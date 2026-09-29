@@ -678,6 +678,13 @@
     REQUEST_EXPIRY_MS: 30 * 60 * 1000,
     // A Library poll this recent keeps the helper up when the last session closes.
     LIBRARY_SEEN_MS: 2 * 60 * 1000,
+    // The Library calls an agent "working" when its monitor is not live but it
+    // ran a lahe command this recently. Past it, and with no live monitor, the
+    // card says only when the agent was last active, and Open does not ask
+    // before a hand-over. Much shorter than AGENT_LIVENESS.RECENT_COMMAND_MS on
+    // purpose: that window only withholds an accusation on the rail, while
+    // this one decides whether a person is told another agent has the session.
+    WORKING_MS: 2 * 60 * 1000,
     // A quiet Library-reopened session closes.
     REOPENED_AUTOCLOSE_MS: 30 * 60 * 1000,
     // A session bare `lahe library` started closes once it owns no reviews and
@@ -1407,8 +1414,16 @@
       // true when NAME was read off a page's own title (`lahe session name
       // --from-review`). The rail still shows it, but its hand-off message,
       // which a new agent reads as its first prompt, leaves it out.
-      NAME_FROM_PAGE: "session_name_from_page"
+      NAME_FROM_PAGE: "session_name_from_page",
+      // One of PRESENCE below: what the Library may say about the agent,
+      // whether or not anything is waiting.
+      PRESENCE: "presence"
     },
+    // listening: a live monitor heartbeat on this handoff rev (or a process
+    //            holding the wake feed open).
+    // working:   neither, but a lahe command within CATALOG.WORKING_MS.
+    // away:      neither of those. The Library says when it was last active.
+    PRESENCE: { LISTENING: "listening", WORKING: "working", AWAY: "away" },
     // THE WORDS, SPELLED ONCE, HERE. They used to be hand-copied into the layer,
     // which is two spellings of one wire value: rename a state and the rail
     // silently stopped recognising it, which looks exactly like a healthy rail

@@ -1031,6 +1031,12 @@ root or a URL, and fields a route does not list are never read.
   attached agent is already the one watching.
 - **The confirm step comes first.** A hand-over (Open with `handoff`, or a request) on a session another
   agent is watching, without `confirmed`, is `PROTO_CONFIRM_NEEDED`, and nothing is restarted or queued.
+  "Watching" here is the list's `watching`: that agent's `presence` is `listening` or `working`. An agent
+  that is `away` (listed under `away`, with its `last_active`) does not need a confirm.
+- **A session's agent in `catalog.list`:** `watching` is `{session, name, state, last_active}` with
+  `state` `listening` or `working`, else null; `away` is `{session, name, last_active}` for an agent seen
+  on the session that is neither, else null. `last_active` is the later of its heartbeat and its last
+  lahe command.
 - **One `catalog` line per Open, Star, unstar, Pick up and Launch** in the helper log, in the format
   `protocol.catalogLogLine` spells, stamped with the helper's clock. A refused action writes none.
 
@@ -1280,7 +1286,13 @@ are our plumbing. A unit test asserts none of those words appears in `TEXT`, `CO
 `replies.poll` answers with an `agent_liveness` object (`protocol.AGENT_LIVENESS`), resolved
 server-side from the review to its owning agent session. Fields: `state`, `unanswered`,
 `oldest_unanswered_at`, `oldest_unanswered_item`, `last_reply_at`, `listening`, `monitor_at`,
-`activity_at`, `session_id`, `session_name`, `session_name_from_page`, `state_dir_flag_needed`.
+`activity_at`, `session_id`, `session_name`, `session_name_from_page`, `state_dir_flag_needed`,
+`presence`.
+
+- `presence` is what the Library may say about the agent, whatever is waiting: `listening` (a live
+  monitor heartbeat on this handoff rev, or a process holding the wake feed open), `working` (neither,
+  but a lahe command within `CATALOG.WORKING_MS`, two minutes), or `away`. It is null for a review with
+  no session. The rail does not draw it.
 
 - `oldest_unanswered_item` is the id of the waiting item `oldest_unanswered_at` belongs to (its
   wait-start, `updated_at` first), or null.

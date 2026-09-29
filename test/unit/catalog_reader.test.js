@@ -357,7 +357,7 @@ test("describeReview also names what Open needs: the covering server, the URL pa
   assert.equal(brief.server, "ss_alphadocs");
   assert.equal(brief.url_path, "/brief.html");
   assert.equal(brief.served_path, path.join(installed.home, "projects/alpha/docs/brief.html"));
-  assert.deepEqual(brief.watching, { session: "s_coach", name: "coach activity" });
+  assert.deepEqual(brief.watching, { session: "s_coach", name: "coach activity", state: "listening", last_active: new Date(installed.nowMs - 10 * 1000).toISOString() });
   assert.equal(brief.last, "2026-09-28T15:40:00.000Z");
   const mounted = reader.describeReview("r_mounted", installed.nowMs);
   assert.match(mounted.url_path, /^\/\.lahe-source\/[a-f0-9]+\/figure\.html$/);
@@ -473,8 +473,8 @@ test("served_url is set only when the recorded server answers its exact-identity
 test("watching names the primary session from a fresh heartbeat, and is null for a stale one", async () => {
   const { reader, installed } = setup();
   const list = await reader.list(installed.nowMs);
-  assert.deepEqual(session(list, "s_coach").watching, { session: "s_coach", name: "coach activity" });
-  assert.deepEqual(session(list, "s_ops").watching, { session: "s_index", name: "document index" });
+  assert.deepEqual(session(list, "s_coach").watching, { session: "s_coach", name: "coach activity", state: "listening", last_active: new Date(installed.nowMs - 10 * 1000).toISOString() });
+  assert.deepEqual(session(list, "s_ops").watching, { session: "s_index", name: "document index", state: "listening", last_active: new Date(installed.nowMs - 10 * 1000).toISOString() });
   assert.equal(session(list, "s_old3").watching, null);
   assert.equal(session(list, "s_dev").watching, null);
 });
@@ -800,4 +800,62 @@ test("an expired request's reason reaches the list, so the page can word attach_
   const list = await reader.list(now);
   assert.equal(row(list, "r_brief").request.state, "expired");
   assert.equal(row(list, "r_brief").request.reason, "attach_changed");
+});
+
+// --- phase 8: listening, working, or last active --------------------------------
+
+function stampActivity(installed, sessionId, atMs) {
+  const stateDir = require("../../src/service/state_dir.js");
+  stateDir.writeAtomic(stateDir.activityPath(installed.dir, sessionId), JSON.stringify({ [protocol.MONITOR.ACTIVITY_FIELD.AT]: new Date(atMs).toISOString() }) + "\n");
+}
+
+test("phase 8: a live monitor is listening, and nothing is away", async () => {
+  const { reader, installed } = setup();
+  const s = session(await reader.list(installed.nowMs), "s_coach");
+  assert.deepEqual(s.watching, { session: "s_coach", name: "coach activity", state: "listening", last_active: new Date(installed.nowMs - 10 * 1000).toISOString() });
+  assert.equal(s.away, null);
+});
+
+test("phase 8: a stale monitor plus a lahe command inside WORKING_MS is working, with that command's time", async () => {
+  const { reader, installed } = setup();
+  const later = installed.nowMs + 10 * protocol.MONITOR.HEARTBEAT_FRESH_MS;
+  stampActivity(installed, "s_coach", later - protocol.CATALOG.WORKING_MS);
+  const s = session(await reader.list(later), "s_coach");
+  assert.deepEqual(s.watching, { session: "s_coach", name: "coach activity", state: "working", last_active: new Date(later - protocol.CATALOG.WORKING_MS).toISOString() });
+  assert.equal(s.away, null);
+});
+
+test("phase 8: a lahe command older than WORKING_MS is not watching: the agent is away, with its last active time", async () => {
+  const { reader, installed } = setup();
+  const later = installed.nowMs + 10 * protocol.MONITOR.HEARTBEAT_FRESH_MS;
+  const commandAt = later - protocol.CATALOG.WORKING_MS - 1;
+  stampActivity(installed, "s_coach", commandAt);
+  const s = session(await reader.list(later), "s_coach");
+  assert.equal(s.watching, null);
+  assert.deepEqual(s.away, { session: "s_coach", name: "coach activity", last_active: new Date(commandAt).toISOString() });
+  assert.equal(reader.describeReview("r_brief", later).watching, null, "Open reads the same answer");
+});
+
+test("phase 8: a stale heartbeat and no command is away since the heartbeat; no record at all is no agent", async () => {
+  const { reader, installed } = setup();
+  const list = await reader.list(installed.nowMs);
+  assert.equal(session(list, "s_old3").watching, null);
+  assert.deepEqual(session(list, "s_old3").away, { session: "s_old3", name: null, last_active: new Date(installed.nowMs - 10 * MINUTE).toISOString() });
+  assert.equal(session(list, "s_dev").away, null);
+  assert.equal(session(list, "s_dev").watching, null);
+});
+
+test("phase 8: a session watched from another session's monitor takes that agent's state", async () => {
+  const { reader, installed, options } = setup();
+  // s_ops's heartbeat names s_index. Both go stale; s_index's agent ran a
+  // command a minute ago, so it is working, and s_ops says so.
+  const later = installed.nowMs + 10 * protocol.MONITOR.HEARTBEAT_FRESH_MS;
+  stampActivity(installed, "s_index", later - MINUTE);
+  const s = session(await reader.list(later), "s_ops");
+  assert.deepEqual(s.watching, { session: "s_index", name: "document index", state: "working", last_active: new Date(later - MINUTE).toISOString() });
+  stampActivity(installed, "s_index", later - 5 * MINUTE);
+  // A fresh reader, so the rewritten stamp is read rather than cached.
+  const away = session(await catalogReader.createReader(options).list(later), "s_ops");
+  assert.equal(away.watching, null);
+  assert.deepEqual(away.away, { session: "s_index", name: "document index", last_active: new Date(later - 5 * MINUTE).toISOString() });
 });

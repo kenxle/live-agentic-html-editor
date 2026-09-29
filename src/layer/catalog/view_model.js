@@ -92,15 +92,23 @@
     SHOW_MISSING: "Show {n} missing",
     MISSING_HEADING: "Missing ({n}). Neither the file nor a main-repo copy exists.",
     HIDE: "Hide",
-    // The card names its watcher once, so its rows need not repeat it. The
-    // Page Spec's card wording did not name the agent; a row's badge did, on
-    // every row of the card.
-    WATCH_LIBRARY_AGENT: "watched by {agent}, the agent that opened this Library",
-    WATCH_OTHER: "watched by {agent}",
+    // The card names its watcher once, so its rows need not repeat it. It
+    // says only what is known (phase 8): a live monitor is "listening", a lahe
+    // command inside CATALOG.WORKING_MS is "working", and anything older is
+    // just when the agent was last active. A flat "watching" called an agent
+    // that went quiet ten minutes ago a watcher.
+    WATCH_LISTENING: "{agent} is listening",
+    WATCH_WORKING: "{agent} is working, last active {time}",
+    WATCH_AWAY: "{agent} last active {time}, not listening",
+    WATCH_AWAY_NO_TIME: "{agent} is not listening",
+    WATCH_NONE: "no agent listening",
+    WATCH_LIBRARY_AGENT: "{agent} (the agent that opened this Library)",
     // The watcher's name is the card's own title: a session watched by its
     // own agent, often one launched for the document and named after it.
-    WATCH_OWN: "watched by its own agent",
-    WATCH_NONE: "no agent watching",
+    WATCH_OWN: "its own agent",
+    WATCH_OWN_START: "Its own agent",
+    WAITING_ONE: "1 comment is waiting.",
+    WAITING_MANY: "{n} comments are waiting.",
     UNNAMED_SESSION: 'Unnamed session, started on "{name}"',
     // Not in the Page Spec: the reader's "legacy" group is lahe add reviews
     // from before agent sessions existed, and "Unnamed session" would be untrue.
@@ -108,7 +116,8 @@
     SESSION_OF: 'session "{name}"',
     BADGE_ENDED: "review ended",
     BADGE_SERVED: "being served now",
-    BADGE_WATCHING: "agent watching: {agent}",
+    BADGE_LISTENING: "agent listening: {agent}",
+    BADGE_WORKING: "agent working: {agent}",
     FOLDED: "{n} reviews of this folder, shown as one",
     UNREADABLE: "Some of this review's records can't be read.",
     MISSING: "File is gone. Open unavailable.",
@@ -139,7 +148,7 @@
     QUEUE_FULL: "No agent was asked: too many hand-overs are waiting.",
     URL_REFUSED: "LAHE answered with an address that is not on this computer, so the Library did not open it.",
     UNKNOWN_ERROR: "Something went wrong.",
-    CONFIRM_TITLE: "Another agent is watching this.",
+    CONFIRM_TITLE: "Another agent is on this session.",
     CONFIRM_BODY: '"{name}" belongs to session "{session}". Handing it to {agent} moves the whole session and stops the other agent.',
     CONFIRM_MOVES: "These reviews move with it:",
     CONFIRM_MOVE: "Move the session",
@@ -374,14 +383,47 @@
     return !!(a && b && a.session === b.session);
   }
 
-  function watchText(session, list) {
-    var w = session.watching;
-    if (!w) return TEXT.WATCH_NONE;
+  var STATE_LISTENING = "listening";
+  var STATE_WORKING = "working";
+
+  // How the watcher is named: the card's own agent and the Library's agent
+  // get their short forms. `start` is for the head of a sentence.
+  function agentPhrase(ref, session, list, start) {
     var attached = list && list.attached;
-    var agent = agentLabel(w);
-    if (attached && attached.session && w.session === attached.session) return fill(TEXT.WATCH_LIBRARY_AGENT, { agent: agent });
-    if (agent === sessionTitle(session)) return TEXT.WATCH_OWN;
-    return fill(TEXT.WATCH_OTHER, { agent: agent });
+    var agent = agentLabel(ref);
+    if (attached && attached.session && ref.session === attached.session) return fill(TEXT.WATCH_LIBRARY_AGENT, { agent: agent });
+    if (agent === sessionTitle(session)) return start ? TEXT.WATCH_OWN_START : TEXT.WATCH_OWN;
+    return agent;
+  }
+
+  /**
+   * What is known about the session's agent, from the list's `watching`
+   * (listening or working, the states that ask before a hand-over) and
+   * `away` (last seen, neither). Both come from the helper's one liveness
+   * rule; the page only words them.
+   */
+  function watchText(session, list, now, opts, start) {
+    var w = session.watching;
+    if (w) {
+      var agent = agentPhrase(w, session, list, start);
+      if (w.state === STATE_WORKING) {
+        return fill(TEXT.WATCH_WORKING, { agent: agent, time: formatTime(w.last_active, now, opts.timeZone) });
+      }
+      return fill(TEXT.WATCH_LISTENING, { agent: agent });
+    }
+    var a = session.away;
+    if (a) {
+      var who = agentPhrase(a, session, list, start);
+      if (!a.last_active) return fill(TEXT.WATCH_AWAY_NO_TIME, { agent: who });
+      return fill(TEXT.WATCH_AWAY, { agent: who, time: formatTime(a.last_active, now, opts.timeZone) });
+    }
+    return TEXT.WATCH_NONE;
+  }
+
+  function waitingIn(session) {
+    return (session.reviews || []).reduce(function (sum, r) {
+      return r.openable === "missing" ? sum : sum + (r.waiting || 0);
+    }, 0);
   }
 
   // ---------------------------------------------------------------------------
@@ -548,7 +590,8 @@
     if (review.ended) badges.push(TEXT.BADGE_ENDED);
     if (review.served_url) badges.push(TEXT.BADGE_SERVED);
     if (session.watching && !sameWatcher(session.watching, cardWatching)) {
-      badges.push(fill(TEXT.BADGE_WATCHING, { agent: agentLabel(session.watching) }));
+      var badge = session.watching.state === STATE_WORKING ? TEXT.BADGE_WORKING : TEXT.BADGE_LISTENING;
+      badges.push(fill(badge, { agent: agentLabel(session.watching) }));
     }
 
     var folded = review.folded_from && review.folded_from.length
@@ -679,7 +722,7 @@
     return null;
   }
 
-  function dialogView(state, list) {
+  function dialogView(state, list, now, opts) {
     var d = state.dialog;
     if (!d) return null;
     var found = findReview(list, d.review);
@@ -698,10 +741,14 @@
       agent: agent.name
     });
     if (others.length) body += " " + TEXT.CONFIRM_MOVES;
+    // What is known about the other agent, and what is waiting on it.
+    var waiting = waitingIn(found.session);
+    var status = watchText(found.session, list, now, opts, true) + ".";
+    if (waiting > 0) status += " " + (waiting === 1 ? TEXT.WAITING_ONE : fill(TEXT.WAITING_MANY, { n: waiting }));
     var buttons = [{ id: "move", label: TEXT.CONFIRM_MOVE }];
     if (found.review.openable === "yes") buttons.push({ id: "read", label: TEXT.CONFIRM_READ });
     buttons.push({ id: "cancel", label: TEXT.CONFIRM_CANCEL });
-    return { review: d.review, action: d.action, title: TEXT.CONFIRM_TITLE, body: body, reviews: others, buttons: buttons };
+    return { review: d.review, action: d.action, title: TEXT.CONFIRM_TITLE, status: status, body: body, reviews: others, buttons: buttons };
   }
 
   function build(list, state, now, opts) {
@@ -713,7 +760,7 @@
       search: { placeholder: TEXT.SEARCH_PLACEHOLDER, value: state.query || "" },
       projects: { options: [], value: state.project || "" },
       banner: banner(state, list),
-      dialog: list ? dialogView(state, list) : null,
+      dialog: list ? dialogView(state, list, now, opts) : null,
       loading: null,
       empty: null,
       notice: null,
@@ -776,7 +823,7 @@
         title: sessionTitle(session),
         projects: (session.projects || []).slice(),
         reviewsText: plural(visible.length, "review", "reviews"),
-        watchText: watchText(session, list),
+        watchText: watchText(session, list, now, opts, false),
         watched: !!session.watching,
         waitingText: waiting > 0 ? waiting + " waiting" : null,
         lastText: "last " + formatTime(session.last, now, opts.timeZone),

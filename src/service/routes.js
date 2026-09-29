@@ -713,6 +713,8 @@ function livenessNone(work) {
   out[protocol.AGENT_LIVENESS.FIELD.SESSION_ID] = null;
   out[protocol.AGENT_LIVENESS.FIELD.STATE_DIR_FLAG] = false;
   out[protocol.AGENT_LIVENESS.FIELD.NAME] = null;
+  // No session, so nothing is known about an agent either way.
+  out[protocol.AGENT_LIVENESS.FIELD.PRESENCE] = null;
   return out;
 }
 

@@ -72,7 +72,7 @@ flowchart TD
     Bare["agent with no session runs<br/>lahe library"] --> Mint["a new agent session,<br/>no reviews"]
     Mint --> AttachFile[("catalog-attach.json<br/>the last agent attached")]
     Attach["agent with a session runs<br/>lahe library --session its-own-id"] --> AttachFile
-    Click["reviewer clicks Pick this up<br/>or Launch a new agent"] --> Watched{"is another agent<br/>watching that session?"}
+    Click["reviewer clicks Pick this up<br/>or Launch a new agent"] --> Watched{"is another agent listening<br/>or working on that session?"}
     Watched -->|"yes"| Confirm["the page asks first, naming that agent<br/>and the other reviews that move"]
     Watched -->|"no"| Queue
     Confirm -->|"confirmed"| Queue[("catalog-requests.jsonl<br/>request: ids only")]

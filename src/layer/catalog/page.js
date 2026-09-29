@@ -330,7 +330,7 @@
     facts.push(h("span", { text: row.counts.comments }));
     if (row.counts.asOf) facts.push(h("span", { text: row.counts.asOf }));
     row.badges.forEach(function (b) {
-      var kind = b.indexOf("agent watching") === 0 ? "watching" : b === "being served now" ? "served" : "ended";
+      var kind = b.indexOf("agent listening") === 0 || b.indexOf("agent working") === 0 ? "watching" : b === "being served now" ? "served" : "ended";
       facts.push(h("span", { class: "lib-badge", "data-badge": kind, text: b }));
     });
     if (row.folded) facts.push(h("span", { text: row.folded }));
@@ -548,7 +548,12 @@
     // focus.
     if (serial === lastDialog && el.open) return;
     lastDialog = serial;
-    var kids = [h("h2", { id: "lahe-catalog-confirm-title", text: dialog.title }), h("p", { text: dialog.body })];
+    // What is known about the other agent comes first, then what moving it does.
+    var kids = [
+      h("h2", { id: "lahe-catalog-confirm-title", text: dialog.title }),
+      dialog.status ? h("p", { class: "lib-dialog-status", text: dialog.status }) : null,
+      h("p", { text: dialog.body })
+    ].filter(Boolean);
     if (dialog.reviews.length) {
       kids.push(h("ul", { class: "lib-dialog-list" }, dialog.reviews.map(function (name) {
         return h("li", { text: name });

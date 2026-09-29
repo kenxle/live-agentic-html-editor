@@ -123,7 +123,8 @@ One writer per file, so a star and an attach cannot overwrite each other.
   "attached": { "session": "s_...", "name": "document index", "watching": true, "closed": false },
   "sessions": [{
     "id": "s_...", "name": "coach activity", "projects": ["steady-thread"],
-    "watching": { "session": "s_...", "name": "free writing lahe" }, "last": "2026-09-28T15:40:00Z",
+    "watching": { "session": "s_...", "name": "free writing lahe", "state": "working", "last_active": "2026-09-28T15:58:00Z" },
+    "away": null, "last": "2026-09-28T15:40:00Z",
     "reviews": [{
       "id": "r_...", "title": "Feature Brief: Coach Activity", "display_name": "Feature Brief: Coach Activity",
       "file": "01_brief.md", "folder": "...", "path_hint": "~/Documents/workspace/steady-thread/...",
@@ -148,8 +149,13 @@ Rules the reader owns:
 - **`projects`:** the base name of the git top level of each review's target. For a worktree, the owning repository's name. No git repository means no project.
 - **`openable: yes`** when `static_servers.servesPath(...)` is true for a recorded server of the session. That counts mounts.
 - **`kind`** tells the agent how to re-serve a `via-agent` row.
-- **`watching`** is null or `{session, name}`, taken from the `primary` field of the session's `monitor.json` heartbeat. So a session picked up by another agent names that agent.
-- **Who counts as watching** is the rule the request queue uses, read through `livenessFrom` with the session's activity stamp: a fresh heartbeat on the current handoff rev whose pid is alive, or a lahe command in the last few minutes. `lahe monitor` exits when it wakes on work, so a heartbeat alone would read "nobody is watching" exactly while that agent works a batch, and Open would skip the "another agent is watching" confirm step then (fix round CL2). With no heartbeat on disk, the session names itself. A session watched from another session's multi-session monitor (its heartbeat names that session as `primary`, on its current handoff rev) counts as watched while that primary session is listening by the same rule, so the card does not say "no agent" right after the agent answers.
+- **`watching`** is null or `{session, name, state, last_active}`, taken from the `primary` field of the session's `monitor.json` heartbeat. So a session picked up by another agent names that agent. `state` is `listening` or `working`; it is set only then, and only then does Open ask before a hand-over.
+- **`away`** is null or `{session, name, last_active}`: an agent was seen on this session (a heartbeat or a lahe command on disk) but is neither listening nor working now. The card says "<agent> last active <time>, not listening", and Open and Pick this up do not ask first. Both null means no agent was ever seen.
+- **What is known about the agent (phase 8)** is `presence` from `livenessFrom`, the one liveness function, read with the session's heartbeat and activity stamp:
+  - `listening`: a fresh heartbeat on the current handoff rev whose pid is alive. The card says "<agent> is listening".
+  - `working`: no live heartbeat, but a lahe command within `CATALOG.WORKING_MS` (two minutes). The card says "<agent> is working, last active <time>". `lahe monitor` exits when it wakes on work, so without this the card would say nobody was there exactly while the agent works a batch (fix round CL2).
+  - `away`: neither.
+  `last_active` is the later of the heartbeat and the last lahe command. The request queue keeps its own wider rule, `listening` from the same function (a command in the last ten minutes), for handing out and expiring requests; that rule only decides whether a request can still be answered. Ken's report that prompted this: a card said "watched by" an agent with no monitor whose last command was about ten minutes old, and Open asked him to confirm taking it over. The card and the confirm dialog also say how many comments are waiting in the session. With no heartbeat on disk, the session names itself. A session watched from another session's multi-session monitor (its heartbeat names that session as `primary`, on its current handoff rev) takes that primary session's presence, so the card does not say "no agent" right after the agent answers.
 - **`attached.watching`** is false when the attached session's monitor is dead. An attach with no session on disk behind it reads as no agent. **`attached.closed`** is true when the attached session has been closed (`closed_at` is set); the page's header then says "No agent attached" rather than "stopped watching".
 - **`request`** is the latest request on that review. An answer stays until the next request on the review, or `ANSWER_SHOWN_MS`. `reason` is why an expired request expired, and null in every other state.
 - **`pages[].path`** is a URL path on the review's server. Page rows are informational; they have no Open of their own.

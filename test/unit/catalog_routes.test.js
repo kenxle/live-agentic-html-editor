@@ -751,7 +751,32 @@ test("CL2: an agent whose monitor exited to work a batch still counts as watchin
   assert.equal(res.status, 409, res.text);
   assert.equal(res.json.error.code, "PROTO_CONFIRM_NEEDED");
   const listed = await api(w, "catalog.list");
-  assert.deepEqual(listed.json.sessions.find((s) => s.id === "s_doc").watching, { session: "s_doc", name: "doc session" });
+  assert.deepEqual(listed.json.sessions.find((s) => s.id === "s_doc").watching, { session: "s_doc", name: "doc session", state: "working", last_active: new Date(T0).toISOString() });
+});
+
+test("phase 8: an agent that ran a lahe command more than WORKING_MS ago, with no live monitor, does not block Open or Pick this up", async (t) => {
+  const w = await world(t);
+  // Ken's report: the card said "watched by" an agent that had no monitor and
+  // had last run a lahe command about ten minutes earlier.
+  const commandAt = T0 - 10 * MINUTE;
+  beat(w.store, "s_doc", commandAt, "s_doc");
+  stateDir.writeAtomic(stateDir.activityPath(w.dir, "s_doc"), JSON.stringify({ [protocol.MONITOR.ACTIVITY_FIELD.AT]: new Date(commandAt).toISOString() }) + "\n");
+  const listed = await api(w, "catalog.list");
+  const doc = listed.json.sessions.find((s) => s.id === "s_doc");
+  assert.equal(doc.watching, null);
+  assert.deepEqual(doc.away, { session: "s_doc", name: "doc session", last_active: new Date(commandAt).toISOString() });
+  const pick = await api(w, "catalog.request", { review: "r_page", action: "pickup" });
+  assert.equal(pick.status, 200, pick.text);
+  assert.ok(pick.json.request_id, "the pick-up was queued without a confirm step");
+});
+
+test("phase 8: Open on a session whose agent is away hands over without a confirm step", async (t) => {
+  const w = await world(t);
+  const commandAt = T0 - protocol.CATALOG.WORKING_MS - 1;
+  beat(w.store, "s_doc", commandAt, "s_doc");
+  stateDir.writeAtomic(stateDir.activityPath(w.dir, "s_doc"), JSON.stringify({ [protocol.MONITOR.ACTIVITY_FIELD.AT]: new Date(commandAt).toISOString() }) + "\n");
+  const res = await api(w, "catalog.open", { review: "r_page", handoff: true });
+  assert.equal(res.status, 200, res.text);
 });
 
 test("catalog.request refuses a missing review with PROTO_NOT_OPENABLE, as Open does, and queues nothing", async (t) => {
@@ -851,7 +876,7 @@ test("walk: right after the agent answers a pick-up, its session card still name
   beat(w.store, "s_doc", T0, "s_agent");
   stateDir.writeAtomic(stateDir.activityPath(w.dir, "s_agent"), JSON.stringify({ [protocol.MONITOR.ACTIVITY_FIELD.AT]: new Date(later).toISOString() }) + "\n");
   const listed = await api(w, "catalog.list");
-  assert.deepEqual(listed.json.sessions.find((x) => x.id === "s_doc").watching, { session: "s_agent", name: "library agent" });
+  assert.deepEqual(listed.json.sessions.find((x) => x.id === "s_doc").watching, { session: "s_agent", name: "library agent", state: "working", last_active: new Date(later).toISOString() });
 });
 
 test("walk: a folder review's recorded page that climbs out, is hidden, or is not a page falls back to the entry page", async (t) => {

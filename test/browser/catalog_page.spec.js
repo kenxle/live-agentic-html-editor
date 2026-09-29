@@ -258,10 +258,11 @@ test.describe("the Library page", () => {
 
     const dialog = page.locator("#lahe-catalog-confirm");
     await expect(dialog).toBeVisible();
-    await expect(dialog.locator("h2")).toHaveText("Another agent is watching this.");
-    await expect(dialog.locator("p")).toHaveText(
+    await expect(dialog.locator("h2")).toHaveText("Another agent is on this session.");
+    await expect(dialog.locator("p")).toHaveText([
+      "Its own agent is listening. 3 comments are waiting.",
       '"shared / figure.html" belongs to session "coach activity". Handing it to document index moves the whole session and stops the other agent. These reviews move with it:'
-    );
+    ]);
     await expect(dialog.locator("li")).toHaveText(["Feature Brief: Coach Activity", "specs / spec.html", "Coach Notes", "Deleted Page"]);
     await expect(dialog.locator("button")).toHaveText(["Move the session", "Just open it to read", "Cancel"]);
     await expectNothingSent(page, sent, "nothing is sent before the reader decides");
@@ -434,16 +435,35 @@ test.describe("the Library page", () => {
     await openLibrary(page, helper);
     const coach = page.locator('details[data-session="s_coach"]');
     // Its watcher is itself, so the card does not repeat its own title.
-    await expect(coach.locator("summary .lib-card-watch")).toHaveText("watched by its own agent");
+    await expect(coach.locator("summary .lib-card-watch")).toHaveText("its own agent is listening");
     await expect(coach.locator('summary .lib-badge[data-badge="watching"]')).toHaveCount(1);
     expect(await coach.locator("li[data-review]").count()).toBeGreaterThan(1);
     await expect(coach.locator('li[data-review] [data-badge="watching"]')).toHaveCount(0);
     await expect(page.locator('details[data-session="s_ops"] summary .lib-card-watch')).toHaveText(
-      "watched by document index, the agent that opened this Library"
+      "document index (the agent that opened this Library) is listening"
     );
     // A missing row is listed outside its card, so it keeps the badge.
     await page.locator('[data-act="show-missing"]').click();
-    await expect(rowLocator(page, "r_deleted").locator('[data-badge="watching"]')).toHaveText("agent watching: coach activity");
+    await expect(rowLocator(page, "r_deleted").locator('[data-badge="watching"]')).toHaveText("agent listening: coach activity");
+  });
+
+  test("phase 8: an agent that is neither listening nor working says when it was last active, and a hand-over asks nothing", async ({ page }) => {
+    const list = freshList();
+    const coach = list.sessions.find((x) => x.id === "s_coach");
+    coach.watching = null;
+    coach.away = { session: "s_other", name: "other agent", last_active: "2026-09-28T15:48:00.000Z" };
+    const calls = await routeCatalog(page, {
+      list: () => list,
+      answers: { "catalog.request": () => ({ status: 200, body: { request_id: "cq_new" } }) }
+    });
+    await openLibrary(page, helper);
+    const card = page.locator('details[data-session="s_coach"]');
+    await expect(card.locator("summary .lib-card-watch")).toHaveText(/^other agent last active .+, not listening$/);
+    await expect(card.locator('summary .lib-badge[data-badge="watching"]')).toHaveCount(0);
+    await expect(card.locator("summary .lib-waiting")).toHaveText("3 waiting");
+    await handTo(page, "r_mounted", "pickup");
+    await expect.poll(() => calls.map((c) => c.body)).toEqual([{ review: "r_mounted", action: "pickup", confirmed: false }]);
+    await expect(page.locator("#lahe-catalog-confirm")).toBeHidden();
   });
 
   test("a row shows Open at rest; Pick this up and Launch open from its one Hand to agent menu", async ({ page }) => {
@@ -547,6 +567,10 @@ test.describe("the Library page", () => {
   test("screenshots, light and dark", async ({ page, browserName }) => {
     test.skip(!shotsWanted(browserName), "screenshots are written only with LAHE_SHOTS=1 on Chromium");
     const list = freshList();
+    // Ken's case: s_coach's agent has no live monitor but ran a lahe command
+    // a minute ago, so the card and the confirm dialog say "working".
+    list.sessions.find((x) => x.id === "s_coach").watching.state = "working";
+    list.sessions.find((x) => x.id === "s_coach").watching.last_active = "2026-09-28T15:58:00.000Z";
     await routeCatalog(page, { list: () => list });
     await openLibrary(page, helper);
     await page.locator("#lahe-catalog-main").waitFor();

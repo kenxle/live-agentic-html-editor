@@ -54,6 +54,7 @@ var catalogStore = require("./catalog_store.js");
 var scriptLine = require("../shared/script_line.js");
 
 var CATALOG = protocol.CATALOG;
+var PRESENCE = protocol.AGENT_LIVENESS.PRESENCE;
 var FOLD_CUTOFF_MS = Date.parse(CATALOG.FOLD_CUTOFF);
 var LEGACY = agentSessions.LEGACY_ID;
 var HEARTBEAT = protocol.MONITOR.HEARTBEAT_FIELD;
@@ -252,16 +253,17 @@ function createReader(options) {
   }
 
   /**
-   * Is an agent listening on this session? Read only through livenessFrom,
-   * with the same inputs the request queue uses (fix round CL2): a fresh
-   * heartbeat on this handoff rev whose pid is alive, OR a lahe command in the
-   * last few minutes. The second matters because `lahe monitor` exits when it
-   * wakes on work, so a heartbeat alone reads "nobody" exactly while the agent
-   * is working a batch. `beat` is the heartbeat record, stale or not, for its
-   * `primary`.
+   * What is known about the agent on this session, read only through
+   * livenessFrom with the inputs the request queue uses (fix round CL2), and
+   * its `presence` answer (phase 8): `listening` for a fresh heartbeat on this
+   * handoff rev whose pid is alive, `working` for a lahe command inside
+   * CATALOG.WORKING_MS, else `away`. `lastActive` is the later of the
+   * heartbeat and the command; `known` is false when neither was ever written.
+   * `beat` is the heartbeat record, stale or not, for its `primary`.
    */
-  function monitorLive(sessionId, nowMs) {
-    if (sessionId === LEGACY || !protocol.isSafeId(sessionId)) return { live: false, beat: null };
+  function presenceOf(sessionId, nowMs) {
+    var none = { known: false, presence: PRESENCE.AWAY, lastActive: null, beat: null };
+    if (sessionId === LEGACY || !protocol.isSafeId(sessionId)) return none;
     var beat = null;
     var activity = null;
     try {
@@ -276,7 +278,7 @@ function createReader(options) {
     } catch (err) {
       activity = null;
     }
-    if (!beat && !activity) return { live: false, beat: null };
+    if (!beat && !activity) return none;
     var s = readSession(sessionId);
     var liveness = agentSessions.livenessFrom({
       session: s.state === "ok" ? s.value : null,
@@ -286,26 +288,64 @@ function createReader(options) {
       nowMs: nowMs,
       pidAlive: pidAlive
     });
-    return { live: liveness[protocol.AGENT_LIVENESS.FIELD.LISTENING] === true, beat: beat };
+    var times = [liveness[protocol.AGENT_LIVENESS.FIELD.MONITOR_AT], liveness[protocol.AGENT_LIVENESS.FIELD.ACTIVITY_AT]]
+      .filter(function (t) { return typeof t === "string" && !Number.isNaN(Date.parse(t)); })
+      .sort(function (a, b) { return Date.parse(b) - Date.parse(a); });
+    return {
+      known: true,
+      presence: liveness[protocol.AGENT_LIVENESS.FIELD.PRESENCE],
+      lastActive: times.length ? new Date(Date.parse(times[0])).toISOString() : null,
+      beat: beat
+    };
   }
 
-  function watchingOf(sessionId, nowMs) {
-    var m = monitorLive(sessionId, nowMs);
+  function laterOf(a, b) {
+    if (!a) return b;
+    if (!b) return a;
+    return Date.parse(a) >= Date.parse(b) ? a : b;
+  }
+
+  /**
+   * The session's agent: {session, name, state, last_active} or null for no
+   * agent ever seen. `state` is a PRESENCE value. The list splits it into
+   * `watching` (listening or working: Open asks before a hand-over) and
+   * `away` (last active, neither).
+   */
+  function agentOf(sessionId, nowMs) {
+    var m = presenceOf(sessionId, nowMs);
+    if (!m.known) return null;
     var primary = m.beat ? m.beat[HEARTBEAT.PRIMARY] : null;
     var who = typeof primary === "string" && protocol.isSafeId(primary) ? primary : sessionId;
-    if (m.live) return { session: who, name: nameOf(who) };
+    var out = function (presence, lastActive) {
+      return { session: who, name: nameOf(who), state: presence, last_active: lastActive };
+    };
+    if (m.presence !== PRESENCE.AWAY) return out(m.presence, m.lastActive);
     // WATCHED THROUGH ANOTHER SESSION'S MONITOR (story walk). An agent that
     // took this session over watches it from its own multi-session monitor,
     // and that monitor exits to work a batch. Right after the agent answers,
-    // this session's heartbeat is stale, but the agent named as `primary` is
-    // listening on its own session: it is still the one watching. Only for a
-    // heartbeat on this session's current handoff rev, so a takeover since
-    // does not count.
-    if (who === sessionId || !m.beat) return null;
+    // this session's heartbeat is stale, but the agent named as `primary` may
+    // be listening or working on its own session: it is still the one on
+    // this session. Only for a heartbeat on this session's current handoff
+    // rev, so a takeover since does not count.
+    if (who === sessionId || !m.beat) return out(PRESENCE.AWAY, m.lastActive);
     var own = readSession(sessionId);
     var rev = own.state === "ok" ? agentSessions.handoffRev(own.value) : 0;
-    if (m.beat[HEARTBEAT.HANDOFF_REV] !== rev) return null;
-    return monitorLive(who, nowMs).live ? { session: who, name: nameOf(who) } : null;
+    if (m.beat[HEARTBEAT.HANDOFF_REV] !== rev) return out(PRESENCE.AWAY, m.lastActive);
+    var p = presenceOf(who, nowMs);
+    if (p.presence !== PRESENCE.AWAY) return out(p.presence, p.lastActive);
+    return out(PRESENCE.AWAY, laterOf(m.lastActive, p.lastActive));
+  }
+
+  /** Listening or working: the agent Open asks about before a hand-over. */
+  function watchingOf(sessionId, nowMs) {
+    var a = agentOf(sessionId, nowMs);
+    return a && a.state !== PRESENCE.AWAY ? a : null;
+  }
+
+  /** Seen before, but neither listening nor working now. */
+  function awayOf(sessionId, nowMs) {
+    var a = agentOf(sessionId, nowMs);
+    return a && a.state === PRESENCE.AWAY ? { session: a.session, name: a.name, last_active: a.last_active } : null;
   }
 
   /**
@@ -981,6 +1021,7 @@ function createReader(options) {
         name_from_page: s.state === "ok" && nameFromPage(s.id),
         projects: projects.sort(),
         watching: watchingOf(s.id, nowMs),
+        away: awayOf(s.id, nowMs),
         last: reviews.length ? reviews[0].last : null,
         reviews: reviews
       };

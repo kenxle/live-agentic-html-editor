@@ -262,24 +262,24 @@ test("a named card shows its name, projects, review count, watcher, waiting and 
   assert.deepEqual(c.projects, ["alpha", "beta"]);
   // r_deleted is missing, so it is not one of the card's visible reviews.
   assert.equal(c.reviewsText, "4 reviews");
-  assert.equal(c.watchText, "watched by its own agent", "its watcher is itself, so its name is not repeated");
+  assert.equal(c.watchText, "its own agent is listening", "its watcher is itself, so its name is not repeated");
   assert.equal(c.waitingText, "3 waiting");
   assert.equal(c.lastText, "last 3:40 PM");
 });
 
 test("the card names the Library's own agent when it is the watcher", () => {
-  assert.equal(card(build(freshList(), okState()), "s_ops").watchText, "watched by document index, the agent that opened this Library");
+  assert.equal(card(build(freshList(), okState()), "s_ops").watchText, "document index (the agent that opened this Library) is listening");
 });
 
 test("a watcher with no name is named by its session id on the card", () => {
   const list = freshList();
   sessionIn(list, "s_coach").watching = { session: "s_coach", name: null };
-  assert.equal(card(build(list, okState()), "s_coach").watchText, "watched by s_coach");
+  assert.equal(card(build(list, okState()), "s_coach").watchText, "s_coach is listening");
 });
 
 test("a card with no watcher and nothing waiting says so and shows no waiting count", () => {
   const c = card(build(freshList(), okState()), "s_badsession");
-  assert.equal(c.watchText, "no agent watching");
+  assert.equal(c.watchText, "no agent listening");
   assert.equal(c.waitingText, null);
   assert.equal(c.reviewsText, "1 review");
 });
@@ -343,12 +343,12 @@ test("a watched card names its agent once: on the card, and on none of its rows"
   assert.equal(card(build(freshList(), okState()), "s_badsession").watched, false);
   assert.ok(c.rows.length > 1, "the card has several rows");
   const texts = [c.watchText].concat(...c.rows.map((r) => r.badges));
-  assert.equal(texts.filter((t) => t.startsWith("watched by") || t.startsWith("agent watching")).length, 1);
+  assert.equal(texts.filter((t) => t.endsWith("is listening") || t.startsWith("agent listening")).length, 1);
 });
 
 test("a row shown outside its card keeps the watching badge, since no card line names its watcher", () => {
   const view = build(freshList(), vm.withShowMissing(okState(), true));
-  assert.deepEqual(row(view, "r_deleted").badges, ["agent watching: coach activity"]);
+  assert.deepEqual(row(view, "r_deleted").badges, ["agent listening: coach activity"]);
 });
 
 test("a review with several pages lists them; one page lists nothing", () => {
@@ -648,7 +648,7 @@ test("a watched session asks before a hand-over, naming the agent and the other 
     assert.equal(d.kind, "confirm", action);
   });
   const view = build(list, vm.withDialog(okState(), "r_mounted", "pickup"));
-  assert.equal(view.dialog.title, "Another agent is watching this.");
+  assert.equal(view.dialog.title, "Another agent is on this session.");
   assert.equal(
     view.dialog.body,
     '"shared / figure.html" belongs to session "coach activity". Handing it to document index moves the whole session and stops the other agent. These reviews move with it:'
@@ -1142,14 +1142,14 @@ test("a refusal clears once the agent that refused is no longer the attached, li
 test("a card watched by its own agent does not repeat the card's title", () => {
   const list = freshList();
   // s_coach is named "coach activity" and watched by itself.
-  assert.equal(card(build(list, okState()), "s_coach").watchText, "watched by its own agent");
+  assert.equal(card(build(list, okState()), "s_coach").watchText, "its own agent is listening");
   // A launched session, named after its document, reads the same way.
   sessionIn(list, "s_coach").name = "Feature Brief: Coach Activity";
   sessionIn(list, "s_coach").watching = { session: "s_coach", name: "Feature Brief: Coach Activity" };
-  assert.equal(card(build(list, okState()), "s_coach").watchText, "watched by its own agent");
+  assert.equal(card(build(list, okState()), "s_coach").watchText, "its own agent is listening");
   // A watcher whose name differs from the card is still named.
   sessionIn(list, "s_coach").watching = { session: "s_other", name: "other agent" };
-  assert.equal(card(build(list, okState()), "s_coach").watchText, "watched by other agent");
+  assert.equal(card(build(list, okState()), "s_coach").watchText, "other agent is listening");
 });
 
 test("the path line shows only what the title does not already say", () => {
@@ -1185,4 +1185,94 @@ test("a legacy row says Pick this up starts a new review and the old comments st
   const r = row(build(freshList(), okState()), "r_legacy");
   assert.ok(r.notices.some((n) => n.text === vm.TEXT.LEGACY_NEW_REVIEW), JSON.stringify(r.notices));
   assert.match(vm.TEXT.LEGACY_NEW_REVIEW, /old comments stay on the old review/);
+});
+
+// ---------------------------------------------------------------------------
+// What the card knows about the watcher (phase 8): listening, working, or
+// neither, never a flat "watching"
+// ---------------------------------------------------------------------------
+
+const AT_1558 = "2026-09-28T15:58:00.000Z";
+const AT_1548 = "2026-09-28T15:48:00.000Z";
+
+function withWatcher(list, sessionId, watching, away) {
+  const s = sessionIn(list, sessionId);
+  s.watching = watching;
+  s.away = away === undefined ? null : away;
+  return list;
+}
+
+test("phase 8: a card whose agent's monitor is live says it is listening", () => {
+  const list = withWatcher(freshList(), "s_coach", { session: "s_other", name: "other agent", state: "listening", last_active: AT_1558 });
+  const c = card(build(list, okState()), "s_coach");
+  assert.equal(c.watchText, "other agent is listening");
+  assert.equal(c.watched, true);
+  assert.equal(c.waitingText, "3 waiting", "the waiting count sits next to it");
+});
+
+test("phase 8: a card whose agent ran a lahe command inside the working window says it is working, and when", () => {
+  const list = withWatcher(freshList(), "s_coach", { session: "s_other", name: "other agent", state: "working", last_active: AT_1558 });
+  const c = card(build(list, okState()), "s_coach");
+  assert.equal(c.watchText, "other agent is working, last active 3:58 PM");
+  assert.equal(c.watched, true);
+});
+
+test("phase 8: a card whose agent is neither listening nor working says when it was last active, and is not marked watched", () => {
+  const list = withWatcher(freshList(), "s_coach", null, { session: "s_other", name: "other agent", last_active: AT_1548 });
+  const c = card(build(list, okState()), "s_coach");
+  assert.equal(c.watchText, "other agent last active 3:48 PM, not listening");
+  assert.equal(c.watched, false);
+  assert.equal(c.waitingText, "3 waiting");
+});
+
+test("phase 8: a card with no agent at all says nobody is listening", () => {
+  const list = withWatcher(freshList(), "s_coach", null, null);
+  assert.equal(card(build(list, okState()), "s_coach").watchText, "no agent listening");
+});
+
+test("phase 8: the card's own agent and the Library's agent keep their short names in each state", () => {
+  const list = withWatcher(freshList(), "s_coach", { session: "s_coach", name: "coach activity", state: "working", last_active: AT_1558 });
+  assert.equal(card(build(list, okState()), "s_coach").watchText, "its own agent is working, last active 3:58 PM");
+  withWatcher(list, "s_coach", null, { session: "s_coach", name: "coach activity", last_active: AT_1548 });
+  assert.equal(card(build(list, okState()), "s_coach").watchText, "its own agent last active 3:48 PM, not listening");
+  withWatcher(list, "s_ops", { session: "s_index", name: "document index", state: "listening", last_active: null });
+  assert.equal(card(build(list, okState()), "s_ops").watchText, "document index (the agent that opened this Library) is listening");
+});
+
+test("phase 8: a row outside its card names the watcher's state in its badge", () => {
+  const list = withWatcher(freshList(), "s_coach", { session: "s_coach", name: "coach activity", state: "working", last_active: AT_1558 });
+  const view = build(list, vm.withShowMissing(okState(), true));
+  assert.deepEqual(row(view, "r_deleted").badges, ["agent working: coach activity"]);
+  withWatcher(list, "s_coach", null, { session: "s_coach", name: "coach activity", last_active: AT_1548 });
+  assert.deepEqual(row(build(list, vm.withShowMissing(okState(), true)), "r_deleted").badges, []);
+});
+
+test("phase 8: an agent that is neither listening nor working does not block Open or Pick this up", () => {
+  const list = withWatcher(freshList(), "s_coach", null, { session: "s_other", name: "other agent", last_active: AT_1548 });
+  const open = vm.decide(list, okState(), "r_mounted", "open", {});
+  assert.equal(open.kind, "open");
+  assert.deepEqual(open.body, { review: "r_mounted", handoff: true, confirmed: false });
+  const pick = vm.decide(list, okState(), "r_mounted", "pickup", {});
+  assert.equal(pick.kind, "request");
+});
+
+test("phase 8: a working agent still asks first, and the dialog says what is known and how many are waiting", () => {
+  const list = withWatcher(freshList(), "s_coach", { session: "s_other", name: "other agent", state: "working", last_active: AT_1558 });
+  assert.equal(vm.decide(list, okState(), "r_mounted", "open", {}).kind, "confirm");
+  const view = build(list, vm.withDialog(okState(), "r_mounted", "open"));
+  assert.equal(view.dialog.title, "Another agent is on this session.");
+  assert.equal(view.dialog.status, "other agent is working, last active 3:58 PM. 3 comments are waiting.");
+});
+
+test("phase 8: a listening agent's dialog says so; one waiting comment is singular", () => {
+  const list = withWatcher(freshList(), "s_dev", { session: "s_other", name: "other agent", state: "listening", last_active: AT_1558 });
+  const view = build(list, vm.withDialog(okState(), "r_dev", "open"));
+  assert.equal(view.dialog.status, "other agent is listening. 1 comment is waiting.");
+});
+
+test("phase 8: the dialog for the card's own agent starts with a capital", () => {
+  const list = withWatcher(freshList(), "s_coach", { session: "s_coach", name: "coach activity", state: "listening", last_active: null });
+  list.attached = { session: "s_index", name: "document index", watching: true, closed: false };
+  const view = build(list, vm.withDialog(okState(), "r_mounted", "open"));
+  assert.equal(view.dialog.status, "Its own agent is listening. 3 comments are waiting.");
 });
