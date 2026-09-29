@@ -1,17 +1,18 @@
 # Progress: LAHE Library
 
-**Phase 7, Review.** Everything is built and merged, and 1597 unit tests pass. Five reviews are back and one fix round is starting; the story walk is still running. One thing is waiting on you: the attach change below. Last updated 2026-09-28 18:15.
+**Phase 7, Review.** Every review finding is fixed, the latest main is merged in, and 1886 unit tests pass. The final full run in all three browsers is going now; the PR opens right after it. One thing is waiting on you: taking the LAHE session back. Last updated 2026-09-29 13:44.
 
 **Docs:** [Crucible](http://127.0.0.1:54705/00_crucible.html) · [Brief](http://127.0.0.1:54705/01_brief_lahe_library.html) · [Wireframes](http://127.0.0.1:54705/wireframes/index.html) · [Architecture](http://127.0.0.1:54705/02_architecture_lahe_library.html) · [Plan](http://127.0.0.1:54705/03_plan_lahe_library.html) · [Ideas page](http://127.0.0.1:55480/DOCUMENT_INDEX_IDEAS-b09cd11f2a84063f.html)
 
 ## Needs your attention
 
-- [ ] **One change from the approved design, for your yes or no.** The design said an agent attaches to the Library by running `lahe library --session <its id>`. But an agent you just asked to "open the lahe library" usually has no LAHE session yet, so it could not attach and Pick this up had nobody to go to. So now a bare `lahe library` starts a fresh session for that agent and attaches it; after that, the agent passes the session id it was given. The cost: every bare run attaches a new agent, which takes the hand-overs away from whichever agent had them before. You don't need to run it yourself: the Library stays at http://127.0.0.1:7817/catalog. Keep this?
+- [ ] **May I take this LAHE session back?** Another copy of me took it over by mistake yesterday and then handed it back. Until I run `lahe session takeover`, comments you leave on this page reach nobody. I'm asking because the rule is to take a session over only when you say so.
 
 ## Currently working on
 
 | Agent or task | Doing | Started | Branch |
 |---|---|---|---|
+| Release run | The full suite, unit and browser, in Chromium, Firefox and WebKit, on the branch with the latest main merged in | 2026-09-29 13:44 | `feat/lahe_library` |
 
 ## Phases
 
@@ -37,6 +38,10 @@
 | 0 | 1 | shared names | done | commit 000c40b | Routes, auth class, error codes, constants and manifest entries landed; unit gate green. |
 | 1 | 1 | list reader and star store | merged | `task/lib-reader`, progress/phase1_task1_reader.md | Builds the Library's list from records on disk, folds old per-page reviews, and never reads a large log. A corrupt stars file is refused, never overwritten. 1366 unit tests pass. One rule is copied from the server code for now; step 2.1 moves it to one place. |
 | 1 | 2 | auth and page serving | merged | `task/lib-auth`, progress/phase1_task2_auth.md | The Library's key lives only in the page; every Library request passes the same-site checks; the page and its files are served with no cross-site access. It also closed an old gap: a page on another local port could get preflight approval for any path. 1330 unit tests pass. |
+| 7 | A | agent-facing safety fixes | merged | `task/lib-fix-agent`, progress/phase7_fix_round.md | Page titles never reach a new agent's prompt; file paths never go into a shell command (`lahe library serve`); owner and symlink checks; a strict page content policy. |
+| 7 | B | service fixes | merged | `task/lib-fix-service` | Open on a folder lands on the right page; no double servers on a double click; stars on grouped rows unstick; "watching" is judged one way everywhere. |
+| 7 | C | page and test fixes | merged | `task/lib-fix-tests` | One "Hand to agent" menu per row, fewer status colors, the rail's button color, phone width; 13 test fixes. |
+| 7 | D | final-review fixes | merged | `task/lib-fix2` | A page can no longer steer which folder an agent serves or starts in; Launch refused where it could mislead; idle Library sessions close themselves; pre-session reviews open fresh; a Firefox focus bug fixed. |
 | 3 | 3 | count script and fixes | merged | `task/lib-fixes`, progress/phase3_task3_script_and_fixes.md | The count script works on the fixture log. The session card now names the watching agent once. The request file is read once per refresh, not once per row. |
 | 2 | 2 | the Library page | merged | `task/lib-page`, progress/phase2_task2_page.md | The page, built on wireframe B, with every state unit-tested and 12 browser tests passing. Screenshots below. |
 | 2 | 1 | wiring and lifetime | merged | `task/lib-wiring`, progress/phase2_task1_wiring.md | List, Open, Star and hand-over requests work end to end on the helper; LAHE stays up while the Library is open; quiet reopened sessions close again. The copied server rule now lives in one place. The helper's version number went up, so an older running helper gets replaced. |
@@ -47,6 +52,7 @@
 
 | Pass | Dispatched | Red after evaluation | Note |
 |---|---|---|---|
+| 3 | Four fix rounds, then the final adversarial review | nothing | Every finding from six reviews and the story walk fixed, each with a test. |
 | 2 | Everything merged | Open on a folder review; the page contradicting itself; redundant hand-over requests; design polish | Story walk: 4 of 8 stories green, 3 partial, 1 red. Five reviews: 2 security and about 20 correctness findings. All in one fix round now. |
 | 1 | Phase 1 tasks 1.1 to 1.4 | not evaluated yet | Merged at 6c872d7, unit gate 1449 pass, 0 fail. Evaluators run after Phase 2. |
 
@@ -73,14 +79,17 @@ Nothing queued.
 
 ### Test results
 
-Test count and how often tests ran are kept apart. The full suite runs once, at the end (release tier), after every fix is in.
+Test count and how often tests ran are kept apart. The full suite runs at the end (release tier), and again after any code change.
 
 | When | Command | Result | Duration |
 |---|---|---|---|
-| 2026-09-28, after Phase 3 merged | `npm run gate` (Chromium) | 413 passed, 1 failed: a page test that read a request before it arrived; fixed with a poll, then 65 of 65 on repeat | 3.5 min |
-| 2026-09-28, after the three fix rounds merged | `npm run gate:all` (Chromium, Firefox, WebKit) | 1259 passed, 1 failed: `catalog_library.spec.js` Open end to end, Firefox only; in the adversary fix round | 9.9 min |
-| 2026-09-28, same point | `npm run gate:unit` | 1683 passed, 0 failed, 2 todo | under 1 min |
-| Release tier | `npm run gate:all` | not run yet: waits on the adversary fix round | |
+| 2026-09-28, after Phase 3 merged | `npm run gate` (Chromium) | 413 passed, 1 failed: a page test that read a request before it arrived; fixed with a poll | 3.5 min |
+| 2026-09-28, after the first three fix rounds | `npm run gate:all` | 1259 passed, 1 failed: Library Open end to end, Firefox only; a real focus bug, fixed | 9.9 min |
+| 2026-09-29 12:58, all fixes in | `npm run gate:all` | 1721 unit and 1265 browser passed, 0 failed | 12 min |
+| 2026-09-29 13:05, after merging main (128 commits) | `npm run gate:unit` | 1887 passed after two fixes where main's trimmed drain met the Library | under 1 min |
+| 2026-09-29 13:15 | `npm run gate:all` | the browser run did not start: the merge left one function defined twice; removed | |
+| 2026-09-29 13:28 | `npm run gate:all` | 1887 unit and 1312 browser passed, 1 failed: `oversized_records.spec.js` in Firefox, which fails on plain main too (board row LAHE-oversized-image-firefox) | 12.8 min |
+| 2026-09-29, after merging main's 4 newest commits | `npm run gate:unit`, then `npm run gate:all` | 1886 unit passed; the browser run is going now | |
 
 ### Ship
 
@@ -88,6 +97,9 @@ Not shipped yet.
 
 ## Log
 
+- **2026-09-29 13:44.** Main moved while this was in review: 128 commits, including one that stops idle page servers after two minutes and one that trims what an agent's drain prints. Both are merged in beside the Library. Two follow-ups are on the board: a Firefox test from main that fails on main too, and lint missing a function declared twice.
+- **2026-09-29 12:39.** A second copy of me took this LAHE session over by mistake, then handed it back and stood down. Nothing was lost.
+- **2026-09-29 12:21.** You chose: a bare `lahe library` starts a session for the agent that runs it, and that session closes itself after 30 quiet minutes with no reviews.
 - **2026-09-28 18:27.** Story walk on a test copy: browsing, starring, getting a closed tab back, and coming back after a restart all work. Open on a folder of pages (like these forge docs) landed on "not found", and the page sometimes said an agent was watching in one spot and not in another. Both are in the fix round, with a design pass: fewer status colors, the rail's button color, and one "Hand to agent" menu per row instead of three buttons. Screenshots of the walk are in the `eval/` folder (not committed; they show real document names).
 - **2026-09-28 17:39.** The Library page is built. First look, from the page's own browser test (fixture data, not your real records):
 
