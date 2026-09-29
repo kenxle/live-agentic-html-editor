@@ -11,6 +11,7 @@
       "id": "s_coach",
       "name": "coach activity",
       "name_from_page": false,
+      "custom_name": null,
       "projects": [
         "alpha",
         "beta"
@@ -206,6 +207,7 @@
       "id": "s_dev",
       "name": "app dev",
       "name_from_page": false,
+      "custom_name": null,
       "projects": [
         "beta"
       ],
@@ -250,6 +252,7 @@
       "id": "s_badsession",
       "name": null,
       "name_from_page": false,
+      "custom_name": null,
       "projects": [],
       "watching": null,
       "away": null,
@@ -286,6 +289,7 @@
       "id": "s_ssbroken",
       "name": "broken server record",
       "name_from_page": false,
+      "custom_name": null,
       "projects": [],
       "watching": null,
       "away": null,
@@ -322,6 +326,7 @@
       "id": "s_ops",
       "name": "ops fixes",
       "name_from_page": false,
+      "custom_name": null,
       "projects": [
         "alpha"
       ],
@@ -545,6 +550,7 @@
       "id": "s_old3",
       "name": null,
       "name_from_page": false,
+      "custom_name": null,
       "projects": [
         "alpha"
       ],
@@ -755,6 +761,7 @@
       "id": "legacy",
       "name": null,
       "name_from_page": false,
+      "custom_name": null,
       "projects": [],
       "watching": null,
       "away": null,

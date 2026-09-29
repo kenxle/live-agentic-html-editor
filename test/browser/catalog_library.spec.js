@@ -179,7 +179,7 @@ test.describe("the Library, end to end, with a stub agent on the real CLI", () =
 
     // Never opened in a browser, so no title was ever recorded: the Library
     // names it by folder and file (R2).
-    const name = "closed / brief.html";
+    const name = "Closed Brief"; // the page's own <title>
     await expect(row(page, world.docs.closed.review).locator(".lib-name")).toHaveText(name);
     const tabPromise = context.waitForEvent("page");
     refreshStubAgent();
@@ -247,7 +247,7 @@ test.describe("the Library, end to end, with a stub agent on the real CLI", () =
     const req = await requestFor(world.docs.pick.review, "pickup");
     expect(req.session).toBe(world.docs.pick.session);
     expect(req.kind).toBe("static");
-    expect(req.title).toBe("pick / plan.html");
+    expect(req.title).toBe("Pick Up Plan");
     expect(req.path).toBe(world.docs.pick.file);
     expect(req.handoff).toContain(world.docs.pick.session);
 
@@ -279,14 +279,14 @@ test.describe("the Library, end to end, with a stub agent on the real CLI", () =
     await expect(dialog).toBeVisible();
     await expect(dialog.locator("h2")).toHaveText(T.CONFIRM_TITLE);
     await expect(dialog.locator("p.lib-dialog-body")).toHaveText(
-      fill(T.CONFIRM_BODY, { name: "watched / spec.html", session: OTHER_AGENT, agent: AGENT_NAME }) + " " + T.CONFIRM_MOVES
+      fill(T.CONFIRM_BODY, { name: "Watched Spec", session: OTHER_AGENT, agent: AGENT_NAME }) + " " + T.CONFIRM_MOVES
     );
     // What is known about the other agent comes first: its real monitor is
     // live, so it is listening. The watched reviews hold no comments, so no
     // waiting count is claimed (the count itself is pinned in the page spec).
     await expect(dialog.locator("p.lib-dialog-status")).toHaveText("Its own agent is listening.");
     await expect(dialog.locator("p.lib-dialog-status")).not.toContainText("waiting");
-    await expect(dialog.locator("li")).toHaveText(["watched2 / figure.html"]);
+    await expect(dialog.locator("li")).toHaveText(["Watched Figure"]);
     expect(world.drainRequests().filter((r) => r.review === world.docs.watched.review), "nothing is queued before the reader decides").toHaveLength(0);
 
     refreshStubAgent();
