@@ -734,8 +734,14 @@ test("CR2: star and unstar act on every review in a fold, so a star never sticks
   assert.equal((await actions.star({ review: lead, starred: true }, installed.nowMs)).status, 200);
   // Another review in the fold becomes the newest, so the lead changes.
   const other = ["r_old1", "r_old2", "r_old3"].find((id) => id !== lead);
-  const later = new Date(installed.nowMs);
-  fs.utimesSync(stateDir.eventsPath(installed.dir, other), later, later);
+  // Work lands on it: its newest event now carries a new time.
+  const log = stateDir.eventsPath(installed.dir, other);
+  const lines = fs.readFileSync(log, "utf8").split("\n").filter(Boolean);
+  const newest = JSON.parse(lines[lines.length - 1]);
+  newest.ts = new Date(installed.nowMs).toISOString();
+  newest.event_id = "ev_cr2_later";
+  newest.seq = lines.length + 1;
+  fs.appendFileSync(log, JSON.stringify(newest) + "\n");
   assert.equal((await foldRow()).id, other, "the lead changed");
   assert.equal((await actions.star({ review: other, starred: false }, installed.nowMs)).status, 200);
   assert.equal((await foldRow()).starred, false, "unstarred through the new lead");

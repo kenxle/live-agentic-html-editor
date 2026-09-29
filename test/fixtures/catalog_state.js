@@ -61,7 +61,10 @@ function install() {
   fs.chmodSync(dir, 0o700);
 
   var big = path.join(dir, "reviews", BIG_REVIEW, "events.jsonl");
-  fs.truncateSync(big, protocol.CATALOG.REPROJECT_MAX_BYTES + 1024);
+  // Padding goes BEFORE the events, as one blank line, so the log's end still
+  // holds real events: the Library reads `last` from the newest one there.
+  var events = fs.readFileSync(big, "utf8");
+  fs.writeFileSync(big, " ".repeat(protocol.CATALOG.REPROJECT_MAX_BYTES + 1024) + "\n" + events, { mode: 0o600 });
 
   var mtimes = JSON.parse(fs.readFileSync(path.join(SOURCE, "mtimes.json"), "utf8"));
   Object.keys(mtimes).forEach(function (rel) {

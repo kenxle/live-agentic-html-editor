@@ -110,11 +110,11 @@ test("reviews group by session, newest session first, reviews newest first", asy
   assert.deepEqual(session(list, "s_coach").reviews.map((r) => r.id), ["r_brief", "r_spec", "r_notes", "r_mounted", "r_deleted"]);
 });
 
-test("a review's last is its log's modified time", async () => {
+test("a review's last is its newest work event's own time", async () => {
   const { reader, installed } = setup();
   const list = await reader.list(installed.nowMs);
   const log = path.join(installed.dir, "reviews", "r_brief", "events.jsonl");
-  assert.equal(row(list, "r_brief").last, fs.statSync(log).mtime.toISOString());
+  assert.equal(row(list, "r_brief").last, newestWorkTs(log));
 });
 
 test("the legacy review lists under the legacy session with kind legacy", async () => {
@@ -858,4 +858,63 @@ test("phase 8: a session watched from another session's monitor takes that agent
   const away = session(await catalogReader.createReader(options).list(later), "s_ops");
   assert.equal(away.watching, null);
   assert.deepEqual(away.away, { session: "s_index", name: "document index", last_active: new Date(later - 5 * MINUTE).toISOString() });
+});
+
+// --- `last` is the newest work event's own time, never a file's mtime ----------
+
+function newestWorkTs(log) {
+  const skip = ["origin.registered", "origin.removed", "page.visited"];
+  return fs.readFileSync(log, "utf8").split("\n").filter((l) => l.trim()).map((l) => JSON.parse(l))
+    .filter((e) => skip.indexOf(e.event) === -1).map((e) => e.ts).sort().pop();
+}
+
+test("last: a compacted log rewritten today keeps its old last, and the card's week split uses it", async () => {
+  const { reader, installed } = setup();
+  const log = path.join(installed.dir, "reviews", "r_spec", "events.jsonl");
+  const before = newestWorkTs(log);
+  // Compaction rewrites the log in place: same events, a new mtime, and two
+  // housekeeping files beside it.
+  fs.writeFileSync(log, fs.readFileSync(log, "utf8"));
+  fs.writeFileSync(log + ".compacted-ids", "ev_x\n");
+  fs.writeFileSync(log + ".pre-compact.gz", "");
+  fs.utimesSync(log, new Date(installed.nowMs), new Date(installed.nowMs));
+  const list = await reader.list(installed.nowMs);
+  assert.equal(row(list, "r_spec").last, before);
+  assert.ok(Date.parse(before) < installed.nowMs - protocol.CATALOG.POLL_MS, "the fixture's newest event is old");
+  assert.equal(row(list, "r_spec").counts_as_of, before, "counts are as of the same last");
+  assert.equal(reader.describeReview("r_spec", installed.nowMs).last, before);
+});
+
+test("last: a review whose every file is new but whose newest event is from August says August", async () => {
+  const { reader, installed } = setup();
+  const log = path.join(installed.dir, "reviews", "r_mounted", "events.jsonl");
+  const events = fs.readFileSync(log, "utf8").split("\n").filter(Boolean).map((l) => JSON.parse(l));
+  const august = "2026-08-18T05:00:03.270Z";
+  events.forEach((e) => { e.ts = august; });
+  fs.writeFileSync(log, events.map((e) => JSON.stringify(e)).join("\n") + "\n");
+  // A reviewer's visit is not work on the document.
+  fs.appendFileSync(log, JSON.stringify({ event: "page.visited", event_id: "ev_visit", ts: new Date(installed.nowMs).toISOString(), review: "r_mounted" }) + "\n");
+  const rj = path.join(installed.dir, "reviews", "r_mounted", "review.json");
+  fs.utimesSync(log, new Date(installed.nowMs), new Date(installed.nowMs));
+  fs.utimesSync(rj, new Date(installed.nowMs), new Date(installed.nowMs));
+  const list = await reader.list(installed.nowMs);
+  assert.equal(row(list, "r_mounted").last, august);
+});
+
+test("last: with no readable event, it is review.json's generated time, else meta created_at, never an mtime", async () => {
+  const { reader, installed } = setup();
+  const log = path.join(installed.dir, "reviews", "r_mounted", "events.jsonl");
+  fs.writeFileSync(log, "{ torn\n");
+  fs.utimesSync(log, new Date(installed.nowMs), new Date(installed.nowMs));
+  const rj = JSON.parse(fs.readFileSync(path.join(installed.dir, "reviews", "r_mounted", "review.json"), "utf8"));
+  const list = await reader.list(installed.nowMs);
+  assert.equal(row(list, "r_mounted").last, new Date(Date.parse(rj.generated_at)).toISOString());
+
+  const meta = JSON.parse(fs.readFileSync(path.join(installed.dir, "reviews", "r_notitle", "meta.json"), "utf8"));
+  const log2 = path.join(installed.dir, "reviews", "r_notitle", "events.jsonl");
+  fs.writeFileSync(log2, "");
+  fs.utimesSync(log2, new Date(installed.nowMs), new Date(installed.nowMs));
+  // r_notitle has no review.json at all.
+  const again = await reader.list(installed.nowMs);
+  assert.equal(row(again, "r_notitle").last, new Date(Date.parse(meta.created_at)).toISOString());
 });

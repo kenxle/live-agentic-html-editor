@@ -165,58 +165,66 @@ function createReader(options) {
   }
 
   // ---------------------------------------------------------------------------
-  // A review's `last`, when its log ends in origin events
+  // A review's `last`: the newest work event's own time
   // ---------------------------------------------------------------------------
 
-  // Open's origin swap (fix round CR5) appends origin.registered and
-  // origin.removed to every review the restarted server serves, so the log's
-  // modified time would call a review nobody touched "worked on just now".
-  // When the log ENDS in origin events, `last` is the time of the newest event
-  // that is not one. Only the tail is read, so a large log stays unread.
-  var ORIGIN_EVENTS = [protocol.EVENT.ORIGIN_REGISTERED, protocol.EVENT.ORIGIN_REMOVED];
+  // `last` is the `ts` of the newest event that is work on the document
+  // (CATALOG.NOT_WORK_EVENTS are not: an Open's origin swap, fix round CR5,
+  // and a visit). It is never the log's modified time: compaction rewrites a
+  // log in place, and every compacted review read "worked on today". The log
+  // is read backwards from its end, in chunks, and never folded; the scan
+  // stops at REPROJECT_MAX_BYTES and then the caller falls back.
   var TAIL_BYTES = 64 * 1024;
   var tailCache = Object.create(null);
 
-  /** The newest non-origin event's time, or null to keep the modified time. */
-  function lastPastOriginEvents(file, stat) {
+  /** The newest work event's time in ms, or null when none was found. */
+  function newestWorkEvent(file, stat) {
     var key = stat.mtimeMs + ":" + stat.size;
     var hit = tailCache[file];
     if (hit && hit.key === key) return hit.value;
     var value = null;
+    var fd = null;
     try {
-      var length = Math.min(stat.size, TAIL_BYTES);
-      var buf = Buffer.alloc(length);
-      var fd = fs.openSync(file, "r");
-      try {
-        fs.readSync(fd, buf, 0, length, stat.size - length);
-      } finally {
-        fs.closeSync(fd);
-      }
-      var lines = buf.toString("utf8").split("\n");
-      // A partial first line of a cut tail is never trusted.
-      if (length < stat.size) lines.shift();
-      var sawOrigin = false;
-      for (var i = lines.length - 1; i >= 0; i -= 1) {
-        if (!lines[i].trim()) continue;
-        var event;
-        try {
-          event = JSON.parse(lines[i]);
-        } catch (err) {
-          continue;
-        }
-        if (!event || typeof event !== "object") continue;
-        if (ORIGIN_EVENTS.indexOf(event.event) !== -1) {
-          sawOrigin = true;
-          continue;
-        }
-        if (sawOrigin) {
+      fd = fs.openSync(file, "r");
+      var end = stat.size;
+      var carry = "";
+      var scanned = 0;
+      while (end > 0 && value === null && scanned < CATALOG.REPROJECT_MAX_BYTES) {
+        var length = Math.min(end, TAIL_BYTES);
+        var buf = Buffer.alloc(length);
+        fs.readSync(fd, buf, 0, length, end - length);
+        end -= length;
+        scanned += length;
+        var lines = (buf.toString("utf8") + carry).split("\n");
+        // The first line may be cut; it is carried into the next chunk, and
+        // trusted only once the start of the file is reached.
+        carry = end > 0 ? lines.shift() : "";
+        for (var i = lines.length - 1; i >= 0; i -= 1) {
+          if (!lines[i].trim()) continue;
+          var event;
+          try {
+            event = JSON.parse(lines[i]);
+          } catch (err) {
+            continue;
+          }
+          if (!event || typeof event !== "object" || typeof event.event !== "string") continue;
+          if (CATALOG.NOT_WORK_EVENTS.indexOf(event.event) !== -1) continue;
           var ts = typeof event.ts === "string" ? Date.parse(event.ts) : NaN;
-          if (!Number.isNaN(ts)) value = ts;
+          if (Number.isNaN(ts)) continue;
+          value = ts;
+          break;
         }
-        break;
       }
     } catch (err) {
       value = null;
+    } finally {
+      if (fd !== null) {
+        try {
+          fs.closeSync(fd);
+        } catch (err) {
+          // nothing to do
+        }
+      }
     }
     tailCache[file] = { key: key, value: value };
     return value;
@@ -620,6 +628,7 @@ function createReader(options) {
       waiting: waiting,
       total: total,
       ended: !!review.ended_at,
+      generated_at: typeof projected.generated_at === "string" ? projected.generated_at : null,
       agent_session_id: typeof review.agent_session_id === "string" ? review.agent_session_id : null
     };
   }
@@ -648,11 +657,12 @@ function createReader(options) {
 
     var createdMs = meta && typeof meta.created_at === "string" ? Date.parse(meta.created_at) : NaN;
     info.createdMs = Number.isNaN(createdMs) ? null : createdMs;
-    info.lastMs = eventsStat ? eventsStat.mtimeMs : info.createdMs !== null ? info.createdMs : 0;
-    if (eventsStat) {
-      var pastOrigins = lastPastOriginEvents(eventsFile, eventsStat);
-      if (pastOrigins !== null) info.lastMs = pastOrigins;
-    }
+    // `last`: the newest work event's time; else review.json's generated time;
+    // else meta's created_at. Never a file's modified time.
+    var generatedMs = rj.state === "ok" && typeof rj.value.generated_at === "string" ? Date.parse(rj.value.generated_at) : NaN;
+    if (Number.isNaN(generatedMs)) generatedMs = null;
+    var workMs = eventsStat ? newestWorkEvent(eventsFile, eventsStat) : null;
+    info.lastMs = workMs !== null ? workMs : generatedMs !== null ? generatedMs : info.createdMs !== null ? info.createdMs : 0;
 
     var summary = null;
     var countsAsOf = null;
@@ -668,7 +678,9 @@ function createReader(options) {
     }
     if (!summary && rj.state === "ok") {
       summary = rj.value;
-      countsAsOf = logIsNewer ? rj.stat.mtimeMs : info.lastMs;
+      // A log review.json has not caught up with: its counts are as of when
+      // it was generated, and never later than `last`.
+      countsAsOf = logIsNewer ? Math.min(generatedMs !== null ? generatedMs : rj.stat.mtimeMs, info.lastMs) : info.lastMs;
     }
     info.summary = summary || { title: null, pages: [], waiting: 0, total: 0, ended: false, agent_session_id: null };
     info.countsAsOfMs = summary ? countsAsOf : null;

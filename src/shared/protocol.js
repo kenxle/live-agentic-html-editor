@@ -762,6 +762,12 @@
     REPLY_REJECTED: "reply.rejected",
     REVIEW_ARCHIVED: "review.archived"
   };
+  // The Library's `last` is the time inside the newest event that is work on
+  // the document, by the reviewer or the agent. These are not: an Open's
+  // origin swap, and a reviewer's visit. Compaction rewrites the log without
+  // adding an event, so the file's modified time is never read for `last`.
+  CATALOG.NOT_WORK_EVENTS = [EVENT.ORIGIN_REGISTERED, EVENT.ORIGIN_REMOVED, EVENT.PAGE_VISITED];
+
 
   // Closed. The projector, the merge rule, and reply folding all switch on this
   // list, and it is the thing a builder invents first if it is not written down.
