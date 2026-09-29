@@ -42,6 +42,7 @@ var stateDir = require("./state_dir.js");
 var agentSessions = require("./agent_sessions.js");
 var reviewsModule = require("./reviews.js");
 var catalogRequests = require("./catalog_requests.js");
+var staticServers = require("./static_servers.js");
 
 var C = protocol.CATALOG;
 var DAY_MS = 24 * 60 * 60 * 1000;
@@ -53,6 +54,9 @@ var NOT_ASKED = { NO_AGENT: "no_agent", QUEUE_FULL: "queue_full", REQUEST_PENDIN
 function iso(ms) {
   return new Date(ms).toISOString();
 }
+
+// Row kinds a new agent cannot be launched on: no session to take over.
+var NO_LAUNCH_KINDS = ["legacy", "worktree"];
 
 function fail(code, detail) {
   return { status: protocol.statusFor(code), error: { code: code, detail: detail === undefined ? null : detail } };
@@ -263,7 +267,11 @@ function createCatalogActions(options) {
         // leaves the session closed.
         restarted = await ops.reopenForCatalog(d.session, d.server, d.review);
       } catch (err) {
-        if (wasClosed) store.clearReopened(d.session);
+        // Only a start that threw left nothing behind. A later throw was
+        // undone inside the ops (the server it started stopped, the session
+        // closed again); the record stays so the sweep closes the session if
+        // that undo did not (adversary fixes).
+        if (wasClosed && err && err.stage === staticServers.REOPEN_STAGE.START) store.clearReopened(d.session);
         log("Library Open of review " + d.review + " could not restart its server: " + err.message, nowMs);
         return { ok: false, outcome: fail("PROTO_NOT_OPENABLE", "the recorded server could not be restarted") };
       }
@@ -323,6 +331,12 @@ function createCatalogActions(options) {
     // A missing review has nothing an agent could open, so it is refused here
     // exactly as Open refuses it.
     if (d.openable === "missing") return fail("PROTO_NOT_OPENABLE", "missing");
+    // A launched agent's first prompt takes the document's session over. A
+    // legacy review has no session, and a worktree row's session serves a
+    // folder that is gone, so a launch there would send a new agent hunting
+    // for a session nobody pointed at (adversary fixes). Pick this up serves
+    // those rows instead.
+    if (action === ACTION.LAUNCH && NO_LAUNCH_KINDS.indexOf(d.kind) !== -1) return fail("PROTO_NO_LAUNCH", d.kind);
     var agent = liveAgent(nowMs);
     if (!agent) return fail("PROTO_NO_AGENT");
     // A pick-up of a served document the attached agent already has asks for
@@ -445,12 +459,67 @@ function createCatalogActions(options) {
     return out;
   }
 
+  /**
+   * Close each session bare `lahe library` started (session.json `created_by`)
+   * once it owns no reviews and its agent has been quiet for
+   * LIBRARY_SESSION_IDLE_MS: no live monitor heartbeat, and no lahe command
+   * since that long ago (quiet counts from the later of the session's start
+   * and its last command). Left alone: a session that owns a review, and one
+   * taken over since (its handoff_rev moved past 0).
+   *
+   * @returns {Promise<{closed: string[], kept: string[]}>}
+   */
+  async function sweepLibrarySessions(nowMs) {
+    var out = { closed: [], kept: [] };
+    var all;
+    try {
+      all = sessions.list();
+    } catch (err) {
+      return out;
+    }
+    for (var i = 0; i < all.length; i += 1) {
+      var session = all[i];
+      if (!session || session.closed_at || session.created_by !== C.CREATED_BY_LIBRARY) continue;
+      var sessionId = session.id;
+      if (agentSessions.handoffRev(session) > 0 || reviewsOf(sessionId).length > 0) continue;
+      if (monitorLive(sessionId, session, nowMs)) {
+        out.kept.push(sessionId);
+        continue;
+      }
+      var quietSince = Date.parse(session.created_at);
+      if (Number.isNaN(quietSince)) quietSince = 0;
+      var activity = null;
+      try {
+        activity = sessions.readActivity(sessionId);
+      } catch (err) {
+        activity = null;
+      }
+      var lastCommand = activity ? Date.parse(activity[protocol.MONITOR.ACTIVITY_FIELD.AT]) : NaN;
+      if (!Number.isNaN(lastCommand)) quietSince = Math.max(quietSince, lastCommand);
+      if (nowMs - quietSince < C.LIBRARY_SESSION_IDLE_MS) {
+        out.kept.push(sessionId);
+        continue;
+      }
+      try {
+        await ops.closeQuiet(sessionId);
+      } catch (err) {
+        log("Library sweep could not close idle Library session " + sessionId + ": " + err.message, nowMs);
+        out.kept.push(sessionId);
+        continue;
+      }
+      log("Library sweep closed session " + sessionId + ": started by lahe library, no reviews, quiet", nowMs);
+      out.closed.push(sessionId);
+    }
+    return out;
+  }
+
   return {
     list: list,
     open: open,
     star: star,
     request: request,
-    sweepReopened: sweepReopened
+    sweepReopened: sweepReopened,
+    sweepLibrarySessions: sweepLibrarySessions
   };
 }
 

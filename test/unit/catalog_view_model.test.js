@@ -168,11 +168,13 @@ test("with no agent, Pick this up and Launch show the hand-off panel instead of 
   });
 });
 
-test("the hand-off panel for a legacy review points at the session list", () => {
+test("the hand-off panel for a legacy review has no message: there is no session to take over, so it never points at the session list", () => {
   const list = freshList();
   list.attached = null;
   const view = build(list, vm.withPanel(okState(), "r_legacy", "no_agent"));
-  assert.equal(row(view, "r_legacy").panel.message, protocol.AGENT_LIVENESS.handoffMessage(null, null, false, { library: true, stateDir: null }));
+  const panel = row(view, "r_legacy").panel;
+  assert.equal(panel.message, null);
+  assert.equal(panel.intro, vm.TEXT.PANEL_NO_SESSION);
 });
 
 // ---------------------------------------------------------------------------
@@ -973,13 +975,19 @@ test("Open on a servable row that no server could restart waits for the agent in
 // src/service/catalog_requests.js EXPIRY_REASON.
 // ---------------------------------------------------------------------------
 
-function expiredRow(action, reason) {
+function expiredRow(action, reason, id) {
   const list = freshList();
   const q = reviewIn(list, "r_wt_gone").request;
   q.action = action;
   if (reason === undefined) delete q.reason;
   else q.reason = reason;
-  return row(build(list, okState()), "r_wt_gone");
+  // The same expired request on another row (a static one, for a launch: a
+  // worktree row has no session a new agent could take over).
+  if (id && id !== "r_wt_gone") {
+    reviewIn(list, id).request = Object.assign({}, q, { review: id });
+    reviewIn(list, "r_wt_gone").request = null;
+  }
+  return row(build(list, okState()), id || "r_wt_gone");
 }
 
 test("a pick-up that expired on a timeout says the agent did not answer", () => {
@@ -1004,15 +1012,21 @@ test("an expired request with no reason keeps the did-not-answer wording", () =>
 });
 
 test("an expired launch says no agent was launched and offers the hand-off message", () => {
-  const r = expiredRow("launch", "timeout");
+  const r = expiredRow("launch", "timeout", "r_brief");
   assert.equal(r.note.text, "No new agent was launched. document index didn't answer.");
   assert.equal(r.note.copyHandoff, true);
 });
 
 test("an expired launch after an attach change names both facts", () => {
-  const r = expiredRow("launch", "attach_changed");
+  const r = expiredRow("launch", "attach_changed", "r_brief");
   assert.equal(r.note.text, "No new agent was launched. A different agent was attached before document index answered.");
   assert.equal(r.note.copyHandoff, true);
+});
+
+test("an expired launch on a worktree row offers no hand-off message: it has no session to take over", () => {
+  const r = expiredRow("launch", "timeout");
+  assert.equal(r.note.text, "No new agent was launched. document index didn't answer.");
+  assert.equal(r.note.copyHandoff, false);
 });
 
 // ---------------------------------------------------------------------------
@@ -1165,4 +1179,10 @@ test("a pick-up answered with no request id says the agent already has it, not w
   assert.equal(r.note.text, "document index already has it. Nothing was sent.");
   assert.equal(r.note.busy, false);
   assert.equal(r.buttons.handTo.busy, false);
+});
+
+test("a legacy row says Pick this up starts a new review and the old comments stay on the old one", () => {
+  const r = row(build(freshList(), okState()), "r_legacy");
+  assert.ok(r.notices.some((n) => n.text === vm.TEXT.LEGACY_NEW_REVIEW), JSON.stringify(r.notices));
+  assert.match(vm.TEXT.LEGACY_NEW_REVIEW, /old comments stay on the old review/);
 });

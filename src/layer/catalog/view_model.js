@@ -78,6 +78,11 @@
     HAND_TO: "Hand to agent",
     // An agent is told to refuse a dev-server hand-over (it cannot start
     // someone's app), so the Library does not offer one.
+    // A launched agent takes the document's session over. These rows have
+    // none to take, so Launch is off and no hand-off message is offered.
+    LAUNCH_NO_SESSION_LEGACY: "This review is from before sessions, so there is no session for a new agent to take over. Pick this up has the attached agent serve it.",
+    LAUNCH_NO_SESSION_WORKTREE: "The worktree is gone, so there is no session for a new agent to take over. Pick this up has the attached agent serve the main repository's copy.",
+    PANEL_NO_SESSION: "This document has no session a new agent could take over, so there is no hand-off message. Attach an agent with lahe library, then choose Pick this up.",
     DEV_SERVER_NO_HANDOFF: "An app's dev server serves this page, so no agent can take it from here. Start the dev server and open the page yourself.",
     SEARCH_PLACEHOLDER: "Search titles, files, folders, sessions",
     ALL_PROJECTS: "All projects",
@@ -107,6 +112,9 @@
     FOLDED: "{n} reviews of this folder, shown as one",
     UNREADABLE: "Some of this review's records can't be read.",
     MISSING: "File is gone. Open unavailable.",
+    // A legacy review has no session: Pick this up serves the page as a new
+    // review in the agent's session.
+    LEGACY_NEW_REVIEW: "Pick this up starts a new review of this page. The old comments stay on the old review.",
     WORKTREE: "The worktree is gone. An agent will open the main repository's copy, which may differ from what you reviewed.",
     NEEDS_AGENT: "Needs an agent to reopen. No agent is attached.",
     NO_MATCHES: "Nothing matches that search.",
@@ -499,14 +507,19 @@
     if (review.unreadable) notices.push({ text: TEXT.UNREADABLE, tone: "warn" });
     if (missing) notices.push({ text: TEXT.MISSING, tone: "quiet" });
     if (!missing && review.kind === "worktree") notices.push({ text: TEXT.WORKTREE, tone: "info" });
+    if (!missing && review.kind === "legacy") notices.push({ text: TEXT.LEGACY_NEW_REVIEW, tone: "info" });
     if (viaAgent && !agent) notices.push({ text: TEXT.NEEDS_AGENT, tone: "warn" });
     if (devServer && !missing) notices.push({ text: TEXT.DEV_SERVER_NO_HANDOFF, tone: "quiet" });
 
     var handEnabled = !missing && !devServer;
+    var noSession = review.kind === "legacy" || review.kind === "worktree";
+    var launchReason = review.kind === "legacy" ? TEXT.LAUNCH_NO_SESSION_LEGACY
+      : review.kind === "worktree" ? TEXT.LAUNCH_NO_SESSION_WORKTREE : null;
+    if (note && noSession) note = assign({}, note, { copyHandoff: false });
     var buttons = {
       open: { label: TEXT.OPEN, enabled: !missing && !(viaAgent && !agent), busy: isOpening(state, review.id) },
       pickup: { label: TEXT.PICKUP, enabled: handEnabled, busy: busyAction === "pickup" },
-      launch: { label: TEXT.LAUNCH, enabled: handEnabled, busy: busyAction === "launch" },
+      launch: { label: TEXT.LAUNCH, enabled: handEnabled && !noSession, reason: launchReason, busy: busyAction === "launch" },
       handTo: {
         label: TEXT.HAND_TO,
         // The attached agent already watches this session: there is nothing
@@ -523,8 +536,8 @@
     if (state.panel && state.panel.review === review.id) {
       panel = {
         reason: state.panel.reason,
-        intro: state.panel.reason === "refused" ? TEXT.PANEL_REFUSED : TEXT.PANEL_NO_AGENT,
-        message: handoffFor(session, list),
+        intro: noSession ? TEXT.PANEL_NO_SESSION : state.panel.reason === "refused" ? TEXT.PANEL_REFUSED : TEXT.PANEL_NO_AGENT,
+        message: noSession ? null : handoffFor(session, list),
         copyLabel: TEXT.COPY,
         closeLabel: TEXT.CLOSE,
         copyStatus: state.panel.copied === true ? TEXT.COPIED : state.panel.copied === false ? TEXT.COPY_FAILED : null
@@ -573,7 +586,7 @@
       pages: pages,
       notices: notices,
       note: note,
-      offerHandoff: viaAgent && !agent,
+      offerHandoff: viaAgent && !agent && !noSession,
       handoffLabel: TEXT.COPY_HANDOFF,
       buttons: buttons,
       panel: panel,

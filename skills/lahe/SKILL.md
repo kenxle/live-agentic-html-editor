@@ -566,7 +566,9 @@ open <the URL it printed>
   Bare, it starts a new agent session for you (one with no reviews),
   attaches it, and prints its session id and its monitor, drain and close
   commands, as `lahe review` does. `--name` names it. Every bare run starts
-  another session, so do not run it bare twice.
+  another session, so do not run it bare twice. A session a bare run started
+  closes itself once it owns no reviews and you have run no monitor and no
+  lahe command for 30 minutes.
 - Then arm your monitor on your session as usual. A request expires if your
   monitor is not running, if another agent attaches, or after 30 minutes with
   no answer.
@@ -590,7 +592,7 @@ it expires.
 | `kind` | What to do |
 | --- | --- |
 | `static` | `lahe session takeover <session>`, run its catch-up, then watch it (below) |
-| `legacy` | No session to take. Run `lahe library serve <request> --session <your-session-id>`: it reads the document's path itself and serves it |
+| `legacy` | No session to take. Run `lahe library serve <request> --session <your-session-id>`: it reads the document's path itself and serves it as a new review in your session. The old comments stay on the old review; say so in your answer |
 | `worktree` | The worktree is gone. Run `lahe library serve <request> --session <your-session-id>`: it serves the main-repo `candidate`. If `candidate` is null, answer `refused` |
 | `dev-server` | Answer `refused`: "Start the dev server at <origin>, then ask me again.", with the entry's `origin` |
 
@@ -602,6 +604,7 @@ lahe monitor --session <your-session-id> --session <session>
 
 **Launch a new agent** (`action: launch`). Start one new agent, never more.
 Do not take the session over yourself: the new agent does that.
+A launch request is only for a static row: the Library refuses one on a legacy or worktree row, and if one reaches you anyway its handoff is null, so answer refused.
 
 On macOS, with a host that has a command line (`claude` for Claude Code,
 `codex` for Codex):
@@ -632,6 +635,21 @@ On macOS, with a host that has a command line (`claude` for Claude Code,
    reaches the new shell as one word, and no page text passes through a shell
    string you typed.
 4. Answer `done`: "Launched claude in a new Terminal window."
+
+When folder is null, skip the folder file and the cd. Run the same command
+with one file, the hand-off:
+
+```sh
+osascript -e 'on run argv' \
+  -e 'set msg to read (POSIX file (item 2 of argv)) as «class utf8»' \
+  -e 'tell application "Terminal"' -e 'activate' \
+  -e 'do script (quoted form of (item 1 of argv)) & " " & (quoted form of msg)' \
+  -e 'end tell' -e 'end run' claude /path/to/handoff.txt
+```
+
+Then answer `done` and say the new agent started in its default folder:
+"Launched claude in a new Terminal window. It started in its default folder,
+since this document has no project folder on record."
 
 On Linux or Windows, or a host with no command line, answer `refused`: "I can't
 open a terminal here. Copy the hand-off message and paste it into a new agent."

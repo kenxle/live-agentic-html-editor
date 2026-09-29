@@ -35,6 +35,16 @@ async function entryFor(doc) {
   store.create({ id: "s_doc" });
   reviewsModule.createReviews({ dir, log: logModule.createEventLog({ dir }) })
     .create({ id: "r_doc", agent_session_id: "s_doc", target_path: doc });
+  // The folder comes from the helper's server record, never from meta.json's
+  // paths, which a page can rewrite with its review token.
+  const staticServers = require("../../src/service/static_servers.js");
+  const record = stateDir.staticServerPath(dir, "s_doc", "ss_doc");
+  fs.mkdirSync(path.dirname(record), { recursive: true });
+  fs.writeFileSync(record, JSON.stringify({
+    schema: staticServers.SCHEMA, id: "ss_doc", session_id: "s_doc", instance: "inst_ss_doc",
+    root: path.dirname(doc), logical_root: path.dirname(doc), host: "127.0.0.1", port: 54997, pid: 999999,
+    started_at: new Date(T0 - 60000).toISOString(), stopped_at: new Date(T0 - 30000).toISOString(), mounts: {}
+  }) + "\n");
   const reviewJson = stateDir.reviewJsonPath(dir, "r_doc");
   fs.writeFileSync(reviewJson, JSON.stringify({ review: {}, pages: [{ title: "Doc", path: "/" + path.basename(doc), items: [] }] }));
   catalogRequests.writeAttach(dir, "s_attached", T0);
@@ -81,4 +91,52 @@ test("every copy of the Launch steps cds into the folder, read from a file, quot
     assert.ok(flat.includes('do script "cd " & (quoted form of dir) & " && " & (quoted form of (item 1 of argv))'), name);
   }
   assert.equal(protocol.isSafeId("s_doc"), true);
+});
+
+// Adversary fixes, finding 5: the walk up to a .git stops at the home folder,
+// so a dotfiles repository in ~ never becomes the folder a new agent starts in.
+test("a dotfiles repository in the home folder is never the launch folder", async (t) => {
+  const home = tempDir();
+  fs.mkdirSync(path.join(home, ".git"));
+  const notes = path.join(home, "notes");
+  fs.mkdirSync(notes);
+  const doc = path.join(notes, "plan.html");
+  fs.writeFileSync(doc, "<p>plan</p>");
+  const saved = process.env.HOME;
+  process.env.HOME = home;
+  t.after(() => { process.env.HOME = saved; });
+  assert.equal(os.homedir(), home, "the test controls the home folder");
+  const { entry } = await entryFor(doc);
+  assert.equal(entry.folder, notes);
+});
+
+test("a repository below the home folder is still found", async (t) => {
+  const home = tempDir();
+  fs.mkdirSync(path.join(home, ".git"));
+  const repo = path.join(home, "code", "proj");
+  fs.mkdirSync(path.join(repo, ".git"), { recursive: true });
+  fs.mkdirSync(path.join(repo, "docs"));
+  const doc = path.join(repo, "docs", "brief.html");
+  fs.writeFileSync(doc, "<p>brief</p>");
+  const saved = process.env.HOME;
+  process.env.HOME = home;
+  t.after(() => { process.env.HOME = saved; });
+  const { entry } = await entryFor(doc);
+  assert.equal(entry.folder, repo);
+});
+
+// Adversary fixes, round 2: a null folder skips the cd, and the answer says so.
+test("every copy of the Launch steps says what to do when folder is null: no cd, and say so in the answer", () => {
+  const root = path.join(__dirname, "..", "..");
+  const copies = {
+    contract: rf.CONTRACT.join("\n"),
+    skill: fs.readFileSync(path.join(root, "skills", "lahe", "SKILL.md"), "utf8"),
+    contracts_md: fs.readFileSync(path.join(root, "docs", "CONTRACTS.md"), "utf8")
+  };
+  for (const [name, text] of Object.entries(copies)) {
+    const flat = text.replace(/\\"/g, '"').replace(/\s+/g, " ");
+    assert.ok(flat.includes("When folder is null, skip the folder file and the cd"), name);
+    assert.ok(flat.includes('do script (quoted form of (item 1 of argv)) & " " & (quoted form of msg)'), name);
+    assert.ok(flat.includes("started in its default folder"), name);
+  }
 });

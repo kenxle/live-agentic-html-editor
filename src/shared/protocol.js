@@ -642,6 +642,7 @@
     PROTO_QUEUE_FULL: 429,
     PROTO_NO_AGENT: 409,
     PROTO_CONFIRM_NEEDED: 409,
+    PROTO_NO_LAUNCH: 409,
     PROTO_CATALOG_UNREADABLE: 500
   };
 
@@ -677,6 +678,12 @@
     LIBRARY_SEEN_MS: 2 * 60 * 1000,
     // A quiet Library-reopened session closes.
     REOPENED_AUTOCLOSE_MS: 30 * 60 * 1000,
+    // A session bare `lahe library` started closes once it owns no reviews and
+    // its agent has been quiet this long (no live monitor, no lahe command).
+    LIBRARY_SESSION_IDLE_MS: 30 * 60 * 1000,
+    // session.json's `created_by` on a session bare `lahe library` started.
+    // Written by the CLI when it creates the session; the helper only reads it.
+    CREATED_BY_LIBRARY: "library",
     // Pending requests across the whole Library.
     QUEUE_CAP: 5,
     // The largest review log the reader will re-project.
@@ -693,6 +700,13 @@
     // can fold into one row per folder.
     FOLD_CUTOFF: "2026-09-17T04:00:00Z"
   };
+
+  // What a legacy pickup does, said once for the drain and `lahe library
+  // serve`: a legacy review has no session, so it is served as a fresh review
+  // and its comments stay where they are.
+  function CATALOG_LEGACY_NOTE(reviewId) {
+    return "Serving it starts a new review in your session. The old comments stay on the old review, " + reviewId + ".";
+  }
 
   // ---------------------------------------------------------------------------
   // The Library's helper log line
@@ -1640,6 +1654,7 @@
     errorBody: errorBody,
 
     CATALOG: CATALOG,
+    CATALOG_LEGACY_NOTE: CATALOG_LEGACY_NOTE,
     CATALOG_LOG: CATALOG_LOG,
     catalogLogLine: catalogLogLine,
 

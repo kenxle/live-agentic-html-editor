@@ -197,7 +197,11 @@ async function runLibrary(args, opts, out, err) {
     }
   } else {
     try {
-      sessionId = store.create(args.name === null ? {} : { name: args.name }).id;
+      // Marked as the Library's own, so the helper closes it once it is idle
+      // and owns no reviews (CATALOG.LIBRARY_SESSION_IDLE_MS).
+      var spec = { created_by: protocol.CATALOG.CREATED_BY_LIBRARY };
+      if (args.name !== null) spec.name = args.name;
+      sessionId = store.create(spec).id;
       created = true;
       // The block printed below names the wake feed's path, so it has to exist
       // before an agent copies that line.
@@ -309,8 +313,8 @@ function runAnswer(args, opts, out, err) {
 /**
  * The file or folder a pickup serves, checked now, or a reason it cannot be.
  *
- * legacy: the review's own document, which must still be there and be this
- * user's. worktree: the main-repo candidate, which describeReview re-checks on
+ * legacy: the review's own document, which must still be there, hold this
+ * review's own script line, and be this user's. worktree: the main-repo candidate, which describeReview re-checks on
  * this read (real path under the repository, not hidden, a page, this user's,
  * no quote or control character). Every other kind is not served.
  */
@@ -320,10 +324,19 @@ function serveTarget(described) {
     var stat = null;
     try { stat = described.path ? fs.statSync(described.path) : null; } catch (error) { stat = null; }
     if (!stat || !(stat.isFile() || stat.isDirectory())) return { error: "its document is gone; answer refused" };
+    // The recorded path is page text (review.write records it with the page's
+    // own token). Only a file that holds this review's script line is its
+    // document.
+    if (!described.verified_path || described.verified_path !== described.path) {
+      return { error: "its recorded file does not hold this review's script line; answer refused" };
+    }
     if (typeof process.getuid === "function" && stat.uid !== process.getuid()) {
       return { error: "its document belongs to another user; answer refused" };
     }
-    return { target: described.path };
+    // A fresh review in the agent's session (`--new`): the file's script line
+    // names the legacy review, which belongs to no session, so `lahe review`
+    // would refuse to reuse it. The old comments stay on the legacy review.
+    return { target: described.verified_path, fresh: true };
   }
   if (described.kind === "worktree") {
     if (!described.candidate) return { error: "its worktree is gone and no main-repo copy passes the checks; answer refused" };
@@ -362,6 +375,7 @@ async function runServe(args, opts, out, err) {
   }
   // argv, never a shell: the path is page text and arrives as one argument.
   var argv = [BIN, "review", chosen.target, "--session", args.session];
+  if (chosen.fresh) argv.push("--new");
   if (args.stateDir) argv.push("--state-dir", args.stateDir);
   if (args.port !== null) argv.push("--port", String(args.port));
   var code = await new Promise(function (resolve) {
@@ -374,7 +388,10 @@ async function runServe(args, opts, out, err) {
     });
     child.on("close", function (status) { resolve(typeof status === "number" ? status : 1); });
   });
-  if (code === EXIT.OK) agentSessions.createStore({ dir: dir }).touchActivity(args.session);
+  if (code === EXIT.OK) {
+    agentSessions.createStore({ dir: dir }).touchActivity(args.session);
+    if (chosen.fresh) out(protocol.CATALOG_LEGACY_NOTE(request.review) + "\n");
+  }
   return code;
 }
 

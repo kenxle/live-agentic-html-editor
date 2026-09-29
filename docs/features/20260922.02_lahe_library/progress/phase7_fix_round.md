@@ -176,3 +176,102 @@ All five come from the page spec's screenshot test, run with `LAHE_SHOTS=1` on C
 **To delete at cleanup**
 
 - `node_modules` in this worktree: a symlink to the main checkout's, never committed.
+
+## Adversary fixes
+
+Branch `task/lib-fix2`. Five findings from the final adversarial review. Each has a test that failed first, except finding 4, which did not reproduce.
+
+**Counts** (final run, this branch)
+
+- `npm run lint`: passed.
+- `npm run gate:unit`: 1711 tests, 1708 pass, 0 fail, 3 todo (the two older `anchor_cases` ones, plus one new todo below).
+- `catalog_page.spec.js`, Chromium: 20 passed, 1 skipped (the screenshot test, which runs only with `LAHE_SHOTS=1`).
+- `catalog_library.spec.js`, Chromium: 3 passed.
+
+**1. A page could choose what `lahe library serve` serves and where a launched agent starts.** `review.write` records any `source_path` or `target_path` sent with the review token, and a page can read that token. The Library now takes its locations only from records a page cannot write.
+
+- Static rows: the drain's `folder` comes from the covering server record's root.
+- Worktree rows: a row is `worktree` only when the covering server record's root is under `<repo>/.claude/worktrees/<name>/` and the document is under that root. A legacy row is never one.
+- Legacy rows: `describeReview` gains `verified_path`, the document only when the file holds this review's own script line. `lahe library serve` refuses otherwise, and the drain's `folder` is null.
+- Test: `test/unit/library_trusted_paths.test.js`. It posts `review.write` with a page's `source_path` (and `target_path`) pointing at another repository, on a legacy and a static review, queues a pickup, and runs `lahe library serve`. Serve refuses, and the drain's `folder` is neither that repository nor inside it. A fake worktree `source_path` does not make a static or a legacy row `worktree`.
+- `launch_folder.test.js` and the worktree-candidate test in `status_catalog.test.js` now write the server record their rows need.
+
+**2. Launch offered a hand-off on rows with no session to take over.** I chose to refuse, not to write a second hand-off. A new agent then never gets a message that sends it to `lahe session list`.
+
+- API: `catalog.request` refuses a launch on a legacy or worktree row with new code `PROTO_NO_LAUNCH` (409), whose remedy says to choose Pick this up.
+- Page: Launch is disabled on those rows, with the reason as its tooltip. The hand-off panel on those rows has no message, and no row offers to copy one.
+- Drain: a launch entry for those kinds carries `handoff: null`.
+- Contract, skill, `docs/CONTRACTS.md` and the test copy: "A launch request is only for a static row: the Library refuses one on a legacy or worktree row, and if one reaches you anyway its handoff is null, so answer refused."
+- Tests: `test/unit/launch_by_kind.test.js` (page, API, drain, contract copies) and a new browser test in `catalog_page.spec.js`. Three view-model tests changed: the legacy panel test now expects no message, and the two expired-launch tests use a static row. A new one pins that a worktree row's expired launch offers no copy.
+
+![A legacy row's menu, light](../catalog_menu_legacy_light.png)
+
+![A legacy row's menu, dark](../catalog_menu_legacy_dark.png)
+
+The reason shows as a tooltip, which a screenshot does not capture.
+
+**3. A failed Open could leave a server running.** `reopenForCatalog` marks an error from `start()` as `stage: "start"`. After the server is up, a throw stops the server it started and closes the session it reopened, then marks the error `after_start`. Open clears its `reopened` record only for a start error, so the sweep still finds a session the undo missed. Test: `test/unit/catalog_open_rollback.test.js`, with the real `createCatalogOps` and a `reviews.registerOrigin` that throws. The session ends closed and no `ss_` process is left (checked with `pgrep`).
+
+**4. `lahe status --quiet` printing the "no reviews" line: did not reproduce.** The parser still refuses `--quiet` without `--json`, as it did before the Library, so that line is never reached. I added a pin test in `status_catalog.test.js`, checked that it goes red when the parse refusal is removed, and added an early return in that branch so the rule holds either way.
+
+**5. The launch folder could be a dotfiles repo in `~`.** `projectFolder` stops walking at the home folder (by path and by real path). Tests in `launch_folder.test.js`: a `.git` in home is never the folder, and a repo below home is still found.
+
+### Needs a decision (settled by Ken in round 2, below)
+
+- **A legacy pickup cannot be served.** A real legacy document holds its review's script line. `lahe review <file> --session <agent>` then refuses: "review r_legacy belongs to agent session legacy". So `lahe library serve` could not serve a real legacy row even before these fixes. The old test passed only because it used a `.md` file with no script line, which a legacy review never is. The quote test now checks that the path reaches `lahe review` as one argument, and a `test.todo` marks the gap. There are two ways to fix it, and both change the design:
+  - Serve with `--new`: a fresh review in the agent's session, with the old comments left on the legacy review.
+  - Adopt the legacy review into the agent's session.
+- **Launch with no folder.** A static row whose server record is gone now has `folder: null`. The Launch steps do not say what to do with a null folder.
+
+### Round 2: Ken's decisions and the Firefox failure
+
+**No full suite ran this round.** `npm run gate` and `npm run gate:all` were not run. The orchestrator runs the full suite once at the end. The runs below are the only ones.
+
+The two open questions above are now settled by Ken, so they are no longer open.
+
+**1. Bare `lahe library` sessions close themselves when idle.** Bare runs still start a fresh session. The CLI marks it `created_by: "library"` in session.json; the helper only reads that field. The helper's sweep (same timer as the reopened-session sweep) closes such a session once it owns no reviews and its agent has been quiet for `CATALOG.LIBRARY_SESSION_IDLE_MS` (30 minutes): no live monitor heartbeat, and no lahe command since then. Quiet counts from the later of the session's start and its last command. A session that gained a review, or was taken over, is left alone.
+
+- Test added: `test/unit/library_session_autoclose.test.js`, 9 tests. The clock is injected. The session closes at exactly the limit and stays open 1 ms under it. A lahe command restarts the count, and a live monitor keeps it open. It is left alone once it owns a review or was taken over. A session nobody marked is never touched. The helper's own timer runs the sweep. The CLI test was green before the constant existed (both sides undefined), so I proved it red by putting `library.js` back to HEAD.
+- Docs: the contract and its three copies, `docs/CONTRACTS.md` (a new "Library-session sweep" paragraph), `docs/CLI.md`, and the architecture's Helper lifetime section.
+- Commands: `node --test test/unit/library_session_autoclose.test.js`: 8 fail, 1 false pass before; 9 pass after.
+
+**2. Legacy pickups are served as a fresh review.** `lahe library serve` runs `lahe review <file> --session <agent> --new`. The old comments stay on the legacy review. Three places say so:
+  - the drain entry: a new helper field, `note`, set on legacy entries only
+  - the command's output
+  - a line on the legacy row: "Pick this up starts a new review of this page. The old comments stay on the old review."
+
+The contract, the skill and `docs/CLI.md` tell the agent to say so in its answer.
+
+- Tests: the `test.todo` is replaced by a real test in `test/unit/library_serve.test.js`. It serves a real legacy file (with its script line), gets one new review owned by the agent at that path, and every file in the legacy review's folder stays byte for byte the same. Also a drain-note test (`library_serve.test.js`) and a row-notice test (`catalog_view_model.test.js`). The pinned key list in `status_catalog.test.js` now includes `note`.
+- Commands: `node --test test/unit/library_serve.test.js test/unit/catalog_view_model.test.js`: 3 fail before; then those plus `status_catalog`, `review_format`, `library_trusted_paths` and `launch_by_kind`: 215 pass, 0 fail, 1.1 s. `LAHE_SHOTS=1 npx playwright test test/browser/catalog_page.spec.js -g "screenshots"`: 1 passed, 2.9 s, which retook the legacy row images:
+
+![A legacy row, with its new line and its menu, light](../catalog_menu_legacy_light.png)
+
+![The same, dark](../catalog_menu_legacy_dark.png)
+
+**3. Launch with `folder: null`.** The Launch steps give a one-file osascript with no `cd`, and the agent says in its answer that the new agent started in its default folder. This is in the contract, the skill, `docs/CONTRACTS.md` and the test copy.
+
+- Test added: in `test/unit/launch_folder.test.js`, every copy carries the null-folder steps.
+- Commands: `node --test test/unit/launch_folder.test.js`: 1 fail before; then with `review_format` and `library_serve`: 63 pass, 0 fail, 3.2 s.
+
+**4. The Firefox failure in `catalog_library.spec.js` "Open a closed review".** It was the product, not the test.
+
+- `--project=firefox --repeat-each 5` failed 5 of 5 before the fix, in 95 s. Each time the comment box never took focus in the opened tab.
+- Tracing showed what happened. The keystroke opened the box, but no element in that tab could take focus, not even a plain probe textarea. Meanwhile the Library page focused its Open button again on the render right after Open.
+- A Library render puts focus back on the control the reader was on. After Open opened a tab, that focus pulled the keyboard back to the Library in Firefox.
+- Fix in `src/layer/catalog/page.js`: after Open opens a tab, a render keeps the focus key and does not focus. It focuses again once the reader is back on the Library page (a focus event, or a key or pointer press there). No retry, no sleep.
+- An earlier try that checked `document.hasFocus()` did not help: under Playwright both pages report focus. Bringing the tab to the front in the test did not help either.
+- Commands after the fix:
+  - `npx playwright test test/browser/catalog_library.spec.js -g "Open a closed review" --project=firefox --repeat-each 5`: 5 passed, 84 s.
+  - `catalog_library.spec.js`, one run per lane: Chromium 3 passed (40.9 s), Firefox 3 passed (38.1 s), WebKit 3 passed (40.5 s).
+  - `npx playwright test test/browser/catalog_page.spec.js` (Chromium, since `page.js` changed), four runs: two were 20 passed with 1 skipped. Two had 1 failure: "a star changes when the helper answers" with `route.fetch: socket hang up` from its own helper. The same test alone with `--repeat-each 10`: 10 passed. This flake is separate from item 4 and I have not tracked down its cause. It shows only when the whole file runs.
+
+**Unit gate, once, at the end:** `npm run gate:unit`: lint passed; 1723 tests, 1721 pass, 0 fail, 2 todo (the two older `anchor_cases` ones), 43 s.
+
+### Not done
+
+- `npm run install-skills` was not run, since the branch is not merged.
+- `dist/` was rebuilt locally for the browser runs and not committed.
+- The rendered `02_architecture_lahe_library.html` was not regenerated.
+
+To delete at cleanup: nothing new.

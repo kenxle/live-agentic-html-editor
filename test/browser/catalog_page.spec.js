@@ -472,6 +472,28 @@ test.describe("the Library page", () => {
     ]);
   });
 
+  test("Launch is disabled with its reason on a legacy and a worktree row; Pick this up stays", async ({ page }) => {
+    // The worktree row's session is watched by the Library's own agent in the
+    // fixture, which hides its menu; nobody watches it here.
+    const list = freshList();
+    list.sessions.forEach((s) => { if (s.reviews.some((r) => r.id === "r_wt_gone")) s.watching = null; });
+    await routeCatalog(page, { list: () => list });
+    await openLibrary(page, helper);
+    for (const id of ["r_legacy", "r_wt_gone"]) {
+      const row = rowLocator(page, id);
+      await row.locator('[data-act="menu"]').click();
+      await expect(row.locator('[data-act="pickup"]')).toBeEnabled();
+      const launch = row.locator('[data-act="launch"]');
+      await expect(launch).toBeDisabled();
+      await expect(launch).toHaveAttribute("title", /no session for a new agent to take over/);
+      await page.keyboard.press("Escape");
+    }
+    // A static row keeps Launch.
+    const mounted = rowLocator(page, "r_mounted");
+    await mounted.locator('[data-act="menu"]').click();
+    await expect(mounted.locator('[data-act="launch"]')).toBeEnabled();
+  });
+
   test("the header says no agent attached when the attached session is closed", async ({ page }) => {
     const list = freshList();
     list.attached = { session: "s_index", name: "document index", watching: false, closed: true };
@@ -534,6 +556,16 @@ test.describe("the Library page", () => {
     await rowLocator(page, "r_mounted").locator('[data-act="menu"]').click();
     await rowLocator(page, "r_mounted").screenshot({ path: path.join(SHOTS, "catalog_menu_light.png") });
     await page.keyboard.press("Escape");
+    // A legacy row's menu: Launch is off, with its reason as the tooltip.
+    for (const scheme of ["light", "dark"]) {
+      await page.emulateMedia({ colorScheme: scheme });
+      const legacy = rowLocator(page, "r_legacy");
+      await legacy.locator('[data-act="menu"]').click();
+      await legacy.locator('[data-act="launch"]').hover();
+      await legacy.screenshot({ path: path.join(SHOTS, "catalog_menu_legacy_" + scheme + ".png") });
+      await page.keyboard.press("Escape");
+    }
+    await page.emulateMedia({ colorScheme: "light" });
     await page.setViewportSize({ width: 390, height: 844 });
     await page.screenshot({ path: path.join(SHOTS, "catalog_page_phone.png") });
   });

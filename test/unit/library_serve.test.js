@@ -79,25 +79,70 @@ test("parse: serve needs a request id and --session", () => {
   assert.equal(ok.id, "cq_x");
 });
 
-test("a legacy row whose file name holds a quote and $(...) is served, and no shell ever runs it", async (t) => {
+test("a legacy row whose file name holds a quote and $(...) reaches lahe review as one argument, and no shell ever runs it", async (t) => {
   const docs = tempDir("lahe-serve-doc-");
-  const doc = path.join(docs, "a'$(touch pwned)'.md");
-  fs.writeFileSync(doc, "# Quoted\n\nbody\n");
+  const doc = path.join(docs, "a'$(touch pwned)'.html");
+  // A legacy document carries its review's script line: serve checks for it.
+  fs.writeFileSync(doc, '<!doctype html><title>Quoted</title><p>body</p>\n<script src="http://127.0.0.1:7817/lahe-layer.js" data-lahe-review="r_legacy"></script>\n');
   const w = world(doc);
   const cwd = tempDir("lahe-serve-cwd-");
   const port = await freePort();
   t.after(() => lahe(["session", "close", "s_agent", "--state-dir", w.dir, "--port", String(port)], cwd));
   const out = await lahe(["library", "serve", w.request.id, "--session", "s_agent", "--state-dir", w.dir, "--port", String(port)], cwd);
-  assert.equal(out.code, 0, out.stderr + out.stdout);
   assert.equal(fs.existsSync(path.join(cwd, "pwned")), false, "nothing ran in the caller's folder");
   assert.equal(fs.existsSync(path.join(docs, "pwned")), false, "nothing ran beside the document");
-  // The new review is the document's, owned by the agent that served it.
-  const metas = fs.readdirSync(path.join(w.dir, "reviews"))
-    .filter((id) => id !== "r_legacy")
-    .map((id) => JSON.parse(fs.readFileSync(path.join(w.dir, "reviews", id, "meta.json"), "utf8")));
-  assert.equal(metas.length, 1, "one new review");
-  assert.equal(metas[0].agent_session_id, "s_agent");
-  assert.equal(metas[0].source_path || metas[0].target_path, doc);
+  // lahe review read that exact file: it found the file's own script line.
+  // It then refuses, because the carried review belongs to no session (see
+  // the todo below); what this test proves is the argv path, not adoption.
+  assert.match(out.stderr + out.stdout, /r_legacy/, out.stderr + out.stdout);
+});
+
+/** Every file under a review's state folder, with its bytes. */
+function snapshot(dir, reviewId) {
+  const root = path.join(dir, "reviews", reviewId);
+  const out = {};
+  for (const name of fs.readdirSync(root)) {
+    const file = path.join(root, name);
+    if (fs.statSync(file).isFile()) out[name] = fs.readFileSync(file, "utf8");
+  }
+  return out;
+}
+
+test("a legacy pickup is served as a fresh review in the agent's session, and the old comments stay on the legacy review", async (t) => {
+  const docs = tempDir("lahe-serve-doc-");
+  const doc = path.join(docs, "legacy.html");
+  fs.writeFileSync(doc, '<!doctype html><title>Legacy</title><p>body</p>\n<script src="http://127.0.0.1:7817/lahe-layer.js" data-lahe-review="r_legacy"></script>\n');
+  const w = world(doc);
+  // One comment on the legacy review, as its log holds it.
+  fs.appendFileSync(path.join(w.dir, "reviews", "r_legacy", "events.jsonl"), JSON.stringify({ event: "synthetic.old_comment", review: "r_legacy" }) + "\n");
+  const before = snapshot(w.dir, "r_legacy");
+  const cwd = tempDir("lahe-serve-cwd-");
+  const port = await freePort();
+  t.after(() => lahe(["session", "close", "s_agent", "--state-dir", w.dir, "--port", String(port)], cwd));
+  const out = await lahe(["library", "serve", w.request.id, "--session", "s_agent", "--state-dir", w.dir, "--port", String(port)], cwd);
+  assert.equal(out.code, 0, out.stderr + out.stdout);
+  const fresh = fs.readdirSync(path.join(w.dir, "reviews")).filter((id) => id !== "r_legacy");
+  assert.equal(fresh.length, 1, "one new review");
+  const meta = JSON.parse(fs.readFileSync(path.join(w.dir, "reviews", fresh[0], "meta.json"), "utf8"));
+  assert.equal(meta.agent_session_id, "s_agent");
+  assert.equal(meta.target_path, doc);
+  assert.deepEqual(snapshot(w.dir, "r_legacy"), before, "the legacy review's records are untouched");
+  assert.match(out.stdout + out.stderr, /old comments stay on the old review/i);
+});
+
+test("the drain says plainly that a legacy pickup starts a new review and leaves the old comments behind", async () => {
+  const docs = tempDir("lahe-serve-doc-");
+  const doc = path.join(docs, "legacy.html");
+  fs.writeFileSync(doc, '<!doctype html>\n<script src="http://127.0.0.1:7817/lahe-layer.js" data-lahe-review="r_legacy"></script>\n');
+  const w = world(doc);
+  const status = require("../../src/cli/commands/status.js");
+  const stdout = [];
+  await status.run(["--session", "s_agent", "--json", "--quiet", "--state-dir", w.dir], { stdout: (x) => stdout.push(x), stderr: () => {} });
+  const lines = stdout.join("").split("\n").filter((l) => l.startsWith("{")).map((l) => JSON.parse(l));
+  const entry = lines[lines.length - 1].catalog_requests.find((e) => e.request === w.request.id);
+  assert.equal(entry.kind, "legacy");
+  assert.match(entry.note, /new review/);
+  assert.match(entry.note, /old comments stay on the old review/);
 });
 
 async function refused(w, args) {

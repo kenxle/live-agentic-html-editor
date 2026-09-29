@@ -40,6 +40,7 @@
 "use strict";
 
 var fs = require("node:fs");
+var os = require("node:os");
 var path = require("node:path");
 
 var protocol = require("../../shared/protocol.js");
@@ -520,16 +521,20 @@ function readerDescriber(dir, nowMs) {
     // "legacy" is not a session anybody can take over; the message then points
     // the new agent at `lahe session list` instead.
     var takeable = protocol.isSafeId(sessionId) && sessionId !== agentSessionsModule.LEGACY_ID;
+    // A legacy or worktree row has no session a new agent could take over, so
+    // it gets no hand-off at all: never one that sends a new agent to
+    // `lahe session list` to pick a session nobody named (adversary fixes).
+    var noTakeover = !described || described.kind === "legacy" || described.kind === "worktree";
     return {
       kind: described ? described.kind : null,
       origin: described && described.origin ? described.origin : null,
       title: described ? described.display_name : null,
       path: described ? described.path : null,
       candidate: described ? described.candidate : null,
-      folder: described ? projectFolder(described.candidate || described.path) : null,
+      folder: described ? projectFolder(launchRoot(described)) : null,
       // The rail's hand-off message in its Library form: take-over wording,
       // with the real --state-dir when it is not the default.
-      handoff: protocol.AGENT_LIVENESS.handoffMessage(takeable ? sessionId : null, takeable ? name : null, false, {
+      handoff: noTakeover ? null : protocol.AGENT_LIVENESS.handoffMessage(takeable ? sessionId : null, takeable ? name : null, false, {
         library: true,
         stateDir: stateDirModule.flagFor(dir)
       })
@@ -537,11 +542,40 @@ function readerDescriber(dir, nowMs) {
   };
 }
 
+/**
+ * Where the launch folder is looked for, from records a page cannot write:
+ * a static row's covering server record root, a worktree row's candidate
+ * (itself derived from that root), a legacy row's document only when it holds
+ * the review's own script line. meta.json's source_path and target_path are
+ * page text (review.write records them), so they never name the folder.
+ */
+function launchRoot(described) {
+  if (described.kind === "static") return described.server_root || null;
+  if (described.kind === "worktree") return described.candidate || null;
+  if (described.kind === "legacy") return described.verified_path || null;
+  return null;
+}
+
 var DESCRIBED_FIELDS = ["kind", "origin", "title", "path", "candidate", "folder", "handoff"];
+
+/** The home folder as given and by real path, so either spelling stops the walk. */
+function homeFolders() {
+  var home = os.homedir();
+  if (!home) return [];
+  var out = [path.resolve(home)];
+  try {
+    var real = fs.realpathSync(home);
+    if (out.indexOf(real) === -1) out.push(real);
+  } catch (err) {
+    // a home folder that is not there stops nothing extra
+  }
+  return out;
+}
 
 /**
  * The folder a launched agent starts in: the repository that holds the
- * document (the nearest folder with a .git), else the document's own folder.
+ * document (the nearest folder with a .git, below the home folder), else the
+ * document's own folder.
  * Null for no path, or for a folder with a control character in it, which the
  * Launch steps could not read back as one line.
  */
@@ -559,7 +593,11 @@ function projectFolder(docPath) {
     return null;
   }
   var found = start;
+  // The walk stops at the home folder: a dotfiles repository in ~ is never a
+  // document's project, and a new agent must not start there.
+  var homes = homeFolders();
   for (var current = start; ; current = path.dirname(current)) {
+    if (homes.indexOf(current) !== -1) break;
     if (fs.existsSync(path.join(current, ".git"))) {
       found = current;
       break;
@@ -611,6 +649,8 @@ function catalogEntries(dir, sessionId, nowMs, describe, keep) {
       candidate: fields.candidate,
       folder: fields.folder,
       handoff: fields.handoff,
+      // A helper sentence, not page text: what serving a legacy row does.
+      note: fields.kind === "legacy" ? protocol.CATALOG_LEGACY_NOTE(request.review) : null,
       // Not printed: which agent answers it. The human output names it in the
       // answer command.
       _for: request.for
@@ -883,6 +923,9 @@ async function run(argv, options) {
         }) + "\n"
       );
     } else {
+      // Parse refuses --quiet without --json today; this keeps the rule if
+      // that ever loosens: quiet with nothing waiting prints nothing.
+      if (args.quiet && catalogPending.length === 0) return EXIT.OK;
       out(
         catalogLines(catalogPending, dir).join("\n") +
           "lahe status: no reviews in " + stateDirModule.reviewsRoot(dir) + ". Start one with `lahe review <page>`.\n"

@@ -348,6 +348,11 @@ function reviewsServedBy(dir, sessionId, meta, alsoReview) {
  *   `reviews` is the helper's registry (reviews.js), `sessions` an
  *   agent_sessions store (one over `dir` when left out).
  */
+// Where a reopenForCatalog error came from, as `err.stage`: the start itself
+// (nothing was reopened or left running), or a later step (undone, and
+// `err.rolledBack` says whether the undo worked).
+var REOPEN_STAGE = { START: "start", AFTER_START: "after_start" };
+
 function createCatalogOps(options) {
   var opts = options || {};
   if (!opts.dir) throw new Error("createCatalogOps: dir is required");
@@ -380,8 +385,52 @@ function createCatalogOps(options) {
     // The server first, the session second. A restart that fails (a root that
     // is gone, a server that never answers) then leaves a closed session
     // closed, with nothing reopened for the sweep to have to find.
-    var result = await start(restartSpec(dir, sessionId, record));
-    if (session.closed_at) sessions.reopen(sessionId);
+    var result;
+    try {
+      result = await start(restartSpec(dir, sessionId, record));
+    } catch (err) {
+      err.stage = REOPEN_STAGE.START;
+      throw err;
+    }
+    // From here on the server is up. A throw undoes what this call did: it
+    // stops a server it started and closes a session it reopened, so a failed
+    // Open leaves nothing running (adversary fixes). Only a start that threw
+    // above has done nothing to undo.
+    var reopenedHere = false;
+    try {
+      if (session.closed_at) {
+        sessions.reopen(sessionId);
+        reopenedHere = true;
+      }
+      return originPass(sessionId, result, reviewId);
+    } catch (err) {
+      err.stage = REOPEN_STAGE.AFTER_START;
+      err.rolledBack = await rollBack(sessionId, result, reopenedHere);
+      throw err;
+    }
+  }
+
+  /** Undo an Open's restart: stop a server it started, close a session it reopened. */
+  async function rollBack(sessionId, result, reopenedHere) {
+    var ok = true;
+    if (result.started) {
+      try {
+        await stopOne(dir, sessionId, result.meta);
+      } catch (err) {
+        ok = false;
+      }
+    }
+    if (reopenedHere) {
+      try {
+        sessions.close(sessionId);
+      } catch (err) {
+        ok = false;
+      }
+    }
+    return ok;
+  }
+
+  function originPass(sessionId, result, reviewId) {
     var server = result.meta;
 
     var current = loopbackOrigins(server.port);
@@ -1135,6 +1184,7 @@ module.exports = {
   stopAll: stopAll,
   restartAll: restartAll,
   createCatalogOps: createCatalogOps,
+  REOPEN_STAGE: REOPEN_STAGE,
   folderPages: folderPages,
   folderEntryPage: folderEntryPage,
   hostIsOwn: hostIsOwn,

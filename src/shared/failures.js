@@ -283,6 +283,13 @@
       "Another agent is watching this document's session, so moving it needs your say-so.",
       "Choose Move the session to confirm, or open it just to read."
     ),
+    PROTO_NO_LAUNCH: def(
+      SEVERITY.INFO,
+      false,
+      SURFACE.CLI,
+      "A new agent can only be launched on a document with a session to take over. This one has none: it is from before sessions, or its worktree is gone.",
+      "Choose Pick this up instead. The attached agent serves it in its own session."
+    ),
     PROTO_CATALOG_UNREADABLE: def(
       SEVERITY.BLOCKING,
       false,
