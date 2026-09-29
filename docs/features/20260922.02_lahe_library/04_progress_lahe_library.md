@@ -52,9 +52,18 @@
 
 ### Changes from plan
 
-- The session card says "watched by <agent>" instead of the Page Spec's unnamed "an agent is watching", and rows no longer repeat it.
-- The count script writes its CSV to a file (`--csv`) and its summary to the terminal.
-
+- **Attaching to the Library.** A bare `lahe library` starts a fresh session for the calling agent and attaches it; the session closes itself after 30 quiet minutes with no reviews. The approved design required an existing session. Your call on 2026-09-29.
+- **Session cards name the watching agent once** ("watched by <agent>") instead of the Page Spec's unnamed "an agent is watching", and rows no longer repeat it.
+- **One "Hand to agent" menu per row** holds Pick this up and Launch; Open stays visible. The plan had three buttons per row.
+- **Launch is refused on pre-session and worktree rows,** with the reason on the page. The design allowed it; the final review found it could tell a new agent to take over a session nobody pointed at.
+- **Pre-session reviews are picked up as a fresh review;** their old comments stay on the old one. Only 15 of 531 reviews are affected.
+- **`lahe library serve <request-id>`** is new. The agent serves a worktree or pre-session document through it, so a file path never goes into a shell command.
+- **One hand-off message builder,** shared by the rail and the Library, with an option for the Library's wording and the real `--state-dir`.
+- **The Library's logic lives in its own module,** `catalog_actions.js`, not in `routes.js`.
+- **List fields the architecture did not name:** a top-level `notice`, each row's `project`, the request's expiry `reason`, and `attached.closed`.
+- **`lahe session reopen` also prefers the old port** when it restarts a server.
+- **Launch passes the hand-off message through a file,** and changes into the document's project folder when one is known.
+- **The count script** writes its CSV to a file (`--csv`) and its summary to the terminal.
 ### Follow-ups
 
 
