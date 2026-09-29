@@ -756,7 +756,7 @@ Screenshots, light and dark: the question card (wireframe `06b-question`), and t
 - **Handled check:** a real captured run where the agent replies handled and writes nothing is held open. A real run whose words the agent wrote as raw HTML is held open. Two real runs where the agent places one and answers handled on both: the skipped one is held open.
 - **Notes page:** three sittings on an empty `lahe write` page before any placement become one record, placed at the top of the file, every block shown once. A sitting added after revision 1 is placed as revision 2, and every block still shows once.
 - **Proofreading:** a run over 150 words, placed, with a proofread reply. After "Use the fixes" the agent puts the fixes in the source and replies handled. The item is not held open or reopened after two reloads, and the original sentence is gone. The "Keep mine" twin passes too.
-- **Old agents:** the old-contract agent, in HTML and in Markdown. No block shows twice, and the item is reopened or flagged, never quietly handled.
+- **Old agents:** the old-contract agent, in HTML and in Markdown. No block shows twice. Nothing wrong is handled silently: the item is reopened or flagged, or every block is on the page with its tag and bold. (On HTML the old agent's `after_html` parses into correct blocks, so handled is the right result there.)
 
 `free_writing_r14.spec.js`, typed for real:
 - the header case on a real `lahe review post.md`, leaving by click and by Esc: the `h2`'s text is exactly the header, and the line shows once below the `sheet-head`. Screenshots while writing and after the rebuild
