@@ -331,9 +331,10 @@ flowchart TD
 
 | Case | Rule |
 |---|---|
-| When a block counts as present | Its words are found in the walk, in run order: as a whole leaf block, inside one leaf block that holds several new blocks (joined), or spread over consecutive leaf blocks (split). Tag and markup never decide presence. |
+| When a block counts as present | Its words are found in the walk, in run order: as a whole leaf block, inside one leaf block whose words are exactly several new blocks and nothing else (joined), or spread over consecutive leaf blocks (split). Tag and markup never decide presence. |
 | Present, one-to-one, wrong tag or lost bold or italic | Rewrite that block in place: swap the tag, or rewrite its inner markup. A wrong tag is also flagged on the card. Never insert. |
 | Present, but joined or split | Leave it. Tags and markup are not rewritten when blocks do not map one to one. |
+| Inside a leaf that also holds words the reviewer never typed | A conflict on that block (brief R6: the words stay as typed). Only the leaf where the block would sit is read: the one after the last present block, or the first leaf after the insert point. Replay writes nothing, anchor included. The item is flagged on the card with the conflict toast, and the card shows the reviewer's block and the page's. "Keep mine" rewrites that leaf to the reviewer's block through `blocks.writeBlock`, and remembers the page state with `acceptPageText`, so a repaint from a source that still disagrees is rewritten again, not raised again. "Take the page's" makes the page's block the record's own, as a new revision, so the walk reads it as present from then on. Either answer then places the rest of the run. The anchor conflict's card, badge and buttons are reused. |
 | Missing from the walk, words found elsewhere | A block of five or more words (`SHORT_BLOCK_WORDS`) is searched for across the page, by whole leaf block, never by substring. If found, nothing is written, and the card says the text was placed in a different spot. |
 | Missing from the walk, short block | A block under five words ("Yes", "Notes") is inserted without a page-wide search, because such words appear on pages for other reasons. |
 | Where a missing block goes | After the last present block that comes before it in run order, or at the anchor's insert point if none is present. Each block gets its own tag and markup, through `cleanBlock`. |
@@ -625,6 +626,15 @@ Changes made here while folding in the four plan reviews (`03_plan_free_writing_
 | EM11 | Three of the brief's agent rules had no contract line | Accepted | Added |
 | T10 | The merge test would pass a "longer wins" rule | Accepted | Both directions tested |
 | DR7 | A screen reader heard nothing useful | Accepted | Live region added |
+
+## Build Back-patches
+
+Changes made after the Phase 2 branches merged.
+
+| # | Finding | Disposition | Rationale |
+|---|---------|-------------|-----------|
+| BP1 | A run block whose words sat inside a leaf with a sentence the agent added was neither present nor missing: the walk stopped there, and replay inserted the block again below it with no conflict (`split_not_conflict`'s control) | Accepted | "Joined" means exactly new blocks and nothing else. A leaf with extra words is a conflict on that block; presence-table row added. `normalize.runClash` and `blocks.runClashFor` find it |
+| BP2 | `foldTypography` folded a drawn dash to "-" but left a typed "--", so the two never matched | Accepted | Runs of hyphens fold to one in the shared normalizer, for every reader; the handled check's local fold is gone |
 
 ## Main Drift, 2026-09-28
 

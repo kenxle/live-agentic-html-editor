@@ -1632,6 +1632,80 @@
     return result;
   }
 
+  // Do these words sit inside this leaf's words as whole words, with more
+  // words around them? A letter or digit on either side is a longer word, not
+  // a boundary ("Beta" is not inside "Betamax").
+  var WORD_CHAR = /[\p{L}\p{N}]/u;
+  function heldInside(leafWords, words) {
+    if (!words || !leafWords || leafWords === words || leafWords.length <= words.length) return false;
+    var from = 0;
+    for (;;) {
+      var at = leafWords.indexOf(words, from);
+      if (at === -1) return false;
+      var before = at === 0 ? "" : leafWords.charAt(at - 1);
+      var after = leafWords.charAt(at + words.length);
+      if ((!before || !WORD_CHAR.test(before)) && (!after || !WORD_CHAR.test(after))) return true;
+      from = at + 1;
+    }
+  }
+
+  /**
+   * A run block whose words the page shows inside a leaf that also holds
+   * words the reviewer never typed (the agent added a sentence to it).
+   *
+   * "Joined" is exact: a leaf whose words are exactly two or more new blocks.
+   * A leaf holding a block's words plus anything else is not presence, and it
+   * is not a missing block either, since inserting the block would show the
+   * reviewer's words twice. It is a clash on that block, and replay writes
+   * nothing until the reviewer answers.
+   *
+   * Only the leaf where the missing block would sit is read: the one right
+   * after the last block the walk found, or the first leaf after the insert
+   * point when the walk found none. So a short block ("Notes") is never a
+   * clash with a paragraph further down that happens to use the word. When
+   * consecutive missing blocks all sit inside that leaf, the clash covers
+   * them all.
+   *
+   * @param {Array<{tag: string, html: string}>} blocks the run
+   * @param {Array<{tag: string, html: string, words?: string}>} leaves from the insert point
+   * @returns {{index: number, blocks: number, leaf: number}|null} the first clash
+   */
+  function runClash(blocks, leaves) {
+    var runBlocks = Array.isArray(blocks) ? blocks : [];
+    var pageLeaves = Array.isArray(leaves) ? leaves : [];
+    var matched = matchRun(runBlocks, pageLeaves);
+    var bw = runBlocks.map(wordsFor);
+    var lw = pageLeaves.map(wordsFor);
+    var limit = Math.min(lw.length, runBlocks.length + RUN_WALK_SLACK);
+    var used = {};
+    matched.forEach(function (m) {
+      m.leaves.forEach(function (l) {
+        used[l] = true;
+      });
+    });
+    var nextLeaf = 0;
+    for (var i = 0; i < matched.length; i += 1) {
+      var m = matched[i];
+      if (m.status !== "missing") {
+        nextLeaf = m.leaves[m.leaves.length - 1] + 1;
+        continue;
+      }
+      if (i > 0 && matched[i - 1].status === "missing") continue;
+      if (nextLeaf >= limit || used[nextLeaf]) continue;
+      var leafWords = lw[nextLeaf];
+      if (!heldInside(leafWords, bw[i])) continue;
+      var count = 1;
+      var acc = bw[i];
+      for (var k = i + 1; k < matched.length && matched[k].status === "missing"; k += 1) {
+        acc = joinWords([acc, bw[k]]);
+        if (!heldInside(leafWords, acc)) break;
+        count += 1;
+      }
+      return { index: i, blocks: count, leaf: nextLeaf };
+    }
+    return null;
+  }
+
   /** The run's words, skipping the from_anchor tail (those words moved). */
   function runWords(blocks) {
     var total = 0;
@@ -1827,6 +1901,7 @@
     blockWords: blockWords,
     leafBlocks: leafBlocks,
     matchRun: matchRun,
+    runClash: runClash,
     runWords: runWords
   };
 });

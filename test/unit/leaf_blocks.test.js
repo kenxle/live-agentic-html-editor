@@ -193,3 +193,46 @@ test("the matcher reads a typed -- and a rendered dash as the same block", () =>
   assert.deepEqual(got, [{ index: 0, status: "whole", leaves: [0] }]);
 });
 
+// ---------------------------------------------------------------------------
+// The clash: a leaf holding a run block's words plus words nobody typed
+// ---------------------------------------------------------------------------
+
+test("a leaf holding a block's words plus a sentence the agent added is a clash on that block", () => {
+  const run = [block("p", "Alpha words here"), block("p", "Beta words here")];
+  const got = normalize.runClash(run, leavesOf("<p>Alpha words here</p><p>Beta words here. The agent added this.</p>"));
+  assert.deepEqual(got, { index: 0 + 1, blocks: 1, leaf: 1 });
+});
+
+test("the clash can be the run's first block, at the first leaf after the anchor", () => {
+  const run = [block("p", "Alpha words here")];
+  const got = normalize.runClash(run, leavesOf("<p>Before it, Alpha words here</p>"));
+  assert.deepEqual(got, { index: 0, blocks: 1, leaf: 0 });
+});
+
+test("two blocks joined in one leaf with extra words are one clash over both", () => {
+  const run = [block("p", "Alpha words here"), block("p", "Beta words here"), block("p", "Gamma words here")];
+  const got = normalize.runClash(run, leavesOf("<p>Alpha words here</p><p>Beta words here Gamma words here and more</p>"));
+  assert.deepEqual(got, { index: 1, blocks: 2, leaf: 1 });
+});
+
+test("an exact join, a split, or a whole block is never a clash", () => {
+  const run = [block("p", "First part of it."), block("p", "Second part of it.")];
+  assert.equal(normalize.runClash(run, leavesOf("<p>First part of it. Second part of it.</p>")), null);
+  assert.equal(normalize.runClash([block("p", "First part of it. Second part of it.")], leavesOf("<p>First part of it.</p><p>Second part of it.</p>")), null);
+  assert.equal(normalize.runClash(run, leavesOf("<p>First part of it.</p><p>Second part of it.</p>")), null);
+});
+
+test("a missing block that is not inside the next leaf is missing, not a clash", () => {
+  const run = [block("p", "Alpha words here"), block("p", "Beta words here")];
+  assert.equal(normalize.runClash(run, leavesOf("<p>Alpha words here</p><p>Something else entirely</p>")), null);
+});
+
+test("words must be whole words: a block's words inside a longer word are not a clash", () => {
+  const run = [block("p", "Alpha words here"), block("p", "Beta")];
+  assert.equal(normalize.runClash(run, leavesOf("<p>Alpha words here</p><p>Betamax tapes</p>")), null);
+});
+
+test("with nothing matched, only the first leaf after the anchor can clash", () => {
+  const run = [block("p", "Notes")];
+  assert.equal(normalize.runClash(run, leavesOf("<p>Unrelated first</p><p>These Notes are about something else</p>")), null);
+});

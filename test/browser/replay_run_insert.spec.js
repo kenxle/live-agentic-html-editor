@@ -321,6 +321,91 @@ test.describe("an anchor conflict holds the run", () => {
   });
 });
 
+test.describe("a run block the page holds with words the reviewer never typed is a conflict", () => {
+  // Brief R6: the words stay as typed. "Joined" is a leaf whose words are
+  // exactly new blocks, nothing else. A leaf holding a block's words plus a
+  // sentence the agent added is neither present nor missing: inserting the
+  // block would show the reviewer's words twice. It is a conflict on that
+  // block, on the anchor conflict's card and buttons.
+  const LONG_C = "The third new paragraph has words zqxcanary";
+  const EXTRA = LONG_B + " The agent added this line.";
+
+  async function clashed(page) {
+    await blog(page);
+    await afterP1(page, "<p>" + LONG_A + "</p><p>" + EXTRA + "</p>");
+    const item = blogRun([{ tag: "p", html: LONG_A }, { tag: "p", html: LONG_B }, { tag: "p", html: LONG_C }]);
+    await setItems(page, [item]);
+    const before = await page.evaluate(() => document.getElementById("post").innerHTML);
+    const r = await page.evaluate(() => window.__pass());
+    return { item, r, before };
+  }
+
+  function sides(page, id) {
+    return page.evaluate((itemId) => {
+      const node = window.__cards.nodes[itemId];
+      const text = (side) => node.querySelector('[data-lahe-conflict-side="' + side + '"] [data-lahe-conflict-text]').textContent;
+      return { yours: text("yours"), theirs: text("theirs") };
+    }, id);
+  }
+
+  test("replay writes nothing, the card is flagged, and it shows the reviewer's block and the page's", async ({ page }) => {
+    const { item, r, before } = await clashed(page);
+    expect(r[0], JSON.stringify(r[0])).toMatchObject({ wrote: false, branch: "content_changed" });
+    expect(await page.evaluate(() => document.getElementById("post").innerHTML)).toBe(before);
+    expect(await page.evaluate((t) => window.__count(t), LONG_C)).toBe(0);
+    expect(await page.evaluate((id) => !!window.__cards.badges[id].REPLAY_NEITHER_MATCHES, item.id)).toBe(true);
+    expect(await sides(page, item.id)).toEqual({ yours: LONG_B, theirs: EXTRA });
+    expect(await page.evaluate(() => window.LAHE.replay.conflictIds())).toEqual([item.id]);
+  });
+
+  test("a second pass over the same page keeps the one conflict and writes nothing", async ({ page }) => {
+    const { item, before } = await clashed(page);
+    const again = await page.evaluate(() => window.__pass());
+    expect(again[0].wrote).toBe(false);
+    expect(await page.evaluate(() => document.getElementById("post").innerHTML)).toBe(before);
+    expect(await page.evaluate(() => window.LAHE.replay.conflictIds())).toEqual([item.id]);
+  });
+
+  test("Keep mine rewrites that block to the reviewer's words, places the rest, and holds over a repaint", async ({ page }) => {
+    const { item } = await clashed(page);
+    await page.evaluate((id) => window.__cards.nodes[id].querySelector('[data-lahe-conflict-choice="keep_mine"]').click(), item.id);
+    expect((await articleShape(page)).slice(1, 5)).toEqual(["p: " + ANCHOR, "p: " + LONG_A, "p: " + LONG_B, "p: " + LONG_C]);
+    expect(await page.evaluate(() => window.LAHE.replay.conflictIds())).toEqual([]);
+    // The page repaints from a source that still has the agent's sentence.
+    await page.evaluate((t) => {
+      document.getElementById("p1").nextElementSibling.nextElementSibling.textContent = t;
+    }, EXTRA);
+    const r = await page.evaluate(() => window.__pass());
+    expect(r[0].wrote).toBe(true);
+    expect((await articleShape(page)).slice(1, 5)).toEqual(["p: " + ANCHOR, "p: " + LONG_A, "p: " + LONG_B, "p: " + LONG_C]);
+    expect(await page.evaluate(() => window.LAHE.replay.conflictIds())).toEqual([]);
+  });
+
+  test("Take the page's keeps the page's block, places the rest, and a later pass reads it as present", async ({ page }) => {
+    const { item } = await clashed(page);
+    await page.evaluate((id) => window.__cards.nodes[id].querySelector('[data-lahe-conflict-choice="take_theirs"]').click(), item.id);
+    expect((await articleShape(page)).slice(1, 5)).toEqual(["p: " + ANCHOR, "p: " + LONG_A, "p: " + EXTRA, "p: " + LONG_C]);
+    expect(await page.evaluate(() => window.LAHE.replay.conflictIds())).toEqual([]);
+    const kept = await page.evaluate(() => window.__items[0]);
+    expect(kept.new_blocks[1].html).toBe(EXTRA);
+    expect(kept.rev).toBe(item.rev + 1);
+    const r = await page.evaluate(() => window.__pass());
+    expect(r[0].wrote).toBe(false);
+    expect(await page.evaluate(() => window.LAHE.replay.conflictIds())).toEqual([]);
+  });
+
+  test("the page fixed by the agent clears the conflict with no answer", async ({ page }) => {
+    const { item } = await clashed(page);
+    await page.evaluate((t) => {
+      document.getElementById("p1").nextElementSibling.nextElementSibling.textContent = t;
+    }, LONG_B);
+    await page.evaluate(() => window.__pass());
+    expect(await page.evaluate(() => window.LAHE.replay.conflictIds())).toEqual([]);
+    expect(await page.evaluate((id) => !!(window.__cards.badges[id] || {}).REPLAY_NEITHER_MATCHES, item.id)).toBe(false);
+    expect(await page.evaluate((t) => window.__count(t), LONG_C)).toBe(1);
+  });
+});
+
 test("a forged record with tag script writes nothing", async ({ page }) => {
   await blog(page);
   const forged = stamp(fx().forgedRuns().find((f) => f.code === "RUN_BLOCK_REFUSED").item, "s-p1", "p");

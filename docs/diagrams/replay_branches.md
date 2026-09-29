@@ -64,7 +64,13 @@ flowchart TD
   Cn --> R{"take-back?"}
   R -- "yes" --> Rm["remove each remove_blocks block<br/>found one to one after the anchor.<br/>Never insert"]
   R -- "no" --> Walk["runElementsFor: walk leaf blocks<br/>from the insert point"]
-  Walk --> Row["decide each block by the presence table"]
+  Walk --> Cl{"runClashFor: a leaf holds a block's words<br/>plus words nobody typed?"}
+  Cl -- "no" --> Row["decide each block by the presence table"]
+  Cl -- "yes, a page state already answered Keep mine" --> KB["rewrite that leaf to the reviewer's block,<br/>then the presence table"]
+  Cl -- "yes" --> HB["CONFLICT on that block. Nothing written.<br/>The card shows the reviewer's block and the page's"]
+  HB --> Cb{"reviewer picks"}
+  Cb -- "Keep mine" --> KB2["rewrite the leaf (writeBlock), remember the page state<br/>(acceptPageText), place the rest"]
+  Cb -- "Take the page's" --> TB["record takes the page's block<br/>(a new revision), place the rest"]
   H --> Ch{"reviewer picks"}
   Ch -- "Keep mine" --> KM["write the anchor, then place the run"]
   Ch -- "Take the page's, keep my new text" --> TT["record takes the page's anchor<br/>(a new revision), then place the run"]
@@ -75,7 +81,8 @@ The presence table, as `placeRun` applies it:
 | Found in the walk | What replay does |
 |---|---|
 | whole, one to one | swap a wrong tag (and say so on the card, `REPLAY_RUN_WRONG_TAG`); rewrite the markup when bold or italic is missing |
-| joined or split | leave it |
+| joined (a leaf whose words are exactly two or more new blocks, nothing else) or split | leave it |
+| inside a leaf that also holds words the reviewer never typed (the clash, checked before anything is written) | write nothing, anchor included; flag the record with `REPLAY_NEITHER_MATCHES` and the conflict card, which shows the reviewer's block and the page's. Keep mine rewrites the leaf and remembers the page state; Take the page's makes the page's block the record's (a new revision). Either answer then places the rest |
 | missing, an earlier revision's block is there one to one | rewrite that block in place to the current words (branch three for the run) |
 | missing, five or more words, a whole leaf elsewhere on the page | write nothing; the card says it is already further down (`REPLAY_RUN_PLACED_ELSEWHERE`) |
 | missing otherwise | insert it after the last present block before it (or at the insert point), with its own tag and markup |

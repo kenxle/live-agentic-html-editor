@@ -1864,6 +1864,7 @@
     // A held run: both answers place it (see resolveRunConflict).
     if (flagged.run) {
       var runItem = itemWithId(ctx, id);
+      if (runItem && record.hasRunFields(runItem) && flagged.block) return resolveBlockClash(ctx, id, choice, runItem, flagged);
       if (runItem && record.hasRunFields(runItem)) return resolveRunConflict(ctx, id, choice, runItem, flagged);
     }
 
@@ -3119,6 +3120,20 @@
       branch = verdictBranch.branch;
       earlierAfter = verdictBranch.earlierAfter;
       if (branch === BRANCH.CONTENT_CHANGED) return holdRun(ctx, item, view, element, domValue, false);
+    }
+
+    // A run block the page holds with words the reviewer never typed. Read
+    // before anything is written, so a clash writes nothing at all (R5, R6).
+    // A page state the reviewer already answered with Keep mine is rewritten
+    // to their block instead, pass after pass, as an anchor's is.
+    var clash = blocks.runClashFor(item, element.ownerDocument, element);
+    var clashWrote = false;
+    if (clash) {
+      if (!clashAccepted(item, clash)) return holdBlockClash(ctx, item, element, clash);
+      clashWrote = writeClashMine(item, clash);
+    }
+
+    if (!container) {
       var tagAfter = item[RUN_FIELD.ANCHOR_TAG_AFTER] || null;
       if (branch !== BRANCH.ALREADY_APPLIED) {
         epoch.write("replay", function () {
@@ -3138,8 +3153,9 @@
         });
         wrote = true;
       }
-      clearConflict(ctx, id);
     }
+    clearConflict(ctx, id);
+    if (clashWrote) wrote = true;
 
     var placed = placeRun(ctx, item, element);
     if (placed.wrote) wrote = true;
@@ -3320,6 +3336,134 @@
     result.item = item;
     result.held = true;
     return result;
+  }
+
+  // ---------------------------------------------------------------------------
+  // A run block with words the reviewer never typed
+  // ---------------------------------------------------------------------------
+  //
+  // Architecture, "Replay after a rebuild", the presence table's clash row.
+  // "Joined" is exact: a leaf whose words are exactly new blocks. A leaf that
+  // holds a block's words plus a sentence the agent added is a conflict on
+  // that block, on the anchor conflict's card, badge and buttons:
+  //
+  //   keep_mine     that leaf is rewritten to the reviewer's block (through
+  //                 blocks.writeBlock), and the page state is remembered with
+  //                 record.acceptPageText, so a repaint from a source that
+  //                 still disagrees is rewritten again rather than re-raised
+  //   take_theirs   the record takes the page's block as its own, a new
+  //                 revision (as the held run's take_theirs does for the
+  //                 anchor), so the walk reads it as present from then on
+  //
+  // Either answer then places the rest of the run.
+
+  function leafText(el) {
+    return normalize.normalizeText(el && typeof el.textContent === "string" ? el.textContent : "");
+  }
+
+  function clashBlocks(item, clash) {
+    return runList(item, RUN_FIELD.NEW_BLOCKS).slice(clash.index, clash.index + clash.blocks);
+  }
+
+  // Has the reviewer already answered this page state with Keep mine?
+  function clashAccepted(item, clash) {
+    var words = normalize.foldTypography(leafText(clash.element));
+    return record.acceptedPageTexts(item).some(function (text) {
+      return normalize.foldTypography(text) === words;
+    });
+  }
+
+  // The reviewer's blocks in place of the clash leaf. Every block is built
+  // before anything is written, so a refused block writes nothing.
+  function writeClashMine(item, clash) {
+    var leaf = clash.element;
+    var doc = leaf.ownerDocument;
+    var built = clashBlocks(item, clash).map(function (b) {
+      return blocks.writeBlock(b.tag, b.html, doc);
+    });
+    if (!built.length || built.some(function (el) { return !el; })) return false;
+    epoch.write("replay", function () {
+      var parent = leaf.parentNode;
+      var next = leaf.nextSibling;
+      parent.replaceChild(built[0], leaf);
+      for (var i = 1; i < built.length; i += 1) parent.insertBefore(built[i], next);
+    });
+    return true;
+  }
+
+  /** The clash on the card: the reviewer's block and the page's, nothing written. */
+  function holdBlockClash(ctx, item, element, clash) {
+    var id = item[record.FIELD.ID];
+    var yours = clashBlocks(item, clash)
+      .map(function (b) {
+        return normalize.normalizeText(normalize.textOf(b.html));
+      })
+      .join("\n\n");
+    var result = flagConflict(ctx, item, id, element, leafText(clash.element), false, yours);
+    if (conflicts[id]) {
+      conflicts[id].run = true;
+      conflicts[id].block = { index: clash.index, blocks: clash.blocks };
+    }
+    var node = conflictNodes[id];
+    if (node && typeof node.querySelector === "function") {
+      var section = node.querySelector("[data-lahe-conflict-run]");
+      if (section && section.parentNode) section.parentNode.removeChild(section);
+      var take = node.querySelector('[data-lahe-conflict-choice="take_theirs"]');
+      if (take) take.textContent = TAKE_THEIRS_LABEL;
+    }
+    result.item = item;
+    result.held = true;
+    return result;
+  }
+
+  // The record with the page's block in place of the reviewer's clashed ones:
+  // a new revision, so the agent reads that the page's version stands.
+  function takePageBlock(item, clash) {
+    var F = record.FIELD;
+    var list = runList(item, RUN_FIELD.NEW_BLOCKS);
+    var first = list[clash.index];
+    var leaf = clash.element;
+    var pageTag = tagOfEl(leaf);
+    var tag = normalize.WRITABLE_BLOCK_TAGS.indexOf(pageTag) !== -1 ? pageTag : first.tag;
+    var cleaned = normalize.cleanBlock(tag, normalize.cleanMarkup(leaf.innerHTML));
+    var html = typeof cleaned.html === "string" ? cleaned.html : leafText(leaf).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    var taken = Object.assign({}, first, { tag: tag, html: html });
+    var next = list.slice(0, clash.index).concat([taken], list.slice(clash.index + clash.blocks));
+    var anchorHtml = typeof item[RUN_FIELD.ANCHOR_AFTER_HTML] === "string" ? item[RUN_FIELD.ANCHOR_AFTER_HTML] : "";
+    var built = record.buildRunAfter(anchorHtml, next);
+    var changes = {};
+    changes[RUN_FIELD.NEW_BLOCKS] = next;
+    changes[F.AFTER_HTML] = built.after_html;
+    changes[F.AFTER] = built.after;
+    var target = record.bumpRev(item, changes);
+    target[F.CHANGE] = record.runChangeText(target);
+    return target;
+  }
+
+  function resolveBlockClash(ctx, id, choice, item, flagged) {
+    if (choice !== "keep_mine" && choice !== "take_theirs") {
+      return { resolved: false, choice: choice, reason: "unknown choice " + String(choice) };
+    }
+    var element = runElementFor(ctx, item);
+    if (!element) return { resolved: false, choice: choice, reason: "the region this record points at is not on the page" };
+    var clash = blocks.runClashFor(item, element.ownerDocument, element);
+    var target = item;
+    if (clash && choice === "keep_mine") {
+      record.acceptPageText(item, flagged.theirs);
+      persistItem(ctx, item);
+      writeClashMine(item, clash);
+    } else if (clash) {
+      target = takePageBlock(item, clash);
+      persistItem(ctx, target);
+    }
+    counters.regionsWritten += 1;
+    placeRun(ctx, target, element);
+    clearLost(ctx, target);
+    lastElement[id] = element;
+    delete conflicts[id];
+    forceClearConflict(ctx, id);
+    notify(ctx, "onResolved", id);
+    return { resolved: true, choice: choice, reason: null };
   }
 
   function runConflictLine(item) {
@@ -3518,14 +3662,14 @@
    *
    * @param {string} theirs what the page says, or tried to say
    */
-  function flagConflict(ctx, item, id, element, theirs, displaced) {
+  function flagConflict(ctx, item, id, element, theirs, displaced, yoursOverride) {
     // The counter counts collisions ARISING, not passes re-detecting one that
     // is already standing: the still-bound rule re-runs the content
     // comparison every pass now, and a standing conflict re-counted itself
     // once per pass. The record below still refreshes (`theirs` can move
     // under a live page), only the count is once per conflict.
     if (!conflicts[id]) counters.regionsConflicted += 1;
-    var yours = ours(item);
+    var yours = typeof yoursOverride === "string" ? yoursOverride : ours(item);
     conflicts[id] = {
       id: id,
       yours: yours,
