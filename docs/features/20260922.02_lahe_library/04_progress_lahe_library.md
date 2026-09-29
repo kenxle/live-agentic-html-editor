@@ -1,18 +1,17 @@
 # Progress: LAHE Library
 
-**Phase 7, Review.** Every review finding is fixed, the latest main is merged in, and 1886 unit tests pass. The final full run in all three browsers is going now; the PR opens right after it. One thing is waiting on you: taking the LAHE session back. Last updated 2026-09-29 13:44.
+**Phase 8, Ship.** The PR is open: [#19](https://github.com/kenxle/live-agentic-html-editor/pull/19). Every review finding is fixed and the full suite passed apart from two Firefox tests from main. Two things are waiting on you. Last updated 2026-09-29 13:47.
 
 **Docs:** [Crucible](http://127.0.0.1:54705/00_crucible.html) · [Brief](http://127.0.0.1:54705/01_brief_lahe_library.html) · [Wireframes](http://127.0.0.1:54705/wireframes/index.html) · [Architecture](http://127.0.0.1:54705/02_architecture_lahe_library.html) · [Plan](http://127.0.0.1:54705/03_plan_lahe_library.html) · [Ideas page](http://127.0.0.1:55480/DOCUMENT_INDEX_IDEAS-b09cd11f2a84063f.html)
 
 ## Needs your attention
 
+- [ ] **Approve PR #19** (https://github.com/kenxle/live-agentic-html-editor/pull/19) so I can merge it. Its automated check runs on GitHub now. After the merge, the Library goes live here once the main LAHE folder pulls main and the helper restarts, which I'll do when you say.
 - [ ] **May I take this LAHE session back?** Another copy of me took it over by mistake yesterday and then handed it back. Until I run `lahe session takeover`, comments you leave on this page reach nobody. I'm asking because the rule is to take a session over only when you say so.
 
 ## Currently working on
 
-| Agent or task | Doing | Started | Branch |
-|---|---|---|---|
-| Release run | The full suite, unit and browser, in Chromium, Firefox and WebKit, on the branch with the latest main merged in | 2026-09-29 13:44 | `feat/lahe_library` |
+Nothing is running. Next: merge PR #19 once you approve and its check passes.
 
 ## Phases
 
@@ -25,8 +24,8 @@
 | 4 Architecture | done | 2026-09-28 |
 | 5 Plan | done | 2026-09-28 |
 | 6 Implement | done | 2026-09-28 |
-| 7 Review | in progress | 2026-09-28 |
-| 8 Ship and land | not started | |
+| 7 Review | done | 2026-09-29 |
+| 8 Ship and land | in progress | 2026-09-29 |
 | 9 Cleanup | not started | |
 
 ## The record
@@ -89,11 +88,11 @@ Test count and how often tests ran are kept apart. The full suite runs at the en
 | 2026-09-29 13:05, after merging main (128 commits) | `npm run gate:unit` | 1887 passed after two fixes where main's trimmed drain met the Library | under 1 min |
 | 2026-09-29 13:15 | `npm run gate:all` | the browser run did not start: the merge left one function defined twice; removed | |
 | 2026-09-29 13:28 | `npm run gate:all` | 1887 unit and 1312 browser passed, 1 failed: `oversized_records.spec.js` in Firefox, which fails on plain main too (board row LAHE-oversized-image-firefox) | 12.8 min |
-| 2026-09-29, after merging main's 4 newest commits | `npm run gate:unit`, then `npm run gate:all` | 1886 unit passed; the browser run is going now | |
+| 2026-09-29, after merging main's 4 newest commits | `npm run gate:unit`, then `npm run gate:all` | 1886 unit and 1326 browser passed, 2 failed, both Firefox tests from main: the image test that fails on main too, and `window_goodbye` which passed 8 of 8 alone (board rows) | 14.8 min |
 
 ### Ship
 
-Not shipped yet.
+- PR [#19](https://github.com/kenxle/live-agentic-html-editor/pull/19) opened, waiting on your approval and its CI run.
 
 ## Log
 
