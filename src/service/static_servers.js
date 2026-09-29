@@ -708,7 +708,10 @@ function injectForMatch(dir, match, target, html) {
     review: match.review,
     token: match.token,
     helper: helperOrigin,
-    fallback: helperOrigin + protocol.route("library.get").path
+    fallback: helperOrigin + protocol.route("library.get").path,
+    // The notes flag rides the tag, so the layer knows at boot that an empty
+    // page here opens for typing (free writing, design call 2).
+    notes: stateDir.isNotesReview(dir, match.review)
   });
   return scriptLine.placeScriptLine(html, tag).html;
 }

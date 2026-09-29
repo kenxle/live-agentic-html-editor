@@ -215,6 +215,15 @@
       "'{first words}' is already further down the page, so Lahe did not add it again.",
       null
     ),
+    // The layer read the helper's health and it reports an older service
+    // contract (free writing, design call 9). Nothing is posted to it.
+    HELPER_CONTRACT_OLDER: def(
+      SEVERITY.BLOCKING,
+      true,
+      SURFACE.FAILURES_LIST,
+      "The local helper is an older version than this page, so nothing you write here is sent to it. Your work is safe in this browser.",
+      "Ask your agent to restart the helper (lahe session list restarts an old one), then reload this page."
+    ),
     RUN_EVENT_REFUSED: def(
       SEVERITY.BLOCKING,
       true,

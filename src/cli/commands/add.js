@@ -1376,7 +1376,8 @@ async function run(argv) {
     review: review.id,
     token: review.token,
     helper: helperOrigin,
-    fallback: fallbackSrc
+    fallback: fallbackSrc,
+    notes: options.notes === true
   });
 
   say("lahe add: " + target);

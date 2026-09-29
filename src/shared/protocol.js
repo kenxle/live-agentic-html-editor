@@ -961,13 +961,18 @@
     HELPER: "data-lahe-helper",
     FALLBACK: "data-lahe-fallback",
     FRAMES: "data-lahe-frames",
-    START: "data-lahe-start"
+    START: "data-lahe-start",
+    // A `lahe write` notes review (free writing, design call 2). The layer
+    // reads it at boot, before the helper has answered anything, so an empty
+    // notes page can open for typing and no other empty page does.
+    NOTES: "data-lahe-notes"
   };
 
   // The one value each of the two opt-ins takes. Anything else is ignored, so a
   // typo fails to the safe default rather than to a guess.
   var FRAMES_ALLOW = "allow";
   var START_HIDDEN = "hidden";
+  var NOTES_ON = "true";
 
   // The inline onerror, kept to one statement-per-clause line so the attribute
   // stays readable in a page's source. Single quotes only: the attribute is
@@ -1002,6 +1007,7 @@
       '        ' + SCRIPT_ATTR.TOKEN + '="' + o.token + '"\n' +
       '        ' + SCRIPT_ATTR.HELPER + '="' + (o.helper || DEFAULT_HELPER_ORIGIN) + '"\n' +
       fallback +
+      (o.notes === true ? '        ' + SCRIPT_ATTR.NOTES + '="' + NOTES_ON + '"\n' : "") +
       '        defer><\/script>'
     );
   }
@@ -1516,6 +1522,7 @@
     SCRIPT_ATTR: SCRIPT_ATTR,
     FRAMES_ALLOW: FRAMES_ALLOW,
     START_HIDDEN: START_HIDDEN,
+    NOTES_ON: NOTES_ON,
     SCRIPT_SELECTOR: SCRIPT_SELECTOR,
     SCRIPT_FALLBACK_ONERROR: SCRIPT_FALLBACK_ONERROR,
     scriptTag: scriptTag,

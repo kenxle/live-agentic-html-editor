@@ -382,3 +382,18 @@ test("a notes render reads its source without following a symlink", () => {
   assert.ok(markdown.render(real, { noFollow: true }).indexOf("Real") !== -1);
   assert.ok(markdown.render(link).indexOf("Real") !== -1, "an ordinary render still follows it");
 });
+
+// Design call 2: the notes flag reaches the layer on the served script tag.
+test("a notes page's served script tag carries data-lahe-notes, and an ordinary page's does not", async (t) => {
+  const r = await rig(t);
+  const folder = tempDir("lahe-write-notesattr-");
+  const notes = r.run("write", [path.join(folder, "n.md")]);
+  assert.equal(notes.code, 0, notes.stdout + notes.stderr);
+  const notesPage = await get(openUrl(notes.stdout).href);
+  assert.ok(notesPage.body.indexOf(protocol.SCRIPT_ATTR.NOTES + '="' + protocol.NOTES_ON + '"') !== -1, "the notes attribute is on the tag");
+  fs.writeFileSync(path.join(folder, "plain.md"), "# Plain\n\nWords.\n");
+  const plain = r.run("review", [path.join(folder, "plain.md")]);
+  assert.equal(plain.code, 0, plain.stdout + plain.stderr);
+  const plainPage = await get(openUrl(plain.stdout).href);
+  assert.equal(plainPage.body.indexOf(protocol.SCRIPT_ATTR.NOTES), -1);
+});
