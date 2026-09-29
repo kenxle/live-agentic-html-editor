@@ -64,7 +64,14 @@ Nothing queued.
 
 ### Test results
 
-No test run yet.
+Test count and how often tests ran are kept apart. The full suite runs once, at the end (release tier), after every fix is in.
+
+| When | Command | Result | Duration |
+|---|---|---|---|
+| 2026-09-28, after Phase 3 merged | `npm run gate` (Chromium) | 413 passed, 1 failed: a page test that read a request before it arrived; fixed with a poll, then 65 of 65 on repeat | 3.5 min |
+| 2026-09-28, after the three fix rounds merged | `npm run gate:all` (Chromium, Firefox, WebKit) | 1259 passed, 1 failed: `catalog_library.spec.js` Open end to end, Firefox only; in the adversary fix round | 9.9 min |
+| 2026-09-28, same point | `npm run gate:unit` | 1683 passed, 0 failed, 2 todo | under 1 min |
+| Release tier | `npm run gate:all` | not run yet: waits on the adversary fix round | |
 
 ### Ship
 
