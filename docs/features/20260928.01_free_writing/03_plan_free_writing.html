@@ -841,6 +841,9 @@ id="toc-code-review-lead-review">Code Review Lead Review</a></li>
 Review</a></li>
 <li><a href="#design-review" id="toc-design-review">Design
 Review</a></li>
+<li><a href="#forge-rule-update-2026-09-29"
+id="toc-forge-rule-update-2026-09-29">Forge rule update,
+2026-09-29</a></li>
 <li><a href="#main-drift-2026-09-28" id="toc-main-drift-2026-09-28">Main
 Drift, 2026-09-28</a></li>
 <li><a href="#reviews-free-writing-plan"
@@ -863,13 +866,15 @@ already exists</a></li>
 </ul>
 </nav>
 <h2 id="summary">Summary</h2>
-<p>This plan builds free writing in four phases. One builder first lays
-the shared pieces: the record shape, the safe-tag check, and the agent's
-instructions. Three builders then work in parallel on typing, replay,
-and the helper and CLI. The orchestrator merges their work, has the rail
-cards built, runs one review with one fix round, and runs the full
-gates. Five design questions wait on Ken (PQ1 to PQ5 under Open
-Questions). Until he answers, the plan builds their defaults.</p>
+<p>This plan builds free writing in four phases. The work goes to five
+workstreams, one agent each. The kernel workstream first lays the shared
+pieces: the record shape, the safe-tag check, and the agent's
+instructions. Three workstreams then run in parallel: editing, replay,
+and helper. The orchestrator merges their work, has the rail workstream
+build the cards, runs one review with one fix round, and runs the full
+gates once at the end. Five design questions wait on Ken (PQ1 to PQ5
+under Open Questions). Until he answers, the plan builds their
+defaults.</p>
 <p>The plan builds the architecture's recommended answers: Lahe's own
 editing code (AQ1, Lahe's code or Tiptap), always checking new blocks on
 a handled reply (AQ3), and bounding a run record's size (AQ4). <a
@@ -877,19 +882,19 @@ href="#if-ken-decides-otherwise">If Ken decides otherwise</a> names the
 tasks that change.</p>
 <h2 id="how-the-work-is-dispatched">How the work is dispatched</h2>
 <pre class="mermaid"><code>flowchart TD
-  P0[&quot;Phase 0: orchestrator&lt;br/&gt;base commit, other branches settled with Ken&quot;] --&gt; P1[&quot;Phase 1: shared kernel&lt;br/&gt;one builder, feat/free-writing&quot;]
+  P0[&quot;Phase 0: orchestrator&lt;br/&gt;base commit, other branches settled with Ken&quot;] --&gt; P1[&quot;kernel workstream&lt;br/&gt;Tasks 1.1 to 1.6, feat/free-writing&quot;]
   P1 --&gt; R1{&quot;orchestrator review&lt;br/&gt;gate:unit green&quot;}
-  R1 --&gt; A[&quot;2A layer editing&lt;br/&gt;free-writing-2a, tasks 2.1 to 2.4&quot;]
-  R1 --&gt; B[&quot;2B replay and page check&lt;br/&gt;free-writing-2b, tasks 2.5 to 2.7&quot;]
-  R1 --&gt; C[&quot;2C helper and CLI&lt;br/&gt;free-writing-2c, tasks 2.8 to 2.12&quot;]
-  A --&gt; M[&quot;Task 3.1: orchestrator merges 2C, 2B, 2A, then main&lt;br/&gt;into integration/free-writing&quot;]
+  R1 --&gt; A[&quot;editing workstream (2A)&lt;br/&gt;free-writing-2a, Tasks 2.1 to 2.4&quot;]
+  R1 --&gt; B[&quot;replay workstream (2B)&lt;br/&gt;free-writing-2b, Tasks 2.5 to 2.7&quot;]
+  R1 --&gt; C[&quot;helper workstream (2C)&lt;br/&gt;free-writing-2c, Tasks 2.8 to 2.12&quot;]
+  A --&gt; M[&quot;Task 3.1: orchestrator merges 2C, 2B, 2A, then main&lt;br/&gt;into integration/free-writing; phase-tier specs&quot;]
   B --&gt; M
   C --&gt; M
-  M --&gt; R3[&quot;Tasks 3.2 and 3.3: rail and proofreading card&lt;br/&gt;free-writing-rail, its own worktree&quot;]
+  M --&gt; R3[&quot;rail workstream&lt;br/&gt;free-writing-rail, Tasks 3.2 and 3.3&quot;]
   M --&gt; X[&quot;Task 3.4: tests that need all three branches&lt;br/&gt;(orchestrator)&quot;]
-  R3 --&gt; RV[&quot;Task 3.5: review of the integrated diff&lt;br/&gt;and one fix round&quot;]
+  R3 --&gt; RV[&quot;Task 3.5: Phase 7 review roster on the integrated diff&lt;br/&gt;and one fix round&quot;]
   X --&gt; RV
-  RV --&gt; G[&quot;Task 3.6: skills install, dist rebuild, gate, gate:all,&lt;br/&gt;story walks, screenshots&quot;]</code></pre>
+  RV --&gt; G[&quot;Task 3.6: release tier: skills install, dist rebuild,&lt;br/&gt;gate, gate:all once, story walks, screenshots&quot;]</code></pre>
 <p><strong>Branches.</strong></p>
 <ul>
 <li><code>feat/free-writing</code>: Phase 1 builds here. The pull
@@ -906,6 +911,112 @@ own worktree, branched from <code>integration/free-writing</code> after
 Task 3.1. Merged back before Task 3.5 (review).</li>
 <li><code>free-writing-fix-&lt;builder&gt;</code>: Task 3.5's fix
 branches, off <code>integration/free-writing</code>.</li>
+</ul>
+<p><strong>Workstreams.</strong> One agent per workstream, not per task.
+Tasks that share setup or a module stay together; the only splits are
+where separate ownership lets work run in parallel. The orchestrator
+owns Phase 0 and Tasks 3.1, 3.4, 3.5, and 3.6 itself.</p>
+<div class="table-scroll"><table>
+<thead>
+<tr>
+<th>Workstream</th>
+<th>Tasks</th>
+<th>Owns</th>
+<th>Branch</th>
+<th>Alerts the orchestrator when</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>kernel</td>
+<td>1.1 to 1.6</td>
+<td>every <code>src/shared/</code> file it edits,
+<code>src/layer/blocks.js</code>, the contract and every copy,
+<code>test/fixtures/free_writing/</code></td>
+<td><code>feat/free-writing</code></td>
+<td>a shared shape (function signature, field, code) differs from the
+architecture; any change to <code>manifest.js</code> or
+<code>review_format.js</code></td>
+</tr>
+<tr>
+<td>editing (2A)</td>
+<td>2.1 to 2.4</td>
+<td>the 2A row of the Phase 2 ownership table</td>
+<td><code>free-writing-2a</code></td>
+<td>it needs a change in <code>src/shared/</code>,
+<code>blocks.js</code>, <code>gestures.js</code>, or
+<code>replay.js</code>; a hotkey fails in one browser; the list of
+existing Enter specs whose result changes (before going on)</td>
+</tr>
+<tr>
+<td>replay (2B)</td>
+<td>2.5 to 2.7</td>
+<td>the 2B row</td>
+<td><code>free-writing-2b</code></td>
+<td>a fixture does not match what the architecture says typing produces;
+it needs <code>editing.js</code>, <code>anchor.js</code>,
+<code>sync.js</code>, or <code>src/shared/</code></td>
+</tr>
+<tr>
+<td>helper (2C)</td>
+<td>2.8 to 2.12</td>
+<td>the 2C row</td>
+<td><code>free-writing-2c</code></td>
+<td>it needs <code>replay.js</code>, <code>editing.js</code>, or the
+contract text; a path rule for <code>lahe write</code> cannot be met as
+written</td>
+</tr>
+<tr>
+<td>rail</td>
+<td>3.2 and 3.3</td>
+<td><code>tab_edits.js</code>, <code>tab_done.js</code>,
+<code>overlay.js</code>, <code>edits_tab.spec.js</code>,
+<code>agent_replies.spec.js</code>,
+<code>block_changes.test.js</code></td>
+<td><code>free-writing-rail</code></td>
+<td>it needs a change in any Phase 2 file or <code>src/shared/</code>; a
+pinned word does not fit the card</td>
+</tr>
+</tbody>
+</table></div>
+<p>If the editing agent runs long, the orchestrator may hand Tasks 2.2
+to 2.4 to a fresh agent in the same worktree; that is still one
+workstream.</p>
+<p><strong>Builder prompts.</strong> Each prompt names the workstream's
+task numbers and only the brief and architecture sections those tasks
+list under "Architecture sections", not whole documents. It also names
+the repo docs a builder reads first (<code>CLAUDE.md</code> "Running the
+loop"). Each agent writes
+<code>progress/phaseN_workstream_[shortname].md</code>, for example
+<code>progress/phase2_workstream_editing.md</code>. The file records
+what was built, tests added, targeted commands and their results,
+whether a full suite ran (it should not), duration, deviations, and
+<code>## Cleanup needed</code>.</p>
+<h3 id="test-scope">Test scope</h3>
+<p>Repo <code>CLAUDE.md</code> rules win where the forge's generic text
+differs. Here the builder's tests are <code>npm run gate:unit</code>
+plus named Playwright specs.</p>
+<ul>
+<li><strong>Task tier (each workstream).</strong>
+<code>gate:unit</code>, plus the named browser specs for its own change,
+by name. No full browser suite. No rerun of a suite whose code did not
+change just because a new agent or worktree started. Rerun only the spec
+the latest change touched.</li>
+<li><strong>Phase tier (orchestrator, after a batch merges).</strong>
+After Task 3.1, and again after the rail merges, run the affected
+browser specs once, by name: every new free-writing spec plus the
+existing specs on 2A's agreed Enter list and the old-record specs. Per
+<code>st-merge</code>, also rerun a file's tests after any merge where
+both sides changed that file, clean merges included.</li>
+<li><strong>Release tier (orchestrator, Task 3.6).</strong> Only after
+implementation and every review fix are integrated: dist rebuild,
+<code>npm run gate</code>, <code>npm run gate:all</code>, once each.
+Readiness reuses that result if no code changed after it. Any code
+change after it means another full run. Each fix in between gets its
+targeted regression test.</li>
+<li><strong>Before a large batch of tests,</strong> the writer maps each
+test to a behavior or acceptance line and checks for duplicates. There
+is no raw cap on the test count.</li>
 </ul>
 <p><strong>Who owns the joins between builders.</strong> The
 orchestrator owns every merge and every test that needs more than one
@@ -2172,8 +2283,8 @@ and offset</li>
 <p><strong>2A's hand-off.</strong> Each 2A task ends with a commit and a
 short report. If the first agent runs long, the orchestrator may send
 Tasks 2.2 to 2.4 (block types, empty space, undo) to a fresh agent in
-the same worktree. Before handoff, 2A runs its six spec files once each
-in Firefox and WebKit, by name.</p>
+the same worktree, still as the editing workstream. Before handoff, 2A
+runs its six spec files once each in Firefox and WebKit, by name.</p>
 <p><strong>Don't touch (2.1 to 2.4):</strong> <code>replay.js</code>,
 <code>sync.js</code>, anything in <code>src/service/</code> or
 <code>src/cli/</code>.</p>
@@ -2523,12 +2634,13 @@ branches</h3>
 into <code>integration/free-writing</code>, using <code>st-merge</code>,
 then merges <code>main</code> in once. It clears the
 <code>planned</code> flag on <code>write.js</code> in
-<code>manifest.js</code> and runs <code>gate:unit</code>.
-<strong>Files:</strong> <code>src/shared/manifest.js</code>, merge
-commits only. <strong>Acceptance:</strong> <code>gate:unit</code> is
-green on the integration branch. No file shows changes from two
-builders. Every conflict and its resolution, including those from
-<code>main</code>, is on the progress page.</p>
+<code>manifest.js</code> and runs <code>gate:unit</code>. Then it runs
+the phase-tier specs once (see Test scope). <strong>Files:</strong>
+<code>src/shared/manifest.js</code>, merge commits only.
+<strong>Acceptance:</strong> <code>gate:unit</code> is green on the
+integration branch, and the phase-tier specs pass once. No file shows
+changes from two builders. Every conflict and its resolution, including
+those from <code>main</code>, is on the progress page.</p>
 <h3 id="task-32-the-edits-tab-and-the-card-show-new-blocks">Task 3.2:
 The edits tab and the card show new blocks</h3>
 <p><strong>Spec:</strong> On <code>free-writing-rail</code>:</p>
@@ -2605,7 +2717,8 @@ fixes" button</li>
 <p>Screenshots, light and dark: the question card (wireframe
 <code>06b-question</code>), and the card after each answer. The
 orchestrator merges <code>free-writing-rail</code> into
-<code>integration/free-writing</code> after this task.</p>
+<code>integration/free-writing</code> after this task and runs the
+rail's specs plus any spec for a file both sides changed.</p>
 <h3 id="task-34-tests-that-need-all-three-branches">Task 3.4: Tests that
 need all three branches</h3>
 <p><strong>Spec:</strong> The orchestrator writes these specs on real
@@ -2702,11 +2815,21 @@ is held open with an agent that changes nothing</li>
 </ul>
 <h3 id="task-35-review-of-the-integrated-diff-and-one-fix-round">Task
 3.5: Review of the integrated diff, and one fix round</h3>
-<p><strong>Spec:</strong> The orchestrator runs feature-forge's review
-set on the diff of <code>integration/free-writing</code> against the
-recorded base. It includes the code lead and security, because serving
-and paths change (<code>lahe write</code>), along with the helper's
-append path and the page-write allowlist.</p>
+<p><strong>Spec:</strong> The orchestrator runs feature-forge's Phase 7
+roster on the diff of <code>integration/free-writing</code> against the
+recorded base, in parallel and in the background:</p>
+<ul>
+<li><code>feature-dev:code-reviewer</code> on the integrated diff</li>
+<li><code>review-security</code>, its second run, because serving and
+paths change (<code>lahe write</code>), along with the helper's append
+path and the page-write allowlist</li>
+<li><code>review-code-lead</code>, its second run</li>
+<li><code>review-testing</code> on the implemented tests</li>
+<li><code>codex review --base &lt;base&gt;</code>, if codex is
+available; skipped with a note otherwise</li>
+<li><code>review-adversary</code> last, handed every other finding</li>
+</ul>
+<p>Then:</p>
 <ul>
 <li>Each finding names its test.</li>
 <li>A fix goes to the original owner, as a
@@ -2717,7 +2840,9 @@ green.</li>
 owns those failures and sends the fix builder.</li>
 <li>The orchestrator merges each fix and checks its test exists and
 passes.</li>
-<li>One fix round. A second review only when a fix is itself risky.</li>
+<li>Each fix runs its targeted regression test, not the full suite.</li>
+<li>One fix round, per repo <code>CLAUDE.md</code>. A second review only
+when a fix is itself risky.</li>
 </ul>
 <p><strong>Files:</strong> fix branches only, plus the progress page.
 <strong>Acceptance:</strong> every finding has a disposition on the
@@ -2750,7 +2875,9 @@ failed", as its own step. The pull request opens from
 </ol>
 <p><strong>Files:</strong> <code>dist/lahe-layer.js</code>,
 <code>docs/features/20260928.01_free_writing/04_progress_free_writing.md</code>.
-<strong>Acceptance:</strong> Both gates show 0 failed in all three
+If a walk leads to a code change, steps 2 to 4 run again after the
+fix.</p>
+<p><strong>Acceptance:</strong> Both gates show 0 failed in all three
 lanes. Each user story has a walk note and a screenshot on the progress
 page. Changes from plan lists every deviation.</p>
 <p><strong>Phase test:</strong> Task 3.6's gates and walks, and the
@@ -2886,6 +3013,11 @@ handled reply), and AQ4 (bounding a run record's size) stay open in the
 <a
 href="02_architecture_free_writing.html#open-questions">architecture</a>.</p>
 <h2 id="test-list">Test List</h2>
+<p>Each line below is an index into task Acceptance lines, not an extra
+test. Where a Phase 2 case and a Task 3.4 case look alike (the skipped
+run, raw HTML, the R14 cases), they are kept on purpose: Phase 2 tests
+fixtures, Task 3.4 tests real capture read back from
+<code>review.json</code>.</p>
 <div class="callout callout-req">
 <p><strong>Kernel (Phase 1)</strong></p>
 <ul class="task-list">
@@ -3059,11 +3191,8 @@ run across a section label, and escaped special characters.</label></li>
 <li><label><input type="checkbox" />The handled check holds open a
 missing block, whether or not the source was written.</label></li>
 <li><label><input type="checkbox" />The handled check holds open a run
-the agent skipped while it placed another (AQ3, always check new blocks
-on a handled reply).</label></li>
-<li><label><input type="checkbox" />The handled check holds open words
-written as raw HTML (AQ3, always check new blocks on a handled
-reply).</label></li>
+the agent skipped while it placed another, and words written as raw HTML
+(AQ3, always check new blocks on a handled reply).</label></li>
 <li><label><input type="checkbox" />The handled check holds open a bold
 edit the agent never made (third R14 case, bold two words).</label></li>
 <li><label><input type="checkbox" /><code>lahe write</code> creates a
@@ -3140,7 +3269,7 @@ nothing.</label></li>
 <div class="callout callout-metric">
 <ul class="task-list">
 <li><label><input type="checkbox" />Full test suite green, not just the
-new tests.</label></li>
+new tests, run once at the release tier (Task 3.6).</label></li>
 <li><label><input type="checkbox" />Design and lint gates green
 (<code>npm run gate</code> and
 <code>npm run gate:all</code>).</label></li>
@@ -3981,6 +4110,31 @@ to change. It can go to the board</td>
 <td>Narrow windows and the rail</td>
 <td><span class="accepted">Accepted</span></td>
 <td>Menu opens upward; bar drops its hint first</td>
+</tr>
+</tbody>
+</table></div>
+<h2 id="forge-rule-update-2026-09-29">Forge rule update, 2026-09-29</h2>
+<div class="table-scroll"><table>
+<thead>
+<tr>
+<th>#</th>
+<th>Change</th>
+<th>Where</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>FR1</td>
+<td>Tasks grouped into five workstreams (kernel, editing, replay,
+helper, rail), one agent each, with ownership, branch, and alerts;
+progress files renamed <code>phaseN_workstream_[shortname].md</code> and
+record tests and runs; builder prompts name only the listed sections;
+test scope in three tiers (phase-tier specs added after Task 3.1 and the
+rail merge, full gates only in Task 3.6, rerun after any later code
+change); Task 3.5 uses the Phase 7 roster with one fix round; the two
+AQ3 Test List lines merged</td>
+<td>How the work is dispatched, Test scope, Tasks 3.1, 3.3, 3.5, 3.6,
+Test List, Acceptance Criteria</td>
 </tr>
 </tbody>
 </table></div>
