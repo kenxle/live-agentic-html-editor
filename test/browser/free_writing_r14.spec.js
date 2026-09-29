@@ -2,21 +2,14 @@
 // `lahe review post.md`.
 //
 // This is the runnable port of the script that reproduced the three R14 cases
-// (test/fixtures/free_writing/r14_repro_reference.js). It asserts what the
-// re-run on main at 2b6eb96 recorded, per plan Task 1.1:
+// (test/fixtures/free_writing/r14_repro_reference.js). On main at 2b6eb96 the
+// first case passed and the other three failed (plan Task 1.1). With the
+// free-writing branches merged, all of them are ordinary tests:
 //
-//   bold in the first paragraph, left out by the agent   passes on main, so it
-//                                                        is an ordinary test
-//                                                        that guards the fix
-//   bold in the second paragraph, left out by the agent  the edit goes lost with
-//                                                        no flag: test.fail
-//   the doubled header line, by click and by Esc         test.fail
-//   bold two words, the agent changes nothing            test.fail
-//
-// Each assertion is the RIGHT behavior. test.fail says it does not hold yet;
-// Task 3.4 (tests that need all three branches) removes the marks once the
-// free-writing branches land. A test.fail that starts passing fails the run,
-// which is the signal to remove its mark.
+//   bold in the first paragraph, left out by the agent   comes back bold
+//   bold in the second paragraph, left out by the agent  comes back bold
+//   the header line, by click and by Esc                 shows once, under the h2
+//   bold two words, the agent changes nothing            not retired
 //
 // Nothing is simulated: the session, the helper, its server, the reply and the
 // rebuild are all real, and a rebuild is a rewrite of the source file. Each
@@ -335,8 +328,6 @@ test.describe("brief R14: bold and italic edits survive the rebuild", () => {
   });
 
   test("a lone paragraph: bold in the SECOND new paragraph, left out by the agent, comes back bold", async ({ page }, testInfo) => {
-    // On main the edit goes lost and nothing is flagged.
-    test.fail();
     world = await makeWorld(testInfo, [ORIGINAL]);
     await page.goto(world.open);
     await booted(page);
@@ -345,11 +336,14 @@ test.describe("brief R14: bold and italic edits survive the rebuild", () => {
     await page.keyboard.type(P_PLAIN, { delay: 2 });
     await page.keyboard.press("Enter");
     await page.keyboard.type(P_BOLD, { delay: 2 });
-    await selectPhrase(page, INTRO_P, "bold");
+    // Enter made the second paragraph its own p (a run block), so the phrase
+    // is looked for across the section, not in the first p.
+    expect(await selectPhrase(page, INTRO_SECTION, "bold")).toBe(true);
     await pressBold(page);
-    await caret(page, INTRO_P, "end");
+    await caret(page, INTRO_SECTION + " > p:last-of-type", "end");
     await commitByEsc(page);
     const it = await committedEdit(page);
+    expect(it.new_blocks.map((b) => b.html)).toEqual(["First new paragraph has a <strong>bold</strong> word in it."]);
     await helperHas(world, it.id, it.rev);
 
     await agentWrites(page, world, [P_PLAIN]);
@@ -363,8 +357,6 @@ test.describe("brief R14: bold and italic edits survive the rebuild", () => {
 
   for (const leave of ["click", "Esc"]) {
     test("the header line: a line written after a heading shows once after the rebuild, left by " + leave, async ({ page }, testInfo) => {
-      // On main the line nests inside the h2 and shows twice after the rebuild.
-      test.fail();
       world = await makeWorld(testInfo, [ORIGINAL]);
       await page.goto(world.open);
       await booted(page);
@@ -387,9 +379,6 @@ test.describe("brief R14: bold and italic edits survive the rebuild", () => {
   }
 
   test("bold two words: an agent that changes nothing and replies handled does not retire the edit", async ({ page }, testInfo) => {
-    // On main the handled check only judges edit records, so the claim retires
-    // the item and the bold is gone.
-    test.fail();
     world = await makeWorld(testInfo, [ORIGINAL]);
     await page.goto(world.open);
     await booted(page);
