@@ -1,6 +1,6 @@
-# Progress: LAHE agent that cannot forget
+# Progress: LAHE starts your agent when a comment is ready
 
-**Phase 2, Brief.** The brief is drafted and going through PM and clarity review; a measurement spike (one real headless run) runs in parallel and feeds the architecture. Nothing is waiting on you. Last updated 2026-09-29 12:40.
+**Phase 2, Brief.** The brief is written, PM-reviewed, and clarity-checked; a measurement spike (one real headless run) runs in parallel and its numbers feed the architecture. Nothing is waiting on you. Last updated 2026-09-29 12:49.
 
 **Docs:** [Crucible](00_crucible_lahe_agent_sdk.md) · [Research](research_agent_sdk.md) · [Brief](01_brief_lahe_agent_sdk.md)
 
@@ -12,7 +12,6 @@ Nothing is waiting on you. You asked not to be stopped until all the docs are wr
 
 | Agent or task | Doing | Started | Branch |
 |---|---|---|---|
-| Brief | PM review and clarity pass on the brief | 2026-09-29 12:40 | feat/lahe-agent-sdk |
 | Measurement spike | One real review run headless: usage per run, reply quality, missing chat context | 2026-09-29 | feat/lahe-agent-sdk |
 
 ## Phases
@@ -62,4 +61,5 @@ Not shipped yet.
 
 ## Log
 
+- **2026-09-29 12:49.** PM review returned 17 findings (two blockers: the cost gate had no number, and runs share the owner's usage limit with his other agents). 16 accepted, 1 partly accepted; the table is in the brief and the full prose in the brief's reviews file. The clarity pass then rewrote 22 passages for plain wording; the title now says what the mode does.
 - **2026-09-29 12:40.** Brief drafted from the crucible's recommendation: an opt-in mode where LAHE starts the user's own agent headless for each batch of work, Claude Code first, rules given once per run, no new dependency. Five assumptions added beyond the crucible's seven; all are listed in the brief.
