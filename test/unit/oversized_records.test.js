@@ -288,49 +288,11 @@ test("2: a media element's opening tag carries its <source> children", () => {
   );
 });
 
-// ---------------------------------------------------------------------------
-// 3. A region that is the whole page
-// ---------------------------------------------------------------------------
-
-test("3: the page itself, and a wrapper holding every word of it, are page-sized; a paragraph is not", () => {
-  const root = el("body");
-  const main = append(root, el("main"));
-  const p = append(main, el("p", { text: "Still open" }));
-  append(main, el("p", { text: "Everything else on the page." }));
-  append(root, el("script", { text: "var notProse = 1;" }));
-
-  assert.equal(anchor.isPageSized(root, root), true, "the body");
-  assert.equal(anchor.isPageSized(main, root), true, "a <main> holding every word the page has");
-  assert.equal(anchor.isPageSized(p, root), false);
-
-  append(root, el("footer", { text: "A footer with words of its own." }));
-  assert.equal(anchor.isPageSized(main, root), false, "once another block has words, <main> is a region");
-});
-
-test("3: one block holding every word on the page is a passage, not the page", () => {
-  // A page of image options with one heading: the heading holds every word
-  // the page has. It is still one passage. Counting it as the page made a
-  // comment on it go lost the moment the agent reworded it (code review).
-  const options = el("body");
-  const h1 = append(options, el("h1", { text: "Pick a logo" }));
-  append(options, el("img", { attrs: { src: "a.png" } }));
-  append(options, el("img", { attrs: { src: "b.png" } }));
-  assert.equal(anchor.isPageSized(h1, options), false, "the heading");
-
-  const single = el("body");
-  const main = append(single, el("main"));
-  const only = append(main, el("p", { text: "The only paragraph." }));
-  assert.equal(anchor.isPageSized(only, single), false, "a one-paragraph page's paragraph");
-  assert.equal(anchor.isPageSized(main, single), false, "and its wrapper, which holds one block");
-  assert.equal(anchor.isPageSized(single, single), true, "the body is always the page");
-
-  const wrapped = el("body");
-  const outer = append(wrapped, el("main"));
-  const inner = append(outer, el("div"));
-  append(inner, el("h2", { text: "A heading" }));
-  append(inner, el("p", { text: "A paragraph." }));
-  assert.equal(anchor.isPageSized(outer, wrapped), true, "a wrapper around a wrapper around two blocks");
-});
+// 3. A region that is the whole page: no unit test here. Whether a selection
+// is anchored on its first block or on the page is a real-Range question, so
+// test/browser/oversized_records.spec.js and whole_page_selection.spec.js own
+// it. The page-sized rule these tests covered (anchor.isPageSized) is gone: a
+// reviewer who selects the whole page commented on the whole page.
 
 test("2: alt text that happens to contain =data: does not make a new signature read as old", () => {
   const src = dataUrl("iVBORw0KGgo", "ALTCASE");

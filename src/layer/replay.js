@@ -2214,13 +2214,20 @@
     if (!scope) return null;
     var found = engine.findByStamp(scope, ref.stamp);
     if (found.length !== 1) return null;
-    // A stamp on an element that holds the whole page says nothing about which
-    // passage the comment is on. Its words are every word on the page, so any
-    // change anywhere reads as "the passage was reworded", and taking that as a
-    // certain place painted the entire page as the comment's passage
-    // (docs/features/20260928.03_oversized_records, cause 3). Not certain, so
-    // the pass goes on to the honest answer: lost, and the point ladder's turn.
-    if (typeof engine.isPageSized === "function" && engine.isPageSized(found[0], scope)) return null;
+    // A stamp on the page's own wrapper is a certain place too: a reviewer who
+    // selected the whole page commented on the whole page, and their quote is
+    // the page's own words. But a stamp on a container far bigger than the
+    // quote (a one-line comment stored on <main> before the triple-click fix)
+    // is not a place the highlighter will paint, and taking it as found left a
+    // card with no highlight and no lost notice. Those words are not there:
+    // the record is lost, and the point ladder gets its turn.
+    if (
+      highlightModule &&
+      typeof highlightModule.refusesWholeElement === "function" &&
+      highlightModule.refusesWholeElement(found[0], record.paintQuoteOf(item))
+    ) {
+      return null;
+    }
     return found[0];
   }
 
