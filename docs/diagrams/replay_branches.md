@@ -54,7 +54,9 @@ flowchart TD
   P -- "start_of_container" --> Cn["the page's one main (or body),<br/>found by tag alone.<br/>No anchor compare"]
   P -- "after_anchor" --> A{"find the anchor<br/>(probes from the anchor view)"}
   A -- "not found" --> L["LOST. Nothing placed"]
-  A -- "found" --> V{"four branches<br/>on the anchor view"}
+  A -- "found" --> U{"anchor left alone?<br/>(same markup before and after,<br/>no new tag)"}
+  U -- "yes: place only,<br/>never compared or written" --> R
+  U -- "no" --> V{"four branches<br/>on the anchor view"}
   V -- "1: applied" --> T{"tag is anchor_tag_after?"}
   V -- "2 or 3: re-apply" --> W["write the anchor's own markup<br/>with its new tag<br/>(writeBlock, swapTag)"]
   V -- "4: conflict" --> H["HOLD the run. The card shows<br/>the anchor's two versions and the run"]
@@ -80,7 +82,7 @@ The presence table, as `placeRun` applies it:
 
 | Found in the walk | What replay does |
 |---|---|
-| whole, one to one | swap a wrong tag (and say so on the card, `REPLAY_RUN_WRONG_TAG`); rewrite the markup when bold or italic is missing |
+| whole, one to one | swap a wrong tag (and say so on the card, `REPLAY_RUN_WRONG_TAG`); rebuild instead of swapping when the block moves into or out of a list; rewrite the markup when bold or italic is missing, or when the leaf shows an earlier revision's words exactly (a punctuation fix the fold reads past) |
 | joined (a leaf whose words are exactly two or more new blocks, nothing else) or split | leave it |
 | inside a leaf that also holds words the reviewer never typed (the clash, checked before anything is written; with no block present yet, a block under five words never clashes, since that leaf is the page's own next paragraph) | write nothing, anchor included; flag the record with `REPLAY_NEITHER_MATCHES` and the conflict card, which shows the reviewer's block and the page's. Keep mine rewrites the leaf and remembers the page state; Take the page's makes the page's block the record's (a new revision). Either answer then places the rest |
 | missing, an earlier revision's block is there one to one | rewrite that block in place to the current words (branch three for the run) |
@@ -89,4 +91,8 @@ The presence table, as `placeRun` applies it:
 
 - **A forged block writes nothing.** When any block's tag is outside the six writable ones or `cleanBlock` refuses its markup, the whole record writes nothing, anchor included.
 - **A taken-back run is never replayed again**, even while the original record is still outstanding in the store.
-- **The page check reads a handled run block by block** (`runCheckReason`) from the page's markup with the string twin of the walk: a missing block reopens as undone, a wrong tag with the tag note, lost bold or italic with the formatting note, in that order.
+- **An anchor the reviewer left alone is never compared.** When the sitting only added blocks, the anchor says where the run goes and nothing more, so an agent's later fix to that paragraph is not a conflict.
+- **A tag change lands on a block.** The anchor is resolved with its new tag as the tie-breaker's hint, and the tag is written onto the block holding the anchor's words, never onto an inline element. A take-back names the old tag in `anchor_tag_after`, and the tag leg turns the anchor back.
+- **The run notes clear.** Each `placeRun` clears the wrong-tag and placed-elsewhere notes and sets them again from what it finds. A wrong tag replay swapped itself stays noted while replay's own element is on the page.
+- **One page walk per `placeRun`**, kept in step with what it writes.
+- **The page check reads a handled run block by block** (`runCheckReason`) from the page's markup with the string twin of the walk: a missing block reopens as undone, a wrong tag with the tag note, lost bold or italic with the formatting note, in that order. A take-back keeps the whole-text check, plus a tag check when it names the old tag.
