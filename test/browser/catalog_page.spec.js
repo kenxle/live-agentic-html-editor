@@ -166,7 +166,7 @@ test.describe("the Library page", () => {
     const hostile = '<img src=x onerror="window.__pwned=1"><b>bold</b>';
     const list = freshList();
     reviewIn(list, "r_stale").display_name = hostile;
-    reviewIn(list, "r_stale").folder = "<i>folder</i>";
+    reviewIn(list, "r_stale").path_hint = "~/<i>folder</i>";
     list.sessions.filter((s) => s.id === "s_coach")[0].name = "<script>window.__pwned=2</script>";
     await routeCatalog(page, { list: () => list });
     await openLibrary(page, helper);

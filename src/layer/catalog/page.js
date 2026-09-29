@@ -261,6 +261,8 @@
       }
     }
     else if (what === "star") star(id, btn.getAttribute("aria-pressed") !== "true");
+    else if (what === "pages") update(VM.withPagesOpen(state, id, btn.getAttribute("aria-expanded") !== "true"));
+    else if (what === "more") update(VM.withCardMore(state, btn.getAttribute("data-card"), btn.getAttribute("aria-expanded") !== "true"));
     else if (what === "handoff") {
       focusKey(id + ":copy");
       update(VM.withPanel(state, id, btn.getAttribute("data-reason") || "no_agent"));
@@ -320,12 +322,15 @@
   }
 
   function renderRow(row, extra) {
+    // Line one: the name alone. Line two: the document's real path, in the
+    // mono face, a step smaller. Then the time and the counts.
     var main = h("div", { class: "lib-row-main" }, [
       h("p", { class: "lib-name", text: row.name }),
-      h("p", { class: "lib-where", text: [row.where, extra, row.lastText].filter(Boolean).join(" \u00b7 ") })
+      row.path ? h("p", { class: "lib-where", text: row.path }) : null
     ]);
 
-    var facts = [];
+    var facts = [h("span", { text: row.lastText })];
+    if (extra) facts.push(h("span", { text: extra }));
     if (row.counts.waiting) facts.push(waitingMark(row.counts.waiting));
     facts.push(h("span", { text: row.counts.comments }));
     if (row.counts.asOf) facts.push(h("span", { text: row.counts.asOf }));
@@ -336,6 +341,20 @@
     if (row.folded) facts.push(h("span", { text: row.folded }));
     main.appendChild(h("div", { class: "lib-facts" }, facts));
 
+    if (row.pagesToggle) {
+      main.appendChild(
+        h("p", { class: "lib-line" }, [
+          button(row.pagesToggle.text, {
+            "data-act": "pages",
+            "data-review": row.id,
+            "data-key": row.id + ":pages",
+            "data-quiet": "true",
+            "data-disclosure": "true",
+            "aria-expanded": row.pagesToggle.expanded ? "true" : "false"
+          })
+        ])
+      );
+    }
     if (row.pages.length) {
       main.appendChild(
         h(
@@ -468,16 +487,35 @@
     );
     if (card.waitingText) metaKids.push(waitingMark(card.waitingText));
     metaKids.push(h("span", { text: card.lastText }));
-    var details = h("details", { class: "lib-card", "data-session": card.id, open: card.open }, [
+    var body = [
       h("summary", { "data-key": "card:" + card.id }, [
         h("span", { class: "lib-chev", "aria-hidden": "true" }),
         h("span", { class: "lib-card-title", text: card.title }),
         h("span", { class: "lib-card-meta" }, metaKids)
-      ]),
-      h("ul", { class: "lib-rows" }, card.rows.map(function (r) {
-        return renderRow(r, null);
-      }))
-    ]);
+      ])
+    ];
+    // What applies to every review of the card is said once, here.
+    if (card.notes && card.notes.length) {
+      body.push(h("div", { class: "lib-card-notes" }, card.notes.map(function (n) {
+        return h("p", { class: "lib-line", "data-tone": n.tone, text: n.text });
+      })));
+    }
+    body.push(h("ul", { class: "lib-rows" }, card.rows.map(function (r) {
+      return renderRow(r, null);
+    })));
+    if (card.more) {
+      body.push(h("p", { class: "lib-card-more" }, [
+        button(card.more.text, {
+          "data-act": "more",
+          "data-card": card.id,
+          "data-key": "more:" + card.id,
+          "data-quiet": "true",
+          "data-disclosure": "true",
+          "aria-expanded": card.more.expanded ? "true" : "false"
+        })
+      ]));
+    }
+    var details = h("details", { class: "lib-card", "data-session": card.id, open: card.open }, body);
     details.addEventListener("toggle", function () {
       if (details.open !== card.open) update(VM.withExpanded(state, card.id, details.open));
     });
