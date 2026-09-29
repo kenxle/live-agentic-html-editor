@@ -20,10 +20,10 @@ The owner decided the reviewer sees only cards and the rail, with no tool mechan
 Surfaces this feature adds or changes:
 
 - a control to turn auto-answer on, and a panel that says what it may do before it starts (R6 and R25 in the brief: the warning, and the optional note for the runs)
-- the status line's words while it is on, working, waiting its turn, failed, or paused (R12, R17, R23)
-- a control to turn it off from the page (R18)
-- where usage shows: run count, and tokens where Claude reports them (R24)
-- a card whose run failed, a card the runs gave up on, and a card left with a change but no reply after a stop (R5, R13, R17)
+- the status line's words while it is on, working, waiting its turn, failed, or paused (R12, a cap on runs at once; R17, failures are visible; R23, a usage ceiling)
+- a control to turn it off from the page (R18, stop from the page)
+- where usage shows: run count, and tokens where Claude reports them (R24, usage is visible)
+- a card whose run failed, a card the runs gave up on, and a card left with a change but no reply after a stop (R5, stopping is clean; R13, retries stop; R17, failures are visible)
 
 The core workflow, one line per step:
 
@@ -83,7 +83,7 @@ Every direction uses the same document (a garden plan), the same four cards and 
 - **The status line stays one line.** The rail had two agent lines once, they contradicted each other in front of the owner, and the fix was to merge them. C brings a second agent surface back and has to gut the status line to stay consistent. B leaves the line's job alone and only adds words.
 - **Hold and Auto-answer explain each other.** With Hold on, nothing sends, so no run starts. Side by side, the two pills show that without a sentence.
 - **Cards stay as they are.** A reply from a run reads exactly like a reply from a chat agent, which is what the brief asks for.
-- **Smallest change after A,** and A's cost (the hidden stop) is the one R18 exists to prevent.
+- **Smallest change after A,** and A's cost (the hidden stop) is the one R18 (stop from the page) exists to prevent.
 
 Worth taking from the others:
 
@@ -112,6 +112,9 @@ The plan pins the rail's words, and where they differ from these screens, the pl
 - The limit buttons are cut, since the page may only ask for on or off. A stopped chip offers one "Try again".
 - Screen b7 (a change with no reply after a stop) and the per-card run notes are not built. A stopped run never changes the file, and the rail has no per-item run state.
 - "Waiting its turn" becomes "waiting for another review's run".
+- A stopped status line says only "auto-answer stopped"; the reason and remedy are said once, in the chip. A daily limit reads "auto-answer paused for today", and the usage limit "auto-answer paused until {time}".
+- The overdue banner, the late ring and the overdue toast do not show at all while auto-answer is on and healthy. They do not switch to auto-answer's own words.
+- A card the runs gave up on says "Auto-answer could not answer this and stopped trying. Reply here yourself, or hand the review to a chat agent."
 
 ## Style rules held
 

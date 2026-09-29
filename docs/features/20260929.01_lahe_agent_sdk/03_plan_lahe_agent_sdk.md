@@ -10,8 +10,19 @@ Status: DRAFT, written without the owner. Four reviews are folded in; their tabl
   - a green base that includes every branch touching the same files
 
   If a fact fails, the build stops and the question comes to you.
-- **Phase 1:** one builder lays the shared pieces. These are the tagged contract and every copy of it, the wire names, the locks, the call signatures the parallel builders meet at, and a fake `claude` for tests.
-- **Phase 2:** four builders work in parallel on the run engine, the supervisor, the command line and helper, and the rail. **Phase 2 waits for your answer on the terms** (OQ1), or for you to say you accept the risk.
+- **Phase 1:** one builder lays the shared pieces:
+  - the tagged contract and every copy of it
+  - the wire names
+  - the locks
+  - the call signatures the parallel builders meet at
+  - a fake `claude` for tests
+- **Phase 2:** four builders work in parallel:
+  - the run engine
+  - the supervisor
+  - the command line and helper
+  - the rail
+
+  **Phase 2 waits for your answer on the terms** (OQ1, subscription terms), or for you to say you accept the risk.
 - **Phase 3:** the orchestrator merges in an integration worktree, writes the tests that need every branch, runs one review with one fix round, and runs the full gates once.
 - **Phase 4:** a live check with the real `claude`, then your dogfood review.
 - **Your questions are in one place,** under [Open Questions](#open-questions). Each has the default the build takes if you do not answer.
@@ -355,13 +366,7 @@ Each builder reads first: the architecture, `docs/ongoing/SESSION_OWNERSHIP.md`,
 
 - `headless_prompt.js`: the system prompt, the reply schema, and the stdin payload. The payload keeps only the architecture's allowed fields, with `source_hint` replaced by the stage path. Batches are cut at 25 items or 100 KB. An item over 8,000 characters becomes the pinned `not_handled` reply instead of being sent.
 - `host_claude_code.js`: the command from the architecture's flag table, run by the recorded absolute path, in its own process group, with the environment built only from `auto_answer.json`'s `env`. The prompt file sits outside `work/` and is removed however the run ends. On timeout: SIGTERM to the group, the grace time, then SIGKILL.
-- `headless_stage.js` (`runBatch`): copy in and stamp, run, check the replies against the batch, diff the copy, and write back only when every check passes. The checks:
-  - the refused-HTML check
-  - the every-item-has-a-reply rule
-  - the stamp check, after waiting for the file to be quiet following a conflict
-  - the no-symlink, same-path, owner and atomic write-back rules
-
-  The run log keeps tool names, paths, sizes, usage and replies only. Only the last 20 run folders remain.
+- `headless_stage.js` (`runBatch`): copy in and stamp, run, check the replies against the batch, diff the copy, and write back only when every check in the architecture's "Checks before anything reaches the real file" passes. The run records follow the architecture's "Run records".
 
 **Files:** those three, and `test/unit/auto_answer_engine_*.test.js`.
 **Don't touch:** `headless_supervisor.js`, `run_slots.js`, `agent.js`, any `src/service/` or `src/layer/` file outside the three.
@@ -371,25 +376,24 @@ Each builder reads first: the architecture, `docs/ongoing/SESSION_OWNERSHIP.md`,
 ### Task 2B: The supervisor
 
 ::: xref
-[Architecture: The supervisor's states](02_architecture_lahe_agent_sdk.html#the-supervisors-states) · [Retries, failures and limits](02_architecture_lahe_agent_sdk.html#retries-failures-and-limits) · [Stopping, and handing back](02_architecture_lahe_agent_sdk.html#stopping-and-handing-back)
+[Architecture: A wake, one run](02_architecture_lahe_agent_sdk.html#a-wake-one-run) · [The supervisor's states](02_architecture_lahe_agent_sdk.html#the-supervisors-states) · [Retries, failures and limits](02_architecture_lahe_agent_sdk.html#retries-failures-and-limits) · [Stopping, and handing back](02_architecture_lahe_agent_sdk.html#stopping-and-handing-back)
 :::
 
-**Spec:** Fill in `run_slots.js` and `headless_supervisor.js` as the architecture describes them. In short, the supervisor:
+**Spec:** Fill in `run_slots.js` and `headless_supervisor.js` as the architecture describes them. The linked sections cover:
 
-- takes the process lock and writes `agent.json`
-- looks every 2 seconds, draining in its own process through `status.js` with `suppressActivityTouch`
-- gathers until 15 seconds pass with no new item, or 60 seconds after the first
-- takes a slot and calls `opts.engine`
-- writes the checked replies with `reply.js`'s encoder
-- reads the review's `events.jsonl` for each fold result before counting attempts or draining again
-- counts attempts, and obeys every stop
+- the drain with `suppressActivityTouch`, and replies written with `reply.js`'s encoder
+- the states and each look
+- the fold wait before counting or draining
+- attempts, failures and limits
+- stopping, leftover runs, and finishing the replies of a run that was applied but not replied
+- the restart on stale code
 
-On start it kills a leftover run group and finishes the replies of a run that was applied but not replied. When its own code is older than the clone, it releases the lock and exits with reason `restarting`.
+The supervisor calls `opts.engine` and takes every number from `AUTO_ANSWER`.
 
 **Files:** those two, and `test/unit/auto_answer_supervisor_*.test.js`.
 **Don't touch:** the engine's three modules (tests pass a fake engine), `agent.js`, `index.js`, anything under `src/layer/`.
 
-**Acceptance:** every Supervisor line in the Test List passes, and a unit test searches `headless_supervisor.js` and `run_slots.js` and finds no `claude` flag (brief R4, other hosts later).
+**Acceptance:** every Supervisor line in the Test List passes, and a unit test searches `headless_supervisor.js` and `run_slots.js` and finds no `claude` flag (brief R4, Claude Code first with other hosts later).
 
 ### Task 2C: The command line and the helper
 
@@ -516,7 +520,7 @@ Each finding names the test that would catch it. Builders fix on `agent-sdk-fix-
 
 ### Task 4.2: Dogfood
 
-**Spec:** The owner runs a review of at least five comments with auto-answer on, on a document no agent reads as instructions (OQ6's default). A script reads `runs.jsonl`, `attempts.json` and the event log. It writes the numbers the brief asks for, one row per item:
+**Spec:** The owner runs a review of at least five comments with auto-answer on, on a document no agent reads as instructions (the default for OQ6, instruction files). A script reads `runs.jsonl`, `attempts.json` and the event log. It writes the numbers the brief asks for, one row per item:
 
 - runs and failures
 - items that hit the limit

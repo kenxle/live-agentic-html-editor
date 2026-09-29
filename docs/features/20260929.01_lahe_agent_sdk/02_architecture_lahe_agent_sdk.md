@@ -1,6 +1,6 @@
 # Architecture: LAHE starts your agent when a comment is ready
 
-Status: DRAFT, written without the owner. Reviewed by the architect and security reviewers; both tables are at the end. The plan's code-lead and testing reviews then changed several sections here; each change names its finding, and the plan's review tables list them. Every guess made on the owner's behalf is listed under Assumptions.
+Status: DRAFT, written without the owner. Reviewed by the architect and security reviewers; both tables are at the end. The plan's reviews changed several sections, and the plan's review tables list those changes. Every guess made on the owner's behalf is listed under Assumptions.
 
 ## Summary
 
@@ -10,7 +10,7 @@ Status: DRAFT, written without the owner. Reviewed by the architect and security
 - **LAHE checks the result, not the model.** It drains again after each run, counts attempts per item, and gives up on an item after three. Two runs at most run at once across the machine, and there is a daily run limit per session and per machine.
 - **The terminal allows it; the page switches it.** A person or chat agent allows auto-answer for a session once, from the terminal. After that, the rail's Auto-answer switch (wireframe direction B) turns it on and off. Turning it on stops the chat agent's monitor; a chat agent taking the session back stops auto-answer.
 - **First version:** the owner's dogfood, one Markdown review per auto-answer session, macOS and Linux only.
-- **One caveat:** Anthropic's Consumer Terms bar scripted access except by API key or where Anthropic "explicitly permit[s] it". Whether a script starting `claude -p` on a subscription counts is not settled (OQ1). Running the dogfood on the owner's subscription is his call.
+- **One caveat:** Anthropic's Consumer Terms bar scripted access except by API key or where Anthropic "explicitly permit[s] it". Whether a script starting `claude -p` on a subscription counts is not settled (OQ1, subscription terms). Running the dogfood on the owner's subscription is his call.
 
 Nothing here needs an install, an API key of LAHE's own, or a dependency.
 
@@ -75,29 +75,34 @@ flowchart LR
 
 New:
 
-- **`src/cli/commands/agent.js`**: `lahe agent allow | disallow | on | off | status`, and the internal `lahe agent supervise` that the detached process runs.
+- **`src/cli/commands/agent.js`**: `lahe agent allow | disallow | on | off | status`, and the internal `lahe agent supervise` that the detached process runs. It is registered in `src/cli/index.js`.
 - **`src/service/headless_supervisor.js`**: the loop. It waits for ready items, lets a burst settle, takes a machine slot, starts a run, checks and applies the result, counts attempts, and obeys stop requests and the handoff fence.
 - **`src/service/headless_stage.js`**: the per-run folder. It copies the source in, diffs and checks the result, and writes it back safely.
 - **`src/service/headless_prompt.js`** (Node only, not in the bundle): builds the system prompt from the tagged contract, the reply schema from `REPLY_FIELD` and `REPLY_REQUIRED`, and the run's stdin from the drain.
 - **`src/service/run_slots.js`**: the machine-wide limits, both runs at once and runs per day.
 - **`src/service/host_claude_code.js`**: the one host adapter. It builds the `claude` command and environment, reads the result, and names the failure.
-- **`src/service/locks.js`**: two kinds of lock in one shared module (code-lead CR1).
+- **`src/service/locks.js`**: two kinds of lock in one shared module.
   - **A short lock**: `withServerLock` and `takeOverStaleLock`, moved out of `static_servers.js` unchanged. They hold a lock only while a callback runs, and treat it as stale after 20 seconds. Static servers and the daily counts use it.
   - **A lock held for a process's life**: new. It is stale only when its pid and that pid's start time no longer match a live process, however old the file is. The supervisor lock and the run slots use it. `ps` runs with `LC_ALL=C TZ=UTC`, so the start time reads the same from the helper and the CLI.
 - **`src/service/file_stamp.js`**: a stamp of a user file (content hash, size, mtime). It is not `source_stamp.js`, which stamps LAHE's own code.
 
 Changed:
 
-- **`src/shared/review_format.js`**: a new `CONTRACT_LINES` list of `{ tag, text }`, with each tag `all`, `chat` or `headless`. `CONTRACT` stays a list of strings, and becomes the `all` and `chat` lines in order, so today's readers of it keep working (code-lead CR7). A few transport lines are reworded to fit both kinds of agent.
-- **`src/shared/protocol.js`**: the auto-answer states, reasons, rail words, limits, event kinds and the route, spelled once, next to `AGENT_LIVENESS`. `SERVICE_CONTRACT` goes from 13 to 14, so an older running helper is restarted instead of refusing the new event and route (code-lead CR8).
+- **`src/shared/review_format.js`**: a new `CONTRACT_LINES` list of `{ tag, text }`, with each tag `all`, `chat` or `headless`. `CONTRACT` stays a list of strings, and becomes the `all` and `chat` lines in order, so today's readers of it keep working. A few transport lines are reworded to fit both kinds of agent.
+- **`src/shared/protocol.js`**: the auto-answer states, reasons, rail words, limits, event kinds and the route, spelled once, next to `AGENT_LIVENESS`. `SERVICE_CONTRACT` goes from 13 to 14, so an older running helper is restarted instead of refusing the new event and route.
 - **`src/service/agent_sessions.js`**: reads `agent.json`, counts a live supervisor at the current rev as listening, and adds the `auto_answer` object to the liveness answer.
-- **`src/service/routes.js`**: `POST /lahe/v1/auto-answer`. The generic events route refuses `auto_answer.requested`, so the page cannot post that event around the new route (code-lead CR5).
+- **`src/service/routes.js`**: `POST /lahe/v1/auto-answer`. The generic events route refuses `auto_answer.requested`, so the page cannot post that event around the new route.
 - **`src/service/projection.js`**: folds `auto_answer.requested` into the latest request for the review.
-- **`src/service/replies.js`** (the fold): while auto-answer holds a review, a reply from any other agent is rejected with reason `auto_answer_owns` (code-lead CR14). The rest of the fold is unchanged.
+- **`src/service/replies.js`** (the fold): while auto-answer holds a review, a reply from any other agent is rejected with reason `auto_answer_owns`. The rest of the fold is unchanged.
 - **`src/service/index.js`** (the helper): starts `lahe agent supervise` when an "on" request lands for an allowed session, and restarts it when "on" still stands but no live supervisor holds the lock.
 - **`src/cli/commands/monitor.js`**: exits with 6 when a live supervisor holds the current rev. Its exit-6 words say auto-answer took the session, and that `lahe session takeover` takes it back.
-- **`src/cli/commands/review.js`**: on re-entry into such a session, it says auto-answer owns it and prints no monitor instructions. It refuses to add a second review to a session auto-answer holds.
-- **`src/layer/overlay.js`, `sync.js`, `index.js` and `tab_done.js`**: the Auto-answer switch and its post, the run count, failure chip and status words, the rail repainting when `auto_answer` changes, and everything overdue standing down (plan review EM1).
+- **`src/cli/commands/review.js`**: on re-entry into such a session, it says auto-answer owns it and prints no monitor instructions.
+- **`src/cli/commands/review.js` and `add.js`**: both refuse to add a second review to a session auto-answer holds.
+- **`src/layer/overlay.js`, `sync.js`, `index.js` and `tab_done.js`**:
+  - the Auto-answer switch and its post
+  - the run count, failure chip and status words
+  - the rail repainting when `auto_answer` changes
+  - everything overdue standing down
 - **Docs and copies:**
   - `src/shared/manifest.js`
   - `skills/lahe/SKILL.md`
@@ -114,7 +119,7 @@ Not touched: the lifecycle table and the handled check's rules.
 
 ### One review per auto-answer session
 
-A session can own several reviews, but auto-answer holds exactly one (code-lead CR2). `lahe agent allow` names the review, and refuses when the session owns more than one. While the allowance holds, `lahe review` and `lahe add` refuse to add a second review to that session. So every auto-answer file below belongs to that one review: the "on" and "off" events go in its `events.jsonl`, the reply file sits in its folder, and the supervisor drains only its items.
+A session can own several reviews, but auto-answer holds exactly one. `lahe agent allow` names the review, and refuses when the session owns more than one. While the allowance holds, `lahe review` and `lahe add` refuse to add a second review to that session. So every auto-answer file below belongs to that one review: the "on" and "off" events go in its `events.jsonl`, the reply file sits in its folder, and the supervisor drains only its items.
 
 ### One writer per file
 
@@ -129,7 +134,7 @@ A session can own several reviews, but auto-answer holds exactly one (code-lead 
 
 ### `auto_answer.json`, the allowance (written only by `lahe agent allow` and `disallow`)
 
-It is its own file, not a block in `session.json`, because `session.json` has several whole-file writers (create, takeover, close, name) that take no lock. A race there could write an old `handoff_rev` back over a takeover (code-lead CR4).
+It is its own file, not a block in `session.json`, because `session.json` has several whole-file writers (create, takeover, close, name) that take no lock. A race there could write an old `handoff_rev` back over a takeover.
 
 ```json
 {
@@ -147,9 +152,9 @@ It is its own file, not a block in `session.json`, because `session.json` has se
 ```
 
 - **Allowed means** that this file's `handoff_rev` equals the session's `handoff_rev`. A takeover bumps the session's rev and never touches this file, so a takeover ends the allowance too. Auto-answer can then only come back through `lahe agent allow`, from a terminal.
-- **`env`** is the environment allowlist, recorded from the shell that ran `allow`. The helper starts the supervisor, so its own environment is whatever shell started the helper. The run's environment is built only from this record, which is what makes the preflight honest (code-lead CR6). No API key is ever recorded or passed (see the run's command).
+- **`env`** is the environment allowlist, recorded from the shell that ran `allow`. The helper starts the supervisor, so its own environment is whatever shell started the helper. The run's environment is built only from this record, which is what makes the preflight honest. No API key is ever recorded or passed (see the run's command).
 - **`source_file`** is the review's CLI-recorded `source_path`, resolved to a real path when the mode is allowed. It is never the page-posted `source_hint`, and never a linked file.
-- **Turn-on is refused** when the file is an instruction file (security RF3):
+- **Turn-on is refused** when the file is an instruction file:
   - `CLAUDE.md`, `AGENTS.md`, `GEMINI.md`, `SKILL.md`
   - anything under `skills/`, `.claude/` or `.github/`
   - a dot-prefixed path
@@ -161,7 +166,7 @@ It is its own file, not a block in `session.json`, because `session.json` has se
 
 - **"On" for a session that is not allowed** does nothing but record the request. The rail then shows the switch as not available, with the terminal command to allow it (see the rail section).
 - **"On" for an allowed session** makes the helper start `lahe agent supervise --session <id> --state-dir <dir>` (detached, its own process group) unless a live one holds the lock. It runs the same Node binary as the helper, with the clone's `bin/lahe.js`.
-- **"On" still stands, but no supervisor is alive** (it was killed, or it exited to restart on new code): the helper starts a new one the next time the page asks for liveness (code-lead CR10). Until one holds the lock, the rail shows "starting". More than three starts in ten minutes stops the mode with reason `failing`.
+- **"On" still stands, but no supervisor is alive** (it was killed, or it exited to restart on new code): the helper starts a new one the next time the page asks for liveness. Until one holds the lock, the rail shows "starting". More than three starts in ten minutes stops the mode with reason `failing`.
 - **"Off"** is read by the supervisor on its next look.
 
 ### `agent.json`, the supervisor's own state
@@ -175,7 +180,7 @@ It is its own file, not a block in `session.json`, because `session.json` has se
 
 - **`started`** is the process start time as `ps -o lstart= -p <pid>` prints it. A pid only counts as the same process when both the pid and that start time match. That is how a reused pid is told apart from the original, since this process has no port to answer a health check.
 - **`state`** is one of `starting`, `idle`, `gathering`, `queued`, `running`, `applying`, `paused` or `stopped`.
-- **`reason`** is one of `turned_off`, `stopped_from_page`, `taken_over`, `closed`, `limit_session`, `limit_machine`, `usage_limit`, `signed_out`, `not_installed`, `source_missing`, `failing`, `restarting`, or `null`. `restarting` replaces the first draft's `stale_code`.
+- **`reason`** is one of `turned_off`, `stopped_from_page`, `taken_over`, `closed`, `limit_session`, `limit_machine`, `usage_limit`, `signed_out`, `not_installed`, `source_missing`, `failing`, `restarting`, or `null`.
 - **`tokens_today`** adds up each run's reported input and output tokens. Cache reads and writes are left out.
 
 ### Run records
@@ -193,7 +198,7 @@ It is its own file, not a block in `session.json`, because `session.json` has se
   - `outcome` is `finished`, `failed`, `stopped`, `timed_out`, `refused` (the edit failed a check) or `conflict` (the real file changed during the run).
   - `failure` is `null` or one of `signed_out`, `usage_limit`, `not_installed`, `crashed`, `bad_output`.
 - **`attempts.json`** counts attempts per item, both per revision and across all revisions: `{ "c_7fa2": { "2": 1, "all": 3 } }`.
-- **`runs/<run_id>/`** is the stage folder (`work/`, which holds the one copy), `result.json`, and a trimmed `log.jsonl`. The log keeps tool names, paths, sizes, usage and the replies, and drops every tool result (security RF10). The prompt file sits outside `work/` and is removed when the run ends, however it ends. The last 20 run folders are kept. Each applied run also writes its diff to `runs/<run_id>/diff.patch`, so `lahe agent status --diffs` shows the edits of the kept runs, and hashes only for older ones (code-lead CR15).
+- **`runs/<run_id>/`** is the stage folder (`work/`, which holds the one copy), `result.json`, and a trimmed `log.jsonl`. The log keeps tool names, paths, sizes, usage and the replies, and drops every tool result. The prompt file sits outside `work/` and is removed when the run ends, however it ends. The last 20 run folders are kept. Each applied run also writes its diff to `runs/<run_id>/diff.patch`, so `lahe agent status --diffs` shows the edits of the kept runs, and hashes only for older ones.
 
 ### Machine-wide slots
 
@@ -215,7 +220,7 @@ Built from `REPLY_FIELD` and `REPLY_REQUIRED` in `protocol.js`, so the names can
 ```
 
 - **The run never names files.** `lahe agent` fills `files` from its own before and after stamps. The file goes on each `handled` reply of a run that changed it.
-- **`text` and `reason` are capped at 500 characters** in the schema, and checked again (security RF8). A reply over the cap is dropped and logged, not cut short. Its item then has no reply, which counts as an attempt.
+- **`text` and `reason` are capped at 500 characters** in the schema, and checked again. A reply over the cap is dropped and logged, not cut short. Its item then has no reply, which counts as an attempt.
 - **A reply for an item or revision not in the batch is dropped** and logged.
 
 ### The liveness answer gains `auto_answer`
@@ -238,7 +243,7 @@ Built from `REPLY_FIELD` and `REPLY_REQUIRED` in `protocol.js`, so the names can
 sequenceDiagram
   participant U as User or chat agent (terminal)
   participant CLI as lahe agent allow
-  participant S as session.json
+  participant S as auto_answer.json
   participant R as Rail (reviewer)
   participant H as Helper
   participant A as lahe agent
@@ -247,7 +252,7 @@ sequenceDiagram
   U->>CLI: lahe agent allow --session s_x [--note ...] [--model sonnet]
   CLI->>CLI: preflight with the run's exact env and flags
   CLI->>U: warning: what it may do, who can make it act, cost, terms
-  CLI->>S: under lock: auto_answer block at the current handoff_rev
+  CLI->>S: under the short lock: write it at the current handoff_rev
   R->>R: Auto-answer switch is now available
   R->>R: first time: warning panel in the footer
   R->>H: POST /lahe/v1/auto-answer {want: on}
@@ -258,13 +263,15 @@ sequenceDiagram
 ```
 
 - **Preflight** runs `claude --version` and `claude auth status` at the recorded absolute path, with the environment it then records in `auto_answer.json`. It refuses when `claude` is missing or signed out, when the source file is not allowed, or when the session owns more than one review. It reports whether the login is a subscription or billed by the token.
-- **The terminal warning** (R6) is printed every time. It says:
+- **The terminal warning** (R6, say what it may do) is printed every time. It says:
   - it edits only this one file and runs no commands
   - anyone who can comment on this review, or run script in its pages, can make it edit that file, and the file may later be read by agents that do have a shell
-  - each run uses the user's Claude usage, or costs money on an API key
-  - the subscription terms question (OQ1)
+  - each run uses the user's Claude usage, and costs money when the Claude login is billed by the token
+  - the subscription terms question (OQ1, whether the terms allow this)
+
+  The plan pins its exact words.
 - **`lahe agent on --session s_x`** is `allow` followed by an "on" request, for a user who wants it on from the terminal.
-- **The chat agent learns from exit 6**, which the skill already reads as "stop, another agent owns this". The skill gains one sentence: when auto-answer is on for your session, tell the human and stop (answers Q3). `lahe review` re-entry into such a session says the same and prints no monitor instructions (architect RF4).
+- **The chat agent learns from exit 6**, which the skill already reads as "stop, another agent owns this". The skill gains one sentence: when auto-answer is on for your session, tell the human and stop (answers Q3, telling the chat agent). `lahe review` re-entry into such a session says the same and prints no monitor instructions.
 
 ### A wake, one run
 
@@ -280,10 +287,10 @@ sequenceDiagram
 
   P->>H: item ready
   A->>H: drain every 2s (no model)
-  A->>A: gathering: wait for 15s with no new item
+  A->>A: gathering: 15s with no new item, or 60s after the first
   A->>L: take a slot, count today's run
   alt no slot
-    A->>A: queued (rail: waiting its turn)
+    A->>A: queued (rail: waiting for another review's run)
   end
   A->>G: copy the source in, stamp it
   A->>C: spawn in G: prompt file, items on stdin
@@ -303,21 +310,21 @@ sequenceDiagram
 **The batch**
 
 - Every ready item the drain lists when the run starts goes in, up to 25 items and 100 KB of input in all.
-- An item whose reviewer text (note plus change) is over 8,000 characters is not sent. It gets a `not_handled` reply: "Too long for auto-answer; a chat agent can take it." (Security RF7. D12 forbids cutting reviewer text, so the item is refused whole.)
+- An item whose reviewer text (note plus change) is over 8,000 characters is not sent. It gets a `not_handled` reply: "Too long for auto-answer; a chat agent can take it." D12 forbids cutting reviewer text, so the item is refused whole.
 
-**The stdin payload** is the drain's item lines, cut to a fixed list of fields (code-lead CR16). Each item keeps what the reviewer wrote (`note`, `change`), its identity (`review`, `id`, `rev`, `kind`), its thread, and the page text under `page`. The page's `path`, `origin` and `linked_file` are dropped, and so is the drain's summary line. Each item's `source_hint` is replaced by the stage path of the copy (security RF4). There is no instruction text in it, per item or per wake (R14). The supervisor drains in its own process, through `status.js` with `suppressActivityTouch` set, as `lahe monitor` does, so its looks never make the rail say an agent is working (code-lead CR9).
+**The stdin payload** is the drain's item lines, cut to a fixed list of fields. Each item keeps what the reviewer wrote (`note`, `change`), its identity (`review`, `id`, `rev`, `kind`), its thread, and the page text under `page`. The page's `path`, `origin` and `linked_file` are dropped, and so is the drain's summary line. Each item's `source_hint` is replaced by the stage path of the copy. There is no instruction text in it, per item or per wake (R14, rules once per run). The supervisor drains in its own process, through `status.js` with `suppressActivityTouch` set, as `lahe monitor` does, so its looks never make the rail say an agent is working.
 
-**Items that arrive mid-run** wait for the next run (R11). If the reviewer rewords an item mid-run, the run's reply names the old rev, and the helper refuses it at fold.
+**Items that arrive mid-run** wait for the next run (R11, nothing is lost). If the reviewer rewords an item mid-run, the run's reply names the old rev, and the helper refuses it at fold.
 
 **Checks before anything reaches the real file:**
 
 - The run must have ended `finished`, with output that matches the schema.
-- The real file's stamp must still match the one taken at copy-in. If it does not, the outcome is `conflict`: nothing is written or replied, and the items go into the next run with a fresh copy. A conflict is not an attempt. It does count toward the three-failed-runs stop, and the next copy-in waits until the file has been unchanged for 15 seconds, so an owner typing in the file does not start run after run (plan review TR10).
-- If the copy changed, every item in the batch must have a reply. A finished run that edited the file but left an item without a reply is `refused`: nothing is written and no reply is sent, so no change reaches the file without a reply beside it (code-lead CR11). What the run cannot be checked on is a reply of `question` for an item whose passage it also edited.
-- The diff must add no raw HTML tag, no `on…=` attribute and no `javascript:` URL (security RF2). If it does, the outcome is `refused`: nothing is written, and each `handled` reply in the run becomes `not_handled` with the reason "Auto-answer does not add raw HTML or scripts; a chat agent can do this."
-- The write-back re-checks the target at write time. It must be a regular file, not a symlink, at the same real path, owned by the user. The new text goes to a temp file beside it, which is then renamed over the target (security RF9).
+- The real file's stamp must still match the one taken at copy-in. If it does not, the outcome is `conflict`: nothing is written or replied, and the items go into the next run with a fresh copy. A conflict is not an attempt. It does count toward the three-failed-runs stop, and the next copy-in waits until the file has been unchanged for 15 seconds, so an owner typing in the file does not start run after run.
+- If the copy changed, every item in the batch must have a reply. A finished run that edited the file but left an item without a reply is `refused`: nothing is written and no reply is sent, so no change reaches the file without a reply beside it. What the run cannot be checked on is a reply of `question` for an item whose passage it also edited.
+- The diff must add no raw HTML tag, no `on…=` attribute and no `javascript:` URL. If it does, the outcome is `refused`: nothing is written, and each `handled` reply in the run becomes `not_handled` with the reason "Auto-answer does not add raw HTML or scripts; a chat agent can do this."
+- The write-back re-checks the target at write time. It must be a regular file, not a symlink, at the same real path, owned by the user. The new text goes to a temp file beside it, which is then renamed over the target.
 
-**Replies go through the helper, as any agent's do** (architect RF1). `lahe agent` appends them with `reply.js`'s encoder. It then reads the review's `events.jsonl` for a `reply.folded` or `reply.rejected` matching each reply's item and rev, before it counts attempts or drains (code-lead CR12). A handled-check hold is a `reply.folded` that marks the change as not on the page. A reply that has been written but not yet folded counts as answered, so the next drain cannot hand the item out twice. If no fold result arrives in 30 seconds (the helper is down), nothing is counted, the timeout is logged, and the loop goes on.
+**Replies go through the helper, as any agent's do.** `lahe agent` appends them with `reply.js`'s encoder. It then reads the review's `events.jsonl` for a `reply.folded` or `reply.rejected` matching each reply's item and rev, before it counts attempts or drains. A handled-check hold is a `reply.folded` that marks the change as not on the page. A reply that has been written but not yet folded counts as answered, so the next drain cannot hand the item out twice. If no fold result arrives in 30 seconds (the helper is down), nothing is counted, the timeout is logged, and the loop goes on.
 
 **If `lahe agent` dies between writing the file back and writing the replies,** `runs.jsonl` shows `applied` with `replies_written: 0`. `result.json` is still in the run folder, so the next supervisor finishes the replies before it does anything else.
 
@@ -345,9 +352,9 @@ stateDiagram-v2
   - the session is open
   - the rev still matches
   - the latest request is not "off"
-  - its own code is not older than the clone (architect RF8)
+  - its own code is not older than the clone
 - **Stale code** restarts it cleanly: it releases its lock and exits with reason `restarting`, and the helper starts a fresh supervisor on the same allowance, as for any dead supervisor. This matters because the owner dogfoods LAHE on LAHE while editing LAHE.
-- **Gathering has a ceiling.** A run starts after 15 seconds with no new item, or 60 seconds after the first item, whichever comes first. A steady trickle of comments still gets answered (plan review TR10).
+- **Gathering has a ceiling** of 60 seconds after the first item, so a steady trickle of comments still gets answered.
 
 ### Stopping, and handing back
 
@@ -361,16 +368,16 @@ flowchart TD
   Drop --> Exit["release slot, clear agent.json state to stopped, release lock, exit"]
 ```
 
-- **R5 is met by construction.** A stopped, crashed or timed-out run changed only its copy, so the real file never holds a change that no reply explains. Every item it was given stays ready, on the drain, for the next run or the next owner (architect RF2 and RF10). No marker reply is used, since a `question` reply takes an item off the drain.
-- **Handing back (R20)** is the existing takeover. Every unanswered item is on the new owner's catch-up drain, and nothing answered shows again.
-- **Leftover runs.** A new supervisor first reads `agent.json`. If a run's process group from before is still alive (pid and start time match), it kills that group before doing anything else (architect RF5). The orphan's edits were only ever to its stage copy.
+- **R5 (stopping is clean) is met by construction.** A stopped, crashed or timed-out run changed only its copy, so the real file never holds a change that no reply explains. Every item it was given stays ready, on the drain, for the next run or the next owner.
+- **Handing back (R20, hand it back)** is the existing takeover. Every unanswered item is on the new owner's catch-up drain, and nothing answered shows again.
+- **Leftover runs.** A new supervisor first reads `agent.json`. If a run's process group from before is still alive (pid and start time match), it kills that group before doing anything else. The orphan's edits were only ever to its stage copy.
 
 ### Retries, failures and limits
 
-- **Attempts count only on `finished` runs** (architect RF6). An attempt is one of:
+- **Attempts count only on `finished` runs.** An attempt is one of:
   - a finished run was given the item and no reply for it folded
   - its `handled` was held by the check
-- **The attempt limits:** three attempts at one revision, or six across all revisions of one item (security RF7). Then `lahe agent` writes a `not_handled` reply: "Auto-answer could not answer this and stopped trying. Reply here yourself, or hand the review to a chat agent." That takes the item off the drain. Rewording it on the card makes it ready again, until the six-attempt limit.
+- **The attempt limits:** three attempts at one revision, or six across all revisions of one item. Then `lahe agent` writes a `not_handled` reply: "Auto-answer could not answer this and stopped trying. Reply here yourself, or hand the review to a chat agent." That takes the item off the drain. Rewording it on the card makes it ready again, until the six-attempt limit.
 - **Three failed runs in a row** (crashed, bad output, timed out) stop the mode with reason `failing`. No item's attempts are used up by a failing tool.
 - **A usage limit reported by the host** pauses the mode for a fixed 30 minutes, and the rail shows the time of the next try.
 - **Signed out or `claude` missing** stops the mode. A person has to fix these.
@@ -384,21 +391,21 @@ flowchart LR
   C["CONTRACT (review_format.js)<br/>each line tagged all / chat / headless"]
   C -->|"all + chat"| RJ["review.json contract field<br/>(chat agents)"]
   C -->|"all + headless"| HP["headless_prompt.js builds<br/>the run's system prompt"]
-  N["note from session.json"] --> HP
+  N["note from auto_answer.json"] --> HP
   SK["skills/lahe/SKILL.md<br/>(chat agents)"] --- RJ
 ```
 
-- **R15 (one source).** Every rule about the work lives on one line, in one array. A line only a chat agent can use (waking, monitors, hosts, `lahe reply`, "this file") is tagged `chat`. A line only a run can use is tagged `headless`. Neither kind is a copy of the other: they say different things about different transports.
-- **The chat contract changes once, on purpose** (architect RF7). The few `all` lines that say "append a reply line" are reworded to name the reply's fields without naming the transport. The `chat` lines say how a chat agent sends one (`lahe reply`), and the `headless` lines say a run returns them in its result. `test/unit/review_format.test.js`, `docs/CONTRACTS.md` and the skill change with it.
+- **R15 (one source of rules).** Every rule about the work lives on one line, in one array. A line only a chat agent can use (waking, monitors, hosts, `lahe reply`, "this file") is tagged `chat`. A line only a run can use is tagged `headless`. Neither kind is a copy of the other: they say different things about different transports.
+- **The chat contract changes once, on purpose.** The few `all` lines that say "append a reply line" are reworded to name the reply's fields without naming the transport. The `chat` lines say how a chat agent sends one (`lahe reply`), and the `headless` lines say a run returns them in its result. `test/unit/review_format.test.js`, `docs/CONTRACTS.md` and the skill change with it.
 - **The `headless` lines** are the short preamble the spike proved. They say:
   - you were started because items are ready; they are on stdin as drain lines
   - the only file you may read or edit is the one each item's `source_hint` names
   - read back each edit before replying
   - return one reply per item
   - do not wait, start anything, or look for more work
-- **The note (R25)** goes last, under its own heading. It is where the rules the lean start drops belong, such as the owner's writing rules from his CLAUDE.md (the spike's trade-off). Only the terminal can set it.
+- **The note (R25, a handoff note)** goes last, under its own heading. It is where the rules the lean start drops belong, such as the owner's writing rules from his CLAUDE.md (the spike's trade-off). Only the terminal can set it.
 - **A test asserts** that the prompt is exactly the `all` and `headless` lines in order, plus the note, and that the stdin payload contains no `CONTRACT` line.
-- **Size.** The spike's prompt was 377 words. The first cut of the `all` group alone is 2,095 words. OQ2 measures what that adds per request against the spike's 9,000 tokens.
+- **Size.** The spike's prompt was 377 words. The first cut of the `all` group alone is 2,095 words. The flags spike (OQ2) measures what that adds per request against the first spike's 9,000 tokens.
 
 ### The run's command (Claude Code adapter)
 
@@ -409,7 +416,7 @@ Flags, not code:
 | `-p`, items on stdin, cwd = the empty stage `work/` folder | headless, one batch; the copy is the only file in reach |
 | `--safe-mode` | no CLAUDE.md, hooks, MCP, skills: the lean start the spike measured |
 | `--restricted` | no Bash or other code-running tools, no settings files, file tools confined to the working folder |
-| `--strict-mcp-config`, `--setting-sources ""` | belt and braces on top of the two above (security RF12) |
+| `--strict-mcp-config`, `--setting-sources ""` | belt and braces on top of the two above |
 | `--tools Read,Edit` | the only two tools |
 | `--permission-mode dontAsk`, `--permission-prompts none` | anything else is refused, never asked |
 | `--append-system-prompt-file <path>` | the rules, once, kept out of the process list |
@@ -420,7 +427,7 @@ Flags, not code:
 | `--model <model>` | `sonnet` by default |
 | never `--bare`, never `Bash` | `--bare` drops the subscription login |
 
-- **Environment: an allowlist, not a blocklist** (security RF6).
+- **Environment: an allowlist, not a blocklist.**
   - `HOME`, `PATH`, `USER`, `LANG` and `TMPDIR` pass through.
   - So does `CLAUDE_CONFIG_DIR`, if it was set at allow time.
   - `ANTHROPIC_API_KEY` never passes, and is never recorded. A user whose Claude login itself is billed by the token (preflight says so) is warned that each run costs money.
@@ -438,35 +445,32 @@ The wireframe doc is `02_wireframe_lahe_agent_sdk.md`, with screens in `wirefram
   - Turning it off takes one click while idle. It asks for one confirm while a run is working, because it cuts the run off.
 - **The run count** sits beside the pill, like Hold's queued count, as "6 runs". Opening it shows today's runs against the limit, and tokens where Claude reports them. No dollar figure: on a subscription the list price is not a charge.
 - **The failure chip** sits under the switch while a failure stands. It holds one plain sentence and one remedy per reason, from a fixed list in `protocol.js`, plus a catch-all.
-- **The status line stays the one agent line.** While auto-answer is on, its words come from `auto_answer.state`, which LAHE knows rather than guesses (architect RF9). `livenessFrom` also counts a live supervisor at the current rev as listening, so the two can never disagree.
+- **The status line stays the one agent line.** While auto-answer is on, its words come from `auto_answer.state`, which LAHE knows rather than guesses. `livenessFrom` also counts a live supervisor at the current rev as listening, so the two cannot disagree.
 
-| State | Status line (placeholder words) | Loud | Chip |
-| --- | --- | --- | --- |
-| idle | Stored · auto-answer on | no | no |
-| gathering | Stored · auto-answer starting on 2 | no | no |
-| running | Stored · auto-answer working on 2, 35s | no | no |
-| starting | Stored · auto-answer starting | no | no |
-| queued | Stored · auto-answer waiting for another review's run, 1m | no | no |
-| paused, a daily limit | Stored · paused: today's runs are used | yes | resets at midnight |
-| paused, usage limit | Stored · paused: Claude's usage limit, next try 15:40 | yes | yes |
-| one failed run, retrying | Stored · auto-answer working on 2 | no | "Last run failed. Trying again." |
-| stopped: signed out, not installed, file gone, failing | Stored · auto-answer stopped | yes | reason and remedy, said once |
-| off (turned off, from page or terminal) | today's words, unchanged | as today | no |
+Which states go loud and which show the chip is below. The exact words for every state, chip and panel are pinned in the plan ("Words this plan pins").
+
+| State | Loud | Chip |
+| --- | --- | --- |
+| starting, idle, gathering, running, queued | no | no |
+| one failed run, retrying | no | yes |
+| paused, a daily limit or the usage limit | yes | yes |
+| stopped: signed out, not installed, file gone, failing | yes | yes, with the reason and remedy (the status line says only "stopped") |
+| off (turned off, from page or terminal) | as today | no |
 
 **The overdue banner stands down while auto-answer is on.** Today, after a wait with nothing listening, a banner says "Check your agent's window first" and offers the handoff button. With auto-answer on there is no window to check, and LAHE knows what is running. So:
 
-- **While on and healthy** (idle, gathering, running, queued), the banner and the "nothing back yet" escalation do not show. A long run stays calm and shows its age ("working on 2, 6m") until the 10-minute limit ends it. At that point it becomes a failed run, and the chip says so.
-- **While paused or stopped by a failure,** the status line goes loud with the reason, and the chip gives the remedy. The banner does not say "check your agent's window". Its hand-off button stays, since a chat agent taking over is a real remedy. Copy review and Export review stay in the head menu, as always.
+- **While on and healthy** (idle, gathering, running, queued), nothing counts as overdue:
+  - no banner
+  - no late ring on a card
+  - no overdue toast
+  - no "nothing back yet" escalation
+
+  A long run stays calm and shows its age ("working on 2, 6m") until the 10-minute limit ends it. At that point it becomes a failed run, and the chip says so.
+- **While paused or stopped by a failure,** the status line goes loud, and the chip gives the reason and the remedy. The banner does not say "check your agent's window". Its hand-off button stays, since a chat agent taking over is a real remedy. Copy review and Export review stay in the head menu, as always.
 - **A card the runs gave up on** wears the amber ring a late card wears today, with its "Not handled" pill and the reply's reason. Both mean "this needs you".
 - **After auto-answer is turned off,** or a chat agent takes over, the rail goes back to today's rules exactly.
 
-Rail words never include monitor, heartbeat, wake feed, watching, or unattended (the existing rule). "Auto-answer" is a placeholder name for the owner to accept or change.
-
-Considered and not taken, from the wireframes:
-
-- **A, the one quiet line.** It hides stop behind a menu, which is what R18 (stop from the page) exists to prevent.
-- **C, an agent strip.** It is a second agent surface, which the calm-liveness change removed after two lines contradicted each other. It also makes runs look different from a chat agent.
-- **C's "Next run" pill** stays a possible later addition if dogfood shows the need.
+Rail words never include monitor, heartbeat, wake feed, watching, or unattended (the existing rule). The wireframe doc says why directions A and C were not taken.
 
 ## Alternatives Considered
 
@@ -475,13 +479,13 @@ Considered and not taken, from the wireframes:
   - it needs an install, which breaks the zero-dependency rule
   - it works for Claude only
 
-  Everything this design needs is a `claude -p` flag. Whether to keep the SDK as a documented option for API-key users is Q7.
+  Everything this design needs is a `claude -p` flag. Whether to keep the SDK as a documented option for API-key users is Q7 (the SDK).
 - **A Stop hook in the owner's chat (crucible Approach C).** Not chosen as this feature:
   - it still needs the agent to start its watcher
   - it installs into the user's own settings
   - it keeps his chat busy with review work
 
-  It is not rejected outright; whether to ship it first is Q6.
+  It is not rejected outright; whether to ship it first is Q6 (order).
 - **A background Claude Code session per review (`claude --bg`).** Rejected:
   - inside it, the watcher is still a background command, so the memory kills and forgetting return
   - it is Claude-only
@@ -491,25 +495,25 @@ Considered and not taken, from the wireframes:
   - a run inside it would die or be orphaned then
   - separate processes keep a run's memory and failures away from page serving
 
-  The helper still does two jobs: it folds the replies, and it starts the supervisor when the page asks (architect RF11).
+  The helper still does two jobs: it folds the replies, and it starts the supervisor when the page asks.
 - **A hook on `lahe monitor`'s exit (the spike's shape).** Rejected as the product: something outside LAHE would own the loop, with no limits or retries, and a chat agent would have to start it, which is the step agents forget.
 - **One long-running run per review** (`--input-format stream-json`, or `--resume`). Rejected:
-  - history piles up in one context, which R14 exists to prevent
+  - history piles up in one context, which R14 (rules once per run) exists to prevent
   - it holds memory on a machine that is short of it
   - a fresh lean run was measured at about 9,000 tokens per request
-- **Forking the chat.** It brings back the 107,000 to 138,000 tokens per request the spike measured. The note covers the gap; Q2 can revisit.
-- **Replies by `lahe reply` through a shell.** The spike proved it with `Bash(lahe *)`. Rejected, including as a fallback (security RF8):
+- **Forking the chat.** It brings back the 107,000 to 138,000 tokens per request the spike measured. The note covers the gap; Q2 (how much of the chat a run gets) can revisit.
+- **Replies by `lahe reply` through a shell.** The spike proved it with `Bash(lahe *)`. Rejected, including as a fallback:
   - any shell grant is the widest door a hostile comment can reach
   - `Bash(lahe *)` also allows `lahe review` of any path and closing or taking over other sessions
 
-  If structured output fails the OQ2 check, the design stops and comes back, rather than granting a shell.
-- **Per-file `Read(...)` and `Edit(...)` rules in the real folder** (the first draft). The security reviewer's live test showed Read rules only add permission: the run read a `.env` beside the source. Replaced by the empty stage folder.
-- **Linked files and static HTML in the first version.** Dropped (security RF2 and RF3):
+  If structured output fails the flags spike (OQ2), the design stops and comes back, rather than granting a shell.
+- **Per-file `Read(...)` and `Edit(...)` rules in the real folder.** The security reviewer's live test showed Read rules only add permission: the run read a `.env` beside the source. Replaced by the empty stage folder.
+- **Linked files and static HTML in the first version.** Dropped:
   - linked files let a page grow the list by visiting links
   - HTML reviews make a planted script easy
   - both come back only with their own checks
-- **A reply marker on stopped items** (the first draft's R5 answer). Rejected: a `question` reply takes the item off the drain (architect RF2). Copy-in, copy-out makes it unnecessary.
-- **Letting the page allow auto-answer.** The wireframe's step 2 turns it on from the page. The switch does that here too, but only after the terminal has allowed the session. Otherwise any script holding the review token could start an agent. See OQ5.
+- **A reply marker on stopped items.** Rejected: a `question` reply takes the item off the drain. Copy-in, copy-out makes it unnecessary.
+- **Letting the page allow auto-answer.** The wireframe's step 2 turns it on from the page. The switch does that here too, but only after the terminal has allowed the session. Otherwise any script holding the review token could start an agent. See OQ5 (who may switch it on).
 
 ## Failure Modes / Edge Cases
 
@@ -518,10 +522,8 @@ Only cases the flows above do not already settle.
 | Case | What happens |
 | --- | --- |
 | Two supervisors start at once (page "on" and `lahe agent on`) | The supervisor lock is an exclusive create. The second exits before it does anything. |
-| The helper is down when the page asks for "on" | The request cannot land. The rail says the helper is not answering, as today. |
-| A supervisor is running and `lahe agent allow` runs again | It updates the block under the lock at the same rev. The running supervisor picks up model, note and limit changes before its next run and does not restart. |
+| A supervisor is running and `lahe agent allow` runs again | It rewrites `auto_answer.json` under the short lock at the same rev. The running supervisor picks up model, note and limit changes before its next run and does not restart. |
 | The source file is renamed or deleted | The next copy-in fails. The mode stops with reason `source_missing`, and the chip says the file is gone. |
-| The owner edits the file by hand mid-run | `conflict`: nothing is written, and the items go into the next run on a fresh copy. |
 | A branch switch swaps the file for a symlink mid-run | The write-back check refuses it. The outcome is `conflict`. |
 | The Markdown already contained raw HTML, and the run keeps it | Only additions are refused. HTML that was already there is left alone. |
 | A reviewer's reply to a run's question | The item goes back to ready as today, and the next run takes it. The thread field carries the question as history. |
@@ -534,7 +536,7 @@ Only cases the flows above do not already settle.
 
 ### Who can make it act
 
-With auto-answer on, anyone who can post a ready item makes an agent act, with nobody reading first (R6, R21). Under D11, posting needs the review token. The token is readable by any script on the reviewed page and on any page under the served root. So the honest statement is: **anyone who has the token, or can run script in a page of this review, can make auto-answer edit the review's source file.**
+With auto-answer on, anyone who can post a ready item makes an agent act, with nobody reading first (R6, say who can make it act; R21, page text is data). Under D11, posting needs the review token. The token is readable by any script on the reviewed page and on any page under the served root. So the honest statement is: **anyone who has the token, or can run script in a page of this review, can make auto-answer edit the review's source file.**
 
 The design does not try to tell a real reviewer from a script. It limits what acting can do:
 
@@ -556,7 +558,7 @@ The design does not try to tell a real reviewer from a script. It limits what ac
 
 ### The residual that stays
 
-**The edited file may be instructions for a later agent** (security RF3). The owner dogfoods on LAHE's own feature docs, which builder agents later read and act on with a shell. An auto-answer edit could plant an instruction there, and a later full-permission session could follow it. The first version narrows this and says it out loud:
+**The edited file may be instructions for a later agent.** The owner dogfoods on LAHE's own feature docs, which builder agents later read and act on with a shell. An auto-answer edit could plant an instruction there, and a later full-permission session could follow it. The first version narrows this and says it out loud:
 
 - instruction files and dot paths are refused
 - the terminal warning names the risk
@@ -584,9 +586,9 @@ The run's input is the drain, with page text under `page`, and the D12 line is i
 
 ### Subscription terms
 
-Anthropic's Consumer Terms, Section 3, bar accessing the Services "through automated or non-human means, whether through a bot, script, or otherwise", except "via an Anthropic API Key or where we otherwise explicitly permit it" ([Consumer Terms](https://www.anthropic.com/legal/consumer-terms)). The quote was read by a web fetch today and still needs a person to check it against the page. Claude Code's docs describe `claude -p` for scripts, and a token "for CI pipelines, scripts" that "authenticates with your Claude subscription" ([Authentication](https://code.claude.com/docs/en/authentication), cited by the spike). Whether that is the explicit permission the terms mean, for this use, is OQ1. Running the dogfood on the owner's subscription is his decision, recorded when he makes it.
+Anthropic's Consumer Terms, Section 3, bar accessing the Services "through automated or non-human means, whether through a bot, script, or otherwise", except "via an Anthropic API Key or where we otherwise explicitly permit it" ([Consumer Terms](https://www.anthropic.com/legal/consumer-terms)). The quote was read by a web fetch today and still needs a person to check it against the page. Claude Code's docs describe `claude -p` for scripts, and a token "for CI pipelines, scripts" that "authenticates with your Claude subscription" ([Authentication](https://code.claude.com/docs/en/authentication), cited by the spike). Whether that is the explicit permission the terms mean, for this use, is OQ1 (subscription terms). Running the dogfood on the owner's subscription is his decision, recorded when he makes it.
 
-## Other hosts later (R4)
+## Other hosts later (R4, Claude Code first)
 
 `host_claude_code.js` is the one seam. The supervisor passes it a run spec and gets back a result, and never names a host's flags. The shapes:
 
@@ -607,96 +609,47 @@ Codex (`codex exec`) and Gemini (`gemini -p`) have headless modes (crucible). Th
 
 ## Test Strategy
 
-**Unit, no model calls in the gate.** A fake host, a small Node script standing in for `claude`, reads stdin and prints a scripted result. It covers:
+The plan's Test List holds every case. The strategy behind it:
 
-- a clean batch, a crash, a timeout, bad output
-- `signed_out` and `usage_limit`
-- a reply for an item not in the batch
-- over-long text
-- an edit that adds a `<script>`
-- the real file changing mid-run
-- a symlink swap mid-run
-
-**Supervisor:**
-
-- a burst of five items starts one run
-- attempts count only on finished runs, three per revision and six per item
-- three failed runs in a row stop the mode
-- both daily limits
-- off, page-off, takeover and close each kill a run in flight and write nothing
-- two supervisors started at once leave one
-- a new supervisor kills a leftover run group
-- a crash after write-back finishes the replies on restart
-- the supervisor waits for fold results before draining
-
-**Ownership:**
-
-- `lahe monitor` exits 6 while a live supervisor holds the rev
-- `lahe review` re-entry prints no monitor lines
-- a takeover ends the allowance
-- the page's "on" does nothing for a session that is not allowed
-
-**Prompt:**
-
-- the prompt is exactly the `all` and `headless` lines plus the note
-- `review.json`'s contract equals the `all` and `chat` lines
-- the stdin payload has no `CONTRACT` line and no page-posted `source_hint`
-- the reply schema's names match `REPLY_FIELD` and `REPLY_REQUIRED`
-
-**Security:**
-
-- turn-on refuses instruction files, dot paths, the state directory and paths outside home
-- the route ignores extra body fields and passes D11
-- the child env holds only the allowlist
-- the adapter's arguments never hold `--bare` or `Bash`
-
-**Browser (one named spec):**
-
-- each rail state's words
-- the switch when not allowed
-- the warning panel
-- the confirm on stopping a working run
-- the banner standing down
-- the gave-up card's ring
-- screenshots in light and dark
-
-**Live, outside the gate: the OQ2 spike repeat with real `claude`.** It covers:
-
-- the exact flag set
-- a planted `.env` beside the stage's original that must not be readable
-- a hostile comment asking for a `<script>` that must be refused
-- the structured output
-- the prompt size
-- how a usage limit is reported
-- whether `--max-budget-usd` applies on a subscription
-- the "rules once" transcript check at 1, 10 and 100 items
+- **No model calls in the gate.** A fake host, a small Node script standing in for `claude`, reads stdin and prints a scripted result. Its output is copied from real runs.
+- **Time and crashes are injected.** Every timed step takes an injected clock, and the engine has hooks that crash it at an exact step.
+- **Races run in separate processes.** Lock and slot tests race real child processes.
+- **Seams run on the real pieces.** After the branches merge, tests run the real helper, the real `lahe agent` and the fake `claude` together.
+- **The rail gets one named browser spec,** with screenshots in light and dark.
+- **Live, outside the gate: the flags spike (OQ2) and a live check with the real `claude`.** They cover what a fake cannot:
+  - the exact flag set
+  - a planted `.env` beside the stage's original that must not be readable
+  - a hostile comment asking for a `<script>` that must be refused
+  - the structured output and the prompt size
+  - how a usage limit is reported
+  - whether `--max-budget-usd` applies on a subscription
+  - the "rules once" transcript check at 1, 10 and 100 items
 
 The dogfood review is the success-metric run.
 
+## To verify before the build
+
+**OQ2 (the flags spike).** The first spike did not run these, and they have to be checked before the build:
+
+- `--restricted`
+- `--json-schema`
+- `--append-system-prompt-file`
+- `--strict-mcp-config`
+- `--setting-sources ""`
+- the larger prompt
+
+The plan's Task 0.2 runs it. If structured output does not work, this design comes back for a decision instead of granting a shell.
+
 ## Open Questions
 
-New ones only; the brief's Q1 to Q8 still stand.
+New ones only. The brief's questions still stand, except Q3 (telling the chat agent), which Assumption A7 answers. The plan gathers every question in one list, each with a default.
 
 - **OQ1 (subscription terms).** Does the Consumer Terms exception cover a script that starts `claude -p` on each comment? The docs support scripted use; the terms do not name it. The owner decides the dogfood. Offering the mode to launch users waits on this.
-- **OQ2 (the flags spike).** The spike did not run these, and they have to be checked before the build:
-  - `--restricted`
-  - `--json-schema`
-  - `--append-system-prompt-file`
-  - `--strict-mcp-config`
-  - `--setting-sources ""`
-  - the larger prompt
-
-  The Test Strategy lists the rest. If structured output does not work, this design comes back for a decision instead of granting a shell.
-- **OQ3 (the numbers).** Every number here is a guess the owner can change:
-  - two runs at once
-  - three attempts per revision, six per item
-  - 40 runs per session and 120 per machine per day
-  - $0.50 and 10 minutes per run
-  - 15 seconds of quiet
-  - 25 items, 100 KB, and 8,000 characters per item
-  - a 30-minute pause on a usage limit
-  - 500 characters per reply
-- **OQ4 (beyond Markdown).** Static HTML, linked files and build-output pages are out of the first version. Each needs its own checks: added-script checks for HTML, a fixed file list for links, and a build that LAHE runs after the run, outside the model.
+- **OQ3 (the numbers).** Every limit and wait in this design is a guess. Are they right? The plan's "Numbers this plan sets" lists each one.
+- **OQ4 (beyond Markdown).** Is Markdown only acceptable for the first version? Static HTML, linked files and build-output pages each need their own checks first:
+  - added-script checks for HTML
+  - a fixed file list for links
+  - a build that LAHE runs after the run, outside the model
 - **OQ5 (who may switch it on).** The wireframe has the reviewer turn auto-answer on from the page. Here the page can do that only after the terminal has allowed the session. Is that extra first step acceptable?
 - **OQ6 (instruction residual).** Is auto-answer on LAHE's own feature docs acceptable for dogfood, given the residual above? Or should the first dogfood use documents no agent reads as instructions?
 
@@ -708,7 +661,7 @@ New ones only; the brief's Q1 to Q8 still stand.
 - **A4.** A run takes at most 25 items and 100 KB. A bigger burst becomes more runs.
 - **A5.** Two runs at once across the machine, and 120 runs a day, given the memory pressure in the brief.
 - **A6.** The first version covers Markdown reviews of one source file, on macOS and Linux.
-- **A7.** Turning auto-answer on stops the chat agent's monitor (exit 6). A chat agent's takeover ends auto-answer and its allowance. This answers Q3.
+- **A7.** Turning auto-answer on stops the chat agent's monitor (exit 6). A chat agent's takeover ends auto-answer and its allowance. This answers Q3 (telling the chat agent).
 - **A8.** The end-of-review routine stays with a chat agent in the first version.
 - **A9.** The contract line "Do not use a native model timer, a forever daemon..." becomes: a chat agent never starts a long-lived process of its own, and auto-answer is the only one, started by LAHE. This is the deliberate change the brief's Rollout asked for.
 - **A10.** The rail shows LAHE's own run count and tokens, not the subscription's remaining limit (which cannot be read) and not dollars.
