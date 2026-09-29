@@ -13,7 +13,6 @@
 | Agent or task | Doing | Started | Branch |
 |---|---|---|---|
 | Editing builder (2A) | Writing new text on the page: the editing area, block types, the menu and hotkeys, "+ Write here", blank pages, undo, and protection during reloads | 2026-09-29 13:37 | `free-writing-2a` |
-| Replay builder (2B) | Putting new text back after a rebuild, block by block, and fixing the doubled header line and the later-paragraph bold case | 2026-09-29 13:37 | `free-writing-2b` |
 
 ## Phases
 
@@ -36,6 +35,7 @@
 
 | Phase | Workstream | Tasks | Status | Detail | Outcome |
 |---|---|---|---|---|---|
+| 2 | replay (2B) | 2.5 to 2.7 | done, waiting to merge | [detail](../../../.claude/worktrees/free-writing-2b/docs/features/20260928.01_free_writing/progress/phase2_workstream_replay.md) | Unit gate: 1619 of 1621 passed, 0 failed, 2 to-do. 53 new browser tests and 40 existing replay tests passed in Chromium. Four screenshots, light and dark. |
 | 2 | helper (2C) | 2.8 to 2.12 | done, waiting to merge | [detail](../../../.claude/worktrees/free-writing-2c/docs/features/20260928.01_free_writing/progress/phase2_workstream_helper.md) | Unit gate: 1645 of 1647 passed, 0 failed, 2 to-do. Built: the check on arrival, always checking new text, `lahe write` with its own one-page server, `lahe reply --proofread`. |
 | 1 | kernel | 1.1 to 1.6 | done | [detail](progress/phase1_workstream_kernel.md) | Seven commits. The unit gate passed 1601 of 1604 with 2 to-do. One timing test failed under full-suite load; alone, it runs the same on the branch and on main. |
 
@@ -71,6 +71,8 @@ Not shipped yet.
 ## Log
 
 Newest first.
+
+**2026-09-29 13:58.** The replay builder (2B) returned green. The header case still shows as an expected failure until the editing builder's typing change merges. The conflict card keeps your new text, and choosing "take the page's" still places it.
 
 **2026-09-29 13:58.** The helper builder (2C) returned green. Two things for the merge:
 - straight `--` does not match a rendered dash in the shared text folding; I will fold it in the shared normalizer so every check agrees
