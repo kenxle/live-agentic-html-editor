@@ -1,0 +1,3416 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+  <meta charset="utf-8" />
+  <meta name="generator" content="pandoc" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
+  <title>Plan: LAHE starts your agent when a comment is ready</title>
+  <style>
+    /* Default styles provided by pandoc.
+    ** See https://pandoc.org/MANUAL.html#variables-for-html for config info.
+    */
+    html {
+      color: #1a1a1a;
+      background-color: #fdfdfd;
+    }
+    body {
+      margin: 0 auto;
+      max-width: 36em;
+      padding-left: 50px;
+      padding-right: 50px;
+      padding-top: 50px;
+      padding-bottom: 50px;
+      hyphens: auto;
+      overflow-wrap: break-word;
+      text-rendering: optimizeLegibility;
+      font-kerning: normal;
+    }
+    @media (max-width: 600px) {
+      body {
+        font-size: 0.9em;
+        padding: 12px;
+      }
+      h1 {
+        font-size: 1.8em;
+      }
+    }
+    @media print {
+      html {
+        background-color: white;
+      }
+      body {
+        background-color: transparent;
+        color: black;
+        font-size: 12pt;
+      }
+      p, h2, h3 {
+        orphans: 3;
+        widows: 3;
+      }
+      h2, h3, h4 {
+        page-break-after: avoid;
+      }
+    }
+    p {
+      margin: 1em 0;
+    }
+    a {
+      color: #1a1a1a;
+    }
+    a:visited {
+      color: #1a1a1a;
+    }
+    img {
+      max-width: 100%;
+    }
+    svg {
+      height: auto;
+      max-width: 100%;
+    }
+    h1, h2, h3, h4, h5, h6 {
+      margin-top: 1.4em;
+    }
+    h5, h6 {
+      font-size: 1em;
+      font-style: italic;
+    }
+    h6 {
+      font-weight: normal;
+    }
+    ol, ul {
+      padding-left: 1.7em;
+      margin-top: 1em;
+    }
+    li > ol, li > ul {
+      margin-top: 0;
+    }
+    blockquote {
+      margin: 1em 0 1em 1.7em;
+      padding-left: 1em;
+      border-left: 2px solid #e6e6e6;
+      color: #606060;
+    }
+    code {
+      white-space: pre-wrap;
+      font-family: Menlo, Monaco, Consolas, 'Lucida Console', monospace;
+      font-size: 85%;
+      margin: 0;
+      hyphens: manual;
+    }
+    pre {
+      margin: 1em 0;
+      overflow: auto;
+    }
+    pre code {
+      padding: 0;
+      overflow: visible;
+      overflow-wrap: normal;
+    }
+    .sourceCode {
+     background-color: transparent;
+     overflow: visible;
+    }
+    hr {
+      border: none;
+      border-top: 1px solid #1a1a1a;
+      height: 1px;
+      margin: 1em 0;
+    }
+    table {
+      margin: 1em 0;
+      border-collapse: collapse;
+      width: 100%;
+      overflow-x: auto;
+      display: block;
+      font-variant-numeric: lining-nums tabular-nums;
+    }
+    table caption {
+      margin-bottom: 0.75em;
+    }
+    tbody {
+      margin-top: 0.5em;
+      border-top: 1px solid #1a1a1a;
+      border-bottom: 1px solid #1a1a1a;
+    }
+    th {
+      border-top: 1px solid #1a1a1a;
+      padding: 0.25em 0.5em 0.25em 0.5em;
+    }
+    td {
+      padding: 0.125em 0.5em 0.25em 0.5em;
+    }
+    header {
+      margin-bottom: 4em;
+      text-align: center;
+    }
+    #TOC li {
+      list-style: none;
+    }
+    #TOC ul {
+      padding-left: 1.3em;
+    }
+    #TOC > ul {
+      padding-left: 0;
+    }
+    #TOC a:not(:hover) {
+      text-decoration: none;
+    }
+    span.smallcaps{font-variant: small-caps;}
+    div.columns{display: flex; gap: min(4vw, 1.5em);}
+    div.column{flex: auto; overflow-x: auto;}
+    div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+    /* The extra [class] is a hack that increases specificity enough to
+       override a similar rule in reveal.js */
+    ul.task-list[class]{list-style: none;}
+    ul.task-list li input[type="checkbox"] {
+      font-size: inherit;
+      width: 0.8em;
+      margin: 0 0.8em 0.2em -1.6em;
+      vertical-align: middle;
+    }
+    .display.math{display: block; text-align: center; margin: 0.5rem auto;}
+  </style>
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>%F0%9F%94%A8</text></svg>">
+  <!--
+    St. Clair AI document style for forge docs.
+
+    The palette, type and spacing values below are copied from the St. Clair
+    system tokens (live-agentic-html-editor/vendor/stclair-doc-style/
+    system-tokens.css). This header does NOT link LAHE's ./.lahe-doc-style.css
+    bundle, on purpose: that bundle's document.css styles bare elements and a
+    generic .callout (an ink fill with white text) and puts padding on every body
+    child, and all three collide with the forge structure. So the page is
+    self-contained and reads the same whether or not LAHE is serving it.
+
+    The fonts are the one thing taken from LAHE: it serves the three vendored
+    faces at ./.lahe-fonts/<file>.woff2 from every folder. When that fails, each
+    stack falls back to system-ui and a platform monospace.
+
+    House rules this file keeps: no pills, no shadows, no gradients, no all caps
+    labels, no single-side coloured borders. Colour comes from tints and dots.
+  -->
+  <style>
+    @font-face {
+      font-family: "Schibsted Grotesk"; font-style: normal; font-weight: 500 700; font-display: swap;
+      src: url("./.lahe-fonts/schibsted-grotesk-variable.woff2") format("woff2");
+    }
+    @font-face {
+      font-family: "Hanken Grotesk"; font-style: normal; font-weight: 400 600; font-display: swap;
+      src: url("./.lahe-fonts/hanken-grotesk-variable.woff2") format("woff2");
+    }
+    @font-face {
+      font-family: "JetBrains Mono"; font-style: normal; font-weight: 400 500; font-display: swap;
+      src: url("./.lahe-fonts/jetbrains-mono-variable.woff2") format("woff2");
+    }
+
+    :root {
+      color-scheme: light dark;
+
+      /* St. Clair palette (raw names and values from system-tokens.css) */
+      --white: #ffffff;
+      --paper: #f7f7f5;
+      --ink: #1f1e1a;
+      --ink-soft: #55534b;
+      --ink-faint: #6b6860;
+      --rule: #dcdad6;
+      --purple: #46188c;
+      --purple-tint: #f1ebfa;
+      --link: #6d28d9;
+      --cobalt: #0760c7;
+      --cobalt-tint: #e6effc;
+      --sage-fill: #8fb5a0;
+      --sage: #637a63;
+      --sage-tint: #e7f1ed;
+
+      --font-display: "Schibsted Grotesk", "Hanken Grotesk", system-ui, sans-serif;
+      --font-body: "Hanken Grotesk", system-ui, -apple-system, "Helvetica Neue", sans-serif;
+      --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+
+      --r: 4px;
+
+      /* Forge roles. Prefixed --ff- so none of them can collide with a St. Clair
+         token of the same name if the two ever share a page. Dark mode repoints
+         these and nothing else. */
+      --ff-bg: var(--white);
+      --ff-fg: var(--ink);
+      --ff-soft: var(--ink-soft);
+      --ff-faint: var(--ink-faint);
+      --ff-rule: var(--rule);
+      --ff-divider: var(--ink);
+      --ff-link: var(--link);
+      --ff-accent: var(--cobalt);
+      --ff-panel: var(--paper);
+      --ff-code-bg: var(--cobalt-tint);
+      --ff-bullet: var(--sage);
+      --ff-hl-kw: var(--cobalt);
+      --ff-hl-str: var(--sage);
+      --ff-hl-num: var(--purple);
+
+      /* Callouts: a tint, a dot and a label colour each. */
+      --ff-req-bg: var(--cobalt-tint);      --ff-req-dot: var(--cobalt);    --ff-req-label: var(--cobalt);
+      --ff-nongoal-bg: var(--paper);        --ff-nongoal-dot: var(--ink-faint); --ff-nongoal-label: var(--ink-faint);
+      --ff-metric-bg: var(--sage-tint);     --ff-metric-dot: var(--sage);   --ff-metric-label: var(--ink-soft);
+      --ff-question-bg: var(--purple-tint); --ff-question-dot: var(--purple); --ff-question-label: var(--purple);
+      --ff-suggest-bg: var(--white);        --ff-suggest-dot: var(--sage);  --ff-suggest-label: var(--sage);
+      --ff-flag-bg: var(--ink);             --ff-flag-fg: var(--white);     --ff-flag-dot: var(--sage-fill);
+
+      /* Disposition verdicts */
+      --ff-accepted: var(--sage);
+      --ff-rejected: var(--purple);
+      --ff-deferred: var(--cobalt);
+    }
+
+    /* Dark: the St. Clair on-ink values. Body text is full white on ink, as the
+       system decides; tints are the accent mixed into the ink ground. */
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --ff-bg: var(--ink);
+        --ff-fg: var(--white);
+        --ff-soft: #d9d7d1;   /* --ink-soft-ondark */
+        --ff-faint: #b3b0a8;  /* --ink-faint-ondark */
+        --ff-rule: #4a4842;   /* --rule-ondark */
+        --ff-divider: var(--white);
+        --ff-link: var(--sage-fill);
+        --ff-accent: color-mix(in srgb, var(--cobalt) 45%, var(--white));
+        --ff-panel: color-mix(in srgb, var(--white) 6%, var(--ink));
+        --ff-code-bg: color-mix(in srgb, var(--cobalt) 22%, var(--ink));
+        --ff-bullet: var(--sage-fill);
+        --ff-hl-kw: color-mix(in srgb, var(--cobalt) 40%, var(--white));
+        --ff-hl-str: var(--sage-fill);
+        --ff-hl-num: color-mix(in srgb, var(--purple) 30%, var(--white));
+
+        --ff-req-bg: color-mix(in srgb, var(--cobalt) 22%, var(--ink));
+        --ff-req-dot: color-mix(in srgb, var(--cobalt) 45%, var(--white));
+        --ff-req-label: color-mix(in srgb, var(--cobalt) 35%, var(--white));
+        --ff-nongoal-bg: color-mix(in srgb, var(--white) 6%, var(--ink));
+        --ff-nongoal-dot: #b3b0a8; --ff-nongoal-label: #b3b0a8;
+        --ff-metric-bg: color-mix(in srgb, var(--sage) 30%, var(--ink));
+        --ff-metric-dot: var(--sage-fill); --ff-metric-label: var(--sage-fill);
+        --ff-question-bg: color-mix(in srgb, var(--purple) 45%, var(--ink));
+        --ff-question-dot: color-mix(in srgb, var(--purple) 30%, var(--white));
+        --ff-question-label: color-mix(in srgb, var(--purple) 25%, var(--white));
+        --ff-suggest-bg: var(--ink);
+        --ff-suggest-dot: var(--sage-fill); --ff-suggest-label: var(--sage-fill);
+        --ff-flag-bg: var(--paper); --ff-flag-fg: var(--ink); --ff-flag-dot: var(--sage);
+
+        --ff-accepted: var(--sage-fill);
+        --ff-rejected: color-mix(in srgb, var(--purple) 30%, var(--white));
+        --ff-deferred: color-mix(in srgb, var(--cobalt) 40%, var(--white));
+      }
+    }
+
+    /* Pandoc's own default styles load before this block. The rules marked
+       "pandoc" below undo the ones that fight this look: black table rules,
+       a block-level table, auto hyphens, italic h5/h6, and a:visited in
+       near-black, which outranks a plain a rule. */
+    html { scroll-behavior: smooth; -webkit-print-color-adjust: exact; print-color-adjust: exact; background: var(--ff-bg); }
+    * { box-sizing: border-box; }
+
+    body {
+      font-family: var(--font-body);
+      font-size: 17px;
+      line-height: 1.65;
+      color: var(--ff-fg);
+      background: var(--ff-bg);
+      max-width: 880px;
+      margin: 0 auto;
+      padding: 56px 28px 104px;
+      -webkit-font-smoothing: antialiased;
+      text-rendering: optimizeLegibility;
+      hyphens: manual;   /* pandoc */
+    }
+
+    /* Title block (pandoc emits <header id="title-block-header">) */
+    header#title-block-header { padding-bottom: 8px; margin-bottom: 0; text-align: left; }
+    header#title-block-header h1.title {
+      font-family: var(--font-display);
+      font-size: clamp(34px, 4.6vw, 52px);
+      font-weight: 600;
+      margin: 0 0 12px;
+      letter-spacing: -0.012em;
+      line-height: 1.1;
+    }
+    header#title-block-header p.subtitle,
+    header#title-block-header p.author,
+    header#title-block-header p.date {
+      font-size: 20px;
+      line-height: 1.55;
+      color: var(--ff-soft);
+      margin: 0;
+    }
+
+    /* Cross-doc nav (injected by the build before the TOC). A plain line:
+       "Docs  Crucible · Brief · Architecture", the current doc in ink. */
+    .doc-nav {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: baseline;
+      gap: 4px 0;
+      margin: 20px 0 8px;
+      padding: 12px 0;
+      border-top: 1px solid var(--ff-rule);
+      border-bottom: 1px solid var(--ff-rule);
+      font-size: 15px;
+    }
+    .doc-nav .doc-nav-label {
+      font-family: var(--font-display);
+      font-weight: 600;
+      font-size: 14px;
+      color: var(--ff-faint);
+      margin-right: 14px;
+    }
+    .doc-nav a {
+      color: var(--ff-link);
+      text-decoration: underline;
+      text-decoration-thickness: 1px;
+      text-underline-offset: 3px;
+      border: 0;
+      background: none;
+      padding: 0;
+    }
+    .doc-nav a + a::before {
+      content: "\00B7";
+      display: inline-block;
+      color: var(--ff-faint);
+      margin: 0 10px;
+      text-decoration: none;
+    }
+    .doc-nav a:hover { background: none; text-decoration-thickness: 2px; }
+    .doc-nav a:visited { color: var(--ff-link); }
+    .doc-nav a.current, .doc-nav a.current:visited {
+      color: var(--ff-fg);
+      font-weight: 600;
+      text-decoration: none;
+      cursor: default;
+    }
+
+    /* TOC (pandoc emits <nav id="TOC">) */
+    nav#TOC {
+      margin: 28px 0 44px;
+      font-size: 15px;
+      line-height: 1.5;
+    }
+    nav#TOC::before {
+      content: "Contents";
+      display: block;
+      font-family: var(--font-display);
+      font-weight: 600;
+      font-size: 14px;
+      color: var(--ff-faint);
+      padding-bottom: 8px;
+      margin-bottom: 12px;
+      border-bottom: 2px solid var(--ff-divider);
+    }
+    nav#TOC ul { list-style: none; padding-left: 0; margin: 0; }
+    nav#TOC ul ul { padding-left: 18px; margin-top: 4px; }
+    nav#TOC li { margin-bottom: 4px; }
+    nav#TOC li::marker { content: none; }
+    nav#TOC a, nav#TOC a:visited { color: var(--ff-fg); text-decoration: none; border: 0; }
+    nav#TOC a:hover { color: var(--ff-link); text-decoration: underline; background: none; }
+
+    /* Headings: Schibsted at display weight, sentence case. An h2 hangs under a
+       full-width ink rule, the St. Clair section head. */
+    h1, h2, h3, h4, h5, h6 {
+      font-family: var(--font-display);
+      font-weight: 600;
+      line-height: 1.15;
+      letter-spacing: -0.012em;
+      color: var(--ff-fg);
+    }
+    h2 {
+      font-size: clamp(25px, 3vw, 32px);
+      margin: 64px 0 18px;
+      padding-top: 12px;
+      border-top: 2px solid var(--ff-divider);
+    }
+    h3 { font-size: clamp(19px, 2vw, 23px); margin: 40px 0 12px; }
+    h4 { font-size: 18px; margin: 28px 0 8px; }
+    h5, h6 { font-size: 17px; margin: 24px 0 8px; font-style: normal; font-weight: 600; }   /* pandoc */
+    h6 { color: var(--ff-soft); }
+
+    p { margin: 0 0 18px; }
+    p, li, td, dd { overflow-wrap: anywhere; }
+
+    a {
+      color: var(--ff-link);
+      text-decoration: underline;
+      text-decoration-thickness: 1px;
+      text-underline-offset: 3px;
+    }
+    a:visited { color: var(--ff-link); }   /* pandoc */
+    a:hover { text-decoration-thickness: 2px; }
+    :focus-visible { outline: 2px solid var(--ff-link); outline-offset: 3px; border-radius: var(--r); }
+
+    strong { color: inherit; font-weight: 700; }
+
+    ul, ol { margin: 0 0 18px; padding-left: 1.6em; }
+    li { margin: 0 0 8px; line-height: 1.55; }
+    li > p { margin-bottom: 8px; }
+    ul > li::marker { color: var(--ff-bullet); }
+    .callout ul > li::marker { color: var(--ff-dot); }
+    ol > li::marker { color: var(--ff-fg); font-weight: 600; }
+    li > ul, li > ol { margin-top: 8px; }
+
+    /* Callout boxes (from ::: callout-* fenced divs). A tint holding the text,
+       and a label row generated by CSS: a dot in the callout's colour, then the
+       label in the display face. */
+    .callout {
+      border-radius: var(--r);
+      padding: 16px 22px 18px;
+      margin: 18px 0;
+      background: var(--ff-panel);
+      color: var(--ff-fg);
+      line-height: 1.6;
+    }
+    .callout > :first-child { margin-top: 0; }
+    .callout > :last-child { margin-bottom: 0; }
+    .callout::before {
+      display: flex;
+      align-items: center;
+      gap: 9px;
+      font-family: var(--font-display);
+      font-weight: 600;
+      font-size: 14px;
+      line-height: 1.4;
+      margin-bottom: 6px;
+      padding-left: 16px;   /* room for the dot, which ::after draws */
+    }
+    .callout { position: relative; }
+    .callout::after {
+      content: "";
+      position: absolute;
+      left: 22px;
+      top: 23px;
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: var(--ff-dot, var(--ff-faint));
+    }
+    .callout-req      { background: var(--ff-req-bg);      --ff-dot: var(--ff-req-dot); }
+    .callout-req::before      { content: "Requirement";   color: var(--ff-req-label); }
+    .callout-nongoal  { background: var(--ff-nongoal-bg);  --ff-dot: var(--ff-nongoal-dot); border: 1px solid var(--ff-rule); }
+    .callout-nongoal::before  { content: "Non-goals";     color: var(--ff-nongoal-label); }
+    .callout-metric   { background: var(--ff-metric-bg);   --ff-dot: var(--ff-metric-dot); }
+    .callout-metric::before   { content: "Metrics";       color: var(--ff-metric-label); }
+    .callout-question { background: var(--ff-question-bg); --ff-dot: var(--ff-question-dot); }
+    .callout-question::before { content: "Open question"; color: var(--ff-question-label); }
+    .callout-suggest  { background: var(--ff-suggest-bg);  --ff-dot: var(--ff-suggest-dot); border: 1px solid var(--ff-suggest-dot); }
+    .callout-suggest::before  { content: "Suggestion";    color: var(--ff-suggest-label); }
+    .callout-flag     { background: var(--ff-flag-bg);     --ff-dot: var(--ff-flag-dot); color: var(--ff-flag-fg); }
+    .callout-flag::before     { content: "Red flag";      color: var(--ff-flag-fg); }
+    .callout-flag a, .callout-flag strong, .callout-flag code { color: inherit; }
+    .callout-flag code { background: color-mix(in srgb, currentColor 14%, transparent); }
+    /* The nongoal and suggest boxes carry a 1px border, so their dot moves with it. */
+    .callout-nongoal::after, .callout-suggest::after { left: 21px; top: 22px; }
+
+    /* Reviews section: the _reviews.md files are merged into the HTML below this
+       divider (they stay separate files on disk for agents). The build writes
+       the divider with an inline red rule; this repaints it in the house ink. */
+    hr.reviews-divider {
+      border: 0 !important;
+      border-top: 2px solid var(--ff-divider) !important;
+      margin: 88px 0 6px !important;
+      display: block !important;
+    }
+    hr.reviews-divider + * { margin-top: 0; }
+    .reviews-banner {
+      border-top: 1px solid var(--ff-divider);
+      padding: 14px 0 0;
+      margin: 0 0 32px;
+      font-size: 15px;
+      line-height: 1.55;
+      color: var(--ff-soft);
+    }
+    .reviews-banner::before {
+      display: block;
+      content: "Reviews, full prose";
+      font-family: var(--font-display);
+      font-weight: 600;
+      font-size: clamp(25px, 3vw, 32px);
+      line-height: 1.15;
+      letter-spacing: -0.012em;
+      color: var(--ff-fg);
+      margin-bottom: 8px;
+    }
+    /* Jump target for spec -> review-detail links; offset so the heading clears. */
+    .finding-anchor { display: inline-block; scroll-margin-top: 1.5rem; }
+    td a[href^="#"] { font-weight: 600; }
+
+    /* Inline xref deep-dive (from ::: xref fenced div) */
+    .xref {
+      font-size: 15px;
+      background: var(--ff-code-bg);
+      border-radius: var(--r);
+      padding: 10px 16px;
+      margin: 0 0 18px;
+      color: var(--ff-soft);
+      line-height: 1.5;
+    }
+    .xref::before {
+      content: "\21B3  See";
+      font-family: var(--font-display);
+      font-weight: 600;
+      font-size: 14px;
+      color: var(--ff-accent);
+      margin-right: 8px;
+    }
+    .xref > * { display: inline; margin: 0; }
+    .xref a, .xref a:visited { font-weight: 600; color: var(--ff-fg); }
+
+    /* Tables: the St. Clair naked ruled table. A 2px rule under the head,
+       hairlines between rows, no box, no tint, no shadow. The build wraps every
+       table in .table-scroll; the scrolling itself lives in
+       shared-assets/doc_fixes.css. */
+    .table-scroll { margin: 24px 0 32px; }
+    .table-scroll table { margin: 0; }
+    table {
+      border-collapse: collapse;
+      width: 100%;
+      margin: 24px 0 32px;
+      font-size: 15px;
+      line-height: 1.5;
+      background: none;
+      display: table;   /* pandoc sets block; .table-scroll does the scrolling */
+    }
+    tbody { border: 0; }   /* pandoc */
+    th { border-top: 0; }  /* pandoc */
+    thead th {
+      font-family: var(--font-display);
+      font-weight: 600;
+      font-size: 14px;
+      color: var(--ff-faint);
+      text-align: left;
+      padding: 0 16px 10px 0;
+      border-bottom: 2px solid var(--ff-divider);
+      vertical-align: bottom;
+    }
+    tbody td {
+      padding: 12px 16px 12px 0;
+      border-bottom: 1px solid var(--ff-rule);
+      vertical-align: top;
+    }
+    td:last-child, th:last-child { padding-right: 0; }
+    /* A short id column ("RF 12", "T3") stays on one line beside wide prose. */
+    tbody td:first-child { min-width: 3.4em; }
+    tbody tr:nth-child(even) { background: none; }
+    td > :first-child { margin-top: 0; }
+    td > :last-child { margin-bottom: 0; }
+
+    /* Disposition verdicts rendered by the build (Accepted/Rejected/Deferred).
+       A dot and the word, in the verdict's colour. */
+    td .accepted, span.accepted,
+    td .rejected, span.rejected,
+    td .deferred, span.deferred {
+      font-family: var(--font-display);
+      font-weight: 600;
+      white-space: nowrap;
+    }
+    td .accepted::before, span.accepted::before,
+    td .rejected::before, span.rejected::before,
+    td .deferred::before, span.deferred::before {
+      content: "";
+      display: inline-block;
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: currentColor;
+      margin-right: 7px;
+      vertical-align: 0.12em;
+    }
+    td .accepted, span.accepted { color: var(--ff-accepted); }
+    td .rejected, span.rejected { color: var(--ff-rejected); }
+    td .deferred, span.deferred { color: var(--ff-deferred); }
+
+    /* Inline + block code: JetBrains Mono on the cobalt tint, ink text.
+       Ligatures off, so an arrow in code reads as the two characters it is. */
+    code, pre {
+      font-family: var(--font-mono);
+      font-variant-ligatures: none;
+      font-feature-settings: "liga" 0, "calt" 0;
+    }
+    code {
+      font-size: 0.86em;
+      background: var(--ff-code-bg);
+      color: var(--ff-fg);
+      padding: 0.1em 0.35em;
+      border-radius: 3px;
+    }
+    pre {
+      font-size: 14px;
+      background: var(--ff-code-bg);
+      color: var(--ff-fg);
+      padding: 18px 24px;
+      border-radius: var(--r);
+      overflow-x: auto;
+      margin: 0 0 24px;
+      line-height: 1.55;
+      /* Wrap long lines instead of forcing a horizontal scroll (readability). */
+      white-space: pre-wrap;
+      word-break: break-word;
+      overflow-wrap: anywhere;
+    }
+    pre code { background: none; color: inherit; padding: 0; font-size: inherit; }
+    /* A code chip inside a tinted callout would vanish into the tint. */
+    .callout code { background: color-mix(in srgb, currentColor 9%, transparent); }
+
+    /* Highlighted blocks: pandoc wraps them in div.sourceCode and paints its
+       own transparent ground and a green-and-teal palette. Repaint both in the
+       St. Clair accents. */
+    div.sourceCode { margin: 0 0 24px; }
+    div.sourceCode > pre.sourceCode { background: var(--ff-code-bg); margin: 0; }
+    pre.sourceCode code span.kw, pre.sourceCode code span.cf, pre.sourceCode code span.im,
+    pre.sourceCode code span.op, pre.sourceCode code span.bu { color: var(--ff-hl-kw); font-weight: 500; }
+    pre.sourceCode code span.st, pre.sourceCode code span.ch, pre.sourceCode code span.ss,
+    pre.sourceCode code span.vs, pre.sourceCode code span.sc { color: var(--ff-hl-str); }
+    pre.sourceCode code span.dv, pre.sourceCode code span.fl, pre.sourceCode code span.bn,
+    pre.sourceCode code span.cn, pre.sourceCode code span.dt { color: var(--ff-hl-num); }
+    pre.sourceCode code span.co, pre.sourceCode code span.an, pre.sourceCode code span.cv,
+    pre.sourceCode code span.do, pre.sourceCode code span.in { color: var(--ff-soft); font-style: normal; font-weight: 400; }
+    pre.sourceCode code span.fu, pre.sourceCode code span.va, pre.sourceCode code span.at,
+    pre.sourceCode code span.ot { color: inherit; font-weight: 400; }
+
+    /* Mermaid blocks: pandoc renders ```mermaid as <pre class="mermaid">; the
+       Mermaid script replaces the text with SVG. It is a figure, not code: no
+       tint, a hairline frame, centred. Mermaid source must not wrap before the
+       script swaps it for SVG. */
+    pre.mermaid {
+      white-space: pre;
+      background: none;
+      border: 1px solid var(--ff-rule);
+      border-radius: var(--r);
+      padding: 24px;
+      text-align: center;
+      color: var(--ff-fg);
+      font-family: var(--font-body);
+    }
+    pre.mermaid svg { max-width: 100%; height: auto; }
+
+    blockquote {
+      margin: 18px 0;
+      padding: 2px 0 2px 18px;
+      border-left: 3px solid var(--ff-rule);
+      color: var(--ff-soft);
+    }
+    blockquote p:last-child { margin-bottom: 0; }
+
+    hr { border: none; border-top: 1px solid var(--ff-rule); margin: 44px 0; }
+    hr:has(+ h2) { display: none; }
+
+    img { max-width: 100%; height: auto; }
+
+    /* Task-list checkboxes from "- [ ]" lists */
+    ul.task-list { list-style: none; padding-left: 4px; }
+    ul.task-list li input[type="checkbox"] { margin-right: 8px; accent-color: var(--cobalt); }
+
+    @page { size: letter; margin: 0.7in 0.65in; }
+    @media (max-width: 620px) {
+      body { padding: 32px 16px 64px; font-size: 16px; }
+      .callout { padding: 14px 16px 16px; }
+      .callout::after { left: 16px; top: 22px; }
+      table { font-size: 14px; }
+    }
+    @media print {
+      :root { color-scheme: light; }
+      * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+      html, body { background: #fff; color: var(--ink); }
+      body { max-width: 100%; font-size: 11pt; padding: 0; }
+      .doc-nav { display: none; }
+      a { color: var(--ink); }
+      .callout, table, pre, blockquote { break-inside: avoid; }
+      h2, h3 { break-after: avoid; }
+    }
+  </style>
+  <script type="module">
+    import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.esm.min.mjs";
+    const dark = window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches;
+    mermaid.initialize({
+      startOnLoad: false,
+      theme: dark ? "dark" : "neutral",
+      securityLevel: "loose",
+      themeVariables: { fontFamily: '"Hanken Grotesk", system-ui, sans-serif' },
+    });
+    /* Pandoc emits ```mermaid blocks as <pre class="mermaid"><code>…</code></pre> with the
+       diagram source HTML-entity-encoded. Mermaid 10 reads innerHTML, so it sees the literal
+       <code> tag and &quot;/&gt; entities and throws syntax errors. Flatten each block to a
+       single decoded text node first (textContent decodes entities and drops the wrapper),
+       then render. Same fix as the personal-repo report builds (commit d525c50 there). */
+    function renderMermaid() {
+      document.querySelectorAll("pre.mermaid").forEach(function (el) {
+        if (!el.dataset.mflattened) {
+          el.textContent = el.textContent;
+          el.dataset.mflattened = "1";
+        }
+      });
+      mermaid.run({ querySelector: "pre.mermaid" });
+    }
+    if (document.readyState === "loading") {
+      window.addEventListener("DOMContentLoaded", renderMermaid);
+    } else {
+      renderMermaid();
+    }
+  </script>
+
+  <!-- The review comment module and the shared document fixes are injected here
+       at build time from ~/.claude/skills/shared-assets/ (comment_module.html +
+       doc_fixes.css) by shared_assets.resolve_header(). Do not paste a copy back
+       into this file. -->
+  <style>
+  /* Shared document fixes: one source for both document builds.
+
+     Injected at build time alongside comment_module.html, in place of the
+     <!-- SHARED_ASSETS --> placeholder in each pandoc header. Because it lands
+     last in <head>, these rules win over the same-specificity rules earlier in a
+     header without needing !important.
+
+     Keep this file to fixes that are true for every document we build. Anything
+     that depends on a skill's own look (colors, radius, shadow) belongs in that
+     skill's header. */
+
+  /* --- Tables: never spill past the reading column (plan Task 4.3, defect 1) ---
+     Two halves to the fix, and both are needed.
+     1. A wide table scrolls inside its wrapper. Both builds wrap every table in
+        <div class="table-scroll">.
+     2. Long unbroken strings (URLs, tokens, absolute paths) wrap instead of
+        setting a min-content width that forces the table wider than the page.
+        Without this the table is simply wider than the wrapper and the text is
+        cut off at the wrapper edge. */
+  .table-scroll {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    max-width: 100%;
+  }
+  .table-scroll > table { margin: 0; }
+  table { max-width: 100%; }
+  thead th, tbody td { overflow-wrap: anywhere; word-break: break-word; }
+  thead th code, tbody td code,
+  thead th a, tbody td a { overflow-wrap: anywhere; word-break: break-word; }
+
+  /* Print/PDF has no scrollbars, so show the whole table and let it shrink. */
+  @media print {
+    .table-scroll { overflow: visible; }
+  }
+
+  /* --- Charts: never let a chart set the page width (plan Task 4.3, defect 2) ---
+     The label-truncation fix itself is Plotly's automargin, applied in the
+     report header's render script. This is the CSS guard next to it: a chart
+     that computes a wider layout than its column stays inside the column
+     instead of pushing the whole page sideways. */
+  figure.plotly-chart,
+  figure.plotly-chart > div,
+  figure.chart svg,
+  figure.plotly-chart .main-svg { max-width: 100%; }
+
+  </style>
+</head>
+<body>
+<header id="title-block-header">
+<h1 class="title">Plan: LAHE starts your agent when a comment is
+ready</h1>
+</header>
+
+<div class="doc-nav"><span class="doc-nav-label">Docs</span><a href="00_crucible_lahe_agent_sdk.html">Crucible</a><a href="01_brief_lahe_agent_sdk.html">Brief</a><a href="02_wireframe_lahe_agent_sdk.html">Wireframe doc</a><a href="02_architecture_lahe_agent_sdk.html">Architecture</a><a href="03_plan_lahe_agent_sdk.html" class="current">Plan</a><a href="wireframes/index.html">Wireframes</a><a href="04_progress_lahe_agent_sdk.md">Progress</a></div>
+<nav id="TOC" role="doc-toc">
+<ul>
+<li><a href="#summary" id="toc-summary">Summary</a></li>
+<li><a href="#how-the-work-is-dispatched"
+id="toc-how-the-work-is-dispatched">How the work is dispatched</a></li>
+<li><a href="#phase-0-facts-that-could-sink-the-design"
+id="toc-phase-0-facts-that-could-sink-the-design">Phase 0: Facts that
+could sink the design</a></li>
+<li><a href="#phase-1-kernel" id="toc-phase-1-kernel">Phase 1:
+Kernel</a></li>
+<li><a href="#phase-2-four-builders-in-parallel"
+id="toc-phase-2-four-builders-in-parallel">Phase 2: Four builders in
+parallel</a></li>
+<li><a href="#phase-3-merge-review-and-checkpoint"
+id="toc-phase-3-merge-review-and-checkpoint">Phase 3: Merge, review and
+checkpoint</a></li>
+<li><a href="#phase-4-live-check-and-dogfood"
+id="toc-phase-4-live-check-and-dogfood">Phase 4: Live check and
+dogfood</a></li>
+<li><a href="#test-list" id="toc-test-list">Test List</a></li>
+<li><a href="#acceptance-criteria"
+id="toc-acceptance-criteria">Acceptance Criteria</a></li>
+<li><a href="#open-questions" id="toc-open-questions">Open
+Questions</a></li>
+<li><a href="#to-delete-at-cleanup" id="toc-to-delete-at-cleanup">To
+delete at cleanup</a></li>
+<li><a href="#engineering-manager-review"
+id="toc-engineering-manager-review">Engineering Manager Review</a></li>
+<li><a href="#code-review-lead-review"
+id="toc-code-review-lead-review">Code Review Lead Review</a></li>
+<li><a href="#testing-review" id="toc-testing-review">Testing
+Review</a></li>
+<li><a href="#design-review" id="toc-design-review">Design
+Review</a></li>
+<li><a
+href="#reviews-lahe-starts-your-agent-when-a-comment-is-ready-plan"
+id="toc-reviews-lahe-starts-your-agent-when-a-comment-is-ready-plan">Reviews:
+LAHE starts your agent when a comment is ready, plan</a>
+<ul>
+<li><a href="#engineering-manager-review-round-1"
+id="toc-engineering-manager-review-round-1">Engineering Manager Review
+(Round 1)</a></li>
+<li><a href="#code-review-lead-review-round-1"
+id="toc-code-review-lead-review-round-1">Code Review Lead Review (Round
+1)</a></li>
+<li><a href="#testing-review-round-1"
+id="toc-testing-review-round-1">Testing Review (Round 1)</a></li>
+<li><a href="#design-review-magic-mirror-round-1"
+id="toc-design-review-magic-mirror-round-1">Design Review, magic-mirror
+(Round 1)</a></li>
+</ul></li>
+</ul>
+</nav>
+<p>Status: DRAFT, written without the owner. Four reviews are folded in.
+Their tables are at the end, and the full prose is in
+<code>03_plan_lahe_agent_sdk_reviews.md</code>.</p>
+<h2 id="summary">Summary</h2>
+<ul>
+<li><p><strong>Phase 0 can stop the feature.</strong> Before any builder
+starts, the orchestrator checks three things the architecture leaves
+open:</p>
+<ul>
+<li>what the subscription terms say, read on the live page</li>
+<li>whether the <code>claude -p</code> flags the design relies on do
+what they say</li>
+<li>a starting commit where the tests pass, with every other branch that
+edits the same files already folded in</li>
+</ul>
+<p>If any check fails, the build stops and the question comes to
+you.</p></li>
+<li><p><strong>Phase 1:</strong> one builder lays the shared pieces:</p>
+<ul>
+<li>the agent rules (the contract), with each line tagged for chat
+agents, auto-answer, or both, and every copy of them</li>
+<li>the shared names for events, routes and states (the wire names)</li>
+<li>the locks that keep two processes from doing the same work</li>
+<li>the function signatures each Phase 2 builder codes against</li>
+<li>a fake <code>claude</code> for tests</li>
+</ul></li>
+<li><p><strong>Phase 2:</strong> four builders work in parallel:</p>
+<ul>
+<li>the run engine</li>
+<li>the supervisor</li>
+<li>the command line and helper</li>
+<li>the rail</li>
+</ul>
+<p><strong>Phase 2 waits for your answer on the terms</strong> (OQ1,
+whether the subscription terms allow this), or for you to say you accept
+the risk.</p></li>
+<li><p><strong>Phase 3:</strong> in an integration worktree, the
+orchestrator:</p>
+<ul>
+<li>merges the four branches</li>
+<li>writes the tests that need every branch</li>
+<li>runs one review with one fix round</li>
+<li>runs the full gates once</li>
+</ul></li>
+<li><p><strong>Phase 4:</strong> a live check with the real
+<code>claude</code>. Then you run a real review with auto-answer on (the
+dogfood).</p></li>
+<li><p><strong>Your questions are in one place,</strong> under <a
+href="#open-questions">Open Questions</a>. Each has the default the
+build takes if you do not answer.</p></li>
+</ul>
+<h2 id="how-the-work-is-dispatched">How the work is dispatched</h2>
+<pre class="mermaid"><code>flowchart TD
+  P0[&quot;Phase 0: orchestrator&lt;br/&gt;0.1 terms, 0.2 flags spike, 0.3 base&quot;] --&gt;|&quot;all three hold&quot;| P1[&quot;Phase 1: kernel&lt;br/&gt;one builder, agent-sdk-kernel&quot;]
+  P0 --&gt;|&quot;a stop rule fires&quot;| STOP[&quot;Stop. The question goes to the owner&quot;]
+  P1 --&gt; R1{&quot;orchestrator reads the kernel, merges it,&lt;br/&gt;gate:unit green, OQ1 answered&quot;}
+  R1 --&gt; A[&quot;2A run engine&lt;br/&gt;agent-sdk-2a&quot;]
+  R1 --&gt; B[&quot;2B supervisor&lt;br/&gt;agent-sdk-2b&quot;]
+  R1 --&gt; C[&quot;2C command line and helper&lt;br/&gt;agent-sdk-2c&quot;]
+  R1 --&gt; D[&quot;2D rail&lt;br/&gt;agent-sdk-2d&quot;]
+  A --&gt; M[&quot;3.1 merge: main, then 2A to 2D&quot;]
+  B --&gt; M
+  C --&gt; M
+  D --&gt; M
+  M --&gt; X[&quot;3.2 tests across branches&quot;]
+  X --&gt; RV[&quot;3.3 one review, one fix round&quot;]
+  RV --&gt; G[&quot;3.4 checkpoint: skills, dist, gate, gate:all, screenshots&quot;]
+  G --&gt; L[&quot;4.1 live check and story walks&quot;]
+  L --&gt; DF[&quot;4.2 dogfood&quot;]</code></pre>
+<p><strong>Branches and worktrees.</strong></p>
+<ul>
+<li><code>feat/lahe-agent-sdk</code>: holds these docs and the progress
+page, in its existing worktree. Only the orchestrator commits here. The
+pull request to <code>main</code> opens from it after Task 3.4
+(checkpoint).</li>
+<li><code>agent-sdk-kernel</code>: Phase 1, in its own worktree,
+branched from <code>feat/lahe-agent-sdk</code> after Task 0.3. The
+orchestrator merges it back.</li>
+<li><code>agent-sdk-2a</code> to <code>agent-sdk-2d</code>: one worktree
+each, branched from <code>feat/lahe-agent-sdk</code> after the kernel
+merge.</li>
+<li><code>integration/lahe-agent-sdk</code>: in its own worktree,
+<code>.claude/worktrees/integration-agent-sdk</code>. Every merge
+happens here, never in the shared main checkout. Other agents push from
+that checkout, and a push there once carried an untested merge to
+<code>main</code>.</li>
+<li><code>agent-sdk-fix-&lt;n&gt;</code>: Task 3.3's fix branches, off
+the integration branch.</li>
+</ul>
+<p><strong>Where branches meet, and who owns it.</strong> The
+orchestrator owns every merge and every test that needs more than one
+branch. Phase 1 pins what each side builds against, so the parallel
+branches fit together:</p>
+<div class="table-scroll"><table>
+<thead>
+<tr>
+<th>Where two branches meet</th>
+<th>Built against</th>
+<th>Proved by</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Supervisor (2B) calls the engine (2A)</td>
+<td><code>runBatch</code> and its return shape (Task 1.3)</td>
+<td>Task 3.2: the real engine under the real supervisor</td>
+</tr>
+<tr>
+<td>Helper (2C) starts the supervisor (2B)</td>
+<td>the <code>supervise</code> argv and how the helper builds it (Task
+1.3)</td>
+<td>Task 3.2: the page's "on" starts one supervisor</td>
+</tr>
+<tr>
+<td>Status and liveness (2C) read what the supervisor writes (2B)</td>
+<td>the <code>agent.json</code> and <code>runs.jsonl</code> fixtures
+(Task 1.2)</td>
+<td>Task 3.2: every state read off a live helper, failures included</td>
+</tr>
+<tr>
+<td>Rail (2D) reads the liveness answer (2C)</td>
+<td>the <code>auto_answer</code> liveness fixtures (Task 1.2)</td>
+<td>Task 3.2: the browser spec on a real helper</td>
+</tr>
+<tr>
+<td>Rail's switch (2D) posts to the route (2C)</td>
+<td>the route and body in Task 1.2</td>
+<td>Task 3.2: a real click turns a real supervisor on and off</td>
+</tr>
+<tr>
+<td>Engine (2A) reads the host's output</td>
+<td>the fake <code>claude</code> (Task 1.4), built from Task 0.2's raw
+output</td>
+<td>Task 4.1 with the real <code>claude</code></td>
+</tr>
+</tbody>
+</table></div>
+<p><strong>Rules every builder follows.</strong> Repo
+<code>CLAUDE.md</code> holds them ("Running the gate", "Running the
+loop", "Never remove files while work is running"). In short:</p>
+<ul>
+<li>Run <code>npm run gate:unit</code>. Run at most one named browser
+spec. The full browser suite runs once, in Task 3.4, by the
+orchestrator.</li>
+<li>Never commit <code>dist/</code>. Never run
+<code>npm run install-skills</code>. The orchestrator does both in Task
+3.4.</li>
+<li>No <code>rm</code>, no <code>git clean</code>. List files to remove
+under "To delete at cleanup" in your report.</li>
+<li><strong>Your Files list is complete for <code>src/</code>.</strong>
+Lint fails on any <code>src/</code> file the manifest does not list, and
+only Phase 1 edits the manifest. Ask the orchestrator before creating
+any other file.</li>
+<li>Name new test files with your task's prefix
+(<code>auto_answer_engine_*</code>,
+<code>auto_answer_supervisor_*</code>, <code>auto_answer_cli_*</code>,
+<code>auto_answer_rail_*</code>), so two branches never pick the same
+name.</li>
+<li>Commit per task with a message that says why. Screenshots go in your
+report; the orchestrator puts them on the progress page.</li>
+<li>Hit a limit? Ask the orchestrator in one line instead of writing
+around it.</li>
+<li>Tests never call the real <code>claude</code> or any model. They use
+the fake <code>claude</code> from Task 1.4.</li>
+<li>Tests never wait on real time. Every timed step takes
+<code>opts.now</code>, <code>opts.sleep</code> and
+<code>opts.limits</code> (Task 1.3). The unit suite must pass on Node
+18, so no <code>node:test</code> fake timers.</li>
+<li>Tests use their own state folder and helper port, and call the
+teardown helper from Task 1.4. They never touch the owner's helper or
+state folder.</li>
+<li>Instructions appear once per run. They never repeat per wake-up or
+per item (brief R14, rules once per run). No output from
+<code>lahe agent</code>, <code>lahe monitor</code> or the stdin payload
+repeats rule text.</li>
+</ul>
+<h3 id="numbers-this-plan-sets">Numbers this plan sets</h3>
+<p>Each lives once, in <code>AUTO_ANSWER</code> in
+<code>src/shared/protocol.js</code>. All are guesses the owner can
+change (OQ3, the numbers).</p>
+<div class="table-scroll"><table>
+<thead>
+<tr>
+<th>Constant</th>
+<th>Value</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>RUNS_AT_ONCE</code> (machine)</td>
+<td>2</td>
+</tr>
+<tr>
+<td><code>ATTEMPTS_PER_REV</code>, <code>ATTEMPTS_PER_ITEM</code></td>
+<td>3, 6</td>
+</tr>
+<tr>
+<td><code>RUNS_PER_DAY_SESSION</code>,
+<code>RUNS_PER_DAY_MACHINE</code></td>
+<td>40, 120</td>
+</tr>
+<tr>
+<td><code>FAILED_RUNS_STOP</code> (in a row, conflicts included)</td>
+<td>3</td>
+</tr>
+<tr>
+<td><code>STARTS_MAX</code>, <code>STARTS_WINDOW_MS</code> (supervisor
+restarts)</td>
+<td>3 in 10 minutes</td>
+</tr>
+<tr>
+<td><code>BUDGET_USD</code> per run</td>
+<td>0.50</td>
+</tr>
+<tr>
+<td><code>RUN_TIMEOUT_MS</code></td>
+<td>10 minutes</td>
+</tr>
+<tr>
+<td><code>KILL_GRACE_MS</code></td>
+<td>5 seconds</td>
+</tr>
+<tr>
+<td><code>QUIET_MS</code> (burst settles),
+<code>GATHER_MAX_MS</code></td>
+<td>15 seconds, 60 seconds</td>
+</tr>
+<tr>
+<td><code>FILE_QUIET_MS</code> (source unchanged before copy-in, after a
+conflict)</td>
+<td>15 seconds</td>
+</tr>
+<tr>
+<td><code>LOOK_MS</code> (supervisor look)</td>
+<td>2 seconds</td>
+</tr>
+<tr>
+<td><code>FOLD_WAIT_MS</code></td>
+<td>30 seconds</td>
+</tr>
+<tr>
+<td><code>USAGE_PAUSE_MS</code></td>
+<td>30 minutes</td>
+</tr>
+<tr>
+<td><code>BATCH_MAX_ITEMS</code>, <code>BATCH_MAX_BYTES</code></td>
+<td>25, 100 KB</td>
+</tr>
+<tr>
+<td><code>ITEM_MAX_CHARS</code> (reviewer text)</td>
+<td>8,000</td>
+</tr>
+<tr>
+<td><code>REPLY_MAX_CHARS</code></td>
+<td>500</td>
+</tr>
+<tr>
+<td><code>NOTE_MAX_CHARS</code></td>
+<td>2,000</td>
+</tr>
+<tr>
+<td><code>RUN_FOLDERS_KEEP</code></td>
+<td>20</td>
+</tr>
+</tbody>
+</table></div>
+<h3 id="words-this-plan-pins">Words this plan pins</h3>
+<p>These live once, in <code>protocol.js</code>, beside today's
+<code>AGENT_LIVENESS</code> words. <strong>Where the wireframe and this
+table differ, this table wins.</strong> "Auto-answer" is the working
+name (OQ7). It is lowercase inside the status line, after "Stored ·",
+and capitalized everywhere else. Times use the rail's existing time
+format, the one cards use. Numbers in braces come from
+<code>AUTO_ANSWER</code>.</p>
+<p><strong>Status line</strong> (the reason and remedy are said once, in
+the chip, never in the status line):</p>
+<div class="table-scroll"><table>
+<thead>
+<tr>
+<th>State</th>
+<th>Words</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>starting</td>
+<td>Stored · auto-answer starting</td>
+</tr>
+<tr>
+<td>idle</td>
+<td>Stored · auto-answer on</td>
+</tr>
+<tr>
+<td>gathering</td>
+<td>Stored · auto-answer starting on {n}</td>
+</tr>
+<tr>
+<td>running</td>
+<td>Stored · auto-answer working on {n}, {age}</td>
+</tr>
+<tr>
+<td>queued</td>
+<td>Stored · auto-answer waiting for another review's run, {age}</td>
+</tr>
+<tr>
+<td>paused, this review's limit</td>
+<td>Stored · auto-answer paused for today</td>
+</tr>
+<tr>
+<td>paused, this computer's limit</td>
+<td>Stored · auto-answer paused for today</td>
+</tr>
+<tr>
+<td>paused, usage limit</td>
+<td>Stored · auto-answer paused until {time}</td>
+</tr>
+<tr>
+<td>stopped</td>
+<td>Stored · auto-answer stopped</td>
+</tr>
+<tr>
+<td>off</td>
+<td>today's words, unchanged</td>
+</tr>
+</tbody>
+</table></div>
+<p><strong>The switch and its panels:</strong></p>
+<div class="table-scroll"><table>
+<thead>
+<tr>
+<th>Where</th>
+<th>Words</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Pill</td>
+<td>"Auto-answer", a switch like Hold sending. "Turning on" from the
+click until liveness confirms.</td>
+</tr>
+<tr>
+<td>Not-allowed panel</td>
+<td>"Auto-answer is allowed from a terminal, once per session. Run this
+where your agent works:" then the command
+<code>lahe agent allow --session {id}</code> and a Copy button.</td>
+</tr>
+<tr>
+<td>Warning panel title</td>
+<td>"Turn on Auto-answer?"</td>
+</tr>
+<tr>
+<td>Warning panel body</td>
+<td>"Claude will answer new comments on this page by itself, a batch at
+a time." / "It can read and edit only {file name}. It runs no commands
+and has no network." / "Anyone who can comment on this review can make
+it edit that file." / "Each run uses your Claude plan. At most {40} runs
+today for this review."</td>
+</tr>
+<tr>
+<td>Warning panel buttons</td>
+<td>"Turn on" (primary), "Cancel"</td>
+</tr>
+<tr>
+<td>Stop confirm</td>
+<td>Title "Stop Auto-answer?" Body "A run is working on {n} comments.
+Stopping ends it, and those comments stay waiting." Buttons "Stop",
+"Keep running".</td>
+</tr>
+<tr>
+<td>Run count</td>
+<td>"1 run", "{n} runs"</td>
+</tr>
+<tr>
+<td>Run count, opened</td>
+<td>"Today: {n} of {40} runs for this review" / "Tokens today: {n}"
+(only when reported) / "Resets at midnight."</td>
+</tr>
+</tbody>
+</table></div>
+<p><strong>The chip</strong> (one sentence, at most one button):</p>
+<div class="table-scroll"><table>
+<thead>
+<tr>
+<th>Reason</th>
+<th>Words</th>
+<th>Button</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>one failed run, retrying</td>
+<td>"Last run failed. Trying again."</td>
+<td>none</td>
+</tr>
+<tr>
+<td><code>signed_out</code></td>
+<td>"Claude is signed out. Sign in by running claude in a terminal, then
+try again."</td>
+<td>Try again</td>
+</tr>
+<tr>
+<td><code>not_installed</code></td>
+<td>"Claude Code is not where it was when Auto-answer was allowed. Run
+lahe agent allow again."</td>
+<td>none</td>
+</tr>
+<tr>
+<td><code>usage_limit</code></td>
+<td>"Claude's usage limit was reached. Next try at {time}."</td>
+<td>none</td>
+</tr>
+<tr>
+<td><code>limit_session</code></td>
+<td>"This review's {40} runs for today are used. They reset at
+midnight."</td>
+<td>the existing hand-off button</td>
+</tr>
+<tr>
+<td><code>limit_machine</code></td>
+<td>"This computer's {120} runs for today are used. They reset at
+midnight."</td>
+<td>the existing hand-off button</td>
+</tr>
+<tr>
+<td><code>source_missing</code></td>
+<td>"The source file is gone, so Auto-answer stopped."</td>
+<td>none</td>
+</tr>
+<tr>
+<td><code>failing</code></td>
+<td>"The last three runs failed."</td>
+<td>Try again</td>
+</tr>
+<tr>
+<td>anything else</td>
+<td>"Auto-answer stopped. Run lahe agent status in a terminal to see
+why."</td>
+<td>none</td>
+</tr>
+</tbody>
+</table></div>
+<p>"Try again" sends <code>want: on</code>. There are no buttons to
+change a limit: the page may only ask for on or off.</p>
+<p><strong>Cards:</strong></p>
+<div class="table-scroll"><table>
+<thead>
+<tr>
+<th>Case</th>
+<th>Words</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Gave up</td>
+<td>"Auto-answer could not answer this and stopped trying. Reply here
+yourself, or hand the review to a chat agent."</td>
+</tr>
+<tr>
+<td>Too long</td>
+<td>"Too long for auto-answer; a chat agent can take it."</td>
+</tr>
+<tr>
+<td>Raw HTML refused</td>
+<td>"Auto-answer does not add raw HTML or scripts; a chat agent can do
+this."</td>
+</tr>
+</tbody>
+</table></div>
+<p><strong>Terminal:</strong></p>
+<div class="table-scroll"><table>
+<thead>
+<tr>
+<th>Where</th>
+<th>Words</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>lahe agent allow</code> warning, every time</td>
+<td>"Auto-answer lets Claude answer comments on this review without
+you." / "It reads and edits one file: {path}. It runs no commands and
+has no network." / "Anyone who can comment on this review, or run script
+in its pages, can make it edit that file. Agents with a shell may read
+that file later." / "Each run uses your Claude plan. Limits: {40} runs a
+day for this review, {120} for this computer." Plus, when preflight
+finds a login billed by the token: "Your Claude login is billed by the
+token, so each run costs money." / "Anthropic's terms limit scripted use
+of a subscription. Whether this use counts is not settled."</td>
+</tr>
+<tr>
+<td><code>lahe monitor</code> exit 6, when auto-answer holds the
+session</td>
+<td>"Auto-answer is answering this review now. Tell the human, and stop.
+To take it back: lahe session takeover {id}"</td>
+</tr>
+<tr>
+<td><code>lahe review</code> re-entry</td>
+<td>"Auto-answer is answering this review. No monitor is needed. To take
+it back: lahe session takeover {id}"</td>
+</tr>
+</tbody>
+</table></div>
+<p>Rail words never use monitor, heartbeat, wake feed, watching or
+unattended.</p>
+<h2 id="phase-0-facts-that-could-sink-the-design">Phase 0: Facts that
+could sink the design</h2>
+<p>The orchestrator alone. No builder starts until all three tasks
+pass.</p>
+<div class="xref">
+<p><a
+href="02_architecture_lahe_agent_sdk.html#subscription-terms">Architecture:
+Subscription terms</a> · <a
+href="02_architecture_lahe_agent_sdk.html#the-runs-command-claude-code-adapter">The
+run's command</a> · <a
+href="02_architecture_lahe_agent_sdk.html#open-questions">Open
+Questions</a></p>
+</div>
+<h3 id="task-01-the-subscription-terms-read-on-the-live-page">Task 0.1:
+The subscription terms, read on the live page</h3>
+<p><strong>Spec:</strong> The architecture's quote came from a web
+fetch. This time the orchestrator opens <a
+href="https://www.anthropic.com/legal/consumer-terms">Anthropic's
+Consumer Terms</a> and Claude Code's <a
+href="https://code.claude.com/docs/en/authentication">Authentication</a>
+and <a href="https://code.claude.com/docs/en/headless">Headless</a>
+pages in a real browser (Claude in Chrome). It copies the exact
+sentences on automated access and on scripted use of a subscription,
+with their links, beside OQ1 on the progress page. The owner reads them
+and decides.</p>
+<p><strong>Acceptance:</strong></p>
+<ul>
+<li>Each quote matches the live page word for word, with its link.</li>
+<li>If the page no longer says what the architecture quotes, the
+architecture's Subscription terms section is corrected in the same
+commit.</li>
+</ul>
+<h3 id="task-02-the-flags-spike">Task 0.2: The flags spike</h3>
+<p><strong>Spec:</strong> <code>claude --help</code> lists every flag
+below, but this project has never run them. A script in the scratchpad
+runs real <code>claude</code> (2.1.284) with the architecture's exact
+command and environment, from an empty stage folder. It saves every raw
+output. A second script computes every number from those files. The
+results go in <code>spike_flags.md</code> in this folder, with the saved
+files' paths. The checks spend a handful of runs on the owner's login,
+as the first spike did.</p>
+<div class="table-scroll"><table>
+<thead>
+<tr>
+<th>Check</th>
+<th>Passes when</th>
+<th>If it fails</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>The whole flag set together</td>
+<td><code>claude</code> starts and exits 0 with
+<code>--safe-mode</code>, <code>--restricted</code>,
+<code>--strict-mcp-config</code>, <code>--setting-sources ""</code>,
+<code>--tools Read,Edit</code>, <code>--permission-mode dontAsk</code>,
+<code>--permission-prompts none</code></td>
+<td>Stop: the design comes back to the owner</td>
+</tr>
+<tr>
+<td>Still the subscription</td>
+<td>the init event reports <code>apiKeySource: "none"</code> with that
+flag set</td>
+<td>Stop</td>
+</tr>
+<tr>
+<td>Structured output</td>
+<td><code>--json-schema</code> with the reply schema returns replies
+that match it; record where they appear in the result</td>
+<td>Stop. No shell is granted as a fallback</td>
+</tr>
+<tr>
+<td>Confinement</td>
+<td>a <code>.env</code> beside the original source, and a file one
+folder up, cannot be read by relative or absolute path</td>
+<td>Stop. The security reviewer sees it first</td>
+</tr>
+<tr>
+<td>Items on stdin</td>
+<td><code>-p</code> with the drain lines on stdin and no prompt argument
+handles the three spike items</td>
+<td>Items go in the <code>-p</code> argument instead; the architecture's
+command section changes before Phase 1</td>
+</tr>
+<tr>
+<td>Rules file</td>
+<td><code>--append-system-prompt-file</code> is read, and its text is
+not in <code>ps</code> output</td>
+<td>Rules go in <code>--append-system-prompt</code>; the process-list
+exposure is written into the architecture's Security section</td>
+</tr>
+<tr>
+<td>Budget flag</td>
+<td><code>--max-budget-usd</code> stops a run on a subscription, and the
+result says so</td>
+<td>The flag stays, but the warning and the architecture say the
+10-minute limit and the daily run counts are the only caps</td>
+</tr>
+<tr>
+<td>Failures</td>
+<td>exit code and result text told apart for signed out (an empty
+<code>CLAUDE_CONFIG_DIR</code>), <code>claude</code> missing, a killed
+run. A usage limit cannot be forced: record "not seen"</td>
+<td>Unclear output is named <code>crashed</code>; the architecture says
+so</td>
+</tr>
+<tr>
+<td>Hostile comment</td>
+<td>a comment asking for a <code>&lt;script&gt;</code> tag: record what
+the model does</td>
+<td>Nothing: LAHE's own check refuses it either way</td>
+</tr>
+<tr>
+<td>Prompt size</td>
+<td>tokens per request with the <code>all</code> and
+<code>headless</code> contract lines, against the first spike's
+9,000</td>
+<td>More than double: go on, and put the number beside Q1 (billing)</td>
+</tr>
+<tr>
+<td>Rules once</td>
+<td>transcripts of runs given 1, 10 and 25 items, and 100 items across 4
+runs: the rules appear once per run, and nothing instruction-like
+repeats per item</td>
+<td>Stop: brief R14 (rules once per run) is the point of the
+feature</td>
+</tr>
+</tbody>
+</table></div>
+<p>Also saved: the raw bytes of every result and failure, for Task 1.4's
+fake <code>claude</code>, and the <code>claude --help</code> flag
+list.</p>
+<p><strong>Acceptance:</strong> <code>spike_flags.md</code> has a pass
+or fail per row, each number traced to a saved file, and one verdict
+line. Any row that failed has changed the architecture before Phase 1
+starts.</p>
+<h3 id="task-03-base-commit-and-overlapping-branches">Task 0.3: Base
+commit and overlapping branches</h3>
+<p><strong>Spec:</strong></p>
+<ol type="1">
+<li><p>Find every open branch whose diff touches a file this plan
+changes. The list:</p>
+<ul>
+<li><code>src/shared/</code>: <code>review_format.js</code>,
+<code>protocol.js</code>, <code>manifest.js</code></li>
+<li><code>src/service/</code>: <code>agent_sessions.js</code>,
+<code>static_servers.js</code>, <code>routes.js</code>,
+<code>projection.js</code>, <code>replies.js</code>,
+<code>index.js</code></li>
+<li><code>src/cli/</code>: <code>index.js</code>,
+<code>commands/monitor.js</code>, <code>commands/review.js</code>,
+<code>commands/add.js</code>, <code>commands/status.js</code></li>
+<li><code>src/layer/</code>: <code>overlay.js</code>,
+<code>sync.js</code>, <code>index.js</code>,
+<code>tab_done.js</code></li>
+<li>docs: <code>skills/lahe/SKILL.md</code>,
+<code>docs/CONTRACTS.md</code>, <code>docs/CLI.md</code>,
+<code>docs/diagrams/session_ownership.md</code></li>
+</ul>
+<p><code>feat/lahe_library</code> touches most of them. Land each
+branch, or agree with the owner how it folds in.</p></li>
+<li><p>Merge <code>main</code> into <code>feat/lahe-agent-sdk</code>. It
+branched 12 commits behind, and those commits change
+<code>sync.js</code>.</p></li>
+<li><p>Record the base commit on the progress page, with
+<code>gate:unit</code> and the browser suite green there. If main's
+suite is red, fixing it comes first (Q8, priority).</p></li>
+<li><p>Add the board row the architecture promised to
+<code>docs/BULLETIN.md</code>. The row says rendered Markdown passes raw
+HTML through with no CSP.</p></li>
+</ol>
+<p><strong>Acceptance:</strong> the progress page names the base commit,
+the gate result at it, and each overlapping branch with what happened to
+it. The board row exists.</p>
+<h2 id="phase-1-kernel">Phase 1: Kernel</h2>
+<p>One builder, alone, on <code>agent-sdk-kernel</code>. After Phase 1,
+no Phase 2 builder edits anything under <code>src/shared/</code>,
+<code>locks.js</code>, <code>file_stamp.js</code>, or any copy of the
+contract. So everything Phase 2 needs there lands now.</p>
+<div class="xref">
+<p><a
+href="02_architecture_lahe_agent_sdk.html#data-state-changes">Architecture:
+Data / State Changes</a> · <a
+href="02_architecture_lahe_agent_sdk.html#the-system-prompt-one-source-of-the-rules">The
+system prompt</a></p>
+</div>
+<h3 id="task-11-the-tagged-contract-and-every-copy">Task 1.1: The tagged
+contract, and every copy</h3>
+<p><strong>Spec:</strong> In <code>review_format.js</code>, add
+<code>CONTRACT_LINES</code>, a list of <code>{ tag, text }</code> with
+each tag <code>all</code>, <code>chat</code> or <code>headless</code>.
+<code>CONTRACT</code> stays a list of strings: the <code>all</code> and
+<code>chat</code> lines in order. That is what <code>review.json</code>
+carries. Then:</p>
+<ul>
+<li>Reword the few <code>all</code> lines that name the reply transport,
+so they name the reply's fields only.</li>
+<li>Add the <code>headless</code> lines the architecture lists (items on
+stdin, the one file, read back, one reply each, do not wait or start
+anything).</li>
+<li>Change the "forever daemon" line as Assumption A9 says. A chat agent
+never starts a long-lived process. Auto-answer is the only one, and LAHE
+starts it.</li>
+<li>Reword the exit-6 line to say that exit 6 means another owner holds
+the session, either a chat agent or auto-answer, and
+<code>lahe session takeover</code> takes it back.</li>
+</ul>
+<p>Carry the change into every copy in one commit:</p>
+<ul>
+<li><code>skills/lahe/SKILL.md</code>, plus one sentence: when
+auto-answer is on for your session, tell the human and stop</li>
+<li><code>docs/CONTRACTS.md</code></li>
+<li>the restated copy and the line count in
+<code>test/unit/review_format.test.js</code></li>
+<li><code>test/unit/projection_review_json.test.js</code>, which asserts
+<code>review.json</code> carries <code>CONTRACT</code></li>
+<li>any of <code>add_command</code>, <code>monitor_command</code>,
+<code>no_stale_excuse</code>, <code>protocol_wire</code>,
+<code>reply_command</code> and <code>status_command</code> tests that
+the new wording breaks</li>
+</ul>
+<p><strong>Files:</strong> <code>src/shared/review_format.js</code>,
+<code>skills/lahe/SKILL.md</code>, <code>docs/CONTRACTS.md</code>, and
+the tests above.</p>
+<p><strong>Acceptance:</strong></p>
+<ul>
+<li>Every line of <code>CONTRACT_LINES</code> carries exactly one of the
+three tags. A test fails on a missing or unknown tag.</li>
+<li><code>CONTRACT</code> equals the <code>all</code> and
+<code>chat</code> texts in order, and <code>review.json</code>'s
+contract equals <code>CONTRACT</code>.</li>
+<li>A test names one known chat-only line (it names
+<code>lahe monitor</code>) and asserts it is absent from the
+<code>headless</code> view, and one known headless line and asserts it
+is absent from <code>CONTRACT</code>.</li>
+<li>The skill and <code>docs/CONTRACTS.md</code> match the new text. The
+orchestrator checks this with a diff.</li>
+</ul>
+<h3 id="task-12-wire-names-fixtures-and-the-manifest">Task 1.2: Wire
+names, fixtures and the manifest</h3>
+<p><strong>Spec:</strong> In <code>protocol.js</code>, spell once:</p>
+<ul>
+<li>the <code>AUTO_ANSWER</code> numbers and every pinned word
+above</li>
+<li>the supervisor states, stop reasons, run outcomes and failures</li>
+<li>the event kind <code>auto_answer.requested</code>, the route
+<code>POST /lahe/v1/auto-answer</code>, its one body field
+<code>want</code></li>
+<li>the reply agent name <code>claude-auto</code>, and the fold's
+rejection reason <code>auto_answer_owns</code></li>
+<li><code>SERVICE_CONTRACT</code> from 13 to 14, with its comment</li>
+</ul>
+<p>In <code>projection.js</code>, fold
+<code>auto_answer.requested</code> into the latest request for the
+review. In <code>agent_sessions.js</code>, add
+<code>allowanceHolds(session)</code>. It reads
+<code>auto_answer.json</code> and returns true when its
+<code>handoff_rev</code> equals the session's.</p>
+<p>Add fixtures in <code>test/fixtures/auto_answer/</code>, paired by
+state:</p>
+<ul>
+<li><code>agent.json</code>, one per supervisor state and reason,
+including "turning on" and "on, supervisor dead"</li>
+<li>the liveness <code>auto_answer</code> object each one should
+produce</li>
+<li>a sample <code>runs.jsonl</code> with an applied run, a refused run
+and a conflict, and a matching <code>runs/</code> folder with a
+<code>diff.patch</code></li>
+<li>a sample <code>auto_answer.json</code></li>
+</ul>
+<p>Add every new file of Tasks 1.3 and 1.4 to <code>manifest.js</code>,
+in the non-bundle list.</p>
+<p><strong>Files:</strong> <code>src/shared/protocol.js</code>,
+<code>src/service/projection.js</code>,
+<code>src/service/agent_sessions.js</code>,
+<code>src/shared/manifest.js</code>,
+<code>test/fixtures/auto_answer/</code> (new).</p>
+<p><strong>Acceptance:</strong></p>
+<ul>
+<li>The projection's latest request follows the last event, and ignores
+other reviews' events.</li>
+<li><code>allowanceHolds</code> is false after a takeover bumps the rev,
+and false with no <code>auto_answer.json</code>.</li>
+<li>Lint's manifest check passes with every new file listed.</li>
+<li>The bundle gains only the wire names and words, no Node-only code
+(checked with <code>npm run build:layer</code> locally, not
+committed).</li>
+</ul>
+<h3 id="task-13-locks-stamps-and-the-signatures-phase-2-meets-at">Task
+1.3: Locks, stamps, and the signatures Phase 2 meets at</h3>
+<p><strong>Spec:</strong> Three things.</p>
+<p><strong>Locks.</strong> Move <code>withServerLock</code> and
+<code>takeOverStaleLock</code> into <code>src/service/locks.js</code>,
+unchanged, and have <code>static_servers.js</code> use them. Add the
+second kind the architecture now names: a lock held for as long as a
+process lives. It goes stale only when its pid and that pid's start time
+no longer match a live process. The start time comes from
+<code>ps -o lstart=</code> run with <code>LC_ALL=C TZ=UTC</code>,
+through a reader a test can replace.</p>
+<p><strong>Stamps.</strong> Add <code>src/service/file_stamp.js</code>:
+content hash, size and mtime of a user file.</p>
+<p><strong>Signatures.</strong> Create each new module with its exported
+functions and doc comments, each body throwing "not built yet". Phase 2
+fills them in and removes every such line. Every timed function takes
+<code>opts.now</code>, <code>opts.sleep</code> and
+<code>opts.limits</code> (defaults from <code>AUTO_ANSWER</code>), as
+<code>monitor.js</code> already takes <code>opts.now</code>.</p>
+<div class="table-scroll"><table>
+<thead>
+<tr>
+<th>Module (owner)</th>
+<th>Exports</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>headless_prompt.js</code> (2A)</td>
+<td><code>buildPrompt(note)</code>, <code>buildSchema()</code>,
+<code>buildStdin(items, stagePath)</code>,
+<code>cutBatches(items)</code></td>
+</tr>
+<tr>
+<td><code>host_claude_code.js</code> (2A)</td>
+<td><code>run(runSpec, opts)</code> returning
+<code>{ replies, usage, turns, failure, exit_code }</code></td>
+</tr>
+<tr>
+<td><code>headless_stage.js</code> (2A)</td>
+<td><code>runBatch(allowance, items, opts)</code>: the whole run, from
+copy-in to write-back. It writes <code>runs/&lt;run_id&gt;/</code>
+(<code>work/</code>, <code>result.json</code>, <code>log.jsonl</code>,
+<code>diff.patch</code>) and returns
+<code>{ run_id, outcome, failure, exit_code, turns, applied, replies, usage }</code>,
+where <code>replies</code> are checked and ready to write.
+<code>opts.hooks.afterWriteBack</code> and
+<code>opts.hooks.beforeRename</code> let a test crash it at an exact
+step.</td>
+</tr>
+<tr>
+<td><code>run_slots.js</code> (2B)</td>
+<td><code>take(stateDir, session, opts)</code>,
+<code>release(slot)</code>,
+<code>countToday(stateDir, session, opts)</code></td>
+</tr>
+<tr>
+<td><code>headless_supervisor.js</code> (2B)</td>
+<td><code>supervise({ session, stateDir }, opts)</code>. It writes
+<code>agent.json</code>, <code>runs.jsonl</code>,
+<code>attempts.json</code> and <code>replies-claude-auto.jsonl</code>.
+<code>opts.engine</code> defaults to <code>runBatch</code>, so 2B tests
+pass a fake engine.</td>
+</tr>
+<tr>
+<td><code>src/cli/commands/agent.js</code> (2C)</td>
+<td>`lahe agent allow</td>
+</tr>
+</tbody>
+</table></div>
+<p><strong>Files:</strong> <code>src/service/locks.js</code>,
+<code>src/service/file_stamp.js</code>,
+<code>src/service/static_servers.js</code>, and the six modules
+above.</p>
+<p><strong>Acceptance:</strong></p>
+<ul>
+<li>Every existing static-server lock test passes, unchanged.</li>
+<li>Two child processes, released together by a start file, race for
+each lock kind 20 times; exactly one wins each time.</li>
+<li>A process lock whose pid is dead is taken over. One whose pid was
+reused with a different start time is taken over. One held by a live
+process for longer than 20 seconds is not.</li>
+<li>The <code>ps</code> reader parses real <code>ps</code> output for
+the test's own <code>process.pid</code>, on the platform the test runs
+on.</li>
+<li>A file stamp changes when the content changes, and not when the file
+is only read.</li>
+</ul>
+<h3 id="task-14-the-fake-claude-and-the-teardown-helper">Task 1.4: The
+fake <code>claude</code> and the teardown helper</h3>
+<p><strong>Spec:</strong> A small Node script standing in for
+<code>claude</code>. A scenario file tells it what to do, and each
+scenario uses the raw bytes Task 0.2 saved, naming the file they came
+from. It:</p>
+<ul>
+<li>edits the stage copy, or a file outside it</li>
+<li>prints the result or failure as Task 0.2 recorded it</li>
+<li>starts a grandchild, or ignores SIGTERM, when told to</li>
+<li>exits non-zero on any flag missing from the
+<code>claude --help</code> list Task 0.2 recorded</li>
+<li>writes the arguments, working folder, environment, pid and process
+group it was given, and its start and end times, to a file tests
+read</li>
+</ul>
+<p>Its one timer carries a <code>harness-allow-timer:</code> comment
+with the reason, so <code>no_arbitrary_sleeps.test.js</code> passes. The
+usage-limit scenario is a guess until one is seen, and its name says
+so.</p>
+<p>The teardown helper reads every process group the fake recorded, plus
+<code>agent.json</code> and <code>run-slots/</code>, and kills what is
+left. Every auto-answer test calls it in <code>after</code>.</p>
+<p><strong>Files:</strong>
+<code>test/fixtures/auto_answer/fake_claude.js</code>,
+<code>test/fixtures/auto_answer/scenarios/</code>,
+<code>test/helpers/auto_answer_teardown.js</code> (new).</p>
+<p><strong>Acceptance:</strong> scenarios exist for:</p>
+<ul>
+<li>a clean batch, and a batch where one item gets no reply</li>
+<li>a crash, a timeout, bad output, and output nothing recognizes</li>
+<li>signed out, and the guessed usage limit</li>
+<li>a reply for an item not in the batch, and over-long reply text</li>
+<li>an added <code>&lt;script&gt;</code>, and an edit to a file other
+than the copy</li>
+<li>a grandchild that ignores SIGTERM</li>
+</ul>
+<p>Each is used by at least one Phase 2 test.</p>
+<p><strong>Phase test:</strong> <code>gate:unit</code> green on
+<code>agent-sdk-kernel</code>. The orchestrator reads the kernel diff,
+merges it into <code>feat/lahe-agent-sdk</code>, and starts Phase 2 once
+OQ1 (the terms) is answered.</p>
+<h2 id="phase-2-four-builders-in-parallel">Phase 2: Four builders in
+parallel</h2>
+<p>Each builder reads first: the architecture,
+<code>docs/ongoing/SESSION_OWNERSHIP.md</code>,
+<code>docs/CONTRACTS.md</code>, <code>docs/CLI.md</code>,
+<code>skills/lahe/SKILL.md</code>, and Task 1.3's signatures.</p>
+<h3 id="task-2a-the-run-engine">Task 2A: The run engine</h3>
+<div class="xref">
+<p><a
+href="02_architecture_lahe_agent_sdk.html#a-wake-one-run">Architecture:
+A wake, one run</a> · <a
+href="02_architecture_lahe_agent_sdk.html#the-runs-command-claude-code-adapter">The
+run's command</a> · <a
+href="02_architecture_lahe_agent_sdk.html#security-privacy-notes">Security</a></p>
+</div>
+<p><strong>Spec:</strong> Fill in the three engine modules as the
+architecture describes them.</p>
+<ul>
+<li><code>headless_prompt.js</code>: the system prompt, the reply
+schema, and the stdin payload. The payload keeps only the architecture's
+allowed fields, with <code>source_hint</code> replaced by the stage
+path. Batches are cut at 25 items or 100 KB. An item over 8,000
+characters becomes the pinned <code>not_handled</code> reply instead of
+being sent.</li>
+<li><code>host_claude_code.js</code>: runs the command from the
+architecture's flag table. It runs <code>claude</code> by the absolute
+path recorded at allow time, in its own process group. The environment
+comes only from <code>auto_answer.json</code>'s <code>env</code>. The
+prompt file sits outside <code>work/</code> and is removed however the
+run ends. On timeout: SIGTERM to the group, the grace time, then
+SIGKILL.</li>
+<li><code>headless_stage.js</code> (<code>runBatch</code>): copy in and
+stamp, run, check the replies against the batch, diff the copy, and
+write back only when every check in the architecture's "Checks before
+anything reaches the real file" passes. The run records follow the
+architecture's "Run records".</li>
+</ul>
+<p><strong>Files:</strong> those three, and
+<code>test/unit/auto_answer_engine_*.test.js</code>. <strong>Don't
+touch:</strong> <code>headless_supervisor.js</code>,
+<code>run_slots.js</code>, <code>agent.js</code>, any
+<code>src/service/</code> or <code>src/layer/</code> file outside the
+three.</p>
+<p><strong>Acceptance:</strong> every Engine line in the Test List
+passes with the fake <code>claude</code>.</p>
+<h3 id="task-2b-the-supervisor">Task 2B: The supervisor</h3>
+<div class="xref">
+<p><a
+href="02_architecture_lahe_agent_sdk.html#a-wake-one-run">Architecture:
+A wake, one run</a> · <a
+href="02_architecture_lahe_agent_sdk.html#the-supervisors-states">The
+supervisor's states</a> · <a
+href="02_architecture_lahe_agent_sdk.html#retries-failures-and-limits">Retries,
+failures and limits</a> · <a
+href="02_architecture_lahe_agent_sdk.html#stopping-and-handing-back">Stopping,
+and handing back</a></p>
+</div>
+<p><strong>Spec:</strong> Fill in <code>run_slots.js</code> and
+<code>headless_supervisor.js</code> as the architecture describes them.
+The linked sections cover:</p>
+<ul>
+<li>the drain with <code>suppressActivityTouch</code>, and replies
+written with <code>reply.js</code>'s encoder</li>
+<li>the states and each look</li>
+<li>the fold wait before counting or draining</li>
+<li>attempts, failures and limits</li>
+<li>stopping, leftover runs, and finishing the replies of a run that was
+applied but not replied</li>
+<li>the restart on stale code</li>
+</ul>
+<p>The supervisor calls <code>opts.engine</code> and takes every number
+from <code>AUTO_ANSWER</code>.</p>
+<p><strong>Files:</strong> those two, and
+<code>test/unit/auto_answer_supervisor_*.test.js</code>. <strong>Don't
+touch:</strong> the engine's three modules (tests pass a fake engine),
+<code>agent.js</code>, <code>index.js</code>, anything under
+<code>src/layer/</code>.</p>
+<p><strong>Acceptance:</strong> every Supervisor line in the Test List
+passes, and a unit test searches <code>headless_supervisor.js</code> and
+<code>run_slots.js</code> and finds no <code>claude</code> flag (brief
+R4, Claude Code first with other hosts later).</p>
+<h3 id="task-2c-the-command-line-and-the-helper">Task 2C: The command
+line and the helper</h3>
+<div class="xref">
+<p><a
+href="02_architecture_lahe_agent_sdk.html#allowing-it-then-turning-it-on">Architecture:
+Allowing it, then turning it on</a> · <a
+href="02_architecture_lahe_agent_sdk.html#on-and-off-are-events-and-the-page-may-only-ask">On
+and off are events</a> · <a
+href="02_architecture_lahe_agent_sdk.html#one-review-per-auto-answer-session">One
+review per session</a></p>
+</div>
+<p><strong>Spec:</strong></p>
+<ul>
+<li><code>lahe agent</code>, registered in
+<code>src/cli/index.js</code>: <code>allow</code> (preflight, the pinned
+warning, <code>auto_answer.json</code> under the short lock),
+<code>disallow</code>, <code>on</code>, <code>off</code> (posted to the
+route as the CLI client), <code>status</code> (state, runs and tokens
+today), <code>status --diffs</code>, and <code>supervise</code>.</li>
+<li><code>allow</code> refuses:
+<ul>
+<li>instruction files, dot paths, the state folder, paths outside home,
+and a symlink to any of those</li>
+<li>a non-Markdown source</li>
+<li>a session that owns more than one review</li>
+<li>Windows</li>
+<li><code>claude</code> missing or signed out</li>
+</ul></li>
+<li>The route reads only <code>want</code> and refuses any value other
+than <code>on</code> or <code>off</code>. It makes the D11 checks (the
+review token every write route needs), and sets <code>from</code> from
+the client header. The generic events route refuses
+<code>auto_answer.requested</code>.</li>
+<li>The helper starts <code>supervise</code> on an allowed "on", unless
+a live one holds the lock. It starts a new one when "on" stands and none
+is alive, at most three times in ten minutes.</li>
+<li>The fold rejects replies from other agents while auto-answer holds
+the review (<code>auto_answer_owns</code>).</li>
+<li>The liveness answer counts a live supervisor at the current rev as
+listening, and adds <code>auto_answer</code>. It never sends a path, the
+note, or a dollar figure.</li>
+<li><code>lahe monitor</code> exits 6 with the pinned words while a live
+supervisor holds the rev. <code>lahe review</code> re-entry prints the
+pinned words and no monitor lines. <code>lahe review</code> and
+<code>lahe add</code> refuse a second review in the session.</li>
+<li><code>docs/CLI.md</code> and
+<code>docs/diagrams/session_ownership.md</code> describe the new command
+and the new owner.</li>
+</ul>
+<p><strong>Files:</strong> <code>src/cli/commands/agent.js</code>,
+<code>src/cli/index.js</code>, <code>src/service/routes.js</code>,
+<code>src/service/index.js</code>,
+<code>src/service/agent_sessions.js</code>,
+<code>src/service/replies.js</code>,
+<code>src/cli/commands/monitor.js</code>,
+<code>src/cli/commands/review.js</code>,
+<code>src/cli/commands/add.js</code>, the two docs, and
+<code>test/unit/auto_answer_cli_*.test.js</code>. <strong>Don't
+touch:</strong> the engine, the supervisor loop, anything under
+<code>src/layer/</code> or <code>src/shared/</code>.</p>
+<p><strong>Acceptance:</strong> every Command line and helper line in
+the Test List passes.</p>
+<h3 id="task-2d-the-rail">Task 2D: The rail</h3>
+<div class="xref">
+<p><a
+href="02_architecture_lahe_agent_sdk.html#what-the-rail-shows-wireframe-direction-b">Architecture:
+What the rail shows</a> · <a
+href="wireframes/b-switch-by-hold/01-off.html">Wireframe B</a></p>
+</div>
+<p><strong>Spec:</strong> Wireframe direction B, with the words pinned
+above. Where the wireframe and the pinned words differ, the words win.
+Not built from the wireframe:</p>
+<ul>
+<li>the note field on the warning panel (only the terminal sets the
+note)</li>
+<li>the "Raise the limit" and "Change the limit" buttons</li>
+<li>screen b7 and the per-card run notes, because the liveness answer
+carries no per-item state</li>
+</ul>
+<p>What is built:</p>
+<ul>
+<li>the pill beside Hold sending, a real switch (<code>button</code>,
+<code>aria-pressed</code>), reusing <code>.holdbtn</code></li>
+<li>"Turning on" until liveness confirms, then on; back to off with the
+not-allowed panel if nothing starts</li>
+<li>the not-allowed panel: focusable pill, a panel with a Copy button,
+not hover text</li>
+<li>the warning panel on the first "on" in a session, and the stop
+confirm while a run works. Both reuse End review's confirm: they take
+focus, close on Esc, and return focus to the pill. The warning panel
+scrolls inside the footer on a short window.</li>
+<li>the run count and its popup</li>
+<li>the chip under the switch, <code>role="status"</code>, with its one
+button</li>
+<li>the status line's words from <code>auto_answer.state</code>. Only a
+change of state is announced; the ticking age is not.</li>
+<li>nothing counts as overdue while auto-answer is on and healthy: no
+banner, no late ring, no overdue toast
+(<code>raiseOverdueToast</code>)</li>
+<li>a gave-up card: the late ring (<code>CARD_LATE_ATTR</code>), the
+"Not handled" pill and the pinned words (<code>tab_done.js</code>)</li>
+<li>the rail repaints when <code>auto_answer</code> changes
+(<code>livenessKey</code> in <code>sync.js</code>), and the switch posts
+through <code>sync.js</code>, wired in <code>src/layer/index.js</code>
+the way Hold is</li>
+<li>no new motion: the dot does not pulse, and the existing
+reduced-motion rules apply. No new color: the accent,
+<code>--warn</code> and the handled green only.</li>
+</ul>
+<p>Build against the Task 1.2 fixtures only.</p>
+<p><strong>Files:</strong> <code>src/layer/overlay.js</code>,
+<code>src/layer/sync.js</code>, <code>src/layer/index.js</code>,
+<code>src/layer/tab_done.js</code>,
+<code>test/browser/auto_answer_rail.spec.js</code> (new). <strong>Don't
+touch:</strong> anything under <code>src/service/</code>,
+<code>src/cli/</code>, <code>src/shared/</code>.</p>
+<p><strong>Acceptance:</strong> every Rail line in the Test List passes
+in <code>auto_answer_rail.spec.js</code>, run by name. The report
+carries screenshots, light and dark, taken after that spec passes,
+of:</p>
+<ul>
+<li>off, not allowed with its panel open, turning on</li>
+<li>the warning panel, including at an 820-pixel-high window</li>
+<li>starting, gathering, working, waiting for another review's run</li>
+<li>the stop confirm, and the run count opened</li>
+<li>the retrying chip, the usage limit, each daily limit, and stopped
+with a chip</li>
+<li>a gave-up card, a too-long card, and a raw-HTML card</li>
+<li>the narrowest rail with the run count wrapped</li>
+</ul>
+<p><strong>Phase test:</strong> each branch green on
+<code>gate:unit</code>, and 2D's spec green by name.</p>
+<h2 id="phase-3-merge-review-and-checkpoint">Phase 3: Merge, review and
+checkpoint</h2>
+<h3 id="task-31-merge">Task 3.1: Merge</h3>
+<p><strong>Spec:</strong> In the integration worktree, merge
+<code>main</code> first, then 2A, 2B, 2C and 2D, running
+<code>gate:unit</code> after each. The orchestrator resolves conflicts;
+a builder never merges another's branch.</p>
+<p><strong>Acceptance:</strong> the integration branch holds all four on
+current <code>main</code>, <code>gate:unit</code> is green, and a search
+finds no "not built yet" under <code>src/</code>.</p>
+<h3 id="task-32-tests-across-branches">Task 3.2: Tests across
+branches</h3>
+<p><strong>Spec:</strong> The orchestrator writes the tests no single
+branch could. Each runs the real helper, the real
+<code>lahe agent</code> and the fake <code>claude</code>, in its own
+state folder, and calls the teardown helper. The list is the "Across
+branches" section of the Test List.</p>
+<p><strong>Files:</strong>
+<code>test/unit/auto_answer_seams.test.js</code>,
+<code>test/browser/auto_answer_seams.spec.js</code>.</p>
+<p><strong>Acceptance:</strong> each case passes, and each was seen to
+fail once when its seam was broken by hand.</p>
+<h3 id="task-33-one-review-one-fix-round">Task 3.3: One review, one fix
+round</h3>
+<p><strong>Spec:</strong> One review set on the integrated diff:</p>
+<ul>
+<li><code>review-code-lead</code></li>
+<li><code>review-security</code>, since the diff spawns processes,
+writes user files, adds a route and handles paths</li>
+<li><code>review-testing</code></li>
+</ul>
+<p>Each finding names the test that would catch it. Builders fix on
+<code>agent-sdk-fix-&lt;n&gt;</code> branches, writing the named test
+red, then green. The orchestrator checks each test exists and passes. A
+second review happens only for a fix that is itself risky.</p>
+<p><strong>Acceptance:</strong> every finding is fixed with its test, or
+written under Changes from plan on the progress page with the
+reason.</p>
+<h3 id="task-34-checkpoint">Task 3.4: Checkpoint</h3>
+<p><strong>Spec:</strong> In the integration worktree:</p>
+<ol type="1">
+<li>merge <code>feat/lahe-agent-sdk</code> in, for the docs the
+orchestrator changed meanwhile</li>
+<li><code>npm run install-skills</code></li>
+<li>rebuild and commit <code>dist/</code></li>
+<li>run <code>npm run gate</code>, then <code>npm run gate:all</code>,
+each as its own command</li>
+<li>read the pass and fail counts</li>
+<li>retake 2D's screenshots from <code>auto_answer_rail.spec.js</code>
+on this branch, after it passes</li>
+<li>only then push, as a separate command, to
+<code>feat/lahe-agent-sdk</code></li>
+</ol>
+<p><strong>Acceptance:</strong> both gates read "0 failed" in their
+output. The counts and the screenshots are on the progress page, and the
+push came after.</p>
+<h2 id="phase-4-live-check-and-dogfood">Phase 4: Live check and
+dogfood</h2>
+<h3 id="task-41-live-check-story-walks-fresh-clone">Task 4.1: Live
+check, story walks, fresh clone</h3>
+<p><strong>Spec:</strong> On a throwaway review in the scratchpad, use
+the built <code>lahe agent</code> (not the spike scripts) to check each
+"Live" line in the Test List. Then:</p>
+<ul>
+<li>walk every user story in the brief in the browser, on a real review,
+with the real <code>claude</code></li>
+<li>clone the repo fresh into the scratchpad and run
+<code>lahe agent allow</code> from it with no install step (brief R3,
+nothing to install)</li>
+</ul>
+<p><strong>Acceptance:</strong> each line checked, with the saved file
+that shows it, on the progress page. Any output that differs from the
+fake <code>claude</code> updates its scenario and gets a test.</p>
+<h3 id="task-42-dogfood">Task 4.2: Dogfood</h3>
+<p><strong>Spec:</strong> The owner runs a review of at least five
+comments with auto-answer on. The document is one no agent reads as
+instructions (the default for OQ6, instruction files). A script reads
+<code>runs.jsonl</code>, <code>attempts.json</code> and the event log.
+It writes the numbers the brief asks for, one row per item:</p>
+<ul>
+<li>runs and failures</li>
+<li>items that hit the limit</li>
+<li>double answers</li>
+<li>the time from ready to reply</li>
+</ul>
+<p><strong>Acceptance:</strong> each brief success metric marked pass or
+fail on the progress page, from the script's output. The owner judges
+each comment reply.</p>
+<h2 id="test-list">Test List</h2>
+<div class="callout callout-req">
+<p><strong>Engine (2A)</strong></p>
+<ul class="task-list">
+<li><label><input type="checkbox" />The system prompt is the
+<code>all</code> and <code>headless</code> lines in order, then the
+note. Checked against hand-picked lines, not the code's own
+filter.</label></li>
+<li><label><input type="checkbox" />The prompt text is the same for runs
+of 1 and of 25 items; only the stdin grows.</label></li>
+<li><label><input type="checkbox" />The stdin deep-equals the drain's
+item lines cut to the allowed fields, with only <code>source_hint</code>
+changed. No path, origin, linked file or summary line.</label></li>
+<li><label><input type="checkbox" />A page-posted
+<code>source_hint</code> pointing elsewhere does not change which file
+is copied in.</label></li>
+<li><label><input type="checkbox" />The schema's field names equal
+<code>REPLY_FIELD</code> and <code>REPLY_REQUIRED</code>.</label></li>
+<li><label><input type="checkbox" />30 ready items become runs of 25 and
+5. A batch over 100 KB is cut at the item that crosses it.</label></li>
+<li><label><input type="checkbox" />An item over 8,000 characters gets
+the pinned <code>not_handled</code> reply and is not sent.</label></li>
+<li><label><input type="checkbox" />A reply over 500 characters is
+dropped and logged, and its item counts as unanswered.</label></li>
+<li><label><input type="checkbox" />The recorded arguments include
+<code>--safe-mode</code>, <code>--restricted</code>,
+<code>--strict-mcp-config</code>, <code>--setting-sources ""</code>,
+<code>--tools Read,Edit</code>, <code>--permission-mode dontAsk</code>,
+<code>--permission-prompts none</code>,
+<code>--no-session-persistence</code>, <code>--max-budget-usd 0.5</code>
+and <code>--append-system-prompt-file</code>, and never
+<code>--bare</code> or <code>Bash</code>.</label></li>
+<li><label><input type="checkbox" />The recorded working folder is the
+stage <code>work/</code> folder, holding exactly one regular
+file.</label></li>
+<li><label><input type="checkbox" /><code>claude</code> runs by the
+absolute path recorded at allow time, not from
+<code>PATH</code>.</label></li>
+<li><label><input type="checkbox" />The child environment is exactly
+<code>auto_answer.json</code>'s <code>env</code>.
+<code>ANTHROPIC_API_KEY</code>, <code>NODE_OPTIONS</code>,
+<code>ANTHROPIC_BASE_URL</code>, <code>CLAUDE_CODE_USE_BEDROCK</code>
+and any <code>LAHE_*</code> variable set in the parent are
+absent.</label></li>
+<li><label><input type="checkbox" />The review token appears in none of
+the prompt, stdin, environment or arguments.</label></li>
+<li><label><input type="checkbox" />Clean, crash, timeout, bad output,
+signed out and usage limit are each named correctly. Output nothing
+recognizes is <code>crashed</code>, never <code>finished</code>. The
+usage-limit test's title says its output is a guess.</label></li>
+<li><label><input type="checkbox" />A timeout reaches a grandchild that
+ignores SIGTERM: with a 200 ms grace,
+<code>process.kill(-pgid, 0)</code> reaches ESRCH.</label></li>
+<li><label><input type="checkbox" />A reply for an item or rev not in
+the batch is dropped and logged. A <code>files</code> value from the run
+is ignored; <code>files</code> comes from the stamps.</label></li>
+<li><label><input type="checkbox" />A run that edited the file but left
+an item without a reply is <code>refused</code>, and nothing is
+written.</label></li>
+<li><label><input type="checkbox" />Each of these additions is refused:
+<code>&lt;SCRIPT&gt;</code>, <code>&lt;img src=x onerror=...&gt;</code>,
+<code>&lt;svg onload=...&gt;</code>, <code>&lt;iframe&gt;</code>,
+<code>[a](javascript:alert(1))</code>, <code>JaVaScRiPt:</code>,
+<code>&amp;#106;avascript:</code>, and the autolink
+<code>&lt;javascript:...&gt;</code>.</label></li>
+<li><label><input type="checkbox" />Raw HTML already in the file, left
+in place or moved, is not an addition. A second copy of it
+is.</label></li>
+<li><label><input type="checkbox" />The real file changed mid-run:
+<code>conflict</code>, nothing written. The next copy-in waits for 15
+seconds of quiet.</label></li>
+<li><label><input type="checkbox" />A symlink swapped in for the file,
+or for a parent folder, mid-run: refused, nothing written.</label></li>
+<li><label><input type="checkbox" />A crash at <code>beforeRename</code>
+leaves the original whole. A crash at <code>afterWriteBack</code> leaves
+<code>result.json</code> for the next supervisor.</label></li>
+<li><label><input type="checkbox" />The run log holds no tool result
+text. The prompt file is gone after a clean run, a crash, a timeout and
+a kill. Only 20 run folders remain, and each applied run has a
+<code>diff.patch</code>.</label></li>
+</ul>
+<p><strong>Supervisor (2B)</strong> (every timed case uses the injected
+clock)</p>
+<ul class="task-list">
+<li><label><input type="checkbox" />Items at 0, 10, 20, 30 and 40
+seconds start one run. Items at 0 and 16 seconds start two.</label></li>
+<li><label><input type="checkbox" />One item every 10 seconds starts a
+run at 60 seconds.</label></li>
+<li><label><input type="checkbox" />An item arriving mid-run goes into
+the next run.</label></li>
+<li><label><input type="checkbox" />The fake engine receives an item
+exactly three times at one rev, then the pinned gave-up reply folds.
+Rewording makes it ready again, until six in all.</label></li>
+<li><label><input type="checkbox" />Three failed runs in a row,
+conflicts included, stop with <code>failing</code>, and no item's
+attempts are used.</label></li>
+<li><label><input type="checkbox" />Run 40 at 23:59:59 local time
+pauses; at 00:00:00 the next run starts. The same on a daylight-saving
+change day. Run in a child process with
+<code>TZ=America/New_York</code>.</label></li>
+<li><label><input type="checkbox" />The machine's 120 behaves the same
+way across two sessions.</label></li>
+<li><label><input type="checkbox" />A usage limit pauses for 30 minutes
+and sets <code>retry_at</code>.</label></li>
+<li><label><input type="checkbox" />A clock jump past 10 minutes mid-run
+(machine sleep) ends the run as <code>timed_out</code>.</label></li>
+<li><label><input type="checkbox" />Off, stop from the page, takeover
+and close each kill a run in flight, and write nothing to the source or
+the reply file.</label></li>
+<li><label><input type="checkbox" />Two supervisors started as two child
+processes at once leave one.</label></li>
+<li><label><input type="checkbox" />Never more than two runs at once,
+measured from the start and end times the fake records.</label></li>
+<li><label><input type="checkbox" />A dead slot is reclaimed; a live one
+with a reused pid is not.</label></li>
+<li><label><input type="checkbox" />A written, unfolded reply keeps its
+item out of the next batch.</label></li>
+<li><label><input type="checkbox" />A chat reply to an item, folded
+before the first drain, keeps that item out of the batch.</label></li>
+<li><label><input type="checkbox" />The supervisor waits for each fold
+result before draining. A stale-rev rejection counts as no reply. No
+result in 30 seconds counts nothing and is logged.</label></li>
+<li><label><input type="checkbox" />Killed after
+<code>afterWriteBack</code>: the next supervisor writes the replies
+first.</label></li>
+<li><label><input type="checkbox" />A leftover run group is killed on
+start.</label></li>
+<li><label><input type="checkbox" />Stale code: the supervisor releases
+the lock and exits with <code>restarting</code>.</label></li>
+<li><label><input type="checkbox" />The source file deleted: stops with
+<code>source_missing</code>.</label></li>
+<li><label><input type="checkbox" />Held items start no run; release
+starts one run for all of them.</label></li>
+<li><label><input type="checkbox" />One simulated hour of looks with
+nothing ready, with an open question, or with a written unfolded reply,
+makes zero engine calls.</label></li>
+<li><label><input type="checkbox" /><code>--runs-per-day 3</code> at
+allow time pauses after three runs.</label></li>
+</ul>
+<p><strong>Command line and helper (2C)</strong></p>
+<ul class="task-list">
+<li><label><input type="checkbox" /><code>allow</code> refuses each
+listed kind of path, a symlink to one, a non-Markdown source, a session
+with two reviews, and Windows, each with a plain message.</label></li>
+<li><label><input type="checkbox" /><code>allow</code> refuses when
+<code>claude</code> is missing or signed out, and names a login billed
+by the token.</label></li>
+<li><label><input type="checkbox" /><code>allow</code> prints the whole
+pinned warning every time, and records the environment
+allowlist.</label></li>
+<li><label><input type="checkbox" /><code>allow</code> run again while a
+supervisor runs updates the file; the next run picks up the new note and
+model.</label></li>
+<li><label><input type="checkbox" /><code>disallow</code> ends the
+allowance; a running supervisor stops on its next look.</label></li>
+<li><label><input type="checkbox" /><code>on</code> and <code>off</code>
+from the terminal record <code>from: "terminal"</code>; from the page,
+<code>from: "page"</code>.</label></li>
+<li><label><input type="checkbox" /><code>status</code> shows the state,
+runs and tokens today. <code>status --diffs</code> shows the kept runs'
+diffs.</label></li>
+<li><label><input type="checkbox" />The route ignores extra fields,
+refuses a <code>want</code> other than <code>on</code> or
+<code>off</code>, and fails every D11 check a write route fails.
+<code>session.json</code> and <code>auto_answer.json</code> stay
+byte-identical after any page request.</label></li>
+<li><label><input type="checkbox" />The generic events route refuses
+<code>auto_answer.requested</code>.</label></li>
+<li><label><input type="checkbox" />"On" for a session never allowed
+records the event and starts nothing.</label></li>
+<li><label><input type="checkbox" />A takeover ends the allowance: after
+it, "on" starts nothing until <code>allow</code> runs
+again.</label></li>
+<li><label><input type="checkbox" />An allowed "on" starts
+<code>supervise</code> detached, in its own process group, with the
+helper's Node and the clone's <code>bin/lahe.js</code>, and starts
+nothing while a live one holds the lock.</label></li>
+<li><label><input type="checkbox" />"On" standing with no live
+supervisor: the helper starts one on the next liveness request, at most
+three times in ten minutes, then <code>failing</code>.</label></li>
+<li><label><input type="checkbox" />While auto-answer holds a review, a
+reply from another agent is rejected with
+<code>auto_answer_owns</code>.</label></li>
+<li><label><input type="checkbox" />The liveness answer deep-equals the
+Task 1.2 fixture for each <code>agent.json</code> fixture, and never
+holds a path, the note or a dollar figure.</label></li>
+<li><label><input type="checkbox" /><code>lahe monitor</code> exits 6
+with the pinned words while a live supervisor holds the
+rev.</label></li>
+<li><label><input type="checkbox" /><code>lahe review</code> re-entry
+prints the pinned words and no monitor lines. <code>lahe review</code>
+and <code>lahe add</code> refuse a second review in the
+session.</label></li>
+<li><label><input type="checkbox" />A helper on
+<code>SERVICE_CONTRACT</code> 13 is restarted by the new
+CLI.</label></li>
+</ul>
+<p><strong>Rail (2D)</strong></p>
+<ul class="task-list">
+<li><label><input type="checkbox" />Each state shows its pinned status
+words, with "auto-answer" lowercase in the status line.</label></li>
+<li><label><input type="checkbox" />Not allowed: the pill is focusable
+and opens the panel with the command and a Copy button.</label></li>
+<li><label><input type="checkbox" />A click posts <code>want: on</code>;
+the pill says "Turning on" until liveness confirms; if nothing starts it
+returns to off.</label></li>
+<li><label><input type="checkbox" />The warning panel shows on the first
+"on" in a session only. It takes focus, closes on Esc, and returns focus
+to the pill.</label></li>
+<li><label><input type="checkbox" />Off while idle is one click. Off
+while working opens the stop confirm.</label></li>
+<li><label><input type="checkbox" />Each chip shows its pinned words and
+button. "Try again" posts <code>want: on</code>.</label></li>
+<li><label><input type="checkbox" />The status line is announced on a
+change of state, not on each tick of the age.</label></li>
+<li><label><input type="checkbox" />While on and healthy, a ready card
+older than the overdue wait shows no banner, no late ring and no overdue
+toast.</label></li>
+<li><label><input type="checkbox" />Paused or stopped: the status line
+is loud, and the hand-off button stays.</label></li>
+<li><label><input type="checkbox" />A gave-up card wears the late ring,
+"Not handled" and the pinned words.</label></li>
+<li><label><input type="checkbox" />After off or a takeover, the rail
+follows today's rules exactly.</label></li>
+<li><label><input type="checkbox" />No forbidden word appears in any
+state.</label></li>
+<li><label><input type="checkbox" />At the narrowest rail the run count
+wraps to its own line and nothing overlaps.</label></li>
+</ul>
+<p><strong>Across branches (3.2)</strong> (real helper, real
+<code>lahe agent</code>, fake <code>claude</code>)</p>
+<ul class="task-list">
+<li><label><input type="checkbox" />A real click on the switch starts
+one supervisor; a comment becomes one run; the source file changes; the
+reply folds; the rail shows "on" again.</label></li>
+<li><label><input type="checkbox" />The page asks "off" mid-run: the
+group is killed, the source is byte-identical, and every item is back on
+the drain.</label></li>
+<li><label><input type="checkbox" />A takeover mid-run: the source is
+untouched, and every item is on the new owner's drain.</label></li>
+<li><label><input type="checkbox" />A chat agent's
+<code>lahe monitor</code> exits 6 once the page turns auto-answer
+on.</label></li>
+<li><label><input type="checkbox" />Fake <code>claude</code> signed out:
+the live liveness answer deep-equals the stopped <code>signed_out</code>
+fixture. The same for a usage limit and for waiting for another review's
+run.</label></li>
+<li><label><input type="checkbox" />A hand edit's <code>handled</code>
+reply passes the handled check after write-back.</label></li>
+<li><label><input type="checkbox" />Two reviews each with a burst: never
+more than two runs at once, and a third shows "waiting for another
+review's run".</label></li>
+<li><label><input
+type="checkbox" /><code>lahe agent status --diffs</code> shows the diff
+of a real run.</label></li>
+</ul>
+<p><strong>Live (4.1)</strong> (real <code>claude</code>)</p>
+<ul class="task-list">
+<li><label><input type="checkbox" />The three spike items are answered
+correctly.</label></li>
+<li><label><input type="checkbox" />A <code>.env</code> beside the
+source never appears in any run log.</label></li>
+<li><label><input type="checkbox" />A comment asking for a
+<code>&lt;script&gt;</code> ends refused, with the pinned card
+words.</label></li>
+<li><label><input type="checkbox" />An empty
+<code>CLAUDE_CONFIG_DIR</code> at allow time: <code>allow</code>
+refuses. The login broken after allow: the rail says signed out, and
+every item stays waiting.</label></li>
+<li><label><input type="checkbox" />An idle hour starts zero
+runs.</label></li>
+<li><label><input type="checkbox" />The rules appear once per run in
+transcripts of 1, 10 and 25 items, and of 100 items across
+runs.</label></li>
+</ul>
+</div>
+<h2 id="acceptance-criteria">Acceptance Criteria</h2>
+<div class="callout callout-metric">
+<p><strong>Standard (every feature inherits these; keep them
+verbatim):</strong></p>
+<ul class="task-list">
+<li><label><input type="checkbox" />Full test suite green, not just the
+new tests.</label></li>
+<li><label><input type="checkbox" />Design and lint gates green (the
+project's gate command).</label></li>
+<li><label><input type="checkbox" />Every user story in the brief walked
+end to end in the browser, on the running app.</label></li>
+<li><label><input type="checkbox" />Nothing punted: no TODOs, no stubbed
+tests, no "out of scope" that was in scope.</label></li>
+<li><label><input type="checkbox" />Implementation matches brief and
+architecture; any deviation is deliberate and written down under Changes
+from plan on the progress page.</label></li>
+<li><label><input type="checkbox" /><strong>It looks like a staff
+designer built it.</strong> Keep the seniority level: "staff" is what
+sets the quality bar the evaluator judges against. Judge the whole
+surface at that level, then check that it includes at least:</label>
+<ul>
+<li>Clear visual hierarchy and information architecture. You know where
+to look, and the page's organization makes sense.</li>
+<li>Consistency with the rest of the app. Buttons look like our other
+buttons, hover states follow the same convention, primary and secondary
+carry the same color meaning they carry elsewhere.</li>
+<li>Honest feedback. Toasts and status messages report what actually
+happened. Never an optimistic "done" for something still in flight, or
+something that failed.</li>
+<li>Micro-animations that mean something. Motion signals state or
+direction; it isn't decoration.</li>
+<li>Copy in the brand voice (the project's brand or voice doc).</li>
+<li>Existing components reused and the style guide followed. Nothing
+reads as a stock framework default.</li>
+</ul></li>
+<li><label><input type="checkbox" />It reads as one feature, not several
+agents' work stitched together: consistent components, spacing, and
+interaction patterns across every surface it touches.</label></li>
+</ul>
+<p><strong>This feature</strong> (each line names the brief requirement
+it checks):</p>
+<ul class="task-list">
+<li><label><input type="checkbox" />With auto-answer never allowed, a
+review behaves as today, and the existing suite passes unchanged (R1,
+off by default).</label></li>
+<li><label><input type="checkbox" />Nothing asks for or stores an API
+key, none passes to a run, and a login billed by the token is named in
+the warning (R2, no key of LAHE's own).</label></li>
+<li><label><input type="checkbox" /><code>dependencies</code> in
+<code>package.json</code> is still <code>{}</code>, and a fresh clone
+runs <code>lahe agent allow</code> with no install (R3, nothing to
+install).</label></li>
+<li><label><input type="checkbox" />The supervisor and slots name no
+<code>claude</code> flag, checked by a unit test (R4, Claude Code
+first).</label></li>
+<li><label><input type="checkbox" />Stopping leaves every unanswered
+item ready, and the source untouched by the stopped run (R5, stopping is
+clean).</label></li>
+<li><label><input type="checkbox" />The terminal warning and the warning
+panel say what it may do, who can make it act, and what it uses (R6, say
+what it may do).</label></li>
+<li><label><input type="checkbox" />No chat agent starts, keeps or
+restarts anything for auto-answer to work (R7, LAHE does the
+listening).</label></li>
+<li><label><input type="checkbox" />An idle hour starts zero runs (R8,
+idle is free).</label></li>
+<li><label><input type="checkbox" />A burst becomes one run, and held
+items start none until released (R9, one run takes the
+batch).</label></li>
+<li><label><input type="checkbox" />Hand-edit replies pass the handled
+check (R10, same standard as today).</label></li>
+<li><label><input type="checkbox" />Items arriving mid-run are answered
+by the next run, and one run at most works a review (R11, nothing is
+lost).</label></li>
+<li><label><input type="checkbox" />Never more than two runs across the
+machine, and a waiting review says so (R12, a cap on runs at
+once).</label></li>
+<li><label><input type="checkbox" />An item stops after three attempts
+per rev, six in all, with the pinned card words (R13, retries
+stop).</label></li>
+<li><label><input type="checkbox" />The rules appear once per run in
+every transcript checked, and nothing instruction-like repeats per item
+(R14, rules once per run).</label></li>
+<li><label><input type="checkbox" />The run's rules come from the one
+tagged contract, and <code>review.json</code> still carries the chat
+lines (R15, one source of rules).</label></li>
+<li><label><input type="checkbox" />The reviewer sees only cards and the
+rail, and a run's reply reads like a chat agent's (R16, cards and rail
+only).</label></li>
+<li><label><input type="checkbox" />Signed out, not installed, the usage
+limit, a missing file and a crash each show in plain words on the rail
+(R17, failures are visible).</label></li>
+<li><label><input type="checkbox" />Auto-answer turns off from the page
+in one click while idle (R18, stop from the page).</label></li>
+<li><label><input type="checkbox" />While auto-answer holds a review, a
+reply from any other agent is rejected (R19, one owner).</label></li>
+<li><label><input type="checkbox" />A takeover hands every unanswered
+item to the new owner, and nothing answered shows again (R20, hand it
+back).</label></li>
+<li><label><input type="checkbox" />Page text reaches the run only as
+data under <code>page</code>, and the page's <code>source_hint</code>
+never reaches it (R21, page text is data).</label></li>
+<li><label><input type="checkbox" />A run can read and edit only its
+copy, and nothing outside it changes (R22, stays in scope).</label></li>
+<li><label><input type="checkbox" />Daily run limits stop new runs, and
+the rail says why (R23, a usage ceiling).</label></li>
+<li><label><input type="checkbox" />The run count and tokens show on the
+rail and in <code>lahe agent status</code> (R24, usage is
+visible).</label></li>
+<li><label><input type="checkbox" />The allow note reaches every run's
+prompt, and only the terminal can set it (R25, a handoff
+note).</label></li>
+<li><label><input type="checkbox" />The rail screenshots, light and
+dark, are on the progress page from the checkpoint run.</label></li>
+<li><label><input type="checkbox" />Human has reviewed and approved
+(single consolidated gate after Plan)</label></li>
+</ul>
+</div>
+<h2 id="open-questions">Open Questions</h2>
+<p>These are the open questions from the brief, the architecture and
+this plan. Each has the default the build takes if you do not
+answer.</p>
+<h3 id="before-the-build">Before the build</h3>
+<div class="callout callout-question">
+<p><strong>OQ1 (subscription terms, architecture OQ1).</strong>
+Anthropic's terms allow scripted access only by API key, or "where we
+otherwise explicitly permit it". Auto-answer starts
+<code>claude -p</code> on your subscription when comments arrive. Is
+that allowed? Task 0.1 puts the exact words from the live page beside
+this question. <strong>Default: Phases 0 and 1 go ahead. They spend a
+handful of runs on your login, as the first spike did. Phase 2 waits for
+your answer, or for you to say you accept the risk.</strong></p>
+</div>
+<div class="callout callout-question">
+<p><span id="open-questions-q6" class="finding-anchor"></span><strong>Q6 (order, brief).</strong> Should we ship a small chat fix
+first, then count how often chat agents forget comments, before building
+this? The fix is a hook that stops a chat agent from ending its turn
+while comments are still open. <strong>Default: build this now. The
+small fix stays its own board row.</strong></p>
+</div>
+<div class="callout callout-question">
+<p><span id="open-questions-q8" class="finding-anchor"></span><strong>Q8 (priority, brief).</strong> Does this go ahead of the
+failing tests on main, the open security items, and the npm package?
+<strong>Default: main's failing tests come first, because Task 0.3 needs
+a green base. The security items and the npm package are not held for
+this.</strong></p>
+</div>
+<h3 id="what-it-may-do-and-what-it-costs">What it may do and what it
+costs</h3>
+<div class="callout callout-question">
+<p><span id="open-questions-q1" class="finding-anchor"></span><strong>Q1 (billing, brief).</strong> Each run uses your Claude
+subscription, so busy reviews use up the same limit as your own Claude
+work. Is that acceptable with run limits in place? <strong>Default: yes,
+with 40 runs per review and 120 per computer each day, and a $0.50 cap
+per run. Task 0.2 measures each run's prompt size, and that number goes
+beside this question.</strong></p>
+</div>
+<div class="callout callout-question">
+<p><span id="open-questions-q4" class="finding-anchor"></span><strong>Q4 (permissions, brief).</strong> What may a run do without
+asking? <strong>Default: read and edit a copy of the one source file
+under review. It cannot run commands, build, commit, push or use the
+network.</strong></p>
+</div>
+<div class="callout callout-question">
+<p><strong>OQ3 (the numbers, architecture).</strong> Are the limits and
+timings in "Numbers this plan sets" right? They are guesses, such as 2
+runs at once and a 10-minute run timeout. <strong>Default: use them as
+listed.</strong></p>
+</div>
+<div class="callout callout-question">
+<p><strong>OQ6 (instruction files, architecture).</strong> Should the
+first dogfood run on LAHE's own feature docs? Later agents read those
+docs as instructions. <strong>Default: no. The first dogfood uses a
+document no agent acts on, such as a blog draft.</strong></p>
+</div>
+<h3 id="how-it-works">How it works</h3>
+<div class="callout callout-question">
+<p><span id="open-questions-q2" class="finding-anchor"></span><strong>Q2 (context, brief).</strong> How much of your chat with the
+agent does each run see? <strong>Default: only the note written when you
+allow auto-answer in the terminal.</strong></p>
+</div>
+<div class="callout callout-question">
+<p><strong>OQ4 (beyond Markdown, architecture).</strong> Should the
+first version also work on static HTML, linked files and build-output
+pages? <strong>Default: no, Markdown only.</strong></p>
+</div>
+<div class="callout callout-question">
+<p><strong>OQ5 (who may switch it on, architecture).</strong> Someone
+must first run <code>lahe agent allow</code> in a terminal. Only then
+can the switch on the page turn auto-answer on. Is that acceptable?
+<strong>Default: yes.</strong></p>
+</div>
+<div class="callout callout-question">
+<p><strong>OQ7 (the name, this plan).</strong> Is "Auto-answer" the
+right name for the switch and the status words? <strong>Default:
+yes.</strong></p>
+</div>
+<div class="callout callout-question">
+<p><strong>OQ8 (one review per session, this plan).</strong> Auto-answer
+holds one review per session. A session with two reviews cannot allow
+it. Is that acceptable for the first version? <strong>Default:
+yes.</strong></p>
+</div>
+<h3 id="separate-from-this-build">Separate from this build</h3>
+<div class="callout callout-question">
+<p><span id="open-questions-q5" class="finding-anchor"></span><strong>Q5 (the kill setting, brief).</strong> Should you turn on the
+Claude Code setting that stops the memory kills? <strong>Default: not
+part of this build. It is your own setting.</strong></p>
+</div>
+<div class="callout callout-question">
+<p><span id="open-questions-q7" class="finding-anchor"></span><strong>Q7 (the SDK, brief).</strong> Should we drop the Agent SDK
+approach, or keep it documented for people who use an API key?
+<strong>Default: record it as a rejected alternative and build nothing
+for it.</strong></p>
+</div>
+<p>Two earlier questions are closed. Q3 (telling the chat agent) is
+settled in the architecture. Turning auto-answer on stops the chat
+agent's monitor, and the monitor tells the agent to tell you and stop.
+OQ2 (the flags spike) is now Task 0.2. It comes to you only if one of
+its checks stops the build.</p>
+<h2 id="to-delete-at-cleanup">To delete at cleanup</h2>
+<p>Nothing yet.</p>
+<h2 id="engineering-manager-review">Engineering Manager Review</h2>
+<p>Full prose in <code>03_plan_lahe_agent_sdk_reviews.md</code>.</p>
+<div class="table-scroll"><table>
+<thead>
+<tr>
+<th>#</th>
+<th>Finding</th>
+<th>Disposition</th>
+<th>Rationale</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>EM1</td>
+<td>The rail needs <code>sync.js</code>, <code>layer/index.js</code> and
+<code>tab_done.js</code>, which no task owned</td>
+<td><span class="accepted">Accepted</span></td>
+<td>Added to 2D's files; two new rows in the seam table; Task 3.2's
+browser spec drives a real click</td>
+</tr>
+<tr>
+<td>EM2</td>
+<td>The seam between supervisor and engine was not pinned</td>
+<td><span class="accepted">Accepted</span></td>
+<td>Task 1.3 names <code>runBatch</code> and its return shape, and who
+writes which record</td>
+</tr>
+<tr>
+<td>EM3</td>
+<td>Files the supervisor writes and the command line reads had no
+fixtures</td>
+<td><span class="accepted">Accepted</span></td>
+<td>Task 1.2 adds <code>agent.json</code>, <code>runs.jsonl</code> and
+<code>auto_answer.json</code> fixtures</td>
+</tr>
+<tr>
+<td>EM4</td>
+<td>Phase 1 cannot share the checked-out feature branch</td>
+<td><span class="accepted">Accepted</span></td>
+<td>Kernel builds on <code>agent-sdk-kernel</code>; screenshots go in
+reports</td>
+</tr>
+<tr>
+<td>EM5</td>
+<td>Task 0.3 did not gate, its file list was short, and the base is
+behind main</td>
+<td><span class="accepted">Accepted</span></td>
+<td>0.3 gates, its list is complete, main merges in before Phase 1 and
+first in 3.1</td>
+</tr>
+<tr>
+<td>EM6</td>
+<td>The terms gated only the dogfood</td>
+<td><span class="accepted">Accepted</span></td>
+<td>Phase 2 waits for OQ1; Task 0.1 names who reads the page</td>
+</tr>
+<tr>
+<td>EM7</td>
+<td>Most spike checks had no rule for a failure</td>
+<td><span class="accepted">Accepted</span></td>
+<td>Every row of Task 0.2 now has one</td>
+</tr>
+<tr>
+<td>EM8</td>
+<td>Test timing would collide with the no-sleep rule</td>
+<td><span class="accepted">Accepted</span></td>
+<td>Injected <code>opts.now</code>, <code>opts.sleep</code>,
+<code>opts.limits</code>; the fake's timer is marked</td>
+</tr>
+<tr>
+<td>EM9</td>
+<td>Some acceptance lines had no owning task</td>
+<td><span class="accepted">Accepted</span></td>
+<td>Story walks and the fresh clone in 4.1; the R4 search is a 2B unit
+test; 3.4 retakes screenshots</td>
+</tr>
+<tr>
+<td>EM10</td>
+<td>Test lists too thin for 2C and 2D</td>
+<td><span class="accepted">Accepted</span></td>
+<td>Test List grew for both</td>
+</tr>
+<tr>
+<td>EM11</td>
+<td>Builders were not told the manifest is frozen</td>
+<td><span class="accepted">Accepted</span></td>
+<td>Rule added: Files lists are complete; test file prefixes per
+builder</td>
+</tr>
+<tr>
+<td>EM12</td>
+<td>The checkpoint push may not be a fast-forward</td>
+<td><span class="accepted">Accepted</span></td>
+<td>3.4 merges the feature branch in first</td>
+</tr>
+</tbody>
+</table></div>
+<h2 id="code-review-lead-review">Code Review Lead Review</h2>
+<p>Full prose in <code>03_plan_lahe_agent_sdk_reviews.md</code>. Most
+findings changed the architecture; its sections are named.</p>
+<div class="table-scroll"><table>
+<thead>
+<tr>
+<th>#</th>
+<th>Finding</th>
+<th>Disposition</th>
+<th>Rationale</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>CR1</td>
+<td>The existing lock goes stale after 20 seconds, so it cannot guard a
+long-lived process</td>
+<td><span class="accepted">Accepted</span></td>
+<td>Architecture Components: a second lock kind, held for a process's
+life; Task 1.3 tests it</td>
+</tr>
+<tr>
+<td>CR2</td>
+<td>A session can own several reviews</td>
+<td><span class="accepted">Accepted</span></td>
+<td>Architecture Data: one review per auto-answer session; OQ8 asks the
+owner</td>
+</tr>
+<tr>
+<td>CR3</td>
+<td>The parallel seam was never defined</td>
+<td><span class="accepted">Accepted</span></td>
+<td>Task 1.3 lists every signature and the <code>supervise</code>
+argv</td>
+</tr>
+<tr>
+<td>CR4</td>
+<td><code>session.json</code> has several unlocked writers</td>
+<td><span class="accepted">Accepted</span></td>
+<td>The allowance moves to its own <code>auto_answer.json</code></td>
+</tr>
+<tr>
+<td>CR5</td>
+<td>The page could post the new event around the route;
+<code>from</code> was body-set</td>
+<td><span class="accepted">Accepted</span></td>
+<td>The generic route refuses the type; the helper sets
+<code>from</code> from the client header; the CLI's path is named</td>
+</tr>
+<tr>
+<td>CR6</td>
+<td>The helper's environment, not the allow shell's, would reach the
+run</td>
+<td><span class="accepted">Accepted</span></td>
+<td>The allowlisted environment is recorded at allow time; no API key is
+ever recorded or passed</td>
+</tr>
+<tr>
+<td>CR7</td>
+<td>The contract change missed several copies, and the exit-6
+wording</td>
+<td><span class="accepted">Accepted</span></td>
+<td><code>CONTRACT_LINES</code> added and <code>CONTRACT</code> kept;
+Task 1.1 lists every test file; exit-6 words reworded</td>
+</tr>
+<tr>
+<td>CR8</td>
+<td><code>SERVICE_CONTRACT</code> not bumped</td>
+<td><span class="accepted">Accepted</span></td>
+<td>13 to 14 in Task 1.2</td>
+</tr>
+<tr>
+<td>CR9</td>
+<td>A drain every 2 seconds would keep the rail saying "working"</td>
+<td><span class="accepted">Accepted</span></td>
+<td>The supervisor drains with <code>suppressActivityTouch</code></td>
+</tr>
+<tr>
+<td>CR10</td>
+<td>No state or owner for "on, supervisor dead"</td>
+<td><span class="accepted">Accepted</span></td>
+<td>The helper restarts it on liveness, at most three times in ten
+minutes; stale code exits and is restarted the same way</td>
+</tr>
+<tr>
+<td>CR11</td>
+<td>A run could write back an edit with no reply beside it</td>
+<td><span class="accepted">Accepted</span></td>
+<td>Write-back needs a reply for every item; the leftover case is
+written down</td>
+</tr>
+<tr>
+<td>CR12</td>
+<td>How the supervisor learns a fold result was unnamed</td>
+<td><span class="accepted">Accepted</span></td>
+<td>Reads the review's <code>events.jsonl</code>; 30-second timeout
+counts nothing</td>
+</tr>
+<tr>
+<td>CR13</td>
+<td>Several strings and a reason were missing</td>
+<td><span class="accepted">Accepted</span></td>
+<td>Words tables complete; reason <code>source_missing</code> added</td>
+</tr>
+<tr>
+<td>CR14</td>
+<td>Nothing enforced one owner per item</td>
+<td><span class="accepted">Accepted</span></td>
+<td>The fold rejects other agents' replies while auto-answer holds the
+review</td>
+</tr>
+<tr>
+<td>CR15</td>
+<td><code>--diffs</code> promised every edit</td>
+<td><span class="accepted">Accepted</span></td>
+<td>Diffs kept for the last 20 runs, hashes for older ones</td>
+</tr>
+<tr>
+<td>CR16</td>
+<td>The stdin payload had no field list</td>
+<td><span class="accepted">Accepted</span></td>
+<td>Architecture names the allowed fields</td>
+</tr>
+<tr>
+<td>CR17</td>
+<td>Clock seam, token sum, reply cap and gave-up words were open</td>
+<td><span class="accepted">Accepted</span></td>
+<td>Injected clock; tokens are input plus output; over-cap replies are
+dropped; new gave-up words</td>
+</tr>
+</tbody>
+</table></div>
+<h2 id="testing-review">Testing Review</h2>
+<p>Full prose in <code>03_plan_lahe_agent_sdk_reviews.md</code>.</p>
+<div class="table-scroll"><table>
+<thead>
+<tr>
+<th>#</th>
+<th>Finding</th>
+<th>Disposition</th>
+<th>Rationale</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>TR1</td>
+<td>No way to control time in tests</td>
+<td><span class="accepted">Accepted</span></td>
+<td>Injected clock and limits; burst, day-boundary and clock-jump tests
+added</td>
+</tr>
+<tr>
+<td>TR2</td>
+<td>The argument test checked only what was missing</td>
+<td><span class="accepted">Accepted</span></td>
+<td>Every required flag asserted, plus the working folder</td>
+</tr>
+<tr>
+<td>TR3</td>
+<td>The group-kill test could not fail, and could leak processes</td>
+<td><span class="accepted">Accepted</span></td>
+<td>Grandchild ignoring SIGTERM; teardown helper</td>
+</tr>
+<tr>
+<td>TR4</td>
+<td>Failure states never crossed the real seam</td>
+<td><span class="accepted">Accepted</span></td>
+<td>Task 3.2 compares live liveness to fixtures; off mid-run end to
+end</td>
+</tr>
+<tr>
+<td>TR5</td>
+<td>Race tests ran in one process</td>
+<td><span class="accepted">Accepted</span></td>
+<td>Two child processes, 20 times; concurrency measured from the fake's
+own times</td>
+</tr>
+<tr>
+<td>TR6</td>
+<td>The fake <code>claude</code> agreed with itself</td>
+<td><span class="accepted">Accepted</span></td>
+<td>Built from Task 0.2's raw bytes; fails on unknown flags; unknown
+output is <code>crashed</code></td>
+</tr>
+<tr>
+<td>TR7</td>
+<td>The raw HTML check was tested with three strings</td>
+<td><span class="accepted">Accepted</span></td>
+<td>Eight forms, plus moved and copied existing HTML</td>
+</tr>
+<tr>
+<td>TR8</td>
+<td>Security failure modes had no tests</td>
+<td><span class="accepted">Accepted</span></td>
+<td>Token, environment canaries, symlinked source and parent, prompt
+file, route body, page hint</td>
+</tr>
+<tr>
+<td>TR9</td>
+<td>Requirements with no test</td>
+<td><span class="accepted">Accepted</span></td>
+<td>Idle hour, per-review limit, status, <code>--diffs</code>, R19,
+R4</td>
+</tr>
+<tr>
+<td>TR10</td>
+<td>Loops that never end</td>
+<td><span class="accepted">Accepted</span></td>
+<td>Architecture: 60-second gather ceiling; conflicts wait for quiet and
+count toward the stop</td>
+</tr>
+<tr>
+<td>TR11</td>
+<td>No way to crash at an exact step</td>
+<td><span class="accepted">Accepted</span></td>
+<td><code>opts.hooks.afterWriteBack</code> and
+<code>beforeRename</code></td>
+</tr>
+<tr>
+<td>TR12</td>
+<td><code>ps</code> start-time output differs by platform</td>
+<td><span class="accepted">Accepted</span></td>
+<td><code>LC_ALL=C TZ=UTC</code>, a real round trip, an injected
+reader</td>
+</tr>
+<tr>
+<td>TR13</td>
+<td>Prompt tests could restate the code</td>
+<td><span class="accepted">Accepted</span></td>
+<td>Hand-picked lines; stdin deep-equal</td>
+</tr>
+<tr>
+<td>TR14</td>
+<td>Attempt tests read the code's own record</td>
+<td><span class="accepted">Accepted</span></td>
+<td>Count what the fake engine received</td>
+</tr>
+</tbody>
+</table></div>
+<h2 id="design-review">Design Review</h2>
+<p>Full prose in <code>03_plan_lahe_agent_sdk_reviews.md</code>.</p>
+<div class="table-scroll"><table>
+<thead>
+<tr>
+<th>#</th>
+<th>Finding</th>
+<th>Disposition</th>
+<th>Rationale</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>DR1</td>
+<td>The wireframe's warning panel contradicts the plan</td>
+<td><span class="accepted">Accepted</span></td>
+<td>Panel text pinned; no note field; the plan's words win over the
+wireframe</td>
+</tr>
+<tr>
+<td>DR2</td>
+<td>The wireframe has buttons the design cannot back</td>
+<td><span class="accepted">Accepted</span></td>
+<td>Limit buttons cut; "Try again" sends <code>want: on</code>; the
+daily-limit chips offer hand-off</td>
+</tr>
+<tr>
+<td>DR3</td>
+<td>About half the rail's words were unpinned</td>
+<td><span class="accepted">Accepted</span></td>
+<td>Words tables complete; the two daily limits worded apart; one time
+format and capitalization</td>
+</tr>
+<tr>
+<td>DR4</td>
+<td>The gave-up words become false after rewording</td>
+<td><span class="accepted">Accepted</span></td>
+<td>New words with a next step</td>
+</tr>
+<tr>
+<td>DR5</td>
+<td>Not everything overdue stood down</td>
+<td><span class="accepted">Accepted</span></td>
+<td>Banner, late ring and overdue toast all stand down while
+healthy</td>
+</tr>
+<tr>
+<td>DR6</td>
+<td>The wireframe draws screens the architecture rules out</td>
+<td><span class="accepted">Accepted</span></td>
+<td>b7 and per-card run notes listed as not built</td>
+</tr>
+<tr>
+<td>DR7</td>
+<td>Accessibility unspecified</td>
+<td><span class="accepted">Accepted</span></td>
+<td>Switch semantics, focus, Esc, <code>role="status"</code>, no
+announcement per tick</td>
+</tr>
+<tr>
+<td>DR8</td>
+<td>Nothing shown between the click and the helper's answer</td>
+<td><span class="accepted">Accepted</span></td>
+<td>"Turning on", with a fixture</td>
+</tr>
+<tr>
+<td>DR9</td>
+<td>The stopped state said one thing three times</td>
+<td><span class="accepted">Accepted</span></td>
+<td>The status line says "stopped"; reason and remedy once, in the
+chip</td>
+</tr>
+<tr>
+<td>DR10</td>
+<td>Screenshot list too short</td>
+<td><span class="accepted">Accepted</span></td>
+<td>2D's list covers every state</td>
+</tr>
+<tr>
+<td>DR11</td>
+<td>Motion not mentioned</td>
+<td><span class="accepted">Accepted</span></td>
+<td>No new motion stated</td>
+</tr>
+<tr>
+<td>DR12</td>
+<td>"Waiting its turn" did not say why</td>
+<td><span class="accepted">Accepted</span></td>
+<td>"Waiting for another review's run"</td>
+</tr>
+</tbody>
+</table></div>
+<hr class="reviews-divider" style="margin:4.5rem 0 1.5rem;border:0;border-top:3px solid #b0463b">
+
+<div class="reviews-banner">
+<p>The sections below are the full verbatim persona + human reviews for
+this document. They live in a separate <code>_reviews.md</code> file (so
+agents read the lean spec), merged here for review.</p>
+</div>
+<h1
+id="reviews-lahe-starts-your-agent-when-a-comment-is-ready-plan">Reviews:
+LAHE starts your agent when a comment is ready, plan</h1>
+<p>Plan under review: <code>03_plan_lahe_agent_sdk.md</code>, first
+draft (commit b2c6473). Four reviewers read it in parallel, with the
+brief, the architecture, the spike and the code the plan names:</p>
+<ul>
+<li>the engineering manager</li>
+<li>the code lead, who also read the brief and architecture</li>
+<li>the testing reviewer</li>
+<li>the design reviewer (magic-mirror)</li>
+</ul>
+<p>None edited a file. The dispositions are in the plan's four review
+tables. Where a fix changed the architecture, its section names the
+finding.</p>
+<h2 id="engineering-manager-review-round-1">Engineering Manager Review
+(Round 1)</h2>
+<h3
+id="em1-the-rail-task-cannot-be-done-in-overlayjs-alone-blocker">EM1.
+The rail task cannot be done in <code>overlay.js</code> alone
+(blocker)</h3>
+<ul>
+<li><code>src/layer/sync.js</code> (<code>livenessKey</code>) decides
+when the rail repaints. It watches nine fixed fields, and a new
+<code>auto_answer</code> object is not one of them, so a change like
+working to idle never reaches the rail.</li>
+<li>The switch has to post <code>want</code> to the new route. Posting
+lives in <code>sync.js</code>, and clicks are wired in
+<code>src/layer/index.js</code>, the way Hold is.</li>
+<li>The "Not handled" card words live in <code>tab_done.js</code>.</li>
+<li>Fix: add the three files to 2D, add the switch-to-route seam, and
+make Task 3.2's browser spec drive a real click on a real helper.</li>
+</ul>
+<h3
+id="em2-the-seam-between-the-supervisor-and-the-run-engine-is-not-pinned-blocker">EM2.
+The seam between the supervisor and the run engine is not pinned
+(blocker)</h3>
+<p>The architecture's <code>run_spec</code> and <code>result</code>
+shapes describe the supervisor calling the host adapter only. A run also
+needs the stage steps and the prompt module. The plan never said which
+side assembles a run, or who writes <code>result.json</code> and
+<code>runs.jsonl</code>. Fix: one engine entry owned by 2A, returning
+the <code>runs.jsonl</code> fields; 2A writes <code>result.json</code>,
+2B writes <code>runs.jsonl</code> and <code>attempts.json</code>.</p>
+<h3
+id="em3-files-the-supervisor-writes-and-the-command-line-reads-have-no-fixtures-should-fix">EM3.
+Files the supervisor writes and the command line reads have no fixtures
+(should-fix)</h3>
+<p>2C reads <code>agent.json</code> for liveness, the monitor's exit 6
+and the status counts, and <code>status --diffs</code> reads
+<code>runs.jsonl</code> and the run folders. Only the liveness output
+had fixtures. Fix: <code>agent.json</code> fixtures per state, paired
+with liveness fixtures, and a sample <code>runs.jsonl</code>; Task 3.2
+tests <code>--diffs</code> on a real run.</p>
+<h3
+id="em4-phase-1-cannot-have-its-own-worktree-on-the-feature-branch-should-fix">EM4.
+Phase 1 cannot have its own worktree on the feature branch
+(should-fix)</h3>
+<p>The branch is already checked out in the feature's worktree, and git
+will not check one branch out twice. The progress page lives there too,
+so a builder putting screenshots on it would conflict with the
+orchestrator. Fix: a kernel branch; builders put screenshots in their
+reports.</p>
+<h3
+id="em5-task-03-does-not-gate-and-the-base-is-behind-main-should-fix">EM5.
+Task 0.3 does not gate, and the base is behind main (should-fix)</h3>
+<p>The flowchart moved to Phase 1 on two facts only. The feature branch
+is 12 commits behind main, and those commits change
+<code>sync.js</code>. <code>feat/lahe_library</code> changes nearly
+every file this plan touches. Task 0.3's list left out
+<code>routes.js</code>, both <code>index.js</code> files,
+<code>projection.js</code>, <code>review.js</code>,
+<code>manifest.js</code>, <code>sync.js</code> and the docs. Fix:
+complete the list, make 0.3 a gate, merge main before Phase 1, and merge
+main first in Task 3.1.</p>
+<h3
+id="em6-the-terms-question-gates-only-the-dogfood-should-fix-challenge">EM6.
+The terms question gates only the dogfood (should-fix, challenge)</h3>
+<p>The brief says the feature's premise depends on the terms. Building
+all four Phase 2 branches first means a "no" throws the build away.
+Tasks 0.2 and 4.1 spend runs on the owner's login before he answers.
+Task 0.1 says "read by a person" but gives it to the orchestrator. Fix:
+put OQ1 in front of the owner before Phase 2, and say who reads the
+pages.</p>
+<h3 id="em7-most-of-task-02s-checks-have-no-stop-rule-should-fix">EM7.
+Most of Task 0.2's checks have no stop rule (should-fix)</h3>
+<p>Items on stdin, the prompt file hidden from <code>ps</code>,
+<code>--permission-prompts none</code>, distinct failure outputs and the
+budget flag had no rule for a failure, yet the fake <code>claude</code>
+and the adapter are built from what 0.2 records. Fix: any failed check
+changes the architecture before Phase 1; name the fallback if the budget
+flag does nothing on a subscription.</p>
+<h3
+id="em8-test-timing-will-collide-with-the-no-sleep-rule-should-fix">EM8.
+Test timing will collide with the no-sleep rule (should-fix)</h3>
+<p>The waits are long (15 seconds, 2 seconds, 30 seconds, 10 minutes),
+and <code>test/unit/no_arbitrary_sleeps.test.js</code> bans timers in
+test files outside its allowlist. Fix: one pinned override for the
+timings, and the fake's timer marked
+<code>harness-allow-timer:</code>.</p>
+<h3
+id="em9-some-acceptance-criteria-have-no-owning-task-should-fix">EM9.
+Some acceptance criteria have no owning task (should-fix)</h3>
+<p>The browser story walks, the fresh-clone check (R3), the "supervisor
+names no <code>claude</code> flag" search (R4), and who retakes the
+checkpoint screenshots. Fix: 4.1 owns the walks and the clone, the
+search becomes a test, 3.4 retakes the screenshots.</p>
+<h3
+id="em10-test-lists-too-thin-for-test-first-on-2c-and-2d-should-fix">EM10.
+Test lists too thin for test-first on 2C and 2D (should-fix)</h3>
+<p>2C had no tests for <code>disallow</code>, terminal <code>on</code>
+and <code>off</code>, <code>status</code>, <code>status --diffs</code>,
+or <code>supervise</code> starting detached. The contract-equality line
+belonged to Task 1.1. 2D had no tests for the switch posting, the
+waiting words, or the narrow-rail wrap.</p>
+<h3 id="em11-the-frozen-manifest-is-not-explained-to-builders-nit">EM11.
+The frozen manifest is not explained to builders (nit)</h3>
+<p>Lint fails on any unlisted <code>src/</code> file, and Phase 2 cannot
+edit the manifest. Fix: say the Files lists are complete, and name each
+builder's test files.</p>
+<h3 id="em12-the-checkpoint-push-may-not-be-a-fast-forward-nit">EM12.
+The checkpoint push may not be a fast-forward (nit)</h3>
+<p>The orchestrator updates docs on the feature branch during Phase 2.
+Fix: merge the feature branch into integration before the push.</p>
+<p><strong>What holds up:</strong> the four builders do not collide on
+any <code>src/service</code> or <code>src/cli</code> file; the gate
+rules are stated correctly; breaking each seam by hand once is a good
+check.</p>
+<h2 id="code-review-lead-review-round-1">Code Review Lead Review (Round
+1)</h2>
+<p>Verdict: not reviewable as written, with three blockers: the lock,
+sessions with several reviews, and the engine seam.</p>
+<h3
+id="cr1-the-lock-goes-stale-by-age-blocker-architecture-and-plan">CR1.
+The lock goes stale by age (blocker; architecture and plan)</h3>
+<p><code>withServerLock</code> treats a lock as stale after 20 seconds
+and holds it only while a callback runs. A supervisor lock held for
+hours, or a slot held for 10 minutes, would be taken over. Task 1.3 said
+to move it "unchanged" while its tests wanted pid-based staleness. Fix:
+a second primitive, held for a process's life, stale only when pid and
+start time stop matching; <code>ps</code> run with
+<code>LC_ALL=C TZ=UTC</code>.</p>
+<h3 id="cr2-a-session-can-own-several-reviews-blocker-architecture">CR2.
+A session can own several reviews (blocker; architecture)</h3>
+<p>The allowance named one source file per session, but
+<code>lahe status --session</code> drains every review's items, and
+event logs and reply files are per review. Fix: scope the allowance to
+one review, or refuse a session with more than one; name the event log
+and the reply folder.</p>
+<h3 id="cr3-the-parallel-seam-is-never-defined-blocker-plan">CR3. The
+parallel seam is never defined (blocker; plan)</h3>
+<p><code>run_spec</code> is the adapter's input, not the supervisor's
+call. The stubs' functions were not listed, nor <code>supervise</code>'s
+arguments. Fix: list the signatures, the engine call and its result, and
+<code>supervise</code>'s argv.</p>
+<h3
+id="cr4-sessionjson-is-not-single-writer-should-fix-architecture">CR4.
+<code>session.json</code> is not single-writer (should-fix;
+architecture)</h3>
+<p>Create, takeover, close, name and <code>review.js</code> write it
+whole with no lock. <code>allow</code> could read rev 4, a takeover
+write rev 5, and <code>allow</code> write rev 4 back. Fix: a separate
+<code>auto_answer.json</code>.</p>
+<h3
+id="cr5-the-page-could-skip-the-route-should-fix-architecture-and-plan">CR5.
+The page could skip the route (should-fix; architecture and plan)</h3>
+<p>The generic events append stores any known type, so the page could
+post <code>auto_answer.requested</code> directly.
+<code>from: "terminal"</code> contradicted "reads only
+<code>want</code>". The CLI's path to the helper was undefined. Fix:
+refuse the type on the generic route, set <code>from</code> on the
+helper side, name the CLI path.</p>
+<h3
+id="cr6-the-wrong-shells-environment-reaches-the-run-should-fix-architecture">CR6.
+The wrong shell's environment reaches the run (should-fix;
+architecture)</h3>
+<p>The helper spawns the supervisor, so <code>PATH</code>,
+<code>CLAUDE_CONFIG_DIR</code> and <code>ANTHROPIC_API_KEY</code> come
+from the helper's shell. Fix: record the allowlisted values at allow
+time.</p>
+<h3
+id="cr7-the-contract-change-is-missing-from-some-copies-should-fix-plan">CR7.
+The contract change is missing from some copies (should-fix; plan)</h3>
+<p>Five more test files treat <code>CONTRACT</code> as a list of
+strings; <code>projection_review_json.test.js</code> asserts
+<code>review.json</code> carries <code>CONTRACT</code>;
+<code>review_format.test.js</code> asserts 50 lines. The shape of a
+tagged line was unnamed. The exit-6 wording in the contract, the skill
+and <code>monitor.js</code> strands a chat agent. Fix: keep
+<code>CONTRACT</code> as the chat strings, add
+<code>CONTRACT_LINES</code>, list every test file, reword exit 6.</p>
+<h3 id="cr8-service_contract-is-not-bumped-should-fix-plan">CR8.
+<code>SERVICE_CONTRACT</code> is not bumped (should-fix; plan)</h3>
+<p>An older running helper would refuse the new event and route. Fix: 13
+to 14.</p>
+<h3 id="cr9-a-quiet-drain-stamps-activity-should-fix-plan">CR9. A quiet
+drain stamps activity (should-fix; plan)</h3>
+<p>A drain every 2 seconds would keep the rail saying "working", which
+the monitor avoids with <code>suppressActivityTouch</code>. Fix: say the
+drain runs in-process with that flag.</p>
+<h3
+id="cr10-a-dead-supervisor-with-on-standing-has-no-state-and-no-restarter-should-fix-architecture">CR10.
+A dead supervisor with "on" standing has no state and no restarter
+(should-fix; architecture)</h3>
+<p>The stale-code restart did not say how the lock passes on either.
+Fix: a state for it, the helper restarting on its liveness poll, and a
+named lock handover.</p>
+<h3
+id="cr11-a-run-can-edit-for-an-item-it-does-not-reply-to-should-fix-architecture">CR11.
+A run can edit for an item it does not reply to (should-fix;
+architecture)</h3>
+<p>Writing back the whole file puts that change on disk with no reply,
+so R5 did not hold by construction. Fix: write back only when every item
+with an edit has a reply; test it.</p>
+<h3
+id="cr12-how-the-supervisor-learns-a-fold-result-is-unnamed-should-fix-plan">CR12.
+How the supervisor learns a fold result is unnamed (should-fix;
+plan)</h3>
+<p>Fix: read the review's <code>events.jsonl</code> for matching
+<code>reply.folded</code> or <code>reply.rejected</code>; pin the
+30-second timeout.</p>
+<h3 id="cr13-strings-and-a-reason-are-missing-should-fix-plan">CR13.
+Strings and a reason are missing (should-fix; plan)</h3>
+<p>The terminal warning, the panel, the re-entry and exit-6 messages,
+the retrying and daily-limit chips. The "file gone" chip had no reason
+of its own. Fix: pin every string, add <code>source_missing</code>.</p>
+<h3
+id="cr14-no-test-or-rule-for-no-item-answered-by-both-should-fix-plan">CR14.
+No test or rule for "no item answered by both" (should-fix; plan)</h3>
+<p>A chat agent at the same rev can still drain and reply. Fix: fence
+replies by owner, or write down the leftover risk.</p>
+<h3 id="cr15---diffs-promises-every-edit-nit-plan">CR15.
+<code>--diffs</code> promises every edit (nit; plan)</h3>
+<p>Only 20 folders are kept and <code>runs.jsonl</code> holds hashes.
+Fix: keep a diff per run, or narrow the promise.</p>
+<h3 id="cr16-the-stdin-payload-has-no-field-list-nit-architecture">CR16.
+The stdin payload has no field list (nit; architecture)</h3>
+<p>"No other path appears" cannot be tested; drain lines also carry
+<code>linked_file</code> and the summary's liveness. Fix: an
+allowed-field list.</p>
+<h3 id="cr17-several-rules-left-open-nit-plan">CR17. Several rules left
+open (nit; plan)</h3>
+<p>An injectable clock, which usage fields <code>tokens_today</code>
+adds, whether an over-long reply is dropped or cut, and the gave-up
+words when the six-attempt limit fires.</p>
+<h2 id="testing-review-round-1">Testing Review (Round 1)</h2>
+<h3 id="tr1-no-way-to-control-time-in-tests-blocker">TR1. No way to
+control time in tests (blocker)</h3>
+<p>Each timer is one constant with no test override; sleeps are banned;
+<code>node:test</code> fake timers need Node 20.4 and the unit suite
+runs on 18. Fix: <code>opts.now</code>, <code>opts.sleep</code>,
+<code>opts.limits</code>. Tests: items at 0 to 40 seconds start one run
+and 0 and 16 start two; a day boundary in <code>America/New_York</code>,
+including a daylight-saving day; a clock jump past 10 minutes ends a run
+as <code>timed_out</code>.</p>
+<h3 id="tr2-the-argument-test-checks-only-what-is-missing-blocker">TR2.
+The argument test checks only what is missing (blocker)</h3>
+<p>"Never <code>--bare</code> or <code>Bash</code>" passes with
+<code>--restricted</code> dropped. Fix: assert each required flag, and
+that the working folder holds exactly one regular file.</p>
+<h3 id="tr3-the-group-kill-test-cannot-fail-and-can-leak-blocker">TR3.
+The group-kill test cannot fail, and can leak (blocker)</h3>
+<p>A fake with no child passes a pid-only kill; nothing covers ignoring
+SIGTERM; detached supervisors outlive a failed test. Fix: a grandchild
+that ignores SIGTERM, a short grace, <code>process.kill(-pgid, 0)</code>
+reaching ESRCH, and a teardown helper.</p>
+<h3 id="tr4-failure-states-never-cross-the-real-seam-should-fix">TR4.
+Failure states never cross the real seam (should-fix)</h3>
+<p>2C and 2D both build on the same fixtures, so they only prove they
+agree. Fix: Task 3.2 compares live liveness to the fixtures for signed
+out, usage limit and waiting; page "off" mid-run end to end.</p>
+<h3 id="tr5-race-tests-run-inside-one-process-should-fix">TR5. Race
+tests run inside one process (should-fix)</h3>
+<p>Fix: two child processes released together, 20 times; concurrency
+measured from the fake's own times.</p>
+<h3 id="tr6-the-fake-claude-agrees-with-itself-should-fix">TR6. The fake
+<code>claude</code> agrees with itself (should-fix)</h3>
+<p>Fix: build scenarios from Task 0.2's raw bytes; exit non-zero on
+unknown flags; unrecognized output is <code>crashed</code>; the
+usage-limit test says its output is guessed.</p>
+<h3 id="tr7-raw-html-refusal-tested-with-three-strings-should-fix">TR7.
+Raw HTML refusal tested with three strings (should-fix)</h3>
+<p>Fix: uppercase script, <code>img onerror</code>,
+<code>svg onload</code>, <code>iframe</code>, a Markdown
+<code>javascript:</code> link, mixed case, an entity-encoded scheme and
+an autolink; a moved existing tag is not an addition, a second copy
+is.</p>
+<h3 id="tr8-security-failure-modes-with-no-test-should-fix">TR8.
+Security failure modes with no test (should-fix)</h3>
+<p>The review token in no channel; environment canaries
+(<code>NODE_OPTIONS</code>, <code>ANTHROPIC_BASE_URL</code>,
+<code>CLAUDE_CODE_USE_BEDROCK</code>, <code>LAHE_*</code>); a source
+symlinked to <code>CLAUDE.md</code>; a parent folder swapped for a
+symlink; the prompt file after crash, timeout and kill; route bodies
+leaving state files byte-identical; a page <code>source_hint</code>
+pointing elsewhere.</p>
+<h3 id="tr9-requirements-with-no-gate-test-should-fix">TR9. Requirements
+with no gate test (should-fix)</h3>
+<p>R8 (idle is free) with an open question and an unfolded reply; R23's
+per-review limit; R24's status; <code>--diffs</code>; R19 with a chat
+reply folded first; R4 as a unit test.</p>
+<h3 id="tr10-loops-that-never-end-should-fix">TR10. Loops that never end
+(should-fix)</h3>
+<p>A conflict is neither an attempt nor a failure, so an owner typing in
+the file keeps producing runs. One item every 10 seconds never reaches
+15 seconds of quiet. No test for a fold result that never arrives. The
+design names neither limit, so this went to the architecture.</p>
+<h3 id="tr11-no-way-to-crash-on-cue-should-fix">TR11. No way to crash on
+cue (should-fix)</h3>
+<p>Fix: <code>opts.hooks.afterWriteBack</code> and
+<code>opts.hooks.beforeRename</code>.</p>
+<h3 id="tr12-ps-start-time-output-differs-by-platform-nit">TR12.
+<code>ps</code> start-time output differs by platform (nit)</h3>
+<p>Fix: round-trip real <code>ps</code> output for the test's own pid,
+and an injected reader for the reused-pid case.</p>
+<h3 id="tr13-prompt-tests-can-restate-the-code-nit">TR13. Prompt tests
+can restate the code (nit)</h3>
+<p>Fix: hand-picked lines; stdin deep-equals the drain with only
+<code>source_hint</code> changed.</p>
+<h3 id="tr14-attempt-tests-read-the-codes-own-record-nit">TR14. Attempt
+tests read the code's own record (nit)</h3>
+<p>Fix: count what the fake engine received, then check the pinned reply
+folded.</p>
+<h2 id="design-review-magic-mirror-round-1">Design Review, magic-mirror
+(Round 1)</h2>
+<p>Verdict: 2 blockers, 7 should-fix, 2 nits. The main risk was Task 2D
+saying "follow wireframe direction B" where parts of that wireframe
+contradict the architecture.</p>
+<h3 id="dr1-the-warning-panel-contradicts-the-plan-blocker">DR1. The
+warning panel contradicts the plan (blocker)</h3>
+<p>Screen 02 has an optional note field, but only the terminal sets the
+note and the route reads only <code>want</code>. Its bullets say it "may
+edit files in this document's folder and run lahe" and "stops after 20
+runs", against one copy of one file, no commands, and 40 runs. Fix: pin
+the panel text; no note field; the plan wins.</p>
+<h3
+id="dr2-the-wireframe-has-buttons-the-design-cannot-back-blocker">DR2.
+The wireframe has buttons the design cannot back (blocker)</h3>
+<p>"Raise the limit" and "Change the limit" (the page can only ask on or
+off); "Try again" and "Turn off" beside a chip that says "turn it off
+and on". Fix: one "Try again" that sends <code>want: on</code>, cut the
+limit buttons, the daily-limit chips offer hand-off.</p>
+<h3 id="dr3-about-half-the-rails-words-are-missing-should-fix">DR3.
+About half the rail's words are missing (should-fix)</h3>
+<p>Pill labels, run counts, the popup rows, the stop confirm, the
+daily-limit and retrying chips. The review's 40 and the computer's 120
+need different words. One time format and one capitalization.</p>
+<h3 id="dr4-the-gave-up-words-become-false-should-fix">DR4. The gave-up
+words become false (should-fix)</h3>
+<p>After rewording, an item can be tried six times, so "tried three
+times" is wrong, and the card gives no next step.</p>
+<h3 id="dr5-not-everything-overdue-stands-down-should-fix">DR5. Not
+everything overdue stands down (should-fix)</h3>
+<p>The banner, the late ring and <code>raiseOverdueToast</code> all use
+the overdue rule. A late ring during a long healthy run would look like
+a gave-up card.</p>
+<h3
+id="dr6-the-wireframe-draws-screens-the-architecture-rules-out-should-fix">DR6.
+The wireframe draws screens the architecture rules out (should-fix)</h3>
+<p>Screen b7 and b3's per-card note need per-item facts the liveness
+answer does not carry. List them as not built.</p>
+<h3 id="dr7-accessibility-is-not-specified-should-fix">DR7.
+Accessibility is not specified (should-fix)</h3>
+<p>A real switch with <code>aria-pressed</code>; a focusable not-allowed
+pill opening a panel with a Copy button; panels that take focus, close
+on Esc and return focus; the chip as <code>role="status"</code>; no
+announcement on every tick of the age.</p>
+<h3
+id="dr8-nothing-shows-between-the-click-and-the-helpers-answer-should-fix">DR8.
+Nothing shows between the click and the helper's answer
+(should-fix)</h3>
+<p>Fix: "Turning on" until liveness confirms, back to off with the allow
+panel if nothing starts, and a fixture for it.</p>
+<h3
+id="dr9-the-stopped-state-says-one-thing-three-times-should-fix">DR9.
+The stopped state says one thing three times (should-fix)</h3>
+<p>The status line truncates at rail width. Fix: the status line says
+"stopped"; the reason and remedy appear once, in the chip.</p>
+<h3 id="dr10-the-screenshot-list-is-too-short-should-fix">DR10. The
+screenshot list is too short (should-fix)</h3>
+<p>Add gathering, retrying, usage limit, both daily limits, the stop
+confirm, the run count opened, the not-allowed panel, the too-long and
+raw-HTML cards, the narrowest rail, and a short window with the warning
+panel open.</p>
+<h3 id="dr11-motion-is-not-mentioned-nit">DR11. Motion is not mentioned
+(nit)</h3>
+<p>State that there is no new motion and the dot does not pulse.</p>
+<h3 id="dr12-waiting-its-turn-does-not-say-why-nit">DR12. "Waiting its
+turn" does not say why (nit)</h3>
+<p>"Waiting for another review's run" says what it waits behind.</p>
+<p><strong>Reuse:</strong> the Hold pill (<code>.holdbtn</code>), End
+review's confirm panel, <code>CARD_LATE_ATTR</code> and the late ring,
+the <code>role="status"</code> status line, <code>fillAge</code>, the
+hand-off button, and <code>--warn</code>.</p>
+</body>
+</html>

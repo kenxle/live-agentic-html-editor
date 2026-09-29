@@ -1,0 +1,3010 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+  <meta charset="utf-8" />
+  <meta name="generator" content="pandoc" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
+  <title>Architecture: LAHE starts your agent when a comment is ready</title>
+  <style>
+    /* Default styles provided by pandoc.
+    ** See https://pandoc.org/MANUAL.html#variables-for-html for config info.
+    */
+    html {
+      color: #1a1a1a;
+      background-color: #fdfdfd;
+    }
+    body {
+      margin: 0 auto;
+      max-width: 36em;
+      padding-left: 50px;
+      padding-right: 50px;
+      padding-top: 50px;
+      padding-bottom: 50px;
+      hyphens: auto;
+      overflow-wrap: break-word;
+      text-rendering: optimizeLegibility;
+      font-kerning: normal;
+    }
+    @media (max-width: 600px) {
+      body {
+        font-size: 0.9em;
+        padding: 12px;
+      }
+      h1 {
+        font-size: 1.8em;
+      }
+    }
+    @media print {
+      html {
+        background-color: white;
+      }
+      body {
+        background-color: transparent;
+        color: black;
+        font-size: 12pt;
+      }
+      p, h2, h3 {
+        orphans: 3;
+        widows: 3;
+      }
+      h2, h3, h4 {
+        page-break-after: avoid;
+      }
+    }
+    p {
+      margin: 1em 0;
+    }
+    a {
+      color: #1a1a1a;
+    }
+    a:visited {
+      color: #1a1a1a;
+    }
+    img {
+      max-width: 100%;
+    }
+    svg {
+      height: auto;
+      max-width: 100%;
+    }
+    h1, h2, h3, h4, h5, h6 {
+      margin-top: 1.4em;
+    }
+    h5, h6 {
+      font-size: 1em;
+      font-style: italic;
+    }
+    h6 {
+      font-weight: normal;
+    }
+    ol, ul {
+      padding-left: 1.7em;
+      margin-top: 1em;
+    }
+    li > ol, li > ul {
+      margin-top: 0;
+    }
+    blockquote {
+      margin: 1em 0 1em 1.7em;
+      padding-left: 1em;
+      border-left: 2px solid #e6e6e6;
+      color: #606060;
+    }
+    code {
+      white-space: pre-wrap;
+      font-family: Menlo, Monaco, Consolas, 'Lucida Console', monospace;
+      font-size: 85%;
+      margin: 0;
+      hyphens: manual;
+    }
+    pre {
+      margin: 1em 0;
+      overflow: auto;
+    }
+    pre code {
+      padding: 0;
+      overflow: visible;
+      overflow-wrap: normal;
+    }
+    .sourceCode {
+     background-color: transparent;
+     overflow: visible;
+    }
+    hr {
+      border: none;
+      border-top: 1px solid #1a1a1a;
+      height: 1px;
+      margin: 1em 0;
+    }
+    table {
+      margin: 1em 0;
+      border-collapse: collapse;
+      width: 100%;
+      overflow-x: auto;
+      display: block;
+      font-variant-numeric: lining-nums tabular-nums;
+    }
+    table caption {
+      margin-bottom: 0.75em;
+    }
+    tbody {
+      margin-top: 0.5em;
+      border-top: 1px solid #1a1a1a;
+      border-bottom: 1px solid #1a1a1a;
+    }
+    th {
+      border-top: 1px solid #1a1a1a;
+      padding: 0.25em 0.5em 0.25em 0.5em;
+    }
+    td {
+      padding: 0.125em 0.5em 0.25em 0.5em;
+    }
+    header {
+      margin-bottom: 4em;
+      text-align: center;
+    }
+    #TOC li {
+      list-style: none;
+    }
+    #TOC ul {
+      padding-left: 1.3em;
+    }
+    #TOC > ul {
+      padding-left: 0;
+    }
+    #TOC a:not(:hover) {
+      text-decoration: none;
+    }
+    span.smallcaps{font-variant: small-caps;}
+    div.columns{display: flex; gap: min(4vw, 1.5em);}
+    div.column{flex: auto; overflow-x: auto;}
+    div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+    /* The extra [class] is a hack that increases specificity enough to
+       override a similar rule in reveal.js */
+    ul.task-list[class]{list-style: none;}
+    ul.task-list li input[type="checkbox"] {
+      font-size: inherit;
+      width: 0.8em;
+      margin: 0 0.8em 0.2em -1.6em;
+      vertical-align: middle;
+    }
+    .display.math{display: block; text-align: center; margin: 0.5rem auto;}
+    /* CSS for syntax highlighting */
+    html { -webkit-text-size-adjust: 100%; }
+    pre > code.sourceCode { white-space: pre; position: relative; }
+    pre > code.sourceCode > span { display: inline-block; line-height: 1.25; }
+    pre > code.sourceCode > span:empty { height: 1.2em; }
+    .sourceCode { overflow: visible; }
+    code.sourceCode > span { color: inherit; text-decoration: inherit; }
+    div.sourceCode { margin: 1em 0; }
+    pre.sourceCode { margin: 0; }
+    @media screen {
+    div.sourceCode { overflow: auto; }
+    }
+    @media print {
+    pre > code.sourceCode { white-space: pre-wrap; }
+    pre > code.sourceCode > span { text-indent: -5em; padding-left: 5em; }
+    }
+    pre.numberSource code
+      { counter-reset: source-line 0; }
+    pre.numberSource code > span
+      { position: relative; left: -4em; counter-increment: source-line; }
+    pre.numberSource code > span > a:first-child::before
+      { content: counter(source-line);
+        position: relative; left: -1em; text-align: right; vertical-align: baseline;
+        border: none; display: inline-block;
+        -webkit-touch-callout: none; -webkit-user-select: none;
+        -khtml-user-select: none; -moz-user-select: none;
+        -ms-user-select: none; user-select: none;
+        padding: 0 4px; width: 4em;
+        color: #aaaaaa;
+      }
+    pre.numberSource { margin-left: 3em; border-left: 1px solid #aaaaaa;  padding-left: 4px; }
+    div.sourceCode
+      {   }
+    @media screen {
+    pre > code.sourceCode > span > a:first-child::before { text-decoration: underline; }
+    }
+    code span.al { color: #ff0000; font-weight: bold; } /* Alert */
+    code span.an { color: #60a0b0; font-weight: bold; font-style: italic; } /* Annotation */
+    code span.at { color: #7d9029; } /* Attribute */
+    code span.bn { color: #40a070; } /* BaseN */
+    code span.bu { color: #008000; } /* BuiltIn */
+    code span.cf { color: #007020; font-weight: bold; } /* ControlFlow */
+    code span.ch { color: #4070a0; } /* Char */
+    code span.cn { color: #880000; } /* Constant */
+    code span.co { color: #60a0b0; font-style: italic; } /* Comment */
+    code span.cv { color: #60a0b0; font-weight: bold; font-style: italic; } /* CommentVar */
+    code span.do { color: #ba2121; font-style: italic; } /* Documentation */
+    code span.dt { color: #902000; } /* DataType */
+    code span.dv { color: #40a070; } /* DecVal */
+    code span.er { color: #ff0000; font-weight: bold; } /* Error */
+    code span.ex { } /* Extension */
+    code span.fl { color: #40a070; } /* Float */
+    code span.fu { color: #06287e; } /* Function */
+    code span.im { color: #008000; font-weight: bold; } /* Import */
+    code span.in { color: #60a0b0; font-weight: bold; font-style: italic; } /* Information */
+    code span.kw { color: #007020; font-weight: bold; } /* Keyword */
+    code span.op { color: #666666; } /* Operator */
+    code span.ot { color: #007020; } /* Other */
+    code span.pp { color: #bc7a00; } /* Preprocessor */
+    code span.sc { color: #4070a0; } /* SpecialChar */
+    code span.ss { color: #bb6688; } /* SpecialString */
+    code span.st { color: #4070a0; } /* String */
+    code span.va { color: #19177c; } /* Variable */
+    code span.vs { color: #4070a0; } /* VerbatimString */
+    code span.wa { color: #60a0b0; font-weight: bold; font-style: italic; } /* Warning */
+  </style>
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>%F0%9F%94%A8</text></svg>">
+  <!--
+    St. Clair AI document style for forge docs.
+
+    The palette, type and spacing values below are copied from the St. Clair
+    system tokens (live-agentic-html-editor/vendor/stclair-doc-style/
+    system-tokens.css). This header does NOT link LAHE's ./.lahe-doc-style.css
+    bundle, on purpose: that bundle's document.css styles bare elements and a
+    generic .callout (an ink fill with white text) and puts padding on every body
+    child, and all three collide with the forge structure. So the page is
+    self-contained and reads the same whether or not LAHE is serving it.
+
+    The fonts are the one thing taken from LAHE: it serves the three vendored
+    faces at ./.lahe-fonts/<file>.woff2 from every folder. When that fails, each
+    stack falls back to system-ui and a platform monospace.
+
+    House rules this file keeps: no pills, no shadows, no gradients, no all caps
+    labels, no single-side coloured borders. Colour comes from tints and dots.
+  -->
+  <style>
+    @font-face {
+      font-family: "Schibsted Grotesk"; font-style: normal; font-weight: 500 700; font-display: swap;
+      src: url("./.lahe-fonts/schibsted-grotesk-variable.woff2") format("woff2");
+    }
+    @font-face {
+      font-family: "Hanken Grotesk"; font-style: normal; font-weight: 400 600; font-display: swap;
+      src: url("./.lahe-fonts/hanken-grotesk-variable.woff2") format("woff2");
+    }
+    @font-face {
+      font-family: "JetBrains Mono"; font-style: normal; font-weight: 400 500; font-display: swap;
+      src: url("./.lahe-fonts/jetbrains-mono-variable.woff2") format("woff2");
+    }
+
+    :root {
+      color-scheme: light dark;
+
+      /* St. Clair palette (raw names and values from system-tokens.css) */
+      --white: #ffffff;
+      --paper: #f7f7f5;
+      --ink: #1f1e1a;
+      --ink-soft: #55534b;
+      --ink-faint: #6b6860;
+      --rule: #dcdad6;
+      --purple: #46188c;
+      --purple-tint: #f1ebfa;
+      --link: #6d28d9;
+      --cobalt: #0760c7;
+      --cobalt-tint: #e6effc;
+      --sage-fill: #8fb5a0;
+      --sage: #637a63;
+      --sage-tint: #e7f1ed;
+
+      --font-display: "Schibsted Grotesk", "Hanken Grotesk", system-ui, sans-serif;
+      --font-body: "Hanken Grotesk", system-ui, -apple-system, "Helvetica Neue", sans-serif;
+      --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+
+      --r: 4px;
+
+      /* Forge roles. Prefixed --ff- so none of them can collide with a St. Clair
+         token of the same name if the two ever share a page. Dark mode repoints
+         these and nothing else. */
+      --ff-bg: var(--white);
+      --ff-fg: var(--ink);
+      --ff-soft: var(--ink-soft);
+      --ff-faint: var(--ink-faint);
+      --ff-rule: var(--rule);
+      --ff-divider: var(--ink);
+      --ff-link: var(--link);
+      --ff-accent: var(--cobalt);
+      --ff-panel: var(--paper);
+      --ff-code-bg: var(--cobalt-tint);
+      --ff-bullet: var(--sage);
+      --ff-hl-kw: var(--cobalt);
+      --ff-hl-str: var(--sage);
+      --ff-hl-num: var(--purple);
+
+      /* Callouts: a tint, a dot and a label colour each. */
+      --ff-req-bg: var(--cobalt-tint);      --ff-req-dot: var(--cobalt);    --ff-req-label: var(--cobalt);
+      --ff-nongoal-bg: var(--paper);        --ff-nongoal-dot: var(--ink-faint); --ff-nongoal-label: var(--ink-faint);
+      --ff-metric-bg: var(--sage-tint);     --ff-metric-dot: var(--sage);   --ff-metric-label: var(--ink-soft);
+      --ff-question-bg: var(--purple-tint); --ff-question-dot: var(--purple); --ff-question-label: var(--purple);
+      --ff-suggest-bg: var(--white);        --ff-suggest-dot: var(--sage);  --ff-suggest-label: var(--sage);
+      --ff-flag-bg: var(--ink);             --ff-flag-fg: var(--white);     --ff-flag-dot: var(--sage-fill);
+
+      /* Disposition verdicts */
+      --ff-accepted: var(--sage);
+      --ff-rejected: var(--purple);
+      --ff-deferred: var(--cobalt);
+    }
+
+    /* Dark: the St. Clair on-ink values. Body text is full white on ink, as the
+       system decides; tints are the accent mixed into the ink ground. */
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --ff-bg: var(--ink);
+        --ff-fg: var(--white);
+        --ff-soft: #d9d7d1;   /* --ink-soft-ondark */
+        --ff-faint: #b3b0a8;  /* --ink-faint-ondark */
+        --ff-rule: #4a4842;   /* --rule-ondark */
+        --ff-divider: var(--white);
+        --ff-link: var(--sage-fill);
+        --ff-accent: color-mix(in srgb, var(--cobalt) 45%, var(--white));
+        --ff-panel: color-mix(in srgb, var(--white) 6%, var(--ink));
+        --ff-code-bg: color-mix(in srgb, var(--cobalt) 22%, var(--ink));
+        --ff-bullet: var(--sage-fill);
+        --ff-hl-kw: color-mix(in srgb, var(--cobalt) 40%, var(--white));
+        --ff-hl-str: var(--sage-fill);
+        --ff-hl-num: color-mix(in srgb, var(--purple) 30%, var(--white));
+
+        --ff-req-bg: color-mix(in srgb, var(--cobalt) 22%, var(--ink));
+        --ff-req-dot: color-mix(in srgb, var(--cobalt) 45%, var(--white));
+        --ff-req-label: color-mix(in srgb, var(--cobalt) 35%, var(--white));
+        --ff-nongoal-bg: color-mix(in srgb, var(--white) 6%, var(--ink));
+        --ff-nongoal-dot: #b3b0a8; --ff-nongoal-label: #b3b0a8;
+        --ff-metric-bg: color-mix(in srgb, var(--sage) 30%, var(--ink));
+        --ff-metric-dot: var(--sage-fill); --ff-metric-label: var(--sage-fill);
+        --ff-question-bg: color-mix(in srgb, var(--purple) 45%, var(--ink));
+        --ff-question-dot: color-mix(in srgb, var(--purple) 30%, var(--white));
+        --ff-question-label: color-mix(in srgb, var(--purple) 25%, var(--white));
+        --ff-suggest-bg: var(--ink);
+        --ff-suggest-dot: var(--sage-fill); --ff-suggest-label: var(--sage-fill);
+        --ff-flag-bg: var(--paper); --ff-flag-fg: var(--ink); --ff-flag-dot: var(--sage);
+
+        --ff-accepted: var(--sage-fill);
+        --ff-rejected: color-mix(in srgb, var(--purple) 30%, var(--white));
+        --ff-deferred: color-mix(in srgb, var(--cobalt) 40%, var(--white));
+      }
+    }
+
+    /* Pandoc's own default styles load before this block. The rules marked
+       "pandoc" below undo the ones that fight this look: black table rules,
+       a block-level table, auto hyphens, italic h5/h6, and a:visited in
+       near-black, which outranks a plain a rule. */
+    html { scroll-behavior: smooth; -webkit-print-color-adjust: exact; print-color-adjust: exact; background: var(--ff-bg); }
+    * { box-sizing: border-box; }
+
+    body {
+      font-family: var(--font-body);
+      font-size: 17px;
+      line-height: 1.65;
+      color: var(--ff-fg);
+      background: var(--ff-bg);
+      max-width: 880px;
+      margin: 0 auto;
+      padding: 56px 28px 104px;
+      -webkit-font-smoothing: antialiased;
+      text-rendering: optimizeLegibility;
+      hyphens: manual;   /* pandoc */
+    }
+
+    /* Title block (pandoc emits <header id="title-block-header">) */
+    header#title-block-header { padding-bottom: 8px; margin-bottom: 0; text-align: left; }
+    header#title-block-header h1.title {
+      font-family: var(--font-display);
+      font-size: clamp(34px, 4.6vw, 52px);
+      font-weight: 600;
+      margin: 0 0 12px;
+      letter-spacing: -0.012em;
+      line-height: 1.1;
+    }
+    header#title-block-header p.subtitle,
+    header#title-block-header p.author,
+    header#title-block-header p.date {
+      font-size: 20px;
+      line-height: 1.55;
+      color: var(--ff-soft);
+      margin: 0;
+    }
+
+    /* Cross-doc nav (injected by the build before the TOC). A plain line:
+       "Docs  Crucible · Brief · Architecture", the current doc in ink. */
+    .doc-nav {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: baseline;
+      gap: 4px 0;
+      margin: 20px 0 8px;
+      padding: 12px 0;
+      border-top: 1px solid var(--ff-rule);
+      border-bottom: 1px solid var(--ff-rule);
+      font-size: 15px;
+    }
+    .doc-nav .doc-nav-label {
+      font-family: var(--font-display);
+      font-weight: 600;
+      font-size: 14px;
+      color: var(--ff-faint);
+      margin-right: 14px;
+    }
+    .doc-nav a {
+      color: var(--ff-link);
+      text-decoration: underline;
+      text-decoration-thickness: 1px;
+      text-underline-offset: 3px;
+      border: 0;
+      background: none;
+      padding: 0;
+    }
+    .doc-nav a + a::before {
+      content: "\00B7";
+      display: inline-block;
+      color: var(--ff-faint);
+      margin: 0 10px;
+      text-decoration: none;
+    }
+    .doc-nav a:hover { background: none; text-decoration-thickness: 2px; }
+    .doc-nav a:visited { color: var(--ff-link); }
+    .doc-nav a.current, .doc-nav a.current:visited {
+      color: var(--ff-fg);
+      font-weight: 600;
+      text-decoration: none;
+      cursor: default;
+    }
+
+    /* TOC (pandoc emits <nav id="TOC">) */
+    nav#TOC {
+      margin: 28px 0 44px;
+      font-size: 15px;
+      line-height: 1.5;
+    }
+    nav#TOC::before {
+      content: "Contents";
+      display: block;
+      font-family: var(--font-display);
+      font-weight: 600;
+      font-size: 14px;
+      color: var(--ff-faint);
+      padding-bottom: 8px;
+      margin-bottom: 12px;
+      border-bottom: 2px solid var(--ff-divider);
+    }
+    nav#TOC ul { list-style: none; padding-left: 0; margin: 0; }
+    nav#TOC ul ul { padding-left: 18px; margin-top: 4px; }
+    nav#TOC li { margin-bottom: 4px; }
+    nav#TOC li::marker { content: none; }
+    nav#TOC a, nav#TOC a:visited { color: var(--ff-fg); text-decoration: none; border: 0; }
+    nav#TOC a:hover { color: var(--ff-link); text-decoration: underline; background: none; }
+
+    /* Headings: Schibsted at display weight, sentence case. An h2 hangs under a
+       full-width ink rule, the St. Clair section head. */
+    h1, h2, h3, h4, h5, h6 {
+      font-family: var(--font-display);
+      font-weight: 600;
+      line-height: 1.15;
+      letter-spacing: -0.012em;
+      color: var(--ff-fg);
+    }
+    h2 {
+      font-size: clamp(25px, 3vw, 32px);
+      margin: 64px 0 18px;
+      padding-top: 12px;
+      border-top: 2px solid var(--ff-divider);
+    }
+    h3 { font-size: clamp(19px, 2vw, 23px); margin: 40px 0 12px; }
+    h4 { font-size: 18px; margin: 28px 0 8px; }
+    h5, h6 { font-size: 17px; margin: 24px 0 8px; font-style: normal; font-weight: 600; }   /* pandoc */
+    h6 { color: var(--ff-soft); }
+
+    p { margin: 0 0 18px; }
+    p, li, td, dd { overflow-wrap: anywhere; }
+
+    a {
+      color: var(--ff-link);
+      text-decoration: underline;
+      text-decoration-thickness: 1px;
+      text-underline-offset: 3px;
+    }
+    a:visited { color: var(--ff-link); }   /* pandoc */
+    a:hover { text-decoration-thickness: 2px; }
+    :focus-visible { outline: 2px solid var(--ff-link); outline-offset: 3px; border-radius: var(--r); }
+
+    strong { color: inherit; font-weight: 700; }
+
+    ul, ol { margin: 0 0 18px; padding-left: 1.6em; }
+    li { margin: 0 0 8px; line-height: 1.55; }
+    li > p { margin-bottom: 8px; }
+    ul > li::marker { color: var(--ff-bullet); }
+    .callout ul > li::marker { color: var(--ff-dot); }
+    ol > li::marker { color: var(--ff-fg); font-weight: 600; }
+    li > ul, li > ol { margin-top: 8px; }
+
+    /* Callout boxes (from ::: callout-* fenced divs). A tint holding the text,
+       and a label row generated by CSS: a dot in the callout's colour, then the
+       label in the display face. */
+    .callout {
+      border-radius: var(--r);
+      padding: 16px 22px 18px;
+      margin: 18px 0;
+      background: var(--ff-panel);
+      color: var(--ff-fg);
+      line-height: 1.6;
+    }
+    .callout > :first-child { margin-top: 0; }
+    .callout > :last-child { margin-bottom: 0; }
+    .callout::before {
+      display: flex;
+      align-items: center;
+      gap: 9px;
+      font-family: var(--font-display);
+      font-weight: 600;
+      font-size: 14px;
+      line-height: 1.4;
+      margin-bottom: 6px;
+      padding-left: 16px;   /* room for the dot, which ::after draws */
+    }
+    .callout { position: relative; }
+    .callout::after {
+      content: "";
+      position: absolute;
+      left: 22px;
+      top: 23px;
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: var(--ff-dot, var(--ff-faint));
+    }
+    .callout-req      { background: var(--ff-req-bg);      --ff-dot: var(--ff-req-dot); }
+    .callout-req::before      { content: "Requirement";   color: var(--ff-req-label); }
+    .callout-nongoal  { background: var(--ff-nongoal-bg);  --ff-dot: var(--ff-nongoal-dot); border: 1px solid var(--ff-rule); }
+    .callout-nongoal::before  { content: "Non-goals";     color: var(--ff-nongoal-label); }
+    .callout-metric   { background: var(--ff-metric-bg);   --ff-dot: var(--ff-metric-dot); }
+    .callout-metric::before   { content: "Metrics";       color: var(--ff-metric-label); }
+    .callout-question { background: var(--ff-question-bg); --ff-dot: var(--ff-question-dot); }
+    .callout-question::before { content: "Open question"; color: var(--ff-question-label); }
+    .callout-suggest  { background: var(--ff-suggest-bg);  --ff-dot: var(--ff-suggest-dot); border: 1px solid var(--ff-suggest-dot); }
+    .callout-suggest::before  { content: "Suggestion";    color: var(--ff-suggest-label); }
+    .callout-flag     { background: var(--ff-flag-bg);     --ff-dot: var(--ff-flag-dot); color: var(--ff-flag-fg); }
+    .callout-flag::before     { content: "Red flag";      color: var(--ff-flag-fg); }
+    .callout-flag a, .callout-flag strong, .callout-flag code { color: inherit; }
+    .callout-flag code { background: color-mix(in srgb, currentColor 14%, transparent); }
+    /* The nongoal and suggest boxes carry a 1px border, so their dot moves with it. */
+    .callout-nongoal::after, .callout-suggest::after { left: 21px; top: 22px; }
+
+    /* Reviews section: the _reviews.md files are merged into the HTML below this
+       divider (they stay separate files on disk for agents). The build writes
+       the divider with an inline red rule; this repaints it in the house ink. */
+    hr.reviews-divider {
+      border: 0 !important;
+      border-top: 2px solid var(--ff-divider) !important;
+      margin: 88px 0 6px !important;
+      display: block !important;
+    }
+    hr.reviews-divider + * { margin-top: 0; }
+    .reviews-banner {
+      border-top: 1px solid var(--ff-divider);
+      padding: 14px 0 0;
+      margin: 0 0 32px;
+      font-size: 15px;
+      line-height: 1.55;
+      color: var(--ff-soft);
+    }
+    .reviews-banner::before {
+      display: block;
+      content: "Reviews, full prose";
+      font-family: var(--font-display);
+      font-weight: 600;
+      font-size: clamp(25px, 3vw, 32px);
+      line-height: 1.15;
+      letter-spacing: -0.012em;
+      color: var(--ff-fg);
+      margin-bottom: 8px;
+    }
+    /* Jump target for spec -> review-detail links; offset so the heading clears. */
+    .finding-anchor { display: inline-block; scroll-margin-top: 1.5rem; }
+    td a[href^="#"] { font-weight: 600; }
+
+    /* Inline xref deep-dive (from ::: xref fenced div) */
+    .xref {
+      font-size: 15px;
+      background: var(--ff-code-bg);
+      border-radius: var(--r);
+      padding: 10px 16px;
+      margin: 0 0 18px;
+      color: var(--ff-soft);
+      line-height: 1.5;
+    }
+    .xref::before {
+      content: "\21B3  See";
+      font-family: var(--font-display);
+      font-weight: 600;
+      font-size: 14px;
+      color: var(--ff-accent);
+      margin-right: 8px;
+    }
+    .xref > * { display: inline; margin: 0; }
+    .xref a, .xref a:visited { font-weight: 600; color: var(--ff-fg); }
+
+    /* Tables: the St. Clair naked ruled table. A 2px rule under the head,
+       hairlines between rows, no box, no tint, no shadow. The build wraps every
+       table in .table-scroll; the scrolling itself lives in
+       shared-assets/doc_fixes.css. */
+    .table-scroll { margin: 24px 0 32px; }
+    .table-scroll table { margin: 0; }
+    table {
+      border-collapse: collapse;
+      width: 100%;
+      margin: 24px 0 32px;
+      font-size: 15px;
+      line-height: 1.5;
+      background: none;
+      display: table;   /* pandoc sets block; .table-scroll does the scrolling */
+    }
+    tbody { border: 0; }   /* pandoc */
+    th { border-top: 0; }  /* pandoc */
+    thead th {
+      font-family: var(--font-display);
+      font-weight: 600;
+      font-size: 14px;
+      color: var(--ff-faint);
+      text-align: left;
+      padding: 0 16px 10px 0;
+      border-bottom: 2px solid var(--ff-divider);
+      vertical-align: bottom;
+    }
+    tbody td {
+      padding: 12px 16px 12px 0;
+      border-bottom: 1px solid var(--ff-rule);
+      vertical-align: top;
+    }
+    td:last-child, th:last-child { padding-right: 0; }
+    /* A short id column ("RF 12", "T3") stays on one line beside wide prose. */
+    tbody td:first-child { min-width: 3.4em; }
+    tbody tr:nth-child(even) { background: none; }
+    td > :first-child { margin-top: 0; }
+    td > :last-child { margin-bottom: 0; }
+
+    /* Disposition verdicts rendered by the build (Accepted/Rejected/Deferred).
+       A dot and the word, in the verdict's colour. */
+    td .accepted, span.accepted,
+    td .rejected, span.rejected,
+    td .deferred, span.deferred {
+      font-family: var(--font-display);
+      font-weight: 600;
+      white-space: nowrap;
+    }
+    td .accepted::before, span.accepted::before,
+    td .rejected::before, span.rejected::before,
+    td .deferred::before, span.deferred::before {
+      content: "";
+      display: inline-block;
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: currentColor;
+      margin-right: 7px;
+      vertical-align: 0.12em;
+    }
+    td .accepted, span.accepted { color: var(--ff-accepted); }
+    td .rejected, span.rejected { color: var(--ff-rejected); }
+    td .deferred, span.deferred { color: var(--ff-deferred); }
+
+    /* Inline + block code: JetBrains Mono on the cobalt tint, ink text.
+       Ligatures off, so an arrow in code reads as the two characters it is. */
+    code, pre {
+      font-family: var(--font-mono);
+      font-variant-ligatures: none;
+      font-feature-settings: "liga" 0, "calt" 0;
+    }
+    code {
+      font-size: 0.86em;
+      background: var(--ff-code-bg);
+      color: var(--ff-fg);
+      padding: 0.1em 0.35em;
+      border-radius: 3px;
+    }
+    pre {
+      font-size: 14px;
+      background: var(--ff-code-bg);
+      color: var(--ff-fg);
+      padding: 18px 24px;
+      border-radius: var(--r);
+      overflow-x: auto;
+      margin: 0 0 24px;
+      line-height: 1.55;
+      /* Wrap long lines instead of forcing a horizontal scroll (readability). */
+      white-space: pre-wrap;
+      word-break: break-word;
+      overflow-wrap: anywhere;
+    }
+    pre code { background: none; color: inherit; padding: 0; font-size: inherit; }
+    /* A code chip inside a tinted callout would vanish into the tint. */
+    .callout code { background: color-mix(in srgb, currentColor 9%, transparent); }
+
+    /* Highlighted blocks: pandoc wraps them in div.sourceCode and paints its
+       own transparent ground and a green-and-teal palette. Repaint both in the
+       St. Clair accents. */
+    div.sourceCode { margin: 0 0 24px; }
+    div.sourceCode > pre.sourceCode { background: var(--ff-code-bg); margin: 0; }
+    pre.sourceCode code span.kw, pre.sourceCode code span.cf, pre.sourceCode code span.im,
+    pre.sourceCode code span.op, pre.sourceCode code span.bu { color: var(--ff-hl-kw); font-weight: 500; }
+    pre.sourceCode code span.st, pre.sourceCode code span.ch, pre.sourceCode code span.ss,
+    pre.sourceCode code span.vs, pre.sourceCode code span.sc { color: var(--ff-hl-str); }
+    pre.sourceCode code span.dv, pre.sourceCode code span.fl, pre.sourceCode code span.bn,
+    pre.sourceCode code span.cn, pre.sourceCode code span.dt { color: var(--ff-hl-num); }
+    pre.sourceCode code span.co, pre.sourceCode code span.an, pre.sourceCode code span.cv,
+    pre.sourceCode code span.do, pre.sourceCode code span.in { color: var(--ff-soft); font-style: normal; font-weight: 400; }
+    pre.sourceCode code span.fu, pre.sourceCode code span.va, pre.sourceCode code span.at,
+    pre.sourceCode code span.ot { color: inherit; font-weight: 400; }
+
+    /* Mermaid blocks: pandoc renders ```mermaid as <pre class="mermaid">; the
+       Mermaid script replaces the text with SVG. It is a figure, not code: no
+       tint, a hairline frame, centred. Mermaid source must not wrap before the
+       script swaps it for SVG. */
+    pre.mermaid {
+      white-space: pre;
+      background: none;
+      border: 1px solid var(--ff-rule);
+      border-radius: var(--r);
+      padding: 24px;
+      text-align: center;
+      color: var(--ff-fg);
+      font-family: var(--font-body);
+    }
+    pre.mermaid svg { max-width: 100%; height: auto; }
+
+    blockquote {
+      margin: 18px 0;
+      padding: 2px 0 2px 18px;
+      border-left: 3px solid var(--ff-rule);
+      color: var(--ff-soft);
+    }
+    blockquote p:last-child { margin-bottom: 0; }
+
+    hr { border: none; border-top: 1px solid var(--ff-rule); margin: 44px 0; }
+    hr:has(+ h2) { display: none; }
+
+    img { max-width: 100%; height: auto; }
+
+    /* Task-list checkboxes from "- [ ]" lists */
+    ul.task-list { list-style: none; padding-left: 4px; }
+    ul.task-list li input[type="checkbox"] { margin-right: 8px; accent-color: var(--cobalt); }
+
+    @page { size: letter; margin: 0.7in 0.65in; }
+    @media (max-width: 620px) {
+      body { padding: 32px 16px 64px; font-size: 16px; }
+      .callout { padding: 14px 16px 16px; }
+      .callout::after { left: 16px; top: 22px; }
+      table { font-size: 14px; }
+    }
+    @media print {
+      :root { color-scheme: light; }
+      * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+      html, body { background: #fff; color: var(--ink); }
+      body { max-width: 100%; font-size: 11pt; padding: 0; }
+      .doc-nav { display: none; }
+      a { color: var(--ink); }
+      .callout, table, pre, blockquote { break-inside: avoid; }
+      h2, h3 { break-after: avoid; }
+    }
+  </style>
+  <script type="module">
+    import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.esm.min.mjs";
+    const dark = window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches;
+    mermaid.initialize({
+      startOnLoad: false,
+      theme: dark ? "dark" : "neutral",
+      securityLevel: "loose",
+      themeVariables: { fontFamily: '"Hanken Grotesk", system-ui, sans-serif' },
+    });
+    /* Pandoc emits ```mermaid blocks as <pre class="mermaid"><code>…</code></pre> with the
+       diagram source HTML-entity-encoded. Mermaid 10 reads innerHTML, so it sees the literal
+       <code> tag and &quot;/&gt; entities and throws syntax errors. Flatten each block to a
+       single decoded text node first (textContent decodes entities and drops the wrapper),
+       then render. Same fix as the personal-repo report builds (commit d525c50 there). */
+    function renderMermaid() {
+      document.querySelectorAll("pre.mermaid").forEach(function (el) {
+        if (!el.dataset.mflattened) {
+          el.textContent = el.textContent;
+          el.dataset.mflattened = "1";
+        }
+      });
+      mermaid.run({ querySelector: "pre.mermaid" });
+    }
+    if (document.readyState === "loading") {
+      window.addEventListener("DOMContentLoaded", renderMermaid);
+    } else {
+      renderMermaid();
+    }
+  </script>
+
+  <!-- The review comment module and the shared document fixes are injected here
+       at build time from ~/.claude/skills/shared-assets/ (comment_module.html +
+       doc_fixes.css) by shared_assets.resolve_header(). Do not paste a copy back
+       into this file. -->
+  <style>
+  /* Shared document fixes: one source for both document builds.
+
+     Injected at build time alongside comment_module.html, in place of the
+     <!-- SHARED_ASSETS --> placeholder in each pandoc header. Because it lands
+     last in <head>, these rules win over the same-specificity rules earlier in a
+     header without needing !important.
+
+     Keep this file to fixes that are true for every document we build. Anything
+     that depends on a skill's own look (colors, radius, shadow) belongs in that
+     skill's header. */
+
+  /* --- Tables: never spill past the reading column (plan Task 4.3, defect 1) ---
+     Two halves to the fix, and both are needed.
+     1. A wide table scrolls inside its wrapper. Both builds wrap every table in
+        <div class="table-scroll">.
+     2. Long unbroken strings (URLs, tokens, absolute paths) wrap instead of
+        setting a min-content width that forces the table wider than the page.
+        Without this the table is simply wider than the wrapper and the text is
+        cut off at the wrapper edge. */
+  .table-scroll {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    max-width: 100%;
+  }
+  .table-scroll > table { margin: 0; }
+  table { max-width: 100%; }
+  thead th, tbody td { overflow-wrap: anywhere; word-break: break-word; }
+  thead th code, tbody td code,
+  thead th a, tbody td a { overflow-wrap: anywhere; word-break: break-word; }
+
+  /* Print/PDF has no scrollbars, so show the whole table and let it shrink. */
+  @media print {
+    .table-scroll { overflow: visible; }
+  }
+
+  /* --- Charts: never let a chart set the page width (plan Task 4.3, defect 2) ---
+     The label-truncation fix itself is Plotly's automargin, applied in the
+     report header's render script. This is the CSS guard next to it: a chart
+     that computes a wider layout than its column stays inside the column
+     instead of pushing the whole page sideways. */
+  figure.plotly-chart,
+  figure.plotly-chart > div,
+  figure.chart svg,
+  figure.plotly-chart .main-svg { max-width: 100%; }
+
+  </style>
+</head>
+<body>
+<header id="title-block-header">
+<h1 class="title">Architecture: LAHE starts your agent when a comment is
+ready</h1>
+</header>
+
+<div class="doc-nav"><span class="doc-nav-label">Docs</span><a href="00_crucible_lahe_agent_sdk.html">Crucible</a><a href="01_brief_lahe_agent_sdk.html">Brief</a><a href="02_wireframe_lahe_agent_sdk.html">Wireframe doc</a><a href="02_architecture_lahe_agent_sdk.html" class="current">Architecture</a><a href="03_plan_lahe_agent_sdk.html">Plan</a><a href="wireframes/index.html">Wireframes</a><a href="04_progress_lahe_agent_sdk.md">Progress</a></div>
+<nav id="TOC" role="doc-toc">
+<ul>
+<li><a href="#summary" id="toc-summary">Summary</a></li>
+<li><a href="#analysis-of-existing-structure"
+id="toc-analysis-of-existing-structure">Analysis of Existing
+Structure</a></li>
+<li><a href="#components--modules-touched"
+id="toc-components--modules-touched">Components / Modules
+Touched</a></li>
+<li><a href="#data--state-changes" id="toc-data--state-changes">Data /
+State Changes</a></li>
+<li><a href="#key-flows" id="toc-key-flows">Key Flows</a></li>
+<li><a href="#alternatives-considered"
+id="toc-alternatives-considered">Alternatives Considered</a></li>
+<li><a href="#failure-modes--edge-cases"
+id="toc-failure-modes--edge-cases">Failure Modes / Edge Cases</a></li>
+<li><a href="#security--privacy-notes"
+id="toc-security--privacy-notes">Security &amp; Privacy Notes</a></li>
+<li><a href="#other-hosts-later-r4-claude-code-first"
+id="toc-other-hosts-later-r4-claude-code-first">Other hosts later (R4,
+Claude Code first)</a></li>
+<li><a href="#test-strategy" id="toc-test-strategy">Test
+Strategy</a></li>
+<li><a href="#to-verify-before-the-build"
+id="toc-to-verify-before-the-build">To verify before the build</a></li>
+<li><a href="#open-questions" id="toc-open-questions">Open
+Questions</a></li>
+<li><a href="#assumptions-made-for-the-owner"
+id="toc-assumptions-made-for-the-owner">Assumptions made for the
+owner</a></li>
+<li><a href="#architect-review" id="toc-architect-review">Architect
+Review</a></li>
+<li><a href="#security-review" id="toc-security-review">Security
+Review</a></li>
+<li><a
+href="#reviews-lahe-starts-your-agent-when-a-comment-is-ready-architecture"
+id="toc-reviews-lahe-starts-your-agent-when-a-comment-is-ready-architecture">Reviews:
+LAHE starts your agent when a comment is ready, architecture</a>
+<ul>
+<li><a href="#architect-review-round-1"
+id="toc-architect-review-round-1">Architect Review (Round 1)</a></li>
+<li><a href="#security-review-round-1"
+id="toc-security-review-round-1">Security Review (Round 1)</a></li>
+</ul></li>
+</ul>
+</nav>
+<p>Status: DRAFT, written without the owner. The architect and security
+reviewers have reviewed it, and their tables are at the end. The plan's
+reviews changed several sections, and the plan's review tables list
+those changes. Every guess made on the owner's behalf is listed under
+Assumptions.</p>
+<h2 id="summary">Summary</h2>
+<ul>
+<li><strong>A small process per session does the listening.</strong>
+When auto-answer is on, <code>lahe agent</code> runs for that session.
+It waits for ready items the way <code>lahe monitor</code> does, and
+spends no model usage while nothing is waiting.</li>
+<li><strong>When work lands, it starts one headless run of the user's
+own agent.</strong> For the first version that is
+<code>claude -p</code>, on the login the user already has. It starts
+lean: no CLAUDE.md, hooks, MCP or skills. The run gets LAHE's rules
+once, in its system prompt, and the waiting items as data.</li>
+<li><strong>The run works on copies, in an empty folder.</strong> It
+gets no shell. It can read and edit only a copy of the review's one
+source file. LAHE checks the edit and writes it to the real file itself.
+It then writes the run's replies to a reply file, and the helper folds
+them in the same way it folds a chat agent's replies.</li>
+<li><strong>LAHE enforces the limits itself.</strong> It drains again
+after each run, counts attempts per item, and gives up on an item after
+three. Two runs at most run at once across the machine, and there is a
+daily run limit per session and per machine.</li>
+<li><strong>Permission comes from the terminal. The on and off switch is
+on the page.</strong> A person or chat agent allows auto-answer for a
+session once, from the terminal. After that, the rail's Auto-answer
+switch (wireframe direction B) turns it on and off. Turning it on stops
+the chat agent's monitor. A chat agent that takes the session back stops
+auto-answer.</li>
+<li><strong>First version:</strong> the owner's dogfood, one Markdown
+review per auto-answer session, macOS and Linux only.</li>
+<li><strong>One caveat:</strong> Anthropic's Consumer Terms bar scripted
+access except by API key or where Anthropic "explicitly permit[s] it".
+Whether a script starting <code>claude -p</code> on a subscription
+counts is not settled (OQ1, subscription terms). Running the dogfood on
+the owner's subscription is his call.</li>
+</ul>
+<p>Nothing here needs an install, an API key of LAHE's own, or a
+dependency.</p>
+<h2 id="analysis-of-existing-structure">Analysis of Existing
+Structure</h2>
+<p>What exists and is reused:</p>
+<ul>
+<li><strong><code>lahe monitor</code></strong>
+(<code>src/cli/commands/monitor.js</code>) polls the drain in a Node
+loop and exits on work (0), close (5) or takeover (6). Its ownership
+check and heartbeat are the pattern <code>lahe agent</code> copies. Its
+duplicate guard is not atomic, and its own comments say so, so
+<code>lahe agent</code> does not copy it.</li>
+<li><strong>Session ownership</strong>
+(<code>src/service/agent_sessions.js</code>): one owner per session, the
+<code>handoff_rev</code> fence, and the liveness object the rail
+reads.</li>
+<li><strong>The drain</strong>
+(<code>lahe status --session &lt;id&gt; --json --quiet</code>) prints
+item data only, with page text under <code>page</code> (D12).</li>
+<li><strong>The helper is the only writer of
+<code>events.jsonl</code></strong> (<code>src/service/log.js</code>).
+Agents append reply lines to their own
+<code>replies-&lt;agent&gt;.jsonl</code>, and the helper folds them,
+refuses a stale rev, and runs the handled check for hand edits.</li>
+<li><strong>A lock pattern exists</strong> (<code>withServerLock</code>
+and <code>takeOverStaleLock</code> in
+<code>src/service/static_servers.js</code>): an exclusive-create lock
+file with stale takeover.</li>
+<li><strong>The contract</strong> (<code>CONTRACT</code> in
+<code>src/shared/review_format.js</code>, shipped in the browser bundle)
+is 50 lines and 3,174 words, written for a chat agent. Sorting its lines
+by keyword puts 18 of them (1,079 words) in the group about waking and
+hosts, which only a chat agent needs.
+<code>contract_split_count.js</code> in this folder does the count.</li>
+</ul>
+<p>What changes:</p>
+<ul>
+<li>a new per-session process, <code>lahe agent</code>, and its
+records</li>
+<li>a Node-only prompt builder and a staging area</li>
+<li>an audience tag on each contract line, and a few transport lines
+reworded</li>
+<li><code>lahe monitor</code> and <code>lahe review</code> stand down
+while auto-answer is on</li>
+<li>two page requests (on and off) that go through the event log</li>
+<li>new rail pieces</li>
+</ul>
+<h2 id="components--modules-touched">Components / Modules Touched</h2>
+<pre class="mermaid"><code>flowchart LR
+  subgraph Browser
+    Rail[&quot;Rail: Auto-answer switch,&lt;br/&gt;run count, failure chip,&lt;br/&gt;status line&quot;]
+  end
+  subgraph &quot;Helper (one per machine)&quot;
+    Routes[&quot;routes.js&lt;br/&gt;+ auto-answer request route&quot;]
+    Fold[&quot;reply fold, handled check&lt;br/&gt;(unchanged)&quot;]
+    Live[&quot;agent_sessions.js&lt;br/&gt;liveness + auto-answer state&quot;]
+    Log[(&quot;events.jsonl&lt;br/&gt;(helper is sole writer)&quot;)]
+  end
+  subgraph &quot;lahe agent (one per session)&quot;
+    Sup[&quot;headless_supervisor.js&quot;]
+    Stage[&quot;headless_stage.js&lt;br/&gt;copy in, check, write back&quot;]
+    Prompt[&quot;headless_prompt.js&lt;br/&gt;prompt + reply schema&quot;]
+    Slots[&quot;run_slots.js&quot;]
+    Host[&quot;host_claude_code.js&quot;]
+  end
+  Claude[&quot;claude -p&lt;br/&gt;cwd = empty stage folder&quot;]
+  Src[(&quot;the review&#39;s&lt;br/&gt;source file&quot;)]
+  RF[(&quot;replies-claude-auto.jsonl&quot;)]
+
+  Rail --&gt;|&quot;on / off request&quot;| Routes --&gt; Log
+  Rail --&gt;|poll| Live
+  Sup --&gt;|&quot;drain, read requests&quot;| Log
+  Sup --&gt; Slots
+  Sup --&gt; Stage
+  Stage --&gt;|&quot;copy in&quot;| Src
+  Sup --&gt; Prompt
+  Sup --&gt; Host --&gt;|&quot;spawn, items on stdin&quot;| Claude
+  Claude --&gt;|&quot;Read, Edit the copy&quot;| Stage
+  Claude --&gt;|&quot;structured replies&quot;| Host
+  Stage --&gt;|&quot;checked write back&quot;| Src
+  Sup --&gt;|&quot;checked replies&quot;| RF --&gt; Fold --&gt; Log
+  Sup --&gt;|&quot;agent.json&quot;| Live</code></pre>
+<p>New:</p>
+<ul>
+<li><strong><code>src/cli/commands/agent.js</code></strong>:
+<code>lahe agent allow | disallow | on | off | status</code>, and the
+internal <code>lahe agent supervise</code> that the detached process
+runs. It is registered in <code>src/cli/index.js</code>.</li>
+<li><strong><code>src/service/headless_supervisor.js</code></strong>:
+the loop. It waits for ready items, lets a burst settle, takes a machine
+slot, starts a run, checks and applies the result, counts attempts, and
+obeys stop requests and the handoff fence.</li>
+<li><strong><code>src/service/headless_stage.js</code></strong>: the
+per-run folder. It copies the source in, diffs and checks the result,
+and writes it back safely.</li>
+<li><strong><code>src/service/headless_prompt.js</code></strong> (Node
+only, not in the bundle): builds the system prompt from the tagged
+contract, the reply schema from <code>REPLY_FIELD</code> and
+<code>REPLY_REQUIRED</code>, and the run's stdin from the drain.</li>
+<li><strong><code>src/service/run_slots.js</code></strong>: the
+machine-wide limits, both runs at once and runs per day.</li>
+<li><strong><code>src/service/host_claude_code.js</code></strong>: the
+one host adapter. It builds the <code>claude</code> command and
+environment, reads the result, and names the failure.</li>
+<li><strong><code>src/service/locks.js</code></strong>: two kinds of
+lock in one shared module.
+<ul>
+<li><strong>A short lock</strong>: <code>withServerLock</code> and
+<code>takeOverStaleLock</code>, moved out of
+<code>static_servers.js</code> unchanged. They hold a lock only while a
+callback runs, and treat it as stale after 20 seconds. Static servers
+and the daily counts use it.</li>
+<li><strong>A lock held for a process's life</strong>: new. It is stale
+only when its pid and that pid's start time no longer match a live
+process, however old the file is. The supervisor lock and the run slots
+use it. <code>ps</code> runs with <code>LC_ALL=C TZ=UTC</code>, so the
+start time reads the same from the helper and the CLI.</li>
+</ul></li>
+<li><strong><code>src/service/file_stamp.js</code></strong>: a stamp of
+a user file (content hash, size, mtime). It is not
+<code>source_stamp.js</code>, which stamps LAHE's own code.</li>
+</ul>
+<p>Changed:</p>
+<ul>
+<li><p><strong><code>src/shared/review_format.js</code></strong>: a new
+<code>CONTRACT_LINES</code> list of <code>{ tag, text }</code>, with
+each tag <code>all</code>, <code>chat</code> or <code>headless</code>.
+<code>CONTRACT</code> stays a list of strings, and becomes the
+<code>all</code> and <code>chat</code> lines in order, so today's
+readers of it keep working. A few transport lines are reworded to fit
+both kinds of agent.</p></li>
+<li><p><strong><code>src/shared/protocol.js</code></strong>: the
+auto-answer states, reasons, rail words, limits, event kinds and the
+route, spelled once, next to <code>AGENT_LIVENESS</code>.
+<code>SERVICE_CONTRACT</code> goes from 13 to 14, so an older running
+helper is restarted instead of refusing the new event and
+route.</p></li>
+<li><p><strong><code>src/service/agent_sessions.js</code></strong>:
+reads <code>agent.json</code>, counts a live supervisor at the current
+rev as listening, and adds the <code>auto_answer</code> object to the
+liveness answer.</p></li>
+<li><p><strong><code>src/service/routes.js</code></strong>:
+<code>POST /lahe/v1/auto-answer</code>. The generic events route refuses
+<code>auto_answer.requested</code>, so the page cannot skip the new
+route by posting that event directly.</p></li>
+<li><p><strong><code>src/service/projection.js</code></strong>: folds
+<code>auto_answer.requested</code> into the latest request for the
+review.</p></li>
+<li><p><strong><code>src/service/replies.js</code></strong> (the fold):
+while auto-answer holds a review, a reply from any other agent is
+rejected with reason <code>auto_answer_owns</code>. The rest of the fold
+is unchanged.</p></li>
+<li><p><strong><code>src/service/index.js</code></strong> (the helper):
+starts <code>lahe agent supervise</code> when an "on" request lands for
+an allowed session, and restarts it when "on" still stands but no live
+supervisor holds the lock.</p></li>
+<li><p><strong><code>src/cli/commands/monitor.js</code></strong>: exits
+with 6 when a live supervisor holds the current rev. Its exit-6 words
+say auto-answer took the session, and that
+<code>lahe session takeover</code> takes it back.</p></li>
+<li><p><strong><code>src/cli/commands/review.js</code></strong>: on
+re-entry into such a session, it says auto-answer owns it and prints no
+monitor instructions.</p></li>
+<li><p><strong><code>src/cli/commands/review.js</code> and
+<code>add.js</code></strong>: both refuse to add a second review to a
+session auto-answer holds.</p></li>
+<li><p><strong><code>src/layer/overlay.js</code>, <code>sync.js</code>,
+<code>index.js</code> and <code>tab_done.js</code></strong>:</p>
+<ul>
+<li>the Auto-answer switch and its post</li>
+<li>the run count, failure chip and status words</li>
+<li>the rail repainting when <code>auto_answer</code> changes</li>
+<li>the overdue banner, late rings and overdue toasts switched off while
+auto-answer is on</li>
+</ul></li>
+<li><p><strong>Docs and copies:</strong></p>
+<ul>
+<li><code>src/shared/manifest.js</code></li>
+<li><code>skills/lahe/SKILL.md</code></li>
+<li><code>docs/CONTRACTS.md</code></li>
+<li><code>docs/CLI.md</code></li>
+<li><code>docs/diagrams/session_ownership.md</code></li>
+<li><code>test/unit/review_format.test.js</code></li>
+</ul>
+<p>The skill and the contract travel together.</p></li>
+</ul>
+<p>Not touched: the lifecycle table and the handled check's rules.</p>
+<h2 id="data--state-changes">Data / State Changes</h2>
+<h3 id="one-review-per-auto-answer-session">One review per auto-answer
+session</h3>
+<p>A session can own several reviews, but auto-answer holds exactly one.
+<code>lahe agent allow</code> names the review, and refuses when the
+session owns more than one. While the allowance holds,
+<code>lahe review</code> and <code>lahe add</code> refuse to add a
+second review to that session. So every auto-answer file below belongs
+to that one review: the "on" and "off" events go in its
+<code>events.jsonl</code>, the reply file sits in its folder, and the
+supervisor drains only its items.</p>
+<h3 id="one-writer-per-file">One writer per file</h3>
+<div class="table-scroll"><table>
+<thead>
+<tr>
+<th>File</th>
+<th>Only writer</th>
+<th>Holds</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>auto_answer.json</code> (session folder)</td>
+<td><code>lahe agent allow</code> and <code>disallow</code>, under the
+short lock</td>
+<td>what the user allowed</td>
+</tr>
+<tr>
+<td><code>events.jsonl</code> (the review's)</td>
+<td>the helper</td>
+<td>on and off requests, as events</td>
+</tr>
+<tr>
+<td><code>agent.json</code></td>
+<td><code>lahe agent</code></td>
+<td>what it is doing now</td>
+</tr>
+<tr>
+<td><code>runs.jsonl</code>, <code>attempts.json</code>,
+<code>runs/</code></td>
+<td><code>lahe agent</code></td>
+<td>run history</td>
+</tr>
+<tr>
+<td><code>replies-claude-auto.jsonl</code></td>
+<td><code>lahe agent</code> (append only)</td>
+<td>the run's checked replies, for the helper to fold</td>
+</tr>
+<tr>
+<td><code>run-slots/</code></td>
+<td>whichever <code>lahe agent</code> takes a slot (exclusive
+create)</td>
+<td>the machine-wide limits</td>
+</tr>
+</tbody>
+</table></div>
+<h3
+id="auto_answerjson-the-allowance-written-only-by-lahe-agent-allow-and-disallow"><code>auto_answer.json</code>,
+the allowance (written only by <code>lahe agent allow</code> and
+<code>disallow</code>)</h3>
+<p>It is its own file, not a block in <code>session.json</code>, because
+<code>session.json</code> has several whole-file writers (create,
+takeover, close, name) that take no lock. A race there could write an
+old <code>handoff_rev</code> back over a takeover.</p>
+<div class="sourceCode" id="cb2"><pre
+class="sourceCode json"><code class="sourceCode json"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="fu">{</span></span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a>  <span class="dt">&quot;allowed_at&quot;</span><span class="fu">:</span> <span class="st">&quot;2026-09-29T15:02:11.204Z&quot;</span><span class="fu">,</span></span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a>  <span class="dt">&quot;handoff_rev&quot;</span><span class="fu">:</span> <span class="dv">4</span><span class="fu">,</span></span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a>  <span class="dt">&quot;review&quot;</span><span class="fu">:</span> <span class="st">&quot;r657344998844&quot;</span><span class="fu">,</span></span>
+<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a>  <span class="dt">&quot;host&quot;</span><span class="fu">:</span> <span class="st">&quot;claude-code&quot;</span><span class="fu">,</span></span>
+<span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a>  <span class="dt">&quot;claude_path&quot;</span><span class="fu">:</span> <span class="st">&quot;/Users/ken/.local/bin/claude&quot;</span><span class="fu">,</span></span>
+<span id="cb2-7"><a href="#cb2-7" aria-hidden="true" tabindex="-1"></a>  <span class="dt">&quot;model&quot;</span><span class="fu">:</span> <span class="st">&quot;sonnet&quot;</span><span class="fu">,</span></span>
+<span id="cb2-8"><a href="#cb2-8" aria-hidden="true" tabindex="-1"></a>  <span class="dt">&quot;source_file&quot;</span><span class="fu">:</span> <span class="st">&quot;/Users/ken/docs/plan.md&quot;</span><span class="fu">,</span></span>
+<span id="cb2-9"><a href="#cb2-9" aria-hidden="true" tabindex="-1"></a>  <span class="dt">&quot;note&quot;</span><span class="fu">:</span> <span class="st">&quot;Short note from whoever allowed it. At most 2,000 characters.&quot;</span><span class="fu">,</span></span>
+<span id="cb2-10"><a href="#cb2-10" aria-hidden="true" tabindex="-1"></a>  <span class="dt">&quot;env&quot;</span><span class="fu">:</span> <span class="fu">{</span> <span class="dt">&quot;HOME&quot;</span><span class="fu">:</span> <span class="st">&quot;...&quot;</span><span class="fu">,</span> <span class="dt">&quot;PATH&quot;</span><span class="fu">:</span> <span class="st">&quot;...&quot;</span><span class="fu">,</span> <span class="dt">&quot;USER&quot;</span><span class="fu">:</span> <span class="st">&quot;...&quot;</span><span class="fu">,</span> <span class="dt">&quot;LANG&quot;</span><span class="fu">:</span> <span class="st">&quot;...&quot;</span><span class="fu">,</span> <span class="dt">&quot;TMPDIR&quot;</span><span class="fu">:</span> <span class="st">&quot;...&quot;</span><span class="fu">,</span> <span class="dt">&quot;CLAUDE_CONFIG_DIR&quot;</span><span class="fu">:</span> <span class="st">&quot;...&quot;</span> <span class="fu">},</span></span>
+<span id="cb2-11"><a href="#cb2-11" aria-hidden="true" tabindex="-1"></a>  <span class="dt">&quot;runs_per_day&quot;</span><span class="fu">:</span> <span class="dv">40</span></span>
+<span id="cb2-12"><a href="#cb2-12" aria-hidden="true" tabindex="-1"></a><span class="fu">}</span></span></code></pre></div>
+<ul>
+<li><strong>Allowed means</strong> that this file's
+<code>handoff_rev</code> equals the session's <code>handoff_rev</code>.
+A takeover bumps the session's rev and never touches this file, so a
+takeover ends the allowance too. Auto-answer can then only come back
+through <code>lahe agent allow</code>, from a terminal.</li>
+<li><strong><code>env</code></strong> is the environment allowlist,
+recorded from the shell that ran <code>allow</code>. The helper starts
+the supervisor, so the supervisor inherits whatever shell started the
+helper. The run's environment is built only from this record. That way
+preflight tests the same environment the run will get. No API key is
+ever recorded or passed (see the run's command).</li>
+<li><strong><code>source_file</code></strong> is the review's
+CLI-recorded <code>source_path</code>, resolved to a real path when
+auto-answer is allowed. It is never the page-posted
+<code>source_hint</code>, and never a linked file.</li>
+<li><strong>Turn-on is refused</strong> when the file is an instruction
+file:
+<ul>
+<li><code>CLAUDE.md</code>, <code>AGENTS.md</code>,
+<code>GEMINI.md</code>, <code>SKILL.md</code></li>
+<li>anything under <code>skills/</code>, <code>.claude/</code> or
+<code>.github/</code></li>
+<li>a dot-prefixed path</li>
+<li>anything in the state directory, or outside the home directory</li>
+</ul></li>
+</ul>
+<h3 id="on-and-off-are-events-and-the-page-may-only-ask">On and off are
+events, and the page may only ask</h3>
+<p><code>POST /lahe/v1/auto-answer</code> takes one field,
+<code>want</code>, which is <code>on</code> or <code>off</code>. It
+refuses any other value and ignores every other field. It passes the D11
+checks, and the helper appends <code>auto_answer.requested</code> with
+<code>{ "want": "on" | "off", "from": "page" | "terminal" }</code> to
+that review's <code>events.jsonl</code>. The helper sets
+<code>from</code> itself, from the <code>x-lahe-client</code> header
+(<code>layer</code> or <code>cli</code>); the body never sets it.
+<code>lahe agent on</code> and <code>off</code> post to the same route
+with the review token from the state folder, the way
+<code>lahe add</code> reaches the helper. The page never writes owner
+state, and the generic events route refuses this event type.</p>
+<ul>
+<li><strong>"On" for a session that is not allowed</strong> does nothing
+but record the request. The rail then shows the switch as not available,
+with the terminal command to allow it (see the rail section).</li>
+<li><strong>"On" for an allowed session</strong> makes the helper start
+<code>lahe agent supervise --session &lt;id&gt; --state-dir &lt;dir&gt;</code>
+(detached, its own process group) unless a live one holds the lock. It
+runs the same Node binary as the helper, with the clone's
+<code>bin/lahe.js</code>.</li>
+<li><strong>"On" still stands, but no supervisor is alive</strong> (it
+was killed, or it exited to restart on new code): the helper starts a
+new one the next time the page asks for liveness. Until one holds the
+lock, the rail shows "starting". More than three starts in ten minutes
+stops auto-answer with reason <code>failing</code>.</li>
+<li><strong>"Off"</strong> is read by the supervisor on its next
+look.</li>
+</ul>
+<h3 id="agentjson-the-supervisors-own-state"><code>agent.json</code>,
+the supervisor's own state</h3>
+<div class="sourceCode" id="cb3"><pre
+class="sourceCode json"><code class="sourceCode json"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="fu">{</span> <span class="dt">&quot;pid&quot;</span><span class="fu">:</span> <span class="dv">4121</span><span class="fu">,</span> <span class="dt">&quot;started&quot;</span><span class="fu">:</span> <span class="st">&quot;Tue Sep 29 15:02:12 2026&quot;</span><span class="fu">,</span> <span class="dt">&quot;handoff_rev&quot;</span><span class="fu">:</span> <span class="dv">4</span><span class="fu">,</span> <span class="dt">&quot;at&quot;</span><span class="fu">:</span> <span class="st">&quot;...&quot;</span><span class="fu">,</span></span>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a>  <span class="dt">&quot;state&quot;</span><span class="fu">:</span> <span class="st">&quot;running&quot;</span><span class="fu">,</span> <span class="dt">&quot;reason&quot;</span><span class="fu">:</span> <span class="kw">null</span><span class="fu">,</span> <span class="dt">&quot;since&quot;</span><span class="fu">:</span> <span class="st">&quot;...&quot;</span><span class="fu">,</span> <span class="dt">&quot;retry_at&quot;</span><span class="fu">:</span> <span class="kw">null</span><span class="fu">,</span></span>
+<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a>  <span class="dt">&quot;run&quot;</span><span class="fu">:</span> <span class="fu">{</span> <span class="dt">&quot;run_id&quot;</span><span class="fu">:</span> <span class="st">&quot;run_0007&quot;</span><span class="fu">,</span> <span class="dt">&quot;pgid&quot;</span><span class="fu">:</span> <span class="dv">4188</span><span class="fu">,</span> <span class="dt">&quot;started&quot;</span><span class="fu">:</span> <span class="st">&quot;Tue Sep 29 15:06:40 2026&quot;</span><span class="fu">,</span> <span class="dt">&quot;items&quot;</span><span class="fu">:</span> <span class="dv">2</span> <span class="fu">},</span></span>
+<span id="cb3-4"><a href="#cb3-4" aria-hidden="true" tabindex="-1"></a>  <span class="dt">&quot;runs_today&quot;</span><span class="fu">:</span> <span class="dv">6</span><span class="fu">,</span> <span class="dt">&quot;tokens_today&quot;</span><span class="fu">:</span> <span class="dv">58210</span> <span class="fu">}</span></span></code></pre></div>
+<ul>
+<li><strong><code>started</code></strong> is the process start time as
+<code>ps -o lstart= -p &lt;pid&gt;</code> prints it. A pid only counts
+as the same process when both the pid and that start time match. That is
+how a reused pid is told apart from the original, since this process has
+no port to answer a health check.</li>
+<li><strong><code>state</code></strong> is one of <code>starting</code>,
+<code>idle</code>, <code>gathering</code>, <code>queued</code>,
+<code>running</code>, <code>applying</code>, <code>paused</code> or
+<code>stopped</code>.</li>
+<li><strong><code>reason</code></strong> is one of
+<code>turned_off</code>, <code>stopped_from_page</code>,
+<code>taken_over</code>, <code>closed</code>,
+<code>limit_session</code>, <code>limit_machine</code>,
+<code>usage_limit</code>, <code>signed_out</code>,
+<code>not_installed</code>, <code>source_missing</code>,
+<code>failing</code>, <code>restarting</code>, or
+<code>null</code>.</li>
+<li><strong><code>tokens_today</code></strong> adds up each run's
+reported input and output tokens. Cache reads and writes are left
+out.</li>
+</ul>
+<h3 id="run-records">Run records</h3>
+<ul>
+<li><strong><code>runs.jsonl</code></strong>, one line per run:</li>
+</ul>
+<div class="sourceCode" id="cb4"><pre
+class="sourceCode json"><code class="sourceCode json"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a><span class="fu">{</span><span class="dt">&quot;run_id&quot;</span><span class="fu">:</span><span class="st">&quot;run_0007&quot;</span><span class="fu">,</span><span class="dt">&quot;started_at&quot;</span><span class="fu">:</span><span class="st">&quot;...&quot;</span><span class="fu">,</span><span class="dt">&quot;ended_at&quot;</span><span class="fu">:</span><span class="st">&quot;...&quot;</span><span class="fu">,</span><span class="dt">&quot;items&quot;</span><span class="fu">:</span><span class="ot">[</span><span class="fu">{</span><span class="dt">&quot;id&quot;</span><span class="fu">:</span><span class="st">&quot;c_7fa2&quot;</span><span class="fu">,</span><span class="dt">&quot;rev&quot;</span><span class="fu">:</span><span class="dv">2</span><span class="fu">}</span><span class="ot">]</span><span class="fu">,</span></span>
+<span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a> <span class="dt">&quot;outcome&quot;</span><span class="fu">:</span><span class="st">&quot;finished&quot;</span><span class="fu">,</span><span class="dt">&quot;failure&quot;</span><span class="fu">:</span><span class="kw">null</span><span class="fu">,</span><span class="dt">&quot;exit_code&quot;</span><span class="fu">:</span><span class="dv">0</span><span class="fu">,</span><span class="dt">&quot;turns&quot;</span><span class="fu">:</span><span class="dv">9</span><span class="fu">,</span></span>
+<span id="cb4-3"><a href="#cb4-3" aria-hidden="true" tabindex="-1"></a> <span class="dt">&quot;applied&quot;</span><span class="fu">:{</span><span class="dt">&quot;file&quot;</span><span class="fu">:</span><span class="st">&quot;/Users/ken/docs/plan.md&quot;</span><span class="fu">,</span><span class="dt">&quot;before&quot;</span><span class="fu">:</span><span class="st">&quot;sha256:...&quot;</span><span class="fu">,</span><span class="dt">&quot;after&quot;</span><span class="fu">:</span><span class="st">&quot;sha256:...&quot;</span><span class="fu">},</span></span>
+<span id="cb4-4"><a href="#cb4-4" aria-hidden="true" tabindex="-1"></a> <span class="dt">&quot;replies_written&quot;</span><span class="fu">:</span><span class="dv">2</span><span class="fu">,</span><span class="dt">&quot;replies_folded&quot;</span><span class="fu">:</span><span class="dv">2</span><span class="fu">,</span></span>
+<span id="cb4-5"><a href="#cb4-5" aria-hidden="true" tabindex="-1"></a> <span class="dt">&quot;usage&quot;</span><span class="fu">:{</span><span class="dt">&quot;input&quot;</span><span class="fu">:</span><span class="dv">12</span><span class="fu">,</span><span class="dt">&quot;output&quot;</span><span class="fu">:</span><span class="dv">1053</span><span class="fu">,</span><span class="dt">&quot;cache_read&quot;</span><span class="fu">:</span><span class="dv">36630</span><span class="fu">,</span><span class="dt">&quot;cache_write&quot;</span><span class="fu">:</span><span class="dv">8922</span><span class="fu">,</span><span class="dt">&quot;cost_usd_list&quot;</span><span class="fu">:</span><span class="fl">0.0536</span><span class="fu">}}</span></span></code></pre></div>
+<ul>
+<li><code>outcome</code> is <code>finished</code>, <code>failed</code>,
+<code>stopped</code>, <code>timed_out</code>, <code>refused</code> (the
+edit failed a check) or <code>conflict</code> (the real file changed
+during the run).</li>
+<li><code>failure</code> is <code>null</code> or one of
+<code>signed_out</code>, <code>usage_limit</code>,
+<code>not_installed</code>, <code>crashed</code>,
+<code>bad_output</code>.</li>
+<li><strong><code>attempts.json</code></strong> counts attempts per
+item, both per revision and across all revisions:
+<code>{ "c_7fa2": { "2": 1, "all": 3 } }</code>.</li>
+<li><strong><code>runs/&lt;run_id&gt;/</code></strong> holds the stage
+folder <code>work/</code> (with the one copy), <code>result.json</code>,
+and a trimmed <code>log.jsonl</code>. The log keeps tool names, paths,
+sizes, usage and the replies, and drops every tool result. The prompt
+file sits outside <code>work/</code> and is removed when the run ends,
+however it ends. The last 20 run folders are kept. Each applied run also
+writes its diff to <code>runs/&lt;run_id&gt;/diff.patch</code>, so
+<code>lahe agent status --diffs</code> shows the edits of the kept runs,
+and hashes only for older ones.</li>
+</ul>
+<h3 id="machine-wide-slots">Machine-wide slots</h3>
+<p><code>&lt;state-dir&gt;/run-slots/</code> holds two slot files at
+most (<code>1.lock</code>, <code>2.lock</code>), each
+<code>{ "pid", "started", "pgid", "session", "at" }</code>. It also
+holds <code>today.json</code>, the machine's run count for the local
+calendar day, updated under the shared lock. A slot is taken by
+exclusive create. It is reclaimed only when its pid and start time no
+longer match a live process and its run group is gone.</p>
+<h3 id="the-reply-schema-a-run-returns">The reply schema a run
+returns</h3>
+<p>Built from <code>REPLY_FIELD</code> and <code>REPLY_REQUIRED</code>
+in <code>protocol.js</code>, so the names cannot drift. A test asserts
+they match.</p>
+<div class="sourceCode" id="cb5"><pre
+class="sourceCode json"><code class="sourceCode json"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a><span class="fu">{</span></span>
+<span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a>  <span class="dt">&quot;replies&quot;</span><span class="fu">:</span> <span class="ot">[</span></span>
+<span id="cb5-3"><a href="#cb5-3" aria-hidden="true" tabindex="-1"></a>    <span class="fu">{</span> <span class="dt">&quot;item&quot;</span><span class="fu">:</span> <span class="st">&quot;c_7fa2&quot;</span><span class="fu">,</span> <span class="dt">&quot;rev&quot;</span><span class="fu">:</span> <span class="dv">2</span><span class="fu">,</span> <span class="dt">&quot;status&quot;</span><span class="fu">:</span> <span class="st">&quot;handled&quot;</span><span class="fu">,</span> <span class="dt">&quot;text&quot;</span><span class="fu">:</span> <span class="st">&quot;Changed </span><span class="ch">\&quot;</span><span class="st">utilize</span><span class="ch">\&quot;</span><span class="st"> to </span><span class="ch">\&quot;</span><span class="st">use</span><span class="ch">\&quot;</span><span class="st">.&quot;</span><span class="fu">,</span></span>
+<span id="cb5-4"><a href="#cb5-4" aria-hidden="true" tabindex="-1"></a>      <span class="dt">&quot;user_needs_to_see_reply&quot;</span><span class="fu">:</span> <span class="kw">false</span> <span class="fu">}</span><span class="ot">,</span></span>
+<span id="cb5-5"><a href="#cb5-5" aria-hidden="true" tabindex="-1"></a>    <span class="fu">{</span> <span class="dt">&quot;item&quot;</span><span class="fu">:</span> <span class="st">&quot;c_81b0&quot;</span><span class="fu">,</span> <span class="dt">&quot;rev&quot;</span><span class="fu">:</span> <span class="dv">1</span><span class="fu">,</span> <span class="dt">&quot;status&quot;</span><span class="fu">:</span> <span class="st">&quot;not_handled&quot;</span><span class="fu">,</span> <span class="dt">&quot;reason&quot;</span><span class="fu">:</span> <span class="st">&quot;...&quot;</span> <span class="fu">}</span><span class="ot">,</span></span>
+<span id="cb5-6"><a href="#cb5-6" aria-hidden="true" tabindex="-1"></a>    <span class="fu">{</span> <span class="dt">&quot;item&quot;</span><span class="fu">:</span> <span class="st">&quot;c_90d3&quot;</span><span class="fu">,</span> <span class="dt">&quot;rev&quot;</span><span class="fu">:</span> <span class="dv">1</span><span class="fu">,</span> <span class="dt">&quot;status&quot;</span><span class="fu">:</span> <span class="st">&quot;question&quot;</span><span class="fu">,</span> <span class="dt">&quot;text&quot;</span><span class="fu">:</span> <span class="st">&quot;What is this year&#39;s figure?&quot;</span> <span class="fu">}</span></span>
+<span id="cb5-7"><a href="#cb5-7" aria-hidden="true" tabindex="-1"></a>  <span class="ot">]</span></span>
+<span id="cb5-8"><a href="#cb5-8" aria-hidden="true" tabindex="-1"></a><span class="fu">}</span></span></code></pre></div>
+<ul>
+<li><strong>The run never names files.</strong> <code>lahe agent</code>
+fills <code>files</code> from its own before and after stamps. When a
+run changed the file, every <code>handled</code> reply from that run
+lists it.</li>
+<li><strong><code>text</code> and <code>reason</code> are capped at 500
+characters</strong> in the schema, and checked again. A reply over the
+cap is dropped and logged, not cut short. Its item then has no reply,
+which counts as an attempt.</li>
+<li><strong>A reply for an item or revision not in the batch is
+dropped</strong> and logged.</li>
+</ul>
+<h3 id="the-liveness-answer-gains-auto_answer">The liveness answer gains
+<code>auto_answer</code></h3>
+<div class="sourceCode" id="cb6"><pre
+class="sourceCode json"><code class="sourceCode json"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a><span class="st">&quot;auto_answer&quot;</span><span class="er">:</span> <span class="fu">{</span> <span class="dt">&quot;available&quot;</span><span class="fu">:</span> <span class="kw">true</span><span class="fu">,</span> <span class="dt">&quot;on&quot;</span><span class="fu">:</span> <span class="kw">true</span><span class="fu">,</span> <span class="dt">&quot;state&quot;</span><span class="fu">:</span> <span class="st">&quot;running&quot;</span><span class="fu">,</span> <span class="dt">&quot;reason&quot;</span><span class="fu">:</span> <span class="kw">null</span><span class="fu">,</span></span>
+<span id="cb6-2"><a href="#cb6-2" aria-hidden="true" tabindex="-1"></a>                 <span class="dt">&quot;since&quot;</span><span class="fu">:</span> <span class="st">&quot;...&quot;</span><span class="fu">,</span> <span class="dt">&quot;retry_at&quot;</span><span class="fu">:</span> <span class="kw">null</span><span class="fu">,</span> <span class="dt">&quot;working_on&quot;</span><span class="fu">:</span> <span class="dv">2</span><span class="fu">,</span></span>
+<span id="cb6-3"><a href="#cb6-3" aria-hidden="true" tabindex="-1"></a>                 <span class="dt">&quot;runs_today&quot;</span><span class="fu">:</span> <span class="dv">6</span><span class="fu">,</span> <span class="dt">&quot;runs_limit&quot;</span><span class="fu">:</span> <span class="dv">40</span><span class="fu">,</span> <span class="dt">&quot;tokens_today&quot;</span><span class="fu">:</span> <span class="dv">58210</span> <span class="fu">}</span></span></code></pre></div>
+<ul>
+<li><strong><code>null</code></strong> when the session has never been
+allowed.</li>
+<li><strong><code>available</code></strong> is false when the session is
+not allowed at the current rev.</li>
+<li>The page is never sent a path, the note, or a dollar figure.</li>
+</ul>
+<h2 id="key-flows">Key Flows</h2>
+<h3 id="allowing-it-then-turning-it-on">Allowing it, then turning it
+on</h3>
+<pre class="mermaid"><code>sequenceDiagram
+  participant U as User or chat agent (terminal)
+  participant CLI as lahe agent allow
+  participant S as auto_answer.json
+  participant R as Rail (reviewer)
+  participant H as Helper
+  participant A as lahe agent
+  participant M as chat agent&#39;s monitor
+
+  U-&gt;&gt;CLI: lahe agent allow --session s_x [--note ...] [--model sonnet]
+  CLI-&gt;&gt;CLI: preflight with the run&#39;s exact env and flags
+  CLI-&gt;&gt;U: warning: what it may do, who can make it act, cost, terms
+  CLI-&gt;&gt;S: under the short lock: write it at the current handoff_rev
+  R-&gt;&gt;R: Auto-answer switch is now available
+  R-&gt;&gt;R: first time: warning panel in the footer
+  R-&gt;&gt;H: POST /lahe/v1/auto-answer {want: on}
+  H-&gt;&gt;H: append auto_answer.requested
+  H-&gt;&gt;A: spawn detached (lock held? then no)
+  A-&gt;&gt;A: take the supervisor lock, agent.json state idle
+  M-&gt;&gt;M: next look: live supervisor at this rev, exit 6</code></pre>
+<ul>
+<li><p><strong>Preflight</strong> runs <code>claude --version</code> and
+<code>claude auth status</code> at the recorded absolute path, with the
+environment it then records in <code>auto_answer.json</code>. It refuses
+when <code>claude</code> is missing or signed out, when the source file
+is not allowed, or when the session owns more than one review. It
+reports whether the login is a subscription or billed by the
+token.</p></li>
+<li><p><strong>The terminal warning</strong> (R6, say what it may do) is
+printed every time. It says:</p>
+<ul>
+<li>it edits only this one file and runs no commands</li>
+<li>anyone who can comment on this review, or run script in its pages,
+can make it edit that file, and the file may later be read by agents
+that do have a shell</li>
+<li>each run uses the user's Claude usage, and costs money when the
+Claude login is billed by the token</li>
+<li>the subscription terms question (OQ1, whether the terms allow
+this)</li>
+</ul>
+<p>The plan pins its exact words.</p></li>
+<li><p><strong><code>lahe agent on --session s_x</code></strong> is
+<code>allow</code> followed by an "on" request, for a user who wants it
+on from the terminal.</p></li>
+<li><p><strong>The chat agent learns from exit 6</strong>, which the
+skill already reads as "stop, another agent owns this". The skill gains
+one sentence: when auto-answer is on for your session, tell the human
+and stop (answers Q3, telling the chat agent). <code>lahe review</code>
+re-entry into such a session says the same and prints no monitor
+instructions.</p></li>
+</ul>
+<h3 id="a-wake-one-run">A wake, one run</h3>
+<pre class="mermaid"><code>sequenceDiagram
+  participant P as Reviewer&#39;s page
+  participant H as Helper
+  participant A as lahe agent
+  participant L as Run slots
+  participant G as Stage folder
+  participant C as claude -p
+  participant F as Source file
+
+  P-&gt;&gt;H: item ready
+  A-&gt;&gt;H: drain every 2s (no model)
+  A-&gt;&gt;A: gathering: 15s with no new item, or 60s after the first
+  A-&gt;&gt;L: take a slot, count today&#39;s run
+  alt no slot
+    A-&gt;&gt;A: queued (rail: waiting for another review&#39;s run)
+  end
+  A-&gt;&gt;G: copy the source in, stamp it
+  A-&gt;&gt;C: spawn in G: prompt file, items on stdin
+  C-&gt;&gt;G: Read, Edit the copy
+  C--&gt;&gt;A: exit, result with replies and usage
+  A-&gt;&gt;A: check the replies against the batch
+  A-&gt;&gt;G: diff the copy against the stamp
+  A-&gt;&gt;F: real file unchanged, no new raw HTML? atomic write back
+  A-&gt;&gt;H: append checked replies to replies-claude-auto.jsonl
+  H-&gt;&gt;H: fold: rev check, handled check (re-render first for Markdown)
+  A-&gt;&gt;H: wait for each reply&#39;s fold result (30s at most)
+  A-&gt;&gt;A: record the run, count attempts
+  A-&gt;&gt;L: release the slot
+  A-&gt;&gt;A: drain again: next run, or idle</code></pre>
+<p><strong>The batch</strong></p>
+<ul>
+<li>Every ready item the drain lists when the run starts goes in, up to
+25 items and 100 KB of input in all.</li>
+<li>An item whose reviewer text (note plus change) is over 8,000
+characters is not sent. It gets a <code>not_handled</code> reply: "Too
+long for auto-answer; a chat agent can take it." D12 forbids cutting
+reviewer text, so the item is refused whole.</li>
+</ul>
+<p><strong>The stdin payload</strong> is the drain's item lines, cut to
+a fixed list of fields. Each item keeps what the reviewer wrote
+(<code>note</code>, <code>change</code>), its identity
+(<code>review</code>, <code>id</code>, <code>rev</code>,
+<code>kind</code>), its thread, and the page text under
+<code>page</code>. The page's <code>path</code>, <code>origin</code> and
+<code>linked_file</code> are dropped, and so is the drain's summary
+line. Each item's <code>source_hint</code> is replaced by the stage path
+of the copy. There is no instruction text in it, per item or per wake
+(R14, rules once per run). The supervisor drains in its own process,
+through <code>status.js</code> with <code>suppressActivityTouch</code>
+set, as <code>lahe monitor</code> does, so its looks never make the rail
+say an agent is working.</p>
+<p><strong>Items that arrive mid-run</strong> wait for the next run
+(R11, nothing is lost). If the reviewer rewords an item mid-run, the
+run's reply names the old rev, and the helper refuses it at fold.</p>
+<p><strong>Checks before anything reaches the real file:</strong></p>
+<ul>
+<li>The run must have ended <code>finished</code>, with output that
+matches the schema.</li>
+<li>The real file's stamp must still match the one taken at copy-in. If
+it does not, the outcome is <code>conflict</code>: nothing is written or
+replied, and the items go into the next run with a fresh copy. A
+conflict is not an attempt, but it does count toward the stop after
+three failed runs in a row. The next copy-in waits until the file has
+been unchanged for 15 seconds, so an owner typing in the file does not
+start run after run.</li>
+<li>If the copy changed, every item in the batch must have a reply. A
+finished run that edited the file but left an item without a reply is
+<code>refused</code>: nothing is written and no reply is sent, so no
+change reaches the file without a reply beside it. One case gets past
+this check: the run edits an item's passage and also replies
+<code>question</code> for that item.</li>
+<li>The diff must add no raw HTML tag, no <code>on…=</code> attribute
+and no <code>javascript:</code> URL. If it does, the outcome is
+<code>refused</code>: nothing is written, and each <code>handled</code>
+reply in the run becomes <code>not_handled</code> with the reason
+"Auto-answer does not add raw HTML or scripts; a chat agent can do
+this."</li>
+<li>The write-back re-checks the target at write time. It must be a
+regular file, not a symlink, at the same real path, owned by the user.
+The new text goes to a temp file beside it, which is then renamed over
+the target.</li>
+</ul>
+<p><strong>Replies go through the helper, as any agent's do.</strong>
+<code>lahe agent</code> appends them with <code>reply.js</code>'s
+encoder. It then reads the review's <code>events.jsonl</code> for a
+<code>reply.folded</code> or <code>reply.rejected</code> matching each
+reply's item and rev, before it counts attempts or drains. When the
+handled check holds a reply back, the helper still writes a
+<code>reply.folded</code>, marked to say the change is not on the page.
+A reply that has been written but not yet folded counts as answered, so
+the next drain cannot hand the item out twice. If no fold result arrives
+in 30 seconds (the helper is down), nothing is counted, the timeout is
+logged, and the loop goes on.</p>
+<p><strong>If <code>lahe agent</code> dies between writing the file back
+and writing the replies,</strong> <code>runs.jsonl</code> shows
+<code>applied</code> with <code>replies_written: 0</code>.
+<code>result.json</code> is still in the run folder, so the next
+supervisor finishes the replies before it does anything else.</p>
+<h3 id="the-supervisors-states">The supervisor's states</h3>
+<pre class="mermaid"><code>stateDiagram-v2
+  [*] --&gt; idle : started, lock taken
+  idle --&gt; gathering : a ready item appears
+  gathering --&gt; queued : 15s with no new item, or 60s after the first
+  queued --&gt; running : slot free, under both daily limits
+  queued --&gt; paused : a daily limit is reached
+  running --&gt; applying : run exits
+  applying --&gt; gathering : items left
+  applying --&gt; idle : nothing left
+  applying --&gt; paused : usage_limit reported by the host
+  applying --&gt; stopped : signed_out, not_installed, 3 failed runs in a row
+  paused --&gt; queued : retry_at passes, or the next day under the limits
+  idle --&gt; stopped : off, stopped from page, takeover, close, restarting
+  running --&gt; stopped : off, stopped from page, takeover, close
+  stopped --&gt; [*]</code></pre>
+<ul>
+<li><strong>Every look</strong> (every 2 seconds) checks:
+<ul>
+<li>the session is open</li>
+<li>the rev still matches</li>
+<li>the latest request is not "off"</li>
+<li>its own code is not older than the clone</li>
+</ul></li>
+<li><strong>Stale code</strong> restarts it cleanly: it releases its
+lock and exits with reason <code>restarting</code>, and the helper
+starts a fresh supervisor on the same allowance, as for any dead
+supervisor. This matters because the owner dogfoods LAHE on LAHE while
+editing LAHE.</li>
+<li><strong>Gathering has a ceiling</strong> of 60 seconds after the
+first item, so a steady trickle of comments still gets answered.</li>
+</ul>
+<h3 id="stopping-and-handing-back">Stopping, and handing back</h3>
+<pre class="mermaid"><code>flowchart TD
+  Off[&quot;off from the rail or the terminal&lt;br/&gt;(auto_answer.requested want off)&quot;] --&gt; Sees
+  Take[&quot;chat agent: lahe session takeover s_x&lt;br/&gt;(handoff_rev + 1)&quot;] --&gt; Sees
+  Close[&quot;lahe session close s_x&quot;] --&gt; Sees
+  Sees[&quot;lahe agent sees it on its next look&quot;] --&gt; Kill[&quot;run in flight? SIGTERM its process group,&lt;br/&gt;5s, then SIGKILL&quot;]
+  Kill --&gt; Drop[&quot;the stage copy is never written back,&lt;br/&gt;no replies are written&quot;]
+  Drop --&gt; Exit[&quot;release slot, clear agent.json state to stopped, release lock, exit&quot;]</code></pre>
+<ul>
+<li><strong>Stopping is always clean (R5).</strong> A stopped, crashed
+or timed-out run changed only its copy, so the real file never holds a
+change that no reply explains. Every item it was given stays ready, on
+the drain, for the next run or the next owner.</li>
+<li><strong>Handing back (R20, hand it back)</strong> is the existing
+takeover. Every unanswered item is on the new owner's catch-up drain,
+and nothing answered shows again.</li>
+<li><strong>Leftover runs.</strong> A new supervisor first reads
+<code>agent.json</code>. If a run's process group from before is still
+alive (pid and start time match), it kills that group before doing
+anything else. The orphan's edits were only ever to its stage copy.</li>
+</ul>
+<h3 id="retries-failures-and-limits">Retries, failures and limits</h3>
+<ul>
+<li><strong>Attempts count only on <code>finished</code> runs.</strong>
+An attempt is one of:
+<ul>
+<li>a finished run was given the item and no reply for it folded</li>
+<li>its <code>handled</code> was held by the check</li>
+</ul></li>
+<li><strong>The attempt limits:</strong> three attempts at one revision,
+or six across all revisions of one item. Then <code>lahe agent</code>
+writes a <code>not_handled</code> reply: "Auto-answer could not answer
+this and stopped trying. Reply here yourself, or hand the review to a
+chat agent." That takes the item off the drain. Rewording it on the card
+makes it ready again, until the six-attempt limit.</li>
+<li><strong>Three failed runs in a row</strong> (crashed, bad output,
+timed out) stop auto-answer with reason <code>failing</code>. No item's
+attempts are used up by a failing tool.</li>
+<li><strong>A usage limit reported by the host</strong> pauses
+auto-answer for a fixed 30 minutes, and the rail shows the time of the
+next try.</li>
+<li><strong>Signed out or <code>claude</code> missing</strong> stops
+auto-answer. A person has to fix these.</li>
+<li><strong>Daily limits</strong> count runs per local calendar day: 40
+per session (set with <code>--runs-per-day</code> at allow time) and 120
+across the machine. Reaching either pauses until the next day.
+<code>--max-budget-usd 0.50</code> caps each run.</li>
+<li><strong>The account's own limit cannot be read.</strong> The spike
+found that <code>/usage</code> gives only a whole percentage for the
+whole account. The rail shows LAHE's own run count against LAHE's own
+limit, and says so in hover text.</li>
+</ul>
+<h3 id="the-system-prompt-one-source-of-the-rules">The system prompt:
+one source of the rules</h3>
+<pre class="mermaid"><code>flowchart LR
+  C[&quot;CONTRACT (review_format.js)&lt;br/&gt;each line tagged all / chat / headless&quot;]
+  C --&gt;|&quot;all + chat&quot;| RJ[&quot;review.json contract field&lt;br/&gt;(chat agents)&quot;]
+  C --&gt;|&quot;all + headless&quot;| HP[&quot;headless_prompt.js builds&lt;br/&gt;the run&#39;s system prompt&quot;]
+  N[&quot;note from auto_answer.json&quot;] --&gt; HP
+  SK[&quot;skills/lahe/SKILL.md&lt;br/&gt;(chat agents)&quot;] --- RJ</code></pre>
+<ul>
+<li><strong>R15 (one source of rules).</strong> Every rule about the
+work lives on one line, in one array. A line only a chat agent can use
+(waking, monitors, hosts, <code>lahe reply</code>, "this file") is
+tagged <code>chat</code>. A line only a run can use is tagged
+<code>headless</code>. Neither kind is a copy of the other: they say
+different things about different transports.</li>
+<li><strong>The chat contract changes once, on purpose.</strong> The few
+<code>all</code> lines that say "append a reply line" are reworded to
+name the reply's fields without naming the transport. The
+<code>chat</code> lines say how a chat agent sends one
+(<code>lahe reply</code>), and the <code>headless</code> lines say a run
+returns them in its result.
+<code>test/unit/review_format.test.js</code>,
+<code>docs/CONTRACTS.md</code> and the skill change with it.</li>
+<li><strong>The <code>headless</code> lines</strong> are the short
+preamble the spike proved. They say:
+<ul>
+<li>you were started because items are ready; they are on stdin as drain
+lines</li>
+<li>the only file you may read or edit is the one each item's
+<code>source_hint</code> names</li>
+<li>read back each edit before replying</li>
+<li>return one reply per item</li>
+<li>do not wait, start anything, or look for more work</li>
+</ul></li>
+<li><strong>The note (R25, a handoff note)</strong> goes last, under its
+own heading. The lean start skips the user's CLAUDE.md, so any rule from
+it that a run needs goes in the note. The owner's writing rules are the
+main example (the spike's trade-off). Only the terminal can set it.</li>
+<li><strong>A test asserts</strong> that the prompt is exactly the
+<code>all</code> and <code>headless</code> lines in order, plus the
+note, and that the stdin payload contains no <code>CONTRACT</code>
+line.</li>
+<li><strong>Size.</strong> The spike's prompt was 377 words. The first
+cut of the <code>all</code> group alone is 2,095 words. The flags spike
+(OQ2) measures what that adds per request against the first spike's
+9,000 tokens.</li>
+</ul>
+<h3 id="the-runs-command-claude-code-adapter">The run's command (Claude
+Code adapter)</h3>
+<p>The adapter passes these flags, each with its reason:</p>
+<div class="table-scroll"><table>
+<thead>
+<tr>
+<th>Flag</th>
+<th>Why</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>-p</code>, items on stdin, cwd = the empty stage
+<code>work/</code> folder</td>
+<td>headless, one batch; the copy is the only file in reach</td>
+</tr>
+<tr>
+<td><code>--safe-mode</code></td>
+<td>no CLAUDE.md, hooks, MCP, skills: the lean start the spike
+measured</td>
+</tr>
+<tr>
+<td><code>--restricted</code></td>
+<td>no Bash or other code-running tools, no settings files, file tools
+confined to the working folder</td>
+</tr>
+<tr>
+<td><code>--strict-mcp-config</code>,
+<code>--setting-sources ""</code></td>
+<td>a second guard on top of the two above</td>
+</tr>
+<tr>
+<td><code>--tools Read,Edit</code></td>
+<td>the only two tools</td>
+</tr>
+<tr>
+<td><code>--permission-mode dontAsk</code>,
+<code>--permission-prompts none</code></td>
+<td>anything else is refused, never asked</td>
+</tr>
+<tr>
+<td><code>--append-system-prompt-file &lt;path&gt;</code></td>
+<td>the rules, once, kept out of the process list</td>
+</tr>
+<tr>
+<td><code>--json-schema &lt;reply schema&gt;</code></td>
+<td>replies as structured output</td>
+</tr>
+<tr>
+<td><code>--output-format stream-json --verbose</code></td>
+<td>usage, turns, tool calls; trimmed before it is kept</td>
+</tr>
+<tr>
+<td><code>--max-budget-usd 0.50</code></td>
+<td>per-run backstop</td>
+</tr>
+<tr>
+<td><code>--no-session-persistence</code></td>
+<td>nothing left in the user's Claude history</td>
+</tr>
+<tr>
+<td><code>--model &lt;model&gt;</code></td>
+<td><code>sonnet</code> by default</td>
+</tr>
+<tr>
+<td>never <code>--bare</code>, never <code>Bash</code></td>
+<td><code>--bare</code> drops the subscription login</td>
+</tr>
+</tbody>
+</table></div>
+<ul>
+<li><strong>Environment: an allowlist, not a blocklist.</strong>
+<ul>
+<li><code>HOME</code>, <code>PATH</code>, <code>USER</code>,
+<code>LANG</code> and <code>TMPDIR</code> pass through.</li>
+<li>So does <code>CLAUDE_CONFIG_DIR</code>, if it was set at allow
+time.</li>
+<li><code>ANTHROPIC_API_KEY</code> never passes, and is never recorded.
+A user whose Claude login itself is billed by the token (preflight says
+so) is warned that each run costs money.</li>
+<li>Nothing else passes, whatever shell started it.</li>
+</ul></li>
+<li><strong><code>claude</code> is run by the absolute path recorded at
+allow time.</strong></li>
+<li><strong>Wall-clock limit:</strong> 10 minutes per run. The slowest
+spike run took 33 seconds.</li>
+</ul>
+<h3 id="what-the-rail-shows-wireframe-direction-b">What the rail shows
+(wireframe direction B)</h3>
+<p>The wireframe doc is <code>02_wireframe_lahe_agent_sdk.md</code>,
+with screens in <code>wireframes/index.html</code>. It recommends
+direction B, and this design follows it.</p>
+<ul>
+<li><strong>The Auto-answer switch</strong> is a pill beside Hold
+sending, in the footer.
+<ul>
+<li>When the session is not allowed, the pill is present but inert. It
+explains that auto-answer is allowed from the terminal, and shows the
+<code>lahe agent allow --session &lt;id&gt;</code> command to copy. The
+session id is already sent to the page, so this adds no path.</li>
+<li>When allowed, the first "on" in a session opens the warning panel in
+the footer, where End review's confirm opens today. The panel says what
+it may do, who can make it act, and what it uses.</li>
+<li>Turning it off takes one click while idle. It asks for one confirm
+while a run is working, because it cuts the run off.</li>
+</ul></li>
+<li><strong>The run count</strong> sits beside the pill, like Hold's
+queued count, as "6 runs". Opening it shows today's runs against the
+limit, and tokens where Claude reports them. No dollar figure: on a
+subscription the list price is not a charge.</li>
+<li><strong>The failure chip</strong> sits under the switch while a
+failure stands. It holds one plain sentence and one remedy per reason,
+from a fixed list in <code>protocol.js</code>, plus a catch-all.</li>
+<li><strong>The status line stays the one agent line.</strong> While
+auto-answer is on, its words come from <code>auto_answer.state</code>,
+which LAHE knows rather than guesses. <code>livenessFrom</code> also
+counts a live supervisor at the current rev as listening, so the two
+cannot disagree.</li>
+</ul>
+<p>The table below shows which states make the status line loud and
+which show the chip. The exact words for every state, chip and panel are
+pinned in the plan ("Words this plan pins").</p>
+<div class="table-scroll"><table>
+<thead>
+<tr>
+<th>State</th>
+<th>Loud</th>
+<th>Chip</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>starting, idle, gathering, running, queued</td>
+<td>no</td>
+<td>no</td>
+</tr>
+<tr>
+<td>one failed run, retrying</td>
+<td>no</td>
+<td>yes</td>
+</tr>
+<tr>
+<td>paused, a daily limit or the usage limit</td>
+<td>yes</td>
+<td>yes</td>
+</tr>
+<tr>
+<td>stopped: signed out, not installed, file gone, failing</td>
+<td>yes</td>
+<td>yes, with the reason and remedy (the status line says only
+"stopped")</td>
+</tr>
+<tr>
+<td>off (turned off, from page or terminal)</td>
+<td>as today</td>
+<td>no</td>
+</tr>
+</tbody>
+</table></div>
+<p><strong>The overdue banner stands down while auto-answer is
+on.</strong> Today, after a wait with nothing listening, a banner says
+"Check your agent's window first" and offers the handoff button. With
+auto-answer on there is no window to check, and LAHE knows what is
+running. So:</p>
+<ul>
+<li><p><strong>While on and healthy</strong> (idle, gathering, running,
+queued), nothing counts as overdue:</p>
+<ul>
+<li>no banner</li>
+<li>no late ring on a card</li>
+<li>no overdue toast</li>
+<li>no "nothing back yet" escalation</li>
+</ul>
+<p>A long run stays calm and shows its age ("working on 2, 6m") until
+the 10-minute limit ends it. At that point it becomes a failed run, and
+the chip says so.</p></li>
+<li><p><strong>While paused or stopped by a failure,</strong> the status
+line goes loud, and the chip gives the reason and the remedy. The banner
+does not say "check your agent's window". Its hand-off button stays,
+since a chat agent taking over is a real remedy. Copy review and Export
+review stay in the head menu, as always.</p></li>
+<li><p><strong>A card the runs gave up on</strong> wears the amber ring
+a late card wears today, with its "Not handled" pill and the reply's
+reason. Both mean "this needs you".</p></li>
+<li><p><strong>After auto-answer is turned off,</strong> or a chat agent
+takes over, the rail goes back to today's rules exactly.</p></li>
+</ul>
+<p>Rail words never include monitor, heartbeat, wake feed, watching, or
+unattended (the existing rule). The wireframe doc says why directions A
+and C were not taken.</p>
+<h2 id="alternatives-considered">Alternatives Considered</h2>
+<ul>
+<li><p><strong>The Agent SDK as an add-on package.</strong> It is the
+owner's original question, and it gives full control from code.
+Rejected:</p>
+<ul>
+<li>it needs an API key and per-token billing</li>
+<li>it needs an install, which breaks the zero-dependency rule</li>
+<li>it works for Claude only</li>
+</ul>
+<p>Everything this design needs is a <code>claude -p</code> flag.
+Whether to keep the SDK as a documented option for API-key users is Q7
+(the SDK).</p></li>
+<li><p><strong>A Stop hook in the owner's chat (crucible Approach
+C).</strong> Not chosen as this feature:</p>
+<ul>
+<li>it still needs the agent to start its watcher</li>
+<li>it installs into the user's own settings</li>
+<li>it keeps his chat busy with review work</li>
+</ul>
+<p>It is not rejected outright; whether to ship it first is Q6
+(order).</p></li>
+<li><p><strong>A background Claude Code session per review
+(<code>claude --bg</code>).</strong> Rejected:</p>
+<ul>
+<li>inside it, the watcher is still a background command, so both old
+problems return: the watcher gets killed for memory, and the agent
+forgets to restart it</li>
+<li>it is Claude-only</li>
+<li>it depends on a young feature LAHE does not control</li>
+</ul></li>
+<li><p><strong>The helper owns the runs.</strong> The helper is
+long-lived and sees every session. Rejected because:</p>
+<ul>
+<li>the helper restarts whenever <code>lahe add</code> finds it older
+than the clone's code, or when it refuses a write</li>
+<li>a run inside it would die or be orphaned then</li>
+<li>separate processes keep a run's memory and failures away from page
+serving</li>
+</ul>
+<p>The helper still does two jobs: it folds the replies, and it starts
+the supervisor when the page asks.</p></li>
+<li><p><strong>A hook on <code>lahe monitor</code>'s exit (the spike's
+shape).</strong> Rejected as the product: something outside LAHE would
+own the loop, with no limits or retries, and a chat agent would have to
+start it, which is the step agents forget.</p></li>
+<li><p><strong>One long-running run per review</strong>
+(<code>--input-format stream-json</code>, or <code>--resume</code>).
+Rejected:</p>
+<ul>
+<li>history piles up in one context, which R14 (rules once per run)
+exists to prevent</li>
+<li>it holds memory on a machine that is short of it</li>
+<li>a fresh lean run was measured at about 9,000 tokens per request</li>
+</ul></li>
+<li><p><strong>Forking the chat.</strong> It brings back the 107,000 to
+138,000 tokens per request the spike measured. The note covers the gap.
+Q2 (how much of the chat a run gets) can revisit this.</p></li>
+<li><p><strong>Replies by <code>lahe reply</code> through a
+shell.</strong> The spike proved it with <code>Bash(lahe *)</code>.
+Rejected, including as a fallback:</p>
+<ul>
+<li>any shell grant is the widest door a hostile comment can reach</li>
+<li><code>Bash(lahe *)</code> also allows <code>lahe review</code> of
+any path and closing or taking over other sessions</li>
+</ul>
+<p>If structured output fails the flags spike (OQ2), the design stops
+and comes back, rather than granting a shell.</p></li>
+<li><p><strong>Per-file <code>Read(...)</code> and
+<code>Edit(...)</code> rules in the real folder.</strong> The security
+reviewer's live test showed that Read rules grant access and never
+restrict it. The run read a <code>.env</code> beside the source.
+Replaced by the empty stage folder.</p></li>
+<li><p><strong>Linked files and static HTML in the first
+version.</strong> Dropped:</p>
+<ul>
+<li>linked files would let a page add files the run can edit, just by
+visiting links</li>
+<li>HTML reviews make a planted script easy</li>
+<li>both come back only with their own checks</li>
+</ul></li>
+<li><p><strong>A reply marker on stopped items.</strong> Rejected. The
+marker would be a <code>question</code> reply, which takes the item off
+the drain. With copy-in, copy-out, a stopped run never touches the real
+file, so no marker is needed.</p></li>
+<li><p><strong>Letting the page allow auto-answer.</strong> The
+wireframe's step 2 turns it on from the page. The switch does that here
+too, but only after the terminal has allowed the session. Otherwise any
+script holding the review token could start an agent. See OQ5 (who may
+switch it on).</p></li>
+</ul>
+<h2 id="failure-modes--edge-cases">Failure Modes / Edge Cases</h2>
+<p>Only cases the flows above do not already settle.</p>
+<div class="table-scroll"><table>
+<thead>
+<tr>
+<th>Case</th>
+<th>What happens</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Two supervisors start at once (page "on" and
+<code>lahe agent on</code>)</td>
+<td>The supervisor lock is an exclusive create. The second exits before
+it does anything.</td>
+</tr>
+<tr>
+<td>A supervisor is running and <code>lahe agent allow</code> runs
+again</td>
+<td>It rewrites <code>auto_answer.json</code> under the short lock at
+the same rev. The running supervisor picks up model, note and limit
+changes before its next run and does not restart.</td>
+</tr>
+<tr>
+<td>The source file is renamed or deleted</td>
+<td>The next copy-in fails. Auto-answer stops with reason
+<code>source_missing</code>, and the chip says the file is gone.</td>
+</tr>
+<tr>
+<td>A branch switch swaps the file for a symlink mid-run</td>
+<td>The write-back check refuses it. The outcome is
+<code>conflict</code>.</td>
+</tr>
+<tr>
+<td>The Markdown already contained raw HTML, and the run keeps it</td>
+<td>Only additions are refused. HTML that was already there is left
+alone.</td>
+</tr>
+<tr>
+<td>A reviewer's reply to a run's question</td>
+<td>The item goes back to ready as today, and the next run takes it. The
+thread field carries the question as history.</td>
+</tr>
+<tr>
+<td>The review is ended from the page</td>
+<td>Its items are drained and answered as usual. The end-of-review
+routine (writing hand edits out beside the document) stays with a chat
+agent in the first version.</td>
+</tr>
+<tr>
+<td>Hold is on</td>
+<td>Held items are not on the drain, so no run starts. Release sends
+them at once, and they settle into one run.</td>
+</tr>
+<tr>
+<td>Windows</td>
+<td><code>lahe agent allow</code> refuses there in the first version:
+process groups and <code>ps -o lstart</code> are POSIX.</td>
+</tr>
+<tr>
+<td>The machine sleeps mid-run</td>
+<td>On wake, the 10-minute limit usually has passed. The run is killed
+as <code>timed_out</code>, which counts toward the three-in-a-row stop,
+not toward attempts.</td>
+</tr>
+</tbody>
+</table></div>
+<h2 id="security--privacy-notes">Security &amp; Privacy Notes</h2>
+<h3 id="who-can-make-it-act">Who can make it act</h3>
+<p>With auto-answer on, anyone who can post a ready item makes an agent
+act, with nobody reading first (R6, say who can make it act; R21, page
+text is data). Under D11, posting needs the review token. The token is
+readable by any script on the reviewed page and on any page under the
+served root. So, plainly: <strong>anyone who has the token, or can run
+script in a page of this review, can make auto-answer edit the review's
+source file.</strong></p>
+<p>The design does not try to tell a real reviewer from a script. It
+limits what acting can do:</p>
+<ul>
+<li><p><strong>One file, as a copy, in an empty folder.</strong> The run
+cannot see anything else on disk. The security reviewer's live test
+showed that this matters: permission rules alone let a run read a
+<code>.env</code> beside the source.</p></li>
+<li><p><strong>No shell, network, MCP, hooks or settings.</strong>
+<code>--restricted</code>, <code>--safe-mode</code>,
+<code>--strict-mcp-config</code>, <code>--setting-sources ""</code> and
+<code>--tools Read,Edit</code>. A hostile repository's
+<code>.claude/settings.json</code> or CLAUDE.md cannot run or steer
+anything.</p></li>
+<li><p><strong>No planted script.</strong> Edits that add raw HTML,
+event attributes or <code>javascript:</code> URLs are refused, and the
+first version reviews Markdown only. Separately from this feature,
+rendered Markdown passes raw HTML through today with no CSP. That goes
+on the board as its own security row.</p></li>
+<li><p><strong>LAHE writes the file, not the model.</strong> It writes
+after checks, with no-symlink, same-path, owner and atomic
+rules.</p></li>
+<li><p><strong>Replies are checked.</strong> Each reply must be for its
+own batch, is capped at 500 characters, and carries a file list that
+LAHE computed itself. Reply text is the easiest way to leak something to
+the page, so it is kept short. The run can only see the copy, so there
+is little to leak.</p></li>
+<li><p><strong>The allowance lives in the terminal.</strong> The page
+can only ask for on or off, as an event through D11's checks, with every
+other body field ignored. A takeover ends the allowance.</p></li>
+<li><p><strong>Limits:</strong></p>
+<ul>
+<li>25 items and 100 KB per run</li>
+<li>8,000 characters of reviewer text per item</li>
+<li>two runs at once</li>
+<li>40 runs per session and 120 per machine each day</li>
+<li>$0.50 per run</li>
+<li>attempt counts that do not reset forever on rewording</li>
+</ul>
+<p>A script that floods items gets, at worst, a day's runs on one file,
+then a loud rail.</p></li>
+</ul>
+<h3 id="the-residual-that-stays">The residual that stays</h3>
+<p><strong>The edited file may be instructions for a later
+agent.</strong> The owner dogfoods on LAHE's own feature docs, which
+builder agents later read and act on with a shell. An auto-answer edit
+could plant an instruction there, and a later full-permission session
+could follow it. The first version narrows this and says it out
+loud:</p>
+<ul>
+<li>instruction files and dot paths are refused</li>
+<li>the terminal warning names the risk</li>
+<li><code>lahe agent status --diffs</code> shows the edits of the last
+20 runs, and the before and after hashes of older ones</li>
+</ul>
+<p>A diff on the card itself is deferred to after dogfood (it would
+change what the wireframe settled on for cards). The owner commits these
+docs by hand, which is a second look.</p>
+<h3 id="page-text-is-data-d12">Page text is data (D12)</h3>
+<p>The run's input is the drain, with page text under <code>page</code>,
+and the D12 line is in the <code>all</code> group, so every run gets it
+once. The page-posted <code>source_hint</code> is replaced before the
+run sees it. For a run nobody watches, the D12 line is not the guard.
+The capability limits above are. The source file's own text is also
+untrusted input, and the same limits contain it.</p>
+<h3 id="credentials-and-environment">Credentials and environment</h3>
+<ul>
+<li>The child environment is an allowlist.</li>
+<li>No API key passes to a run. A login billed by the token is named in
+the warning.</li>
+<li>Preflight runs with the run's exact environment and binary, so what
+it reports is what the run uses.</li>
+<li>The review token is never in the prompt, the stdin or the
+environment.</li>
+</ul>
+<h3 id="privacy">Privacy</h3>
+<ul>
+<li>Run logs keep tool names, paths, sizes, usage and replies, never
+tool results.</li>
+<li>The prompt file is removed when a run ends.</li>
+<li>The last 20 run folders are kept, in the owner-only session
+directory. Session folders stay after close, as they do today.</li>
+<li><code>--no-session-persistence</code> keeps runs out of the user's
+Claude history.</li>
+</ul>
+<h3 id="subscription-terms">Subscription terms</h3>
+<p>Anthropic's Consumer Terms, Section 3, bar accessing the Services
+"through automated or non-human means, whether through a bot, script, or
+otherwise", except "via an Anthropic API Key or where we otherwise
+explicitly permit it" (<a
+href="https://www.anthropic.com/legal/consumer-terms">Consumer
+Terms</a>). The quote was read by a web fetch today and still needs a
+person to check it against the page. Claude Code's docs describe
+<code>claude -p</code> for scripts, and a token "for CI pipelines,
+scripts" that "authenticates with your Claude subscription" (<a
+href="https://code.claude.com/docs/en/authentication">Authentication</a>,
+cited by the spike). Whether that is the explicit permission the terms
+mean, for this use, is OQ1 (subscription terms). Running the dogfood on
+the owner's subscription is his decision, recorded when he makes it.</p>
+<h2 id="other-hosts-later-r4-claude-code-first">Other hosts later (R4,
+Claude Code first)</h2>
+<p><code>host_claude_code.js</code> is the only file that knows about
+Claude Code. The supervisor passes it a run spec and gets back a result.
+The supervisor never names a host's flags. The shapes:</p>
+<div class="sourceCode" id="cb12"><pre
+class="sourceCode json"><code class="sourceCode json"><span id="cb12-1"><a href="#cb12-1" aria-hidden="true" tabindex="-1"></a><span class="fu">{</span> <span class="dt">&quot;run_spec&quot;</span><span class="fu">:</span> <span class="fu">{</span> <span class="dt">&quot;stage_dir&quot;</span><span class="fu">:</span> <span class="st">&quot;...&quot;</span><span class="fu">,</span> <span class="dt">&quot;prompt_file&quot;</span><span class="fu">:</span> <span class="st">&quot;...&quot;</span><span class="fu">,</span> <span class="dt">&quot;stdin&quot;</span><span class="fu">:</span> <span class="st">&quot;...&quot;</span><span class="fu">,</span> <span class="dt">&quot;reply_schema&quot;</span><span class="fu">:</span> <span class="fu">{},</span></span>
+<span id="cb12-2"><a href="#cb12-2" aria-hidden="true" tabindex="-1"></a>                <span class="dt">&quot;model&quot;</span><span class="fu">:</span> <span class="st">&quot;sonnet&quot;</span><span class="fu">,</span> <span class="dt">&quot;budget_usd&quot;</span><span class="fu">:</span> <span class="fl">0.5</span><span class="fu">,</span> <span class="dt">&quot;timeout_ms&quot;</span><span class="fu">:</span> <span class="dv">600000</span><span class="fu">,</span> <span class="dt">&quot;env&quot;</span><span class="fu">:</span> <span class="fu">{}</span> <span class="fu">},</span></span>
+<span id="cb12-3"><a href="#cb12-3" aria-hidden="true" tabindex="-1"></a>  <span class="dt">&quot;result&quot;</span><span class="fu">:</span>   <span class="fu">{</span> <span class="dt">&quot;replies&quot;</span><span class="fu">:</span> <span class="ot">[]</span><span class="fu">,</span> <span class="dt">&quot;usage&quot;</span><span class="fu">:</span> <span class="fu">{},</span> <span class="dt">&quot;turns&quot;</span><span class="fu">:</span> <span class="dv">9</span><span class="fu">,</span> <span class="dt">&quot;failure&quot;</span><span class="fu">:</span> <span class="kw">null</span> <span class="fu">}</span> <span class="fu">}</span></span></code></pre></div>
+<p>A second host gets its own adapter file, beside this one, when it
+arrives. It must be able to do four things:</p>
+<ul>
+<li>run headless on the user's own login</li>
+<li>confine files to a working folder</li>
+<li>run without a shell</li>
+<li>return structured output</li>
+</ul>
+<p>Codex (<code>codex exec</code>) and Gemini (<code>gemini -p</code>)
+have headless modes (crucible). Their confinement and output flags are
+not checked here. A host that cannot run without a shell is not
+added.</p>
+<h2 id="test-strategy">Test Strategy</h2>
+<p>The plan's Test List holds every case. The strategy behind it:</p>
+<ul>
+<li><strong>No model calls in the gate.</strong> A fake host, a small
+Node script standing in for <code>claude</code>, reads stdin and prints
+a scripted result. Its output is copied from real runs.</li>
+<li><strong>Time and crashes are injected.</strong> Every timed step
+takes an injected clock, and the engine has hooks that crash it at an
+exact step.</li>
+<li><strong>Races run in separate processes.</strong> Lock and slot
+tests race real child processes.</li>
+<li><strong>Integration tests use the real pieces.</strong> After the
+branches merge, tests run the real helper, the real
+<code>lahe agent</code> and the fake <code>claude</code> together.</li>
+<li><strong>The rail gets one named browser spec,</strong> with
+screenshots in light and dark.</li>
+<li><strong>Live, outside the gate: the flags spike (OQ2) and a live
+check with the real <code>claude</code>.</strong> They cover what a fake
+cannot:
+<ul>
+<li>the exact flag set</li>
+<li>a planted <code>.env</code> beside the stage's original that must
+not be readable</li>
+<li>a hostile comment asking for a <code>&lt;script&gt;</code> that must
+be refused</li>
+<li>the structured output and the prompt size</li>
+<li>how a usage limit is reported</li>
+<li>whether <code>--max-budget-usd</code> applies on a subscription</li>
+<li>the "rules once" transcript check at 1, 10 and 100 items</li>
+</ul></li>
+</ul>
+<p>The dogfood review is the success-metric run.</p>
+<h2 id="to-verify-before-the-build">To verify before the build</h2>
+<p><strong>OQ2 (the flags spike).</strong> The first spike did not run
+these, and they have to be checked before the build:</p>
+<ul>
+<li><code>--restricted</code></li>
+<li><code>--json-schema</code></li>
+<li><code>--append-system-prompt-file</code></li>
+<li><code>--strict-mcp-config</code></li>
+<li><code>--setting-sources ""</code></li>
+<li>the larger prompt</li>
+</ul>
+<p>The plan's Task 0.2 runs it. If structured output does not work, this
+design comes back for a decision instead of granting a shell.</p>
+<h2 id="open-questions">Open Questions</h2>
+<p>New ones only. The brief's questions still stand, except Q3 (telling
+the chat agent), which Assumption A7 answers. The plan gathers every
+question in one list, each with a default.</p>
+<ul>
+<li><strong>OQ1 (subscription terms).</strong> Does the Consumer Terms
+exception cover a script that starts <code>claude -p</code> on each
+comment? The docs support scripted use; the terms do not name it. The
+owner decides the dogfood. Offering auto-answer to launch users waits on
+this.</li>
+<li><strong>OQ3 (the numbers).</strong> Every limit and wait in this
+design is a guess. Are they right? The plan's "Numbers this plan sets"
+lists each one.</li>
+<li><strong>OQ4 (beyond Markdown).</strong> Is Markdown only acceptable
+for the first version? Static HTML, linked files and build-output pages
+each need their own checks first:
+<ul>
+<li>added-script checks for HTML</li>
+<li>a fixed file list for links</li>
+<li>a build that LAHE runs after the run, outside the model</li>
+</ul></li>
+<li><strong>OQ5 (who may switch it on).</strong> The wireframe has the
+reviewer turn auto-answer on from the page. Here the page can do that
+only after the terminal has allowed the session. Is that extra first
+step acceptable?</li>
+<li><strong>OQ6 (instruction residual).</strong> Is auto-answer on
+LAHE's own feature docs acceptable for dogfood, given the residual
+above? Or should the first dogfood use documents no agent reads as
+instructions?</li>
+</ul>
+<h2 id="assumptions-made-for-the-owner">Assumptions made for the
+owner</h2>
+<ul>
+<li><strong>A1.</strong> Sonnet is the default model. The spike found it
+as accurate as Opus on this job, and faster.</li>
+<li><strong>A2.</strong> Per-run limits are $0.50 (Claude Code's
+list-price estimate) and 10 minutes.</li>
+<li><strong>A3.</strong> Three attempts per revision, six per item, then
+the card says auto-answer could not handle it.</li>
+<li><strong>A4.</strong> A run takes at most 25 items and 100 KB. A
+bigger burst becomes more runs.</li>
+<li><strong>A5.</strong> Two runs at once across the machine, and 120
+runs a day, given the memory pressure in the brief.</li>
+<li><strong>A6.</strong> The first version covers Markdown reviews of
+one source file, on macOS and Linux.</li>
+<li><strong>A7.</strong> Turning auto-answer on stops the chat agent's
+monitor (exit 6). A chat agent's takeover ends auto-answer and its
+allowance. This answers Q3 (telling the chat agent).</li>
+<li><strong>A8.</strong> The end-of-review routine stays with a chat
+agent in the first version.</li>
+<li><strong>A9.</strong> The contract line "Do not use a native model
+timer, a forever daemon..." becomes: a chat agent never starts a
+long-lived process of its own, and auto-answer is the only one, started
+by LAHE. This is the deliberate change the brief's Rollout asked
+for.</li>
+<li><strong>A10.</strong> The rail shows LAHE's own run count and
+tokens, not the subscription's remaining limit (which cannot be read)
+and not dollars.</li>
+<li><strong>A11.</strong> The reply agent name is
+<code>claude-auto</code>, so a run's replies land in their own file and
+never share one with a chat agent's. The card shows that name like any
+agent's.</li>
+<li><strong>A12.</strong> The wireframe's direction B is the rail
+design, with "Auto-answer" as a working name.</li>
+</ul>
+<h2 id="architect-review">Architect Review</h2>
+<p>Summary table only. Full review prose lives in
+<code>02_architecture_lahe_agent_sdk_reviews.md</code>.</p>
+<div class="table-scroll"><table>
+<thead>
+<tr>
+<th>#</th>
+<th>Finding</th>
+<th>Disposition</th>
+<th>Rationale</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>RF1</td>
+<td>The supervisor would be a second writer of
+<code>events.jsonl</code></td>
+<td><span class="accepted">Accepted</span></td>
+<td>Replies go to <code>replies-claude-auto.jsonl</code> for the helper
+to fold; the supervisor waits for fold results before counting or
+draining</td>
+</tr>
+<tr>
+<td>RF2</td>
+<td>A <code>question</code> reply takes an item off the drain, so the
+stop marker lost items</td>
+<td><span class="accepted">Accepted</span></td>
+<td>No marker reply; copy-in, copy-out means a stopped run never changes
+the real file</td>
+</tr>
+<tr>
+<td>RF3</td>
+<td>Five writers share <code>session.json</code> with no lock</td>
+<td><span class="accepted">Accepted</span></td>
+<td>One writer per file (table in Data); "allowed" derived from the rev;
+page requests are events</td>
+</tr>
+<tr>
+<td>RF4</td>
+<td>Duplicate guard not atomic; a chat monitor can run beside the
+mode</td>
+<td><span class="accepted">Accepted</span></td>
+<td>Exclusive-create supervisor lock in a shared <code>locks.js</code>;
+monitor exits 6 and <code>lahe review</code> stands down while it is
+on</td>
+</tr>
+<tr>
+<td>RF5</td>
+<td>A killed supervisor leaves an orphan run; start identity claim was
+false</td>
+<td><span class="accepted">Accepted</span></td>
+<td>Run group and <code>ps -o lstart</code> start time recorded; a new
+supervisor kills leftovers; POSIX only in v1</td>
+</tr>
+<tr>
+<td>RF6</td>
+<td>Failed runs would use up every item's attempts</td>
+<td><span class="accepted">Accepted</span></td>
+<td>Attempts count only on finished runs</td>
+</tr>
+<tr>
+<td>RF7</td>
+<td>Tagging is not one source; schema missing <code>reason</code>,
+renamed field</td>
+<td><span class="accepted">Accepted</span></td>
+<td>Transport lines reworded once for both agents; schema built from
+<code>REPLY_FIELD</code> and <code>REPLY_REQUIRED</code>, with a
+test</td>
+</tr>
+<tr>
+<td>RF8</td>
+<td><code>source_stamp.js</code> is the wrong module; long-lived process
+can go stale</td>
+<td><span class="accepted">Accepted</span></td>
+<td>New <code>file_stamp.js</code>; supervisor checks its own code each
+look and restarts when stale</td>
+</tr>
+<tr>
+<td>RF9</td>
+<td>Today's liveness would read "no agent" while a run works</td>
+<td><span class="accepted">Accepted</span></td>
+<td>A live supervisor at the rev counts as listening; the rail's words
+come from <code>auto_answer.state</code></td>
+</tr>
+<tr>
+<td>RF10</td>
+<td>Allow rules grant, not restrict</td>
+<td><span class="accepted">Accepted</span></td>
+<td>Empty per-run stage folder with a copy; LAHE writes back</td>
+</tr>
+<tr>
+<td>RF11</td>
+<td>Wrong reason given against the helper owning runs</td>
+<td><span class="accepted">Accepted</span></td>
+<td>Reason reworded; the helper starts supervisors on the page's
+request</td>
+</tr>
+<tr>
+<td>RF12</td>
+<td>Over-built: registry, dollar ceiling, backoff ladder, two
+timers</td>
+<td><span class="accepted">Accepted</span></td>
+<td>One adapter file, run-count limits only, fixed 30-minute pause, one
+15-second window</td>
+</tr>
+<tr>
+<td>RF13</td>
+<td><code>review_format.js</code> ships in the browser bundle</td>
+<td><span class="accepted">Accepted</span></td>
+<td>Only the tags go there; prompt and schema live in
+<code>src/service/headless_prompt.js</code>; two behaviours added to
+OQ2</td>
+</tr>
+</tbody>
+</table></div>
+<h2 id="security-review">Security Review</h2>
+<p>Summary table only. Full review prose lives in
+<code>02_architecture_lahe_agent_sdk_reviews.md</code>.</p>
+<div class="table-scroll"><table>
+<thead>
+<tr>
+<th>#</th>
+<th>Finding</th>
+<th>Disposition</th>
+<th>Rationale</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>RF1</td>
+<td>Live test: the run read <code>.env</code> beside the source despite
+Read rules</td>
+<td><span class="accepted">Accepted</span></td>
+<td>Empty stage folder with one copy; a planted-<code>.env</code> test
+in the OQ2 spike</td>
+</tr>
+<tr>
+<td>RF2</td>
+<td>The agent can plant script; Markdown passes raw HTML</td>
+<td><span class="accepted">Accepted</span></td>
+<td>Added raw HTML, <code>on…</code> attributes and
+<code>javascript:</code> URLs refused; v1 is Markdown only; the Markdown
+raw-HTML issue goes on the board as its own row</td>
+</tr>
+<tr>
+<td>RF3</td>
+<td>Edited files may be instructions for later agents; page can grow
+linked files</td>
+<td>Partly accepted</td>
+<td>One source file, no linked files; instruction files refused; risk in
+the warning; <code>lahe agent status --diffs</code>. A diff on the card
+is deferred; OQ6 asks the owner</td>
+</tr>
+<tr>
+<td>RF4</td>
+<td>The run's input carries a page-set <code>source_hint</code></td>
+<td><span class="accepted">Accepted</span></td>
+<td>Replaced with the stage path; test that the page's hint never
+appears</td>
+</tr>
+<tr>
+<td>RF5</td>
+<td>Stop route would write <code>session.json</code> from the page</td>
+<td><span class="accepted">Accepted</span></td>
+<td>On and off are events through the D11 path; the route reads only
+<code>want</code></td>
+</tr>
+<tr>
+<td>RF6</td>
+<td>Child environment was a blocklist</td>
+<td><span class="accepted">Accepted</span></td>
+<td>Allowlist; preflight with the same env; absolute <code>claude</code>
+path</td>
+</tr>
+<tr>
+<td>RF7</td>
+<td>Caps counted items, not bytes; attempts reset on rewording; ceilings
+per session only</td>
+<td><span class="accepted">Accepted</span></td>
+<td>Byte caps per run and per item; 120-run machine limit; six attempts
+per item across revisions</td>
+</tr>
+<tr>
+<td>RF8</td>
+<td>Model's <code>files</code> and long reply text trusted</td>
+<td><span class="accepted">Accepted</span></td>
+<td>Files from LAHE's stamps; 500-character cap; no shell fallback</td>
+</tr>
+<tr>
+<td>RF9</td>
+<td>Symlink swap mid-run is followed</td>
+<td><span class="accepted">Accepted</span></td>
+<td>LAHE's own write-back with no-symlink, same-path, atomic checks;
+test</td>
+</tr>
+<tr>
+<td>RF10</td>
+<td>Run streams keep every Read result</td>
+<td><span class="accepted">Accepted</span></td>
+<td>Logs trimmed; prompt file removed after the run; retention
+stated</td>
+</tr>
+<tr>
+<td>RF11</td>
+<td>Terms risk only in Security</td>
+<td><span class="accepted">Accepted</span></td>
+<td>Summary line and warning line added; the quote still needs a person
+to check it; dogfood choice is the owner's</td>
+</tr>
+<tr>
+<td>RF12</td>
+<td><code>--safe-mode</code> plus <code>--restricted</code> never
+measured</td>
+<td><span class="accepted">Accepted</span></td>
+<td><code>--strict-mcp-config</code> and
+<code>--setting-sources ""</code> added; OQ2 runs the <code>.env</code>
+and script tests</td>
+</tr>
+</tbody>
+</table></div>
+<hr class="reviews-divider" style="margin:4.5rem 0 1.5rem;border:0;border-top:3px solid #b0463b">
+
+<div class="reviews-banner">
+<p>The sections below are the full verbatim persona + human reviews for
+this document. They live in a separate <code>_reviews.md</code> file (so
+agents read the lean spec), merged here for review.</p>
+</div>
+<h1
+id="reviews-lahe-starts-your-agent-when-a-comment-is-ready-architecture">Reviews:
+LAHE starts your agent when a comment is ready, architecture</h1>
+<p>Architecture under review:
+<code>02_architecture_lahe_agent_sdk.md</code>, first draft (commit
+a400367). Both reviewers read the brief, the spike, the crucible, D11
+and D12, the contract, and the code the draft names. The security
+reviewer also ran two live <code>claude -p</code> runs (Haiku, about
+$0.03 at list price) to test the file limits. Its test files are under
+<code>/private/tmp</code>, so nothing needs deleting.</p>
+<p>The dispositions are in the architecture's two review tables. Section
+names below refer to the first draft.</p>
+<h2 id="architect-review-round-1">Architect Review (Round 1)</h2>
+<h3
+id="rf1-the-supervisor-would-be-a-second-writer-of-the-event-log">RF1.
+The supervisor would be a second writer of the event log</h3>
+<ul>
+<li>severity: blocker. kind: red flag.</li>
+<li>where: Components ("replies.js: an entry that takes replies from
+lahe agent"), and the "A wake, one run" diagram.</li>
+<li>what: The supervisor process would write replies into the fold
+itself. That makes it a second writer of <code>events.jsonl</code>.</li>
+<li>why: The helper assigns <code>seq</code> and is the only writer of
+the log (<code>src/service/log.js:25</code>, <code>:345</code>). D6 and
+<code>add.js:36</code> rely on this too. A second process hands out
+sequence numbers the helper has already used, and the page's reply
+cursor breaks.</li>
+<li>fix: Have the supervisor write its checked replies to
+<code>replies-&lt;agent&gt;.jsonl</code>, using <code>reply.js</code>'s
+encoder, and let the helper fold them. Then the supervisor must wait for
+<code>reply.folded</code> or <code>reply.rejected</code>, or the
+handled-check hold, before it counts attempts or drains again. It should
+also treat "written but not yet folded" as answered. Otherwise the next
+drain shows answered items as open, and the next run answers them
+twice.</li>
+</ul>
+<h3 id="rf2-a-question-reply-does-not-keep-an-item-on-the-drain">RF2. A
+question reply does not keep an item on the drain</h3>
+<ul>
+<li>severity: blocker. kind: red flag.</li>
+<li>where: "Stopping, and handing back" (R5 paragraph), and "Handing
+back (R20)".</li>
+<li>what: The doc says a <code>question</code> reply "leaves the item
+ready, so the next owner still sees it". It doesn't. Items carrying a
+question are counted but left off the drain
+(<code>docs/CONTRACTS.md:169</code>, <code>:902-904</code>).</li>
+<li>why: On a stop, takeover, crash or timeout, every item whose file
+changed drops out of the new owner's catch-up list. That breaks R20
+(every unanswered item reaches the new owner) and the first half of R5
+(unanswered items stay waiting).</li>
+<li>fix: Don't use a reply for this. Record the changed files in
+<code>runs.jsonl</code> and hand them to the next batch, or to the
+catch-up, as data. If R5 truly needs words on the card, add a card note
+that doesn't retire the item. RF10 makes most of this unnecessary.</li>
+</ul>
+<h3 id="rf3-five-writers-share-sessionjson-with-no-lock">RF3. Five
+writers share <code>session.json</code> with no lock</h3>
+<ul>
+<li>severity: blocker. kind: red flag.</li>
+<li>where: Data, "<code>session.json</code> gains a
+<code>headless</code> block".</li>
+<li>what: Five writers would share <code>session.json</code>: the CLI's
+on and off, takeover, close, the helper's stop route, and the supervisor
+itself (the <code>stopped</code> field set <code>by: lahe</code>). The
+store does read, change, write with no lock
+(<code>agent_sessions.js:279</code>, <code>:361-371</code>).</li>
+<li>why: Say the supervisor writes <code>stopped: login</code> while a
+takeover runs. Its write can put <code>handoff_rev</code> back to the
+old number. The new owner's monitor then exits 6 against its own
+session, and the fence stops being one-way.</li>
+<li>fix: Give each file one writer. The supervisor's own state goes in
+<code>agent.json</code>. The page's stop goes in a separate stop file
+that the helper writes. The CLI's writes to <code>session.json</code>
+happen under a lock (the <code>withServerLock</code> pattern). Also
+derive "on" from
+<code>headless.handoff_rev === session.handoff_rev</code>. Then takeover
+never has to touch the headless block.</li>
+</ul>
+<h3
+id="rf4-the-duplicate-guard-is-not-atomic-and-a-chat-monitor-can-run-beside-the-mode">RF4.
+The duplicate guard is not atomic, and a chat monitor can run beside the
+mode</h3>
+<ul>
+<li>severity: important. kind: red flag.</li>
+<li>where: Failure Modes ("Two <code>lahe agent</code> processes"), and
+"Not touched: lahe monitor's behaviour".</li>
+<li>what: The duplicate guard copied from the monitor is not atomic, and
+<code>monitor.js:113-119</code> says so.</li>
+<li>why: Two things can start a supervisor: <code>lahe agent on</code>
+and re-entry through <code>lahe review</code>. That makes the race real,
+and here the cost is two runs editing one file. Two more problems.
+Running <code>lahe agent on</code> a second time is itself a takeover,
+so it kills the first supervisor's run mid-flight. And
+<code>lahe review</code> into a session that is already in background
+mode prints the monitor instructions; a chat monitor at the same rev
+never looks at <code>agent.json</code>, so the chat agent and the runs
+both answer (breaks R19, one owner at a time).</li>
+<li>fix: Take an exclusive-create lock for the supervisor. Move
+<code>withServerLock</code> and <code>takeOverStaleLock</code> into one
+shared lock module, and use it for the slots too. Make
+<code>lahe agent on</code> do nothing when a live supervisor already
+holds the current rev. Make <code>lahe monitor</code> and
+<code>lahe review</code> refuse, or redirect to takeover, while the mode
+is on.</li>
+</ul>
+<h3 id="rf5-a-killed-supervisor-leaves-an-orphan-run">RF5. A killed
+supervisor leaves an orphan run</h3>
+<ul>
+<li>severity: important. kind: red flag.</li>
+<li>where: Failure Modes ("<code>lahe agent</code> itself dies"), and
+"Machine-wide slots".</li>
+<li>what: <code>claude</code> runs in its own process group. If the
+supervisor is killed, the run keeps editing, but nobody is left to fold
+its replies.</li>
+<li>why: The slot is reclaimed because the supervisor's pid is gone, so
+the machine cap no longer holds. A restarted supervisor starts a second
+run on the same items while the orphan is still running. And the "start
+identity" reuse claim is false: static servers prove who they are
+through an HTTP health check with an instance token
+(<code>static_servers.js:190-199</code>); a process with no port can't
+do that.</li>
+<li>fix: Record the run's process group and start time in
+<code>agent.json</code> and in the slot file. A new supervisor kills any
+leftover group before its first run. State how the start time is read
+(for example <code>ps -o lstart</code>). Say that Windows is out for the
+first version, since process groups are POSIX only.</li>
+</ul>
+<h3 id="rf6-failed-runs-would-use-up-every-items-attempts">RF6. Failed
+runs would use up every item's attempts</h3>
+<ul>
+<li>severity: important. kind: red flag.</li>
+<li>where: "Retries and failures", and the Failure Modes row for a crash
+or bad output.</li>
+<li>what: Crashed, <code>bad_output</code> and timed-out runs count an
+attempt against every item in the batch.</li>
+<li>why: Suppose one Claude Code update breaks
+<code>--json-schema</code>. Three bad runs follow, and every item gets
+"tried three times", is closed as not handled, and leaves the drain.
+Only then does the mode stop as <code>failing</code>. A chat agent
+taking over sees none of those items.</li>
+<li>fix: Count item attempts only on <code>finished</code> runs. Failed
+runs count toward the three-failures-in-a-row stop and nothing
+else.</li>
+</ul>
+<h3
+id="rf7-tagging-lines-does-not-give-one-source-and-the-schema-is-wrong">RF7.
+Tagging lines does not give one source, and the schema is wrong</h3>
+<ul>
+<li>severity: important. kind: red flag.</li>
+<li>where: "Contract lines get an audience", "One source of the rules",
+and the reply schema.</li>
+<li>what: Lines 20, 22, 25 and 49 fall in the shared group, and each
+tells the agent to append a reply line. Lines 0 to 2 refer to "this
+file" (review.json). A headless run has neither the file nor a
+shell.</li>
+<li>why: Either reword those lines so they fit both, which makes "chat
+agents see exactly what they see today" false, or restate them in the
+headless lines, which is a second copy that can drift. The schema also
+has no <code>reason</code> field, which <code>REPLY_REQUIRED</code>
+needs for <code>not_handled</code> (<code>protocol.js:711-715</code>),
+so every not-handled reply from a run is refused at fold. And it renames
+<code>user_needs_to_see_reply</code> to <code>needs_see</code>.</li>
+<li>fix: Build the schema from <code>REPLY_FIELD</code> and
+<code>REPLY_REQUIRED</code>, and add a test that the field names match.
+Reword the handful of transport lines so they work for both kinds of
+agent. State that this changes the chat contract once, on purpose.</li>
+</ul>
+<h3
+id="rf8-source_stampjs-is-the-wrong-module-and-a-long-lived-process-can-go-stale">RF8.
+<code>source_stamp.js</code> is the wrong module, and a long-lived
+process can go stale</h3>
+<ul>
+<li>severity: important. kind: red flag.</li>
+<li>where: "Stopping" (R5 paragraph).</li>
+<li>what: <code>source_stamp.js</code> doesn't stamp the user's files.
+It checks whether the helper is running older code than the clone now
+has.</li>
+<li>why: The claim sends the plan to reuse the wrong module. The
+module's own history is also the risk this design repeats: on 2026-08-23
+a long-lived process kept the old contract in memory and wrote stale
+rules for two days. The supervisor is long-lived too, and Ken dogfoods
+on LAHE's own docs while he edits LAHE.</li>
+<li>fix: Write a new file stamp (hash plus mtime). Before each run, the
+supervisor runs the predates-source check on itself, and restarts itself
+when its code is stale.</li>
+</ul>
+<h3 id="rf9-todays-liveness-check-would-call-the-mode-no-agent">RF9.
+Today's liveness check would call the mode "no agent"</h3>
+<ul>
+<li>severity: important. kind: red flag.</li>
+<li>where: "The liveness answer gains <code>headless</code>".</li>
+<li>what: With the mode on, <code>livenessFrom</code> sees none of its
+signs of life: no monitor heartbeat, no wake-feed tail, and no activity
+stamps (the run never runs a <code>lahe</code> command).</li>
+<li>why: The existing state reads <code>no_agent</code>, and the rail
+goes loud at ten minutes while <code>headless.state</code> says
+<code>running</code>. The two contradict each other.</li>
+<li>fix: Count a live <code>agent.json</code> at the current rev as
+listening, and have a running run stamp activity. Or state that the rail
+shows only the <code>headless</code> object whenever it is present.</li>
+</ul>
+<h3 id="rf10-allow-rules-grant-access-they-do-not-restrict-it">RF10.
+Allow rules grant access; they do not restrict it</h3>
+<ul>
+<li>severity: important. kind: suggestion (it touches security).</li>
+<li>where: "The run's command", and Security "Exact files".</li>
+<li>what: The file limit rests on allow rules, which grant access rather
+than restrict it.</li>
+<li>why: Reads inside the working directory normally need no rule, so a
+<code>.env</code> beside a top-level README can be read.
+<code>--restricted</code> keeps file tools inside the working
+directories, so allowed linked files in other folders are refused unless
+<code>--add-dir</code> is passed, which would open those whole
+folders.</li>
+<li>fix: Copy in, copy out. Run in an empty per-run folder under the
+session directory that holds copies of the allowed files. The supervisor
+copies them back only after a finished run, and only if the real file is
+unchanged since the copy. This removes RF2's half-finished edits, the
+race on the file during a takeover mid-run, and RF5's orphan edits. The
+cost: the files' paths differ from <code>source_hint</code>, so the
+prompt has to map one to the other. Add this to the flags spike under
+OQ2.</li>
+</ul>
+<h3
+id="rf11-the-reason-given-against-the-helper-owning-runs-is-wrong">RF11.
+The reason given against the helper owning runs is wrong</h3>
+<ul>
+<li>severity: minor. kind: question.</li>
+<li>where: Alternatives, "The helper owns the runs".</li>
+<li>what: <code>lahe add</code> restarts the helper when the helper is
+older than LAHE's own code, or when it refuses a write
+(<code>add.js:25-39</code>, <code>:1138</code>). It doesn't restart
+because the helper "predates a review".</li>
+<li>why: After RF1's fix, the supervisor needs the helper to fold
+replies anyway. So "fails alone" is weaker than the doc says. The choice
+itself still holds up: separate memory, and runs kept apart from serving
+pages.</li>
+<li>fix: Reword the reason honestly. Consider letting only one component
+spawn supervisors, which also helps RF4.</li>
+</ul>
+<h3 id="rf12-over-built-for-a-first-dogfood-version">RF12. Over-built
+for a first dogfood version</h3>
+<ul>
+<li>severity: minor. kind: cut.</li>
+<li>where: "Other hosts later", "Usage ceiling", "Retries".</li>
+<li>what: An adapter registry and <code>supports</code> matrix for a
+single host; a rolling 24-hour dollar ceiling on top of the run ceiling
+and the per-run budget; a 15/30/60-minute backoff ladder; two debounce
+timers.</li>
+<li>why: Each adds settings and tests before any use has shown it's
+needed. The ceiling is also described two ways: "rolling 24 hours" in
+the ceiling section, "a new day" in the state diagram.</li>
+<li>fix: Keep <code>host_claude_code.js</code> as the seam that R4
+needs. Keep one ceiling (runs per day); <code>--max-budget-usd</code>
+already limits spend per run. Use a fixed retry delay and one quiet
+window.</li>
+</ul>
+<h3 id="rf13-review_formatjs-ships-in-the-browser-bundle">RF13.
+<code>review_format.js</code> ships in the browser bundle</h3>
+<ul>
+<li>severity: minor. kind: suggestion.</li>
+<li>where: Components, changes to <code>review_format.js</code>.</li>
+<li>what: <code>review_format.js</code> is "FROZEN at CP0" and ships in
+the browser bundle (<code>manifest.js:100-103</code>).</li>
+<li>why: A prompt builder and reply schema for Claude Code would load
+into every reviewed page.</li>
+<li>fix: Keep only the audience tags on <code>CONTRACT</code>. Put the
+prompt builder and schema in a Node-only module under
+<code>src/service/</code>. Add two unverified behaviours to the OQ2
+spike: how the result reports <code>usage_limit</code>, and whether
+<code>--max-budget-usd</code> applies on a subscription login.</li>
+</ul>
+<h2 id="security-review-round-1">Security Review (Round 1)</h2>
+<p>The design's main safety claim did not hold. The reviewer tested it
+with a live <code>claude -p</code> run on this machine (Claude Code
+2.1.284, two Haiku runs). A per-file <code>Read(...)</code> rule does
+not limit what the run can read.</p>
+<h3 id="rf1-the-run-can-read-every-file-in-its-working-folder">RF1. The
+run can read every file in its working folder</h3>
+<ul>
+<li>severity: blocker. kind: red flag.</li>
+<li>where: Security, "Exact files"; the run's command table
+(<code>--allowedTools</code>, cwd).</li>
+<li>what: The run can read every file in its working folder, dotfiles
+included, not just <code>allowed_files</code>.</li>
+<li>why: The test used cwd set to the document's folder, with
+<code>--safe-mode --restricted --tools Read,Edit --allowedTools "Read(&lt;plan.md&gt;)" "Edit(&lt;plan.md&gt;)" --permission-mode dontAsk --permission-prompts none</code>.
+It read <code>./notes.txt</code> and <code>./.env</code>. It was refused
+<code>../outside.txt</code> and an edit to <code>notes.txt</code>. So
+Edit rules confine the run, but Read rules only add permission and never
+take it away. <code>--restricted</code> confines reads to the working
+folder, and the draft makes that "the directory of the first allowed
+file", often a repo root. A hostile comment can say "put the contents of
+.env in your reply" or "into the doc", and page script reads the card or
+the rendered page. The claim "can only change text the page could
+already see" is false.</li>
+<li>fix: Run in a fresh, empty per-run folder that holds copies of the
+allowed files only. After the run, LAHE writes changes back itself,
+using the linked-file path rules (real path, no symlink, owner-only,
+atomic). Before writing back, check each original's stamp, so a hand
+edit made during the run is not overwritten. This also fixes RF9, and it
+handles allowed files in different folders without
+<code>--add-dir</code>. Add a gate test: a real run with a planted
+<code>.env</code> beside the source must fail to read it.</li>
+</ul>
+<h3
+id="rf2-the-agent-can-plant-live-script-on-a-page-that-carries-the-review-token">RF2.
+The agent can plant live script on a page that carries the review
+token</h3>
+<ul>
+<li>severity: blocker. kind: red flag.</li>
+<li>where: Review kinds allowed (A6); Security, "Who can make it
+act".</li>
+<li>what: The agent can plant live script on a page that carries the
+review token.</li>
+<li>why: <code>src/service/markdown.js</code> overrides
+<code>link</code>, <code>code</code> and <code>table</code> but not
+<code>html</code>, so marked passes raw <code>&lt;script&gt;</code> and
+<code>&lt;img onerror&gt;</code> through. No CSP is set. Static HTML
+reviews are in scope too. One comment ("add this snippet") becomes
+stored script. On the next re-render it reads the token, posts new items
+forever (up to the ceiling), and reads anything under the served root. A
+hostile Markdown file someone sent can also drive the agent with nobody
+commenting at all.</li>
+<li>fix: After each run, diff the change. Refuse and roll back any added
+raw HTML tag, <code>on*</code> attribute or <code>javascript:</code>
+URL, and reply <code>not_handled</code> saying why. For v1, drop HTML
+reviews, or apply the same added-script check to them. Separately,
+escape raw HTML (or add a CSP) on rendered Markdown.</li>
+</ul>
+<h3
+id="rf3-the-edited-files-are-often-instructions-for-later-agents-that-have-a-shell">RF3.
+The edited files are often instructions for later agents that have a
+shell</h3>
+<ul>
+<li>severity: blocker. kind: red flag.</li>
+<li>where: Data, <code>allowed_files</code>; Security, "Page text is
+data".</li>
+<li>what: The edited files are often instructions for later agents that
+have a shell.</li>
+<li>why: The dogfood is LAHE's own docs: briefs and
+<code>docs/ongoing/</code> pages that builder agents obey, plus files
+like <code>skills/lahe/SKILL.md</code>, CLAUDE.md and AGENTS.md if
+linked. An unwatched edit can plant instructions that the owner's
+full-permission chat later runs, so "no shell" ends at the next session.
+The linked list is also shaped by the page: <code>recordLinks</code>
+runs when the static server renders a linked document that carries a
+rail, so page script can GET each linked doc in turn and grow
+<code>linked_files</code> to the whole Markdown link closure. "Never
+from anything a page posted" is true only in the narrowest sense. The
+source file's own text is an injection channel that D12 does not
+cover.</li>
+<li>fix: In v1, allow only the review's own source and no linked files.
+Refuse turn-on for instruction files: CLAUDE.md, AGENTS.md, GEMINI.md,
+SKILL.md, anything under <code>skills/</code>, <code>.claude/</code> or
+<code>.github/</code>. Show each agent edit as a diff on the card and in
+<code>lahe agent status</code>. Say this risk in the turn-on
+warning.</li>
+</ul>
+<h3 id="rf4-the-runs-input-still-carries-a-page-set-source_hint">RF4.
+The run's input still carries a page-set <code>source_hint</code></h3>
+<ul>
+<li>severity: important. kind: red flag.</li>
+<li>where: A wake, one run ("drain lines exactly as a chat agent gets
+them"); the headless preamble.</li>
+<li>what: The run's input still carries <code>source_hint</code>, and
+the page sets it through <code>page.visited</code>
+(<code>projection.js</code>, around line 279).</li>
+<li>why: The spike's prompt said "edit the source file named in its
+source_hint". A hint of <code>./.env</code> steers the model toward
+reading it (see RF1), and a wrong hint burns attempts.</li>
+<li>fix: The supervisor replaces <code>source_hint</code> in the input
+with the path LAHE resolved itself. The headless lines name the allowed
+files as the only files. Test: a page-posted hint pointing elsewhere
+never appears in the input.</li>
+</ul>
+<h3
+id="rf5-the-stop-route-is-the-first-page-reachable-writer-of-sessionjson">RF5.
+The stop route is the first page-reachable writer of
+<code>session.json</code></h3>
+<ul>
+<li>severity: important. kind: suggestion.</li>
+<li>where: Stopping, <code>POST /lahe/v1/agent/stop</code>; Data,
+"written by the stop route".</li>
+<li>what: The stop route is the first page-reachable route that writes
+<code>session.json</code>.</li>
+<li>why: It adds a new write path from the page into owner state. A
+read-modify-write from a stale copy can erase a concurrent takeover's
+<code>handoff_rev</code> or <code>on</code> flag.
+<code>by: "reviewer"</code> records a claim the helper cannot check. Any
+review token in the session stops the whole session.</li>
+<li>fix: Have the route append an event to the review's own
+<code>events.jsonl</code>, through the existing D11-checked path. The
+supervisor then sets <code>stopped</code>. The route ignores every body
+field. Label it "stopped from the page". Tests: extra body fields change
+nothing, and a stop during a takeover keeps the new rev.</li>
+</ul>
+<h3 id="rf6-the-childs-environment-is-a-blocklist">RF6. The child's
+environment is a blocklist</h3>
+<ul>
+<li>severity: important. kind: red flag.</li>
+<li>where: The run's command, "Environment"; Preflight.</li>
+<li>what: The child's environment is the parent's minus a
+blocklist.</li>
+<li>why: <code>lahe agent on</code> is often run from a chat agent's
+shell, so the detached process inherits that shell's environment.
+<code>ANTHROPIC_BASE_URL</code>, <code>ANTHROPIC_CUSTOM_HEADERS</code>,
+proxy variables, <code>NODE_OPTIONS</code>, <code>AWS_*</code> and
+<code>CLAUDE_CODE_OAUTH_TOKEN</code> pass through (the last removed only
+by the CLAUDE* rule). Removing every CLAUDE* variable also drops
+<code>CLAUDE_CONFIG_DIR</code>, which can switch the run to a different
+login. Preflight's <code>claude auth status</code> runs with a different
+environment than the run, so it can report "subscription" while the run
+bills an API key. <code>claude</code> is looked up on PATH at every
+run.</li>
+<li>fix: Build the child's environment from an allowlist:
+<code>HOME</code>, <code>PATH</code>, <code>USER</code>,
+<code>LANG</code>, <code>TMPDIR</code>, plus
+<code>CLAUDE_CONFIG_DIR</code> if set, and the API key only with
+<code>--allow-api-key</code>. Run preflight with that exact environment
+and flags. Record the absolute path to <code>claude</code> at
+turn-on.</li>
+</ul>
+<h3 id="rf7-caps-count-items-and-runs-not-bytes">RF7. Caps count items
+and runs, not bytes</h3>
+<ul>
+<li>severity: important. kind: red flag.</li>
+<li>where: Security, "Denial of usage"; A4, A2.</li>
+<li>what: The caps count items and runs, not bytes. The per-run budget
+is checked only after money is spent.</li>
+<li>why: Reviewer text is never truncated (D12), and a request may be 8
+MB (<code>MAX_BODY_BYTES</code>). So 25 items can make one huge first
+request that goes far past $0.50 before <code>--max-budget-usd</code>
+stops anything. Rewording resets the attempt count. Ceilings are per
+session, so each open session adds another $3.00. On a subscription,
+this drains the window the owner's own interactive work depends on.</li>
+<li>fix: Cap the input by bytes per item and per run; oversized items go
+back as <code>not_handled</code>. Add a machine-wide daily ceiling.
+Count attempts per item id across revisions.</li>
+</ul>
+<h3
+id="rf8-the-models-files-list-and-reply-text-are-trusted-too-much">RF8.
+The model's <code>files</code> list and reply text are trusted too
+much</h3>
+<ul>
+<li>severity: important. kind: suggestion.</li>
+<li>where: Reply schema; "Replies are checked against the batch".</li>
+<li>what: The model's <code>files</code> list and reply text are trusted
+too much.</li>
+<li>why: Reply text is the easiest exfiltration channel to the page (up
+to <code>REPLY_TEXT_MAX</code>, 20,000 characters). A model-reported
+<code>files</code> list can claim edits that never happened.</li>
+<li>fix: LAHE fills <code>files</code> from its own before and after
+stamps, not from the model. Cap headless reply text far lower, for
+example 500 characters. Keep structured output and never fall back to
+<code>Bash(lahe *)</code>. If structured output fails OQ2, stop and
+redesign rather than grant a shell.</li>
+</ul>
+<h3 id="rf9-a-file-swapped-for-a-symlink-mid-run-is-followed">RF9. A
+file swapped for a symlink mid-run is followed</h3>
+<ul>
+<li>severity: important. kind: red flag.</li>
+<li>where: Data, "refreshed before each run"; Security tests.</li>
+<li>what: Real paths are checked when the list is refreshed, but Claude
+Code's Edit follows whatever sits at that path when it writes.</li>
+<li>why: A file swapped for a symlink between the refresh and the edit
+is followed: a branch switch, another agent, a hostile repo. The design
+names no check at write time.</li>
+<li>fix: The staged copy from RF1, with LAHE's own no-symlink atomic
+write-back. Test: a swap made mid-run is refused.</li>
+</ul>
+<h3 id="rf10-stored-run-streams-keep-every-read-result">RF10. Stored run
+streams keep every Read result</h3>
+<ul>
+<li>severity: minor. kind: suggestion.</li>
+<li>where: Privacy.</li>
+<li>what: <code>runs/&lt;id&gt;.jsonl</code> from stream-json with
+<code>--verbose</code> stores the full contents of every Read
+result.</li>
+<li>why: Given RF1, that can include secrets. The prompt file with the
+owner's note also stays in the session folder. Session folders outlive
+the session.</li>
+<li>fix: Keep only tool names, paths, sizes, usage and replies, and drop
+tool results. Delete the prompt file when the run exits. Say how long
+the folders are kept after close.</li>
+</ul>
+<h3 id="rf11-the-terms-risk-lives-only-in-security">RF11. The terms risk
+lives only in Security</h3>
+<ul>
+<li>severity: minor. kind: suggestion.</li>
+<li>where: Subscription terms; Summary; the turn-on warning.</li>
+<li>what: The OQ1 statement is honest, but it lives only in
+Security.</li>
+<li>why: The Summary says "on the login the user already has" with no
+caveat. The warning covers billing but not the terms. The route the
+terms name explicitly (an API key) is the one the design makes opt-in.
+The quote is marked "via a fetch; check the page", so no person has
+confirmed it yet.</li>
+<li>fix: Have a person verify the quote against the page. Add one line
+to the Summary and to the warning. Record the dogfood-on-subscription
+choice as Ken's decision.</li>
+</ul>
+<h3
+id="rf12---safe-mode-and---restricted-together-were-never-measured">RF12.
+<code>--safe-mode</code> and <code>--restricted</code> together were
+never measured</h3>
+<ul>
+<li>severity: minor. kind: question.</li>
+<li>where: OQ2; command table.</li>
+<li>what: <code>--safe-mode</code> plus <code>--restricted</code>
+together were never measured.</li>
+<li>why: Per <code>claude --help</code>, <code>--restricted</code> still
+applies managed settings and <code>--settings</code>. It relies on
+<code>--strict-mcp-config</code> to skip MCP. Safe mode covers that
+today, but nothing asserts it.</li>
+<li>fix: Add <code>--strict-mcp-config</code> and
+<code>--setting-sources ""</code> as belt and braces. Have OQ2's repeat
+run include RF1's <code>.env</code> test and RF2's added-script test
+against real <code>claude</code>.</li>
+</ul>
+</body>
+</html>

@@ -4,11 +4,11 @@ Status: DRAFT, written without the owner. Every guess made on his behalf is list
 
 ## Summary
 
-**Not the Agent SDK.** It needs an API key, per-token billing, and an install. This brief does the same job with the agent you already have, run with no chat window, on the login you already pay for. Whether to close the SDK path for good is Q7 (the SDK).
+**Not the Agent SDK.** The SDK needs an API key, per-token billing, and an install. This brief gets the same result from the agent you already have. It runs with no chat window, on the login you already pay for. Whether to close the SDK option for good is Q7 (the SDK).
 
-What this brief proposes instead is an opt-in mode. LAHE itself starts the user's own coding agent each time a reviewer's comment is ready. Claude Code comes first, run in its headless mode (no chat window). Each run gets LAHE's rules once, at the top. It handles every waiting comment, replies on the cards, and exits. LAHE then checks that nothing was left unanswered.
+This brief proposes an opt-in mode instead. LAHE itself starts the user's own coding agent each time a reviewer's comment is ready. Claude Code comes first, run in its headless mode (no chat window). Each run gets LAHE's rules once, at the top. It handles every waiting comment, replies on the cards, and exits. LAHE then checks that nothing was left unanswered.
 
-A measurement spike ran one real review headless (`spike_headless_run.md`). It measured what each run uses and whether the replies are right, and its numbers went into the architecture. They also set the cost line: if a run uses more than that, this feature stops.
+A test run, the spike, handled one real review headless (`spike_headless_run.md`). It measured how much usage each run takes and whether the replies were right. Its numbers went into the architecture. They also set the cost line, the most usage a run may take. If runs go over it, this feature stops.
 
 ## Context
 
@@ -18,13 +18,13 @@ The owner asked this on a LAHE card:
 
 (Recorded in the crucible, under "The idea, as stated", 2026-09-29.)
 
-The crucible in this folder answered that. The Agent SDK is the wrong base for him: it bills per token through an API key, needs an install, and works for Claude only.
+The crucible in this folder answered that. The Agent SDK is the wrong base for him. It bills per token through an API key, needs an install, and works for Claude only.
 
 The pain behind the question has three parts:
 
 - **The agent forgets a step.** It serves the page and never starts listening, or ends its turn with comments unanswered. On 2026-08-18, 7 items sat unanswered in Codex this way.
 - **The watcher gets killed.** Claude Code stops quiet background commands when it thinks memory is low. Each kill costs the agent a turn to restart the watcher.
-- **Rules repeat every time new work arrives.** Each time a comment comes in, the agent is shown the same "do not end this turn" text again. The owner: "When you repeat something over and over in the context it starts to mess with the way the agent responds. Those words start to influence the way that the agent writes as well as what they do." (from his notes on trimming the list of waiting items, 2026-09-28)
+- **Rules repeat every time new work arrives.** Each time a comment comes in, the agent is shown the same "do not end this turn" text again. The owner wrote: "When you repeat something over and over in the context it starts to mess with the way the agent responds. Those words start to influence the way that the agent writes as well as what they do." (from his notes on trimming the list of waiting items, 2026-09-28)
 
 Every earlier fix added words to the rules, and each one failed the same way. This feature moves the job of waiting for comments out of the chat. LAHE does the remembering, so the agent does not have to.
 
@@ -58,7 +58,7 @@ The owner leaves comments in a burst and moves on to other work. Every comment s
 
 **Two of the three pains have cheap fixes outside this feature.** One Claude Code setting stops the memory kills. Trimming the text repeated each time work arrives shrinks the repetition. What is left is agents ending a turn with work still open, and nobody has counted how often that happens. If a cheap fix to the chat workflow brings that to zero, this mode may not be needed. Q6 (order) asks whether to run that test first.
 
-**The key design question:** can a fresh headless run of the user's own agent, started by LAHE for each batch of work, answer cards as well as the chat agent does, at a cost the owner accepts? The spike answers the cost half and gives a first read on quality.
+**The key design question:** LAHE starts a fresh headless run of the user's own agent for each batch of work. Can that run answer cards as well as the chat agent does, at a cost the owner accepts? The spike answers the cost question and gives a first look at quality.
 
 **First version is for the owner, as dogfood.** It is offered to launch users only after the success metrics pass.
 
@@ -68,7 +68,7 @@ The owner leaves comments in a burst and moves on to other work. Every comment s
 - Not built on the Agent SDK. LAHE adds no API key of its own.
 - Not a new default. The chat-agent workflow stays as it is for anyone who does not turn this on.
 - Not Codex, Gemini or Antigravity in the first version. The mode should not rule them out.
-- Not the separate small fix for the chat workflow (a Claude Code hook that stops a turn ending with work open, plus trimming the text repeated each time work arrives). Whether that comes first is Q6 (order).
+- Not the separate small fix for the chat workflow. That fix is a Claude Code hook that stops a turn from ending with work open, plus trimming the text repeated each time work arrives. Whether it comes first is Q6 (order).
 - Not setting the Claude Code option that stops the memory kills. It is the user's own setting. The skill already asks them about it.
 - Not running anywhere but the user's own machine. No cloud runner.
 - Not changing how reviewers comment or edit. The only visible changes are new status wording on the rail and a stop control.
@@ -83,9 +83,9 @@ The owner leaves comments in a burst and moves on to other work. Every comment s
 - He pays for a Claude subscription, not API tokens. His other agents draw on the same usage limit.
 - He wants fewer things to watch, not more.
 
-He works on a Mac with one browser tab per review and several Claude Code terminals, often across worktrees. He comments in a burst, then leaves for another terminal or task. The machine is often short of memory, which is what sets off Claude Code's kills of quiet background commands. His only view of the agent is the rail's one status line and the reply on each card.
+He works on a Mac with one browser tab per review and several Claude Code terminals, often across worktrees. He comments in a burst, then leaves for another terminal or task. The machine is often short of memory. That is when Claude Code kills quiet background commands. His only view of the agent is the rail's one status line and the reply on each card.
 
-**Later, the launch audience.** People running a coding agent who find LAHE through the npm package and the launch. Assumed to be mostly subscription users too, spread across Claude Code, Codex, Gemini and Antigravity. They get this mode only after the owner's dogfood passes.
+**Later, the launch audience.** These are people who run a coding agent and find LAHE through the npm package or the launch. We assume most are subscription users too, spread across Claude Code, Codex, Gemini and Antigravity. They get this mode only after the owner's dogfood passes.
 
 ## User Stories
 
@@ -142,11 +142,11 @@ He works on a Mac with one browser tab per review and several Claude Code termin
 :::
 
 ::: callout-req
-**R8 (idle is free):** No run starts while nothing is waiting. An idle review uses no model usage.
+**R8 (idle is free):** No run starts while nothing is waiting. An idle review uses none of the user's model limit.
 :::
 
 ::: callout-req
-**R9 (one run takes the batch):** A run handles every item that is ready when it starts, not one item per run. A burst of comments leads to a few runs, not one per comment. Items held back by the reviewer's Hold toggle start no run until released.
+**R9 (one run takes the batch):** A run handles every item that is ready when it starts. So a burst of comments leads to a few runs, not one per comment. Items held back by the reviewer's Hold toggle start no run until released.
 :::
 
 ::: callout-req
@@ -158,7 +158,7 @@ He works on a Mac with one browser tab per review and several Claude Code termin
 :::
 
 ::: callout-req
-**R12 (a cap on runs at once across the machine):** Runs across all reviews on the machine are limited, so a burst across several reviews does not start many agents at once. A review waiting for another review's run says so on the rail. The number is set in the architecture.
+**R12 (a limit on how many run at once):** Only a set number of runs may go at once, across all reviews on the machine. A burst of comments on several reviews waits its turn instead of starting many agents. A review waiting for another review's run says so on the rail. The number is set in the architecture.
 :::
 
 ::: callout-req
@@ -168,7 +168,7 @@ He works on a Mac with one browser tab per review and several Claude Code termin
 ### Rules said once
 
 ::: callout-req
-**R14 (rules once per run):** A run is given LAHE's rules once, at the start. Nothing that reads like an instruction repeats each time work arrives, or per item. What the run reads about each item is the item's data.
+**R14 (rules once per run):** A run is given LAHE's rules once, at the start. Nothing that reads like an instruction repeats each time work arrives, or per item. For each item, the run reads only the item's data.
 :::
 
 ::: callout-req
@@ -202,7 +202,7 @@ He works on a Mac with one browser tab per review and several Claude Code termin
 ### Safety and cost
 
 ::: callout-req
-**R21 (page text is data):** A run treats text copied off the page as data, never as instructions, under the same rule chat agents follow today. The architecture's security review covers this for an agent nobody is watching. It also covers the reviewer's comments. With the mode on, a comment becomes an action that nobody reads first.
+**R21 (page text is data):** A run treats text copied off the page as data, never as instructions, under the same rule chat agents follow today. The architecture's security review covers this for an agent nobody is watching. It also covers the reviewer's own comments, because with the mode on, a comment turns into an action before anyone reads it.
 :::
 
 ::: callout-req
@@ -214,7 +214,7 @@ He works on a Mac with one browser tab per review and several Claude Code termin
 :::
 
 ::: callout-req
-**R24 (usage is visible):** The user can see how many runs a session started. Where the host reports it, they can also see what each run used.
+**R24 (usage is visible):** The user can see how many runs a session started. Where the agent reports it, they can also see what each run used.
 :::
 
 ### Context from the chat
@@ -275,7 +275,7 @@ There is no baseline for how often agents forget today. Every sighting is real, 
 ## Analytics / Logging
 
 - Log each run: when it started and ended, how many items it was given, how many it answered, and how it ended (finished, failed, stopped).
-- Log the usage each run reports, where the host reports it.
+- Log the usage each run reports, where the agent reports it.
 - Log each item that hit the retry limit, and each time the usage ceiling stopped a run.
 
 ## Rollout / Flags
@@ -286,7 +286,7 @@ There is no baseline for how often agents forget today. Every sighting is real, 
 
 ## To verify before architecture
 
-- **Subscription terms.** The brief assumes a headless run started by a script on the user's own machine may draw on a Claude subscription. The spike measures usage, not terms. This has to be checked against Anthropic's published terms, with a link to the source, before the architecture relies on it. The feature's premise depends on it. The architecture carries it as OQ1 (subscription terms), and the plan's Task 0.1 reads the live page.
+- **Subscription terms.** The brief assumes a headless run started by a script on the user's own machine may draw on a Claude subscription. The spike measures usage, not terms. This has to be checked against Anthropic's published terms, with a link to the source, before the architecture relies on it. The whole feature depends on it. The architecture lists it as open question OQ1 (subscription terms). The plan's Task 0.1 (read Anthropic's current terms page) checks it.
 
 ## Assumptions made for the owner
 
@@ -297,7 +297,7 @@ Carried from the crucible:
 3. The zero-runtime-dependency rule is not up for change.
 4. Most cards can be answered by an agent that has the review and the files, but not the chat's history.
 5. Claude first, other hosts later, is acceptable.
-6. A background agent may edit files and run the project's build without asking each time, inside the reviewed project. The architecture narrows this to one file and no commands; Q4 (permissions) asks the owner.
+6. A background agent may edit files and run the project's build without asking each time, inside the reviewed project. The architecture narrows this to one file and no commands. Q4 (permissions) asks the owner to decide.
 7. The mode is opt-in, not the new default.
 
 Added by this brief:
@@ -315,7 +315,7 @@ Added by this brief:
 ### Decides this feature
 
 ::: callout-question
-**Q1 (billing):** Background runs draw on the same subscription limit as all your other agents, so a busy review could lock you out of other work until the limit resets. Is that acceptable with a usage ceiling in place? What per-run or per-day usage would be too much? The spike's numbers go beside this question.
+**Q1 (billing):** Background runs draw on the same subscription limit as all your other agents. A busy review could lock you out of other work until the limit resets. Is that acceptable with a usage ceiling in place? What per-run or per-day usage would be too much? The spike's numbers go beside this question.
 :::
 
 ::: callout-question
@@ -335,7 +335,7 @@ Q3 (telling the chat agent) is answered in the architecture: turning the mode on
 ### Separate decisions
 
 ::: callout-question
-**Q5 (the kill setting):** Turn on Claude Code's option that stops the memory kills in your own settings now, separate from this feature?
+**Q5 (the kill setting):** Should you turn on the Claude Code setting that stops the memory kills now, in your own settings, separate from this feature?
 :::
 
 ::: callout-question

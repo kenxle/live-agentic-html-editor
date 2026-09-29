@@ -5,10 +5,10 @@ Status: DRAFT (ran without the owner; every answer he would have given is an ass
 
 ## Summary
 
-- **Recommendation:** do not build on the Agent SDK. Build an opt-in mode where LAHE starts a headless run of the user's own coding agent (`claude -p` first) each time work lands. The rules go in once, in that run's system prompt.
+- **Recommendation:** do not build on the Agent SDK. Build an opt-in mode where LAHE starts the user's own coding agent headless, with no chat window (`claude -p` first), each time work lands. The rules go in once, in that run's system prompt.
 - **Why not the SDK:** it needs an API key and pay-per-token billing, an npm install, and it only works for Claude. The headless CLI does the same job on the user's existing login, with nothing to install, and Codex and Gemini have their own headless modes.
 - **Before anyone designs it:** one real review, run headless, to measure subscription usage and reply quality. That result can still sink the recommendation.
-- **Separately, today:** the kills of the quiet watcher that cost turns have a one-line fix (a Claude Code setting). It is the owner's call and needs no feature.
+- **Separately, today:** Claude Code keeps stopping the idle watcher, and each restart costs a turn. One Claude Code setting stops that. It is the owner's call and needs no feature.
 
 ## The idea, as stated
 
@@ -18,11 +18,11 @@ On a LAHE card, 2026-09-29: "for claude at least, what about the agents sdk. wou
 
 The owner leaves comments on a page and moves on to something else. He wants every comment acted on, rebuilt, and answered on the card, without going back to the chat to prod the agent. He also doesn't want to watch whether the agent is still listening.
 
-The job is not "an agent framework". It is: **nothing I write on the page goes unanswered, and I don't have to supervise the thing answering it.**
+**Nothing I write on the page goes unanswered, and I don't have to supervise the thing answering it.** That is the job. An agent framework is one possible way to do it.
 
 ## Who the user is
 
-- **First, the owner.** He runs many agents at once: 21 Claude processes were counted on 2026-09-22. He reads while juggling other work, often by voice through Superwhisper. He pays for a Claude subscription, not API tokens. He has ADHD and wants fewer things to watch, not more.
+- **First, the owner.** He runs many agents at once: 21 Claude processes were counted on 2026-09-22. He reads while juggling other work, often by voice through Superwhisper. He pays for a Claude subscription, not API tokens. He has ADHD and wants fewer things to watch.
 - **Second, the launch audience.** These are people running a coding agent who find LAHE through the npm package and the Product Hunt launch on the board. Assumed to be mostly subscription users too, spread across Claude Code, Codex, Gemini and Antigravity.
 
 ## User context
@@ -33,20 +33,20 @@ A Mac with one browser tab per review and one or more Claude Code terminals, oft
 
 **In this repo:**
 
-- **`lahe monitor`** already is the "outside watcher" the research recommends. It waits in a small Node process with no model tokens spent, and it exits only when there is work (code 0), the session is closed (5), or another agent took over (6).
-- **Trim the drain** (merged, `docs/features/20260928.04_trim_the_drain/`). The drain command now prints only the reviewer's items and repeats no rule text.
+- **`lahe monitor`** is already a watcher that runs outside the chat, which is what the research recommends. It waits in a small Node process that spends no model tokens, and it exits only when there is work (code 0), the session is closed (5), or another agent took over (6).
+- **Trim the drain** (merged, `docs/features/20260928.04_trim_the_drain/`). The drain command, which an agent runs to collect new comments, now prints only the reviewer's items. It repeats no rule text.
 - **Contract once** (`docs/features/20260916.02_contract_once/`). The rules live in `review.json`'s `contract` field, read once.
 - **Rebuild is not the agent's job for Markdown** (`20260923.01`). The helper re-renders by itself.
 - **The handled check.** A "handled" reply on a hand edit is checked against the built page, so an agent can't close an item by just saying it's done.
 - **The rail's status line** tells the reviewer when nothing is listening, or when nothing has come back.
 - **The three-strikes rule** in the skill: stop relaunching a killed monitor after three kills in a row.
 
-**What still repeats on every wake:** the monitor prints `LAHE ACTION REQUIRED: do not end this turn...` twice (once on stdout, once on stderr), then a `NEXT:` block with the drain and relaunch commands (`src/cli/commands/monitor.js`). That is the "banner" in the owner's complaint. It is a prose patch for agents that did not act.
+**What still repeats each time the monitor wakes the agent:** the monitor prints `LAHE ACTION REQUIRED: do not end this turn...` twice (once on stdout, once on stderr), then a `NEXT:` block with the drain and relaunch commands (`src/cli/commands/monitor.js`). That is the "banner" in the owner's complaint. It was added as extra wording to push agents that did not act.
 
 **Outside this repo** (research: `research_agent_sdk.md`, plus the installed CLIs checked today):
 
 - **The Claude Agent SDK** exists, and it is the same agent loop as Claude Code. It needs `ANTHROPIC_API_KEY` and pay-per-token billing, plus an npm or pip install. It cannot idle for free, so it would still need `lahe monitor` in front of it.
-- **Headless Claude Code (`claude -p`, version 2.1.284 installed).** It has everything a per-wake run needs:
+- **Headless Claude Code (`claude -p`, version 2.1.284 installed).** It has everything needed for a run started on each wake:
   - `--append-system-prompt` (rules in the system prompt)
   - `--system-prompt-snapshot` (the system prompt recorded once per conversation)
   - `--resume` and `--fork-session`
@@ -55,11 +55,11 @@ A Mac with one browser tab per review and one or more Claude Code terminals, oft
   - `claude --bg` and `claude attach` (background sessions a person can join)
 
   One catch: `--bare` forces API-key auth. A subscription user's run must not use it.
-- **Other hosts.** `codex exec` has `resume` and `fork` (Codex 0.159.0 installed), and `gemini` is installed with a `-p` mode. So "start the host's headless command per wake" works for more than one host. The SDK works for Claude only.
+- **Other hosts.** `codex exec` has `resume` and `fork` (Codex 0.159.0 installed), and `gemini` is installed with a `-p` mode. So starting the host's own headless command on each wake works for more than one host. The SDK works for Claude only.
 - **Checking the research:**
-  - The research's list of model IDs disagrees with its own pricing list; that has no bearing on this decision.
-  - Its claim that the SDK has "no startup cost" is weak: by the same research, the SDK bundles and starts a Claude Code binary.
-  - It rates hooks "limited fit". That misses the one hook that matters: a Stop hook can refuse to let a turn end (see Approach C). Whether it can do that today is to be verified.
+  - The research's list of model IDs disagrees with its own pricing list. That has no bearing on this decision.
+  - Its claim that the SDK has "no startup cost" is weak. The same research says the SDK bundles and starts a Claude Code binary.
+  - It rates hooks "limited fit". That misses the one hook that matters. A Stop hook is a check Claude Code runs when a turn tries to end, and it can refuse to let the turn end (see Approach C). We have not yet checked that it can do this today.
 
 ## Evidence
 
@@ -69,12 +69,12 @@ What we actually know, all from the owner's own use:
 - **2026-08-19:** overnight, a watch with a timeout woke the model on nothing, again and again.
 - **2026-08-24:** a lesson was written, "Opening a review is not listening to it". Agents served the page and never started the watcher. The lesson's own words: "This wants a mechanism and does not have one yet."
 - **2026-09-15:** 18 wakeups on nothing in one day, after Claude Code dropped `persistent: true` from its Monitor tool.
-- **2026-09-17:** repeated reaper kills of a quiet monitor, each re-armed at the cost of a turn. This is what led to the three-strikes rule.
-- **2026-09-22:** confirmed that the kills come from Claude Code's own memory reaper, not macOS. It can be turned off with `CLAUDE_CODE_DISABLE_BG_SHELL_PRESSURE_REAP=1`; not set as of that note.
+- **2026-09-17:** repeated reaper kills of a quiet monitor, each restarted at the cost of a turn. This is what led to the three-strikes rule.
+- **2026-09-22:** confirmed that the kills come from Claude Code's own memory reaper, not macOS. It can be turned off with `CLAUDE_CODE_DISABLE_BG_SHELL_PRESSURE_REAP=1`. As of that note, it was not set.
 - **2026-09-28:** the owner's principle: text repeated to an agent tens to thousands of times steers how it writes and acts.
 - **2026-09-29:** the card that started this.
 
-What we do not have: a count of how often an agent forgets to reply, rebuild, or re-arm, per review or per week. Every sighting is real, but there is no rate. We also have no measurement of what a headless run costs against a subscription's usage limits.
+What we do not have: a count of how often an agent forgets to reply, rebuild, or restart the watcher, per review or per week. Every sighting is real, but there is no rate. We also have no measurement of what a headless run costs against a subscription's usage limits.
 
 ## Status quo
 
@@ -88,11 +88,11 @@ Each one is marked with the answer assumed for the owner. He can overturn any of
 
 1. **The complaint is three separate problems, and each has a different fix.** They are: the per-wake banner, the agent forgetting a step, and the reaper killing the watcher. Assumed: agree.
 2. **The reaper problem does not need a feature.** One setting ends it for the owner. LAHE could suggest that setting, but it can't choose it for users. Assumed: agree.
-3. **The banner is a symptom.** It exists because agents did not act. If the agent can't forget, the banner can go; if it can forget, deleting the banner alone makes things worse. Assumed: agree.
-4. **"Can't forget" has to be built into how LAHE runs, not written into the rules.** Every past fix that added words failed, per the host-constraints memory. Assumed: agree.
-5. **The owner will not add API billing for this.** So an API-key-only path can be an add-on for others at most, never his default. Assumed: agree. This is the biggest assumption in this doc.
+3. **The banner is a symptom.** It exists because agents did not act. If the agent can't forget, the banner can go. If it can forget, deleting the banner alone makes things worse. Assumed: agree.
+4. **"Can't forget" has to be built into how LAHE runs, not written into the rules.** Every past fix that added more wording failed (recorded in the host-constraints memory note). Assumed: agree.
+5. **The owner will not add API billing for this.** So a path that works only with an API key can at most be an add-on for other users. It can't be his default. Assumed: agree. This is the biggest assumption in this doc.
 6. **The zero-runtime-dependency rule holds.** Anything that needs an npm install ships outside the core tool, or not at all. Assumed: agree.
-7. **LAHE already talks to the reviewer through cards, not the chat.** An agent that is not the chat agent can still hold the whole conversation with the reviewer: questions, caveats, and not-handled reasons all land on the card. Assumed: agree.
+7. **LAHE already talks to the reviewer through cards, not the chat.** An agent that is not the chat agent can still hold the whole conversation with the reviewer: questions, caveats, and reasons an item was not handled all land on the card. Assumed: agree.
 8. **Most cards can be handled without the chat's history.** The agent needs the review, the source files, and a short handoff note. Assumed: agree, but unverified. Some reviews clearly lean on what was said in chat.
 
 ## The case against building this
@@ -112,17 +112,17 @@ A second, background agent adds real new risk:
 - **Duplicate work.** The chat agent and the background agent can both act on one review.
 - **Weaker answers.** The background agent doesn't know what the owner and the chat agent discussed.
 - **The contract forbids it today.** It says "Do not use ... a forever daemon". This mode needs a process that outlives the chat.
-- **Opportunity cost.** Main's gate is red (the `rail_hold` spec failure). Several security rows are open: the Host header check, and Markdown link types beyond http, https, mailto and tel. The npm package gates the launch.
+- **Other work waits.** The tests on main are failing (the `rail_hold` browser test). Several security rows are open: the Host header check, and Markdown link types beyond http, https, mailto and tel. The npm package has to ship before the launch.
 
 **What would change my mind:** a measured rate of forgotten steps after the reaper setting and a Stop hook are in place. If agents still drop work, the background agent earns its risk. If they don't, it is a solution looking for a problem.
 
 ## What happens if we do nothing
 
-The owner keeps prodding agents when the rail goes quiet. He keeps losing turns to reaper kills until he sets the variable. Codex and Antigravity users keep the prose-only discipline that has failed before. Nothing breaks, and nobody new is harmed. The cost is his attention, on every review, indefinitely.
+The owner keeps prodding agents when the rail goes quiet. He keeps losing turns to reaper kills until he sets the variable. Codex and Antigravity users keep relying on written rules alone, which has failed before. Nothing breaks, and nobody new is harmed. The cost is his attention, on every review, indefinitely.
 
 ## Approaches considered
 
-Size is relative size of the change, not time.
+Size is how big the change is, not how long it takes.
 
 ### Approach A: Agent SDK agent, shipped as an optional add-on
 
@@ -141,7 +141,7 @@ Size is relative size of the change, not time.
 
 ### Approach B: headless runs of the user's own agent, started by LAHE on each wake
 
-- **Summary:** an opt-in mode where LAHE's watcher starts the host's headless command when work lands (`claude -p` first; `codex exec` and `gemini -p` later). The rules go in once, in the system prompt. The run drains, edits, rebuilds, replies, and exits. LAHE checks what is still unanswered afterward. The agent can't forget to re-arm, because LAHE is what re-arms.
+- **Summary:** an opt-in mode where LAHE's watcher starts the host's headless command when work lands (`claude -p` first; `codex exec` and `gemini -p` later). The rules go in once, in the system prompt. The run drains, edits, rebuilds, replies, and exits. LAHE checks what is still unanswered afterward. The agent can't forget to restart the watcher, because LAHE restarts it.
 - **Size:** M to L. **Risk:** Medium.
 - **Pros:**
   - Runs on the login the user already has, so no API billing for a subscription user.
@@ -160,23 +160,23 @@ Size is relative size of the change, not time.
   - `lahe monitor` and its duplicate guard and exit codes
   - the drain, `lahe reply`, the handled check
   - the helper's existing habit of starting and stopping processes
-  - the rail's "agent listening" check, which looks at what holds the wake feed open
+  - the rail's "agent listening" check, which looks at which process holds open the connection that delivers new work
 
 ### Approach C: keep the agent in the chat, and make forgetting hard
 
 - **Summary:** leave the loop in the owner's normal chat and remove the failure points with structure, not words. Three parts:
-  - The owner turns on the reaper setting.
-  - The per-wake banner is cut down to data.
-  - For Claude Code, a Stop hook refuses to end a turn while this session has unanswered items. Whether the hook can block like that is to be verified.
+  1. The owner turns on the reaper setting.
+  2. The banner printed on each wake shrinks to plain data, with no instructions in it.
+  3. For Claude Code, a Stop hook refuses to end a turn while this session has unanswered items. We have not yet checked that the hook can block like that.
 - **Size:** S. **Risk:** Low to Medium.
 - **Pros:**
   - Keeps the chat's full context.
   - No new billing, no new process, no new permissions.
-  - The smallest change of the four approaches that build something.
+  - Of the four approaches that build something, this is the smallest change.
 - **Cons:**
   - The Stop hook is Claude only, and it installs into the user's own settings, which the user must agree to.
   - A hook that misfires could keep a chat from ending.
-  - Still needs the agent to start the watcher in the first place. The "opening is not listening" lesson is only half solved.
+  - Still needs the agent to start the watcher in the first place. An agent that opens a review but never starts the watcher is still a risk.
   - The owner's chat stays busy with review work, so he can't use it for other things during a review.
 - **Reuses:** the drain (as the hook's check), the skill, the three-strikes rule.
 
@@ -190,27 +190,31 @@ Size is relative size of the change, not time.
 - **Cons:**
   - Inside that session the watcher is still a background command, so the reaper and forgetting both return.
   - Claude only.
-  - Adopts a young Claude Code feature whose behavior LAHE doesn't control. The Monitor-tool change of 2026-09-14 shows what that costs.
+  - Adopts a young Claude Code feature whose behavior LAHE doesn't control. When Claude Code changed its Monitor tool on 2026-09-14, the owner saw 18 wakeups on nothing in one day.
 - **Reuses:** everything in today's skill.
 
 ### Do nothing
 
-Keep today's loop and the three-strikes rule. The drain fix already landed. What we lose: the owner keeps supervising agents, reaper kills keep costing turns until the setting is on, and the banner stays.
+Keep today's loop and the three-strikes rule. The drain fix already landed. What we lose:
+
+- The owner keeps supervising agents.
+- Reaper kills keep costing turns until the setting is on.
+- The banner stays.
 
 ## Recommended approach
 
-**Approach B, opt-in, Claude Code first. It depends on a measured spike before architecture begins. The SDK stays out of the core tool.**
+**Approach B, opt-in, Claude Code first. Before architecture begins, one real test run has to measure its cost (see The assignment). The SDK stays out of the core tool.**
 
 B is the only option that removes the owner from supervision without new billing or a new install, and the only one that extends to other hosts. A is B with worse terms for this owner: API billing, an install, Claude only. Its one real advantage, control from code, is mostly available through CLI flags. C is worth doing whatever else is decided, but it keeps the owner's chat as the worker and only half-fixes forgetting.
 
 Constraints the brief should carry:
 
 - The zero-dependency rule holds.
-- Nothing instruction-shaped repeats per wake.
+- No instructions repeat on each wake.
 - The reviewer's view of the agent stays the card and the rail's one status line.
 - The mode is off unless the user turns it on.
 
-What stays open for the brief and architecture is listed below. How it is built and what it looks like is theirs to explore.
+How it is built and what it looks like is left to the brief and architecture.
 
 ## Challenges the session leader accepted
 
@@ -222,14 +226,14 @@ None yet, for the same reason.
 
 ## What we skipped and why
 
-- **All seven questions were answered from evidence, not asked.** The owner asked for no stops. The answers are in the sections above, and the ones that are guesses are listed under Assumptions.
+- **The crucible's seven standard questions were answered from evidence instead of asked.** The owner asked for no stops. The answers are in the sections above, and the ones that are guesses are listed under Assumptions.
 - **I read the prior feature docs without asking first,** because the owner was unavailable and they were recent and directly on this topic: contract once, trim the drain, rebuild not the agent's job, and the two proposed lessons.
-- **Future fit.** Better models follow written rules better, which shrinks the "forgets a step" problem. That weakens B over time. Two things don't shrink with better models: text repeated to an agent steering it, and a harness killing background processes. Those still favor moving the loop out of the chat. On balance B holds, but less strongly than it looks today.
+- **Future fit.** Better models follow written rules better, which shrinks the "forgets a step" problem. That weakens B over time. Two problems won't shrink with better models. Text repeated to an agent still steers how it writes and acts. Claude Code still kills quiet background processes. Both still favor moving the loop out of the chat. On balance B holds, but less strongly than it looks today.
 
 ## Assumptions made for the owner
 
 1. He stays on his subscription and will not pay API rates for this.
-2. A `claude -p` run started by a script on his own machine draws on his subscription, within its terms. What it uses per wake is acceptable, and that is to be measured.
+2. A `claude -p` run started by a script on his own machine draws on his subscription, within its terms. How much it uses on each wake is acceptable. That amount still has to be measured.
 3. The zero-runtime-dependency rule is not up for change for this feature.
 4. Most cards can be answered by an agent that has the review and the files but not the chat's history.
 5. Claude first, other hosts later, is acceptable.
@@ -247,14 +251,14 @@ Only the owner can answer these:
 5. **The reaper setting.** Turn on `CLAUDE_CODE_DISABLE_BG_SHELL_PRESSURE_REAP=1` in his Claude Code settings now, separate from this feature?
 6. **Approach C.** Build the Stop hook and banner trim now as a separate small change (whetstone), whatever happens to B?
 7. **The SDK.** Close the SDK path for good, or keep it as a documented option for API-key users later?
-8. **Priority.** Does this go ahead of the red main gate, the open security rows, and the npm package that gates the launch?
+8. **Priority.** Does this go ahead of fixing the failing tests on main, the open security rows, and the npm package that gates the launch?
 
 ## The assignment
 
-Run one real review headless before the brief is signed off. Start a small Markdown review. When work lands, have `lahe monitor`'s exit start `claude -p` with the LAHE rules passed through `--append-system-prompt`. Let it answer three to five comments. Record three things:
+Run one real review headless before the brief is signed off. Start a small Markdown review. When work lands and `lahe monitor` exits, start `claude -p` with the LAHE rules passed through `--append-system-prompt`. Let it answer three to five comments. Record three things:
 
 - how much of the subscription limit each wake used, as Claude Code reports it
 - whether every card got a correct reply
 - whether any card needed context only the chat had
 
-That one run answers open questions 1 and 2 with data instead of guesses.
+That one run answers open questions 1 (billing) and 2 (context) with data instead of guesses.

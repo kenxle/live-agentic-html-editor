@@ -1,6 +1,6 @@
 # Progress: LAHE starts your agent when a comment is ready
 
-**Phase 5, Plan, done up to your review.** Every document is written and reviewed, and ready for you to read. Nothing is built yet. Last updated 2026-09-29 13:15.
+**Phase 5, Plan, done up to your review.** Every document is written and reviewed, and ready for you to read. Nothing is built yet. Last updated 2026-09-29 13:33.
 
 **Docs:** [Crucible](00_crucible_lahe_agent_sdk.md) · [Research](research_agent_sdk.md) · [Spike](spike_headless_run.md) · [Brief](01_brief_lahe_agent_sdk.md) · [Brief reviews](01_brief_lahe_agent_sdk_reviews.md) · [Wireframe](02_wireframe_lahe_agent_sdk.md) · [Wireframes](wireframes/index.html) · [Architecture](02_architecture_lahe_agent_sdk.md) · [Architecture reviews](02_architecture_lahe_agent_sdk_reviews.md) · [Plan](03_plan_lahe_agent_sdk.md) · [Plan reviews](03_plan_lahe_agent_sdk_reviews.md)
 
@@ -61,7 +61,8 @@ Not shipped yet.
 
 ## Log
 
-- **2026-09-29 13:15.** Plan drafted: Phase 0 settles the subscription terms and the untested `claude -p` flags before anything is built, then a one-builder kernel, four parallel builders, one merge and review in an integration worktree, and a live check before your dogfood.
+- **2026-09-29 13:33.** Plan reviewed by four reviewers: engineering manager 12 findings, code lead 17, testing 14, design 12, all accepted. The code lead's three blockers changed the architecture: a lock that lasts as long as the supervisor, one review per auto-answer session, and the allowance in its own file. Phase 2 now waits for your answer on the subscription terms. A compression pass and a clarity pass then ran on every document.
+- **2026-09-29.** Plan drafted: Phase 0 settles the subscription terms and the untested `claude -p` flags before anything is built, then a one-builder kernel, four parallel builders, one merge and review in an integration worktree, and a live check before your dogfood.
 - **2026-09-29.** Architecture written and reviewed by the architect and security reviewers: a small per-session process starts a lean `claude -p` run on a copy of the one source file, with no shell, and LAHE writes the edit back itself.
 - **2026-09-29.** Spike: a headless `claude -p` run on your subscription handled a real wake correctly in all eight runs. A lean start cut each request from 107,000 to 138,000 tokens down to about 9,000.
 - **2026-09-29.** Wireframes drawn: three directions for where auto-answer lives in the rail, 48 linked screens. Recommended B, the switch beside Hold.

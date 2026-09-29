@@ -1,20 +1,20 @@
 # Plan: LAHE starts your agent when a comment is ready
 
-Status: DRAFT, written without the owner. Four reviews are folded in; their tables are at the end, and the full prose is in `03_plan_lahe_agent_sdk_reviews.md`.
+Status: DRAFT, written without the owner. Four reviews are folded in. Their tables are at the end, and the full prose is in `03_plan_lahe_agent_sdk_reviews.md`.
 
 ## Summary
 
-- **Phase 0 can stop the feature.** Before any builder starts, the orchestrator settles what the architecture leaves open:
+- **Phase 0 can stop the feature.** Before any builder starts, the orchestrator checks three things the architecture leaves open:
   - what the subscription terms say, read on the live page
   - whether the `claude -p` flags the design relies on do what they say
-  - a green base that includes every branch touching the same files
+  - a starting commit where the tests pass, with every other branch that edits the same files already folded in
 
-  If a fact fails, the build stops and the question comes to you.
+  If any check fails, the build stops and the question comes to you.
 - **Phase 1:** one builder lays the shared pieces:
-  - the tagged contract and every copy of it
-  - the wire names
-  - the locks
-  - the call signatures the parallel builders meet at
+  - the agent rules (the contract), with each line tagged for chat agents, auto-answer, or both, and every copy of them
+  - the shared names for events, routes and states (the wire names)
+  - the locks that keep two processes from doing the same work
+  - the function signatures each Phase 2 builder codes against
   - a fake `claude` for tests
 - **Phase 2:** four builders work in parallel:
   - the run engine
@@ -22,9 +22,13 @@ Status: DRAFT, written without the owner. Four reviews are folded in; their tabl
   - the command line and helper
   - the rail
 
-  **Phase 2 waits for your answer on the terms** (OQ1, subscription terms), or for you to say you accept the risk.
-- **Phase 3:** the orchestrator merges in an integration worktree, writes the tests that need every branch, runs one review with one fix round, and runs the full gates once.
-- **Phase 4:** a live check with the real `claude`, then your dogfood review.
+  **Phase 2 waits for your answer on the terms** (OQ1, whether the subscription terms allow this), or for you to say you accept the risk.
+- **Phase 3:** in an integration worktree, the orchestrator:
+  - merges the four branches
+  - writes the tests that need every branch
+  - runs one review with one fix round
+  - runs the full gates once
+- **Phase 4:** a live check with the real `claude`. Then you run a real review with auto-answer on (the dogfood).
 - **Your questions are in one place,** under [Open Questions](#open-questions). Each has the default the build takes if you do not answer.
 
 ## How the work is dispatched
@@ -57,9 +61,9 @@ flowchart TD
 - `integration/lahe-agent-sdk`: in its own worktree, `.claude/worktrees/integration-agent-sdk`. Every merge happens here, never in the shared main checkout. Other agents push from that checkout, and a push there once carried an untested merge to `main`.
 - `agent-sdk-fix-<n>`: Task 3.3's fix branches, off the integration branch.
 
-**Who owns each seam.** The orchestrator owns every merge and every test that needs more than one branch. Phase 1 fixes what each side builds against:
+**Where branches meet, and who owns it.** The orchestrator owns every merge and every test that needs more than one branch. Phase 1 pins what each side builds against, so the parallel branches fit together:
 
-| Seam | Built against | Proved by |
+| Where two branches meet | Built against | Proved by |
 | --- | --- | --- |
 | Supervisor (2B) calls the engine (2A) | `runBatch` and its return shape (Task 1.3) | Task 3.2: the real engine under the real supervisor |
 | Helper (2C) starts the supervisor (2B) | the `supervise` argv and how the helper builds it (Task 1.3) | Task 3.2: the page's "on" starts one supervisor |
@@ -80,7 +84,7 @@ flowchart TD
 - Tests never call the real `claude` or any model. They use the fake `claude` from Task 1.4.
 - Tests never wait on real time. Every timed step takes `opts.now`, `opts.sleep` and `opts.limits` (Task 1.3). The unit suite must pass on Node 18, so no `node:test` fake timers.
 - Tests use their own state folder and helper port, and call the teardown helper from Task 1.4. They never touch the owner's helper or state folder.
-- Nothing instruction-like repeats per wake or per item (brief R14, rules once per run). No output from `lahe agent`, `lahe monitor` or the stdin payload repeats rule text.
+- Instructions appear once per run. They never repeat per wake-up or per item (brief R14, rules once per run). No output from `lahe agent`, `lahe monitor` or the stdin payload repeats rule text.
 
 ### Numbers this plan sets
 
@@ -183,7 +187,7 @@ The orchestrator alone. No builder starts until all three tasks pass.
 
 ### Task 0.1: The subscription terms, read on the live page
 
-**Spec:** The orchestrator opens [Anthropic's Consumer Terms](https://www.anthropic.com/legal/consumer-terms) and Claude Code's [Authentication](https://code.claude.com/docs/en/authentication) and [Headless](https://code.claude.com/docs/en/headless) pages in a real browser (Claude in Chrome), not a web fetch, which is where the architecture's quote came from. It copies the exact sentences on automated access and on scripted use of a subscription, with their links, beside OQ1 on the progress page. The owner reads them and decides.
+**Spec:** The architecture's quote came from a web fetch. This time the orchestrator opens [Anthropic's Consumer Terms](https://www.anthropic.com/legal/consumer-terms) and Claude Code's [Authentication](https://code.claude.com/docs/en/authentication) and [Headless](https://code.claude.com/docs/en/headless) pages in a real browser (Claude in Chrome). It copies the exact sentences on automated access and on scripted use of a subscription, with their links, beside OQ1 on the progress page. The owner reads them and decides.
 
 **Acceptance:**
 
@@ -192,7 +196,7 @@ The orchestrator alone. No builder starts until all three tasks pass.
 
 ### Task 0.2: The flags spike
 
-**Spec:** A script in the scratchpad runs real `claude` (2.1.284) with the architecture's exact command, from an empty stage folder, with the environment built the architecture's way. It saves every raw output. A second script computes every number from those files. The results go in `spike_flags.md` in this folder, with the saved files' paths. `claude --help` lists every flag below, but none has been run by this project. These runs use a handful of runs on the owner's login, as the first spike did.
+**Spec:** `claude --help` lists every flag below, but this project has never run them. A script in the scratchpad runs real `claude` (2.1.284) with the architecture's exact command and environment, from an empty stage folder. It saves every raw output. A second script computes every number from those files. The results go in `spike_flags.md` in this folder, with the saved files' paths. The checks spend a handful of runs on the owner's login, as the first spike did.
 
 | Check | Passes when | If it fails |
 | --- | --- | --- |
@@ -226,7 +230,7 @@ Also saved: the raw bytes of every result and failure, for Task 1.4's fake `clau
    `feat/lahe_library` touches most of them. Land each branch, or agree with the owner how it folds in.
 2. Merge `main` into `feat/lahe-agent-sdk`. It branched 12 commits behind, and those commits change `sync.js`.
 3. Record the base commit on the progress page, with `gate:unit` and the browser suite green there. If main's suite is red, fixing it comes first (Q8, priority).
-4. Add the board row the architecture promised to `docs/BULLETIN.md`: rendered Markdown passes raw HTML through with no CSP.
+4. Add the board row the architecture promised to `docs/BULLETIN.md`. The row says rendered Markdown passes raw HTML through with no CSP.
 
 **Acceptance:** the progress page names the base commit, the gate result at it, and each overlapping branch with what happened to it. The board row exists.
 
@@ -244,8 +248,8 @@ One builder, alone, on `agent-sdk-kernel`. After Phase 1, no Phase 2 builder edi
 
 - Reword the few `all` lines that name the reply transport, so they name the reply's fields only.
 - Add the `headless` lines the architecture lists (items on stdin, the one file, read back, one reply each, do not wait or start anything).
-- Change the "forever daemon" line as Assumption A9 says: a chat agent never starts a long-lived process; auto-answer is the only one, started by LAHE.
-- Reword the exit-6 line: exit 6 means another owner holds the session, a chat agent or auto-answer, and `lahe session takeover` takes it back.
+- Change the "forever daemon" line as Assumption A9 says. A chat agent never starts a long-lived process. Auto-answer is the only one, and LAHE starts it.
+- Reword the exit-6 line to say that exit 6 means another owner holds the session, either a chat agent or auto-answer, and `lahe session takeover` takes it back.
 
 Carry the change into every copy in one commit:
 
@@ -262,7 +266,7 @@ Carry the change into every copy in one commit:
 - Every line of `CONTRACT_LINES` carries exactly one of the three tags. A test fails on a missing or unknown tag.
 - `CONTRACT` equals the `all` and `chat` texts in order, and `review.json`'s contract equals `CONTRACT`.
 - A test names one known chat-only line (it names `lahe monitor`) and asserts it is absent from the `headless` view, and one known headless line and asserts it is absent from `CONTRACT`.
-- The skill and `docs/CONTRACTS.md` match the new text; the orchestrator diffs them.
+- The skill and `docs/CONTRACTS.md` match the new text. The orchestrator checks this with a diff.
 
 ### Task 1.2: Wire names, fixtures and the manifest
 
@@ -274,7 +278,7 @@ Carry the change into every copy in one commit:
 - the reply agent name `claude-auto`, and the fold's rejection reason `auto_answer_owns`
 - `SERVICE_CONTRACT` from 13 to 14, with its comment
 
-In `projection.js`, fold `auto_answer.requested` into the latest request for the review. In `agent_sessions.js`, read `auto_answer.json` and answer `allowanceHolds(session)`: true when its `handoff_rev` equals the session's.
+In `projection.js`, fold `auto_answer.requested` into the latest request for the review. In `agent_sessions.js`, add `allowanceHolds(session)`. It reads `auto_answer.json` and returns true when its `handoff_rev` equals the session's.
 
 Add fixtures in `test/fixtures/auto_answer/`, paired by state:
 
@@ -298,7 +302,7 @@ Add every new file of Tasks 1.3 and 1.4 to `manifest.js`, in the non-bundle list
 
 **Spec:** Three things.
 
-**Locks.** Move `withServerLock` and `takeOverStaleLock` into `src/service/locks.js`, unchanged, and have `static_servers.js` use them. Add the second kind the architecture now names: a lock held for a process's life, stale only when its pid and that pid's start time no longer match a live process. The start time comes from `ps -o lstart=` run with `LC_ALL=C TZ=UTC`, through a reader a test can replace.
+**Locks.** Move `withServerLock` and `takeOverStaleLock` into `src/service/locks.js`, unchanged, and have `static_servers.js` use them. Add the second kind the architecture now names: a lock held for as long as a process lives. It goes stale only when its pid and that pid's start time no longer match a live process. The start time comes from `ps -o lstart=` run with `LC_ALL=C TZ=UTC`, through a reader a test can replace.
 
 **Stamps.** Add `src/service/file_stamp.js`: content hash, size and mtime of a user file.
 
@@ -350,7 +354,7 @@ The teardown helper reads every process group the fake recorded, plus `agent.jso
 
 Each is used by at least one Phase 2 test.
 
-**Phase test:** `gate:unit` green on `agent-sdk-kernel`. The orchestrator reads the kernel diff, merges it into `feat/lahe-agent-sdk`, and dispatches Phase 2 once OQ1 (the terms) is answered.
+**Phase test:** `gate:unit` green on `agent-sdk-kernel`. The orchestrator reads the kernel diff, merges it into `feat/lahe-agent-sdk`, and starts Phase 2 once OQ1 (the terms) is answered.
 
 ## Phase 2: Four builders in parallel
 
@@ -365,7 +369,7 @@ Each builder reads first: the architecture, `docs/ongoing/SESSION_OWNERSHIP.md`,
 **Spec:** Fill in the three engine modules as the architecture describes them.
 
 - `headless_prompt.js`: the system prompt, the reply schema, and the stdin payload. The payload keeps only the architecture's allowed fields, with `source_hint` replaced by the stage path. Batches are cut at 25 items or 100 KB. An item over 8,000 characters becomes the pinned `not_handled` reply instead of being sent.
-- `host_claude_code.js`: the command from the architecture's flag table, run by the recorded absolute path, in its own process group, with the environment built only from `auto_answer.json`'s `env`. The prompt file sits outside `work/` and is removed however the run ends. On timeout: SIGTERM to the group, the grace time, then SIGKILL.
+- `host_claude_code.js`: runs the command from the architecture's flag table. It runs `claude` by the absolute path recorded at allow time, in its own process group. The environment comes only from `auto_answer.json`'s `env`. The prompt file sits outside `work/` and is removed however the run ends. On timeout: SIGTERM to the group, the grace time, then SIGKILL.
 - `headless_stage.js` (`runBatch`): copy in and stamp, run, check the replies against the batch, diff the copy, and write back only when every check in the architecture's "Checks before anything reaches the real file" passes. The run records follow the architecture's "Run records".
 
 **Files:** those three, and `test/unit/auto_answer_engine_*.test.js`.
@@ -410,7 +414,7 @@ The supervisor calls `opts.engine` and takes every number from `AUTO_ANSWER`.
   - a session that owns more than one review
   - Windows
   - `claude` missing or signed out
-- The route: reads only `want`, refuses any other value, passes D11, and sets `from` from the client header. The generic events route refuses `auto_answer.requested`.
+- The route reads only `want` and refuses any value other than `on` or `off`. It makes the D11 checks (the review token every write route needs), and sets `from` from the client header. The generic events route refuses `auto_answer.requested`.
 - The helper starts `supervise` on an allowed "on", unless a live one holds the lock. It starts a new one when "on" stands and none is alive, at most three times in ten minutes.
 - The fold rejects replies from other agents while auto-answer holds the review (`auto_answer_owns`).
 - The liveness answer counts a live supervisor at the current rev as listening, and adds `auto_answer`. It never sends a path, the note, or a dollar figure.
@@ -432,7 +436,7 @@ The supervisor calls `opts.engine` and takes every number from `AUTO_ANSWER`.
 
 - the note field on the warning panel (only the terminal sets the note)
 - the "Raise the limit" and "Change the limit" buttons
-- screen b7 and the per-card run notes: the liveness answer carries no per-item state
+- screen b7 and the per-card run notes, because the liveness answer carries no per-item state
 
 What is built:
 
@@ -511,7 +515,7 @@ Each finding names the test that would catch it. Builders fix on `agent-sdk-fix-
 
 ### Task 4.1: Live check, story walks, fresh clone
 
-**Spec:** Through the built `lahe agent`, not spike scripts, on a throwaway review in the scratchpad. Check each "Live" line in the Test List. Then:
+**Spec:** On a throwaway review in the scratchpad, use the built `lahe agent` (not the spike scripts) to check each "Live" line in the Test List. Then:
 
 - walk every user story in the brief in the browser, on a real review, with the real `claude`
 - clone the repo fresh into the scratchpad and run `lahe agent allow` from it with no install step (brief R3, nothing to install)
@@ -520,7 +524,7 @@ Each finding names the test that would catch it. Builders fix on `agent-sdk-fix-
 
 ### Task 4.2: Dogfood
 
-**Spec:** The owner runs a review of at least five comments with auto-answer on, on a document no agent reads as instructions (the default for OQ6, instruction files). A script reads `runs.jsonl`, `attempts.json` and the event log. It writes the numbers the brief asks for, one row per item:
+**Spec:** The owner runs a review of at least five comments with auto-answer on. The document is one no agent reads as instructions (the default for OQ6, instruction files). A script reads `runs.jsonl`, `attempts.json` and the event log. It writes the numbers the brief asks for, one row per item:
 
 - runs and failures
 - items that hit the limit
@@ -694,16 +698,16 @@ Each finding names the test that would catch it. Builders fix on `agent-sdk-fix-
 
 ## Open Questions
 
-Every question for the owner, from the brief, the architecture and this plan, each with the default the build takes if he does not answer.
+These are the open questions from the brief, the architecture and this plan. Each has the default the build takes if you do not answer.
 
 ### Before the build
 
 ::: callout-question
-**OQ1 (subscription terms, architecture OQ1).** Anthropic's terms allow scripted access only by API key, or "where we otherwise explicitly permit it". Does a script starting `claude -p` on each comment, on your subscription, fall inside that? Task 0.1 puts the exact words from the live page beside this question. **Default: Phases 0 and 1 go ahead; they spend a handful of runs on your login, as the first spike did. Phase 2 waits for your answer, or for you to say you accept the risk.**
+**OQ1 (subscription terms, architecture OQ1).** Anthropic's terms allow scripted access only by API key, or "where we otherwise explicitly permit it". Auto-answer starts `claude -p` on your subscription when comments arrive. Is that allowed? Task 0.1 puts the exact words from the live page beside this question. **Default: Phases 0 and 1 go ahead. They spend a handful of runs on your login, as the first spike did. Phase 2 waits for your answer, or for you to say you accept the risk.**
 :::
 
 ::: callout-question
-**Q6 (order, brief).** Ship the small chat fix first (a hook that stops a turn ending with work open), and count forgotten items before building this? **Default: build this now. The small fix stays its own board row.**
+**Q6 (order, brief).** Should we ship a small chat fix first, then count how often chat agents forget comments, before building this? The fix is a hook that stops a chat agent from ending its turn while comments are still open. **Default: build this now. The small fix stays its own board row.**
 :::
 
 ::: callout-question
@@ -713,54 +717,54 @@ Every question for the owner, from the brief, the architecture and this plan, ea
 ### What it may do and what it costs
 
 ::: callout-question
-**Q1 (billing, brief).** Busy reviews draw on your shared subscription limit. Acceptable with run limits in place? **Default: yes, with 40 runs per review and 120 per computer each day, and $0.50 per run. Task 0.2's prompt size goes beside this.**
+**Q1 (billing, brief).** Each run uses your Claude subscription, so busy reviews use up the same limit as your own Claude work. Is that acceptable with run limits in place? **Default: yes, with 40 runs per review and 120 per computer each day, and a $0.50 cap per run. Task 0.2 measures each run's prompt size, and that number goes beside this question.**
 :::
 
 ::: callout-question
-**Q4 (permissions, brief).** What may a run do without asking? **Default: read and edit one copy of the one source file. No commands, no build, no commit, no push, no network.**
+**Q4 (permissions, brief).** What may a run do without asking? **Default: read and edit a copy of the one source file under review. It cannot run commands, build, commit, push or use the network.**
 :::
 
 ::: callout-question
-**OQ3 (the numbers, architecture).** Every number in "Numbers this plan sets". **Default: as listed.**
+**OQ3 (the numbers, architecture).** Are the limits and timings in "Numbers this plan sets" right? They are guesses, such as 2 runs at once and a 10-minute run timeout. **Default: use them as listed.**
 :::
 
 ::: callout-question
-**OQ6 (instruction files, architecture).** Dogfood on LAHE's own feature docs, which later agents read as instructions? **Default: no. The first dogfood uses a document no agent acts on, such as a blog draft.**
+**OQ6 (instruction files, architecture).** Should the first dogfood run on LAHE's own feature docs? Later agents read those docs as instructions. **Default: no. The first dogfood uses a document no agent acts on, such as a blog draft.**
 :::
 
 ### How it works
 
 ::: callout-question
-**Q2 (context, brief).** How much of the chat does each run know? **Default: only the note given at allow time.**
+**Q2 (context, brief).** How much of your chat with the agent does each run see? **Default: only the note written when you allow auto-answer in the terminal.**
 :::
 
 ::: callout-question
-**OQ4 (beyond Markdown, architecture).** Static HTML, linked files and build-output pages? **Default: Markdown only in the first version.**
+**OQ4 (beyond Markdown, architecture).** Should the first version also work on static HTML, linked files and build-output pages? **Default: no, Markdown only.**
 :::
 
 ::: callout-question
-**OQ5 (who may switch it on, architecture).** The page can turn it on only after a terminal has allowed the session. Acceptable? **Default: yes.**
+**OQ5 (who may switch it on, architecture).** Someone must first run `lahe agent allow` in a terminal. Only then can the switch on the page turn auto-answer on. Is that acceptable? **Default: yes.**
 :::
 
 ::: callout-question
-**OQ7 (the name, this plan).** "Auto-answer" for the switch and the status words? **Default: yes.**
+**OQ7 (the name, this plan).** Is "Auto-answer" the right name for the switch and the status words? **Default: yes.**
 :::
 
 ::: callout-question
-**OQ8 (one review per session, this plan).** Auto-answer holds one review per session; a session with two reviews cannot allow it. Acceptable for the first version? **Default: yes.**
+**OQ8 (one review per session, this plan).** Auto-answer holds one review per session. A session with two reviews cannot allow it. Is that acceptable for the first version? **Default: yes.**
 :::
 
 ### Separate from this build
 
 ::: callout-question
-**Q5 (the kill setting, brief).** Turn on Claude Code's option that stops the memory kills? **Default: not part of this build. It is your own setting.**
+**Q5 (the kill setting, brief).** Should you turn on the Claude Code setting that stops the memory kills? **Default: not part of this build. It is your own setting.**
 :::
 
 ::: callout-question
-**Q7 (the SDK, brief).** Close the Agent SDK path, or keep it documented for API-key users? **Default: recorded as a rejected alternative; nothing built.**
+**Q7 (the SDK, brief).** Should we drop the Agent SDK approach, or keep it documented for people who use an API key? **Default: record it as a rejected alternative and build nothing for it.**
 :::
 
-Q3 (telling the chat agent) is settled in the architecture: turning auto-answer on stops the chat agent's monitor, which tells it to tell you and stop. OQ2 (the flags spike) is not a question for you. It is Task 0.2, and it comes to you only if a stop rule fires.
+Two earlier questions are closed. Q3 (telling the chat agent) is settled in the architecture. Turning auto-answer on stops the chat agent's monitor, and the monitor tells the agent to tell you and stop. OQ2 (the flags spike) is now Task 0.2. It comes to you only if one of its checks stops the build.
 
 ## To delete at cleanup
 
