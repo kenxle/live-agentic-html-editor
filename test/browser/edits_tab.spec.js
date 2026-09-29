@@ -630,7 +630,7 @@ test.describe("free writing: the edits row and the card show new blocks", () => 
   // presence table after a reworded middle block), which this workstream does
   // not own. fixme so it reports rather than failing a branch that cannot land
   // the fix; the orchestrator hands it to the replay fix builder.
-  test.fixme("after Use the fixes, the blocks after the fixed one raise no placed-elsewhere note", async ({ page }) => {
+  test("after Use the fixes, the blocks after the fixed one raise no placed-elsewhere note", async ({ page }, testInfo) => {
     await fw.openFixture(page, server, "blog.html");
     const item = await typeWorkedRun(page);
     await page.evaluate((id) => {
@@ -667,6 +667,8 @@ test.describe("free writing: the edits row and the card show new blocks", () => 
     await page.evaluate(() => window.__lahe.replayNow());
     const codes = await page.evaluate((id) => window.__lahe.rail.cardBadges(id).map((b) => b.code), item.id);
     expect(codes).not.toContain("REPLAY_RUN_PLACED_ELSEWHERE");
+    await page.evaluate(() => window.__lahe.rail.collapse(false));
+    await page.screenshot({ path: testInfo.outputPath("after-use-fixes-no-note.png") });
   });
 
   test("a page with content keeps the ordinary empty lines", async ({ page }) => {

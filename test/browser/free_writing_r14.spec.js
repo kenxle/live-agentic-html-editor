@@ -10,6 +10,12 @@
 //   bold in the second paragraph, left out by the agent  comes back bold
 //   the header line, by click and by Esc                 shows once, under the h2
 //   bold two words, the agent changes nothing            not retired
+//   bold two words, a correct agent                      survives, retired
+//
+// Plan Task 3.4 adds, typed for real: the lone-paragraph cases now also have
+// the agent reply handled, and the item must reopen (the helper holds it);
+// the header case checks the line sits right below the sheet-head and takes
+// screenshots while writing and after the rebuild.
 //
 // Nothing is simulated: the session, the helper, its server, the reply and the
 // rebuild are all real, and a rebuild is a rewrite of the source file. Each
@@ -292,6 +298,20 @@ function reply(world, it) {
   ]);
 }
 
+/** The agent says handled. The words it left out keep the item open. */
+async function heldAfterHandled(world, it) {
+  reply(world, it);
+  const got = await pollUntil(
+    () => {
+      const now = reviewJsonItem(world, it.id);
+      return now && now.reply ? now : null;
+    },
+    { message: "the helper to fold the handled reply", timeoutMs: 20000 }
+  );
+  expect(got.state, "the item reopens: it is still in front of the agent").toBe("ready");
+  expect(got.handled_not_on_page).toBe(true);
+}
+
 test.describe("brief R14: bold and italic edits survive the rebuild", () => {
   let world = null;
 
@@ -325,6 +345,7 @@ test.describe("brief R14: bold and italic edits survive the rebuild", () => {
     });
     expect(await countOnPage(page, P_BOLD)).toBe(1);
     expect(await countOnPage(page, P_PLAIN)).toBe(1);
+    await heldAfterHandled(world, it);
   });
 
   test("a lone paragraph: bold in the SECOND new paragraph, left out by the agent, comes back bold", async ({ page }, testInfo) => {
@@ -353,6 +374,7 @@ test.describe("brief R14: bold and italic edits survive the rebuild", () => {
       timeoutMs: 5000
     });
     expect(await countOnPage(page, P_BOLD)).toBe(1);
+    await heldAfterHandled(world, it);
   });
 
   for (const leave of ["click", "Esc"]) {
@@ -364,6 +386,7 @@ test.describe("brief R14: bold and italic edits survive the rebuild", () => {
       await caret(page, INTRO_H2, "end");
       await page.keyboard.press("Enter");
       await page.keyboard.type(NEW_LINE, { delay: 5 });
+      await page.screenshot({ path: testInfo.outputPath("header-line-writing-" + leave + ".png") });
       if (leave === "click") await commitByClickOutside(page);
       else await commitByEsc(page);
       const it = await committedEdit(page);
@@ -372,9 +395,16 @@ test.describe("brief R14: bold and italic edits survive the rebuild", () => {
       // A correct agent: the new line as its own paragraph under the heading.
       await agentWrites(page, world, [NEW_LINE, ORIGINAL]);
 
-      expect(await page.evaluate((s) => document.querySelector(s).innerText.trim(), INTRO_H2)).toBe("Intro");
+      expect(await page.evaluate((s) => document.querySelector(s).textContent, INTRO_H2), "the h2's text is exactly the header").toBe("Intro");
       expect(await countOnPage(page, NEW_LINE)).toBe(1);
       expect(await sectionText(page)).toContain(NEW_LINE + " " + ORIGINAL);
+      const below = await page.evaluate((sel) => {
+        const head = document.querySelector(sel + " > .sheet-head");
+        const next = head && head.nextElementSibling;
+        return next ? { tag: next.tagName, text: next.textContent.trim() } : null;
+      }, INTRO_SECTION);
+      expect(below, "the line is the block right below the sheet-head").toEqual({ tag: "P", text: NEW_LINE });
+      await page.screenshot({ path: testInfo.outputPath("header-line-rebuilt-" + leave + ".png") });
     });
   }
 
@@ -400,5 +430,35 @@ test.describe("brief R14: bold and italic edits survive the rebuild", () => {
     );
     expect(folded.state).toBe("ready");
     expect(folded.handled_not_on_page).toBe(true);
+  });
+
+  test("bold two words: a correct agent carries the bold, and it survives the rebuild", async ({ page }, testInfo) => {
+    world = await makeWorld(testInfo, [ORIGINAL]);
+    await page.goto(world.open);
+    await booted(page);
+    await openEdit(page, INTRO_P);
+    expect(await selectPhrase(page, INTRO_P, "too fast")).toBe(true);
+    await pressBold(page);
+    await commitByEsc(page);
+    const it = await committedEdit(page);
+    await helperHas(world, it.id, it.rev);
+
+    await agentWrites(page, world, ["Runners come back **too fast** after a layoff."]);
+    reply(world, it);
+    const folded = await pollUntil(
+      () => {
+        const got = reviewJsonItem(world, it.id);
+        return got && got.reply ? got : null;
+      },
+      { message: "the helper to fold the handled reply", timeoutMs: 20000 }
+    );
+    expect(folded.state).toBe("handled");
+    expect(folded.handled_not_on_page).toBe(false);
+    await page.reload();
+    await settled(page);
+    expect(await page.evaluate((sel) => Array.from(document.querySelectorAll(sel + " strong")).map((n) => n.textContent), INTRO_P)).toEqual([
+      "too fast"
+    ]);
+    expect(await page.evaluate((id) => window.__lahe.itemById(id).state, it.id), "the page check leaves it handled").toBe("handled");
   });
 });

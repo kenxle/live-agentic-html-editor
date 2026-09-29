@@ -2799,8 +2799,14 @@
       store.read(requireReview()).forEach(function (item) {
         var kind = item[record.FIELD.KIND];
         if (kind !== record.KIND.EDIT && kind !== record.KIND.FORMAT_ONLY) return;
-        if (!record.isDraft(item) || !isCommittedEdit(item)) return;
+        if (!record.isDraft(item)) return;
         if (session && session.itemId === item[record.FIELD.ID]) return;
+        if (record.hasRunFields(item)) {
+          var run = recoverRun(item);
+          if (run) out.push(run);
+          return;
+        }
+        if (!isCommittedEdit(item)) return;
         var before = { text: item[record.FIELD.BEFORE], html: item[record.FIELD.BEFORE_HTML] };
         var after = { text: item[record.FIELD.AFTER], html: item[record.FIELD.AFTER_HTML] };
         var verdict = kindFor(before, after);
@@ -2818,6 +2824,40 @@
         out.push(committed);
       });
       return out;
+    }
+
+    // Did a run draft change anything? New words, a split, a new tag, or new
+    // anchor words. The blank page's own draft (opened ready to type, nothing
+    // typed) did not, and stays a draft.
+    function runChanged(item) {
+      var blocksNow = item[record.FIELD.NEW_BLOCKS] || [];
+      if (blocksNow.length) return true;
+      if (item[record.FIELD.ANCHOR_TAG_AFTER]) return true;
+      var anchorNow = item[record.FIELD.ANCHOR_AFTER_HTML];
+      return typeof anchorNow === "string" && anchorNow !== item[record.FIELD.BEFORE_HTML];
+    }
+
+    /**
+     * A run draft left by a page that died mid-sitting (architecture, Failure
+     * Modes: "The next page load commits it"). A run's first sitting has no
+     * committed wording anywhere else: the draft is the only copy, and replay
+     * never shows a draft. So it is committed with the run's own change text,
+     * as leaving the page would have: a first sitting stays at its revision,
+     * a later one bumps it.
+     */
+    function recoverRun(item) {
+      if (!runChanged(item)) return null;
+      var changes = { change: record.runChangeText(item), state: record.STATE.READY };
+      var committed;
+      if (isCommittedEdit(item)) committed = record.bumpRev(item, changes);
+      else {
+        committed = Object.assign({}, item, changes);
+        committed[record.FIELD.UPDATED_AT] = record.nowIso();
+        committed[record.FIELD.AFTER_HISTORY] = appendHistory(item, committed);
+      }
+      record.validateItem(committed);
+      persist(committed, "committed", "ready");
+      return committed;
     }
 
     // ------------------------------------------------------------------------
