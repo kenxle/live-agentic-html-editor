@@ -711,7 +711,7 @@ These are the open questions from the brief, the architecture and this plan. Eac
 :::
 
 ::: callout-question
-**Q8 (priority, brief).** Does this go ahead of the failing tests on main, the open security items, and the npm package? **Default: main's failing tests come first, because Task 0.3 needs a green base. The security items and the npm package are not held for this.**
+**Q8 (priority, brief).** Does this go ahead of the open security items and the npm package? **Default: yes. Main's suite is green as of 2026-09-29 (commit 32fe22b: 417 passed, 0 failed), so there are no failing tests to fix first. The security items and the npm package are not held for this.**
 :::
 
 ### What it may do and what it costs
