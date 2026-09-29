@@ -75,6 +75,8 @@ var UNSAFE_PATH_CHARS = /['"`\\\u0000-\u001f\u007f-\u009f]/;
 
 // <repo>/.claude/worktrees/<name>/<rest>
 var WORKTREE = /^(.*)\/\.claude\/worktrees\/[^/]+(?:\/(.*))?$/;
+// The project label for files under ~/.claude (skills, agent settings).
+var CLAUDE_CONFIG_PROJECT = "claude config";
 
 function toMs(now) {
   if (typeof now === "number") return now;
@@ -503,8 +505,14 @@ function createReader(options) {
   /** The git project a document belongs to, or null. A worktree's is its owner's. */
   function projectOf(docPath) {
     if (typeof docPath !== "string" || !docPath) return null;
+    // ~/.claude holds skills and agent settings. It is often a git
+    // repository, whose folder name ".claude" is no project name.
+    var claudeHome = path.join(home, ".claude");
+    if (docPath === claudeHome || docPath.indexOf(claudeHome + path.sep) === 0) return CLAUDE_CONFIG_PROJECT;
+    // A worktree at <repo>/.claude/worktrees/<name> belongs to <repo>, even
+    // when neither it nor the repo has a .git left to read.
     var wt = WORKTREE.exec(docPath);
-    if (wt && repoNameAt(wt[1])) return repoNameAt(wt[1]);
+    if (wt && wt[1]) return repoNameAt(wt[1]) || path.basename(wt[1]);
     var current = docPath;
     while (!exists(current)) {
       var up = path.dirname(current);

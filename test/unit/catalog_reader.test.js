@@ -918,3 +918,32 @@ test("last: with no readable event, it is review.json's generated time, else met
   const again = await reader.list(installed.nowMs);
   assert.equal(row(again, "r_notitle").last, new Date(Date.parse(meta.created_at)).toISOString());
 });
+
+// --- project labels for files under a .claude folder ---------------------------
+
+function extraReview(installed, id, target) {
+  const reviewsModule = require("../../src/service/reviews.js");
+  const logModule = require("../../src/service/log.js");
+  reviewsModule.createReviews({ dir: installed.dir, log: logModule.createEventLog({ dir: installed.dir }) }).create({ id, agent_session_id: "s_coach", target_path: target });
+}
+
+test("project: a file under ~/.claude, itself a git repository, is labelled claude config, not .claude", async () => {
+  const { reader, installed } = setup();
+  const skill = path.join(installed.home, ".claude", "skills", "crucible", "SKILL.md");
+  fs.mkdirSync(path.dirname(skill), { recursive: true });
+  fs.mkdirSync(path.join(installed.home, ".claude", ".git"));
+  fs.writeFileSync(skill, "# Crucible\n");
+  extraReview(installed, "r_skill", skill);
+  const list = await reader.list(installed.nowMs);
+  assert.equal(row(list, "r_skill").project, "claude config");
+});
+
+test("project: a worktree under <repo>/.claude/worktrees is labelled with the repo's name, even with no .git to read", async () => {
+  const { reader, installed } = setup();
+  const doc = path.join(installed.home, "projects", "gamma", ".claude", "worktrees", "wt-x", "docs", "brief.html");
+  fs.mkdirSync(path.dirname(doc), { recursive: true });
+  fs.writeFileSync(doc, "<!doctype html><title>x</title>");
+  extraReview(installed, "r_gamma", doc);
+  const list = await reader.list(installed.nowMs);
+  assert.equal(row(list, "r_gamma").project, "gamma");
+});
