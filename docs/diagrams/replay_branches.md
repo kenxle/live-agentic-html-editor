@@ -82,7 +82,7 @@ The presence table, as `placeRun` applies it:
 |---|---|
 | whole, one to one | swap a wrong tag (and say so on the card, `REPLAY_RUN_WRONG_TAG`); rewrite the markup when bold or italic is missing |
 | joined (a leaf whose words are exactly two or more new blocks, nothing else) or split | leave it |
-| inside a leaf that also holds words the reviewer never typed (the clash, checked before anything is written) | write nothing, anchor included; flag the record with `REPLAY_NEITHER_MATCHES` and the conflict card, which shows the reviewer's block and the page's. Keep mine rewrites the leaf and remembers the page state; Take the page's makes the page's block the record's (a new revision). Either answer then places the rest |
+| inside a leaf that also holds words the reviewer never typed (the clash, checked before anything is written; with no block present yet, a block under five words never clashes, since that leaf is the page's own next paragraph) | write nothing, anchor included; flag the record with `REPLAY_NEITHER_MATCHES` and the conflict card, which shows the reviewer's block and the page's. Keep mine rewrites the leaf and remembers the page state; Take the page's makes the page's block the record's (a new revision). Either answer then places the rest |
 | missing, an earlier revision's block is there one to one | rewrite that block in place to the current words (branch three for the run) |
 | missing, five or more words, a whole leaf elsewhere on the page | write nothing; the card says it is already further down (`REPLAY_RUN_PLACED_ELSEWHERE`) |
 | missing otherwise | insert it after the last present block before it (or at the insert point), with its own tag and markup |

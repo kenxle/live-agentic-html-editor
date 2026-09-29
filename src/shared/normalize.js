@@ -1687,10 +1687,19 @@
    * consecutive missing blocks all sit inside that leaf, the clash covers
    * them all.
    *
+   * With nothing matched yet, that first leaf is usually the page's own next
+   * paragraph (the agent has not placed the run). A block of fewer than
+   * SHORT_BLOCK_WORDS words ("Next", "Yes") sits inside such a paragraph for
+   * other reasons, so it only clashes after an earlier block matched.
+   *
    * @param {Array<{tag: string, html: string}>} blocks the run
    * @param {Array<{tag: string, html: string, words?: string}>} leaves from the insert point
    * @returns {{index: number, blocks: number, leaf: number}|null} the first clash
    */
+  function wordTotal(words) {
+    return words ? words.split(" ").length : 0;
+  }
+
   function runClash(blocks, leaves) {
     var runBlocks = Array.isArray(blocks) ? blocks : [];
     var pageLeaves = Array.isArray(leaves) ? leaves : [];
@@ -1714,6 +1723,7 @@
       if (i > 0 && matched[i - 1].status === "missing") continue;
       if (nextLeaf >= limit || used[nextLeaf]) continue;
       var leafWords = lw[nextLeaf];
+      if (nextLeaf === 0 && wordTotal(bw[i]) < SHORT_BLOCK_WORDS) continue;
       if (!heldInside(leafWords, bw[i])) continue;
       var count = 1;
       var acc = bw[i];

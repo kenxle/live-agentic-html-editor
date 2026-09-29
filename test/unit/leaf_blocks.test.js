@@ -204,9 +204,32 @@ test("a leaf holding a block's words plus a sentence the agent added is a clash 
 });
 
 test("the clash can be the run's first block, at the first leaf after the anchor", () => {
-  const run = [block("p", "Alpha words here")];
-  const got = normalize.runClash(run, leavesOf("<p>Before it, Alpha words here</p>"));
+  // Five words or more: a shorter first block is not read against the page's
+  // own next paragraph (below).
+  const run = [block("p", "Alpha words here and there")];
+  const got = normalize.runClash(run, leavesOf("<p>Before it, Alpha words here and there</p>"));
   assert.deepEqual(got, { index: 0, blocks: 1, leaf: 0 });
+});
+
+// Code lead finding 3. Before the agent places a run, the leaf where the block
+// would sit is the page's own next paragraph. A short first block ("Next",
+// "Yes") is often inside it as whole words. That is not a clash: nothing
+// matched yet, and the architecture keeps short blocks out of page searches.
+test("with nothing matched, a short first block inside the page's next paragraph is not a clash", () => {
+  assert.equal(
+    normalize.runClash(
+      [block("h3", "Next"), block("p", "Some new words here today")],
+      leavesOf("<p>Next, we tested the build on Windows.</p>")
+    ),
+    null
+  );
+  assert.equal(normalize.runClash([block("p", "Yes")], leavesOf("<p>Yes, that is the plan we agreed.</p>")), null);
+});
+
+test("after an earlier block matched, a short block inside the next leaf is still a clash", () => {
+  const run = [block("p", "Alpha words here"), block("p", "Yes")];
+  const got = normalize.runClash(run, leavesOf("<p>Alpha words here</p><p>Yes, and the agent added this.</p>"));
+  assert.deepEqual(got, { index: 1, blocks: 1, leaf: 1 });
 });
 
 test("two blocks joined in one leaf with extra words are one clash over both", () => {
