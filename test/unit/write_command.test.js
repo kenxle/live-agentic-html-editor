@@ -296,3 +296,89 @@ test("write.js exists, so the manifest no longer lists it as planned", () => {
   const manifest = require("../../src/shared/manifest.js");
   assert.equal(manifest.plannedFiles().some((entry) => entry.path === "src/cli/commands/write.js"), false);
 });
+
+// --- Fix round F3 -----------------------------------------------------------
+
+function getWithHost(url, host) {
+  return new Promise(function (resolve, reject) {
+    const u = new URL(url);
+    http
+      .request({ host: u.hostname, port: u.port, path: u.pathname, method: "GET", headers: { host: host } }, function (res) {
+        res.resume();
+        res.on("end", () => resolve({ status: res.statusCode }));
+      })
+      .on("error", reject)
+      .end();
+  });
+}
+
+// Adversary review 5 / design call 7.
+test("lahe review on a notes file keeps the one-page server: .env beside it is a 404", async (t) => {
+  const r = await rig(t);
+  const folder = tempDir("lahe-write-review-");
+  const file = path.join(folder, "notes.md");
+  fs.writeFileSync(path.join(folder, ".env"), "SECRET=zqxcanary\n");
+  fs.writeFileSync(path.join(folder, "diary.txt"), "private zqxcanary\n");
+  const first = r.run("write", [file]);
+  assert.equal(first.code, 0, first.stdout + first.stderr);
+  const sessionId = first.stdout.match(/^\s*session\s+(s_[a-f0-9]+)/m)[1];
+  const again = r.run("review", [file, "--session", sessionId]);
+  assert.equal(again.code, 0, again.stdout + again.stderr);
+  assert.match(again.stdout, /scope\s+this page only/);
+  assert.doesNotMatch(again.stdout, /^\s*root\s/m);
+  assert.equal(reviewIdOf(again.stdout), reviewIdOf(first.stdout), "the notes review is reused");
+  const url = openUrl(again.stdout);
+  const prefix = markdown.assetPrefix(file);
+  assert.equal((await get(url.origin + prefix + ".env")).status, 404);
+  assert.equal((await get(url.origin + prefix + "diary.txt")).status, 404);
+  assert.equal((await get(url.origin + "/.env")).status, 404);
+  assert.equal((await get(url.href)).status, 200);
+  assert.equal(projected(r.state, reviewIdOf(again.stdout)).review.notes, true);
+});
+
+// Security review 6.
+test("the one-page server refuses a Host that is not its own loopback address", async (t) => {
+  const r = await rig(t);
+  const folder = tempDir("lahe-write-host-");
+  const out = r.run("write", [path.join(folder, "n.md")]);
+  assert.equal(out.code, 0, out.stdout + out.stderr);
+  const url = openUrl(out.stdout);
+  assert.equal((await getWithHost(url.href, "attacker.example:" + url.port)).status, 404);
+  assert.equal((await getWithHost(url.href, "127.0.0.1:" + url.port)).status, 200);
+  assert.equal((await getWithHost(url.href, "localhost:" + url.port)).status, 200);
+});
+
+// Code lead 23: the record says it is a one-page server.
+test("a one-page server's record carries page: true", async (t) => {
+  const staticServers = require("../../src/service/static_servers.js");
+  const r = await rig(t);
+  const out = r.run("write", [path.join(tempDir("lahe-write-pagerec-"), "n.md")]);
+  const sessionId = out.stdout.match(/^\s*session\s+(s_[a-f0-9]+)/m)[1];
+  const url = openUrl(out.stdout);
+  const meta = staticServers.list(r.state, sessionId).find((m) => String(m.port) === url.port);
+  assert.equal(meta.page, true);
+});
+
+// Security review 5.
+test("lahe write refuses a file with more than one hard link", async (t) => {
+  const r = await rig(t);
+  const folder = tempDir("lahe-write-hardlink-");
+  const other = path.join(folder, "other.md");
+  fs.writeFileSync(other, "# Someone else's file\n");
+  const linked = path.join(folder, "notes.md");
+  fs.linkSync(other, linked);
+  const out = r.run("write", [linked]);
+  assert.equal(out.code, protocol.CLI_EXIT.BAD_USAGE, out.stdout + out.stderr);
+  assert.match(out.stderr, /hard link/);
+});
+
+test("a notes render reads its source without following a symlink", () => {
+  const folder = tempDir("lahe-write-nofollow-");
+  const real = path.join(folder, "real.md");
+  fs.writeFileSync(real, "# Real\n");
+  const link = path.join(folder, "link.md");
+  fs.symlinkSync(real, link);
+  assert.throws(() => markdown.render(link, { noFollow: true }), /symlink|ELOOP|link/i);
+  assert.ok(markdown.render(real, { noFollow: true }).indexOf("Real") !== -1);
+  assert.ok(markdown.render(link).indexOf("Real") !== -1, "an ordinary render still follows it");
+});

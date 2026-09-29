@@ -46,8 +46,8 @@ var USAGE = [
   "                  server, which serves this one page and nothing else in its folder",
   "  --name <name>   the human's name for this agent session, as lahe review takes it",
   "",
-  "Refused: a name that is not .md or .markdown, a missing folder, a directory, and any",
-  "symlink. An existing file is never overwritten."
+  "Refused: a name that is not .md or .markdown, a missing folder, a directory, any",
+  "symlink, and a file with more than one hard link. An existing file is never overwritten."
 ].join("\n");
 
 var PASSED_VALUE_FLAGS = ["--session", "--name", "--state-dir", "--port"];
@@ -88,6 +88,12 @@ function lstatOrNull(file) {
   }
 }
 
+// A second name for the same bytes is how notes.md can be someone else's file
+// on a shared machine (security review 5).
+function hardLinkRefusal(file) {
+  return file + " has more than one hard link, so it is also another file's name; lahe write opens a file with one name only";
+}
+
 /**
  * Apply the path rules. Returns {file, folder, created} or {error}.
  * `folder` is the parent's real path.
@@ -111,6 +117,7 @@ function prepare(target) {
     return { error: file + " is a symlink; lahe write opens or creates a real file only, and never follows one" };
   }
   if (stat && !stat.isFile()) return { error: file + " is not a regular file" };
+  if (stat && stat.nlink > 1) return { error: hardLinkRefusal(file) };
 
   var created = false;
   if (!stat) {
@@ -126,6 +133,7 @@ function prepare(target) {
         return { error: file + " appeared as a symlink while lahe write was creating it; refused" };
       }
       if (!again.isFile()) return { error: file + " is not a regular file" };
+      if (again.nlink > 1) return { error: hardLinkRefusal(file) };
     }
   }
   return { file: file, folder: fs.realpathSync(parent), created: created };
