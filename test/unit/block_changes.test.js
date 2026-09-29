@@ -307,3 +307,24 @@ test("a one pixel box is a screen-reader copy; no box at all is a hidden slide",
   );
   assert.equal(sync.isVisuallyHidden(realParagraph), false);
 });
+
+// ---------------------------------------------------------------------------
+// The wash on a committed run (free writing, plan Task 3.2)
+// ---------------------------------------------------------------------------
+//
+// The dashed "sent, not yet placed" rule is cut. When a sitting commits, its
+// new text wears the changed-text wash for a moment instead. A tail moved out
+// of the anchor by a split is not new text, so it is not washed.
+
+const tabEdits = require("../../src/layer/tab_edits.js");
+const { createFixtures } = require("../../src/shared/record_fixtures.js");
+
+test("a committed run washes its new blocks and never its moved tail", () => {
+  const fx = createFixtures({ seed: "block-changes-wash" });
+  const byName = (name) => fx.runFixtures().find((f) => f.name === name).item;
+
+  assert.deepEqual(tabEdits.runWashIndexes(byName("worked example")), [0, 1, 2]);
+  assert.deepEqual(tabEdits.runWashIndexes(byName("split tail, with typing")), [1]);
+  assert.deepEqual(tabEdits.runWashIndexes(byName("split tail, no typing")), []);
+  assert.deepEqual(tabEdits.runWashIndexes(fx.edit()), [], "an ordinary edit is not a run");
+});
