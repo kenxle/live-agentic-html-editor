@@ -1123,7 +1123,8 @@ async function run(argv) {
   // moment.
   if (alive) {
     var liveContract = Number.isInteger(alive.service_contract) ? alive.service_contract : 0;
-    if (liveContract > protocol.SERVICE_CONTRACT) {
+    var verdict = protocol.helperContractVerdict(alive);
+    if (verdict === protocol.CONTRACT_VERDICT.NEWER) {
       process.stderr.write(
         "lahe add: the running helper uses service contract " + liveContract +
           ", but this clone supports " + protocol.SERVICE_CONTRACT +
@@ -1131,7 +1132,7 @@ async function run(argv) {
       );
       return EXIT.FAILED;
     }
-    if (liveContract < protocol.SERVICE_CONTRACT) {
+    if (verdict === protocol.CONTRACT_VERDICT.OLDER) {
       restartReason =
         "the verified helper uses older service contract " + liveContract +
         "; this clone requires " + protocol.SERVICE_CONTRACT;

@@ -34,6 +34,11 @@
     ENTER_ELEMENT_PICK: "enter_element_pick",
     PICK_ELEMENT: "pick_element",
     EDIT_BLOCK: "edit_block",
+    // Free writing: Cmd-Shift-E with the caret in no block. Edit state opens
+    // with no block open, the "+ Write here" lines show, and Esc leaves.
+    ENTER_EDIT_STATE: "enter_edit_state",
+    // Esc while the bar's block-type menu is open closes the menu and nothing else.
+    CLOSE_MENU: "close_menu",
     MARK_READY: "mark_ready",
     COMMIT_EDIT: "commit_edit",
     CANCEL: "cancel",
@@ -86,6 +91,15 @@
       passThrough: false,
       preventDefault: true,
       requirement: "R24"
+    },
+    {
+      gesture: GESTURE.ENTER_EDIT_STATE,
+      keys: "Cmd-Shift-E",
+      when: "the cursor is in no block",
+      hint: "Click + Write here to add text. Esc to finish.",
+      passThrough: false,
+      preventDefault: true,
+      requirement: "R1"
     },
     {
       gesture: GESTURE.MARK_READY,
@@ -240,7 +254,10 @@
         return decide(GESTURE.TOGGLE_RAIL, false, true, "Cmd-Shift-1 opens the review panel, or closes it");
       }
       if (e.key === "Escape") {
-        if (e.editing === true) {
+        if (e.blockMenuOpen === true) {
+          return decide(GESTURE.CLOSE_MENU, false, true, "Esc closes the block-type menu and leaves the edit open");
+        }
+        if (e.editing === true || e.editState === true) {
           return decide(GESTURE.COMMIT_EDIT, false, true, "Esc commits the open edit and gives the block back to the page");
         }
         if (e.pickMode === true || e.inCommentBox === true) {
@@ -264,6 +281,9 @@
         return decide(GESTURE.ENTER_ELEMENT_PICK, false, true, "Cmd-Shift-C with nothing selected picks an element (R17)");
       }
       if (mod && e.shiftKey === true && isKey(e.key, "e")) {
+        if (e.inBlock === false) {
+          return decide(GESTURE.ENTER_EDIT_STATE, false, true, "Cmd-Shift-E with the cursor in no block opens edit state with no block open");
+        }
         return decide(GESTURE.EDIT_BLOCK, false, true, "Cmd-Shift-E edits the block under the cursor, and nothing else");
       }
       return decide(GESTURE.NONE, true, false, "not a library gesture; the page and the edited block keep it");
@@ -457,6 +477,156 @@
     return e.active === true ? FORMAT.REMOVE : FORMAT.APPLY;
   }
 
+  // ---------------------------------------------------------------------------
+  // Free writing: block types, Enter, edges, and undo inside a session
+  // ---------------------------------------------------------------------------
+  //
+  // docs/features/20260928.01_free_writing, plan "Block-type hotkeys". Every
+  // decision the editing workstream needs lives here, pure over a plain
+  // descriptor, so Phase 2 never edits this file and the rules are unit tested
+  // with no browser.
+  //
+  // THE CHORDS MATCH ON event.code, so the characters Option or Shift make on
+  // a layout never matter (Cmd-Option-2 is "™" on a US Mac). No chord uses
+  // Ctrl-Alt: on Windows and Linux AltGr sends Ctrl-Alt, and AltGr with a digit
+  // types a character on German and Polish layouts, so nothing matches while
+  // AltGraph is on. Digit 1 is skipped because Cmd-Shift-1 opens the rail, and
+  // the heading digit is the heading's level on the page.
+
+  var BLOCK_TYPES = [
+    { tag: "p", label: "Paragraph", code: "Digit0", chords: { mac: "Cmd-Option-0", other: "Ctrl-Shift-0" }, markdown: null },
+    { tag: "h2", label: "Heading", code: "Digit2", chords: { mac: "Cmd-Option-2", other: "Ctrl-Shift-2" }, markdown: "# " },
+    { tag: "h3", label: "Subheading", code: "Digit3", chords: { mac: "Cmd-Option-3", other: "Ctrl-Shift-3" }, markdown: "## " },
+    { tag: "h4", label: "Small heading", code: "Digit4", chords: { mac: "Cmd-Option-4", other: "Ctrl-Shift-4" }, markdown: "### " },
+    { tag: "ul", label: "Bulleted list", code: "Digit8", chords: { mac: "Cmd-Shift-8", other: "Ctrl-Shift-8" }, markdown: "- " },
+    { tag: "ol", label: "Numbered list", code: "Digit7", chords: { mac: "Cmd-Shift-7", other: "Ctrl-Shift-7" }, markdown: "1. " }
+  ];
+
+  // What the menu says when the caret's block is none of the six.
+  var OTHER_BLOCK_LABEL = "Other block";
+
+  var LIST_CHORD_TAGS = { ul: 1, ol: 1 };
+
+  /**
+   * The block type a keydown asks for, or null.
+   *
+   * @param {Object} input {code, key, metaKey, ctrlKey, altKey, shiftKey,
+   *   altGraph, platform: "mac" | "other"}
+   * @returns {(string|null)} the tag
+   */
+  function blockTypeChord(input) {
+    var e = input || {};
+    if (e.altGraph === true) return null;
+    var mac = e.platform === "mac";
+    for (var i = 0; i < BLOCK_TYPES.length; i += 1) {
+      var t = BLOCK_TYPES[i];
+      if (e.code !== t.code) continue;
+      if (mac) {
+        if (e.metaKey !== true || e.ctrlKey === true) return null;
+        if (LIST_CHORD_TAGS[t.tag]) return e.shiftKey === true && e.altKey !== true ? t.tag : null;
+        return e.altKey === true && e.shiftKey !== true ? t.tag : null;
+      }
+      if (e.ctrlKey !== true || e.metaKey === true || e.altKey === true) return null;
+      return e.shiftKey === true ? t.tag : null;
+    }
+    return null;
+  }
+
+  /** The chord a menu row shows, for the reviewer's system. */
+  function chordLabelFor(tag, platform) {
+    for (var i = 0; i < BLOCK_TYPES.length; i += 1) {
+      if (BLOCK_TYPES[i].tag === tag) return BLOCK_TYPES[i].chords[platform === "mac" ? "mac" : "other"];
+    }
+    return null;
+  }
+
+  var MARKDOWN_SHORTCUTS = { "# ": "h2", "## ": "h3", "### ": "h4", "- ": "ul", "* ": "ul", "1. ": "ol" };
+
+  /**
+   * The block type a Markdown shortcut asks for: the whole text of the block
+   * before the caret, typed at the block's start, with its trailing space.
+   *
+   * @param {string} textBeforeCaret
+   * @returns {(string|null)}
+   */
+  function markdownShortcutFor(textBeforeCaret) {
+    var t = typeof textBeforeCaret === "string" ? textBeforeCaret.replace(/ /g, " ") : "";
+    return Object.prototype.hasOwnProperty.call(MARKDOWN_SHORTCUTS, t) ? MARKDOWN_SHORTCUTS[t] : null;
+  }
+
+  var ENTER = {
+    SIBLING: "sibling", // a new p after this block
+    SPLIT: "split", // the block splits in two; the tail is marked from_anchor
+    NEW_ITEM: "new_item", // an li in this list
+    END_LIST: "end_list", // the empty last item goes, and a new p follows the list
+    LINE: "line", // Shift-Enter: a line break
+    BREAK_RULE: "break_rule" // no run here (a table cell, a caption): today's rule
+  };
+
+  /**
+   * What Enter means inside a writing session.
+   *
+   * @param {Object} input {shiftKey, atEnd, inListItem, itemEmpty, lastItem,
+   *   runAllowed (false where the host cannot hold flow content)}
+   */
+  function enterIntentFor(input) {
+    var e = input || {};
+    if (e.shiftKey === true) return ENTER.LINE;
+    if (e.runAllowed === false) return ENTER.BREAK_RULE;
+    if (e.inListItem === true) {
+      return e.itemEmpty === true && e.lastItem === true ? ENTER.END_LIST : ENTER.NEW_ITEM;
+    }
+    return e.atEnd === true ? ENTER.SIBLING : ENTER.SPLIT;
+  }
+
+  var EDGE = {
+    MERGE_PREVIOUS: "merge_previous",
+    MERGE_NEXT: "merge_next",
+    DELETE_SELECTION: "delete_selection",
+    REFUSE: "refuse"
+  };
+
+  /**
+   * Backspace and Delete across a block edge. The layer cancels these and
+   * writes the merge itself, because a native merge adds style spans. Null
+   * means ordinary typing the engine may do.
+   *
+   * @param {Object} input {key: "Backspace"|"Delete", collapsed, spansBlocks,
+   *   atBlockStart, atBlockEnd, firstBlock (the session's first block),
+   *   lastBlock (its last)}
+   */
+  function edgeDeleteFor(input) {
+    var e = input || {};
+    if (e.key !== "Backspace" && e.key !== "Delete") return null;
+    if (e.collapsed === false) return e.spansBlocks === true ? EDGE.DELETE_SELECTION : null;
+    if (e.key === "Backspace") {
+      if (e.atBlockStart !== true) return null;
+      return e.firstBlock === true ? EDGE.REFUSE : EDGE.MERGE_PREVIOUS;
+    }
+    if (e.atBlockEnd !== true) return null;
+    return e.lastBlock === true ? EDGE.REFUSE : EDGE.MERGE_NEXT;
+  }
+
+  var HISTORY = { UNDO: "undo", REDO: "redo" };
+
+  /**
+   * Cmd-Z and Shift-Cmd-Z inside a session walk the session's own history.
+   * Outside one, the answer is null and Lahe's per-record undo is unchanged.
+   *
+   * @param {Object} input {code, key, metaKey, ctrlKey, shiftKey, altKey,
+   *   inputType, editing, platform}
+   */
+  function historyIntentFor(input) {
+    var e = input || {};
+    if (e.editing !== true) return null;
+    if (e.inputType === "historyUndo") return HISTORY.UNDO;
+    if (e.inputType === "historyRedo") return HISTORY.REDO;
+    if (!isPrimaryModifier(e) || e.altKey === true) return null;
+    if (e.code === "KeyZ" || isKey(e.key, "z")) return e.shiftKey === true ? HISTORY.REDO : HISTORY.UNDO;
+    if (e.platform !== "mac" && e.ctrlKey === true && (e.code === "KeyY" || isKey(e.key, "y"))) return HISTORY.REDO;
+    return null;
+  }
+
   // KeyboardEvent.key is lowercase unless Shift is held, and it is the layout's
   // character. Comparing case-insensitively is what makes Cmd-Shift-C work.
   function isKey(key, letter) {
@@ -500,7 +670,18 @@
     isScrollbarPress: isScrollbarPress,
     hintFor: hintFor,
     hintLines: hintLines,
-    isPrimaryModifier: isPrimaryModifier
+    isPrimaryModifier: isPrimaryModifier,
+    BLOCK_TYPES: BLOCK_TYPES,
+    OTHER_BLOCK_LABEL: OTHER_BLOCK_LABEL,
+    blockTypeChord: blockTypeChord,
+    chordLabelFor: chordLabelFor,
+    markdownShortcutFor: markdownShortcutFor,
+    ENTER: ENTER,
+    enterIntentFor: enterIntentFor,
+    EDGE: EDGE,
+    edgeDeleteFor: edgeDeleteFor,
+    HISTORY: HISTORY,
+    historyIntentFor: historyIntentFor
   };
 
   if (browser) {

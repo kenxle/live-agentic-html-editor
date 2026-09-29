@@ -137,13 +137,14 @@ async function startHelper(dir, port, options) {
   var live = await service.probeHealth(protocol.DEFAULT_HOST, port);
   if (live) {
     var liveContract = Number.isInteger(live.service_contract) ? live.service_contract : 0;
-    if (liveContract > protocol.SERVICE_CONTRACT) {
+    var verdict = protocol.helperContractVerdict(live);
+    if (verdict === protocol.CONTRACT_VERDICT.NEWER) {
       throw new Error(
         "the running helper uses newer service contract " + liveContract +
         "; update this clone before changing the session"
       );
     }
-    if (liveContract === protocol.SERVICE_CONTRACT) {
+    if (verdict === protocol.CONTRACT_VERDICT.CURRENT) {
       stale = sourceStamp.helperPredatesSource(live.started_at).stale;
       if (!stale) return { started: false, stale: false, keptForReviewer: null };
       // SOMEBODY IS REVIEWING ON IT. Being older than the code on disk is a

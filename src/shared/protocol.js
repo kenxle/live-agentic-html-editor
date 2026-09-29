@@ -58,7 +58,22 @@
   // replacing one throws every open review page out of its own review, and
   // they leave no windows.json for a CLI command to ask whether anybody is
   // reviewing before it replaces them. They must be restarted.
-  var SERVICE_CONTRACT = 13;
+  // 14: older helpers store free-writing run records without the block
+  // allowlist or the size ceiling, and never project new_blocks, so an agent
+  // on them would never see the reviewer's new text. They must be restarted.
+  var SERVICE_CONTRACT = 14;
+
+  // What a CLI or layer makes of the contract a running helper reports. OLDER
+  // is refused (the helper is restarted), NEWER means this clone is behind and
+  // must not bounce a newer shared helper backward.
+  var CONTRACT_VERDICT = { CURRENT: "current", OLDER: "older", NEWER: "newer" };
+
+  function helperContractVerdict(health) {
+    var live = health && Number.isInteger(health.service_contract) ? health.service_contract : 0;
+    if (live > SERVICE_CONTRACT) return CONTRACT_VERDICT.NEWER;
+    if (live < SERVICE_CONTRACT) return CONTRACT_VERDICT.OLDER;
+    return CONTRACT_VERDICT.CURRENT;
+  }
   var BASE = "/lahe/" + API_VERSION;
 
   // ---------------------------------------------------------------------------
@@ -223,10 +238,12 @@
         "one way a script on an allowed page could widen the allowlist with a token it read off the script tag, " +
         "which would leave the token as the only factor guarding the review. " +
         "only_recorded_pages is accepted as true and never as false, for the same reason: narrowing a review to " +
-        "the pages it recorded is the reviewer's `--only`, and widening one back out is what a leaked token would ask for",
+        "the pages it recorded is the reviewer's `--only`, and widening one back out is what a leaked token would ask for. " +
+        "notes is accepted as true and never as false, the same way: it marks a `lahe write` notes review, whose " +
+        "long sittings are not proofread (acceptsNotesFlag)",
       request:
         "{review, origins: [origin...], target_path?, source_path?, source_hint?, page_path?, " +
-        "only_recorded_pages?: true}",
+        "only_recorded_pages?: true, notes?: true}",
       response: "{origins, recorded_source, recorded_paths, only_recorded_pages, seq}"
     },
     {
@@ -645,6 +662,9 @@
     // item's last draft post, not a timer that typing pushes back. The poll
     // loop cannot get round it either: flush itself applies it.
     DRAFT_FLOOR_MS: 10000,
+    // A free-writing run record's drafts carry the whole run, so they wait
+    // longer (docs/features/20260928.01_free_writing). A commit is never held.
+    RUN_DRAFT_FLOOR_MS: 30000,
     // Plus an immediate flush on each of these, with no debounce and no draft
     // floor. `hide` is the tab being hidden, which is often the last thing a
     // page hears before the browser discards it.
@@ -701,8 +721,31 @@
     REASON: "reason",
     TEXT: "text",
     FILES: "files",
-    NEEDS_SEE: "user_needs_to_see_reply"
+    NEEDS_SEE: "user_needs_to_see_reply",
+    // A proofread question on a long hand-written run: the agent placed the
+    // words as written and lists fixes as {block, from, to}, block being the
+    // index in new_blocks. Accepted on a question only.
+    PROOFREAD: "proofread",
+    SUGGESTIONS: "suggestions"
   };
+
+  /** A review write marks a notes review only with the literal true. */
+  function acceptsNotesFlag(body) {
+    return !!body && body.notes === true;
+  }
+
+  // Null when the suggestions are well formed, or the reason they are not.
+  function suggestionsProblem(list) {
+    if (!Array.isArray(list)) return "suggestions must be a list";
+    for (var i = 0; i < list.length; i += 1) {
+      var s = list[i];
+      if (!s || typeof s !== "object" || Array.isArray(s)) return "suggestion " + i + " must be an object";
+      if (!Number.isInteger(s.block) || s.block < 0) return "suggestion " + i + " block must be a whole number from 0";
+      if (typeof s.from !== "string" || !s.from) return "suggestion " + i + " from must be a non-empty string";
+      if (typeof s.to !== "string") return "suggestion " + i + " to must be a string";
+    }
+    return null;
+  }
 
   var REPLY_STATUS = { HANDLED: "handled", NOT_HANDLED: "not_handled", QUESTION: "question" };
   var REPLY_STATUSES = [REPLY_STATUS.HANDLED, REPLY_STATUS.NOT_HANDLED, REPLY_STATUS.QUESTION];
@@ -780,6 +823,18 @@
 
     // WHEN THE FILENAME'S AGENT AND THE LINE'S AGENT DISAGREE, THE LINE WINS,
     // because the line is what the reviewer sees on the card.
+    var marksProofread = parsed[REPLY_FIELD.PROOFREAD] !== undefined || parsed[REPLY_FIELD.SUGGESTIONS] !== undefined;
+    if (marksProofread) {
+      if (status !== REPLY_STATUS.QUESTION) {
+        return { ok: false, code: "REPLY_LINE_MALFORMED", reason: "proofread and suggestions belong on a question reply only" };
+      }
+      if (parsed[REPLY_FIELD.PROOFREAD] !== true) {
+        return { ok: false, code: "REPLY_LINE_MALFORMED", reason: "proofread must be true when suggestions are given" };
+      }
+      var problem = suggestionsProblem(parsed[REPLY_FIELD.SUGGESTIONS] === undefined ? [] : parsed[REPLY_FIELD.SUGGESTIONS]);
+      if (problem) return { ok: false, code: "REPLY_LINE_MALFORMED", reason: problem };
+    }
+
     var agent = typeof parsed[REPLY_FIELD.AGENT] === "string" && parsed[REPLY_FIELD.AGENT] ? parsed[REPLY_FIELD.AGENT] : opts.filenameAgent || null;
 
     var reply = {};
@@ -796,6 +851,12 @@
     // badge is a smaller failure than losing the answer, and question and
     // not_handled replies reach the reviewer without this field anyway.
     reply[REPLY_FIELD.NEEDS_SEE] = parsed[REPLY_FIELD.NEEDS_SEE] === true;
+    if (marksProofread) {
+      reply[REPLY_FIELD.PROOFREAD] = true;
+      reply[REPLY_FIELD.SUGGESTIONS] = (parsed[REPLY_FIELD.SUGGESTIONS] || []).map(function (sg) {
+        return { block: sg.block, from: sg.from, to: sg.to };
+      });
+    }
     return { ok: true, reply: reply, reason: null };
   }
 
@@ -1379,6 +1440,9 @@
   return {
     API_VERSION: API_VERSION,
     SERVICE_CONTRACT: SERVICE_CONTRACT,
+    CONTRACT_VERDICT: CONTRACT_VERDICT,
+    helperContractVerdict: helperContractVerdict,
+    acceptsNotesFlag: acceptsNotesFlag,
     BASE: BASE,
     DEFAULT_PORT: DEFAULT_PORT,
     DEFAULT_HOST: DEFAULT_HOST,
