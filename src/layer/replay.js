@@ -80,7 +80,8 @@
       root.LAHE.protect,
       root.LAHE.markers,
       root.LAHE.pointing,
-      root.LAHE.highlight
+      root.LAHE.highlight,
+      root.LAHE.blocks
     );
   } else {
     module.exports = factory(
@@ -93,7 +94,8 @@
       require("./protect.js"),
       require("../shared/markers.js"),
       require("./pointing.js"),
-      require("./highlight.js")
+      require("./highlight.js"),
+      require("./blocks.js")
     );
   }
 })(typeof globalThis !== "undefined" ? globalThis : this, function (
@@ -106,7 +108,8 @@
   protectModule,
   markers,
   pointingModule,
-  highlightModule
+  highlightModule,
+  blocks
 ) {
   "use strict";
 
@@ -1302,6 +1305,10 @@
   // And the third: the words landed and the id did not. Same reason again.
   var STAMP_LOST_NOTE = record.PAGE_CHECK_STAMP_NOTE;
 
+  // And the fourth, for a run record: a block landed one to one with a
+  // different tag from the one in new_blocks.
+  var TAG_WRONG_NOTE = record.PAGE_CHECK_TAG_NOTE;
+
   // The backstop, independent of the stamp rule below. Two checks that both look
   // at the same item cannot reopen it twice inside this window, whatever they
   // each believe about the record. Sixty seconds because the loop that caused
@@ -1338,7 +1345,7 @@
   // The three things the check can find, and the sentence each one carries. A
   // caller that only wants a yes or no asks isRevertedHandledEdit; one that has
   // to write the note asks pageCheckNoteFor.
-  var CHECK_REASON = { REVERTED: "reverted", FORMATTING: "formatting", STAMP: "stamp" };
+  var CHECK_REASON = { REVERTED: "reverted", FORMATTING: "formatting", STAMP: "stamp", TAG: "tag" };
 
   /**
    * Why the page check would reopen this item, or null.
@@ -1351,6 +1358,13 @@
     if (item[record.FIELD.STATE] !== record.STATE.HANDLED) return null;
     if (record.answeredPageCheckReopen(item)) return null;
     if (withinCheckCooldown(item, options)) return null;
+
+    // A free-writing record is read block by block (runCheckReason).
+    if (isRunChecked(item)) {
+      var runReason = runCheckReason(item, options);
+      if (runReason) return runReason;
+      return stampMissingFromPage(item, options) ? CHECK_REASON.STAMP : null;
+    }
 
     var after = item[record.FIELD.AFTER];
     var before = item[record.FIELD.BEFORE];
@@ -1387,6 +1401,7 @@
     if (reason === CHECK_REASON.REVERTED) return REVERTED_EDIT_NOTE;
     if (reason === CHECK_REASON.FORMATTING) return FORMATTING_LOST_NOTE;
     if (reason === CHECK_REASON.STAMP) return STAMP_LOST_NOTE;
+    if (reason === CHECK_REASON.TAG) return TAG_WRONG_NOTE;
     return null;
   }
 
@@ -1398,6 +1413,7 @@
   CHECK_NOTICES[FORMATTING_LOST_NOTE] =
     "The bold or italic in this change is not on the page. The item is open again.";
   CHECK_NOTICES[STAMP_LOST_NOTE] = "The id for this element is not in the source. The item is open again.";
+  CHECK_NOTICES[TAG_WRONG_NOTE] = "A block in this change is on the page as a different type. The item is open again.";
 
   /** The rail's line for a page-check note, defaulting to the revert one. */
   function pageCheckNoticeFor(note) {
@@ -1487,6 +1503,7 @@
     // Nothing to read is not evidence of anything: a check that guessed would
     // reopen every handled edit on the page.
     if (html === null) return false;
+    if (isRunChecked(item)) return runCheckReason(item, opts) === CHECK_REASON.FORMATTING;
     if (item[record.FIELD.KIND] !== record.KIND.EDIT) return false;
     if (!markupSaysAfter(item)) return false;
     return missingEmphasis(item[record.FIELD.AFTER_HTML], html);
@@ -1665,7 +1682,13 @@
     "[data-lahe-conflict-diff]{background:var(--accent-wash);border-radius:3px;",
     "padding:0 2px;box-shadow:0 1px 0 var(--accent)}",
     "[data-lahe-conflict-side='theirs'] [data-lahe-conflict-diff]{background:var(--warn-wash);",
-    "box-shadow:0 1px 0 var(--warn)}"
+    "box-shadow:0 1px 0 var(--warn)}",
+    // A held run (free writing): the reviewer's new blocks, drawn like their
+    // own side, under the line that says either answer keeps them.
+    "[data-lahe-conflict-run]{display:flex;flex-direction:column;gap:3px;padding-left:9px;",
+    "border-left:2px solid var(--accent)}",
+    "[data-lahe-conflict-run-line]{font-size:12.5px;line-height:1.45;color:var(--ink-soft)}",
+    "[data-lahe-conflict-run-block]{font-size:12.5px;line-height:1.45;color:var(--ink);overflow-wrap:anywhere}"
   ].join("");
 
   // One node per item, reused. Building a fresh node on every pass would be the
@@ -1837,6 +1860,12 @@
     var ctx = contextFor(null);
     var flagged = conflicts[id];
     if (!flagged) return { resolved: false, choice: choice, reason: "no conflict is flagged on " + String(id) };
+
+    // A held run: both answers place it (see resolveRunConflict).
+    if (flagged.run) {
+      var runItem = itemWithId(ctx, id);
+      if (runItem && record.hasRunFields(runItem)) return resolveRunConflict(ctx, id, choice, runItem, flagged);
+    }
 
     if (choice === "take_theirs") {
       // The page stands and the record goes. Nothing is written to the page:
@@ -2610,6 +2639,11 @@
       return { wrote: false, branch: null, lost: false, reason: "not outstanding", item: item, element: null };
     }
 
+    // A free-writing record (an anchor plus a run, a tag change, or a
+    // take-back) has its own path. Every record without those fields takes
+    // the one below, unchanged.
+    if (record.hasRunFields(item)) return applyRun(item, ctx);
+
     var ref = item[record.FIELD.REGION] ? item[record.FIELD.REGION].ref : null;
     var commit = commitFor(ctx, id);
     var element = ctx.element || (commit && commit.element) || null;
@@ -2825,6 +2859,657 @@
     };
   }
 
+  // ---------------------------------------------------------------------------
+  // Free writing: replay of a run record
+  // ---------------------------------------------------------------------------
+  //
+  // docs/features/20260928.01_free_writing, architecture "Replay after a
+  // rebuild" and docs/diagrams/replay_branches.md. A run record is one sitting:
+  // an existing anchor block, maybe reworded or retagged, and new sibling blocks
+  // written after it. Replay does two things with it, in order:
+  //
+  //   1. THE ANCHOR COMPARE, today's four branches, on the ANCHOR VIEW: the
+  //      anchor's own after (anchor_after_html) in place of the whole sitting.
+  //      So a repaint that brings the old anchor back gets the anchor's words,
+  //      never the run's. Then the tag leg: the anchor counts as applied only
+  //      when its tag is anchor_tag_after, and a wrong tag is swapped.
+  //      A container anchor (start_of_container) is found by its tag alone and
+  //      has no compare at all: once the notes are placed its text is the page.
+  //   2. THE RUN, block by block, by the presence table: found with
+  //      blocks.runElementsFor, and each missing block written with
+  //      blocks.writeBlock after the last present one before it.
+  //
+  // Branch four holds the run: nothing is placed until the reviewer answers,
+  // and either answer places it. A take-back removes its remove_blocks and
+  // never inserts. Nothing here writes a record string into the page as
+  // markup except the anchor's own markup when cleanBlock refuses it (a link),
+  // which is today's anchor write, unchanged.
+
+  var RUN_FIELD = {
+    NEW_BLOCKS: "new_blocks",
+    REMOVE_BLOCKS: "remove_blocks",
+    ANCHOR_AFTER_HTML: "anchor_after_html",
+    ANCHOR_TAG_AFTER: "anchor_tag_after",
+    PLACEMENT: "placement"
+  };
+  var START_OF_CONTAINER = (record.PLACEMENT && record.PLACEMENT.START_OF_CONTAINER) || "start_of_container";
+
+  // The conflict card on a run record. Pinned in the plan's "Words this plan
+  // pins"; the singular is for a run of one block.
+  var TAKE_THEIRS_RUN_LABEL = "Take the page's, keep my new text";
+  var RUN_CONFLICT_LINE = "Your {n} new blocks after this {type} are waiting on this choice. Either answer keeps them.";
+  var RUN_CONFLICT_LINE_ONE = "Your 1 new block after this {type} is waiting on this choice. Either answer keeps it.";
+
+  // How the card names a block's type: the block menu's names, lowercased.
+  var BLOCK_TYPE_NAMES = {
+    p: "paragraph",
+    h1: "heading",
+    h2: "heading",
+    h3: "subheading",
+    h4: "small heading",
+    h5: "heading",
+    h6: "heading",
+    ul: "bulleted list",
+    ol: "numbered list"
+  };
+
+  function tagOfEl(el) {
+    return el && typeof el.tagName === "string" ? el.tagName.toLowerCase() : "";
+  }
+
+  function runList(item, field) {
+    var list = item ? item[field] : null;
+    return Array.isArray(list) ? list : [];
+  }
+
+  function isTakeBack(item) {
+    return runList(item, RUN_FIELD.REMOVE_BLOCKS).length > 0;
+  }
+
+  function isContainerPlacement(item) {
+    return !!item && item[RUN_FIELD.PLACEMENT] === START_OF_CONTAINER;
+  }
+
+  function blockTypeName(tag) {
+    return Object.prototype.hasOwnProperty.call(BLOCK_TYPE_NAMES, tag) ? BLOCK_TYPE_NAMES[tag] : "block";
+  }
+
+  function blockOpen(b) {
+    return "<" + b.tag + ">" + b.html + "</" + b.tag + ">";
+  }
+
+  function wordCount(html) {
+    var words = normalize.blockWords(typeof html === "string" ? html : "");
+    return words ? words.split(" ").length : 0;
+  }
+
+  // The first few words of a block, for a card note. Never the whole block.
+  var FIRST_WORDS = 6;
+  function firstWords(html) {
+    var text = normalize.normalizeText(normalize.textOf(typeof html === "string" ? html : ""));
+    var parts = text ? text.split(" ") : [];
+    return parts.length > FIRST_WORDS ? parts.slice(0, FIRST_WORDS).join(" ") + "..." : parts.join(" ");
+  }
+
+  /**
+   * The record as the anchor compare reads it.
+   *
+   * record.anchorView swaps the whole sitting for the anchor's own after. Two
+   * more things have to follow it here, or the compare still reads the sitting:
+   *
+   *   the history    every entry's after is the whole sitting too. An entry
+   *                  that carries anchor_after_html gives its anchor's words;
+   *                  one that does not (an older, trimmed entry) gives none,
+   *                  so branch three never matches a whole sitting
+   *   a take-back    has no anchor_after_html. Its before_html is the sitting
+   *                  it undoes, which ends with the run it removes, so the
+   *                  anchor's own before is that markup with the run cut off
+   *
+   * @returns {Object} a copy; the record itself is never changed
+   */
+  function runAnchorView(item) {
+    var F = record.FIELD;
+    var view = Object.assign({}, record.anchorView(item));
+    if (isTakeBack(item)) {
+      var suffix = runList(item, RUN_FIELD.REMOVE_BLOCKS).map(blockOpen).join("");
+      var bh = item[F.BEFORE_HTML];
+      if (typeof bh === "string" && suffix && bh.length >= suffix.length && bh.slice(bh.length - suffix.length) === suffix) {
+        view[F.BEFORE_HTML] = bh.slice(0, bh.length - suffix.length);
+        view[F.BEFORE] = normalize.blockText(view[F.BEFORE_HTML]);
+      }
+      return view;
+    }
+    var history = item[F.AFTER_HISTORY];
+    if (Array.isArray(history)) {
+      view[F.AFTER_HISTORY] = history.map(function (entry) {
+        var out = Object.assign({}, entry);
+        if (entry && typeof entry[RUN_FIELD.ANCHOR_AFTER_HTML] === "string") {
+          out.after_html = entry[RUN_FIELD.ANCHOR_AFTER_HTML];
+          out.after = normalize.blockText(entry[RUN_FIELD.ANCHOR_AFTER_HTML]);
+        } else {
+          out.after_html = null;
+          out.after = null;
+        }
+        return out;
+      });
+    }
+    return view;
+  }
+
+  // Every block of the run is one Lahe writes. A record carrying any other
+  // (a forged script block) writes nothing at all, anchor included.
+  function runBlocksWritable(item) {
+    var list = runList(item, RUN_FIELD.NEW_BLOCKS);
+    for (var i = 0; i < list.length; i += 1) {
+      var b = list[i];
+      if (!b || normalize.WRITABLE_BLOCK_TAGS.indexOf(b.tag) === -1) return false;
+      if (typeof normalize.cleanBlock(b.tag, b.html).html !== "string") return false;
+    }
+    var tag = item[RUN_FIELD.ANCHOR_TAG_AFTER];
+    return tag === null || tag === undefined || normalize.WRITABLE_BLOCK_TAGS.indexOf(tag) !== -1;
+  }
+
+  /**
+   * The container a start_of_container record writes into: the page's one
+   * main, or the body. Found by tag alone; its words are never compared.
+   */
+  function containerFor(item, ctx) {
+    var doc = ctx.document;
+    var root = ctx.root && ctx.root.nodeType === 9 ? ctx.root.body : ctx.root;
+    var tag = record.anchorTagOf(item);
+    if (tag === "body") return doc && doc.body ? doc.body : null;
+    if (root && tagOfEl(root) === "main") return root;
+    var found = root && typeof root.querySelectorAll === "function" ? root.querySelectorAll("main") : [];
+    if (found.length === 1) return found[0];
+    if (!found.length && tag !== "main") return doc && doc.body ? doc.body : null;
+    return null;
+  }
+
+  function writeAnchor(element, view, tagAfter) {
+    var tag = tagAfter || tagOfEl(element);
+    var built = blocks.writeBlock(tag, view[record.FIELD.AFTER_HTML], element.ownerDocument);
+    if (!built) {
+      if (tagAfter) element = blocks.swapTag(element, tagAfter) || element;
+      writeRegion(element, view);
+      return element;
+    }
+    if (tagAfter) element = blocks.swapTag(element, tagAfter) || element;
+    moveChildren(built, element);
+    return element;
+  }
+
+  function moveChildren(from, to) {
+    while (to.firstChild) to.removeChild(to.firstChild);
+    while (from.firstChild) to.appendChild(from.firstChild);
+  }
+
+  function setRunNote(ctx, id, code, message) {
+    if (!failures) return;
+    var f = failures.failure(code, null);
+    f.message = message;
+    callCard(ctx, "setCardBadge", id, f);
+  }
+
+  function lostVerdict() {
+    return { bound: false, element: null, reason: uniqueness.REASON.NO_TEXT_MATCH, considered: 0 };
+  }
+
+  function protectedResult(item, element) {
+    counters.regionsSkippedProtected += 1;
+    return { wrote: false, branch: null, lost: false, reason: "the reviewer is in this region", item: item, element: element };
+  }
+
+  /**
+   * Applies one run record. The contract is applyRecord's, plus the run.
+   */
+  function applyRun(item, ctx) {
+    var F = record.FIELD;
+    var id = item[F.ID];
+    var view = runAnchorView(item);
+    var container = isContainerPlacement(item);
+    var commit = commitFor(ctx, id);
+    var element = ctx.element || (commit && commit.element) || null;
+
+    // The original run of a take-back is never replayed again, even while it
+    // is still outstanding.
+    var taken = record.takenBackIds(itemsIn(ctx));
+    if (taken[id]) return { wrote: false, branch: null, lost: false, reason: "taken back", item: item, element: null };
+
+    if (!element && protectedForItem(ctx, id)) return protectedResult(item, lastElement[id]);
+
+    var verdict = null;
+    if (!element) {
+      if (container) {
+        element = containerFor(item, ctx);
+        if (!element) verdict = lostVerdict();
+      } else {
+        var ref = item[F.REGION] ? item[F.REGION].ref : null;
+        if (!ref) return { wrote: false, branch: null, lost: false, reason: "no reference", item: item, element: null };
+        verdict = resolveRegion(view, ref, ctx);
+        element = verdict.element;
+      }
+    }
+    if (!element) {
+      var bound = lastElement[id];
+      if (bound && bound.isConnected) element = bound;
+      else return markLost(item, verdict || lostVerdict(), ctx);
+    }
+
+    lastElement[id] = element;
+    if (isProtectedNow(ctx, element)) return protectedResult(item, element);
+    clearLost(ctx, item);
+
+    if (!runBlocksWritable(item)) {
+      return { wrote: false, branch: null, lost: false, reason: "a block in this record is not one Lahe writes", item: item, element: element };
+    }
+
+    var wrote = false;
+    var branch = null;
+    var earlierAfter = null;
+    if (!container) {
+      if (commit) {
+        if (conflicts[id] && conflicts[id].displaced) delete conflicts[id];
+        var observed = observedValue(commit);
+        if (typeof observed === "string" && compare(view, observed, null, null).branch === BRANCH.CONTENT_CHANGED) {
+          return holdRun(ctx, item, view, element, observed, true);
+        }
+      }
+      var domValue = domValueOf(element, view);
+      var verdictBranch = compare(view, domValue, typeof element.innerHTML === "string" ? element.innerHTML : null, null);
+      branch = verdictBranch.branch;
+      earlierAfter = verdictBranch.earlierAfter;
+      if (branch === BRANCH.CONTENT_CHANGED) return holdRun(ctx, item, view, element, domValue, false);
+      var tagAfter = item[RUN_FIELD.ANCHOR_TAG_AFTER] || null;
+      if (branch !== BRANCH.ALREADY_APPLIED) {
+        epoch.write("replay", function () {
+          element = writeAnchor(element, view, tagAfter);
+        });
+        wrote = true;
+        if (branch === BRANCH.EARLIER_REVISION) {
+          counters.regionsEarlierRevision += 1;
+          callCard(ctx, "setCardNotice", id, EARLIER_REVISION_MESSAGE);
+        }
+      } else if (tagAfter && tagOfEl(element) !== tagAfter) {
+        // The tag leg: the words and markup are right and the type is not.
+        // Written through the anchor's own markup, so a paragraph turned into
+        // a list gets its li, which the structural compare reads past.
+        epoch.write("replay", function () {
+          element = writeAnchor(element, view, tagAfter);
+        });
+        wrote = true;
+      }
+      clearConflict(ctx, id);
+    }
+
+    var placed = placeRun(ctx, item, element);
+    if (placed.wrote) wrote = true;
+    lastElement[id] = element;
+    if (wrote) counters.regionsWritten += 1;
+    else counters.regionsSkippedEqual += 1;
+    return {
+      wrote: wrote,
+      branch: branch,
+      lost: false,
+      reason: wrote ? "re-applied" : "idempotent",
+      earlierAfter: earlierAfter,
+      run: placed,
+      item: item,
+      element: element
+    };
+  }
+
+  // For each block index, the leaf an EARLIER revision's block sits in one to
+  // one, when its words differ from the current block's. Branch three for the
+  // run: that block is rewritten in place rather than inserted beside it.
+  function priorRunLeaves(item, doc, anchor) {
+    var out = {};
+    var current = runList(item, RUN_FIELD.NEW_BLOCKS);
+    var history = item[record.FIELD.AFTER_HISTORY];
+    if (!Array.isArray(history)) return out;
+    for (var h = history.length - 1; h >= 0; h -= 1) {
+      var entry = history[h];
+      if (!entry || entry.rev === item[record.FIELD.REV]) continue;
+      var prior = runList(entry, RUN_FIELD.NEW_BLOCKS);
+      if (!prior.length) continue;
+      var found = blocks.runElementsFor({ new_blocks: prior, placement: item[RUN_FIELD.PLACEMENT] }, doc, anchor);
+      found.blocks.forEach(function (b) {
+        if (b.status !== "whole" || out[b.index] || !current[b.index]) return;
+        if (normalize.blockWords(prior[b.index].html) === normalize.blockWords(current[b.index].html)) return;
+        out[b.index] = b.elements[0];
+      });
+    }
+    return out;
+  }
+
+  // Is a block of this many words already on the page as a whole leaf,
+  // somewhere the walk did not reach?
+  function placedElsewhere(block, doc, skip) {
+    var words = normalize.blockWords(block.html);
+    var leaves = blocks.leafWalk(doc.body);
+    for (var i = 0; i < leaves.length; i += 1) {
+      if (skip.indexOf(leaves[i]) !== -1) continue;
+      if (normalize.blockWords(normalize.cleanMarkup(leaves[i].innerHTML)) === words) return true;
+    }
+    return false;
+  }
+
+  // Rewrite a leaf found one to one: its tag, and its inner markup when the
+  // bold or italic the block asks for is not in it.
+  function fixBlock(ctx, id, el, block, force) {
+    var doc = el.ownerDocument;
+    var pageTag = tagOfEl(el);
+    var wrote = false;
+    if (pageTag !== block.tag) {
+      var swapped = null;
+      epoch.write("replay", function () {
+        swapped = blocks.swapTag(el, block.tag);
+      });
+      if (swapped) {
+        el = swapped;
+        wrote = true;
+        setRunNote(
+          ctx,
+          id,
+          "REPLAY_RUN_WRONG_TAG",
+          "The agent placed '" + firstWords(block.html) + "' as a " + blockTypeName(pageTag) +
+            ". You wrote a " + blockTypeName(block.tag) + ", so Lahe sent it back."
+        );
+      }
+    }
+    if (force || missingEmphasis(block.html, el.innerHTML)) {
+      var built = blocks.writeBlock(block.tag, block.html, doc);
+      if (built) {
+        epoch.write("replay", function () {
+          moveChildren(built, el);
+        });
+        wrote = true;
+      }
+    }
+    return { element: el, wrote: wrote };
+  }
+
+  function insertAfterPoint(point, el) {
+    point.parent.insertBefore(el, point.before && point.before.parentNode === point.parent ? point.before : null);
+  }
+
+  /**
+   * The run, block by block, by the presence table. A take-back removes its
+   * remove_blocks found one to one and inserts nothing.
+   *
+   * @returns {{wrote: boolean, inserted: number, removed: number, rewritten: number, elsewhere: number}}
+   */
+  function placeRun(ctx, item, anchor) {
+    var id = item[record.FIELD.ID];
+    var out = { wrote: false, inserted: 0, removed: 0, rewritten: 0, elsewhere: 0 };
+    var doc = anchor.ownerDocument;
+    if (isTakeBack(item)) {
+      var gone = blocks.runElementsFor(item, doc, anchor);
+      gone.blocks.forEach(function (b) {
+        if (b.status !== "whole") return;
+        epoch.write("replay", function () {
+          b.elements[0].parentNode.removeChild(b.elements[0]);
+        });
+        out.removed += 1;
+        out.wrote = true;
+      });
+      return out;
+    }
+    var list = runList(item, RUN_FIELD.NEW_BLOCKS);
+    if (!list.length) return out;
+    var found = blocks.runElementsFor(item, doc, anchor);
+    var priors = priorRunLeaves(item, doc, anchor);
+    var seen = [];
+    found.blocks.forEach(function (b) {
+      seen = seen.concat(b.elements);
+    });
+    var last = null;
+    found.blocks.forEach(function (b) {
+      var block = list[b.index];
+      if (b.status === "whole") {
+        var fixed = fixBlock(ctx, id, b.elements[0], block, false);
+        if (fixed.wrote) {
+          out.rewritten += 1;
+          out.wrote = true;
+        }
+        last = fixed.element;
+        return;
+      }
+      if (b.status !== "missing") {
+        last = b.elements[b.elements.length - 1];
+        return;
+      }
+      var prior = priors[b.index];
+      if (prior && prior.isConnected !== false && seen.indexOf(prior) === -1) {
+        var again = fixBlock(ctx, id, prior, block, true);
+        out.rewritten += 1;
+        out.wrote = true;
+        seen.push(again.element);
+        last = again.element;
+        return;
+      }
+      if (wordCount(block.html) >= normalize.SHORT_BLOCK_WORDS && placedElsewhere(block, doc, seen)) {
+        out.elsewhere += 1;
+        setRunNote(
+          ctx,
+          id,
+          "REPLAY_RUN_PLACED_ELSEWHERE",
+          "'" + firstWords(block.html) + "' is already further down the page, so Lahe did not add it again."
+        );
+        return;
+      }
+      var el = blocks.writeBlock(block.tag, block.html, doc);
+      if (!el) return;
+      var point = last ? blocks.insertPointAfter(last) : found.start;
+      epoch.write("replay", function () {
+        insertAfterPoint(point, el);
+      });
+      out.inserted += 1;
+      out.wrote = true;
+      seen.push(el);
+      last = el;
+    });
+    return out;
+  }
+
+  /** Branch four on a run record: flag the anchor, hold the run, say so. */
+  function holdRun(ctx, item, view, element, theirs, displaced) {
+    var id = item[record.FIELD.ID];
+    var result = flagConflict(ctx, view, id, element, theirs, displaced);
+    if (conflicts[id]) conflicts[id].run = true;
+    decorateRunConflict(ctx, id, item);
+    result.item = item;
+    result.held = true;
+    return result;
+  }
+
+  function runConflictLine(item) {
+    var n = runList(item, RUN_FIELD.NEW_BLOCKS).length;
+    var type = record.anchorTypeName(item);
+    return (n === 1 ? RUN_CONFLICT_LINE_ONE : RUN_CONFLICT_LINE.replace("{n}", String(n))).replace("{type}", type);
+  }
+
+  // The run section of the conflict card: the pinned line and each held
+  // block's words, as text. The second button says the run is kept.
+  function decorateRunConflict(ctx, id, item) {
+    var node = conflictNodes[id];
+    if (!node || typeof node.querySelector !== "function") return;
+    var doc = node.ownerDocument;
+    var section = node.querySelector("[data-lahe-conflict-run]");
+    if (!section) {
+      section = doc.createElement("div");
+      section.setAttribute("data-lahe-conflict-run", "");
+      var acts = node.querySelector("[data-lahe-conflict-actions]");
+      node.insertBefore(section, acts || null);
+    }
+    section.textContent = "";
+    var line = doc.createElement("div");
+    line.setAttribute("data-lahe-conflict-run-line", "");
+    line.textContent = runConflictLine(item);
+    section.appendChild(line);
+    runList(item, RUN_FIELD.NEW_BLOCKS).forEach(function (b) {
+      var row = doc.createElement("div");
+      row.setAttribute("data-lahe-conflict-run-block", b.tag);
+      row.textContent = normalize.normalizeText(normalize.textOf(b.html));
+      section.appendChild(row);
+    });
+    var take = node.querySelector('[data-lahe-conflict-choice="take_theirs"]');
+    if (take) take.textContent = TAKE_THEIRS_RUN_LABEL;
+  }
+
+  // The element a run conflict is about, bound again when a repaint replaced it.
+  function runElementFor(ctx, item) {
+    var id = item[record.FIELD.ID];
+    var element = lastElement[id];
+    if (element && element.isConnected !== false) return element;
+    var ref = item[record.FIELD.REGION] ? item[record.FIELD.REGION].ref : null;
+    var verdict = ref ? resolveRegion(runAnchorView(item), ref, ctx) : null;
+    return verdict ? verdict.element : null;
+  }
+
+  /**
+   * The reviewer's answer on a held run. Both answers place the run.
+   *
+   *   keep_mine     the anchor's version stands, as on any record, and the run
+   *                 is placed after it
+   *   take_theirs   the page's anchor stands: the record takes the page's anchor
+   *                 markup as its own (a new revision, so the agent reads it),
+   *                 and the run is still placed
+   */
+  function resolveRunConflict(ctx, id, choice, item, flagged) {
+    if (choice !== "keep_mine" && choice !== "take_theirs") {
+      return { resolved: false, choice: choice, reason: "unknown choice " + String(choice) };
+    }
+    var element = runElementFor(ctx, item);
+    if (!element) return { resolved: false, choice: choice, reason: "the region this record points at is not on the page" };
+    var target = item;
+    if (choice === "keep_mine") {
+      record.acceptPageText(item, flagged.theirs);
+      persistItem(ctx, item);
+      var view = runAnchorView(item);
+      var tagAfter = item[RUN_FIELD.ANCHOR_TAG_AFTER] || null;
+      epoch.write("replay.keep_mine", function () {
+        element = writeAnchor(element, view, tagAfter);
+      });
+    } else {
+      var F = record.FIELD;
+      var pageHtml = normalize.cleanMarkup(element.innerHTML);
+      var built = record.buildRunAfter(pageHtml, runList(item, RUN_FIELD.NEW_BLOCKS));
+      var changes = {};
+      changes[RUN_FIELD.ANCHOR_AFTER_HTML] = pageHtml;
+      changes[RUN_FIELD.ANCHOR_TAG_AFTER] = null;
+      changes[F.AFTER_HTML] = built.after_html;
+      changes[F.AFTER] = built.after;
+      target = record.bumpRev(item, changes);
+      target[F.CHANGE] = record.runChangeText(target);
+      persistItem(ctx, target);
+    }
+    counters.regionsWritten += 1;
+    placeRun(ctx, target, element);
+    clearLost(ctx, target);
+    lastElement[id] = element;
+    delete conflicts[id];
+    forceClearConflict(ctx, id);
+    notify(ctx, "onResolved", id);
+    return { resolved: true, choice: choice, reason: null };
+  }
+
+  // ---------------------------------------------------------------------------
+  // The page check on a run
+  // ---------------------------------------------------------------------------
+  //
+  // Architecture "The page check on a run". Today's check looks for the whole
+  // after as one string, and the "Section N" label between a header and its
+  // paragraph would reopen a correct run. So a run is read block by block, with
+  // the string twin of replay's walk (normalize.leafBlocks) and the same
+  // matcher, starting after the anchor:
+  //
+  //   a missing block        reopens with today's "undone" note
+  //   a wrong tag, one to one  reopens with the tag note
+  //   lost bold or italic    reopens with the formatting note
+  //
+  // In that order, when more than one holds. A block of five or more words the
+  // page shows whole somewhere else is not missing: replay would not add it
+  // again either. Pure: a record and the page's markup in, a reason out.
+  function runCheckReason(item, options) {
+    var html = options && typeof options.pageHtml === "string" ? options.pageHtml : null;
+    if (html === null) return null;
+    var F = record.FIELD;
+    var leaves = normalize.leafBlocks(html);
+    var list = runList(item, RUN_FIELD.NEW_BLOCKS);
+    var anchorHtml = typeof item[RUN_FIELD.ANCHOR_AFTER_HTML] === "string" ? item[RUN_FIELD.ANCHOR_AFTER_HTML] : "";
+    var anchorWords = normalize.blockWords(anchorHtml);
+    var starts = [];
+    var anchored = true;
+    if (isContainerPlacement(item)) {
+      starts.push(-1);
+      anchored = false;
+    } else {
+      leaves.forEach(function (leaf, i) {
+        if (anchorWords && leaf.words === anchorWords) starts.push(i);
+      });
+    }
+    if (!starts.length) {
+      var beforeWords = normalize.blockWords(item[F.BEFORE_HTML] || item[F.BEFORE] || "");
+      var beforeBack = beforeWords && beforeWords !== anchorWords && leaves.some(function (l) {
+        return l.words === beforeWords;
+      });
+      if (beforeBack) return CHECK_REASON.REVERTED;
+      if (!list.length) return null;
+      anchored = false;
+      leaves.forEach(function (leaf, i) {
+        var hit = list.some(function (b) {
+          return normalize.blockWords(b.html) === leaf.words;
+        });
+        if (hit) starts.push(i - 1);
+      });
+      if (!starts.length) return CHECK_REASON.REVERTED;
+    }
+    var best = null;
+    starts.forEach(function (start) {
+      var matched = normalize.matchRun(list, leaves.slice(start + 1));
+      var present = matched.filter(function (m) {
+        return m.status !== "missing";
+      }).length;
+      if (!best || present > best.present) best = { start: start, matched: matched, present: present };
+    });
+    var missing = false;
+    var tag = false;
+    var formatting = false;
+    var anchorLeaf = anchored && best.start >= 0 ? leaves[best.start] : null;
+    if (anchorLeaf) {
+      var tagAfter = item[RUN_FIELD.ANCHOR_TAG_AFTER];
+      if (tagAfter && anchorLeaf.tag !== tagAfter) tag = true;
+      if (item[F.KIND] === record.KIND.EDIT && missingEmphasis(anchorHtml, anchorLeaf.html)) formatting = true;
+    }
+    best.matched.forEach(function (m) {
+      var block = list[m.index];
+      if (m.status === "missing") {
+        var words = normalize.blockWords(block.html);
+        var elsewhere =
+          wordCount(block.html) >= normalize.SHORT_BLOCK_WORDS &&
+          leaves.some(function (l) {
+            return l.words === words;
+          });
+        if (!elsewhere) missing = true;
+        return;
+      }
+      if (m.status !== "whole") return;
+      var leaf = leaves[best.start + 1 + m.leaves[0]];
+      if (leaf.tag !== block.tag) tag = true;
+      if (missingEmphasis(block.html, leaf.html)) formatting = true;
+    });
+    if (missing) return CHECK_REASON.REVERTED;
+    if (tag) return CHECK_REASON.TAG;
+    if (formatting) return CHECK_REASON.FORMATTING;
+    return null;
+  }
+
+  // Which records the run check reads: a run, a tag change, or a reworded
+  // anchor. A take-back keeps today's check.
+  function isRunChecked(item) {
+    return record.hasRunFields(item) && !isTakeBack(item);
+  }
+
   /**
    * Branch four, in one place: the badge, the card node carrying both versions
    * in full, and a result that says nothing was written. Called from the DOM
@@ -3001,6 +3686,12 @@
     REVERTED_EDIT_NOTE: REVERTED_EDIT_NOTE,
     FORMATTING_LOST_NOTE: FORMATTING_LOST_NOTE,
     STAMP_LOST_NOTE: STAMP_LOST_NOTE,
+    TAG_WRONG_NOTE: TAG_WRONG_NOTE,
+    CHECK_NOTICES: CHECK_NOTICES,
+    TAKE_THEIRS_RUN_LABEL: TAKE_THEIRS_RUN_LABEL,
+    runAnchorView: runAnchorView,
+    runConflictLine: runConflictLine,
+    runCheckReason: runCheckReason,
     CHECK_REOPEN_COOLDOWN_MS: CHECK_REOPEN_COOLDOWN_MS,
     isRevertedHandledEdit: isRevertedHandledEdit,
     pageCheckReasonFor: pageCheckReasonFor,
