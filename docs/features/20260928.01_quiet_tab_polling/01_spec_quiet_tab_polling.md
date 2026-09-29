@@ -7,10 +7,10 @@ Whetstone-size. Part 1 of [GitHub issue 16](https://github.com/kenxle/live-agent
 Every open review tab used to ask the helper for news once a second, forever. Now how often it asks depends on whether you are looking:
 
 - The tab you are working in still asks once a second, so it feels exactly as responsive as before.
-- A page you can see but are not in (beside the terminal) asks every 15 seconds.
+- A page you can see but are not in (beside the terminal) asks every 30 seconds, and tells the helper "still open" every five minutes.
 - A hidden tab asks nothing at all. It only tells the helper "still open" once every five minutes.
 
-Coming back to a tab checks at once, so anything that arrived while you were away shows up straight away. Measured over an hour: a hidden tab went from 720 requests to 12, and a visible page you are not in went from 3,960 to 600.
+Coming back to a tab checks at once, so anything that arrived while you were away shows up straight away. Measured over an hour: a hidden tab went from 720 requests to 12, and a visible page you are not in went from 3,960 to 600, then to 132 in the second round (see Measurements).
 
 ## The problem
 
@@ -38,10 +38,13 @@ He then simplified it twice, and later added a middle pace. On focus: "we can us
 
 1. **Three states.** Hidden means `document.hidden` is true (a background tab, a minimized window, a window on another macOS desktop). Otherwise the page is focused, unless `document.hasFocus()` is false, which makes it visible but not focused. Focus inside a frame on the page still counts as focused.
 2. **Focused: poll once a second, steadily.** No slowdown. Only one tab can have focus, so only one tab ever runs at this pace.
-3. **Visible but not focused: the reply poll and the read-only re-ask every 15 seconds.** The heartbeat stays at the ordinary 10 seconds, so the helper keeps its ordinary 30 second window for this page.
+3. **Visible but not focused: the reply poll every 30 seconds, and nothing else on a clock but the quiet heartbeat.** (Second round; it was 15 seconds with the ordinary 10 second heartbeat.)
+   - The rail's agent line refreshes from each reply poll's answer, which already carries `agent_liveness`. It makes no request of its own.
+   - The holder's claim goes quiet, as a hidden tab's does: `quiet: true`, a beat every 5 minutes, held by the helper for 390 seconds.
+   - A read-only window does not re-ask for the review until it has focus again.
 4. **Hidden: no reply poll and no read-only re-ask at all.** The only request is a "still open" heartbeat every 5 minutes. The helper holds a hidden tab's review for 390 seconds (see Approach for why that number and what it costs).
 5. **Every page polls once at load, whatever its state.** That answer records which version of the file the page shows. Without it, a rebuild that lands before the reviewer comes back would never reload the page.
-6. **Gaining focus polls at once and goes to full speed. Becoming visible after being hidden polls at once and goes to the 15 second pace.** That one poll shows any reply that arrived meanwhile and triggers any reload a rebuild owes. A return that fires both a visibility and a focus event polls once. Losing focus while still visible only moves the next poll out to 15 seconds.
+6. **Gaining focus polls at once and goes to full speed. Becoming visible after being hidden polls at once and goes to the 30 second pace.** That one poll shows any reply that arrived meanwhile and triggers any reload a rebuild owes. A return that fires both a visibility and a focus event polls once. Losing focus while still visible only moves the next poll out to 30 seconds.
 7. **Closing the tab says goodbye, in any state.** The existing goodbye on `pagehide` frees the review at once.
 8. **Drafts unchanged.** Hiding the tab or leaving a comment box still sends drafts at once. A window blur with nothing queued sends nothing.
 9. **A keystroke costs nothing.** The owner, when he approved the design: "be careful about anything that is firing on every keystroke, as i think that was part of what slowed us down before. we were writing multiple places every keystroke." While the page is focused, a key press, click, pointer move or selection change starts no request, writes nothing to browser storage and schedules no timer. One listener watches keys, clicks and pointer moves. It returns at once when the page is focused. Otherwise it re-checks focus, to catch a missed focus event: a reviewer typing into the page is plainly here, and one who clicks straight into a frame on the page sends the top page no focus event.
@@ -54,15 +57,16 @@ He then simplified it twice, and later added a middle pace. On focus: "we can us
 - **One handler for focus, blur and visibility** (`onAttention`). It compares the state with the last reading.
   - Going hidden clears the poll timer and the read-only re-ask.
   - Gaining focus, or leaving hidden, polls at once and resumes the chain at the new pace.
-  - Losing focus while visible reschedules the next poll to 15 seconds.
+  - Losing focus while visible reschedules the next poll to 30 seconds.
 - **The missed-focus guard.** `keydown`, `pointerdown` and `pointermove` listeners (capture, passive). They return at once while the page is focused; otherwise they re-check the state, and a return is handled as a return.
 - **The heartbeat is a chain too, and each beat is timed from the answer to the last one.**
-  - Every claim the page sends carries `quiet`. It is true only while hidden, and only if the helper has offered a slow beat.
+  - Every claim the page sends carries `quiet`. It is true only while the page lacks focus (visible or hidden), and only if the helper has offered a slow beat.
   - The page counts the helper as told only when the helper GRANTS the latest claim, and it schedules the next beat after that answer.
-  - So hiding sends nothing itself. The beat already due, at most 10 seconds out, carries `quiet: true`, and once it is granted the next beat is 5 minutes later.
+  - So losing focus sends nothing itself. The beat already due, at most 10 seconds out, carries `quiet: true`, and once it is granted the next beat is 5 minutes later.
   - If that beat fails (a helper being replaced, say), the page stays at 10 seconds and says quiet again.
-  - Leaving hidden beats at once with `quiet: false` if the helper had been told quiet. That beat is also the check that this tab still holds the review.
-  - A visible page, focused or not, keeps the 10 second beat.
+  - Gaining focus beats at once with `quiet: false` if the helper had been told quiet. That beat is also the check that this tab still holds the review. Moving between visible and hidden beats nothing, because both are quiet.
+  - Only a focused page keeps the 10 second beat.
+  - **Why a visible page goes quiet, rather than its reply poll counting as the claim.** A poll every 30 seconds against the 30 second claim window lapses on any late answer, so the window would have to stretch anyway. The reply poll is also a GET with no session secret; to prove it is the holder it would need the secret in its query string. The quiet window already exists in the helper, survives a restart, and keeps one holder at a time.
 - **A tab without focus, with the helper down, no longer retries every 1.2 seconds.** Before this, an unreachable helper made the holder re-post its claim every 1.2 seconds forever. Only a focused tab still retries that fast.
 - **An older helper keeps the fast beat.** Against a helper that does not offer `quiet_heartbeat_seconds`, a hidden page keeps the 10 second beat, because that helper would call a slower holder gone after 30 seconds. It still stops polling.
 
@@ -83,8 +87,8 @@ He then simplified it twice, and later added a middle pace. On focus: "we can us
 
 **What it costs.**
 
-- A tab that crashes, or a browser that is force-quit, while the tab is hidden now holds its review for up to 390 seconds (6.5 minutes) before another window can take it on its own. Before, that was 30 seconds.
-- A tab that crashes while visible, focused or not, is unchanged at 30 seconds.
+- A tab that crashes, or a browser that is force-quit, while the tab lacks focus (visible or hidden) now holds its review for up to 390 seconds (6.5 minutes) before another window can take it on its own. Before, that was 30 seconds.
+- A tab that crashes while focused is unchanged at 30 seconds.
 - After a laptop sleep longer than 390 seconds, a hidden page counts as gone until its next beat. A read-only second window may take the review over in the meantime. There is still only one holder, and nothing typed is lost.
 - Closing the tab normally still frees the review at once. "Review here instead" in the next window still takes it at once (unit test "Review here instead takes a quiet holder's review at once").
 
@@ -92,7 +96,7 @@ He then simplified it twice, and later added a middle pace. On focus: "we can us
 
 ### Page reload after a rebuild
 
-The poll triggers the reload when it sees a new modified time on the page's file. A hidden tab does not poll, so it does not reload while hidden. The poll on return sees the new time and reloads after the existing 1.5 second debounce. A visible page notices within 15 seconds. The poll at load (requirement 5) is what makes this safe for a page that loaded while hidden.
+The poll triggers the reload when it sees a new modified time on the page's file. A hidden tab does not poll, so it does not reload while hidden. The poll on return sees the new time and reloads after the existing 1.5 second debounce. A visible page notices within 30 seconds. The poll at load (requirement 5) is what makes this safe for a page that loaded while hidden.
 
 ## Tasks
 
@@ -101,7 +105,7 @@ The poll triggers the reload when it sees a new modified time on the page's file
    - Page side:
      - the three paces
      - 200 keystrokes cost no request, write or timer
-     - a visible page shows a reply within 15 seconds and keeps the ordinary beat
+     - a visible page shows a reply within 30 seconds and goes on the quiet beat
      - no poll while hidden
      - a heartbeat every 5 minutes while hidden, only after a granted quiet beat
      - a failed quiet beat keeps the fast pace
@@ -120,7 +124,7 @@ The poll triggers the reload when it sees a new modified time on the page's file
 4. Build the helper side in `src/service/reviews.js`, `src/service/routes.js`, `src/shared/protocol.js`.
 5. Browser spec `test/browser/quiet_tab_polling.spec.js`, on Playwright's page clock:
    - a hidden tab sends two heartbeats and no poll in 10 minutes, and bringing it back polls once and shows a reply written meanwhile
-   - a visible page without focus shows a reply from its next 15 second poll
+   - a visible page without focus shows a reply from its next 30 second poll
    - closing an unfocused tab frees the review for the next window at once
 6. `scripts/measure_idle_requests.js`: request counts over a fixed window per state, before and after.
 7. `docs/CONTRACTS.md`:
@@ -132,7 +136,7 @@ The poll triggers the reload when it sees a new modified time on the page's file
 ## Acceptance criteria
 
 - [x] A focused tab polls once a second, as before.
-- [x] A visible page without focus polls every 15 seconds and shows a reply within 15 seconds.
+- [x] A visible page without focus polls every 30 seconds, shows a reply within 30 seconds, and keeps its review on the quiet beat.
 - [x] A hidden tab sends no reply poll; its only request is one heartbeat per 5 minutes.
 - [x] Gaining focus or becoming visible polls at once, once, and shows what arrived. An owed reload happens, including for a page that loaded hidden.
 - [x] Closing an unfocused tab frees the review at once.
@@ -143,6 +147,38 @@ The poll triggers the reload when it sees a new modified time on the page's file
 - [x] `npm run gate:unit` green; the named browser specs green.
 
 ## Measurements
+
+### Second round: a quieter visible page
+
+The owner, on 600 requests an hour for a visible page without focus: "is too much". 360 of those 600 were the 10 second heartbeat, not the reply poll. The rail's agent line never made a request of its own; it reads `agent_liveness` from the reply poll's answer.
+
+- "Before" is main at `c7fde24`. "After" is branch `visible-quieter`.
+- Both come from `node scripts/measure_idle_requests.js --minutes 60` (and `--minutes 10`) in the worktree, before and after the change.
+- The percentages were computed with Python from these counts.
+
+One hour:
+
+| State | Before: total (polls, claims) | After: total (polls, claims) | Change |
+| --- | --- | --- | --- |
+| Focused, idle | 3,960 (3,600, 360) | 3,960 (3,600, 360) | 0% |
+| Focused, active | 3,960 (3,600, 360) | 3,960 (3,600, 360) | 0% |
+| Visible, not focused | 600 (240, 360) | 132 (120, 12) | -78.0% |
+| Hidden | 12 (0, 12) | 12 (0, 12) | 0% |
+| Closed while hidden | 1 (the goodbye) | 1 (the goodbye) | 0% |
+
+Ten minutes:
+
+| State | Before: total (polls, claims) | After: total (polls, claims) |
+| --- | --- | --- |
+| Focused, idle | 660 (600, 60) | 660 (600, 60) |
+| Focused, active | 660 (600, 60) | 660 (600, 60) |
+| Visible, not focused | 100 (40, 60) | 22 (20, 2) |
+| Hidden | 2 (0, 2) | 2 (0, 2) |
+| Closed while hidden | 1 | 1 |
+
+`helper_still_holds` was true for every state but "closed", before and after. So the visible page still held its review at the end of the hour on the slow beat.
+
+### First round
 
 The counts come from `node scripts/measure_idle_requests.js <tree> --minutes N`.
 
@@ -213,6 +249,22 @@ Notes on the numbers:
 
   Tests, the browser spec, the measurements and `docs/CONTRACTS.md` were updated to three states. Unit tests are now 37, of which 11 failed on the branch before this round.
 
+- 2026-09-29: second round, a quieter visible page. The owner found 600 requests an hour for a visible page without focus too many. Built on branch `visible-quieter`:
+  - the reply poll every 30 seconds (was 15)
+  - the holder's claim goes quiet while visible, as while hidden: one beat every 5 minutes, a 390 second window
+  - no read-only re-ask while visible; it asks on focus
+  - the rail's agent line was already fed by the reply poll, so it refreshes every 30 seconds with no request of its own
+
+  Unit tests: 7 changed or new ones failed on main first:
+  - the constants
+  - the 30 second pace with the quiet beat
+  - an hour of only polls and quiet beats
+  - the agent line refreshed by the poll alone
+  - becoming visible from hidden at the 30 second pace
+  - the hidden, visible, focused claim walk
+  - the read-only window beside the terminal The hour-long "claim stays held" test passes on main too, because main beats every 10 seconds; it was shown red against a variant that drops the visible beat without going quiet. The browser test "a visible page without focus shows a reply within 30 seconds" failed on main's bundle first.
+
 ## To delete at cleanup
 
+- `.claude/worktrees/visible-quieter/node_modules`: a symlink to the main checkout's `node_modules`, for Playwright. Untracked, never staged.
 - `.claude/worktrees/quiet-tab-polling/node_modules`: a symlink to the main checkout's `node_modules`, made so Playwright runs in this worktree. Untracked, never staged.

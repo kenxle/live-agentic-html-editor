@@ -13,8 +13,9 @@
 // THE RULE.
 //
 //  - "Open" is the helper's own answer: a review whose window holder is not
-//    stale by its own claim window (reviews.openWindowReviews). A hidden tab on
-//    the five minute beat is held for 390 seconds, so it counts for all of it.
+//    stale by its own claim window (reviews.openWindowReviews). An unfocused
+//    tab on the five minute beat is held for 390 seconds, so it counts for all
+//    of it.
 //  - A session with no open window on any of its reviews for GRACE_MS has every
 //    running page server stopped, marked IDLE_REASON on the server's record.
 //  - The grace counts from the latest of: the last moment a window was open,
