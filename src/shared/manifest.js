@@ -260,7 +260,6 @@ var NON_BUNDLE_FILES = [
   {
     path: "src/cli/commands/write.js",
     owner: "free-writing 2C",
-    planned: true,
     why: "lahe write: start a blank notes page on its own one-page server"
   },
   { path: "src/cli/commands/reply.js", owner: "3A", why: "reply: the one agent-facing write path, so no shell hand-encodes JSON" },
