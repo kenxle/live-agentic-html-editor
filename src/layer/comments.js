@@ -477,6 +477,16 @@
    * so it is the block the selection starts in. The reviewer's quote is theirs
    * and is kept whole, and the repaint covers all of it (see paintRangeFor).
    *
+   * EXCEPT A SELECTION OF MOST OF THE PAGE. When the reviewer's own words are
+   * more than half the page's text, the page is what they chose, and the
+   * region is the smallest element holding the selection. Ken: "if *I*
+   * highlighted the entire page, then that's the highlight." Anchored on its
+   * first block, such a comment shrank to that block the moment the agent
+   * changed any word in it, because the quote could no longer be found. The
+   * bar is PAINT_MAX_TEXT_RATIO, so a region chosen this way always passes the
+   * highlighter's size check (refusesWholePaint), and a triple-click (whose
+   * words are one block) never reaches it.
+   *
    * @param {Range} range
    * @returns {Element|null}
    */
@@ -485,19 +495,38 @@
     var ends = selectedTextEnds(range);
     var node = range.commonAncestorContainer;
     if (ends) {
-      var firstBlock = innermostBlockOf(ends.first);
-      var lastBlock = innermostBlockOf(ends.last);
-      if (firstBlock && lastBlock && firstBlock !== lastBlock && firstBlock.contains && !firstBlock.contains(lastBlock)) {
-        return firstBlock;
-      }
       var doc = ends.first.ownerDocument;
       var tight = doc.createRange();
       tight.setStart(ends.first, 0);
       tight.setEnd(ends.last, 0);
-      node = tight.commonAncestorContainer;
+      var holder = tight.commonAncestorContainer;
+      while (holder && holder.nodeType !== 1) holder = holder.parentNode;
+      var firstBlock = innermostBlockOf(ends.first);
+      var lastBlock = innermostBlockOf(ends.last);
+      if (firstBlock && lastBlock && firstBlock !== lastBlock && firstBlock.contains && !firstBlock.contains(lastBlock)) {
+        return selectsMostOfPage(range, holder) ? holder : firstBlock;
+      }
+      node = holder;
     }
     while (node && node.nodeType !== 1) node = node.parentNode;
     return node && node.nodeType === 1 ? node : null;
+  }
+
+  /**
+   * Are the selected words more than half the page's text? The page is the
+   * review scope (the anchor engine's scopeOf), measured the way the
+   * highlighter measures a whole-element paint.
+   */
+  function selectsMostOfPage(range, holder) {
+    if (!holder || !anchor || typeof anchor.scopeOf !== "function" || typeof anchor.wordsOf !== "function") {
+      return false;
+    }
+    var page = anchor.scopeOf(holder.ownerDocument, holder);
+    if (!page) return false;
+    var selected = normalize.normalizeText(String(range.toString() || "")).length;
+    var whole = normalize.normalizeText(anchor.wordsOf(page) || "").length;
+    if (!selected || !whole) return false;
+    return whole <= selected * PAINT_MAX_TEXT_RATIO;
   }
 
   function headingTextFor(element, doc) {

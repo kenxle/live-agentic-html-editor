@@ -1008,20 +1008,22 @@ test("a comment whose element still carries the agent's stamp is found, not gues
   assert.equal(cards.notices[item.id], undefined, "with nothing on the card");
 });
 
-test("a stamp on an element holding the whole page is not a certain place for a comment", () => {
-  // Oversized records, cause 3 (docs/features/20260928.03_oversized_records).
-  // A selection that climbed to the page's own wrapper put its stamp on
-  // <main>. Every word on the page is that region's words, so ANY change
-  // anywhere read as "the passage was reworded, and the stamp says where it
-  // is", and the whole page was painted as the comment's passage. A stamp over
-  // the whole page says nothing about which passage the comment is on: the
-  // record is honestly lost, and nothing is painted over the page.
+test("a stamp on an element holding the whole page is a certain place, and the whole page is painted", () => {
+  // Ken: "if *I* highlighted the entire page, then that's the highlight." A
+  // reviewer who selects the whole page gets a region that is the page's own
+  // wrapper, and its stamp on <main>. When the agent changes something on the
+  // page, the stamp still says where the comment lives: the whole page. The
+  // accidental case (a one-line quote on a page-sized region, from records
+  // made before the triple-click fix) is kept off the page by the
+  // highlighter's size check, which is why the quote is handed to it.
   const item = fixtures.comment();
   const blocks = [el("p", { text: "Still open" }), el("p", { text: "The next paragraph." }), el("p", { text: "The last one." })];
   const main = el("main", { attrs: { "data-lahe-id": "e-page" }, children: blocks });
   const root = el("body", { children: [main] });
   const anchoredItem = anchored(item, main, root);
   assert.equal(anchoredItem.region.ref.stamp, "e-page");
+  const quote = "Still open The next paragraph. The last one.";
+  anchoredItem[record.FIELD.CONTEXT] = Object.assign({}, anchoredItem[record.FIELD.CONTEXT], { quote: quote });
 
   const highlights = fakeHighlights();
   const cards = fakeCards();
@@ -1036,14 +1038,14 @@ test("a stamp on an element holding the whole page is not a certain place for a 
 
   replay.resetCounters();
   replay.noteSettling(0);
-  // Something else on the page changed. Not the passage the reviewer meant.
-  blocks[2].textContent = "The last one, edited by the agent for another comment.";
+  blocks[2].textContent = "The last one, edited by the agent.";
 
   const outcome = replay.runPass(replay.REASON.MUTATION, context).results[0];
 
-  assert.notEqual(outcome.element, main, "the whole page is not where this comment lives");
-  assert.ok(anchoredItem.region.lost, "so the record says it could not be placed");
-  assert.equal(highlights.painted[item.id], undefined, "and the page is not washed");
+  assert.equal(outcome.element, main, "the stamp says the comment lives on the whole page");
+  assert.equal(anchoredItem.region.lost, null, "so the record is found, not lost");
+  assert.equal(highlights.painted[item.id].range.node, main, "and the whole page is painted");
+  assert.equal(highlights.quotes[item.id], quote, "weighed against the reviewer's own words");
 });
 
 test("a heading that holds every word on the page is still found by its stamp after a rewrite", () => {
@@ -1076,9 +1078,9 @@ test("a heading that holds every word on the page is still found by its stamp af
 test("a whole-element paint hands the highlighter the reviewer's quote, and reports a refusal", () => {
   // Code review of oversized-records: the highlighter refuses a whole-element
   // paint that is far bigger than the words the reviewer chose, and it needs
-  // those words to tell. <main> here is not the whole page (the header has
-  // words), so the stamp on it is taken as certain, and only the size check
-  // stands between a one-line comment and a wash over every paragraph.
+  // those words to tell. The stamp on <main> is taken as certain, so only the
+  // size check stands between a one-line comment and a wash over every
+  // paragraph.
   const item = fixtures.comment();
   const blocks = [el("p", { text: "Still open" }), el("p", { text: "The next paragraph." }), el("p", { text: "The last one." })];
   const main = el("main", { attrs: { "data-lahe-id": "e-main" }, children: blocks });
