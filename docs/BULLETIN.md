@@ -5,6 +5,8 @@ status: `[ ]` open, `[>]` claimed, `[x]` done, `[!]` blocked.
 
 ## Board
 
+- [ ] @anyone 2026-09-29 LAHE-window-goodbye-firefox-flake -- **`test/browser/window_goodbye.spec.js:121` failed once in Firefox under the full three-browser run** ("the second window was granted the review the first one gave back"). It passed 8 of 8 alone on both the Library branch and plain main, so it is a timing flake under load. Look for a fixed wait or a race between the goodbye and the next claim.
+
 - [ ] @anyone 2026-09-29 LAHE-oversized-image-firefox -- **`test/browser/oversized_records.spec.js:101` fails in Firefox every time, on main too.** "an embedded image is stored once, whole" expects the embedded image's data to be over 100000 characters; Firefox encodes the same test image smaller (70394). Passes on Chromium and WebKit. Found by the Library feature's release run; checked on plain main at 32fe22b. Make the test build an image whose size does not depend on the browser's encoder.
 
 - [ ] @anyone 2026-09-29 LAHE-lint-duplicate-functions -- **Lint misses a function declared twice in one file.** `node --check` accepts it, Playwright's parser refuses it, so it only surfaces when the browser suite loads the file. A merge of two branches that each added `validPort` to `static_servers.js` hit this. Add a duplicate-declaration check to `scripts/lint.js`.
