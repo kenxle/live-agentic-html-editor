@@ -1291,13 +1291,12 @@ are our plumbing. A unit test asserts none of those words appears in `TEXT`, `CO
 `replies.poll` answers with an `agent_liveness` object (`protocol.AGENT_LIVENESS`), resolved
 server-side from the review to its owning agent session. Fields: `state`, `unanswered`,
 `oldest_unanswered_at`, `oldest_unanswered_item`, `last_reply_at`, `listening`, `monitor_at`,
-`activity_at`, `session_id`, `session_name`, `session_name_from_page`, `state_dir_flag_needed`,
-`presence`.
+`activity_at`, `session_id`, `session_name`, `session_name_from_page`, `state_dir_flag_needed`.
 
-- `presence` is what the Library may say about the agent, whatever is waiting: `listening` (a live
-  monitor heartbeat on this handoff rev, or a process holding the wake feed open), `working` (neither,
-  but a lahe command within `CATALOG.WORKING_MS`, two minutes), or `away`. It is null for a review with
-  no session. The rail does not draw it.
+`livenessFrom` also computes `presence`, the Library's answer: `listening` (a live monitor heartbeat on
+this handoff rev, or a process holding the wake feed open), `working` (neither, but a lahe command
+within `CATALOG.WORKING_MS`, two minutes), or `away`. `replies.poll` strips it, so the rail's payload
+carries only the fields above.
 
 - `oldest_unanswered_item` is the id of the waiting item `oldest_unanswered_at` belongs to (its
   wait-start, `updated_at` first), or null.

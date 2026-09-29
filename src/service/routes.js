@@ -711,12 +711,16 @@ function agentLiveness(request, deps, owner) {
   // existed) is reached some other way, so there is no monitor to be missing.
   // Saying "no agent watching" there would be a false alarm about nobody.
   if (!owner) return livenessNone(work);
-  return deps.agentSessions.liveness(owner, {
+  var out = deps.agentSessions.liveness(owner, {
     unanswered: work.unanswered,
     oldestUnansweredAt: work.oldest,
     oldestUnansweredItem: work.oldestItem,
     lastReplyAt: work.lastReplyAt
   });
+  // `presence` is the Library's answer (listening, working, away), not the
+  // rail's. The rail's payload keeps exactly the fields the rail reads.
+  if (out) delete out[protocol.AGENT_LIVENESS.FIELD.PRESENCE];
+  return out;
 }
 
 /**
@@ -741,8 +745,6 @@ function livenessNone(work) {
   out[protocol.AGENT_LIVENESS.FIELD.SESSION_ID] = null;
   out[protocol.AGENT_LIVENESS.FIELD.STATE_DIR_FLAG] = false;
   out[protocol.AGENT_LIVENESS.FIELD.NAME] = null;
-  // No session, so nothing is known about an agent either way.
-  out[protocol.AGENT_LIVENESS.FIELD.PRESENCE] = null;
   return out;
 }
 

@@ -52,3 +52,17 @@ Docs: architecture (liveness note, `last`, project, `custom_name`, rename, page 
 ## To delete at cleanup
 
 - `/private/tmp/.../scratchpad/projects.js`: a scratch script that ran the reader over the preview state. It lives in /tmp, so no removal is needed.
+
+## Fix round after gate:all on feat/lahe_library
+
+1. **Rail payload.** `replies.poll` now strips `presence`, so the rail gets exactly the fields it had before. The per-review route is back to its old keys, and `livenessNone` no longer adds `presence`. The unit test's key list drops `presence` and asserts it is absent. That test went red first. Only the Library list carries the new state.
+2. **Confirm dialog locator.** The body paragraph has class `lib-dialog-body` and the status has `lib-dialog-status`. `catalog_library.spec.js` checks each one. The status there is "Its own agent is listening.", since the watched reviews in that test hold no comments. The spec asserts that no waiting count is claimed. The count itself is pinned in `catalog_page.spec.js` ("3 comments are waiting.") and in the view model tests.
+
+| Command | Result | Time |
+| --- | --- | --- |
+| `node --test test/unit/agent_liveness.test.js` (before the fix) | 1 fail: the key list without `presence` | under 5s |
+| `npx playwright test test/browser/catalog_library.spec.js test/browser/rail_agent_liveness.spec.js --project=chromium` | 7 passed, 1 failed: the new status assertion expected a waiting count the test world does not have | 36s |
+| `npx playwright test test/browser/catalog_library.spec.js --project=chromium` | 3 passed | 31s |
+| `npm run gate:unit` | 1940 tests, 1938 pass, 0 fail, 2 todo | 37s |
+| `npx playwright test test/browser/reload_claim.spec.js:159 --project=webkit` | 1 passed | 3s |
+| `npx playwright test test/browser/oversized_records.spec.js:101 --project=firefox` | 1 failed (`toBeGreaterThan`), the known red on main | 3s |

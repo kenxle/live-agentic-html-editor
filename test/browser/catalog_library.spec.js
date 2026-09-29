@@ -278,9 +278,14 @@ test.describe("the Library, end to end, with a stub agent on the real CLI", () =
     const dialog = page.locator("#lahe-catalog-confirm");
     await expect(dialog).toBeVisible();
     await expect(dialog.locator("h2")).toHaveText(T.CONFIRM_TITLE);
-    await expect(dialog.locator("p")).toHaveText(
+    await expect(dialog.locator("p.lib-dialog-body")).toHaveText(
       fill(T.CONFIRM_BODY, { name: "watched / spec.html", session: OTHER_AGENT, agent: AGENT_NAME }) + " " + T.CONFIRM_MOVES
     );
+    // What is known about the other agent comes first: its real monitor is
+    // live, so it is listening. The watched reviews hold no comments, so no
+    // waiting count is claimed (the count itself is pinned in the page spec).
+    await expect(dialog.locator("p.lib-dialog-status")).toHaveText("Its own agent is listening.");
+    await expect(dialog.locator("p.lib-dialog-status")).not.toContainText("waiting");
     await expect(dialog.locator("li")).toHaveText(["watched2 / figure.html"]);
     expect(world.drainRequests().filter((r) => r.review === world.docs.watched.review), "nothing is queued before the reader decides").toHaveLength(0);
 

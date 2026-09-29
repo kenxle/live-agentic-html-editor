@@ -652,7 +652,7 @@
     var kids = [
       h("h2", { id: "lahe-catalog-confirm-title", text: dialog.title }),
       dialog.status ? h("p", { class: "lib-dialog-status", text: dialog.status }) : null,
-      h("p", { text: dialog.body })
+      h("p", { class: "lib-dialog-body", text: dialog.body })
     ].filter(Boolean);
     if (dialog.reviews.length) {
       kids.push(h("ul", { class: "lib-dialog-list" }, dialog.reviews.map(function (name) {
