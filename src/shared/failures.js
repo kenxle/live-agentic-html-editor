@@ -165,6 +165,71 @@
       null
     ),
 
+    // --- free writing: run records -----------------------------------------
+    //
+    // docs/features/20260928.01_free_writing. The first four are the helper's
+    // refusals of a run event (record.validateRun). The helper refuses rather
+    // than cleans, so a forged or runaway record shows up instead of being
+    // quietly repaired. normalize.cleanBlock returns the first one itself.
+    RUN_BLOCK_REFUSED: def(
+      SEVERITY.BLOCKING,
+      false,
+      SURFACE.CLI,
+      "A new block in this edit is not a paragraph, heading or list the tool can store, or holds markup outside bold and italic.",
+      null
+    ),
+    RUN_OVER_CEILING: def(
+      SEVERITY.BLOCKING,
+      false,
+      SURFACE.CLI,
+      "This edit is larger than the helper stores in one record.",
+      null
+    ),
+    RUN_PLACEMENT_REFUSED: def(
+      SEVERITY.BLOCKING,
+      false,
+      SURFACE.CLI,
+      "This edit's placement is not after_anchor or start_of_container.",
+      null
+    ),
+    RUN_TAKEBACK_CARRIES_RUN: def(
+      SEVERITY.BLOCKING,
+      false,
+      SURFACE.CLI,
+      "A take-back names blocks to remove and never carries new blocks.",
+      null
+    ),
+    // The card notes. {first words} and {type} are filled in by the layer.
+    REPLAY_RUN_WRONG_TAG: def(
+      SEVERITY.WARNING,
+      true,
+      SURFACE.CARD,
+      "The agent placed '{first words}' as a {type}. You wrote a {type}, so Lahe sent it back.",
+      null
+    ),
+    // For the reviewer only. It never reaches review.json.
+    REPLAY_RUN_PLACED_ELSEWHERE: def(
+      SEVERITY.INFO,
+      true,
+      SURFACE.CARD,
+      "'{first words}' is already further down the page, so Lahe did not add it again.",
+      null
+    ),
+    RUN_EVENT_REFUSED: def(
+      SEVERITY.BLOCKING,
+      true,
+      SURFACE.CARD,
+      "The helper refused this edit, so the agent has not seen it. Your words are still on this page.",
+      null
+    ),
+    SUGGESTION_NOT_FOUND: def(
+      SEVERITY.BLOCKING,
+      false,
+      SURFACE.CLI,
+      "A proofreading suggestion's from text is not in its block exactly once, so it cannot be applied.",
+      null
+    ),
+
     // --- replies from agents (D6) ------------------------------------------
     //
     // The helper SKIPS a bad line and never dies: exiting on one agent's typo
