@@ -505,6 +505,14 @@
   // What the menu says when the caret's block is none of the six.
   var OTHER_BLOCK_LABEL = "Other block";
 
+  /** The menu's name for a writable block type, or null for any other tag. */
+  function blockTypeLabel(tag) {
+    for (var i = 0; i < BLOCK_TYPES.length; i += 1) {
+      if (BLOCK_TYPES[i].tag === tag) return BLOCK_TYPES[i].label;
+    }
+    return null;
+  }
+
   var LIST_CHORD_TAGS = { ul: 1, ol: 1 };
 
   /**
@@ -673,6 +681,7 @@
     isPrimaryModifier: isPrimaryModifier,
     BLOCK_TYPES: BLOCK_TYPES,
     OTHER_BLOCK_LABEL: OTHER_BLOCK_LABEL,
+    blockTypeLabel: blockTypeLabel,
     blockTypeChord: blockTypeChord,
     chordLabelFor: chordLabelFor,
     markdownShortcutFor: markdownShortcutFor,

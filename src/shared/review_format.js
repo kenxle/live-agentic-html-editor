@@ -37,11 +37,11 @@
   var browser = typeof window !== "undefined" && !!window.document;
   if (browser) {
     root.LAHE = root.LAHE || {};
-    root.LAHE.review_format = factory(root.LAHE.record, root.LAHE.normalize);
+    root.LAHE.review_format = factory(root.LAHE.record, root.LAHE.normalize, root.LAHE.gestures);
   } else {
-    module.exports = factory(require("./record.js"), require("./normalize.js"));
+    module.exports = factory(require("./record.js"), require("./normalize.js"), require("./gestures.js"));
   }
-})(typeof globalThis !== "undefined" ? globalThis : this, function (record, normalize) {
+})(typeof globalThis !== "undefined" ? globalThis : this, function (record, normalize, gestures) {
   "use strict";
 
   var SCHEMA = "lahe.review/4";
@@ -256,7 +256,10 @@
     "thread[].agent.reason": record.CLASS_DATA,
     "thread[].agent.text": record.CLASS_DATA,
     "thread[].agent.files": record.CLASS_DATA,
-    "thread[].agent.at": record.CLASS_DATA
+    "thread[].agent.at": record.CLASS_DATA,
+    // A proofread question's fixes, on that turn only: the agent's own words.
+    "thread[].agent.proofread": record.CLASS_DATA,
+    "thread[].agent.suggestions": record.CLASS_DATA
   };
 
   // ---------------------------------------------------------------------------
@@ -507,16 +510,41 @@
   function projectBlocks(list) {
     if (!Array.isArray(list) || !list.length) return null;
     return list.map(function (b) {
-      var out = { tag: b.tag, html: b.html, text: record.blockText(b.html) };
+      // text is the words as typed: entities resolved, so it matches what the
+      // page shows and what a proofread's from must quote (code lead 7).
+      var out = { tag: b.tag, html: b.html, text: normalize.decodeEntities(record.blockText(b.html)) };
       if (b.from_anchor === true) out.from_anchor = true;
       return out;
+    });
+  }
+
+  // Has the agent already asked its proofread question on this item? Then the
+  // reviewer answered it (Use the fixes or Keep mine), and asking again would
+  // loop (adversary review 4).
+  function proofreadAsked(it) {
+    return record.threadOf(it).some(function (round) {
+      return !!round && !!round.agent && round.agent.proofread === true;
     });
   }
 
   function isProofread(it, options) {
     if (!record.isRunRecord(it)) return false;
     if (options && options.notes === true) return false;
+    if (proofreadAsked(it)) return false;
     return normalize.runWords(it[record.FIELD.NEW_BLOCKS]) > PROOFREAD_MIN_WORDS;
+  }
+
+  // A proofread turn's fixes, as the thread carries them. Bounded per string
+  // at the run's own byte ceiling; the count is capped on the wire.
+  function projectSuggestions(list) {
+    return (Array.isArray(list) ? list : []).map(function (sg) {
+      var s = sg || {};
+      return {
+        block: typeof s.block === "number" ? s.block : null,
+        from: boundData(typeof s.from === "string" ? s.from : null, record.NEW_BLOCKS_MAX_BYTES),
+        to: boundData(typeof s.to === "string" ? s.to : null, record.NEW_BLOCKS_MAX_BYTES)
+      };
+    });
   }
 
   function projectItem(it, pageHint, linkedHint, options) {
@@ -545,7 +573,7 @@
     out[PROJECTED.THREAD] = record.chronologicalThread(it).map(function (round) {
       var reviewer = round.reviewer || {};
       var agent = round.agent || {};
-      return {
+      var projected = {
         rev: round.rev,
         reviewer: {
           note: verbatim(reviewer.note),
@@ -561,6 +589,14 @@
           at: agent.at || null
         }
       };
+      // A proofread question's fixes stay readable after the reviewer answers
+      // it, so the agent never has to rebuild them from cut history (design
+      // call 6). Only on that turn, so every other round keeps its shape.
+      if (agent.proofread === true) {
+        projected.agent.proofread = true;
+        projected.agent.suggestions = projectSuggestions(agent.suggestions);
+      }
+      return projected;
     });
 
     // Data. Everything below came off the page.
@@ -593,7 +629,9 @@
     // Free writing. Present on every item, null when the item has none, so
     // every item keeps one shape.
     out[PROJECTED.NEW_BLOCKS] = projectBlocks(it[F.NEW_BLOCKS]);
-    out[PROJECTED.ANCHOR_AFTER_HTML] = boundData(typeof it[F.ANCHOR_AFTER_HTML] === "string" ? it[F.ANCHOR_AFTER_HTML] : null, BEFORE_MAX);
+    // The anchor's own change is part of the sitting: a list anchor is the
+    // whole list, and a character cut can end mid-tag (code lead 17).
+    out[PROJECTED.ANCHOR_AFTER_HTML] = boundData(typeof it[F.ANCHOR_AFTER_HTML] === "string" ? it[F.ANCHOR_AFTER_HTML] : null, record.hasRunFields(it) ? Infinity : BEFORE_MAX);
     out[PROJECTED.REMOVE_BLOCKS] = projectBlocks(it[F.REMOVE_BLOCKS]);
     out[PROJECTED.ANCHOR_TAG_AFTER] = typeof it[F.ANCHOR_TAG_AFTER] === "string" ? it[F.ANCHOR_TAG_AFTER] : null;
     out[PROJECTED.PLACEMENT] = record.PLACEMENTS.indexOf(it[F.PLACEMENT]) !== -1 ? it[F.PLACEMENT] : null;
@@ -953,11 +991,14 @@
   }
 
   // The menu's names for the six writable types, so a person reading an export
-  // sees the words the reviewer saw on the bar.
-  var BLOCK_TYPE_NAMES = { p: "Paragraph", h2: "Heading", h3: "Subheading", h4: "Small heading", ul: "Bulleted list", ol: "Numbered list" };
+  // sees the words the reviewer saw on the bar. Read from gestures, the one
+  // table (code lead 20).
+  function blockTypeName(tag) {
+    return gestures.blockTypeLabel(tag) || tag;
+  }
 
   function blockLine(b) {
-    var name = Object.prototype.hasOwnProperty.call(BLOCK_TYPE_NAMES, b.tag) ? BLOCK_TYPE_NAMES[b.tag] : b.tag;
+    var name = blockTypeName(b.tag);
     var text = record.blockText(b.html);
     if (b.tag === "ul" || b.tag === "ol") text = text.split(/\n{2,}/).join("; ");
     return "    " + name + (b.from_anchor === true ? " (moved from the anchor)" : "") + ": " + wrapped(text);
@@ -971,7 +1012,7 @@
       lines.push("  Anchor after the edit (page text): " + wrapped(record.blockText(it[F.ANCHOR_AFTER_HTML])));
     }
     if (typeof it[F.ANCHOR_TAG_AFTER] === "string" && it[F.ANCHOR_TAG_AFTER]) {
-      lines.push("  Anchor becomes: " + (BLOCK_TYPE_NAMES[it[F.ANCHOR_TAG_AFTER]] || it[F.ANCHOR_TAG_AFTER]));
+      lines.push("  Anchor becomes: " + blockTypeName(it[F.ANCHOR_TAG_AFTER]));
     }
     lines.push(
       it[F.PLACEMENT] === record.PLACEMENT.START_OF_CONTAINER

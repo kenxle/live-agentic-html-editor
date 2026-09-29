@@ -99,7 +99,7 @@ var LAYER_FILES = [
   {
     path: "src/shared/review_format.js",
     owner: "0A-wire, FROZEN at CP0",
-    why: "in the bundle because copy and export must produce the same text with no helper (R10). Needs record"
+    why: "in the bundle because copy and export must produce the same text with no helper (R10). Needs record, normalize and gestures"
   },
   {
     path: "src/shared/record_fixtures.js",
