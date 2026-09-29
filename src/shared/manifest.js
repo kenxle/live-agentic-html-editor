@@ -119,6 +119,11 @@ var LAYER_FILES = [
     why: "the caret accessor. 2A and 2B both read it and neither owns it"
   },
   {
+    path: "src/layer/blocks.js",
+    owner: "free-writing kernel",
+    why: "the DOM block rules in one copy: the leaf walk, the insert point, the editing host, the tag swap, and the one way to find a record's run. Needs markers and normalize; loads before anchor.js, so callers pass the anchor in"
+  },
+  {
     path: "src/layer/store.js",
     owner: "1B",
     why: "browser storage, synchronous on every keystroke, keyed by review id"
@@ -252,6 +257,12 @@ var NON_BUNDLE_FILES = [
   { path: "src/cli/commands/session.js", owner: "1A", why: "agent-session close, reopen, and helper lifetime" },
   { path: "src/cli/commands/add.js", owner: "3B", why: "add" },
   { path: "src/cli/commands/status.js", owner: "3A", why: "status: the one agent-facing read path" },
+  {
+    path: "src/cli/commands/write.js",
+    owner: "free-writing 2C",
+    planned: true,
+    why: "lahe write: start a blank notes page on its own one-page server"
+  },
   { path: "src/cli/commands/reply.js", owner: "3A", why: "reply: the one agent-facing write path, so no shell hand-encodes JSON" },
   { path: "src/cli/commands/monitor.js", owner: "3A", why: "exit-on-work local monitor over session-scoped status" }
 ];
