@@ -4,25 +4,25 @@ Status: DRAFT, written without the owner. Every guess made on his behalf is list
 
 ## Summary
 
-An opt-in mode where LAHE itself starts the user's own coding agent each time a reviewer's comment is ready. Claude Code comes first, run in its headless mode (no chat window). Each run gets LAHE's rules once, at the top. It handles every waiting comment, replies on the cards, and exits. LAHE then checks that nothing was left unanswered.
+**Not the Agent SDK.** It needs an API key, per-token billing, and an install. The same job works through the headless mode of the agent you already have, on the login you already pay for. Whether to close the SDK path for good is Q7.
 
-The user needs no API key, no new bill, and nothing new to install. The mode is off unless the user turns it on.
+What this brief proposes instead is an opt-in mode. LAHE itself starts the user's own coding agent each time a reviewer's comment is ready. Claude Code comes first, run in its headless mode (no chat window). Each run gets LAHE's rules once, at the top. It handles every waiting comment, replies on the cards, and exits. LAHE then checks that nothing was left unanswered.
 
-A measurement spike is running in parallel: one real review, run headless. It measures how much of the subscription each run uses and whether the replies are right. Its numbers feed the architecture, and they can still change or stop this feature.
+A measurement spike is running in parallel: one real review, run headless. It measures how much of the subscription each run uses and whether the replies are right. Its numbers feed the architecture, and they set the cost line that can still stop this feature.
 
 ## Context
 
-The owner asked, on a LAHE card on 2026-09-29:
+The owner asked, on a LAHE card on 2026-09-29 (recorded in the crucible, under "The idea, as stated"):
 
 > "for claude at least, what about the agents sdk. would that allow us to fully automate this stuff without having to repeat these instructions?"
 
-The crucible in this folder answered that. The Agent SDK is the wrong base for him: it bills per token through an API key, needs an install, and works for Claude only. The same job can be done by the headless mode of the agent the user already has, on the login they already pay for.
+The crucible in this folder answered that. The Agent SDK is the wrong base for him: it bills per token through an API key, needs an install, and works for Claude only.
 
 The pain behind the question has three parts:
 
 - **The agent forgets a step.** It serves the page and never starts listening, or ends its turn with comments unanswered. On 2026-08-18, 7 items sat unanswered in Codex this way.
 - **The watcher gets killed.** Claude Code stops quiet background commands when it thinks memory is low. Each kill costs the agent a turn to restart the watcher.
-- **Rules repeat on every wake.** Every time work lands, the agent is shown the same "do not end this turn" text again. The owner, on 2026-09-28: "When you repeat something over and over in the context it starts to mess with the way the agent responds. Those words start to influence the way that the agent writes as well as what they do."
+- **Rules repeat on every wake.** Every time work lands, the agent is shown the same "do not end this turn" text again. The owner, in his notes on trimming the list of waiting items, 2026-09-28: "When you repeat something over and over in the context it starts to mess with the way the agent responds. Those words start to influence the way that the agent writes as well as what they do."
 
 Every earlier fix added words to the rules, and each one failed the same way. This feature moves the loop out of the chat, so remembering is LAHE's job and not the agent's.
 
@@ -41,7 +41,12 @@ flowchart LR
   end
 ```
 
-Related work already merged: the drain carries only the reviewer's items, the rules live in the review and are read once, LAHE re-renders Markdown by itself, and a "handled" reply on a hand edit is checked against the built page.
+Related work already merged:
+
+- The list of waiting items an agent reads now carries only the reviewer's items, no rules.
+- The rules live in the review and are read once.
+- LAHE re-renders Markdown by itself.
+- When an agent says it handled a hand edit, LAHE checks the edit really reached the page.
 
 ## Goal / Problem
 
@@ -49,18 +54,22 @@ Related work already merged: the drain carries only the reviewer's items, the ru
 
 The owner leaves comments in a burst and moves on to other work. Every comment should be acted on, rebuilt, and answered on its card. He should not have to go back to a terminal to prod an agent, and should not have to watch whether one is still listening.
 
-**The key design question:** can a fresh headless run of the user's own agent, started by LAHE for each batch of work, answer cards as well as the chat agent does, at a subscription cost the owner accepts? The spike answers the cost half and the first read on quality.
+**Two of the three pains have cheap fixes outside this feature.** One Claude Code setting stops the memory kills. Trimming the per-wake text shrinks the repetition. What is left is agents ending a turn with work still open, and nobody has counted how often that happens. The crucible's test still stands: if a cheap chat-side fix brings that to zero, this mode may not be needed. Q6 asks whether to run that test first.
+
+**The key design question:** can a fresh headless run of the user's own agent, started by LAHE for each batch of work, answer cards as well as the chat agent does, at a cost the owner accepts? The spike answers the cost half and gives a first read on quality.
+
+**First version is for the owner, as dogfood.** It is offered to launch users only after the success metrics pass.
 
 ## Non-Goals
 
 ::: callout-nongoal
-- Not built on the Agent SDK, and no path that needs an API key or pay-per-token billing.
+- Not built on the Agent SDK. LAHE adds no API key of its own.
 - Not a new default. The chat-agent workflow stays as it is for anyone who does not turn this on.
 - Not Codex, Gemini or Antigravity in the first version. The mode should not rule them out.
-- Not the separate small fix for the chat workflow: a Claude Code hook that stops a turn ending with work open, plus trimming the per-wake banner. That is its own change, if the owner wants it (Q6).
-- Not setting the Claude Code option that stops the memory-pressure kills. It is the user's own setting. The skill already asks them about it.
+- Not the separate small fix for the chat workflow (a Claude Code hook that stops a turn ending with work open, plus trimming the per-wake text). Whether that comes first is Q6.
+- Not setting the Claude Code option that stops the memory kills. It is the user's own setting. The skill already asks them about it.
 - Not running anywhere but the user's own machine. No cloud runner.
-- Not changing how reviewers comment or edit, or how a card looks beyond the rail's status wording.
+- Not changing how reviewers comment or edit, or how a card looks beyond the rail's status wording and a stop control.
 :::
 
 ## User & Context
@@ -69,22 +78,22 @@ The owner leaves comments in a burst and moves on to other work. Every comment s
 
 - He runs many agents at once: 21 Claude processes were counted on 2026-09-22.
 - He reads while juggling other work, often by voice.
-- He pays for a Claude subscription, not API tokens.
-- He has ADHD and wants fewer things to watch, not more.
+- He pays for a Claude subscription, not API tokens. His other agents draw on the same usage limit.
+- He wants fewer things to watch, not more.
 
 He works on a Mac with one browser tab per review and several Claude Code terminals, often across worktrees. He comments in a burst, then leaves for another terminal or task. The machine is often short of memory, which is what sets off Claude Code's kills of quiet background commands. His only view of the agent is the rail's one status line and the reply on each card.
 
-**Second, the launch audience.** People running a coding agent who find LAHE through the npm package and the launch. Assumed to be mostly subscription users too, spread across Claude Code, Codex, Gemini and Antigravity.
+**Later, the launch audience.** People running a coding agent who find LAHE through the npm package and the launch. Assumed to be mostly subscription users too, spread across Claude Code, Codex, Gemini and Antigravity. They get this mode only after the owner's dogfood passes.
 
 ## User Stories
 
 - **As the owner**, I want every comment I leave answered on its card without going back to a terminal, so I can comment and move on to other work.
 - **As the owner**, I want to stop watching whether an agent is still listening, so a review is one less thing to track.
-- **As the owner**, I want this to run on the subscription I already pay for, so reviews add no new bill.
+- **As the owner**, I want this to run on the subscription I already pay for, without starving my other agents, so reviews add no new bill and no lockout.
 - **As the owner**, I want the agent to see LAHE's rules once per run, not on every wake, so repeated rule text stops steering how it writes and acts.
-- **As a reviewer**, I want the rail to tell me plainly when the background agent has stopped or failed, so silence never looks like work in progress.
-- **As a LAHE user on any host**, I want to turn this on with nothing new to install, so it works from a clone like the rest of the tool.
-- **As a cautious user**, I want to know what the unattended agent is allowed to do before I turn it on, so it cannot surprise me.
+- **As a reviewer**, I want the rail to tell me plainly when the background agent has stopped or failed, and to stop it from the page, so silence never looks like work in progress.
+- **As a Claude Code user**, I want to turn this on with nothing new to install, so it works from a clone like the rest of the tool.
+- **As a cautious user**, I want to know what the unattended agent is allowed to do, and who can make it act, before I turn it on.
 
 ## Solution Outline
 
@@ -93,8 +102,8 @@ He works on a Mac with one browser tab per review and several Claude Code termin
 3. When a reviewer's item becomes ready, LAHE starts a headless run of the user's own agent, on the user's own login. The run is told LAHE's rules once, at the start.
 4. The run handles every waiting item the way a chat agent does today: change the source, rebuild, check the change landed, reply on the card. Then it exits.
 5. LAHE checks what is still unanswered. Items that arrived during the run get another run. An item that runs keep failing to answer stops being retried, and its card says so.
-6. The reviewer sees the same cards and the same rail status line, with plain words for "working", "idle", and "stopped".
-7. Turning the mode off, or closing the session, stops it. A chat agent can take the review back.
+6. The reviewer sees the same cards and the same rail status line, with plain words for "working", "idle", "waiting its turn", and "stopped".
+7. Turning the mode off, stopping it from the page, or closing the session stops it. A chat agent can take the review back through the handoff that exists today.
 
 ## Requirements
 
@@ -105,7 +114,7 @@ He works on a Mac with one browser tab per review and several Claude Code termin
 :::
 
 ::: callout-req
-**R2 (no new bill):** Runs use the login the user's agent already has. The mode never needs an API key.
+**R2 (no key of LAHE's own):** Runs use the login the user's agent already has. LAHE never asks for or stores an API key. For a user whose agent is billed per token, the warning in R6 says each run costs money.
 :::
 
 ::: callout-req
@@ -117,11 +126,11 @@ He works on a Mac with one browser tab per review and several Claude Code termin
 :::
 
 ::: callout-req
-**R5 (turn it off):** The user can turn the mode off at any time. Closing the session also stops it. A run that is already going finishes its current item or is stopped cleanly; it never leaves a half-written reply.
+**R5 (stopping is clean):** The user can turn the mode off at any time, and closing the session also stops it. When a run is stopped, every item it did not reply to stays waiting. A change it made without replying is named on that item's card, so the next run or the reviewer can see it.
 :::
 
 ::: callout-req
-**R6 (say what it may do):** Before the mode starts, the user is told in plain words what the unattended agent may do without asking. The default is the least that lets it do the job. The exact list is Q4.
+**R6 (say what it may do, and who can make it act):** Before the mode starts, the user is told in plain words what the unattended agent may do without asking. The default is the least that lets it do the job. The warning also says that anyone who can comment on this review can make the agent edit and build within that list. The exact list is Q4.
 :::
 
 ### Waking and working
@@ -139,7 +148,7 @@ He works on a Mac with one browser tab per review and several Claude Code termin
 :::
 
 ::: callout-req
-**R10 (same standard as today):** A run meets the same bar as a chat agent: it changes the source, rebuilds where needed, checks the change is on the page, and replies. The existing "handled" check applies to its replies unchanged.
+**R10 (same standard as today):** A run meets the same bar as a chat agent: it changes the source, rebuilds where needed, checks the change is on the page, and replies. Its replies on hand edits pass the existing check that the edit reached the page. Its replies on comments are not checked by the tool, as today.
 :::
 
 ::: callout-req
@@ -147,57 +156,69 @@ He works on a Mac with one browser tab per review and several Claude Code termin
 :::
 
 ::: callout-req
-**R12 (retries stop):** After a run exits, LAHE checks for unanswered items and starts another run if any remain. An item that runs keep leaving unanswered is retried a limited number of times, then its card tells the reviewer the agent could not handle it. The limit is set in the architecture.
+**R12 (a machine-wide limit):** Runs across all reviews on the machine are limited, so a burst across several reviews does not start many agents at once. A review waiting its turn shows that on the rail. The number is set in the architecture.
+:::
+
+::: callout-req
+**R13 (retries stop):** After a run exits, LAHE checks for unanswered items and starts another run if any remain. An item that runs keep leaving unanswered is retried a limited number of times, then its card tells the reviewer the agent could not handle it. The limit is set in the architecture.
 :::
 
 ### Rules said once
 
 ::: callout-req
-**R13 (rules once per run):** A run is given LAHE's rules once, at the start. Nothing that reads like an instruction repeats per wake or per item. What the run reads about each item is the item's data.
+**R14 (rules once per run):** A run is given LAHE's rules once, at the start. Nothing that reads like an instruction repeats per wake or per item. What the run reads about each item is the item's data.
 :::
 
 ::: callout-req
-**R14 (one source of rules):** The rules a run gets are the same rules a chat agent reads today. They are not a second copy that can drift.
+**R15 (one source of rules):** The rules a run gets are the same rules a chat agent reads today. They are not a second copy that can drift.
 :::
 
 ### What the reviewer sees
 
 ::: callout-req
-**R15 (cards and rail only):** The reviewer's view stays the cards and the rail's one status line. Questions, caveats, and reasons for not handling an item land on the card, as today.
+**R16 (cards and rail only):** The reviewer's view stays the cards and the rail's one status line. Questions, caveats, and reasons for not handling an item land on the card, as today.
 :::
 
 ::: callout-req
-**R16 (failures are visible):** When a run fails (login expired, usage limit reached, the agent crashed or is not installed), the rail says so in plain words. The items stay waiting. A failure is never silent.
+**R17 (failures are visible):** When a run fails (login expired, usage limit reached, the agent crashed or is not installed), the rail says so in plain words. The items stay waiting. A failure is never silent.
+:::
+
+::: callout-req
+**R18 (stop from the page):** The reviewer can stop the mode from the page, without a terminal. Its look is for the wireframe.
 :::
 
 ### Who owns the review
 
 ::: callout-req
-**R17 (one owner at a time):** While the mode is on, one agent owns the review. The chat agent and the background runs never both answer the same item. Which one yields is Q3.
+**R19 (one owner, as today):** The mode owns a review the same way any agent owns a session today: one owner at a time, and the chat agent and the runs never both answer the same item.
 :::
 
 ::: callout-req
-**R18 (hand it back):** A chat agent can take the review back from the mode, and hand it back again, without losing or repeating an item.
+**R20 (hand it back):** Moving a review between the mode and a chat agent uses the session handoff that exists today, with the same promises: every unanswered item reaches the new owner, and nothing answered is done twice.
 :::
 
 ### Safety and cost
 
 ::: callout-req
-**R19 (page text is data):** A run treats text copied off the page as data, never as instructions, under the same rule chat agents follow today. The security review of the architecture checks this for an agent nobody is watching.
+**R21 (page text is data):** A run treats text copied off the page as data, never as instructions, under the same rule chat agents follow today. The security review of the architecture covers this for an agent nobody is watching, and covers the reviewer's comments as well, since with the mode on they become actions nobody reads first.
 :::
 
 ::: callout-req
-**R20 (stays in scope):** A run edits only what the allowed list in R6 covers, and nothing outside the reviewed project.
+**R22 (stays in scope):** A run edits only what the allowed list in R6 covers, and nothing outside the reviewed project.
 :::
 
 ::: callout-req
-**R21 (usage is visible):** The user can see how many runs a session started. Where the host reports it, they can also see what each run used.
+**R23 (a usage ceiling):** The user can set a usage ceiling for the mode. When runs reach it, no new run starts, items stay waiting, and the rail says why. This keeps a busy review from using up the limit the user's other agents share.
+:::
+
+::: callout-req
+**R24 (usage is visible):** The user can see how many runs a session started. Where the host reports it, they can also see what each run used.
 :::
 
 ### Context from the chat
 
 ::: callout-req
-**R22 (a handoff note):** The person or chat agent that turns the mode on can leave a short note for the runs: what the document is for and anything said in chat that the review does not hold. Every run sees it. Whether runs get more of the chat than that is Q2.
+**R25 (a handoff note):** The person or chat agent that turns the mode on can leave a short note for the runs: what the document is for and anything said in chat that the review does not hold. Every run sees it. Whether runs get more of the chat than that is Q2.
 :::
 
 ## AI Behavior
@@ -229,38 +250,44 @@ The agent here is the user's own coding agent, started by LAHE with no person wa
 - **No re-arming.** Zero agent turns are spent starting or restarting a watcher in a review with the mode on.
 - **Rules once.** A run's full transcript shows LAHE's rules once, and nothing instruction-shaped repeated per item. Checked by reading one transcript at 1, 10 and 100 items.
 - **Idle is free.** A review left open for an hour with no new comments starts zero runs.
-- **Correct replies.** Every "handled" reply in the dogfood review passes the existing handled check, and the owner agrees with each answer.
+- **Correct replies.** Replies on hand edits pass the existing check. Replies on comments are judged by the owner, card by card, in the dogfood review.
+- **No double answers.** Zero items answered twice in dogfood.
 - **Failures show.** With the agent's login deliberately broken, the rail reports the failure and every item stays waiting.
 - **Nothing to install.** A fresh clone runs the mode with no install step, and the tool's runtime dependencies stay empty.
-- **Cost the owner accepts.** Usage per run stays under a limit the owner sets after seeing the spike's numbers (Q1).
+- **Cost under the line.** Usage per run and per dogfood day stays under the stop line in Assumption 13.
+- **Recorded for the owner to judge:** run failures and retry-limit hits per review, and the time from an item becoming ready to its reply.
 :::
 
 There is no baseline for how often agents forget today. Every sighting is real, but nobody has counted them. The first metric is therefore absolute, not a comparison.
 
 ## UX Notes
 
-- The rail's status line needs plain words for the new states: the background agent is working, idle and listening, or stopped with a reason.
+- The rail's status line needs plain words for the new states: the background agent is working, idle and listening, waiting its turn, or stopped with a reason (including the usage ceiling).
 - The card shows the agent's name as today. The reviewer does not need to know whether a reply came from a chat agent or a run.
-- Turning the mode on and off is done by the user or their chat agent, not from the page. Whether the rail should also offer a switch is for the wireframe phase.
+- Turning the mode on is done by the user or their chat agent. Stopping it can also be done from the page (R18).
 
 ## Analytics / Logging
 
 - Log each run: when it started and ended, how many items it was given, how many it answered, and how it ended (finished, failed, stopped).
 - Log the usage each run reports, where the host reports it.
-- Log each item that hit the retry limit.
+- Log each item that hit the retry limit, and each time the usage ceiling stopped a run.
 
 ## Rollout / Flags
 
-- Off by default, turned on per session (assumed; see Q9).
-- The review's rules currently tell agents not to use a forever daemon. This mode needs a process that outlives the chat. The architecture doc changes first, then the rules, the skill, and every copy of the rules together.
-- The spike's numbers come before architecture. If a run costs more than the owner accepts, this brief goes back to him before any design.
+- Off by default, turned on per session (Assumption 8).
+- Dogfood with the owner first. Offered to launch users only after the success metrics pass.
+- The review's rules currently tell agents not to run a forever daemon. This mode needs a process that outlives the chat, so that rule has to change on purpose.
+
+## To verify before architecture
+
+- **Subscription terms.** The brief assumes a headless run started by a script on the user's own machine may draw on a Claude subscription. The spike measures usage, not terms. This has to be checked against Anthropic's published terms, with a link to the source, before the architecture relies on it. The feature's premise depends on it.
 
 ## Assumptions made for the owner
 
 Carried from the crucible:
 
 1. He stays on his subscription and will not pay API rates for this.
-2. A headless run started by a script on his own machine draws on his subscription, within its terms. What it uses per run is acceptable, pending the spike.
+2. What a headless run uses per run is acceptable, pending the spike and the stop line in Assumption 13. (Whether the terms allow it is under "To verify".)
 3. The zero-runtime-dependency rule is not up for change.
 4. Most cards can be answered by an agent that has the review and the files, but not the chat's history.
 5. Claude first, other hosts later, is acceptable.
@@ -269,36 +296,42 @@ Carried from the crucible:
 
 Added by this brief:
 
-8. The mode is turned on per session, not as a machine-wide setting.
-9. One owner per review at a time is the right rule. Two agents answering side by side is not wanted.
+8. The mode is turned on per session, not as a machine-wide setting or per review.
+9. One owner per review at a time is the right rule, using today's session handoff.
 10. A retry limit for items runs keep leaving unanswered is wanted. Its number is left to the architecture.
 11. The reviewer does not need to tell a run from a chat agent, beyond the agent name on the card.
 12. A short handoff note is enough context for most reviews. If the spike shows otherwise, Q2 decides.
+13. **The cost stop line comes from the spike.** When the spike reports, its per-run usage becomes the working line: the architecture goes ahead under it, and the spike's numbers go on the owner's page next to Q1. No number is written here that no measurement produced.
+14. The first version is for the owner as dogfood, not for launch users.
 
 ## Open Questions
 
+### Decides this feature
+
 ::: callout-question
-**Q1 (billing):** Is drawing on subscription limits from background runs acceptable? What per-run or per-day usage would be too much? The spike's numbers inform this. It decides whether the feature goes ahead.
+**Q1 (billing):** Background runs draw on the same subscription limit as all your other agents, so a busy review could lock you out of other work until the limit resets. Is that acceptable with a usage ceiling in place? What per-run or per-day usage would be too much? The spike's numbers go beside this question.
 :::
 
 ::: callout-question
-**Q2 (context):** Should each run be a fork of the chat that opened the review (knows everything, costs more per run), its own continuing session (cheaper, knows the review and files), or fresh every time?
+**Q2 (context):** How much of the chat should each run know: all of it (costs more per run), only this review's history, or just the handoff note?
 :::
 
 ::: callout-question
-**Q3 (who owns the review):** When the mode is on, does the chat agent stop handling cards entirely? If both are active, which one answers?
+**Q3 (telling the chat agent):** When the mode is on, should the chat agent be told it no longer owns the review?
 :::
 
 ::: callout-question
-**Q4 (permissions):** What may an unattended agent do without asking: edit only the reviewed document's sources, run the project's build, or run any command?
+**Q4 (permissions):** What may an unattended agent do without asking: edit only the reviewed document's sources, run the project's build, or run any command? May it commit its changes? Push? Reach the network?
 :::
 
 ::: callout-question
-**Q5 (the kill setting):** Turn on Claude Code's option that stops the memory-pressure kills in the owner's own settings now, separate from this feature?
+**Q6 (order):** Ship the small chat fix first (a hook that stops a Claude Code turn ending with work open, plus the per-wake text trim), then count forgotten items over a few reviews before building this mode?
 :::
 
+### Separate decisions
+
 ::: callout-question
-**Q6 (the small chat fix):** Build the hook that stops a Claude Code turn ending with work open, plus the banner trim, now as a separate small change, whatever happens here?
+**Q5 (the kill setting):** Turn on Claude Code's option that stops the memory kills in your own settings now, separate from this feature?
 :::
 
 ::: callout-question
@@ -309,10 +342,26 @@ Added by this brief:
 **Q8 (priority):** Does this go ahead of the red main gate, the open security rows, and the npm package that gates the launch?
 :::
 
-::: callout-question
-**Q9 (the switch):** Per session, per review, or a machine-wide setting?
-:::
-
 ## PM Review
 
-Pending. See the progress page.
+Full prose in `01_brief_lahe_agent_sdk_reviews.md`.
+
+| # | Finding | Disposition | Rationale |
+|---|---------|-------------|-----------|
+| RF1 | The cost gate had no number, so it could never trigger | Accepted | Assumption 13: the spike's numbers set the working stop line; they go beside Q1 |
+| RF2 | Runs share the owner's usage limit with his other agents | Accepted | Added R23 (usage ceiling); Q1 now names the lockout risk |
+| RF3 | The crucible's case against building, and the cheaper fix, were dropped | Accepted | Goal / Problem says what is left after cheap fixes; Q6 is now a sequencing question |
+| RF4 | Summary never said the SDK was rejected | Accepted | Summary opens with "Not the Agent SDK" |
+| RF5 | Subscription terms treated as an assumption | Accepted | New "To verify before architecture" section |
+| RF6 | Anyone who can comment can make an unattended agent act | Accepted | R6 warning names it; R21 asks security to cover comments |
+| RF7 | No machine-wide limit on runs | Accepted | Added R12, with a "waiting its turn" rail state |
+| RF8 | Ownership rules contradicted each other and ignored today's handoff | Accepted | R19 and R20 reuse today's session handoff; Q3 narrowed |
+| RF9 | Stopping guarded the wrong partial state | Accepted | R5 now covers an edit made without a reply |
+| RF10 | The handled check covers hand edits only | Accepted | R10 and the "Correct replies" metric say so |
+| RF11 | Open questions mixed feature-shaping and separate decisions | Accepted | Split into two lists; old Q9 removed, Assumption 8 stands |
+| RF12 | Unclear who the first version is for | Accepted | Owner dogfood first; story changed to "a Claude Code user" |
+| RF13 | "No new bill" is untrue for per-token users | Accepted | R2 reworded; the warning says runs cost money for them |
+| RF14 | Missing metrics for double answers, failures, and wait time | Accepted | Added "No double answers" and a recorded-for-judgment line |
+| RF15 | Stopping a misbehaving mode needed a terminal | Accepted | Added R18 (stop from the page) |
+| RF16 | Q4 left out commit, push, and network | Accepted | Added to Q4 |
+| RF17 | Jargon, process detail, personal detail, unlinked quotes | Partly accepted | Terms explained, ADHD line removed, Q2 reworded, process ordering left for the architecture. Quotes now name where they were recorded; the card itself lives in local review state and has no public link |
