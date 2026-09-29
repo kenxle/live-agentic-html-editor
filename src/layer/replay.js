@@ -3209,6 +3209,17 @@
     return false;
   }
 
+  function sameBlockWords(el, block) {
+    return normalize.blockWords(normalize.cleanMarkup(el.innerHTML)) === normalize.blockWords(block.html);
+  }
+
+  // The leaf the page walk reaches right after this one, if any.
+  function leafAfter(el, doc) {
+    var leaves = blocks.leafWalk(doc.body);
+    var at = leaves.indexOf(el);
+    return at === -1 ? null : leaves[at + 1] || null;
+  }
+
   // Rewrite a leaf found one to one: its tag, and its inner markup when the
   // bold or italic the block asks for is not in it.
   function fixBlock(ctx, id, el, block, force) {
@@ -3301,6 +3312,21 @@
         out.wrote = true;
         seen.push(again.element);
         last = again.element;
+        return;
+      }
+      // The walk stops at the first leaf that does not match, so a block
+      // after one rewritten from an earlier revision reads as missing though
+      // it sits right where it belongs: the next leaf after the last block
+      // placed. That is present, not placed elsewhere.
+      var next = last ? leafAfter(last, doc) : null;
+      if (next && seen.indexOf(next) === -1 && sameBlockWords(next, block)) {
+        var kept = fixBlock(ctx, id, next, block, false);
+        if (kept.wrote) {
+          out.rewritten += 1;
+          out.wrote = true;
+        }
+        seen.push(kept.element);
+        last = kept.element;
         return;
       }
       if (wordCount(block.html) >= normalize.SHORT_BLOCK_WORDS && placedElsewhere(block, doc, seen)) {

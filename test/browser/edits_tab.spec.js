@@ -630,7 +630,7 @@ test.describe("free writing: the edits row and the card show new blocks", () => 
   // presence table after a reworded middle block), which this workstream does
   // not own. fixme so it reports rather than failing a branch that cannot land
   // the fix; the orchestrator hands it to the replay fix builder.
-  test.fixme("after Use the fixes, the blocks after the fixed one raise no placed-elsewhere note", async ({ page }) => {
+  test("after Use the fixes, the blocks after the fixed one raise no placed-elsewhere note", async ({ page }) => {
     await fw.openFixture(page, server, "blog.html");
     const item = await typeWorkedRun(page);
     await page.evaluate((id) => {
