@@ -174,7 +174,7 @@ He works on a Mac with one browser tab per review and several Claude Code termin
 :::
 
 ::: callout-req
-**R26 (one agent per review, kept running):** LAHE starts one background agent per review and keeps it running while the mode is on, handing it each batch. It does not start a new agent for each batch. A new agent pays its whole start-up cost again, which on the owner's projects fills a large share of the context window before any work is done. An idle agent may be closed and picked up again later, as long as its start-up cost is not paid per batch.
+**R26 (one agent per review, kept running):** LAHE starts one background agent per review and keeps it running while the mode is on, handing it each batch. It does not start a new agent for each batch. A new agent pays its whole start-up cost again, which on the owner's projects fills a large share of the context window before any work is done. An idle agent may be closed and a new one started at the next batch, since that pays the start-up cost once per idle spell, not once per batch.
 :::
 
 ::: callout-req

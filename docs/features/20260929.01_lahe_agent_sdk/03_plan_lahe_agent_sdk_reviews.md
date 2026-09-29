@@ -247,3 +247,174 @@ State that there is no new motion and the dot does not pulse.
 "Waiting for another review's run" says what it waits behind.
 
 **Reuse:** the Hold pill (`.holdbtn`), End review's confirm panel, `CARD_LATE_ATTR` and the late ring, the `role="status"` status line, `fillAge`, the hand-off button, and `--warn`.
+
+## Code Review Lead Review (Round 2)
+
+Revision 2 of the architecture and plan (commit 494cd28), reviewed before implementation.
+
+Verdict: not reviewable as written. There are two blockers. First, the supervisor builder cannot build or test alone. Second, the `agent.json` layout loses the facts the kept-agent rules depend on. The round-one fixes (CR1 to CR17) mostly still hold. CR14 (one owner per item) has a new hole, covered in CR22.
+
+### CR18. The supervisor (2B) calls engine functions it cannot fake (blocker; plan)
+
+- **What:** 2B can inject only `opts.engine` and `opts.host`. The supervisor still needs four 2A functions, and each one throws "not built yet" for all of Phase 2:
+  - `buildPrompt`: for `prompt_sha256` and the "new prompt hash means fresh start" test.
+  - `buildSchema`: for `agentSpec.reply_schema`.
+  - `cutBatches`: the supervisor decides the batch and counts what the fake engine received.
+  - `prepare`: someone has to create the stage before `host.start`.
+- Smaller gaps where 2A and 2B meet:
+  - `agentSpec` carries a `prompt_file` path, which suggests the caller writes it. But 2A's host spec removes it "however the process ends". Nobody is named as the writer.
+  - `cutBatches(items)` has no return shape for the items over 8,000 characters. The supervisor is the only reply writer, so it must learn which items those are.
+  - `runTurn` mints `turn_id`, but `agent.json` shows the `turn_id` while the turn is still running.
+  - `runTurn` returns no `model_turns`, which `turns.jsonl` records.
+  - The architecture's handle ("Other hosts later") has a `session_id` property and no `started` field. The plan has `sessionId()` and `started`.
+- **Why:** 2B's tests fail on the stubs until the Task 3.1 merge. Or 2B works around them with local copies, and those copies drift.
+- **Fix:**
+  - Build `headless_prompt.js` in full in Phase 1. It is pure and small, and it sits next to the contract work in Task 1.1. Or add `opts.prompt` and `opts.stage` injections.
+  - Pin that `host.start` takes the prompt text and owns writing and removing the file.
+  - Pin `cutBatches` as returning `{ batches, too_long }`, with the supervisor writing the too-long replies.
+  - The supervisor mints `turn_id` and passes it in.
+  - `runTurn` returns `model_turns`.
+  - Update the architecture's handle block to match the plan.
+
+### CR19. `agent.json` puts session-lifetime facts in the per-process object that goes null (blocker; architecture and plan)
+
+- **What:** `claude_session`, `prompt_sha256`, `first_context` and `restarts` all live inside `agent`. The architecture says `agent` is `null` "while no agent process is alive (before the first turn, or after an idle close)". Three rules break:
+  - **Resume after idle close.** The architecture says "the supervisor keeps the session id", but the schema has no place to keep it. The stale-code restart has the same problem ("the next supervisor resumes the same session id").
+  - **The restart limit.** `restarts` is wiped with each dead process, so "3 restarts in 10 minutes" never counts to 3.
+  - **The 80,000-token fresh-start rule.** A resumed process's first request already carries the whole history. If `first_context` resets per process, the rule measures only growth since the last resume. A review commented on less often than hourly (so idle close runs, then a resume) grows until Claude Code compacts on its own. That is the expensive path the rule exists to avoid.
+- **Also unpinned:**
+  - Which starts count toward the restart limit: a fresh start after a crashed turn, or a failed resume.
+  - Whether a death while idle is resumed "at once" (architecture) or "before the next turn" (plan test). Resuming at once also holds an agent slot for no turn.
+- **Fix:**
+  - Split the record. Put `claude_session: { id, prompt_sha256, fresh_first_context, restarts[] }` at the top level. It survives process death and idle close, and only a fresh start or a stop drops it. `agent` keeps only pid, pgid, started and turns.
+  - Pin "resume lazily, at the next turn" and say which starts count toward the limit.
+  - Update the Task 1.2 fixtures.
+  - Tests:
+    - idle close, then resume, keeps the id
+    - the 80,000 rule fires across two idle-close resumes
+    - three deaths across three processes stop with `failing`
+
+### CR20. Crash recovery after write-back looks for a record that does not exist yet (should-fix; plan)
+
+- **What:** The recovery rule reads "`turns.jsonl` shows `applied` with `replies_written: 0`". But the supervisor (2B) writes `turns.jsonl` only after `runTurn` returns, and the `afterWriteBack` hook fires inside `runTurn` (2A). So a kill there leaves no `turns.jsonl` line at all.
+- The order of `result.json` against the rename is also not pinned. A crash between the rename and `result.json` leaves a change in the real file with no reply beside it. That breaks R5 (no change reaches the source without a reply that explains it).
+- **Why:** Each side will assume the other writes the durable marker.
+- **Fix:**
+  - `runTurn` writes `result.json`, with the checked replies and `"stage": "applying"`, and flushes it to disk before the rename.
+  - On start, the next supervisor scans `turns/` for a `result.json` that has no finished `turns.jsonl` line, and writes those replies first.
+  - Test a kill at each step:
+    - between `result.json` and the rename: the original is intact and no reply is written
+    - between the rename and the return: the replies are written by the next supervisor
+
+### CR21. Three turn behaviours have no owner: stop against crash, timeout, and "file changed" (should-fix; plan)
+
+- **Stop against crash.** On "off" mid-turn, the supervisor kills the group while `runTurn` waits on `sendTurn`. `runTurn` sees a dead process and reports `failed`/`crashed`, not `stopped`. Then `turns.jsonl` and the dogfood numbers are wrong. Fix: `runTurn` takes `opts.signal` from the supervisor, and a kill it asked for is `stopped`.
+- **Timeout.** Two gaps:
+  - `sendTurn` takes `timeout_ms`, but its `failure` list has no timed-out value.
+  - Node's timers run on a clock that does not count machine sleep on macOS or Linux. So the host's own timer does not end a turn after a sleep. The "clock jump past 10 minutes ends the turn" test only works if the supervisor's look checks wall time.
+
+  Fix: the supervisor's look owns the 10-minute limit through `opts.now`. The host's timer stays only as a backstop. Name the failure `timed_out`. Run the test with a fake host that never answers.
+- **`file_changed_since_last_turn`.** After a conflict, `runTurn` resets the copy at the end of that turn. At the next turn's copy-in the copy already matches, so the flag is lost. Conflict is not a fresh-start reason, so the same agent never hears the file changed. Fix: the supervisor passes `opts.fileChanged` from the previous `file_reset`.
+- **The 15-second quiet wait.** It is on the Engine test list, but it is a timed step. Waiting inside `runTurn` would also hold a turn slot for 15 seconds. Fix: the supervisor owns it, before it takes a slot. Move the test to the Supervisor list.
+
+### CR22. "While auto-answer holds a review" is undefined, and the likely reading breaks "off" (should-fix; architecture and plan)
+
+- **What:** Task 1.2 gives `allowanceHolds(session)`, which stays true after "off", because only a takeover or `disallow` ends the allowance. The pieces use different tests:
+  - The fold rejects other agents' replies "while auto-answer holds".
+  - `lahe monitor` exits 6 while "a live supervisor holds the rev".
+- **Why:** If the fold uses `allowanceHolds`, then after "off" a chat agent's replies in that session are rejected with `auto_answer_owns`, while the rail promises "today's rules exactly". The two tests can also disagree while a supervisor is restarting.
+- **Fix:**
+  - One named predicate in `agent_sessions.js`: the allowance holds and the latest request is "on". The fold, the monitor, `review` re-entry and liveness all use it.
+  - Tests:
+    - after "off", a chat reply folds and the monitor runs
+    - with "on" standing and the supervisor dead, a chat reply is still rejected
+
+### CR23. The helper's "three starts, then `failing`" has no file to write (should-fix; architecture)
+
+- **What:** Only the supervisor writes `agent.json`. A supervisor that dies at start writes nothing. If the helper keeps its start count in memory, it resets every time the helper restarts on stale code, and that is the normal case while dogfooding LAHE on LAHE.
+- **Fix:**
+  - Give the helper its own file, for example `supervisor_starts.json` in the session folder, with the helper as sole writer. Add it to the one-writer table.
+  - Liveness reads stopped with reason `failing` from that file.
+  - Add a Task 1.2 fixture, and a Task 3.2 test with a supervisor that exits at once.
+
+### CR24. Task 0.2 is missing rows the fake and the restart rules depend on (should-fix; plan)
+
+Add these rows, each saving its raw bytes:
+
+- **A resume that fails:** `--resume` with a missing session id and with a corrupt one.
+  - Record whether it fails at spawn or at the first message. The spike saw `init` only with the first message.
+  - Without this row, the rule "a failed resume gets one fresh start that is not a restart" cannot be told apart from a crash, and Task 1.4's "resume that fails" scenario has no real bytes.
+  - Add a `resume_failed` failure value.
+  - Stop rule: if a failed resume looks the same as a crash, drop that exception from the architecture.
+- **Running totals after `--resume`:** do they start at zero or carry over? `sendTurn`'s usage difference depends on it.
+- **Structured output on the first turn after a resume.** Today's row covers three turns in one process only.
+- **Resume from a different working folder,** to confirm that history is looked up by the folder (see CR26).
+- **`--verbose` left out, and a malformed stdin line:** record the real error text.
+- **What `work/` holds after several turns.** Does Claude Code write anything into its working folder? The "exactly one regular file" test and the diff depend on the answer.
+- **Failures in kept mode:** run the Failures row in the kept-running mode, at the first turn, not as one-shot runs.
+
+### CR25. The fake `claude` and the argument test still let real mistakes through (should-fix; plan)
+
+- **What:**
+  - The required-argument test leaves out:
+    - `-p`
+    - `--verbose`
+    - `--model`
+    - `--json-schema` (when Task 0.2 chooses it)
+
+    As far as I know, current Claude Code refuses `--output-format stream-json` under `-p` without `--verbose`. The CR24 row should confirm it.
+  - The fake checks only flag names against `--help`. It does not check flag combinations or the shape of the stdin user message (`type`, `message.role`, `content`, `session_id`).
+- **Why:** A builder who drops `--verbose` or builds the message envelope wrong passes every gate test. The error then shows only in Task 4.1, or as a hang.
+- **Fix:**
+  - Add those flags to the test.
+  - The fake reproduces the errors Task 0.2 records and checks the envelope.
+  - One engine test sends a malformed envelope and expects a named failure within the timeout, not a hang.
+
+### CR26. The stage path has to stay fixed for resume, and the docs disagree on how long it lives (should-fix; architecture)
+
+- **What:** The architecture's Privacy section says Claude files the history "in a folder named after the stage path", so `--resume` depends on the working folder staying the same. The docs give three lifetimes for the stage:
+  - "one per agent" (Components)
+  - "lives as long as the agent" (the copy between turns)
+  - "lives as long as the allowance" (Turn records)
+- **Why:** A builder who reads "one per agent" makes a new folder per start. Every resume then fails and quietly becomes a paid fresh start.
+- **Fix:**
+  - One fixed path, `agent/work/`, for the life of the allowance.
+  - `prepare` can run twice with the same result.
+  - The fake refuses a resume from a different working folder, as the CR24 row records.
+  - Add an engine test: resume after `prepare` runs again uses the same working folder.
+
+### CR27. Missing and false rail words (nit; plan)
+
+- `applying` is a pinned state that can last up to 30 seconds per turn (the fold wait). It has no status-line words.
+- "Last run failed. Trying again." also shows when an idle agent died and was resumed. No run failed, and the resume is silent and free.
+- `queued` covers two waits: for a turn slot, and for an agent slot. The agent-slot wait can last up to 60 minutes while four idle agents hold all slots. In that case "waiting for another review's run" is false, because no run exists.
+- **Fix:**
+  - Pin `applying` words (the running words will do).
+  - Show no chip for an idle resume.
+  - Either pin words for the agent-slot wait, or close the longest-idle agent early. The architecture already names that for the Library phase.
+
+### CR28. `tokens_today` understates use, and its example contradicts its definition (nit; architecture)
+
+- **What:**
+  - In the spike, kept-agent lean turns reported 8 to 14 input tokens and 489 to 1,247 output tokens, while reading 37,436 to 83,933 tokens from cache.
+  - "Input plus output" leaves out nearly everything a turn processed. At the spike's largest per-turn figures, 6 turns give 7,566 tokens (computed with Python), so the example's `58210` for 6 turns cannot come from that definition.
+  - A crashed, timed-out or stopped turn has no `result` line, so its tokens are never counted.
+- **Why:** This works against R24 (usage is visible) and the "honest feedback" acceptance line.
+- **Fix:**
+  - Pick the definition, and fix the example to match.
+  - A turn with no result is shown as "not reported" in `lahe agent status`, not as zero.
+
+### CR29. The fold wait matches `reply.rejected` by item and rev, which it does not carry (nit; architecture)
+
+- **What:** `reject()` in `src/service/replies.js` writes `reply.rejected` with the file and line number only. It has no item and no rev.
+- **Why:** Without a fix, a malformed line the supervisor wrote always takes the full 30-second timeout.
+- **Fix:** Match `reply.folded` by item and rev. Match `reply.rejected` by the file and line number the supervisor just appended.
+
+**What holds up from round one:**
+
+- The write-back rule "no change without a reply" (CR11).
+- `suppressActivityTouch` on the drain (CR9). `status.js`'s `run(argv, options)` supports being called in-process.
+- The process-life lock (CR1).
+- Keeping `CONTRACT` as the chat strings (CR7).
+- The route and `from` rules (CR5).
+- Replaying a byte-identical reply line is safe, because `foldEventId` hashes the line.

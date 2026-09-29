@@ -209,3 +209,149 @@ The design's main safety claim did not hold. The reviewer tested it with a live 
 - what: `--safe-mode` plus `--restricted` together were never measured.
 - why: Per `claude --help`, `--restricted` still applies managed settings and `--settings`. It relies on `--strict-mcp-config` to skip MCP. Safe mode covers that today, but nothing asserts it.
 - fix: Add `--strict-mcp-config` and `--setting-sources ""` as belt and braces. Have OQ2's repeat run include RF1's `.env` test and RF2's added-script test against real `claude`.
+
+## Architect Review (Round 2)
+
+This round covers revision 2 (commit 494cd28), checked against `spike_persistent_run.md`, the brief (including R26, one agent per review, and R27, nothing depends on the model remembering), and the code the doc names. The code claims I checked hold:
+
+- `suppressActivityTouch` in `status.js`
+- `SERVICE_CONTRACT = 13`
+- `REPLY_FIELD` and `REPLY_REQUIRED`
+- the 20-second stale lock
+- the handled check's `not_on_page` fold
+
+### RF14. A supervisor that stopped itself gets started again
+
+- severity: blocker. kind: defect.
+- where: 02_architecture:118, :196, :430, :449, :482. The one-writer table at :147-156.
+- what: The helper restarts a supervisor whenever "on" still stands and none is alive. Nothing says it must leave alone a supervisor that stopped on purpose. The "more than three starts in ten minutes" counter has no file and no writer.
+- why:
+  - A supervisor that stops for `signed_out`, `failing`, `not_installed` or `source_missing` exits. The latest request is still "on", so the next liveness poll starts it again. The stop never sticks, and the rail flips between "starting" and "stopped".
+  - The counter that should catch this lives nowhere. If it lives in the helper's memory, a helper restart wipes it, which the Library section rules out (:621). If the helper writes it into `agent.json`, that file gets a second writer, which undoes the first round's one-writer fix.
+  - `source_stamp.js` judges "stale" by file times under `src/` and `vendor/` (:51, :146). Every merge, pull or branch switch in the clone therefore restarts the supervisor. Three in ten minutes is a normal dogfood afternoon, and it would read as `failing`.
+  - The state diagram sends `restarting` through `stopped`, and "a stop drops the session id" (:482). That contradicts :430, which says the new supervisor resumes the same agent session.
+- fix:
+  - The helper restarts a supervisor only when `agent.json` shows reason `restarting`, or shows the process died without writing a stop.
+  - After a failure stop, only a new "on" request made after the stop time brings auto-answer back. That can be off then on from the page, or `lahe agent on`. The chip's remedy says so.
+  - The supervisor records its own starts in a file it alone writes, and stops itself as `failing` on the fourth start in ten minutes. Exits with reason `restarting` do not count.
+  - Take `restarting` out of the `stopped` path, so the session id survives it.
+
+### RF15. The two kinds of slot can stall every review on the machine
+
+- severity: important. kind: defect.
+- where: :340-343 (turn slot taken, then agent slot), :441, :674, and the Library section at :619.
+- what: A supervisor takes a turn slot, then waits for an agent slot. Idle agents keep their agent slots for up to 60 minutes.
+- why:
+  - With five or more reviews on, two supervisors can hold both turn slots while they wait for agent slots. Four idle agents hold those agent slots. The idle agents cannot take a turn either, so every review on the machine stalls until one idle close, up to an hour.
+  - Even without that deadlock, a fifth review waits up to an hour while nothing runs. Meanwhile its rail says "waiting for another review's run" (:674). That is false, and it misstates what R12 (a limit on how many run at once) asks the rail to say.
+  - The Library section names the fix (ask the longest-idle agent to close early) but defers it. The first version already needs it.
+- fix:
+  - Take the agent slot first. Never wait for one slot while holding the other: take both, or release and wait.
+  - When all agent slots are held and one holder is idle, the waiter drops a marker in `run-slots/`. The idle holder closes its agent on its next look.
+  - Give "waiting for a free agent" its own words.
+  - The simpler alternative for dogfood: drop agent slots, and rely on turn slots plus the idle close. Pick one on purpose.
+
+### RF16. Refused turns can loop, and a normal edit can stop auto-answer
+
+- severity: important. kind: defect.
+- where: :377, :423, :486-490, :718.
+- what: A `refused` turn counts neither as an attempt nor as a failed turn. (A refused turn is one that edited the file but left an item with no reply.) A `conflict` does count as a failed turn.
+- why:
+  - A refused batch goes back on the drain. The next turn starts fresh, paying the start-up cost again, with the same items. Nothing stops the loop until the 40-turn daily limit, and each pass throws away the good work on every other item in the batch.
+  - The claim at :423, "whatever pushed the agent there stays out of the next turn", is false. The item that pushed it is sent again.
+  - Going the other way: if the owner saves the file in his editor during three turns in a row, auto-answer stops as `failing`, and the chip tells him a person has to look. Saving the file is normal work, not a tool failure.
+- fix:
+  - Count an attempt against each item that got no reply in a refused turn. The existing attempt limit then retires that item and ends the loop.
+  - Leave conflicts out of the three-in-a-row count. The 15-second quiet wait and the daily limit already bound them.
+
+### RF17. Resuming saved history costs more than it saves once the cache is cold
+
+- severity: important. kind: risk.
+- where: :410, :414, :419, :428, :564, :749. OQ10 and A15.
+- what: The agent resumes its saved history after an idle close, a stop-free supervisor restart, or any crash. Yet :419 says a fresh start "loses nothing it needs".
+- why:
+  - **Cost after an idle close.** By then the one-hour cache has expired. A resume writes the whole history back to cache, up to the 80,000-token fresh-start line, on top of the prompt. A fresh start writes only the prompt. The spike measured a resume only 75 seconds after a kill, and says the cold case was not measured (spike :356).
+  - **Cost on a login billed by the token.** The spike found one-hour cache writes are what a subscription gets. A token-billed login likely gets the default five minutes. There, most turns after a short pause rewrite the whole history.
+  - **Privacy.** Resume is the only reason Claude Code must save the full transcript, every Read result included, under `~/.claude/projects`. That undoes the first security round's fix (security RF10, drop tool results from logs). It is also the whole cause of OQ10 (where the history lives) and A15 (keeping it is acceptable).
+  - **Security.** A planted instruction rides across the idle hour, which lengthens the residual described at :721.
+  - **Build size.** It is also the machinery with the most parts: capturing the session id, the resume-failed fallback, and the prompt check on resume.
+- fix:
+  - At most, resume only when the agent died inside the cache hour, and never after an idle close or a stop.
+  - For a first dogfood, better: drop resume, pass `--no-session-persistence`, and treat every process loss as a fresh start. R26 (one agent per review, not per batch) still holds. Start-up is paid once per idle hour or crash, never per batch, and a lean fresh start is cents per the spike.
+  - Put this to the owner as a choice.
+
+### RF18. A death while idle is restarted at once
+
+- severity: important. kind: defect.
+- where: :399-402, :412-416. Compare :321.
+- what: When the agent dies while idle, the supervisor starts it again immediately.
+- why:
+  - This breaks the doc's own "start only at the first turn" rule, and holds memory and an agent slot for no work.
+  - The likely killer is memory pressure, which is what killed the old watcher. A process the operating system killed for memory, started again at once, gets killed again.
+  - Three such deaths in ten minutes stop auto-answer as `failing` while no comment is even waiting.
+- fix: On a death while idle, log it, set `agent` to null, and start at the next turn. Only deaths during a turn, or at start-up, count toward the restart limit.
+
+### RF19. The usage numbers mislead, and the session limit resets
+
+- severity: important. kind: defect.
+- where: :209, :221, :233-237, :277, :493, :581.
+- what: `tokens_today` leaves out cache reads and writes. The doc never says where the running totals start counting from. Turns that die record no usage. The daily counts live in `agent.json`, which each new supervisor starts over.
+- why:
+  - **The rail's token figure is almost all output.** In the spike's lean turns, input was 8 to 14 tokens and cache reads were 37,436 to 83,933 (spike :294-298). The "tokens" figure understates what a turn used, and the owner reads it for R24 (usage is visible) and to check the cost line.
+  - **Deltas need a stated starting point.** Running totals are per process. The first result of a new process (fresh, resumed or restarted) has to be measured from zero, not from the old process's last total.
+  - **The costliest turns count nothing.** Timed-out and crashed turns have no `result` line, so the 10-minute turns add nothing to the count.
+  - **The session limit resets.** Each new supervisor starts the daily count over, whether from a restart for new code or from off then on from the page. So the 40-turn session limit (R23, the usage ceiling) resets on every off and on, which anyone holding the review token can post.
+  - **Turn ids collide.** `turn_id` restarts too, so ids collide with the kept turn folders and with the `result.json` recovery.
+- fix:
+  - Record input, cache write, cache read and output separately in `turns.jsonl`.
+  - Either show a rail figure that includes cache, or show runs only and keep tokens in `lahe agent status`.
+  - Measure each process's totals from zero.
+  - For a turn with no result, add up the per-message usage from the stream.
+  - At start, build today's counts and the next turn id from `turns.jsonl`.
+
+### RF20. The long-lived stage folder is never checked for stray files
+
+- severity: minor. kind: risk (it touches security).
+- where: :242, :371, :697, :718.
+- what: The stage folder now lives as long as the allowance, and nothing checks that it holds only the one copy.
+- why:
+  - Claude Code's Edit tool can likely create a new file when given an empty old string. This is unverified.
+  - A hostile comment could then have the agent leave a note file in `work/`. That note survives fresh starts, and a new agent would find it. That defeats the fresh-start containment the security section relies on.
+  - The first round's fix was a new empty folder for every run.
+- fix:
+  - After each turn, check that `work/` holds exactly one regular file. Treat anything else as `refused`, and remove it.
+  - Rebuild `work/` at every fresh start.
+  - Add a stray-file case to the flags spike (plan Task 0.2).
+
+### RF21. The write-back crash recovery has no record to recover from
+
+- severity: minor. kind: defect.
+- where: :225-237, :383.
+- what: Recovery depends on a `turns.jsonl` line that shows `applied` with `replies_written: 0`. But that file gets one line per finished turn, and nothing says that line is written before the rename.
+- why: Suppose the supervisor is killed after the rename but before any record is written. The next supervisor finds nothing to finish. The change stays in the real file with no reply beside it, which R5 (stopping is clean) forbids. With a kept agent, this window opens on every turn.
+- fix:
+  - Before the rename, write `result.json` and an "applying" record holding the before and after hashes.
+  - On start, a supervisor that finds an unfinished "applying" record checks the real file. If it matches the after hash, send the replies. If it matches the before hash, drop them.
+
+### RF22. The flags spike skips the pairing most likely to break structured replies
+
+- severity: minor. kind: risk.
+- where: :389-392, :557, :560, :803-812.
+- what: The spike list does not test `--json-schema` together with `--tools Read,Edit`. It also does not name how a schema failure is reported.
+- why:
+  - Claude Code may deliver structured output through a tool of its own. If `--tools` removes that tool, every turn comes back `bad_output`. Three in a row stop auto-answer, and the design lands on the owner as a decision on the first day.
+  - A failed schema retry probably ends with its own error type in the result, not a crash. The supervisor has to map that to `bad_output`.
+- fix: Run Task 0.2 with the exact production flag set, not a reduced one. Record the result type for a schema failure.
+
+### Checked and holding
+
+- The first round's other decisions all still stand:
+  - the helper as the only writer of the event log
+  - the empty stage folder with one copy (apart from RF20)
+  - the environment allowlist
+  - no shell
+  - replies built from `REPLY_FIELD`
+  - attempts counted only on finished turns (apart from the refused gap in RF16)
+  - on and off sent as events
+- The Library section leaves that phase open without building it. Its one early promise, the "yield the longest-idle agent" step, is needed now (RF15). The first version otherwise does nothing that blocks a per-folder allowance.
+- No requirement is left without a home. Two are met only loosely: R12 (the rail says when a review is waiting on another; RF15) and R24 (usage is visible; RF19).
