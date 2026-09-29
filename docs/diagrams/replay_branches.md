@@ -43,3 +43,43 @@ flowchart LR
 - **A handled item is never stamped lost.** If an agent already said it made the fix, a failed re-anchor on that item means the fix rewrote the very passage the item pointed at, which is the fix working, not the feedback going missing.
 - **The same pass runs for both directions of editing.** When the agent lands a change and the page reloads itself, that reload is just another repaint: the agent's change is the new page, the reviewer's outstanding records are re-applied on top of it, and a genuine collision between the two is exactly the "matches none of these" branch, surfaced rather than fought over silently.
 - **On commit, this pass runs immediately**, not on the next scheduled tick, so a change the page tried to make while a block was protected surfaces right away instead of vanishing. See `docs/diagrams/protected_region.md` for that half.
+
+## A run record (free writing)
+
+A record with free-writing fields (`new_blocks`, `anchor_after_html`, `anchor_tag_after`, `placement`, or a take-back's `remove_blocks`) takes its own path in `applyRun`. Every other record takes the path above, unchanged. The anchor compare is the same four branches, read on the **anchor view**: the anchor's own after in place of the whole sitting, so the run's words are never written into the anchor. Then the run is placed block by block.
+
+```mermaid
+flowchart TD
+  S(["pass for one run record"]) --> P{"placement"}
+  P -- "start_of_container" --> Cn["the page's one main (or body),<br/>found by tag alone.<br/>No anchor compare"]
+  P -- "after_anchor" --> A{"find the anchor<br/>(probes from the anchor view)"}
+  A -- "not found" --> L["LOST. Nothing placed"]
+  A -- "found" --> V{"four branches<br/>on the anchor view"}
+  V -- "1: applied" --> T{"tag is anchor_tag_after?"}
+  V -- "2 or 3: re-apply" --> W["write the anchor's own markup<br/>with its new tag<br/>(writeBlock, swapTag)"]
+  V -- "4: conflict" --> H["HOLD the run. The card shows<br/>the anchor's two versions and the run"]
+  T -- "no" --> W
+  T -- "yes" --> R
+  W --> R
+  Cn --> R{"take-back?"}
+  R -- "yes" --> Rm["remove each remove_blocks block<br/>found one to one after the anchor.<br/>Never insert"]
+  R -- "no" --> Walk["runElementsFor: walk leaf blocks<br/>from the insert point"]
+  Walk --> Row["decide each block by the presence table"]
+  H --> Ch{"reviewer picks"}
+  Ch -- "Keep mine" --> KM["write the anchor, then place the run"]
+  Ch -- "Take the page's, keep my new text" --> TT["record takes the page's anchor<br/>(a new revision), then place the run"]
+```
+
+The presence table, as `placeRun` applies it:
+
+| Found in the walk | What replay does |
+|---|---|
+| whole, one to one | swap a wrong tag (and say so on the card, `REPLAY_RUN_WRONG_TAG`); rewrite the markup when bold or italic is missing |
+| joined or split | leave it |
+| missing, an earlier revision's block is there one to one | rewrite that block in place to the current words (branch three for the run) |
+| missing, five or more words, a whole leaf elsewhere on the page | write nothing; the card says it is already further down (`REPLAY_RUN_PLACED_ELSEWHERE`) |
+| missing otherwise | insert it after the last present block before it (or at the insert point), with its own tag and markup |
+
+- **A forged block writes nothing.** When any block's tag is outside the six writable ones or `cleanBlock` refuses its markup, the whole record writes nothing, anchor included.
+- **A taken-back run is never replayed again**, even while the original record is still outstanding in the store.
+- **The page check reads a handled run block by block** (`runCheckReason`) from the page's markup with the string twin of the walk: a missing block reopens as undone, a wrong tag with the tag note, lost bold or italic with the formatting note, in that order.
