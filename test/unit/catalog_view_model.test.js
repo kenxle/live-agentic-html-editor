@@ -1180,3 +1180,9 @@ test("a pick-up answered with no request id says the agent already has it, not w
   assert.equal(r.note.busy, false);
   assert.equal(r.buttons.handTo.busy, false);
 });
+
+test("a legacy row says Pick this up starts a new review and the old comments stay on the old one", () => {
+  const r = row(build(freshList(), okState()), "r_legacy");
+  assert.ok(r.notices.some((n) => n.text === vm.TEXT.LEGACY_NEW_REVIEW), JSON.stringify(r.notices));
+  assert.match(vm.TEXT.LEGACY_NEW_REVIEW, /old comments stay on the old review/);
+});

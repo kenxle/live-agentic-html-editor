@@ -112,6 +112,9 @@
     FOLDED: "{n} reviews of this folder, shown as one",
     UNREADABLE: "Some of this review's records can't be read.",
     MISSING: "File is gone. Open unavailable.",
+    // A legacy review has no session: Pick this up serves the page as a new
+    // review in the agent's session.
+    LEGACY_NEW_REVIEW: "Pick this up starts a new review of this page. The old comments stay on the old review.",
     WORKTREE: "The worktree is gone. An agent will open the main repository's copy, which may differ from what you reviewed.",
     NEEDS_AGENT: "Needs an agent to reopen. No agent is attached.",
     NO_MATCHES: "Nothing matches that search.",
@@ -504,6 +507,7 @@
     if (review.unreadable) notices.push({ text: TEXT.UNREADABLE, tone: "warn" });
     if (missing) notices.push({ text: TEXT.MISSING, tone: "quiet" });
     if (!missing && review.kind === "worktree") notices.push({ text: TEXT.WORKTREE, tone: "info" });
+    if (!missing && review.kind === "legacy") notices.push({ text: TEXT.LEGACY_NEW_REVIEW, tone: "info" });
     if (viaAgent && !agent) notices.push({ text: TEXT.NEEDS_AGENT, tone: "warn" });
     if (devServer && !missing) notices.push({ text: TEXT.DEV_SERVER_NO_HANDOFF, tone: "quiet" });
 

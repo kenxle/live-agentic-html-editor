@@ -167,7 +167,8 @@ The page does search, the project filter, and the "unanswered comments, and star
 ```json
 { "request": "cq_...", "action": "pickup" | "launch", "review": "r_...", "session": "s_...", "kind": "static" | "dev-server" | "legacy" | "worktree",
   "origin": "http://..." | null, "moves_with": ["r_...", "r_..."], "at": "...",
-  "title": "...", "path": "...", "candidate": "..." | null, "folder": "..." | null, "handoff": "..." }
+  "title": "...", "path": "...", "candidate": "..." | null, "folder": "..." | null, "handoff": "..." | null,
+    "note": "..." | null }
 ```
 
 - `request`, `action`, `review`, `session`, `kind`, `origin`, `moves_with` and `at` are ids and helper values. `origin` is a dev-server row's registered origin, else null, so the refusal below can name it.
@@ -222,7 +223,7 @@ sequenceDiagram
 - **Queue full:** Open still opens, with `not_asked: "queue_full"`, and the row says no agent was asked.
 - **What Open can restart itself:** a review whose session has an `ss_*.json` record that serves the review's page. That record was written by `lahe review` or the helper, never by a page, so Open serves nothing new. Everything else is `via-agent`: its Open queues a pick-up and the agent re-serves it. With no agent attached, a `via-agent` Open is disabled and offers the hand-off message; the helper refuses it with `PROTO_NO_AGENT`. By `kind`:
   - **dev-server:** the agent answers `refused`: "Start the dev server at `<origin>`, then ask me again.", with the entry's `origin`.
-  - **legacy** (`lahe add` script-line reviews, recovered as session "legacy"): there is no session to take over, so the agent runs `lahe library serve <request> --session <its own>`, which reads the path itself and serves it in the agent's own session (fix round, SEC2: no page-derived path in a shell string). It serves the document only when the file holds this review's own script line, since the recorded path is page text (adversary fixes).
+  - **legacy** (`lahe add` script-line reviews, recovered as session "legacy"): there is no session to take over, so the agent runs `lahe library serve <request> --session <its own>`, which reads the path itself and serves it in the agent's own session (fix round, SEC2: no page-derived path in a shell string). It serves the document only when the file holds this review's own script line, since the recorded path is page text (adversary fixes). It serves it as a fresh review in the agent's session (`lahe review --new`), since `lahe review` will not reuse a review that belongs to no session. The old comments stay on the legacy review, and the drain entry's `note`, the command's output and the row all say so (Ken's decision: 15 of his 531 reviews are legacy).
   - **worktree:** see below.
 - **Worktree fallback (R9):** when the covering server record's root is gone and sits under `<repo>/.claude/worktrees/<name>/`, the row says "The worktree is gone. An agent will open the main repository's copy, which may differ from what you reviewed." The request carries only the review id. The drain derives and checks the candidate (see the drain section). The agent serves it with `lahe review`, so the path goes through the CLI's own checks.
 - **Missing:** Open is refused with `PROTO_NOT_OPENABLE`, reason `missing`. So is a Pick up or Launch request on a missing row.

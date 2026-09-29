@@ -701,6 +701,13 @@
     FOLD_CUTOFF: "2026-09-17T04:00:00Z"
   };
 
+  // What a legacy pickup does, said once for the drain and `lahe library
+  // serve`: a legacy review has no session, so it is served as a fresh review
+  // and its comments stay where they are.
+  function CATALOG_LEGACY_NOTE(reviewId) {
+    return "Serving it starts a new review in your session. The old comments stay on the old review, " + reviewId + ".";
+  }
+
   // ---------------------------------------------------------------------------
   // The Library's helper log line
   // ---------------------------------------------------------------------------
@@ -1647,6 +1654,7 @@
     errorBody: errorBody,
 
     CATALOG: CATALOG,
+    CATALOG_LEGACY_NOTE: CATALOG_LEGACY_NOTE,
     CATALOG_LOG: CATALOG_LOG,
     catalogLogLine: catalogLogLine,
 

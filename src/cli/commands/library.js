@@ -333,7 +333,10 @@ function serveTarget(described) {
     if (typeof process.getuid === "function" && stat.uid !== process.getuid()) {
       return { error: "its document belongs to another user; answer refused" };
     }
-    return { target: described.verified_path };
+    // A fresh review in the agent's session (`--new`): the file's script line
+    // names the legacy review, which belongs to no session, so `lahe review`
+    // would refuse to reuse it. The old comments stay on the legacy review.
+    return { target: described.verified_path, fresh: true };
   }
   if (described.kind === "worktree") {
     if (!described.candidate) return { error: "its worktree is gone and no main-repo copy passes the checks; answer refused" };
@@ -372,6 +375,7 @@ async function runServe(args, opts, out, err) {
   }
   // argv, never a shell: the path is page text and arrives as one argument.
   var argv = [BIN, "review", chosen.target, "--session", args.session];
+  if (chosen.fresh) argv.push("--new");
   if (args.stateDir) argv.push("--state-dir", args.stateDir);
   if (args.port !== null) argv.push("--port", String(args.port));
   var code = await new Promise(function (resolve) {
@@ -384,7 +388,10 @@ async function runServe(args, opts, out, err) {
     });
     child.on("close", function (status) { resolve(typeof status === "number" ? status : 1); });
   });
-  if (code === EXIT.OK) agentSessions.createStore({ dir: dir }).touchActivity(args.session);
+  if (code === EXIT.OK) {
+    agentSessions.createStore({ dir: dir }).touchActivity(args.session);
+    if (chosen.fresh) out(protocol.CATALOG_LEGACY_NOTE(request.review) + "\n");
+  }
   return code;
 }
 
