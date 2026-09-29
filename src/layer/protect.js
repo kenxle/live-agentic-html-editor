@@ -72,7 +72,7 @@
     // time would capture undefined forever.
     root.LAHE.protect = factory(root.LAHE.markers, root.LAHE.selection, root.LAHE.epoch, function () {
       return root.LAHE.replay;
-    });
+    }, root.LAHE.blocks);
   } else {
     module.exports = factory(
       require("../shared/markers.js"),
@@ -80,10 +80,11 @@
       require("../shared/epoch.js"),
       function () {
         return require("./replay.js");
-      }
+      },
+      require("./blocks.js")
     );
   }
-})(typeof globalThis !== "undefined" ? globalThis : this, function (markers, selection, epoch, replayModule) {
+})(typeof globalThis !== "undefined" ? globalThis : this, function (markers, selection, epoch, replayModule, blocks) {
   "use strict";
 
   var LAYER = {
@@ -337,11 +338,37 @@
       // The last thing the page tried to say in this block while it was
       // protected, taken off the page by layer three's restore. See
       // displacedChange() below.
-      displaced: null
+      displaced: null,
+      // Free writing: a run session protects the anchor AND every run block,
+      // read through the caller's `blocks()` each time, because the run grows
+      // with every Enter. Null for a single-block edit.
+      run: typeof (options || {}).blocks === "function" ? runModeFrom(options) : null,
+      elements: null
     };
 
     if (enabled(LAYER.SNAPSHOT_RESTORE)) snapshot(el);
     return active;
+  }
+
+  function runModeFrom(options) {
+    return {
+      blocks: options.blocks,
+      host: typeof options.host === "function" ? options.host : function () {
+        return null;
+      },
+      refind: typeof options.refind === "function" ? options.refind : null,
+      container: options.container === true
+    };
+  }
+
+  // The blocks a run session holds right now: after a restore, the ones the
+  // restore built; otherwise what the caller says.
+  function runBlocksNow() {
+    if (!active || !active.run) return active ? [active.element] : [];
+    var list = active.run.blocks() || [];
+    return list.filter(function (b) {
+      return !!b;
+    });
   }
 
   // True when el, or an ancestor of it, is the protected region. Replay asks
@@ -349,6 +376,13 @@
   function isProtected(el) {
     if (!active || !el) return false;
     if (active.element === el) return true;
+    if (active.run) {
+      var list = runBlocksNow();
+      for (var i = 0; i < list.length; i += 1) {
+        if (list[i] === el || (typeof list[i].contains === "function" && list[i].contains(el))) return true;
+      }
+      return false;
+    }
     return typeof active.element.contains === "function" && active.element.contains(el);
   }
 
@@ -366,7 +400,12 @@
   function touches(el) {
     if (!active || !el) return false;
     if (isProtected(el)) return true;
-    return typeof el.contains === "function" && el.contains(active.element);
+    if (typeof el.contains !== "function") return false;
+    if (el.contains(active.element)) return true;
+    if (!active.run) return false;
+    var list = runBlocksNow();
+    for (var i = 0; i < list.length; i += 1) if (el.contains(list[i])) return true;
+    return false;
   }
 
   function protectedElement() {
@@ -508,6 +547,7 @@
    * @returns {null|Object} the snapshot
    */
   function snapshot(regionEl) {
+    if (active && active.run && !restoring) return runSnapshot();
     var el = regionEl || protectedElement();
     if (!el || restoring) return null;
     counters.snapshots += 1;
@@ -552,11 +592,191 @@
    *                             already has it
    * @returns {boolean} true when the caret landed where the snapshot said
    */
+
+  // -------------------------------------------------------------------------
+  // LAYER 3 for a run: the anchor plus every run block
+  // -------------------------------------------------------------------------
+  //
+  // docs/features/20260928.01_free_writing, plan Task 2.4. The run's blocks
+  // are new elements the page's server has never heard of, so a repaint of
+  // their parent drops them all. The snapshot keeps each block's tag and
+  // markup in order, and the caret as a block index plus a character offset;
+  // the restore re-finds the anchor, rebuilds the run after it with the one
+  // insert-point rule, and puts the caret back by position.
+
+  function caretIn(list, node, offsetInNode) {
+    for (var i = 0; i < list.length; i += 1) {
+      var at = offsetWithin(list[i], node, offsetInNode);
+      if (at !== null) return { block: i, offset: at };
+    }
+    return null;
+  }
+
+  function runCaret(list) {
+    var range = selection.currentRange();
+    if (!range) return null;
+    var start = caretIn(list, range.startContainer, range.startOffset);
+    if (!start) return null;
+    var end = caretIn(list, range.endContainer, range.endOffset) || start;
+    return { start: start, end: end };
+  }
+
+  function runSnapshot() {
+    counters.snapshots += 1;
+    var list = runBlocksNow();
+    var snap = {
+      run: true,
+      regionKey: active.key,
+      selector: active.key.selector,
+      container: active.run.container,
+      anchorTag: active.run.container ? String(active.element.tagName || "").toLowerCase() : null,
+      entries: list.map(function (b) {
+        return { tag: String(b.tagName || "").toLowerCase(), html: b.innerHTML, text: b.textContent };
+      }),
+      caret: runCaret(list),
+      at: Date.now()
+    };
+    snapshots[active.key.value] = snap;
+    active.snapshot = snap;
+    return snap;
+  }
+
+  function runUndamaged(snap, list) {
+    if (list.length !== snap.entries.length) return false;
+    for (var i = 0; i < list.length; i += 1) {
+      if (!list[i].isConnected || list[i].textContent !== snap.entries[i].text) return false;
+    }
+    return true;
+  }
+
+  function refindAnchor(snap) {
+    var doc = ownerDocument(active.element);
+    if (snap.container) {
+      if (active.element.isConnected) return active.element;
+      var mains = doc.getElementsByTagName("main");
+      return mains.length === 1 ? mains[0] : doc.body;
+    }
+    if (active.element.isConnected) return active.element;
+    var byKey = findRegion(snap.regionKey, doc);
+    if (byKey) return byKey;
+    return active.run.refind ? active.run.refind() : null;
+  }
+
+  function placeRunCaret(list, caret) {
+    if (!caret) return true;
+    var start = list[caret.start.block];
+    if (!start) return false;
+    var end = list[caret.end.block] || start;
+    if (!textNodesIn(start).length) {
+      var doc = ownerDocument(start);
+      var r = doc.createRange();
+      r.setStart(start, 0);
+      r.collapse(true);
+      var sel = doc.defaultView.getSelection();
+      sel.removeAllRanges();
+      sel.addRange(r);
+      return true;
+    }
+    if (start !== end) {
+      return placeCaretAt(start, caret.start.offset, caret.start.offset);
+    }
+    return placeCaretAt(start, caret.start.offset, caret.end.offset);
+  }
+
+  function runRestore(snap) {
+    var list = runBlocksNow();
+    if (runUndamaged(snap, list)) {
+      var live = runCaret(list);
+      if (live) snap.caret = live;
+      return false;
+    }
+    var anchorEl = refindAnchor(snap);
+    if (!anchorEl) {
+      lastFailure = "the anchor of the run could not be found again after the repaint";
+      counters.restoreFailures += 1;
+      return false;
+    }
+    var doc = ownerDocument(anchorEl);
+    var built = [];
+    restoring = true;
+    try {
+      epoch.write("protect_restore_run", function () {
+        list.forEach(function (b) {
+          if (b !== anchorEl && b !== active.element && b.parentNode) b.parentNode.removeChild(b);
+        });
+        var entries = snap.entries.slice();
+        var point;
+        if (snap.container) {
+          point = blocks.startPointIn(anchorEl);
+        } else {
+          var first = entries.shift();
+          if (String(anchorEl.tagName).toLowerCase() !== first.tag) {
+            anchorEl = blocks.swapTag(anchorEl, first.tag) || anchorEl;
+          }
+          if (anchorEl.innerHTML !== first.html) anchorEl.innerHTML = first.html;
+          built.push(anchorEl);
+          point = blocks.insertPointAfter(anchorEl);
+        }
+        entries.forEach(function (entry) {
+          var el = doc.createElement(entry.tag);
+          el.innerHTML = entry.html;
+          point.parent.insertBefore(el, point.before);
+          built.push(el);
+        });
+        active.element = anchorEl;
+        active.elements = { anchor: anchorEl, run: snap.container ? built : built.slice(1) };
+        anchorEl.setAttribute(PROTECTED_ATTRIBUTE, "");
+        if (enabled(LAYER.COOPERATIVE_SKIP)) applySkipAttributes(anchorEl);
+      });
+    } finally {
+      restoring = false;
+    }
+    if (installation && installation.onRestore) installation.onRestore(anchorEl, snap);
+    var host = active && active.run ? active.run.host() : null;
+    if (host && typeof host.focus === "function") {
+      try {
+        host.focus({ preventScroll: true });
+      } catch (err) {
+        host.focus();
+      }
+    }
+    var placed = placeRunCaret(built, snap.caret);
+    if (placed) counters.restores += 1;
+    else {
+      lastFailure = "the caret could not be put back in the run";
+      counters.restoreFailures += 1;
+    }
+    if (active) active.elements = null;
+    runSnapshot();
+    return placed;
+  }
+
+  /**
+   * The blocks the last run restore built, for the editing surface to move
+   * its session onto. Null outside a restore.
+   */
+  function protectedBlocks() {
+    return active && active.elements ? active.elements : null;
+  }
+
+  /** The anchor is a new element now (a tag swap), and protection moves to it. */
+  function rebindTo(el) {
+    if (!active || !el) return false;
+    if (active.element && active.element !== el) {
+      active.element.removeAttribute && active.element.removeAttribute(PROTECTED_ATTRIBUTE);
+    }
+    active.element = el;
+    el.setAttribute(PROTECTED_ATTRIBUTE, "");
+    if (enabled(LAYER.COOPERATIVE_SKIP)) applySkipAttributes(el);
+    return true;
+  }
+
   function restore(snapOrKey, regionEl) {
     var snap = null;
     if (typeof snapOrKey === "string") snap = snapshots[snapOrKey];
     else if (snapOrKey && typeof snapOrKey === "object") snap = snapOrKey;
     else if (active) snap = active.snapshot;
+    if (snap && snap.run) return active && active.run ? runRestore(snap) : false;
 
     if (!snap) {
       lastFailure = "restore called with no snapshot to restore";
@@ -719,6 +939,14 @@
       if (!enabled(LAYER.SNAPSHOT_RESTORE) || restoring || !active) return;
       var el = active.element;
       var snap = snapshots[active.key.value];
+      if (snap && snap.run) {
+        var list = runBlocksNow();
+        if (runUndamaged(snap, list)) {
+          var live = runCaret(list);
+          if (live) snap.caret = live;
+        }
+        return;
+      }
       if (!snap || !el || el.textContent !== snap.text) return;
       if (adoptLiveCaret(el, snap) && active.snapshot === snap) active.snapshot = snap;
     }
@@ -726,6 +954,11 @@
     function onTyping(event) {
       if (!enabled(LAYER.SNAPSHOT_RESTORE) || restoring || !active) return;
       var target = event.target;
+      if (active.run) {
+        var host = active.run.host();
+        if (host && target && (host === target || (host.contains && host.contains(target)))) runSnapshot();
+        return;
+      }
       if (!(target === active.element || (target && active.element.contains && active.element.contains(target)))) return;
       snapshot(active.element);
     }
@@ -902,6 +1135,8 @@
     },
     veto: veto,
     snapshot: snapshot,
+    protectedBlocks: protectedBlocks,
+    rebindTo: rebindTo,
     restore: restore,
     release: release,
     lastFailure: function () {

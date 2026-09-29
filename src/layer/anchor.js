@@ -1314,6 +1314,14 @@
   function resolve(ref, root, options) {
     var reference = ref || {};
     var scope = scopeOf(root, null);
+    // THE EMPTY-CONTAINER RUNG (free writing, plan Task 2.3). A record written
+    // at the start of an empty page is anchored on the page's one main (or
+    // body), found by its tag alone: once the notes are placed, main's text is
+    // the whole page, and a text compare would call that lost. It serves
+    // start_of_container records only; an after_anchor record whose anchor is
+    // gone stays lost, even on a page the agent emptied.
+    var container = containerRung(reference, scope, options);
+    if (container) return container;
     // The stamp first, because it is the one signal that is true by
     // construction. It answers in three ways and only one of them is a bind:
     // see stampVerdict. A stamp that is not on the page says nothing, and the
@@ -1321,8 +1329,39 @@
     var stamped = stampVerdict(reference, scope, options && options.accept);
     if (stamped) return stamped;
     var verdict = uniqueness.selectUnique(candidatesFor(reference, scope), reference);
-    verdict.element = verdict.bound ? mintedElementFor(verdict.key, reference, scope) : null;
+    verdict.element = verdict.bound ? mintedElementFor(verdict.key, reference, scope, options && options.tagAfter) : null;
     return verdict;
+  }
+
+  var CONTAINER_TAGS = { main: 1, body: 1 };
+
+  function containerRung(ref, scope, options) {
+    if (!options || options.placement !== "start_of_container") return null;
+    var tag = ref.fingerprint && typeof ref.fingerprint.tag === "string" ? ref.fingerprint.tag.toLowerCase() : "";
+    if (!CONTAINER_TAGS[tag]) return null;
+    var found = [];
+    if (tag === "main") {
+      eachElement(scope, function (node) {
+        if (tagOf(node) === "main") found.push(node);
+      });
+      if (tagOf(scope) === "main" && found.indexOf(scope) === -1) found.unshift(scope);
+    } else {
+      var hop = scope;
+      while (hop && tagOf(hop) !== "body") hop = firstDescendantOfTag(hop, "body") || null;
+      if (hop) found.push(hop);
+    }
+    var bound = found.length === 1;
+    return {
+      bound: bound,
+      key: bound ? found[0] : null,
+      element: bound ? found[0] : null,
+      via: "container",
+      reason: bound ? "the page's one " + tag : found.length ? "more than one " + tag : "no " + tag + " on the page",
+      failureCode: bound ? null : found.length ? "ANCHOR_AMBIGUOUS" : "ANCHOR_NO_TEXT_MATCH",
+      considered: found.length,
+      survivors: bound ? 1 : 0,
+      corroboration: { structure: false, heading: false }
+    };
   }
 
   /**
@@ -1346,15 +1385,23 @@
    *
    * @returns {Element} the minted element, or `bound` unchanged
    */
-  function mintedElementFor(bound, ref, scope) {
+  function mintedElementFor(bound, ref, scope, tagAfter) {
     var wanted = ref && ref.fingerprint && typeof ref.fingerprint.tag === "string" ? ref.fingerprint.tag : "";
-    if (!wanted || !isElement(bound) || tagOf(bound) === wanted) return bound;
+    // The tag tie-breaker accepts either tag: the one the reference was
+    // minted on, or the anchor's new tag when the reviewer changed its type
+    // (free writing, anchor_tag_after).
+    var also = typeof tagAfter === "string" && tagAfter ? tagAfter.toLowerCase() : "";
+    var fits = function (node) {
+      var t = tagOf(node);
+      return t === wanted || (!!also && t === also);
+    };
+    if (!wanted || !isElement(bound) || fits(bound)) return bound;
     var words = textOf(bound);
     var hop = bound;
     while (hop !== scope) {
       var parent = parentOf(hop);
       if (!isElement(parent) || textOf(parent) !== words) return bound;
-      if (tagOf(parent) === wanted) return parent;
+      if (fits(parent)) return parent;
       hop = parent;
     }
     return bound;

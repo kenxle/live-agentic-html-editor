@@ -183,3 +183,53 @@ test("install refuses a layer name it does not know", () => {
     /unknown layer/
   );
 });
+
+// ---------------------------------------------------------------------------
+// Free writing: a run session protects the anchor AND its run (plan Task 2.4)
+// ---------------------------------------------------------------------------
+
+function runSession() {
+  const anchorEl = fakeElement({ "data-region": "anchor" });
+  const runA = fakeElement();
+  const runB = fakeElement();
+  const inside = fakeElement();
+  runB.children.push(inside);
+  const host = fakeElement();
+  host.children.push(anchorEl, runA, runB);
+  const outside = fakeElement();
+  const blocks = [anchorEl, runA];
+  protect.mark(anchorEl, {
+    reason: "edit",
+    blocks: () => blocks,
+    host: () => host
+  });
+  return { anchorEl, runA, runB, inside, host, outside, blocks };
+}
+
+test("a run session protects every run block, including one added after the mark", () => {
+  const s = runSession();
+  assert.equal(protect.isProtected(s.anchorEl), true);
+  assert.equal(protect.isProtected(s.runA), true);
+  assert.equal(protect.isProtected(s.runB), false, "not in the run yet");
+  s.blocks.push(s.runB);
+  assert.equal(protect.isProtected(s.inside), true, "the run is read each time, so a new block is protected at once");
+  assert.equal(protect.isProtected(s.outside), false);
+});
+
+test("the veto fires on an element that contains a run block, even when it holds no anchor", () => {
+  const s = runSession();
+  const wrapper = fakeElement();
+  wrapper.children.push(s.runA);
+  assert.equal(protect.veto(wrapper, null), true);
+  assert.equal(protect.veto(s.outside, null), false);
+});
+
+test("rebindTo moves protection to the element a tag swap made", () => {
+  const s = runSession();
+  const swapped = fakeElement({ "data-region": "anchor" });
+  assert.equal(protect.rebindTo(swapped), true);
+  assert.equal(protect.protectedElement(), swapped);
+  assert.equal(swapped.hasAttribute(protect.PROTECTED_ATTRIBUTE), true);
+  assert.equal(s.anchorEl.hasAttribute(protect.PROTECTED_ATTRIBUTE), false);
+  protect.SKIP_ATTRIBUTES.forEach((name) => assert.equal(swapped.getAttribute(name), ""));
+});

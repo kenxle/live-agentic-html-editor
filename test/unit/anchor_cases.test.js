@@ -959,3 +959,39 @@ test("S8: a guess is not shaped like a verdict, so no caller can read one as the
   const refused = anchor.resolve(ref, reworded.body);
   assert.equal(GUESS_VIAS.indexOf(refused.via), -1);
 });
+
+// ---------------------------------------------------------------------------
+// Free writing: the tag tie-breaker accepts either tag (plan Task 2.2)
+// ---------------------------------------------------------------------------
+//
+// A block whose words sit in one inline wrapper binds that wrapper first, and
+// the tie-breaker climbs to the tag the reference was minted on. When the
+// reviewer changed the block's type (anchor_tag_after), the climb has to stop
+// at the new tag too, or the write lands inside the <em>.
+
+function wrappedBlock(tag, text) {
+  const inner = el("em", { text: text });
+  const block = el(tag, { children: [inner] });
+  const body = el("body", { children: [el("main", { children: [el("p", { text: WORDS[0] }), block] })] });
+  return { body: body, block: block, inner: inner };
+}
+
+test("free writing: the ladder finds a block by its saved tag", () => {
+  const page = wrappedBlock("p", WORDS[2]);
+  const ref = anchor.mint({ element: page.block, root: page.body });
+  const again = wrappedBlock("p", WORDS[2]);
+  assert.equal(anchor.resolve(ref, again.body).element, again.block);
+  assert.equal(anchor.resolve(ref, again.body, { tagAfter: "h2" }).element, again.block, "the saved tag still counts");
+});
+
+test("free writing: the ladder finds a retagged block by anchor_tag_after", () => {
+  const page = wrappedBlock("p", WORDS[2]);
+  const ref = anchor.mint({ element: page.block, root: page.body });
+  const retagged = wrappedBlock("h2", WORDS[2]);
+  assert.equal(
+    anchor.resolve(ref, retagged.body).element,
+    retagged.inner,
+    "without the new tag the climb never stops at the h2"
+  );
+  assert.equal(anchor.resolve(ref, retagged.body, { tagAfter: "h2" }).element, retagged.block);
+});
