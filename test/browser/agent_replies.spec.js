@@ -1728,6 +1728,11 @@ test.describe("free writing: the proofreading question", () => {
       await waitForItemInLog(helper, run.id);
       await askProofread(helper, page, run, [{ block: 1, from: "place", to: "spot" }]);
 
+      // The question's toast names the run in the reviewer's words, never the
+      // change text written for the agent.
+      const toasts = await page.evaluate(() => window.__lahe.rail.toastInfo().toasts.map((t) => t.about));
+      expect(toasts).toContain("New text after 'Nine clients checked in this week....'");
+
       const buttons = await proofButtons(page, run.id);
       expect(buttons).toEqual({ asked: true, use: "Use the fixes", keep: "Keep mine", followup: true });
 
@@ -1750,8 +1755,14 @@ test.describe("free writing: the proofreading question", () => {
 
       const words = await cardWords(page, run.id);
       expect(words.thread).toContain("Use the fixes you listed. Change nothing else.");
+      expect(words.thread, "the agent-facing change text stays off a run's thread").not.toContain("new_blocks");
       expect(words.notice).toBe("Waiting on the agent");
       expect((await proofButtons(page, run.id)).asked, "the question is answered").toBe(false);
+      const listed = await page.evaluate((id) =>
+        Array.from(window.__lahe.rail.cardNode(id).querySelectorAll("[data-lahe-run-words]")).map((n) => n.textContent),
+        run.id
+      );
+      expect(listed[1], "the Edits row lists the fixed words").toBe("I lost my spot every time I scrolled back.");
 
       // The agent reads the fixed words from review.json at the new revision.
       await pollUntil(

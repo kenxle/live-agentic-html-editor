@@ -1322,7 +1322,11 @@
 
       var reviewer = round.reviewer || {};
       if (reviewer.note) appendTurn(turns, "Reviewer note", reviewer.note, reviewer.at, "reviewer");
-      if (reviewer.change) appendTurn(turns, "Reviewer change", reviewer.change, reviewer.at, "reviewer");
+      // A run's change text is written for the agent, and the card already
+      // leads with the reviewer's own two lines for it, so a round on a run
+      // record does not print it again.
+      var runCard = !!overlayModule.runSummary(itemById(id));
+      if (reviewer.change && !runCard) appendTurn(turns, "Reviewer change", reviewer.change, reviewer.at, "reviewer");
       var agent = round.agent || {};
       if (agent.text) appendTurn(turns, agent.agent || "Agent", agent.text, agent.at, "agent");
       if (agent.reason) appendTurn(turns, (agent.agent || "Agent") + " reason", agent.reason, agent.at, "agent");
@@ -1673,6 +1677,10 @@
     function aboutWords(item) {
       if (!item) return "";
       var context = item[record.FIELD.CONTEXT] || {};
+      // A run's change text is written for the agent; the reviewer's line is
+      // the run summary's first line, as on the folded card.
+      var run = overlayModule.runSummary(item);
+      if (run) return run.first;
       if (record.isHandEdit(item)) return item[record.FIELD.CHANGE] || context.quote || "";
       return context.quote || item[record.FIELD.NOTE] || item[record.FIELD.CHANGE] || "";
     }

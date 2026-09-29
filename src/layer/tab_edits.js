@@ -506,7 +506,13 @@
         if (!seen[id]) dropRow(id);
       });
 
-      paintBar(items.length);
+      // The empty draft an empty page opens with is not a hand edit yet: the
+      // rail does not draw it, so the count does not claim it either.
+      paintBar(
+        items.filter(function (item) {
+          return !overlayModule.isBlankStartDraft(item);
+        }).length
+      );
       return api;
     }
 

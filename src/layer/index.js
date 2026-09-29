@@ -509,6 +509,9 @@
         },
         onContinued: function (next) {
           tab.refresh();
+          // The Edits row reads the record too: after "Use the fixes" its block
+          // list has to show the fixed words.
+          if (editsTab && typeof editsTab.refresh === "function") editsTab.refresh();
           // "Use the fixes" is the reviewer's reword of a placed run at a new
           // revision, and the page has to show the fixed words: replay's
           // branch three rewrites the placed blocks in place. Only a run

@@ -191,3 +191,8 @@ test("the pinned words", () => {
   assert.equal(tabDone.PROOFREAD.KEEP_LABEL, "Keep mine");
   assert.equal(tabDone.PROOFREAD.WAITING, "Waiting on the agent");
 });
+
+test("a list block's words read one item to a line", () => {
+  const s = overlay.runSummary(fixture("worked example"));
+  assert.equal(s.blocks[2].text, "scrolling\nre-asking zqxcanary");
+});

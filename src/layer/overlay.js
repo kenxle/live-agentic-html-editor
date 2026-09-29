@@ -1372,7 +1372,10 @@
         return {
           label: blockLabel(b.tag),
           moved: b.from_anchor === true,
-          text: normalize.blockText(typeof b.html === "string" ? "<" + b.tag + ">" + b.html + "</" + b.tag + ">" : "")
+          // A list's items one to a line, not a blank line apart.
+          text: normalize
+            .blockText(typeof b.html === "string" ? "<" + b.tag + ">" + b.html + "</" + b.tag + ">" : "")
+            .replace(/\n{2,}/g, "\n")
         };
       })
     };
@@ -6368,6 +6371,7 @@
     collapsedLineText: collapsedLineText,
     runSummary: runSummary,
     emptyPageLines: emptyPageLines,
+    isBlankStartDraft: isBlankStartDraft,
     clipAtWord: clipAtWord,
     TAB: TAB,
     TABS: TABS,

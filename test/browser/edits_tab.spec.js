@@ -598,6 +598,10 @@ test.describe("free writing: the edits row and the card show new blocks", () => 
         "The agent only places your words. It organizes the notes when you ask it to."
       ]);
     }
+    const count = await page.evaluate(
+      () => window.__lahe.rail.tabBody("edits").querySelector(".lahe-edits-bar__count").textContent
+    );
+    expect(count, "the empty draft the page opens with is not counted").toBe("0 hand edits");
   });
 
   test("an empty HTML page shows the lines without a file name", async ({ page }) => {
@@ -614,6 +618,55 @@ test.describe("free writing: the edits row and the card show new blocks", () => 
       { message: "the empty-page lines on an HTML page" }
     );
     expect(lines[1]).toBe("Start typing.");
+  });
+
+  // A REPLAY DEFECT the rail found and cannot fix in its own files.
+  //
+  // After "Use the fixes" rewords block 1 of a run, replay's branch three
+  // rewrites that block in place, which is right. But the block AFTER it (the
+  // list here) then reads as missing from its place, and the card gets
+  // REPLAY_RUN_PLACED_ELSEWHERE ("... is already further down the page") while
+  // the page is exactly right. The fix is in src/layer/replay.js placeRun (the
+  // presence table after a reworded middle block), which this workstream does
+  // not own. fixme so it reports rather than failing a branch that cannot land
+  // the fix; the orchestrator hands it to the replay fix builder.
+  test.fixme("after Use the fixes, the blocks after the fixed one raise no placed-elsewhere note", async ({ page }) => {
+    await fw.openFixture(page, server, "blog.html");
+    const item = await typeWorkedRun(page);
+    await page.evaluate((id) => {
+      const P = window.LAHE.protocol;
+      const ev = P.newEvent({
+        event: P.EVENT.REPLY_FOLDED,
+        event_id: window.LAHE.record.randomId("evt"),
+        review: window.__lahe.handle.review,
+        item: id,
+        rev: window.__lahe.itemById(id).rev,
+        payload: {
+          accepted: true,
+          state: "ready",
+          file: "replies-claude.jsonl",
+          reply: {
+            status: "question",
+            agent: "claude",
+            text: "One fix.",
+            files: [],
+            proofread: true,
+            suggestions: [{ block: 1, from: "wall", to: "sheet" }]
+          }
+        }
+      });
+      window.__lahe.handle.doneTab().applyReplies([ev]);
+      window.__lahe.rail.cardNode(id).querySelector("[data-lahe-act='use-fixes']").click();
+    }, item.id);
+    await pollPage(
+      page,
+      () => Array.from(document.querySelectorAll("#post p")).some((p) => p.textContent.indexOf("a sheet of text") !== -1),
+      undefined,
+      { message: "replay to write the fixed words" }
+    );
+    await page.evaluate(() => window.__lahe.replayNow());
+    const codes = await page.evaluate((id) => window.__lahe.rail.cardBadges(id).map((b) => b.code), item.id);
+    expect(codes).not.toContain("REPLAY_RUN_PLACED_ELSEWHERE");
   });
 
   test("a page with content keeps the ordinary empty lines", async ({ page }) => {
