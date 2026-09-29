@@ -91,7 +91,10 @@
   }
 
   // An additional transform, applied ON TOP of normalizeText, never instead of
-  // it. Verification (3B) uses it for a second pass when the literal pass
+  // it. A run of hyphens folds to one, after the dashes do: a Markdown source
+  // spells a dash "--" or "---" and a smart renderer draws it as one, so the
+  // typed and the rendered text must fold to the same string for every reader
+  // (the run walk, the page check, the handled check, the split search). Verification (3B) uses it for a second pass when the literal pass
   // misses, because a markdown source holds a straight quote where the built
   // HTML holds a curly one. Nothing else may use it: replay folding typography
   // would silently discard a reviewer's punctuation fix.
@@ -100,6 +103,7 @@
       .replace(/[\u2018\u2019\u201A\u201B\u2032]/g, "'")
       .replace(/[\u201C\u201D\u201E\u201F\u2033]/g, '"')
       .replace(/[\u2010\u2011\u2012\u2013\u2014\u2015\u2212]/g, "-")
+      .replace(/-{2,}/g, "-")
       .replace(/\u2026/g, "...");
   }
 

@@ -187,3 +187,9 @@ test("runWords counts the run and skips from_anchor blocks", () => {
   assert.equal(normalize.runWords(blocks), 6);
   assert.equal(normalize.runWords([]), 0);
 });
+
+test("the matcher reads a typed -- and a rendered dash as the same block", () => {
+  const got = normalize.matchRun([block("p", "She said no -- then left")], leavesOf("<p>She said no — then left</p>"));
+  assert.deepEqual(got, [{ index: 0, status: "whole", leaves: [0] }]);
+});
+
