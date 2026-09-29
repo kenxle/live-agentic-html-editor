@@ -36,7 +36,7 @@ test("the four refusal codes and the three card codes are failure codes", () => 
 
 test("the page check's tag note is pinned and is one of its notes", () => {
   assert.equal(record.PAGE_CHECK_TAG_NOTE,
-    "Reopened by the page check: a block landed with a different tag from the one in new_blocks. " +
+    "Reopened by the page check: a block landed with a different tag from the one in new_blocks or anchor_tag_after. " +
     "Give it that tag in the source, or reply not_handled saying why.");
   assert.ok(record.PAGE_CHECK_NOTES.indexOf(record.PAGE_CHECK_TAG_NOTE) !== -1);
 });
