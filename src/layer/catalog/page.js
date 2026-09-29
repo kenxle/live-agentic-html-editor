@@ -242,7 +242,10 @@
     renameDraft = { id: null, value: "" };
     focusKey(reviewId + ":rename");
     update(VM.beginRename(state, reviewId, value));
-    call(ROUTE.rename, { review: reviewId, name: value }).then(function (result) {
+    var body = reviewId.indexOf("session:") === 0
+      ? { session: reviewId.slice("session:".length), name: value }
+      : { review: reviewId, name: value };
+    call(ROUTE.rename, body).then(function (result) {
       update(VM.afterRename(state, reviewId, result, now()));
       poll();
     });
@@ -291,7 +294,14 @@
       }
     }
     else if (what === "star") star(id, btn.getAttribute("aria-pressed") !== "true");
-    else if (what === "rename") startRename(id);
+    else if (what === "rename") {
+      event.preventDefault();
+      startRename(id);
+    } else if (what === "rename-session") {
+      // Inside the card's summary: the click renames and does not fold the card.
+      event.preventDefault();
+      startRename("session:" + btn.getAttribute("data-session"));
+    }
     else if (what === "pages") update(VM.withPagesOpen(state, id, btn.getAttribute("aria-expanded") !== "true"));
     else if (what === "more") update(VM.withCardMore(state, btn.getAttribute("data-card"), btn.getAttribute("aria-expanded") !== "true"));
     else if (what === "handoff") {
@@ -328,6 +338,17 @@
       node.appendChild(typeof child === "string" ? document.createTextNode(child) : child);
     });
     return node;
+  }
+
+  // A path as text with a break opportunity after each slash, so a long one
+  // wraps between folders and never mid-name. No characters are added.
+  function slashBreaks(text) {
+    var out = [];
+    String(text).split("/").forEach(function (part, i, all) {
+      out.push(part + (i < all.length - 1 ? "/" : ""));
+      if (i < all.length - 1) out.push(document.createElement("wbr"));
+    });
+    return out;
   }
 
   function button(label, attrs) {
@@ -374,21 +395,24 @@
         })
       ]);
     } else {
+      // The name is the rename control: a click, or Enter on it, edits it.
       nameLine = h("p", { class: "lib-name-line" }, [
-        h("span", { class: "lib-name", "data-name": row.id, text: row.name }),
-        button(row.rename.label, {
+        h("button", {
+          type: "button",
+          class: "lib-name",
           "data-act": "rename",
           "data-review": row.id,
           "data-key": row.id + ":rename",
-          "data-quiet": "true",
-          class: "lib-btn lib-rename-btn"
+          "aria-label": row.rename.label + ": " + row.name,
+          title: row.rename.label,
+          text: row.name
         })
       ]);
     }
     var main = h("div", { class: "lib-row-main" }, [
       nameLine,
       row.originalName ? h("p", { class: "lib-original", text: row.originalName }) : null,
-      row.path ? h("p", { class: "lib-where", text: row.path }) : null
+      row.path ? h("p", { class: "lib-where", title: row.pathTitle || null }, slashBreaks(row.path)) : null
     ]);
 
     var facts = [h("span", { text: row.lastText })];
@@ -535,6 +559,44 @@
     return h("li", { "data-review": row.id }, [h("div", { class: "lib-row" }, kids)]);
   }
 
+  // A card's title is its rename control, like a row's name; the original
+  // name sits small under it once renamed.
+  function cardTitle(card) {
+    if (card.rename && card.rename.editing) {
+      var key = "session:" + card.session;
+      var typed = renameDraft.id === key ? renameDraft.value : card.rename.value;
+      return h("span", { class: "lib-card-title" }, [
+        h("input", {
+          type: "text",
+          class: "lib-rename-input",
+          "data-rename": key,
+          "data-key": key + ":rename-input",
+          value: typed,
+          maxlength: "80",
+          "aria-label": card.rename.label + ": " + card.rename.original,
+          placeholder: card.rename.original
+        })
+      ]);
+    }
+    var kids = [];
+    if (card.rename) {
+      kids.push(h("button", {
+        type: "button",
+        class: "lib-card-name",
+        "data-act": "rename-session",
+        "data-session": card.session,
+        "data-key": "session:" + card.session + ":rename",
+        "aria-label": card.rename.label + ": " + card.title,
+        title: card.rename.label,
+        text: card.title
+      }));
+    } else {
+      kids.push(h("span", { text: card.title }));
+    }
+    if (card.originalTitle) kids.push(h("span", { class: "lib-card-original", text: card.originalTitle }));
+    return h("span", { class: "lib-card-title" }, kids);
+  }
+
   function renderCard(card) {
     var metaKids = card.projects.map(function (p) {
       return h("span", { class: "lib-project", text: p });
@@ -552,7 +614,7 @@
     var body = [
       h("summary", { "data-key": "card:" + card.id }, [
         h("span", { class: "lib-chev", "aria-hidden": "true" }),
-        h("span", { class: "lib-card-title", text: card.title }),
+        cardTitle(card),
         h("span", { class: "lib-card-meta" }, metaKids)
       ])
     ];
@@ -592,7 +654,10 @@
     if (view.noMatches) kids.push(h("p", { class: "lib-quiet", "data-state": "no-matches", text: view.noMatches }));
     view.sections.forEach(function (section) {
       kids.push(
-        h("section", { class: "lib-section", "data-section": section.id }, [h("h2", { text: section.heading })].concat(section.cards.map(renderCard)))
+        h("section", { class: "lib-section", "data-section": section.id }, [
+          h("h2", { text: section.heading }),
+          section.subtitle ? h("p", { class: "lib-section-sub", text: section.subtitle }) : null
+        ].concat(section.cards.map(renderCard)))
       );
     });
     if (view.missing) {
@@ -789,10 +854,6 @@
       event.stopPropagation();
       cancelRename(id);
     }
-  });
-  els.main.addEventListener("dblclick", function (event) {
-    var name = event.target && event.target.closest ? event.target.closest("[data-name]") : null;
-    if (name) startRename(name.getAttribute("data-name"));
   });
   els.search.addEventListener("input", function () {
     update(VM.withQuery(state, els.search.value));

@@ -321,6 +321,10 @@ function createCatalogActions(options) {
    * Library's rows only. Every review in a fold takes it, as a star does.
    */
   async function rename(body, nowMs) {
+    var hasSession = body && body.session !== undefined;
+    var hasReview = body && body.review !== undefined;
+    if (hasSession && hasReview) return badRequest("rename one thing: a review or a session");
+    if (hasSession) return renameSession(body);
     var found = describe(body, nowMs);
     if (found.outcome) return found.outcome;
     if (typeof body.name !== "string") return badRequest("name must be a string; an empty one clears it");
@@ -333,6 +337,23 @@ function createCatalogActions(options) {
       kept = written.name;
     }
     return { status: 200, body: { review: d.review, name: kept } };
+  }
+
+  /** catalog.rename with {session, name}: the reviewer's own name for a session card. */
+  function renameSession(body) {
+    var id = body.session;
+    if (!protocol.isSafeId(id) || id === "legacy") return badRequest("session must be an agent session id");
+    if (typeof body.name !== "string") return badRequest("name must be a string; an empty one clears it");
+    var known = null;
+    try {
+      known = sessions.read(id);
+    } catch (err) {
+      known = null;
+    }
+    if (!known) return fail("PROTO_NOT_OPENABLE", "unknown session");
+    var written = store.setSessionName(id, body.name);
+    if (!written.ok) return fail(written.code || "PROTO_CATALOG_UNREADABLE");
+    return { status: 200, body: { session: id, name: written.name } };
   }
 
   /**

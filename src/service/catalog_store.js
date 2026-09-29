@@ -6,7 +6,8 @@
 //   { "schema": 1,
 //     "stars":    { "<review-id>": "<when it was starred>" },
 //     "reopened": { "<session-id>": { "at": "<when>", "handoff_rev": <n> } },
-//     "names":    { "<review-id>": "<the reviewer's own name for it>" } }
+//     "names":    { "<review-id>": "<the reviewer's own name for it>" },
+//     "session_names": { "<session-id>": "<the reviewer's own name for it>" } }
 //
 // `names` came later; a file without it reads as no names. A name is the
 // reviewer's display text for the Library only. It is never put in a drain
@@ -43,7 +44,7 @@ function catalogPath(dir) {
 }
 
 function empty() {
-  return { schema: SCHEMA, stars: {}, reopened: {}, names: {} };
+  return { schema: SCHEMA, stars: {}, reopened: {}, names: {}, session_names: {} };
 }
 
 function isPlainObject(value) {
@@ -55,11 +56,13 @@ function validate(parsed) {
   if (!isPlainObject(parsed) || parsed.schema !== SCHEMA) return null;
   if (!isPlainObject(parsed.stars) || !isPlainObject(parsed.reopened)) return null;
   if (parsed.names !== undefined && !isPlainObject(parsed.names)) return null;
+  if (parsed.session_names !== undefined && !isPlainObject(parsed.session_names)) return null;
   return {
     schema: SCHEMA,
     stars: Object.assign({}, parsed.stars),
     reopened: Object.assign({}, parsed.reopened),
-    names: Object.assign({}, parsed.names || {})
+    names: Object.assign({}, parsed.names || {}),
+    session_names: Object.assign({}, parsed.session_names || {})
   };
 }
 
@@ -128,11 +131,21 @@ function createCatalogStore(options) {
    */
   function setName(reviewId, name) {
     assertSafe("review", reviewId);
+    return setIn("names", reviewId, name);
+  }
+
+  /** The reviewer's own name for a session: same rule, its own map. */
+  function setSessionName(sessionId, name) {
+    assertSafe("session", sessionId);
+    return setIn("session_names", sessionId, name);
+  }
+
+  function setIn(map, id, name) {
     var clean = agentSessions.cleanName(name);
     if (clean && Array.from(clean).length > NAME_MAX) clean = Array.from(clean).slice(0, NAME_MAX).join("").trim();
     var out = update(function (data) {
-      if (clean) data.names[reviewId] = clean;
-      else delete data.names[reviewId];
+      if (clean) data[map][id] = clean;
+      else delete data[map][id];
     });
     if (out.ok) out.name = clean || null;
     return out;
@@ -160,6 +173,7 @@ function createCatalogStore(options) {
     read: read,
     setStar: setStar,
     setName: setName,
+    setSessionName: setSessionName,
     setReopened: setReopened,
     clearReopened: clearReopened
   };

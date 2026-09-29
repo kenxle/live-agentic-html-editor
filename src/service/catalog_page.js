@@ -230,16 +230,24 @@ var PAGE_STYLE = [
   ".lib-row-main{min-width:0}",
   ".lib-name{font-family:var(--font-display);font-weight:var(--w-display);font-size:var(--text-body);line-height:1.35;",
   "margin:0;overflow-wrap:anywhere}",
-  // The path: the mono face, a step smaller, muted, and breaking only at a
-  // slash when it must.
+  // The path: the mono face, a step smaller, muted, wrapping at the <wbr>
+  // after each slash, and mid-name only when one name is wider than the line.
   ".lib-where{margin:2px 0 0;color:var(--lib-faint);font-family:var(--font-mono);font-size:var(--text-micro);", // px: hugs the name
-  "line-height:1.45;overflow-wrap:anywhere;max-width:none}",
+  "line-height:1.45;overflow-wrap:break-word;max-width:none}",
   ".lib-name{max-width:none}",
   // The name line: the name, then a quiet Rename. The original name, after a
   // rename, sits small and muted under it.
   ".lib-name-line{margin:0;display:flex;flex-wrap:wrap;align-items:baseline;gap:0 var(--s2);max-width:none}",
-  ".lib-name-line>.lib-name{display:inline}",
-  ".lib-rename-btn.lib-btn{font-size:var(--text-micro);font-weight:var(--w-body);padding:0 var(--s1);color:var(--lib-faint)}",
+  // The name is a button that looks like the name: it renames on click.
+  "button.lib-name{display:inline;text-align:left;background:none;border:0;padding:0;margin:0;color:inherit;cursor:text;",
+  "border-bottom:1px dashed transparent;border-radius:0}",
+  "button.lib-name:hover,button.lib-name:focus-visible{border-bottom-color:currentColor}",
+  ".lib-card-name{font:inherit;color:inherit;background:none;border:0;padding:0;margin:0;cursor:text;text-align:left;",
+  "border-bottom:1px dashed transparent}",
+  ".lib-card-name:hover,.lib-card-name:focus-visible{border-bottom-color:currentColor}",
+  ".lib-card-title{display:flex;flex-direction:column}",
+  ".lib-card-original{font-family:var(--font-body);font-weight:var(--w-body);font-size:var(--text-meta);opacity:.85}",
+  ".lib-section-sub{margin:calc(-1 * var(--s3)) 0 var(--s4);color:var(--lib-soft);font-size:var(--text-meta)}",
   ".lib-original{margin:0;color:var(--lib-soft);font-size:var(--text-meta);max-width:none}",
   ".lib-rename-input{font:inherit;font-family:var(--font-display);font-weight:var(--w-display);font-size:var(--text-body);",
   "width:100%;color:var(--lib-fg);background:var(--lib-card);border:1px solid var(--lib-accent);border-radius:var(--r);padding:2px 6px}", // px: field padding
@@ -289,7 +297,10 @@ var PAGE_STYLE = [
   ".lib-btn[data-act='menu']::after{content:'';display:inline-block;width:5px;height:5px;margin-left:8px;", // px: a drawn caret
   "border-right:1.5px solid currentColor;border-bottom:1.5px solid currentColor;transform:translateY(-2px) rotate(45deg)}",
   ".lib-btn[data-act='menu'][aria-expanded='true']::after{transform:translateY(1px) rotate(-135deg)}",
-  ".lib-menu-list{display:flex;flex-direction:column;align-items:stretch;gap:var(--s1);padding:var(--s1);",
+  // The menu floats under its button, so opening it never widens the column.
+  ".lib-menu-list{position:absolute;top:calc(100% + 4px);right:0;z-index:3;min-width:max-content;", // px: gap under the button
+  "box-shadow:0 8px 24px rgba(0,0,0,.18);",
+  "display:flex;flex-direction:column;align-items:stretch;gap:var(--s1);padding:var(--s1);",
   "border:1px solid var(--lib-rule);border-radius:var(--r);background:var(--lib-raised)}",
   ".lib-menu-list .lib-btn{border-color:transparent;text-align:left}",
   ".lib-menu-list .lib-btn:hover{border-color:var(--lib-rule)}",
@@ -339,6 +350,7 @@ var PAGE_STYLE = [
   ".lib-acts{grid-column:2;flex-direction:row;flex-wrap:wrap;justify-content:flex-start;align-items:flex-start}",
   ".lib-acts>.lib-btn,.lib-acts>.lib-menu>.lib-btn{width:auto}",
   ".lib-menu{align-items:flex-start}",
+  ".lib-menu-list{right:auto;left:0}",
   // On a phone the meta items wrap onto new lines; a separator would start
   // a line by itself, so the items are spaced instead.
   ".lib-card-meta{gap:0 var(--s4)}",

@@ -19,7 +19,7 @@ test("a state dir with no catalog.json reads as no stars and no reopened session
   const store = catalogStore.createCatalogStore({ dir: tempState() });
   const read = store.read();
   assert.equal(read.ok, true);
-  assert.deepEqual(read.data, { schema: 1, stars: {}, reopened: {}, names: {} });
+  assert.deepEqual(read.data, { schema: 1, stars: {}, reopened: {}, names: {}, session_names: {} });
 });
 
 test("a star is written, read back, and removed by unstarring", () => {
@@ -46,7 +46,8 @@ test("the file is owner-only and keeps the architecture's shape", () => {
     schema: 1,
     stars: { r_alpha1: "2026-09-28T16:20:00.000Z" },
     reopened: { s_one: { at: "2026-09-28T16:21:00.000Z", handoff_rev: 4 } },
-    names: {}
+    names: {},
+    session_names: {}
   });
 });
 
@@ -139,4 +140,14 @@ test("a catalog.json from before names reads as no names, and a names that is no
   old.names = ["nope"];
   fs.writeFileSync(file, JSON.stringify(old));
   assert.equal(store.read().ok, false);
+});
+
+test("a session name is kept apart from review names, by the same rule, and cleared by an empty name", () => {
+  const dir = tempState();
+  const store = catalogStore.createCatalogStore({ dir });
+  assert.equal(store.setSessionName("s_one", "Briefing app \u0000work").name, "Briefing app work");
+  assert.deepEqual(store.read().data.session_names, { s_one: "Briefing app work" });
+  assert.deepEqual(store.read().data.names, {});
+  store.setSessionName("s_one", "");
+  assert.deepEqual(store.read().data.session_names, {});
 });

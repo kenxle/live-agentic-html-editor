@@ -66,3 +66,28 @@ Docs: architecture (liveness note, `last`, project, `custom_name`, rename, page 
 | `npm run gate:unit` | 1940 tests, 1938 pass, 0 fail, 2 todo | 37s |
 | `npx playwright test test/browser/reload_claim.spec.js:159 --project=webkit` | 1 passed | 3s |
 | `npx playwright test test/browser/oversized_records.spec.js:101 --project=firefox` | 1 failed (`toBeGreaterThan`), the known red on main | 3s |
+
+## Round 2: Ken's second preview
+
+Each of these changes has a test that failed first. The reader and view model tests were written before the code. Some browser spec expectations were updated afterwards, where display names moved from "folder / file" to the file's own title.
+
+- Path line: the path from the project root (repository, worktree root, `~/.claude`), else the `~` path. It is never shortened, wraps after slashes, and its tooltip is the whole `~` path.
+- The name is the rename control, for rows and for session cards. Sessions can be renamed (`catalog.json` `session_names`), with the original shown under the new name.
+- A rename equal to the original name shows once.
+- With no recorded title, a row takes the file's own `<title>` or first Markdown heading. With neither, it shows just the file name.
+- A review with several pages is named after its own page. Its page list shows real paths, never `.lahe-source` mounts.
+- Two reviews of one document in one session fold into one row: "N reviews of this document, shown as one".
+- The top section holds only the waiting and starred reviews. A session's other reviews appear in the time sections as a second card of that session.
+- "Search reaches all of them." is a subtitle.
+- The Hand to agent menu floats, so the buttons keep their width.
+
+![The Library, light](../catalog_page_light.png)
+
+![The Library, dark](../catalog_page_dark.png)
+
+| Command | Result | Time |
+| --- | --- | --- |
+| `npx playwright test test/browser/catalog_page.spec.js --project=chromium` | 26 passed, 1 skipped | 6s |
+| `npx playwright test test/browser/catalog_library.spec.js --project=chromium` | 3 passed, after two runs that failed on the expected display-name changes | 31s |
+| `npm run gate:unit` | 1 fail (the list fixture, before it was regenerated), then 1957 tests, 1955 pass, 0 fail, 2 todo | 35s |
+| `LAHE_SHOTS=1 ... -g screenshots` | light and dark retaken and looked at | 2s |
