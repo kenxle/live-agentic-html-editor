@@ -285,7 +285,7 @@ To delete at cleanup: nothing new.
 - `helper.stop()` sends SIGTERM. The helper's shutdown ends every open connection (`closeAllConnections`), including the one under that `route.fetch`.
 - The route handler then threw `socket hang up` or `read ECONNRESET`, and Playwright blamed it on whichever test was finishing.
 
-It was never only the star test. Any test that ends right after an action could hit it: in the runs below, the failures landed on six different tests. It showed only on whole-file runs because timing under several parallel workers stretches the poll past the last assertion.
+It was never only the star test. Any test that ends right after an action could hit it: in the runs below, the failures landed on seven different tests. It showed only on whole-file runs because timing under several parallel workers stretches the poll past the last assertion.
 
 How it was found: a temporary log in the route handler (since removed) printed the helper's port, whether it was alive, and its exit. Every failure was on the current test's own helper (no port reuse, no stale socket from an earlier test), and every time that helper had exited with SIGTERM, which only `afterEach` sends.
 
