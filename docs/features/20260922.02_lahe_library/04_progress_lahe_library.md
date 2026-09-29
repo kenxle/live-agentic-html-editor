@@ -52,7 +52,7 @@
 
 ### Changes from plan
 
-- **Attaching to the Library.** A bare `lahe library` starts a fresh session for the calling agent and attaches it; the session closes itself after 30 quiet minutes with no reviews. The approved design required an existing session. Your call on 2026-09-29.
+- **Attaching to the Library.** A bare `lahe library` starts a fresh session for the calling agent and attaches it; the session closes itself after 30 quiet minutes with no reviews. The approved design required an existing session. You chose this over requiring an existing session.
 - **Session cards name the watching agent once** ("watched by <agent>") instead of the Page Spec's unnamed "an agent is watching", and rows no longer repeat it.
 - **One "Hand to agent" menu per row** holds Pick this up and Launch; Open stays visible. The plan had three buttons per row.
 - **Launch is refused on pre-session and worktree rows,** with the reason on the page. The design allowed it; the final review found it could tell a new agent to take over a session nobody pointed at.
