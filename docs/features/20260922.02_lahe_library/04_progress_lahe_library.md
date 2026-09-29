@@ -6,7 +6,7 @@
 
 ## Needs your attention
 
-- [ ] **Look at the Library before it merges:** http://127.0.0.1:7917/catalog. It runs the new code on a **copy** of your LAHE records, on its own port, so your live LAHE is untouched. Click anything. Open brings a document back from the copy; comments you leave on a document opened there go into the copy and are thrown away. Pick this up and Launch go to an agent named "Library preview", which is me. Comment on the Library page itself or here with what you want changed.
+- [ ] **Look at the Library before it merges:** http://127.0.0.1:7917/catalog. It runs the new code on a **copy** of your LAHE records, on its own port, so your live LAHE is untouched. Click anything. Open brings a document back from the copy; comments you leave on a document opened there go into the copy and are thrown away. Pick this up and Launch go to an agent named "Library preview", which is me. The Library page has no comment rail of its own, so leave comments here on this page, or tell me in chat.
 - [ ] **Approve PR #19** (https://github.com/kenxle/live-agentic-html-editor/pull/19) once the page looks right.
 
 ## Currently working on
