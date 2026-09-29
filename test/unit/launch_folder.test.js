@@ -124,3 +124,19 @@ test("a repository below the home folder is still found", async (t) => {
   const { entry } = await entryFor(doc);
   assert.equal(entry.folder, repo);
 });
+
+// Adversary fixes, round 2: a null folder skips the cd, and the answer says so.
+test("every copy of the Launch steps says what to do when folder is null: no cd, and say so in the answer", () => {
+  const root = path.join(__dirname, "..", "..");
+  const copies = {
+    contract: rf.CONTRACT.join("\n"),
+    skill: fs.readFileSync(path.join(root, "skills", "lahe", "SKILL.md"), "utf8"),
+    contracts_md: fs.readFileSync(path.join(root, "docs", "CONTRACTS.md"), "utf8")
+  };
+  for (const [name, text] of Object.entries(copies)) {
+    const flat = text.replace(/\\"/g, '"').replace(/\s+/g, " ");
+    assert.ok(flat.includes("When folder is null, skip the folder file and the cd"), name);
+    assert.ok(flat.includes('do script (quoted form of (item 1 of argv)) & " " & (quoted form of msg)'), name);
+    assert.ok(flat.includes("started in its default folder"), name);
+  }
+});
