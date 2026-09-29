@@ -277,6 +277,16 @@
     normalize.NOT_ITALIC_TAG + " { font-style: normal; }"
   ].join("\n");
 
+  // Free writing's one rule (docs/features/20260928.01_free_writing, plan
+  // Task 2.1), in the same page-level sheet after STYLE_TEXT. A writing session
+  // makes the anchor's parent editable, and the edit frame is the focus
+  // indicator, so the host's own focus ring is hidden. It matches only the
+  // attribute the layer sets on the host and takes off at commit, so it never
+  // matches the page's own markup (D8). Kept apart from STYLE_TEXT, which is
+  // the highlight rules and the two reset rules and nothing else.
+  var EDIT_HOST_RULE =
+    "[" + markers.EDIT_HOST_ATTR + "]:focus, [" + markers.EDIT_HOST_ATTR + "]:focus-visible { outline: none; }";
+
   // ---------------------------------------------------------------------------
   // Which scheme the library draws in
   // ---------------------------------------------------------------------------
@@ -537,7 +547,7 @@
       el.id = STYLE_ID;
       el.setAttribute(STYLE_ATTR, "");
       markers.markChrome(el);
-      el.textContent = STYLE_TEXT;
+      el.textContent = STYLE_TEXT + "\n" + EDIT_HOST_RULE;
       (doc.head || doc.documentElement).appendChild(el);
       styleNode = el;
       return styleNode;
@@ -994,6 +1004,7 @@
     SCHEME_ATTR: SCHEME_ATTR,
     HIDDEN_ATTR: HIDDEN_ATTR,
     RAIL_ALLOWANCE_PROP: RAIL_ALLOWANCE_PROP,
+    EDIT_HOST_RULE: EDIT_HOST_RULE,
     STYLE_TEXT: STYLE_TEXT,
     PRINT_HOST_STYLE_TEXT: PRINT_HOST_STYLE_TEXT,
     HIDDEN_HOST_STYLE_TEXT: HIDDEN_HOST_STYLE_TEXT,
