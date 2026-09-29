@@ -599,6 +599,13 @@
       // A collision flagged while this window was refused was held, not spent.
       // The reviewer has taken the review back, so tell it now.
       if (conflictToasts) conflictToasts.sync();
+      // This window is now the review's holder, so it does what boot does for
+      // a holder: commit what a dead window left as a draft. After a crash the
+      // helper still names the dead window for a while, so the next load
+      // starts read-only and only gets here once it takes the review back.
+      if (typeof editing.recoverWithdrawn === "function" && editing.recoverWithdrawn().length) {
+        ns.replay.schedule(ns.replay.REASON.BOOT);
+      }
     }
 
     var sync = opts.sync || ns.sync.createSync({
