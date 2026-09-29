@@ -1,6 +1,6 @@
 # Progress: Free writing
 
-**Phase 6, Implement.** The shared pieces are built and verified. Three builders now work in parallel: editing, replay, and the helper. Nothing is blocked on you. Last updated 2026-09-29 13:37.
+**Phase 6, Implement.** The shared pieces are built and verified. Three builders now work in parallel: editing, replay, and the helper. Nothing is blocked on you. Last updated 2026-09-29 13:58.
 
 **Docs:** [Crucible questions](00_crucible_questions.md) · [Crucible](http://127.0.0.1:65155/00_crucible.html) · [Brief](http://127.0.0.1:65155/01_brief_free_writing.html) · [Wireframes](http://127.0.0.1:49513/index.html) ([decision](wireframes/DECISION.md)) · [Architecture](http://127.0.0.1:65155/02_architecture_free_writing.html) · [Plan](http://127.0.0.1:65155/03_plan_free_writing.html)
 
@@ -14,7 +14,6 @@
 |---|---|---|---|
 | Editing builder (2A) | Writing new text on the page: the editing area, block types, the menu and hotkeys, "+ Write here", blank pages, undo, and protection during reloads | 2026-09-29 13:37 | `free-writing-2a` |
 | Replay builder (2B) | Putting new text back after a rebuild, block by block, and fixing the doubled header line and the later-paragraph bold case | 2026-09-29 13:37 | `free-writing-2b` |
-| Helper builder (2C) | The helper side: the safe-tag check on arrival, size limits, the "did it land" check for new text, `lahe write`, and `lahe reply --proofread` | 2026-09-29 13:37 | `free-writing-2c` |
 
 ## Phases
 
@@ -37,6 +36,7 @@
 
 | Phase | Workstream | Tasks | Status | Detail | Outcome |
 |---|---|---|---|---|---|
+| 2 | helper (2C) | 2.8 to 2.12 | done, waiting to merge | [detail](../../../.claude/worktrees/free-writing-2c/docs/features/20260928.01_free_writing/progress/phase2_workstream_helper.md) | Unit gate: 1645 of 1647 passed, 0 failed, 2 to-do. Built: the check on arrival, always checking new text, `lahe write` with its own one-page server, `lahe reply --proofread`. |
 | 1 | kernel | 1.1 to 1.6 | done | [detail](progress/phase1_workstream_kernel.md) | Seven commits. The unit gate passed 1601 of 1604 with 2 to-do. One timing test failed under full-suite load; alone, it runs the same on the branch and on main. |
 
 ### Loop passes
@@ -71,6 +71,10 @@ Not shipped yet.
 ## Log
 
 Newest first.
+
+**2026-09-29 13:58.** The helper builder (2C) returned green. Two things for the merge:
+- straight `--` does not match a rendered dash in the shared text folding; I will fold it in the shared normalizer so every check agrees
+- the rail needs wiring for refused records, which Phase 3 picks up
 
 **2026-09-29 13:37.** Phase 1 (the shared pieces) is done and verified:
 - the new record fields
