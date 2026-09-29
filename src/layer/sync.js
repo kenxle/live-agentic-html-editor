@@ -1473,6 +1473,16 @@
     // previous session left queued is due at once, which is "re-posts on the
     // next load".
     var draftSentAt = Object.create(null);
+    // Item id -> true when its latest write is a free-writing run record. Its
+    // drafts carry the whole run, so they wait protocol.FLUSH.RUN_DRAFT_FLOOR_MS
+    // instead (docs/features/20260928.01_free_writing, Task 2.8).
+    var runDraftItems = Object.create(null);
+    // Item id -> the RUN_EVENT_REFUSED failure the helper's refusal raised.
+    // The refused event is dropped from the outbox, so it is posted once; the
+    // words stay in browser storage and the card says the agent has not seen
+    // them. A later event for the item that the helper accepts clears it.
+    var refusedRuns = Object.create(null);
+    var onItemRefused = typeof opts.onItemRefused === "function" ? opts.onItemRefused : function () {};
     // When the armed flush timer fires, and whether it was asked for by
     // something that skips the floor. The timer keeps the EARLIEST deadline it
     // is given (requirement 5): a later request never pushes it back.
@@ -1726,6 +1736,7 @@
       // nothing calls this; the guard is the belt to that suspenders.
       if (readOnly) return null;
       var opts2 = options || {};
+      runDraftItems[item[record.FIELD.ID]] = record.isRunRecord(item);
       var event = eventFor(item, opts2);
       store.queueEvent(requireReview(), event);
       if (opts2.immediate) {
@@ -1766,11 +1777,46 @@
       return event;
     }
 
+    // The helper refused some run events (record.validateRun). Each one is
+    // taken out of the outbox, so it is not re-posted on every flush and
+    // reconnect, and its item carries RUN_EVENT_REFUSED. Only the run codes
+    // are handled here: any other refusal keeps today's behavior.
+    // Returns the refused event ids.
+    var RUN_REFUSAL_CODES = ["RUN_BLOCK_REFUSED", "RUN_OVER_CEILING", "RUN_PLACEMENT_REFUSED", "RUN_TAKEBACK_CARRIES_RUN"];
+    function refuseRunEvents(sent, rejected, accepted) {
+      var byId = Object.create(null);
+      sent.forEach(function (ev) {
+        byId[ev.event_id] = ev;
+      });
+      accepted.forEach(function (id) {
+        var ev = byId[id];
+        var itemId = ev && ev[protocol.EVENT_FIELD.ITEM];
+        if (itemId && refusedRuns[itemId]) delete refusedRuns[itemId];
+      });
+      var ids = [];
+      rejected.forEach(function (entry) {
+        if (!entry || RUN_REFUSAL_CODES.indexOf(entry.code) === -1) return;
+        var ev = byId[entry.event_id];
+        if (!ev) return;
+        ids.push(entry.event_id);
+        var itemId = ev[protocol.EVENT_FIELD.ITEM];
+        var raised = failures.failure("RUN_EVENT_REFUSED", {
+          item: itemId,
+          helper_code: entry.code,
+          reason: typeof entry.reason === "string" ? entry.reason : null
+        });
+        refusedRuns[itemId] = raised;
+        onItemRefused(itemId, raised);
+      });
+      return ids;
+    }
+
     // When an item's drafts may next go to the helper: the floor after its last
     // draft post, or now when this page has never posted it.
     function draftDueAt(itemId) {
       var at = draftSentAt[itemId];
-      return typeof at === "number" ? at + protocol.FLUSH.DRAFT_FLOOR_MS : 0;
+      var floor = runDraftItems[itemId] ? protocol.FLUSH.RUN_DRAFT_FLOOR_MS : protocol.FLUSH.DRAFT_FLOOR_MS;
+      return typeof at === "number" ? at + floor : 0;
     }
 
     /**
@@ -1972,6 +2018,7 @@
         flushing = false;
         if (result.ok) {
           var accepted = (result.body && result.body.accepted) || [];
+          var refusedIds = refuseRunEvents(events, (result.body && result.body.rejected) || [], accepted);
           // BOTH OF THESE ARE WRITES INTO BROWSER STORAGE, inside a promise
           // chain with no catch of its own. A full storage throwing here is an
           // unhandled rejection raised after `flushing` has already gone back to
@@ -1979,7 +2026,7 @@
           // console error nobody sees. Guarded, it is a chip on the rail and the
           // events simply stay queued for the next flush.
           failures.tolerateStorageQuota(function () {
-            store.acknowledge(requireReview(), accepted);
+            store.acknowledge(requireReview(), accepted.concat(refusedIds));
           }, onFailure);
           // Finding 10: beside dropping the accepted events from the outbox,
           // stamp the item acknowledged when the helper named the event carrying
@@ -3356,6 +3403,10 @@
         return stampCarriable;
       },
       deleteItem: deleteItem,
+      /** The RUN_EVENT_REFUSED failure an item carries, or null. */
+      refusalFor: function (itemId) {
+        return refusedRuns[itemId] || null;
+      },
       eventFor: eventFor,
       flush: flush,
       flushNow: flushNow,

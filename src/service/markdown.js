@@ -17,6 +17,7 @@ var marked = markedPackage.marked;
 var links = require("./markdown_links.js");
 var tabIcon = require("./tab_icon.js");
 var stateDir = require("./state_dir.js");
+var markers = require("../shared/markers.js");
 
 var MARKDOWN_EXTENSIONS = links.MARKDOWN_EXTENSIONS;
 var MERMAID_ASSET = ".lahe-mermaid-11.16.1.js";
@@ -146,6 +147,14 @@ function keyedMount(prefix, resolved) {
 function titleFrom(source, body) {
   var heading = String(body).match(/^#\s+(.+)$/m);
   return heading ? heading[1].replace(/[*_`]/g, "").trim() : path.basename(source);
+}
+
+// A title taken from the file name is not in the file, so it is page chrome:
+// the layer never anchors to it and the handled check never reads it as a
+// block (docs/features/20260928.01_free_writing, "Empty page and lahe write").
+function fileTitleAttr(source, body, title) {
+  if (title !== path.basename(source)) return "";
+  return " " + markers.FILE_TITLE_ATTR + "=\"" + markers.FILE_TITLE_VALUE + "\"";
 }
 
 function artifactPath(dir, sessionId, source) {
@@ -291,7 +300,9 @@ function render(source, options) {
   var lede = parseChunk(parser, page.lede, lexed.links);
   var blocks = [
     "<div class=\"hero\">",
-    "<h1>" + (page.heading ? parser.parseInline(page.heading.tokens) : escapeHtml(title)) + "</h1>",
+    page.heading
+      ? "<h1>" + parser.parseInline(page.heading.tokens) + "</h1>"
+      : "<h1" + fileTitleAttr(resolved, parts.body, title) + ">" + escapeHtml(title) + "</h1>",
     lede,
     "</div>"
   ];

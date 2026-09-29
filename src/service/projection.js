@@ -266,6 +266,9 @@ function foldEvents(state, events, options) {
     if (type === EVENT.REVIEW_CREATED) {
       if (!state.times.started_at) state.times.started_at = ts;
       if (typeof event.agent_session_id === "string") state.times.agent_session_id = event.agent_session_id;
+      // A `lahe write` notes review (free writing). It rides the created
+      // event, so every fold of this log agrees on it.
+      if (event.notes === true) state.times.notes = true;
       return;
     }
 
@@ -386,6 +389,7 @@ function projectFold(reviewId, state, options) {
     started_at: state.times.started_at,
     ended_at: state.times.ended_at,
     agent_session_id: state.times.agent_session_id,
+    notes: state.times.notes === true,
     generated_at: opts.generated_at || undefined,
     items: actionableItems(itemsOf(state)),
     source_hint: sourceHintOf(state),

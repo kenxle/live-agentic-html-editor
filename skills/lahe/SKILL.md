@@ -398,6 +398,7 @@ legacy command; use `lahe review` for normal work.)
 | What your human is looking at | Open it with | Where your edits go | What `handled` needs |
 | --- | --- | --- | --- |
 | A Markdown file, on its own | `lahe review file.md` | the `.md` itself | nothing: the page re-renders and reloads itself. Check the rendered page |
+| Notes they want to write on a blank page | `lahe write notes/2026-09-28.md` | the `.md` itself: place their words as written | the words in the file; the page re-renders itself |
 | HTML that IS the source: a hand-written one-pager, a mockup | `lahe review page.html` | the page file the item names | in the file and on their screen |
 | A FOLDER of HTML pages that is the document | `lahe review folder` | the page file the item names | in that file and on their screen |
 | One page in a folder they did NOT ask you to touch | `lahe review page.html --only` | that one HTML file | in the file and on their screen |
@@ -429,6 +430,23 @@ the reviewer to refresh or clear a cache.
 
 A local link that renders as plain text is one the tool cannot serve. It is not a
 bug to fix in the source.
+
+### Notes on a blank page
+
+When your human wants to write, not review, run `lahe write <file.md>`. It
+creates the file when it does not exist, or opens it as it is, and prints what
+`lahe review` prints. Hand over the `open` URL the same way. The page opens ready
+to type.
+
+- The folder must already exist. It refuses a name that is not `.md` or
+  `.markdown`, a directory, and any symlink, and it never overwrites a file.
+- The page gets its own server that serves that one page and nothing else in its
+  folder, so notes in a home or Documents folder are safe to open.
+  `--session <id>` adds it to your session and still starts its own server.
+- The review carries `notes: true` in `review.json`. Each sitting arrives as one
+  item with its words in `new_blocks`: place them in the file as written, at the
+  top of the file for `start_of_container`. Organize the notes only when your
+  human asks.
 
 ### A folder of pages
 

@@ -48,6 +48,7 @@ var USAGE = [
   "usage: lahe reply --review <id> --item <item-id> --rev <n> --status handled|not_handled|question",
   "                  [--text <words>] [--reason <words>] [--file <path>]... [--needs-see]",
   "                  [--agent <name>] [--session <agent-session-id>] [--state-dir <path>]",
+  "                  [--proofread [--suggest <block> <from> <to>]...]",
   "",
   "Appends one correctly encoded reply line to your reply file in the review folder.",
   "Newlines and quotes in --text and --reason are encoded for you; never hand-write the JSON.",
@@ -68,6 +69,11 @@ var USAGE = [
   "  --session <id>   your agent session, stamped as activity so the reviewer's rail",
   "                   says an agent is working without waiting for the next fold",
   "  --state-dir <p>  where the helper keeps its data, the same flag every command takes",
+  "  --proofread      this question is a proofread of an item carrying proofread: true.",
+  "                   Place the words as written first. Question replies only",
+  "  --suggest <block> <from> <to>",
+  "                   one fix: in new_blocks[<block>], change <from> to <to>. Repeat it.",
+  "                   <from> must be in that block's words exactly once. Needs --proofread",
   "",
   "Exit codes: " + EXIT.OK + " written, " + EXIT.HELPER_UNREACHABLE + " the state directory is unusable, " + EXIT.UNKNOWN_REVIEW + " unknown review, " + EXIT.BAD_USAGE + " bad usage."
 ].join("\n");
@@ -84,6 +90,8 @@ function parseArgs(argv) {
     reason: null,
     files: [],
     needsSee: false,
+    proofread: false,
+    suggestions: [],
     agent: null,
     session: null,
     stateDir: null,
@@ -98,6 +106,20 @@ function parseArgs(argv) {
       out.help = true;
     } else if (arg === "--needs-see") {
       out.needsSee = true;
+    } else if (arg === "--proofread") {
+      out.proofread = true;
+    } else if (arg === "--suggest") {
+      if (list[i + 1] === undefined || list[i + 2] === undefined || list[i + 3] === undefined) {
+        out.error = "--suggest needs three values: <block> <from> <to>";
+        break;
+      }
+      var blockArg = String(list[i + 1]).trim();
+      if (!/^\d+$/.test(blockArg)) {
+        out.error = "--suggest <block> must be a whole number from 0 (the index in new_blocks), got " + JSON.stringify(list[i + 1]);
+        break;
+      }
+      out.suggestions.push({ block: Number(blockArg), from: list[i + 2], to: list[i + 3] });
+      i += 3;
     } else if (VALUE_FLAGS.indexOf(arg) !== -1) {
       if (list[i + 1] === undefined) {
         out.error = arg + " needs a value";
@@ -138,6 +160,14 @@ function parseArgs(argv) {
     out.error = "--session must be a safe id: " + String(protocol.SAFE_ID);
   } else if (out.files.some(function (path) { return typeof path !== "string" || !path.trim(); })) {
     out.error = "--file needs a path";
+  }
+
+  if (!out.error && out.suggestions.length && !out.proofread) {
+    out.error = "--suggest needs --proofread: suggestions belong on a proofreading question";
+  } else if (!out.error && out.proofread && out.status !== protocol.REPLY_STATUS.QUESTION) {
+    out.error = "--proofread and --suggest belong on a --status question reply only";
+  } else if (!out.error && out.suggestions.some(function (sg) { return !sg.from; })) {
+    out.error = "--suggest <from> must not be empty";
   }
 
   if (!out.error) out.rev = Number(out.rev);
@@ -234,7 +264,53 @@ function replyObject(args) {
   if (args.text) reply[FIELD.TEXT] = args.text;
   if (args.files.length) reply[FIELD.FILES] = args.files.slice();
   if (args.needsSee) reply[FIELD.NEEDS_SEE] = true;
+  if (args.proofread) {
+    reply[FIELD.PROOFREAD] = true;
+    reply[FIELD.SUGGESTIONS] = args.suggestions.map(function (sg) {
+      return { block: sg.block, from: sg.from, to: sg.to };
+    });
+  }
   return reply;
+}
+
+function suggestionName(sg) {
+  return "--suggest " + sg.block + " " + JSON.stringify(sg.from) + " " + JSON.stringify(sg.to);
+}
+
+/**
+ * Null, or why a proofreading reply cannot be written. The item is read from
+ * review.json at the rev the line names, and each suggestion is tried alone
+ * and then all together through record.applySuggestions, the function the
+ * reviewer's "Use the fixes" runs, so a line this writes is one it can apply.
+ */
+function proofreadProblem(dir, args) {
+  var projected;
+  try {
+    projected = JSON.parse(fs.readFileSync(stateDirModule.reviewJsonPath(dir, args.review), "utf8"));
+  } catch (error) {
+    return "--proofread reads the item from review.json, which could not be read: " + error.message;
+  }
+  var found = null;
+  (Array.isArray(projected.pages) ? projected.pages : []).forEach(function (page) {
+    (Array.isArray(page && page.items) ? page.items : []).forEach(function (it) {
+      if (it && it[record.FIELD.ID] === args.item) found = it;
+    });
+  });
+  if (!found) return "no item " + JSON.stringify(args.item) + " in review.json for review " + args.review;
+  if (found[record.FIELD.REV] !== args.rev) {
+    return "item " + args.item + " is at rev " + found[record.FIELD.REV] + " in review.json and you passed " + args.rev +
+      "; suggestions name that revision's words, so re-read the item and answer its current rev";
+  }
+  if (!record.isRunRecord(found)) return "item " + args.item + " has no new_blocks, so there is nothing to proofread";
+  var named = [];
+  args.suggestions.forEach(function (sg) {
+    var one = record.applySuggestions(found, [sg]);
+    if (one && one.code) named.push(suggestionName(sg) + ": " + one.code + ", " + one.reason.replace(/^suggestion 0/, "this suggestion"));
+  });
+  if (named.length) return "refused " + named.join("; ");
+  var all = record.applySuggestions(found, args.suggestions);
+  if (all && all.code) return "the suggestions do not apply together: " + all.code + ", " + all.reason;
+  return null;
 }
 
 /** replies.jsonl alone, replies-<agent>.jsonl when an agent is named. */
@@ -323,6 +399,13 @@ async function run(argv, options) {
       err("lahe reply: no review " + JSON.stringify(args.review) + " in " + stateDirModule.reviewsRoot(dir) + "\n");
       return EXIT.UNKNOWN_REVIEW;
     }
+    if (args.proofread) {
+      var problem = proofreadProblem(dir, args);
+      if (problem) {
+        err("lahe reply: " + problem + "\n");
+        return EXIT.BAD_USAGE;
+      }
+    }
     target = stateDirModule.replyFilePath(dir, args.review, replyFilename(args.agent));
   } catch (error) {
     err("lahe reply: " + error.message + "\n");
@@ -362,6 +445,7 @@ module.exports = {
   resolveStdin: resolveStdin,
   validateBody: validateBody,
   replyObject: replyObject,
+  proofreadProblem: proofreadProblem,
   replyFilename: replyFilename,
   revWarning: revWarning,
   run: run

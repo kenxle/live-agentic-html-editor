@@ -81,8 +81,16 @@ function rig(t, options) {
       const sent = JSON.parse(config.body);
       posts.push({ at: Date.now(), events: sent.events, keepalive: !!config.keepalive });
       if (gate) await gate.promise;
-      seq += sent.events.length;
-      return ok({ accepted: sent.events.map((e) => e.event_id), seq: seq });
+      const refuse = opts.refuse || (() => null);
+      const rejected = [];
+      const accepted = [];
+      sent.events.forEach((e) => {
+        const code = refuse(e);
+        if (code) rejected.push({ event_id: e.event_id, code: code, reason: code + ": refused by the test" });
+        else accepted.push(e.event_id);
+      });
+      seq += accepted.length;
+      return ok({ accepted: accepted, rejected: rejected, seq: seq });
     }
     if (path.indexOf("/replies") !== -1) return ok({ events: [], seq: seq });
     if (path.indexOf("/window/release") !== -1) return ok({ released: true });
@@ -95,7 +103,8 @@ function rig(t, options) {
     store: store,
     document: doc,
     window: win,
-    fetch: fetchImpl
+    fetch: fetchImpl,
+    onItemRefused: opts.onItemRefused
   });
   t.after(() => {
     sync.stop();
@@ -374,4 +383,142 @@ test("closing a comment box tells the host the reviewer left it", () => {
   assert.equal(left, 0, "typing is not leaving");
   box.close();
   assert.equal(left, 1);
+});
+
+// ---------------------------------------------------------------------------
+// Free writing (plan Task 2.8): the run draft floor, and refused run events
+// ---------------------------------------------------------------------------
+
+const RUN_FLOOR = protocol.FLUSH.RUN_DRAFT_FLOOR_MS;
+const { createFixtures } = require("../../src/shared/record_fixtures.js");
+
+function runDraft() {
+  const item = createFixtures({ seed: "cadence" }).runFixtures()[0].item;
+  return Object.assign({}, item, { state: record.STATE.DRAFT, reply: null });
+}
+
+function typeRun(r, item, words) {
+  const blocks = item.new_blocks.slice();
+  blocks[blocks.length - 1] = { tag: "p", html: words };
+  const built = record.buildRunAfter(item.anchor_after_html, blocks);
+  const next = Object.assign({}, item, { new_blocks: blocks, after_html: built.after_html, after: built.after });
+  r.store.write(REVIEW, next);
+  r.sync.recordItem(next);
+  return next;
+}
+
+test("a run record's drafts wait for the run floor, not the 10-second one", async (t) => {
+  assert.ok(RUN_FLOOR > FLOOR);
+  const r = rig(t);
+  await started(r);
+  let item = typeRun(r, runDraft(), "a");
+  await r.advance(1000);
+  assert.equal(r.draftPosts().length, 1, "the first draft goes promptly");
+  const firstAt = r.draftPosts()[0].at;
+  let text = "a";
+  for (let i = 0; i < (RUN_FLOOR + 2000) / 200; i += 1) {
+    text += "b";
+    item = typeRun(r, item, text);
+    await r.advance(200);
+  }
+  const drafts = r.draftPosts();
+  assert.ok(drafts.length >= 2);
+  assert.ok(drafts[1].at - firstAt >= RUN_FLOOR, "the second run draft waited the run floor");
+  assert.ok(drafts[1].at - firstAt <= RUN_FLOOR + 1000);
+});
+
+test("a record without new_blocks keeps the 10-second floor", async (t) => {
+  const r = rig(t);
+  await started(r);
+  let item = r.type(draftItem("a"), "a");
+  await r.advance(1000);
+  const firstAt = r.draftPosts()[0].at;
+  let text = "a";
+  for (let i = 0; i < 70; i += 1) {
+    text += "b";
+    item = r.type(item, text);
+    await r.advance(200);
+  }
+  assert.ok(r.draftPosts()[1].at - firstAt <= FLOOR + 1000, "a comment is not held to the run floor");
+});
+
+test("committing a run is never held by the run floor", async (t) => {
+  const r = rig(t);
+  await started(r);
+  let item = typeRun(r, runDraft(), "a");
+  await r.advance(1000);
+  item = typeRun(r, item, "ab");
+  await r.advance(200);
+  const before = r.posts.length;
+  const ready = Object.assign({}, item, { state: record.STATE.READY });
+  r.store.write(REVIEW, ready);
+  r.sync.recordItem(ready, { immediate: "ready" });
+  await r.advance(1, 1);
+  await r.drain();
+  assert.equal(r.posts.length, before + 1, "the commit went at once");
+});
+
+test("reopening a ready run and typing posts the withdrawal at once; later drafts wait the run floor", async (t) => {
+  const r = rig(t);
+  await started(r);
+  let item = typeRun(r, runDraft(), "first");
+  await r.advance(1000);
+  const ready = Object.assign({}, item, { state: record.STATE.READY });
+  r.store.write(REVIEW, ready);
+  r.sync.recordItem(ready, { immediate: "ready" });
+  await r.advance(200);
+  const before = r.posts.length;
+
+  // The first changing keystroke takes it off ready.
+  const blocks = ready.new_blocks.slice();
+  blocks[blocks.length - 1] = { tag: "p", html: "firstx" };
+  const built = record.buildRunAfter(ready.anchor_after_html, blocks);
+  item = Object.assign({}, ready, { state: record.STATE.DRAFT, new_blocks: blocks, after_html: built.after_html, after: built.after });
+  r.store.write(REVIEW, item);
+  r.sync.recordItem(item, { withdrawnFromReady: true });
+  await r.advance(protocol.FLUSH.HELPER_DEBOUNCE_MS + 100);
+  assert.equal(r.posts.length, before + 1, "the withdrawal went on the debounce");
+  const withdrawnAt = r.posts[before].at;
+
+  let text = "firstx";
+  for (let i = 0; i < (RUN_FLOOR + 2000) / 200; i += 1) {
+    text += "y";
+    item = typeRun(r, item, text);
+    await r.advance(200);
+  }
+  const after = r.posts.slice(before + 1).filter((p) => p.events.some((e) => e.draft === true));
+  assert.ok(after.length >= 1);
+  assert.ok(after[0].at - withdrawnAt >= RUN_FLOOR, "the next draft waited the run floor");
+});
+
+test("a refused run event is posted once, never again on reconnect, and the item carries RUN_EVENT_REFUSED", async (t) => {
+  const raised = [];
+  const r = rig(t, {
+    refuse: (e) => (e.record && Array.isArray(e.record.new_blocks) ? "RUN_OVER_CEILING" : null),
+    onItemRefused: (id, failure) => raised.push({ id, failure })
+  });
+  await started(r);
+  const item = runDraft();
+  const ready = Object.assign({}, item, { state: record.STATE.READY });
+  r.store.write(REVIEW, ready);
+  r.sync.recordItem(ready, { immediate: "ready" });
+  await r.advance(200);
+  const carrying = () => r.posts.filter((p) => p.events.some((e) => e.record && e.record.id === ready.id)).length;
+  assert.equal(carrying(), 1, "posted once");
+
+  // Later flushes and a reconnect's re-post of the outbox do not carry it.
+  await r.sync.flush({ force: true });
+  r.win.fire("online");
+  r.doc.fire("visibilitychange");
+  await r.advance(FLOOR + RUN_FLOOR, 500);
+  assert.equal(carrying(), 1, "never posted again");
+  assert.equal(r.store.pendingEvents(REVIEW).length, 0, "nothing of it is left in the outbox");
+
+  const failure = r.sync.refusalFor(ready.id);
+  assert.ok(failure, "the item carries the refusal");
+  assert.equal(failure.code, "RUN_EVENT_REFUSED");
+  assert.equal(failure.detail.helper_code, "RUN_OVER_CEILING");
+  assert.equal(raised.length, 1);
+  assert.equal(raised[0].id, ready.id);
+  assert.equal(raised[0].failure.code, "RUN_EVENT_REFUSED");
 });

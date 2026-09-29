@@ -33,6 +33,7 @@ var fs = require("node:fs");
 
 var protocol = require("../shared/protocol.js");
 var stateDir = require("./state_dir.js");
+var record = require("../shared/record.js");
 
 var EVENT_ID = protocol.IDEMPOTENCE_KEY;
 var SEQ = protocol.EVENT_FIELD.SEQ;
@@ -488,6 +489,17 @@ function createEventLog(options) {
       if (state.seen[eventId]) {
         duplicates.push(eventId);
         return;
+      }
+      // A free-writing record is checked here, before anything is stored.
+      // The helper refuses rather than cleans, so a forgery shows up: the
+      // refusal names its code, and the event_id stays unused.
+      var carried = event.record;
+      if (carried && typeof carried === "object") {
+        var refusal = record.validateRun(carried);
+        if (refusal) {
+          rejected.push({ event_id: eventId, code: refusal.code, reason: refusal.code + ": " + refusal.reason });
+          return;
+        }
       }
 
       var stored = Object.assign({}, event);
