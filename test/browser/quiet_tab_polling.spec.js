@@ -9,8 +9,9 @@
 //      the beat that tells the helper it went quiet and one "still open" beat
 //      five minutes later. Bringing it back polls at once, and a reply the
 //      agent wrote while nobody was looking is on the page from that one poll.
-//   2. A visible page without focus (beside the terminal) polls every 15
-//      seconds, so a reply shows up within 15 seconds without focusing it.
+//   2. A visible page without focus (beside the terminal) polls every 30
+//      seconds, so a reply shows up within 30 seconds without focusing it.
+//      Its only other request is the beat that tells the helper it is quiet.
 //   3. Closing a tab while it is unfocused still hands the review back.
 //
 // TIME. Ten minutes cannot be waited out, and the harness forbids sleeps, so
@@ -223,7 +224,7 @@ test.describe("a tab nobody is looking at stops asking", () => {
     expect(requests.filter((r) => r.kind === "poll").length, "from one poll, with no clock moved").toBe(1);
   });
 
-  test("a visible page without focus shows a reply within 15 seconds", async ({ page }) => {
+  test("a visible page without focus shows a reply within 30 seconds", async ({ page }) => {
     await bootHolding(page, url);
     await page.evaluate(() => window.__lahe.handle.tab().focusNote());
     await page.keyboard.type("say why the fourth week holds");
@@ -239,8 +240,14 @@ test.describe("a tab nobody is looking at stops asking", () => {
 
     await freezeClock(page);
     const requests = recordHelperRequests(page, service.url);
+    // The beat already due. Its timer was armed before the clock was
+    // installed, so it fires on real time, at most ten seconds out.
+    const beatAnswered = page.waitForResponse((response) => {
+      const u = response.url();
+      return u.indexOf("/window") !== -1 && u.indexOf("/release") === -1;
+    });
     // The reviewer clicks into the terminal beside the page. Still visible.
-    // Losing focus moves the next poll to the 15 second pace.
+    // Losing focus moves the next poll to the 30 second pace.
     await leave(page);
     const before = requests.filter((r) => r.kind === "poll").length;
 
@@ -249,13 +256,21 @@ test.describe("a tab nobody is looking at stops asking", () => {
       JSON.stringify({ item: item.id, rev: item.rev, status: "handled", agent: "claude" }) + "\n"
     );
     // The helper folds reply files on a poll, so the next one brings it.
-    await runToNextPoll(page, 15000);
+    await runToNextPoll(page, 30000);
     await expect
       .poll(() => page.evaluate((id) => window.__lahe.itemById(id).reply !== null, item.id), {
         message: "the reply is on the page, with the window never focused"
       })
       .toBe(true);
-    expect(requests.filter((r) => r.kind === "poll").length - before, "from one poll 15 seconds later").toBe(1);
+    expect(requests.filter((r) => r.kind === "poll").length - before, "from one poll 30 seconds later").toBe(1);
+    await beatAnswered;
+    const beats = requests.filter((r) => r.kind === "claim");
+    expect(beats, "one beat, the one already due").toHaveLength(1);
+    expect(beats[0].body.quiet, "and it tells the helper this page is quiet").toBe(true);
+    expect(
+      requests.every((r) => r.kind === "poll" || r.kind === "claim"),
+      "nothing else was asked: " + requests.map((r) => r.kind).join(",")
+    ).toBe(true);
   });
 
   test("closing a tab while it is unfocused still hands the review back", async ({ page, browser }) => {

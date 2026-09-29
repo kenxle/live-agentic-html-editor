@@ -65,8 +65,9 @@ var TOKEN_BYTES = 32;
 var HEARTBEAT_SECONDS = 10;
 var STALE_AFTER_MS = 30 * 1000;
 
-// A QUIET HOLDER (spec 20260928.01). A page whose window has lost focus stops
-// polling and only says "still open" every QUIET_HEARTBEAT_SECONDS, and it
+// A QUIET HOLDER (spec 20260928.01). A page whose window has lost focus
+// (visible beside something, or hidden) polls slowly or not at all and only
+// says "still open" every QUIET_HEARTBEAT_SECONDS, and it
 // says `quiet: true` on the claim before it slows down. The helper gives such
 // a holder the longer window: the five minute beat, plus a minute because
 // Chrome wakes a long-hidden tab's timers only once a minute, plus the same 30
@@ -1140,8 +1141,8 @@ function createReviews(options) {
   /**
    * Every review a browser window has open right now, by the helper's own rule:
    * a holder that is not stale by its OWN claim window. That is 30 seconds for
-   * a page someone can see and 390 for a hidden tab on the slow beat, so a
-   * hidden tab counts for as long as the helper still holds its review. A
+   * a focused page and 390 for an unfocused one on the slow beat, so an
+   * unfocused tab counts for as long as the helper still holds its review. A
    * window that said goodbye has no holder and does not count.
    *
    * The idle sweep (idle_servers.js) asks this. Not liveHolders: that answers
