@@ -284,6 +284,36 @@ test.describe("free writing: block types", () => {
     expect(verdict).toEqual({ blocks: 400, refusal: null });
   });
 
+  // The count ceiling is tested above. The byte ceiling is the other half of
+  // validateRun's check (NEW_BLOCKS_MAX_BYTES), and the layer's own estimate
+  // must stop the input before the helper would refuse the record. Three-byte
+  // characters make the bytes reach the ceiling long before the count does.
+  test("multibyte text past the byte ceiling: the bar refuses before validateRun would, and the record is never over it", async ({ page }) => {
+    await fw.openFixture(page, server, "blog.html");
+    await fw.openEdit(page, "#p1");
+    await page.keyboard.press("Enter");
+    const wanted = 100;
+    const block = "\u65e5".repeat(700); // 2100 bytes in UTF-8
+    await fw.pasteText(page, Array.from({ length: wanted }, () => block).join("\n\n"));
+    const made = (await sessionTags(page)).length - 1;
+    expect(made, "some blocks were refused").toBeLessThan(wanted);
+    expect(made, "and some were taken").toBeGreaterThan(10);
+    const b = await bar(page);
+    expect(b.hint).toBe("This edit is full. Press Esc to send it. Once the agent places it, you can keep writing.");
+    await fw.commitByEsc(page);
+    const verdict = await page.evaluate(() => {
+      const item = window.__lahe.items().find((it) => it.kind === "edit");
+      return {
+        blocks: item.new_blocks.length,
+        bytes: item.new_blocks.reduce((n, x) => n + new TextEncoder().encode(x.html).length, 0),
+        max: window.LAHE.record.NEW_BLOCKS_MAX_BYTES,
+        refusal: window.LAHE.record.validateRun(item)
+      };
+    });
+    expect(verdict.refusal, "validateRun accepts what the bar let through").toBeNull();
+    expect(verdict.bytes).toBeLessThanOrEqual(verdict.max);
+  });
+
   for (const file of ["blog.html", "md_render.html"]) {
     test("new blocks match the page's own computed spacing and type on " + file, async ({ page }) => {
       await fw.openFixture(page, server, file);
@@ -334,9 +364,137 @@ test.describe("free writing: block types", () => {
         } else {
           expect(got.made, c.tag + " after " + c.anchor).toEqual(got.own);
         }
+        // After commit the host's contenteditable and the frame come off; the
+        // block must still look like the page's own.
+        await page.evaluate(() => {
+          document.querySelectorAll("[data-fw-probe]").forEach((n) => n.removeAttribute("data-fw-probe"));
+          window.__lahe.handle.editing.sessionElements()[1].setAttribute("data-fw-probe", "1");
+        });
         await page.keyboard.press("Escape");
         await pollPage(page, () => window.__lahe.isEditing() === false, undefined, { message: "commit" });
+        const kept = await page.evaluate((mark) => {
+          const el = document.querySelector("[" + mark + "]");
+          if (!el) return null;
+          const cs = getComputedStyle(el);
+          return { mt: cs.marginTop, mb: cs.marginBottom, fs: cs.fontSize, lh: cs.lineHeight, fw: cs.fontWeight };
+        }, "data-fw-probe");
+        expect(kept, c.tag + " after commit is still on the page").toBeTruthy();
+        if (md && c.tag === "h2") {
+          expect({ fs: kept.fs, lh: kept.lh, fw: kept.fw }).toEqual({ fs: got.own.fs, lh: got.own.lh, fw: got.own.fw });
+        } else {
+          expect(kept, c.tag + " after commit matches the page's own").toEqual(got.own);
+        }
       }
     });
+  }
+
+  // Brief R4 names new, split and retyped blocks, "while writing and after
+  // commit", and the gap to the next block is part of what a reader sees (the
+  // spike's 53px to 31px regression was a gap). The twin is a real block the
+  // test puts where the new one will be, so the page's own selectors answer:
+  // "after" is a paragraph that follows the anchor (the split tail), "replace"
+  // is the anchor made a heading (a retype). It is measured, then removed.
+  const FILES = [
+    { file: "blog.html", anchor: "#p2", offset: 12 },
+    { file: "md_render.html", anchor: "section:first-of-type > p:first-of-type", offset: 10 }
+  ];
+  const RETYPES = [
+    { tag: "h2", shortcut: "# " },
+    { tag: "h3", shortcut: "## " },
+    { tag: "h4", shortcut: "### " }
+  ];
+
+  /** Computed type and spacing of an element, and the gap from its bottom to the next block's top. */
+  function measure(page, marker) {
+    return page.evaluate((mark) => {
+      const el = document.querySelector("[" + mark + "]");
+      if (!el) return null;
+      const cs = getComputedStyle(el);
+      const next = el.nextElementSibling;
+      const gap = next ? Math.round((next.getBoundingClientRect().top - el.getBoundingClientRect().bottom) * 100) / 100 : null;
+      return { tag: el.tagName.toLowerCase(), mt: cs.marginTop, mb: cs.marginBottom, fs: cs.fontSize, lh: cs.lineHeight, fw: cs.fontWeight, gap: gap };
+    }, marker);
+  }
+
+  /** Put the page's own twin in, measure it, take it out again. */
+  async function measureTwin(page, anchorSel, mode, tag) {
+    await page.evaluate(
+      ([sel, how, t]) => {
+        const a = document.querySelector(sel);
+        if (how === "after") {
+          const twin = a.cloneNode(true);
+          twin.removeAttribute("id");
+          twin.setAttribute("data-fw-twin", "1");
+          a.after(twin);
+        } else {
+          const twin = document.createElement(t);
+          twin.textContent = a.textContent;
+          twin.setAttribute("data-fw-twin", "1");
+          a.after(twin);
+          a.setAttribute("data-fw-hidden", "1");
+          a.style.display = "none";
+        }
+      },
+      [anchorSel, mode, tag]
+    );
+    const got = await measure(page, "data-fw-twin");
+    await page.evaluate(() => {
+      document.querySelector("[data-fw-twin]").remove();
+      const h = document.querySelector("[data-fw-hidden]");
+      if (h) {
+        h.style.display = "";
+        h.removeAttribute("data-fw-hidden");
+      }
+    });
+    return got;
+  }
+
+  function sameStyle(got, twin, note) {
+    // A heading's margins come from rules that name the sheet-head it lacks
+    // until the rebuild (see the loop above), so type is compared for those.
+    const keys = ["tag", "fs", "lh", "fw"].concat(note.marginsToo ? ["mt", "mb", "gap"] : []);
+    const pick = (o) => keys.reduce((acc, k) => Object.assign(acc, { [k]: o[k] }), {});
+    expect(pick(got), note.label).toEqual(pick(twin));
+  }
+
+  for (const f of FILES) {
+    test("a split tail matches the page's own next block, while writing and after commit, on " + f.file, async ({ page }) => {
+      await fw.openFixture(page, server, f.file);
+      const twin = await measureTwin(page, f.anchor, "after");
+      await fw.openEdit(page, f.anchor, f.offset);
+      await page.keyboard.press("Enter");
+      await page.evaluate(() => window.__lahe.handle.editing.sessionElements()[1].setAttribute("data-fw-probe", "1"));
+      const during = await measure(page, "data-fw-probe");
+      sameStyle(during, twin, { label: "the split tail while writing", marginsToo: true });
+      await page.keyboard.press("Escape");
+      await pollPage(page, () => window.__lahe.isEditing() === false, undefined, { message: "commit" });
+      const after = await measure(page, "data-fw-probe");
+      expect(after, "the tail is still on the page after commit").toBeTruthy();
+      sameStyle(after, twin, { label: "the split tail after commit", marginsToo: true });
+    });
+
+    for (const r of RETYPES) {
+      test("a paragraph retyped to " + r.tag + " matches the page's own " + r.tag + ", while writing and after commit, on " + f.file, async ({
+        page
+      }) => {
+        await fw.openFixture(page, server, f.file);
+        const twin = await measureTwin(page, f.anchor, "replace", r.tag);
+        await fw.openEdit(page, f.anchor, 0);
+        await page.keyboard.type(r.shortcut, { delay: 2 });
+        expect(await sessionTags(page), "the shortcut retyped the block").toContain(r.tag);
+        await page.evaluate((t) => {
+          const els = window.__lahe.handle.editing.sessionElements();
+          els.find((e) => e.tagName.toLowerCase() === t).setAttribute("data-fw-probe", "1");
+        }, r.tag);
+        const during = await measure(page, "data-fw-probe");
+        // The gap is the twin's own: the next block is the same element.
+        sameStyle(during, twin, { label: r.tag + " retype while writing", marginsToo: true });
+        await page.keyboard.press("Escape");
+        await pollPage(page, () => window.__lahe.isEditing() === false, undefined, { message: "commit" });
+        const after = await measure(page, "data-fw-probe");
+        expect(after, "the retyped block is still on the page after commit").toBeTruthy();
+        sameStyle(after, twin, { label: r.tag + " retype after commit", marginsToo: true });
+      });
+    }
   }
 });
