@@ -599,6 +599,9 @@ async function serve(options) {
   function sweepReopened(atMs) {
     return catalogActionsInstance.sweepReopened(typeof atMs === "number" ? atMs : now());
   }
+  function sweepLibrarySessions(atMs) {
+    return catalogActionsInstance.sweepLibrarySessions(typeof atMs === "number" ? atMs : now());
+  }
   // `opts.schedule` stands in for setInterval in a test, which then runs the
   // tick itself instead of waiting POLL_MS.
   var schedule = typeof opts.schedule === "function" ? opts.schedule : setInterval;
@@ -606,6 +609,7 @@ async function serve(options) {
     if (sweeping) return Promise.resolve();
     sweeping = true;
     return sweepReopened()
+      .then(function () { return sweepLibrarySessions(); })
       .catch(function (err) {
         log.helperLog("Library sweep failed: " + err.message);
       })
@@ -638,6 +642,7 @@ async function serve(options) {
     // The sweep, run by hand: the helper runs it every POLL_MS on its own, and
     // tests drive it with the time they choose.
     sweepReopened: sweepReopened,
+    sweepLibrarySessions: sweepLibrarySessions,
     server: server,
     close: function () {
       if (!opts.schedule) clearInterval(sweepTimer);

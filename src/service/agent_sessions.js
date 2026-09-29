@@ -357,7 +357,11 @@ function createStore(options) {
     // before the feed existed gets one.
     feed.ensure(id);
     if (existing) return existing;
-    return write(applyName({ schema: SCHEMA, id: id, created_at: now(), closed_at: null, handoff_rev: 0 }, spec.name));
+    var fresh = { schema: SCHEMA, id: id, created_at: now(), closed_at: null, handoff_rev: 0 };
+    // Who made it, when that matters to a sweep: bare `lahe library` marks its
+    // sessions so the helper can close them when idle.
+    if (spec.created_by === protocol.CATALOG.CREATED_BY_LIBRARY) fresh.created_by = spec.created_by;
+    return write(applyName(fresh, spec.name));
   }
 
   /**

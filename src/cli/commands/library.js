@@ -197,7 +197,11 @@ async function runLibrary(args, opts, out, err) {
     }
   } else {
     try {
-      sessionId = store.create(args.name === null ? {} : { name: args.name }).id;
+      // Marked as the Library's own, so the helper closes it once it is idle
+      // and owns no reviews (CATALOG.LIBRARY_SESSION_IDLE_MS).
+      var spec = { created_by: protocol.CATALOG.CREATED_BY_LIBRARY };
+      if (args.name !== null) spec.name = args.name;
+      sessionId = store.create(spec).id;
       created = true;
       // The block printed below names the wake feed's path, so it has to exist
       // before an agent copies that line.

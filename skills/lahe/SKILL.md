@@ -566,7 +566,9 @@ open <the URL it printed>
   Bare, it starts a new agent session for you (one with no reviews),
   attaches it, and prints its session id and its monitor, drain and close
   commands, as `lahe review` does. `--name` names it. Every bare run starts
-  another session, so do not run it bare twice.
+  another session, so do not run it bare twice. A session a bare run started
+  closes itself once it owns no reviews and you have run no monitor and no
+  lahe command for 30 minutes.
 - Then arm your monitor on your session as usual. A request expires if your
   monitor is not running, if another agent attaches, or after 30 minutes with
   no answer.

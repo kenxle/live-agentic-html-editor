@@ -678,6 +678,12 @@
     LIBRARY_SEEN_MS: 2 * 60 * 1000,
     // A quiet Library-reopened session closes.
     REOPENED_AUTOCLOSE_MS: 30 * 60 * 1000,
+    // A session bare `lahe library` started closes once it owns no reviews and
+    // its agent has been quiet this long (no live monitor, no lahe command).
+    LIBRARY_SESSION_IDLE_MS: 30 * 60 * 1000,
+    // session.json's `created_by` on a session bare `lahe library` started.
+    // Written by the CLI when it creates the session; the helper only reads it.
+    CREATED_BY_LIBRARY: "library",
     // Pending requests across the whole Library.
     QUEUE_CAP: 5,
     // The largest review log the reader will re-project.

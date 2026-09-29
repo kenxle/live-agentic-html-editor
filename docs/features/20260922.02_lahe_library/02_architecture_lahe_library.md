@@ -295,6 +295,7 @@ flowchart TD
   The helper runs Open's restart step one at a time per server record (fix round CR1), so two Opens of a closed session start one server and both answer on its port.
 
   After a close, it clears the session's `reopened` entry.
+- **Library-session sweep (adversary fixes, Ken's decision):** bare `lahe library` still starts a fresh session every run. The CLI marks it `created_by: "library"` in session.json; the helper only reads that field. On the same timer, `sweepLibrarySessions(now)` closes (with `closeQuiet`) a marked session once it owns no reviews and its agent has been quiet for `LIBRARY_SESSION_IDLE_MS`: no live monitor heartbeat, and no lahe command since that long ago, counted from the later of the session's start and its last command. It leaves alone a session that owns a review and one taken over since (its `handoff_rev` moved past 0).
 - **After a helper restart,** the old token is refused. On `PROTO_UNAUTHORIZED` the page stops polling and shows "LAHE restarted, reload this page." Reloading fetches a fresh token.
 
 ## Alternatives Considered
