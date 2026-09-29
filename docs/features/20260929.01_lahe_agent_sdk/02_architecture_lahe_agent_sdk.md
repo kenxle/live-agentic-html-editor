@@ -1,6 +1,6 @@
 # Architecture: LAHE starts your agent when a comment is ready
 
-Status: DRAFT, written without the owner. Reviewed by the architect and security reviewers; both tables are at the end. Every guess made on the owner's behalf is listed under Assumptions.
+Status: DRAFT, written without the owner. Reviewed by the architect and security reviewers; both tables are at the end. The plan's code-lead and testing reviews then changed several sections here; each change names its finding, and the plan's review tables list them. Every guess made on the owner's behalf is listed under Assumptions.
 
 ## Summary
 
@@ -9,7 +9,7 @@ Status: DRAFT, written without the owner. Reviewed by the architect and security
 - **The run works on copies, in an empty folder.** It gets no shell. It can read and edit only a copy of the review's one source file. LAHE checks the edit and writes it back itself, then writes the run's replies to a reply file for the helper to fold, as a chat agent's would be.
 - **LAHE checks the result, not the model.** It drains again after each run, counts attempts per item, and gives up on an item after three. Two runs at most run at once across the machine, and there is a daily run limit per session and per machine.
 - **The terminal allows it; the page switches it.** A person or chat agent allows auto-answer for a session once, from the terminal. After that, the rail's Auto-answer switch (wireframe direction B) turns it on and off. Turning it on stops the chat agent's monitor; a chat agent taking the session back stops auto-answer.
-- **First version:** the owner's dogfood, Markdown reviews only, macOS and Linux only.
+- **First version:** the owner's dogfood, one Markdown review per auto-answer session, macOS and Linux only.
 - **One caveat:** Anthropic's Consumer Terms bar scripted access except by API key or where Anthropic "explicitly permit[s] it". Whether a script starting `claude -p` on a subscription counts is not settled (OQ1). Running the dogfood on the owner's subscription is his call.
 
 Nothing here needs an install, an API key of LAHE's own, or a dependency.
@@ -81,20 +81,23 @@ New:
 - **`src/service/headless_prompt.js`** (Node only, not in the bundle): builds the system prompt from the tagged contract, the reply schema from `REPLY_FIELD` and `REPLY_REQUIRED`, and the run's stdin from the drain.
 - **`src/service/run_slots.js`**: the machine-wide limits, both runs at once and runs per day.
 - **`src/service/host_claude_code.js`**: the one host adapter. It builds the `claude` command and environment, reads the result, and names the failure.
-- **`src/service/locks.js`**: `withServerLock` and `takeOverStaleLock` moved out of `static_servers.js` into one shared module. Static servers, the supervisor lock and the slots all use it.
+- **`src/service/locks.js`**: two kinds of lock in one shared module (code-lead CR1).
+  - **A short lock**: `withServerLock` and `takeOverStaleLock`, moved out of `static_servers.js` unchanged. They hold a lock only while a callback runs, and treat it as stale after 20 seconds. Static servers and the daily counts use it.
+  - **A lock held for a process's life**: new. It is stale only when its pid and that pid's start time no longer match a live process, however old the file is. The supervisor lock and the run slots use it. `ps` runs with `LC_ALL=C TZ=UTC`, so the start time reads the same from the helper and the CLI.
 - **`src/service/file_stamp.js`**: a stamp of a user file (content hash, size, mtime). It is not `source_stamp.js`, which stamps LAHE's own code.
 
 Changed:
 
-- **`src/shared/review_format.js`**: each `CONTRACT` line gets an audience tag (`all`, `chat`, `headless`). A few transport lines are reworded to fit both kinds of agent. Nothing else moves in.
-- **`src/shared/protocol.js`**: the auto-answer states, reasons, rail words, limits, event kinds and the route, spelled once, next to `AGENT_LIVENESS`.
+- **`src/shared/review_format.js`**: a new `CONTRACT_LINES` list of `{ tag, text }`, with each tag `all`, `chat` or `headless`. `CONTRACT` stays a list of strings, and becomes the `all` and `chat` lines in order, so today's readers of it keep working (code-lead CR7). A few transport lines are reworded to fit both kinds of agent.
+- **`src/shared/protocol.js`**: the auto-answer states, reasons, rail words, limits, event kinds and the route, spelled once, next to `AGENT_LIVENESS`. `SERVICE_CONTRACT` goes from 13 to 14, so an older running helper is restarted instead of refusing the new event and route (code-lead CR8).
 - **`src/service/agent_sessions.js`**: reads `agent.json`, counts a live supervisor at the current rev as listening, and adds the `auto_answer` object to the liveness answer.
-- **`src/service/routes.js`**: `POST /lahe/v1/auto-answer`.
-- **`src/service/projection.js`**: folds the two new event kinds into the latest request per session.
-- **`src/service/index.js`** (the helper): starts `lahe agent supervise` when an "on" request lands for an allowed session.
-- **`src/cli/commands/monitor.js`**: exits with 6 when a live supervisor holds the current rev.
-- **`src/cli/commands/review.js`**: on re-entry into such a session, it says auto-answer owns it and prints no monitor instructions.
-- **`src/layer/overlay.js`**: the Auto-answer switch, run count, failure chip, status words, and the overdue banner standing down.
+- **`src/service/routes.js`**: `POST /lahe/v1/auto-answer`. The generic events route refuses `auto_answer.requested`, so the page cannot post that event around the new route (code-lead CR5).
+- **`src/service/projection.js`**: folds `auto_answer.requested` into the latest request for the review.
+- **`src/service/replies.js`** (the fold): while auto-answer holds a review, a reply from any other agent is rejected with reason `auto_answer_owns` (code-lead CR14). The rest of the fold is unchanged.
+- **`src/service/index.js`** (the helper): starts `lahe agent supervise` when an "on" request lands for an allowed session, and restarts it when "on" still stands but no live supervisor holds the lock.
+- **`src/cli/commands/monitor.js`**: exits with 6 when a live supervisor holds the current rev. Its exit-6 words say auto-answer took the session, and that `lahe session takeover` takes it back.
+- **`src/cli/commands/review.js`**: on re-entry into such a session, it says auto-answer owns it and prints no monitor instructions. It refuses to add a second review to a session auto-answer holds.
+- **`src/layer/overlay.js`, `sync.js`, `index.js` and `tab_done.js`**: the Auto-answer switch and its post, the run count, failure chip and status words, the rail repainting when `auto_answer` changes, and everything overdue standing down (plan review EM1).
 - **Docs and copies:**
   - `src/shared/manifest.js`
   - `skills/lahe/SKILL.md`
@@ -105,38 +108,46 @@ Changed:
 
   The skill and the contract travel together.
 
-Not touched: the reply fold, the lifecycle table, and the handled check's rules.
+Not touched: the lifecycle table and the handled check's rules.
 
 ## Data / State Changes
+
+### One review per auto-answer session
+
+A session can own several reviews, but auto-answer holds exactly one (code-lead CR2). `lahe agent allow` names the review, and refuses when the session owns more than one. While the allowance holds, `lahe review` and `lahe add` refuse to add a second review to that session. So every auto-answer file below belongs to that one review: the "on" and "off" events go in its `events.jsonl`, the reply file sits in its folder, and the supervisor drains only its items.
 
 ### One writer per file
 
 | File | Only writer | Holds |
 | --- | --- | --- |
-| `session.json` | the CLI, under a lock | what the user allowed |
-| `events.jsonl` | the helper | on and off requests from the page, as events |
+| `auto_answer.json` (session folder) | `lahe agent allow` and `disallow`, under the short lock | what the user allowed |
+| `events.jsonl` (the review's) | the helper | on and off requests, as events |
 | `agent.json` | `lahe agent` | what it is doing now |
 | `runs.jsonl`, `attempts.json`, `runs/` | `lahe agent` | run history |
 | `replies-claude-auto.jsonl` | `lahe agent` (append only) | the run's checked replies, for the helper to fold |
 | `run-slots/` | whichever `lahe agent` takes a slot (exclusive create) | the machine-wide limits |
 
-### `session.json` gains an `auto_answer` block (written only by `lahe agent allow` and `disallow`)
+### `auto_answer.json`, the allowance (written only by `lahe agent allow` and `disallow`)
+
+It is its own file, not a block in `session.json`, because `session.json` has several whole-file writers (create, takeover, close, name) that take no lock. A race there could write an old `handoff_rev` back over a takeover (code-lead CR4).
 
 ```json
-"auto_answer": {
+{
   "allowed_at": "2026-09-29T15:02:11.204Z",
   "handoff_rev": 4,
+  "review": "r657344998844",
   "host": "claude-code",
   "claude_path": "/Users/ken/.local/bin/claude",
   "model": "sonnet",
   "source_file": "/Users/ken/docs/plan.md",
   "note": "Short note from whoever allowed it. At most 2,000 characters.",
-  "allow_api_key": false,
+  "env": { "HOME": "...", "PATH": "...", "USER": "...", "LANG": "...", "TMPDIR": "...", "CLAUDE_CONFIG_DIR": "..." },
   "runs_per_day": 40
 }
 ```
 
-- **Allowed means** that `auto_answer.handoff_rev` equals the session's `handoff_rev`. A takeover bumps the session's rev and never touches this block, so a takeover ends the allowance too. Auto-answer can then only come back through `lahe agent allow`, from a terminal.
+- **Allowed means** that this file's `handoff_rev` equals the session's `handoff_rev`. A takeover bumps the session's rev and never touches this file, so a takeover ends the allowance too. Auto-answer can then only come back through `lahe agent allow`, from a terminal.
+- **`env`** is the environment allowlist, recorded from the shell that ran `allow`. The helper starts the supervisor, so its own environment is whatever shell started the helper. The run's environment is built only from this record, which is what makes the preflight honest (code-lead CR6). No API key is ever recorded or passed (see the run's command).
 - **`source_file`** is the review's CLI-recorded `source_path`, resolved to a real path when the mode is allowed. It is never the page-posted `source_hint`, and never a linked file.
 - **Turn-on is refused** when the file is an instruction file (security RF3):
   - `CLAUDE.md`, `AGENTS.md`, `GEMINI.md`, `SKILL.md`
@@ -146,10 +157,11 @@ Not touched: the reply fold, the lifecycle table, and the handled check's rules.
 
 ### On and off are events, and the page may only ask
 
-`POST /lahe/v1/auto-answer` takes one field, `want`, which is `on` or `off`, and ignores everything else. It passes the D11 checks, and the helper appends `auto_answer.requested` with `{ "want": "on" | "off" }` to that review's `events.jsonl`. The page never writes owner state. `lahe agent on` and `off` append the same event through the helper, with `from: "terminal"`.
+`POST /lahe/v1/auto-answer` takes one field, `want`, which is `on` or `off`. It refuses any other value and ignores every other field. It passes the D11 checks, and the helper appends `auto_answer.requested` with `{ "want": "on" | "off", "from": "page" | "terminal" }` to that review's `events.jsonl`. The helper sets `from` itself, from the `x-lahe-client` header (`layer` or `cli`); the body never sets it. `lahe agent on` and `off` post to the same route with the review token from the state folder, the way `lahe add` reaches the helper. The page never writes owner state, and the generic events route refuses this event type.
 
 - **"On" for a session that is not allowed** does nothing but record the request. The rail then shows the switch as not available, with the terminal command to allow it (see the rail section).
-- **"On" for an allowed session** makes the helper start `lahe agent supervise` (detached, its own process group) unless a live one holds the lock.
+- **"On" for an allowed session** makes the helper start `lahe agent supervise --session <id> --state-dir <dir>` (detached, its own process group) unless a live one holds the lock. It runs the same Node binary as the helper, with the clone's `bin/lahe.js`.
+- **"On" still stands, but no supervisor is alive** (it was killed, or it exited to restart on new code): the helper starts a new one the next time the page asks for liveness (code-lead CR10). Until one holds the lock, the rail shows "starting". More than three starts in ten minutes stops the mode with reason `failing`.
 - **"Off"** is read by the supervisor on its next look.
 
 ### `agent.json`, the supervisor's own state
@@ -162,8 +174,9 @@ Not touched: the reply fold, the lifecycle table, and the handled check's rules.
 ```
 
 - **`started`** is the process start time as `ps -o lstart= -p <pid>` prints it. A pid only counts as the same process when both the pid and that start time match. That is how a reused pid is told apart from the original, since this process has no port to answer a health check.
-- **`state`** is one of `idle`, `gathering`, `queued`, `running`, `applying`, `paused` or `stopped`.
-- **`reason`** is one of `turned_off`, `stopped_from_page`, `taken_over`, `closed`, `limit_session`, `limit_machine`, `usage_limit`, `signed_out`, `not_installed`, `failing`, `stale_code`, or `null`.
+- **`state`** is one of `starting`, `idle`, `gathering`, `queued`, `running`, `applying`, `paused` or `stopped`.
+- **`reason`** is one of `turned_off`, `stopped_from_page`, `taken_over`, `closed`, `limit_session`, `limit_machine`, `usage_limit`, `signed_out`, `not_installed`, `source_missing`, `failing`, `restarting`, or `null`. `restarting` replaces the first draft's `stale_code`.
+- **`tokens_today`** adds up each run's reported input and output tokens. Cache reads and writes are left out.
 
 ### Run records
 
@@ -180,7 +193,7 @@ Not touched: the reply fold, the lifecycle table, and the handled check's rules.
   - `outcome` is `finished`, `failed`, `stopped`, `timed_out`, `refused` (the edit failed a check) or `conflict` (the real file changed during the run).
   - `failure` is `null` or one of `signed_out`, `usage_limit`, `not_installed`, `crashed`, `bad_output`.
 - **`attempts.json`** counts attempts per item, both per revision and across all revisions: `{ "c_7fa2": { "2": 1, "all": 3 } }`.
-- **`runs/<run_id>/`** is the stage folder (`work/`, which holds the one copy), `result.json`, and a trimmed `log.jsonl`. The log keeps tool names, paths, sizes, usage and the replies, and drops every tool result (security RF10). The prompt file is removed when the run ends. The last 20 run folders are kept.
+- **`runs/<run_id>/`** is the stage folder (`work/`, which holds the one copy), `result.json`, and a trimmed `log.jsonl`. The log keeps tool names, paths, sizes, usage and the replies, and drops every tool result (security RF10). The prompt file sits outside `work/` and is removed when the run ends, however it ends. The last 20 run folders are kept. Each applied run also writes its diff to `runs/<run_id>/diff.patch`, so `lahe agent status --diffs` shows the edits of the kept runs, and hashes only for older ones (code-lead CR15).
 
 ### Machine-wide slots
 
@@ -202,7 +215,7 @@ Built from `REPLY_FIELD` and `REPLY_REQUIRED` in `protocol.js`, so the names can
 ```
 
 - **The run never names files.** `lahe agent` fills `files` from its own before and after stamps. The file goes on each `handled` reply of a run that changed it.
-- **`text` and `reason` are capped at 500 characters** in the schema, and checked again (security RF8).
+- **`text` and `reason` are capped at 500 characters** in the schema, and checked again (security RF8). A reply over the cap is dropped and logged, not cut short. Its item then has no reply, which counts as an attempt.
 - **A reply for an item or revision not in the batch is dropped** and logged.
 
 ### The liveness answer gains `auto_answer`
@@ -244,7 +257,7 @@ sequenceDiagram
   M->>M: next look: live supervisor at this rev, exit 6
 ```
 
-- **Preflight** runs `claude --version` and `claude auth status` at the recorded absolute path, with the same environment the runs will get. It refuses when `claude` is missing or signed out, or when the source file is not allowed. It reports whether the login is a subscription or an API key.
+- **Preflight** runs `claude --version` and `claude auth status` at the recorded absolute path, with the environment it then records in `auto_answer.json`. It refuses when `claude` is missing or signed out, when the source file is not allowed, or when the session owns more than one review. It reports whether the login is a subscription or billed by the token.
 - **The terminal warning** (R6) is printed every time. It says:
   - it edits only this one file and runs no commands
   - anyone who can comment on this review, or run script in its pages, can make it edit that file, and the file may later be read by agents that do have a shell
@@ -292,18 +305,19 @@ sequenceDiagram
 - Every ready item the drain lists when the run starts goes in, up to 25 items and 100 KB of input in all.
 - An item whose reviewer text (note plus change) is over 8,000 characters is not sent. It gets a `not_handled` reply: "Too long for auto-answer; a chat agent can take it." (Security RF7. D12 forbids cutting reviewer text, so the item is refused whole.)
 
-**The stdin payload** is the drain lines with one substitution. Each item's `source_hint` is replaced by the stage path of the copy, and no other path appears (security RF4). There is no instruction text in it, per item or per wake (R14).
+**The stdin payload** is the drain's item lines, cut to a fixed list of fields (code-lead CR16). Each item keeps what the reviewer wrote (`note`, `change`), its identity (`review`, `id`, `rev`, `kind`), its thread, and the page text under `page`. The page's `path`, `origin` and `linked_file` are dropped, and so is the drain's summary line. Each item's `source_hint` is replaced by the stage path of the copy (security RF4). There is no instruction text in it, per item or per wake (R14). The supervisor drains in its own process, through `status.js` with `suppressActivityTouch` set, as `lahe monitor` does, so its looks never make the rail say an agent is working (code-lead CR9).
 
 **Items that arrive mid-run** wait for the next run (R11). If the reviewer rewords an item mid-run, the run's reply names the old rev, and the helper refuses it at fold.
 
 **Checks before anything reaches the real file:**
 
 - The run must have ended `finished`, with output that matches the schema.
-- The real file's stamp must still match the one taken at copy-in. If it does not, the outcome is `conflict`: nothing is written or replied, and the items go into the next run with a fresh copy. A conflict is not an attempt.
+- The real file's stamp must still match the one taken at copy-in. If it does not, the outcome is `conflict`: nothing is written or replied, and the items go into the next run with a fresh copy. A conflict is not an attempt. It does count toward the three-failed-runs stop, and the next copy-in waits until the file has been unchanged for 15 seconds, so an owner typing in the file does not start run after run (plan review TR10).
+- If the copy changed, every item in the batch must have a reply. A finished run that edited the file but left an item without a reply is `refused`: nothing is written and no reply is sent, so no change reaches the file without a reply beside it (code-lead CR11). What the run cannot be checked on is a reply of `question` for an item whose passage it also edited.
 - The diff must add no raw HTML tag, no `on…=` attribute and no `javascript:` URL (security RF2). If it does, the outcome is `refused`: nothing is written, and each `handled` reply in the run becomes `not_handled` with the reason "Auto-answer does not add raw HTML or scripts; a chat agent can do this."
 - The write-back re-checks the target at write time. It must be a regular file, not a symlink, at the same real path, owned by the user. The new text goes to a temp file beside it, which is then renamed over the target (security RF9).
 
-**Replies go through the helper, as any agent's do** (architect RF1). `lahe agent` appends them with `reply.js`'s encoder. It then waits for `reply.folded`, `reply.rejected` or a handled-check hold for each one before it counts attempts or drains. A reply that has been written but not yet folded counts as answered, so the next drain cannot hand the item out twice.
+**Replies go through the helper, as any agent's do** (architect RF1). `lahe agent` appends them with `reply.js`'s encoder. It then reads the review's `events.jsonl` for a `reply.folded` or `reply.rejected` matching each reply's item and rev, before it counts attempts or drains (code-lead CR12). A handled-check hold is a `reply.folded` that marks the change as not on the page. A reply that has been written but not yet folded counts as answered, so the next drain cannot hand the item out twice. If no fold result arrives in 30 seconds (the helper is down), nothing is counted, the timeout is logged, and the loop goes on.
 
 **If `lahe agent` dies between writing the file back and writing the replies,** `runs.jsonl` shows `applied` with `replies_written: 0`. `result.json` is still in the run folder, so the next supervisor finishes the replies before it does anything else.
 
@@ -313,7 +327,7 @@ sequenceDiagram
 stateDiagram-v2
   [*] --> idle : started, lock taken
   idle --> gathering : a ready item appears
-  gathering --> queued : 15s with no new item
+  gathering --> queued : 15s with no new item, or 60s after the first
   queued --> running : slot free, under both daily limits
   queued --> paused : a daily limit is reached
   running --> applying : run exits
@@ -322,7 +336,7 @@ stateDiagram-v2
   applying --> paused : usage_limit reported by the host
   applying --> stopped : signed_out, not_installed, 3 failed runs in a row
   paused --> queued : retry_at passes, or the next day under the limits
-  idle --> stopped : off, stopped from page, takeover, close, stale code
+  idle --> stopped : off, stopped from page, takeover, close, restarting
   running --> stopped : off, stopped from page, takeover, close
   stopped --> [*]
 ```
@@ -332,7 +346,8 @@ stateDiagram-v2
   - the rev still matches
   - the latest request is not "off"
   - its own code is not older than the clone (architect RF8)
-- **Stale code** restarts it cleanly: it stops, and starts a fresh supervisor that holds the same allowance. This matters because the owner dogfoods LAHE on LAHE while editing LAHE.
+- **Stale code** restarts it cleanly: it releases its lock and exits with reason `restarting`, and the helper starts a fresh supervisor on the same allowance, as for any dead supervisor. This matters because the owner dogfoods LAHE on LAHE while editing LAHE.
+- **Gathering has a ceiling.** A run starts after 15 seconds with no new item, or 60 seconds after the first item, whichever comes first. A steady trickle of comments still gets answered (plan review TR10).
 
 ### Stopping, and handing back
 
@@ -355,7 +370,7 @@ flowchart TD
 - **Attempts count only on `finished` runs** (architect RF6). An attempt is one of:
   - a finished run was given the item and no reply for it folded
   - its `handled` was held by the check
-- **The attempt limits:** three attempts at one revision, or six across all revisions of one item (security RF7). Then `lahe agent` writes a `not_handled` reply: "Auto-answer tried three times and could not answer this." That takes the item off the drain. Rewording it on the card makes it ready again, until the six-attempt limit.
+- **The attempt limits:** three attempts at one revision, or six across all revisions of one item (security RF7). Then `lahe agent` writes a `not_handled` reply: "Auto-answer could not answer this and stopped trying. Reply here yourself, or hand the review to a chat agent." That takes the item off the drain. Rewording it on the card makes it ready again, until the six-attempt limit.
 - **Three failed runs in a row** (crashed, bad output, timed out) stop the mode with reason `failing`. No item's attempts are used up by a failing tool.
 - **A usage limit reported by the host** pauses the mode for a fixed 30 minutes, and the rail shows the time of the next try.
 - **Signed out or `claude` missing** stops the mode. A person has to fix these.
@@ -408,7 +423,7 @@ Flags, not code:
 - **Environment: an allowlist, not a blocklist** (security RF6).
   - `HOME`, `PATH`, `USER`, `LANG` and `TMPDIR` pass through.
   - So does `CLAUDE_CONFIG_DIR`, if it was set at allow time.
-  - `ANTHROPIC_API_KEY` passes only with `--allow-api-key`.
+  - `ANTHROPIC_API_KEY` never passes, and is never recorded. A user whose Claude login itself is billed by the token (preflight says so) is warned that each run costs money.
   - Nothing else passes, whatever shell started it.
 - **`claude` is run by the absolute path recorded at allow time.**
 - **Wall-clock limit:** 10 minutes per run. The slowest spike run took 33 seconds.
@@ -430,11 +445,12 @@ The wireframe doc is `02_wireframe_lahe_agent_sdk.md`, with screens in `wirefram
 | idle | Stored · auto-answer on | no | no |
 | gathering | Stored · auto-answer starting on 2 | no | no |
 | running | Stored · auto-answer working on 2, 35s | no | no |
-| queued | Stored · auto-answer waiting its turn, 1m | no | no |
+| starting | Stored · auto-answer starting | no | no |
+| queued | Stored · auto-answer waiting for another review's run, 1m | no | no |
 | paused, a daily limit | Stored · paused: today's runs are used | yes | resets at midnight |
 | paused, usage limit | Stored · paused: Claude's usage limit, next try 15:40 | yes | yes |
 | one failed run, retrying | Stored · auto-answer working on 2 | no | "Last run failed. Trying again." |
-| stopped: signed out, not installed, failing | Stored · auto-answer stopped: Claude is signed out | yes | remedy sentence |
+| stopped: signed out, not installed, file gone, failing | Stored · auto-answer stopped | yes | reason and remedy, said once |
 | off (turned off, from page or terminal) | today's words, unchanged | as today | no |
 
 **The overdue banner stands down while auto-answer is on.** Today, after a wait with nothing listening, a banner says "Check your agent's window first" and offers the handoff button. With auto-answer on there is no window to check, and LAHE knows what is running. So:
@@ -504,7 +520,7 @@ Only cases the flows above do not already settle.
 | Two supervisors start at once (page "on" and `lahe agent on`) | The supervisor lock is an exclusive create. The second exits before it does anything. |
 | The helper is down when the page asks for "on" | The request cannot land. The rail says the helper is not answering, as today. |
 | A supervisor is running and `lahe agent allow` runs again | It updates the block under the lock at the same rev. The running supervisor picks up model, note and limit changes before its next run and does not restart. |
-| The source file is renamed or deleted | The next copy-in fails. The mode stops with `failing` and the chip says the file is gone. |
+| The source file is renamed or deleted | The next copy-in fails. The mode stops with reason `source_missing`, and the chip says the file is gone. |
 | The owner edits the file by hand mid-run | `conflict`: nothing is written, and the items go into the next run on a fresh copy. |
 | A branch switch swaps the file for a symlink mid-run | The write-back check refuses it. The outcome is `conflict`. |
 | The Markdown already contained raw HTML, and the run keeps it | Only additions are refused. HTML that was already there is left alone. |
@@ -544,7 +560,7 @@ The design does not try to tell a real reviewer from a script. It limits what ac
 
 - instruction files and dot paths are refused
 - the terminal warning names the risk
-- `lahe agent status --diffs` shows every edit a run applied, from `runs.jsonl`'s stamps and the stage copies it kept
+- `lahe agent status --diffs` shows the edits of the last 20 runs, and the before and after hashes of older ones
 
 A diff on the card itself is deferred to after dogfood (it would change what the wireframe settled on for cards). The owner commits these docs by hand, which is a second look.
 
@@ -555,7 +571,7 @@ The run's input is the drain, with page text under `page`, and the D12 line is i
 ### Credentials and environment
 
 - The child environment is an allowlist.
-- An API key passes only when the user asks, and the warning prices it.
+- No API key passes to a run. A login billed by the token is named in the warning.
 - Preflight runs with the run's exact environment and binary, so what it reports is what the run uses.
 - The review token is never in the prompt, the stdin or the environment.
 

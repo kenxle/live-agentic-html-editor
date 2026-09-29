@@ -104,6 +104,15 @@ These came out of drawing the screens. None needs the owner today; each has a de
 - **Turning it on from a chat or terminal** shows the same "on" state on the rail. The warning then shows where the command was run. Not drawn.
 - **Stopping asks only when a run is working.** Idle: one click, off. Working: one confirm, because it cuts the run off.
 
+## What the plan changed
+
+The plan pins the rail's words, and where they differ from these screens, the plan wins. The main changes:
+
+- The warning panel has no note field; only the terminal sets the note. Its list of what it may do matches the architecture: one file, no commands.
+- The limit buttons are cut, since the page may only ask for on or off. A stopped chip offers one "Try again".
+- Screen b7 (a change with no reply after a stop) and the per-card run notes are not built. A stopped run never changes the file, and the rail has no per-item run state.
+- "Waiting its turn" becomes "waiting for another review's run".
+
 ## Style rules held
 
 - Failures and the usage limit use a full amber border on all four sides, never a stripe down one edge.

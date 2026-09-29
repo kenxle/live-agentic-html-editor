@@ -245,7 +245,7 @@ Document it as "LAHE Agent (optional)". Users who want the dedicated agent insta
 | **Auth/billing** | API key required; pay-per-token (no subscription access) | [Get API key](https://platform.claude.com/docs/en/get-api-key), [Pricing](https://claude.com/pricing) |
 | **Models** | Sonnet 5 default; Opus 5.5 for complex work; Haiku for cost | [Models overview](https://platform.claude.com/docs/en/about-claude/models/overview) |
 | **Sharing context** | Can resume a session by ID; forking and separate sessions also work | [Sessions](https://code.claude.com/docs/en/agent-sdk/sessions) |
-| **Claude Code alternatives** | Headless `-p`, Routines, Monitor, subagents—each has trade-offs; SDK is simpler for standalone LAHE agent | [Headless](https://code.claude.com/docs/en/headless), [Overview](https://code.claude.com/docs/en/overview) |
+| **Claude Code alternatives** | Headless `-p`, Routines, Monitor, subagents; each has trade-offs; SDK is simpler for standalone LAHE agent | [Headless](https://code.claude.com/docs/en/headless), [Overview](https://code.claude.com/docs/en/overview) |
 | **Zero-dependency constraint** | SDK requires install; cannot be vendored easily. Recommend optional add-on or separate tool | [Quickstart](https://code.claude.com/docs/en/agent-sdk/quickstart) |
 
 ---
