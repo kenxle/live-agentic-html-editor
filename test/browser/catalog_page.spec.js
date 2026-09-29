@@ -134,7 +134,15 @@ test.describe("the Library page", () => {
     helper = await startService({ entry: SERVICE_ENTRY, args: EPHEMERAL_PORT });
   });
 
-  test.afterEach(async () => {
+  // The page goes before the helper. An action ends with a follow-up list poll,
+  // and a test's last assertion can pass before that poll comes back. Stopping
+  // the helper first (Playwright closes the page only after afterEach) ended
+  // the helper's connections under that poll's route.fetch, which threw
+  // "socket hang up" into whichever test was finishing. unrouteAll waits for a
+  // handler already running, and closing the page stops any new poll.
+  test.afterEach(async ({ page }) => {
+    await page.unrouteAll({ behavior: "wait" });
+    await page.close();
     if (helper) await helper.stop();
   });
 

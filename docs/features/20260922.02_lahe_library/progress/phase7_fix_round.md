@@ -275,3 +275,33 @@ The contract, the skill and `docs/CLI.md` tell the agent to say so in its answer
 - The rendered `02_architecture_lahe_library.html` was not regenerated.
 
 To delete at cleanup: nothing new.
+
+## Star flake
+
+**Cause: the test harness, not the product.** Each test's `afterEach` stopped the helper while the test's page was still open. Playwright closes the page only after `afterEach` runs.
+
+- An action on the Library (star, Open, Pick this up) ends with a follow-up list poll. A test's last assertion can pass before that poll comes back.
+- That poll goes through the spec's `route.fetch` to the real helper.
+- `helper.stop()` sends SIGTERM. The helper's shutdown ends every open connection (`closeAllConnections`), including the one under that `route.fetch`.
+- The route handler then threw `socket hang up` or `read ECONNRESET`, and Playwright blamed it on whichever test was finishing.
+
+It was never only the star test. Any test that ends right after an action could hit it: in the runs below, the failures landed on six different tests. It showed only on whole-file runs because timing under several parallel workers stretches the poll past the last assertion.
+
+How it was found: a temporary log in the route handler (since removed) printed the helper's port, whether it was alive, and its exit. Every failure was on the current test's own helper (no port reuse, no stale socket from an earlier test), and every time that helper had exited with SIGTERM, which only `afterEach` sends.
+
+**Fix** in `test/browser/catalog_page.spec.js`, the `afterEach` only. It now:
+
+1. runs `page.unrouteAll({ behavior: "wait" })`, which waits for a route handler already running and removes the routes
+2. closes the page, so no new poll starts
+3. stops the helper
+
+No retry, no sleep, no skip. `src/` is unchanged, so `gate:unit` was not run.
+
+**Commands and results** (Chromium, whole file, `--repeat-each 4`, so 84 test runs each: 80 run, 4 skipped screenshot runs)
+
+- Before the fix, the same command nine times (the last eight with the temporary log): failures per run of 80 were 5, 5, 0, 3, 1, 0, 2, 2, 1. Seven of nine runs failed. The first run took 23.3 s.
+- After the fix, the same command five times: 80 passed, 4 skipped, every time. Wall times 19.7 s, 16.8 s, 17.2 s, 21.1 s, 21.6 s.
+
+`dist/` was rebuilt locally for the runs and not committed.
+
+To delete at cleanup: nothing new.
