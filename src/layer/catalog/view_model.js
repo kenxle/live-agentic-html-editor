@@ -122,6 +122,7 @@
     BADGE_LISTENING: "agent listening: {agent}",
     BADGE_WORKING: "agent working: {agent}",
     FOLDED: "{n} reviews of this folder, shown as one",
+    FOLDED_DOCUMENT: "{n} reviews of this document, shown as one",
     PAGES: "{n} pages",
     SHOW_MORE: "Show {n} more",
     SHOW_FEWER: "Show fewer",
@@ -668,7 +669,7 @@
     }
 
     var folded = review.folded_from && review.folded_from.length
-      ? fill(TEXT.FOLDED, { n: review.folded_from.length + 1 })
+      ? fill(review.fold_kind === "document" ? TEXT.FOLDED_DOCUMENT : TEXT.FOLDED, { n: review.folded_from.length + 1 })
       : null;
 
     // A folder review's pages: a count, and the list only once opened.
@@ -677,12 +678,16 @@
     var pagesToggle = allPages.length ? { text: fill(TEXT.PAGES, { n: allPages.length }), expanded: pagesOpen } : null;
     var pages = pagesOpen
       ? allPages.map(function (p) {
-          return { title: p.title || p.path, path: p.path };
+          // The page's real path from the helper, never a .lahe-source mount.
+          var where = typeof p.source === "string" && p.source ? p.source : String(p.path || "").replace(/^\/\.lahe-source\/[^/]+\//, "");
+          return { title: p.title || where, path: where };
         })
       : [];
 
     var original = review.display_name || review.title || review.id;
     var renamed = customName(review, state);
+    // A rename that equals the original says nothing new.
+    if (renamed === original) renamed = null;
     return {
       id: review.id,
       session: session.id,

@@ -651,7 +651,7 @@ function createReader(options) {
     (projected.pages || []).forEach(function (page) {
       if (!title && typeof page.title === "string" && page.title.trim()) title = page.title.trim();
       if (!pages.some(function (p) { return p.path === page.path; })) {
-        pages.push({ title: typeof page.title === "string" && page.title ? page.title : null, path: page.path });
+        pages.push({ title: typeof page.title === "string" && page.title ? page.title : null, path: page.path, count: (page.items || []).length });
       }
       (page.items || []).forEach(function (item) {
         total += 1;
@@ -668,6 +668,83 @@ function createReader(options) {
       generated_at: typeof projected.generated_at === "string" ? projected.generated_at : null,
       agent_session_id: typeof review.agent_session_id === "string" ? review.agent_session_id : null
     };
+  }
+
+  /**
+   * The review's own page leads, and names it (phase 8). A review of a
+   * Markdown file that links to a wireframe was named after whichever page
+   * got a comment first, so the name and the path line described two
+   * different pages. The own page is the one whose file is the review's
+   * target; with none, the page with the most comments. With no page title at
+   * all, the title comes from the file: the built page's <title>, else the
+   * Markdown's first heading. A copy, never the cached summary.
+   */
+  function withOwnPageFirst(summary, servedPath, sourcePath) {
+    var pages = (summary.pages || []).slice();
+    var targetName = servedPath ? path.basename(servedPath) : null;
+    var ownIndex = -1;
+    pages.forEach(function (p, i) {
+      if (ownIndex !== -1 || !targetName || typeof p.path !== "string") return;
+      var name;
+      try {
+        name = decodeURIComponent(p.path.split("?")[0].split("/").pop() || "");
+      } catch (err) {
+        name = p.path.split("/").pop();
+      }
+      if (name === targetName) ownIndex = i;
+    });
+    if (ownIndex === -1 && pages.length > 1) {
+      var most = 0;
+      pages.forEach(function (p, i) {
+        if ((p.count || 0) > (pages[most].count || 0)) most = i;
+      });
+      ownIndex = most;
+    }
+    if (ownIndex > 0) pages.unshift(pages.splice(ownIndex, 1)[0]);
+    var title = pages.length && pages[0].title ? pages[0].title : summary.title;
+    if (!title) title = fileTitle(servedPath, sourcePath);
+    return Object.assign({}, summary, { pages: pages, title: title || null });
+  }
+
+  var titleCache = Object.create(null);
+
+  /** A page's own <title>, else a Markdown file's first "# " heading, or null. */
+  function fileTitle(servedPath, sourcePath) {
+    var candidates = [];
+    if (servedPath && /\.html?$/i.test(servedPath)) candidates.push({ file: servedPath, kind: "html" });
+    if (sourcePath && /\.(md|markdown)$/i.test(sourcePath)) candidates.push({ file: sourcePath, kind: "md" });
+    if (servedPath && /\.(md|markdown)$/i.test(servedPath)) candidates.push({ file: servedPath, kind: "md" });
+    for (var i = 0; i < candidates.length; i += 1) {
+      var c = candidates[i];
+      var stat = statOrNull(c.file);
+      if (!stat || !stat.isFile()) continue;
+      var key = c.file + "|" + stat.mtimeMs + "|" + stat.size;
+      if (!Object.prototype.hasOwnProperty.call(titleCache, key)) titleCache[key] = readTitle(c.file, c.kind, stat.size);
+      if (titleCache[key]) return titleCache[key];
+    }
+    return null;
+  }
+
+  function readTitle(file, kind, size) {
+    var text;
+    try {
+      var length = Math.min(size, TAIL_BYTES);
+      var buf = Buffer.alloc(length);
+      var fd = fs.openSync(file, "r");
+      try {
+        fs.readSync(fd, buf, 0, length, 0);
+      } finally {
+        fs.closeSync(fd);
+      }
+      text = buf.toString("utf8");
+    } catch (err) {
+      return null;
+    }
+    var m = kind === "html" ? /<title[^>]*>([\s\S]*?)<\/title>/i.exec(text) : /^#[ \t]+(.+?)[ \t#]*$/m.exec(text);
+    if (!m) return null;
+    var t = m[1].replace(/\s+/g, " ").trim();
+    if (kind === "html") t = t.replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, "\"").replace(/&#39;/g, "'");
+    return agentSessions.cleanName(t) ? t.slice(0, 200) : null;
   }
 
   function readReview(reviewId) {
@@ -720,6 +797,8 @@ function createReader(options) {
       countsAsOf = logIsNewer ? Math.min(generatedMs !== null ? generatedMs : rj.stat.mtimeMs, info.lastMs) : info.lastMs;
     }
     info.summary = summary || { title: null, pages: [], waiting: 0, total: 0, ended: false, agent_session_id: null };
+    info.metaServedPath = meta && typeof meta.target_path === "string" && meta.target_path ? meta.target_path : null;
+    info.summary = withOwnPageFirst(info.summary, info.metaServedPath, meta && typeof meta.source_path === "string" ? meta.source_path : null);
     info.countsAsOfMs = summary ? countsAsOf : null;
 
     var sessionId = meta
@@ -866,11 +945,40 @@ function createReader(options) {
       if (parts.length < 2) rows.push({ parts: parts });
       else rows.push({ parts: parts.slice().sort(newestFirst), folder: key });
     });
+    // SAME DOCUMENT, ONE ROW (phase 8). Two reviews of one document in one
+    // session (a double start, or a re-review) are one row, newest first. A
+    // legacy review with no path on record is keyed by its one page and title.
+    var byDoc = Object.create(null);
+    var merged = [];
     rows.forEach(function (row) {
+      var key = row.folder ? null : documentKey(row.parts[0]);
+      if (!key) {
+        merged.push(row);
+        return;
+      }
+      if (byDoc[key]) {
+        byDoc[key].parts = byDoc[key].parts.concat(row.parts);
+        byDoc[key].foldKind = "document";
+        return;
+      }
+      byDoc[key] = row;
+      merged.push(row);
+    });
+    merged.forEach(function (row) {
+      if (row.folder) row.foldKind = "folder";
       row.parts.sort(newestFirst);
       row.lead = row.parts[0];
     });
-    return rows;
+    return merged;
+  }
+
+  function documentKey(placed) {
+    var info = placed.info;
+    if (info.unreadable) return null;
+    if (info.docPath) return "doc:" + info.docPath;
+    var pages = info.summary && info.summary.pages ? info.summary.pages : [];
+    if (info.sessionId === LEGACY && pages.length === 1 && pages[0].title) return "page:" + pages[0].path + "|" + pages[0].title;
+    return null;
   }
 
   function scan(nowMs) {
@@ -917,14 +1025,11 @@ function createReader(options) {
         allRows.push(row);
       });
     });
-    var titleCount = Object.create(null);
     allRows.forEach(function (row) {
-      if (row.title) titleCount[row.title] = (titleCount[row.title] || 0) + 1;
-    });
-    allRows.forEach(function (row) {
-      if (row.title && titleCount[row.title] === 1) row.displayName = row.title;
-      else if (row.file) row.displayName = (row.folderName ? row.folderName + " / " : "") + row.file;
-      else row.displayName = row.title || row.folderName || row.lead.info.id;
+      // The title, else just the file name: the path line under it carries
+      // the folder (phase 8). Two rows may share a title; their path lines
+      // tell them apart.
+      row.displayName = row.title || row.file || row.folderName || row.lead.info.id;
       row.starred = row.parts.some(function (p) { return Object.prototype.hasOwnProperty.call(stars, p.info.id); });
       // The reviewer's own name: the lead's, else any part's.
       row.customName = null;
@@ -993,6 +1098,56 @@ function createReader(options) {
     return { session: a.session, name: nameOf(a.session), watching: a.watching === true, closed: a.closed === true };
   }
 
+  /**
+   * Where a page really lives, as the row's path line says it: from the
+   * project root. A page behind a .lahe-source mount maps through the
+   * server's mounts; the rendered page of a Markdown review is its .md. Never
+   * the internal mount path.
+   */
+  function pageSource(placed, pagePath) {
+    if (typeof pagePath !== "string" || !pagePath) return null;
+    var info = placed.info;
+    var clean;
+    try {
+      clean = decodeURIComponent(pagePath.split("?")[0]);
+    } catch (err) {
+      clean = pagePath.split("?")[0];
+    }
+    var name = clean.split("/").pop();
+    // The review's own page: its file by name, or the server root's "/" when
+    // the server is rooted at the page's folder.
+    var meta0 = placed.covering ? placed.covering.meta : null;
+    var ownByRoot = clean === "/" && meta0 && info.metaServedPath && path.dirname(info.metaServedPath) === meta0.root;
+    if (info.metaServedPath && (name === path.basename(info.metaServedPath) || ownByRoot)) {
+      return shownPath(info.docPath || info.metaServedPath);
+    }
+    var meta = placed.covering ? placed.covering.meta : null;
+    var mounts = meta && meta.mounts && typeof meta.mounts === "object" ? meta.mounts : {};
+    var prefixes = Object.keys(mounts);
+    for (var i = 0; i < prefixes.length; i += 1) {
+      var prefix = prefixes[i];
+      if (clean.indexOf(prefix) === 0 && typeof mounts[prefix] === "string") {
+        var rest = clean.slice(prefix.length);
+        if (rest.split("/").indexOf("..") !== -1) return null;
+        return shownPath(path.join(mounts[prefix], rest));
+      }
+    }
+    if (clean.indexOf("/.lahe-source/") === 0) {
+      // A mount this server no longer lists: say where inside it, not how.
+      return clean.split("/").slice(3).join("/") || null;
+    }
+    if (meta && typeof meta.root === "string" && clean.charAt(0) === "/" && clean.split("/").indexOf("..") === -1) {
+      return shownPath(path.join(meta.root, clean));
+    }
+    return null;
+  }
+
+  /** projectPath, but never an absolute path outside the home folder: null then. */
+  function shownPath(file) {
+    var shown = projectPath(file);
+    return shown && shown.charAt(0) === "/" ? null : shown;
+  }
+
   function rowOut(row, nowMs, servedUrl, lookup) {
     var lead = row.lead;
     var info = lead.info;
@@ -1009,7 +1164,9 @@ function createReader(options) {
       var partAsOf = p.info.countsAsOfMs;
       if (partAsOf !== null && partAsOf < p.info.lastMs && (stalest === null || partAsOf < stalest)) stalest = partAsOf;
       p.info.summary.pages.forEach(function (page) {
-        if (!pages.some(function (q) { return q.path === page.path; })) pages.push(page);
+        if (!pages.some(function (q) { return q.path === page.path; })) {
+          pages.push({ title: page.title, path: page.path, source: pageSource(p, page.path) });
+        }
       });
     });
     if (stalest !== null) asOf = stalest;
@@ -1023,6 +1180,9 @@ function createReader(options) {
       // The document's path from its project root (worktree root, ~/.claude),
       // else its ~ path: the row's second line.
       project_path: row.projectPath || null,
+      // "folder" for old per-page reviews folded by folder, "document" for
+      // several reviews of one document; null for a single review.
+      fold_kind: row.parts.length > 1 ? row.foldKind || "folder" : null,
       project: projectOf(row.folder || info.docPath),
       last: iso(info.lastMs),
       waiting: waiting,

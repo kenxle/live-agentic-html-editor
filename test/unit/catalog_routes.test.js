@@ -916,7 +916,7 @@ test("rename: the list carries the reviewer's name beside the original, and an e
   assert.deepEqual(res.json, { review: "r_page", name: "My page" });
   let row = (await api(w, "catalog.list")).json.sessions.find((s) => s.id === "s_doc").reviews.find((r) => r.id === "r_page");
   assert.equal(row.custom_name, "My page");
-  assert.equal(row.display_name, "site / page.html", "the original name is unchanged");
+  assert.equal(row.display_name, "Synthetic page", "the original name is unchanged");
   assert.equal((await api(w, "catalog.rename", { review: "r_page", name: "" })).json.name, null);
   row = (await api(w, "catalog.list")).json.sessions.find((s) => s.id === "s_doc").reviews.find((r) => r.id === "r_page");
   assert.equal(row.custom_name, null);

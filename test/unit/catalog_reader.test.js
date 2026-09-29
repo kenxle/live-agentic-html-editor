@@ -200,19 +200,21 @@ test("a fold is titled from its folder, sums waiting and total, and shows a star
 
 // --- display names -------------------------------------------------------------
 
-test("a review with no review.json shows its file name", async () => {
+test("a review with no review.json takes its title from its own file", async () => {
   const { reader, installed } = setup();
   const list = await reader.list(installed.nowMs);
-  assert.equal(row(list, "r_notitle").title, null);
-  assert.equal(row(list, "r_notitle").display_name, "loose / untitled.html");
+  // No comment ever recorded a title; the page's own <title> says "Untitled".
+  assert.equal(row(list, "r_notitle").title, "Untitled");
+  assert.equal(row(list, "r_notitle").display_name, "Untitled");
 });
 
-test("a title shared by two rows shows folder and file on both", async () => {
+test("a title shared by two rows is still the name on both; their path lines tell them apart", async () => {
   const { reader, installed } = setup();
   const list = await reader.list(installed.nowMs);
   assert.equal(row(list, "r_spec").title, "Shared Title");
-  assert.equal(row(list, "r_spec").display_name, "specs / spec.html");
-  assert.equal(row(list, "r_shared").display_name, "loose / shared.html");
+  assert.equal(row(list, "r_spec").display_name, "Shared Title");
+  assert.equal(row(list, "r_shared").display_name, "Shared Title");
+  assert.notEqual(row(list, "r_spec").project_path, row(list, "r_shared").project_path);
   assert.equal(row(list, "r_brief").display_name, "Feature Brief: Coach Activity");
 });
 
@@ -345,7 +347,7 @@ test("describeReview gives the display name, the document's path, and a checked 
   const gone = reader.describeReview("r_wt_gone", installed.nowMs);
   assert.equal(gone.kind, "worktree");
   assert.equal(gone.candidate, path.join(installed.home, "projects/alpha/docs/brief.html"));
-  assert.equal(reader.describeReview("r_spec", installed.nowMs).display_name, "specs / spec.html");
+  assert.equal(reader.describeReview("r_spec", installed.nowMs).display_name, "Shared Title");
   assert.equal(reader.describeReview("r_nope", installed.nowMs), null);
 });
 
@@ -974,4 +976,85 @@ test("project_path: outside any project it is the ~ path, and under ~/.claude it
   const list = await reader.list(installed.nowMs);
   assert.equal(row(list, "r_shared").project_path, "~/loose/shared.html");
   assert.equal(row(list, "r_skill2").project_path, "skills/crucible/SKILL.md");
+});
+
+// --- names, pages and folds from Ken's preview ---------------------------------
+
+const recordMod = require("../../src/shared/record.js");
+
+/** One ready comment on `pagePath` of a review, with the page's title. */
+function commentOnPage(installed, reviewId, pagePath, title, n, atMs) {
+  const logModule = require("../../src/service/log.js");
+  const log = logModule.createEventLog({ dir: installed.dir });
+  const at = new Date(atMs).toISOString();
+  const it = recordMod.newItem({
+    id: "itm_" + reviewId + "_p" + n, kind: recordMod.KIND.COMMENT, state: recordMod.STATE.READY, note: "note " + n,
+    page_origin: "http://127.0.0.1:4321", page_path: pagePath, page_title: title, page_seq: 1, created_at: at, updated_at: at
+  });
+  log.append(reviewId, [protocol.newEvent({
+    event: protocol.EVENT.ITEM_READY, event_id: "ev_" + reviewId + "_p" + n, ts: at, review: reviewId, item: it.id, rev: it.rev,
+    page_path: pagePath, page_title: title, page_seq: 1, payload: { draft: false, record: it }
+  })]);
+}
+
+test("title: a review with no recorded title takes its built page's <title>, else its Markdown's first heading", async () => {
+  const { reader, installed } = setup();
+  const dirA = path.join(installed.home, "projects", "alpha", "docs");
+  fs.writeFileSync(path.join(dirA, "built.html"), "<!doctype html><title>Feature Brief: Built</title><p>x</p>");
+  fs.writeFileSync(path.join(dirA, "built.md"), "# Something else\n");
+  extraReview(installed, "r_built", path.join(dirA, "built.html"));
+  const md = path.join(dirA, "plain.md");
+  fs.writeFileSync(md, "Intro line\n\n# Progress: Plain doc\n\nbody\n");
+  extraReview(installed, "r_plainmd", md);
+  const list = await reader.list(installed.nowMs);
+  assert.equal(row(list, "r_built").display_name, "Feature Brief: Built");
+  assert.equal(row(list, "r_plainmd").display_name, "Progress: Plain doc");
+});
+
+test("name: a row with no title shows just its file name; the path line carries the folder", async () => {
+  const { reader, installed } = setup();
+  const bare = path.join(installed.home, "loose", "bare.html");
+  fs.writeFileSync(bare, "<!doctype html><p>no title anywhere</p>");
+  extraReview(installed, "r_bare", bare);
+  const list = await reader.list(installed.nowMs);
+  assert.equal(row(list, "r_bare").display_name, "bare.html");
+  assert.equal(row(list, "r_spec").display_name, "Shared Title", "a title shared with another row is still the title");
+});
+
+test("title: a review with several pages is named after its own page, not whichever page was commented first", async () => {
+  const { reader, installed } = setup();
+  const dirA = path.join(installed.home, "projects", "alpha", "docs");
+  const own = path.join(dirA, "own.html");
+  fs.writeFileSync(own, "<!doctype html><title>Own page</title>");
+  extraReview(installed, "r_multi", own);
+  commentOnPage(installed, "r_multi", "/.lahe-source/ab12cd/figure.html", "Linked figure", 1, installed.nowMs - 3 * MINUTE);
+  commentOnPage(installed, "r_multi", "/own.html", "Own page", 2, installed.nowMs - 2 * MINUTE);
+  const list = await reader.list(installed.nowMs);
+  const r = row(list, "r_multi");
+  assert.equal(r.display_name, "Own page");
+  assert.equal(r.pages[0].title, "Own page", "the review's own page leads the page list");
+});
+
+test("pages: a page served through a .lahe-source mount is listed by its real path, never the internal one", async () => {
+  const { reader, installed } = setup();
+  // r_notes is served by ss_notes, which mounts /.lahe-source/ab12cd/ onto alpha/shared.
+  commentOnPage(installed, "r_notes", "/.lahe-source/ab12cd/figure.html", "Figure", 1, installed.nowMs - MINUTE);
+  const list = await reader.list(installed.nowMs);
+  const pages = row(list, "r_notes").pages;
+  const fig = pages.find((p) => p.title === "Figure");
+  assert.equal(fig.source, "shared/figure.html");
+  assert.ok(pages.every((p) => !String(p.source || "").includes(".lahe-source")), JSON.stringify(pages));
+  const own = pages.find((p) => p.title === "Coach Notes");
+  assert.equal(own.source, "docs/notes.md", "a rendered Markdown page is listed as its .md");
+});
+
+test("fold: two reviews of one document in one session are one row, and it says so", async () => {
+  const { reader, installed } = setup();
+  const doc = path.join(installed.home, "projects", "alpha", "docs", "brief.html");
+  extraReview(installed, "r_brief_again", doc);
+  const list = await reader.list(installed.nowMs);
+  const rows = session(list, "s_coach").reviews.filter((r) => r.id === "r_brief" || r.id === "r_brief_again" || (r.folded_from || []).some((f) => f === "r_brief" || f === "r_brief_again"));
+  assert.equal(rows.length, 1, JSON.stringify(rows.map((r) => r.id)));
+  assert.equal(rows[0].fold_kind, "document");
+  assert.equal(rows[0].folded_from.length, 1);
 });

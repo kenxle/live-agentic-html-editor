@@ -287,7 +287,7 @@ test("a card with no watcher and nothing waiting says so and shows no waiting co
 
 test("an unnamed card is named after the review it started on", () => {
   // s_old3's oldest review is r_s3page.
-  assert.equal(card(build(freshList(), okState()), "s_old3").title, 'Unnamed session, started on "old-pages / p5.html"');
+  assert.equal(card(build(freshList(), okState()), "s_old3").title, 'Unnamed session, started on "Page Five"');
 });
 
 test("the legacy card is not called a session", () => {
@@ -463,9 +463,9 @@ test("search matches a folder, across all ages", () => {
   const view = build(freshList(), vm.withQuery(okState(), "old-pages"));
   // s_ops's matching rows only, dated Sep 13 to Sep 20.
   assert.deepEqual(card(view, "s_ops").rows.map((r) => r.id), ["r_old4", "r_old2", "r_oldfolder"]);
-  // s_old3 has no name, so its card is titled after "old-pages / p5.html": the
-  // card's own title matches, and the whole card shows.
-  assert.equal(card(view, "s_old3").rows.length, 6, "all but the missing r_badmeta");
+  // s_old3 has no name; its card is titled after "Page Five", so only its
+  // row in old-pages matches, by its path.
+  assert.deepEqual(card(view, "s_old3").rows.map((r) => r.id), ["r_s3page"]);
   assert.deepEqual(allCards(view).map((c) => c.id).sort(), ["s_old3", "s_ops"]);
 });
 
@@ -659,9 +659,9 @@ test("a watched session asks before a hand-over, naming the agent and the other 
   assert.equal(view.dialog.title, "Another agent is on this session.");
   assert.equal(
     view.dialog.body,
-    '"shared / figure.html" belongs to session "coach activity". Handing it to document index moves the whole session and stops the other agent. These reviews move with it:'
+    '"Figure" belongs to session "coach activity". Handing it to document index moves the whole session and stops the other agent. These reviews move with it:'
   );
-  assert.deepEqual(view.dialog.reviews, ["Feature Brief: Coach Activity", "specs / spec.html", "Coach Notes", "Deleted Page"]);
+  assert.deepEqual(view.dialog.reviews, ["Feature Brief: Coach Activity", "Shared Title", "Coach Notes", "Deleted Page"]);
   assert.deepEqual(view.dialog.buttons.map((b) => [b.id, b.label]), [
     ["move", "Move the session"],
     ["read", "Just open it to read"],
@@ -700,13 +700,13 @@ test("Open, handing over: the banner says so while it is in flight", () => {
   const state = vm.beginOpen(okState(), freshList(), "r_mounted", { handoff: true });
   assert.equal(
     build(freshList(), state).banner.text,
-    'Opening "shared / figure.html" in a new tab and handing it to document index.'
+    'Opening "Figure" in a new tab and handing it to document index.'
   );
 });
 
 test("Open to read: the banner says only that it is opening", () => {
   const state = vm.beginOpen(okState(), freshList(), "r_mounted", { handoff: false });
-  assert.equal(build(freshList(), state).banner.text, 'Opening "shared / figure.html" in a new tab.');
+  assert.equal(build(freshList(), state).banner.text, 'Opening "Figure" in a new tab.');
 });
 
 test("after Open, the banner waits for the agent, and says it is watching only once it answers", () => {
@@ -715,10 +715,10 @@ test("after Open, the banner waits for the agent, and says it is watching only o
   state = vm.afterOpen(state, list, "r_mounted", { ok: true, body: { url: "http://127.0.0.1:5000/figure.html", request_id: "cq_new", not_asked: null } }, NOW);
   assert.equal(
     build(list, state).banner.text,
-    '"shared / figure.html" is open in a new tab. Waiting for document index to start watching it.'
+    '"Figure" is open in a new tab. Waiting for document index to start watching it.'
   );
   reviewIn(list, "r_mounted").request = { id: "cq_new", action: "pickup", at: new Date(NOW).toISOString(), state: "done", by_name: "document index", text: "watching", answered_at: new Date(NOW).toISOString() };
-  assert.equal(build(list, state).banner.text, '"shared / figure.html" is open in a new tab, and document index is watching it.');
+  assert.equal(build(list, state).banner.text, '"Figure" is open in a new tab, and document index is watching it.');
   reviewIn(list, "r_mounted").request.state = "refused";
   assert.equal(build(list, state).banner, null, "a refusal is the row's to say, not a success banner");
 });
@@ -734,7 +734,7 @@ test("Open to read ends with a plain opened banner", () => {
   const list = freshList();
   let state = vm.beginOpen(okState(), list, "r_mounted", { handoff: false });
   state = vm.afterOpen(state, list, "r_mounted", { ok: true, body: { url: "http://127.0.0.1:5000/figure.html", request_id: null, not_asked: null } }, NOW);
-  assert.equal(build(list, state).banner.text, '"shared / figure.html" is open in a new tab.');
+  assert.equal(build(list, state).banner.text, '"Figure" is open in a new tab.');
 });
 
 test("Open with the queue full says no agent was asked", () => {
@@ -1410,7 +1410,7 @@ test("rename: editing opens a field with the current name; saving shows the new 
   let failed = vm.beginRename(okState(), "r_spec", "Other");
   failed = vm.afterRename(failed, "r_spec", { ok: false, unreachable: true }, NOW);
   r = row(build(freshList(), failed), "r_spec");
-  assert.equal(r.name, "specs / spec.html");
+  assert.equal(r.name, "Shared Title");
   assert.match(r.note.text, /rename/i);
 });
 
@@ -1439,4 +1439,36 @@ test("path line: with no project_path from the helper it falls back to the whole
   const list = freshList();
   delete reviewIn(list, "r_brief").project_path;
   assert.equal(row(build(list, okState()), "r_brief").path, "~/projects/alpha/docs/brief.html");
+});
+
+// ---------------------------------------------------------------------------
+// Ken's second preview round
+// ---------------------------------------------------------------------------
+
+test("round 2: a rename equal to the original name shows no second, identical name", () => {
+  const list = freshList();
+  reviewIn(list, "r_brief").custom_name = "Feature Brief: Coach Activity";
+  const r = row(build(list, okState()), "r_brief");
+  assert.equal(r.name, "Feature Brief: Coach Activity");
+  assert.equal(r.originalName, null);
+});
+
+test("round 2: several reviews of one document say so, not 'of this folder'", () => {
+  const list = freshList();
+  const r = reviewIn(list, "r_brief");
+  r.folded_from = ["r_brief_old"];
+  r.fold_kind = "document";
+  assert.equal(row(build(list, okState()), "r_brief").folded, "2 reviews of this document, shown as one");
+  assert.equal(row(build(freshList(), okState()), "r_old2").folded, "3 reviews of this folder, shown as one");
+});
+
+test("round 2: the page list names each page's real path, never an internal one", () => {
+  const list = freshList();
+  reviewIn(list, "r_brief").pages = [
+    { title: "Progress", path: "/04_progress-abc.html", source: "docs/04_progress.md" },
+    { title: "Herald wireframes", path: "/.lahe-source/615d/wireframes/index.html", source: "docs/wireframes/index.html" },
+    { title: "Unmapped", path: "/.lahe-source/615d/x.html", source: null }
+  ];
+  const r = row(build(list, vm.withPagesOpen(okState(), "r_brief", true)), "r_brief");
+  assert.deepEqual(r.pages.map((p) => p.path), ["docs/04_progress.md", "docs/wireframes/index.html", "x.html"]);
 });

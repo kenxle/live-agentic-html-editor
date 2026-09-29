@@ -32,6 +32,7 @@
           "folder": "docs",
           "path_hint": "~/projects/alpha/docs",
           "project_path": "docs/brief.html",
+          "fold_kind": null,
           "project": "alpha",
           "last": "2026-09-28T15:40:00.000Z",
           "waiting": 3,
@@ -57,7 +58,8 @@
           "pages": [
             {
               "title": "Feature Brief: Coach Activity",
-              "path": "/"
+              "path": "/",
+              "source": "docs/brief.html"
             }
           ],
           "folded_from": []
@@ -65,11 +67,12 @@
         {
           "id": "r_spec",
           "title": "Shared Title",
-          "display_name": "specs / spec.html",
+          "display_name": "Shared Title",
           "file": "spec.html",
           "folder": "specs",
           "path_hint": "~/projects/beta/specs",
           "project_path": "specs/spec.html",
+          "fold_kind": null,
           "project": "beta",
           "last": "2026-09-26T16:00:00.000Z",
           "waiting": 0,
@@ -95,7 +98,8 @@
           "pages": [
             {
               "title": "Shared Title",
-              "path": "/"
+              "path": "/",
+              "source": "specs/spec.html"
             }
           ],
           "folded_from": []
@@ -108,6 +112,7 @@
           "folder": "docs",
           "path_hint": "~/projects/alpha/docs",
           "project_path": "docs/notes.md",
+          "fold_kind": null,
           "project": "alpha",
           "last": "2026-09-25T16:00:00.000Z",
           "waiting": 0,
@@ -133,19 +138,21 @@
           "pages": [
             {
               "title": "Coach Notes",
-              "path": "/"
+              "path": "/",
+              "source": "docs/notes.md"
             }
           ],
           "folded_from": []
         },
         {
           "id": "r_mounted",
-          "title": null,
-          "display_name": "shared / figure.html",
+          "title": "Figure",
+          "display_name": "Figure",
           "file": "figure.html",
           "folder": "shared",
           "path_hint": "~/projects/alpha/shared",
           "project_path": "shared/figure.html",
+          "fold_kind": null,
           "project": "alpha",
           "last": "2026-09-24T16:00:00.000Z",
           "waiting": 0,
@@ -170,6 +177,7 @@
           "folder": "docs",
           "path_hint": "~/projects/alpha/docs",
           "project_path": "docs/deleted.html",
+          "fold_kind": null,
           "project": "alpha",
           "last": "2026-09-22T16:00:00.000Z",
           "waiting": 1,
@@ -186,7 +194,8 @@
           "pages": [
             {
               "title": "Deleted Page",
-              "path": "/"
+              "path": "/",
+              "source": "docs/deleted.html"
             }
           ],
           "folded_from": []
@@ -212,6 +221,7 @@
           "folder": "projects",
           "path_hint": "~/projects",
           "project_path": "~/projects/beta",
+          "fold_kind": null,
           "project": "beta",
           "last": "2026-09-27T16:00:00.000Z",
           "waiting": 1,
@@ -228,7 +238,8 @@
           "pages": [
             {
               "title": "App Home",
-              "path": "/"
+              "path": "/",
+              "source": null
             }
           ],
           "folded_from": []
@@ -246,12 +257,13 @@
       "reviews": [
         {
           "id": "r_badsession",
-          "title": null,
-          "display_name": "loose / b.html",
+          "title": "B",
+          "display_name": "B",
           "file": "b.html",
           "folder": "loose",
           "path_hint": "~/loose",
           "project_path": "~/loose/b.html",
+          "fold_kind": null,
           "project": null,
           "last": "2026-09-26T17:00:00.000Z",
           "waiting": 0,
@@ -281,12 +293,13 @@
       "reviews": [
         {
           "id": "r_ssbroken",
-          "title": null,
-          "display_name": "loose / c.html",
+          "title": "C",
+          "display_name": "C",
           "file": "c.html",
           "folder": "loose",
           "path_hint": "~/loose",
           "project_path": "~/loose/c.html",
+          "fold_kind": null,
           "project": null,
           "last": "2026-09-26T17:00:00.000Z",
           "waiting": 0,
@@ -323,12 +336,13 @@
       "reviews": [
         {
           "id": "r_wt_live",
-          "title": null,
-          "display_name": "wt-live / page.html",
+          "title": "Worktree Page",
+          "display_name": "Worktree Page",
           "file": "page.html",
           "folder": "wt-live",
           "path_hint": "~/projects/alpha/.claude/worktrees/wt-live",
           "project_path": "page.html",
+          "fold_kind": null,
           "project": "alpha",
           "last": "2026-09-24T17:00:00.000Z",
           "waiting": 0,
@@ -348,11 +362,12 @@
         {
           "id": "r_wt_vanished",
           "title": null,
-          "display_name": "docs / vanished.html",
+          "display_name": "vanished.html",
           "file": "vanished.html",
           "folder": "docs",
           "path_hint": "~/projects/alpha/.claude/worktrees/wt-gone/docs",
           "project_path": "docs/vanished.html",
+          "fold_kind": null,
           "project": "alpha",
           "last": "2026-09-23T18:00:00.000Z",
           "waiting": 0,
@@ -377,6 +392,7 @@
           "folder": "docs",
           "path_hint": "~/projects/alpha/.claude/worktrees/wt-gone/docs",
           "project_path": "docs/brief.html",
+          "fold_kind": null,
           "project": "alpha",
           "last": "2026-09-23T17:00:00.000Z",
           "waiting": 1,
@@ -402,7 +418,8 @@
           "pages": [
             {
               "title": "Worktree Brief",
-              "path": "/"
+              "path": "/",
+              "source": "docs/brief.html"
             }
           ],
           "folded_from": []
@@ -415,6 +432,7 @@
           "folder": "old-pages",
           "path_hint": "~/projects/alpha/old-pages",
           "project_path": "old-pages/p4.html",
+          "fold_kind": null,
           "project": "alpha",
           "last": "2026-09-20T04:00:00.000Z",
           "waiting": 1,
@@ -431,7 +449,8 @@
           "pages": [
             {
               "title": "Page Four",
-              "path": "/"
+              "path": "/",
+              "source": "old-pages/p4.html"
             }
           ],
           "folded_from": []
@@ -444,6 +463,7 @@
           "folder": "old-pages",
           "path_hint": "~/projects/alpha/old-pages",
           "project_path": "old-pages",
+          "fold_kind": "folder",
           "project": "alpha",
           "last": "2026-09-19T04:00:00.000Z",
           "waiting": 3,
@@ -460,7 +480,8 @@
           "pages": [
             {
               "title": "Page Two",
-              "path": "/"
+              "path": "/",
+              "source": "old-pages/p2.html"
             }
           ],
           "folded_from": [
@@ -470,12 +491,13 @@
         },
         {
           "id": "r_other",
-          "title": null,
-          "display_name": "other / x.html",
+          "title": "Other",
+          "display_name": "Other",
           "file": "x.html",
           "folder": "other",
           "path_hint": "~/projects/alpha/other",
           "project_path": "other/x.html",
+          "fold_kind": null,
           "project": "alpha",
           "last": "2026-09-14T05:00:00.000Z",
           "waiting": 0,
@@ -495,11 +517,12 @@
         {
           "id": "r_oldfolder",
           "title": null,
-          "display_name": "alpha / old-pages",
+          "display_name": "old-pages",
           "file": "old-pages",
           "folder": "alpha",
           "path_hint": "~/projects/alpha",
           "project_path": "old-pages",
+          "fold_kind": null,
           "project": "alpha",
           "last": "2026-09-13T05:00:00.000Z",
           "waiting": 0,
@@ -541,6 +564,7 @@
           "folder": "loose",
           "path_hint": "~/loose",
           "project_path": "~/loose/stale.html",
+          "fold_kind": null,
           "project": null,
           "last": "2026-09-20T17:00:00.000Z",
           "waiting": 2,
@@ -557,7 +581,8 @@
           "pages": [
             {
               "title": "Stale Projection",
-              "path": "/"
+              "path": "/",
+              "source": "~/loose/stale.html"
             }
           ],
           "folded_from": []
@@ -570,6 +595,7 @@
           "folder": "loose",
           "path_hint": "~/loose",
           "project_path": "~/loose/big.html",
+          "fold_kind": null,
           "project": null,
           "last": "2026-09-20T16:00:00.000Z",
           "waiting": 1,
@@ -586,7 +612,8 @@
           "pages": [
             {
               "title": "Big Log",
-              "path": "/"
+              "path": "/",
+              "source": "~/loose/big.html"
             }
           ],
           "folded_from": []
@@ -594,11 +621,12 @@
         {
           "id": "r_shared",
           "title": "Shared Title",
-          "display_name": "loose / shared.html",
+          "display_name": "Shared Title",
           "file": "shared.html",
           "folder": "loose",
           "path_hint": "~/loose",
           "project_path": "~/loose/shared.html",
+          "fold_kind": null,
           "project": null,
           "last": "2026-09-19T16:00:00.000Z",
           "waiting": 0,
@@ -615,19 +643,21 @@
           "pages": [
             {
               "title": "Shared Title",
-              "path": "/"
+              "path": "/",
+              "source": "~/loose/shared.html"
             }
           ],
           "folded_from": []
         },
         {
           "id": "r_badreview",
-          "title": null,
-          "display_name": "loose / review.html",
+          "title": "Review",
+          "display_name": "Review",
           "file": "review.html",
           "folder": "loose",
           "path_hint": "~/loose",
           "project_path": "~/loose/review.html",
+          "fold_kind": null,
           "project": null,
           "last": "2026-09-18T19:00:00.000Z",
           "waiting": 0,
@@ -652,6 +682,7 @@
           "folder": null,
           "path_hint": null,
           "project_path": null,
+          "fold_kind": null,
           "project": null,
           "last": "2026-09-18T18:00:00.000Z",
           "waiting": 0,
@@ -670,12 +701,13 @@
         },
         {
           "id": "r_notitle",
-          "title": null,
-          "display_name": "loose / untitled.html",
+          "title": "Untitled",
+          "display_name": "Untitled",
           "file": "untitled.html",
           "folder": "loose",
           "path_hint": "~/loose",
           "project_path": "~/loose/untitled.html",
+          "fold_kind": null,
           "project": null,
           "last": "2026-09-18T17:00:00.000Z",
           "waiting": 0,
@@ -694,12 +726,13 @@
         },
         {
           "id": "r_s3page",
-          "title": null,
-          "display_name": "old-pages / p5.html",
+          "title": "Page Five",
+          "display_name": "Page Five",
           "file": "p5.html",
           "folder": "old-pages",
           "path_hint": "~/projects/alpha/old-pages",
           "project_path": "old-pages/p5.html",
+          "fold_kind": null,
           "project": "alpha",
           "last": "2026-09-15T05:00:00.000Z",
           "waiting": 0,
@@ -735,6 +768,7 @@
           "folder": "loose",
           "path_hint": "~/loose",
           "project_path": "~/loose/legacy.html",
+          "fold_kind": null,
           "project": null,
           "last": "2026-09-09T16:00:00.000Z",
           "waiting": 1,
@@ -751,7 +785,8 @@
           "pages": [
             {
               "title": "Legacy Page",
-              "path": "/"
+              "path": "/",
+              "source": null
             }
           ],
           "folded_from": []
