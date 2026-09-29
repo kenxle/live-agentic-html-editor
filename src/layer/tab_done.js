@@ -552,6 +552,14 @@
     ".card[" + ASKING_ATTR + "='true']{order:-1;border-color:var(--accent)}",
     // The proofreading answers sit under the question, two at equal weight.
     "." + ASK_CLASS + " .lahe-ask-acts{justify-content:flex-start}",
+    // The fixes "Use the fixes" would apply, as from and to, one per row.
+    "." + ASK_CLASS + " .lahe-ask-fixes{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px}",
+    "." + ASK_CLASS + " .lahe-fix{font-size:13px;line-height:1.4;color:var(--ink);overflow-wrap:anywhere;",
+    "border-top:1px solid var(--rule,rgba(128,128,128,.25));padding-top:6px}",
+    "." + ASK_CLASS + " .lahe-fix-where{display:block;font-size:10px;font-weight:700;letter-spacing:.06em;",
+    "text-transform:uppercase;color:var(--ink-faint)}",
+    "." + ASK_CLASS + " .lahe-fix-from{text-decoration:line-through;color:var(--ink-faint);white-space:pre-wrap}",
+    "." + ASK_CLASS + " .lahe-fix-to{white-space:pre-wrap}",
     "." + ASK_CLASS + " .lahe-ask-acts [hidden]{display:none}",
 
     // The unseen mark. A reply the agent flagged (or a question, or a refusal)
@@ -609,13 +617,22 @@
    */
   function answerOnto(item, base, text) {
     var F = record.FIELD;
-    if (base === item) return record.followUp(item, text);
-    var next = Object.assign({}, base);
-    next[F.THREAD] = record.chronologicalThread(item).concat([record.completedRound(item)]);
-    next[F.NOTE] = text;
-    next[F.CHANGE] = typeof item[F.CHANGE] === "string" ? item[F.CHANGE] : null;
-    next[F.STATE] = record.STATE.READY;
-    next[F.REPLY] = null;
+    var turn = {
+      note: text,
+      change: typeof item[F.CHANGE] === "string" ? item[F.CHANGE] : null
+    };
+    // The archive-and-continue steps are record.continueThread's, so a change
+    // to them reaches this path too. What applySuggestions changed on top of
+    // the item (the fixed words) is copied onto that result.
+    var next = record.continueThread(item, turn);
+    if (base === item) return next;
+    var moved = {};
+    moved[F.REV] = moved[F.THREAD] = moved[F.NOTE] = moved[F.CHANGE] = moved[F.STATE] = moved[F.REPLY] = true;
+    moved[F.UPDATED_AT] = true;
+    Object.keys(base).forEach(function (key) {
+      if (moved[key] || base[key] === item[key]) return;
+      next[key] = base[key];
+    });
     return next;
   }
 
@@ -2262,6 +2279,7 @@
         if (acts) acts.parentNode.removeChild(acts);
         return null;
       }
+      paintFixes(node, item);
       if (!acts) {
         acts = el("div", "cardacts lahe-ask-acts");
         acts.setAttribute("data-lahe-proofread", "");
@@ -2287,6 +2305,53 @@
       useBtn.disabled = readOnly;
       acts.querySelector("[data-lahe-act='keep-mine']").disabled = readOnly;
       return acts;
+    }
+
+    /**
+     * The fixes, drawn as from and to from the same list proofreadOffer
+     * applies, so what the reviewer reads is what the button does. Every
+     * word is set with textContent; the agent wrote them.
+     */
+    function paintFixes(node, item) {
+      var list = node.querySelector(".lahe-ask-fixes");
+      var suggestions = item[record.FIELD.REPLY].suggestions;
+      if (!Array.isArray(suggestions) || !suggestions.length) {
+        if (list) list.parentNode.removeChild(list);
+        return null;
+      }
+      if (!list) {
+        list = el("ol", "lahe-ask-fixes");
+        list.setAttribute("data-lahe-fixes", "");
+        var anchorNode = node.querySelector("[data-lahe-proofread]");
+        node.insertBefore(list, anchorNode);
+      }
+      while (list.firstChild) list.removeChild(list.firstChild);
+      var blocks = item[record.FIELD.NEW_BLOCKS] || [];
+      suggestions.forEach(function (sg) {
+        var row = el("li", "lahe-fix");
+        row.setAttribute("data-lahe-fix", "");
+        var block = blocks[sg.block];
+        var start = block && typeof block.html === "string" ? plainStart(block.html) : "";
+        row.appendChild(el("span", "lahe-fix-where", "Block " + (Number(sg.block) + 1) + (start ? ": " + start : "")));
+        var from = el("span", "lahe-fix-from", boundedText(String(sg.from)));
+        from.setAttribute("data-lahe-fix-from", "");
+        var to = el("span", "lahe-fix-to", boundedText(String(sg.to)));
+        to.setAttribute("data-lahe-fix-to", "");
+        row.appendChild(from);
+        row.appendChild(doc.createTextNode(" \u2192 "));
+        row.appendChild(to);
+        list.appendChild(row);
+      });
+      return list;
+    }
+
+    /** The block's first words as plain text, for the row's label. */
+    function plainStart(html) {
+      // A template's content is inert: nothing loads and no handler runs.
+      var probe = doc.createElement("template");
+      probe.innerHTML = String(html).slice(0, 2000);
+      var text = (probe.content.textContent || "").replace(/\s+/g, " ").trim();
+      return text.length > 40 ? text.slice(0, 40) + "..." : text;
     }
 
     /**

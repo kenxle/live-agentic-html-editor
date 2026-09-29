@@ -157,6 +157,20 @@ async function pasteText(page, text, html) {
   );
 }
 
+/** The caret's session block and character offset in it, or null when it is outside the session. */
+function caretSpot(page) {
+  return page.evaluate(() => {
+    const els = window.__lahe.handle.editing.sessionElements();
+    const s = window.getSelection();
+    const i = els.findIndex((el) => el.contains(s.focusNode));
+    if (i === -1) return null;
+    const r = document.createRange();
+    r.selectNodeContents(els[i]);
+    r.setEnd(s.focusNode, s.focusOffset);
+    return { block: i, offset: r.toString().length };
+  });
+}
+
 function items(page) {
   return page.evaluate(() => window.__lahe.items());
 }
@@ -195,6 +209,7 @@ function outsideSnapshot(page, selectors) {
 }
 
 module.exports = {
+  caretSpot,
   REPO_ROOT,
   FIXTURE_DIR,
   openFixture,

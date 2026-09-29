@@ -372,6 +372,10 @@
     var rail = opts.overlay || overlayModule.shared;
     var host = opts.host || null;
     var editing = opts.editing || null;
+    // The three browser modules the commit wash reads. Named here so the
+    // dependency is visible; a caller that passes none gets the page's own
+    // namespace, which is what index.js relies on today.
+    var washModules = opts.washModules || null;
 
     var mounted = false;
     var unsubscribe = null;
@@ -705,7 +709,7 @@
     // the namespace, because anchor, blocks and highlight are browser modules
     // this file does not need anywhere else.
     function washCommitted(item) {
-      var ns = root && root.LAHE ? root.LAHE : null;
+      var ns = washModules || (root && root.LAHE ? root.LAHE : null);
       if (!doc || !ns || !ns.anchor || !ns.blocks || !ns.highlight || !ns.highlight.shared) return 0;
       var indexes = runWashIndexes(item);
       if (!indexes.length) return 0;
