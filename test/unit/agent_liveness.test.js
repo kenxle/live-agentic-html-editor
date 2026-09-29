@@ -488,7 +488,6 @@ test("replies.poll answers with how long it has been, not with a claim", () => {
     "monitor_at",
     "oldest_unanswered_at",
     "oldest_unanswered_item",
-    "presence",
     "session_id",
     "session_name",
     "session_name_from_page",
@@ -497,6 +496,7 @@ test("replies.poll answers with how long it has been, not with a claim", () => {
     "unanswered"
   ]);
   assert.equal(liveness.oldest_unanswered_item, item[record.FIELD.ID], "the notice is keyed on this item");
+  assert.equal(Object.prototype.hasOwnProperty.call(liveness, "presence"), false, "presence is the Library's, never on the rail's payload");
   assert.equal(liveness.session_id, "s_wire");
 
   // The agent answers. The line now reports the answer rather than the wait, and
