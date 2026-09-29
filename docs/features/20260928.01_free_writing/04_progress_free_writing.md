@@ -1,6 +1,6 @@
 # Progress: Free writing
 
-**Phase 7, Review.** Everything is built and merged. Five reviews of the built code are in. The adversarial reviewer goes last, then one fix round. Nothing is blocked on you. Last updated 2026-09-29 17:41.
+**Phase 7, Review.** All six reviews are in. Four builders are running the one fix round in parallel. Nothing is blocked on you. Last updated 2026-09-29 17:54.
 
 **Docs:** [Crucible questions](00_crucible_questions.md) · [Crucible](http://127.0.0.1:65155/00_crucible.html) · [Brief](http://127.0.0.1:65155/01_brief_free_writing.html) · [Wireframes](http://127.0.0.1:49513/index.html) ([decision](wireframes/DECISION.md)) · [Architecture](http://127.0.0.1:65155/02_architecture_free_writing.html) · [Plan](http://127.0.0.1:65155/03_plan_free_writing.html)
 
@@ -12,7 +12,10 @@
 
 | Agent or task | Doing | Started | Branch |
 |---|---|---|---|
-| Adversarial reviewer | Reading all five reviews and hunting for what they missed | 2026-09-29 17:41 | `feat/free-writing` |
+| Fix builder F1, editing | Removed blocks, the empty-page trigger, undo after a question, bold lost in a repaint | 2026-09-29 17:54 | `free-writing-f1` |
+| Fix builder F2, replay | Never comparing a paragraph you did not change, header take-backs, lists, stale notes, the helper freeze | 2026-09-29 17:54 | `free-writing-f2` |
+| Fix builder F3, helper and instructions | Checks on the paragraph you started from, the notes folder leak, proofreading that never stops, drain size, refusing an old helper | 2026-09-29 17:54 | `free-writing-f3` |
+| Fix builder F4, rail and tests | Showing each proofread fix on the card, and 16 test gaps | 2026-09-29 17:54 | `free-writing-f4` |
 
 ## Phases
 
@@ -78,6 +81,12 @@ Not shipped yet.
 ## Log
 
 Newest first.
+
+**2026-09-29 17:54.** The adversarial review found six more problems. The two worst:
+- Undo after a proofread question never takes the words out of the source.
+- Writing after a paragraph the agent later changes hides your section behind a conflict.
+
+I made nine design calls for the fix round and wrote them in [FIX_ROUND.md](../../../.claude/worktrees/free-writing/docs/features/20260928.01_free_writing/reviews_impl/FIX_ROUND.md). The main one: a paragraph you did not change is never compared, so the agent fixing it can never hide your new section. Four builders are now fixing everything in parallel.
 
 **2026-09-29 17:41.** Five reviews of the built code are back. They are saved in [reviews_impl](../../../.claude/worktrees/free-writing/docs/features/20260928.01_free_writing/reviews_impl/). The findings that matter most:
 - A block you add and then delete in the same sitting still reaches the agent.
