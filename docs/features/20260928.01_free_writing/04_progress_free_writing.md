@@ -1,6 +1,6 @@
 # Progress: Free writing
 
-**Phase 6, Implement.** You approved the plan and all nine decisions. The first builder is laying the shared pieces. Nothing is blocked on you. Last updated 2026-09-29 12:58.
+**Phase 6, Implement.** The shared pieces are built and verified. Three builders now work in parallel: editing, replay, and the helper. Nothing is blocked on you. Last updated 2026-09-29 13:37.
 
 **Docs:** [Crucible questions](00_crucible_questions.md) · [Crucible](http://127.0.0.1:65155/00_crucible.html) · [Brief](http://127.0.0.1:65155/01_brief_free_writing.html) · [Wireframes](http://127.0.0.1:49513/index.html) ([decision](wireframes/DECISION.md)) · [Architecture](http://127.0.0.1:65155/02_architecture_free_writing.html) · [Plan](http://127.0.0.1:65155/03_plan_free_writing.html)
 
@@ -12,7 +12,9 @@
 
 | Agent or task | Doing | Started | Branch |
 |---|---|---|---|
-| Kernel builder | Phase 1: the record's new fields, the safe-tag check, the block reader, the agent's instructions and every copy of them | 2026-09-29 12:58 | `feat/free-writing` |
+| Editing builder (2A) | Writing new text on the page: the editing area, block types, the menu and hotkeys, "+ Write here", blank pages, undo, and protection during reloads | 2026-09-29 13:37 | `free-writing-2a` |
+| Replay builder (2B) | Putting new text back after a rebuild, block by block, and fixing the doubled header line and the later-paragraph bold case | 2026-09-29 13:37 | `free-writing-2b` |
+| Helper builder (2C) | The helper side: the safe-tag check on arrival, size limits, the "did it land" check for new text, `lahe write`, and `lahe reply --proofread` | 2026-09-29 13:37 | `free-writing-2c` |
 
 ## Phases
 
@@ -33,7 +35,9 @@
 
 ### Task index
 
-No tasks dispatched yet.
+| Phase | Workstream | Tasks | Status | Detail | Outcome |
+|---|---|---|---|---|---|
+| 1 | kernel | 1.1 to 1.6 | done | [detail](progress/phase1_workstream_kernel.md) | Seven commits. The unit gate passed 1601 of 1604 with 2 to-do. One timing test failed under full-suite load; alone, it runs the same on the branch and on main. |
 
 ### Loop passes
 
@@ -67,6 +71,14 @@ Not shipped yet.
 ## Log
 
 Newest first.
+
+**2026-09-29 13:37.** Phase 1 (the shared pieces) is done and verified:
+- the new record fields
+- the safe-tag check
+- the block reader
+- contract version 14, with every copy of the agent's instructions updated together
+
+The three Phase 2 builders were dispatched in their own worktrees.
 
 **2026-09-29 12:58.** You approved the plan, and all nine decisions are recorded:
 - Lahe's own code for now, Tiptap discussed later
