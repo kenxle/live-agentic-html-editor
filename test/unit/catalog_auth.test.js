@@ -37,7 +37,7 @@ const OTHER_LOOPBACK = "http://127.0.0.1:5555";
 
 const PAGE = protocol.route("catalog.page");
 const ASSET = protocol.route("catalog.asset");
-const API_ROUTES = ["catalog.list", "catalog.open", "catalog.star", "catalog.request"].map(protocol.route);
+const API_ROUTES = ["catalog.list", "catalog.open", "catalog.star", "catalog.rename", "catalog.request"].map(protocol.route);
 const POST_ROUTES = API_ROUTES.filter((r) => r.method === "POST");
 
 function tempDir() {
@@ -171,6 +171,7 @@ function callApi(port, token, r, extra) {
 const VALID_BODY = {
   "catalog.open": { review: REVIEW, handoff: false, confirmed: false },
   "catalog.star": { review: REVIEW, starred: true },
+  "catalog.rename": { review: REVIEW, name: "Renamed" },
   "catalog.request": { review: REVIEW, action: "pickup", confirmed: false }
 };
 

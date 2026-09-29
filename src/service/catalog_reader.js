@@ -847,6 +847,7 @@ function createReader(options) {
   function scan(nowMs) {
     var starsRead = store.read();
     var stars = starsRead.ok ? starsRead.data.stars : {};
+    var names = starsRead.ok ? starsRead.data.names || {} : {};
     var sessionCache = Object.create(null);
     function sessionContext(sessionId) {
       if (!sessionCache[sessionId]) {
@@ -895,6 +896,12 @@ function createReader(options) {
       else if (row.file) row.displayName = (row.folderName ? row.folderName + " / " : "") + row.file;
       else row.displayName = row.title || row.folderName || row.lead.info.id;
       row.starred = row.parts.some(function (p) { return Object.prototype.hasOwnProperty.call(stars, p.info.id); });
+      // The reviewer's own name: the lead's, else any part's.
+      row.customName = null;
+      row.parts.forEach(function (p) {
+        if (!row.customName && Object.prototype.hasOwnProperty.call(names, p.info.id)) row.customName = String(names[p.info.id]);
+      });
+      if (Object.prototype.hasOwnProperty.call(names, row.lead.info.id)) row.customName = String(names[row.lead.info.id]);
     });
 
     return { sessions: sessions, notice: starsRead.ok ? null : starsRead.code, nowMs: nowMs };
@@ -993,6 +1000,9 @@ function createReader(options) {
       openable: lead.openable,
       kind: lead.kind,
       starred: row.starred,
+      // The reviewer's rename, or null. List only: describeReview, the drain
+      // and every hand-off keep the original name.
+      custom_name: row.customName || null,
       unreadable: row.parts.some(function (p) { return p.unreadable; }),
       request: requestOf(info.id, nowMs, lookup),
       pages: pages,

@@ -235,6 +235,14 @@ var PAGE_STYLE = [
   ".lib-where{margin:2px 0 0;color:var(--lib-faint);font-family:var(--font-mono);font-size:var(--text-micro);", // px: hugs the name
   "line-height:1.45;overflow-wrap:anywhere;max-width:none}",
   ".lib-name{max-width:none}",
+  // The name line: the name, then a quiet Rename. The original name, after a
+  // rename, sits small and muted under it.
+  ".lib-name-line{margin:0;display:flex;flex-wrap:wrap;align-items:baseline;gap:0 var(--s2);max-width:none}",
+  ".lib-name-line>.lib-name{display:inline}",
+  ".lib-rename-btn.lib-btn{font-size:var(--text-micro);font-weight:var(--w-body);padding:0 var(--s1);color:var(--lib-faint)}",
+  ".lib-original{margin:0;color:var(--lib-soft);font-size:var(--text-meta);max-width:none}",
+  ".lib-rename-input{font:inherit;font-family:var(--font-display);font-weight:var(--w-display);font-size:var(--text-body);",
+  "width:100%;color:var(--lib-fg);background:var(--lib-card);border:1px solid var(--lib-accent);border-radius:var(--r);padding:2px 6px}", // px: field padding
   ".lib-facts{margin:var(--s1) 0 0;display:flex;flex-wrap:wrap;gap:var(--s1) var(--s3);font-size:var(--text-meta);color:var(--lib-soft)}",
   ".lib-badge{display:inline}",
   ".lib-badge::before{content:'';display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--lib-faint);", // px: a dot

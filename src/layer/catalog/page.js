@@ -51,6 +51,7 @@
     list: protocol.route("catalog.list"),
     open: protocol.route("catalog.open"),
     star: protocol.route("catalog.star"),
+    rename: protocol.route("catalog.rename"),
     request: protocol.route("catalog.request")
   };
 
@@ -224,6 +225,35 @@
     });
   }
 
+  // What the reader has typed into a rename field, kept here so a poll that
+  // redraws the list does not throw it away.
+  var renameDraft = { id: null, value: "" };
+
+  function startRename(reviewId) {
+    var found = null;
+    renameDraft = { id: null, value: "" };
+    focusKey(reviewId + ":rename-input");
+    update(VM.withRenaming(state, reviewId));
+    found = els.main.querySelector('[data-key="' + cssEscape(reviewId + ":rename-input") + '"]');
+    if (found && found.select) found.select();
+  }
+
+  function saveRename(reviewId, value) {
+    renameDraft = { id: null, value: "" };
+    focusKey(reviewId + ":rename");
+    update(VM.beginRename(state, reviewId, value));
+    call(ROUTE.rename, { review: reviewId, name: value }).then(function (result) {
+      update(VM.afterRename(state, reviewId, result, now()));
+      poll();
+    });
+  }
+
+  function cancelRename(reviewId) {
+    renameDraft = { id: null, value: "" };
+    focusKey(reviewId + ":rename");
+    update(VM.withRenaming(state, null));
+  }
+
   function copyHandoff(reviewId, message) {
     var done = function (ok) {
       update(VM.withCopied(state, reviewId, ok));
@@ -261,6 +291,7 @@
       }
     }
     else if (what === "star") star(id, btn.getAttribute("aria-pressed") !== "true");
+    else if (what === "rename") startRename(id);
     else if (what === "pages") update(VM.withPagesOpen(state, id, btn.getAttribute("aria-expanded") !== "true"));
     else if (what === "more") update(VM.withCardMore(state, btn.getAttribute("data-card"), btn.getAttribute("aria-expanded") !== "true"));
     else if (what === "handoff") {
@@ -324,8 +355,39 @@
   function renderRow(row, extra) {
     // Line one: the name alone. Line two: the document's real path, in the
     // mono face, a step smaller. Then the time and the counts.
+    // The reviewer can rename a row: the Rename button or a double-click on
+    // the name opens a field; Enter saves, Escape cancels, empty goes back to
+    // the original. Their name is shown first, the original under it.
+    var nameLine;
+    if (row.rename.editing) {
+      var typed = renameDraft.id === row.id ? renameDraft.value : row.rename.value;
+      nameLine = h("p", { class: "lib-name lib-rename" }, [
+        h("input", {
+          type: "text",
+          class: "lib-rename-input",
+          "data-rename": row.id,
+          "data-key": row.id + ":rename-input",
+          value: typed,
+          maxlength: "80",
+          "aria-label": row.rename.label + ": " + row.rename.original,
+          placeholder: row.rename.original
+        })
+      ]);
+    } else {
+      nameLine = h("p", { class: "lib-name-line" }, [
+        h("span", { class: "lib-name", "data-name": row.id, text: row.name }),
+        button(row.rename.label, {
+          "data-act": "rename",
+          "data-review": row.id,
+          "data-key": row.id + ":rename",
+          "data-quiet": "true",
+          class: "lib-btn lib-rename-btn"
+        })
+      ]);
+    }
     var main = h("div", { class: "lib-row-main" }, [
-      h("p", { class: "lib-name", text: row.name }),
+      nameLine,
+      row.originalName ? h("p", { class: "lib-original", text: row.originalName }) : null,
       row.path ? h("p", { class: "lib-where", text: row.path }) : null
     ]);
 
@@ -709,6 +771,28 @@
     if (event.key !== "Escape" || !state.menu) return;
     focusKey(state.menu + ":menu");
     update(VM.withMenu(state, null));
+  });
+  // The rename field: typing is kept across redraws; Enter saves, Escape
+  // cancels (and closes nothing else).
+  els.main.addEventListener("input", function (event) {
+    var id = event.target && event.target.getAttribute && event.target.getAttribute("data-rename");
+    if (id) renameDraft = { id: id, value: event.target.value };
+  });
+  els.main.addEventListener("keydown", function (event) {
+    var id = event.target && event.target.getAttribute && event.target.getAttribute("data-rename");
+    if (!id) return;
+    if (event.key === "Enter") {
+      event.preventDefault();
+      saveRename(id, event.target.value);
+    } else if (event.key === "Escape") {
+      event.preventDefault();
+      event.stopPropagation();
+      cancelRename(id);
+    }
+  });
+  els.main.addEventListener("dblclick", function (event) {
+    var name = event.target && event.target.closest ? event.target.closest("[data-name]") : null;
+    if (name) startRename(name.getAttribute("data-name"));
   });
   els.search.addEventListener("input", function () {
     update(VM.withQuery(state, els.search.value));

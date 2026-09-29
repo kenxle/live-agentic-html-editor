@@ -5,7 +5,12 @@
 //
 //   { "schema": 1,
 //     "stars":    { "<review-id>": "<when it was starred>" },
-//     "reopened": { "<session-id>": { "at": "<when>", "handoff_rev": <n> } } }
+//     "reopened": { "<session-id>": { "at": "<when>", "handoff_rev": <n> } },
+//     "names":    { "<review-id>": "<the reviewer's own name for it>" } }
+//
+// `names` came later; a file without it reads as no names. A name is the
+// reviewer's display text for the Library only. It is never put in a drain
+// entry, a hand-off message, or anything an agent reads.
 //
 // ONE WRITER. Only the helper writes this file, through this module, with the
 // state dir's write-beside-and-rename. The CLI's attach record lives in its own
@@ -24,18 +29,21 @@
 var fs = require("node:fs");
 
 var protocol = require("../shared/protocol.js");
+var agentSessions = require("./agent_sessions.js");
 var stateDir = require("./state_dir.js");
 
 var SCHEMA = 1;
 var FILE = "catalog.json";
 var UNREADABLE = "PROTO_CATALOG_UNREADABLE";
+// The longest name a rename keeps, in characters: the session name's cap.
+var NAME_MAX = 80;
 
 function catalogPath(dir) {
   return stateDir.resolveWithin(dir, [FILE]);
 }
 
 function empty() {
-  return { schema: SCHEMA, stars: {}, reopened: {} };
+  return { schema: SCHEMA, stars: {}, reopened: {}, names: {} };
 }
 
 function isPlainObject(value) {
@@ -46,7 +54,13 @@ function isPlainObject(value) {
 function validate(parsed) {
   if (!isPlainObject(parsed) || parsed.schema !== SCHEMA) return null;
   if (!isPlainObject(parsed.stars) || !isPlainObject(parsed.reopened)) return null;
-  return { schema: SCHEMA, stars: Object.assign({}, parsed.stars), reopened: Object.assign({}, parsed.reopened) };
+  if (parsed.names !== undefined && !isPlainObject(parsed.names)) return null;
+  return {
+    schema: SCHEMA,
+    stars: Object.assign({}, parsed.stars),
+    reopened: Object.assign({}, parsed.reopened),
+    names: Object.assign({}, parsed.names || {})
+  };
 }
 
 function assertSafe(kind, id) {
@@ -107,6 +121,23 @@ function createCatalogStore(options) {
     });
   }
 
+  /**
+   * Set the reviewer's name for a review, or clear it with an empty one.
+   * Control and invisible characters are dropped and it is cut to NAME_MAX,
+   * by the same rule session names use. Returns the name kept, or null.
+   */
+  function setName(reviewId, name) {
+    assertSafe("review", reviewId);
+    var clean = agentSessions.cleanName(name);
+    if (clean && Array.from(clean).length > NAME_MAX) clean = Array.from(clean).slice(0, NAME_MAX).join("").trim();
+    var out = update(function (data) {
+      if (clean) data.names[reviewId] = clean;
+      else delete data.names[reviewId];
+    });
+    if (out.ok) out.name = clean || null;
+    return out;
+  }
+
   function setReopened(sessionId, entry) {
     assertSafe("session", sessionId);
     var e = entry || {};
@@ -128,6 +159,7 @@ function createCatalogStore(options) {
   return {
     read: read,
     setStar: setStar,
+    setName: setName,
     setReopened: setReopened,
     clearReopened: clearReopened
   };
@@ -136,6 +168,7 @@ function createCatalogStore(options) {
 module.exports = {
   SCHEMA: SCHEMA,
   FILE: FILE,
+  NAME_MAX: NAME_MAX,
   catalogPath: catalogPath,
   createCatalogStore: createCatalogStore
 };

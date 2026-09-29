@@ -409,6 +409,17 @@
       response: "{review, starred}"
     },
     {
+      name: "catalog.rename",
+      method: "POST",
+      path: CATALOG_API_BASE + "/rename",
+      auth: AUTH.CATALOG_TOKEN,
+      mutating: true,
+      checks: { sec_fetch_site: ["same-origin"], token: true, json_body: true, origin: "exact" },
+      why: "the reviewer's own name for a review, in catalog.json; empty clears it. Display text for the Library only, never in an agent's input",
+      request: "{review, name}",
+      response: "{review, name}"
+    },
+    {
       name: "catalog.request",
       method: "POST",
       path: CATALOG_API_BASE + "/request",

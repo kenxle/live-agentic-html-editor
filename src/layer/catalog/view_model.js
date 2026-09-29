@@ -142,6 +142,8 @@
     UNSTAR: "Remove the star",
     STAR_FAILED: "Couldn't save the star: {why}. The star goes back.",
     STAR_NOT_RUNNING: "LAHE is not running",
+    RENAME: "Rename",
+    RENAME_FAILED: "Couldn't save the rename: {why}. The old name goes back.",
     OPENING_HANDOFF: 'Opening "{name}" in a new tab and handing it to {agent}.',
     OPENING: 'Opening "{name}" in a new tab.',
     // Not in the Page Spec's table: the tab is open but the agent has not
@@ -230,7 +232,11 @@
       // {reviewId: true}: a review whose page list the reader opened.
       pagesOpen: {},
       // {cardId: true}: a card whose every review the reader asked to see.
-      cardMore: {}
+      cardMore: {},
+      // reviewId | null: the row whose name is being edited.
+      renaming: null,
+      // {reviewId: name|null}: a rename sent that the list has not caught up with.
+      nameOverride: {}
     };
   }
 
@@ -266,6 +272,43 @@
 
   function withShowMissing(state, shown) {
     return assign({}, state, { showMissing: !!shown });
+  }
+
+  /** Start editing a row's name, or stop with null. */
+  function withRenaming(state, reviewId) {
+    return assign({}, state, { renaming: reviewId || null });
+  }
+
+  function cleanTyped(name) {
+    var t = typeof name === "string" ? name.trim() : "";
+    return t || null;
+  }
+
+  /** A rename is sent: show the new name at once and close the field. */
+  function beginRename(state, reviewId, name) {
+    return assign({}, state, { renaming: null, nameOverride: withKey(state.nameOverride || {}, reviewId, cleanTyped(name)) });
+  }
+
+  function afterRename(state, reviewId, result, now) {
+    if (result && result.ok) {
+      var kept = result.body && Object.prototype.hasOwnProperty.call(result.body, "name") ? result.body.name : undefined;
+      var out = assign({}, state, { notes: withKey(state.notes, reviewId, undefined) });
+      if (kept !== undefined) out.nameOverride = withKey(state.nameOverride || {}, reviewId, kept || null);
+      return out;
+    }
+    var back = assign({}, state, { nameOverride: withKey(state.nameOverride || {}, reviewId, undefined) });
+    if (result && result.status === 401) return withFetch(back, { ok: false, status: 401 });
+    var why = !result || result.unreachable
+      ? TEXT.STAR_NOT_RUNNING
+      : (result.error && (result.error.remedy || result.error.message)) || TEXT.UNKNOWN_ERROR;
+    return withNote(back, reviewId, { kind: "error", text: fill(TEXT.RENAME_FAILED, { why: withoutFinalPeriod(why) }), tone: "warn" }, now);
+  }
+
+  /** The name the reviewer gave, after any rename in flight; null for none. */
+  function customName(review, state) {
+    var o = state.nameOverride || {};
+    if (Object.prototype.hasOwnProperty.call(o, review.id)) return o[review.id];
+    return typeof review.custom_name === "string" && review.custom_name ? review.custom_name : null;
   }
 
   /** Open or close one review's page list. Held for the page's lifetime only. */
@@ -318,7 +361,12 @@
       var found = findReview(list, id);
       if (!found || !!found.review.starred === override[id]) delete override[id];
     });
-    return assign({}, state, { starOverride: override });
+    var names = assign({}, state.nameOverride);
+    Object.keys(names).forEach(function (id) {
+      var found = findReview(list, id);
+      if (!found || (found.review.custom_name || null) === names[id]) delete names[id];
+    });
+    return assign({}, state, { starOverride: override, nameOverride: names });
   }
 
   // ---------------------------------------------------------------------------
@@ -640,10 +688,15 @@
         })
       : [];
 
+    var original = review.display_name || review.title || review.id;
+    var renamed = customName(review, state);
     return {
       id: review.id,
       session: session.id,
-      name: review.display_name || review.title || review.id,
+      name: renamed || original,
+      // The document's own name, under the reviewer's when they renamed it.
+      originalName: renamed ? original : null,
+      rename: { editing: state.renaming === review.id, value: renamed || original, label: TEXT.RENAME, original: original },
       path: pathText(review),
       lastText: "last " + formatTime(review.last, now, opts.timeZone),
       counts: {
@@ -774,7 +827,7 @@
   }
 
   function rowHaystack(review) {
-    return [review.display_name, review.title, review.file, review.folder, review.path_hint, review.project]
+    return [review.custom_name, review.display_name, review.title, review.file, review.folder, review.path_hint, review.project]
       .filter(function (v) {
         return typeof v === "string";
       })
@@ -1260,6 +1313,9 @@
     withShowMissing: withShowMissing,
     withExpanded: withExpanded,
     withPagesOpen: withPagesOpen,
+    withRenaming: withRenaming,
+    beginRename: beginRename,
+    afterRename: afterRename,
     withCardMore: withCardMore,
     CARD_ROWS_SHOWN: CARD_ROWS_SHOWN,
     withPanel: withPanel,

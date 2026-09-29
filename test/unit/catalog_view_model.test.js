@@ -1379,3 +1379,55 @@ test("phase 8: a collapsed card still shows a starred or waiting row past the fi
   const searched = card(build(freshList(), vm.withQuery(okState(), "alpha")), "s_ops");
   assert.equal(searched.more, null);
 });
+
+// ---------------------------------------------------------------------------
+// Rename
+// ---------------------------------------------------------------------------
+
+test("rename: a renamed row shows the reviewer's name first and the original under it", () => {
+  const list = freshList();
+  reviewIn(list, "r_brief").custom_name = "Coach brief v2";
+  const r = row(build(list, okState()), "r_brief");
+  assert.equal(r.name, "Coach brief v2");
+  assert.equal(r.originalName, "Feature Brief: Coach Activity");
+  assert.equal(row(build(freshList(), okState()), "r_brief").originalName, null, "not renamed: no second name");
+});
+
+test("rename: search matches the new name and the original", () => {
+  const list = freshList();
+  reviewIn(list, "r_brief").custom_name = "Zebra notes";
+  assert.ok(allRows(build(list, vm.withQuery(okState(), "zebra"))).some((r) => r.id === "r_brief"));
+  assert.ok(allRows(build(list, vm.withQuery(okState(), "coach activity"))).some((r) => r.id === "r_brief"));
+});
+
+test("rename: editing opens a field with the current name; saving shows the new name at once, and a failure puts it back", () => {
+  const list = freshList();
+  const editing = row(build(list, vm.withRenaming(okState(), "r_brief")), "r_brief");
+  assert.deepEqual(editing.rename, { editing: true, value: "Feature Brief: Coach Activity", label: "Rename", original: "Feature Brief: Coach Activity" });
+  assert.equal(row(build(list, okState()), "r_brief").rename.editing, false);
+  let state = vm.beginRename(vm.withRenaming(okState(), "r_brief"), "r_brief", "  New name ");
+  let r = row(build(list, state), "r_brief");
+  assert.equal(r.rename.editing, false);
+  assert.equal(r.name, "New name");
+  state = vm.afterRename(state, "r_brief", { ok: true, body: { review: "r_brief", name: "New name" } }, NOW);
+  assert.equal(row(build(list, state), "r_brief").name, "New name");
+  // The list catches up; the override goes.
+  reviewIn(list, "r_brief").custom_name = "New name";
+  state = vm.afterList(state, list);
+  assert.deepEqual(state.nameOverride, {});
+  // A failed rename goes back and says why.
+  let failed = vm.beginRename(okState(), "r_spec", "Other");
+  failed = vm.afterRename(failed, "r_spec", { ok: false, unreachable: true }, NOW);
+  r = row(build(freshList(), failed), "r_spec");
+  assert.equal(r.name, "specs / spec.html");
+  assert.match(r.note.text, /rename/i);
+});
+
+test("rename: an empty name clears back to the original", () => {
+  const list = freshList();
+  reviewIn(list, "r_brief").custom_name = "Coach brief v2";
+  const state = vm.beginRename(okState(), "r_brief", "   ");
+  const r = row(build(list, state), "r_brief");
+  assert.equal(r.name, "Feature Brief: Coach Activity");
+  assert.equal(r.originalName, null);
+});

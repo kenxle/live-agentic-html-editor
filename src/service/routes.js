@@ -767,6 +767,9 @@ var CATALOG_HANDLERS = {
   "catalog.star": function (request, deps) {
     return deps.catalogActions.star(request.body || {}, deps.now());
   },
+  "catalog.rename": function (request, deps) {
+    return deps.catalogActions.rename(request.body || {}, deps.now());
+  },
   "catalog.request": function (request, deps) {
     return deps.catalogActions.request(request.body || {}, deps.now());
   }

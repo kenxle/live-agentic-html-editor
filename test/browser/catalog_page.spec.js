@@ -65,7 +65,7 @@ async function routeCatalog(page, options) {
     }
     await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(options.list()) });
   });
-  for (const name of ["catalog.open", "catalog.star", "catalog.request"]) {
+  for (const name of ["catalog.open", "catalog.star", "catalog.rename", "catalog.request"]) {
     await page.route("**" + protocol.route(name).path, async (route) => {
       const req = route.request();
       const headers = req.headers();
@@ -83,7 +83,7 @@ async function routeCatalog(page, options) {
 // page.on("request") fires when the browser starts a request, before any route
 // handler runs, so a click's request cannot slip past it.
 function recordActions(page) {
-  const paths = ["catalog.open", "catalog.star", "catalog.request"].map((n) => protocol.route(n).path);
+  const paths = ["catalog.open", "catalog.star", "catalog.rename", "catalog.request"].map((n) => protocol.route(n).path);
   const sent = [];
   page.on("request", (req) => {
     const url = new URL(req.url());
@@ -562,6 +562,63 @@ test.describe("the Library page", () => {
     }));
     expect(style.marker).toBe("disc");
     expect(style.before).toBe("none");
+  });
+
+  test("rename: Rename opens a field, Enter saves and shows both names, Escape sends nothing", async ({ page }) => {
+    const list = freshList();
+    const calls = await routeCatalog(page, {
+      list: () => list,
+      answers: { "catalog.rename": (body) => {
+        reviewIn(list, body.review).custom_name = body.name.trim() || null;
+        return { status: 200, body: { review: body.review, name: body.name.trim() || null } };
+      } }
+    });
+    await openLibrary(page, helper);
+    const brief = rowLocator(page, "r_brief");
+    await brief.locator('[data-act="rename"]').click();
+    const input = brief.locator(".lib-rename-input");
+    await expect(input).toBeFocused();
+    await input.fill("Coach brief v2");
+    await input.press("Enter");
+    await expect.poll(() => calls.filter((c) => c.name === "catalog.rename").map((c) => c.body)).toEqual([{ review: "r_brief", name: "Coach brief v2" }]);
+    await expect(brief.locator(".lib-name")).toHaveText("Coach brief v2");
+    await expect(brief.locator(".lib-original")).toHaveText("Feature Brief: Coach Activity");
+    await expect(brief.locator('[data-act="rename"]')).toBeFocused();
+
+    const sent = recordActions(page);
+    const spec = rowLocator(page, "r_spec");
+    await spec.locator(".lib-name").dblclick();
+    await expect(spec.locator(".lib-rename-input")).toBeFocused();
+    await page.keyboard.type("nope");
+    await page.keyboard.press("Escape");
+    await expect(spec.locator(".lib-rename-input")).toHaveCount(0);
+    await expect(spec.locator(".lib-name")).toHaveText("specs / spec.html");
+    await expectNothingSent(page, sent);
+  });
+
+  test("long lists collapse: a card's Show N more and a review's N pages open from the keyboard", async ({ page }) => {
+    const list = freshList();
+    reviewIn(list, "r_brief").pages = [
+      { title: "One", path: "/one.html" }, { title: "Two", path: "/two.html" }, { title: "Three", path: "/three.html" }
+    ];
+    await routeCatalog(page, { list: () => list });
+    await openLibrary(page, helper);
+    const ops = page.locator('details[data-session="s_ops"]');
+    await expect(ops.locator("li[data-review]")).toHaveCount(5);
+    const more = ops.locator('[data-act="more"]');
+    await expect(more).toHaveText("Show 1 more");
+    await more.focus();
+    await page.keyboard.press("Enter");
+    await expect(ops.locator("li[data-review]")).toHaveCount(6);
+    await expect(ops.locator('[data-act="more"]')).toHaveAttribute("aria-expanded", "true");
+
+    const brief = rowLocator(page, "r_brief");
+    await expect(brief.locator(".lib-pages")).toHaveCount(0);
+    const pages = brief.locator('[data-act="pages"]');
+    await expect(pages).toHaveText("3 pages");
+    await pages.focus();
+    await page.keyboard.press("Enter");
+    await expect(brief.locator(".lib-pages li")).toHaveCount(3);
   });
 
   test("screenshots, light and dark", async ({ page, browserName }) => {

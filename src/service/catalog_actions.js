@@ -317,6 +317,25 @@ function createCatalogActions(options) {
   }
 
   /**
+   * catalog.rename, body {review, name}. The reviewer's own name, for the
+   * Library's rows only. Every review in a fold takes it, as a star does.
+   */
+  async function rename(body, nowMs) {
+    var found = describe(body, nowMs);
+    if (found.outcome) return found.outcome;
+    if (typeof body.name !== "string") return badRequest("name must be a string; an empty one clears it");
+    var d = found.described;
+    var ids = Array.isArray(d.fold) && d.fold.length ? d.fold : [d.review];
+    var kept = null;
+    for (var i = 0; i < ids.length; i += 1) {
+      var written = store.setName(ids[i], body.name);
+      if (!written.ok) return fail(written.code || "PROTO_CATALOG_UNREADABLE");
+      kept = written.name;
+    }
+    return { status: 200, body: { review: d.review, name: kept } };
+  }
+
+  /**
    * catalog.request, body {review, action, confirmed}. Ids only: nothing else
    * in the body is read, so nothing else can reach the queue.
    */
@@ -517,6 +536,7 @@ function createCatalogActions(options) {
     list: list,
     open: open,
     star: star,
+    rename: rename,
     request: request,
     sweepReopened: sweepReopened,
     sweepLibrarySessions: sweepLibrarySessions
