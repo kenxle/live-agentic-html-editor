@@ -1,40 +1,18 @@
 # Progress: Free writing
 
-**Phase 5, Plan. The review gate is open.** Brief, wireframes, architecture, and plan are reviewed, revised, and checked against today's main. Nine decisions wait on you; each has a recommended default. Last updated 2026-09-28 19:07.
+**Phase 6, Implement.** You approved the plan and all nine decisions. The first builder is laying the shared pieces. Nothing is blocked on you. Last updated 2026-09-29 12:58.
 
 **Docs:** [Crucible questions](00_crucible_questions.md) · [Crucible](http://127.0.0.1:65155/00_crucible.html) · [Brief](http://127.0.0.1:65155/01_brief_free_writing.html) · [Wireframes](http://127.0.0.1:49513/index.html) ([decision](wireframes/DECISION.md)) · [Architecture](http://127.0.0.1:65155/02_architecture_free_writing.html) · [Plan](http://127.0.0.1:65155/03_plan_free_writing.html)
 
 ## Needs your attention
 
-- [ ] **Review gate: read the dossier and say go, or what to change.** Building starts only after your go. Leave comments on any page; I answer them there.
-  - [Brief](http://127.0.0.1:65155/01_brief_free_writing.html): what we are building and why. Unchanged since you read it, apart from today's main being credited with part of one bug.
-  - [Architecture](http://127.0.0.1:65155/02_architecture_free_writing.html): how. The edit gains a "run" of new blocks after the block you start from. Replay learns to put that run back after a rebuild, block by block, which also fixes the doubled header line.
-  - [Plan](http://127.0.0.1:65155/03_plan_free_writing.html): who and when. One builder lays the shared pieces. Three build in parallel: typing, replay, and the helper plus `lahe write`. Then the rail, one review round, one fix round, and the full gates.
-
-Decisions. Each has a default the plan already builds, so answer only where you disagree.
-
-- [ ] **AQ1, Lahe's own code or Tiptap.** Recommend: Lahe's own code. A test put an existing block next to a Tiptap editor, which is exactly what one sitting does. In all three browsers:
-  - the caret could not cross between them
-  - a selection could not span both
-  - Backspace did not merge
-  - undo ran out of order
-  Lahe's own approach passed every check.
-- [ ] **AQ3, always check that new text really landed.** Recommend: yes. Today the check lets an agent answer "handled" on new text it never placed, as long as it wrote something else in the same review.
-- [ ] **AQ4, how big one writing record may get.** Recommend two things together:
-  - older revisions keep only their words
-  - the bar warns you before a sitting gets too big to send
-  Without a limit, a long notes page could eventually be refused by the helper.
-- [ ] **PQ1, a blank notes page opens ready to type.** Recommend: yes. The wireframe had you click "+ Write here" first, which a keyboard user cannot do.
-- [ ] **PQ2, the bar says "Editing" for every edit.** Recommend: yes. "Editing this block" reads wrong over five new blocks.
-- [ ] **PQ3, no proofreading on notes.** Recommend: no proofreading. It would put a question card on every long notes sitting.
-- [ ] **PQ4, what a reload does mid-writing.** Recommend:
-  - the caret stays through Lahe's own rebuild and a page repaint
-  - any other reload saves the sitting as sent, and you reopen it with Cmd-Shift-E
-- [ ] **PQ5, the proofreading buttons read "Use the fixes" and "Keep my words".** Recommend: yes. "Keep mine" already means something else on conflict cards.
+- [ ] **For your information, no action needed unless you disagree.** The Library feature branch (`feat/lahe_library`, 160 commits) changes some of the same files: the rail, the page server, the command list, and shared files. Plan: build free writing on main, and whichever of the two lands second merges the other in. If you want one to land first, say so.
 
 ## Currently working on
 
-Nothing is running. Next: building starts after your go at the review gate.
+| Agent or task | Doing | Started | Branch |
+|---|---|---|---|
+| Kernel builder | Phase 1: the record's new fields, the safe-tag check, the block reader, the agent's instructions and every copy of them | 2026-09-29 12:58 | `feat/free-writing` |
 
 ## Phases
 
@@ -45,8 +23,8 @@ Nothing is running. Next: building starts after your go at the review gate.
 | 2 Brief | done | 2026-09-28 |
 | 3 Wireframe | done | 2026-09-28 |
 | 4 Architecture | done | 2026-09-28 |
-| 5 Plan | in progress | 2026-09-28 |
-| 6 Implement | not started | |
+| 5 Plan | done | 2026-09-29 |
+| 6 Implement | in progress | 2026-09-29 |
 | 7 Review | not started | |
 | 8 Ship and land | not started | |
 | 9 Cleanup | not started | |
@@ -89,6 +67,18 @@ Not shipped yet.
 ## Log
 
 Newest first.
+
+**2026-09-29 12:58.** You approved the plan, and all nine decisions are recorded:
+- Lahe's own code for now, Tiptap discussed later
+- always check new text
+- old revisions keep words only
+- notes open ready to type
+- "Editing" on the bar
+- no proofreading on notes
+- reload default
+- "Use the fixes" and "Keep mine"
+
+Phase 0: main is at 97a8270, and every branch the plan worried about has already merged. The worktree `feat/free-writing` was created. The kernel builder was dispatched.
 
 **2026-09-28 19:07.** Review gate opened. Before it, three things happened:
 - The dossier got a clarity pass, and the architecture was trimmed by about a quarter.
