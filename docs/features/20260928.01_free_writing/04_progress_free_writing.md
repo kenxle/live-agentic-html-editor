@@ -1,6 +1,6 @@
 # Progress: Free writing
 
-**Phase 6, Implement.** Every branch is merged, rail included. One builder is writing the end-to-end tests and fixing one replay bug. Then comes the review round. Nothing is blocked on you. Last updated 2026-09-29 14:55.
+**Phase 7, Review.** Everything is built and merged. Five reviews of the built code are in. The adversarial reviewer goes last, then one fix round. Nothing is blocked on you. Last updated 2026-09-29 17:41.
 
 **Docs:** [Crucible questions](00_crucible_questions.md) · [Crucible](http://127.0.0.1:65155/00_crucible.html) · [Brief](http://127.0.0.1:65155/01_brief_free_writing.html) · [Wireframes](http://127.0.0.1:49513/index.html) ([decision](wireframes/DECISION.md)) · [Architecture](http://127.0.0.1:65155/02_architecture_free_writing.html) · [Plan](http://127.0.0.1:65155/03_plan_free_writing.html)
 
@@ -12,7 +12,7 @@
 
 | Agent or task | Doing | Started | Branch |
 |---|---|---|---|
-| Seams builder | The end-to-end tests across every branch, including a scripted agent that follows only the agent's instructions. It is also fixing a false "further down the page" note after "Use the fixes" | 2026-09-29 14:55 | `free-writing-seams` |
+| Adversarial reviewer | Reading all five reviews and hunting for what they missed | 2026-09-29 17:41 | `feat/free-writing` |
 
 ## Phases
 
@@ -24,8 +24,8 @@
 | 3 Wireframe | done | 2026-09-28 |
 | 4 Architecture | done | 2026-09-28 |
 | 5 Plan | done | 2026-09-29 |
-| 6 Implement | in progress | 2026-09-29 |
-| 7 Review | not started | |
+| 6 Implement | done | 2026-09-29 |
+| 7 Review | in progress | 2026-09-29 |
 | 8 Ship and land | not started | |
 | 9 Cleanup | not started | |
 
@@ -35,6 +35,7 @@
 
 | Phase | Workstream | Tasks | Status | Detail | Outcome |
 |---|---|---|---|---|---|
+| 3 | seams | 3.4 | merged | [detail](../../../.claude/worktrees/free-writing-seams/docs/features/20260928.01_free_writing/progress/phase3_workstream_seams.md) | 21 end-to-end tests with a scripted agent that follows only the agent's instructions. Fixed a false "further down the page" note, and a crash that lost your writing. |
 | 3 | rail | 3.2, 3.3 | merged | [detail](../../../.claude/worktrees/free-writing-rail/docs/features/20260928.01_free_writing/progress/phase3_workstream_rail.md) | Unit gate: 1694 passed, 0 failed. 81 browser tests passed. 16 screenshots of every card state, light and dark. One replay bug left for the seams builder. |
 | 3 | integration fixes | after the Phase 2 merge | merged | [detail](../../../.claude/worktrees/free-writing-fix/docs/features/20260928.01_free_writing/progress/phase3_workstream_fixes.md) | Unit gate: 1691 passed, 0 failed. 73 browser tests passed. The agent's extra words now show as a conflict on the card, and "--" matches a rendered dash everywhere. |
 | 2 | editing (2A) | 2.1 to 2.4 | merged | [detail](../../../.claude/worktrees/free-writing-2a/docs/features/20260928.01_free_writing/progress/phase2_workstream_editing.md) | Unit gate green. 98 browser tests passed in Chromium; Firefox and WebKit also ran. 22 screenshots. |
@@ -77,6 +78,18 @@ Not shipped yet.
 ## Log
 
 Newest first.
+
+**2026-09-29 17:41.** Five reviews of the built code are back. They are saved in [reviews_impl](../../../.claude/worktrees/free-writing/docs/features/20260928.01_free_writing/reviews_impl/). The findings that matter most:
+- A block you add and then delete in the same sitting still reaches the agent.
+- Undoing a header change comes back at the next rebuild.
+- Any page with no content opens editing on its own, not only notes pages.
+- A page repaint that keeps your words but strips your bold loses the bold.
+- The safe-tag check covers new blocks but not the paragraph you started from.
+- One oversized post can freeze the helper.
+- "Use the fixes" applies changes the card does not show you.
+- Several tests cannot fail, and the end-to-end tests have run only in Chromium.
+
+One fix round covers all of it.
 
 **2026-09-29 14:55.** The rail merged. The cards for new text are built:
 - each card leads with a short summary
