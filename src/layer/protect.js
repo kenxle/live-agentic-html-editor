@@ -72,7 +72,7 @@
     // time would capture undefined forever.
     root.LAHE.protect = factory(root.LAHE.markers, root.LAHE.selection, root.LAHE.epoch, function () {
       return root.LAHE.replay;
-    }, root.LAHE.blocks);
+    }, root.LAHE.blocks, root.LAHE.normalize);
   } else {
     module.exports = factory(
       require("../shared/markers.js"),
@@ -81,10 +81,11 @@
       function () {
         return require("./replay.js");
       },
-      require("./blocks.js")
+      require("./blocks.js"),
+      require("../shared/normalize.js")
     );
   }
-})(typeof globalThis !== "undefined" ? globalThis : this, function (markers, selection, epoch, replayModule, blocks) {
+})(typeof globalThis !== "undefined" ? globalThis : this, function (markers, selection, epoch, replayModule, blocks, normalize) {
   "use strict";
 
   var LAYER = {
@@ -641,12 +642,36 @@
     return snap;
   }
 
+  // Undamaged means each block is still on the page with the same tag, words
+  // AND markup as the snapshot. Words alone missed a repaint that kept the
+  // words and dropped the reviewer's bold (codex P2): the restore was
+  // skipped, and the next snapshot took the stripped markup as the truth.
+  // The reviewer's own typing and the layer's own writes snapshot first, so
+  // they are never read as damage.
   function runUndamaged(snap, list) {
     if (list.length !== snap.entries.length) return false;
     for (var i = 0; i < list.length; i += 1) {
-      if (!list[i].isConnected || list[i].textContent !== snap.entries[i].text) return false;
+      var el = list[i];
+      var entry = snap.entries[i];
+      if (!el.isConnected || el.textContent !== entry.text) return false;
+      if (String(el.tagName || "").toLowerCase() !== entry.tag || el.innerHTML !== entry.html) return false;
     }
     return true;
+  }
+
+  // A run block rebuilt from a snapshot goes through the same allowlist as
+  // every other run block reaching the page (blocks.writeBlock, security 7).
+  // A block writeBlock refuses (a split tail still holding the page's link)
+  // keeps its markup through normalize.cleanMarkup, which drops scripts,
+  // handlers and attributes other than the few it keeps.
+  function rebuildRunBlock(doc, entry) {
+    var cleaned = normalize.cleanMarkup(entry.html);
+    // An empty block keeps its line break, so the caret has a line to sit on.
+    var built = entry.text ? blocks.writeBlock(entry.tag, cleaned, doc) : null;
+    if (built) return built;
+    var el = doc.createElement(blocks.writeBlock(entry.tag, "", doc) ? entry.tag : "p");
+    el.innerHTML = cleaned;
+    return el;
   }
 
   function refindAnchor(snap) {
@@ -713,13 +738,14 @@
           if (String(anchorEl.tagName).toLowerCase() !== first.tag) {
             anchorEl = blocks.swapTag(anchorEl, first.tag) || anchorEl;
           }
-          if (anchorEl.innerHTML !== first.html) anchorEl.innerHTML = first.html;
+          // The anchor is the page's own block and may hold what the run
+          // allowlist does not (a link, code), so it is cleaned, not rebuilt.
+          if (anchorEl.innerHTML !== first.html) anchorEl.innerHTML = normalize.cleanMarkup(first.html);
           built.push(anchorEl);
           point = blocks.insertPointAfter(anchorEl);
         }
         entries.forEach(function (entry) {
-          var el = doc.createElement(entry.tag);
-          el.innerHTML = entry.html;
+          var el = rebuildRunBlock(doc, entry);
           point.parent.insertBefore(el, point.before);
           built.push(el);
         });

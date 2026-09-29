@@ -181,6 +181,35 @@
     return actor === ACTOR.REVIEWER && DELETABLE_FROM.indexOf(from) !== -1;
   }
 
+  // Has an agent answered this item, now or in an earlier round?
+  function agentReplied(item) {
+    if (!item) return false;
+    if (item[FIELD.REPLY]) return true;
+    var thread = Array.isArray(item[FIELD.THREAD]) ? item[FIELD.THREAD] : [];
+    for (var i = 0; i < thread.length; i += 1) {
+      if (thread[i] && thread[i].agent) return true;
+    }
+    return false;
+  }
+
+  // Does the reviewer's undo of this item have to ask the agent to take the
+  // change back out of the source, rather than just drop the record?
+  //
+  // A handled item: yes, the agent changed the source. A ready (or draft)
+  // item the agent has already answered: also yes. The proofread flow has the
+  // agent place the words, rebuild, and then ask, so "ready" no longer means
+  // "nothing is in the source". The same holds after "Use the fixes" (ready at
+  // rev + 1 with rev 1 placed) and after a placement question. A not_handled
+  // item: no. An agent that said not_handled changed nothing, which is why
+  // DELETABLE_FROM lists it.
+  function undoTakesBack(item) {
+    if (!item) return false;
+    var state = item[FIELD.STATE];
+    if (state === STATE.HANDLED) return true;
+    if (state === STATE.NOT_HANDLED) return false;
+    return agentReplied(item);
+  }
+
   // ---------------------------------------------------------------------------
   // The revision rule (R9, R21)
   // ---------------------------------------------------------------------------
@@ -298,6 +327,8 @@
     assertTransition: assertTransition,
     findTransition: findTransition,
     canDelete: canDelete,
+    agentReplied: agentReplied,
+    undoTakesBack: undoTakesBack,
     replyApplies: replyApplies,
     applyReply: applyReply,
     countByState: countByState,
