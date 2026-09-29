@@ -191,6 +191,7 @@
         update(VM.popupBlocked(state, reviewId, now()));
         return;
       }
+      awayInTab = true;
       try {
         tab.opener = null;
       } catch (err) {
@@ -595,6 +596,18 @@
     pendingFocus = key;
   }
 
+  // True from the moment Open opens a tab until the reader is back on this
+  // page: it takes focus, or they press a key or a pointer here.
+  var awayInTab = false;
+  function backOnPage() {
+    if (!awayInTab) return;
+    awayInTab = false;
+    if (pendingFocus !== null) render();
+  }
+  window.addEventListener("focus", backOnPage);
+  document.addEventListener("pointerdown", backOnPage, true);
+  document.addEventListener("keydown", backOnPage, true);
+
   function render() {
     var view = VM.build(list, state, now(), {});
     var serial = JSON.stringify(view);
@@ -618,6 +631,15 @@
     // the page every POLL_MS.
     var key = pendingFocus || activeKey;
     pendingFocus = null;
+    // Not while the reader is away in a tab Open just opened. A render here
+    // focused the Open button again, and in Firefox focusing an element in
+    // the Library pulled focus back from the new tab, so the comment box the
+    // reader opened in the document never got the keyboard. The key waits
+    // until the reader is back on this page.
+    if (key && awayInTab) {
+      pendingFocus = key;
+      key = null;
+    }
     if (key && !(view.dialog && els.dialog.open)) {
       var target = els.main.querySelector('[data-key="' + cssEscape(key) + '"]') || els.banner.querySelector('[data-key="' + cssEscape(key) + '"]');
       if (target && target !== document.activeElement) target.focus();
