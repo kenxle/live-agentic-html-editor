@@ -1,0 +1,63 @@
+<!doctype html>
+<!--
+AUTO-ANSWER WIREFRAMES: INDEX
+
+Three directions for the reviewer's side of the headless mode, on the same garden-plan document,
+the same four cards and the same states. They differ on where the mode lives in the rail: in the
+words of the status line (A), as a switch beside Hold (B), or as a strip of its own under the
+tabs (C). Everything the reviewer sees is cards and the rail; no tool mechanics.
+-->
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Auto-answer wireframes</title>
+<style>
+body{margin:0;font-family:system-ui,-apple-system,sans-serif;color:#222;background:#fff}
+main{max-width:720px;margin:40px auto;padding:0 16px;line-height:1.55}
+h1{font-size:22px}
+.dir{border:1px solid #ccc;border-radius:8px;padding:14px 16px;margin:14px 0}
+.dir h2{font-size:17px;margin:0 0 4px}
+.dir h2 a{color:#3c56a5}
+.dir p{margin:4px 0;font-size:14px}
+.sig{color:#555;font-size:13px}
+.rec{border:1px solid #3c56a5;background:rgba(60,86,165,.06);border-radius:8px;padding:10px 14px;font-size:14px}
+.settled{border:1px dashed #999;background:#fafafa;padding:10px 12px;font-size:13.5px}
+ul{font-size:13.5px;padding-left:20px}
+</style></head><body><main>
+<h1>Auto-answer: three directions</h1>
+<p>Same document, same cards, same words, different layout. Each direction opens on step 1. The strip at the top of
+every screen walks the seven steps, and the branches hang off steps 4, 5 and 6.</p>
+<div class="settled"><b>Same in all three:</b>
+<ul><li>The mode is called <b>Auto-answer</b> on the page.</li>
+<li>Turning it on shows what Claude may do, who can make it act, and what it costs, before it starts.</li>
+<li>Replies land on the cards exactly as a chat agent's do today.</li>
+<li>A failed run keeps every comment waiting, and says why in plain words.</li>
+<li>A failure or the usage limit uses a full amber border, never a stripe down one side.</li></ul></div>
+
+<div class="dir"><h2><a href="a-quiet-line/01-off.html">A. The one quiet line</a></h2>
+<p>Argues auto-answer is one more answer to the question the status line already answers, so it adds words there and
+a menu item, nothing else. A failure borrows today's overdue banner at the top.</p>
+<p>Gives up: stopping is two clicks behind a menu, and usage hides in hover text.</p>
+<p class="sig">Signature: the status line, "Stored · auto-answer working on 2, 35s".</p></div>
+
+<div class="dir"><h2><a href="b-switch-by-hold/01-off.html">B. A switch beside Hold</a></h2>
+<p>Argues the mode is a control over the conversation with the agent, like Hold sending, so it sits beside Hold as a
+second pill: one click on, one click off, the run count beside it.</p>
+<p>Gives up: one more pill in the footer, and a failure shows at the foot rather than the top.</p>
+<p class="sig">Signature: the Auto-answer switch beside Hold sending.</p></div>
+
+<div class="dir"><h2><a href="c-agent-strip/01-off.html">C. An agent strip under the tabs</a></h2>
+<p>Argues an agent nobody is watching deserves a visible seat: a strip under the tabs while it is on, with what it is
+doing, its run count, and a Stop that is always one click away. Cards say "In this run" or "Next run".</p>
+<p>Gives up: vertical space on every screen, and a run looks different from a chat agent.</p>
+<p class="sig">Signature: the strip, with its always-visible Stop.</p></div>
+
+<div class="rec"><b>Recommended: B</b>, with C's "Next run" note considered for the build. The reasons are in
+<a href="../02_wireframe_lahe_agent_sdk.md">02_wireframe_lahe_agent_sdk.md</a>.</div>
+
+<p>Every direction has:</p>
+<ul>
+<li>Steps: off, turning it on, on and idle, a comment lands, a run works the batch, replies on the cards, turned off</li>
+<li>Branches: usage, waiting its turn, a failed run, a comment it could not answer, the usage limit, stopping
+mid-run, and the card left after a stop</li>
+</ul>
+<p>Controls with a dotted underline are not wired.</p>
+</main></body></html>
