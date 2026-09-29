@@ -58,7 +58,7 @@ async function pickUp(rowLocator) {
 
 test.describe.configure({ mode: "serial" });
 
-const POST_ROUTES = ["catalog.open", "catalog.star", "catalog.request"];
+const POST_ROUTES = ["catalog.open", "catalog.star", "catalog.rename", "catalog.request"];
 
 let world = null;
 let token = null;
@@ -143,6 +143,7 @@ function snapshot() {
 function forgedBody(name) {
   if (name === "catalog.open") return { review: world.docs.closed.review, handoff: false, confirmed: true };
   if (name === "catalog.star") return { review: world.docs.target.review, starred: true };
+  if (name === "catalog.rename") return { review: world.docs.target.review, name: "cross-site" };
   return { review: world.docs.target.review, action: "launch", confirmed: true };
 }
 

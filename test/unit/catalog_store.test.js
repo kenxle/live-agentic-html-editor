@@ -19,7 +19,7 @@ test("a state dir with no catalog.json reads as no stars and no reopened session
   const store = catalogStore.createCatalogStore({ dir: tempState() });
   const read = store.read();
   assert.equal(read.ok, true);
-  assert.deepEqual(read.data, { schema: 1, stars: {}, reopened: {} });
+  assert.deepEqual(read.data, { schema: 1, stars: {}, reopened: {}, names: {} });
 });
 
 test("a star is written, read back, and removed by unstarring", () => {
@@ -45,7 +45,8 @@ test("the file is owner-only and keeps the architecture's shape", () => {
   assert.deepEqual(JSON.parse(fs.readFileSync(file, "utf8")), {
     schema: 1,
     stars: { r_alpha1: "2026-09-28T16:20:00.000Z" },
-    reopened: { s_one: { at: "2026-09-28T16:21:00.000Z", handoff_rev: 4 } }
+    reopened: { s_one: { at: "2026-09-28T16:21:00.000Z", handoff_rev: 4 } },
+    names: {}
   });
 });
 
@@ -104,4 +105,38 @@ test("a symlinked catalog.json is refused rather than followed", () => {
   assert.equal(refused.ok, false);
   assert.equal(refused.code, "PROTO_CATALOG_UNREADABLE");
   assert.equal(fs.readFileSync(elsewhere, "utf8"), JSON.stringify({ schema: 1, stars: {}, reopened: {} }));
+});
+
+// --- names (rename) ------------------------------------------------------------
+
+test("a name is written, read back, and cleared by an empty name", () => {
+  const dir = tempState();
+  const store = catalogStore.createCatalogStore({ dir });
+  assert.equal(store.setName("r_alpha1", "Coach brief, v2").ok, true);
+  assert.deepEqual(catalogStore.createCatalogStore({ dir }).read().data.names, { r_alpha1: "Coach brief, v2" });
+  assert.equal(store.setName("r_alpha1", "").ok, true);
+  assert.deepEqual(store.read().data.names, {});
+});
+
+test("a name is cut to NAME_MAX characters and loses control characters", () => {
+  const store = catalogStore.createCatalogStore({ dir: tempState() });
+  store.setName("r_alpha1", "a\u0000b\u202ec\n" + "x".repeat(200));
+  const name = store.read().data.names.r_alpha1;
+  assert.equal(name.length, catalogStore.NAME_MAX);
+  assert.ok(name.startsWith("abcx"), JSON.stringify(name));
+  assert.equal(catalogStore.NAME_MAX, 80);
+});
+
+test("a catalog.json from before names reads as no names, and a names that is not a map is unreadable", () => {
+  const dir = tempState();
+  const store = catalogStore.createCatalogStore({ dir });
+  store.setStar("r_alpha1", true, "2026-09-28T16:20:00.000Z");
+  const file = catalogStore.catalogPath(dir);
+  const old = JSON.parse(fs.readFileSync(file, "utf8"));
+  delete old.names;
+  fs.writeFileSync(file, JSON.stringify(old));
+  assert.deepEqual(store.read().data.names, {});
+  old.names = ["nope"];
+  fs.writeFileSync(file, JSON.stringify(old));
+  assert.equal(store.read().ok, false);
 });

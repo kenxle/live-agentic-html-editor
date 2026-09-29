@@ -240,16 +240,20 @@ function review(id, spec) {
     seq += 1;
     return protocol.newEvent(Object.assign({ event_id: eventId(), review: id, seq: seq }, fields));
   }
+  // The Library's `last` is the newest work event's own time, so the newest
+  // event is stamped `lastMs`: the archive for an ended review, else the last
+  // comment, else (no comments) the review's creation event.
+  var items0 = (spec.items || []).length;
   var events = [
     ev({
       event: protocol.EVENT.REVIEW_CREATED,
-      ts: iso(created),
+      ts: iso(!spec.ended && items0 === 0 ? spec.lastMs : created),
       payload: { token: meta.token, agent_session_id: spec.session || "legacy" }
     })
   ];
   var items = [];
   (spec.items || []).forEach(function (state, n) {
-    var at = created + (n + 1) * MINUTE;
+    var at = !spec.ended && n === items0 - 1 ? spec.lastMs : created + (n + 1) * MINUTE;
     var it = item(id, n + 1, state, spec.title, at);
     items.push(it);
     events.push(
@@ -266,7 +270,7 @@ function review(id, spec) {
     );
   });
   if (spec.ended) {
-    events.push(ev({ event: protocol.EVENT.REVIEW_ARCHIVED, ts: iso(spec.lastMs - MINUTE) }));
+    events.push(ev({ event: protocol.EVENT.REVIEW_ARCHIVED, ts: iso(spec.lastMs) }));
   }
   // review.json is written from the first `projectedEvents` events; a stale one
   // leaves some out, so the log is newer than the projection.

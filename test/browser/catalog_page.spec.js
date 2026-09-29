@@ -65,7 +65,7 @@ async function routeCatalog(page, options) {
     }
     await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(options.list()) });
   });
-  for (const name of ["catalog.open", "catalog.star", "catalog.request"]) {
+  for (const name of ["catalog.open", "catalog.star", "catalog.rename", "catalog.request"]) {
     await page.route("**" + protocol.route(name).path, async (route) => {
       const req = route.request();
       const headers = req.headers();
@@ -83,7 +83,7 @@ async function routeCatalog(page, options) {
 // page.on("request") fires when the browser starts a request, before any route
 // handler runs, so a click's request cannot slip past it.
 function recordActions(page) {
-  const paths = ["catalog.open", "catalog.star", "catalog.request"].map((n) => protocol.route(n).path);
+  const paths = ["catalog.open", "catalog.star", "catalog.rename", "catalog.request"].map((n) => protocol.route(n).path);
   const sent = [];
   page.on("request", (req) => {
     const url = new URL(req.url());
@@ -166,7 +166,7 @@ test.describe("the Library page", () => {
     const hostile = '<img src=x onerror="window.__pwned=1"><b>bold</b>';
     const list = freshList();
     reviewIn(list, "r_stale").display_name = hostile;
-    reviewIn(list, "r_stale").folder = "<i>folder</i>";
+    reviewIn(list, "r_stale").path_hint = "~/<i>folder</i>";
     list.sessions.filter((s) => s.id === "s_coach")[0].name = "<script>window.__pwned=2</script>";
     await routeCatalog(page, { list: () => list });
     await openLibrary(page, helper);
@@ -258,10 +258,11 @@ test.describe("the Library page", () => {
 
     const dialog = page.locator("#lahe-catalog-confirm");
     await expect(dialog).toBeVisible();
-    await expect(dialog.locator("h2")).toHaveText("Another agent is watching this.");
-    await expect(dialog.locator("p")).toHaveText(
+    await expect(dialog.locator("h2")).toHaveText("Another agent is on this session.");
+    await expect(dialog.locator("p")).toHaveText([
+      "Its own agent is listening. 3 comments are waiting.",
       '"shared / figure.html" belongs to session "coach activity". Handing it to document index moves the whole session and stops the other agent. These reviews move with it:'
-    );
+    ]);
     await expect(dialog.locator("li")).toHaveText(["Feature Brief: Coach Activity", "specs / spec.html", "Coach Notes", "Deleted Page"]);
     await expect(dialog.locator("button")).toHaveText(["Move the session", "Just open it to read", "Cancel"]);
     await expectNothingSent(page, sent, "nothing is sent before the reader decides");
@@ -434,16 +435,35 @@ test.describe("the Library page", () => {
     await openLibrary(page, helper);
     const coach = page.locator('details[data-session="s_coach"]');
     // Its watcher is itself, so the card does not repeat its own title.
-    await expect(coach.locator("summary .lib-card-watch")).toHaveText("watched by its own agent");
+    await expect(coach.locator("summary .lib-card-watch")).toHaveText("its own agent is listening");
     await expect(coach.locator('summary .lib-badge[data-badge="watching"]')).toHaveCount(1);
     expect(await coach.locator("li[data-review]").count()).toBeGreaterThan(1);
     await expect(coach.locator('li[data-review] [data-badge="watching"]')).toHaveCount(0);
     await expect(page.locator('details[data-session="s_ops"] summary .lib-card-watch')).toHaveText(
-      "watched by document index, the agent that opened this Library"
+      "document index (the agent that opened this Library) is listening"
     );
     // A missing row is listed outside its card, so it keeps the badge.
     await page.locator('[data-act="show-missing"]').click();
-    await expect(rowLocator(page, "r_deleted").locator('[data-badge="watching"]')).toHaveText("agent watching: coach activity");
+    await expect(rowLocator(page, "r_deleted").locator('[data-badge="watching"]')).toHaveText("agent listening: coach activity");
+  });
+
+  test("phase 8: an agent that is neither listening nor working says when it was last active, and a hand-over asks nothing", async ({ page }) => {
+    const list = freshList();
+    const coach = list.sessions.find((x) => x.id === "s_coach");
+    coach.watching = null;
+    coach.away = { session: "s_other", name: "other agent", last_active: "2026-09-28T15:48:00.000Z" };
+    const calls = await routeCatalog(page, {
+      list: () => list,
+      answers: { "catalog.request": () => ({ status: 200, body: { request_id: "cq_new" } }) }
+    });
+    await openLibrary(page, helper);
+    const card = page.locator('details[data-session="s_coach"]');
+    await expect(card.locator("summary .lib-card-watch")).toHaveText(/^other agent last active .+, not listening$/);
+    await expect(card.locator('summary .lib-badge[data-badge="watching"]')).toHaveCount(0);
+    await expect(card.locator("summary .lib-waiting")).toHaveText("3 waiting");
+    await handTo(page, "r_mounted", "pickup");
+    await expect.poll(() => calls.map((c) => c.body)).toEqual([{ review: "r_mounted", action: "pickup", confirmed: false }]);
+    await expect(page.locator("#lahe-catalog-confirm")).toBeHidden();
   });
 
   test("a row shows Open at rest; Pick this up and Launch open from its one Hand to agent menu", async ({ page }) => {
@@ -544,9 +564,72 @@ test.describe("the Library page", () => {
     expect(style.before).toBe("none");
   });
 
+  test("rename: Rename opens a field, Enter saves and shows both names, Escape sends nothing", async ({ page }) => {
+    const list = freshList();
+    const calls = await routeCatalog(page, {
+      list: () => list,
+      answers: { "catalog.rename": (body) => {
+        reviewIn(list, body.review).custom_name = body.name.trim() || null;
+        return { status: 200, body: { review: body.review, name: body.name.trim() || null } };
+      } }
+    });
+    await openLibrary(page, helper);
+    const brief = rowLocator(page, "r_brief");
+    await brief.locator('[data-act="rename"]').click();
+    const input = brief.locator(".lib-rename-input");
+    await expect(input).toBeFocused();
+    await input.fill("Coach brief v2");
+    await input.press("Enter");
+    await expect.poll(() => calls.filter((c) => c.name === "catalog.rename").map((c) => c.body)).toEqual([{ review: "r_brief", name: "Coach brief v2" }]);
+    await expect(brief.locator(".lib-name")).toHaveText("Coach brief v2");
+    await expect(brief.locator(".lib-original")).toHaveText("Feature Brief: Coach Activity");
+    await expect(brief.locator('[data-act="rename"]')).toBeFocused();
+
+    const sent = recordActions(page);
+    const spec = rowLocator(page, "r_spec");
+    await spec.locator(".lib-name").dblclick();
+    await expect(spec.locator(".lib-rename-input")).toBeFocused();
+    await page.keyboard.type("nope");
+    await page.keyboard.press("Escape");
+    await expect(spec.locator(".lib-rename-input")).toHaveCount(0);
+    await expect(spec.locator(".lib-name")).toHaveText("specs / spec.html");
+    await expectNothingSent(page, sent);
+  });
+
+  test("long lists collapse: a card's Show N more and a review's N pages open from the keyboard", async ({ page }) => {
+    const list = freshList();
+    reviewIn(list, "r_brief").pages = [
+      { title: "One", path: "/one.html" }, { title: "Two", path: "/two.html" }, { title: "Three", path: "/three.html" }
+    ];
+    await routeCatalog(page, { list: () => list });
+    await openLibrary(page, helper);
+    const ops = page.locator('details[data-session="s_ops"]');
+    await expect(ops.locator("li[data-review]")).toHaveCount(5);
+    const more = ops.locator('[data-act="more"]');
+    await expect(more).toHaveText("Show 1 more");
+    await more.focus();
+    await page.keyboard.press("Enter");
+    await expect(ops.locator("li[data-review]")).toHaveCount(6);
+    await expect(ops.locator('[data-act="more"]')).toHaveAttribute("aria-expanded", "true");
+
+    const brief = rowLocator(page, "r_brief");
+    await expect(brief.locator(".lib-pages")).toHaveCount(0);
+    const pages = brief.locator('[data-act="pages"]');
+    await expect(pages).toHaveText("3 pages");
+    await pages.focus();
+    await page.keyboard.press("Enter");
+    await expect(brief.locator(".lib-pages li")).toHaveCount(3);
+  });
+
   test("screenshots, light and dark", async ({ page, browserName }) => {
     test.skip(!shotsWanted(browserName), "screenshots are written only with LAHE_SHOTS=1 on Chromium");
     const list = freshList();
+    // Ken's case: s_coach's agent has no live monitor but ran a lahe command
+    // a minute ago, so the card and the confirm dialog say "working".
+    list.sessions.find((x) => x.id === "s_coach").watching.state = "working";
+    list.sessions.find((x) => x.id === "s_coach").watching.last_active = "2026-09-28T15:58:00.000Z";
+    // A renamed row, so the picture shows the reviewer's name over the original.
+    reviewIn(list, "r_spec").custom_name = "Beta spec, second pass";
     await routeCatalog(page, { list: () => list });
     await openLibrary(page, helper);
     await page.locator("#lahe-catalog-main").waitFor();

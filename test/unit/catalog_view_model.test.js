@@ -239,10 +239,11 @@ test("the week boundary: a session exactly DEFAULT_VIEW_DAYS old is older, one m
   const days = protocol.CATALOG.DEFAULT_VIEW_DAYS;
   const legacy = sessionIn(list, "legacy");
   legacy.reviews[0].waiting = 0;
-  legacy.last = new Date(NOW - days * DAY).toISOString();
+  // A pre-session card's time is its own reviews' newest.
+  legacy.reviews[0].last = legacy.last = new Date(NOW - days * DAY).toISOString();
   assert.deepEqual(sectionIds(build(list, okState())).indexOf("older") !== -1, true);
   assert.equal(card(build(list, okState()), "legacy").open, false);
-  legacy.last = new Date(NOW - days * DAY + 60 * 1000).toISOString();
+  legacy.reviews[0].last = legacy.last = new Date(NOW - days * DAY + 60 * 1000).toISOString();
   assert.equal(card(build(list, okState()), "legacy").open, true);
 });
 
@@ -262,24 +263,24 @@ test("a named card shows its name, projects, review count, watcher, waiting and 
   assert.deepEqual(c.projects, ["alpha", "beta"]);
   // r_deleted is missing, so it is not one of the card's visible reviews.
   assert.equal(c.reviewsText, "4 reviews");
-  assert.equal(c.watchText, "watched by its own agent", "its watcher is itself, so its name is not repeated");
+  assert.equal(c.watchText, "its own agent is listening", "its watcher is itself, so its name is not repeated");
   assert.equal(c.waitingText, "3 waiting");
   assert.equal(c.lastText, "last 3:40 PM");
 });
 
 test("the card names the Library's own agent when it is the watcher", () => {
-  assert.equal(card(build(freshList(), okState()), "s_ops").watchText, "watched by document index, the agent that opened this Library");
+  assert.equal(card(build(freshList(), okState()), "s_ops").watchText, "document index (the agent that opened this Library) is listening");
 });
 
 test("a watcher with no name is named by its session id on the card", () => {
   const list = freshList();
   sessionIn(list, "s_coach").watching = { session: "s_coach", name: null };
-  assert.equal(card(build(list, okState()), "s_coach").watchText, "watched by s_coach");
+  assert.equal(card(build(list, okState()), "s_coach").watchText, "s_coach is listening");
 });
 
 test("a card with no watcher and nothing waiting says so and shows no waiting count", () => {
   const c = card(build(freshList(), okState()), "s_badsession");
-  assert.equal(c.watchText, "no agent watching");
+  assert.equal(c.watchText, "no agent listening");
   assert.equal(c.waitingText, null);
   assert.equal(c.reviewsText, "1 review");
 });
@@ -304,7 +305,7 @@ test("an older last time carries its date", () => {
 test("a row shows its name, where it lives, when, and its counts", () => {
   const r = row(build(freshList(), okState()), "r_brief");
   assert.equal(r.name, "Feature Brief: Coach Activity");
-  assert.equal(r.where, "alpha / docs / brief.html");
+  assert.equal(r.path, "~/projects/alpha/docs/brief.html");
   assert.equal(r.lastText, "last 3:40 PM");
   assert.equal(r.counts.waiting, "3 waiting");
   assert.equal(r.counts.comments, "5 comments");
@@ -321,12 +322,12 @@ test("one comment is singular, and no project leaves the project out", () => {
   const r = row(build(freshList(), okState()), "r_shared");
   assert.equal(r.counts.comments, "1 comment");
   assert.equal(r.counts.waiting, null);
-  assert.equal(r.where, "", "the title already says loose / shared.html");
+
 });
 
 test("a folded row names its folder and says how many reviews it holds", () => {
   const r = row(build(freshList(), okState()), "r_old2");
-  assert.equal(r.where, "", "the title says old-pages and the card says alpha");
+
   assert.equal(r.folded, "3 reviews of this folder, shown as one");
 });
 
@@ -343,21 +344,21 @@ test("a watched card names its agent once: on the card, and on none of its rows"
   assert.equal(card(build(freshList(), okState()), "s_badsession").watched, false);
   assert.ok(c.rows.length > 1, "the card has several rows");
   const texts = [c.watchText].concat(...c.rows.map((r) => r.badges));
-  assert.equal(texts.filter((t) => t.startsWith("watched by") || t.startsWith("agent watching")).length, 1);
+  assert.equal(texts.filter((t) => t.endsWith("is listening") || t.startsWith("agent listening")).length, 1);
 });
 
 test("a row shown outside its card keeps the watching badge, since no card line names its watcher", () => {
   const view = build(freshList(), vm.withShowMissing(okState(), true));
-  assert.deepEqual(row(view, "r_deleted").badges, ["agent watching: coach activity"]);
+  assert.deepEqual(row(view, "r_deleted").badges, ["agent listening: coach activity"]);
 });
 
-test("a review with several pages lists them; one page lists nothing", () => {
+test("a review with several pages lists them once opened; one page lists nothing", () => {
   const list = freshList();
   reviewIn(list, "r_brief").pages = [
     { title: "Brief", path: "/brief.html" },
     { title: "", path: "/appendix.html" }
   ];
-  const view = build(list, okState());
+  const view = build(list, vm.withPagesOpen(okState(), "r_brief", true));
   assert.deepEqual(row(view, "r_brief").pages, [
     { title: "Brief", path: "/brief.html" },
     { title: "/appendix.html", path: "/appendix.html" }
@@ -509,7 +510,7 @@ test("the project filter lists every project and keeps only cards with that labe
 // R4: a week of reviews is findable without search
 // ---------------------------------------------------------------------------
 
-test("a 7-day fixture of 120 reviews: every one is in an open card, with no search", () => {
+test("a 7-day fixture of 120 reviews: every one is in an open card, with no search, one Show more away", () => {
   const sessions = [];
   let n = 0;
   for (let s = 0; s < 12; s += 1) {
@@ -528,7 +529,14 @@ test("a 7-day fixture of 120 reviews: every one is in an open card, with no sear
     sessions.push({ id: "s_gen" + s, name: "gen " + s, projects: ["p"], watching: null, last: reviews[0].last, reviews });
   }
   sessions.sort((a, b) => Date.parse(b.last) - Date.parse(a.last));
-  const view = build({ attached: null, notice: null, sessions }, okState());
+  const collapsed = build({ attached: null, notice: null, sessions }, okState());
+  allCards(collapsed).forEach((c) => {
+    assert.ok(c.rows.length >= vm.CARD_ROWS_SHOWN, c.id);
+    assert.equal(c.more.expanded, false);
+  });
+  let state = okState();
+  sessions.forEach((x) => { state = vm.withCardMore(state, x.id, true); });
+  const view = build({ attached: null, notice: null, sessions }, state);
   const reachable = [];
   allCards(view).forEach((c) => {
     assert.equal(c.open, true, c.id + " is open");
@@ -648,7 +656,7 @@ test("a watched session asks before a hand-over, naming the agent and the other 
     assert.equal(d.kind, "confirm", action);
   });
   const view = build(list, vm.withDialog(okState(), "r_mounted", "pickup"));
-  assert.equal(view.dialog.title, "Another agent is watching this.");
+  assert.equal(view.dialog.title, "Another agent is on this session.");
   assert.equal(
     view.dialog.body,
     '"shared / figure.html" belongs to session "coach activity". Handing it to document index moves the whole session and stops the other agent. These reviews move with it:'
@@ -1142,32 +1150,14 @@ test("a refusal clears once the agent that refused is no longer the attached, li
 test("a card watched by its own agent does not repeat the card's title", () => {
   const list = freshList();
   // s_coach is named "coach activity" and watched by itself.
-  assert.equal(card(build(list, okState()), "s_coach").watchText, "watched by its own agent");
+  assert.equal(card(build(list, okState()), "s_coach").watchText, "its own agent is listening");
   // A launched session, named after its document, reads the same way.
   sessionIn(list, "s_coach").name = "Feature Brief: Coach Activity";
   sessionIn(list, "s_coach").watching = { session: "s_coach", name: "Feature Brief: Coach Activity" };
-  assert.equal(card(build(list, okState()), "s_coach").watchText, "watched by its own agent");
+  assert.equal(card(build(list, okState()), "s_coach").watchText, "its own agent is listening");
   // A watcher whose name differs from the card is still named.
   sessionIn(list, "s_coach").watching = { session: "s_other", name: "other agent" };
-  assert.equal(card(build(list, okState()), "s_coach").watchText, "watched by other agent");
-});
-
-test("the path line shows only what the title does not already say", () => {
-  const view = build(freshList(), okState());
-  // Title is "loose / shared.html": nothing to add.
-  assert.equal(row(view, "r_shared").where, "");
-  // A real title: the path adds where it lives. s_coach spans two projects,
-  // so the project stays.
-  assert.equal(row(view, "r_brief").where, "alpha / docs / brief.html");
-  // s_ops is all "alpha", and the card already says so.
-  assert.equal(row(view, "r_old4").where, "old-pages / p4.html");
-  // Title "old-pages", project on the card: nothing to add.
-  assert.equal(row(view, "r_old2").where, "");
-});
-
-test("a row outside its card keeps its project on the path line", () => {
-  const state = vm.withShowMissing(okState(), true);
-  assert.equal(row(build(freshList(), state), "r_wt_vanished").where, "alpha");
+  assert.equal(card(build(list, okState()), "s_coach").watchText, "other agent is listening");
 });
 
 test("a pick-up answered with no request id says the agent already has it, not waiting", () => {
@@ -1181,8 +1171,263 @@ test("a pick-up answered with no request id says the agent already has it, not w
   assert.equal(r.buttons.handTo.busy, false);
 });
 
-test("a legacy row says Pick this up starts a new review and the old comments stay on the old one", () => {
+test("a lone legacy row says Pick this up brings its old comments along", () => {
   const r = row(build(freshList(), okState()), "r_legacy");
-  assert.ok(r.notices.some((n) => n.text === vm.TEXT.LEGACY_NEW_REVIEW), JSON.stringify(r.notices));
-  assert.match(vm.TEXT.LEGACY_NEW_REVIEW, /old comments stay on the old review/);
+  assert.ok(r.notices.some((n) => n.text === vm.TEXT.LEGACY_PICKUP), JSON.stringify(r.notices));
+});
+
+// ---------------------------------------------------------------------------
+// What the card knows about the watcher (phase 8): listening, working, or
+// neither, never a flat "watching"
+// ---------------------------------------------------------------------------
+
+const AT_1558 = "2026-09-28T15:58:00.000Z";
+const AT_1548 = "2026-09-28T15:48:00.000Z";
+
+function withWatcher(list, sessionId, watching, away) {
+  const s = sessionIn(list, sessionId);
+  s.watching = watching;
+  s.away = away === undefined ? null : away;
+  return list;
+}
+
+test("phase 8: a card whose agent's monitor is live says it is listening", () => {
+  const list = withWatcher(freshList(), "s_coach", { session: "s_other", name: "other agent", state: "listening", last_active: AT_1558 });
+  const c = card(build(list, okState()), "s_coach");
+  assert.equal(c.watchText, "other agent is listening");
+  assert.equal(c.watched, true);
+  assert.equal(c.waitingText, "3 waiting", "the waiting count sits next to it");
+});
+
+test("phase 8: a card whose agent ran a lahe command inside the working window says it is working, and when", () => {
+  const list = withWatcher(freshList(), "s_coach", { session: "s_other", name: "other agent", state: "working", last_active: AT_1558 });
+  const c = card(build(list, okState()), "s_coach");
+  assert.equal(c.watchText, "other agent is working, last active 3:58 PM");
+  assert.equal(c.watched, true);
+});
+
+test("phase 8: a card whose agent is neither listening nor working says when it was last active, and is not marked watched", () => {
+  const list = withWatcher(freshList(), "s_coach", null, { session: "s_other", name: "other agent", last_active: AT_1548 });
+  const c = card(build(list, okState()), "s_coach");
+  assert.equal(c.watchText, "other agent last active 3:48 PM, not listening");
+  assert.equal(c.watched, false);
+  assert.equal(c.waitingText, "3 waiting");
+});
+
+test("phase 8: a card with no agent at all says nobody is listening", () => {
+  const list = withWatcher(freshList(), "s_coach", null, null);
+  assert.equal(card(build(list, okState()), "s_coach").watchText, "no agent listening");
+});
+
+test("phase 8: the card's own agent and the Library's agent keep their short names in each state", () => {
+  const list = withWatcher(freshList(), "s_coach", { session: "s_coach", name: "coach activity", state: "working", last_active: AT_1558 });
+  assert.equal(card(build(list, okState()), "s_coach").watchText, "its own agent is working, last active 3:58 PM");
+  withWatcher(list, "s_coach", null, { session: "s_coach", name: "coach activity", last_active: AT_1548 });
+  assert.equal(card(build(list, okState()), "s_coach").watchText, "its own agent last active 3:48 PM, not listening");
+  withWatcher(list, "s_ops", { session: "s_index", name: "document index", state: "listening", last_active: null });
+  assert.equal(card(build(list, okState()), "s_ops").watchText, "document index (the agent that opened this Library) is listening");
+});
+
+test("phase 8: a row outside its card names the watcher's state in its badge", () => {
+  const list = withWatcher(freshList(), "s_coach", { session: "s_coach", name: "coach activity", state: "working", last_active: AT_1558 });
+  const view = build(list, vm.withShowMissing(okState(), true));
+  assert.deepEqual(row(view, "r_deleted").badges, ["agent working: coach activity"]);
+  withWatcher(list, "s_coach", null, { session: "s_coach", name: "coach activity", last_active: AT_1548 });
+  assert.deepEqual(row(build(list, vm.withShowMissing(okState(), true)), "r_deleted").badges, []);
+});
+
+test("phase 8: an agent that is neither listening nor working does not block Open or Pick this up", () => {
+  const list = withWatcher(freshList(), "s_coach", null, { session: "s_other", name: "other agent", last_active: AT_1548 });
+  const open = vm.decide(list, okState(), "r_mounted", "open", {});
+  assert.equal(open.kind, "open");
+  assert.deepEqual(open.body, { review: "r_mounted", handoff: true, confirmed: false });
+  const pick = vm.decide(list, okState(), "r_mounted", "pickup", {});
+  assert.equal(pick.kind, "request");
+});
+
+test("phase 8: a working agent still asks first, and the dialog says what is known and how many are waiting", () => {
+  const list = withWatcher(freshList(), "s_coach", { session: "s_other", name: "other agent", state: "working", last_active: AT_1558 });
+  assert.equal(vm.decide(list, okState(), "r_mounted", "open", {}).kind, "confirm");
+  const view = build(list, vm.withDialog(okState(), "r_mounted", "open"));
+  assert.equal(view.dialog.title, "Another agent is on this session.");
+  assert.equal(view.dialog.status, "other agent is working, last active 3:58 PM. 3 comments are waiting.");
+});
+
+test("phase 8: a listening agent's dialog says so; one waiting comment is singular", () => {
+  const list = withWatcher(freshList(), "s_dev", { session: "s_other", name: "other agent", state: "listening", last_active: AT_1558 });
+  const view = build(list, vm.withDialog(okState(), "r_dev", "open"));
+  assert.equal(view.dialog.status, "other agent is listening. 1 comment is waiting.");
+});
+
+test("phase 8: the dialog for the card's own agent starts with a capital", () => {
+  const list = withWatcher(freshList(), "s_coach", { session: "s_coach", name: "coach activity", state: "listening", last_active: null });
+  list.attached = { session: "s_index", name: "document index", watching: true, closed: false };
+  const view = build(list, vm.withDialog(okState(), "r_mounted", "open"));
+  assert.equal(view.dialog.status, "Its own agent is listening. 3 comments are waiting.");
+});
+
+// ---------------------------------------------------------------------------
+// Phase 8 page items: the path line, pre-session cards per project, notes
+// said once per card, and long lists collapsed
+// ---------------------------------------------------------------------------
+
+test("phase 8: a row's second line is the document's real path, with no added spaces", () => {
+  const view = build(freshList(), okState());
+  assert.equal(row(view, "r_brief").path, "~/projects/alpha/docs/brief.html");
+  assert.equal(row(view, "r_shared").path, "~/loose/shared.html");
+  assert.equal(row(view, "r_old2").path, "~/projects/alpha/old-pages", "a folded row is its folder");
+  const all = build(freshList(), vm.withShowMissing(okState(), true));
+  assert.equal(row(all, "r_badmeta").path, "", "no path known, no line");
+});
+
+test("phase 8: a long path is shortened in the middle, keeping its project folder and its end", () => {
+  const list = freshList();
+  const r = reviewIn(list, "r_brief");
+  r.project = "personal";
+  r.path_hint = "~/Documents/workspace/personal/docs/features/20260915.01_style_systems/textbook/deep/more";
+  r.file = "01_brief.md";
+  assert.equal(row(build(list, okState()), "r_brief").path, "~/Documents/workspace/personal/…/textbook/deep/more/01_brief.md");
+});
+
+function withLegacy(list) {
+  const legacy = sessionIn(list, "legacy");
+  const base = reviewIn(list, "r_legacy");
+  const extra = (id, project, msAgo) => Object.assign(JSON.parse(JSON.stringify(base)), {
+    id, project, display_name: id, waiting: 0, last: new Date(NOW - msAgo).toISOString()
+  });
+  legacy.reviews = [
+    extra("r_lbeta", "beta", 3 * 60 * 60 * 1000),
+    extra("r_lalpha1", "alpha", DAY),
+    extra("r_lalpha2", "alpha", 2 * DAY),
+    base
+  ];
+  return list;
+}
+
+test("phase 8: pre-session reviews get one card per project, each saying it is from before sessions", () => {
+  const view = build(withLegacy(freshList()), okState());
+  assert.equal(card(view, "legacy:alpha").title, "alpha, from before sessions");
+  assert.deepEqual(card(view, "legacy:alpha").rows.map((r) => r.id), ["r_lalpha1", "r_lalpha2"]);
+  assert.deepEqual(card(view, "legacy:alpha").projects, ["alpha"]);
+  assert.equal(card(view, "legacy:beta").title, "beta, from before sessions");
+  assert.equal(card(view, "legacy").title, "Reviews from before sessions", "no project keeps the plain title");
+  assert.deepEqual(card(view, "legacy").rows.map((r) => r.id), ["r_legacy"]);
+});
+
+test("phase 8: the pre-session cards sort by their newest activity like any other card", () => {
+  const view = build(withLegacy(freshList()), okState());
+  const week = view.sections.filter((s) => s.id === "week")[0];
+  const ids = cardIds(week);
+  assert.ok(ids.indexOf("legacy:beta") !== -1 && ids.indexOf("legacy:alpha") !== -1, ids.join(","));
+  assert.ok(ids.indexOf("legacy:beta") < ids.indexOf("legacy:alpha"), "3 hours ago before a day ago: " + ids.join(","));
+});
+
+test("phase 8: what applies to every row of a card is said once on the card, and on none of its rows", () => {
+  const view = build(withLegacy(freshList()), okState());
+  const c = card(view, "legacy:alpha");
+  assert.equal(c.notes.length, 1);
+  assert.equal(c.notes[0].text, vm.TEXT.LEGACY_PICKUP);
+  c.rows.forEach((r) => assert.ok(!r.notices.some((n) => n.text === vm.TEXT.LEGACY_PICKUP), r.id));
+  // With no agent, "needs an agent" is also the whole card's, so it moves too.
+  const list = withLegacy(freshList());
+  list.attached = null;
+  const none = card(build(list, okState()), "legacy:alpha");
+  assert.deepEqual(none.notes.map((n) => n.text).sort(), [vm.TEXT.LEGACY_PICKUP, vm.TEXT.NEEDS_AGENT].sort());
+  none.rows.forEach((r) => assert.deepEqual(r.notices, []));
+});
+
+test("phase 8: a note only some rows share stays on those rows", () => {
+  const c = card(build(freshList(), okState()), "s_ops");
+  assert.deepEqual(c.notes, []);
+  assert.ok(row(build(freshList(), okState()), "r_wt_gone").notices.some((n) => n.text === vm.TEXT.WORKTREE));
+});
+
+test("phase 8: the pick-up note says the old comments come along", () => {
+  assert.match(vm.TEXT.LEGACY_PICKUP, /old comments/);
+  assert.doesNotMatch(vm.TEXT.LEGACY_PICKUP, /new review/);
+});
+
+test("phase 8: a review's page list is collapsed to a count, and opens on request", () => {
+  const list = freshList();
+  reviewIn(list, "r_brief").pages = [
+    { title: "One", path: "/one.html" }, { title: "Two", path: "/two.html" }, { title: "Three", path: "/three.html" }
+  ];
+  const closed = row(build(list, okState()), "r_brief");
+  assert.deepEqual(closed.pages, []);
+  assert.deepEqual(closed.pagesToggle, { text: "3 pages", expanded: false });
+  const open = row(build(list, vm.withPagesOpen(okState(), "r_brief", true)), "r_brief");
+  assert.equal(open.pages.length, 3);
+  assert.deepEqual(open.pagesToggle, { text: "3 pages", expanded: true });
+  assert.equal(row(build(list, okState()), "r_spec").pagesToggle, null, "one page: nothing to collapse");
+});
+
+test("phase 8: a card with many reviews shows its newest few and a Show N more toggle", () => {
+  const c = card(build(freshList(), okState()), "s_ops");
+  assert.equal(c.rows.length, vm.CARD_ROWS_SHOWN);
+  assert.deepEqual(c.more, { text: "Show 1 more", expanded: false });
+  const all = card(build(freshList(), vm.withCardMore(okState(), "s_ops", true)), "s_ops");
+  assert.equal(all.rows.length, 6);
+  assert.deepEqual(all.more, { text: "Show fewer", expanded: true });
+  assert.equal(card(build(freshList(), okState()), "s_coach").more, null, "4 reviews: no toggle");
+});
+
+test("phase 8: a collapsed card still shows a starred or waiting row past the first few, and search shows all", () => {
+  const list = freshList();
+  reviewIn(list, "r_oldfolder").starred = true;
+  const c = card(build(list, okState()), "s_ops");
+  assert.ok(c.rows.some((r) => r.id === "r_oldfolder"));
+  const searched = card(build(freshList(), vm.withQuery(okState(), "alpha")), "s_ops");
+  assert.equal(searched.more, null);
+});
+
+// ---------------------------------------------------------------------------
+// Rename
+// ---------------------------------------------------------------------------
+
+test("rename: a renamed row shows the reviewer's name first and the original under it", () => {
+  const list = freshList();
+  reviewIn(list, "r_brief").custom_name = "Coach brief v2";
+  const r = row(build(list, okState()), "r_brief");
+  assert.equal(r.name, "Coach brief v2");
+  assert.equal(r.originalName, "Feature Brief: Coach Activity");
+  assert.equal(row(build(freshList(), okState()), "r_brief").originalName, null, "not renamed: no second name");
+});
+
+test("rename: search matches the new name and the original", () => {
+  const list = freshList();
+  reviewIn(list, "r_brief").custom_name = "Zebra notes";
+  assert.ok(allRows(build(list, vm.withQuery(okState(), "zebra"))).some((r) => r.id === "r_brief"));
+  assert.ok(allRows(build(list, vm.withQuery(okState(), "coach activity"))).some((r) => r.id === "r_brief"));
+});
+
+test("rename: editing opens a field with the current name; saving shows the new name at once, and a failure puts it back", () => {
+  const list = freshList();
+  const editing = row(build(list, vm.withRenaming(okState(), "r_brief")), "r_brief");
+  assert.deepEqual(editing.rename, { editing: true, value: "Feature Brief: Coach Activity", label: "Rename", original: "Feature Brief: Coach Activity" });
+  assert.equal(row(build(list, okState()), "r_brief").rename.editing, false);
+  let state = vm.beginRename(vm.withRenaming(okState(), "r_brief"), "r_brief", "  New name ");
+  let r = row(build(list, state), "r_brief");
+  assert.equal(r.rename.editing, false);
+  assert.equal(r.name, "New name");
+  state = vm.afterRename(state, "r_brief", { ok: true, body: { review: "r_brief", name: "New name" } }, NOW);
+  assert.equal(row(build(list, state), "r_brief").name, "New name");
+  // The list catches up; the override goes.
+  reviewIn(list, "r_brief").custom_name = "New name";
+  state = vm.afterList(state, list);
+  assert.deepEqual(state.nameOverride, {});
+  // A failed rename goes back and says why.
+  let failed = vm.beginRename(okState(), "r_spec", "Other");
+  failed = vm.afterRename(failed, "r_spec", { ok: false, unreachable: true }, NOW);
+  r = row(build(freshList(), failed), "r_spec");
+  assert.equal(r.name, "specs / spec.html");
+  assert.match(r.note.text, /rename/i);
+});
+
+test("rename: an empty name clears back to the original", () => {
+  const list = freshList();
+  reviewIn(list, "r_brief").custom_name = "Coach brief v2";
+  const state = vm.beginRename(okState(), "r_brief", "   ");
+  const r = row(build(list, state), "r_brief");
+  assert.equal(r.name, "Feature Brief: Coach Activity");
+  assert.equal(r.originalName, null);
 });

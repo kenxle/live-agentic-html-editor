@@ -27,6 +27,7 @@ const agentSessions = require("../../src/service/agent_sessions.js");
 const staticServers = require("../../src/service/static_servers.js");
 const catalogRequests = require("../../src/service/catalog_requests.js");
 const catalogStore = require("../../src/service/catalog_store.js");
+const statusCmd = require("../../src/cli/commands/status.js");
 
 const C = protocol.CATALOG;
 const T0 = Date.parse("2026-09-28T16:00:00.000Z");
@@ -734,8 +735,14 @@ test("CR2: star and unstar act on every review in a fold, so a star never sticks
   assert.equal((await actions.star({ review: lead, starred: true }, installed.nowMs)).status, 200);
   // Another review in the fold becomes the newest, so the lead changes.
   const other = ["r_old1", "r_old2", "r_old3"].find((id) => id !== lead);
-  const later = new Date(installed.nowMs);
-  fs.utimesSync(stateDir.eventsPath(installed.dir, other), later, later);
+  // Work lands on it: its newest event now carries a new time.
+  const log = stateDir.eventsPath(installed.dir, other);
+  const lines = fs.readFileSync(log, "utf8").split("\n").filter(Boolean);
+  const newest = JSON.parse(lines[lines.length - 1]);
+  newest.ts = new Date(installed.nowMs).toISOString();
+  newest.event_id = "ev_cr2_later";
+  newest.seq = lines.length + 1;
+  fs.appendFileSync(log, JSON.stringify(newest) + "\n");
   assert.equal((await foldRow()).id, other, "the lead changed");
   assert.equal((await actions.star({ review: other, starred: false }, installed.nowMs)).status, 200);
   assert.equal((await foldRow()).starred, false, "unstarred through the new lead");
@@ -751,7 +758,32 @@ test("CL2: an agent whose monitor exited to work a batch still counts as watchin
   assert.equal(res.status, 409, res.text);
   assert.equal(res.json.error.code, "PROTO_CONFIRM_NEEDED");
   const listed = await api(w, "catalog.list");
-  assert.deepEqual(listed.json.sessions.find((s) => s.id === "s_doc").watching, { session: "s_doc", name: "doc session" });
+  assert.deepEqual(listed.json.sessions.find((s) => s.id === "s_doc").watching, { session: "s_doc", name: "doc session", state: "working", last_active: new Date(T0).toISOString() });
+});
+
+test("phase 8: an agent that ran a lahe command more than WORKING_MS ago, with no live monitor, does not block Open or Pick this up", async (t) => {
+  const w = await world(t);
+  // Ken's report: the card said "watched by" an agent that had no monitor and
+  // had last run a lahe command about ten minutes earlier.
+  const commandAt = T0 - 10 * MINUTE;
+  beat(w.store, "s_doc", commandAt, "s_doc");
+  stateDir.writeAtomic(stateDir.activityPath(w.dir, "s_doc"), JSON.stringify({ [protocol.MONITOR.ACTIVITY_FIELD.AT]: new Date(commandAt).toISOString() }) + "\n");
+  const listed = await api(w, "catalog.list");
+  const doc = listed.json.sessions.find((s) => s.id === "s_doc");
+  assert.equal(doc.watching, null);
+  assert.deepEqual(doc.away, { session: "s_doc", name: "doc session", last_active: new Date(commandAt).toISOString() });
+  const pick = await api(w, "catalog.request", { review: "r_page", action: "pickup" });
+  assert.equal(pick.status, 200, pick.text);
+  assert.ok(pick.json.request_id, "the pick-up was queued without a confirm step");
+});
+
+test("phase 8: Open on a session whose agent is away hands over without a confirm step", async (t) => {
+  const w = await world(t);
+  const commandAt = T0 - protocol.CATALOG.WORKING_MS - 1;
+  beat(w.store, "s_doc", commandAt, "s_doc");
+  stateDir.writeAtomic(stateDir.activityPath(w.dir, "s_doc"), JSON.stringify({ [protocol.MONITOR.ACTIVITY_FIELD.AT]: new Date(commandAt).toISOString() }) + "\n");
+  const res = await api(w, "catalog.open", { review: "r_page", handoff: true });
+  assert.equal(res.status, 200, res.text);
 });
 
 test("catalog.request refuses a missing review with PROTO_NOT_OPENABLE, as Open does, and queues nothing", async (t) => {
@@ -851,7 +883,7 @@ test("walk: right after the agent answers a pick-up, its session card still name
   beat(w.store, "s_doc", T0, "s_agent");
   stateDir.writeAtomic(stateDir.activityPath(w.dir, "s_agent"), JSON.stringify({ [protocol.MONITOR.ACTIVITY_FIELD.AT]: new Date(later).toISOString() }) + "\n");
   const listed = await api(w, "catalog.list");
-  assert.deepEqual(listed.json.sessions.find((x) => x.id === "s_doc").watching, { session: "s_agent", name: "library agent" });
+  assert.deepEqual(listed.json.sessions.find((x) => x.id === "s_doc").watching, { session: "s_agent", name: "library agent", state: "working", last_active: new Date(later).toISOString() });
 });
 
 test("walk: a folder review's recorded page that climbs out, is hidden, or is not a page falls back to the entry page", async (t) => {
@@ -871,4 +903,47 @@ test("walk: a folder review's recorded page that climbs out, is hidden, or is no
   const res = await api(w, "catalog.open", { review: "r_folder" });
   assert.equal(res.status, 200, res.text);
   assert.match(res.json.url, /\/01_brief\.html$/);
+});
+
+// ---------------------------------------------------------------------------
+// Rename
+// ---------------------------------------------------------------------------
+
+test("rename: the list carries the reviewer's name beside the original, and an empty name clears it", async (t) => {
+  const w = await world(t);
+  const res = await api(w, "catalog.rename", { review: "r_page", name: "  My page  " });
+  assert.equal(res.status, 200, res.text);
+  assert.deepEqual(res.json, { review: "r_page", name: "My page" });
+  let row = (await api(w, "catalog.list")).json.sessions.find((s) => s.id === "s_doc").reviews.find((r) => r.id === "r_page");
+  assert.equal(row.custom_name, "My page");
+  assert.equal(row.display_name, "site / page.html", "the original name is unchanged");
+  assert.equal((await api(w, "catalog.rename", { review: "r_page", name: "" })).json.name, null);
+  row = (await api(w, "catalog.list")).json.sessions.find((s) => s.id === "s_doc").reviews.find((r) => r.id === "r_page");
+  assert.equal(row.custom_name, null);
+});
+
+test("rename: a name that is not a string is refused, and a corrupt catalog.json is left as it was", async (t) => {
+  const w = await world(t);
+  assert.equal((await api(w, "catalog.rename", { review: "r_page", name: 5 })).status, 400);
+  assert.notEqual((await api(w, "catalog.rename", { review: "r_nope", name: "x" })).status, 200, "an unknown review is refused");
+  const file = catalogStore.catalogPath(w.dir);
+  fs.writeFileSync(file, "{not json");
+  const refused = await api(w, "catalog.rename", { review: "r_page", name: "x" });
+  assert.equal(refused.json.error.code, "PROTO_CATALOG_UNREADABLE");
+  assert.equal(fs.readFileSync(file, "utf8"), "{not json");
+});
+
+test("rename: the reviewer's name never reaches the drain or a hand-off message", async (t) => {
+  const w = await world(t);
+  catalogRequests.writeAttach(w.dir, "s_agent", T0 - MINUTE);
+  const marker = "RENAME-MARKER-never-in-a-prompt";
+  assert.equal((await api(w, "catalog.rename", { review: "r_page", name: marker })).status, 200);
+  const pick = await api(w, "catalog.request", { review: "r_page", action: "pickup", confirmed: true });
+  assert.equal(pick.status, 200, pick.text);
+  const lines = [];
+  await statusCmd.run(["--session", "s_agent", "--json", "--state-dir", w.dir], { stdout: (s) => lines.push(s), stderr: () => {}, now: T0 });
+  const drained = lines.join("");
+  assert.ok(drained.indexOf("r_page") !== -1 || drained.indexOf("catalog_requests") !== -1, drained.slice(0, 300));
+  assert.equal(drained.indexOf(marker), -1, "no rename text in the drain");
+  assert.equal(fs.readFileSync(path.join(w.dir, "catalog-requests.jsonl"), "utf8").indexOf(marker), -1);
 });

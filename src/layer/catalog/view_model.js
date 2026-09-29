@@ -92,29 +92,44 @@
     SHOW_MISSING: "Show {n} missing",
     MISSING_HEADING: "Missing ({n}). Neither the file nor a main-repo copy exists.",
     HIDE: "Hide",
-    // The card names its watcher once, so its rows need not repeat it. The
-    // Page Spec's card wording did not name the agent; a row's badge did, on
-    // every row of the card.
-    WATCH_LIBRARY_AGENT: "watched by {agent}, the agent that opened this Library",
-    WATCH_OTHER: "watched by {agent}",
+    // The card names its watcher once, so its rows need not repeat it. It
+    // says only what is known (phase 8): a live monitor is "listening", a lahe
+    // command inside CATALOG.WORKING_MS is "working", and anything older is
+    // just when the agent was last active. A flat "watching" called an agent
+    // that went quiet ten minutes ago a watcher.
+    WATCH_LISTENING: "{agent} is listening",
+    WATCH_WORKING: "{agent} is working, last active {time}",
+    WATCH_AWAY: "{agent} last active {time}, not listening",
+    WATCH_AWAY_NO_TIME: "{agent} is not listening",
+    WATCH_NONE: "no agent listening",
+    WATCH_LIBRARY_AGENT: "{agent} (the agent that opened this Library)",
     // The watcher's name is the card's own title: a session watched by its
     // own agent, often one launched for the document and named after it.
-    WATCH_OWN: "watched by its own agent",
-    WATCH_NONE: "no agent watching",
+    WATCH_OWN: "its own agent",
+    WATCH_OWN_START: "Its own agent",
+    WAITING_ONE: "1 comment is waiting.",
+    WAITING_MANY: "{n} comments are waiting.",
     UNNAMED_SESSION: 'Unnamed session, started on "{name}"',
     // Not in the Page Spec: the reader's "legacy" group is lahe add reviews
     // from before agent sessions existed, and "Unnamed session" would be untrue.
     LEGACY_SESSION: "Reviews from before sessions",
+    // One card per project for pre-session reviews (phase 8): one card of
+    // every project's old reviews read as a mix nobody made.
+    LEGACY_PROJECT: "{project}, from before sessions",
     SESSION_OF: 'session "{name}"',
     BADGE_ENDED: "review ended",
     BADGE_SERVED: "being served now",
-    BADGE_WATCHING: "agent watching: {agent}",
+    BADGE_LISTENING: "agent listening: {agent}",
+    BADGE_WORKING: "agent working: {agent}",
     FOLDED: "{n} reviews of this folder, shown as one",
+    PAGES: "{n} pages",
+    SHOW_MORE: "Show {n} more",
+    SHOW_FEWER: "Show fewer",
     UNREADABLE: "Some of this review's records can't be read.",
     MISSING: "File is gone. Open unavailable.",
-    // A legacy review has no session: Pick this up serves the page as a new
-    // review in the agent's session.
-    LEGACY_NEW_REVIEW: "Pick this up starts a new review of this page. The old comments stay on the old review.",
+    // A legacy review belongs to no session: Pick this up has the attached
+    // agent take it into its own session and serve it, old comments and all.
+    LEGACY_PICKUP: "From before sessions. Pick this up has the attached agent take it into its session and serve it, with its old comments.",
     WORKTREE: "The worktree is gone. An agent will open the main repository's copy, which may differ from what you reviewed.",
     NEEDS_AGENT: "Needs an agent to reopen. No agent is attached.",
     NO_MATCHES: "Nothing matches that search.",
@@ -127,6 +142,8 @@
     UNSTAR: "Remove the star",
     STAR_FAILED: "Couldn't save the star: {why}. The star goes back.",
     STAR_NOT_RUNNING: "LAHE is not running",
+    RENAME: "Rename",
+    RENAME_FAILED: "Couldn't save the rename: {why}. The old name goes back.",
     OPENING_HANDOFF: 'Opening "{name}" in a new tab and handing it to {agent}.',
     OPENING: 'Opening "{name}" in a new tab.',
     // Not in the Page Spec's table: the tab is open but the agent has not
@@ -139,7 +156,7 @@
     QUEUE_FULL: "No agent was asked: too many hand-overs are waiting.",
     URL_REFUSED: "LAHE answered with an address that is not on this computer, so the Library did not open it.",
     UNKNOWN_ERROR: "Something went wrong.",
-    CONFIRM_TITLE: "Another agent is watching this.",
+    CONFIRM_TITLE: "Another agent is on this session.",
     CONFIRM_BODY: '"{name}" belongs to session "{session}". Handing it to {agent} moves the whole session and stops the other agent.',
     CONFIRM_MOVES: "These reviews move with it:",
     CONFIRM_MOVE: "Move the session",
@@ -211,7 +228,15 @@
       menu: null,
       notes: {},
       starPending: {},
-      starOverride: {}
+      starOverride: {},
+      // {reviewId: true}: a review whose page list the reader opened.
+      pagesOpen: {},
+      // {cardId: true}: a card whose every review the reader asked to see.
+      cardMore: {},
+      // reviewId | null: the row whose name is being edited.
+      renaming: null,
+      // {reviewId: name|null}: a rename sent that the list has not caught up with.
+      nameOverride: {}
     };
   }
 
@@ -247,6 +272,53 @@
 
   function withShowMissing(state, shown) {
     return assign({}, state, { showMissing: !!shown });
+  }
+
+  /** Start editing a row's name, or stop with null. */
+  function withRenaming(state, reviewId) {
+    return assign({}, state, { renaming: reviewId || null });
+  }
+
+  function cleanTyped(name) {
+    var t = typeof name === "string" ? name.trim() : "";
+    return t || null;
+  }
+
+  /** A rename is sent: show the new name at once and close the field. */
+  function beginRename(state, reviewId, name) {
+    return assign({}, state, { renaming: null, nameOverride: withKey(state.nameOverride || {}, reviewId, cleanTyped(name)) });
+  }
+
+  function afterRename(state, reviewId, result, now) {
+    if (result && result.ok) {
+      var kept = result.body && Object.prototype.hasOwnProperty.call(result.body, "name") ? result.body.name : undefined;
+      var out = assign({}, state, { notes: withKey(state.notes, reviewId, undefined) });
+      if (kept !== undefined) out.nameOverride = withKey(state.nameOverride || {}, reviewId, kept || null);
+      return out;
+    }
+    var back = assign({}, state, { nameOverride: withKey(state.nameOverride || {}, reviewId, undefined) });
+    if (result && result.status === 401) return withFetch(back, { ok: false, status: 401 });
+    var why = !result || result.unreachable
+      ? TEXT.STAR_NOT_RUNNING
+      : (result.error && (result.error.remedy || result.error.message)) || TEXT.UNKNOWN_ERROR;
+    return withNote(back, reviewId, { kind: "error", text: fill(TEXT.RENAME_FAILED, { why: withoutFinalPeriod(why) }), tone: "warn" }, now);
+  }
+
+  /** The name the reviewer gave, after any rename in flight; null for none. */
+  function customName(review, state) {
+    var o = state.nameOverride || {};
+    if (Object.prototype.hasOwnProperty.call(o, review.id)) return o[review.id];
+    return typeof review.custom_name === "string" && review.custom_name ? review.custom_name : null;
+  }
+
+  /** Open or close one review's page list. Held for the page's lifetime only. */
+  function withPagesOpen(state, reviewId, open) {
+    return assign({}, state, { pagesOpen: withKey(state.pagesOpen || {}, reviewId, open ? true : undefined) });
+  }
+
+  /** Show every review of one card, or only its newest few. */
+  function withCardMore(state, cardId, open) {
+    return assign({}, state, { cardMore: withKey(state.cardMore || {}, cardId, open ? true : undefined) });
   }
 
   function withExpanded(state, sessionId, open) {
@@ -289,7 +361,12 @@
       var found = findReview(list, id);
       if (!found || !!found.review.starred === override[id]) delete override[id];
     });
-    return assign({}, state, { starOverride: override });
+    var names = assign({}, state.nameOverride);
+    Object.keys(names).forEach(function (id) {
+      var found = findReview(list, id);
+      if (!found || (found.review.custom_name || null) === names[id]) delete names[id];
+    });
+    return assign({}, state, { starOverride: override, nameOverride: names });
   }
 
   // ---------------------------------------------------------------------------
@@ -358,13 +435,13 @@
   }
 
   function handoffFor(session, list) {
-    var isLegacy = !session || session.id === LEGACY_SESSION;
+    var legacy = !session || isLegacy(session);
     // A name read off a page's title stays out: the message is a new agent's prompt.
-    var name = isLegacy || session.name_from_page === true ? null : session.name || null;
+    var name = legacy || session.name_from_page === true ? null : session.name || null;
     // The rail's hand-off message in its Library form, with the state dir the
     // list names (null for the default one).
     var dirPath = list && typeof list.state_dir === "string" && list.state_dir ? list.state_dir : null;
-    return protocol.AGENT_LIVENESS.handoffMessage(isLegacy ? null : session.id, name, false, {
+    return protocol.AGENT_LIVENESS.handoffMessage(legacy ? null : session.id, name, false, {
       library: true,
       stateDir: dirPath
     });
@@ -374,14 +451,47 @@
     return !!(a && b && a.session === b.session);
   }
 
-  function watchText(session, list) {
-    var w = session.watching;
-    if (!w) return TEXT.WATCH_NONE;
+  var STATE_LISTENING = "listening";
+  var STATE_WORKING = "working";
+
+  // How the watcher is named: the card's own agent and the Library's agent
+  // get their short forms. `start` is for the head of a sentence.
+  function agentPhrase(ref, session, list, start) {
     var attached = list && list.attached;
-    var agent = agentLabel(w);
-    if (attached && attached.session && w.session === attached.session) return fill(TEXT.WATCH_LIBRARY_AGENT, { agent: agent });
-    if (agent === sessionTitle(session)) return TEXT.WATCH_OWN;
-    return fill(TEXT.WATCH_OTHER, { agent: agent });
+    var agent = agentLabel(ref);
+    if (attached && attached.session && ref.session === attached.session) return fill(TEXT.WATCH_LIBRARY_AGENT, { agent: agent });
+    if (agent === sessionTitle(session)) return start ? TEXT.WATCH_OWN_START : TEXT.WATCH_OWN;
+    return agent;
+  }
+
+  /**
+   * What is known about the session's agent, from the list's `watching`
+   * (listening or working, the states that ask before a hand-over) and
+   * `away` (last seen, neither). Both come from the helper's one liveness
+   * rule; the page only words them.
+   */
+  function watchText(session, list, now, opts, start) {
+    var w = session.watching;
+    if (w) {
+      var agent = agentPhrase(w, session, list, start);
+      if (w.state === STATE_WORKING) {
+        return fill(TEXT.WATCH_WORKING, { agent: agent, time: formatTime(w.last_active, now, opts.timeZone) });
+      }
+      return fill(TEXT.WATCH_LISTENING, { agent: agent });
+    }
+    var a = session.away;
+    if (a) {
+      var who = agentPhrase(a, session, list, start);
+      if (!a.last_active) return fill(TEXT.WATCH_AWAY_NO_TIME, { agent: who });
+      return fill(TEXT.WATCH_AWAY, { agent: who, time: formatTime(a.last_active, now, opts.timeZone) });
+    }
+    return TEXT.WATCH_NONE;
+  }
+
+  function waitingIn(session) {
+    return (session.reviews || []).reduce(function (sum, r) {
+      return r.openable === "missing" ? sum : sum + (r.waiting || 0);
+    }, 0);
   }
 
   // ---------------------------------------------------------------------------
@@ -392,31 +502,43 @@
     return n + " " + (n === 1 ? one : many);
   }
 
+  function isLegacy(session) {
+    return !!session && (session.id === LEGACY_SESSION || session.id.indexOf(LEGACY_SESSION + ":") === 0);
+  }
+
   function sessionTitle(session) {
-    if (session.id === LEGACY_SESSION) return TEXT.LEGACY_SESSION;
+    if (session.legacyProject) return fill(TEXT.LEGACY_PROJECT, { project: session.legacyProject });
+    if (isLegacy(session)) return TEXT.LEGACY_SESSION;
     if (session.name) return session.name;
     var reviews = session.reviews || [];
     var first = reviews.length ? reviews[reviews.length - 1] : null;
     return fill(TEXT.UNNAMED_SESSION, { name: first ? first.display_name : session.id });
   }
 
-  // The path line says only what the title and the card do not: the project
-  // is left out when the card shows exactly that one project, and a folder or
-  // file the title already names is left out.
-  function whereText(review, cardProjects) {
-    var name = String(review.display_name || review.title || "");
-    var parts = [];
-    var projectShown = !!(cardProjects && cardProjects.length === 1 && cardProjects[0] === review.project);
-    if (typeof review.project === "string" && review.project && !projectShown) parts.push(review.project);
-    var rest = [review.folder, review.file].filter(function (p) {
-      return typeof p === "string" && p !== "";
-    });
-    var said = rest.every(function (p) {
-      return name.indexOf(p) !== -1;
-    });
-    if (!said) parts = parts.concat(rest);
-    return parts.join(" / ");
+  // The row's second line: the document's real path, as the reader wrote it
+  // (~ for home), never a join with spaced slashes. A long one keeps its head
+  // up to the project folder and as much of its end as fits, with an ellipsis
+  // between.
+  var PATH_MAX = 64;
+  var CARD_ROWS_SHOWN = 5;
+
+  function pathText(review) {
+    var dirPart = typeof review.path_hint === "string" ? review.path_hint : "";
+    var file = typeof review.file === "string" && review.file ? review.file : "";
+    var full = dirPart && file ? dirPart.replace(/\/+$/, "") + "/" + file : dirPart || "";
+    if (full.length <= PATH_MAX) return full;
+    var segs = full.split("/");
+    var last = segs.length - 1;
+    var headEnd = typeof review.project === "string" && review.project ? segs.lastIndexOf(review.project) : -1;
+    if (headEnd < 0 || headEnd >= last - 1) headEnd = 0;
+    var head = segs.slice(0, headEnd + 1).join("/");
+    var t = last;
+    while (t - 1 > headEnd + 1 && (head + "/\u2026/" + segs.slice(t - 1).join("/")).length <= PATH_MAX) t -= 1;
+    if (t <= headEnd + 1) return full;
+    return head + "/\u2026/" + segs.slice(t).join("/");
   }
+
+
 
   // ---------------------------------------------------------------------------
   // Rows
@@ -507,7 +629,7 @@
     if (review.unreadable) notices.push({ text: TEXT.UNREADABLE, tone: "warn" });
     if (missing) notices.push({ text: TEXT.MISSING, tone: "quiet" });
     if (!missing && review.kind === "worktree") notices.push({ text: TEXT.WORKTREE, tone: "info" });
-    if (!missing && review.kind === "legacy") notices.push({ text: TEXT.LEGACY_NEW_REVIEW, tone: "info" });
+    if (!missing && review.kind === "legacy") notices.push({ text: TEXT.LEGACY_PICKUP, tone: "info" });
     if (viaAgent && !agent) notices.push({ text: TEXT.NEEDS_AGENT, tone: "warn" });
     if (devServer && !missing) notices.push({ text: TEXT.DEV_SERVER_NO_HANDOFF, tone: "quiet" });
 
@@ -548,24 +670,34 @@
     if (review.ended) badges.push(TEXT.BADGE_ENDED);
     if (review.served_url) badges.push(TEXT.BADGE_SERVED);
     if (session.watching && !sameWatcher(session.watching, cardWatching)) {
-      badges.push(fill(TEXT.BADGE_WATCHING, { agent: agentLabel(session.watching) }));
+      var badge = session.watching.state === STATE_WORKING ? TEXT.BADGE_WORKING : TEXT.BADGE_LISTENING;
+      badges.push(fill(badge, { agent: agentLabel(session.watching) }));
     }
 
     var folded = review.folded_from && review.folded_from.length
       ? fill(TEXT.FOLDED, { n: review.folded_from.length + 1 })
       : null;
 
-    var pages = (review.pages || []).length > 1
-      ? review.pages.map(function (p) {
+    // A folder review's pages: a count, and the list only once opened.
+    var allPages = (review.pages || []).length > 1 ? review.pages : [];
+    var pagesOpen = !!(state.pagesOpen && state.pagesOpen[review.id]);
+    var pagesToggle = allPages.length ? { text: fill(TEXT.PAGES, { n: allPages.length }), expanded: pagesOpen } : null;
+    var pages = pagesOpen
+      ? allPages.map(function (p) {
           return { title: p.title || p.path, path: p.path };
         })
       : [];
 
+    var original = review.display_name || review.title || review.id;
+    var renamed = customName(review, state);
     return {
       id: review.id,
       session: session.id,
-      name: review.display_name || review.title || review.id,
-      where: whereText(review, inCard ? session.projects : null),
+      name: renamed || original,
+      // The document's own name, under the reviewer's when they renamed it.
+      originalName: renamed ? original : null,
+      rename: { editing: state.renaming === review.id, value: renamed || original, label: TEXT.RENAME, original: original },
+      path: pathText(review),
       lastText: "last " + formatTime(review.last, now, opts.timeZone),
       counts: {
         waiting: review.waiting > 0 ? review.waiting + " waiting" : null,
@@ -584,6 +716,7 @@
       badges: badges,
       folded: folded,
       pages: pages,
+      pagesToggle: pagesToggle,
       notices: notices,
       note: note,
       offerHandoff: viaAgent && !agent && !noSession,
@@ -592,6 +725,81 @@
       panel: panel,
       sessionText: fill(TEXT.SESSION_OF, { name: sessionTitle(session) })
     };
+  }
+
+  // ---------------------------------------------------------------------------
+  // Cards
+  // ---------------------------------------------------------------------------
+
+  /**
+   * The cards to draw, one per session, except the pre-session reviews
+   * (phase 8): one card per project, since one card of every project's old
+   * reviews read as a mix nobody made. Reviews with no project keep the plain
+   * "from before sessions" card.
+   */
+  function cardSessions(sessions) {
+    var out = [];
+    sessions.forEach(function (session) {
+      if (session.id !== LEGACY_SESSION) {
+        out.push(session);
+        return;
+      }
+      var groups = {};
+      var order = [];
+      session.reviews.forEach(function (r) {
+        var key = typeof r.project === "string" && r.project ? r.project : "";
+        if (!Object.prototype.hasOwnProperty.call(groups, key)) {
+          groups[key] = [];
+          order.push(key);
+        }
+        groups[key].push(r);
+      });
+      order.forEach(function (key) {
+        var reviews = groups[key];
+        var last = reviews.reduce(function (m, r) {
+          return !m || Date.parse(r.last) > Date.parse(m) ? r.last : m;
+        }, null);
+        out.push(assign({}, session, {
+          id: key ? LEGACY_SESSION + ":" + key : LEGACY_SESSION,
+          legacyProject: key || null,
+          projects: key ? [key] : [],
+          reviews: reviews,
+          last: last
+        }));
+      });
+    });
+    return out;
+  }
+
+  /**
+   * A notice every row of a card carries is the card's to say, once. Taken
+   * off the rows and returned for the card. A card of one row keeps it on
+   * the row.
+   */
+  function hoistNotes(rows) {
+    if (rows.length < 2) return [];
+    var shared = rows[0].notices.filter(function (n) {
+      return rows.every(function (row) {
+        return row.notices.some(function (m) { return m.text === n.text; });
+      });
+    });
+    if (!shared.length) return [];
+    rows.forEach(function (row) {
+      row.notices = row.notices.filter(function (n) {
+        return !shared.some(function (m) { return m.text === n.text; });
+      });
+    });
+    return shared.map(function (n) { return { text: n.text, tone: n.tone }; });
+  }
+
+  /** A row the reader has a panel, menu, open or note on. */
+  function actingOn(state, reviewId) {
+    return !!(
+      (state.panel && state.panel.review === reviewId) ||
+      state.menu === reviewId ||
+      (state.opening && state.opening[reviewId]) ||
+      (state.notes && state.notes[reviewId])
+    );
   }
 
   // ---------------------------------------------------------------------------
@@ -619,7 +827,7 @@
   }
 
   function rowHaystack(review) {
-    return [review.display_name, review.title, review.file, review.folder, review.path_hint, review.project]
+    return [review.custom_name, review.display_name, review.title, review.file, review.folder, review.path_hint, review.project]
       .filter(function (v) {
         return typeof v === "string";
       })
@@ -679,7 +887,7 @@
     return null;
   }
 
-  function dialogView(state, list) {
+  function dialogView(state, list, now, opts) {
     var d = state.dialog;
     if (!d) return null;
     var found = findReview(list, d.review);
@@ -698,10 +906,14 @@
       agent: agent.name
     });
     if (others.length) body += " " + TEXT.CONFIRM_MOVES;
+    // What is known about the other agent, and what is waiting on it.
+    var waiting = waitingIn(found.session);
+    var status = watchText(found.session, list, now, opts, true) + ".";
+    if (waiting > 0) status += " " + (waiting === 1 ? TEXT.WAITING_ONE : fill(TEXT.WAITING_MANY, { n: waiting }));
     var buttons = [{ id: "move", label: TEXT.CONFIRM_MOVE }];
     if (found.review.openable === "yes") buttons.push({ id: "read", label: TEXT.CONFIRM_READ });
     buttons.push({ id: "cancel", label: TEXT.CONFIRM_CANCEL });
-    return { review: d.review, action: d.action, title: TEXT.CONFIRM_TITLE, body: body, reviews: others, buttons: buttons };
+    return { review: d.review, action: d.action, title: TEXT.CONFIRM_TITLE, status: status, body: body, reviews: others, buttons: buttons };
   }
 
   function build(list, state, now, opts) {
@@ -713,7 +925,7 @@
       search: { placeholder: TEXT.SEARCH_PLACEHOLDER, value: state.query || "" },
       projects: { options: [], value: state.project || "" },
       banner: banner(state, list),
-      dialog: list ? dialogView(state, list) : null,
+      dialog: list ? dialogView(state, list, now, opts) : null,
       loading: null,
       empty: null,
       notice: null,
@@ -742,7 +954,7 @@
     var olderReviews = 0;
     var missingRows = [];
 
-    sessions.forEach(function (session) {
+    cardSessions(sessions).forEach(function (session) {
       if (state.project && (session.projects || []).indexOf(state.project) === -1) return;
       var wholeCard = searching && matchesAll(sessionHaystack(session), ts);
       var sessionText = sessionHaystack(session);
@@ -771,19 +983,51 @@
         return sum + (r.waiting || 0);
       }, 0);
       if (bucket === older) olderReviews += visible.length;
+      var rows = visible.map(function (r) {
+        return buildRow(r, session, list, state, now, opts, session.watching || null, true);
+      });
+      var notes = hoistNotes(rows);
+      // A long card shows its newest few. A row the reader needs (waiting,
+      // starred) or is acting on stays shown; search shows every match.
+      var more = null;
+      var cardOpenAll = !!(state.cardMore && state.cardMore[session.id]);
+      if (!searching && rows.length > CARD_ROWS_SHOWN) {
+        var hidden = 0;
+        if (!cardOpenAll) {
+          rows = rows.filter(function (row, i) {
+            var r = visible[i];
+            var keep = i < CARD_ROWS_SHOWN || r.waiting > 0 || row.starred || actingOn(state, r.id);
+            if (!keep) hidden += 1;
+            return keep;
+          });
+        }
+        if (cardOpenAll) more = { text: TEXT.SHOW_FEWER, expanded: true };
+        else if (hidden > 0) more = { text: fill(TEXT.SHOW_MORE, { n: hidden }), expanded: false };
+      }
       bucket.push({
         id: session.id,
         title: sessionTitle(session),
         projects: (session.projects || []).slice(),
         reviewsText: plural(visible.length, "review", "reviews"),
-        watchText: watchText(session, list),
+        watchText: watchText(session, list, now, opts, false),
         watched: !!session.watching,
         waitingText: waiting > 0 ? waiting + " waiting" : null,
         lastText: "last " + formatTime(session.last, now, opts.timeZone),
         open: open,
-        rows: visible.map(function (r) {
-          return buildRow(r, session, list, state, now, opts, session.watching || null, true);
-        })
+        lastAt: session.last,
+        notes: notes,
+        more: more,
+        rows: rows
+      });
+    });
+
+    // Cards sort by their newest activity, so a pre-session card split off
+    // the one list slots in by its own reviews' times.
+    [top, week, older].forEach(function (bucket) {
+      bucket.sort(function (a, b) {
+        var am = Date.parse(a.lastAt) || 0;
+        var bm = Date.parse(b.lastAt) || 0;
+        return bm - am;
       });
     });
 
@@ -1068,6 +1312,12 @@
     withProject: withProject,
     withShowMissing: withShowMissing,
     withExpanded: withExpanded,
+    withPagesOpen: withPagesOpen,
+    withRenaming: withRenaming,
+    beginRename: beginRename,
+    afterRename: afterRename,
+    withCardMore: withCardMore,
+    CARD_ROWS_SHOWN: CARD_ROWS_SHOWN,
     withPanel: withPanel,
     withMenu: withMenu,
     withDialog: withDialog,

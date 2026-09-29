@@ -110,11 +110,11 @@ test("reviews group by session, newest session first, reviews newest first", asy
   assert.deepEqual(session(list, "s_coach").reviews.map((r) => r.id), ["r_brief", "r_spec", "r_notes", "r_mounted", "r_deleted"]);
 });
 
-test("a review's last is its log's modified time", async () => {
+test("a review's last is its newest work event's own time", async () => {
   const { reader, installed } = setup();
   const list = await reader.list(installed.nowMs);
   const log = path.join(installed.dir, "reviews", "r_brief", "events.jsonl");
-  assert.equal(row(list, "r_brief").last, fs.statSync(log).mtime.toISOString());
+  assert.equal(row(list, "r_brief").last, newestWorkTs(log));
 });
 
 test("the legacy review lists under the legacy session with kind legacy", async () => {
@@ -357,7 +357,7 @@ test("describeReview also names what Open needs: the covering server, the URL pa
   assert.equal(brief.server, "ss_alphadocs");
   assert.equal(brief.url_path, "/brief.html");
   assert.equal(brief.served_path, path.join(installed.home, "projects/alpha/docs/brief.html"));
-  assert.deepEqual(brief.watching, { session: "s_coach", name: "coach activity" });
+  assert.deepEqual(brief.watching, { session: "s_coach", name: "coach activity", state: "listening", last_active: new Date(installed.nowMs - 10 * 1000).toISOString() });
   assert.equal(brief.last, "2026-09-28T15:40:00.000Z");
   const mounted = reader.describeReview("r_mounted", installed.nowMs);
   assert.match(mounted.url_path, /^\/\.lahe-source\/[a-f0-9]+\/figure\.html$/);
@@ -473,8 +473,8 @@ test("served_url is set only when the recorded server answers its exact-identity
 test("watching names the primary session from a fresh heartbeat, and is null for a stale one", async () => {
   const { reader, installed } = setup();
   const list = await reader.list(installed.nowMs);
-  assert.deepEqual(session(list, "s_coach").watching, { session: "s_coach", name: "coach activity" });
-  assert.deepEqual(session(list, "s_ops").watching, { session: "s_index", name: "document index" });
+  assert.deepEqual(session(list, "s_coach").watching, { session: "s_coach", name: "coach activity", state: "listening", last_active: new Date(installed.nowMs - 10 * 1000).toISOString() });
+  assert.deepEqual(session(list, "s_ops").watching, { session: "s_index", name: "document index", state: "listening", last_active: new Date(installed.nowMs - 10 * 1000).toISOString() });
   assert.equal(session(list, "s_old3").watching, null);
   assert.equal(session(list, "s_dev").watching, null);
 });
@@ -800,4 +800,150 @@ test("an expired request's reason reaches the list, so the page can word attach_
   const list = await reader.list(now);
   assert.equal(row(list, "r_brief").request.state, "expired");
   assert.equal(row(list, "r_brief").request.reason, "attach_changed");
+});
+
+// --- phase 8: listening, working, or last active --------------------------------
+
+function stampActivity(installed, sessionId, atMs) {
+  const stateDir = require("../../src/service/state_dir.js");
+  stateDir.writeAtomic(stateDir.activityPath(installed.dir, sessionId), JSON.stringify({ [protocol.MONITOR.ACTIVITY_FIELD.AT]: new Date(atMs).toISOString() }) + "\n");
+}
+
+test("phase 8: a live monitor is listening, and nothing is away", async () => {
+  const { reader, installed } = setup();
+  const s = session(await reader.list(installed.nowMs), "s_coach");
+  assert.deepEqual(s.watching, { session: "s_coach", name: "coach activity", state: "listening", last_active: new Date(installed.nowMs - 10 * 1000).toISOString() });
+  assert.equal(s.away, null);
+});
+
+test("phase 8: a stale monitor plus a lahe command inside WORKING_MS is working, with that command's time", async () => {
+  const { reader, installed } = setup();
+  const later = installed.nowMs + 10 * protocol.MONITOR.HEARTBEAT_FRESH_MS;
+  stampActivity(installed, "s_coach", later - protocol.CATALOG.WORKING_MS);
+  const s = session(await reader.list(later), "s_coach");
+  assert.deepEqual(s.watching, { session: "s_coach", name: "coach activity", state: "working", last_active: new Date(later - protocol.CATALOG.WORKING_MS).toISOString() });
+  assert.equal(s.away, null);
+});
+
+test("phase 8: a lahe command older than WORKING_MS is not watching: the agent is away, with its last active time", async () => {
+  const { reader, installed } = setup();
+  const later = installed.nowMs + 10 * protocol.MONITOR.HEARTBEAT_FRESH_MS;
+  const commandAt = later - protocol.CATALOG.WORKING_MS - 1;
+  stampActivity(installed, "s_coach", commandAt);
+  const s = session(await reader.list(later), "s_coach");
+  assert.equal(s.watching, null);
+  assert.deepEqual(s.away, { session: "s_coach", name: "coach activity", last_active: new Date(commandAt).toISOString() });
+  assert.equal(reader.describeReview("r_brief", later).watching, null, "Open reads the same answer");
+});
+
+test("phase 8: a stale heartbeat and no command is away since the heartbeat; no record at all is no agent", async () => {
+  const { reader, installed } = setup();
+  const list = await reader.list(installed.nowMs);
+  assert.equal(session(list, "s_old3").watching, null);
+  assert.deepEqual(session(list, "s_old3").away, { session: "s_old3", name: null, last_active: new Date(installed.nowMs - 10 * MINUTE).toISOString() });
+  assert.equal(session(list, "s_dev").away, null);
+  assert.equal(session(list, "s_dev").watching, null);
+});
+
+test("phase 8: a session watched from another session's monitor takes that agent's state", async () => {
+  const { reader, installed, options } = setup();
+  // s_ops's heartbeat names s_index. Both go stale; s_index's agent ran a
+  // command a minute ago, so it is working, and s_ops says so.
+  const later = installed.nowMs + 10 * protocol.MONITOR.HEARTBEAT_FRESH_MS;
+  stampActivity(installed, "s_index", later - MINUTE);
+  const s = session(await reader.list(later), "s_ops");
+  assert.deepEqual(s.watching, { session: "s_index", name: "document index", state: "working", last_active: new Date(later - MINUTE).toISOString() });
+  stampActivity(installed, "s_index", later - 5 * MINUTE);
+  // A fresh reader, so the rewritten stamp is read rather than cached.
+  const away = session(await catalogReader.createReader(options).list(later), "s_ops");
+  assert.equal(away.watching, null);
+  assert.deepEqual(away.away, { session: "s_index", name: "document index", last_active: new Date(later - 5 * MINUTE).toISOString() });
+});
+
+// --- `last` is the newest work event's own time, never a file's mtime ----------
+
+function newestWorkTs(log) {
+  const skip = ["origin.registered", "origin.removed", "page.visited"];
+  return fs.readFileSync(log, "utf8").split("\n").filter((l) => l.trim()).map((l) => JSON.parse(l))
+    .filter((e) => skip.indexOf(e.event) === -1).map((e) => e.ts).sort().pop();
+}
+
+test("last: a compacted log rewritten today keeps its old last, and the card's week split uses it", async () => {
+  const { reader, installed } = setup();
+  const log = path.join(installed.dir, "reviews", "r_spec", "events.jsonl");
+  const before = newestWorkTs(log);
+  // Compaction rewrites the log in place: same events, a new mtime, and two
+  // housekeeping files beside it.
+  fs.writeFileSync(log, fs.readFileSync(log, "utf8"));
+  fs.writeFileSync(log + ".compacted-ids", "ev_x\n");
+  fs.writeFileSync(log + ".pre-compact.gz", "");
+  fs.utimesSync(log, new Date(installed.nowMs), new Date(installed.nowMs));
+  const list = await reader.list(installed.nowMs);
+  assert.equal(row(list, "r_spec").last, before);
+  assert.ok(Date.parse(before) < installed.nowMs - protocol.CATALOG.POLL_MS, "the fixture's newest event is old");
+  assert.equal(row(list, "r_spec").counts_as_of, before, "counts are as of the same last");
+  assert.equal(reader.describeReview("r_spec", installed.nowMs).last, before);
+});
+
+test("last: a review whose every file is new but whose newest event is from August says August", async () => {
+  const { reader, installed } = setup();
+  const log = path.join(installed.dir, "reviews", "r_mounted", "events.jsonl");
+  const events = fs.readFileSync(log, "utf8").split("\n").filter(Boolean).map((l) => JSON.parse(l));
+  const august = "2026-08-18T05:00:03.270Z";
+  events.forEach((e) => { e.ts = august; });
+  fs.writeFileSync(log, events.map((e) => JSON.stringify(e)).join("\n") + "\n");
+  // A reviewer's visit is not work on the document.
+  fs.appendFileSync(log, JSON.stringify({ event: "page.visited", event_id: "ev_visit", ts: new Date(installed.nowMs).toISOString(), review: "r_mounted" }) + "\n");
+  const rj = path.join(installed.dir, "reviews", "r_mounted", "review.json");
+  fs.utimesSync(log, new Date(installed.nowMs), new Date(installed.nowMs));
+  fs.utimesSync(rj, new Date(installed.nowMs), new Date(installed.nowMs));
+  const list = await reader.list(installed.nowMs);
+  assert.equal(row(list, "r_mounted").last, august);
+});
+
+test("last: with no readable event, it is review.json's generated time, else meta created_at, never an mtime", async () => {
+  const { reader, installed } = setup();
+  const log = path.join(installed.dir, "reviews", "r_mounted", "events.jsonl");
+  fs.writeFileSync(log, "{ torn\n");
+  fs.utimesSync(log, new Date(installed.nowMs), new Date(installed.nowMs));
+  const rj = JSON.parse(fs.readFileSync(path.join(installed.dir, "reviews", "r_mounted", "review.json"), "utf8"));
+  const list = await reader.list(installed.nowMs);
+  assert.equal(row(list, "r_mounted").last, new Date(Date.parse(rj.generated_at)).toISOString());
+
+  const meta = JSON.parse(fs.readFileSync(path.join(installed.dir, "reviews", "r_notitle", "meta.json"), "utf8"));
+  const log2 = path.join(installed.dir, "reviews", "r_notitle", "events.jsonl");
+  fs.writeFileSync(log2, "");
+  fs.utimesSync(log2, new Date(installed.nowMs), new Date(installed.nowMs));
+  // r_notitle has no review.json at all.
+  const again = await reader.list(installed.nowMs);
+  assert.equal(row(again, "r_notitle").last, new Date(Date.parse(meta.created_at)).toISOString());
+});
+
+// --- project labels for files under a .claude folder ---------------------------
+
+function extraReview(installed, id, target) {
+  const reviewsModule = require("../../src/service/reviews.js");
+  const logModule = require("../../src/service/log.js");
+  reviewsModule.createReviews({ dir: installed.dir, log: logModule.createEventLog({ dir: installed.dir }) }).create({ id, agent_session_id: "s_coach", target_path: target });
+}
+
+test("project: a file under ~/.claude, itself a git repository, is labelled claude config, not .claude", async () => {
+  const { reader, installed } = setup();
+  const skill = path.join(installed.home, ".claude", "skills", "crucible", "SKILL.md");
+  fs.mkdirSync(path.dirname(skill), { recursive: true });
+  fs.mkdirSync(path.join(installed.home, ".claude", ".git"));
+  fs.writeFileSync(skill, "# Crucible\n");
+  extraReview(installed, "r_skill", skill);
+  const list = await reader.list(installed.nowMs);
+  assert.equal(row(list, "r_skill").project, "claude config");
+});
+
+test("project: a worktree under <repo>/.claude/worktrees is labelled with the repo's name, even with no .git to read", async () => {
+  const { reader, installed } = setup();
+  const doc = path.join(installed.home, "projects", "gamma", ".claude", "worktrees", "wt-x", "docs", "brief.html");
+  fs.mkdirSync(path.dirname(doc), { recursive: true });
+  fs.writeFileSync(doc, "<!doctype html><title>x</title>");
+  extraReview(installed, "r_gamma", doc);
+  const list = await reader.list(installed.nowMs);
+  assert.equal(row(list, "r_gamma").project, "gamma");
 });

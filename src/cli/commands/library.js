@@ -23,7 +23,8 @@
 // session owns no review, so it is not an empty review.
 
 // SERVING. `lahe library serve` serves the document a legacy or worktree
-// pickup names. It reads the path itself, from the request's review, re-runs the
+// pickup names. A legacy review is served on itself, taken into the agent's
+// session with its old comments (`--review <id> --adopt`). It reads the path itself, from the request's review, re-runs the
 // candidate checks at serve time, and runs `lahe review` with the path as one
 // argv entry. A page-derived path never passes through a shell string.
 
@@ -333,10 +334,11 @@ function serveTarget(described) {
     if (typeof process.getuid === "function" && stat.uid !== process.getuid()) {
       return { error: "its document belongs to another user; answer refused" };
     }
-    // A fresh review in the agent's session (`--new`): the file's script line
-    // names the legacy review, which belongs to no session, so `lahe review`
-    // would refuse to reuse it. The old comments stay on the legacy review.
-    return { target: described.verified_path, fresh: true };
+    // The legacy review itself, taken into the agent's session with its old
+    // comments (`--review <id> --adopt`). It belongs to no session, so this
+    // moves nothing from another agent; `lahe add` checks the pick-up is
+    // pending for this session, and the helper checks it again.
+    return { target: described.verified_path, adopt: described.review };
   }
   if (described.kind === "worktree") {
     if (!described.candidate) return { error: "its worktree is gone and no main-repo copy passes the checks; answer refused" };
@@ -375,7 +377,7 @@ async function runServe(args, opts, out, err) {
   }
   // argv, never a shell: the path is page text and arrives as one argument.
   var argv = [BIN, "review", chosen.target, "--session", args.session];
-  if (chosen.fresh) argv.push("--new");
+  if (chosen.adopt) argv.push("--review", chosen.adopt, "--adopt");
   if (args.stateDir) argv.push("--state-dir", args.stateDir);
   if (args.port !== null) argv.push("--port", String(args.port));
   var code = await new Promise(function (resolve) {
@@ -390,7 +392,7 @@ async function runServe(args, opts, out, err) {
   });
   if (code === EXIT.OK) {
     agentSessions.createStore({ dir: dir }).touchActivity(args.session);
-    if (chosen.fresh) out(protocol.CATALOG_LEGACY_NOTE(request.review) + "\n");
+    if (chosen.adopt) out(protocol.CATALOG_LEGACY_NOTE(request.review) + "\n");
   }
   return code;
 }

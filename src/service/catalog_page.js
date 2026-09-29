@@ -119,7 +119,10 @@ var PAGE_STYLE = [
   "--lib-attn:var(--purple);--lib-dot:var(--lib-soft);",
   // The rail's primary button (src/layer/overlay.js --accent), so Open looks
   // like the same product's button in both places.
-  "--lib-primary:#3c56a5;--lib-on-primary:#fff}",
+  "--lib-primary:#3c56a5;--lib-on-primary:#fff;",
+  // The card's header band: filled cobalt with white text, so a session reads
+  // as a header and its reviews as what sits inside it.
+  "--lib-head:var(--cobalt);--lib-on-head:var(--white);--lib-head-hover:var(--cobalt-hover)}",
   "@media (prefers-color-scheme: dark){:root{",
   "--lib-bg:var(--ink);--lib-fg:var(--white);--lib-soft:var(--ink-soft-ondark);--lib-faint:var(--ink-faint-ondark);",
   "--lib-rule:var(--rule-ondark);--lib-accent:color-mix(in srgb,var(--cobalt) 45%,var(--white));",
@@ -132,7 +135,9 @@ var PAGE_STYLE = [
   "--lib-focus:var(--sage-fill);",
   // Saturated enough to stand apart from the quiet grey dots on a dark page.
   "--lib-attn:color-mix(in srgb,var(--purple) 55%,#c9b6ff);--lib-dot:var(--lib-faint);",
-  "--lib-primary:#93a7ea;--lib-on-primary:#12151a}}",
+  "--lib-primary:#93a7ea;--lib-on-primary:#12151a;",
+  "--lib-head:color-mix(in srgb,var(--cobalt) 62%,var(--ink));--lib-on-head:var(--white);",
+  "--lib-head-hover:color-mix(in srgb,var(--cobalt) 74%,var(--ink))}}",
   "body{background:var(--lib-bg);color:var(--lib-fg);font-size:var(--text-small);line-height:1.5}",
   ":focus-visible{outline-color:var(--lib-focus)}",
   "[hidden]{display:none !important}",
@@ -177,10 +182,27 @@ var PAGE_STYLE = [
   // The session card.
   ".lib-card{border:1px solid var(--lib-rule);border-radius:var(--r-lg);background:var(--lib-card);margin:0 0 var(--s3)}",
   ".lib-card>summary{list-style:none;cursor:pointer;display:grid;grid-template-columns:auto 1fr;gap:var(--s1) var(--s3);",
-  "align-items:baseline;padding:var(--s3) var(--s4);border-radius:var(--r-lg)}",
+  "align-items:baseline;padding:var(--s3) var(--s4);border-radius:var(--r-lg);",
+  "background:var(--lib-head);color:var(--lib-on-head)}",
+  ".lib-card[open]>summary{border-radius:var(--r-lg) var(--r-lg) 0 0}",
   ".lib-card>summary::-webkit-details-marker{display:none}",
   ".lib-card>summary::marker{content:''}",
-  ".lib-card>summary:hover{background:var(--lib-raised)}",
+  ".lib-card>summary:hover{background:var(--lib-head-hover)}",
+  ".lib-card>summary:focus-visible{outline:2px solid var(--lib-focus);outline-offset:2px}",
+  // Everything on the band is white: the meta, its dots and its separators.
+  ".lib-card>summary .lib-card-meta,.lib-card>summary .lib-project,.lib-card>summary .lib-waiting,",
+  ".lib-card>summary .lib-card-meta>span+span::before{color:var(--lib-on-head)}",
+  ".lib-card>summary .lib-card-meta{opacity:.92}",
+  ".lib-card>summary .lib-chev{border-color:var(--lib-on-head)}",
+  ".lib-card>summary .lib-waiting>.lib-dot,.lib-card>summary .lib-badge::before{background:var(--lib-on-head)}",
+  // Notes that apply to every review of the card, said once under the band.
+  ".lib-card-notes{padding:var(--s2) var(--s4) var(--s3);border-bottom:1px solid var(--lib-rule)}",
+  ".lib-card-notes>.lib-line:first-child{margin-top:0}",
+  ".lib-card-more{margin:0;padding:var(--s2) var(--s4) var(--s3);border-top:1px solid var(--lib-rule)}",
+  // A disclosure (N pages, Show N more) carries a caret that turns when open.
+  ".lib-btn[data-disclosure='true']::after{content:'';display:inline-block;width:5px;height:5px;margin-left:8px;", // px: a drawn caret
+  "border-right:1.5px solid currentColor;border-bottom:1.5px solid currentColor;transform:translateY(-2px) rotate(45deg)}",
+  ".lib-btn[data-disclosure='true'][aria-expanded='true']::after{transform:translateY(1px) rotate(-135deg)}",
   ".lib-chev{grid-row:1;align-self:center;width:8px;height:8px;margin-right:var(--s1);", // px: a drawn chevron
   "border-right:2px solid var(--lib-faint);border-bottom:2px solid var(--lib-faint);transform:rotate(-45deg);",
   "transition:transform .15s ease}",
@@ -208,7 +230,19 @@ var PAGE_STYLE = [
   ".lib-row-main{min-width:0}",
   ".lib-name{font-family:var(--font-display);font-weight:var(--w-display);font-size:var(--text-body);line-height:1.35;",
   "margin:0;overflow-wrap:anywhere}",
-  ".lib-where{margin:2px 0 0;color:var(--lib-faint);font-size:var(--text-meta);overflow-wrap:anywhere}", // px: hugs the name
+  // The path: the mono face, a step smaller, muted, and breaking only at a
+  // slash when it must.
+  ".lib-where{margin:2px 0 0;color:var(--lib-faint);font-family:var(--font-mono);font-size:var(--text-micro);", // px: hugs the name
+  "line-height:1.45;overflow-wrap:anywhere;max-width:none}",
+  ".lib-name{max-width:none}",
+  // The name line: the name, then a quiet Rename. The original name, after a
+  // rename, sits small and muted under it.
+  ".lib-name-line{margin:0;display:flex;flex-wrap:wrap;align-items:baseline;gap:0 var(--s2);max-width:none}",
+  ".lib-name-line>.lib-name{display:inline}",
+  ".lib-rename-btn.lib-btn{font-size:var(--text-micro);font-weight:var(--w-body);padding:0 var(--s1);color:var(--lib-faint)}",
+  ".lib-original{margin:0;color:var(--lib-soft);font-size:var(--text-meta);max-width:none}",
+  ".lib-rename-input{font:inherit;font-family:var(--font-display);font-weight:var(--w-display);font-size:var(--text-body);",
+  "width:100%;color:var(--lib-fg);background:var(--lib-card);border:1px solid var(--lib-accent);border-radius:var(--r);padding:2px 6px}", // px: field padding
   ".lib-facts{margin:var(--s1) 0 0;display:flex;flex-wrap:wrap;gap:var(--s1) var(--s3);font-size:var(--text-meta);color:var(--lib-soft)}",
   ".lib-badge{display:inline}",
   ".lib-badge::before{content:'';display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--lib-faint);", // px: a dot
@@ -227,13 +261,16 @@ var PAGE_STYLE = [
   ".lib-note[data-tone='warn'] .lib-mark{background:var(--lib-attn)}",
   ".lib-note[data-busy='true'] .lib-mark{animation:lib-pulse 1.4s ease-in-out infinite}",
   "@keyframes lib-pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.35;transform:scale(.7)}}",
-  ".lib-pages{margin:var(--s2) 0 0;padding:0;list-style:none;font-size:var(--text-meta);color:var(--lib-soft)}",
+  ".lib-pages{margin:var(--s2) 0 0 var(--s4);padding:0;list-style:none;font-size:var(--text-meta);color:var(--lib-faint)}",
   ".lib-pages>li{margin:0;padding:0 0 0 var(--s3);border-left:1px solid var(--lib-rule)}",
   ".lib-pages>li::before{content:none}",
   ".lib-pages .lib-path{color:var(--lib-faint);margin-left:var(--s2)}",
 
   // Buttons: one filled primary (Open), outlined secondaries, and a quiet text button.
-  ".lib-acts{display:flex;gap:var(--s2);flex-wrap:wrap;justify-content:flex-end;align-items:flex-start}",
+  // Open over Hand to agent, one narrow column, so the text beside it gets
+  // the width.
+  ".lib-acts{display:flex;flex-direction:column;gap:var(--s2);align-items:stretch}",
+  ".lib-acts>.lib-btn,.lib-acts>.lib-menu>.lib-btn{width:100%}",
   ".lib-btn{font:inherit;font-size:var(--text-meta);font-weight:var(--w-medium);line-height:1.2;white-space:nowrap;",
   "color:var(--lib-fg);background:transparent;border:1px solid var(--lib-rule);border-radius:var(--r);",
   "padding:7px 12px;cursor:pointer}", // px: control padding
@@ -299,7 +336,8 @@ var PAGE_STYLE = [
 
   "@media (max-width:720px){",
   ".lib-row{grid-template-columns:32px minmax(0,1fr)}",
-  ".lib-acts{grid-column:2;justify-content:flex-start}",
+  ".lib-acts{grid-column:2;flex-direction:row;flex-wrap:wrap;justify-content:flex-start;align-items:flex-start}",
+  ".lib-acts>.lib-btn,.lib-acts>.lib-menu>.lib-btn{width:auto}",
   ".lib-menu{align-items:flex-start}",
   // On a phone the meta items wrap onto new lines; a separator would start
   // a line by itself, so the items are spaced instead.

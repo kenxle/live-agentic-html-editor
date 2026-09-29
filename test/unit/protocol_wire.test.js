@@ -29,6 +29,7 @@ test("the event type vocabulary is closed and complete", () => {
     "page.visited",
     "reply.folded",
     "reply.rejected",
+    "review.adopted",
     "review.archived",
     "review.created"
   ]);

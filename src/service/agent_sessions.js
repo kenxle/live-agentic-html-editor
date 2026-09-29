@@ -230,6 +230,14 @@ function livenessFrom(input) {
     withinMs(activityAt, nowMs, protocol.AGENT_LIVENESS.ACTIVE_MS) ||
     withinMs(lastReplyAt, nowMs, protocol.AGENT_LIVENESS.ACTIVE_MS);
 
+  // PRESENCE (the Library, phase 8): what is actually known, in three steps.
+  // The ten-minute "listening" above only withholds an accusation; a person
+  // deciding whether to take a session over is told the narrower truth.
+  var presence;
+  if (watcher === true || monitorLive) presence = protocol.AGENT_LIVENESS.PRESENCE.LISTENING;
+  else if (withinMs(activityAt, nowMs, protocol.CATALOG.WORKING_MS)) presence = protocol.AGENT_LIVENESS.PRESENCE.WORKING;
+  else presence = protocol.AGENT_LIVENESS.PRESENCE.AWAY;
+
   var state;
   if (unanswered === 0) state = states.NONE;
   else if (active) state = states.WORKING;
@@ -244,6 +252,7 @@ function livenessFrom(input) {
   out[protocol.AGENT_LIVENESS.FIELD.LISTENING] = listening;
   out[protocol.AGENT_LIVENESS.FIELD.MONITOR_AT] = monitorAt;
   out[protocol.AGENT_LIVENESS.FIELD.ACTIVITY_AT] = activityAt;
+  out[protocol.AGENT_LIVENESS.FIELD.PRESENCE] = presence;
   // Passed in by the store, which knows the state directory. The pure half has
   // no directory to put in the command, so it claims none.
   out[protocol.AGENT_LIVENESS.FIELD.OLDEST_ITEM] =

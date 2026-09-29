@@ -291,6 +291,7 @@ async function serve(options) {
     library: loadLibrary(),
     catalog: catalog,
     catalogActions: catalogActionsInstance,
+    catalogQueue: catalogQueue,
     now: now,
     version: VERSION,
     startedAt: startedAt

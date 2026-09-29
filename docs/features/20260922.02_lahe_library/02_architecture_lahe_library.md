@@ -79,8 +79,11 @@ All in `protocol.CATALOG`, each with its value:
 ```json
 { "schema": 1,
   "stars": { "<review-id>": "2026-09-28T16:20:00Z" },
-  "reopened": { "<session-id>": { "at": "2026-09-28T16:21:00Z", "handoff_rev": 4 } } }
+  "reopened": { "<session-id>": { "at": "2026-09-28T16:21:00Z", "handoff_rev": 4 } },
+  "names": { "<review-id>": "Coach brief v2" } }
 ```
+
+`names` (phase 8) holds the reviewer's own names for reviews. A file without it reads as no names.
 
 A corrupt `catalog.json` is never overwritten: a star is refused with `PROTO_CATALOG_UNREADABLE`, and the list shows no stars with a notice. An Open that would reopen a closed session is refused the same way, because a reopen the sweep cannot see would leave that session open for good (fix round CX2 and CR4).
 
@@ -123,7 +126,8 @@ One writer per file, so a star and an attach cannot overwrite each other.
   "attached": { "session": "s_...", "name": "document index", "watching": true, "closed": false },
   "sessions": [{
     "id": "s_...", "name": "coach activity", "projects": ["steady-thread"],
-    "watching": { "session": "s_...", "name": "free writing lahe" }, "last": "2026-09-28T15:40:00Z",
+    "watching": { "session": "s_...", "name": "free writing lahe", "state": "working", "last_active": "2026-09-28T15:58:00Z" },
+    "away": null, "last": "2026-09-28T15:40:00Z",
     "reviews": [{
       "id": "r_...", "title": "Feature Brief: Coach Activity", "display_name": "Feature Brief: Coach Activity",
       "file": "01_brief.md", "folder": "...", "path_hint": "~/Documents/workspace/steady-thread/...",
@@ -144,12 +148,19 @@ One writer per file, so a star and an attach cannot overwrite each other.
 Rules the reader owns:
 
 - **`display_name`** is the title. When the title is missing, or shared with another row, it is `folder / file`.
-- **`last`** on a review is its newest event time; on a session, its newest review's. Origin events do not count: an Open's origin swap appends them to every review the restarted server serves, so a log that ends in them takes `last` from the newest other event, read from the log's tail (fix round CR5).
+- **`last`** on a review is the `ts` inside its newest event that is work on the document; on a session, its newest review's. It is never a file's modified time: compaction rewrites old logs in place, and every compacted review read "last today" (phase 8). `protocol.CATALOG.NOT_WORK_EVENTS` do not count: origin events (an Open's origin swap, fix round CR5), `page.visited`, and `review.adopted`. The log is read backwards from its end, in chunks, never folded, up to `REPROJECT_MAX_BYTES`. With no readable event, `last` is `review.json`'s `generated_at`, else `meta.json`'s `created_at`. `counts_as_of` is `last` when the counts are current, else `review.json`'s `generated_at`, never later than `last`. The week and older split reads the same `last`.
+- **`project`** is the name of the git repository holding the document. A worktree under `<repo>/.claude/worktrees/<name>/` takes `<repo>`'s name, even with no `.git` left to read. Anything under `~/.claude` (skills, agent settings) is "claude config", since that folder is often a git repository named `.claude`.
+- **`custom_name`** is the reviewer's rename from `catalog.json` `names`, or null. `display_name` is unchanged. List only.
 - **`projects`:** the base name of the git top level of each review's target. For a worktree, the owning repository's name. No git repository means no project.
 - **`openable: yes`** when `static_servers.servesPath(...)` is true for a recorded server of the session. That counts mounts.
 - **`kind`** tells the agent how to re-serve a `via-agent` row.
-- **`watching`** is null or `{session, name}`, taken from the `primary` field of the session's `monitor.json` heartbeat. So a session picked up by another agent names that agent.
-- **Who counts as watching** is the rule the request queue uses, read through `livenessFrom` with the session's activity stamp: a fresh heartbeat on the current handoff rev whose pid is alive, or a lahe command in the last few minutes. `lahe monitor` exits when it wakes on work, so a heartbeat alone would read "nobody is watching" exactly while that agent works a batch, and Open would skip the "another agent is watching" confirm step then (fix round CL2). With no heartbeat on disk, the session names itself. A session watched from another session's multi-session monitor (its heartbeat names that session as `primary`, on its current handoff rev) counts as watched while that primary session is listening by the same rule, so the card does not say "no agent" right after the agent answers.
+- **`watching`** is null or `{session, name, state, last_active}`, taken from the `primary` field of the session's `monitor.json` heartbeat. So a session picked up by another agent names that agent. `state` is `listening` or `working`; it is set only then, and only then does Open ask before a hand-over.
+- **`away`** is null or `{session, name, last_active}`: an agent was seen on this session (a heartbeat or a lahe command on disk) but is neither listening nor working now. The card says "<agent> last active <time>, not listening", and Open and Pick this up do not ask first. Both null means no agent was ever seen.
+- **What is known about the agent (phase 8)** is `presence` from `livenessFrom`, the one liveness function, read with the session's heartbeat and activity stamp:
+  - `listening`: a fresh heartbeat on the current handoff rev whose pid is alive. The card says "<agent> is listening".
+  - `working`: no live heartbeat, but a lahe command within `CATALOG.WORKING_MS` (two minutes). The card says "<agent> is working, last active <time>". `lahe monitor` exits when it wakes on work, so without this the card would say nobody was there exactly while the agent works a batch (fix round CL2).
+  - `away`: neither.
+  `last_active` is the later of the heartbeat and the last lahe command. The request queue keeps its own wider rule, `listening` from the same function (a command in the last ten minutes), for handing out and expiring requests; that rule only decides whether a request can still be answered. Ken's report that prompted this: a card said "watched by" an agent with no monitor whose last command was about ten minutes old, and Open asked him to confirm taking it over. The card and the confirm dialog also say how many comments are waiting in the session. With no heartbeat on disk, the session names itself. A session watched from another session's multi-session monitor (its heartbeat names that session as `primary`, on its current handoff rev) takes that primary session's presence, so the card does not say "no agent" right after the agent answers.
 - **`attached.watching`** is false when the attached session's monitor is dead. An attach with no session on disk behind it reads as no agent. **`attached.closed`** is true when the attached session has been closed (`closed_at` is set); the page's header then says "No agent attached" rather than "stopped watching".
 - **`request`** is the latest request on that review. An answer stays until the next request on the review, or `ANSWER_SHOWN_MS`. `reason` is why an expired request expired, and null in every other state.
 - **`pages[].path`** is a URL path on the review's server. Page rows are informational; they have no Open of their own.
@@ -223,7 +234,7 @@ sequenceDiagram
 - **Queue full:** Open still opens, with `not_asked: "queue_full"`, and the row says no agent was asked.
 - **What Open can restart itself:** a review whose session has an `ss_*.json` record that serves the review's page. That record was written by `lahe review` or the helper, never by a page, so Open serves nothing new. Everything else is `via-agent`: its Open queues a pick-up and the agent re-serves it. With no agent attached, a `via-agent` Open is disabled and offers the hand-off message; the helper refuses it with `PROTO_NO_AGENT`. By `kind`:
   - **dev-server:** the agent answers `refused`: "Start the dev server at `<origin>`, then ask me again.", with the entry's `origin`.
-  - **legacy** (`lahe add` script-line reviews, recovered as session "legacy"): there is no session to take over, so the agent runs `lahe library serve <request> --session <its own>`, which reads the path itself and serves it in the agent's own session (fix round, SEC2: no page-derived path in a shell string). It serves the document only when the file holds this review's own script line, since the recorded path is page text (adversary fixes). It serves it as a fresh review in the agent's session (`lahe review --new`), since `lahe review` will not reuse a review that belongs to no session. The old comments stay on the legacy review, and the drain entry's `note`, the command's output and the row all say so (Ken's decision: 15 of his 531 reviews are legacy).
+  - **legacy** (`lahe add` script-line reviews, recovered as session "legacy"): there is no session to take over, so the agent runs `lahe library serve <request> --session <its own>`, which reads the path itself and serves it in the agent's own session (fix round, SEC2: no page-derived path in a shell string). It serves the document only when the file holds this review's own script line, since the recorded path is page text (adversary fixes). It serves the legacy review itself, taken into the agent's session with its old comments (phase 8, Ken's decision: "we opened existing reviews with the old comments intact"). This is adoption: `lahe review --review <id> --adopt`. It is allowed only for a review whose owner is `legacy`, and only while a Library pick-up of that review is pending for that session. `lahe add` checks the queue, and the helper's `review.write` checks it again, since the review token is readable by scripts on the reviewed page. The helper sets the owner in `meta.json` and appends one `review.adopted` event (`{agent_session_id}`), so a lost meta is recovered with the new owner and the projection reads it. A review with a real session is never adopted: the immutable-owner rule stands. The drain entry's `note`, the command's output and the card say the old comments come along.
   - **worktree:** see below.
 - **Worktree fallback (R9):** when the covering server record's root is gone and sits under `<repo>/.claude/worktrees/<name>/`, the row says "The worktree is gone. An agent will open the main repository's copy, which may differ from what you reviewed." The request carries only the review id. The drain derives and checks the candidate (see the drain section). The agent serves it with `lahe review`, so the path goes through the CLI's own checks.
 - **Missing:** Open is refused with `PROTO_NOT_OPENABLE`, reason `missing`. So is a Pick up or Launch request on a missing row.
@@ -236,6 +247,20 @@ On a new port, the helper registers `http://127.0.0.1:<new>` and `http://localho
 ### Star
 
 `POST catalog.star {review, starred}`. The helper writes `catalog.json` and answers. On a folded row it stars or unstars every review in the fold, since the list shows the row starred when any of them is (fix round CR2). The row changes when the answer comes back. A failed star puts the row back and says why. No agent.
+
+### Rename
+
+`POST catalog.rename {review, name}` (phase 8). The helper stores the name in `catalog.json` `names`, cut to 80 characters with control and invisible characters removed by the session-name rule. An empty name clears it. On a folded row every review in the fold takes it, as star does. The row shows the new name first and the original under it, and search matches both. The name is the reviewer's display text: it is set with `textContent`, and it never enters `describeReview`, a drain entry, a request, or a hand-off message, so an agent never reads it.
+
+### How the page lays out cards and rows (phase 8)
+
+The view model owns these; the list response does not change for them.
+
+- A card's header is a filled cobalt band with white text, so a session reads apart from the reviews inside it. A review's page list is indented and quieter.
+- A row is three lines: the name alone; the document's real path in the mono face, a step smaller, shortened in the middle past 64 characters (the head up to the project folder, then as much of the end as fits); then the time and counts. The actions sit in one narrow column.
+- Reviews from before sessions get one card per project, titled "<project>, from before sessions"; reviews with no project keep "Reviews from before sessions". Cards sort by their newest review's `last`.
+- A notice every row of a card carries (for example the pre-session pick-up note, or "needs an agent" with none attached) is said once on the card and taken off the rows.
+- Long lists collapse for the page's lifetime: a review's pages show as "N pages" with a toggle, and a card with more than 5 reviews shows its newest 5 plus any waiting, starred, or acted-on row, with "Show N more". Search shows everything that matches.
 
 ### Launch a new agent
 

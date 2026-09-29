@@ -607,7 +607,7 @@ it expires.
 | `kind` | What to do |
 | --- | --- |
 | `static` | `lahe session takeover <session>`, run its catch-up, then watch it (below) |
-| `legacy` | No session to take. Run `lahe library serve <request> --session <your-session-id>`: it reads the document's path itself and serves it as a new review in your session. The old comments stay on the old review; say so in your answer |
+| `legacy` | The review belongs to no session. Run `lahe library serve <request> --session <your-session-id>`: it reads the document's path itself, takes that review into your session with its old comments, and serves it. Then drain it and work any comment still waiting |
 | `worktree` | The worktree is gone. Run `lahe library serve <request> --session <your-session-id>`: it serves the main-repo `candidate`. If `candidate` is null, answer `refused` |
 | `dev-server` | Answer `refused`: "Start the dev server at <origin>, then ask me again.", with the entry's `origin` |
 

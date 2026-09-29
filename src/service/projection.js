@@ -269,6 +269,12 @@ function foldEvents(state, events, options) {
       return;
     }
 
+    // A legacy review adopted into a session belongs to it from here on.
+    if (type === EVENT.REVIEW_ADOPTED) {
+      if (typeof event.agent_session_id === "string") state.times.agent_session_id = event.agent_session_id;
+      return;
+    }
+
     if (type === EVENT.REVIEW_ARCHIVED) {
       state.times.ended_at = ts;
       return;

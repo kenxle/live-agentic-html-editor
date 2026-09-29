@@ -17,8 +17,11 @@
       ],
       "watching": {
         "session": "s_coach",
-        "name": "coach activity"
+        "name": "coach activity",
+        "state": "listening",
+        "last_active": "2026-09-28T15:59:50.000Z"
       },
+      "away": null,
       "last": "2026-09-28T15:40:00.000Z",
       "reviews": [
         {
@@ -38,6 +41,7 @@
           "openable": "yes",
           "kind": "static",
           "starred": true,
+          "custom_name": null,
           "unreadable": false,
           "request": {
             "id": "cq_waiting1",
@@ -74,6 +78,7 @@
           "openable": "yes",
           "kind": "static",
           "starred": false,
+          "custom_name": null,
           "unreadable": false,
           "request": {
             "id": "cq_done1",
@@ -110,6 +115,7 @@
           "openable": "yes",
           "kind": "static",
           "starred": false,
+          "custom_name": null,
           "unreadable": false,
           "request": {
             "id": "cq_refused1",
@@ -146,6 +152,7 @@
           "openable": "yes",
           "kind": "static",
           "starred": false,
+          "custom_name": null,
           "unreadable": false,
           "request": null,
           "pages": [],
@@ -168,6 +175,7 @@
           "openable": "missing",
           "kind": "static",
           "starred": false,
+          "custom_name": null,
           "unreadable": false,
           "request": null,
           "pages": [
@@ -188,6 +196,7 @@
         "beta"
       ],
       "watching": null,
+      "away": null,
       "last": "2026-09-27T16:00:00.000Z",
       "reviews": [
         {
@@ -207,6 +216,7 @@
           "openable": "via-agent",
           "kind": "dev-server",
           "starred": false,
+          "custom_name": null,
           "unreadable": false,
           "request": null,
           "pages": [
@@ -225,6 +235,7 @@
       "name_from_page": false,
       "projects": [],
       "watching": null,
+      "away": null,
       "last": "2026-09-26T17:00:00.000Z",
       "reviews": [
         {
@@ -244,6 +255,7 @@
           "openable": "yes",
           "kind": "static",
           "starred": false,
+          "custom_name": null,
           "unreadable": true,
           "request": null,
           "pages": [],
@@ -257,6 +269,7 @@
       "name_from_page": false,
       "projects": [],
       "watching": null,
+      "away": null,
       "last": "2026-09-26T17:00:00.000Z",
       "reviews": [
         {
@@ -276,6 +289,7 @@
           "openable": "via-agent",
           "kind": "static",
           "starred": false,
+          "custom_name": null,
           "unreadable": true,
           "request": null,
           "pages": [],
@@ -292,8 +306,11 @@
       ],
       "watching": {
         "session": "s_index",
-        "name": "document index"
+        "name": "document index",
+        "state": "listening",
+        "last_active": "2026-09-28T15:59:50.000Z"
       },
+      "away": null,
       "last": "2026-09-24T17:00:00.000Z",
       "reviews": [
         {
@@ -313,6 +330,7 @@
           "openable": "yes",
           "kind": "static",
           "starred": false,
+          "custom_name": null,
           "unreadable": false,
           "request": null,
           "pages": [],
@@ -335,6 +353,7 @@
           "openable": "missing",
           "kind": "static",
           "starred": false,
+          "custom_name": null,
           "unreadable": false,
           "request": null,
           "pages": [],
@@ -357,6 +376,7 @@
           "openable": "via-agent",
           "kind": "worktree",
           "starred": false,
+          "custom_name": null,
           "unreadable": false,
           "request": {
             "id": "cq_expired1",
@@ -393,6 +413,7 @@
           "openable": "yes",
           "kind": "static",
           "starred": false,
+          "custom_name": null,
           "unreadable": false,
           "request": null,
           "pages": [
@@ -420,6 +441,7 @@
           "openable": "yes",
           "kind": "static",
           "starred": true,
+          "custom_name": null,
           "unreadable": false,
           "request": null,
           "pages": [
@@ -450,6 +472,7 @@
           "openable": "yes",
           "kind": "static",
           "starred": false,
+          "custom_name": null,
           "unreadable": false,
           "request": null,
           "pages": [],
@@ -472,6 +495,7 @@
           "openable": "yes",
           "kind": "static",
           "starred": false,
+          "custom_name": null,
           "unreadable": false,
           "request": null,
           "pages": [],
@@ -487,6 +511,11 @@
         "alpha"
       ],
       "watching": null,
+      "away": {
+        "session": "s_old3",
+        "name": null,
+        "last_active": "2026-09-28T15:50:00.000Z"
+      },
       "last": "2026-09-20T17:00:00.000Z",
       "reviews": [
         {
@@ -506,6 +535,7 @@
           "openable": "yes",
           "kind": "static",
           "starred": false,
+          "custom_name": null,
           "unreadable": false,
           "request": null,
           "pages": [
@@ -533,6 +563,7 @@
           "openable": "yes",
           "kind": "static",
           "starred": false,
+          "custom_name": null,
           "unreadable": false,
           "request": null,
           "pages": [
@@ -560,6 +591,7 @@
           "openable": "yes",
           "kind": "static",
           "starred": false,
+          "custom_name": null,
           "unreadable": false,
           "request": null,
           "pages": [
@@ -587,6 +619,7 @@
           "openable": "yes",
           "kind": "static",
           "starred": false,
+          "custom_name": null,
           "unreadable": true,
           "request": null,
           "pages": [],
@@ -609,6 +642,7 @@
           "openable": "missing",
           "kind": "static",
           "starred": false,
+          "custom_name": null,
           "unreadable": true,
           "request": null,
           "pages": [],
@@ -631,6 +665,7 @@
           "openable": "yes",
           "kind": "static",
           "starred": false,
+          "custom_name": null,
           "unreadable": false,
           "request": null,
           "pages": [],
@@ -653,6 +688,7 @@
           "openable": "yes",
           "kind": "static",
           "starred": false,
+          "custom_name": null,
           "unreadable": false,
           "request": null,
           "pages": [],
@@ -666,6 +702,7 @@
       "name_from_page": false,
       "projects": [],
       "watching": null,
+      "away": null,
       "last": "2026-09-09T16:00:00.000Z",
       "reviews": [
         {
@@ -685,6 +722,7 @@
           "openable": "via-agent",
           "kind": "legacy",
           "starred": false,
+          "custom_name": null,
           "unreadable": false,
           "request": null,
           "pages": [
