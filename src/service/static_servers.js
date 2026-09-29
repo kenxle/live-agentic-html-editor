@@ -450,10 +450,6 @@ async function stopAll(dir, sessionId) {
   return stopped;
 }
 
-function validPort(value) {
-  return typeof value === "number" && Number.isInteger(value) && value > 0 && value < 65536;
-}
-
 /** The start() options that bring a recorded server back as it was. */
 function restartSpec(dir, sessionId, meta) {
   return {
