@@ -594,3 +594,115 @@ test("the projector folds a reply file it finds, and the file says the item is h
   assert.deepEqual(folded.reply.files, ["app/views/home.html.erb"]);
   projector.stop();
 });
+
+// ---------------------------------------------------------------------------
+// Free writing (docs/features/20260928.01_free_writing, plan Task 1.6)
+// ---------------------------------------------------------------------------
+
+const fwFormat = require("../../src/shared/review_format.js");
+const fwRecord = require("../../src/shared/record.js");
+const { createFixtures: fwFixtures } = require("../../src/shared/record_fixtures.js");
+
+function fwProject(items, reviewFields) {
+  const json = fwFormat.projectReview(Object.assign({ id: "rev_fw", items: items }, reviewFields || {}));
+  const out = [];
+  json.pages.forEach((p) => p.items.forEach((it) => out.push(it)));
+  return { json: json, items: out };
+}
+
+function wordsRun(n, extra) {
+  const words = [];
+  for (let i = 0; i < n; i += 1) words.push("w" + i);
+  return fwFixtures({ seed: "proj" }).runItem(Object.assign({ new_blocks: [{ tag: "p", html: words.join(" ") }] }, extra || {}));
+}
+
+test("a run's new blocks are projected with their derived words", () => {
+  const worked = fwFixtures({ seed: "proj" }).runFixtures().find((f) => f.name === "worked example").item;
+  const it = fwProject([worked]).items[0];
+  assert.deepEqual(it.new_blocks, [
+    { tag: "h2", html: "What the chat window cost me zqxcanary", text: "What the chat window cost me zqxcanary" },
+    { tag: "p", html: "I lost my place <strong>every</strong> time zqxcanary", text: "I lost my place every time zqxcanary" },
+    { tag: "ul", html: "<li>scrolling</li><li>re-asking zqxcanary</li>", text: "scrolling\n\nre-asking zqxcanary" }
+  ]);
+  assert.equal(it.anchor_after_html, "What changed");
+  assert.equal(it.anchor_tag_after, null);
+  assert.equal(it.placement, "after_anchor");
+  assert.equal(it.remove_blocks, null);
+  assert.equal(it.run_words, 17);
+});
+
+test("a split tail keeps its from_anchor mark in the projection", () => {
+  const split = fwFixtures({ seed: "proj" }).runFixtures().find((f) => f.name === "split tail, no typing").item;
+  const it = fwProject([split]).items[0];
+  assert.equal(it.new_blocks[0].from_anchor, true);
+  assert.equal(it.run_words, 0);
+});
+
+test("a take-back projects remove_blocks and no new_blocks", () => {
+  const back = fwFixtures({ seed: "proj" }).runFixtures().find((f) => f.name === "take-back").item;
+  const it = fwProject([back]).items[0];
+  assert.equal(it.new_blocks, null);
+  assert.equal(it.remove_blocks.length, 3);
+  assert.equal(it.remove_blocks[0].text, "What the chat window cost me zqxcanary");
+});
+
+test("an ordinary item carries the run fields as null and proofread false", () => {
+  const it = fwProject([fwFixtures({ seed: "proj" }).edit()]).items[0];
+  for (const f of ["new_blocks", "anchor_after_html", "anchor_tag_after", "placement", "remove_blocks", "run_words"]) {
+    assert.equal(it[f], null, f);
+  }
+  assert.equal(it.proofread, false);
+});
+
+test("a run over 2000 characters is projected whole in new_blocks, after_full and after_html", () => {
+  const long = "word ".repeat(1000).trim();
+  assert.ok(long.length > fwFormat.BEFORE_MAX);
+  const item = fwFixtures({ seed: "proj" }).runItem({ new_blocks: [{ tag: "p", html: long }] });
+  const it = fwProject([item]).items[0];
+  assert.equal(it.new_blocks[0].html, long);
+  assert.equal(it.after_full, item.after);
+  assert.equal(it.after_html, item.after_html);
+  assert.equal(it.after_full.indexOf("bounded here"), -1);
+  // An ordinary edit of the same size is still bounded.
+  const plain = fwProject([fwFixtures({ seed: "proj" }).edit({ after: long, after_html: long })]).items[0];
+  assert.ok(plain.after_full.indexOf("bounded here") !== -1);
+});
+
+test("the new fields are classed as data, and a projected history entry has no new_blocks", () => {
+  let item = wordsRun(3);
+  const built = fwRecord.buildRunAfter(item.anchor_after_html, item.new_blocks.concat([{ tag: "p", html: "more" }]));
+  item = fwRecord.bumpRev(item, { new_blocks: item.new_blocks.concat([{ tag: "p", html: "more" }]), after_html: built.after_html, after: built.after });
+  assert.ok(Array.isArray(item.after_history[0].new_blocks), "the stored entry carries the run");
+  const { json, items } = fwProject([item]);
+  for (const f of ["new_blocks", "anchor_after_html", "remove_blocks", "anchor_tag_after", "placement", "run_words", "proofread"]) {
+    assert.equal(json.field_classes[f], fwRecord.CLASS_DATA, f);
+  }
+  items[0].after_history.forEach((e) => assert.equal(Object.prototype.hasOwnProperty.call(e, "new_blocks"), false));
+  for (const f of ["new_blocks", "anchor_after_html", "remove_blocks"]) {
+    assert.ok(fwFormat.DATA_FIELDS.indexOf(f) !== -1, f + " is a data field");
+  }
+});
+
+test("run_words of 150 gives proofread false, and 151 gives true", () => {
+  assert.equal(fwProject([wordsRun(150)]).items[0].proofread, false);
+  const over = fwProject([wordsRun(151)]).items[0];
+  assert.equal(over.run_words, 151);
+  assert.equal(over.proofread, true);
+});
+
+test("a run over 150 words only because of from_anchor blocks gives false", () => {
+  const f = fwFixtures({ seed: "proj" });
+  const tail = [];
+  for (let i = 0; i < 200; i += 1) tail.push("t" + i);
+  const item = f.runItem({ new_blocks: [{ tag: "p", html: tail.join(" "), from_anchor: true }, { tag: "p", html: "three new words" }] });
+  const it = fwProject([item]).items[0];
+  assert.equal(it.run_words, 3);
+  assert.equal(it.proofread, false);
+});
+
+test("a notes review gives false, and the review says it is a notes review", () => {
+  const { json, items } = fwProject([wordsRun(151)], { notes: true });
+  assert.equal(items[0].proofread, false);
+  assert.equal(json.review.notes, true);
+  assert.equal(fwProject([wordsRun(1)]).json.review.notes, false);
+});

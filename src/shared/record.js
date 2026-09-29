@@ -2145,6 +2145,7 @@
     validateRun: validateRun,
     trimRunHistory: trimRunHistory,
     applySuggestions: applySuggestions,
+    blockText: runBlockText,
     TOOL_ROUND: TOOL_ROUND,
     TOOL_ROUNDS: TOOL_ROUNDS,
     toolRoundOf: toolRoundOf,

@@ -89,7 +89,7 @@ test("tool chrome is not a block", () => {
 });
 
 test("words are folded for typography", () => {
-  assert.equal(normalize.blockWords("It’s “done” — now"), "It's \"done\" - now");
+  assert.equal(normalize.blockWords("It\u2019s \u201cdone\u201d \u2014 now"), "It's \"done\" - now");
   assert.equal(normalize.blockWords("Fish &amp; chips &quot;x&quot;"), 'Fish & chips "x"');
 });
 
