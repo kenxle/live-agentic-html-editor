@@ -734,15 +734,27 @@
     return !!body && body.notes === true;
   }
 
+  // Bounds on a proofread's fixes (security review 4). A hand-written reply
+  // line skips lahe reply's check, and the rail applies the list on every
+  // paint, so the count and each string are capped here. The count is one fix
+  // per block at the run's block ceiling; each string is held to the run's
+  // byte ceiling, which no real from or to comes near. Both numbers restate
+  // record.NEW_BLOCKS_MAX and record.NEW_BLOCKS_MAX_BYTES, because this file
+  // loads before record.js; a unit test holds them equal.
+  var SUGGESTIONS_MAX = 400;
+  var SUGGESTION_TEXT_MAX = 200000;
+
   // Null when the suggestions are well formed, or the reason they are not.
   function suggestionsProblem(list) {
     if (!Array.isArray(list)) return "suggestions must be a list";
+    if (list.length > SUGGESTIONS_MAX) return "suggestions holds " + list.length + " fixes, more than " + SUGGESTIONS_MAX;
     for (var i = 0; i < list.length; i += 1) {
       var s = list[i];
       if (!s || typeof s !== "object" || Array.isArray(s)) return "suggestion " + i + " must be an object";
       if (!Number.isInteger(s.block) || s.block < 0) return "suggestion " + i + " block must be a whole number from 0";
       if (typeof s.from !== "string" || !s.from) return "suggestion " + i + " from must be a non-empty string";
       if (typeof s.to !== "string") return "suggestion " + i + " to must be a string";
+      if (s.from.length > SUGGESTION_TEXT_MAX || s.to.length > SUGGESTION_TEXT_MAX) return "suggestion " + i + " from or to is over " + SUGGESTION_TEXT_MAX + " characters";
     }
     return null;
   }
@@ -1494,6 +1506,8 @@
     REPLY_FILE: REPLY_FILE,
     agentFromFilename: agentFromFilename,
     parseReplyLine: parseReplyLine,
+    SUGGESTIONS_MAX: SUGGESTIONS_MAX,
+    SUGGESTION_TEXT_MAX: SUGGESTION_TEXT_MAX,
     REPLY_POLL: REPLY_POLL,
     REPLY_CURSOR_FIELD: REPLY_CURSOR_FIELD,
     nextReadOffset: nextReadOffset,

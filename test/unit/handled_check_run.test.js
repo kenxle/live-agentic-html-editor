@@ -154,3 +154,38 @@ test("a comment and a delete are still not checked", () => {
   assert.equal(handled.checkable(f.comment()), false);
   assert.equal(handled.checkable(f.deletion()), false);
 });
+
+// --- Fix round (adversary review 3): a take-back of placed blocks is checked --
+
+function takeBack() {
+  const item = worked();
+  item.state = record.STATE.HANDLED;
+  return record.revertOf(item);
+}
+
+const TAKEN_BACK_SOURCE = ["# Post", "", "What changed", "", "Something the page already had afterwards.", ""].join("\n");
+
+test("a take-back of placed blocks is checkable", () => {
+  assert.equal(handled.checkable(takeBack()), true);
+});
+
+test("a take-back answered handled with the blocks still on the page is held", () => {
+  const html = page(WORKED_SOURCE);
+  assert.equal(handled.verdictFor([html], takeBack(), WRITTEN), false);
+  assert.equal(handled.verdictFor([html], takeBack(), NOTHING_WRITTEN), false);
+});
+
+test("a take-back that removed one block of three is held", () => {
+  const partial = ["# Post", "", "What changed", "", "## What the chat window cost me zqxcanary", "", "I lost my place **every** time zqxcanary", ""].join("\n");
+  assert.equal(handled.verdictFor([page(partial)], takeBack(), WRITTEN), false);
+});
+
+test("a take-back whose blocks are gone passes", () => {
+  assert.equal(handled.verdictFor([page(TAKEN_BACK_SOURCE)], takeBack(), WRITTEN), true);
+});
+
+test("an ordinary take-back is still not checked", () => {
+  const edit = fx().edit();
+  edit.state = record.STATE.HANDLED;
+  assert.equal(handled.checkable(record.revertOf(edit)), false);
+});
