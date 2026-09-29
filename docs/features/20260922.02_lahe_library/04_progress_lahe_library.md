@@ -1,13 +1,13 @@
 # Progress: LAHE Library
 
-**Phase 8, Ship.** The PR is open: [#19](https://github.com/kenxle/live-agentic-html-editor/pull/19). Every review finding is fixed and the full suite passed apart from two Firefox tests from main. Two things are waiting on you. Last updated 2026-09-29 13:47.
+**Phase 8, Ship.** The PR is open ([#19](https://github.com/kenxle/live-agentic-html-editor/pull/19)) and waits on your look at the real page. A preview of the Library is running on a copy of your records: http://127.0.0.1:7917/catalog. Last updated 2026-09-29 14:24.
 
 **Docs:** [Crucible](http://127.0.0.1:54705/00_crucible.html) · [Brief](http://127.0.0.1:54705/01_brief_lahe_library.html) · [Wireframes](http://127.0.0.1:54705/wireframes/index.html) · [Architecture](http://127.0.0.1:54705/02_architecture_lahe_library.html) · [Plan](http://127.0.0.1:54705/03_plan_lahe_library.html) · [Ideas page](http://127.0.0.1:55480/DOCUMENT_INDEX_IDEAS-b09cd11f2a84063f.html)
 
 ## Needs your attention
 
-- [ ] **Approve PR #19** (https://github.com/kenxle/live-agentic-html-editor/pull/19) so I can merge it. Its automated check runs on GitHub now. After the merge, the Library goes live here once the main LAHE folder pulls main and the helper restarts, which I'll do when you say.
-- [ ] **May I take this LAHE session back?** Another copy of me took it over by mistake yesterday and then handed it back. Until I run `lahe session takeover`, comments you leave on this page reach nobody. I'm asking because the rule is to take a session over only when you say so.
+- [ ] **Look at the Library before it merges:** http://127.0.0.1:7917/catalog. It runs the new code on a **copy** of your LAHE records, on its own port, so your live LAHE is untouched. Click anything. Open brings a document back from the copy; comments you leave on a document opened there go into the copy and are thrown away. Pick this up and Launch go to an agent named "Library preview", which is me. Comment on the Library page itself or here with what you want changed.
+- [ ] **Approve PR #19** (https://github.com/kenxle/live-agentic-html-editor/pull/19) once the page looks right.
 
 ## Currently working on
 
@@ -96,6 +96,7 @@ Test count and how often tests ran are kept apart. The full suite runs at the en
 
 ## Log
 
+- **2026-09-29 14:24.** Session taken back, with your OK. Preview of the Library started on a copy of your records at http://127.0.0.1:7917/catalog.
 - **2026-09-29 13:44.** Main moved while this was in review: 128 commits, including one that stops idle page servers after two minutes and one that trims what an agent's drain prints. Both are merged in beside the Library. Two follow-ups are on the board: a Firefox test from main that fails on main too, and lint missing a function declared twice.
 - **2026-09-29 12:39.** A second copy of me took this LAHE session over by mistake, then handed it back and stood down. Nothing was lost.
 - **2026-09-29 12:21.** You chose: a bare `lahe library` starts a session for the agent that runs it, and that session closes itself after 30 quiet minutes with no reviews.
