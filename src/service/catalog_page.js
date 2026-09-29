@@ -230,10 +230,10 @@ var PAGE_STYLE = [
   ".lib-row-main{min-width:0}",
   ".lib-name{font-family:var(--font-display);font-weight:var(--w-display);font-size:var(--text-body);line-height:1.35;",
   "margin:0;overflow-wrap:anywhere}",
-  // The path: the mono face, a step smaller, muted, and breaking only at a
-  // slash when it must.
+  // The path: the mono face, a step smaller, muted, wrapping at the <wbr>
+  // after each slash, and mid-name only when one name is wider than the line.
   ".lib-where{margin:2px 0 0;color:var(--lib-faint);font-family:var(--font-mono);font-size:var(--text-micro);", // px: hugs the name
-  "line-height:1.45;overflow-wrap:anywhere;max-width:none}",
+  "line-height:1.45;overflow-wrap:break-word;max-width:none}",
   ".lib-name{max-width:none}",
   // The name line: the name, then a quiet Rename. The original name, after a
   // rename, sits small and muted under it.

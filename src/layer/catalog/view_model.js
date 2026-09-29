@@ -515,28 +515,21 @@
     return fill(TEXT.UNNAMED_SESSION, { name: first ? first.display_name : session.id });
   }
 
-  // The row's second line: the document's real path, as the reader wrote it
-  // (~ for home), never a join with spaced slashes. A long one keeps its head
-  // up to the project folder and as much of its end as fits, with an ellipsis
-  // between.
-  var PATH_MAX = 64;
+  // The row's second line: the document's path from its project root (the
+  // helper's project_path), never shortened; the page wraps it at slashes.
+  // Its tooltip is the whole ~ path.
   var CARD_ROWS_SHOWN = 5;
 
-  function pathText(review) {
+  function fullPath(review) {
     var dirPart = typeof review.path_hint === "string" ? review.path_hint : "";
     var file = typeof review.file === "string" && review.file ? review.file : "";
-    var full = dirPart && file ? dirPart.replace(/\/+$/, "") + "/" + file : dirPart || "";
-    if (full.length <= PATH_MAX) return full;
-    var segs = full.split("/");
-    var last = segs.length - 1;
-    var headEnd = typeof review.project === "string" && review.project ? segs.lastIndexOf(review.project) : -1;
-    if (headEnd < 0 || headEnd >= last - 1) headEnd = 0;
-    var head = segs.slice(0, headEnd + 1).join("/");
-    var t = last;
-    while (t - 1 > headEnd + 1 && (head + "/\u2026/" + segs.slice(t - 1).join("/")).length <= PATH_MAX) t -= 1;
-    if (t <= headEnd + 1) return full;
-    return head + "/\u2026/" + segs.slice(t).join("/");
+    return dirPart && file ? dirPart.replace(/\/+$/, "") + "/" + file : dirPart || "";
   }
+
+  function pathText(review) {
+    return typeof review.project_path === "string" && review.project_path ? review.project_path : fullPath(review);
+  }
+
 
 
 
@@ -698,6 +691,7 @@
       originalName: renamed ? original : null,
       rename: { editing: state.renaming === review.id, value: renamed || original, label: TEXT.RENAME, original: original },
       path: pathText(review),
+      pathTitle: fullPath(review),
       lastText: "last " + formatTime(review.last, now, opts.timeZone),
       counts: {
         waiting: review.waiting > 0 ? review.waiting + " waiting" : null,

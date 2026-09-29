@@ -305,7 +305,7 @@ test("an older last time carries its date", () => {
 test("a row shows its name, where it lives, when, and its counts", () => {
   const r = row(build(freshList(), okState()), "r_brief");
   assert.equal(r.name, "Feature Brief: Coach Activity");
-  assert.equal(r.path, "~/projects/alpha/docs/brief.html");
+  assert.equal(r.path, "docs/brief.html");
   assert.equal(r.lastText, "last 3:40 PM");
   assert.equal(r.counts.waiting, "3 waiting");
   assert.equal(r.counts.comments, "5 comments");
@@ -1271,22 +1271,13 @@ test("phase 8: the dialog for the card's own agent starts with a capital", () =>
 // said once per card, and long lists collapsed
 // ---------------------------------------------------------------------------
 
-test("phase 8: a row's second line is the document's real path, with no added spaces", () => {
+test("phase 8: a row's second line is the document's path from its project root", () => {
   const view = build(freshList(), okState());
-  assert.equal(row(view, "r_brief").path, "~/projects/alpha/docs/brief.html");
-  assert.equal(row(view, "r_shared").path, "~/loose/shared.html");
-  assert.equal(row(view, "r_old2").path, "~/projects/alpha/old-pages", "a folded row is its folder");
+  assert.equal(row(view, "r_brief").path, "docs/brief.html");
+  assert.equal(row(view, "r_shared").path, "~/loose/shared.html", "no project: the ~ path");
+  assert.equal(row(view, "r_old2").path, "old-pages", "a folded row is its folder");
   const all = build(freshList(), vm.withShowMissing(okState(), true));
   assert.equal(row(all, "r_badmeta").path, "", "no path known, no line");
-});
-
-test("phase 8: a long path is shortened in the middle, keeping its project folder and its end", () => {
-  const list = freshList();
-  const r = reviewIn(list, "r_brief");
-  r.project = "personal";
-  r.path_hint = "~/Documents/workspace/personal/docs/features/20260915.01_style_systems/textbook/deep/more";
-  r.file = "01_brief.md";
-  assert.equal(row(build(list, okState()), "r_brief").path, "~/Documents/workspace/personal/…/textbook/deep/more/01_brief.md");
 });
 
 function withLegacy(list) {
@@ -1430,4 +1421,22 @@ test("rename: an empty name clears back to the original", () => {
   const r = row(build(list, state), "r_brief");
   assert.equal(r.name, "Feature Brief: Coach Activity");
   assert.equal(r.originalName, null);
+});
+
+test("path line: the path from the project root, never shortened, with the whole ~ path as its tooltip", () => {
+  const list = freshList();
+  const r = reviewIn(list, "r_brief");
+  r.project_path = "docs/features/20260921.01_briefing_app/deep/deeper/04_progress_briefing_app.md";
+  r.path_hint = "~/Documents/workspace/personal/docs/features/20260921.01_briefing_app/deep/deeper";
+  r.file = "04_progress_briefing_app.md";
+  const built = row(build(list, okState()), "r_brief");
+  assert.equal(built.path, "docs/features/20260921.01_briefing_app/deep/deeper/04_progress_briefing_app.md");
+  assert.equal(built.pathTitle, "~/Documents/workspace/personal/docs/features/20260921.01_briefing_app/deep/deeper/04_progress_briefing_app.md");
+  assert.ok(built.path.indexOf("…") === -1, "no ellipsis");
+});
+
+test("path line: with no project_path from the helper it falls back to the whole ~ path", () => {
+  const list = freshList();
+  delete reviewIn(list, "r_brief").project_path;
+  assert.equal(row(build(list, okState()), "r_brief").path, "~/projects/alpha/docs/brief.html");
 });

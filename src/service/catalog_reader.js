@@ -503,16 +503,25 @@ function createReader(options) {
   }
 
   /** The git project a document belongs to, or null. A worktree's is its owner's. */
-  function projectOf(docPath) {
+  /**
+   * The project a document belongs to: {name, root}, or null. One rule for the
+   * label and for the path line. `root` is the folder the row's path is shown
+   * from: the repository, the worktree itself for a worktree, or ~/.claude.
+   */
+  function projectRootOf(docPath) {
     if (typeof docPath !== "string" || !docPath) return null;
     // ~/.claude holds skills and agent settings. It is often a git
     // repository, whose folder name ".claude" is no project name.
     var claudeHome = path.join(home, ".claude");
-    if (docPath === claudeHome || docPath.indexOf(claudeHome + path.sep) === 0) return CLAUDE_CONFIG_PROJECT;
+    if (docPath === claudeHome || docPath.indexOf(claudeHome + path.sep) === 0) return { name: CLAUDE_CONFIG_PROJECT, root: claudeHome };
     // A worktree at <repo>/.claude/worktrees/<name> belongs to <repo>, even
-    // when neither it nor the repo has a .git left to read.
+    // when neither it nor the repo has a .git left to read. Its paths are
+    // shown from the worktree's own root, which mirrors the repo's.
     var wt = WORKTREE.exec(docPath);
-    if (wt && wt[1]) return repoNameAt(wt[1]) || path.basename(wt[1]);
+    if (wt && wt[1]) {
+      var wtRoot = docPath.slice(0, docPath.length - (wt[2] ? wt[2].length + 1 : 0));
+      return { name: repoNameAt(wt[1]) || path.basename(wt[1]), root: wtRoot };
+    }
     var current = docPath;
     while (!exists(current)) {
       var up = path.dirname(current);
@@ -523,12 +532,32 @@ function createReader(options) {
     if (stat && !stat.isDirectory()) current = path.dirname(current);
     for (;;) {
       var name = repoNameAt(current);
-      if (name) return name;
+      if (name) return { name: name, root: current };
       var parent = path.dirname(current);
       if (parent === current) return null;
       current = parent;
     }
   }
+
+  function projectOf(docPath) {
+    var p = projectRootOf(docPath);
+    return p ? p.name : null;
+  }
+
+  /**
+   * The row's path line: from the project root, else the ~ path. Never
+   * shortened; the page wraps it at slashes.
+   */
+  function projectPath(fullPath) {
+    if (typeof fullPath !== "string" || !fullPath) return null;
+    var p = projectRootOf(fullPath);
+    if (p && p.root) {
+      var rel = path.relative(p.root, fullPath);
+      if (rel && rel.indexOf("..") !== 0 && !path.isAbsolute(rel)) return rel.split(path.sep).join("/");
+    }
+    return pathHint(fullPath);
+  }
+
 
   /**
    * The main repository's copy of a document whose worktree copy is gone, or
@@ -884,6 +913,7 @@ function createReader(options) {
         var folderPath = row.folder || (lead.docPath ? path.dirname(lead.docPath) : null);
         row.folderName = folderPath ? path.basename(folderPath) : null;
         row.pathHint = pathHint(folderPath);
+        row.projectPath = projectPath(row.folder || lead.docPath);
         allRows.push(row);
       });
     });
@@ -990,6 +1020,9 @@ function createReader(options) {
       file: row.file,
       folder: row.folderName,
       path_hint: row.pathHint,
+      // The document's path from its project root (worktree root, ~/.claude),
+      // else its ~ path: the row's second line.
+      project_path: row.projectPath || null,
       project: projectOf(row.folder || info.docPath),
       last: iso(info.lastMs),
       waiting: waiting,

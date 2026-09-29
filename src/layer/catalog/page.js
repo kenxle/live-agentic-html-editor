@@ -330,6 +330,17 @@
     return node;
   }
 
+  // A path as text with a break opportunity after each slash, so a long one
+  // wraps between folders and never mid-name. No characters are added.
+  function slashBreaks(text) {
+    var out = [];
+    String(text).split("/").forEach(function (part, i, all) {
+      out.push(part + (i < all.length - 1 ? "/" : ""));
+      if (i < all.length - 1) out.push(document.createElement("wbr"));
+    });
+    return out;
+  }
+
   function button(label, attrs) {
     return h("button", Object.assign({ type: "button", class: "lib-btn", text: label }, attrs || {}));
   }
@@ -388,7 +399,7 @@
     var main = h("div", { class: "lib-row-main" }, [
       nameLine,
       row.originalName ? h("p", { class: "lib-original", text: row.originalName }) : null,
-      row.path ? h("p", { class: "lib-where", text: row.path }) : null
+      row.path ? h("p", { class: "lib-where", title: row.pathTitle || null }, slashBreaks(row.path)) : null
     ]);
 
     var facts = [h("span", { text: row.lastText })];

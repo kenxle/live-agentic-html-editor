@@ -947,3 +947,31 @@ test("project: a worktree under <repo>/.claude/worktrees is labelled with the re
   const list = await reader.list(installed.nowMs);
   assert.equal(row(list, "r_gamma").project, "gamma");
 });
+
+// --- project_path: the row's path from its project root ------------------------
+
+test("project_path: a document in a repository is shown from the repository root", async () => {
+  const { reader, installed } = setup();
+  const list = await reader.list(installed.nowMs);
+  assert.equal(row(list, "r_brief").project_path, "docs/brief.html");
+  assert.equal(row(list, "r_spec").project_path, "specs/spec.html");
+  assert.equal(row(list, "r_old2").project_path, "old-pages", "a folded row is its folder");
+});
+
+test("project_path: a worktree row is shown from the worktree root, whether or not the worktree is still there", async () => {
+  const { reader, installed } = setup();
+  const list = await reader.list(installed.nowMs);
+  assert.equal(row(list, "r_wt_live").project_path, "page.html");
+  assert.equal(row(list, "r_wt_gone").project_path, "docs/brief.html");
+});
+
+test("project_path: outside any project it is the ~ path, and under ~/.claude it is from ~/.claude", async () => {
+  const { reader, installed } = setup();
+  const skill = path.join(installed.home, ".claude", "skills", "crucible", "SKILL.md");
+  fs.mkdirSync(path.dirname(skill), { recursive: true });
+  fs.writeFileSync(skill, "# Crucible\n");
+  extraReview(installed, "r_skill2", skill);
+  const list = await reader.list(installed.nowMs);
+  assert.equal(row(list, "r_shared").project_path, "~/loose/shared.html");
+  assert.equal(row(list, "r_skill2").project_path, "skills/crucible/SKILL.md");
+});
