@@ -504,7 +504,7 @@ The plan's Test List holds every test. At this level:
 **Ken's decisions at the review gate (2026-09-29):**
 - **AQ1 (Lahe's code or Tiptap):** Lahe's own code for now. Tiptap integration is discussed after this ships (board row `LAHE-tiptap-later`).
 - **AQ3 (always check new blocks on a handled reply):** yes.
-- **AQ4 (bounding a run record's size):** still open. Ken asked why it matters; answered on the card.
+- **AQ4 (bounding a run record's size):** yes, the recommendation: old revisions keep words only, and the bar warns before a sitting is too big to send.
 - **PQ1 (blank notes page opens ready to type):** yes.
 - **PQ2 (the bar says "Editing"):** yes.
 - **PQ3 (no proofreading on notes):** yes, try it.
