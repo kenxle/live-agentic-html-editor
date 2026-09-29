@@ -848,25 +848,30 @@ that cannot forget, brief</a>
 </ul></li>
 </ul>
 </nav>
-<p>Status: DRAFT, written without the owner. Every guess made on his
-behalf is listed under Assumptions.</p>
+<p>Status: DRAFT, revision 2. The owner rejected one new agent per batch
+of comments. This revision asks for one agent per review, kept running.
+Every guess made on his behalf is listed under Assumptions.</p>
 <h2 id="summary">Summary</h2>
 <p><strong>Not the Agent SDK.</strong> The SDK needs an API key,
 per-token billing, and an install. This brief gets the same result from
 the agent you already have. It runs with no chat window, on the login
 you already pay for. Whether to close the SDK option for good is Q7 (the
 SDK).</p>
-<p>This brief proposes an opt-in mode instead. LAHE itself starts the
-user's own coding agent each time a reviewer's comment is ready. Claude
-Code comes first, run in its headless mode (no chat window). Each run
-gets LAHE's rules once, at the top. It handles every waiting comment,
-replies on the cards, and exits. LAHE then checks that nothing was left
-unanswered.</p>
-<p>A test run, the spike, handled one real review headless
-(<code>spike_headless_run.md</code>). It measured how much usage each
-run takes and whether the replies were right. Its numbers went into the
-architecture. They also set the cost line, the most usage a run may
-take. If runs go over it, this feature stops.</p>
+<p>This brief proposes an opt-in mode instead. LAHE starts one
+background agent for a review: the user's own coding agent, with no chat
+window. Claude Code comes first, run in its headless mode. The agent
+gets LAHE's rules once, when it starts, and then stays running. Each
+time comments are ready, LAHE hands them to that same agent. It handles
+them and returns its replies, and LAHE checks that nothing was left
+unanswered. LAHE, not the agent, does every step that must not be
+forgotten.</p>
+<p>Two test runs, the spikes, handled real reviews headless. The first
+(<code>spike_headless_run.md</code>) started a new agent for each batch.
+The second (<code>spike_persistent_run.md</code>) kept one agent running
+across batches. They measured how much usage each batch takes and
+whether the replies were right. Their numbers went into the
+architecture. They also set the cost line, the most usage a batch may
+take. If batches go over it, this feature stops.</p>
 <h2 id="context">Context</h2>
 <p>The owner asked this on a LAHE card:</p>
 <blockquote>
@@ -898,6 +903,31 @@ they do." (from his notes on trimming the list of waiting items,
 <p>Every earlier fix added words to the rules, and each one failed the
 same way. This feature moves the job of waiting for comments out of the
 chat. LAHE does the remembering, so the agent does not have to.</p>
+<p>The first version of this brief started a new agent for every batch
+of comments. The owner's comment on it:</p>
+<blockquote>
+<p>"Having a headless agent isn't a bad idea, um, but this workflow
+isn't good because it exits after every task and there's pretty
+significant upfront cost for starting an agent in some of my projects
+with a lot of contextual information after a single message to Opus
+which has a million token context window you know starting up a brand
+new agent sending in one message puts me at 18% of context. So you would
+essentially be burning tons of upfront tokens. If you spun up a new
+agent for every one of these... if you could spin up one agent and have
+it stay persistent while being headless, you know That's fine. I don't
+mind that. That would allow the overall sort of library or catalog to
+open documents for me with agents running in the background where all
+they're doing is taking care of the document itself and we could
+optimize that setup and have these background agents running and then I
+could do other things from the chat windows that would be reasonable...
+if it's totally headless and I can't see it and it forgets to do
+something like rearm then I don't know what we do... we just can't do
+every Note is a new agent, that would be too wasteful."</p>
+</blockquote>
+<p>(His comment on the first set of feature documents, dictated, quoted
+in full as it was passed on.)</p>
+<p>So the agent is started once per review and kept running (R26), and
+nothing depends on it remembering a step (R27).</p>
 <pre class="mermaid"><code>flowchart LR
   subgraph Today
     A[Reviewer comments] --&gt; B[Chat agent must be listening]
@@ -905,8 +935,8 @@ chat. LAHE does the remembering, so the agent does not have to.</p>
     B --&gt;|listening| D[Agent handles and replies]
   end
   subgraph &quot;With this mode&quot;
-    E[Reviewer comments] --&gt; F[LAHE starts a run of the user&#39;s agent]
-    F --&gt; G[Run handles every waiting item, replies, exits]
+    E[Reviewer comments] --&gt; F[LAHE hands the batch to the review&#39;s background agent]
+    F --&gt; G[Agent handles every item, returns replies, waits]
     G --&gt; H[LAHE checks nothing is left]
     H --&gt;|something left| F
   end</code></pre>
@@ -933,10 +963,10 @@ repetition. What is left is agents ending a turn with work still open,
 and nobody has counted how often that happens. If a cheap fix to the
 chat workflow brings that to zero, this mode may not be needed. Q6
 (order) asks whether to run that test first.</p>
-<p><strong>The key design question:</strong> LAHE starts a fresh
-headless run of the user's own agent for each batch of work. Can that
-run answer cards as well as the chat agent does, at a cost the owner
-accepts? The spike answers the cost question and gives a first look at
+<p><strong>The key design question:</strong> LAHE keeps one headless
+agent running per review and hands it each batch of work. Can that agent
+answer cards as well as the chat agent does, at a cost the owner
+accepts? The spikes answer the cost question and give a first look at
 quality.</p>
 <p><strong>First version is for the owner, as dogfood.</strong> It is
 offered to launch users only after the success metrics pass.</p>
@@ -992,8 +1022,8 @@ agent is still listening, so a review is one less thing to track.</li>
 subscription I already pay for, without starving my other agents, so
 reviews add no new bill and no lockout.</li>
 <li><strong>As the owner</strong>, I want the agent to see LAHE's rules
-once per run, not every time new work arrives, so repeated rule text
-stops steering how it writes and acts.</li>
+once, not every time new work arrives, so repeated rule text stops
+steering how it writes and acts.</li>
 <li><strong>As a reviewer</strong>, I want the rail to tell me plainly
 when the background agent has stopped or failed, and to stop it from the
 page, so silence never looks like work in progress.</li>
@@ -1010,17 +1040,19 @@ turn it on.</li>
 session.</li>
 <li>From then on, LAHE watches the review itself. No agent has to start
 or restart a watcher.</li>
-<li>When a reviewer's item becomes ready, LAHE starts a headless run of
-the user's own agent, on the user's own login. The run is told LAHE's
-rules once, at the start.</li>
-<li>The run handles every waiting item the way a chat agent does today:
-change the source, rebuild, check the change landed, reply on the card.
-Then it exits.</li>
+<li>When the first reviewer item becomes ready, LAHE starts one headless
+agent for the review, on the user's own login. The agent is told LAHE's
+rules once, when it starts. It stays running after that.</li>
+<li>LAHE hands the agent every waiting item as one batch. The agent
+handles them the way a chat agent does today: change the source, check
+the change landed, and give a reply for each card. Then it waits for the
+next batch.</li>
 <li>LAHE checks what is still unanswered. Items that arrived during the
-run get another run. If runs keep failing to answer an item, LAHE stops
-retrying it and its card says so.</li>
+batch go in the next batch. If the agent keeps failing to answer an
+item, LAHE stops retrying it and its card says so. If the agent dies,
+LAHE starts it again.</li>
 <li>The reviewer sees the same cards and the same rail status line, with
-plain words for when the run is working, idle, waiting for another
+plain words for when the agent is working, idle, waiting for another
 review's run, or stopped.</li>
 <li>Turning the mode off, stopping it from the page, or closing the
 session stops it. A chat agent can take the review back through the
@@ -1066,18 +1098,19 @@ Q4 (permissions).</p>
 <h3 id="waking-and-working">Waking and working</h3>
 <div class="callout callout-req">
 <p><strong>R7 (LAHE does the listening):</strong> When an item becomes
-ready, LAHE starts a run. No agent has to start, keep, or restart a
-watcher.</p>
+ready, LAHE hands it to the review's agent. No agent has to start, keep,
+or restart a watcher.</p>
 </div>
 <div class="callout callout-req">
-<p><strong>R8 (idle is free):</strong> No run starts while nothing is
-waiting. An idle review uses none of the user's model limit.</p>
+<p><strong>R8 (idle is free):</strong> No model call happens while
+nothing is waiting. A waiting agent uses none of the user's model
+limit.</p>
 </div>
 <div class="callout callout-req">
-<p><strong>R9 (one run takes the batch):</strong> A run handles every
-item that is ready when it starts. So a burst of comments leads to a few
-runs, not one per comment. Items held back by the reviewer's Hold toggle
-start no run until released.</p>
+<p><strong>R9 (one batch at a time):</strong> The agent is handed every
+item that is ready when a batch starts. So a burst of comments leads to
+a few batches, not one per comment. Items held back by the reviewer's
+Hold toggle start no batch until released.</p>
 </div>
 <div class="callout callout-req">
 <p><strong>R10 (same standard as today):</strong> A run meets the same
@@ -1087,9 +1120,9 @@ pass the existing check that the edit reached the page. Its replies on
 comments are not checked by the tool, as today.</p>
 </div>
 <div class="callout callout-req">
-<p><strong>R11 (nothing is lost):</strong> Items that arrive while a run
-is going are handled by that run or the next one. At most one run works
-a session at a time.</p>
+<p><strong>R11 (nothing is lost):</strong> Items that arrive while a
+batch is being worked go in the next batch. At most one batch is worked
+per session at a time.</p>
 </div>
 <div class="callout callout-req">
 <p><strong>R12 (a limit on how many run at once):</strong> Only a set
@@ -1099,18 +1132,41 @@ many agents. A review waiting for another review's run says so on the
 rail. The number is set in the architecture.</p>
 </div>
 <div class="callout callout-req">
-<p><strong>R13 (retries stop):</strong> After a run exits, LAHE checks
-for unanswered items and starts another run if any remain. If runs keep
-leaving an item unanswered, LAHE retries it a limited number of times.
-Then its card tells the reviewer the agent could not handle it. The
-limit is set in the architecture.</p>
+<p><strong>R13 (retries stop):</strong> After each batch, LAHE checks
+for unanswered items and hands over another batch if any remain. If the
+agent keeps leaving an item unanswered, LAHE retries it a limited number
+of times. Then its card tells the reviewer the agent could not handle
+it. The limit is set in the architecture.</p>
+</div>
+<div class="callout callout-req">
+<p><strong>R26 (one agent per review, kept running):</strong> LAHE
+starts one background agent per review and keeps it running while the
+mode is on, handing it each batch. It does not start a new agent for
+each batch. A new agent pays its whole start-up cost again, which on the
+owner's projects fills a large share of the context window before any
+work is done. LAHE may close an idle agent and start a new one at the
+next batch. That pays the start-up cost once per idle spell, not once
+per batch.</p>
+</div>
+<div class="callout callout-req">
+<p><strong>R27 (nothing depends on the model remembering):</strong>
+Every step that must happen is done by LAHE, not by the model. LAHE does
+these:</p>
+<ul>
+<li>wakes the agent</li>
+<li>checks after each batch that every item got a reply</li>
+<li>sends the replies to the cards</li>
+<li>restarts the agent when it dies</li>
+</ul>
+<p>The model's job is the edit and the words of each reply. If the model
+forgets or is blocked, LAHE notices and the rail says so.</p>
 </div>
 <h3 id="rules-said-once">Rules said once</h3>
 <div class="callout callout-req">
-<p><strong>R14 (rules once per run):</strong> A run is given LAHE's
-rules once, at the start. Nothing that reads like an instruction repeats
-each time work arrives, or per item. For each item, the run reads only
-the item's data.</p>
+<p><strong>R14 (rules once per agent):</strong> The agent is given
+LAHE's rules once, when it starts. Nothing that reads like an
+instruction repeats each time work arrives, or per item. For each item,
+the agent reads only the item's data.</p>
 </div>
 <div class="callout callout-req">
 <p><strong>R15 (one source of rules):</strong> The rules a run gets are
@@ -1192,8 +1248,8 @@ reason, or a question.</li>
 than guess.</li>
 <li>Say plainly on the card when it did something differently than
 asked.</li>
-<li>Exit when there is nothing left. LAHE decides when to run it
-again.</li>
+<li>End its turn when the batch is done. LAHE decides when to hand it
+the next one.</li>
 </ul>
 <p><strong>What it should never do:</strong></p>
 <ul>
@@ -1201,43 +1257,56 @@ again.</li>
 <li>Edit files outside what it is allowed to touch, or run commands
 outside that list.</li>
 <li>Mark an item handled when its change is not on the page.</li>
-<li>Start a watcher, wait for more work, or try to keep itself
-running.</li>
+<li>Start a watcher, poll for more work, or try to keep itself running.
+LAHE brings it the next batch.</li>
 <li>Refuse an item as stale or old. Every item it is shown is
 current.</li>
 </ul>
 <p><strong>When it is unsure or fails:</strong> leave the item
-unanswered or ask a question, never invent an answer. A run that crashes
-leaves the items waiting, and the rail shows the failure.</p>
+unanswered or ask a question, never invent an answer. An agent that
+crashes leaves the items waiting, and the rail shows the failure.</p>
 <h2 id="success-metrics">Success Metrics</h2>
 <div class="callout callout-metric">
 <ul>
-<li><strong>No prodding.</strong> In a dogfood review of at least five
-comments with the mode on, every ready item gets a reply on its card,
-and the owner never opens a terminal to prod an agent.</li>
-<li><strong>No re-arming.</strong> Zero agent turns are spent starting
-or restarting a watcher in a review with the mode on.</li>
-<li><strong>Rules once.</strong> A run's full transcript shows LAHE's
-rules once. Nothing that reads like an instruction repeats per item.
-Checked by reading one transcript each from runs given 1, 10 and 100
-items.</li>
-<li><strong>Idle is free.</strong> A review left open for an hour with
-no new comments starts zero runs.</li>
-<li><strong>Correct replies.</strong> Replies on hand edits pass the
+<li><p><strong>No prodding.</strong> In a dogfood review of at least
+five comments with the mode on, every ready item gets a reply on its
+card, and the owner never opens a terminal to prod an agent.</p></li>
+<li><p><strong>No re-arming.</strong> Zero agent turns are spent
+starting or restarting a watcher in a review with the mode on.</p></li>
+<li><p><strong>Rules once.</strong> The agent's full transcript shows
+LAHE's rules once, however many batches it handled. Nothing that reads
+like an instruction repeats per batch or per item. Checked by reading
+transcripts from batches of 1, 10 and 25 items, and of 100 items across
+several batches.</p></li>
+<li><p><strong>Idle is free.</strong> A review left open for an hour
+with no new comments makes zero model calls.</p></li>
+<li><p><strong>One agent.</strong> In the dogfood review, the agent
+starts once. It starts again only when LAHE records one of these:</p>
+<ul>
+<li>a crash</li>
+<li>closing an idle agent</li>
+<li>a fresh start</li>
+</ul>
+<p>It never starts once per batch.</p></li>
+<li><p><strong>Nothing forgotten.</strong> With the agent killed on
+purpose between batches, the next comment is still answered, and nobody
+touched a terminal.</p></li>
+<li><p><strong>Correct replies.</strong> Replies on hand edits pass the
 existing check. Replies on comments are judged by the owner, card by
-card, in the dogfood review.</li>
-<li><strong>No double answers.</strong> Zero items answered twice in
-dogfood.</li>
-<li><strong>Failures show.</strong> With the agent's login deliberately
-broken, the rail reports the failure and every item stays waiting.</li>
-<li><strong>Nothing to install.</strong> A fresh clone runs the mode
+card, in the dogfood review.</p></li>
+<li><p><strong>No double answers.</strong> Zero items answered twice in
+dogfood.</p></li>
+<li><p><strong>Failures show.</strong> With the agent's login
+deliberately broken, the rail reports the failure and every item stays
+waiting.</p></li>
+<li><p><strong>Nothing to install.</strong> A fresh clone runs the mode
 with no install step, and the tool's runtime dependencies stay
-empty.</li>
-<li><strong>Cost under the line.</strong> Usage per run and per dogfood
-day stays under the cost line in Assumption 13.</li>
-<li><strong>Recorded for the owner to judge:</strong> how many runs
+empty.</p></li>
+<li><p><strong>Cost under the line.</strong> Usage per run and per
+dogfood day stays under the cost line in Assumption 13.</p></li>
+<li><p><strong>Recorded for the owner to judge:</strong> how many runs
 failed and how many items hit the retry limit, per review, and the time
-from an item becoming ready to its reply.</li>
+from an item becoming ready to its reply.</p></li>
 </ul>
 </div>
 <p>There is no baseline for how often agents forget today. Every

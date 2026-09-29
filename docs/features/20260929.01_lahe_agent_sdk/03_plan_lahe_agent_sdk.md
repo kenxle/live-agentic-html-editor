@@ -1,6 +1,6 @@
 # Plan: LAHE starts your agent when a comment is ready
 
-Status: DRAFT, revision 2. Reworked for one background agent per review, kept running, after the owner rejected one new agent per batch. The first round's four reviews are folded in, and so are this revision's second round (architect and code lead). The biggest change from that round: every agent starts fresh, and nothing is resumed in the first version. Their tables are at the end, and the full prose is in `03_plan_lahe_agent_sdk_reviews.md`.
+Status: DRAFT, revision 2. Reworked for one background agent per review, kept running, after the owner rejected one new agent per batch. Findings from two review rounds are folded in: the first round's four reviews, and this revision's architect and code lead reviews. The biggest change from the second round is that every agent starts fresh, and nothing is resumed in the first version. The review tables are at the end, and the full prose is in `03_plan_lahe_agent_sdk_reviews.md`.
 
 ## Summary
 
@@ -19,7 +19,7 @@ Status: DRAFT, revision 2. Reworked for one background agent per review, kept ru
   - a fake `claude` for tests that stays running and takes turns on stdin, as the real one does
 - **Phase 2:** four builders work in parallel:
   - the engine: starting the agent, sending a turn, reading its replies, and the copy-in and write-back
-  - the supervisor: the wake, the done check after every turn, fresh starts after a death or a bad turn, idle close and limits
+  - the supervisor: waking the agent when items are ready, the done check after every turn, fresh starts after a death or a bad turn, closing an idle agent, and the limits
   - the command line and helper
   - the rail
 
@@ -253,7 +253,7 @@ Also saved: the raw bytes of every stream and failure, for Task 1.4's fake `clau
 One builder, alone, on `agent-sdk-kernel`. After Phase 1, no Phase 2 builder edits anything under `src/shared/`, `locks.js`, `file_stamp.js`, or any copy of the contract. So everything Phase 2 needs there lands now.
 
 ::: xref
-[Architecture: Data / State Changes](02_architecture_lahe_agent_sdk.html#data-state-changes) · [The system prompt](02_architecture_lahe_agent_sdk.html#the-system-prompt-one-source-of-the-rules)
+[Architecture: Data / State Changes](02_architecture_lahe_agent_sdk.html#data--state-changes) · [The system prompt](02_architecture_lahe_agent_sdk.html#the-system-prompt-one-source-of-the-rules)
 :::
 
 ### Task 1.1: The tagged contract, and every copy
@@ -261,7 +261,13 @@ One builder, alone, on `agent-sdk-kernel`. After Phase 1, no Phase 2 builder edi
 **Spec:** In `review_format.js`, add `CONTRACT_LINES`, a list of `{ tag, text }` with each tag `all`, `chat` or `headless`. `CONTRACT` stays a list of strings: the `all` and `chat` lines in order. That is what `review.json` carries. Then:
 
 - Reword the few `all` lines that name the reply transport, so they name the reply's fields only.
-- Add the `headless` lines the architecture lists for an agent that stays running: each message is a batch, the one file, read it afresh each batch, read back, one reply per item in the reply format with nothing after it, do not wait or start anything.
+- Add the `headless` lines the architecture lists for an agent that stays running. They say:
+  - each message is a batch
+  - the one file it may read and edit
+  - read that file afresh each batch
+  - read back each edit
+  - give one reply per item, in the reply format, with nothing after it
+  - do not wait or start anything
 - Change the "forever daemon" line as Assumption A9 says. A chat agent never starts a long-lived process. Auto-answer is the only one, and LAHE starts it.
 - Reword the exit-6 line to say that exit 6 means another owner holds the session, either a chat agent or auto-answer, and `lahe session takeover` takes it back.
 
@@ -380,7 +386,7 @@ Each is used by at least one Phase 2 test.
 
 ### Task 1.5: The prompt module, built in full
 
-**Spec:** Build `src/service/headless_prompt.js` completely, as the architecture's "The system prompt" and "The turn message" describe, with the exports in Task 1.3's table. It is pure and small, and both 2A and 2B need it, so it is not left as a stub. It sits beside Task 1.1's contract work.
+**Spec:** Build `src/service/headless_prompt.js` completely, as the architecture's "The system prompt" and "The turn message" describe, with the exports in Task 1.3's table. It is small and has no side effects, and both 2A and 2B need it, so it is built now rather than stubbed. It sits beside Task 1.1's contract work.
 
 **Files:** `src/service/headless_prompt.js`, `test/unit/auto_answer_prompt.test.js`.
 
@@ -390,17 +396,25 @@ Each is used by at least one Phase 2 test.
 
 ## Phase 2: Four builders in parallel
 
-Each builder reads first: the architecture, `docs/ongoing/SESSION_OWNERSHIP.md`, `docs/CONTRACTS.md`, `docs/CLI.md`, `skills/lahe/SKILL.md`, `spike_persistent_run.md` (its supervisor is the shape 2A and 2B build properly), and Task 1.3's signatures.
+Each builder reads these first:
+
+- the architecture
+- `docs/ongoing/SESSION_OWNERSHIP.md`
+- `docs/CONTRACTS.md`
+- `docs/CLI.md`
+- `skills/lahe/SKILL.md`
+- `spike_persistent_run.md` (its supervisor is the shape 2A and 2B build properly)
+- Task 1.3's signatures
 
 ### Task 2A: The engine
 
 ::: xref
-[Architecture: A wake, one turn](02_architecture_lahe_agent_sdk.html#a-wake-one-turn-of-the-same-agent) · [The structured reply channel](02_architecture_lahe_agent_sdk.html#the-structured-reply-channel) · [The agent's command](02_architecture_lahe_agent_sdk.html#the-agents-command-claude-code-adapter) · [Security](02_architecture_lahe_agent_sdk.html#security-privacy-notes)
+[Architecture: A wake, one turn](02_architecture_lahe_agent_sdk.html#a-wake-one-turn-of-the-same-agent) · [The structured reply channel](02_architecture_lahe_agent_sdk.html#the-structured-reply-channel) · [The agent's command](02_architecture_lahe_agent_sdk.html#the-agents-command-claude-code-adapter) · [Security](02_architecture_lahe_agent_sdk.html#security--privacy-notes)
 :::
 
 **Spec:** Fill in the two engine modules as the architecture describes them. The prompt module is already built (Task 1.5).
 
-- `host_claude_code.js`: starts the agent with the command from the architecture's flag table, by the absolute path recorded at allow time, in its own process group, always fresh. It writes the prompt file from the text it is given, outside `work/`, and removes it however the process ends. The environment comes only from `auto_answer.json`'s `env`. It sends one turn at a time and refuses a second `sendTurn` while one is in flight. It reads the stream line by line and computes each turn's usage as the difference of the running totals, from zero for a new process. A turn with no result sums its messages' usage, or reports `null`. When the supervisor's `signal` fires, or its own backstop timer passes: SIGTERM to the group, the grace time, then SIGKILL, with failure `stopped` or `timed_out`. `onExit` fires from the child's `exit` event.
+- `host_claude_code.js`: starts the agent with the command from the architecture's flag table, by the absolute path recorded at allow time, in its own process group, always fresh. It writes the prompt file from the text it is given, outside `work/`, and removes it however the process ends. The environment comes only from `auto_answer.json`'s `env`. It sends one turn at a time and refuses a second `sendTurn` while one is in flight. It reads the stream line by line and computes each turn's usage as the difference of the running totals, from zero for a new process. A turn with no result sums its messages' usage, or reports `null`. When the supervisor's `signal` fires, or its own backstop timer passes, it sends SIGTERM to the group, waits the grace time, then sends SIGKILL. The failure is `stopped` or `timed_out`. `onExit` fires from the child's `exit` event.
 - `headless_stage.js`: `prepare` empties `agent/work/` and makes the copy. `runTurn` makes the copy match the real file and stamps it, sends the turn, and checks the replies against the batch. It checks that `work/` holds only the copy, removing strays and refusing the turn, then diffs the copy. It writes back only when every check in the architecture's "Checks before anything reaches the real file" passes, with `result.json` at `applying` flushed before the rename. After a refused or conflicting turn it resets the copy and reports `file_reset`. The turn records follow the architecture's "Turn records".
 
 **Files:** those two, and `test/unit/auto_answer_engine_*.test.js`.
@@ -443,7 +457,13 @@ The supervisor calls `opts.engine` and `opts.host`, imports the kernel's `headle
 
 **Spec:**
 
-- `lahe agent`, registered in `src/cli/index.js`: `allow` (preflight, the pinned warning, `auto_answer.json` under the short lock, and the context files copied into `auto_answer_context.md`), `disallow`, `on`, `off` (posted to the route as the CLI client), `status` (state, whether an agent is alive and since when, turns today, and each turn's input, output, cache read and cache write, with "not reported" where a turn has none), `status --diffs`, and `supervise`.
+- `lahe agent`, registered in `src/cli/index.js`, with these subcommands:
+  - `allow`: preflight, the pinned warning, `auto_answer.json` under the short lock, and the context files copied into `auto_answer_context.md`
+  - `disallow`
+  - `on` and `off`, posted to the route as the CLI client
+  - `status`: the state, whether an agent is alive and since when, turns today, and each turn's input, output, cache read and cache write, with "not reported" where a turn has none
+  - `status --diffs`
+  - `supervise`
 - `allow` refuses:
   - instruction files, dot paths, the state folder, paths outside home, and a symlink to any of those, as the edited source
   - a non-Markdown source
@@ -452,7 +472,7 @@ The supervisor calls `opts.engine` and `opts.host`, imports the kernel's `headle
   - Windows
   - `claude` missing or signed out
 - The route reads only `want` and refuses any value other than `on` or `off`. It makes the D11 checks (the review token every write route needs), and sets `from` from the client header. The generic events route refuses `auto_answer.requested`.
-- The helper starts `supervise` on an allowed "on", unless a live one holds the lock. With "on" standing and none alive, it starts a new one only after a `restarting` exit, or when `agent.json` shows no stop was written. A failure stop stays until a new "on" arrives after it. It records each start in `supervisor_starts.json`, which only it writes, not counting starts after a `restarting` exit, and refuses a fourth within ten minutes with `failing`.
+- The helper starts `supervise` on an allowed "on", unless a live one holds the lock. With "on" standing and none alive, it starts a new one only after a `restarting` exit, or when `agent.json` shows no stop was written. A failure stop stays until a new "on" arrives after it. It records each start in `supervisor_starts.json`, which only it writes. Starts after a `restarting` exit are not counted. A fourth counted start within ten minutes is refused with `failing`.
 - The fold rejects replies from other agents while `autoAnswerHolds` is true (`auto_answer_owns`). The monitor, `review` re-entry and liveness use the same predicate.
 - The liveness answer counts a live supervisor at the current rev as listening, and adds `auto_answer`. It never sends a path, the note, the context, or a dollar figure.
 - `lahe monitor` exits 6 with the pinned words while `autoAnswerHolds` is true. `lahe review` re-entry prints the pinned words and no monitor lines. `lahe review` and `lahe add` refuse a second review in the session.
@@ -520,7 +540,7 @@ Build against the Task 1.2 fixtures only.
 
 **Files:** `test/unit/auto_answer_seams.test.js`, `test/browser/auto_answer_seams.spec.js`.
 
-**Acceptance:** each case passes, and each was seen to fail once when its seam was broken by hand.
+**Acceptance:** each case passes, and each was seen to fail once when the join it tests was broken by hand.
 
 ### Task 3.3: One review, one fix round
 
@@ -561,7 +581,14 @@ Each finding names the test that would catch it. Builders fix on `agent-sdk-fix-
 
 ### Task 4.2: Dogfood
 
-**Spec:** The owner runs a review of at least five comments with auto-answer on. The document is one no agent reads as instructions (the default for OQ6, instruction files). A script reads `turns.jsonl`, `attempts.json`, `agent.json`'s history and the event log. It writes the numbers the brief asks for, one row per item:
+**Spec:** The owner runs a review of at least five comments with auto-answer on. The document is one no agent reads as instructions (the default for OQ6, instruction files). A script reads:
+
+- `turns.jsonl`
+- `attempts.json`
+- `agent.json`'s history
+- the event log
+
+It writes the numbers the brief asks for, one row per item:
 
 - turns and failures
 - items that hit the limit
@@ -754,7 +781,7 @@ It also writes one row per agent start, with why it started (first turn, crash, 
 - [ ] A burst becomes one turn, and held items start none until released (R9, one batch at a time).
 - [ ] Hand-edit replies pass the handled check (R10, same standard as today).
 - [ ] Items arriving mid-turn are answered in the next turn, and one turn at most works a review (R11, nothing is lost).
-- [ ] Never more than two turns and four agents across the machine, and a waiting review says so (R12, a cap on runs at once).
+- [ ] Never more than two turns and four agents across the machine, and a waiting review says so (R12, a limit on how many run at once).
 - [ ] An item stops after three attempts per rev, six in all, with the pinned card words (R13, retries stop).
 - [ ] The rules appear once per agent in every transcript checked, and nothing instruction-like repeats per turn or per item (R14, rules once per agent).
 - [ ] The agent's rules come from the one tagged contract, and `review.json` still carries the chat lines (R15, one source of rules).
@@ -811,7 +838,14 @@ These are the open questions from the brief, the architecture and this plan. Eac
 :::
 
 ::: callout-question
-**OQ3 (the numbers, architecture).** Are the limits and timings in "Numbers this plan sets" right? They are guesses, such as 2 turns at once, 4 agents alive (an idle one gives way when a fifth review needs it), closing an agent after 60 idle minutes, and a fresh start at 80,000 tokens of history. **Default: use them as listed.**
+**OQ3 (the numbers, architecture).** Are the limits and timings in "Numbers this plan sets" right? They are guesses. Examples:
+
+- 2 turns at once
+- 4 agents alive, with an idle one giving way when a fifth review needs it
+- closing an agent after 60 idle minutes
+- a fresh start at 80,000 tokens of history
+
+**Default: use them as listed.**
 :::
 
 ::: callout-question

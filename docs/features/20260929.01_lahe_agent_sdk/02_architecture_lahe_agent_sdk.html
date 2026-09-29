@@ -877,6 +877,8 @@ ready</h1>
 <nav id="TOC" role="doc-toc">
 <ul>
 <li><a href="#summary" id="toc-summary">Summary</a></li>
+<li><a href="#words-used-here" id="toc-words-used-here">Words used
+here</a></li>
 <li><a href="#analysis-of-existing-structure"
 id="toc-analysis-of-existing-structure">Analysis of Existing
 Structure</a></li>
@@ -906,6 +908,8 @@ id="toc-assumptions-made-for-the-owner">Assumptions made for the
 owner</a></li>
 <li><a href="#architect-review" id="toc-architect-review">Architect
 Review</a></li>
+<li><a href="#architect-review-round-2"
+id="toc-architect-review-round-2">Architect Review (Round 2)</a></li>
 <li><a href="#security-review" id="toc-security-review">Security
 Review</a></li>
 <li><a
@@ -917,50 +921,101 @@ LAHE starts your agent when a comment is ready, architecture</a>
 id="toc-architect-review-round-1">Architect Review (Round 1)</a></li>
 <li><a href="#security-review-round-1"
 id="toc-security-review-round-1">Security Review (Round 1)</a></li>
+<li><a href="#architect-review-round-2-1"
+id="toc-architect-review-round-2-1">Architect Review (Round 2)</a></li>
 </ul></li>
 </ul>
 </nav>
-<p>Status: DRAFT, written without the owner. The architect and security
-reviewers have reviewed it, and their tables are at the end. The plan's
-reviews changed several sections, and the plan's review tables list
-those changes. Every guess made on the owner's behalf is listed under
-Assumptions.</p>
+<p>Status: DRAFT, revision 2. The owner rejected the first version,
+which started a new headless agent for every batch of comments. Every
+new agent pays its whole start-up cost again. This revision keeps one
+headless agent running per review, owned by LAHE. The second spike
+(<code>spike_persistent_run.md</code>) showed that this works. The
+architect and code lead reviewed this revision, and their findings are
+folded in. Both rounds' tables are at the end. Every guess made on the
+owner's behalf is listed under Assumptions.</p>
 <h2 id="summary">Summary</h2>
 <ul>
-<li><strong>A small process per session does the listening.</strong>
+<li><p><strong>One background agent per review, started once.</strong>
 When auto-answer is on, <code>lahe agent</code> runs for that session.
-It waits for ready items the way <code>lahe monitor</code> does, and
-spends no model usage while nothing is waiting.</li>
-<li><strong>When work lands, it starts one headless run of the user's
-own agent.</strong> For the first version that is
-<code>claude -p</code>, on the login the user already has. It starts
-lean: no CLAUDE.md, hooks, MCP or skills. The run gets LAHE's rules
-once, in its system prompt, and the waiting items as data.</li>
-<li><strong>The run works on copies, in an empty folder.</strong> It
-gets no shell. It can read and edit only a copy of the review's one
-source file. LAHE checks the edit and writes it to the real file itself.
-It then writes the run's replies to a reply file, and the helper folds
-them in the same way it folds a chat agent's replies.</li>
-<li><strong>LAHE enforces the limits itself.</strong> It drains again
-after each run, counts attempts per item, and gives up on an item after
-three. Two runs at most run at once across the machine, and there is a
-daily run limit per session and per machine.</li>
-<li><strong>Permission comes from the terminal. The on and off switch is
-on the page.</strong> A person or chat agent allows auto-answer for a
+It starts one headless Claude Code process for the review and keeps it
+running. Each time items are ready, it sends them to that same process
+as one new message. The agent's start-up cost is paid once, not once per
+batch.</p></li>
+<li><p><strong>A waiting agent costs nothing.</strong> The process makes
+no model call between batches. The spike measured zero calls while idle,
+and the prompt cache carried over between batches, including across a 6
+minute 32 second gap.</p></li>
+<li><p><strong>LAHE owns every step that must not depend on the
+model:</strong></p>
+<ul>
+<li>waking the agent</li>
+<li>checking after every batch that each item got a reply</li>
+<li>writing the replies</li>
+<li>noticing a dead process and starting a new one at the next
+batch</li>
+<li>starting fresh when the history gets long, or after a bad batch</li>
+</ul>
+<p>The model only edits the document and writes the reply text. There is
+no watcher for it to re-arm, and nothing it has to remember.</p></li>
+<li><p><strong>Replies come back as structured output, not shell
+commands.</strong> The agent has no shell. It returns its replies in its
+answer, and LAHE checks them and writes them. In the spike, a reply
+containing "$220" was refused by the shell permission rule twice and
+went unanswered. Only the supervisor's own check caught it.</p></li>
+<li><p><strong>The agent still works on a copy, in an empty
+folder.</strong> It can read and edit only a copy of the review's one
+source file. LAHE checks each batch's edit and writes it to the real
+file itself. The security decisions from the first review all
+stand.</p></li>
+<li><p><strong>Lean by default.</strong> The agent starts without the
+user's CLAUDE.md, hooks, MCP servers or skills. With the owner's full
+setup, every later batch cost 4.3 to 5.1 times a lean one, because every
+request carries his whole setup. A project that needs its own rules
+names context files at allow time.</p></li>
+<li><p><strong>Permission comes from the terminal. The on and off switch
+is on the page.</strong> A person or chat agent allows auto-answer for a
 session once, from the terminal. After that, the rail's Auto-answer
-switch (wireframe direction B) turns it on and off. Turning it on stops
-the chat agent's monitor. A chat agent that takes the session back stops
-auto-answer.</li>
-<li><strong>First version:</strong> the owner's dogfood, one Markdown
-review per auto-answer session, macOS and Linux only.</li>
-<li><strong>One caveat:</strong> Anthropic's Consumer Terms bar scripted
-access except by API key or where Anthropic "explicitly permit[s] it".
-Whether a script starting <code>claude -p</code> on a subscription
-counts is not settled (OQ1, subscription terms). Running the dogfood on
-the owner's subscription is his call.</li>
+switch (wireframe direction B) turns it on and off.</p></li>
+<li><p><strong>Later, the Library opens documents with their background
+agents.</strong> That is a later phase and is not built now (see "Later:
+the Library opens a document with its agent").</p></li>
+<li><p><strong>First version:</strong> the owner's dogfood, one Markdown
+review per auto-answer session, macOS and Linux only.</p></li>
+<li><p><strong>One caveat:</strong> Anthropic's Consumer Terms bar
+scripted access except by API key or where Anthropic "explicitly
+permit[s] it". Whether a script driving <code>claude -p</code> on a
+subscription counts is not settled (OQ1, subscription terms). Running
+the dogfood on the owner's subscription is his call.</p></li>
 </ul>
 <p>Nothing here needs an install, an API key of LAHE's own, or a
 dependency.</p>
+<h2 id="words-used-here">Words used here</h2>
+<ul>
+<li><strong>The agent:</strong> the one headless <code>claude -p</code>
+process LAHE keeps running for a review.</li>
+<li><strong>The supervisor:</strong> <code>lahe agent supervise</code>,
+the small Node process that starts, feeds, checks and replaces the
+agent. It makes no model calls.</li>
+<li><strong>A turn:</strong> one batch of items sent to the agent as one
+message. The turn ends when the agent prints its <code>result</code>
+line. The rail calls a turn a run, since the reviewer sees batches of
+work, not processes.</li>
+<li><strong>A wake:</strong> the supervisor finding ready items and
+sending them to the agent as a turn.</li>
+<li><strong>A look:</strong> one pass of the supervisor's loop, every 2
+seconds. Each look checks for ready items and for anything that should
+stop the agent.</li>
+<li><strong>The drain:</strong> the list of ready items an agent reads,
+as <code>lahe status --session &lt;id&gt; --json --quiet</code> prints
+it.</li>
+<li><strong>The allowance:</strong> the permission a person gives from
+the terminal for auto-answer on one session. It is stored in
+<code>auto_answer.json</code>.</li>
+<li><strong>A fresh start:</strong> a new agent process with no history.
+The first version never reloads an old history (<code>--resume</code>).
+See Alternatives Considered and OQ10 (resume after a crash).</li>
+</ul>
 <h2 id="analysis-of-existing-structure">Analysis of Existing
 Structure</h2>
 <p>What exists and is reused:</p>
@@ -993,12 +1048,17 @@ is 50 lines and 3,174 words, written for a chat agent. Sorting its lines
 by keyword puts 18 of them (1,079 words) in the group about waking and
 hosts, which only a chat agent needs.
 <code>contract_split_count.js</code> in this folder does the count.</li>
+<li><strong>The Library</strong> (branch <code>feat/lahe_library</code>,
+pull request 19, not yet merged) lists every review at
+<code>127.0.0.1:7817/catalog</code> and can ask an attached chat agent
+to pick a document up. The later phase below builds on it.</li>
 </ul>
 <p>What changes:</p>
 <ul>
-<li>a new per-session process, <code>lahe agent</code>, and its
-records</li>
-<li>a Node-only prompt builder and a staging area</li>
+<li>a new per-session supervisor, <code>lahe agent</code>, that owns one
+long-lived agent process, and its records</li>
+<li>a Node-only prompt builder and a stage folder that lives as long as
+the agent</li>
 <li>an audience tag on each contract line, and a few transport lines
 reworded</li>
 <li><code>lahe monitor</code> and <code>lahe review</code> stand down
@@ -1017,14 +1077,14 @@ while auto-answer is on</li>
     Live[&quot;agent_sessions.js&lt;br/&gt;liveness + auto-answer state&quot;]
     Log[(&quot;events.jsonl&lt;br/&gt;(helper is sole writer)&quot;)]
   end
-  subgraph &quot;lahe agent (one per session)&quot;
-    Sup[&quot;headless_supervisor.js&quot;]
-    Stage[&quot;headless_stage.js&lt;br/&gt;copy in, check, write back&quot;]
-    Prompt[&quot;headless_prompt.js&lt;br/&gt;prompt + reply schema&quot;]
-    Slots[&quot;run_slots.js&quot;]
-    Host[&quot;host_claude_code.js&quot;]
+  subgraph &quot;lahe agent supervise (one per session, no model calls)&quot;
+    Sup[&quot;headless_supervisor.js&lt;br/&gt;wake, done check, restarts,&lt;br/&gt;fresh starts, limits&quot;]
+    Stage[&quot;headless_stage.js&lt;br/&gt;copy in, check, write back&lt;br/&gt;(every turn)&quot;]
+    Prompt[&quot;headless_prompt.js&lt;br/&gt;system prompt, reply schema,&lt;br/&gt;turn message&quot;]
+    Slots[&quot;run_slots.js&lt;br/&gt;turns at once, agents alive&quot;]
+    Host[&quot;host_claude_code.js&lt;br/&gt;start, send a turn, read the stream&quot;]
   end
-  Claude[&quot;claude -p&lt;br/&gt;cwd = empty stage folder&quot;]
+  Claude[&quot;the agent: one claude -p process&lt;br/&gt;stream-json in and out&lt;br/&gt;cwd = stage work/ folder&lt;br/&gt;tools: Read, Edit (the copy only)&quot;]
   Src[(&quot;the review&#39;s&lt;br/&gt;source file&quot;)]
   RF[(&quot;replies-claude-auto.jsonl&quot;)]
 
@@ -1033,11 +1093,12 @@ while auto-answer is on</li>
   Sup --&gt;|&quot;drain, read requests&quot;| Log
   Sup --&gt; Slots
   Sup --&gt; Stage
-  Stage --&gt;|&quot;copy in&quot;| Src
+  Stage --&gt;|&quot;copy in before each turn&quot;| Src
   Sup --&gt; Prompt
-  Sup --&gt; Host --&gt;|&quot;spawn, items on stdin&quot;| Claude
+  Sup --&gt; Host
+  Host --&gt;|&quot;started once;&lt;br/&gt;one stdin line per turn&quot;| Claude
   Claude --&gt;|&quot;Read, Edit the copy&quot;| Stage
-  Claude --&gt;|&quot;structured replies&quot;| Host
+  Claude --&gt;|&quot;result line: structured replies,&lt;br/&gt;usage&quot;| Host
   Stage --&gt;|&quot;checked write back&quot;| Src
   Sup --&gt;|&quot;checked replies&quot;| RF --&gt; Fold --&gt; Log
   Sup --&gt;|&quot;agent.json&quot;| Live</code></pre>
@@ -1045,24 +1106,35 @@ while auto-answer is on</li>
 <ul>
 <li><strong><code>src/cli/commands/agent.js</code></strong>:
 <code>lahe agent allow | disallow | on | off | status</code>, and the
-internal <code>lahe agent supervise</code> that the detached process
+internal <code>lahe agent supervise</code> that the detached supervisor
 runs. It is registered in <code>src/cli/index.js</code>.</li>
 <li><strong><code>src/service/headless_supervisor.js</code></strong>:
-the loop. It waits for ready items, lets a burst settle, takes a machine
-slot, starts a run, checks and applies the result, counts attempts, and
-obeys stop requests and the handoff fence.</li>
+the loop, and the owner of the agent process. It waits for ready items
+and lets a burst settle. It takes the slots, mints the turn id, has the
+engine run the turn, and waits for it to end. Then it writes the
+replies, waits for the folds, counts attempts, and drains again. It
+starts and closes the agent, notices its death, owns the 10-minute
+limit, and obeys stop requests and the handoff fence. It never names a
+<code>claude</code> flag.</li>
 <li><strong><code>src/service/headless_stage.js</code></strong>: the
-per-run folder. It copies the source in, diffs and checks the result,
-and writes it back safely.</li>
+stage folder, one fixed path per allowance, emptied and refilled at each
+fresh start. It runs one turn: it makes the copy match the real file,
+sends the turn through the host, checks the replies and the diff, and
+writes the file back safely.</li>
 <li><strong><code>src/service/headless_prompt.js</code></strong> (Node
 only, not in the bundle): builds the system prompt from the tagged
-contract, the reply schema from <code>REPLY_FIELD</code> and
-<code>REPLY_REQUIRED</code>, and the run's stdin from the drain.</li>
+contract, the note and any context files. It also builds the reply
+schema from <code>REPLY_FIELD</code> and <code>REPLY_REQUIRED</code>,
+and each turn's message from the drain.</li>
 <li><strong><code>src/service/run_slots.js</code></strong>: the
-machine-wide limits, both runs at once and runs per day.</li>
+machine-wide limits: turns in flight at once, agents alive at once, and
+turns per day.</li>
 <li><strong><code>src/service/host_claude_code.js</code></strong>: the
 one host adapter. It builds the <code>claude</code> command and
-environment, reads the result, and names the failure.</li>
+environment, and starts the process. It writes each turn to stdin, reads
+the stream, and returns each turn's result with its usage and replies.
+It reports the process's exit the moment it happens, and names the
+failure.</li>
 <li><strong><code>src/service/locks.js</code></strong>: two kinds of
 lock in one shared module.
 <ul>
@@ -1073,9 +1145,9 @@ callback runs, and treat it as stale after 20 seconds. Static servers
 and the daily counts use it.</li>
 <li><strong>A lock held for a process's life</strong>: new. It is stale
 only when its pid and that pid's start time no longer match a live
-process, however old the file is. The supervisor lock and the run slots
-use it. <code>ps</code> runs with <code>LC_ALL=C TZ=UTC</code>, so the
-start time reads the same from the helper and the CLI.</li>
+process, however old the file is. The supervisor lock and both kinds of
+slot use it. <code>ps</code> runs with <code>LC_ALL=C TZ=UTC</code>, so
+the start time reads the same from the helper and the CLI.</li>
 </ul></li>
 <li><strong><code>src/service/file_stamp.js</code></strong>: a stamp of
 a user file (content hash, size, mtime). It is not
@@ -1113,8 +1185,10 @@ rejected with reason <code>auto_answer_owns</code>. The rest of the fold
 is unchanged.</p></li>
 <li><p><strong><code>src/service/index.js</code></strong> (the helper):
 starts <code>lahe agent supervise</code> when an "on" request lands for
-an allowed session, and restarts it when "on" still stands but no live
-supervisor holds the lock.</p></li>
+an allowed session. It starts a new one only when the old one exited to
+restart on new code, or died without writing a stop (see "On and off are
+events"). It counts its own starts in
+<code>supervisor_starts.json</code>.</p></li>
 <li><p><strong><code>src/cli/commands/monitor.js</code></strong>: exits
 with 6 when a live supervisor holds the current rev. Its exit-6 words
 say auto-answer took the session, and that
@@ -1156,7 +1230,7 @@ session owns more than one. While the allowance holds,
 second review to that session. So every auto-answer file below belongs
 to that one review: the "on" and "off" events go in its
 <code>events.jsonl</code>, the reply file sits in its folder, and the
-supervisor drains only its items.</p>
+supervisor drains only its items. One review means one agent.</p>
 <h3 id="one-writer-per-file">One writer per file</h3>
 <div class="table-scroll"><table>
 <thead>
@@ -1174,30 +1248,44 @@ short lock</td>
 <td>what the user allowed</td>
 </tr>
 <tr>
+<td><code>auto_answer_context.md</code> (session folder)</td>
+<td><code>lahe agent allow</code></td>
+<td>the context files' text, copied at allow time</td>
+</tr>
+<tr>
 <td><code>events.jsonl</code> (the review's)</td>
 <td>the helper</td>
 <td>on and off requests, as events</td>
 </tr>
 <tr>
-<td><code>agent.json</code></td>
-<td><code>lahe agent</code></td>
-<td>what it is doing now</td>
+<td><code>supervisor_starts.json</code> (session folder)</td>
+<td>the helper</td>
+<td>when it started a supervisor, for the start limit</td>
 </tr>
 <tr>
-<td><code>runs.jsonl</code>, <code>attempts.json</code>,
-<code>runs/</code></td>
-<td><code>lahe agent</code></td>
-<td>run history</td>
+<td><code>agent.json</code></td>
+<td>the supervisor</td>
+<td>what it and its agent are doing now</td>
+</tr>
+<tr>
+<td><code>turns.jsonl</code>, <code>attempts.json</code></td>
+<td>the supervisor</td>
+<td>turn history</td>
+</tr>
+<tr>
+<td><code>turns/&lt;turn_id&gt;/</code></td>
+<td>the engine, inside a turn the supervisor started</td>
+<td><code>result.json</code> before write-back, the trimmed log, the
+diff</td>
 </tr>
 <tr>
 <td><code>replies-claude-auto.jsonl</code></td>
-<td><code>lahe agent</code> (append only)</td>
-<td>the run's checked replies, for the helper to fold</td>
+<td>the supervisor (append only)</td>
+<td>the agent's checked replies, for the helper to fold</td>
 </tr>
 <tr>
 <td><code>run-slots/</code></td>
-<td>whichever <code>lahe agent</code> takes a slot (exclusive
-create)</td>
+<td>whichever supervisor takes a slot (exclusive create)</td>
 <td>the machine-wide limits</td>
 </tr>
 </tbody>
@@ -1220,9 +1308,11 @@ class="sourceCode json"><code class="sourceCode json"><span id="cb2-1"><a href="
 <span id="cb2-7"><a href="#cb2-7" aria-hidden="true" tabindex="-1"></a>  <span class="dt">&quot;model&quot;</span><span class="fu">:</span> <span class="st">&quot;sonnet&quot;</span><span class="fu">,</span></span>
 <span id="cb2-8"><a href="#cb2-8" aria-hidden="true" tabindex="-1"></a>  <span class="dt">&quot;source_file&quot;</span><span class="fu">:</span> <span class="st">&quot;/Users/ken/docs/plan.md&quot;</span><span class="fu">,</span></span>
 <span id="cb2-9"><a href="#cb2-9" aria-hidden="true" tabindex="-1"></a>  <span class="dt">&quot;note&quot;</span><span class="fu">:</span> <span class="st">&quot;Short note from whoever allowed it. At most 2,000 characters.&quot;</span><span class="fu">,</span></span>
-<span id="cb2-10"><a href="#cb2-10" aria-hidden="true" tabindex="-1"></a>  <span class="dt">&quot;env&quot;</span><span class="fu">:</span> <span class="fu">{</span> <span class="dt">&quot;HOME&quot;</span><span class="fu">:</span> <span class="st">&quot;...&quot;</span><span class="fu">,</span> <span class="dt">&quot;PATH&quot;</span><span class="fu">:</span> <span class="st">&quot;...&quot;</span><span class="fu">,</span> <span class="dt">&quot;USER&quot;</span><span class="fu">:</span> <span class="st">&quot;...&quot;</span><span class="fu">,</span> <span class="dt">&quot;LANG&quot;</span><span class="fu">:</span> <span class="st">&quot;...&quot;</span><span class="fu">,</span> <span class="dt">&quot;TMPDIR&quot;</span><span class="fu">:</span> <span class="st">&quot;...&quot;</span><span class="fu">,</span> <span class="dt">&quot;CLAUDE_CONFIG_DIR&quot;</span><span class="fu">:</span> <span class="st">&quot;...&quot;</span> <span class="fu">},</span></span>
-<span id="cb2-11"><a href="#cb2-11" aria-hidden="true" tabindex="-1"></a>  <span class="dt">&quot;runs_per_day&quot;</span><span class="fu">:</span> <span class="dv">40</span></span>
-<span id="cb2-12"><a href="#cb2-12" aria-hidden="true" tabindex="-1"></a><span class="fu">}</span></span></code></pre></div>
+<span id="cb2-10"><a href="#cb2-10" aria-hidden="true" tabindex="-1"></a>  <span class="dt">&quot;context_files&quot;</span><span class="fu">:</span> <span class="ot">[</span> <span class="fu">{</span> <span class="dt">&quot;path&quot;</span><span class="fu">:</span> <span class="st">&quot;/Users/ken/docs/STYLE.md&quot;</span><span class="fu">,</span> <span class="dt">&quot;sha256&quot;</span><span class="fu">:</span> <span class="st">&quot;...&quot;</span><span class="fu">,</span> <span class="dt">&quot;chars&quot;</span><span class="fu">:</span> <span class="dv">6120</span> <span class="fu">}</span> <span class="ot">]</span><span class="fu">,</span></span>
+<span id="cb2-11"><a href="#cb2-11" aria-hidden="true" tabindex="-1"></a>  <span class="dt">&quot;setup&quot;</span><span class="fu">:</span> <span class="st">&quot;lean&quot;</span><span class="fu">,</span></span>
+<span id="cb2-12"><a href="#cb2-12" aria-hidden="true" tabindex="-1"></a>  <span class="dt">&quot;env&quot;</span><span class="fu">:</span> <span class="fu">{</span> <span class="dt">&quot;HOME&quot;</span><span class="fu">:</span> <span class="st">&quot;...&quot;</span><span class="fu">,</span> <span class="dt">&quot;PATH&quot;</span><span class="fu">:</span> <span class="st">&quot;...&quot;</span><span class="fu">,</span> <span class="dt">&quot;USER&quot;</span><span class="fu">:</span> <span class="st">&quot;...&quot;</span><span class="fu">,</span> <span class="dt">&quot;LANG&quot;</span><span class="fu">:</span> <span class="st">&quot;...&quot;</span><span class="fu">,</span> <span class="dt">&quot;TMPDIR&quot;</span><span class="fu">:</span> <span class="st">&quot;...&quot;</span><span class="fu">,</span> <span class="dt">&quot;CLAUDE_CONFIG_DIR&quot;</span><span class="fu">:</span> <span class="st">&quot;...&quot;</span> <span class="fu">},</span></span>
+<span id="cb2-13"><a href="#cb2-13" aria-hidden="true" tabindex="-1"></a>  <span class="dt">&quot;runs_per_day&quot;</span><span class="fu">:</span> <span class="dv">40</span></span>
+<span id="cb2-14"><a href="#cb2-14" aria-hidden="true" tabindex="-1"></a><span class="fu">}</span></span></code></pre></div>
 <ul>
 <li><strong>Allowed means</strong> that this file's
 <code>handoff_rev</code> equals the session's <code>handoff_rev</code>.
@@ -1232,15 +1322,23 @@ through <code>lahe agent allow</code>, from a terminal.</li>
 <li><strong><code>env</code></strong> is the environment allowlist,
 recorded from the shell that ran <code>allow</code>. The helper starts
 the supervisor, so the supervisor inherits whatever shell started the
-helper. The run's environment is built only from this record. That way
-preflight tests the same environment the run will get. No API key is
-ever recorded or passed (see the run's command).</li>
+helper. The agent's environment is built only from this record. That way
+preflight tests the same environment the agent will get. No API key is
+ever recorded or passed (see the agent's command).</li>
 <li><strong><code>source_file</code></strong> is the review's
 CLI-recorded <code>source_path</code>, resolved to a real path when
 auto-answer is allowed. It is never the page-posted
 <code>source_hint</code>, and never a linked file.</li>
-<li><strong>Turn-on is refused</strong> when the file is an instruction
-file:
+<li><strong><code>context_files</code></strong> are the files named with
+<code>--context</code> (see "Lean by default, and a project's own
+context"). Their text is copied into <code>auto_answer_context.md</code>
+at allow time. The agent reads that copy's text in its system prompt,
+never the files themselves. Changing a context file changes nothing
+until <code>allow</code> runs again.</li>
+<li><strong><code>setup</code></strong> is always <code>lean</code> in
+the first version.</li>
+<li><strong>Turn-on is refused</strong> when the source file is an
+instruction file:
 <ul>
 <li><code>CLAUDE.md</code>, <code>AGENTS.md</code>,
 <code>GEMINI.md</code>, <code>SKILL.md</code></li>
@@ -1255,7 +1353,8 @@ events, and the page may only ask</h3>
 <p><code>POST /lahe/v1/auto-answer</code> takes one field,
 <code>want</code>, which is <code>on</code> or <code>off</code>. It
 refuses any other value and ignores every other field. It passes the D11
-checks, and the helper appends <code>auto_answer.requested</code> with
+checks (the review-token checks every write route makes), and the helper
+appends <code>auto_answer.requested</code> with
 <code>{ "want": "on" | "off", "from": "page" | "terminal" }</code> to
 that review's <code>events.jsonl</code>. The helper sets
 <code>from</code> itself, from the <code>x-lahe-client</code> header
@@ -1265,35 +1364,98 @@ with the review token from the state folder, the way
 <code>lahe add</code> reaches the helper. The page never writes owner
 state, and the generic events route refuses this event type.</p>
 <ul>
-<li><strong>"On" for a session that is not allowed</strong> does nothing
-but record the request. The rail then shows the switch as not available,
-with the terminal command to allow it (see the rail section).</li>
-<li><strong>"On" for an allowed session</strong> makes the helper start
+<li><p><strong>"On" for a session that is not allowed</strong> does
+nothing but record the request. The rail then shows the switch as not
+available, with the terminal command to allow it (see the rail
+section).</p></li>
+<li><p><strong>"On" for an allowed session</strong> makes the helper
+start
 <code>lahe agent supervise --session &lt;id&gt; --state-dir &lt;dir&gt;</code>
 (detached, its own process group) unless a live one holds the lock. It
 runs the same Node binary as the helper, with the clone's
-<code>bin/lahe.js</code>.</li>
-<li><strong>"On" still stands, but no supervisor is alive</strong> (it
-was killed, or it exited to restart on new code): the helper starts a
-new one the next time the page asks for liveness. Until one holds the
-lock, the rail shows "starting". More than three starts in ten minutes
-stops auto-answer with reason <code>failing</code>.</li>
-<li><strong>"Off"</strong> is read by the supervisor on its next
-look.</li>
+<code>bin/lahe.js</code>.</p></li>
+<li><p><strong>"On" still stands, but no supervisor is alive:</strong>
+the helper starts a new one, the next time the page asks for liveness,
+in two cases only:</p>
+<ul>
+<li><code>agent.json</code> says the old one exited with reason
+<code>restarting</code> (new code)</li>
+<li><code>agent.json</code> does not say <code>stopped</code>, so the
+old one died without writing a stop</li>
 </ul>
+<p>A supervisor that stopped itself for a failure
+(<code>signed_out</code>, <code>not_installed</code>,
+<code>source_missing</code>, <code>failing</code>) stays stopped. Only a
+new "on" request made after the stop brings it back: off then on from
+the page, "Try again" on the chip, or
+<code>lahe agent on</code>.</p></li>
+<li><p><strong>The start limit.</strong> The helper records each start
+in <code>supervisor_starts.json</code>, which only it writes, so the
+count survives a helper restart. Starts after a <code>restarting</code>
+exit do not count, since every merge or pull in the clone causes one. A
+fourth counted start within ten minutes is refused, and liveness reports
+<code>stopped</code> with reason <code>failing</code> from that file.
+Until a supervisor holds the lock, the rail shows "starting".</p></li>
+<li><p><strong>"Off"</strong> is read by the supervisor on its next
+look.</p></li>
+</ul>
+<h3 id="what-auto-answer-holds-a-review-means">What "auto-answer holds a
+review" means</h3>
+<p>One function in <code>agent_sessions.js</code>,
+<code>autoAnswerHolds(session)</code>, decides it. It is true when the
+allowance holds (its <code>handoff_rev</code> matches) and the latest
+<code>auto_answer.requested</code> for the review is "on". Four places
+use it, so they cannot disagree:</p>
+<ul>
+<li>the fold's <code>auto_answer_owns</code> rejection</li>
+<li><code>lahe monitor</code>'s exit 6</li>
+<li><code>lahe review</code> re-entry</li>
+<li>the liveness answer</li>
+</ul>
+<p>After "off", a chat agent's replies fold and its monitor runs, as
+today. With "on" standing and the supervisor briefly dead, a chat
+agent's reply is still rejected.</p>
 <h3 id="agentjson-the-supervisors-own-state"><code>agent.json</code>,
 the supervisor's own state</h3>
 <div class="sourceCode" id="cb3"><pre
 class="sourceCode json"><code class="sourceCode json"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="fu">{</span> <span class="dt">&quot;pid&quot;</span><span class="fu">:</span> <span class="dv">4121</span><span class="fu">,</span> <span class="dt">&quot;started&quot;</span><span class="fu">:</span> <span class="st">&quot;Tue Sep 29 15:02:12 2026&quot;</span><span class="fu">,</span> <span class="dt">&quot;handoff_rev&quot;</span><span class="fu">:</span> <span class="dv">4</span><span class="fu">,</span> <span class="dt">&quot;at&quot;</span><span class="fu">:</span> <span class="st">&quot;...&quot;</span><span class="fu">,</span></span>
-<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a>  <span class="dt">&quot;state&quot;</span><span class="fu">:</span> <span class="st">&quot;running&quot;</span><span class="fu">,</span> <span class="dt">&quot;reason&quot;</span><span class="fu">:</span> <span class="kw">null</span><span class="fu">,</span> <span class="dt">&quot;since&quot;</span><span class="fu">:</span> <span class="st">&quot;...&quot;</span><span class="fu">,</span> <span class="dt">&quot;retry_at&quot;</span><span class="fu">:</span> <span class="kw">null</span><span class="fu">,</span></span>
-<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a>  <span class="dt">&quot;run&quot;</span><span class="fu">:</span> <span class="fu">{</span> <span class="dt">&quot;run_id&quot;</span><span class="fu">:</span> <span class="st">&quot;run_0007&quot;</span><span class="fu">,</span> <span class="dt">&quot;pgid&quot;</span><span class="fu">:</span> <span class="dv">4188</span><span class="fu">,</span> <span class="dt">&quot;started&quot;</span><span class="fu">:</span> <span class="st">&quot;Tue Sep 29 15:06:40 2026&quot;</span><span class="fu">,</span> <span class="dt">&quot;items&quot;</span><span class="fu">:</span> <span class="dv">2</span> <span class="fu">},</span></span>
-<span id="cb3-4"><a href="#cb3-4" aria-hidden="true" tabindex="-1"></a>  <span class="dt">&quot;runs_today&quot;</span><span class="fu">:</span> <span class="dv">6</span><span class="fu">,</span> <span class="dt">&quot;tokens_today&quot;</span><span class="fu">:</span> <span class="dv">58210</span> <span class="fu">}</span></span></code></pre></div>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a>  <span class="dt">&quot;state&quot;</span><span class="fu">:</span> <span class="st">&quot;idle&quot;</span><span class="fu">,</span> <span class="dt">&quot;reason&quot;</span><span class="fu">:</span> <span class="kw">null</span><span class="fu">,</span> <span class="dt">&quot;since&quot;</span><span class="fu">:</span> <span class="st">&quot;...&quot;</span><span class="fu">,</span> <span class="dt">&quot;retry_at&quot;</span><span class="fu">:</span> <span class="kw">null</span><span class="fu">,</span></span>
+<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a>  <span class="dt">&quot;agent&quot;</span><span class="fu">:</span> <span class="fu">{</span> <span class="dt">&quot;pid&quot;</span><span class="fu">:</span> <span class="dv">4188</span><span class="fu">,</span> <span class="dt">&quot;pgid&quot;</span><span class="fu">:</span> <span class="dv">4188</span><span class="fu">,</span> <span class="dt">&quot;started&quot;</span><span class="fu">:</span> <span class="st">&quot;Tue Sep 29 15:02:13 2026&quot;</span><span class="fu">,</span></span>
+<span id="cb3-4"><a href="#cb3-4" aria-hidden="true" tabindex="-1"></a>             <span class="dt">&quot;prompt_sha256&quot;</span><span class="fu">:</span> <span class="st">&quot;...&quot;</span><span class="fu">,</span> <span class="dt">&quot;turns&quot;</span><span class="fu">:</span> <span class="dv">12</span><span class="fu">,</span> <span class="dt">&quot;first_context&quot;</span><span class="fu">:</span> <span class="dv">5269</span><span class="fu">,</span> <span class="dt">&quot;last_context&quot;</span><span class="fu">:</span> <span class="dv">17727</span><span class="fu">,</span></span>
+<span id="cb3-5"><a href="#cb3-5" aria-hidden="true" tabindex="-1"></a>             <span class="dt">&quot;last_turn_at&quot;</span><span class="fu">:</span> <span class="st">&quot;...&quot;</span> <span class="fu">},</span></span>
+<span id="cb3-6"><a href="#cb3-6" aria-hidden="true" tabindex="-1"></a>  <span class="dt">&quot;turn_deaths&quot;</span><span class="fu">:</span> <span class="ot">[]</span><span class="fu">,</span></span>
+<span id="cb3-7"><a href="#cb3-7" aria-hidden="true" tabindex="-1"></a>  <span class="dt">&quot;turn&quot;</span><span class="fu">:</span> <span class="kw">null</span><span class="fu">,</span></span>
+<span id="cb3-8"><a href="#cb3-8" aria-hidden="true" tabindex="-1"></a>  <span class="dt">&quot;turns_today&quot;</span><span class="fu">:</span> <span class="dv">6</span> <span class="fu">}</span></span></code></pre></div>
 <ul>
 <li><strong><code>started</code></strong> is the process start time as
 <code>ps -o lstart= -p &lt;pid&gt;</code> prints it. A pid only counts
 as the same process when both the pid and that start time match. That is
-how a reused pid is told apart from the original, since this process has
-no port to answer a health check.</li>
+how a reused pid is told apart from the original, since neither process
+has a port to answer a health check.</li>
+<li><strong><code>agent</code></strong> is <code>null</code> while no
+agent process is alive (before the first turn, after an idle close, or
+after the agent died). It describes one process only. Since every agent
+starts fresh, nothing in it has to outlive the process.
+<ul>
+<li><code>prompt_sha256</code> is the hash of the system prompt the
+agent was started with. A different hash means a fresh start (see "Fresh
+starts").</li>
+<li><code>first_context</code> and <code>last_context</code> are the
+tokens the first and the latest request carried. Their difference is how
+much history the agent holds.</li>
+</ul></li>
+<li><strong><code>turn_deaths</code></strong> sits outside
+<code>agent</code>, so it survives each dead process. It holds the times
+the agent died during a turn or at start-up, for the limit on
+those.</li>
+<li><strong><code>turn</code></strong> is the turn in flight:
+<code>{ "turn_id": "turn_0007", "items": 2, "sent_at": "..." }</code>,
+or <code>null</code>. The supervisor mints each <code>turn_id</code>
+before the turn starts.</li>
+<li><strong>At start, a supervisor rebuilds</strong>
+<code>turns_today</code> and the next <code>turn_id</code> from
+<code>turns.jsonl</code>, so neither resets when a supervisor restarts
+or auto-answer is turned off and on.</li>
 <li><strong><code>state</code></strong> is one of <code>starting</code>,
 <code>idle</code>, <code>gathering</code>, <code>queued</code>,
 <code>running</code>, <code>applying</code>, <code>paused</code> or
@@ -1306,25 +1468,35 @@ no port to answer a health check.</li>
 <code>not_installed</code>, <code>source_missing</code>,
 <code>failing</code>, <code>restarting</code>, or
 <code>null</code>.</li>
-<li><strong><code>tokens_today</code></strong> adds up each run's
-reported input and output tokens. Cache reads and writes are left
-out.</li>
 </ul>
-<h3 id="run-records">Run records</h3>
+<h3 id="turn-records">Turn records</h3>
 <ul>
-<li><strong><code>runs.jsonl</code></strong>, one line per run:</li>
+<li><strong><code>turns.jsonl</code></strong>, one line per turn:</li>
 </ul>
 <div class="sourceCode" id="cb4"><pre
-class="sourceCode json"><code class="sourceCode json"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a><span class="fu">{</span><span class="dt">&quot;run_id&quot;</span><span class="fu">:</span><span class="st">&quot;run_0007&quot;</span><span class="fu">,</span><span class="dt">&quot;started_at&quot;</span><span class="fu">:</span><span class="st">&quot;...&quot;</span><span class="fu">,</span><span class="dt">&quot;ended_at&quot;</span><span class="fu">:</span><span class="st">&quot;...&quot;</span><span class="fu">,</span><span class="dt">&quot;items&quot;</span><span class="fu">:</span><span class="ot">[</span><span class="fu">{</span><span class="dt">&quot;id&quot;</span><span class="fu">:</span><span class="st">&quot;c_7fa2&quot;</span><span class="fu">,</span><span class="dt">&quot;rev&quot;</span><span class="fu">:</span><span class="dv">2</span><span class="fu">}</span><span class="ot">]</span><span class="fu">,</span></span>
-<span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a> <span class="dt">&quot;outcome&quot;</span><span class="fu">:</span><span class="st">&quot;finished&quot;</span><span class="fu">,</span><span class="dt">&quot;failure&quot;</span><span class="fu">:</span><span class="kw">null</span><span class="fu">,</span><span class="dt">&quot;exit_code&quot;</span><span class="fu">:</span><span class="dv">0</span><span class="fu">,</span><span class="dt">&quot;turns&quot;</span><span class="fu">:</span><span class="dv">9</span><span class="fu">,</span></span>
-<span id="cb4-3"><a href="#cb4-3" aria-hidden="true" tabindex="-1"></a> <span class="dt">&quot;applied&quot;</span><span class="fu">:{</span><span class="dt">&quot;file&quot;</span><span class="fu">:</span><span class="st">&quot;/Users/ken/docs/plan.md&quot;</span><span class="fu">,</span><span class="dt">&quot;before&quot;</span><span class="fu">:</span><span class="st">&quot;sha256:...&quot;</span><span class="fu">,</span><span class="dt">&quot;after&quot;</span><span class="fu">:</span><span class="st">&quot;sha256:...&quot;</span><span class="fu">},</span></span>
-<span id="cb4-4"><a href="#cb4-4" aria-hidden="true" tabindex="-1"></a> <span class="dt">&quot;replies_written&quot;</span><span class="fu">:</span><span class="dv">2</span><span class="fu">,</span><span class="dt">&quot;replies_folded&quot;</span><span class="fu">:</span><span class="dv">2</span><span class="fu">,</span></span>
-<span id="cb4-5"><a href="#cb4-5" aria-hidden="true" tabindex="-1"></a> <span class="dt">&quot;usage&quot;</span><span class="fu">:{</span><span class="dt">&quot;input&quot;</span><span class="fu">:</span><span class="dv">12</span><span class="fu">,</span><span class="dt">&quot;output&quot;</span><span class="fu">:</span><span class="dv">1053</span><span class="fu">,</span><span class="dt">&quot;cache_read&quot;</span><span class="fu">:</span><span class="dv">36630</span><span class="fu">,</span><span class="dt">&quot;cache_write&quot;</span><span class="fu">:</span><span class="dv">8922</span><span class="fu">,</span><span class="dt">&quot;cost_usd_list&quot;</span><span class="fu">:</span><span class="fl">0.0536</span><span class="fu">}}</span></span></code></pre></div>
+class="sourceCode json"><code class="sourceCode json"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a><span class="fu">{</span><span class="dt">&quot;turn_id&quot;</span><span class="fu">:</span><span class="st">&quot;turn_0007&quot;</span><span class="fu">,</span><span class="dt">&quot;agent_pid&quot;</span><span class="fu">:</span><span class="dv">4188</span><span class="fu">,</span><span class="dt">&quot;agent_turn&quot;</span><span class="fu">:</span><span class="dv">3</span><span class="fu">,</span></span>
+<span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a> <span class="dt">&quot;sent_at&quot;</span><span class="fu">:</span><span class="st">&quot;...&quot;</span><span class="fu">,</span><span class="dt">&quot;ended_at&quot;</span><span class="fu">:</span><span class="st">&quot;...&quot;</span><span class="fu">,</span><span class="dt">&quot;items&quot;</span><span class="fu">:</span><span class="ot">[</span><span class="fu">{</span><span class="dt">&quot;id&quot;</span><span class="fu">:</span><span class="st">&quot;c_7fa2&quot;</span><span class="fu">,</span><span class="dt">&quot;rev&quot;</span><span class="fu">:</span><span class="dv">2</span><span class="fu">}</span><span class="ot">]</span><span class="fu">,</span></span>
+<span id="cb4-3"><a href="#cb4-3" aria-hidden="true" tabindex="-1"></a> <span class="dt">&quot;outcome&quot;</span><span class="fu">:</span><span class="st">&quot;finished&quot;</span><span class="fu">,</span><span class="dt">&quot;failure&quot;</span><span class="fu">:</span><span class="kw">null</span><span class="fu">,</span><span class="dt">&quot;model_turns&quot;</span><span class="fu">:</span><span class="dv">6</span><span class="fu">,</span></span>
+<span id="cb4-4"><a href="#cb4-4" aria-hidden="true" tabindex="-1"></a> <span class="dt">&quot;applied&quot;</span><span class="fu">:{</span><span class="dt">&quot;file&quot;</span><span class="fu">:</span><span class="st">&quot;/Users/ken/docs/plan.md&quot;</span><span class="fu">,</span><span class="dt">&quot;before&quot;</span><span class="fu">:</span><span class="st">&quot;sha256:...&quot;</span><span class="fu">,</span><span class="dt">&quot;after&quot;</span><span class="fu">:</span><span class="st">&quot;sha256:...&quot;</span><span class="fu">},</span></span>
+<span id="cb4-5"><a href="#cb4-5" aria-hidden="true" tabindex="-1"></a> <span class="dt">&quot;replies_written&quot;</span><span class="fu">:</span><span class="dv">2</span><span class="fu">,</span><span class="dt">&quot;replies_folded&quot;</span><span class="fu">:</span><span class="dv">2</span><span class="fu">,</span></span>
+<span id="cb4-6"><a href="#cb4-6" aria-hidden="true" tabindex="-1"></a> <span class="dt">&quot;context&quot;</span><span class="fu">:{</span><span class="dt">&quot;first&quot;</span><span class="fu">:</span><span class="dv">9114</span><span class="fu">,</span><span class="dt">&quot;last&quot;</span><span class="fu">:</span><span class="dv">11849</span><span class="fu">},</span><span class="dt">&quot;compacted&quot;</span><span class="fu">:</span><span class="kw">false</span><span class="fu">,</span></span>
+<span id="cb4-7"><a href="#cb4-7" aria-hidden="true" tabindex="-1"></a> <span class="dt">&quot;usage&quot;</span><span class="fu">:{</span><span class="dt">&quot;input&quot;</span><span class="fu">:</span><span class="dv">8</span><span class="fu">,</span><span class="dt">&quot;output&quot;</span><span class="fu">:</span><span class="dv">1004</span><span class="fu">,</span><span class="dt">&quot;cache_read&quot;</span><span class="fu">:</span><span class="dv">39756</span><span class="fu">,</span><span class="dt">&quot;cache_write&quot;</span><span class="fu">:</span><span class="dv">3002</span><span class="fu">,</span><span class="dt">&quot;cost_usd_list&quot;</span><span class="fu">:</span><span class="fl">0.0300</span><span class="fu">}}</span></span></code></pre></div>
 <ul>
+<li>Claude Code reports usage and cost as running totals for the
+process. The engine records each turn as the difference from the
+previous <code>result</code> of the same process, as the spike did. A
+new process counts from zero.</li>
+<li>The four usage numbers are kept apart (input, output, cache read,
+cache write), since cache reads are most of what a turn processes.</li>
+<li>A turn with no <code>result</code> line (it died, timed out or was
+stopped) records the sum of its assistant messages' usage when the
+stream had any, and <code>"usage": null</code> otherwise.
+<code>lahe agent status</code> shows <code>null</code> as "not
+reported", never as zero.</li>
 <li><code>outcome</code> is <code>finished</code>, <code>failed</code>,
 <code>stopped</code>, <code>timed_out</code>, <code>refused</code> (the
 edit failed a check) or <code>conflict</code> (the real file changed
-during the run).</li>
+during the turn).</li>
 <li><code>failure</code> is <code>null</code> or one of
 <code>signed_out</code>, <code>usage_limit</code>,
 <code>not_installed</code>, <code>crashed</code>,
@@ -1332,25 +1504,53 @@ during the run).</li>
 <li><strong><code>attempts.json</code></strong> counts attempts per
 item, both per revision and across all revisions:
 <code>{ "c_7fa2": { "2": 1, "all": 3 } }</code>.</li>
-<li><strong><code>runs/&lt;run_id&gt;/</code></strong> holds the stage
-folder <code>work/</code> (with the one copy), <code>result.json</code>,
-and a trimmed <code>log.jsonl</code>. The log keeps tool names, paths,
-sizes, usage and the replies, and drops every tool result. The prompt
-file sits outside <code>work/</code> and is removed when the run ends,
-however it ends. The last 20 run folders are kept. Each applied run also
-writes its diff to <code>runs/&lt;run_id&gt;/diff.patch</code>, so
-<code>lahe agent status --diffs</code> shows the edits of the kept runs,
-and hashes only for older ones.</li>
+<li><strong><code>turns/&lt;turn_id&gt;/</code></strong> holds
+<code>result.json</code> (the checked replies, the before and after
+hashes, and <code>"stage": "applying"</code> or
+<code>"stage": "done"</code>), a trimmed <code>log.jsonl</code>, and
+<code>diff.patch</code> when the turn applied an edit. The log keeps
+tool names, paths, sizes, usage and the replies, and drops every tool
+result. The last 20 turn folders are kept.
+<code>lahe agent status --diffs</code> shows the edits of the kept
+turns, and hashes only for older ones.</li>
+<li><strong>The stage folder</strong> is always <code>agent/work/</code>
+in the session folder, for as long as the allowance holds. It holds the
+one copy and nothing else. It is emptied and the copy made again at
+every fresh start, and preparing it twice gives the same result. The
+prompt file sits beside it in <code>agent/</code>, outside
+<code>work/</code>. The host adapter writes it from the prompt text it
+is given, and removes it when the agent process ends, however it
+ends.</li>
 </ul>
 <h3 id="machine-wide-slots">Machine-wide slots</h3>
-<p><code>&lt;state-dir&gt;/run-slots/</code> holds two slot files at
-most (<code>1.lock</code>, <code>2.lock</code>), each
-<code>{ "pid", "started", "pgid", "session", "at" }</code>. It also
-holds <code>today.json</code>, the machine's run count for the local
-calendar day, updated under the shared lock. A slot is taken by
-exclusive create. It is reclaimed only when its pid and start time no
-longer match a live process and its run group is gone.</p>
-<h3 id="the-reply-schema-a-run-returns">The reply schema a run
+<p><code>&lt;state-dir&gt;/run-slots/</code> holds two kinds of slot,
+each <code>{ "pid", "started", "pgid", "session", "at" }</code>:</p>
+<ul>
+<li><strong>Agent slots</strong> (<code>agent-1.lock</code> to
+<code>agent-4.lock</code>): at most four agent processes alive across
+the machine. A supervisor holds one while its agent lives. The spike
+measured 115 to 275 MB of memory per agent.</li>
+<li><strong>Turn slots</strong> (<code>turn-1.lock</code>,
+<code>turn-2.lock</code>): at most two turns in flight across the
+machine. A supervisor takes one before it sends a turn and releases it
+at the turn's end.</li>
+</ul>
+<p><strong>The order, so the two kinds cannot stall each other.</strong>
+A supervisor with no agent takes an agent slot first, and only then a
+turn slot. It never waits for one kind while holding the other: if the
+second is not free, it releases the first and waits.</p>
+<p><strong>An idle agent gives way.</strong> When every agent slot is
+held, the waiting supervisor leaves a <code>want-agent</code> marker in
+<code>run-slots/</code>. On its next look, the supervisor whose agent
+has been idle longest closes that agent and releases its slot. At most
+two agents can be mid-turn at once, so at least two of the four are idle
+whenever a fifth review waits. The wait is one look, not an hour.</p>
+<p><code>run-slots/</code> also holds <code>today.json</code>, the
+machine's turn count for the local calendar day, updated under the short
+lock. A slot is taken by exclusive create. It is reclaimed only when its
+pid and start time no longer match a live process and its process group
+is gone.</p>
+<h3 id="the-reply-schema-a-turn-returns">The reply schema a turn
 returns</h3>
 <p>Built from <code>REPLY_FIELD</code> and <code>REPLY_REQUIRED</code>
 in <code>protocol.js</code>, so the names cannot drift. A test asserts
@@ -1361,33 +1561,38 @@ class="sourceCode json"><code class="sourceCode json"><span id="cb5-1"><a href="
 <span id="cb5-3"><a href="#cb5-3" aria-hidden="true" tabindex="-1"></a>    <span class="fu">{</span> <span class="dt">&quot;item&quot;</span><span class="fu">:</span> <span class="st">&quot;c_7fa2&quot;</span><span class="fu">,</span> <span class="dt">&quot;rev&quot;</span><span class="fu">:</span> <span class="dv">2</span><span class="fu">,</span> <span class="dt">&quot;status&quot;</span><span class="fu">:</span> <span class="st">&quot;handled&quot;</span><span class="fu">,</span> <span class="dt">&quot;text&quot;</span><span class="fu">:</span> <span class="st">&quot;Changed </span><span class="ch">\&quot;</span><span class="st">utilize</span><span class="ch">\&quot;</span><span class="st"> to </span><span class="ch">\&quot;</span><span class="st">use</span><span class="ch">\&quot;</span><span class="st">.&quot;</span><span class="fu">,</span></span>
 <span id="cb5-4"><a href="#cb5-4" aria-hidden="true" tabindex="-1"></a>      <span class="dt">&quot;user_needs_to_see_reply&quot;</span><span class="fu">:</span> <span class="kw">false</span> <span class="fu">}</span><span class="ot">,</span></span>
 <span id="cb5-5"><a href="#cb5-5" aria-hidden="true" tabindex="-1"></a>    <span class="fu">{</span> <span class="dt">&quot;item&quot;</span><span class="fu">:</span> <span class="st">&quot;c_81b0&quot;</span><span class="fu">,</span> <span class="dt">&quot;rev&quot;</span><span class="fu">:</span> <span class="dv">1</span><span class="fu">,</span> <span class="dt">&quot;status&quot;</span><span class="fu">:</span> <span class="st">&quot;not_handled&quot;</span><span class="fu">,</span> <span class="dt">&quot;reason&quot;</span><span class="fu">:</span> <span class="st">&quot;...&quot;</span> <span class="fu">}</span><span class="ot">,</span></span>
-<span id="cb5-6"><a href="#cb5-6" aria-hidden="true" tabindex="-1"></a>    <span class="fu">{</span> <span class="dt">&quot;item&quot;</span><span class="fu">:</span> <span class="st">&quot;c_90d3&quot;</span><span class="fu">,</span> <span class="dt">&quot;rev&quot;</span><span class="fu">:</span> <span class="dv">1</span><span class="fu">,</span> <span class="dt">&quot;status&quot;</span><span class="fu">:</span> <span class="st">&quot;question&quot;</span><span class="fu">,</span> <span class="dt">&quot;text&quot;</span><span class="fu">:</span> <span class="st">&quot;What is this year&#39;s figure?&quot;</span> <span class="fu">}</span></span>
+<span id="cb5-6"><a href="#cb5-6" aria-hidden="true" tabindex="-1"></a>    <span class="fu">{</span> <span class="dt">&quot;item&quot;</span><span class="fu">:</span> <span class="st">&quot;c_90d3&quot;</span><span class="fu">,</span> <span class="dt">&quot;rev&quot;</span><span class="fu">:</span> <span class="dv">1</span><span class="fu">,</span> <span class="dt">&quot;status&quot;</span><span class="fu">:</span> <span class="st">&quot;question&quot;</span><span class="fu">,</span> <span class="dt">&quot;text&quot;</span><span class="fu">:</span> <span class="st">&quot;What is this year&#39;s figure? It costs $220 now.&quot;</span> <span class="fu">}</span></span>
 <span id="cb5-7"><a href="#cb5-7" aria-hidden="true" tabindex="-1"></a>  <span class="ot">]</span></span>
 <span id="cb5-8"><a href="#cb5-8" aria-hidden="true" tabindex="-1"></a><span class="fu">}</span></span></code></pre></div>
 <ul>
-<li><strong>The run never names files.</strong> <code>lahe agent</code>
-fills <code>files</code> from its own before and after stamps. When a
-run changed the file, every <code>handled</code> reply from that run
-lists it.</li>
+<li><strong>The agent never names files.</strong> The supervisor fills
+<code>files</code> from its own before and after stamps. When a turn
+changed the file, every <code>handled</code> reply from that turn lists
+it.</li>
 <li><strong><code>text</code> and <code>reason</code> are capped at 500
 characters</strong> in the schema, and checked again. A reply over the
 cap is dropped and logged, not cut short. Its item then has no reply,
 which counts as an attempt.</li>
-<li><strong>A reply for an item or revision not in the batch is
-dropped</strong> and logged.</li>
+<li><strong>A reply for an item or revision not in this turn's batch is
+dropped</strong> and logged. That includes a reply for an item from an
+earlier turn, which the agent may still remember.</li>
 </ul>
 <h3 id="the-liveness-answer-gains-auto_answer">The liveness answer gains
 <code>auto_answer</code></h3>
 <div class="sourceCode" id="cb6"><pre
 class="sourceCode json"><code class="sourceCode json"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a><span class="st">&quot;auto_answer&quot;</span><span class="er">:</span> <span class="fu">{</span> <span class="dt">&quot;available&quot;</span><span class="fu">:</span> <span class="kw">true</span><span class="fu">,</span> <span class="dt">&quot;on&quot;</span><span class="fu">:</span> <span class="kw">true</span><span class="fu">,</span> <span class="dt">&quot;state&quot;</span><span class="fu">:</span> <span class="st">&quot;running&quot;</span><span class="fu">,</span> <span class="dt">&quot;reason&quot;</span><span class="fu">:</span> <span class="kw">null</span><span class="fu">,</span></span>
 <span id="cb6-2"><a href="#cb6-2" aria-hidden="true" tabindex="-1"></a>                 <span class="dt">&quot;since&quot;</span><span class="fu">:</span> <span class="st">&quot;...&quot;</span><span class="fu">,</span> <span class="dt">&quot;retry_at&quot;</span><span class="fu">:</span> <span class="kw">null</span><span class="fu">,</span> <span class="dt">&quot;working_on&quot;</span><span class="fu">:</span> <span class="dv">2</span><span class="fu">,</span></span>
-<span id="cb6-3"><a href="#cb6-3" aria-hidden="true" tabindex="-1"></a>                 <span class="dt">&quot;runs_today&quot;</span><span class="fu">:</span> <span class="dv">6</span><span class="fu">,</span> <span class="dt">&quot;runs_limit&quot;</span><span class="fu">:</span> <span class="dv">40</span><span class="fu">,</span> <span class="dt">&quot;tokens_today&quot;</span><span class="fu">:</span> <span class="dv">58210</span> <span class="fu">}</span></span></code></pre></div>
+<span id="cb6-3"><a href="#cb6-3" aria-hidden="true" tabindex="-1"></a>                 <span class="dt">&quot;runs_today&quot;</span><span class="fu">:</span> <span class="dv">6</span><span class="fu">,</span> <span class="dt">&quot;runs_limit&quot;</span><span class="fu">:</span> <span class="dv">40</span> <span class="fu">}</span></span></code></pre></div>
 <ul>
 <li><strong><code>null</code></strong> when the session has never been
 allowed.</li>
 <li><strong><code>available</code></strong> is false when the session is
 not allowed at the current rev.</li>
-<li>The page is never sent a path, the note, or a dollar figure.</li>
+<li><code>runs_today</code> and <code>runs_limit</code> count turns.
+They keep the rail's word, "runs".</li>
+<li>The page is never sent a path, the note, the context files, token
+counts, or a dollar figure. Token counts, cache included, are in
+<code>lahe agent status</code>.</li>
 </ul>
 <h2 id="key-flows">Key Flows</h2>
 <h3 id="allowing-it-then-turning-it-on">Allowing it, then turning it
@@ -1398,11 +1603,11 @@ on</h3>
   participant S as auto_answer.json
   participant R as Rail (reviewer)
   participant H as Helper
-  participant A as lahe agent
+  participant A as Supervisor
   participant M as chat agent&#39;s monitor
 
-  U-&gt;&gt;CLI: lahe agent allow --session s_x [--note ...] [--model sonnet]
-  CLI-&gt;&gt;CLI: preflight with the run&#39;s exact env and flags
+  U-&gt;&gt;CLI: lahe agent allow --session s_x [--note ...] [--context STYLE.md] [--model sonnet]
+  CLI-&gt;&gt;CLI: preflight with the agent&#39;s exact env and flags
   CLI-&gt;&gt;U: warning: what it may do, who can make it act, cost, terms
   CLI-&gt;&gt;S: under the short lock: write it at the current handoff_rev
   R-&gt;&gt;R: Auto-answer switch is now available
@@ -1410,7 +1615,7 @@ on</h3>
   R-&gt;&gt;H: POST /lahe/v1/auto-answer {want: on}
   H-&gt;&gt;H: append auto_answer.requested
   H-&gt;&gt;A: spawn detached (lock held? then no)
-  A-&gt;&gt;A: take the supervisor lock, agent.json state idle
+  A-&gt;&gt;A: take the supervisor lock, agent.json state idle, no agent yet
   M-&gt;&gt;M: next look: live supervisor at this rev, exit 6</code></pre>
 <ul>
 <li><p><strong>Preflight</strong> runs <code>claude --version</code> and
@@ -1427,12 +1632,18 @@ printed every time. It says:</p>
 <li>anyone who can comment on this review, or run script in its pages,
 can make it edit that file, and the file may later be read by agents
 that do have a shell</li>
-<li>each run uses the user's Claude usage, and costs money when the
+<li>it keeps one Claude session running for this review while
+auto-answer is on</li>
+<li>each turn uses the user's Claude usage, and costs money when the
 Claude login is billed by the token</li>
 <li>the subscription terms question (OQ1, whether the terms allow
 this)</li>
 </ul>
 <p>The plan pins its exact words.</p></li>
+<li><p><strong>The agent is not started at "on".</strong> It starts with
+the first turn, so a review switched on and never commented on costs
+nothing and holds no memory. The spike's agent also made no request
+until its first message.</p></li>
 <li><p><strong><code>lahe agent on --session s_x</code></strong> is
 <code>allow</code> followed by an "on" request, for a user who wants it
 on from the terminal.</p></li>
@@ -1443,82 +1654,112 @@ and stop (answers Q3, telling the chat agent). <code>lahe review</code>
 re-entry into such a session says the same and prints no monitor
 instructions.</p></li>
 </ul>
-<h3 id="a-wake-one-run">A wake, one run</h3>
+<h3 id="a-wake-one-turn-of-the-same-agent">A wake: one turn of the same
+agent</h3>
 <pre class="mermaid"><code>sequenceDiagram
   participant P as Reviewer&#39;s page
   participant H as Helper
-  participant A as lahe agent
+  participant A as Supervisor
   participant L as Run slots
-  participant G as Stage folder
-  participant C as claude -p
+  participant G as Stage copy
+  participant C as The agent (claude -p, kept running)
   participant F as Source file
 
   P-&gt;&gt;H: item ready
   A-&gt;&gt;H: drain every 2s (no model)
   A-&gt;&gt;A: gathering: 15s with no new item, or 60s after the first
-  A-&gt;&gt;L: take a slot, count today&#39;s run
-  alt no slot
-    A-&gt;&gt;A: queued (rail: waiting for another review&#39;s run)
+  alt no agent alive
+    A-&gt;&gt;L: take an agent slot (an idle agent elsewhere may give way)
+    A-&gt;&gt;G: empty work/, make the copy
+    A-&gt;&gt;C: start fresh, prompt given once
   end
-  A-&gt;&gt;G: copy the source in, stamp it
-  A-&gt;&gt;C: spawn in G: prompt file, items on stdin
+  A-&gt;&gt;L: take a turn slot, count today&#39;s turn
+  A-&gt;&gt;G: make the copy match the real file, stamp it
+  A-&gt;&gt;C: one stdin line: this batch&#39;s items, as data
   C-&gt;&gt;G: Read, Edit the copy
-  C--&gt;&gt;A: exit, result with replies and usage
-  A-&gt;&gt;A: check the replies against the batch
+  C--&gt;&gt;A: result line: structured replies, usage (agent stays running)
+  A-&gt;&gt;A: check the replies against this batch
   A-&gt;&gt;G: diff the copy against the stamp
   A-&gt;&gt;F: real file unchanged, no new raw HTML? atomic write back
   A-&gt;&gt;H: append checked replies to replies-claude-auto.jsonl
   H-&gt;&gt;H: fold: rev check, handled check (re-render first for Markdown)
   A-&gt;&gt;H: wait for each reply&#39;s fold result (30s at most)
-  A-&gt;&gt;A: record the run, count attempts
-  A-&gt;&gt;L: release the slot
-  A-&gt;&gt;A: drain again: next run, or idle</code></pre>
+  A-&gt;&gt;A: record the turn, count attempts, check fresh-start rules
+  A-&gt;&gt;L: release the turn slot
+  A-&gt;&gt;H: drain again: next turn, or idle</code></pre>
 <p><strong>The batch</strong></p>
 <ul>
-<li>Every ready item the drain lists when the run starts goes in, up to
+<li>Every ready item the drain lists when the turn starts goes in, up to
 25 items and 100 KB of input in all.</li>
 <li>An item whose reviewer text (note plus change) is over 8,000
 characters is not sent. It gets a <code>not_handled</code> reply: "Too
 long for auto-answer; a chat agent can take it." D12 forbids cutting
 reviewer text, so the item is refused whole.</li>
 </ul>
-<p><strong>The stdin payload</strong> is the drain's item lines, cut to
-a fixed list of fields. Each item keeps what the reviewer wrote
+<p><strong>The turn message</strong> is one stream-json user message on
+the agent's stdin. Its text is the drain's item lines, cut to a fixed
+list of fields. Each item keeps what the reviewer wrote
 (<code>note</code>, <code>change</code>), its identity
 (<code>review</code>, <code>id</code>, <code>rev</code>,
 <code>kind</code>), its thread, and the page text under
 <code>page</code>. The page's <code>path</code>, <code>origin</code> and
 <code>linked_file</code> are dropped, and so is the drain's summary
 line. Each item's <code>source_hint</code> is replaced by the stage path
-of the copy. There is no instruction text in it, per item or per wake
-(R14, rules once per run). The supervisor drains in its own process,
-through <code>status.js</code> with <code>suppressActivityTouch</code>
-set, as <code>lahe monitor</code> does, so its looks never make the rail
-say an agent is working.</p>
-<p><strong>Items that arrive mid-run</strong> wait for the next run
-(R11, nothing is lost). If the reviewer rewords an item mid-run, the
-run's reply names the old rev, and the helper refuses it at fold.</p>
-<p><strong>Checks before anything reaches the real file:</strong></p>
+of the copy. When the copy was reset since the agent's last turn (a
+refused edit, a conflict, or a change to the real file), the message
+starts with one data line,
+<code>{"file_changed_since_last_turn": true}</code>. There is no
+instruction text in the message, per item or per turn (R14, rules once).
+The supervisor drains in its own process, through <code>status.js</code>
+with <code>suppressActivityTouch</code> set, as
+<code>lahe monitor</code> does, so its looks never make the rail say an
+agent is working.</p>
+<p><strong>One turn at a time.</strong> The supervisor sends nothing
+while a turn is in flight. The <code>result</code> line is the only sign
+a turn is over. The model saying it is done means nothing to the
+supervisor.</p>
+<p><strong>Items that arrive mid-turn</strong> wait for the next turn
+(R11, nothing is lost). If the reviewer rewords an item mid-turn, the
+turn's reply names the old rev, and the helper refuses it at fold.</p>
+<p><strong>The copy between turns.</strong> The copy stays in
+<code>agent/work/</code> as long as the agent does. Before each turn the
+engine compares it with the real file. If they differ (the owner edited
+the file), the real file is copied over it. After a refused or
+conflicting turn, the engine resets the copy at once. Either way, the
+supervisor passes "the file changed" into the next turn, so the turn
+message's first data line tells the agent. After a turn that was written
+back, the copy and the real file are already the same. The system prompt
+tells the agent to read the file afresh at the start of every turn.
+Claude Code's Edit tool also refuses to edit a file that changed since
+it was last read. The flags spike checks that this holds here.</p>
+<p><strong>The 15-second quiet wait</strong> after a conflict happens in
+the supervisor, before it takes a slot. So it never holds a slot while
+the owner is still typing.</p>
+<p><strong>Checks before anything reaches the real file</strong> (the
+first version's checks, now per turn):</p>
 <ul>
-<li>The run must have ended <code>finished</code>, with output that
-matches the schema.</li>
+<li>The turn must have ended <code>finished</code>, with replies that
+match the schema.</li>
+<li><code>work/</code> must hold exactly one regular file, the copy.
+Anything else the agent left there makes the turn <code>refused</code>.
+The engine removes the stray files, and the next turn starts fresh. A
+stray file could otherwise carry a planted note past a fresh start.</li>
 <li>The real file's stamp must still match the one taken at copy-in. If
 it does not, the outcome is <code>conflict</code>: nothing is written or
-replied, and the items go into the next run with a fresh copy. A
-conflict is not an attempt, but it does count toward the stop after
-three failed runs in a row. The next copy-in waits until the file has
-been unchanged for 15 seconds, so an owner typing in the file does not
-start run after run.</li>
+replied, and the items go into the next turn with a fresh copy. A
+conflict is not an attempt and not a failed turn: saving the file is
+normal work. The quiet wait and the daily limit bound how often it can
+happen.</li>
 <li>If the copy changed, every item in the batch must have a reply. A
-finished run that edited the file but left an item without a reply is
+finished turn that edited the file but left an item without a reply is
 <code>refused</code>: nothing is written and no reply is sent, so no
 change reaches the file without a reply beside it. One case gets past
-this check: the run edits an item's passage and also replies
+this check: the agent edits an item's passage and also replies
 <code>question</code> for that item.</li>
 <li>The diff must add no raw HTML tag, no <code>on…=</code> attribute
 and no <code>javascript:</code> URL. If it does, the outcome is
 <code>refused</code>: nothing is written, and each <code>handled</code>
-reply in the run becomes <code>not_handled</code> with the reason
+reply in the turn becomes <code>not_handled</code> with the reason
 "Auto-answer does not add raw HTML or scripts; a chat agent can do
 this."</li>
 <li>The write-back re-checks the target at write time. It must be a
@@ -1526,37 +1767,166 @@ regular file, not a symlink, at the same real path, owned by the user.
 The new text goes to a temp file beside it, which is then renamed over
 the target.</li>
 </ul>
+<p><strong>Before the rename, the engine writes
+<code>result.json</code></strong> with the checked replies, the before
+and after hashes, and <code>"stage": "applying"</code>, and flushes it
+to disk. After the replies are written, it becomes
+<code>"stage": "done"</code>. So a supervisor killed at any point leaves
+a record to recover from:</p>
+<ul>
+<li><strong>Killed before the rename:</strong> the real file still
+matches the before hash. The next supervisor drops the replies, and the
+items go into the next turn.</li>
+<li><strong>Killed after the rename:</strong> the real file matches the
+after hash. The next supervisor writes the replies before it does
+anything else.</li>
+</ul>
+<p>On start, a supervisor scans <code>turns/</code> for a
+<code>result.json</code> still at <code>applying</code>, and settles it
+this way first.</p>
 <p><strong>Replies go through the helper, as any agent's do.</strong>
-<code>lahe agent</code> appends them with <code>reply.js</code>'s
-encoder. It then reads the review's <code>events.jsonl</code> for a
-<code>reply.folded</code> or <code>reply.rejected</code> matching each
-reply's item and rev, before it counts attempts or drains. When the
+The supervisor appends them with <code>reply.js</code>'s encoder. It
+then reads the review's <code>events.jsonl</code> before it counts
+attempts or drains. It matches a <code>reply.folded</code> by item and
+rev. It matches a <code>reply.rejected</code> by the reply file and line
+number it just appended, since that event carries no item. When the
 handled check holds a reply back, the helper still writes a
 <code>reply.folded</code>, marked to say the change is not on the page.
 A reply that has been written but not yet folded counts as answered, so
 the next drain cannot hand the item out twice. If no fold result arrives
 in 30 seconds (the helper is down), nothing is counted, the timeout is
 logged, and the loop goes on.</p>
-<p><strong>If <code>lahe agent</code> dies between writing the file back
-and writing the replies,</strong> <code>runs.jsonl</code> shows
-<code>applied</code> with <code>replies_written: 0</code>.
-<code>result.json</code> is still in the run folder, so the next
-supervisor finishes the replies before it does anything else.</p>
+<h3 id="the-structured-reply-channel">The structured reply channel</h3>
+<p>The agent returns its replies in its turn's result. It never runs a
+command to reply.</p>
+<ul>
+<li><strong>First choice: <code>--json-schema</code>.</strong> Claude
+Code checks the agent's final answer against the reply schema and puts
+it in the result as structured output. Whether this works for every turn
+of a process fed by <code>--input-format stream-json</code>, with the
+exact production flags (<code>--tools Read,Edit</code> included), is not
+yet measured. The first spike used one-shot runs, and the second replied
+through the shell. The flags spike (Task 0.2 in the plan) checks it, and
+records how Claude Code reports an answer that fails the schema. That
+report maps to <code>bad_output</code>.</li>
+<li><strong>If it does not work per turn: a JSON answer the supervisor
+checks.</strong> The system prompt asks the agent to end each turn with
+one JSON object that fits the schema, and nothing after it. The engine
+reads the result's final text, takes the last JSON object in it, and
+checks it against the same schema. Output that does not parse or does
+not fit is <code>bad_output</code>: nothing is written or replied, and
+the items go to the next turn.</li>
+<li><strong>Either way, the same checks run</strong> on every reply (its
+own batch, the 500-character cap, LAHE's own file list), and no shell is
+ever granted as a fallback. If neither form works, the design stops and
+comes back to the owner.</li>
+<li><strong>Why not the shell.</strong> The second spike's agent wrote
+<code>--text "... cost $220."</code> in a Bash call. Inside double
+quotes, <code>$2</code> is a shell variable, so the
+<code>Bash(lahe *)</code> rule no longer matched and the call was
+refused, twice. The edit was in the file, but the item had no reply.
+Structured output has no quoting to get wrong, and a shell is also the
+widest door a hostile comment could reach (security review, first
+round).</li>
+</ul>
+<h3 id="the-agents-life-start-death-fresh-start-close">The agent's life:
+start, death, fresh start, close</h3>
+<pre class="mermaid"><code>stateDiagram-v2
+  [*] --&gt; none : supervisor started
+  none --&gt; alive : a turn is ready: agent slot taken, work/ rebuilt, fresh start
+  alive --&gt; alive : turn sent, result read
+  alive --&gt; none : died while idle: logged, nothing restarted until the next turn
+  alive --&gt; none : died or timed out mid-turn: turn fails, items stay waiting
+  alive --&gt; none : idle 60 minutes, or another review needs the slot: stdin closed
+  alive --&gt; none : a fresh-start rule after a turn: stdin closed
+  alive --&gt; none : off, takeover, close, disallow: stdin closed, or group killed mid-turn
+  none --&gt; gaveup : third death during a turn or at start-up within 10 minutes
+  gaveup --&gt; [*] : auto-answer stops, reason failing</code></pre>
+<p><strong>Every start is fresh.</strong> The supervisor starts an agent
+only when it has a turn to send, after taking an agent slot. The first
+version never reloads an old history with <code>--resume</code> (see
+Alternatives and OQ10). A fresh agent loses nothing it needs: the rules
+are in the system prompt, each item carries its own thread, and the
+agent reads the file afresh each turn. On a lean start it costs cents:
+the second spike's first lean turn cost $0.0566 at list price, against
+$0.020 to $0.030 for a warm one.</p>
+<p><strong>Noticing a death.</strong> Node's <code>exit</code> event on
+the child fires the moment the process ends. In the spike it fired at
+once on a SIGKILL. No heartbeat and no polling are needed.</p>
+<ul>
+<li><strong>Dead while idle:</strong> the supervisor logs it and sets
+<code>agent</code> to null. Nothing is restarted until the next turn
+needs an agent. The likely killer is memory pressure, and a process
+started again at once would likely be killed again. A death while idle
+does not count toward the limit below, and the rail shows nothing: no
+batch failed.</li>
+<li><strong>Dead mid-turn, or at start-up:</strong> the turn is
+<code>failed</code> with failure <code>crashed</code>. Nothing is
+written back and no reply is sent, so every item stays on the drain. The
+time goes in <code>turn_deaths</code>.</li>
+<li><strong>The limit:</strong> a third entry in
+<code>turn_deaths</code> within ten minutes stops auto-answer with
+reason <code>failing</code>. A person has to look.</li>
+</ul>
+<p><strong>Fresh starts.</strong> After a turn, the supervisor closes
+the agent and lets the next turn start a new one when any of these
+hold:</p>
+<ul>
+<li><strong>The history is long:</strong> the latest request carried
+more than 80,000 tokens above the agent's first request. At the lean
+growth the spike measured (2,220 tokens per turn), that is about 36
+turns. This limit keeps every turn cheap, and it keeps the agent far
+below the point where Claude Code compacts on its own (about 967,000
+tokens for Sonnet 5.5). The spike showed compaction works, but each
+compaction is a model call over the whole conversation.</li>
+<li><strong>The system prompt changed:</strong> <code>allow</code> ran
+again with a new note, context files, model or limits, or LAHE's code
+now builds a different prompt. The supervisor compares
+<code>prompt_sha256</code>.</li>
+<li><strong>The last turn was <code>refused</code>,
+<code>timed_out</code>, <code>crashed</code> or
+<code>bad_output</code>.</strong> The history that led there stays out
+of the next turn.</li>
+<li><strong>Claude Code compacted anyway</strong> (a
+<code>compact_boundary</code> event appeared).</li>
+</ul>
+<p><strong>Idle close.</strong> After 60 minutes with no turn, the
+supervisor closes the agent's stdin, and the agent exits cleanly (the
+spike measured about 200 ms). The next turn starts fresh. This costs
+almost nothing extra: Claude Code's prompt cache lasts one hour on a
+subscription, so a process kept alive past that would rewrite its cache
+on the next turn anyway. It frees 115 to 275 MB of memory and an agent
+slot. An idle agent also closes early when another review is waiting for
+its slot (see "Machine-wide slots").</p>
+<p><strong>The supervisor restarting itself.</strong> When its own code
+is older than the clone, the supervisor waits for any turn in flight to
+finish, closes the agent's stdin, releases its locks, and exits with
+reason <code>restarting</code>. That exit is not a stop. The helper
+starts a new supervisor on the same allowance, and the next turn starts
+a fresh agent. This matters because the owner dogfoods LAHE on LAHE
+while editing LAHE, so it happens after every merge or pull.</p>
+<p><strong>A supervisor killed outright.</strong> The agent's stdin
+closes with it, and the agent then exits (a closed stdin is a clean
+stop). A new supervisor first reads <code>agent.json</code>. If an agent
+process group from before is still alive (pid and start time match), it
+kills that group before doing anything else. The orphan's edits were
+only ever to its stage copy.</p>
 <h3 id="the-supervisors-states">The supervisor's states</h3>
 <pre class="mermaid"><code>stateDiagram-v2
-  [*] --&gt; idle : started, lock taken
+  [*] --&gt; idle : started, lock taken, unfinished result.json settled
   idle --&gt; gathering : a ready item appears
   gathering --&gt; queued : 15s with no new item, or 60s after the first
-  queued --&gt; running : slot free, under both daily limits
+  queued --&gt; running : agent slot (if no agent), then turn slot, under both daily limits
   queued --&gt; paused : a daily limit is reached
-  running --&gt; applying : run exits
+  running --&gt; applying : result line, or the agent died, or the 10-minute limit passed
   applying --&gt; gathering : items left
   applying --&gt; idle : nothing left
   applying --&gt; paused : usage_limit reported by the host
-  applying --&gt; stopped : signed_out, not_installed, 3 failed runs in a row
+  applying --&gt; stopped : signed_out, not_installed, 3 failed turns in a row, 3 turn deaths in 10 minutes
   paused --&gt; queued : retry_at passes, or the next day under the limits
-  idle --&gt; stopped : off, stopped from page, takeover, close, restarting
-  running --&gt; stopped : off, stopped from page, takeover, close
+  idle --&gt; stopped : off, stopped from page, takeover, close, disallow
+  running --&gt; stopped : off, stopped from page, takeover, close, disallow
+  idle --&gt; [*] : restarting (new code): exits, and the helper starts a new supervisor
   stopped --&gt; [*]</code></pre>
 <ul>
 <li><strong>Every look</strong> (every 2 seconds) checks:
@@ -1564,118 +1934,194 @@ supervisor finishes the replies before it does anything else.</p>
 <li>the session is open</li>
 <li>the rev still matches</li>
 <li>the latest request is not "off"</li>
+<li>the allowance still holds</li>
 <li>its own code is not older than the clone</li>
+<li>whether the agent has been idle for 60 minutes, or another review
+wants its slot</li>
+<li>whether the turn in flight has passed its 10-minute limit, by
+wall-clock time</li>
 </ul></li>
-<li><strong>Stale code</strong> restarts it cleanly: it releases its
-lock and exits with reason <code>restarting</code>, and the helper
-starts a fresh supervisor on the same allowance, as for any dead
-supervisor. This matters because the owner dogfoods LAHE on LAHE while
-editing LAHE.</li>
+<li><strong>The look enforces the 10-minute limit,</strong> using the
+injected clock. Node's own timers do not count time the machine spends
+asleep, so a timer alone would not end a turn after a sleep. The host
+keeps a timer only as a backstop.</li>
+<li><strong>A stop the supervisor asked for is <code>stopped</code>, not
+<code>crashed</code>.</strong> It passes a stop signal into the turn
+before it kills the agent, so the turn record says what happened.</li>
 <li><strong>Gathering has a ceiling</strong> of 60 seconds after the
 first item, so a steady trickle of comments still gets answered.</li>
+<li><strong>The agent's life is separate from these states.</strong>
+Idle with an agent alive and idle with no agent look the same on the
+rail. <code>applying</code> shows the same words as
+<code>running</code>.</li>
 </ul>
 <h3 id="stopping-and-handing-back">Stopping, and handing back</h3>
 <pre class="mermaid"><code>flowchart TD
   Off[&quot;off from the rail or the terminal&lt;br/&gt;(auto_answer.requested want off)&quot;] --&gt; Sees
   Take[&quot;chat agent: lahe session takeover s_x&lt;br/&gt;(handoff_rev + 1)&quot;] --&gt; Sees
   Close[&quot;lahe session close s_x&quot;] --&gt; Sees
-  Sees[&quot;lahe agent sees it on its next look&quot;] --&gt; Kill[&quot;run in flight? SIGTERM its process group,&lt;br/&gt;5s, then SIGKILL&quot;]
+  Dis[&quot;lahe agent disallow&quot;] --&gt; Sees
+  Sees[&quot;supervisor sees it on its next look&quot;] --&gt; Q{&quot;turn in flight?&quot;}
+  Q --&gt;|no| Stdin[&quot;close the agent&#39;s stdin: clean exit&quot;]
+  Q --&gt;|yes| Kill[&quot;mark the turn stopped, SIGTERM the agent&#39;s&lt;br/&gt;process group, 5s, then SIGKILL&quot;]
   Kill --&gt; Drop[&quot;the stage copy is never written back,&lt;br/&gt;no replies are written&quot;]
-  Drop --&gt; Exit[&quot;release slot, clear agent.json state to stopped, release lock, exit&quot;]</code></pre>
+  Stdin --&gt; Exit[&quot;release slots, agent.json state stopped,&lt;br/&gt;release lock, exit&quot;]
+  Drop --&gt; Exit</code></pre>
 <ul>
-<li><strong>Stopping is always clean (R5).</strong> A stopped, crashed
-or timed-out run changed only its copy, so the real file never holds a
-change that no reply explains. Every item it was given stays ready, on
-the drain, for the next run or the next owner.</li>
+<li><strong>Stopping is always clean (R5, stopping is clean).</strong> A
+stopped, crashed or timed-out turn changed only the copy, so the real
+file never holds a change that no reply explains. Every item it was
+given stays ready, on the drain, for the next turn or the next
+owner.</li>
 <li><strong>Handing back (R20, hand it back)</strong> is the existing
 takeover. Every unanswered item is on the new owner's catch-up drain,
 and nothing answered shows again.</li>
-<li><strong>Leftover runs.</strong> A new supervisor first reads
-<code>agent.json</code>. If a run's process group from before is still
-alive (pid and start time match), it kills that group before doing
-anything else. The orphan's edits were only ever to its stage copy.</li>
 </ul>
 <h3 id="retries-failures-and-limits">Retries, failures and limits</h3>
 <ul>
-<li><strong>Attempts count only on <code>finished</code> runs.</strong>
-An attempt is one of:
+<li><strong>Attempts count only on <code>finished</code> and
+<code>refused</code> turns.</strong> An attempt is one of:
 <ul>
-<li>a finished run was given the item and no reply for it folded</li>
+<li>a finished turn was given the item and no reply for it folded</li>
 <li>its <code>handled</code> was held by the check</li>
+<li>a turn was refused, and it had no reply for the item</li>
 </ul></li>
 <li><strong>The attempt limits:</strong> three attempts at one revision,
-or six across all revisions of one item. Then <code>lahe agent</code>
-writes a <code>not_handled</code> reply: "Auto-answer could not answer
-this and stopped trying. Reply here yourself, or hand the review to a
-chat agent." That takes the item off the drain. Rewording it on the card
-makes it ready again, until the six-attempt limit.</li>
-<li><strong>Three failed runs in a row</strong> (crashed, bad output,
+or six across all revisions of one item. Then the supervisor writes a
+<code>not_handled</code> reply: "Auto-answer could not answer this and
+stopped trying. Reply here yourself, or hand the review to a chat
+agent." That takes the item off the drain. Rewording it on the card
+makes it ready again, until the six-attempt limit. Counting refused
+turns ends the loop where one bad item sends the same batch back again
+and again.</li>
+<li><strong>Three failed turns in a row</strong> (crashed, bad output,
 timed out) stop auto-answer with reason <code>failing</code>. No item's
-attempts are used up by a failing tool.</li>
+attempts are used up by a failing tool. Conflicts do not count.</li>
 <li><strong>A usage limit reported by the host</strong> pauses
 auto-answer for a fixed 30 minutes, and the rail shows the time of the
-next try.</li>
+next try. The agent is closed, not kept.</li>
 <li><strong>Signed out or <code>claude</code> missing</strong> stops
 auto-answer. A person has to fix these.</li>
-<li><strong>Daily limits</strong> count runs per local calendar day: 40
+<li><strong>Daily limits</strong> count turns per local calendar day: 40
 per session (set with <code>--runs-per-day</code> at allow time) and 120
-across the machine. Reaching either pauses until the next day.
-<code>--max-budget-usd 0.50</code> caps each run.</li>
-<li><strong>The account's own limit cannot be read.</strong> The spike
-found that <code>/usage</code> gives only a whole percentage for the
-whole account. The rail shows LAHE's own run count against LAHE's own
-limit, and says so in hover text.</li>
+across the machine. Reaching either pauses until the next day.</li>
+<li><strong>A turn's wall-clock limit is 10 minutes.</strong> At the
+limit, the supervisor kills the agent's process group, the turn is
+<code>timed_out</code>, and the next turn starts fresh. The slowest
+spike turn took 26 seconds.</li>
+<li><strong>A money cap per turn is not assumed.</strong>
+<code>--max-budget-usd</code> capped a whole one-shot run. For a process
+that stays up, it may cap the whole process instead. The flags spike
+finds out which. Until then the caps are the daily turn counts and the
+10-minute limit.</li>
+<li><strong>The account's own limit cannot be read.</strong> The first
+spike found that <code>/usage</code> gives only a whole percentage for
+the whole account. The rail shows LAHE's own run count against LAHE's
+own limit, and says so in hover text.</li>
 </ul>
 <h3 id="the-system-prompt-one-source-of-the-rules">The system prompt:
 one source of the rules</h3>
 <pre class="mermaid"><code>flowchart LR
   C[&quot;CONTRACT (review_format.js)&lt;br/&gt;each line tagged all / chat / headless&quot;]
   C --&gt;|&quot;all + chat&quot;| RJ[&quot;review.json contract field&lt;br/&gt;(chat agents)&quot;]
-  C --&gt;|&quot;all + headless&quot;| HP[&quot;headless_prompt.js builds&lt;br/&gt;the run&#39;s system prompt&quot;]
+  C --&gt;|&quot;all + headless&quot;| HP[&quot;headless_prompt.js builds&lt;br/&gt;the agent&#39;s system prompt&quot;]
   N[&quot;note from auto_answer.json&quot;] --&gt; HP
+  X[&quot;auto_answer_context.md&lt;br/&gt;(named context files)&quot;] --&gt; HP
   SK[&quot;skills/lahe/SKILL.md&lt;br/&gt;(chat agents)&quot;] --- RJ</code></pre>
 <ul>
 <li><strong>R15 (one source of rules).</strong> Every rule about the
 work lives on one line, in one array. A line only a chat agent can use
 (waking, monitors, hosts, <code>lahe reply</code>, "this file") is
-tagged <code>chat</code>. A line only a run can use is tagged
-<code>headless</code>. Neither kind is a copy of the other: they say
-different things about different transports.</li>
+tagged <code>chat</code>. A line only the background agent can use is
+tagged <code>headless</code>. Neither kind is a copy of the other: they
+say different things about different transports.</li>
 <li><strong>The chat contract changes once, on purpose.</strong> The few
 <code>all</code> lines that say "append a reply line" are reworded to
 name the reply's fields without naming the transport. The
 <code>chat</code> lines say how a chat agent sends one
-(<code>lahe reply</code>), and the <code>headless</code> lines say a run
-returns them in its result.
+(<code>lahe reply</code>), and the <code>headless</code> lines say the
+agent returns them in its answer.
 <code>test/unit/review_format.test.js</code>,
 <code>docs/CONTRACTS.md</code> and the skill change with it.</li>
 <li><strong>The <code>headless</code> lines</strong> are the short
-preamble the spike proved. They say:
+preamble the spikes proved, changed for an agent that stays up. They
+say:
 <ul>
-<li>you were started because items are ready; they are on stdin as drain
-lines</li>
+<li>you stay running for this one review; each message you get is a
+batch of ready items, as drain lines</li>
 <li>the only file you may read or edit is the one each item's
-<code>source_hint</code> names</li>
+<code>source_hint</code> names; read it afresh at the start of every
+batch, since it may have changed</li>
 <li>read back each edit before replying</li>
-<li>return one reply per item</li>
-<li>do not wait, start anything, or look for more work</li>
+<li>end each batch with one reply per item, in the reply format, and
+nothing after it</li>
+<li>do not wait, start anything, or look for more work; the next batch
+comes to you</li>
 </ul></li>
-<li><strong>The note (R25, a handoff note)</strong> goes last, under its
-own heading. The lean start skips the user's CLAUDE.md, so any rule from
-it that a run needs goes in the note. The owner's writing rules are the
-main example (the spike's trade-off). Only the terminal can set it.</li>
+<li><strong>The note (R25, a handoff note)</strong> comes after the
+rules, under its own heading. Only the terminal can set it.</li>
+<li><strong>Context files</strong> come last, under a heading that names
+each file. See the next section.</li>
+<li><strong>The prompt goes in once per agent.</strong> It is passed
+when the agent starts, and never in a turn message. When the prompt LAHE
+would build no longer matches the running agent's
+(<code>prompt_sha256</code>), the next turn starts a fresh agent.</li>
 <li><strong>A test asserts</strong> that the prompt is exactly the
-<code>all</code> and <code>headless</code> lines in order, plus the
-note, and that the stdin payload contains no <code>CONTRACT</code>
-line.</li>
-<li><strong>Size.</strong> The spike's prompt was 377 words. The first
+<code>all</code> and <code>headless</code> lines in order, then the
+note, then the context, and that no turn message contains a
+<code>CONTRACT</code> line.</li>
+<li><strong>Size.</strong> The spike's prompt was 399 words. The first
 cut of the <code>all</code> group alone is 2,095 words. The flags spike
-(OQ2) measures what that adds per request against the first spike's
-9,000 tokens.</li>
+measures what that adds per request. With the agent kept running, the
+prompt is cached after the first turn, so a longer prompt costs mostly
+at the first turn and at each fresh start.</li>
 </ul>
-<h3 id="the-runs-command-claude-code-adapter">The run's command (Claude
-Code adapter)</h3>
-<p>The adapter passes these flags, each with its reason:</p>
+<h3 id="lean-by-default-and-a-projects-own-context">Lean by default, and
+a project's own context</h3>
+<p><strong>The default is lean,</strong> with <code>--safe-mode</code>:
+no CLAUDE.md, hooks, MCP servers or skills from the user's setup or the
+project. The subscription login still works. Why:</p>
+<ul>
+<li><strong>Cost at every turn.</strong> The second spike ran the
+owner's full setup in a process kept running. Its first turn cost
+$0.9951 at list price, and later turns cost $0.094 to $0.153. The
+matching lean turns cost $0.020 to $0.030. So even with the cache warm,
+a full-setup turn costs 4.3 to 5.1 times a lean one, at every turn,
+because every request carries 132,000 to 139,000 tokens of setup. Each
+fresh start pays the full first-turn cost again.</li>
+<li><strong>It buys nothing for this job.</strong> Every item was
+handled correctly in lean mode. The owner's setup is for his own work,
+not for editing one Markdown file.</li>
+<li><strong>Security.</strong> Hooks run commands, and MCP servers add
+tools beyond Read and Edit. The first security review ruled both out for
+an agent nobody watches.</li>
+</ul>
+<p><strong>How a project opts into its own context.</strong> Some
+documents need rules the lean start drops, such as the owner's writing
+rules or a project's style guide. The allowing person names them:</p>
+<div class="sourceCode" id="cb13"><pre
+class="sourceCode sh"><code class="sourceCode bash"><span id="cb13-1"><a href="#cb13-1" aria-hidden="true" tabindex="-1"></a><span class="ex">lahe</span> agent allow <span class="at">--session</span> s_x <span class="at">--context</span> ~/docs/STYLE.md <span class="at">--context</span> ./CLAUDE.md</span></code></pre></div>
+<ul>
+<li><code>allow</code> reads each named file once and copies the text
+into <code>auto_answer_context.md</code>. The system prompt carries that
+text after the rules and the note.</li>
+<li>The warning lists each file and its size. The total is capped at
+40,000 characters; <code>allow</code> refuses more.</li>
+<li>Context files may be instruction files such as CLAUDE.md. The ban on
+instruction files covers only the file the agent edits.</li>
+<li>The agent never reads the context files from disk. A change to one
+takes effect when <code>allow</code> runs again, which also starts the
+agent fresh.</li>
+<li>The cost is paid mostly once per agent: the text is cached with the
+rest of the system prompt.</li>
+</ul>
+<p><strong>The full setup is not offered in the first version.</strong>
+A project that wants it (for example, a skill the agent must use) is an
+open question, OQ9.</p>
+<h3 id="the-agents-command-claude-code-adapter">The agent's command
+(Claude Code adapter)</h3>
+<p>The adapter starts the agent with these flags, each with its
+reason:</p>
 <div class="table-scroll"><table>
 <thead>
 <tr>
@@ -1685,13 +2131,15 @@ Code adapter)</h3>
 </thead>
 <tbody>
 <tr>
-<td><code>-p</code>, items on stdin, cwd = the empty stage
-<code>work/</code> folder</td>
-<td>headless, one batch; the copy is the only file in reach</td>
+<td><code>-p --input-format stream-json --output-format stream-json --verbose</code>,
+cwd = the stage <code>work/</code> folder</td>
+<td>one process that takes each turn as a stdin line and reports each
+turn's result, usage and tool calls; the copy is the only file in
+reach</td>
 </tr>
 <tr>
 <td><code>--safe-mode</code></td>
-<td>no CLAUDE.md, hooks, MCP, skills: the lean start the spike
+<td>no CLAUDE.md, hooks, MCP, skills: the lean start both spikes
 measured</td>
 </tr>
 <tr>
@@ -1715,27 +2163,22 @@ confined to the working folder</td>
 </tr>
 <tr>
 <td><code>--append-system-prompt-file &lt;path&gt;</code></td>
-<td>the rules, once, kept out of the process list</td>
+<td>the rules, the note and the context, once, kept out of the process
+list</td>
 </tr>
 <tr>
 <td><code>--json-schema &lt;reply schema&gt;</code></td>
-<td>replies as structured output</td>
-</tr>
-<tr>
-<td><code>--output-format stream-json --verbose</code></td>
-<td>usage, turns, tool calls; trimmed before it is kept</td>
-</tr>
-<tr>
-<td><code>--max-budget-usd 0.50</code></td>
-<td>per-run backstop</td>
-</tr>
-<tr>
-<td><code>--no-session-persistence</code></td>
-<td>nothing left in the user's Claude history</td>
+<td>replies as structured output, if the flags spike shows it works per
+turn</td>
 </tr>
 <tr>
 <td><code>--model &lt;model&gt;</code></td>
 <td><code>sonnet</code> by default</td>
+</tr>
+<tr>
+<td><code>--no-session-persistence</code></td>
+<td>nothing is saved to the user's Claude history; the first version
+never resumes</td>
 </tr>
 <tr>
 <td>never <code>--bare</code>, never <code>Bash</code></td>
@@ -1744,6 +2187,8 @@ confined to the working folder</td>
 </tbody>
 </table></div>
 <ul>
+<li><strong><code>--max-budget-usd</code></strong> is added only if the
+flags spike shows what it caps in this mode.</li>
 <li><strong>Environment: an allowlist, not a blocklist.</strong>
 <ul>
 <li><code>HOME</code>, <code>PATH</code>, <code>USER</code>,
@@ -1752,19 +2197,22 @@ confined to the working folder</td>
 time.</li>
 <li><code>ANTHROPIC_API_KEY</code> never passes, and is never recorded.
 A user whose Claude login itself is billed by the token (preflight says
-so) is warned that each run costs money.</li>
-<li>Nothing else passes, whatever shell started it.</li>
+so) is warned that each turn costs money.</li>
+<li>Nothing else passes, whatever shell started the helper. That
+includes the <code>CLAUDE*</code> variables of a parent Claude Code
+session, which the spikes also stripped.</li>
 </ul></li>
 <li><strong><code>claude</code> is run by the absolute path recorded at
-allow time.</strong></li>
-<li><strong>Wall-clock limit:</strong> 10 minutes per run. The slowest
-spike run took 33 seconds.</li>
+allow time,</strong> in its own process group, so a stop or timeout can
+end it and anything it started.</li>
 </ul>
 <h3 id="what-the-rail-shows-wireframe-direction-b">What the rail shows
 (wireframe direction B)</h3>
 <p>The wireframe doc is <code>02_wireframe_lahe_agent_sdk.md</code>,
 with screens in <code>wireframes/index.html</code>. It recommends
-direction B, and this design follows it.</p>
+direction B, and this design follows it. The persistent agent changes
+nothing the reviewer sees: the reviewer sees batches of work, which the
+rail calls runs.</p>
 <ul>
 <li><strong>The Auto-answer switch</strong> is a pill beside Hold
 sending, in the footer.
@@ -1777,12 +2225,14 @@ session id is already sent to the page, so this adds no path.</li>
 the footer, where End review's confirm opens today. The panel says what
 it may do, who can make it act, and what it uses.</li>
 <li>Turning it off takes one click while idle. It asks for one confirm
-while a run is working, because it cuts the run off.</li>
+while a turn is working, because it cuts the turn off.</li>
 </ul></li>
 <li><strong>The run count</strong> sits beside the pill, like Hold's
 queued count, as "6 runs". Opening it shows today's runs against the
-limit, and tokens where Claude reports them. No dollar figure: on a
-subscription the list price is not a charge.</li>
+limit. It shows no token count and no dollar figure. Tokens without
+cache reads badly understate a turn, and on a subscription the list
+price is not a charge. <code>lahe agent status</code> shows all four
+token counts per turn.</li>
 <li><strong>The failure chip</strong> sits under the switch while a
 failure stands. It holds one plain sentence and one remedy per reason,
 from a fixed list in <code>protocol.js</code>, plus a catch-all.</li>
@@ -1810,7 +2260,7 @@ pinned in the plan ("Words this plan pins").</p>
 <td>no</td>
 </tr>
 <tr>
-<td>one failed run, retrying</td>
+<td>one failed turn, retrying</td>
 <td>no</td>
 <td>yes</td>
 </tr>
@@ -1846,15 +2296,15 @@ queued), nothing counts as overdue:</p>
 <li>no overdue toast</li>
 <li>no "nothing back yet" escalation</li>
 </ul>
-<p>A long run stays calm and shows its age ("working on 2, 6m") until
-the 10-minute limit ends it. At that point it becomes a failed run, and
+<p>A long turn stays calm and shows its age ("working on 2, 6m") until
+the 10-minute limit ends it. At that point it becomes a failed turn, and
 the chip says so.</p></li>
 <li><p><strong>While paused or stopped by a failure,</strong> the status
 line goes loud, and the chip gives the reason and the remedy. The banner
 does not say "check your agent's window". Its hand-off button stays,
 since a chat agent taking over is a real remedy. Copy review and Export
 review stay in the head menu, as always.</p></li>
-<li><p><strong>A card the runs gave up on</strong> wears the amber ring
+<li><p><strong>A card the agent gave up on</strong> wears the amber ring
 a late card wears today, with its "Not handled" pill and the reply's
 reason. Both mean "this needs you".</p></li>
 <li><p><strong>After auto-answer is turned off,</strong> or a chat agent
@@ -1863,8 +2313,103 @@ takes over, the rail goes back to today's rules exactly.</p></li>
 <p>Rail words never include monitor, heartbeat, wake feed, watching, or
 unattended (the existing rule). The wireframe doc says why directions A
 and C were not taken.</p>
+<h3 id="later-the-library-opens-a-document-with-its-agent">Later: the
+Library opens a document with its agent</h3>
+<p>Not built now. This section records the shape so the first version
+does not block it.</p>
+<p>The Library (<code>feat/lahe_library</code>) lists every review and
+can open one in a new tab. The owner wants to open documents from it
+with a background agent already taking care of each, while he works in
+his chat windows. With this design, that is one more way to send
+"on":</p>
+<ul>
+<li><strong>An allowance per project folder, from the terminal.</strong>
+<code>lahe agent allow --project &lt;folder&gt;</code> would allow
+auto-answer, once, for any Markdown review whose source sits under that
+folder. It would record the same things <code>auto_answer.json</code>
+records, the context files included. The rule that only a terminal
+grants permission stays.</li>
+<li><strong>An "Open with auto-answer" action in the Library.</strong>
+For a review under an allowed folder, the Library asks the helper to
+open the review and post <code>want: on</code> for it. Each review gets
+its own supervisor and, at its first comment, its own agent, as
+here.</li>
+<li><strong>The Library shows each document's agent state</strong> from
+the same <code>auto_answer</code> liveness object the rail reads.</li>
+<li><strong>The machine limits already fit.</strong> Many open documents
+cost nothing while idle: no supervisor makes model calls, and agents
+close after 60 idle minutes. The agent-slot limit keeps memory bounded,
+and an idle agent already gives way when another review needs its
+slot.</li>
+</ul>
+<p>To leave this open, the first version must not tie the allowance to a
+chat agent. It must also not keep any auto-answer state only in
+memory.</p>
 <h2 id="alternatives-considered">Alternatives Considered</h2>
 <ul>
+<li><p><strong>One new headless agent per batch (this design's first
+version).</strong> Each batch started a new lean <code>claude -p</code>
+process, which handled the batch and exited. Replaced because of the
+owner's cost objection: in his projects, starting a new agent and
+sending one message to Opus fills about 18% of its context window, so a
+new agent per comment burns that start-up cost again and again. The
+second spike measured it. With his full setup, a fresh start cost
+$0.9951 at list price, and a later turn of a kept agent cost $0.094 to
+<span
+class="math inline">0.153.<em>W</em><em>i</em><em>t</em><em>h</em><em>t</em><em>h</em><em>e</em><em>l</em><em>e</em><em>a</em><em>n</em><em>s</em><em>e</em><em>t</em><em>u</em><em>p</em>, <em>a</em><em>f</em><em>r</em><em>e</em><em>s</em><em>h</em><em>s</em><em>t</em><em>a</em><em>r</em><em>t</em><em>a</em><em>n</em><em>d</em><em>a</em><em>k</em><em>e</em><em>p</em><em>t</em><em>a</em><em>g</em><em>e</em><em>n</em><em>t</em><em>c</em><em>o</em><em>s</em><em>t</em><em>a</em><em>b</em><em>o</em><em>u</em><em>t</em><em>t</em><em>h</em><em>e</em><em>s</em><em>a</em><em>m</em><em>e</em>(</span>0.034
+to $0.054 against $0.020 to $0.030), so keeping the agent mostly saves
+time there. What carried over from the first version:</p>
+<ul>
+<li>the lean start</li>
+<li>the stage copy</li>
+<li>no shell</li>
+<li>structured replies</li>
+<li>the done check after each batch</li>
+<li>every limit</li>
+</ul></li>
+<li><p><strong>The first version's case against one long-running
+agent</strong> (<code>--input-format stream-json</code>). It said
+history piles up in one context, which R14 (rules once per agent) exists
+to prevent, and that it holds memory on a machine short of it. The
+second spike answered both. The rules sit once in the system prompt, and
+history grows by about 2,220 tokens a turn, which the fresh-start rule
+bounds at 80,000. Memory is bounded by the idle close and the agent-slot
+limit.</p></li>
+<li><p><strong>Resuming the saved history (<code>--resume</code>) after
+a death, an idle close or a supervisor restart.</strong> The second
+spike proved it works: a resumed agent kept its history, and 75 seconds
+after a kill its first turn cost the same as a warm one. Left out of the
+first version (architect review, second round):</p>
+<ul>
+<li>After an idle close the one-hour cache has expired, so a resume
+writes the whole history back to cache, up to 80,000 tokens. A lean
+fresh start writes only the prompt. The cold case was never
+measured.</li>
+<li>A login billed by the token likely gets a five-minute cache, so
+there most resumes would be cold.</li>
+<li>Resume needs Claude Code to save the full transcript, every file
+read included, in the user's Claude folder. That undoes the first
+security round's rule to keep tool results out of stored logs.</li>
+<li>A planted instruction would ride across the idle hour.</li>
+<li>It is the part with the most pieces: the session id kept across
+processes, a fallback when a resume fails, and a prompt check on
+resume.</li>
+</ul>
+<p>R26 (one agent per review) still holds without it: the start-up cost
+is paid once per idle hour, crash or fresh start, never per batch.
+Whether to add a resume within the cache hour after a crash is
+OQ10.</p></li>
+<li><p><strong>The owner's full setup as the default.</strong> Rejected:
+4.3 to 5.1 times the cost of a lean turn at every turn, and it brings
+hooks and MCP servers the security review ruled out. Named context files
+cover what a project needs.</p></li>
+<li><p><strong>Keeping one agent alive forever, with no fresh
+starts.</strong> Rejected: each turn's cost grows with the history, and
+Claude Code's own compaction is a model call over the whole conversation
+($0.20 to $0.33 at a forced 100,000-token window in the spike).</p></li>
+<li><p><strong>Keeping an idle agent past an hour.</strong> Rejected:
+the prompt cache lasts an hour, so the next turn rewrites it anyway, and
+the process holds 115 to 275 MB in the meantime.</p></li>
 <li><p><strong>The Agent SDK as an add-on package.</strong> It is the
 owner's original question, and it gives full control from code.
 Rejected:</p>
@@ -1894,43 +2439,35 @@ forgets to restart it</li>
 <li>it is Claude-only</li>
 <li>it depends on a young feature LAHE does not control</li>
 </ul></li>
-<li><p><strong>The helper owns the runs.</strong> The helper is
+<li><p><strong>The helper owns the agents.</strong> The helper is
 long-lived and sees every session. Rejected because:</p>
 <ul>
 <li>the helper restarts whenever <code>lahe add</code> finds it older
 than the clone's code, or when it refuses a write</li>
-<li>a run inside it would die or be orphaned then</li>
-<li>separate processes keep a run's memory and failures away from page
-serving</li>
+<li>an agent inside it would die or be orphaned then</li>
+<li>separate processes keep an agent's memory and failures away from
+page serving</li>
 </ul>
 <p>The helper still does two jobs: it folds the replies, and it starts
 the supervisor when the page asks.</p></li>
-<li><p><strong>A hook on <code>lahe monitor</code>'s exit (the spike's
-shape).</strong> Rejected as the product: something outside LAHE would
-own the loop, with no limits or retries, and a chat agent would have to
-start it, which is the step agents forget.</p></li>
-<li><p><strong>One long-running run per review</strong>
-(<code>--input-format stream-json</code>, or <code>--resume</code>).
-Rejected:</p>
-<ul>
-<li>history piles up in one context, which R14 (rules once per run)
-exists to prevent</li>
-<li>it holds memory on a machine that is short of it</li>
-<li>a fresh lean run was measured at about 9,000 tokens per request</li>
-</ul></li>
-<li><p><strong>Forking the chat.</strong> It brings back the 107,000 to
-138,000 tokens per request the spike measured. The note covers the gap.
-Q2 (how much of the chat a run gets) can revisit this.</p></li>
+<li><p><strong>A hook on <code>lahe monitor</code>'s exit (the first
+spike's shape).</strong> Rejected as the product: something outside LAHE
+would own the loop, with no limits or retries, and a chat agent would
+have to start it, which is the step agents forget.</p></li>
+<li><p><strong>Forking the chat</strong> (starting the agent with a copy
+of the chat's history). It brings back the 107,000 to 138,000 tokens per
+request the first spike measured. The note and context files cover the
+gap. Q2 (how much of the chat the agent gets) can revisit this.</p></li>
 <li><p><strong>Replies by <code>lahe reply</code> through a
-shell.</strong> The spike proved it with <code>Bash(lahe *)</code>.
+shell.</strong> Both spikes used it with <code>Bash(lahe *)</code>.
 Rejected, including as a fallback:</p>
 <ul>
 <li>any shell grant is the widest door a hostile comment can reach</li>
 <li><code>Bash(lahe *)</code> also allows <code>lahe review</code> of
 any path and closing or taking over other sessions</li>
-</ul>
-<p>If structured output fails the flags spike (OQ2), the design stops
-and comes back, rather than granting a shell.</p></li>
+<li>the second spike's "$220" reply was refused by the shell rule twice
+and went unanswered</li>
+</ul></li>
 <li><p><strong>Per-file <code>Read(...)</code> and
 <code>Edit(...)</code> rules in the real folder.</strong> The security
 reviewer's live test showed that Read rules grant access and never
@@ -1939,14 +2476,14 @@ Replaced by the empty stage folder.</p></li>
 <li><p><strong>Linked files and static HTML in the first
 version.</strong> Dropped:</p>
 <ul>
-<li>linked files would let a page add files the run can edit, just by
+<li>linked files would let a page add files the agent can edit, just by
 visiting links</li>
 <li>HTML reviews make a planted script easy</li>
 <li>both come back only with their own checks</li>
 </ul></li>
 <li><p><strong>A reply marker on stopped items.</strong> Rejected. The
 marker would be a <code>question</code> reply, which takes the item off
-the drain. With copy-in, copy-out, a stopped run never touches the real
+the drain. With copy-in, copy-out, a stopped turn never touches the real
 file, so no marker is needed.</p></li>
 <li><p><strong>Letting the page allow auto-answer.</strong> The
 wireframe's step 2 turns it on from the page. The switch does that here
@@ -1974,8 +2511,15 @@ it does anything.</td>
 <td>A supervisor is running and <code>lahe agent allow</code> runs
 again</td>
 <td>It rewrites <code>auto_answer.json</code> under the short lock at
-the same rev. The running supervisor picks up model, note and limit
-changes before its next run and does not restart.</td>
+the same rev. The supervisor sees the new prompt hash before its next
+turn and starts the agent fresh.</td>
+</tr>
+<tr>
+<td>All four agent slots are taken</td>
+<td>The supervisor leaves a <code>want-agent</code> marker, and the
+longest-idle agent closes on its owner's next look. At least two of the
+four are idle whenever this happens, since only two turns run at
+once.</td>
 </tr>
 <tr>
 <td>The source file is renamed or deleted</td>
@@ -1983,19 +2527,30 @@ changes before its next run and does not restart.</td>
 <code>source_missing</code>, and the chip says the file is gone.</td>
 </tr>
 <tr>
-<td>A branch switch swaps the file for a symlink mid-run</td>
+<td>A branch switch swaps the file for a symlink mid-turn</td>
 <td>The write-back check refuses it. The outcome is
 <code>conflict</code>.</td>
 </tr>
 <tr>
-<td>The Markdown already contained raw HTML, and the run keeps it</td>
+<td>The owner edits the file between turns</td>
+<td>The next copy-in finds the copy and the file differ, copies the file
+over, and tells the agent in the turn message's first data line.</td>
+</tr>
+<tr>
+<td>The agent answers an item from an earlier turn again</td>
+<td>The reply is not for this turn's batch, so it is dropped and
+logged.</td>
+</tr>
+<tr>
+<td>The Markdown already contained raw HTML, and the agent keeps it</td>
 <td>Only additions are refused. HTML that was already there is left
 alone.</td>
 </tr>
 <tr>
-<td>A reviewer's reply to a run's question</td>
-<td>The item goes back to ready as today, and the next run takes it. The
-thread field carries the question as history.</td>
+<td>A reviewer's reply to the agent's question</td>
+<td>The item goes back to ready as today, and the next turn takes it.
+The thread field carries the question as history, whether or not the
+agent still remembers asking.</td>
 </tr>
 <tr>
 <td>The review is ended from the page</td>
@@ -2005,8 +2560,8 @@ agent in the first version.</td>
 </tr>
 <tr>
 <td>Hold is on</td>
-<td>Held items are not on the drain, so no run starts. Release sends
-them at once, and they settle into one run.</td>
+<td>Held items are not on the drain, so no turn starts. Release sends
+them at once, and they settle into one turn.</td>
 </tr>
 <tr>
 <td>Windows</td>
@@ -2014,14 +2569,22 @@ them at once, and they settle into one run.</td>
 process groups and <code>ps -o lstart</code> are POSIX.</td>
 </tr>
 <tr>
-<td>The machine sleeps mid-run</td>
-<td>On wake, the 10-minute limit usually has passed. The run is killed
-as <code>timed_out</code>, which counts toward the three-in-a-row stop,
-not toward attempts.</td>
+<td>The machine sleeps mid-turn</td>
+<td>On wake, the supervisor's next look compares wall-clock time, and
+the 10-minute limit usually has passed. The agent is killed, the turn is
+<code>timed_out</code>, and the next turn starts fresh. It counts toward
+the three-in-a-row stop, not toward attempts.</td>
+</tr>
+<tr>
+<td>The machine sleeps while the agent is idle</td>
+<td>Nothing happens on wake. The idle clock may have passed 60 minutes,
+and the next look closes the agent.</td>
 </tr>
 </tbody>
 </table></div>
 <h2 id="security--privacy-notes">Security &amp; Privacy Notes</h2>
+<p>The first review's decisions all stand. What changes is that one
+agent now sees many batches.</p>
 <h3 id="who-can-make-it-act">Who can make it act</h3>
 <p>With auto-answer on, anyone who can post a ready item makes an agent
 act, with nobody reading first (R6, say who can make it act; R21, page
@@ -2033,45 +2596,70 @@ source file.</strong></p>
 <p>The design does not try to tell a real reviewer from a script. It
 limits what acting can do:</p>
 <ul>
-<li><p><strong>One file, as a copy, in an empty folder.</strong> The run
-cannot see anything else on disk. The security reviewer's live test
-showed that this matters: permission rules alone let a run read a
+<li><p><strong>One file, as a copy, in an empty folder.</strong> The
+agent cannot see anything else on disk. The security reviewer's live
+test showed that this matters: permission rules alone let a run read a
 <code>.env</code> beside the source.</p></li>
 <li><p><strong>No shell, network, MCP, hooks or settings.</strong>
 <code>--restricted</code>, <code>--safe-mode</code>,
 <code>--strict-mcp-config</code>, <code>--setting-sources ""</code> and
 <code>--tools Read,Edit</code>. A hostile repository's
 <code>.claude/settings.json</code> or CLAUDE.md cannot run or steer
-anything.</p></li>
+anything. Context files are text chosen at the terminal, not
+settings.</p></li>
 <li><p><strong>No planted script.</strong> Edits that add raw HTML,
 event attributes or <code>javascript:</code> URLs are refused, and the
 first version reviews Markdown only. Separately from this feature,
 rendered Markdown passes raw HTML through today with no CSP. That goes
 on the board as its own security row.</p></li>
 <li><p><strong>LAHE writes the file, not the model.</strong> It writes
-after checks, with no-symlink, same-path, owner and atomic
+after checks, every turn, with no-symlink, same-path, owner and atomic
 rules.</p></li>
 <li><p><strong>Replies are checked.</strong> Each reply must be for its
-own batch, is capped at 500 characters, and carries a file list that
-LAHE computed itself. Reply text is the easiest way to leak something to
-the page, so it is kept short. The run can only see the copy, so there
-is little to leak.</p></li>
+own turn's batch, is capped at 500 characters, and carries a file list
+that LAHE computed itself. Reply text is the easiest way to leak
+something to the page, so it is kept short. The agent can only see the
+copy, so there is little to leak.</p></li>
 <li><p><strong>The allowance lives in the terminal.</strong> The page
 can only ask for on or off, as an event through D11's checks, with every
 other body field ignored. A takeover ends the allowance.</p></li>
 <li><p><strong>Limits:</strong></p>
 <ul>
-<li>25 items and 100 KB per run</li>
+<li>25 items and 100 KB per turn</li>
 <li>8,000 characters of reviewer text per item</li>
-<li>two runs at once</li>
-<li>40 runs per session and 120 per machine each day</li>
-<li>$0.50 per run</li>
+<li>two turns at once, and four agents alive, across the machine</li>
+<li>40 turns per session and 120 per machine each day</li>
+<li>10 minutes per turn</li>
 <li>attempt counts that do not reset forever on rewording</li>
 </ul>
-<p>A script that floods items gets, at worst, a day's runs on one file,
+<p>A script that floods items gets, at worst, a day's turns on one file,
 then a loud rail.</p></li>
 </ul>
-<h3 id="the-residual-that-stays">The residual that stays</h3>
+<h3 id="new-with-a-kept-agent-an-instruction-can-outlive-its-batch">New
+with a kept agent: an instruction can outlive its batch</h3>
+<p>A hostile comment in one batch stays in the agent's history for later
+batches. It could try to steer them ("from now on, also add..."). What
+contains it:</p>
+<ul>
+<li>The agent's powers are the same in every turn: one copy, no shell.
+Every turn's diff is checked on its own.</li>
+<li>In the first version, a fresh agent per batch contained this risk. A
+fresh start now happens after at most 80,000 tokens of history, after an
+idle hour, and right after any refused, timed-out, crashed or bad-output
+turn. So the history that pushed the agent into a refused edit does not
+reach the next turn. The item itself comes back, and its attempts
+count.</li>
+<li>Nothing carries across a fresh start. No history is saved for
+resume, and <code>work/</code> is emptied and must hold only the copy
+after every turn, so the agent cannot leave itself a note.</li>
+<li>The D12 line stays in the system prompt: page text is data.</li>
+</ul>
+<p>What is left: a planted instruction that never trips a check can
+steer later turns until the next fresh start. Those turns are still
+limited to text edits in one file, checked each time, with a reply on
+every card and a diff in <code>lahe agent status --diffs</code>.</p>
+<h3 id="edits-may-plant-instructions-for-a-later-agent">Edits may plant
+instructions for a later agent</h3>
 <p><strong>The edited file may be instructions for a later
 agent.</strong> The owner dogfoods on LAHE's own feature docs, which
 builder agents later read and act on with a shell. An auto-answer edit
@@ -2082,37 +2670,39 @@ loud:</p>
 <li>instruction files and dot paths are refused</li>
 <li>the terminal warning names the risk</li>
 <li><code>lahe agent status --diffs</code> shows the edits of the last
-20 runs, and the before and after hashes of older ones</li>
+20 turns, and the before and after hashes of older ones</li>
 </ul>
 <p>A diff on the card itself is deferred to after dogfood (it would
 change what the wireframe settled on for cards). The owner commits these
 docs by hand, which is a second look.</p>
 <h3 id="page-text-is-data-d12">Page text is data (D12)</h3>
-<p>The run's input is the drain, with page text under <code>page</code>,
-and the D12 line is in the <code>all</code> group, so every run gets it
-once. The page-posted <code>source_hint</code> is replaced before the
-run sees it. For a run nobody watches, the D12 line is not the guard.
-The capability limits above are. The source file's own text is also
-untrusted input, and the same limits contain it.</p>
+<p>The agent's input is the drain, with page text under
+<code>page</code>, and the D12 line is in the <code>all</code> group, so
+the agent gets it once, in its system prompt. The page-posted
+<code>source_hint</code> is replaced before the agent sees it. For an
+agent nobody watches, the D12 line is not the guard. The capability
+limits above are. The source file's own text is also untrusted input,
+and the same limits contain it.</p>
 <h3 id="credentials-and-environment">Credentials and environment</h3>
 <ul>
 <li>The child environment is an allowlist.</li>
-<li>No API key passes to a run. A login billed by the token is named in
-the warning.</li>
-<li>Preflight runs with the run's exact environment and binary, so what
-it reports is what the run uses.</li>
-<li>The review token is never in the prompt, the stdin or the
-environment.</li>
+<li>No API key passes to the agent. A login billed by the token is named
+in the warning.</li>
+<li>Preflight runs with the agent's exact environment and binary, so
+what it reports is what the agent uses.</li>
+<li>The review token is never in the prompt, a turn message, the
+environment or the arguments.</li>
 </ul>
 <h3 id="privacy">Privacy</h3>
 <ul>
-<li>Run logs keep tool names, paths, sizes, usage and replies, never
+<li>Turn logs keep tool names, paths, sizes, usage and replies, never
 tool results.</li>
-<li>The prompt file is removed when a run ends.</li>
-<li>The last 20 run folders are kept, in the owner-only session
+<li>The prompt file is removed when the agent process ends.</li>
+<li>The last 20 turn folders are kept, in the owner-only session
 directory. Session folders stay after close, as they do today.</li>
-<li><code>--no-session-persistence</code> keeps runs out of the user's
-Claude history.</li>
+<li><code>--no-session-persistence</code> keeps the agent's history out
+of the user's Claude folder. The history lives only in the running
+process, and ends with it.</li>
 </ul>
 <h3 id="subscription-terms">Subscription terms</h3>
 <p>Anthropic's Consumer Terms, Section 3, bar accessing the Services
@@ -2120,41 +2710,56 @@ Claude history.</li>
 otherwise", except "via an Anthropic API Key or where we otherwise
 explicitly permit it" (<a
 href="https://www.anthropic.com/legal/consumer-terms">Consumer
-Terms</a>). The quote was read by a web fetch today and still needs a
-person to check it against the page. Claude Code's docs describe
+Terms</a>). The quote was read by a web fetch and still needs a person
+to check it against the page. Claude Code's docs describe
 <code>claude -p</code> for scripts, and a token "for CI pipelines,
 scripts" that "authenticates with your Claude subscription" (<a
 href="https://code.claude.com/docs/en/authentication">Authentication</a>,
-cited by the spike). Whether that is the explicit permission the terms
-mean, for this use, is OQ1 (subscription terms). Running the dogfood on
-the owner's subscription is his decision, recorded when he makes it.</p>
+cited by the first spike). Whether that is the explicit permission the
+terms mean, for this use, is OQ1 (subscription terms). A kept agent does
+not change the question: it is still a script feeding
+<code>claude -p</code>. Running the dogfood on the owner's subscription
+is his decision, recorded when he makes it.</p>
 <h2 id="other-hosts-later-r4-claude-code-first">Other hosts later (R4,
 Claude Code first)</h2>
 <p><code>host_claude_code.js</code> is the only file that knows about
-Claude Code. The supervisor passes it a run spec and gets back a result.
-The supervisor never names a host's flags. The shapes:</p>
-<div class="sourceCode" id="cb12"><pre
-class="sourceCode json"><code class="sourceCode json"><span id="cb12-1"><a href="#cb12-1" aria-hidden="true" tabindex="-1"></a><span class="fu">{</span> <span class="dt">&quot;run_spec&quot;</span><span class="fu">:</span> <span class="fu">{</span> <span class="dt">&quot;stage_dir&quot;</span><span class="fu">:</span> <span class="st">&quot;...&quot;</span><span class="fu">,</span> <span class="dt">&quot;prompt_file&quot;</span><span class="fu">:</span> <span class="st">&quot;...&quot;</span><span class="fu">,</span> <span class="dt">&quot;stdin&quot;</span><span class="fu">:</span> <span class="st">&quot;...&quot;</span><span class="fu">,</span> <span class="dt">&quot;reply_schema&quot;</span><span class="fu">:</span> <span class="fu">{},</span></span>
-<span id="cb12-2"><a href="#cb12-2" aria-hidden="true" tabindex="-1"></a>                <span class="dt">&quot;model&quot;</span><span class="fu">:</span> <span class="st">&quot;sonnet&quot;</span><span class="fu">,</span> <span class="dt">&quot;budget_usd&quot;</span><span class="fu">:</span> <span class="fl">0.5</span><span class="fu">,</span> <span class="dt">&quot;timeout_ms&quot;</span><span class="fu">:</span> <span class="dv">600000</span><span class="fu">,</span> <span class="dt">&quot;env&quot;</span><span class="fu">:</span> <span class="fu">{}</span> <span class="fu">},</span></span>
-<span id="cb12-3"><a href="#cb12-3" aria-hidden="true" tabindex="-1"></a>  <span class="dt">&quot;result&quot;</span><span class="fu">:</span>   <span class="fu">{</span> <span class="dt">&quot;replies&quot;</span><span class="fu">:</span> <span class="ot">[]</span><span class="fu">,</span> <span class="dt">&quot;usage&quot;</span><span class="fu">:</span> <span class="fu">{},</span> <span class="dt">&quot;turns&quot;</span><span class="fu">:</span> <span class="dv">9</span><span class="fu">,</span> <span class="dt">&quot;failure&quot;</span><span class="fu">:</span> <span class="kw">null</span> <span class="fu">}</span> <span class="fu">}</span></span></code></pre></div>
+Claude Code. The supervisor passes it an agent spec, with the prompt as
+text, and gets back a handle. The adapter writes the prompt file and
+removes it when the process ends. The supervisor never names a host's
+flags. The shapes:</p>
+<div class="sourceCode" id="cb14"><pre
+class="sourceCode json"><code class="sourceCode json"><span id="cb14-1"><a href="#cb14-1" aria-hidden="true" tabindex="-1"></a><span class="fu">{</span> <span class="dt">&quot;agent_spec&quot;</span><span class="fu">:</span> <span class="fu">{</span> <span class="dt">&quot;stage_dir&quot;</span><span class="fu">:</span> <span class="st">&quot;...&quot;</span><span class="fu">,</span> <span class="dt">&quot;prompt_text&quot;</span><span class="fu">:</span> <span class="st">&quot;...&quot;</span><span class="fu">,</span> <span class="dt">&quot;reply_schema&quot;</span><span class="fu">:</span> <span class="fu">{},</span></span>
+<span id="cb14-2"><a href="#cb14-2" aria-hidden="true" tabindex="-1"></a>                  <span class="dt">&quot;model&quot;</span><span class="fu">:</span> <span class="st">&quot;sonnet&quot;</span><span class="fu">,</span> <span class="dt">&quot;env&quot;</span><span class="fu">:</span> <span class="fu">{},</span> <span class="dt">&quot;claude_path&quot;</span><span class="fu">:</span> <span class="st">&quot;...&quot;</span> <span class="fu">},</span></span>
+<span id="cb14-3"><a href="#cb14-3" aria-hidden="true" tabindex="-1"></a>  <span class="dt">&quot;handle&quot;</span><span class="fu">:</span>     <span class="fu">{</span> <span class="dt">&quot;pid&quot;</span><span class="fu">:</span> <span class="dv">4188</span><span class="fu">,</span> <span class="dt">&quot;pgid&quot;</span><span class="fu">:</span> <span class="dv">4188</span><span class="fu">,</span> <span class="dt">&quot;started&quot;</span><span class="fu">:</span> <span class="st">&quot;...&quot;</span><span class="fu">,</span> <span class="dt">&quot;sessionId&quot;</span><span class="fu">:</span> <span class="st">&quot;() from init&quot;</span><span class="fu">,</span></span>
+<span id="cb14-4"><a href="#cb14-4" aria-hidden="true" tabindex="-1"></a>                  <span class="dt">&quot;sendTurn&quot;</span><span class="fu">:</span> <span class="st">&quot;(message, { timeout_ms, signal }) -&gt; turn result&quot;</span><span class="fu">,</span> <span class="dt">&quot;close&quot;</span><span class="fu">:</span> <span class="st">&quot;()&quot;</span><span class="fu">,</span> <span class="dt">&quot;kill&quot;</span><span class="fu">:</span> <span class="st">&quot;()&quot;</span><span class="fu">,</span></span>
+<span id="cb14-5"><a href="#cb14-5" aria-hidden="true" tabindex="-1"></a>                  <span class="dt">&quot;onExit&quot;</span><span class="fu">:</span> <span class="st">&quot;(cb)&quot;</span> <span class="fu">},</span></span>
+<span id="cb14-6"><a href="#cb14-6" aria-hidden="true" tabindex="-1"></a>  <span class="dt">&quot;turn_result&quot;</span><span class="fu">:</span> <span class="fu">{</span> <span class="dt">&quot;replies&quot;</span><span class="fu">:</span> <span class="ot">[]</span><span class="fu">,</span> <span class="dt">&quot;usage&quot;</span><span class="fu">:</span> <span class="fu">{},</span> <span class="dt">&quot;context&quot;</span><span class="fu">:</span> <span class="fu">{</span> <span class="dt">&quot;first&quot;</span><span class="fu">:</span> <span class="dv">0</span><span class="fu">,</span> <span class="dt">&quot;last&quot;</span><span class="fu">:</span> <span class="dv">0</span> <span class="fu">},</span></span>
+<span id="cb14-7"><a href="#cb14-7" aria-hidden="true" tabindex="-1"></a>                   <span class="dt">&quot;model_turns&quot;</span><span class="fu">:</span> <span class="dv">6</span><span class="fu">,</span> <span class="dt">&quot;compacted&quot;</span><span class="fu">:</span> <span class="kw">false</span><span class="fu">,</span></span>
+<span id="cb14-8"><a href="#cb14-8" aria-hidden="true" tabindex="-1"></a>                   <span class="dt">&quot;failure&quot;</span><span class="fu">:</span> <span class="st">&quot;null | signed_out | usage_limit | crashed | timed_out | stopped | bad_output&quot;</span> <span class="fu">}</span> <span class="fu">}</span></span></code></pre></div>
 <p>A second host gets its own adapter file, beside this one, when it
-arrives. It must be able to do four things:</p>
+arrives. It must be able to do five things:</p>
 <ul>
 <li>run headless on the user's own login</li>
 <li>confine files to a working folder</li>
 <li>run without a shell</li>
 <li>return structured output</li>
+<li>stay running and take work on stdin, or else run once per turn (the
+first version's shape) at a start-up cost the owner accepts</li>
 </ul>
 <p>Codex (<code>codex exec</code>) and Gemini (<code>gemini -p</code>)
-have headless modes (crucible). Their confinement and output flags are
-not checked here. A host that cannot run without a shell is not
-added.</p>
+have headless modes (crucible). Their confinement, output and
+long-running modes are not checked here. A host that cannot run without
+a shell is not added.</p>
 <h2 id="test-strategy">Test Strategy</h2>
 <p>The plan's Test List holds every case. The strategy behind it:</p>
 <ul>
 <li><strong>No model calls in the gate.</strong> A fake host, a small
-Node script standing in for <code>claude</code>, reads stdin and prints
-a scripted result. Its output is copied from real runs.</li>
+Node script standing in for <code>claude</code>, stays running, reads
+stream-json lines from stdin, and prints a scripted stream per turn. Its
+output is copied from the flags spike's real streams. It reports running
+totals as Claude Code does, checks each stdin message's envelope,
+refuses flags and flag pairs Claude Code refuses, and can die between or
+during turns on cue.</li>
 <li><strong>Time and crashes are injected.</strong> Every timed step
 takes an injected clock, and the engine has hooks that crash it at an
 exact step.</li>
@@ -2165,78 +2770,109 @@ branches merge, tests run the real helper, the real
 <code>lahe agent</code> and the fake <code>claude</code> together.</li>
 <li><strong>The rail gets one named browser spec,</strong> with
 screenshots in light and dark.</li>
-<li><strong>Live, outside the gate: the flags spike (OQ2) and a live
-check with the real <code>claude</code>.</strong> They cover what a fake
+<li><strong>Live, outside the gate: the flags spike and a live check
+with the real <code>claude</code>.</strong> They cover what a fake
 cannot:
 <ul>
-<li>the exact flag set</li>
+<li>the exact flag set, in a process that stays up across turns</li>
+<li>structured output on every turn</li>
 <li>a planted <code>.env</code> beside the stage's original that must
 not be readable</li>
 <li>a hostile comment asking for a <code>&lt;script&gt;</code> that must
 be refused</li>
-<li>the structured output and the prompt size</li>
+<li>the prompt size, and the cache carried from turn to turn</li>
+<li>a kill, then a fresh start that answers the same items</li>
 <li>how a usage limit is reported</li>
-<li>whether <code>--max-budget-usd</code> applies on a subscription</li>
-<li>the "rules once" transcript check at 1, 10 and 100 items</li>
+<li>what <code>--max-budget-usd</code> caps in this mode</li>
+<li>the "rules once" transcript check at 1, 10 and 25 items, and 100
+items across turns</li>
 </ul></li>
 </ul>
 <p>The dogfood review is the success-metric run.</p>
 <h2 id="to-verify-before-the-build">To verify before the build</h2>
-<p><strong>OQ2 (the flags spike).</strong> The first spike did not run
-these, and they have to be checked before the build:</p>
+<p><strong>The flags spike (plan Task 0.2).</strong> Neither spike ran
+these together, in a process that stays up:</p>
 <ul>
-<li><code>--restricted</code></li>
-<li><code>--json-schema</code></li>
+<li>the exact production flag set together, with stream-json input:
+<code>--restricted</code>, <code>--strict-mcp-config</code>,
+<code>--setting-sources ""</code>, <code>--tools Read,Edit</code> and
+<code>--no-session-persistence</code> included</li>
+<li><code>--json-schema</code> on every turn with that set, or the
+JSON-answer fallback, and how an answer that fails the schema is
+reported</li>
 <li><code>--append-system-prompt-file</code></li>
-<li><code>--strict-mcp-config</code></li>
-<li><code>--setting-sources ""</code></li>
+<li>the Edit tool's refusal when the copy changed since the agent last
+read it, and whether Edit can create a new file in
+<code>work/</code></li>
+<li>what <code>work/</code> holds after several turns</li>
+<li>a kill mid-turn, then a fresh start</li>
+<li>the failures (signed out, missing, killed) in the kept-running mode,
+at the first turn</li>
+<li>the error for a missing <code>--verbose</code> and for a malformed
+stdin line</li>
+<li>what <code>--max-budget-usd</code> caps</li>
 <li>the larger prompt</li>
 </ul>
-<p>The plan's Task 0.2 runs it. If structured output does not work, this
-design comes back for a decision instead of granting a shell.</p>
+<p>If neither form of structured output works, this design comes back
+for a decision instead of granting a shell.</p>
 <h2 id="open-questions">Open Questions</h2>
 <p>New ones only. The brief's questions still stand, except Q3 (telling
 the chat agent), which Assumption A7 answers. The plan gathers every
 question in one list, each with a default.</p>
 <ul>
 <li><strong>OQ1 (subscription terms).</strong> Does the Consumer Terms
-exception cover a script that starts <code>claude -p</code> on each
-comment? The docs support scripted use; the terms do not name it. The
-owner decides the dogfood. Offering auto-answer to launch users waits on
-this.</li>
+exception cover a script that keeps <code>claude -p</code> running and
+feeds it each comment? The docs support scripted use; the terms do not
+name it. The owner decides the dogfood. Offering auto-answer to launch
+users waits on this.</li>
 <li><strong>OQ3 (the numbers).</strong> Every limit and wait in this
 design is a guess. Are they right? The plan's "Numbers this plan sets"
-lists each one.</li>
+lists each one. New in this revision: four agents alive, a 60-minute
+idle close, and a fresh start at 80,000 tokens of history.</li>
 <li><strong>OQ4 (beyond Markdown).</strong> Is Markdown only acceptable
 for the first version? Static HTML, linked files and build-output pages
 each need their own checks first:
 <ul>
 <li>added-script checks for HTML</li>
 <li>a fixed file list for links</li>
-<li>a build that LAHE runs after the run, outside the model</li>
+<li>a build that LAHE runs after each turn, outside the model</li>
 </ul></li>
 <li><strong>OQ5 (who may switch it on).</strong> The wireframe has the
 reviewer turn auto-answer on from the page. Here the page can do that
 only after the terminal has allowed the session. Is that extra first
 step acceptable?</li>
-<li><strong>OQ6 (instruction residual).</strong> Is auto-answer on
-LAHE's own feature docs acceptable for dogfood, given the residual
-above? Or should the first dogfood use documents no agent reads as
-instructions?</li>
+<li><strong>OQ6 (instruction files).</strong> Is auto-answer on LAHE's
+own feature docs acceptable for dogfood, given the risk in "Edits may
+plant instructions for a later agent"? Or should the first dogfood use
+documents no agent reads as instructions?</li>
+<li><strong>OQ9 (full setup).</strong> Should a project be able to run
+its agent with its full Claude Code setup (its CLAUDE.md, skills, MCP
+servers and hooks), at 4 to 5 times the cost of every turn and with
+hooks and MCP back in reach? Or are named context files enough?</li>
+<li><strong>OQ10 (resume after a crash).</strong> Should a later version
+reload the agent's history after it dies, within the cache hour? It
+saves the first-turn cost again, but Claude would then save the whole
+transcript, file reads included, in the user's Claude folder. The first
+version always starts fresh.</li>
+<li><strong>OQ11 (the Library phase).</strong> When the Library opens
+documents with their agents, is a one-time terminal allowance per
+project folder the right permission?</li>
 </ul>
 <h2 id="assumptions-made-for-the-owner">Assumptions made for the
 owner</h2>
 <ul>
-<li><strong>A1.</strong> Sonnet is the default model. The spike found it
-as accurate as Opus on this job, and faster.</li>
-<li><strong>A2.</strong> Per-run limits are $0.50 (Claude Code's
-list-price estimate) and 10 minutes.</li>
+<li><strong>A1.</strong> Sonnet is the default model. The first spike
+found it as accurate as Opus on this job, and faster.</li>
+<li><strong>A2.</strong> A turn's limit is 10 minutes. No money cap per
+turn is assumed until the flags spike shows what
+<code>--max-budget-usd</code> caps.</li>
 <li><strong>A3.</strong> Three attempts per revision, six per item, then
 the card says auto-answer could not handle it.</li>
-<li><strong>A4.</strong> A run takes at most 25 items and 100 KB. A
-bigger burst becomes more runs.</li>
-<li><strong>A5.</strong> Two runs at once across the machine, and 120
-runs a day, given the memory pressure in the brief.</li>
+<li><strong>A4.</strong> A turn takes at most 25 items and 100 KB. A
+bigger burst becomes more turns.</li>
+<li><strong>A5.</strong> Two turns at once and four agents alive across
+the machine, and 120 turns a day, given the memory pressure in the
+brief.</li>
 <li><strong>A6.</strong> The first version covers Markdown reviews of
 one source file, on macOS and Linux.</li>
 <li><strong>A7.</strong> Turning auto-answer on stops the chat agent's
@@ -2249,15 +2885,26 @@ timer, a forever daemon..." becomes: a chat agent never starts a
 long-lived process of its own, and auto-answer is the only one, started
 by LAHE. This is the deliberate change the brief's Rollout asked
 for.</li>
-<li><strong>A10.</strong> The rail shows LAHE's own run count and
-tokens, not the subscription's remaining limit (which cannot be read)
-and not dollars.</li>
+<li><strong>A10.</strong> The rail shows LAHE's own run count. It does
+not show tokens, dollars, or the subscription's remaining limit, which
+cannot be read. <code>lahe agent status</code> shows each turn's four
+token counts.</li>
 <li><strong>A11.</strong> The reply agent name is
-<code>claude-auto</code>, so a run's replies land in their own file and
-never share one with a chat agent's. The card shows that name like any
-agent's.</li>
+<code>claude-auto</code>, so the agent's replies land in their own file
+and never share one with a chat agent's. The card shows that name like
+any agent's.</li>
 <li><strong>A12.</strong> The wireframe's direction B is the rail
 design, with "Auto-answer" as a working name.</li>
+<li><strong>A13.</strong> Lean is the default, and named context files
+are how a project adds its own rules. The full setup is not offered in
+the first version.</li>
+<li><strong>A14.</strong> An agent idle for 60 minutes is closed, or
+sooner when another review needs its slot. Every start is fresh: at the
+first turn, after a close or a death, at 80,000 tokens of history, when
+the prompt changes, and after a bad turn.</li>
+<li><strong>A15.</strong> No history is saved and nothing is resumed in
+the first version. A lean fresh start costs cents, so resume is not
+worth its privacy and build cost yet.</li>
 </ul>
 <h2 id="architect-review">Architect Review</h2>
 <p>Summary table only. Full review prose lives in
@@ -2371,6 +3018,96 @@ timers</td>
 <td>Only the tags go there; prompt and schema live in
 <code>src/service/headless_prompt.js</code>; two behaviours added to
 OQ2</td>
+</tr>
+</tbody>
+</table></div>
+<h2 id="architect-review-round-2">Architect Review (Round 2)</h2>
+<p>Summary table only. Full review prose lives in
+<code>02_architecture_lahe_agent_sdk_reviews.md</code>. The code lead's
+second round also changed this document; its table is in the plan.</p>
+<div class="table-scroll"><table>
+<thead>
+<tr>
+<th>#</th>
+<th>Finding</th>
+<th>Disposition</th>
+<th>Rationale</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>RF14</td>
+<td>A supervisor that stopped itself gets started again; the start
+counter had no file</td>
+<td><span class="accepted">Accepted</span></td>
+<td>The helper restarts only after a <code>restarting</code> exit or a
+death with no stop written; a failure stop needs a new "on"; starts
+counted in helper-written <code>supervisor_starts.json</code>,
+<code>restarting</code> exits not counted; <code>restarting</code> no
+longer passes through <code>stopped</code></td>
+</tr>
+<tr>
+<td>RF15</td>
+<td>The two kinds of slot can stall every review</td>
+<td><span class="accepted">Accepted</span></td>
+<td>Agent slot first, never wait holding the other; an idle agent gives
+way to a <code>want-agent</code> marker on its next look, so no new rail
+words are needed</td>
+</tr>
+<tr>
+<td>RF16</td>
+<td>Refused turns loop; saving the file can stop auto-answer</td>
+<td><span class="accepted">Accepted</span></td>
+<td>A refused turn counts an attempt for each item it left without a
+reply; conflicts no longer count toward the three-in-a-row stop</td>
+</tr>
+<tr>
+<td>RF17</td>
+<td>Resume costs more than it saves once the cache is cold, and forces
+saved transcripts</td>
+<td><span class="accepted">Accepted</span></td>
+<td>Every start is fresh; <code>--no-session-persistence</code> is back;
+resume moves to Alternatives; OQ10 asks the owner about resume within
+the cache hour</td>
+</tr>
+<tr>
+<td>RF18</td>
+<td>A death while idle is restarted at once</td>
+<td><span class="accepted">Accepted</span></td>
+<td>Logged, agent set to null, started at the next turn; only deaths
+during a turn or at start-up count toward the limit</td>
+</tr>
+<tr>
+<td>RF19</td>
+<td>Usage numbers mislead; the session limit resets</td>
+<td><span class="accepted">Accepted</span></td>
+<td>Four usage fields kept apart; totals from zero per process;
+no-result turns sum stream usage or say "not reported"; the rail shows
+runs only; counts and turn ids rebuilt from
+<code>turns.jsonl</code></td>
+</tr>
+<tr>
+<td>RF20</td>
+<td>The long-lived stage folder is never checked for stray files</td>
+<td><span class="accepted">Accepted</span></td>
+<td><code>work/</code> must hold exactly the copy after each turn, or
+the turn is refused and strays removed; emptied at each fresh start;
+flags spike row</td>
+</tr>
+<tr>
+<td>RF21</td>
+<td>Write-back crash recovery had no record</td>
+<td><span class="accepted">Accepted</span></td>
+<td><code>result.json</code> at <code>applying</code>, flushed before
+the rename; settled by hashes on the next start</td>
+</tr>
+<tr>
+<td>RF22</td>
+<td>The flags spike skipped <code>--json-schema</code> with
+<code>--tools Read,Edit</code></td>
+<td><span class="accepted">Accepted</span></td>
+<td>Task 0.2 runs the exact production flag set and records how a schema
+failure is reported</td>
 </tr>
 </tbody>
 </table></div>
@@ -3005,6 +3742,339 @@ today, but nothing asserts it.</li>
 <code>--setting-sources ""</code> as belt and braces. Have OQ2's repeat
 run include RF1's <code>.env</code> test and RF2's added-script test
 against real <code>claude</code>.</li>
+</ul>
+<h2 id="architect-review-round-2-1">Architect Review (Round 2)</h2>
+<p>This round covers revision 2 (commit 494cd28), checked against
+<code>spike_persistent_run.md</code>, the brief (including R26, one
+agent per review, and R27, nothing depends on the model remembering),
+and the code the doc names. The code claims I checked hold:</p>
+<ul>
+<li><code>suppressActivityTouch</code> in <code>status.js</code></li>
+<li><code>SERVICE_CONTRACT = 13</code></li>
+<li><code>REPLY_FIELD</code> and <code>REPLY_REQUIRED</code></li>
+<li>the 20-second stale lock</li>
+<li>the handled check's <code>not_on_page</code> fold</li>
+</ul>
+<h3 id="rf14-a-supervisor-that-stopped-itself-gets-started-again">RF14.
+A supervisor that stopped itself gets started again</h3>
+<ul>
+<li>severity: blocker. kind: defect.</li>
+<li>where: 02_architecture:118, :196, :430, :449, :482. The one-writer
+table at :147-156.</li>
+<li>what: The helper restarts a supervisor whenever "on" still stands
+and none is alive. Nothing says it must leave alone a supervisor that
+stopped on purpose. The "more than three starts in ten minutes" counter
+has no file and no writer.</li>
+<li>why:
+<ul>
+<li>A supervisor that stops for <code>signed_out</code>,
+<code>failing</code>, <code>not_installed</code> or
+<code>source_missing</code> exits. The latest request is still "on", so
+the next liveness poll starts it again. The stop never sticks, and the
+rail flips between "starting" and "stopped".</li>
+<li>The counter that should catch this lives nowhere. If it lives in the
+helper's memory, a helper restart wipes it, which the Library section
+rules out (:621). If the helper writes it into <code>agent.json</code>,
+that file gets a second writer, which undoes the first round's
+one-writer fix.</li>
+<li><code>source_stamp.js</code> judges "stale" by file times under
+<code>src/</code> and <code>vendor/</code> (:51, :146). Every merge,
+pull or branch switch in the clone therefore restarts the supervisor.
+Three in ten minutes is a normal dogfood afternoon, and it would read as
+<code>failing</code>.</li>
+<li>The state diagram sends <code>restarting</code> through
+<code>stopped</code>, and "a stop drops the session id" (:482). That
+contradicts :430, which says the new supervisor resumes the same agent
+session.</li>
+</ul></li>
+<li>fix:
+<ul>
+<li>The helper restarts a supervisor only when <code>agent.json</code>
+shows reason <code>restarting</code>, or shows the process died without
+writing a stop.</li>
+<li>After a failure stop, only a new "on" request made after the stop
+time brings auto-answer back. That can be off then on from the page, or
+<code>lahe agent on</code>. The chip's remedy says so.</li>
+<li>The supervisor records its own starts in a file it alone writes, and
+stops itself as <code>failing</code> on the fourth start in ten minutes.
+Exits with reason <code>restarting</code> do not count.</li>
+<li>Take <code>restarting</code> out of the <code>stopped</code> path,
+so the session id survives it.</li>
+</ul></li>
+</ul>
+<h3
+id="rf15-the-two-kinds-of-slot-can-stall-every-review-on-the-machine">RF15.
+The two kinds of slot can stall every review on the machine</h3>
+<ul>
+<li>severity: important. kind: defect.</li>
+<li>where: :340-343 (turn slot taken, then agent slot), :441, :674, and
+the Library section at :619.</li>
+<li>what: A supervisor takes a turn slot, then waits for an agent slot.
+Idle agents keep their agent slots for up to 60 minutes.</li>
+<li>why:
+<ul>
+<li>With five or more reviews on, two supervisors can hold both turn
+slots while they wait for agent slots. Four idle agents hold those agent
+slots. The idle agents cannot take a turn either, so every review on the
+machine stalls until one idle close, up to an hour.</li>
+<li>Even without that deadlock, a fifth review waits up to an hour while
+nothing runs. Meanwhile its rail says "waiting for another review's run"
+(:674). That is false, and it misstates what R12 (a limit on how many
+run at once) asks the rail to say.</li>
+<li>The Library section names the fix (ask the longest-idle agent to
+close early) but defers it. The first version already needs it.</li>
+</ul></li>
+<li>fix:
+<ul>
+<li>Take the agent slot first. Never wait for one slot while holding the
+other: take both, or release and wait.</li>
+<li>When all agent slots are held and one holder is idle, the waiter
+drops a marker in <code>run-slots/</code>. The idle holder closes its
+agent on its next look.</li>
+<li>Give "waiting for a free agent" its own words.</li>
+<li>The simpler alternative for dogfood: drop agent slots, and rely on
+turn slots plus the idle close. Pick one on purpose.</li>
+</ul></li>
+</ul>
+<h3
+id="rf16-refused-turns-can-loop-and-a-normal-edit-can-stop-auto-answer">RF16.
+Refused turns can loop, and a normal edit can stop auto-answer</h3>
+<ul>
+<li>severity: important. kind: defect.</li>
+<li>where: :377, :423, :486-490, :718.</li>
+<li>what: A <code>refused</code> turn counts neither as an attempt nor
+as a failed turn. (A refused turn is one that edited the file but left
+an item with no reply.) A <code>conflict</code> does count as a failed
+turn.</li>
+<li>why:
+<ul>
+<li>A refused batch goes back on the drain. The next turn starts fresh,
+paying the start-up cost again, with the same items. Nothing stops the
+loop until the 40-turn daily limit, and each pass throws away the good
+work on every other item in the batch.</li>
+<li>The claim at :423, "whatever pushed the agent there stays out of the
+next turn", is false. The item that pushed it is sent again.</li>
+<li>Going the other way: if the owner saves the file in his editor
+during three turns in a row, auto-answer stops as <code>failing</code>,
+and the chip tells him a person has to look. Saving the file is normal
+work, not a tool failure.</li>
+</ul></li>
+<li>fix:
+<ul>
+<li>Count an attempt against each item that got no reply in a refused
+turn. The existing attempt limit then retires that item and ends the
+loop.</li>
+<li>Leave conflicts out of the three-in-a-row count. The 15-second quiet
+wait and the daily limit already bound them.</li>
+</ul></li>
+</ul>
+<h3
+id="rf17-resuming-saved-history-costs-more-than-it-saves-once-the-cache-is-cold">RF17.
+Resuming saved history costs more than it saves once the cache is
+cold</h3>
+<ul>
+<li>severity: important. kind: risk.</li>
+<li>where: :410, :414, :419, :428, :564, :749. OQ10 and A15.</li>
+<li>what: The agent resumes its saved history after an idle close, a
+stop-free supervisor restart, or any crash. Yet :419 says a fresh start
+"loses nothing it needs".</li>
+<li>why:
+<ul>
+<li><strong>Cost after an idle close.</strong> By then the one-hour
+cache has expired. A resume writes the whole history back to cache, up
+to the 80,000-token fresh-start line, on top of the prompt. A fresh
+start writes only the prompt. The spike measured a resume only 75
+seconds after a kill, and says the cold case was not measured (spike
+:356).</li>
+<li><strong>Cost on a login billed by the token.</strong> The spike
+found one-hour cache writes are what a subscription gets. A token-billed
+login likely gets the default five minutes. There, most turns after a
+short pause rewrite the whole history.</li>
+<li><strong>Privacy.</strong> Resume is the only reason Claude Code must
+save the full transcript, every Read result included, under
+<code>~/.claude/projects</code>. That undoes the first security round's
+fix (security RF10, drop tool results from logs). It is also the whole
+cause of OQ10 (where the history lives) and A15 (keeping it is
+acceptable).</li>
+<li><strong>Security.</strong> A planted instruction rides across the
+idle hour, which lengthens the residual described at :721.</li>
+<li><strong>Build size.</strong> It is also the machinery with the most
+parts: capturing the session id, the resume-failed fallback, and the
+prompt check on resume.</li>
+</ul></li>
+<li>fix:
+<ul>
+<li>At most, resume only when the agent died inside the cache hour, and
+never after an idle close or a stop.</li>
+<li>For a first dogfood, better: drop resume, pass
+<code>--no-session-persistence</code>, and treat every process loss as a
+fresh start. R26 (one agent per review, not per batch) still holds.
+Start-up is paid once per idle hour or crash, never per batch, and a
+lean fresh start is cents per the spike.</li>
+<li>Put this to the owner as a choice.</li>
+</ul></li>
+</ul>
+<h3 id="rf18-a-death-while-idle-is-restarted-at-once">RF18. A death
+while idle is restarted at once</h3>
+<ul>
+<li>severity: important. kind: defect.</li>
+<li>where: :399-402, :412-416. Compare :321.</li>
+<li>what: When the agent dies while idle, the supervisor starts it again
+immediately.</li>
+<li>why:
+<ul>
+<li>This breaks the doc's own "start only at the first turn" rule, and
+holds memory and an agent slot for no work.</li>
+<li>The likely killer is memory pressure, which is what killed the old
+watcher. A process the operating system killed for memory, started again
+at once, gets killed again.</li>
+<li>Three such deaths in ten minutes stop auto-answer as
+<code>failing</code> while no comment is even waiting.</li>
+</ul></li>
+<li>fix: On a death while idle, log it, set <code>agent</code> to null,
+and start at the next turn. Only deaths during a turn, or at start-up,
+count toward the restart limit.</li>
+</ul>
+<h3
+id="rf19-the-usage-numbers-mislead-and-the-session-limit-resets">RF19.
+The usage numbers mislead, and the session limit resets</h3>
+<ul>
+<li>severity: important. kind: defect.</li>
+<li>where: :209, :221, :233-237, :277, :493, :581.</li>
+<li>what: <code>tokens_today</code> leaves out cache reads and writes.
+The doc never says where the running totals start counting from. Turns
+that die record no usage. The daily counts live in
+<code>agent.json</code>, which each new supervisor starts over.</li>
+<li>why:
+<ul>
+<li><strong>The rail's token figure is almost all output.</strong> In
+the spike's lean turns, input was 8 to 14 tokens and cache reads were
+37,436 to 83,933 (spike :294-298). The "tokens" figure understates what
+a turn used, and the owner reads it for R24 (usage is visible) and to
+check the cost line.</li>
+<li><strong>Deltas need a stated starting point.</strong> Running totals
+are per process. The first result of a new process (fresh, resumed or
+restarted) has to be measured from zero, not from the old process's last
+total.</li>
+<li><strong>The costliest turns count nothing.</strong> Timed-out and
+crashed turns have no <code>result</code> line, so the 10-minute turns
+add nothing to the count.</li>
+<li><strong>The session limit resets.</strong> Each new supervisor
+starts the daily count over, whether from a restart for new code or from
+off then on from the page. So the 40-turn session limit (R23, the usage
+ceiling) resets on every off and on, which anyone holding the review
+token can post.</li>
+<li><strong>Turn ids collide.</strong> <code>turn_id</code> restarts
+too, so ids collide with the kept turn folders and with the
+<code>result.json</code> recovery.</li>
+</ul></li>
+<li>fix:
+<ul>
+<li>Record input, cache write, cache read and output separately in
+<code>turns.jsonl</code>.</li>
+<li>Either show a rail figure that includes cache, or show runs only and
+keep tokens in <code>lahe agent status</code>.</li>
+<li>Measure each process's totals from zero.</li>
+<li>For a turn with no result, add up the per-message usage from the
+stream.</li>
+<li>At start, build today's counts and the next turn id from
+<code>turns.jsonl</code>.</li>
+</ul></li>
+</ul>
+<h3
+id="rf20-the-long-lived-stage-folder-is-never-checked-for-stray-files">RF20.
+The long-lived stage folder is never checked for stray files</h3>
+<ul>
+<li>severity: minor. kind: risk (it touches security).</li>
+<li>where: :242, :371, :697, :718.</li>
+<li>what: The stage folder now lives as long as the allowance, and
+nothing checks that it holds only the one copy.</li>
+<li>why:
+<ul>
+<li>Claude Code's Edit tool can likely create a new file when given an
+empty old string. This is unverified.</li>
+<li>A hostile comment could then have the agent leave a note file in
+<code>work/</code>. That note survives fresh starts, and a new agent
+would find it. That defeats the fresh-start containment the security
+section relies on.</li>
+<li>The first round's fix was a new empty folder for every run.</li>
+</ul></li>
+<li>fix:
+<ul>
+<li>After each turn, check that <code>work/</code> holds exactly one
+regular file. Treat anything else as <code>refused</code>, and remove
+it.</li>
+<li>Rebuild <code>work/</code> at every fresh start.</li>
+<li>Add a stray-file case to the flags spike (plan Task 0.2).</li>
+</ul></li>
+</ul>
+<h3
+id="rf21-the-write-back-crash-recovery-has-no-record-to-recover-from">RF21.
+The write-back crash recovery has no record to recover from</h3>
+<ul>
+<li>severity: minor. kind: defect.</li>
+<li>where: :225-237, :383.</li>
+<li>what: Recovery depends on a <code>turns.jsonl</code> line that shows
+<code>applied</code> with <code>replies_written: 0</code>. But that file
+gets one line per finished turn, and nothing says that line is written
+before the rename.</li>
+<li>why: Suppose the supervisor is killed after the rename but before
+any record is written. The next supervisor finds nothing to finish. The
+change stays in the real file with no reply beside it, which R5
+(stopping is clean) forbids. With a kept agent, this window opens on
+every turn.</li>
+<li>fix:
+<ul>
+<li>Before the rename, write <code>result.json</code> and an "applying"
+record holding the before and after hashes.</li>
+<li>On start, a supervisor that finds an unfinished "applying" record
+checks the real file. If it matches the after hash, send the replies. If
+it matches the before hash, drop them.</li>
+</ul></li>
+</ul>
+<h3
+id="rf22-the-flags-spike-skips-the-pairing-most-likely-to-break-structured-replies">RF22.
+The flags spike skips the pairing most likely to break structured
+replies</h3>
+<ul>
+<li>severity: minor. kind: risk.</li>
+<li>where: :389-392, :557, :560, :803-812.</li>
+<li>what: The spike list does not test <code>--json-schema</code>
+together with <code>--tools Read,Edit</code>. It also does not name how
+a schema failure is reported.</li>
+<li>why:
+<ul>
+<li>Claude Code may deliver structured output through a tool of its own.
+If <code>--tools</code> removes that tool, every turn comes back
+<code>bad_output</code>. Three in a row stop auto-answer, and the design
+lands on the owner as a decision on the first day.</li>
+<li>A failed schema retry probably ends with its own error type in the
+result, not a crash. The supervisor has to map that to
+<code>bad_output</code>.</li>
+</ul></li>
+<li>fix: Run Task 0.2 with the exact production flag set, not a reduced
+one. Record the result type for a schema failure.</li>
+</ul>
+<h3 id="checked-and-holding">Checked and holding</h3>
+<ul>
+<li>The first round's other decisions all still stand:
+<ul>
+<li>the helper as the only writer of the event log</li>
+<li>the empty stage folder with one copy (apart from RF20)</li>
+<li>the environment allowlist</li>
+<li>no shell</li>
+<li>replies built from <code>REPLY_FIELD</code></li>
+<li>attempts counted only on finished turns (apart from the refused gap
+in RF16)</li>
+<li>on and off sent as events</li>
+</ul></li>
+<li>The Library section leaves that phase open without building it. Its
+one early promise, the "yield the longest-idle agent" step, is needed
+now (RF15). The first version otherwise does nothing that blocks a
+per-folder allowance.</li>
+<li>No requirement is left without a home. Two are met only loosely: R12
+(the rail says when a review is waiting on another; RF15) and R24 (usage
+is visible; RF19).</li>
 </ul>
 </body>
 </html>

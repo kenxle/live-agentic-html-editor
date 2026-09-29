@@ -112,7 +112,7 @@ He works on a Mac with one browser tab per review and several Claude Code termin
 3. When the first reviewer item becomes ready, LAHE starts one headless agent for the review, on the user's own login. The agent is told LAHE's rules once, when it starts. It stays running after that.
 4. LAHE hands the agent every waiting item as one batch. The agent handles them the way a chat agent does today: change the source, check the change landed, and give a reply for each card. Then it waits for the next batch.
 5. LAHE checks what is still unanswered. Items that arrived during the batch go in the next batch. If the agent keeps failing to answer an item, LAHE stops retrying it and its card says so. If the agent dies, LAHE starts it again.
-6. The reviewer sees the same cards and the same rail status line, with plain words for when the run is working, idle, waiting for another review's run, or stopped.
+6. The reviewer sees the same cards and the same rail status line, with plain words for when the agent is working, idle, waiting for another review's run, or stopped.
 7. Turning the mode off, stopping it from the page, or closing the session stops it. A chat agent can take the review back through the handoff that exists today.
 
 ## Requirements
@@ -170,15 +170,22 @@ He works on a Mac with one browser tab per review and several Claude Code termin
 :::
 
 ::: callout-req
-**R13 (retries stop):** After each batch, LAHE checks for unanswered items and hands over another batch if any remain. If runs keep leaving an item unanswered, LAHE retries it a limited number of times. Then its card tells the reviewer the agent could not handle it. The limit is set in the architecture.
+**R13 (retries stop):** After each batch, LAHE checks for unanswered items and hands over another batch if any remain. If the agent keeps leaving an item unanswered, LAHE retries it a limited number of times. Then its card tells the reviewer the agent could not handle it. The limit is set in the architecture.
 :::
 
 ::: callout-req
-**R26 (one agent per review, kept running):** LAHE starts one background agent per review and keeps it running while the mode is on, handing it each batch. It does not start a new agent for each batch. A new agent pays its whole start-up cost again, which on the owner's projects fills a large share of the context window before any work is done. An idle agent may be closed and a new one started at the next batch, since that pays the start-up cost once per idle spell, not once per batch.
+**R26 (one agent per review, kept running):** LAHE starts one background agent per review and keeps it running while the mode is on, handing it each batch. It does not start a new agent for each batch. A new agent pays its whole start-up cost again, which on the owner's projects fills a large share of the context window before any work is done. LAHE may close an idle agent and start a new one at the next batch. That pays the start-up cost once per idle spell, not once per batch.
 :::
 
 ::: callout-req
-**R27 (nothing depends on the model remembering):** Every step that must happen is done by LAHE, not by the model. That means waking the agent, checking after each batch that every item got a reply, sending the replies to the cards, and restarting the agent when it dies. The model's job is the edit and the words of each reply. If the model forgets or is blocked, LAHE notices and the rail says so.
+**R27 (nothing depends on the model remembering):** Every step that must happen is done by LAHE, not by the model. LAHE does these:
+
+- wakes the agent
+- checks after each batch that every item got a reply
+- sends the replies to the cards
+- restarts the agent when it dies
+
+The model's job is the edit and the words of each reply. If the model forgets or is blocked, LAHE notices and the rail says so.
 :::
 
 ### Rules said once
@@ -259,7 +266,7 @@ The agent here is the user's own coding agent, started by LAHE with no person wa
 - Start a watcher, poll for more work, or try to keep itself running. LAHE brings it the next batch.
 - Refuse an item as stale or old. Every item it is shown is current.
 
-**When it is unsure or fails:** leave the item unanswered or ask a question, never invent an answer. A run that crashes leaves the items waiting, and the rail shows the failure.
+**When it is unsure or fails:** leave the item unanswered or ask a question, never invent an answer. An agent that crashes leaves the items waiting, and the rail shows the failure.
 
 ## Success Metrics
 
@@ -268,7 +275,12 @@ The agent here is the user's own coding agent, started by LAHE with no person wa
 - **No re-arming.** Zero agent turns are spent starting or restarting a watcher in a review with the mode on.
 - **Rules once.** The agent's full transcript shows LAHE's rules once, however many batches it handled. Nothing that reads like an instruction repeats per batch or per item. Checked by reading transcripts from batches of 1, 10 and 25 items, and of 100 items across several batches.
 - **Idle is free.** A review left open for an hour with no new comments makes zero model calls.
-- **One agent.** In the dogfood review, the agent is started once, plus once for each crash, idle close or fresh start LAHE records. Never once per batch.
+- **One agent.** In the dogfood review, the agent starts once. It starts again only when LAHE records one of these:
+  - a crash
+  - closing an idle agent
+  - a fresh start
+
+  It never starts once per batch.
 - **Nothing forgotten.** With the agent killed on purpose between batches, the next comment is still answered, and nobody touched a terminal.
 - **Correct replies.** Replies on hand edits pass the existing check. Replies on comments are judged by the owner, card by card, in the dogfood review.
 - **No double answers.** Zero items answered twice in dogfood.

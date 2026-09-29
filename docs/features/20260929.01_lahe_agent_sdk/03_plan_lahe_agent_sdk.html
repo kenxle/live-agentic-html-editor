@@ -839,6 +839,9 @@ delete at cleanup</a></li>
 id="toc-engineering-manager-review">Engineering Manager Review</a></li>
 <li><a href="#code-review-lead-review"
 id="toc-code-review-lead-review">Code Review Lead Review</a></li>
+<li><a href="#code-review-lead-review-round-2"
+id="toc-code-review-lead-review-round-2">Code Review Lead Review (Round
+2)</a></li>
 <li><a href="#testing-review" id="toc-testing-review">Testing
 Review</a></li>
 <li><a href="#design-review" id="toc-design-review">Design
@@ -859,11 +862,19 @@ id="toc-testing-review-round-1">Testing Review (Round 1)</a></li>
 <li><a href="#design-review-magic-mirror-round-1"
 id="toc-design-review-magic-mirror-round-1">Design Review, magic-mirror
 (Round 1)</a></li>
+<li><a href="#code-review-lead-review-round-2-1"
+id="toc-code-review-lead-review-round-2-1">Code Review Lead Review
+(Round 2)</a></li>
 </ul></li>
 </ul>
 </nav>
-<p>Status: DRAFT, written without the owner. Four reviews are folded in.
-Their tables are at the end, and the full prose is in
+<p>Status: DRAFT, revision 2. Reworked for one background agent per
+review, kept running, after the owner rejected one new agent per batch.
+Findings from two review rounds are folded in: the first round's four
+reviews, and this revision's architect and code lead reviews. The
+biggest change from the second round is that every agent starts fresh,
+and nothing is resumed in the first version. The review tables are at
+the end, and the full prose is in
 <code>03_plan_lahe_agent_sdk_reviews.md</code>.</p>
 <h2 id="summary">Summary</h2>
 <ul>
@@ -872,8 +883,9 @@ starts, the orchestrator checks three things the architecture leaves
 open:</p>
 <ul>
 <li>what the subscription terms say, read on the live page</li>
-<li>whether the <code>claude -p</code> flags the design relies on do
-what they say</li>
+<li>whether the <code>claude -p</code> flags the design relies on work
+in a process that stays running, including replies as structured output
+on every turn</li>
 <li>a starting commit where the tests pass, with every other branch that
 edits the same files already folded in</li>
 </ul>
@@ -886,12 +898,18 @@ agents, auto-answer, or both, and every copy of them</li>
 <li>the shared names for events, routes and states (the wire names)</li>
 <li>the locks that keep two processes from doing the same work</li>
 <li>the function signatures each Phase 2 builder codes against</li>
-<li>a fake <code>claude</code> for tests</li>
+<li>the prompt module, built in full, since both the engine and the
+supervisor need it</li>
+<li>a fake <code>claude</code> for tests that stays running and takes
+turns on stdin, as the real one does</li>
 </ul></li>
 <li><p><strong>Phase 2:</strong> four builders work in parallel:</p>
 <ul>
-<li>the run engine</li>
-<li>the supervisor</li>
+<li>the engine: starting the agent, sending a turn, reading its replies,
+and the copy-in and write-back</li>
+<li>the supervisor: waking the agent when items are ready, the done
+check after every turn, fresh starts after a death or a bad turn,
+closing an idle agent, and the limits</li>
 <li>the command line and helper</li>
 <li>the rail</li>
 </ul>
@@ -915,10 +933,10 @@ build takes if you do not answer.</p></li>
 </ul>
 <h2 id="how-the-work-is-dispatched">How the work is dispatched</h2>
 <pre class="mermaid"><code>flowchart TD
-  P0[&quot;Phase 0: orchestrator&lt;br/&gt;0.1 terms, 0.2 flags spike, 0.3 base&quot;] --&gt;|&quot;all three hold&quot;| P1[&quot;Phase 1: kernel&lt;br/&gt;one builder, agent-sdk-kernel&quot;]
+  P0[&quot;Phase 0: orchestrator&lt;br/&gt;0.1 terms, 0.2 flags spike (kept agent), 0.3 base&quot;] --&gt;|&quot;all three hold&quot;| P1[&quot;Phase 1: kernel&lt;br/&gt;one builder, agent-sdk-kernel&quot;]
   P0 --&gt;|&quot;a stop rule fires&quot;| STOP[&quot;Stop. The question goes to the owner&quot;]
   P1 --&gt; R1{&quot;orchestrator reads the kernel, merges it,&lt;br/&gt;gate:unit green, OQ1 answered&quot;}
-  R1 --&gt; A[&quot;2A run engine&lt;br/&gt;agent-sdk-2a&quot;]
+  R1 --&gt; A[&quot;2A engine&lt;br/&gt;agent-sdk-2a&quot;]
   R1 --&gt; B[&quot;2B supervisor&lt;br/&gt;agent-sdk-2b&quot;]
   R1 --&gt; C[&quot;2C command line and helper&lt;br/&gt;agent-sdk-2c&quot;]
   R1 --&gt; D[&quot;2D rail&lt;br/&gt;agent-sdk-2d&quot;]
@@ -965,9 +983,23 @@ branches fit together:</p>
 </thead>
 <tbody>
 <tr>
-<td>Supervisor (2B) calls the engine (2A)</td>
-<td><code>runBatch</code> and its return shape (Task 1.3)</td>
+<td>Supervisor (2B) starts the agent through the host (2A)</td>
+<td><code>host.start</code> and its handle (Task 1.3)</td>
+<td>Task 3.2: the real host under the real supervisor, with the fake
+<code>claude</code></td>
+</tr>
+<tr>
+<td>Supervisor (2B) prepares the stage and runs a turn through the
+engine (2A)</td>
+<td><code>prepare</code>, <code>runTurn</code> and its return shape
+(Task 1.3)</td>
 <td>Task 3.2: the real engine under the real supervisor</td>
+</tr>
+<tr>
+<td>Supervisor (2B) and engine (2A) both build prompts, schemas and
+batches</td>
+<td><code>headless_prompt.js</code>, built in full in Task 1.5</td>
+<td>Both branches import the same kernel module</td>
 </tr>
 <tr>
 <td>Helper (2C) starts the supervisor (2B)</td>
@@ -977,7 +1009,7 @@ branches fit together:</p>
 </tr>
 <tr>
 <td>Status and liveness (2C) read what the supervisor writes (2B)</td>
-<td>the <code>agent.json</code> and <code>runs.jsonl</code> fixtures
+<td>the <code>agent.json</code> and <code>turns.jsonl</code> fixtures
 (Task 1.2)</td>
 <td>Task 3.2: every state read off a live helper, failures included</td>
 </tr>
@@ -992,9 +1024,9 @@ branches fit together:</p>
 <td>Task 3.2: a real click turns a real supervisor on and off</td>
 </tr>
 <tr>
-<td>Engine (2A) reads the host's output</td>
+<td>Engine (2A) reads the host's stream</td>
 <td>the fake <code>claude</code> (Task 1.4), built from Task 0.2's raw
-output</td>
+streams</td>
 <td>Task 4.1 with the real <code>claude</code></td>
 </tr>
 </tbody>
@@ -1033,10 +1065,10 @@ the fake <code>claude</code> from Task 1.4.</li>
 <li>Tests use their own state folder and helper port, and call the
 teardown helper from Task 1.4. They never touch the owner's helper or
 state folder.</li>
-<li>Instructions appear once per run. They never repeat per wake-up or
-per item (brief R14, rules once per run). No output from
-<code>lahe agent</code>, <code>lahe monitor</code> or the stdin payload
-repeats rule text.</li>
+<li>Instructions appear once per agent, in its system prompt. They never
+repeat per turn or per item (brief R14, rules once per agent). No output
+from <code>lahe agent</code>, <code>lahe monitor</code> or a turn
+message repeats rule text.</li>
 </ul>
 <h3 id="numbers-this-plan-sets">Numbers this plan sets</h3>
 <p>Each lives once, in <code>AUTO_ANSWER</code> in
@@ -1051,38 +1083,52 @@ change (OQ3, the numbers).</p>
 </thead>
 <tbody>
 <tr>
-<td><code>RUNS_AT_ONCE</code> (machine)</td>
+<td><code>TURNS_AT_ONCE</code> (machine)</td>
 <td>2</td>
+</tr>
+<tr>
+<td><code>AGENTS_ALIVE</code> (machine)</td>
+<td>4</td>
 </tr>
 <tr>
 <td><code>ATTEMPTS_PER_REV</code>, <code>ATTEMPTS_PER_ITEM</code></td>
 <td>3, 6</td>
 </tr>
 <tr>
-<td><code>RUNS_PER_DAY_SESSION</code>,
-<code>RUNS_PER_DAY_MACHINE</code></td>
+<td><code>RUNS_PER_DAY_SESSION</code>, <code>RUNS_PER_DAY_MACHINE</code>
+(a run is one turn)</td>
 <td>40, 120</td>
 </tr>
 <tr>
-<td><code>FAILED_RUNS_STOP</code> (in a row, conflicts included)</td>
+<td><code>FAILED_TURNS_STOP</code> (in a row, conflicts included)</td>
 <td>3</td>
 </tr>
 <tr>
 <td><code>STARTS_MAX</code>, <code>STARTS_WINDOW_MS</code> (supervisor
-restarts)</td>
+starts by the helper, <code>restarting</code> exits not counted)</td>
 <td>3 in 10 minutes</td>
 </tr>
 <tr>
-<td><code>BUDGET_USD</code> per run</td>
-<td>0.50</td>
+<td><code>TURN_DEATHS_MAX</code>, <code>TURN_DEATHS_WINDOW_MS</code>
+(agent deaths during a turn or at start-up)</td>
+<td>3 in 10 minutes</td>
 </tr>
 <tr>
-<td><code>RUN_TIMEOUT_MS</code></td>
+<td><code>TURN_TIMEOUT_MS</code></td>
 <td>10 minutes</td>
 </tr>
 <tr>
 <td><code>KILL_GRACE_MS</code></td>
 <td>5 seconds</td>
+</tr>
+<tr>
+<td><code>IDLE_CLOSE_MS</code> (agent closed after no turn)</td>
+<td>60 minutes</td>
+</tr>
+<tr>
+<td><code>FRESH_AFTER_TOKENS</code> (history above the first
+request)</td>
+<td>80,000</td>
 </tr>
 <tr>
 <td><code>QUIET_MS</code> (burst settles),
@@ -1123,11 +1169,18 @@ conflict)</td>
 <td>2,000</td>
 </tr>
 <tr>
-<td><code>RUN_FOLDERS_KEEP</code></td>
+<td><code>CONTEXT_MAX_CHARS</code> (all context files together)</td>
+<td>40,000</td>
+</tr>
+<tr>
+<td><code>TURN_FOLDERS_KEEP</code></td>
 <td>20</td>
 </tr>
 </tbody>
 </table></div>
+<p>There is no per-turn money cap. Task 0.2 finds out what
+<code>--max-budget-usd</code> caps in a process that stays up. If it
+caps each turn, <code>BUDGET_USD</code> (0.50) joins this table.</p>
 <h3 id="words-this-plan-pins">Words this plan pins</h3>
 <p>These live once, in <code>protocol.js</code>, beside today's
 <code>AGENT_LIVENESS</code> words. <strong>Where the wireframe and this
@@ -1135,7 +1188,8 @@ table differ, this table wins.</strong> "Auto-answer" is the working
 name (OQ7). It is lowercase inside the status line, after "Stored ·",
 and capitalized everywhere else. Times use the rail's existing time
 format, the one cards use. Numbers in braces come from
-<code>AUTO_ANSWER</code>.</p>
+<code>AUTO_ANSWER</code>. The reviewer sees batches of work, so the rail
+calls a turn a run.</p>
 <p><strong>Status line</strong> (the reason and remedy are said once, in
 the chip, never in the status line):</p>
 <div class="table-scroll"><table>
@@ -1159,7 +1213,7 @@ the chip, never in the status line):</p>
 <td>Stored · auto-answer starting on {n}</td>
 </tr>
 <tr>
-<td>running</td>
+<td>running, applying</td>
 <td>Stored · auto-answer working on {n}, {age}</td>
 </tr>
 <tr>
@@ -1236,8 +1290,9 @@ Stopping ends it, and those comments stay waiting." Buttons "Stop",
 </tr>
 <tr>
 <td>Run count, opened</td>
-<td>"Today: {n} of {40} runs for this review" / "Tokens today: {n}"
-(only when reported) / "Resets at midnight."</td>
+<td>"Today: {n} of {40} runs for this review" / "Resets at midnight."
+(No token count: <code>lahe agent status</code> shows tokens, cache
+included.)</td>
 </tr>
 </tbody>
 </table></div>
@@ -1292,7 +1347,8 @@ midnight."</td>
 </tr>
 <tr>
 <td><code>failing</code></td>
-<td>"The last three runs failed."</td>
+<td>"Auto-answer failed three times in a row, so it stopped. Try again
+to turn it back on."</td>
 <td>Try again</td>
 </tr>
 <tr>
@@ -1345,11 +1401,14 @@ this."</td>
 you." / "It reads and edits one file: {path}. It runs no commands and
 has no network." / "Anyone who can comment on this review, or run script
 in its pages, can make it edit that file. Agents with a shell may read
-that file later." / "Each run uses your Claude plan. Limits: {40} runs a
-day for this review, {120} for this computer." Plus, when preflight
-finds a login billed by the token: "Your Claude login is billed by the
-token, so each run costs money." / "Anthropic's terms limit scripted use
-of a subscription. Whether this use counts is not settled."</td>
+that file later." / "It keeps one Claude session running for this review
+while Auto-answer is on." / "Each run uses your Claude plan. Limits:
+{40} runs a day for this review, {120} for this computer." Plus, when
+context files are named: "Context it reads once: {file} ({n}
+characters)", one line per file. Plus, when preflight finds a login
+billed by the token: "Your Claude login is billed by the token, so each
+run costs money." / "Anthropic's terms limit scripted use of a
+subscription. Whether this use counts is not settled."</td>
 </tr>
 <tr>
 <td><code>lahe monitor</code> exit 6, when auto-answer holds the
@@ -1374,10 +1433,12 @@ pass.</p>
 <p><a
 href="02_architecture_lahe_agent_sdk.html#subscription-terms">Architecture:
 Subscription terms</a> · <a
-href="02_architecture_lahe_agent_sdk.html#the-runs-command-claude-code-adapter">The
-run's command</a> · <a
-href="02_architecture_lahe_agent_sdk.html#open-questions">Open
-Questions</a></p>
+href="02_architecture_lahe_agent_sdk.html#the-agents-command-claude-code-adapter">The
+agent's command</a> · <a
+href="02_architecture_lahe_agent_sdk.html#the-structured-reply-channel">The
+structured reply channel</a> · <a
+href="02_architecture_lahe_agent_sdk.html#to-verify-before-the-build">To
+verify before the build</a></p>
 </div>
 <h3 id="task-01-the-subscription-terms-read-on-the-live-page">Task 0.1:
 The subscription terms, read on the live page</h3>
@@ -1398,15 +1459,18 @@ and decides.</p>
 architecture's Subscription terms section is corrected in the same
 commit.</li>
 </ul>
-<h3 id="task-02-the-flags-spike">Task 0.2: The flags spike</h3>
-<p><strong>Spec:</strong> <code>claude --help</code> lists every flag
-below, but this project has never run them. A script in the scratchpad
-runs real <code>claude</code> (2.1.284) with the architecture's exact
-command and environment, from an empty stage folder. It saves every raw
-output. A second script computes every number from those files. The
-results go in <code>spike_flags.md</code> in this folder, with the saved
-files' paths. The checks spend a handful of runs on the owner's login,
-as the first spike did.</p>
+<h3 id="task-02-the-flags-spike-in-a-kept-agent">Task 0.2: The flags
+spike, in a kept agent</h3>
+<p><strong>Spec:</strong> Neither spike ran the architecture's whole
+flag set in a process that stays up. A supervisor script in the
+scratchpad, built from the second spike's <code>supervisor.js</code>,
+starts the real <code>claude</code> (2.1.284) with the architecture's
+exact command and environment, from an empty stage folder. It feeds
+turns on stdin. It saves every raw stream. A second script computes
+every number from those files. The results go in
+<code>spike_flags.md</code> in this folder, with the saved files' paths.
+The checks spend a handful of turns on the owner's login, as the spikes
+did.</p>
 <div class="table-scroll"><table>
 <thead>
 <tr>
@@ -1417,12 +1481,18 @@ as the first spike did.</p>
 </thead>
 <tbody>
 <tr>
-<td>The whole flag set together</td>
-<td><code>claude</code> starts and exits 0 with
+<td>The whole flag set, kept running</td>
+<td><code>claude</code> starts with the architecture's exact production
+set
+(<code>-p --input-format stream-json --output-format stream-json --verbose</code>,
 <code>--safe-mode</code>, <code>--restricted</code>,
 <code>--strict-mcp-config</code>, <code>--setting-sources ""</code>,
 <code>--tools Read,Edit</code>, <code>--permission-mode dontAsk</code>,
-<code>--permission-prompts none</code></td>
+<code>--permission-prompts none</code>,
+<code>--no-session-persistence</code>,
+<code>--append-system-prompt-file</code>, <code>--model sonnet</code>),
+takes three turns on stdin, and exits 0 when stdin closes. Every later
+row uses this same set</td>
 <td>Stop: the design comes back to the owner</td>
 </tr>
 <tr>
@@ -1432,23 +1502,30 @@ flag set</td>
 <td>Stop</td>
 </tr>
 <tr>
-<td>Structured output</td>
-<td><code>--json-schema</code> with the reply schema returns replies
-that match it; record where they appear in the result</td>
-<td>Stop. No shell is granted as a fallback</td>
+<td>Structured output on every turn</td>
+<td>with <code>--json-schema</code> added to the production set, each of
+the three turns' <code>result</code> carries replies that match the
+schema; record the field they appear in, and the result type when an
+answer fails the schema</td>
+<td>Run the same turns with the JSON-answer fallback (the architecture's
+second form). If it passes, the architecture names it as the channel. If
+both fail: Stop. No shell is granted as a fallback</td>
 </tr>
 <tr>
 <td>Confinement</td>
 <td>a <code>.env</code> beside the original source, and a file one
-folder up, cannot be read by relative or absolute path</td>
+folder up, cannot be read by relative or absolute path, on the first
+turn or a later one</td>
 <td>Stop. The security reviewer sees it first</td>
 </tr>
 <tr>
-<td>Items on stdin</td>
-<td><code>-p</code> with the drain lines on stdin and no prompt argument
-handles the three spike items</td>
-<td>Items go in the <code>-p</code> argument instead; the architecture's
-command section changes before Phase 1</td>
+<td>Items as data</td>
+<td>a turn message holding only the item lines (plus the
+<code>file_changed_since_last_turn</code> line, when set) gets the three
+spike items handled</td>
+<td>Record the smallest wording that works. Any sentence of instruction
+per turn goes to the owner as a change to R14 (rules once per
+agent)</td>
 </tr>
 <tr>
 <td>Rules file</td>
@@ -1458,19 +1535,54 @@ not in <code>ps</code> output</td>
 exposure is written into the architecture's Security section</td>
 </tr>
 <tr>
+<td>The copy changes between turns</td>
+<td>the copy is replaced between turns; the agent re-reads before
+editing, or its Edit is refused and it re-reads. Record which</td>
+<td>Record only: the write-back checks run on the diff either way</td>
+</tr>
+<tr>
+<td>What <code>work/</code> holds</td>
+<td>after several turns, <code>work/</code> holds only the copy. A
+comment asking the agent to create a second file there: record whether
+Edit can</td>
+<td>If Claude Code writes its own files there, the one-file check names
+them; the architecture says so</td>
+</tr>
+<tr>
+<td>A kill, then a fresh start</td>
+<td>SIGKILL while idle: <code>exit</code> fires, and a fresh agent at
+the next turn handles the next item. SIGKILL mid-turn: a fresh agent
+handles the same items</td>
+<td>Stop: the life-cycle design needs rework</td>
+</tr>
+<tr>
 <td>Budget flag</td>
-<td><code>--max-budget-usd</code> stops a run on a subscription, and the
-result says so</td>
-<td>The flag stays, but the warning and the architecture say the
-10-minute limit and the daily run counts are the only caps</td>
+<td>record whether <code>--max-budget-usd</code> stops one turn or the
+whole process, and whether it applies on a subscription</td>
+<td>Leave the flag out; the warning and the architecture say the daily
+turn counts and the 10-minute limit are the only caps</td>
 </tr>
 <tr>
 <td>Failures</td>
-<td>exit code and result text told apart for signed out (an empty
+<td>in the kept-running mode, at the first turn: exit code and stream
+text told apart for signed out (an empty
 <code>CLAUDE_CONFIG_DIR</code>), <code>claude</code> missing, a killed
-run. A usage limit cannot be forced: record "not seen"</td>
+process. A usage limit cannot be forced: record "not seen"</td>
 <td>Unclear output is named <code>crashed</code>; the architecture says
 so</td>
+</tr>
+<tr>
+<td>Wrong input</td>
+<td>the error text for a start without <code>--verbose</code>, and for a
+malformed stdin line</td>
+<td>Record only: the fake reproduces them</td>
+</tr>
+<tr>
+<td>Nothing saved</td>
+<td>with <code>--no-session-persistence</code>, no transcript appears
+under <code>~/.claude/projects/</code> for the stage folder</td>
+<td>The warning says the history is saved, and OQ10 goes to the
+owner</td>
 </tr>
 <tr>
 <td>Hostile comment</td>
@@ -1479,25 +1591,26 @@ the model does</td>
 <td>Nothing: LAHE's own check refuses it either way</td>
 </tr>
 <tr>
-<td>Prompt size</td>
+<td>Prompt size and cache</td>
 <td>tokens per request with the <code>all</code> and
-<code>headless</code> contract lines, against the first spike's
-9,000</td>
+<code>headless</code> contract lines, at the first turn and at later
+turns, against the second spike's lean numbers (5,269 first request,
+about 2,000 tokens of cache written per later turn)</td>
 <td>More than double: go on, and put the number beside Q1 (billing)</td>
 </tr>
 <tr>
 <td>Rules once</td>
-<td>transcripts of runs given 1, 10 and 25 items, and 100 items across 4
-runs: the rules appear once per run, and nothing instruction-like
-repeats per item</td>
-<td>Stop: brief R14 (rules once per run) is the point of the
+<td>transcripts of turns given 1, 10 and 25 items, and of 100 items
+across 4 turns of one agent: the rules appear once per agent, and no
+turn message holds anything instruction-like</td>
+<td>Stop: brief R14 (rules once per agent) is the point of the
 feature</td>
 </tr>
 </tbody>
 </table></div>
-<p>Also saved: the raw bytes of every result and failure, for Task 1.4's
-fake <code>claude</code>, and the <code>claude --help</code> flag
-list.</p>
+<p>Also saved: the raw bytes of every stream and failure, for Task 1.4's
+fake <code>claude</code>, the <code>claude --help</code> flag list, and
+every flag pair Claude Code refused.</p>
 <p><strong>Acceptance:</strong> <code>spike_flags.md</code> has a pass
 or fail per row, each number traced to a saved file, and one verdict
 line. Any row that failed has changed the architecture before Phase 1
@@ -1525,10 +1638,11 @@ changes. The list:</p>
 <code>docs/CONTRACTS.md</code>, <code>docs/CLI.md</code>,
 <code>docs/diagrams/session_ownership.md</code></li>
 </ul>
-<p><code>feat/lahe_library</code> touches most of them. Land each
-branch, or agree with the owner how it folds in.</p></li>
+<p><code>feat/lahe_library</code> (pull request 19, open) touches most
+of them. Land each branch, or agree with the owner how it folds
+in.</p></li>
 <li><p>Merge <code>main</code> into <code>feat/lahe-agent-sdk</code>. It
-branched 12 commits behind, and those commits change
+branched behind <code>main</code>, and those commits change
 <code>sync.js</code>.</p></li>
 <li><p>Record the base commit on the progress page, with
 <code>gate:unit</code> and the browser suite green there. If main's
@@ -1547,7 +1661,7 @@ no Phase 2 builder edits anything under <code>src/shared/</code>,
 contract. So everything Phase 2 needs there lands now.</p>
 <div class="xref">
 <p><a
-href="02_architecture_lahe_agent_sdk.html#data-state-changes">Architecture:
+href="02_architecture_lahe_agent_sdk.html#data--state-changes">Architecture:
 Data / State Changes</a> · <a
 href="02_architecture_lahe_agent_sdk.html#the-system-prompt-one-source-of-the-rules">The
 system prompt</a></p>
@@ -1563,9 +1677,17 @@ carries. Then:</p>
 <ul>
 <li>Reword the few <code>all</code> lines that name the reply transport,
 so they name the reply's fields only.</li>
-<li>Add the <code>headless</code> lines the architecture lists (items on
-stdin, the one file, read back, one reply each, do not wait or start
-anything).</li>
+<li>Add the <code>headless</code> lines the architecture lists for an
+agent that stays running. They say:
+<ul>
+<li>each message is a batch</li>
+<li>the one file it may read and edit</li>
+<li>read that file afresh each batch</li>
+<li>read back each edit</li>
+<li>give one reply per item, in the reply format, with nothing after
+it</li>
+<li>do not wait or start anything</li>
+</ul></li>
 <li>Change the "forever daemon" line as Assumption A9 says. A chat agent
 never starts a long-lived process. Auto-answer is the only one, and LAHE
 starts it.</li>
@@ -1610,7 +1732,7 @@ names, fixtures and the manifest</h3>
 <ul>
 <li>the <code>AUTO_ANSWER</code> numbers and every pinned word
 above</li>
-<li>the supervisor states, stop reasons, run outcomes and failures</li>
+<li>the supervisor states, stop reasons, turn outcomes and failures</li>
 <li>the event kind <code>auto_answer.requested</code>, the route
 <code>POST /lahe/v1/auto-answer</code>, its one body field
 <code>want</code></li>
@@ -1620,24 +1742,37 @@ rejection reason <code>auto_answer_owns</code></li>
 </ul>
 <p>In <code>projection.js</code>, fold
 <code>auto_answer.requested</code> into the latest request for the
-review. In <code>agent_sessions.js</code>, add
-<code>allowanceHolds(session)</code>. It reads
+review. In <code>agent_sessions.js</code>, add two predicates:</p>
+<ul>
+<li><code>allowanceHolds(session)</code>: reads
 <code>auto_answer.json</code> and returns true when its
-<code>handoff_rev</code> equals the session's.</p>
+<code>handoff_rev</code> equals the session's.</li>
+<li><code>autoAnswerHolds(session)</code>: the allowance holds and the
+latest request for its review is "on". This is the one meaning of
+"auto-answer holds a review". The fold, <code>lahe monitor</code>,
+<code>lahe review</code> re-entry and the liveness answer all use
+it.</li>
+</ul>
 <p>Add fixtures in <code>test/fixtures/auto_answer/</code>, paired by
 state:</p>
 <ul>
-<li><code>agent.json</code>, one per supervisor state and reason,
-including "turning on" and "on, supervisor dead"</li>
+<li><code>agent.json</code>, one per supervisor state and reason, each
+with and without a live agent, including "turning on", "on, supervisor
+dead" and a <code>restarting</code> exit, with <code>turn_deaths</code>
+filled in one of them</li>
+<li><code>supervisor_starts.json</code>, under the limit and at it</li>
 <li>the liveness <code>auto_answer</code> object each one should
 produce</li>
-<li>a sample <code>runs.jsonl</code> with an applied run, a refused run
-and a conflict, and a matching <code>runs/</code> folder with a
-<code>diff.patch</code></li>
-<li>a sample <code>auto_answer.json</code></li>
+<li>a sample <code>turns.jsonl</code> with an applied turn, a refused
+turn, a conflict, a crashed turn with <code>"usage": null</code> and a
+stopped turn, from two agent processes, and a matching
+<code>turns/</code> folder with a <code>diff.patch</code> and one
+<code>result.json</code> still at <code>applying</code></li>
+<li>a sample <code>auto_answer.json</code>, with and without context
+files</li>
 </ul>
-<p>Add every new file of Tasks 1.3 and 1.4 to <code>manifest.js</code>,
-in the non-bundle list.</p>
+<p>Add every new file of Tasks 1.3, 1.4 and 1.5 to
+<code>manifest.js</code>, in the non-bundle list.</p>
 <p><strong>Files:</strong> <code>src/shared/protocol.js</code>,
 <code>src/service/projection.js</code>,
 <code>src/service/agent_sessions.js</code>,
@@ -1649,6 +1784,8 @@ in the non-bundle list.</p>
 other reviews' events.</li>
 <li><code>allowanceHolds</code> is false after a takeover bumps the rev,
 and false with no <code>auto_answer.json</code>.</li>
+<li><code>autoAnswerHolds</code> is false after "off" and true with "on"
+standing, whether or not a supervisor is alive.</li>
 <li>Lint's manifest check passes with every new file listed.</li>
 <li>The bundle gains only the wire names and words, no Node-only code
 (checked with <code>npm run build:layer</code> locally, not
@@ -1660,9 +1797,9 @@ committed).</li>
 <p><strong>Locks.</strong> Move <code>withServerLock</code> and
 <code>takeOverStaleLock</code> into <code>src/service/locks.js</code>,
 unchanged, and have <code>static_servers.js</code> use them. Add the
-second kind the architecture now names: a lock held for as long as a
-process lives. It goes stale only when its pid and that pid's start time
-no longer match a live process. The start time comes from
+second kind the architecture names: a lock held for as long as a process
+lives. It goes stale only when its pid and that pid's start time no
+longer match a live process. The start time comes from
 <code>ps -o lstart=</code> run with <code>LC_ALL=C TZ=UTC</code>,
 through a reader a test can replace.</p>
 <p><strong>Stamps.</strong> Add <code>src/service/file_stamp.js</code>:
@@ -1682,52 +1819,81 @@ fills them in and removes every such line. Every timed function takes
 </thead>
 <tbody>
 <tr>
-<td><code>headless_prompt.js</code> (2A)</td>
-<td><code>buildPrompt(note)</code>, <code>buildSchema()</code>,
-<code>buildStdin(items, stagePath)</code>,
-<code>cutBatches(items)</code></td>
+<td><code>headless_prompt.js</code> (kernel, Task 1.5)</td>
+<td>built in full, not stubbed: <code>buildPrompt(note, context)</code>
+returning the text and its <code>sha256</code>,
+<code>buildSchema()</code>,
+<code>buildTurnMessage(items, stagePath, fileChanged)</code>,
+<code>cutBatches(items)</code> returning
+<code>{ batches, too_long }</code>,
+<code>readReplies(resultEvent)</code>: the replies from structured
+output or from the final JSON answer, whichever Task 0.2 chose, or
+<code>bad_output</code></td>
 </tr>
 <tr>
 <td><code>host_claude_code.js</code> (2A)</td>
-<td><code>run(runSpec, opts)</code> returning
-<code>{ replies, usage, turns, failure, exit_code }</code></td>
+<td><code>start(agentSpec, opts)</code>, where <code>agentSpec</code>
+carries the prompt as text; the adapter writes the prompt file and
+removes it when the process ends. It returns a handle:
+<code>{ pid, pgid, started, sessionId(), sendTurn(message, { timeout_ms, signal }), close(), kill(), onExit(cb) }</code>.
+<code>sendTurn</code> resolves with
+<code>{ replies, usage, context, model_turns, compacted, failure }</code>
+at the turn's end. Usage is the difference from the previous result of
+the same process, counted from zero for a new one; a turn with no result
+sums its messages' usage, or reports <code>null</code>.
+<code>failure</code> is <code>null</code>, <code>signed_out</code>,
+<code>usage_limit</code>, <code>crashed</code>, <code>timed_out</code>,
+<code>stopped</code> or <code>bad_output</code>. <code>onExit</code>
+fires once, on the child's own <code>exit</code> event.</td>
 </tr>
 <tr>
 <td><code>headless_stage.js</code> (2A)</td>
-<td><code>runBatch(allowance, items, opts)</code>: the whole run, from
-copy-in to write-back. It writes <code>runs/&lt;run_id&gt;/</code>
-(<code>work/</code>, <code>result.json</code>, <code>log.jsonl</code>,
-<code>diff.patch</code>) and returns
-<code>{ run_id, outcome, failure, exit_code, turns, applied, replies, usage }</code>,
-where <code>replies</code> are checked and ready to write.
-<code>opts.hooks.afterWriteBack</code> and
+<td><code>prepare(allowance, stageDir)</code>: empties
+<code>agent/work/</code> and makes the copy; running it twice gives the
+same result. <code>runTurn(handle, allowance, items, opts)</code>: the
+whole turn, from making the copy match the real file to write-back.
+<code>opts</code> carries <code>turn_id</code> (minted by the
+supervisor), <code>fileChanged</code> and <code>signal</code>. It writes
+<code>turns/&lt;turn_id&gt;/</code> (<code>result.json</code> at
+<code>applying</code>, flushed before the rename, then
+<code>done</code>; <code>log.jsonl</code>; <code>diff.patch</code>) and
+returns
+<code>{ turn_id, outcome, failure, applied, replies, usage, context, model_turns, compacted, file_reset }</code>,
+where <code>replies</code> are checked and ready to write. A kill the
+supervisor asked for through <code>signal</code> is
+<code>stopped</code>. <code>opts.hooks.afterWriteBack</code> and
 <code>opts.hooks.beforeRename</code> let a test crash it at an exact
 step.</td>
 </tr>
 <tr>
 <td><code>run_slots.js</code> (2B)</td>
-<td><code>take(stateDir, session, opts)</code>,
+<td><code>takeTurn(stateDir, session, opts)</code>,
+<code>takeAgent(stateDir, session, opts)</code>,
 <code>release(slot)</code>,
 <code>countToday(stateDir, session, opts)</code></td>
 </tr>
 <tr>
 <td><code>headless_supervisor.js</code> (2B)</td>
 <td><code>supervise({ session, stateDir }, opts)</code>. It writes
-<code>agent.json</code>, <code>runs.jsonl</code>,
+<code>agent.json</code>, <code>turns.jsonl</code>,
 <code>attempts.json</code> and <code>replies-claude-auto.jsonl</code>.
-<code>opts.engine</code> defaults to <code>runBatch</code>, so 2B tests
-pass a fake engine.</td>
+It owns the agent's life (fresh start, death, idle close, giving way),
+the 10-minute limit, the quiet wait, and the too-long replies.
+<code>opts.engine</code> defaults to <code>{ prepare, runTurn }</code>
+from <code>headless_stage.js</code>, and <code>opts.host</code> to
+<code>host_claude_code</code>, so 2B tests pass fakes of both.</td>
 </tr>
 <tr>
 <td><code>src/cli/commands/agent.js</code> (2C)</td>
-<td>`lahe agent allow</td>
+<td>`lahe agent allow [--note] [--context <file>]... [--model]
+[--runs-per-day]</td>
 </tr>
 </tbody>
 </table></div>
 <p><strong>Files:</strong> <code>src/service/locks.js</code>,
 <code>src/service/file_stamp.js</code>,
-<code>src/service/static_servers.js</code>, and the six modules
-above.</p>
+<code>src/service/static_servers.js</code>, and the modules above except
+<code>headless_prompt.js</code> (Task 1.5).</p>
 <p><strong>Acceptance:</strong></p>
 <ul>
 <li>Every existing static-server lock test passes, unchanged.</li>
@@ -1745,17 +1911,29 @@ is only read.</li>
 <h3 id="task-14-the-fake-claude-and-the-teardown-helper">Task 1.4: The
 fake <code>claude</code> and the teardown helper</h3>
 <p><strong>Spec:</strong> A small Node script standing in for
-<code>claude</code>. A scenario file tells it what to do, and each
-scenario uses the raw bytes Task 0.2 saved, naming the file they came
-from. It:</p>
+<code>claude</code>. Like the real one in stream-json mode, it stays
+running, reads one user message per stdin line, and writes a stream per
+turn: <code>init</code> on the first message, assistant messages, and a
+<code>result</code> line with running totals of usage and cost. It exits
+0 when stdin closes. A scenario file tells it what to do on each turn,
+and each scenario uses the raw bytes Task 0.2 saved, naming the file
+they came from. It:</p>
 <ul>
 <li>edits the stage copy, or a file outside it</li>
-<li>prints the result or failure as Task 0.2 recorded it</li>
+<li>replies in the structured form Task 0.2 chose</li>
+<li>checks each stdin message's envelope (<code>type</code>,
+<code>message.role</code>, <code>content</code>), and answers a bad one
+with the error Task 0.2 recorded</li>
+<li>refuses the flags and flag pairs Claude Code refused in Task 0.2, a
+missing <code>--verbose</code> included</li>
+<li>dies while idle or mid-turn, hangs past the timeout, emits a
+<code>compact_boundary</code>, or leaves a second file in its working
+folder, when told to</li>
 <li>starts a grandchild, or ignores SIGTERM, when told to</li>
 <li>exits non-zero on any flag missing from the
 <code>claude --help</code> list Task 0.2 recorded</li>
-<li>writes the arguments, working folder, environment, pid and process
-group it was given, and its start and end times, to a file tests
+<li>writes the arguments, working folder, environment, pid, process
+group, each turn's message and its start and end times, to a file tests
 read</li>
 </ul>
 <p>Its one timer carries a <code>harness-allow-timer:</code> comment
@@ -1771,69 +1949,108 @@ left. Every auto-answer test calls it in <code>after</code>.</p>
 <code>test/helpers/auto_answer_teardown.js</code> (new).</p>
 <p><strong>Acceptance:</strong> scenarios exist for:</p>
 <ul>
-<li>a clean batch, and a batch where one item gets no reply</li>
-<li>a crash, a timeout, bad output, and output nothing recognizes</li>
+<li>three clean turns in one process, and a turn where one item gets no
+reply</li>
+<li>a death while idle, a death at start-up, a death mid-turn, a hang,
+bad output, an answer that fails the schema, and output nothing
+recognizes</li>
+<li>a malformed envelope, and a missing <code>--verbose</code></li>
+<li>a <code>compact_boundary</code> mid-turn, and a stray file left in
+<code>work/</code></li>
 <li>signed out, and the guessed usage limit</li>
-<li>a reply for an item not in the batch, and over-long reply text</li>
+<li>a reply for an item not in the batch, a reply for an item from an
+earlier turn, and over-long reply text</li>
 <li>an added <code>&lt;script&gt;</code>, and an edit to a file other
 than the copy</li>
 <li>a grandchild that ignores SIGTERM</li>
 </ul>
 <p>Each is used by at least one Phase 2 test.</p>
+<h3 id="task-15-the-prompt-module-built-in-full">Task 1.5: The prompt
+module, built in full</h3>
+<p><strong>Spec:</strong> Build
+<code>src/service/headless_prompt.js</code> completely, as the
+architecture's "The system prompt" and "The turn message" describe, with
+the exports in Task 1.3's table. It is small and has no side effects,
+and both 2A and 2B need it, so it is built now rather than stubbed. It
+sits beside Task 1.1's contract work.</p>
+<p><strong>Files:</strong> <code>src/service/headless_prompt.js</code>,
+<code>test/unit/auto_answer_prompt.test.js</code>.</p>
+<p><strong>Acceptance:</strong> every Prompt line in the Test List
+passes.</p>
 <p><strong>Phase test:</strong> <code>gate:unit</code> green on
 <code>agent-sdk-kernel</code>. The orchestrator reads the kernel diff,
 merges it into <code>feat/lahe-agent-sdk</code>, and starts Phase 2 once
 OQ1 (the terms) is answered.</p>
 <h2 id="phase-2-four-builders-in-parallel">Phase 2: Four builders in
 parallel</h2>
-<p>Each builder reads first: the architecture,
-<code>docs/ongoing/SESSION_OWNERSHIP.md</code>,
-<code>docs/CONTRACTS.md</code>, <code>docs/CLI.md</code>,
-<code>skills/lahe/SKILL.md</code>, and Task 1.3's signatures.</p>
-<h3 id="task-2a-the-run-engine">Task 2A: The run engine</h3>
+<p>Each builder reads these first:</p>
+<ul>
+<li>the architecture</li>
+<li><code>docs/ongoing/SESSION_OWNERSHIP.md</code></li>
+<li><code>docs/CONTRACTS.md</code></li>
+<li><code>docs/CLI.md</code></li>
+<li><code>skills/lahe/SKILL.md</code></li>
+<li><code>spike_persistent_run.md</code> (its supervisor is the shape 2A
+and 2B build properly)</li>
+<li>Task 1.3's signatures</li>
+</ul>
+<h3 id="task-2a-the-engine">Task 2A: The engine</h3>
 <div class="xref">
 <p><a
-href="02_architecture_lahe_agent_sdk.html#a-wake-one-run">Architecture:
-A wake, one run</a> · <a
-href="02_architecture_lahe_agent_sdk.html#the-runs-command-claude-code-adapter">The
-run's command</a> · <a
-href="02_architecture_lahe_agent_sdk.html#security-privacy-notes">Security</a></p>
+href="02_architecture_lahe_agent_sdk.html#a-wake-one-turn-of-the-same-agent">Architecture:
+A wake, one turn</a> · <a
+href="02_architecture_lahe_agent_sdk.html#the-structured-reply-channel">The
+structured reply channel</a> · <a
+href="02_architecture_lahe_agent_sdk.html#the-agents-command-claude-code-adapter">The
+agent's command</a> · <a
+href="02_architecture_lahe_agent_sdk.html#security--privacy-notes">Security</a></p>
 </div>
-<p><strong>Spec:</strong> Fill in the three engine modules as the
-architecture describes them.</p>
+<p><strong>Spec:</strong> Fill in the two engine modules as the
+architecture describes them. The prompt module is already built (Task
+1.5).</p>
 <ul>
-<li><code>headless_prompt.js</code>: the system prompt, the reply
-schema, and the stdin payload. The payload keeps only the architecture's
-allowed fields, with <code>source_hint</code> replaced by the stage
-path. Batches are cut at 25 items or 100 KB. An item over 8,000
-characters becomes the pinned <code>not_handled</code> reply instead of
-being sent.</li>
-<li><code>host_claude_code.js</code>: runs the command from the
-architecture's flag table. It runs <code>claude</code> by the absolute
-path recorded at allow time, in its own process group. The environment
-comes only from <code>auto_answer.json</code>'s <code>env</code>. The
-prompt file sits outside <code>work/</code> and is removed however the
-run ends. On timeout: SIGTERM to the group, the grace time, then
-SIGKILL.</li>
-<li><code>headless_stage.js</code> (<code>runBatch</code>): copy in and
-stamp, run, check the replies against the batch, diff the copy, and
-write back only when every check in the architecture's "Checks before
-anything reaches the real file" passes. The run records follow the
-architecture's "Run records".</li>
+<li><code>host_claude_code.js</code>: starts the agent with the command
+from the architecture's flag table, by the absolute path recorded at
+allow time, in its own process group, always fresh. It writes the prompt
+file from the text it is given, outside <code>work/</code>, and removes
+it however the process ends. The environment comes only from
+<code>auto_answer.json</code>'s <code>env</code>. It sends one turn at a
+time and refuses a second <code>sendTurn</code> while one is in flight.
+It reads the stream line by line and computes each turn's usage as the
+difference of the running totals, from zero for a new process. A turn
+with no result sums its messages' usage, or reports <code>null</code>.
+When the supervisor's <code>signal</code> fires, or its own backstop
+timer passes, it sends SIGTERM to the group, waits the grace time, then
+sends SIGKILL. The failure is <code>stopped</code> or
+<code>timed_out</code>. <code>onExit</code> fires from the child's
+<code>exit</code> event.</li>
+<li><code>headless_stage.js</code>: <code>prepare</code> empties
+<code>agent/work/</code> and makes the copy. <code>runTurn</code> makes
+the copy match the real file and stamps it, sends the turn, and checks
+the replies against the batch. It checks that <code>work/</code> holds
+only the copy, removing strays and refusing the turn, then diffs the
+copy. It writes back only when every check in the architecture's "Checks
+before anything reaches the real file" passes, with
+<code>result.json</code> at <code>applying</code> flushed before the
+rename. After a refused or conflicting turn it resets the copy and
+reports <code>file_reset</code>. The turn records follow the
+architecture's "Turn records".</li>
 </ul>
-<p><strong>Files:</strong> those three, and
+<p><strong>Files:</strong> those two, and
 <code>test/unit/auto_answer_engine_*.test.js</code>. <strong>Don't
-touch:</strong> <code>headless_supervisor.js</code>,
-<code>run_slots.js</code>, <code>agent.js</code>, any
-<code>src/service/</code> or <code>src/layer/</code> file outside the
-three.</p>
+touch:</strong> <code>headless_prompt.js</code> (kernel),
+<code>headless_supervisor.js</code>, <code>run_slots.js</code>,
+<code>agent.js</code>, any <code>src/service/</code> or
+<code>src/layer/</code> file outside the two.</p>
 <p><strong>Acceptance:</strong> every Engine line in the Test List
 passes with the fake <code>claude</code>.</p>
 <h3 id="task-2b-the-supervisor">Task 2B: The supervisor</h3>
 <div class="xref">
 <p><a
-href="02_architecture_lahe_agent_sdk.html#a-wake-one-run">Architecture:
-A wake, one run</a> · <a
+href="02_architecture_lahe_agent_sdk.html#a-wake-one-turn-of-the-same-agent">Architecture:
+A wake, one turn</a> · <a
+href="02_architecture_lahe_agent_sdk.html#the-agents-life-start-death-fresh-start-close">The
+agent's life</a> · <a
 href="02_architecture_lahe_agent_sdk.html#the-supervisors-states">The
 supervisor's states</a> · <a
 href="02_architecture_lahe_agent_sdk.html#retries-failures-and-limits">Retries,
@@ -1846,21 +2063,44 @@ and handing back</a></p>
 The linked sections cover:</p>
 <ul>
 <li>the drain with <code>suppressActivityTouch</code>, and replies
-written with <code>reply.js</code>'s encoder</li>
-<li>the states and each look</li>
-<li>the fold wait before counting or draining</li>
-<li>attempts, failures and limits</li>
-<li>stopping, leftover runs, and finishing the replies of a run that was
-applied but not replied</li>
-<li>the restart on stale code</li>
+written with <code>reply.js</code>'s encoder, including the too-long
+replies <code>cutBatches</code> names</li>
+<li>one turn at a time, with the end of the turn as the only "done"</li>
+<li>the done check after every turn: the fold wait (a fold matched by
+item and rev, a rejection by file and line), then counting attempts,
+then draining again</li>
+<li>the agent's life: every start fresh and only when a turn is ready; a
+death while idle logged and left until the next turn; a death during a
+turn or at start-up counted in <code>turn_deaths</code>; a fresh start
+after a bad turn, a long history or a new prompt; the idle close; giving
+way to a <code>want-agent</code> marker</li>
+<li>the states and each look, including the 10-minute limit by
+wall-clock time and the 15-second quiet wait before any slot is
+taken</li>
+<li>slots in order: agent slot first, then turn slot, never waiting
+while holding one</li>
+<li>attempts (refused turns included), failures (conflicts not included)
+and limits</li>
+<li>minting each <code>turn_id</code>, and passing
+<code>fileChanged</code> and a stop <code>signal</code> into the
+turn</li>
+<li>stopping, leftover agent groups, and settling any
+<code>result.json</code> still at <code>applying</code> before anything
+else</li>
+<li>rebuilding today's counts and the next <code>turn_id</code> from
+<code>turns.jsonl</code> at start</li>
+<li>the exit on stale code, which waits for a turn in flight and exits
+with <code>restarting</code>, not <code>stopped</code></li>
 </ul>
-<p>The supervisor calls <code>opts.engine</code> and takes every number
-from <code>AUTO_ANSWER</code>.</p>
+<p>The supervisor calls <code>opts.engine</code> and
+<code>opts.host</code>, imports the kernel's
+<code>headless_prompt.js</code>, and takes every number from
+<code>AUTO_ANSWER</code>.</p>
 <p><strong>Files:</strong> those two, and
 <code>test/unit/auto_answer_supervisor_*.test.js</code>. <strong>Don't
-touch:</strong> the engine's three modules (tests pass a fake engine),
-<code>agent.js</code>, <code>index.js</code>, anything under
-<code>src/layer/</code>.</p>
+touch:</strong> the engine's two modules (tests pass fakes),
+<code>headless_prompt.js</code>, <code>agent.js</code>,
+<code>index.js</code>, anything under <code>src/layer/</code>.</p>
 <p><strong>Acceptance:</strong> every Supervisor line in the Test List
 passes, and a unit test searches <code>headless_supervisor.js</code> and
 <code>run_slots.js</code> and finds no <code>claude</code> flag (brief
@@ -1874,21 +2114,34 @@ Allowing it, then turning it on</a> · <a
 href="02_architecture_lahe_agent_sdk.html#on-and-off-are-events-and-the-page-may-only-ask">On
 and off are events</a> · <a
 href="02_architecture_lahe_agent_sdk.html#one-review-per-auto-answer-session">One
-review per session</a></p>
+review per session</a> · <a
+href="02_architecture_lahe_agent_sdk.html#lean-by-default-and-a-projects-own-context">Lean
+by default</a></p>
 </div>
 <p><strong>Spec:</strong></p>
 <ul>
 <li><code>lahe agent</code>, registered in
-<code>src/cli/index.js</code>: <code>allow</code> (preflight, the pinned
-warning, <code>auto_answer.json</code> under the short lock),
-<code>disallow</code>, <code>on</code>, <code>off</code> (posted to the
-route as the CLI client), <code>status</code> (state, runs and tokens
-today), <code>status --diffs</code>, and <code>supervise</code>.</li>
+<code>src/cli/index.js</code>, with these subcommands:
+<ul>
+<li><code>allow</code>: preflight, the pinned warning,
+<code>auto_answer.json</code> under the short lock, and the context
+files copied into <code>auto_answer_context.md</code></li>
+<li><code>disallow</code></li>
+<li><code>on</code> and <code>off</code>, posted to the route as the CLI
+client</li>
+<li><code>status</code>: the state, whether an agent is alive and since
+when, turns today, and each turn's input, output, cache read and cache
+write, with "not reported" where a turn has none</li>
+<li><code>status --diffs</code></li>
+<li><code>supervise</code></li>
+</ul></li>
 <li><code>allow</code> refuses:
 <ul>
 <li>instruction files, dot paths, the state folder, paths outside home,
-and a symlink to any of those</li>
+and a symlink to any of those, as the edited source</li>
 <li>a non-Markdown source</li>
+<li>a context file that is missing or not a regular file, or context
+over 40,000 characters in all</li>
 <li>a session that owns more than one review</li>
 <li>Windows</li>
 <li><code>claude</code> missing or signed out</li>
@@ -1899,17 +2152,24 @@ review token every write route needs), and sets <code>from</code> from
 the client header. The generic events route refuses
 <code>auto_answer.requested</code>.</li>
 <li>The helper starts <code>supervise</code> on an allowed "on", unless
-a live one holds the lock. It starts a new one when "on" stands and none
-is alive, at most three times in ten minutes.</li>
-<li>The fold rejects replies from other agents while auto-answer holds
-the review (<code>auto_answer_owns</code>).</li>
+a live one holds the lock. With "on" standing and none alive, it starts
+a new one only after a <code>restarting</code> exit, or when
+<code>agent.json</code> shows no stop was written. A failure stop stays
+until a new "on" arrives after it. It records each start in
+<code>supervisor_starts.json</code>, which only it writes. Starts after
+a <code>restarting</code> exit are not counted. A fourth counted start
+within ten minutes is refused with <code>failing</code>.</li>
+<li>The fold rejects replies from other agents while
+<code>autoAnswerHolds</code> is true (<code>auto_answer_owns</code>).
+The monitor, <code>review</code> re-entry and liveness use the same
+predicate.</li>
 <li>The liveness answer counts a live supervisor at the current rev as
 listening, and adds <code>auto_answer</code>. It never sends a path, the
-note, or a dollar figure.</li>
-<li><code>lahe monitor</code> exits 6 with the pinned words while a live
-supervisor holds the rev. <code>lahe review</code> re-entry prints the
-pinned words and no monitor lines. <code>lahe review</code> and
-<code>lahe add</code> refuse a second review in the session.</li>
+note, the context, or a dollar figure.</li>
+<li><code>lahe monitor</code> exits 6 with the pinned words while
+<code>autoAnswerHolds</code> is true. <code>lahe review</code> re-entry
+prints the pinned words and no monitor lines. <code>lahe review</code>
+and <code>lahe add</code> refuse a second review in the session.</li>
 <li><code>docs/CLI.md</code> and
 <code>docs/diagrams/session_ownership.md</code> describe the new command
 and the new owner.</li>
@@ -1935,8 +2195,9 @@ What the rail shows</a> · <a
 href="wireframes/b-switch-by-hold/01-off.html">Wireframe B</a></p>
 </div>
 <p><strong>Spec:</strong> Wireframe direction B, with the words pinned
-above. Where the wireframe and the pinned words differ, the words win.
-Not built from the wireframe:</p>
+above. The kept agent changes nothing the reviewer sees. Where the
+wireframe and the pinned words differ, the words win. Not built from the
+wireframe:</p>
 <ul>
 <li>the note field on the warning panel (only the terminal sets the
 note)</li>
@@ -1953,7 +2214,7 @@ not-allowed panel if nothing starts</li>
 <li>the not-allowed panel: focusable pill, a panel with a Copy button,
 not hover text</li>
 <li>the warning panel on the first "on" in a session, and the stop
-confirm while a run works. Both reuse End review's confirm: they take
+confirm while a turn works. Both reuse End review's confirm: they take
 focus, close on Esc, and return focus to the pill. The warning panel
 scrolls inside the footer on a short window.</li>
 <li>the run count and its popup</li>
@@ -2018,14 +2279,14 @@ branches" section of the Test List.</p>
 <code>test/unit/auto_answer_seams.test.js</code>,
 <code>test/browser/auto_answer_seams.spec.js</code>.</p>
 <p><strong>Acceptance:</strong> each case passes, and each was seen to
-fail once when its seam was broken by hand.</p>
+fail once when the join it tests was broken by hand.</p>
 <h3 id="task-33-one-review-one-fix-round">Task 3.3: One review, one fix
 round</h3>
 <p><strong>Spec:</strong> One review set on the integrated diff:</p>
 <ul>
 <li><code>review-code-lead</code></li>
-<li><code>review-security</code>, since the diff spawns processes,
-writes user files, adds a route and handles paths</li>
+<li><code>review-security</code>, since the diff spawns long-lived
+processes, writes user files, adds a route and handles paths</li>
 <li><code>review-testing</code></li>
 </ul>
 <p>Each finding names the test that would catch it. Builders fix on
@@ -2073,50 +2334,91 @@ fake <code>claude</code> updates its scenario and gets a test.</p>
 <h3 id="task-42-dogfood">Task 4.2: Dogfood</h3>
 <p><strong>Spec:</strong> The owner runs a review of at least five
 comments with auto-answer on. The document is one no agent reads as
-instructions (the default for OQ6, instruction files). A script reads
-<code>runs.jsonl</code>, <code>attempts.json</code> and the event log.
-It writes the numbers the brief asks for, one row per item:</p>
+instructions (the default for OQ6, instruction files). A script
+reads:</p>
 <ul>
-<li>runs and failures</li>
+<li><code>turns.jsonl</code></li>
+<li><code>attempts.json</code></li>
+<li><code>agent.json</code>'s history</li>
+<li>the event log</li>
+</ul>
+<p>It writes the numbers the brief asks for, one row per item:</p>
+<ul>
+<li>turns and failures</li>
 <li>items that hit the limit</li>
 <li>double answers</li>
 <li>the time from ready to reply</li>
 </ul>
+<p>It also writes one row per agent start, with why it started (first
+turn, crash, idle close, fresh start).</p>
 <p><strong>Acceptance:</strong> each brief success metric marked pass or
 fail on the progress page, from the script's output. The owner judges
 each comment reply.</p>
 <h2 id="test-list">Test List</h2>
 <div class="callout callout-req">
-<p><strong>Engine (2A)</strong></p>
+<p><strong>Prompt (1.5)</strong></p>
 <ul class="task-list">
 <li><label><input type="checkbox" />The system prompt is the
 <code>all</code> and <code>headless</code> lines in order, then the
-note. Checked against hand-picked lines, not the code's own
-filter.</label></li>
-<li><label><input type="checkbox" />The prompt text is the same for runs
-of 1 and of 25 items; only the stdin grows.</label></li>
-<li><label><input type="checkbox" />The stdin deep-equals the drain's
-item lines cut to the allowed fields, with only <code>source_hint</code>
-changed. No path, origin, linked file or summary line.</label></li>
+note, then the context. Checked against hand-picked lines, not the
+code's own filter.</label></li>
+<li><label><input type="checkbox" />The prompt and its hash are the same
+whether the agent will be given 1 or 25 items, and change when the note
+or context changes.</label></li>
+<li><label><input type="checkbox" />The turn message deep-equals the
+drain's item lines cut to the allowed fields, with only
+<code>source_hint</code> changed. No path, origin, linked file or
+summary line. The <code>file_changed_since_last_turn</code> line appears
+only when asked for. No turn message holds a <code>CONTRACT</code>
+line.</label></li>
+<li><label><input type="checkbox" />The schema's field names equal
+<code>REPLY_FIELD</code> and <code>REPLY_REQUIRED</code>.</label></li>
+<li><label><input type="checkbox" />Replies read from the chosen
+structured form parse to the expected list. A result with no replies,
+replies that do not fit the schema, or Task 0.2's schema-failure result
+is <code>bad_output</code>.</label></li>
+<li><label><input type="checkbox" />30 ready items become batches of 25
+and 5. A batch over 100 KB is cut at the item that crosses it. An item
+over 8,000 characters is in <code>too_long</code>, not in any
+batch.</label></li>
+</ul>
+<p><strong>Engine (2A)</strong></p>
+<ul class="task-list">
+<li><label><input type="checkbox" />One handle takes three turns: the
+fake records one pid, and each turn's usage is the difference of the
+running totals. A second process's first turn counts from
+zero.</label></li>
+<li><label><input type="checkbox" />A turn that dies before its result
+records its messages' summed usage, or <code>null</code>.</label></li>
+<li><label><input type="checkbox" />A second <code>sendTurn</code> while
+one is in flight is refused.</label></li>
 <li><label><input type="checkbox" />A page-posted
 <code>source_hint</code> pointing elsewhere does not change which file
 is copied in.</label></li>
-<li><label><input type="checkbox" />The schema's field names equal
-<code>REPLY_FIELD</code> and <code>REPLY_REQUIRED</code>.</label></li>
-<li><label><input type="checkbox" />30 ready items become runs of 25 and
-5. A batch over 100 KB is cut at the item that crosses it.</label></li>
-<li><label><input type="checkbox" />An item over 8,000 characters gets
-the pinned <code>not_handled</code> reply and is not sent.</label></li>
+<li><label><input type="checkbox" />Before each turn the copy matches
+the real file, after an outside edit. After a refused turn and after a
+conflict, the copy is reset at once and <code>file_reset</code> is
+true.</label></li>
+<li><label><input type="checkbox" /><code>prepare</code> run twice gives
+the same <code>agent/work/</code> with one file.</label></li>
 <li><label><input type="checkbox" />A reply over 500 characters is
 dropped and logged, and its item counts as unanswered.</label></li>
 <li><label><input type="checkbox" />The recorded arguments include
-<code>--safe-mode</code>, <code>--restricted</code>,
-<code>--strict-mcp-config</code>, <code>--setting-sources ""</code>,
-<code>--tools Read,Edit</code>, <code>--permission-mode dontAsk</code>,
+<code>-p</code>, <code>--verbose</code>,
+<code>--input-format stream-json</code>,
+<code>--output-format stream-json</code>, <code>--safe-mode</code>,
+<code>--restricted</code>, <code>--strict-mcp-config</code>,
+<code>--setting-sources ""</code>, <code>--tools Read,Edit</code>,
+<code>--permission-mode dontAsk</code>,
 <code>--permission-prompts none</code>,
-<code>--no-session-persistence</code>, <code>--max-budget-usd 0.5</code>
-and <code>--append-system-prompt-file</code>, and never
-<code>--bare</code> or <code>Bash</code>.</label></li>
+<code>--no-session-persistence</code>,
+<code>--append-system-prompt-file</code> and <code>--model</code>, plus
+<code>--json-schema</code> if Task 0.2 chose it. They never include
+<code>--bare</code>, <code>Bash</code> or
+<code>--resume</code>.</label></li>
+<li><label><input type="checkbox" />The fake refuses a start without
+<code>--verbose</code>, and a malformed envelope ends as a named failure
+within the timeout, not a hang.</label></li>
 <li><label><input type="checkbox" />The recorded working folder is the
 stage <code>work/</code> folder, holding exactly one regular
 file.</label></li>
@@ -2126,24 +2428,32 @@ absolute path recorded at allow time, not from
 <li><label><input type="checkbox" />The child environment is exactly
 <code>auto_answer.json</code>'s <code>env</code>.
 <code>ANTHROPIC_API_KEY</code>, <code>NODE_OPTIONS</code>,
-<code>ANTHROPIC_BASE_URL</code>, <code>CLAUDE_CODE_USE_BEDROCK</code>
-and any <code>LAHE_*</code> variable set in the parent are
-absent.</label></li>
+<code>ANTHROPIC_BASE_URL</code>, <code>CLAUDE_CODE_USE_BEDROCK</code>,
+any <code>CLAUDE_CODE_*</code> and any <code>LAHE_*</code> variable set
+in the parent are absent.</label></li>
 <li><label><input type="checkbox" />The review token appears in none of
-the prompt, stdin, environment or arguments.</label></li>
-<li><label><input type="checkbox" />Clean, crash, timeout, bad output,
-signed out and usage limit are each named correctly. Output nothing
+the prompt, turn messages, environment or arguments.</label></li>
+<li><label><input type="checkbox" />Clean, death mid-turn, a stop
+through <code>signal</code>, the backstop timeout, bad output, signed
+out and usage limit are each named correctly (<code>crashed</code>,
+<code>stopped</code>, <code>timed_out</code>, and so on). Output nothing
 recognizes is <code>crashed</code>, never <code>finished</code>. The
 usage-limit test's title says its output is a guess.</label></li>
-<li><label><input type="checkbox" />A timeout reaches a grandchild that
+<li><label><input type="checkbox" /><code>onExit</code> fires once when
+the fake dies while idle, with its code and signal.</label></li>
+<li><label><input type="checkbox" />A stop reaches a grandchild that
 ignores SIGTERM: with a 200 ms grace,
 <code>process.kill(-pgid, 0)</code> reaches ESRCH.</label></li>
 <li><label><input type="checkbox" />A reply for an item or rev not in
-the batch is dropped and logged. A <code>files</code> value from the run
-is ignored; <code>files</code> comes from the stamps.</label></li>
-<li><label><input type="checkbox" />A run that edited the file but left
+the batch, including one from an earlier turn, is dropped and logged. A
+<code>files</code> value from the agent is ignored; <code>files</code>
+comes from the stamps.</label></li>
+<li><label><input type="checkbox" />A turn that edited the file but left
 an item without a reply is <code>refused</code>, and nothing is
 written.</label></li>
+<li><label><input type="checkbox" />A stray file left in
+<code>work/</code> makes the turn <code>refused</code>; the stray is
+gone afterwards and nothing is written.</label></li>
 <li><label><input type="checkbox" />Each of these additions is refused:
 <code>&lt;SCRIPT&gt;</code>, <code>&lt;img src=x onerror=...&gt;</code>,
 <code>&lt;svg onload=...&gt;</code>, <code>&lt;iframe&gt;</code>,
@@ -2153,99 +2463,162 @@ written.</label></li>
 <li><label><input type="checkbox" />Raw HTML already in the file, left
 in place or moved, is not an addition. A second copy of it
 is.</label></li>
-<li><label><input type="checkbox" />The real file changed mid-run:
-<code>conflict</code>, nothing written. The next copy-in waits for 15
-seconds of quiet.</label></li>
+<li><label><input type="checkbox" />The real file changed mid-turn:
+<code>conflict</code>, nothing written.</label></li>
 <li><label><input type="checkbox" />A symlink swapped in for the file,
-or for a parent folder, mid-run: refused, nothing written.</label></li>
-<li><label><input type="checkbox" />A crash at <code>beforeRename</code>
-leaves the original whole. A crash at <code>afterWriteBack</code> leaves
-<code>result.json</code> for the next supervisor.</label></li>
-<li><label><input type="checkbox" />The run log holds no tool result
-text. The prompt file is gone after a clean run, a crash, a timeout and
-a kill. Only 20 run folders remain, and each applied run has a
+or for a parent folder, mid-turn: refused, nothing written.</label></li>
+<li><label><input type="checkbox" /><code>result.json</code> at
+<code>applying</code> is on disk before the rename. A crash at
+<code>beforeRename</code> leaves the original whole. A crash at
+<code>afterWriteBack</code> leaves <code>result.json</code> at
+<code>applying</code> with the after hash.</label></li>
+<li><label><input type="checkbox" />The turn log holds no tool result
+text. The prompt file is gone after a clean close, a death, a timeout
+and a kill. Only 20 turn folders remain, and each applied turn has a
 <code>diff.patch</code>.</label></li>
 </ul>
 <p><strong>Supervisor (2B)</strong> (every timed case uses the injected
 clock)</p>
 <ul class="task-list">
+<li><label><input type="checkbox" />"On" starts no agent. The first
+ready item starts it, and the fake records the start.</label></li>
+<li><label><input type="checkbox" />Three bursts minutes apart go to one
+agent: the fake records one start and three turns.</label></li>
 <li><label><input type="checkbox" />Items at 0, 10, 20, 30 and 40
-seconds start one run. Items at 0 and 16 seconds start two.</label></li>
-<li><label><input type="checkbox" />One item every 10 seconds starts a
-run at 60 seconds.</label></li>
-<li><label><input type="checkbox" />An item arriving mid-run goes into
-the next run.</label></li>
+seconds make one turn. Items at 0 and 16 seconds make two.</label></li>
+<li><label><input type="checkbox" />One item every 10 seconds makes a
+turn at 60 seconds.</label></li>
+<li><label><input type="checkbox" />An item arriving mid-turn goes into
+the next turn, and nothing is sent while a turn is in
+flight.</label></li>
+<li><label><input type="checkbox" />After every turn, the supervisor
+waits for each fold, then drains again, whatever the agent's own text
+said.</label></li>
+<li><label><input type="checkbox" />A too-long item gets the pinned
+reply from the supervisor, and is never sent.</label></li>
 <li><label><input type="checkbox" />The fake engine receives an item
 exactly three times at one rev, then the pinned gave-up reply folds.
 Rewording makes it ready again, until six in all.</label></li>
-<li><label><input type="checkbox" />Three failed runs in a row,
-conflicts included, stop with <code>failing</code>, and no item's
-attempts are used.</label></li>
-<li><label><input type="checkbox" />Run 40 at 23:59:59 local time
-pauses; at 00:00:00 the next run starts. The same on a daylight-saving
+<li><label><input type="checkbox" />A refused turn counts an attempt for
+each item it left without a reply, so a batch that is refused again and
+again ends at the attempt limit.</label></li>
+<li><label><input type="checkbox" />Three failed turns in a row
+(crashed, bad output, timed out) stop with <code>failing</code>, and no
+item's attempts are used. Three conflicts in a row do not stop
+it.</label></li>
+<li><label><input type="checkbox" />After a conflict, the next copy-in
+waits for 15 seconds of quiet, and no slot is held during the
+wait.</label></li>
+<li><label><input type="checkbox" />After a conflict, the next turn is
+sent with <code>fileChanged</code>.</label></li>
+<li><label><input type="checkbox" />The agent dies while idle:
+<code>agent</code> becomes null, nothing starts until the next item, the
+next item is answered by a fresh agent, and <code>turn_deaths</code> is
+unchanged.</label></li>
+<li><label><input type="checkbox" />The agent dies mid-turn: the turn is
+<code>crashed</code>, every item is back on the drain, and the next
+start is fresh.</label></li>
+<li><label><input type="checkbox" />Three deaths during turns or at
+start-up, across three processes, within ten minutes stop with
+<code>failing</code>.</label></li>
+<li><label><input type="checkbox" />A fresh start follows each of:
+history above 80,000 tokens; a new prompt hash after <code>allow</code>
+runs again; a <code>refused</code>, <code>timed_out</code>,
+<code>crashed</code> or <code>bad_output</code> turn; a
+<code>compact_boundary</code>. In each case the fake records a new
+start.</label></li>
+<li><label><input type="checkbox" />After 60 idle minutes the agent's
+stdin is closed and its agent slot released. The next item starts a
+fresh agent.</label></li>
+<li><label><input type="checkbox" />One simulated hour with nothing
+ready, with an open question, or with a written unfolded reply, sends
+zero turns.</label></li>
+<li><label><input type="checkbox" />A turn past 10 minutes by the
+injected wall clock is ended as <code>timed_out</code> by the look, with
+a fake host that never answers.</label></li>
+<li><label><input type="checkbox" />Off during a turn: the turn record
+says <code>stopped</code>, not <code>crashed</code>.</label></li>
+<li><label><input type="checkbox" />Turn 40 at 23:59:59 local time
+pauses; at 00:00:00 the next turn starts. The same on a daylight-saving
 change day. Run in a child process with
 <code>TZ=America/New_York</code>.</label></li>
 <li><label><input type="checkbox" />The machine's 120 behaves the same
 way across two sessions.</label></li>
-<li><label><input type="checkbox" />A usage limit pauses for 30 minutes
-and sets <code>retry_at</code>.</label></li>
-<li><label><input type="checkbox" />A clock jump past 10 minutes mid-run
-(machine sleep) ends the run as <code>timed_out</code>.</label></li>
-<li><label><input type="checkbox" />Off, stop from the page, takeover
-and close each kill a run in flight, and write nothing to the source or
-the reply file.</label></li>
+<li><label><input type="checkbox" />A new supervisor rebuilds today's
+count and the next <code>turn_id</code> from <code>turns.jsonl</code>:
+off then on does not reset the 40.</label></li>
+<li><label><input type="checkbox" />A usage limit pauses for 30 minutes,
+sets <code>retry_at</code>, and closes the agent.</label></li>
+<li><label><input type="checkbox" />Off, stop from the page, takeover,
+close and disallow: while idle, the agent's stdin is closed; mid-turn,
+its group is killed. Nothing is written to the source or the reply
+file.</label></li>
 <li><label><input type="checkbox" />Two supervisors started as two child
 processes at once leave one.</label></li>
-<li><label><input type="checkbox" />Never more than two runs at once,
+<li><label><input type="checkbox" />Never more than two turns at once,
 measured from the start and end times the fake records.</label></li>
-<li><label><input type="checkbox" />A dead slot is reclaimed; a live one
-with a reused pid is not.</label></li>
+<li><label><input type="checkbox" />Never more than four agents alive. A
+fifth review leaves a <code>want-agent</code> marker, the longest-idle
+agent closes on its owner's next look, and the fifth
+starts.</label></li>
+<li><label><input type="checkbox" />A supervisor never waits for a turn
+slot while holding a new agent slot, or the other way round: five
+reviews with bursts at once all finish.</label></li>
+<li><label><input type="checkbox" />A dead slot of either kind is
+reclaimed; a live one with a reused pid is not.</label></li>
 <li><label><input type="checkbox" />A written, unfolded reply keeps its
 item out of the next batch.</label></li>
 <li><label><input type="checkbox" />A chat reply to an item, folded
 before the first drain, keeps that item out of the batch.</label></li>
-<li><label><input type="checkbox" />The supervisor waits for each fold
-result before draining. A stale-rev rejection counts as no reply. No
-result in 30 seconds counts nothing and is logged.</label></li>
-<li><label><input type="checkbox" />Killed after
-<code>afterWriteBack</code>: the next supervisor writes the replies
-first.</label></li>
-<li><label><input type="checkbox" />A leftover run group is killed on
-start.</label></li>
-<li><label><input type="checkbox" />Stale code: the supervisor releases
-the lock and exits with <code>restarting</code>.</label></li>
+<li><label><input type="checkbox" />A stale-rev rejection counts as no
+reply. A malformed reply line is matched by its file and line number,
+without waiting 30 seconds. No fold result in 30 seconds counts nothing
+and is logged.</label></li>
+<li><label><input type="checkbox" />A <code>result.json</code> left at
+<code>applying</code>: when the real file has the after hash, the next
+supervisor writes its replies first; when it has the before hash, the
+replies are dropped and the items stay waiting.</label></li>
+<li><label><input type="checkbox" />A leftover agent group from a killed
+supervisor is killed on start.</label></li>
+<li><label><input type="checkbox" />Stale code: the supervisor waits for
+the turn in flight, closes the agent, releases the lock and exits with
+<code>restarting</code>, not <code>stopped</code>.</label></li>
 <li><label><input type="checkbox" />The source file deleted: stops with
 <code>source_missing</code>.</label></li>
-<li><label><input type="checkbox" />Held items start no run; release
-starts one run for all of them.</label></li>
-<li><label><input type="checkbox" />One simulated hour of looks with
-nothing ready, with an open question, or with a written unfolded reply,
-makes zero engine calls.</label></li>
+<li><label><input type="checkbox" />Held items start no turn; release
+starts one turn for all of them.</label></li>
 <li><label><input type="checkbox" /><code>--runs-per-day 3</code> at
-allow time pauses after three runs.</label></li>
+allow time pauses after three turns.</label></li>
 </ul>
 <p><strong>Command line and helper (2C)</strong></p>
 <ul class="task-list">
 <li><label><input type="checkbox" /><code>allow</code> refuses each
-listed kind of path, a symlink to one, a non-Markdown source, a session
-with two reviews, and Windows, each with a plain message.</label></li>
+listed kind of source path, a symlink to one, a non-Markdown source, a
+session with two reviews, and Windows, each with a plain
+message.</label></li>
 <li><label><input type="checkbox" /><code>allow</code> refuses when
 <code>claude</code> is missing or signed out, and names a login billed
 by the token.</label></li>
 <li><label><input type="checkbox" /><code>allow</code> prints the whole
-pinned warning every time, and records the environment
-allowlist.</label></li>
+pinned warning every time, including one line per context file, and
+records the environment allowlist.</label></li>
+<li><label><input type="checkbox" /><code>allow --context</code> copies
+each file's text into <code>auto_answer_context.md</code> and records
+its hash and size. It refuses a missing file and a total over 40,000
+characters. Editing a context file afterwards changes nothing until
+<code>allow</code> runs again.</label></li>
 <li><label><input type="checkbox" /><code>allow</code> run again while a
-supervisor runs updates the file; the next run picks up the new note and
-model.</label></li>
+supervisor runs updates the file; the next turn starts a fresh agent
+with the new note, context and model.</label></li>
 <li><label><input type="checkbox" /><code>disallow</code> ends the
 allowance; a running supervisor stops on its next look.</label></li>
 <li><label><input type="checkbox" /><code>on</code> and <code>off</code>
 from the terminal record <code>from: "terminal"</code>; from the page,
 <code>from: "page"</code>.</label></li>
 <li><label><input type="checkbox" /><code>status</code> shows the state,
-runs and tokens today. <code>status --diffs</code> shows the kept runs'
-diffs.</label></li>
+whether an agent is alive and since when, turns today, and each kept
+turn's four token counts, with "not reported" for a turn with no usage.
+<code>status --diffs</code> shows the kept turns' diffs.</label></li>
 <li><label><input type="checkbox" />The route ignores extra fields,
 refuses a <code>want</code> other than <code>on</code> or
 <code>off</code>, and fails every D11 check a write route fails.
@@ -2262,18 +2635,27 @@ again.</label></li>
 <code>supervise</code> detached, in its own process group, with the
 helper's Node and the clone's <code>bin/lahe.js</code>, and starts
 nothing while a live one holds the lock.</label></li>
-<li><label><input type="checkbox" />"On" standing with no live
-supervisor: the helper starts one on the next liveness request, at most
-three times in ten minutes, then <code>failing</code>.</label></li>
-<li><label><input type="checkbox" />While auto-answer holds a review, a
-reply from another agent is rejected with
+<li><label><input type="checkbox" />A supervisor that stopped for
+<code>signed_out</code> is not started again by liveness polls; a new
+"on" after the stop starts it.</label></li>
+<li><label><input type="checkbox" />A supervisor that exited with
+<code>restarting</code> is started again, and that start is not
+counted.</label></li>
+<li><label><input type="checkbox" />A supervisor that dies at once,
+again and again: the fourth start within ten minutes is refused,
+liveness says <code>failing</code>, and the count survives a helper
+restart.</label></li>
+<li><label><input type="checkbox" />After "off", a chat agent's reply in
+that session folds and its monitor runs. With "on" standing and the
+supervisor dead, a chat agent's reply is rejected with
 <code>auto_answer_owns</code>.</label></li>
 <li><label><input type="checkbox" />The liveness answer deep-equals the
 Task 1.2 fixture for each <code>agent.json</code> fixture, and never
-holds a path, the note or a dollar figure.</label></li>
+holds a path, the note, the context, a token count or a dollar
+figure.</label></li>
 <li><label><input type="checkbox" /><code>lahe monitor</code> exits 6
-with the pinned words while a live supervisor holds the
-rev.</label></li>
+with the pinned words while <code>autoAnswerHolds</code> is
+true.</label></li>
 <li><label><input type="checkbox" /><code>lahe review</code> re-entry
 prints the pinned words and no monitor lines. <code>lahe review</code>
 and <code>lahe add</code> refuse a second review in the
@@ -2285,7 +2667,8 @@ CLI.</label></li>
 <p><strong>Rail (2D)</strong></p>
 <ul class="task-list">
 <li><label><input type="checkbox" />Each state shows its pinned status
-words, with "auto-answer" lowercase in the status line.</label></li>
+words, with "auto-answer" lowercase in the status line, and
+<code>applying</code> shows the running words.</label></li>
 <li><label><input type="checkbox" />Not allowed: the pill is focusable
 and opens the panel with the command and a Copy button.</label></li>
 <li><label><input type="checkbox" />A click posts <code>want: on</code>;
@@ -2298,6 +2681,8 @@ to the pill.</label></li>
 while working opens the stop confirm.</label></li>
 <li><label><input type="checkbox" />Each chip shows its pinned words and
 button. "Try again" posts <code>want: on</code>.</label></li>
+<li><label><input type="checkbox" />The run count's popup shows runs
+against the limit and no token count.</label></li>
 <li><label><input type="checkbox" />The status line is announced on a
 change of state, not on each tick of the age.</label></li>
 <li><label><input type="checkbox" />While on and healthy, a ready card
@@ -2318,47 +2703,62 @@ wraps to its own line and nothing overlaps.</label></li>
 <code>lahe agent</code>, fake <code>claude</code>)</p>
 <ul class="task-list">
 <li><label><input type="checkbox" />A real click on the switch starts
-one supervisor; a comment becomes one run; the source file changes; the
-reply folds; the rail shows "on" again.</label></li>
-<li><label><input type="checkbox" />The page asks "off" mid-run: the
-group is killed, the source is byte-identical, and every item is back on
-the drain.</label></li>
-<li><label><input type="checkbox" />A takeover mid-run: the source is
+one supervisor; a comment starts one agent and one turn; the source file
+changes; the reply folds; the rail shows "on" again.</label></li>
+<li><label><input type="checkbox" />Two more comments a minute apart go
+to the same agent: the fake records one start.</label></li>
+<li><label><input type="checkbox" />The fake agent is killed between
+comments: the next comment is answered by a fresh agent, and nobody
+touched a terminal.</label></li>
+<li><label><input type="checkbox" />The page asks "off" mid-turn: the
+group is killed, the source is byte-identical, every item is back on the
+drain, and the turn record says <code>stopped</code>.</label></li>
+<li><label><input type="checkbox" />A takeover mid-turn: the source is
 untouched, and every item is on the new owner's drain.</label></li>
 <li><label><input type="checkbox" />A chat agent's
 <code>lahe monitor</code> exits 6 once the page turns auto-answer
 on.</label></li>
 <li><label><input type="checkbox" />Fake <code>claude</code> signed out:
 the live liveness answer deep-equals the stopped <code>signed_out</code>
-fixture. The same for a usage limit and for waiting for another review's
-run.</label></li>
+fixture, and stays stopped across liveness polls. The same for a usage
+limit and for waiting for another review's run.</label></li>
+<li><label><input type="checkbox" />A supervisor that exits at once is
+started at most three times in ten minutes, then liveness says
+<code>failing</code>.</label></li>
 <li><label><input type="checkbox" />A hand edit's <code>handled</code>
 reply passes the handled check after write-back.</label></li>
 <li><label><input type="checkbox" />Two reviews each with a burst: never
-more than two runs at once, and a third shows "waiting for another
+more than two turns at once, and a third shows "waiting for another
 review's run".</label></li>
 <li><label><input
 type="checkbox" /><code>lahe agent status --diffs</code> shows the diff
-of a real run.</label></li>
+of a real turn.</label></li>
 </ul>
 <p><strong>Live (4.1)</strong> (real <code>claude</code>)</p>
 <ul class="task-list">
 <li><label><input type="checkbox" />The three spike items are answered
-correctly.</label></li>
+correctly, and a reply containing "$220" reaches its card.</label></li>
+<li><label><input type="checkbox" />One agent answers three bursts. Its
+later turns write a small fraction of the first turn's cache, as in the
+second spike.</label></li>
+<li><label><input type="checkbox" />The agent killed between bursts: the
+next comment is answered by a fresh agent.</label></li>
+<li><label><input type="checkbox" />No transcript for the stage folder
+appears under <code>~/.claude/projects/</code>.</label></li>
 <li><label><input type="checkbox" />A <code>.env</code> beside the
-source never appears in any run log.</label></li>
+source never appears in any turn log.</label></li>
 <li><label><input type="checkbox" />A comment asking for a
-<code>&lt;script&gt;</code> ends refused, with the pinned card
-words.</label></li>
+<code>&lt;script&gt;</code> ends refused, with the pinned card words,
+and the next turn starts fresh.</label></li>
 <li><label><input type="checkbox" />An empty
 <code>CLAUDE_CONFIG_DIR</code> at allow time: <code>allow</code>
 refuses. The login broken after allow: the rail says signed out, and
 every item stays waiting.</label></li>
-<li><label><input type="checkbox" />An idle hour starts zero
-runs.</label></li>
-<li><label><input type="checkbox" />The rules appear once per run in
-transcripts of 1, 10 and 25 items, and of 100 items across
-runs.</label></li>
+<li><label><input type="checkbox" />An idle hour makes zero model calls,
+and the agent is closed at 60 minutes.</label></li>
+<li><label><input type="checkbox" />The rules appear once per agent in
+transcripts of 1, 10 and 25 items, and of 100 items across turns of one
+agent.</label></li>
 </ul>
 </div>
 <h2 id="acceptance-criteria">Acceptance Criteria</h2>
@@ -2407,8 +2807,8 @@ it checks):</p>
 review behaves as today, and the existing suite passes unchanged (R1,
 off by default).</label></li>
 <li><label><input type="checkbox" />Nothing asks for or stores an API
-key, none passes to a run, and a login billed by the token is named in
-the warning (R2, no key of LAHE's own).</label></li>
+key, none passes to the agent, and a login billed by the token is named
+in the warning (R2, no key of LAHE's own).</label></li>
 <li><label><input type="checkbox" /><code>dependencies</code> in
 <code>package.json</code> is still <code>{}</code>, and a fresh clone
 runs <code>lahe agent allow</code> with no install (R3, nothing to
@@ -2417,39 +2817,38 @@ install).</label></li>
 <code>claude</code> flag, checked by a unit test (R4, Claude Code
 first).</label></li>
 <li><label><input type="checkbox" />Stopping leaves every unanswered
-item ready, and the source untouched by the stopped run (R5, stopping is
-clean).</label></li>
+item ready, and the source untouched by the stopped turn (R5, stopping
+is clean).</label></li>
 <li><label><input type="checkbox" />The terminal warning and the warning
 panel say what it may do, who can make it act, and what it uses (R6, say
 what it may do).</label></li>
 <li><label><input type="checkbox" />No chat agent starts, keeps or
 restarts anything for auto-answer to work (R7, LAHE does the
 listening).</label></li>
-<li><label><input type="checkbox" />An idle hour starts zero runs (R8,
-idle is free).</label></li>
-<li><label><input type="checkbox" />A burst becomes one run, and held
-items start none until released (R9, one run takes the
-batch).</label></li>
+<li><label><input type="checkbox" />An idle hour makes zero model calls
+(R8, idle is free).</label></li>
+<li><label><input type="checkbox" />A burst becomes one turn, and held
+items start none until released (R9, one batch at a time).</label></li>
 <li><label><input type="checkbox" />Hand-edit replies pass the handled
 check (R10, same standard as today).</label></li>
-<li><label><input type="checkbox" />Items arriving mid-run are answered
-by the next run, and one run at most works a review (R11, nothing is
+<li><label><input type="checkbox" />Items arriving mid-turn are answered
+in the next turn, and one turn at most works a review (R11, nothing is
 lost).</label></li>
-<li><label><input type="checkbox" />Never more than two runs across the
-machine, and a waiting review says so (R12, a cap on runs at
-once).</label></li>
+<li><label><input type="checkbox" />Never more than two turns and four
+agents across the machine, and a waiting review says so (R12, a limit on
+how many run at once).</label></li>
 <li><label><input type="checkbox" />An item stops after three attempts
 per rev, six in all, with the pinned card words (R13, retries
 stop).</label></li>
-<li><label><input type="checkbox" />The rules appear once per run in
-every transcript checked, and nothing instruction-like repeats per item
-(R14, rules once per run).</label></li>
-<li><label><input type="checkbox" />The run's rules come from the one
+<li><label><input type="checkbox" />The rules appear once per agent in
+every transcript checked, and nothing instruction-like repeats per turn
+or per item (R14, rules once per agent).</label></li>
+<li><label><input type="checkbox" />The agent's rules come from the one
 tagged contract, and <code>review.json</code> still carries the chat
 lines (R15, one source of rules).</label></li>
 <li><label><input type="checkbox" />The reviewer sees only cards and the
-rail, and a run's reply reads like a chat agent's (R16, cards and rail
-only).</label></li>
+rail, and the agent's reply reads like a chat agent's (R16, cards and
+rail only).</label></li>
 <li><label><input type="checkbox" />Signed out, not installed, the usage
 limit, a missing file and a crash each show in plain words on the rail
 (R17, failures are visible).</label></li>
@@ -2460,19 +2859,27 @@ reply from any other agent is rejected (R19, one owner).</label></li>
 <li><label><input type="checkbox" />A takeover hands every unanswered
 item to the new owner, and nothing answered shows again (R20, hand it
 back).</label></li>
-<li><label><input type="checkbox" />Page text reaches the run only as
+<li><label><input type="checkbox" />Page text reaches the agent only as
 data under <code>page</code>, and the page's <code>source_hint</code>
 never reaches it (R21, page text is data).</label></li>
-<li><label><input type="checkbox" />A run can read and edit only its
+<li><label><input type="checkbox" />The agent can read and edit only its
 copy, and nothing outside it changes (R22, stays in scope).</label></li>
-<li><label><input type="checkbox" />Daily run limits stop new runs, and
+<li><label><input type="checkbox" />Daily run limits stop new turns, and
 the rail says why (R23, a usage ceiling).</label></li>
-<li><label><input type="checkbox" />The run count and tokens show on the
-rail and in <code>lahe agent status</code> (R24, usage is
+<li><label><input type="checkbox" />The run count shows on the rail, and
+each turn's four token counts in <code>lahe agent status</code>, with
+"not reported" where a turn has none (R24, usage is
 visible).</label></li>
-<li><label><input type="checkbox" />The allow note reaches every run's
-prompt, and only the terminal can set it (R25, a handoff
-note).</label></li>
+<li><label><input type="checkbox" />The allow note and the named context
+reach the agent's prompt, and only the terminal can set them (R25, a
+handoff note).</label></li>
+<li><label><input type="checkbox" />In the dogfood, the agent starts
+once plus once per recorded death, idle close or fresh-start rule, never
+once per batch (R26, one agent per review, kept running).</label></li>
+<li><label><input type="checkbox" />With the agent killed between
+comments, the next comment is still answered with no one at a terminal,
+and a blocked or missing reply shows on the rail or the card (R27,
+nothing depends on the model remembering).</label></li>
 <li><label><input type="checkbox" />The rail screenshots, light and
 dark, are on the progress page from the checkpoint run.</label></li>
 <li><label><input type="checkbox" />Human has reviewed and approved
@@ -2487,12 +2894,13 @@ answer.</p>
 <div class="callout callout-question">
 <p><strong>OQ1 (subscription terms, architecture OQ1).</strong>
 Anthropic's terms allow scripted access only by API key, or "where we
-otherwise explicitly permit it". Auto-answer starts
-<code>claude -p</code> on your subscription when comments arrive. Is
-that allowed? Task 0.1 puts the exact words from the live page beside
-this question. <strong>Default: Phases 0 and 1 go ahead. They spend a
-handful of runs on your login, as the first spike did. Phase 2 waits for
-your answer, or for you to say you accept the risk.</strong></p>
+otherwise explicitly permit it". Auto-answer keeps
+<code>claude -p</code> running on your subscription and feeds it each
+batch of comments. Is that allowed? Task 0.1 puts the exact words from
+the live page beside this question. <strong>Default: Phases 0 and 1 go
+ahead. They spend a handful of turns on your login, as the spikes did.
+Phase 2 waits for your answer, or for you to say you accept the
+risk.</strong></p>
 </div>
 <div class="callout callout-question">
 <p><span id="open-questions-q6" class="finding-anchor"></span><strong>Q6 (order, brief).</strong> Should we ship a small chat fix
@@ -2504,31 +2912,62 @@ small fix stays its own board row.</strong></p>
 <div class="callout callout-question">
 <p><span id="open-questions-q8" class="finding-anchor"></span><strong>Q8 (priority, brief).</strong> Does this go ahead of the open
 security items and the npm package? <strong>Default: yes. Main's suite
-is green as of 2026-09-29 (commit 32fe22b: 417 passed, 0 failed), so
-there are no failing tests to fix first. The security items and the npm
+was green on 2026-09-29 (commit 32fe22b: 417 passed, 0 failed), so there
+are no failing tests to fix first. The security items and the npm
 package are not held for this.</strong></p>
 </div>
 <h3 id="what-it-may-do-and-what-it-costs">What it may do and what it
 costs</h3>
 <div class="callout callout-question">
-<p><span id="open-questions-q1" class="finding-anchor"></span><strong>Q1 (billing, brief).</strong> Each run uses your Claude
+<p><span id="open-questions-q1" class="finding-anchor"></span><strong>Q1 (billing, brief).</strong> Each turn uses your Claude
 subscription, so busy reviews use up the same limit as your own Claude
-work. Is that acceptable with run limits in place? <strong>Default: yes,
-with 40 runs per review and 120 per computer each day, and a $0.50 cap
-per run. Task 0.2 measures each run's prompt size, and that number goes
+work. Is that acceptable with run limits in place? In the second spike,
+a lean agent's later turns cost $0.020 to $0.030 each at list price, and
+its first turn $0.057. <strong>Default: yes, with 40 runs per review and
+120 per computer each day, and a 10-minute limit per turn. Task 0.2
+measures the prompt size with LAHE's full rules, and that number goes
 beside this question.</strong></p>
 </div>
 <div class="callout callout-question">
-<p><span id="open-questions-q4" class="finding-anchor"></span><strong>Q4 (permissions, brief).</strong> What may a run do without
-asking? <strong>Default: read and edit a copy of the one source file
-under review. It cannot run commands, build, commit, push or use the
-network.</strong></p>
+<p><span id="open-questions-q4" class="finding-anchor"></span><strong>Q4 (permissions, brief).</strong> What may the agent do
+without asking? <strong>Default: read and edit a copy of the one source
+file under review. It cannot run commands, build, commit, push or use
+the network. Its replies come back as structured output, not shell
+commands.</strong></p>
+</div>
+<div class="callout callout-question">
+<p><strong>OQ9 (full setup, architecture).</strong> Should a project be
+able to run its agent with its full Claude Code setup (its CLAUDE.md,
+skills, MCP servers and hooks)? In the second spike, your full setup
+made every later turn cost 4.3 to 5.1 times a lean one, and it brings
+back hooks and MCP servers, which can run commands. <strong>Default: no.
+The agent starts lean, and a project adds its own rules with
+<code>lahe agent allow --context &lt;file&gt;</code>, up to 40,000
+characters in all.</strong></p>
+</div>
+<div class="callout callout-question">
+<p><strong>OQ10 (resume after a crash, architecture).</strong> The
+second spike showed a dead agent can be brought back with its history
+(<code>--resume</code>). The first version does not do this: every new
+agent starts fresh. Resuming would save the first-turn cost again after
+a crash, but only within the one-hour cache, and it needs Claude to save
+the whole transcript, file reads included, in your Claude folder. In the
+second spike, a lean fresh start's first turn cost $0.057 at list price.
+<strong>Default: no resume in the first version. Every start is fresh,
+and nothing is saved to your Claude folder.</strong></p>
 </div>
 <div class="callout callout-question">
 <p><strong>OQ3 (the numbers, architecture).</strong> Are the limits and
-timings in "Numbers this plan sets" right? They are guesses, such as 2
-runs at once and a 10-minute run timeout. <strong>Default: use them as
-listed.</strong></p>
+timings in "Numbers this plan sets" right? They are guesses.
+Examples:</p>
+<ul>
+<li>2 turns at once</li>
+<li>4 agents alive, with an idle one giving way when a fifth review
+needs it</li>
+<li>closing an agent after 60 idle minutes</li>
+<li>a fresh start at 80,000 tokens of history</li>
+</ul>
+<p><strong>Default: use them as listed.</strong></p>
 </div>
 <div class="callout callout-question">
 <p><strong>OQ6 (instruction files, architecture).</strong> Should the
@@ -2539,8 +2978,9 @@ document no agent acts on, such as a blog draft.</strong></p>
 <h3 id="how-it-works">How it works</h3>
 <div class="callout callout-question">
 <p><span id="open-questions-q2" class="finding-anchor"></span><strong>Q2 (context, brief).</strong> How much of your chat with the
-agent does each run see? <strong>Default: only the note written when you
-allow auto-answer in the terminal.</strong></p>
+agent does it see? <strong>Default: only the note written when you allow
+auto-answer in the terminal, plus any context files you name
+there.</strong></p>
 </div>
 <div class="callout callout-question">
 <p><strong>OQ4 (beyond Markdown, architecture).</strong> Should the
@@ -2563,6 +3003,13 @@ yes.</strong></p>
 holds one review per session. A session with two reviews cannot allow
 it. Is that acceptable for the first version? <strong>Default:
 yes.</strong></p>
+</div>
+<div class="callout callout-question">
+<p><strong>OQ11 (the Library, later, architecture).</strong> Later, the
+Library could open documents with their background agents already
+running. Is a one-time terminal allowance per project folder the right
+permission for that? <strong>Default: yes, as a later phase. Nothing for
+the Library is built now.</strong></p>
 </div>
 <h3 id="separate-from-this-build">Separate from this build</h3>
 <div class="callout callout-question">
@@ -2809,6 +3256,121 @@ review</td>
 <td><span class="accepted">Accepted</span></td>
 <td>Injected clock; tokens are input plus output; over-cap replies are
 dropped; new gave-up words</td>
+</tr>
+</tbody>
+</table></div>
+<h2 id="code-review-lead-review-round-2">Code Review Lead Review (Round
+2)</h2>
+<p>Summary table only. Full review prose lives in
+<code>03_plan_lahe_agent_sdk_reviews.md</code>. Several findings changed
+the architecture too. The architect's second round (RF14 to RF22)
+removed resume, which settled most of CR19, CR24 and CR26.</p>
+<div class="table-scroll"><table>
+<thead>
+<tr>
+<th>#</th>
+<th>Finding</th>
+<th>Disposition</th>
+<th>Rationale</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>CR18</td>
+<td>The supervisor calls engine functions it cannot fake</td>
+<td><span class="accepted">Accepted</span></td>
+<td>New Task 1.5 builds <code>headless_prompt.js</code> in full in the
+kernel; <code>opts.engine</code> is <code>{ prepare, runTurn }</code>;
+<code>host.start</code> takes prompt text and owns the file;
+<code>cutBatches</code> returns <code>{ batches, too_long }</code>; the
+supervisor mints <code>turn_id</code>; <code>runTurn</code> returns
+<code>model_turns</code>; the architecture's handle block matches</td>
+</tr>
+<tr>
+<td>CR19</td>
+<td>Session-lifetime facts sat in the per-process record</td>
+<td>Accepted, mostly settled by removing resume</td>
+<td>No session id to keep; <code>agent</code> is per process;
+<code>turn_deaths</code> moved out of it; a death while idle is left
+until the next turn and not counted</td>
+</tr>
+<tr>
+<td>CR20</td>
+<td>Crash recovery looked for a record that did not exist yet</td>
+<td><span class="accepted">Accepted</span></td>
+<td><code>result.json</code> at <code>applying</code>, flushed before
+the rename; the next supervisor settles it by hashes; a test at each
+step</td>
+</tr>
+<tr>
+<td>CR21</td>
+<td>Stop against crash, timeout and "file changed" had no owner</td>
+<td><span class="accepted">Accepted</span></td>
+<td><code>signal</code> makes a requested kill <code>stopped</code>; the
+look owns the 10-minute limit by wall clock, with
+<code>timed_out</code>; the supervisor passes <code>fileChanged</code>;
+the quiet wait is the supervisor's, before any slot</td>
+</tr>
+<tr>
+<td>CR22</td>
+<td>"Auto-answer holds a review" was undefined</td>
+<td><span class="accepted">Accepted</span></td>
+<td>One predicate, <code>autoAnswerHolds</code>: allowance holds and
+latest request is "on"; used by the fold, the monitor,
+<code>review</code> re-entry and liveness; tests both ways</td>
+</tr>
+<tr>
+<td>CR23</td>
+<td>The helper's start count had no file</td>
+<td><span class="accepted">Accepted</span></td>
+<td>Helper-written <code>supervisor_starts.json</code>;
+<code>restarting</code> exits not counted; fixture and a seam test</td>
+</tr>
+<tr>
+<td>CR24</td>
+<td>Task 0.2 missed rows the fake depends on</td>
+<td>Partly accepted</td>
+<td>Resume rows dropped with resume; added the exact flag set,
+<code>work/</code> contents, failures in kept mode at the first turn,
+missing <code>--verbose</code> and a malformed stdin line, and a check
+that nothing is saved</td>
+</tr>
+<tr>
+<td>CR25</td>
+<td>The argument test and the fake let real mistakes through</td>
+<td><span class="accepted">Accepted</span></td>
+<td><code>-p</code>, <code>--verbose</code>, <code>--model</code>,
+<code>--no-session-persistence</code> and <code>--json-schema</code>
+asserted; the fake checks the envelope and refused flag pairs; malformed
+envelope test</td>
+</tr>
+<tr>
+<td>CR26</td>
+<td>The stage path's lifetime was stated three ways</td>
+<td><span class="accepted">Accepted</span></td>
+<td>One fixed <code>agent/work/</code> for the allowance, emptied at
+each fresh start; <code>prepare</code> gives the same result twice</td>
+</tr>
+<tr>
+<td>CR27</td>
+<td>Missing and false rail words</td>
+<td><span class="accepted">Accepted</span></td>
+<td><code>applying</code> shows the running words; no chip for a death
+while idle; the agent-slot wait is one look long, so the queued words
+stay true</td>
+</tr>
+<tr>
+<td>CR28</td>
+<td><code>tokens_today</code> understated use</td>
+<td><span class="accepted">Accepted</span></td>
+<td>The rail shows runs only; <code>lahe agent status</code> shows all
+four counts per turn, with "not reported" for a turn with none</td>
+</tr>
+<tr>
+<td>CR29</td>
+<td><code>reply.rejected</code> carries no item or rev</td>
+<td><span class="accepted">Accepted</span></td>
+<td>Rejections matched by reply file and line number</td>
 </tr>
 </tbody>
 </table></div>
@@ -3412,5 +3974,415 @@ turn" does not say why (nit)</h3>
 review's confirm panel, <code>CARD_LATE_ATTR</code> and the late ring,
 the <code>role="status"</code> status line, <code>fillAge</code>, the
 hand-off button, and <code>--warn</code>.</p>
+<h2 id="code-review-lead-review-round-2-1">Code Review Lead Review
+(Round 2)</h2>
+<p>Revision 2 of the architecture and plan (commit 494cd28), reviewed
+before implementation.</p>
+<p>Verdict: not reviewable as written. There are two blockers. First,
+the supervisor builder cannot build or test alone. Second, the
+<code>agent.json</code> layout loses the facts the kept-agent rules
+depend on. The round-one fixes (CR1 to CR17) mostly still hold. CR14
+(one owner per item) has a new hole, covered in CR22.</p>
+<h3
+id="cr18-the-supervisor-2b-calls-engine-functions-it-cannot-fake-blocker-plan">CR18.
+The supervisor (2B) calls engine functions it cannot fake (blocker;
+plan)</h3>
+<ul>
+<li><strong>What:</strong> 2B can inject only <code>opts.engine</code>
+and <code>opts.host</code>. The supervisor still needs four 2A
+functions, and each one throws "not built yet" for all of Phase 2:
+<ul>
+<li><code>buildPrompt</code>: for <code>prompt_sha256</code> and the
+"new prompt hash means fresh start" test.</li>
+<li><code>buildSchema</code>: for
+<code>agentSpec.reply_schema</code>.</li>
+<li><code>cutBatches</code>: the supervisor decides the batch and counts
+what the fake engine received.</li>
+<li><code>prepare</code>: someone has to create the stage before
+<code>host.start</code>.</li>
+</ul></li>
+<li>Smaller gaps where 2A and 2B meet:
+<ul>
+<li><code>agentSpec</code> carries a <code>prompt_file</code> path,
+which suggests the caller writes it. But 2A's host spec removes it
+"however the process ends". Nobody is named as the writer.</li>
+<li><code>cutBatches(items)</code> has no return shape for the items
+over 8,000 characters. The supervisor is the only reply writer, so it
+must learn which items those are.</li>
+<li><code>runTurn</code> mints <code>turn_id</code>, but
+<code>agent.json</code> shows the <code>turn_id</code> while the turn is
+still running.</li>
+<li><code>runTurn</code> returns no <code>model_turns</code>, which
+<code>turns.jsonl</code> records.</li>
+<li>The architecture's handle ("Other hosts later") has a
+<code>session_id</code> property and no <code>started</code> field. The
+plan has <code>sessionId()</code> and <code>started</code>.</li>
+</ul></li>
+<li><strong>Why:</strong> 2B's tests fail on the stubs until the Task
+3.1 merge. Or 2B works around them with local copies, and those copies
+drift.</li>
+<li><strong>Fix:</strong>
+<ul>
+<li>Build <code>headless_prompt.js</code> in full in Phase 1. It is pure
+and small, and it sits next to the contract work in Task 1.1. Or add
+<code>opts.prompt</code> and <code>opts.stage</code> injections.</li>
+<li>Pin that <code>host.start</code> takes the prompt text and owns
+writing and removing the file.</li>
+<li>Pin <code>cutBatches</code> as returning
+<code>{ batches, too_long }</code>, with the supervisor writing the
+too-long replies.</li>
+<li>The supervisor mints <code>turn_id</code> and passes it in.</li>
+<li><code>runTurn</code> returns <code>model_turns</code>.</li>
+<li>Update the architecture's handle block to match the plan.</li>
+</ul></li>
+</ul>
+<h3
+id="cr19-agentjson-puts-session-lifetime-facts-in-the-per-process-object-that-goes-null-blocker-architecture-and-plan">CR19.
+<code>agent.json</code> puts session-lifetime facts in the per-process
+object that goes null (blocker; architecture and plan)</h3>
+<ul>
+<li><strong>What:</strong> <code>claude_session</code>,
+<code>prompt_sha256</code>, <code>first_context</code> and
+<code>restarts</code> all live inside <code>agent</code>. The
+architecture says <code>agent</code> is <code>null</code> "while no
+agent process is alive (before the first turn, or after an idle close)".
+Three rules break:
+<ul>
+<li><strong>Resume after idle close.</strong> The architecture says "the
+supervisor keeps the session id", but the schema has no place to keep
+it. The stale-code restart has the same problem ("the next supervisor
+resumes the same session id").</li>
+<li><strong>The restart limit.</strong> <code>restarts</code> is wiped
+with each dead process, so "3 restarts in 10 minutes" never counts to
+3.</li>
+<li><strong>The 80,000-token fresh-start rule.</strong> A resumed
+process's first request already carries the whole history. If
+<code>first_context</code> resets per process, the rule measures only
+growth since the last resume. A review commented on less often than
+hourly (so idle close runs, then a resume) grows until Claude Code
+compacts on its own. That is the expensive path the rule exists to
+avoid.</li>
+</ul></li>
+<li><strong>Also unpinned:</strong>
+<ul>
+<li>Which starts count toward the restart limit: a fresh start after a
+crashed turn, or a failed resume.</li>
+<li>Whether a death while idle is resumed "at once" (architecture) or
+"before the next turn" (plan test). Resuming at once also holds an agent
+slot for no turn.</li>
+</ul></li>
+<li><strong>Fix:</strong>
+<ul>
+<li>Split the record. Put
+<code>claude_session: { id, prompt_sha256, fresh_first_context, restarts[] }</code>
+at the top level. It survives process death and idle close, and only a
+fresh start or a stop drops it. <code>agent</code> keeps only pid, pgid,
+started and turns.</li>
+<li>Pin "resume lazily, at the next turn" and say which starts count
+toward the limit.</li>
+<li>Update the Task 1.2 fixtures.</li>
+<li>Tests:
+<ul>
+<li>idle close, then resume, keeps the id</li>
+<li>the 80,000 rule fires across two idle-close resumes</li>
+<li>three deaths across three processes stop with
+<code>failing</code></li>
+</ul></li>
+</ul></li>
+</ul>
+<h3
+id="cr20-crash-recovery-after-write-back-looks-for-a-record-that-does-not-exist-yet-should-fix-plan">CR20.
+Crash recovery after write-back looks for a record that does not exist
+yet (should-fix; plan)</h3>
+<ul>
+<li><strong>What:</strong> The recovery rule reads
+"<code>turns.jsonl</code> shows <code>applied</code> with
+<code>replies_written: 0</code>". But the supervisor (2B) writes
+<code>turns.jsonl</code> only after <code>runTurn</code> returns, and
+the <code>afterWriteBack</code> hook fires inside <code>runTurn</code>
+(2A). So a kill there leaves no <code>turns.jsonl</code> line at
+all.</li>
+<li>The order of <code>result.json</code> against the rename is also not
+pinned. A crash between the rename and <code>result.json</code> leaves a
+change in the real file with no reply beside it. That breaks R5 (no
+change reaches the source without a reply that explains it).</li>
+<li><strong>Why:</strong> Each side will assume the other writes the
+durable marker.</li>
+<li><strong>Fix:</strong>
+<ul>
+<li><code>runTurn</code> writes <code>result.json</code>, with the
+checked replies and <code>"stage": "applying"</code>, and flushes it to
+disk before the rename.</li>
+<li>On start, the next supervisor scans <code>turns/</code> for a
+<code>result.json</code> that has no finished <code>turns.jsonl</code>
+line, and writes those replies first.</li>
+<li>Test a kill at each step:
+<ul>
+<li>between <code>result.json</code> and the rename: the original is
+intact and no reply is written</li>
+<li>between the rename and the return: the replies are written by the
+next supervisor</li>
+</ul></li>
+</ul></li>
+</ul>
+<h3
+id="cr21-three-turn-behaviours-have-no-owner-stop-against-crash-timeout-and-file-changed-should-fix-plan">CR21.
+Three turn behaviours have no owner: stop against crash, timeout, and
+"file changed" (should-fix; plan)</h3>
+<ul>
+<li><p><strong>Stop against crash.</strong> On "off" mid-turn, the
+supervisor kills the group while <code>runTurn</code> waits on
+<code>sendTurn</code>. <code>runTurn</code> sees a dead process and
+reports <code>failed</code>/<code>crashed</code>, not
+<code>stopped</code>. Then <code>turns.jsonl</code> and the dogfood
+numbers are wrong. Fix: <code>runTurn</code> takes
+<code>opts.signal</code> from the supervisor, and a kill it asked for is
+<code>stopped</code>.</p></li>
+<li><p><strong>Timeout.</strong> Two gaps:</p>
+<ul>
+<li><code>sendTurn</code> takes <code>timeout_ms</code>, but its
+<code>failure</code> list has no timed-out value.</li>
+<li>Node's timers run on a clock that does not count machine sleep on
+macOS or Linux. So the host's own timer does not end a turn after a
+sleep. The "clock jump past 10 minutes ends the turn" test only works if
+the supervisor's look checks wall time.</li>
+</ul>
+<p>Fix: the supervisor's look owns the 10-minute limit through
+<code>opts.now</code>. The host's timer stays only as a backstop. Name
+the failure <code>timed_out</code>. Run the test with a fake host that
+never answers.</p></li>
+<li><p><strong><code>file_changed_since_last_turn</code>.</strong> After
+a conflict, <code>runTurn</code> resets the copy at the end of that
+turn. At the next turn's copy-in the copy already matches, so the flag
+is lost. Conflict is not a fresh-start reason, so the same agent never
+hears the file changed. Fix: the supervisor passes
+<code>opts.fileChanged</code> from the previous
+<code>file_reset</code>.</p></li>
+<li><p><strong>The 15-second quiet wait.</strong> It is on the Engine
+test list, but it is a timed step. Waiting inside <code>runTurn</code>
+would also hold a turn slot for 15 seconds. Fix: the supervisor owns it,
+before it takes a slot. Move the test to the Supervisor list.</p></li>
+</ul>
+<h3
+id="cr22-while-auto-answer-holds-a-review-is-undefined-and-the-likely-reading-breaks-off-should-fix-architecture-and-plan">CR22.
+"While auto-answer holds a review" is undefined, and the likely reading
+breaks "off" (should-fix; architecture and plan)</h3>
+<ul>
+<li><strong>What:</strong> Task 1.2 gives
+<code>allowanceHolds(session)</code>, which stays true after "off",
+because only a takeover or <code>disallow</code> ends the allowance. The
+pieces use different tests:
+<ul>
+<li>The fold rejects other agents' replies "while auto-answer
+holds".</li>
+<li><code>lahe monitor</code> exits 6 while "a live supervisor holds the
+rev".</li>
+</ul></li>
+<li><strong>Why:</strong> If the fold uses <code>allowanceHolds</code>,
+then after "off" a chat agent's replies in that session are rejected
+with <code>auto_answer_owns</code>, while the rail promises "today's
+rules exactly". The two tests can also disagree while a supervisor is
+restarting.</li>
+<li><strong>Fix:</strong>
+<ul>
+<li>One named predicate in <code>agent_sessions.js</code>: the allowance
+holds and the latest request is "on". The fold, the monitor,
+<code>review</code> re-entry and liveness all use it.</li>
+<li>Tests:
+<ul>
+<li>after "off", a chat reply folds and the monitor runs</li>
+<li>with "on" standing and the supervisor dead, a chat reply is still
+rejected</li>
+</ul></li>
+</ul></li>
+</ul>
+<h3
+id="cr23-the-helpers-three-starts-then-failing-has-no-file-to-write-should-fix-architecture">CR23.
+The helper's "three starts, then <code>failing</code>" has no file to
+write (should-fix; architecture)</h3>
+<ul>
+<li><strong>What:</strong> Only the supervisor writes
+<code>agent.json</code>. A supervisor that dies at start writes nothing.
+If the helper keeps its start count in memory, it resets every time the
+helper restarts on stale code, and that is the normal case while
+dogfooding LAHE on LAHE.</li>
+<li><strong>Fix:</strong>
+<ul>
+<li>Give the helper its own file, for example
+<code>supervisor_starts.json</code> in the session folder, with the
+helper as sole writer. Add it to the one-writer table.</li>
+<li>Liveness reads stopped with reason <code>failing</code> from that
+file.</li>
+<li>Add a Task 1.2 fixture, and a Task 3.2 test with a supervisor that
+exits at once.</li>
+</ul></li>
+</ul>
+<h3
+id="cr24-task-02-is-missing-rows-the-fake-and-the-restart-rules-depend-on-should-fix-plan">CR24.
+Task 0.2 is missing rows the fake and the restart rules depend on
+(should-fix; plan)</h3>
+<p>Add these rows, each saving its raw bytes:</p>
+<ul>
+<li><strong>A resume that fails:</strong> <code>--resume</code> with a
+missing session id and with a corrupt one.
+<ul>
+<li>Record whether it fails at spawn or at the first message. The spike
+saw <code>init</code> only with the first message.</li>
+<li>Without this row, the rule "a failed resume gets one fresh start
+that is not a restart" cannot be told apart from a crash, and Task 1.4's
+"resume that fails" scenario has no real bytes.</li>
+<li>Add a <code>resume_failed</code> failure value.</li>
+<li>Stop rule: if a failed resume looks the same as a crash, drop that
+exception from the architecture.</li>
+</ul></li>
+<li><strong>Running totals after <code>--resume</code>:</strong> do they
+start at zero or carry over? <code>sendTurn</code>'s usage difference
+depends on it.</li>
+<li><strong>Structured output on the first turn after a resume.</strong>
+Today's row covers three turns in one process only.</li>
+<li><strong>Resume from a different working folder,</strong> to confirm
+that history is looked up by the folder (see CR26).</li>
+<li><strong><code>--verbose</code> left out, and a malformed stdin
+line:</strong> record the real error text.</li>
+<li><strong>What <code>work/</code> holds after several turns.</strong>
+Does Claude Code write anything into its working folder? The "exactly
+one regular file" test and the diff depend on the answer.</li>
+<li><strong>Failures in kept mode:</strong> run the Failures row in the
+kept-running mode, at the first turn, not as one-shot runs.</li>
+</ul>
+<h3
+id="cr25-the-fake-claude-and-the-argument-test-still-let-real-mistakes-through-should-fix-plan">CR25.
+The fake <code>claude</code> and the argument test still let real
+mistakes through (should-fix; plan)</h3>
+<ul>
+<li><strong>What:</strong>
+<ul>
+<li><p>The required-argument test leaves out:</p>
+<ul>
+<li><code>-p</code></li>
+<li><code>--verbose</code></li>
+<li><code>--model</code></li>
+<li><code>--json-schema</code> (when Task 0.2 chooses it)</li>
+</ul>
+<p>As far as I know, current Claude Code refuses
+<code>--output-format stream-json</code> under <code>-p</code> without
+<code>--verbose</code>. The CR24 row should confirm it.</p></li>
+<li><p>The fake checks only flag names against <code>--help</code>. It
+does not check flag combinations or the shape of the stdin user message
+(<code>type</code>, <code>message.role</code>, <code>content</code>,
+<code>session_id</code>).</p></li>
+</ul></li>
+<li><strong>Why:</strong> A builder who drops <code>--verbose</code> or
+builds the message envelope wrong passes every gate test. The error then
+shows only in Task 4.1, or as a hang.</li>
+<li><strong>Fix:</strong>
+<ul>
+<li>Add those flags to the test.</li>
+<li>The fake reproduces the errors Task 0.2 records and checks the
+envelope.</li>
+<li>One engine test sends a malformed envelope and expects a named
+failure within the timeout, not a hang.</li>
+</ul></li>
+</ul>
+<h3
+id="cr26-the-stage-path-has-to-stay-fixed-for-resume-and-the-docs-disagree-on-how-long-it-lives-should-fix-architecture">CR26.
+The stage path has to stay fixed for resume, and the docs disagree on
+how long it lives (should-fix; architecture)</h3>
+<ul>
+<li><strong>What:</strong> The architecture's Privacy section says
+Claude files the history "in a folder named after the stage path", so
+<code>--resume</code> depends on the working folder staying the same.
+The docs give three lifetimes for the stage:
+<ul>
+<li>"one per agent" (Components)</li>
+<li>"lives as long as the agent" (the copy between turns)</li>
+<li>"lives as long as the allowance" (Turn records)</li>
+</ul></li>
+<li><strong>Why:</strong> A builder who reads "one per agent" makes a
+new folder per start. Every resume then fails and quietly becomes a paid
+fresh start.</li>
+<li><strong>Fix:</strong>
+<ul>
+<li>One fixed path, <code>agent/work/</code>, for the life of the
+allowance.</li>
+<li><code>prepare</code> can run twice with the same result.</li>
+<li>The fake refuses a resume from a different working folder, as the
+CR24 row records.</li>
+<li>Add an engine test: resume after <code>prepare</code> runs again
+uses the same working folder.</li>
+</ul></li>
+</ul>
+<h3 id="cr27-missing-and-false-rail-words-nit-plan">CR27. Missing and
+false rail words (nit; plan)</h3>
+<ul>
+<li><code>applying</code> is a pinned state that can last up to 30
+seconds per turn (the fold wait). It has no status-line words.</li>
+<li>"Last run failed. Trying again." also shows when an idle agent died
+and was resumed. No run failed, and the resume is silent and free.</li>
+<li><code>queued</code> covers two waits: for a turn slot, and for an
+agent slot. The agent-slot wait can last up to 60 minutes while four
+idle agents hold all slots. In that case "waiting for another review's
+run" is false, because no run exists.</li>
+<li><strong>Fix:</strong>
+<ul>
+<li>Pin <code>applying</code> words (the running words will do).</li>
+<li>Show no chip for an idle resume.</li>
+<li>Either pin words for the agent-slot wait, or close the longest-idle
+agent early. The architecture already names that for the Library
+phase.</li>
+</ul></li>
+</ul>
+<h3
+id="cr28-tokens_today-understates-use-and-its-example-contradicts-its-definition-nit-architecture">CR28.
+<code>tokens_today</code> understates use, and its example contradicts
+its definition (nit; architecture)</h3>
+<ul>
+<li><strong>What:</strong>
+<ul>
+<li>In the spike, kept-agent lean turns reported 8 to 14 input tokens
+and 489 to 1,247 output tokens, while reading 37,436 to 83,933 tokens
+from cache.</li>
+<li>"Input plus output" leaves out nearly everything a turn processed.
+At the spike's largest per-turn figures, 6 turns give 7,566 tokens
+(computed with Python), so the example's <code>58210</code> for 6 turns
+cannot come from that definition.</li>
+<li>A crashed, timed-out or stopped turn has no <code>result</code>
+line, so its tokens are never counted.</li>
+</ul></li>
+<li><strong>Why:</strong> This works against R24 (usage is visible) and
+the "honest feedback" acceptance line.</li>
+<li><strong>Fix:</strong>
+<ul>
+<li>Pick the definition, and fix the example to match.</li>
+<li>A turn with no result is shown as "not reported" in
+<code>lahe agent status</code>, not as zero.</li>
+</ul></li>
+</ul>
+<h3
+id="cr29-the-fold-wait-matches-replyrejected-by-item-and-rev-which-it-does-not-carry-nit-architecture">CR29.
+The fold wait matches <code>reply.rejected</code> by item and rev, which
+it does not carry (nit; architecture)</h3>
+<ul>
+<li><strong>What:</strong> <code>reject()</code> in
+<code>src/service/replies.js</code> writes <code>reply.rejected</code>
+with the file and line number only. It has no item and no rev.</li>
+<li><strong>Why:</strong> Without a fix, a malformed line the supervisor
+wrote always takes the full 30-second timeout.</li>
+<li><strong>Fix:</strong> Match <code>reply.folded</code> by item and
+rev. Match <code>reply.rejected</code> by the file and line number the
+supervisor just appended.</li>
+</ul>
+<p><strong>What holds up from round one:</strong></p>
+<ul>
+<li>The write-back rule "no change without a reply" (CR11).</li>
+<li><code>suppressActivityTouch</code> on the drain (CR9).
+<code>status.js</code>'s <code>run(argv, options)</code> supports being
+called in-process.</li>
+<li>The process-life lock (CR1).</li>
+<li>Keeping <code>CONTRACT</code> as the chat strings (CR7).</li>
+<li>The route and <code>from</code> rules (CR5).</li>
+<li>Replaying a byte-identical reply line is safe, because
+<code>foldEventId</code> hashes the line.</li>
+</ul>
 </body>
 </html>
