@@ -15,9 +15,16 @@
 
 const protocol = require("../../../src/shared/protocol.js");
 
-function install(page, helperOrigin) {
+// The events.append answer has the real route's shape (src/service/routes.js):
+// accepted, stored, duplicates, rejected, seq, and a reason that leads with its
+// code. test/unit/run_refusal_real_route.test.js holds the real route to it.
+//
+// `contract` (optional) is the service_contract the stand-in's health answer
+// reports, for the layer's version check.
+function install(page, helperOrigin, options) {
+  const contract = options && typeof options.contract === "number" ? options.contract : null;
   return page.addInitScript(
-    ({ origin, base }) => {
+    ({ origin, base, contract }) => {
       const real = window.fetch.bind(window);
       const json = (body) =>
         new Response(JSON.stringify(body), { status: 200, headers: { "content-type": "application/json" } });
@@ -33,11 +40,14 @@ function install(page, helperOrigin) {
           (body.events || []).forEach((ev) => {
             const rec = ev.record || (ev.payload && ev.payload.record) || null;
             if (rec && Array.isArray(rec.new_blocks) && rec.new_blocks.length) {
-              rejected.push({ event_id: ev.event_id, code: "RUN_BLOCK_REFUSED", reason: "block 0 is not clean" });
+              rejected.push({ event_id: ev.event_id, code: "RUN_BLOCK_REFUSED", reason: "RUN_BLOCK_REFUSED: block 0 is not clean" });
               window.__laheRefused.push(ev.event_id);
             } else accepted.push(ev.event_id);
           });
-          return Promise.resolve(json({ accepted: accepted, rejected: rejected, seq: 1 }));
+          return Promise.resolve(json({ accepted: accepted, stored: accepted, duplicates: [], rejected: rejected, seq: 1 }));
+        }
+        if (path === base + "/health" && contract !== null) {
+          return Promise.resolve(json({ ok: true, version: "stand-in", api: 1, service_contract: contract, started_at: "2026-09-29T00:00:00.000Z" }));
         }
         if (path === base + "/window") {
           return Promise.resolve(
@@ -62,7 +72,7 @@ function install(page, helperOrigin) {
         return Promise.resolve(json({ ok: true }));
       };
     },
-    { origin: helperOrigin, base: protocol.route("events.append").path.replace(/\/events$/, "") }
+    { origin: helperOrigin, base: protocol.route("events.append").path.replace(/\/events$/, ""), contract: contract }
   );
 }
 
