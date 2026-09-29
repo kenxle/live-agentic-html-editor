@@ -183,3 +183,78 @@ test("a handled block the agent added words to reopens as undone", () => {
   const page = WORKED_PAGE.replace("time zqxcanary</p>", "time zqxcanary. The agent added this sentence.</p>");
   assert.equal(check(item, page), replay.PAGE_CHECK_REASON.REVERTED);
 });
+
+// ---------------------------------------------------------------------------
+// Fix round (reviews_impl/FIX_ROUND.md, group F2)
+// ---------------------------------------------------------------------------
+
+// Code lead finding 19: a sitting that retags and bolds the anchor is
+// format_only, and its bold was never checked.
+test("a format_only anchor whose bold the page lost reopens with the formatting note", () => {
+  const item = handled(
+    fx().runItem({
+      kind: record.KIND.FORMAT_ONLY,
+      before: "Plain words zqxcanary",
+      before_html: "Plain words zqxcanary",
+      anchor_after_html: "Plain <strong>words</strong> zqxcanary",
+      anchor_tag_after: "h2",
+      new_blocks: []
+    })
+  );
+  assert.equal(check(item, "<main><h2>Plain words zqxcanary</h2></main>"), replay.PAGE_CHECK_REASON.FORMATTING);
+  assert.equal(check(item, "<main><h2>Plain <strong>words</strong> zqxcanary</h2></main>"), null);
+});
+
+// Code lead finding 18: a proofread fix of "well--known" to "well-known" folds
+// to the same words, so the page showing the earlier revision was never seen.
+function punctuationFix() {
+  const f = fx();
+  const first = f.runItem({ new_blocks: [{ tag: "p", html: "A well--known fact about builds zqxcanary" }] });
+  const blocks = [{ tag: "p", html: "A well-known fact about builds zqxcanary" }];
+  const built = record.buildRunAfter(first.anchor_after_html, blocks);
+  const later = record.bumpRev(first, { new_blocks: blocks, after_html: built.after_html, after: built.after });
+  later.change = record.runChangeText(later);
+  return later;
+}
+
+test("a handled punctuation fix whose earlier revision is back on the page reopens as undone", () => {
+  const item = handled(punctuationFix());
+  assert.equal(check(item, "<main><p>What changed</p><p>A well--known fact about builds zqxcanary</p></main>"), replay.PAGE_CHECK_REASON.REVERTED);
+  assert.equal(check(item, "<main><p>What changed</p><p>A well-known fact about builds zqxcanary</p></main>"), null);
+});
+
+test("a punctuation fix rendered with a typographic dash is not reopened", () => {
+  // The render draws "-" as it is, and "--" in the earlier revision as a dash:
+  // the page shows neither revision exactly, and the fold says it is present.
+  const item = handled(punctuationFix());
+  assert.equal(check(item, "<main><p>What changed</p><p>A well‑known fact about builds zqxcanary</p></main>"), null);
+});
+
+// Design call 4 (CR 3, CL 2): a take-back carries the old tag in
+// anchor_tag_after, and the page check acts on it.
+function tagOnlyTakeBack() {
+  const orig = named("tag-only change");
+  const back = record.revertOf(orig);
+  back.anchor_tag_after = "p";
+  back.region = orig.region;
+  return handled(back);
+}
+
+test("a handled take-back of a tag change is not reopened when the anchor is back to its old tag", () => {
+  assert.equal(check(tagOnlyTakeBack(), "<main><p>Plain words zqxcanary</p></main>"), null);
+});
+
+test("a handled take-back of a tag change reopens with the tag note while the page keeps the new tag", () => {
+  const back = tagOnlyTakeBack();
+  const page = "<main><h2>Plain words zqxcanary</h2></main>";
+  assert.equal(check(back, page), replay.PAGE_CHECK_REASON.TAG);
+  assert.equal(replay.pageCheckNoteFor(back, page, { pageHtml: page }), record.PAGE_CHECK_TAG_NOTE);
+});
+
+test("a handled take-back of a retagged run checks the anchor's old tag too", () => {
+  const orig = fx().runItem({ anchor_tag_after: "h3" });
+  const back = handled(record.revertOf(orig));
+  back.anchor_tag_after = "p";
+  assert.equal(check(back, "<main><p>What changed</p></main>"), null);
+  assert.equal(check(back, "<main><h3>What changed</h3></main>"), replay.PAGE_CHECK_REASON.TAG);
+});

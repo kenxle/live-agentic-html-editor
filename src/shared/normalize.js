@@ -94,10 +94,13 @@
   // it. A run of hyphens folds to one, after the dashes do: a Markdown source
   // spells a dash "--" or "---" and a smart renderer draws it as one, so the
   // typed and the rendered text must fold to the same string for every reader
-  // (the run walk, the page check, the handled check, the split search). Verification (3B) uses it for a second pass when the literal pass
-  // misses, because a markdown source holds a straight quote where the built
-  // HTML holds a curly one. Nothing else may use it: replay folding typography
-  // would silently discard a reviewer's punctuation fix.
+  // (the run walk, the page check, the handled check, the split search).
+  // Verification (3B) uses it for a second pass when the literal pass misses,
+  // because a markdown source holds a straight quote where the built HTML
+  // holds a curly one. The fold decides only where a block is, never whether
+  // its words are right: replay and the page check compare a found block with
+  // each revision WITHOUT the fold, so a reviewer's punctuation fix (well--known
+  // to well-known) is still written and still checked.
   function foldTypography(input) {
     return normalizeText(input)
       .replace(/[\u2018\u2019\u201A\u201B\u2032]/g, "'")
