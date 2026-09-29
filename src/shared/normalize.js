@@ -1115,6 +1115,12 @@
   // The refusal code, spelled once in failures.js.
   var RUN_BLOCK_REFUSED = "RUN_BLOCK_REFUSED";
 
+  // How deep a block's elements may nest, li included. A real block is a few
+  // levels deep (four inline tags and li exist). The cap bounds the closing-tag
+  // scan and every recursive pass below, so hostile markup costs linear time
+  // and never overflows the stack (security review, finding 2).
+  var MAX_BLOCK_NESTING = 32;
+
   // Inline elements a new block may hold, and the constant each is written as.
   // Nothing in a record ever names an element: output tags come from here.
   var INLINE_ALLOWED = {
@@ -1230,6 +1236,7 @@
         if (parent !== rootNode) return refuse("a nested item");
         var li = { name: "li", children: [] };
         rootNode.children.push(li);
+        if (stack.length > MAX_BLOCK_NESTING) return refuse("nesting deeper than " + MAX_BLOCK_NESTING);
         stack.push(li);
         if (parsed.selfClosing) stack.pop();
         continue;
@@ -1238,7 +1245,9 @@
       if (isList && parent === rootNode) return refuse("formatting outside an item in a list block");
       var el = { name: INLINE_ALLOWED[name], children: [] };
       parent.children.push(el);
-      if (!parsed.selfClosing) stack.push(el);
+      if (parsed.selfClosing) continue;
+      if (stack.length > MAX_BLOCK_NESTING) return refuse("nesting deeper than " + MAX_BLOCK_NESTING);
+      stack.push(el);
     }
 
     var out;
@@ -1278,22 +1287,34 @@
 
   // An element with no words goes, and a text node that is only space between
   // two breaks or at an edge is left to trimEdge.
+  //
+  // Neighbouring text (text either side of an element that went) is joined
+  // once, at the end of the run of text, never once per piece: joining per
+  // piece rescanned the whole joined string each time, which is N x N on a
+  // block of many empty elements.
   function pruneEmpty(nodes) {
     var out = [];
+    var pending = null;
+    function flush() {
+      if (!pending) return;
+      out.push({ text: pending.length === 1 ? pending[0] : pending.join("").replace(/ +/g, " ") });
+      pending = null;
+    }
     for (var i = 0; i < nodes.length; i += 1) {
       var node = nodes[i];
       if (node.children) {
         if (!hasWords(node)) continue;
+        flush();
         out.push({ name: node.name, children: pruneEmpty(node.children) });
       } else if (node.text !== undefined) {
         if (!node.text) continue;
-        var prev = out.length ? out[out.length - 1] : null;
-        if (prev && prev.text !== undefined) prev.text = (prev.text + node.text).replace(/ +/g, " ");
-        else out.push({ text: node.text });
+        (pending = pending || []).push(node.text);
       } else {
+        flush();
         out.push(node);
       }
     }
+    flush();
     return out;
   }
 
@@ -1893,6 +1914,7 @@
     SAFE_SCHEMES: SAFE_SCHEMES,
     DROP_SUBTREE_TAGS: DROP_SUBTREE_TAGS,
     WRITABLE_BLOCK_TAGS: WRITABLE_BLOCK_TAGS,
+    MAX_BLOCK_NESTING: MAX_BLOCK_NESTING,
     SHORT_BLOCK_WORDS: SHORT_BLOCK_WORDS,
     RUN_WALK_SLACK: RUN_WALK_SLACK,
     RUN_BLOCK_REFUSED: RUN_BLOCK_REFUSED,
