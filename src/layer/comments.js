@@ -477,15 +477,16 @@
    * so it is the block the selection starts in. The reviewer's quote is theirs
    * and is kept whole, and the repaint covers all of it (see paintRangeFor).
    *
-   * EXCEPT A SELECTION OF MOST OF THE PAGE. When the reviewer's own words are
-   * more than half the page's text, the page is what they chose, and the
-   * region is the smallest element holding the selection. Ken: "if *I*
-   * highlighted the entire page, then that's the highlight." Anchored on its
-   * first block, such a comment shrank to that block the moment the agent
-   * changed any word in it, because the quote could no longer be found. The
-   * bar is PAINT_MAX_TEXT_RATIO, so a region chosen this way always passes the
-   * highlighter's size check (refusesWholePaint), and a triple-click (whose
-   * words are one block) never reaches it.
+   * EXCEPT A SELECTION OF A WHOLE ELEMENT. When the reviewer selected nearly
+   * all the words of the smallest element holding the selection (a whole
+   * <main>, a whole page), that element is what they chose, and it is the
+   * region. Ken: "if *I* highlighted the entire page, then that's the
+   * highlight." Anchored on its first block, such a comment shrank to that
+   * block the moment the agent changed any word in it, because the quote could
+   * no longer be found. The bar is WHOLE_SELECTION_SHARE, measured against
+   * that element and not the page, so a site's nav and footer do not count
+   * against a selection of all of <main>, and three of five paragraphs is
+   * never "the whole page". A triple-click (one block) never reaches it.
    *
    * @param {Range} range
    * @returns {Element|null}
@@ -504,7 +505,7 @@
       var firstBlock = innermostBlockOf(ends.first);
       var lastBlock = innermostBlockOf(ends.last);
       if (firstBlock && lastBlock && firstBlock !== lastBlock && firstBlock.contains && !firstBlock.contains(lastBlock)) {
-        return selectsMostOfPage(range, holder) ? holder : firstBlock;
+        return selectsNearlyAllOf(range, holder) ? holder : firstBlock;
       }
       node = holder;
     }
@@ -512,21 +513,56 @@
     return node && node.nodeType === 1 ? node : null;
   }
 
+  // How much of an element's words a selection must cover to be a selection
+  // of the element. Near whole, not "most": the rule is the reviewer's own
+  // choice of the whole thing, and a drag that stops a word or two short of the
+  // end, or skips a caption, is still that choice.
+  var WHOLE_SELECTION_SHARE = 0.9;
+
   /**
-   * Are the selected words more than half the page's text? The page is the
-   * review scope (the anchor engine's scopeOf), measured the way the
-   * highlighter measures a whole-element paint.
+   * Does the selection cover nearly all the words of this element? Both sides
+   * are counted by one walk, the same way: visible characters in text nodes,
+   * skipping what the anchor engine skips (<script>, <style>, the library's own
+   * chrome). A count that read <script> text on one side and not the other
+   * made a selection look bigger than it was.
    */
-  function selectsMostOfPage(range, holder) {
-    if (!holder || !anchor || typeof anchor.scopeOf !== "function" || typeof anchor.wordsOf !== "function") {
-      return false;
+  function selectsNearlyAllOf(range, holder) {
+    if (!range || !holder) return false;
+    var whole = visibleCharsIn(holder, null);
+    if (!whole) return false;
+    return visibleCharsIn(holder, range) >= whole * WHOLE_SELECTION_SHARE;
+  }
+
+  /** Non-space characters of text under `holder`, within `range` when given. */
+  function visibleCharsIn(holder, range) {
+    var doc = holder.ownerDocument;
+    if (!doc || typeof doc.createTreeWalker !== "function") return 0;
+    var walker = doc.createTreeWalker(holder, 4 /* NodeFilter.SHOW_TEXT */);
+    var count = 0;
+    var node = walker.nextNode();
+    while (node) {
+      if (!skippedBelow(node, holder) && (!range || range.intersectsNode(node))) {
+        var data = String(node.data || "");
+        var from = range && node === range.startContainer ? range.startOffset : 0;
+        var to = range && node === range.endContainer ? range.endOffset : data.length;
+        count += data.slice(from, to).replace(/\s+/g, "").length;
+      }
+      node = walker.nextNode();
     }
-    var page = anchor.scopeOf(holder.ownerDocument, holder);
-    if (!page) return false;
-    var selected = normalize.normalizeText(String(range.toString() || "")).length;
-    var whole = normalize.normalizeText(anchor.wordsOf(page) || "").length;
-    if (!selected || !whole) return false;
-    return whole <= selected * PAINT_MAX_TEXT_RATIO;
+    return count;
+  }
+
+  /** Is this text node inside something the anchor engine does not read? */
+  function skippedBelow(node, holder) {
+    var skip = (anchor && anchor.SKIP_TAGS) || {};
+    var el = node.parentNode;
+    while (el && el !== holder && el.nodeType === 1) {
+      var tag = String(el.tagName || "").toLowerCase();
+      if (Object.prototype.hasOwnProperty.call(skip, tag)) return true;
+      if (markers && typeof markers.isToolNode === "function" && markers.isToolNode(el)) return true;
+      el = el.parentNode;
+    }
+    return false;
   }
 
   function headingTextFor(element, doc) {

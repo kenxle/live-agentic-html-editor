@@ -877,10 +877,16 @@
     return id;
   }
 
-  /** Every element carrying this exact stamp. More than one is a duplicate. */
+  /**
+   * Every element carrying this exact stamp. More than one is a duplicate.
+   *
+   * The scope itself counts. A whole-page selection on a page whose blocks sit
+   * straight in <body> has <body> as its region, so the stamp is on the scope.
+   */
   function findByStamp(scope, stamp) {
     var out = [];
     if (!stamp) return out;
+    if (isElement(scope) && attrOf(scope, markers.STAMP_ATTR) === stamp) out.push(scope);
     eachElement(scope, function (node) {
       if (attrOf(node, markers.STAMP_ATTR) === stamp) out.push(node);
     });

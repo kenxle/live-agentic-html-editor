@@ -32,6 +32,17 @@ const WORDS = {
 // A flat document: every block sits directly in <main>, so the only element
 // holding the whole selection is the page itself.
 function docHtml(config, options) {
+  if (options.inner) {
+    return (
+      '<!doctype html>\n<html lang="en">\n<head><meta charset="utf-8" />' +
+      "<title>Steady Pace</title>" +
+      "<style>body{font:16px/1.5 system-ui,sans-serif;margin:2rem}</style></head>\n<body>\n" +
+      options.inner +
+      "\n" +
+      scriptTagFor(config) +
+      "\n</body>\n</html>\n"
+    );
+  }
   const weekTwo = options.reworded ? "Week two adds a fourth run, still easy." : WORDS.weekTwo;
   return (
     '<!doctype html>\n<html lang="en">\n<head><meta charset="utf-8" />' +
@@ -236,5 +247,142 @@ test.describe("a whole-page selection is the whole page", () => {
     expect(after.text).toBe(await pageWords(page));
     const stored = await page.evaluate((itemId) => window.__lahe.itemById(itemId), item.id);
     expect(stored.region.lost, "the record is found, not lost").toBe(null);
+  });
+
+  /** Select from the start of one element's text to the end of another's, and comment. */
+  async function commentFromTo(page, fromId, toId, note) {
+    await page.evaluate(
+      function (ids) {
+        const from = document.getElementById(ids[0]).firstChild;
+        const to = document.getElementById(ids[1]).firstChild;
+        const range = document.createRange();
+        range.setStart(from, 0);
+        range.setEnd(to, to.data.length);
+        const selection = window.getSelection();
+        selection.removeAllRanges();
+        selection.addRange(range);
+      },
+      [fromId, toId]
+    );
+    await page.keyboard.press("ControlOrMeta+Shift+KeyC");
+    await pollPage(page, () => !!window.__lahe.focusedBoxQuote(), undefined, {
+      message: "the comment box to open on the selection"
+    });
+    await page.keyboard.type(note);
+    await page.keyboard.press("ControlOrMeta+Enter");
+    await pollPage(
+      page,
+      (text) => window.__lahe.items().some((item) => item.note === text && item.state === "ready"),
+      note,
+      { message: "the comment to be ready" }
+    );
+    return page.evaluate((text) => window.__lahe.items().find((item) => item.note === text), note);
+  }
+
+  const LONG = " It runs on at some length so that the paragraphs weigh about the same on the page.";
+
+  test("three of five paragraphs on a flat page is not the whole page: the region is the first block", async ({
+    page
+  }) => {
+    // A Markdown document is one <main> of blocks. Three long paragraphs out
+    // of five is more than half its text, and still not what "the whole page"
+    // means: after the agent rewords them, the paint must not grow to cover
+    // the two paragraphs the reviewer never chose.
+    const inner =
+      "<main>\n" +
+      [1, 2, 3, 4, 5].map((n) => '<p id="p' + n + '">Paragraph ' + n + " opens here." + LONG + "</p>").join("\n") +
+      "\n</main>";
+    await openDoc(page, { inner: inner });
+    const item = await commentFromTo(page, "p1", "p3", "Tighten these three.");
+    expect(item.region.lost).toBe(null);
+    expect(item.region.ref.path, "anchored on the first selected block, not <main>").toBe("body>main:1>p:1");
+  });
+
+  test("all of <main> on a page with a long nav and footer is the whole page, and stays whole after a change", async ({
+    page
+  }) => {
+    // The nav and footer carry more words than <main>, so <main> is under half
+    // the page's text. The reviewer still selected all of the content.
+    const chrome = "Home About Pricing Blog Careers Contact Docs Support Status Security Privacy Terms Cookies";
+    const inner =
+      '<nav id="nav">' + chrome + " " + chrome + " " + chrome + "</nav>\n<main>\n" +
+      '<h1 id="title">' + WORDS.title + "</h1>\n" +
+      '<p id="intro">' + WORDS.intro + "</p>\n" +
+      '<p id="closing">' + WORDS.closing + "</p>\n</main>\n" +
+      '<footer id="footer">' + chrome + " " + chrome + " " + chrome + "</footer>";
+    await openDoc(page, { inner: inner });
+    const item = await commentFromTo(page, "title", "closing", "Tighten the whole page.");
+    expect(item.region.lost).toBe(null);
+    expect(item.region.ref.path, "the region is <main>, all of what was selected").toBe("body>main:1");
+
+    // The agent rewords a line and carries the stamp into the source. After
+    // the reload the stamp finds <main>, and all of it is painted.
+    const stamped = await page.evaluate(() => document.querySelector("main").outerHTML);
+    const reworded =
+      '<nav id="nav">' + chrome + " " + chrome + " " + chrome + "</nav>\n" +
+      stamped.replace(WORDS.intro, "Runners come back too fast after a layoff.") + "\n" +
+      '<footer id="footer">' + chrome + " " + chrome + " " + chrome + "</footer>";
+    const config = { review: REVIEW, token: TOKEN, helper: "http://127.0.0.1:1" };
+    await page.unroute("**" + DOC_PATH);
+    await page.route("**" + DOC_PATH, function (route) {
+      return route.fulfill({
+        status: 200,
+        headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" },
+        body: docHtml(config, { inner: reworded })
+      });
+    });
+    await page.reload();
+    await pollPage(page, () => !!(window.__lahe && window.__lahe.booted), undefined, {
+      message: "the layer to boot again after the reload"
+    });
+    await pollPage(
+      page,
+      (itemId) => window.__lahe.handle.comments.highlights.paintedIds().indexOf(itemId) !== -1,
+      item.id,
+      { message: "<main> to be painted after the agent's change" }
+    );
+    const after = await paintState(page, item.id);
+    const main = await page.evaluate(() => document.querySelector("main").innerText.replace(/\s+/g, " ").trim());
+    expect(after.text, "the whole of <main> is painted, not the first block").toBe(main);
+    const stored = await page.evaluate((itemId) => window.__lahe.itemById(itemId), item.id);
+    expect(stored.region.lost, "and the record is found").toBe(null);
+  });
+
+  test("script text inside the selection does not count toward selecting the whole element", async ({ page }) => {
+    // Four of five paragraphs plus a long inline script. Counted by
+    // toString(), the script's text makes the selection look like nearly all
+    // of <main>. Counted the way the page's words are, it is not.
+    const script = "<script>" + "var notProse = 'x';".repeat(200) + "</script>";
+    const inner =
+      "<main>\n" +
+      [1, 2, 3, 4].map((n) => '<p id="p' + n + '">Paragraph ' + n + " opens here." + LONG + "</p>").join("\n") +
+      "\n" + script + "\n" +
+      '<p id="p5">Paragraph 5 opens here.' + LONG + LONG + LONG + "</p>\n</main>";
+    await openDoc(page, { inner: inner });
+    await page.evaluate(function () {
+      // Selection from p1 to the end of the script: every paragraph but the last.
+      const from = document.getElementById("p1").firstChild;
+      const script = document.querySelector("main script");
+      const range = document.createRange();
+      range.setStart(from, 0);
+      range.setEnd(script.firstChild, script.firstChild.data.length);
+      const selection = window.getSelection();
+      selection.removeAllRanges();
+      selection.addRange(range);
+      window.__probe = { selected: String(range).length, main: document.querySelector("main").textContent.length };
+    });
+    const probe = await page.evaluate(() => window.__probe);
+    expect(probe.selected / probe.main, "the raw selection is over nine tenths of <main>").toBeGreaterThan(0.9);
+    await page.keyboard.press("ControlOrMeta+Shift+KeyC");
+    await pollPage(page, () => !!window.__lahe.focusedBoxQuote(), undefined, {
+      message: "the comment box to open on the selection"
+    });
+    await page.keyboard.type("Tighten these four.");
+    await page.keyboard.press("ControlOrMeta+Enter");
+    await pollPage(page, () => window.__lahe.items().some((item) => item.state === "ready"), undefined, {
+      message: "the comment to be ready"
+    });
+    const item = await page.evaluate(() => window.__lahe.items()[0]);
+    expect(item.region.ref.path, "anchored on the first block").toBe("body>main:1>p:1");
   });
 });

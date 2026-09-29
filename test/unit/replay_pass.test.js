@@ -1075,12 +1075,13 @@ test("a heading that holds every word on the page is still found by its stamp af
   assert.equal(highlights.painted[item.id].range.node, h1, "and it is painted");
 });
 
-test("a whole-element paint hands the highlighter the reviewer's quote, and reports a refusal", () => {
-  // Code review of oversized-records: the highlighter refuses a whole-element
-  // paint that is far bigger than the words the reviewer chose, and it needs
-  // those words to tell. The stamp on <main> is taken as certain, so only the
-  // size check stands between a one-line comment and a wash over every
-  // paragraph.
+test("a stamp on a container far bigger than the reviewer's words is honestly lost, not found and unpainted", () => {
+  // A record stored before the triple-click fix: its stamp is on <main> and
+  // its quote is one heading. The highlighter would refuse to paint <main> for
+  // it (more than twice the quote), so taking the stamp as certain left a card
+  // with no highlight, no lost notice, and no probable-place guess. The stamp
+  // is not a certain place for these words: the record is lost, and the point
+  // ladder gets its turn.
   const item = fixtures.comment();
   const blocks = [el("p", { text: "Still open" }), el("p", { text: "The next paragraph." }), el("p", { text: "The last one." })];
   const main = el("main", { attrs: { "data-lahe-id": "e-main" }, children: blocks });
@@ -1088,20 +1089,24 @@ test("a whole-element paint hands the highlighter the reviewer's quote, and repo
   const anchoredItem = anchored(item, main, root);
   anchoredItem[record.FIELD.CONTEXT] = Object.assign({}, anchoredItem[record.FIELD.CONTEXT], { quote: "Still open" });
   const highlights = fakeHighlights();
+  const ladder = fakePointing(null);
   const context = {
     root: root,
     items: [anchoredItem],
     cards: fakeCards(),
     document: fakeDocument(),
     highlights: highlights,
-    pointing: fakePointing(null)
+    pointing: ladder
   };
 
   replay.resetCounters();
   replay.noteSettling(0);
   blocks[2].textContent = "The last one, edited by the agent.";
-  replay.runPass(replay.REASON.MUTATION, context);
-  assert.equal(highlights.quotes[item.id], "Still open", "the quote reaches the highlighter");
+  const outcome = replay.runPass(replay.REASON.MUTATION, context).results[0];
+  assert.notEqual(outcome.element, main, "<main> is not where a one-line comment lives");
+  assert.ok(anchoredItem.region.lost, "so the record says it could not be placed");
+  assert.equal(highlights.painted[item.id], undefined, "and nothing is washed");
+  assert.ok(ladder.asked.length > 0, "and the point ladder is asked for a probable place");
 });
 
 test("a comment on a whole element is not weighed against its old text when the element grows", () => {
