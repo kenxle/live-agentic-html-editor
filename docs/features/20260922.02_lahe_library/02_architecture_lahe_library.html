@@ -872,7 +872,7 @@
 <h1 class="title">Architecture: LAHE Library</h1>
 </header>
 
-<div class="doc-nav"><span class="doc-nav-label">Docs</span><a href="00_crucible.html">Crucible</a><a href="01_brief_lahe_library.html">Brief</a><a href="02_architecture_lahe_library.html" class="current">Architecture</a><a href="03_plan_lahe_library.html">Plan</a><a href="wireframes/index.html">Index</a><a href="http://127.0.0.1:55480/04_progress_lahe_library-fdf092f7193a770f.html">Progress</a></div>
+<div class="doc-nav"><span class="doc-nav-label">Docs</span><a href="00_crucible.html">Crucible</a><a href="01_brief_lahe_library.html">Brief</a><a href="02_architecture_lahe_library.html" class="current">Architecture</a><a href="03_plan_lahe_library.html">Plan</a><a href="wireframes/index.html">Wireframes</a><a href="http://127.0.0.1:55480/04_progress_lahe_library-fdf092f7193a770f.html">Progress</a></div>
 <nav id="TOC" role="doc-toc">
 <ul>
 <li><a href="#summary" id="toc-summary">Summary</a></li>
@@ -1121,7 +1121,9 @@ class="sourceCode json"><code class="sourceCode json"><span id="cb2-1"><a href="
 <span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a>  <span class="dt">&quot;reopened&quot;</span><span class="fu">:</span> <span class="fu">{</span> <span class="dt">&quot;&lt;session-id&gt;&quot;</span><span class="fu">:</span> <span class="fu">{</span> <span class="dt">&quot;at&quot;</span><span class="fu">:</span> <span class="st">&quot;2026-09-28T16:21:00Z&quot;</span><span class="fu">,</span> <span class="dt">&quot;handoff_rev&quot;</span><span class="fu">:</span> <span class="dv">4</span> <span class="fu">}</span> <span class="fu">}</span> <span class="fu">}</span></span></code></pre></div>
 <p>A corrupt <code>catalog.json</code> is never overwritten: a star is
 refused with <code>PROTO_CATALOG_UNREADABLE</code>, and the list shows
-no stars with a notice.</p>
+no stars with a notice. An Open that would reopen a closed session is
+refused the same way, because a reopen the sweep cannot see would leave
+that session open for good (fix round CX2 and CR4).</p>
 <p><strong><code>&lt;state&gt;/catalog-attach.json</code></strong>,
 written only by the CLI (<code>lahe library --session</code>):</p>
 <div class="sourceCode" id="cb3"><pre
@@ -1154,8 +1156,8 @@ appends the <code>expired</code> line the first time it sees one, so the
 file stays the single record.</li>
 <li>An answered or expired request no longer counts toward
 one-per-review or <code>QUEUE_CAP</code>.</li>
-<li>A torn last line is skipped with a helper log line. The list and the
-drain still work.</li>
+<li>A torn last line is skipped with a helper log line, logged once
+rather than on every poll. The list and the drain still work.</li>
 </ul>
 <p><strong>The Library token</strong> is minted in memory at each helper
 start and never written to disk. It exists only inside the served
@@ -1167,7 +1169,7 @@ page.</p>
 <p><code>catalog.list</code>, one entry per session:</p>
 <div class="sourceCode" id="cb5"><pre
 class="sourceCode json"><code class="sourceCode json"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a><span class="fu">{</span></span>
-<span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a>  <span class="dt">&quot;attached&quot;</span><span class="fu">:</span> <span class="fu">{</span> <span class="dt">&quot;session&quot;</span><span class="fu">:</span> <span class="st">&quot;s_...&quot;</span><span class="fu">,</span> <span class="dt">&quot;name&quot;</span><span class="fu">:</span> <span class="st">&quot;document index&quot;</span><span class="fu">,</span> <span class="dt">&quot;watching&quot;</span><span class="fu">:</span> <span class="kw">true</span> <span class="fu">},</span></span>
+<span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a>  <span class="dt">&quot;attached&quot;</span><span class="fu">:</span> <span class="fu">{</span> <span class="dt">&quot;session&quot;</span><span class="fu">:</span> <span class="st">&quot;s_...&quot;</span><span class="fu">,</span> <span class="dt">&quot;name&quot;</span><span class="fu">:</span> <span class="st">&quot;document index&quot;</span><span class="fu">,</span> <span class="dt">&quot;watching&quot;</span><span class="fu">:</span> <span class="kw">true</span><span class="fu">,</span> <span class="dt">&quot;closed&quot;</span><span class="fu">:</span> <span class="kw">false</span> <span class="fu">},</span></span>
 <span id="cb5-3"><a href="#cb5-3" aria-hidden="true" tabindex="-1"></a>  <span class="dt">&quot;sessions&quot;</span><span class="fu">:</span> <span class="ot">[</span><span class="fu">{</span></span>
 <span id="cb5-4"><a href="#cb5-4" aria-hidden="true" tabindex="-1"></a>    <span class="dt">&quot;id&quot;</span><span class="fu">:</span> <span class="st">&quot;s_...&quot;</span><span class="fu">,</span> <span class="dt">&quot;name&quot;</span><span class="fu">:</span> <span class="st">&quot;coach activity&quot;</span><span class="fu">,</span> <span class="dt">&quot;projects&quot;</span><span class="fu">:</span> <span class="ot">[</span><span class="st">&quot;steady-thread&quot;</span><span class="ot">]</span><span class="fu">,</span></span>
 <span id="cb5-5"><a href="#cb5-5" aria-hidden="true" tabindex="-1"></a>    <span class="dt">&quot;watching&quot;</span><span class="fu">:</span> <span class="fu">{</span> <span class="dt">&quot;session&quot;</span><span class="fu">:</span> <span class="st">&quot;s_...&quot;</span><span class="fu">,</span> <span class="dt">&quot;name&quot;</span><span class="fu">:</span> <span class="st">&quot;free writing lahe&quot;</span> <span class="fu">},</span> <span class="dt">&quot;last&quot;</span><span class="fu">:</span> <span class="st">&quot;2026-09-28T15:40:00Z&quot;</span><span class="fu">,</span></span>
@@ -1179,19 +1181,23 @@ class="sourceCode json"><code class="sourceCode json"><span id="cb5-1"><a href="
 <span id="cb5-11"><a href="#cb5-11" aria-hidden="true" tabindex="-1"></a>      <span class="dt">&quot;openable&quot;</span><span class="fu">:</span> <span class="st">&quot;yes&quot;</span> <span class="er">|</span> <span class="st">&quot;via-agent&quot;</span> <span class="er">|</span> <span class="st">&quot;missing&quot;</span><span class="fu">,</span> <span class="dt">&quot;kind&quot;</span><span class="fu">:</span> <span class="st">&quot;static&quot;</span> <span class="er">|</span> <span class="st">&quot;dev-server&quot;</span> <span class="er">|</span> <span class="st">&quot;legacy&quot;</span> <span class="er">|</span> <span class="st">&quot;worktree&quot;</span><span class="fu">,</span></span>
 <span id="cb5-12"><a href="#cb5-12" aria-hidden="true" tabindex="-1"></a>      <span class="dt">&quot;starred&quot;</span><span class="fu">:</span> <span class="kw">false</span><span class="fu">,</span> <span class="dt">&quot;unreadable&quot;</span><span class="fu">:</span> <span class="kw">false</span><span class="fu">,</span></span>
 <span id="cb5-13"><a href="#cb5-13" aria-hidden="true" tabindex="-1"></a>      <span class="dt">&quot;request&quot;</span><span class="fu">:</span> <span class="fu">{</span> <span class="dt">&quot;id&quot;</span><span class="fu">:</span> <span class="st">&quot;cq_...&quot;</span><span class="fu">,</span> <span class="dt">&quot;action&quot;</span><span class="fu">:</span> <span class="st">&quot;pickup&quot;</span><span class="fu">,</span> <span class="dt">&quot;at&quot;</span><span class="fu">:</span> <span class="st">&quot;...&quot;</span><span class="fu">,</span> <span class="dt">&quot;state&quot;</span><span class="fu">:</span> <span class="st">&quot;waiting&quot;</span> <span class="er">|</span> <span class="st">&quot;done&quot;</span> <span class="er">|</span> <span class="st">&quot;refused&quot;</span> <span class="er">|</span> <span class="st">&quot;expired&quot;</span><span class="fu">,</span></span>
-<span id="cb5-14"><a href="#cb5-14" aria-hidden="true" tabindex="-1"></a>                   <span class="dt">&quot;by_name&quot;</span><span class="fu">:</span> <span class="st">&quot;document index&quot;</span><span class="fu">,</span> <span class="dt">&quot;text&quot;</span><span class="fu">:</span> <span class="st">&quot;...&quot;</span><span class="fu">,</span> <span class="dt">&quot;answered_at&quot;</span><span class="fu">:</span> <span class="st">&quot;...&quot;</span> <span class="fu">},</span></span>
-<span id="cb5-15"><a href="#cb5-15" aria-hidden="true" tabindex="-1"></a>      <span class="dt">&quot;pages&quot;</span><span class="fu">:</span> <span class="ot">[</span><span class="fu">{</span> <span class="dt">&quot;title&quot;</span><span class="fu">:</span> <span class="st">&quot;...&quot;</span><span class="fu">,</span> <span class="dt">&quot;path&quot;</span><span class="fu">:</span> <span class="st">&quot;/...&quot;</span> <span class="fu">}</span><span class="ot">]</span><span class="fu">,</span></span>
-<span id="cb5-16"><a href="#cb5-16" aria-hidden="true" tabindex="-1"></a>      <span class="dt">&quot;folded_from&quot;</span><span class="fu">:</span> <span class="ot">[</span><span class="st">&quot;r_...&quot;</span><span class="ot">,</span> <span class="st">&quot;r_...&quot;</span><span class="ot">]</span></span>
-<span id="cb5-17"><a href="#cb5-17" aria-hidden="true" tabindex="-1"></a>    <span class="fu">}</span><span class="ot">]</span></span>
-<span id="cb5-18"><a href="#cb5-18" aria-hidden="true" tabindex="-1"></a>  <span class="fu">}</span><span class="ot">]</span></span>
-<span id="cb5-19"><a href="#cb5-19" aria-hidden="true" tabindex="-1"></a><span class="fu">}</span></span></code></pre></div>
+<span id="cb5-14"><a href="#cb5-14" aria-hidden="true" tabindex="-1"></a>                   <span class="dt">&quot;by_name&quot;</span><span class="fu">:</span> <span class="st">&quot;document index&quot;</span><span class="fu">,</span> <span class="dt">&quot;text&quot;</span><span class="fu">:</span> <span class="st">&quot;...&quot;</span><span class="fu">,</span> <span class="dt">&quot;answered_at&quot;</span><span class="fu">:</span> <span class="st">&quot;...&quot;</span><span class="fu">,</span></span>
+<span id="cb5-15"><a href="#cb5-15" aria-hidden="true" tabindex="-1"></a>                   <span class="dt">&quot;reason&quot;</span><span class="fu">:</span> <span class="kw">null</span> <span class="er">|</span> <span class="st">&quot;attach_changed&quot;</span> <span class="er">|</span> <span class="st">&quot;monitor_dead&quot;</span> <span class="er">|</span> <span class="st">&quot;timeout&quot;</span> <span class="fu">},</span></span>
+<span id="cb5-16"><a href="#cb5-16" aria-hidden="true" tabindex="-1"></a>      <span class="dt">&quot;pages&quot;</span><span class="fu">:</span> <span class="ot">[</span><span class="fu">{</span> <span class="dt">&quot;title&quot;</span><span class="fu">:</span> <span class="st">&quot;...&quot;</span><span class="fu">,</span> <span class="dt">&quot;path&quot;</span><span class="fu">:</span> <span class="st">&quot;/...&quot;</span> <span class="fu">}</span><span class="ot">]</span><span class="fu">,</span></span>
+<span id="cb5-17"><a href="#cb5-17" aria-hidden="true" tabindex="-1"></a>      <span class="dt">&quot;folded_from&quot;</span><span class="fu">:</span> <span class="ot">[</span><span class="st">&quot;r_...&quot;</span><span class="ot">,</span> <span class="st">&quot;r_...&quot;</span><span class="ot">]</span></span>
+<span id="cb5-18"><a href="#cb5-18" aria-hidden="true" tabindex="-1"></a>    <span class="fu">}</span><span class="ot">]</span></span>
+<span id="cb5-19"><a href="#cb5-19" aria-hidden="true" tabindex="-1"></a>  <span class="fu">}</span><span class="ot">]</span></span>
+<span id="cb5-20"><a href="#cb5-20" aria-hidden="true" tabindex="-1"></a><span class="fu">}</span></span></code></pre></div>
 <p>Rules the reader owns:</p>
 <ul>
 <li><strong><code>display_name</code></strong> is the title. When the
 title is missing, or shared with another row, it is
 <code>folder / file</code>.</li>
 <li><strong><code>last</code></strong> on a review is its newest event
-time; on a session, its newest review's.</li>
+time; on a session, its newest review's. Origin events do not count: an
+Open's origin swap appends them to every review the restarted server
+serves, so a log that ends in them takes <code>last</code> from the
+newest other event, read from the log's tail (fix round CR5).</li>
 <li><strong><code>projects</code>:</strong> the base name of the git top
 level of each review's target. For a worktree, the owning repository's
 name. No git repository means no project.</li>
@@ -1204,12 +1210,30 @@ server of the session. That counts mounts.</li>
 <code>{session, name}</code>, taken from the <code>primary</code> field
 of the session's <code>monitor.json</code> heartbeat. So a session
 picked up by another agent names that agent.</li>
+<li><strong>Who counts as watching</strong> is the rule the request
+queue uses, read through <code>livenessFrom</code> with the session's
+activity stamp: a fresh heartbeat on the current handoff rev whose pid
+is alive, or a lahe command in the last few minutes.
+<code>lahe monitor</code> exits when it wakes on work, so a heartbeat
+alone would read "nobody is watching" exactly while that agent works a
+batch, and Open would skip the "another agent is watching" confirm step
+then (fix round CL2). With no heartbeat on disk, the session names
+itself. A session watched from another session's multi-session monitor
+(its heartbeat names that session as <code>primary</code>, on its
+current handoff rev) counts as watched while that primary session is
+listening by the same rule, so the card does not say "no agent" right
+after the agent answers.</li>
 <li><strong><code>attached.watching</code></strong> is false when the
 attached session's monitor is dead. An attach with no session on disk
-behind it reads as no agent.</li>
+behind it reads as no agent.
+<strong><code>attached.closed</code></strong> is true when the attached
+session has been closed (<code>closed_at</code> is set); the page's
+header then says "No agent attached" rather than "stopped
+watching".</li>
 <li><strong><code>request</code></strong> is the latest request on that
 review. An answer stays until the next request on the review, or
-<code>ANSWER_SHOWN_MS</code>.</li>
+<code>ANSWER_SHOWN_MS</code>. <code>reason</code> is why an expired
+request expired, and null in every other state.</li>
 <li><strong><code>pages[].path</code></strong> is a URL path on the
 review's server. Page rows are informational; they have no Open of their
 own.</li>
@@ -1234,24 +1258,44 @@ summary line, beside <code>ended_reviews</code>. One entry per pending
 request whose <code>for</code> is a drained session:</p>
 <div class="sourceCode" id="cb6"><pre
 class="sourceCode json"><code class="sourceCode json"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a><span class="fu">{</span> <span class="dt">&quot;request&quot;</span><span class="fu">:</span> <span class="st">&quot;cq_...&quot;</span><span class="fu">,</span> <span class="dt">&quot;action&quot;</span><span class="fu">:</span> <span class="st">&quot;pickup&quot;</span> <span class="er">|</span> <span class="st">&quot;launch&quot;</span><span class="fu">,</span> <span class="dt">&quot;review&quot;</span><span class="fu">:</span> <span class="st">&quot;r_...&quot;</span><span class="fu">,</span> <span class="dt">&quot;session&quot;</span><span class="fu">:</span> <span class="st">&quot;s_...&quot;</span><span class="fu">,</span> <span class="dt">&quot;kind&quot;</span><span class="fu">:</span> <span class="st">&quot;static&quot;</span> <span class="er">|</span> <span class="st">&quot;dev-server&quot;</span> <span class="er">|</span> <span class="st">&quot;legacy&quot;</span> <span class="er">|</span> <span class="st">&quot;worktree&quot;</span><span class="fu">,</span></span>
-<span id="cb6-2"><a href="#cb6-2" aria-hidden="true" tabindex="-1"></a>  <span class="dt">&quot;moves_with&quot;</span><span class="fu">:</span> <span class="ot">[</span><span class="st">&quot;r_...&quot;</span><span class="ot">,</span> <span class="st">&quot;r_...&quot;</span><span class="ot">]</span><span class="fu">,</span> <span class="dt">&quot;at&quot;</span><span class="fu">:</span> <span class="st">&quot;...&quot;</span><span class="fu">,</span></span>
-<span id="cb6-3"><a href="#cb6-3" aria-hidden="true" tabindex="-1"></a>  <span class="dt">&quot;title&quot;</span><span class="fu">:</span> <span class="st">&quot;...&quot;</span><span class="fu">,</span> <span class="dt">&quot;path&quot;</span><span class="fu">:</span> <span class="st">&quot;...&quot;</span><span class="fu">,</span> <span class="dt">&quot;candidate&quot;</span><span class="fu">:</span> <span class="st">&quot;...&quot;</span> <span class="er">|</span> <span class="kw">null</span><span class="fu">,</span> <span class="dt">&quot;handoff&quot;</span><span class="fu">:</span> <span class="st">&quot;...&quot;</span> <span class="fu">}</span></span></code></pre></div>
+<span id="cb6-2"><a href="#cb6-2" aria-hidden="true" tabindex="-1"></a>  <span class="dt">&quot;origin&quot;</span><span class="fu">:</span> <span class="st">&quot;http://...&quot;</span> <span class="er">|</span> <span class="kw">null</span><span class="fu">,</span> <span class="dt">&quot;moves_with&quot;</span><span class="fu">:</span> <span class="ot">[</span><span class="st">&quot;r_...&quot;</span><span class="ot">,</span> <span class="st">&quot;r_...&quot;</span><span class="ot">]</span><span class="fu">,</span> <span class="dt">&quot;at&quot;</span><span class="fu">:</span> <span class="st">&quot;...&quot;</span><span class="fu">,</span></span>
+<span id="cb6-3"><a href="#cb6-3" aria-hidden="true" tabindex="-1"></a>  <span class="dt">&quot;title&quot;</span><span class="fu">:</span> <span class="st">&quot;...&quot;</span><span class="fu">,</span> <span class="dt">&quot;path&quot;</span><span class="fu">:</span> <span class="st">&quot;...&quot;</span><span class="fu">,</span> <span class="dt">&quot;candidate&quot;</span><span class="fu">:</span> <span class="st">&quot;...&quot;</span> <span class="er">|</span> <span class="kw">null</span><span class="fu">,</span> <span class="dt">&quot;folder&quot;</span><span class="fu">:</span> <span class="st">&quot;...&quot;</span> <span class="er">|</span> <span class="kw">null</span><span class="fu">,</span> <span class="dt">&quot;handoff&quot;</span><span class="fu">:</span> <span class="st">&quot;...&quot;</span> <span class="er">|</span> <span class="kw">null</span><span class="fu">,</span></span>
+<span id="cb6-4"><a href="#cb6-4" aria-hidden="true" tabindex="-1"></a>    <span class="dt">&quot;note&quot;</span><span class="fu">:</span> <span class="st">&quot;...&quot;</span> <span class="er">|</span> <span class="kw">null</span> <span class="fu">}</span></span></code></pre></div>
 <ul>
 <li><code>request</code>, <code>action</code>, <code>review</code>,
-<code>session</code>, <code>kind</code>, <code>moves_with</code> and
-<code>at</code> are ids and helper values.</li>
-<li><code>title</code>, <code>path</code>, <code>candidate</code> and
-<code>handoff</code> are page-derived text. They are declared as data
-fields in <code>PROJECTED_FIELD_CLASS</code> and fenced exactly like
-other page-derived text. A title containing the fence marker or a
-newline cannot break out of the entry.</li>
+<code>session</code>, <code>kind</code>, <code>origin</code>,
+<code>moves_with</code> and <code>at</code> are ids and helper values.
+<code>origin</code> is a dev-server row's registered origin, else null,
+so the refusal below can name it.</li>
+<li><code>kind</code> is <code>dev-server</code> only when the review
+has a registered origin no static server record serves, on a target LAHE
+would not serve itself. A review with no covering record and no such
+origin is <code>static</code> and unreadable: its server record was
+lost, and a takeover still works. (Fix round, CL minor.)</li>
+<li><code>title</code>, <code>path</code>, <code>candidate</code>,
+<code>folder</code> and <code>handoff</code> are page-derived text.
+<code>folder</code> is the document's project folder, where a Launch
+starts the new agent. It comes only from records a page cannot write
+(adversary fixes): a static row's covering server record root, a
+worktree row's candidate, or a legacy row's document when that file
+holds the review's own script line. meta.json's <code>source_path</code>
+and <code>target_path</code> are page text, since
+<code>review.write</code> records them with the page's token. They are
+declared as data fields in <code>PROJECTED_FIELD_CLASS</code> and fenced
+exactly like other page-derived text. A title containing the fence
+marker or a newline cannot break out of the entry.</li>
 <li><code>candidate</code> is the main-repository copy for a worktree
 row. The drain derives it from the recorded root at drain time and
 checks it: under the repository by real path, no hidden segment, owned
 by the current user, a page. A candidate that fails is
 <code>null</code>. The request itself never carries a path.</li>
-<li><code>handoff</code> is the rail's existing hand-off message for the
-document's session (<code>AGENT_LIVENESS.handoffMessage</code>).</li>
+<li><code>handoff</code> is the rail's hand-off message in its Library
+form (<code>AGENT_LIVENESS.handoffMessage</code> with
+<code>{library: true, stateDir}</code>): the rail's text with one
+sentence changed to take the session over and blame nobody, and the real
+<code>--state-dir</code> when it is not the default. It never carries a
+session name read off a page's title. (Fix round; one builder for the
+rail and the Library.)</li>
 <li><strong>Wake:</strong> a new pending request is work. It gets past
 <code>--quiet</code> and makes <code>lahe monitor</code> exit 0 once per
 request. A per-session <code>catalog-delivered.log</code>, like
@@ -1278,7 +1322,8 @@ once in <code>protocol.js</code>:</p>
   K-&gt;&gt;K: click Open: tab = open about:blank, tab.opener = null
   K-&gt;&gt;H: POST catalog.open {review, handoff, confirmed}
   H-&gt;&gt;H: route checks; review has a recorded server
-  H-&gt;&gt;S: reopenForCatalog: reopen the session if closed, restart that server (old port if free)
+  H-&gt;&gt;H: session closed? record it in the reopened map first
+  H-&gt;&gt;S: reopenForCatalog: restart that server (old port if free), then reopen the session if closed
   H-&gt;&gt;H: register the new origin, append origin.removed for this server&#39;s old ports
   H--&gt;&gt;K: {url, request_id, not_asked}
   K-&gt;&gt;K: url is loopback http? tab.location = url, else close the tab and show why
@@ -1290,6 +1335,17 @@ once in <code>protocol.js</code>:</p>
 <ul>
 <li><strong>Already served (R10):</strong> the helper returns the live
 URL and starts nothing.</li>
+<li><strong>A folder review</strong> opens on the page its comments are
+on, when that is a page in the folder, else on the page
+<code>lahe review &lt;folder&gt;</code> opens (<code>index.html</code>,
+then <code>index.htm</code>, then the first page by name). Never the
+bare server root, which a folder with no index answers with "not found".
+The list's <code>served_url</code> is the same page.</li>
+<li><strong>The attached agent already has it:</strong> when the
+attached agent owns the document's session, or is the one watching it,
+Open just opens and queues nothing, and a Pick up of a served row
+answers <code>{request_id: null}</code> with nothing queued. A via-agent
+row's pick-up is still queued, since it needs re-serving.</li>
 <li><strong>Another agent is watching (R12b):</strong> the page asks
 first, naming that agent and the other reviews in its session. "Move the
 session" sends <code>handoff: true, confirmed: true</code>. "Just open
@@ -1314,15 +1370,24 @@ disabled and offers the hand-off message; the helper refuses it with
 <ul>
 <li><strong>dev-server:</strong> the agent answers <code>refused</code>:
 "Start the dev server at <code>&lt;origin&gt;</code>, then ask me
-again."</li>
+again.", with the entry's <code>origin</code>.</li>
 <li><strong>legacy</strong> (<code>lahe add</code> script-line reviews,
 recovered as session "legacy"): there is no session to take over, so the
-agent runs <code>lahe review &lt;path&gt;</code> in its own
-session.</li>
+agent runs
+<code>lahe library serve &lt;request&gt; --session &lt;its own&gt;</code>,
+which reads the path itself and serves it in the agent's own session
+(fix round, SEC2: no page-derived path in a shell string). It serves the
+document only when the file holds this review's own script line, since
+the recorded path is page text (adversary fixes). It serves it as a
+fresh review in the agent's session (<code>lahe review --new</code>),
+since <code>lahe review</code> will not reuse a review that belongs to
+no session. The old comments stay on the legacy review, and the drain
+entry's <code>note</code>, the command's output and the row all say so
+(Ken's decision: 15 of his 531 reviews are legacy).</li>
 <li><strong>worktree:</strong> see below.</li>
 </ul></li>
-<li><strong>Worktree fallback (R9):</strong> when the recorded root is
-gone and sits under
+<li><strong>Worktree fallback (R9):</strong> when the covering server
+record's root is gone and sits under
 <code>&lt;repo&gt;/.claude/worktrees/&lt;name&gt;/</code>, the row says
 "The worktree is gone. An agent will open the main repository's copy,
 which may differ from what you reviewed." The request carries only the
@@ -1330,21 +1395,27 @@ review id. The drain derives and checks the candidate (see the drain
 section). The agent serves it with <code>lahe review</code>, so the path
 goes through the CLI's own checks.</li>
 <li><strong>Missing:</strong> Open is refused with
-<code>PROTO_NOT_OPENABLE</code>, reason <code>missing</code>.</li>
+<code>PROTO_NOT_OPENABLE</code>, reason <code>missing</code>. So is a
+Pick up or Launch request on a missing row.</li>
 <li><strong>Folded rows:</strong> Open targets the newest review in the
 fold.</li>
 </ul>
 <h3 id="stale-origins">Stale origins</h3>
 <p>On a new port, the helper registers
 <code>http://127.0.0.1:&lt;new&gt;</code> and
-<code>http://localhost:&lt;new&gt;</code> on the review. It then appends
+<code>http://localhost:&lt;new&gt;</code> on the review, and on every
+review of the session that server serves by
+<code>static_servers.coveragePath</code>, the same rule that makes a row
+openable, mounts included (fix round CL3). It then appends
 <code>origin.removed</code> for the loopback origins of this same
 <code>ss_</code> server's earlier ports, and only those. It never
 removes a non-loopback origin, a dev-server origin, or an origin from
 another server.</p>
 <h3 id="star">Star</h3>
 <p><code>POST catalog.star {review, starred}</code>. The helper writes
-<code>catalog.json</code> and answers. The row changes when the answer
+<code>catalog.json</code> and answers. On a folded row it stars or
+unstars every review in the fold, since the list shows the row starred
+when any of them is (fix round CR2). The row changes when the answer
 comes back. A failed star puts the row back and says why. No agent.</p>
 <h3 id="launch-a-new-agent">Launch a new agent</h3>
 <p>Queues a <code>launch</code> request. The attached agent reads it in
@@ -1435,9 +1506,24 @@ in the map)</li>
 <li>a session taken over since (its <code>handoff_rev</code> moved past
 the recorded one)</li>
 <li>a session whose monitor is live</li>
+<li>a session an Open is part way through bringing back</li>
 </ul>
+<p>The helper runs Open's restart step one at a time per server record
+(fix round CR1), so two Opens of a closed session start one server and
+both answer on its port.</p>
 <p>After a close, it clears the session's <code>reopened</code>
 entry.</p></li>
+<li><p><strong>Library-session sweep (adversary fixes, Ken's
+decision):</strong> bare <code>lahe library</code> still starts a fresh
+session every run. The CLI marks it <code>created_by: "library"</code>
+in session.json; the helper only reads that field. On the same timer,
+<code>sweepLibrarySessions(now)</code> closes (with
+<code>closeQuiet</code>) a marked session once it owns no reviews and
+its agent has been quiet for <code>LIBRARY_SESSION_IDLE_MS</code>: no
+live monitor heartbeat, and no lahe command since that long ago, counted
+from the later of the session's start and its last command. It leaves
+alone a session that owns a review and one taken over since (its
+<code>handoff_rev</code> moved past 0).</p></li>
 <li><p><strong>After a helper restart,</strong> the old token is
 refused. On <code>PROTO_UNAUTHORIZED</code> the page stops polling and
 shows "LAHE restarted, reload this page." Reloading fetches a fresh
@@ -1620,6 +1706,12 @@ refused too.</p></li>
 <td>a hand-over on a watched session without <code>confirmed</code></td>
 </tr>
 <tr>
+<td><code>PROTO_NO_LAUNCH</code></td>
+<td>409</td>
+<td>A launch on a legacy or worktree row, which has no session a new
+agent could take over (adversary fixes)</td>
+</tr>
+<tr>
 <td><code>PROTO_CATALOG_UNREADABLE</code></td>
 <td>500</td>
 <td><code>catalog.json</code> is corrupt</td>
@@ -1652,7 +1744,9 @@ names, answers) with <code>textContent</code> only.</p></li>
 <code>opener</code> to null before any await, and then navigates only to
 a loopback <code>http:</code> URL from the helper.</p></li>
 <li><p><strong>Files Open or a fallback serve</strong> must be owned by
-the current user.</p></li>
+the current user. For Open that includes the root of the server record
+it restarts, and a recorded file that is not on disk is not
+openable.</p></li>
 <li><p><strong>Static servers get the Host check</strong> (board row
 LAHE-static-server-host-check), since the Library keeps more of them
 running.</p></li>
