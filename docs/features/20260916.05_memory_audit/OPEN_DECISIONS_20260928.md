@@ -1,6 +1,6 @@
 # What I still need from you
 
-**Short version:** one time slot, three small calls, two goes, and one read.
+**Short version:** one call on the wake banner, two small goes, and one read. The auto-answer docs come to you when they are all written.
 
 ## Still open
 
@@ -19,10 +19,6 @@
 - **The old logs are trimmed:** 735 million bytes down to 77 million, with only the helper paused for 33 seconds. The five image records store their image once.
 - **Selecting the whole page** highlights the whole page again. A selection has to cover 90% of what it sits in to count as whole. Merging now.
 - **A visible page you have not clicked** makes 132 requests an hour, down from 600.
-
-## A correction
-
-I told you a page you can see but have not clicked would cost about 240 requests an hour. The builder measured it: 600 an hour, because the liveness line refreshes too. Background tabs drop from 720 to 12 an hour, and the page you are working in is unchanged.
 
 ## Needs a spec before code
 
