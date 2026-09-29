@@ -383,8 +383,14 @@ var HANDLERS = {
       // Possession proof of the CURRENT holder. The route passes it through; the
       // registry decides. A refusal returns no secret and no holder id.
       session_secret: typeof body.session_secret === "string" ? body.session_secret : undefined,
-      takeover: body.takeover === true
+      takeover: body.takeover === true,
+      // Nobody is looking at this window, so its heartbeat is about to slow
+      // down. A boolean and nothing else; the registry owns what it buys.
+      quiet: body.quiet === true
     });
+    // A window of this review is open, so its session's page servers stay up,
+    // and come back if the idle sweep had stopped them (idle_servers.js).
+    if (outcome.granted) noteWindow(deps, request.review);
     return {
       status: outcome.granted ? 200 : protocol.statusFor("PROTO_SECOND_WINDOW"),
       body: outcome
@@ -402,6 +408,8 @@ var HANDLERS = {
     var outcome = deps.reviews.releaseWindow(request.review, {
       session_secret: typeof body.session_secret === "string" ? body.session_secret : undefined
     });
+    // The goodbye is where the idle grace starts, not the last sweep.
+    if (outcome.released) noteWindow(deps, request.review);
     return { status: 200, body: outcome };
   },
 
@@ -448,6 +456,17 @@ function ownerSessionOf(request, deps) {
   // has no directory and therefore no feed and no heartbeat.
   if (!owner || owner === "legacy" || !protocol.isSafeId(owner)) return null;
   return owner;
+}
+
+/** Tell the idle sweep a window of this review was active. Never throws. */
+function noteWindow(deps, reviewId) {
+  if (!deps.idleServers || typeof deps.idleServers.windowActivity !== "function") return;
+  try {
+    var pending = deps.idleServers.windowActivity(reviewId);
+    if (pending && typeof pending.catch === "function") pending.catch(function () {});
+  } catch (err) {
+    // The claim's answer matters more than the server bookkeeping.
+  }
 }
 
 /**

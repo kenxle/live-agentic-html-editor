@@ -42,6 +42,30 @@ Today one program, the helper, writes a review's files, and the static server on
 - **The wireframing skill needs firmer guidance** on how it lays out a set of pages, regardless of how LAHE serves the folder. Ken: "the wireframes have been kind of all over the place every time they get generated." Its own board row, `LAHE-wireframe-skill-guidance`.
 - **A see-all view** of every page's items in the rail (above).
 
+## Linked documents (2026-09-28)
+
+The rule now reaches documents a reviewed Markdown page links to in other
+folders, served under `/.lahe-source/<hash>/` mounts. Spec:
+`docs/features/20260922.02_linked_docs_rail/01_spec_linked_docs_rail.md`.
+
+- The server records which review's page linked to which file
+  (`linked_files` in the static server's metadata). `lahe review`, the helper's
+  re-render, and the server's own render of a linked page all write it.
+- A linked file with its own review in this session redirects to that review's
+  page. Otherwise it carries the newest linking review's rail. A chain (hub
+  links B, B links C) rides the hub's review.
+- Only recorded link targets get the rail, never their neighbours. An `--only`
+  review keeps its links read-only.
+- Hidden (dot-prefixed) files get no special handling. The served folder and a
+  linked folder serve them like any other file, and a link to one translates
+  like any other link. What bounds a request is containment: a path, or a
+  symlink, that resolves outside the served folder or the mount is refused.
+- If the linking review is gone, which should not happen, the page says so and
+  shows the `lahe review` command that would open one. Nothing is created.
+- The helper, not the page, names the file an item was made on: review.json's
+  `linked_file`, the reload stat, and the handled check all use the same mount
+  lookup (`static_servers.linkedFileForPage`).
+
 ## Before building
 
 - Write the tests first: a folder of three linked pages, `lahe review <folder>` once, load each page through the server, the rail is present on all three; comment on page two, the item carries page two's path and lands in the folder's review; a page added to the folder after the review was opened also gets the rail; a page that already carries a LAHE script line for a different review is left alone (the existing rule).

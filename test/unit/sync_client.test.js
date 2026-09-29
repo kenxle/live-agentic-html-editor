@@ -159,6 +159,41 @@ test("a CSP refusal is named distinctly from a helper that is down", async (t) =
   assert.equal(sync.status().cspRefused, true);
 });
 
+test("a CSP refusal that lands after the load-time poll has failed withdraws the helper-down reading", async (t) => {
+  // The browser rejects the blocked fetch first and fires the violation event
+  // after, so the poll every page sends at load (spec 20260928.01) is already
+  // classified as the helper being down when the real reason arrives.
+  const listeners = {};
+  const fakeDocument = {
+    addEventListener: (type, fn) => {
+      listeners[type] = fn;
+    },
+    removeEventListener: () => {}
+  };
+  const raised = [];
+  const recovered = [];
+  const sync = syncModule.createSync({
+    review: "review-1",
+    token: "t",
+    helperOrigin: "http://127.0.0.1:7817",
+    store: storeModule.createStore(),
+    document: fakeDocument,
+    window: null,
+    fetch: async () => {
+      throw new TypeError("Failed to fetch");
+    },
+    onFailure: (f) => raised.push(f.code),
+    onRecovered: (code) => recovered.push(code)
+  });
+  t.after(() => sync.stop());
+  await sync.start();
+  await sync.poll();
+  assert.ok(raised.includes("HELPER_UNREACHABLE"), "precondition: the early poll read as the helper being down");
+  listeners.securitypolicyviolation({ effectiveDirective: "connect-src", blockedURI: "http://127.0.0.1:7817" });
+  assert.ok(recovered.includes("HELPER_UNREACHABLE"), "the helper-down chip is withdrawn");
+  assert.equal(sync.status().lastFailure, "CSP_REFUSED", "and the CSP refusal is the one reading left");
+});
+
 test("the status line never says stored before anything has been acknowledged", (t) => {
   const { sync, statuses } = harness();
   t.after(() => sync.stop());
@@ -400,10 +435,11 @@ test("the flush policy is imported, not restated", () => {
   assert.notEqual(syncModule.POLL_INTERVAL_MS, protocol.REPLY_POLL.INTERVAL_MS);
 });
 
-test("hidden review pages use the background polling cadence", () => {
+test("hidden review pages do not poll at all (quiet tab polling, spec 20260928.01)", () => {
   assert.equal(syncModule.pollIntervalFor({ hidden: false }), syncModule.POLL_INTERVAL_MS);
-  assert.equal(syncModule.pollIntervalFor({ hidden: true }), syncModule.HIDDEN_POLL_INTERVAL_MS);
-  assert.ok(syncModule.HIDDEN_POLL_INTERVAL_MS > syncModule.POLL_INTERVAL_MS);
+  // A hidden tab is away, and an away tab polls nothing until it has focus
+  // again. The rest of the rule is in test/unit/quiet_tab_polling.test.js.
+  assert.equal(syncModule.pollIntervalFor({ hidden: true }), null);
 });
 
 test("a card can carry a loud attachment, which is what an agent question needs", () => {

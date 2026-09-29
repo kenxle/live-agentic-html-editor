@@ -807,8 +807,11 @@ function fakeHighlights() {
     supported: function () {
       return true;
     },
-    paint: function (id, range, name) {
+    quotes: {},
+    paint: function (id, range, name, quote) {
+      this.quotes[id] = quote;
       painted[id] = { range: range, name: name };
+      return painted[id];
     },
     clear: function (id) {
       delete painted[id];
@@ -1003,6 +1006,137 @@ test("a comment whose element still carries the agent's stamp is found, not gues
   assert.equal(ladder.asked.length, 0, "and nothing is guessed");
   assert.equal(highlights.painted[item.id].name, "lahe-comment", "painted normally");
   assert.equal(cards.notices[item.id], undefined, "with nothing on the card");
+});
+
+test("a stamp on an element holding the whole page is not a certain place for a comment", () => {
+  // Oversized records, cause 3 (docs/features/20260928.03_oversized_records).
+  // A selection that climbed to the page's own wrapper put its stamp on
+  // <main>. Every word on the page is that region's words, so ANY change
+  // anywhere read as "the passage was reworded, and the stamp says where it
+  // is", and the whole page was painted as the comment's passage. A stamp over
+  // the whole page says nothing about which passage the comment is on: the
+  // record is honestly lost, and nothing is painted over the page.
+  const item = fixtures.comment();
+  const blocks = [el("p", { text: "Still open" }), el("p", { text: "The next paragraph." }), el("p", { text: "The last one." })];
+  const main = el("main", { attrs: { "data-lahe-id": "e-page" }, children: blocks });
+  const root = el("body", { children: [main] });
+  const anchoredItem = anchored(item, main, root);
+  assert.equal(anchoredItem.region.ref.stamp, "e-page");
+
+  const highlights = fakeHighlights();
+  const cards = fakeCards();
+  const context = {
+    root: root,
+    items: [anchoredItem],
+    cards: cards,
+    document: fakeDocument(),
+    highlights: highlights,
+    pointing: fakePointing(null)
+  };
+
+  replay.resetCounters();
+  replay.noteSettling(0);
+  // Something else on the page changed. Not the passage the reviewer meant.
+  blocks[2].textContent = "The last one, edited by the agent for another comment.";
+
+  const outcome = replay.runPass(replay.REASON.MUTATION, context).results[0];
+
+  assert.notEqual(outcome.element, main, "the whole page is not where this comment lives");
+  assert.ok(anchoredItem.region.lost, "so the record says it could not be placed");
+  assert.equal(highlights.painted[item.id], undefined, "and the page is not washed");
+});
+
+test("a heading that holds every word on the page is still found by its stamp after a rewrite", () => {
+  // Code review of oversized-records: a single block is a passage even when it
+  // is the only thing on the page with words (a page of image options).
+  const item = fixtures.comment();
+  const h1 = el("h1", { text: "Pick a logo", attrs: { "data-lahe-id": "e-heading" } });
+  const root = el("body", { children: [h1, el("img", { attrs: { src: "a.png" } }), el("img", { attrs: { src: "b.png" } })] });
+  const anchoredItem = anchored(item, h1, root);
+  const highlights = fakeHighlights();
+  const context = {
+    root: root,
+    items: [anchoredItem],
+    cards: fakeCards(),
+    document: fakeDocument(),
+    highlights: highlights,
+    pointing: fakePointing(null)
+  };
+
+  replay.resetCounters();
+  replay.noteSettling(0);
+  h1.textContent = "Choose one of these logos";
+
+  const outcome = replay.runPass(replay.REASON.MUTATION, context).results[0];
+  assert.equal(outcome.element, h1, "the stamp says which element, and it is certain");
+  assert.equal(anchoredItem.region.lost, null);
+  assert.equal(highlights.painted[item.id].range.node, h1, "and it is painted");
+});
+
+test("a whole-element paint hands the highlighter the reviewer's quote, and reports a refusal", () => {
+  // Code review of oversized-records: the highlighter refuses a whole-element
+  // paint that is far bigger than the words the reviewer chose, and it needs
+  // those words to tell. <main> here is not the whole page (the header has
+  // words), so the stamp on it is taken as certain, and only the size check
+  // stands between a one-line comment and a wash over every paragraph.
+  const item = fixtures.comment();
+  const blocks = [el("p", { text: "Still open" }), el("p", { text: "The next paragraph." }), el("p", { text: "The last one." })];
+  const main = el("main", { attrs: { "data-lahe-id": "e-main" }, children: blocks });
+  const root = el("body", { children: [el("header", { text: "Site header" }), main] });
+  const anchoredItem = anchored(item, main, root);
+  anchoredItem[record.FIELD.CONTEXT] = Object.assign({}, anchoredItem[record.FIELD.CONTEXT], { quote: "Still open" });
+  const highlights = fakeHighlights();
+  const context = {
+    root: root,
+    items: [anchoredItem],
+    cards: fakeCards(),
+    document: fakeDocument(),
+    highlights: highlights,
+    pointing: fakePointing(null)
+  };
+
+  replay.resetCounters();
+  replay.noteSettling(0);
+  blocks[2].textContent = "The last one, edited by the agent.";
+  replay.runPass(replay.REASON.MUTATION, context);
+  assert.equal(highlights.quotes[item.id], "Still open", "the quote reaches the highlighter");
+});
+
+test("a comment on a whole element is not weighed against its old text when the element grows", () => {
+  // Re-review of oversized-records: a comment on a whole card saves the card's
+  // whole text as its quote. The agent did what was asked ("add detail here")
+  // and kept the stamp, so the card is found for certain, and it is now three
+  // times the size of that quote. Its paint must not be weighed against it.
+  const item = fixtures.comment();
+  const card = el("div", {
+    attrs: { "data-lahe-id": "e-card", class: "card" },
+    children: [el("h3", { text: "Plan" }), el("p", { text: "Short text." })]
+  });
+  const root = el("body", { children: [el("p", { text: "Before the card." }), card, el("p", { text: "After it." })] });
+  const anchoredItem = anchored(item, card, root);
+  anchoredItem[record.FIELD.CONTEXT] = Object.assign({}, anchoredItem[record.FIELD.CONTEXT], {
+    quote: "Plan Short text.",
+    element: "DIV",
+    subject: { tag: "div", src: null, alt: null, html: '<div class="card">', near: "After it." }
+  });
+  const highlights = fakeHighlights();
+  const context = {
+    root: root,
+    items: [anchoredItem],
+    cards: fakeCards(),
+    document: fakeDocument(),
+    highlights: highlights,
+    pointing: fakePointing(null)
+  };
+
+  replay.resetCounters();
+  replay.noteSettling(0);
+  card.children[1].textContent = "Much longer text, with the detail the reviewer asked for, and then some more of it.";
+  const outcome = replay.runPass(replay.REASON.MUTATION, context).results[0];
+
+  assert.equal(outcome.element, card, "found for certain by its stamp");
+  assert.equal(highlights.painted[item.id].range.node, card, "painted");
+  assert.equal(highlights.quotes[item.id], null, "and no quote to weigh it against: the quote was the element");
 });
 
 test("an edit whose stamp points at different words is still refused", () => {
@@ -1549,3 +1683,107 @@ test("duplicate: a write the page's own blocks would double does not happen", ()
 // The other half, that a live page which does NOT carry the split still takes
 // the reviewer's typed break, is a write, and the simulated DOM here cannot be
 // written breaks into. `test/browser/paragraph_break.spec.js` is where it runs.
+
+// ---------------------------------------------------------------------------
+// The one paragraph written keeps its formatting
+// ---------------------------------------------------------------------------
+//
+// When the page already carries some of the reviewer's paragraphs, replay
+// writes only the one the page is missing. That write used to go in as plain
+// text, so the bold, italic and link inside that paragraph were dropped. The
+// markup for that one paragraph is now taken from the record's after_html,
+// but only when after_html splits into the same paragraphs as the text.
+
+const FORMATTED_FIRST = 'First <strong>bold</strong> <em>italic</em> <a href="https://example.com/x">link</a>.';
+const FORMATTED_AFTER = "First bold italic link.\n\nSecond paragraph.\n\nThird paragraph.";
+
+function formattedSplitEdit(before, afterHtml) {
+  return Object.assign(splitEdit(before, FORMATTED_AFTER), { after_html: afterHtml });
+}
+
+test("formatting: the missing paragraph is written with its bold, italic and link", () => {
+  // The shape Enter makes: the first paragraph's words loose in the block,
+  // then one <p> per paragraph typed after it.
+  const item = formattedSplitEdit(
+    "Old first line.",
+    FORMATTED_FIRST + "<p>Second paragraph.</p><p>Third paragraph.</p>"
+  );
+  const page = pageOf(["A heading line.", "Old first line.", "Second paragraph.", "Third paragraph.", "The end."]);
+  const anchoredItem = anchored(item, page.blocks[1], page.root);
+
+  const ran = runOne(anchoredItem, page.root);
+
+  assert.equal(ran.result.branch, replay.BRANCH.REAPPLY);
+  assert.equal(replay.counters.regionsWroteMissingPiece, 1);
+  assert.equal(page.blocks[1].innerHTML, FORMATTED_FIRST, "the paragraph carries all three formats");
+  assert.deepEqual(
+    page.blocks.map((b) => b.textContent),
+    ["A heading line.", "First bold italic link.", "Second paragraph.", "Third paragraph.", "The end."],
+    "and nothing is doubled"
+  );
+
+  // The write settles: the next pass reads the split as applied.
+  replay.runPass(replay.REASON.MUTATION, { root: page.root, items: [anchoredItem], cards: fakeCards() });
+  assert.equal(replay.counters.regionsWritten, 1, "idempotent once the paragraph is back");
+});
+
+test("formatting: one <p> per paragraph, or <br> breaks, split the same way", () => {
+  const shapes = [
+    "<p>" + FORMATTED_FIRST + "</p><p>Second paragraph.</p><p>Third paragraph.</p>",
+    FORMATTED_FIRST + "<br><br>Second paragraph.<br><br>Third paragraph."
+  ];
+  shapes.forEach(function (html) {
+    const item = formattedSplitEdit("Old first line.", html);
+    const page = pageOf(["Old first line.", "Second paragraph.", "Third paragraph."]);
+    const anchoredItem = anchored(item, page.blocks[0], page.root);
+    runOne(anchoredItem, page.root);
+    assert.equal(page.blocks[0].innerHTML, FORMATTED_FIRST, "split from: " + html);
+  });
+});
+
+test("formatting: markup that does not split into the same paragraphs falls back to plain text", () => {
+  const cases = [
+    // A paragraph nested inside the first one's emphasis: the top level has
+    // two pieces, not three.
+    "<strong>First bold italic link.<p>Second paragraph.</p></strong><p>Third paragraph.</p>",
+    // Markup whose words are not the record's words any more.
+    FORMATTED_FIRST.replace("First", "Earlier") + "<p>Second paragraph.</p><p>Third paragraph.</p>",
+    // A paragraph the text has and the markup does not.
+    FORMATTED_FIRST + "<p>Second paragraph.</p>",
+    // The first paragraph sits in a wrapper, so its share of the markup is a
+    // block of its own: a bullet or a heading written inside the paragraph.
+    "<ul><li>First bold italic link.</li></ul><p>Second paragraph.</p><p>Third paragraph.</p>",
+    "<blockquote><h2>First bold italic link.</h2></blockquote><p>Second paragraph.</p><p>Third paragraph.</p>"
+  ];
+  cases.forEach(function (html) {
+    const item = formattedSplitEdit("Old first line.", html);
+    const page = pageOf(["Old first line.", "Second paragraph.", "Third paragraph."]);
+    const anchoredItem = anchored(item, page.blocks[0], page.root);
+    runOne(anchoredItem, page.root);
+    assert.equal(page.blocks[0].textContent, "First bold italic link.", "the words land: " + html);
+    assert.equal(page.blocks[0].innerHTML, "First bold italic link.", "as plain text, never guessed markup: " + html);
+    assert.equal(page.blocks[1].textContent, "Second paragraph.");
+  });
+});
+
+test("formatting: Keep mine writes the missing paragraph with its formatting too", () => {
+  const item = formattedSplitEdit(
+    "Before words.",
+    FORMATTED_FIRST + "<p>Second paragraph.</p><p>Third paragraph.</p>"
+  );
+  const page = pageOf(["A heading line.", "The agent's own line.", "Second paragraph.", "Third paragraph.", "The end."]);
+  const anchoredItem = anchored(item, page.blocks[1], page.root);
+
+  const first = runOne(anchoredItem, page.root);
+  assert.equal(first.result.branch, replay.BRANCH.CONTENT_CHANGED, "the clash is raised");
+
+  replay.configure({ root: page.root, items: [anchoredItem], cards: first.cards, persist: function () {} });
+  const answered = replay.resolveConflict(item.id, "keep_mine");
+
+  assert.equal(answered.resolved, true, answered.reason || "");
+  assert.equal(page.blocks[1].innerHTML, FORMATTED_FIRST, "the press keeps the bold, italic and link");
+  assert.deepEqual(
+    page.blocks.map((b) => b.textContent),
+    ["A heading line.", "First bold italic link.", "Second paragraph.", "Third paragraph.", "The end."]
+  );
+});

@@ -18,7 +18,7 @@ var links = require("./markdown_links.js");
 var tabIcon = require("./tab_icon.js");
 var stateDir = require("./state_dir.js");
 
-var MARKDOWN_EXTENSIONS = [".md", ".markdown"];
+var MARKDOWN_EXTENSIONS = links.MARKDOWN_EXTENSIONS;
 var MERMAID_ASSET = ".lahe-mermaid-11.16.1.js";
 var MERMAID_SOURCE = path.join(__dirname, "..", "..", "vendor", "mermaid", "mermaid.tiny.js");
 
@@ -213,6 +213,27 @@ function sourceNote(sourcePath) {
     "</code>. This document is not under review.</p>";
 }
 
+/**
+ * The note a linked document carries when the reviewed page that linked to it
+ * has no review in this session any more. Reviews are never deleted, so this
+ * should not happen; when it does the page says so, and hands the reviewer the
+ * command that opens a review rather than opening one itself. Nothing is ever
+ * created by a click (spec 20260922.02, requirement 3).
+ */
+/** `value` as one word for a POSIX shell: single-quoted, each ' as '\''. */
+function shellQuote(value) {
+  return "'" + String(value).replace(/'/g, "'\\''") + "'";
+}
+
+function missingReviewNote(sourcePath, sessionId) {
+  var command = "lahe review " + shellQuote(sourcePath) + " --session " + shellQuote(sessionId);
+  return "<p class=\"lahe-readonly-note lahe-missing-review\">This document has no review, which should not happen: " +
+    "the reviewed page that linked here is not in this session any more. Nothing was created. " +
+    "To open a review of <code>" + escapeHtml(sourcePath) + "</code>, run <code>" + escapeHtml(command) + "</code> " +
+    "<button type=\"button\" data-command=\"" + escapeHtml(command) + "\" " +
+    "onclick=\"navigator.clipboard&&navigator.clipboard.writeText(this.getAttribute('data-command'))\">Copy the command</button></p>";
+}
+
 function render(source, options) {
   var opts = options || {};
   var resolved = path.resolve(source);
@@ -300,7 +321,7 @@ function render(source, options) {
     "<style>",
     styleSheet(),
     "</style></head><body><main data-container=\"Markdown document\">",
-    opts.readOnlyNote ? sourceNote(resolved) : "",
+    typeof opts.note === "string" ? opts.note : (opts.readOnlyNote ? sourceNote(resolved) : ""),
     metadata,
     body,
     "</main>",
@@ -336,6 +357,7 @@ function writeArtifact(dir, sessionId, source) {
     assetPrefix: prefix,
     assetRoot: path.dirname(path.resolve(source)),
     linkMounts: registry.added.slice(),
+    linked: registry.linked.slice(),
     linkMountsSkipped: registry.skipped
   };
 }
@@ -359,6 +381,7 @@ module.exports = {
   rewriteRelativeUrls: rewriteRelativeUrls,
   artifactPath: artifactPath,
   sourceNote: sourceNote,
+  missingReviewNote: missingReviewNote,
   render: render,
   writeArtifact: writeArtifact
 };

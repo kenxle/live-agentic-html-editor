@@ -56,7 +56,7 @@ async function entryFor(doc) {
     stdout: (t) => stdout.push(t), stderr: () => {}, now: T0 + 1000
   });
   const lines = stdout.join("").split("\n").filter((l) => l.startsWith("{")).map((l) => JSON.parse(l));
-  return { entry: lines[lines.length - 1].catalog_requests[0], classes: lines[0].field_classes };
+  return { entry: lines[lines.length - 1].catalog_requests[0], classes: rf.PROJECTED_FIELD_CLASS };
 }
 
 test("the drain names the document's project folder: the repository that holds it", async () => {

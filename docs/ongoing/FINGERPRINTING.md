@@ -268,6 +268,12 @@ flowchart TD
 | **identity** | `p.para__body` inside `section.para` | usually | usually |
 | **place** | `body>main:1>section:3>p:1` | yes | no, if anything moved |
 
+An embedded image (a `data:` URL) is named in the signature, not copied into it:
+`img|src=embedded:image/png;base64:171364:<64-bit digest>|alt=...`. The record keeps the
+value once, whole, in `context.subject.src`. Two pictures that differ anywhere are two
+signatures, and two copies of one picture are one, so D9 decides exactly as before. A
+signature stored before 2026-09-28 holds the value in full and is still matched that way.
+
 The stamp is the only one that is **true by construction**. Every other row is a
 guess that the element still looks like what it looked like.
 

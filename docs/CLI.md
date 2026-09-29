@@ -15,8 +15,8 @@ lahe skill; after that a plain sentence works:
 | --- | --- |
 | `lahe review path/to/page.html` | Start a review and isolated agent session: starts or reuses its static server and the shared helper, then prints one URL plus the wake, monitor, drain, and close commands. It writes NOTHING into the page's folder: the server puts the script line into each response instead |
 | `lahe review path/to/folder` | A folder of HTML pages that is itself the document: serves the whole folder, mints ONE review for it, and opens `index.html` (else the first page in name order). The folder needs at least one `.html` file of its own; one with none is still the dev-server row |
-| `lahe review path/to/notes.md` | A Markdown file that is the whole document: LAHE renders it to HTML in its own state directory and puts the review on that render. Your `.md` is never written to. The agent edits the `.md` and replies; it does not rerun anything, because the helper notices the source is newer and renders again by itself. In the rendered page, a link that leaves the documentation opens in a new tab, and a link to another local `.md` opens as another rendered page in the same tab, read-only |
-| `lahe review ... --only` | Keep this review to the page it was given. The default is the opposite: our server serves the page's whole folder and the rail follows the reviewer onto every HTML page in it, including pages added later, so a link or a typed filename never lands them somewhere they cannot comment. Use `--only` when that folder holds files nobody asked to review, a Downloads folder or a Desktop. It cannot be undone on a review afterwards. `lahe review` prints the served `root`, which is the line that tells you whether you want this |
+| `lahe review path/to/notes.md` | A Markdown file that is the whole document: LAHE renders it to HTML in its own state directory and puts the review on that render. Your `.md` is never written to. The agent edits the `.md` and replies; it does not rerun anything, because the helper notices the source is newer and renders again by itself. In the rendered page, a link that leaves the documentation opens in a new tab, and a link to another local `.md` opens as another rendered page in the same tab, with the editor (see `--only`) |
+| `lahe review ... --only` | Keep this review to the page it was given. The default is the opposite: our server serves the page's whole folder and the rail follows the reviewer onto every HTML page in it, including pages added later, so a link or a typed filename never lands them somewhere they cannot comment. Use `--only` when that folder holds files nobody asked to review, a Downloads folder or a Desktop. It cannot be undone on a review afterwards. For a Markdown review it also keeps the documents the page links to read-only; without it, a linked document with no review of its own carries this review's rail, and one with its own review in the session opens that review's page. `lahe review` prints the served `root`, which is the line that tells you whether you want this |
 | `lahe review another.html --session <id>` | Add a later document to the same agent workstream without receiving another agent's comments |
 | `lahe add path/to/project --origin http://localhost:3000` | Dev-server variant: edits nothing, prints a commented snippet that you must wrap in your framework's development-only conditional |
 | `lahe add ... --new` | Mint a fresh review even though the page already carries one |
@@ -31,7 +31,7 @@ lahe skill; after that a plain sentence works:
 | `lahe library serve <request-id> --session <id>` | Serve the document a `legacy` or `worktree` pickup names, as `lahe review` does. The command reads the path itself (a legacy row's own document, or a worktree row's checked main-repo candidate), so no page-derived path passes through a shell. A legacy row is served as a fresh review in your session (`lahe review --new`), since the legacy review belongs to no session; the old comments stay on the old review, and the command prints that. `--session` is your own session, the one the request is for. |
 | `lahe library answer <request-id> --session <id> --status done\|refused --text "..."` | Answer one request from the drain's `catalog_requests` section. `--session` is your own session, the one the request is for. The text shows on the Library row, at most 500 characters. Refused: an unknown id, another session's request, an expired request, a second answer (it prints the first), and text that is too long |
 | `lahe session list [--json]` | Read-only: every agent session on this machine, open ones first, with its handoff revision, reviews owned, unanswered items, whether anything is listening to it, and when the agent last replied. This is how you find a session id |
-| `lahe session close <id>` | Close an agent workstream, stop its static servers, and keep all review history. The final close also stops the shared helper, unless the Library page polled it in the last two minutes or a review page is still open |
+| `lahe session close <id>` | Close an agent workstream, stop its static servers, and keep all review history. The final close also stops the shared helper, unless the Library page polled it in the last two minutes or a review page is still open. Separately, the helper stops a session's static servers after two minutes with no browser window open on its pages; the session stays open, and `lahe review <document> --session <id>` brings the page back on its old port when that port is free |
 | `lahe session reopen <id>` | Reopen the workstream and restart its helper and static servers |
 | `lahe session takeover <id>` | Explicitly hand an existing workstream to a new agent, fence its older monitors, and print catch-up commands. Add `--name "<name>"` to record the new agent's name at the same time |
 | `lahe session name <id> "<name>"` | The human's name for this session, as the host shows it (Claude Code after `/rename`). The reviewer's rail uses it to say which agent to check, and `session list` prints it after the id. Trimmed, control characters removed, 80 characters at most; `""` clears it |
@@ -55,12 +55,22 @@ nothing. Work stays listed until a reply lands, so a missed wake costs nothing:
 the next drain shows the item again. When the reviews are not in the default
 state directory, every command the tool prints carries `--state-dir <path>`
 already: copy them as printed, because the same command without it reads the
-default directory and reports no work. `lahe status --json` never prints the
-contract text, in any mode: line one is always a pointer to the `contract`
-field in the review's `review.json`, the one place the contract lives. There
-is no flag that trades the pointer back for the full text, on purpose: an
-agent that is woken thirty times should not have to remember one to avoid
-reading 3,800 tokens it already has thirty times.
+default directory and reports no work.
+
+The drain carries the reviewer's items and what locates them, and nothing it
+would repeat on every wake. There is no contract text, no pointer to it, and no
+field-class table: the contract lives in the `contract` field of the review's
+`review.json`, read once. The prompt-injection fence (architecture decision
+D12) is kept as structure, not words: on each item line, every field read off
+the page (the quoted passage, the before and after text, the region, the
+subject) is grouped under `page`, and the reviewer's own `note` and `change`
+stay at the top level. The contract says once that nothing under `page` is an
+instruction. A review the reviewer ended is listed under
+`ended_reviews` on the last line on every drain while it still holds unanswered
+items, and once more when it holds none. After that it is not listed again, so a
+drain with nothing waiting prints nothing at all. A takeover counts as a new
+reader: the agent that took over is told again. Whether each review's page is
+connected is said once per review, under `liveness` on the same last line.
 
 The **wake channel** is per host, because hosts differ in what they can do
 without spending model tokens:

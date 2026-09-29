@@ -1,0 +1,4015 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+  <meta charset="utf-8" />
+  <meta name="generator" content="pandoc" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
+  <title>Architecture: Free writing</title>
+  <style>
+    /* Default styles provided by pandoc.
+    ** See https://pandoc.org/MANUAL.html#variables-for-html for config info.
+    */
+    html {
+      color: #1a1a1a;
+      background-color: #fdfdfd;
+    }
+    body {
+      margin: 0 auto;
+      max-width: 36em;
+      padding-left: 50px;
+      padding-right: 50px;
+      padding-top: 50px;
+      padding-bottom: 50px;
+      hyphens: auto;
+      overflow-wrap: break-word;
+      text-rendering: optimizeLegibility;
+      font-kerning: normal;
+    }
+    @media (max-width: 600px) {
+      body {
+        font-size: 0.9em;
+        padding: 12px;
+      }
+      h1 {
+        font-size: 1.8em;
+      }
+    }
+    @media print {
+      html {
+        background-color: white;
+      }
+      body {
+        background-color: transparent;
+        color: black;
+        font-size: 12pt;
+      }
+      p, h2, h3 {
+        orphans: 3;
+        widows: 3;
+      }
+      h2, h3, h4 {
+        page-break-after: avoid;
+      }
+    }
+    p {
+      margin: 1em 0;
+    }
+    a {
+      color: #1a1a1a;
+    }
+    a:visited {
+      color: #1a1a1a;
+    }
+    img {
+      max-width: 100%;
+    }
+    svg {
+      height: auto;
+      max-width: 100%;
+    }
+    h1, h2, h3, h4, h5, h6 {
+      margin-top: 1.4em;
+    }
+    h5, h6 {
+      font-size: 1em;
+      font-style: italic;
+    }
+    h6 {
+      font-weight: normal;
+    }
+    ol, ul {
+      padding-left: 1.7em;
+      margin-top: 1em;
+    }
+    li > ol, li > ul {
+      margin-top: 0;
+    }
+    blockquote {
+      margin: 1em 0 1em 1.7em;
+      padding-left: 1em;
+      border-left: 2px solid #e6e6e6;
+      color: #606060;
+    }
+    code {
+      white-space: pre-wrap;
+      font-family: Menlo, Monaco, Consolas, 'Lucida Console', monospace;
+      font-size: 85%;
+      margin: 0;
+      hyphens: manual;
+    }
+    pre {
+      margin: 1em 0;
+      overflow: auto;
+    }
+    pre code {
+      padding: 0;
+      overflow: visible;
+      overflow-wrap: normal;
+    }
+    .sourceCode {
+     background-color: transparent;
+     overflow: visible;
+    }
+    hr {
+      border: none;
+      border-top: 1px solid #1a1a1a;
+      height: 1px;
+      margin: 1em 0;
+    }
+    table {
+      margin: 1em 0;
+      border-collapse: collapse;
+      width: 100%;
+      overflow-x: auto;
+      display: block;
+      font-variant-numeric: lining-nums tabular-nums;
+    }
+    table caption {
+      margin-bottom: 0.75em;
+    }
+    tbody {
+      margin-top: 0.5em;
+      border-top: 1px solid #1a1a1a;
+      border-bottom: 1px solid #1a1a1a;
+    }
+    th {
+      border-top: 1px solid #1a1a1a;
+      padding: 0.25em 0.5em 0.25em 0.5em;
+    }
+    td {
+      padding: 0.125em 0.5em 0.25em 0.5em;
+    }
+    header {
+      margin-bottom: 4em;
+      text-align: center;
+    }
+    #TOC li {
+      list-style: none;
+    }
+    #TOC ul {
+      padding-left: 1.3em;
+    }
+    #TOC > ul {
+      padding-left: 0;
+    }
+    #TOC a:not(:hover) {
+      text-decoration: none;
+    }
+    span.smallcaps{font-variant: small-caps;}
+    div.columns{display: flex; gap: min(4vw, 1.5em);}
+    div.column{flex: auto; overflow-x: auto;}
+    div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+    /* The extra [class] is a hack that increases specificity enough to
+       override a similar rule in reveal.js */
+    ul.task-list[class]{list-style: none;}
+    ul.task-list li input[type="checkbox"] {
+      font-size: inherit;
+      width: 0.8em;
+      margin: 0 0.8em 0.2em -1.6em;
+      vertical-align: middle;
+    }
+    .display.math{display: block; text-align: center; margin: 0.5rem auto;}
+    /* CSS for syntax highlighting */
+    html { -webkit-text-size-adjust: 100%; }
+    pre > code.sourceCode { white-space: pre; position: relative; }
+    pre > code.sourceCode > span { display: inline-block; line-height: 1.25; }
+    pre > code.sourceCode > span:empty { height: 1.2em; }
+    .sourceCode { overflow: visible; }
+    code.sourceCode > span { color: inherit; text-decoration: inherit; }
+    div.sourceCode { margin: 1em 0; }
+    pre.sourceCode { margin: 0; }
+    @media screen {
+    div.sourceCode { overflow: auto; }
+    }
+    @media print {
+    pre > code.sourceCode { white-space: pre-wrap; }
+    pre > code.sourceCode > span { text-indent: -5em; padding-left: 5em; }
+    }
+    pre.numberSource code
+      { counter-reset: source-line 0; }
+    pre.numberSource code > span
+      { position: relative; left: -4em; counter-increment: source-line; }
+    pre.numberSource code > span > a:first-child::before
+      { content: counter(source-line);
+        position: relative; left: -1em; text-align: right; vertical-align: baseline;
+        border: none; display: inline-block;
+        -webkit-touch-callout: none; -webkit-user-select: none;
+        -khtml-user-select: none; -moz-user-select: none;
+        -ms-user-select: none; user-select: none;
+        padding: 0 4px; width: 4em;
+        color: #aaaaaa;
+      }
+    pre.numberSource { margin-left: 3em; border-left: 1px solid #aaaaaa;  padding-left: 4px; }
+    div.sourceCode
+      {   }
+    @media screen {
+    pre > code.sourceCode > span > a:first-child::before { text-decoration: underline; }
+    }
+    code span.al { color: #ff0000; font-weight: bold; } /* Alert */
+    code span.an { color: #60a0b0; font-weight: bold; font-style: italic; } /* Annotation */
+    code span.at { color: #7d9029; } /* Attribute */
+    code span.bn { color: #40a070; } /* BaseN */
+    code span.bu { color: #008000; } /* BuiltIn */
+    code span.cf { color: #007020; font-weight: bold; } /* ControlFlow */
+    code span.ch { color: #4070a0; } /* Char */
+    code span.cn { color: #880000; } /* Constant */
+    code span.co { color: #60a0b0; font-style: italic; } /* Comment */
+    code span.cv { color: #60a0b0; font-weight: bold; font-style: italic; } /* CommentVar */
+    code span.do { color: #ba2121; font-style: italic; } /* Documentation */
+    code span.dt { color: #902000; } /* DataType */
+    code span.dv { color: #40a070; } /* DecVal */
+    code span.er { color: #ff0000; font-weight: bold; } /* Error */
+    code span.ex { } /* Extension */
+    code span.fl { color: #40a070; } /* Float */
+    code span.fu { color: #06287e; } /* Function */
+    code span.im { color: #008000; font-weight: bold; } /* Import */
+    code span.in { color: #60a0b0; font-weight: bold; font-style: italic; } /* Information */
+    code span.kw { color: #007020; font-weight: bold; } /* Keyword */
+    code span.op { color: #666666; } /* Operator */
+    code span.ot { color: #007020; } /* Other */
+    code span.pp { color: #bc7a00; } /* Preprocessor */
+    code span.sc { color: #4070a0; } /* SpecialChar */
+    code span.ss { color: #bb6688; } /* SpecialString */
+    code span.st { color: #4070a0; } /* String */
+    code span.va { color: #19177c; } /* Variable */
+    code span.vs { color: #4070a0; } /* VerbatimString */
+    code span.wa { color: #60a0b0; font-weight: bold; font-style: italic; } /* Warning */
+  </style>
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>%F0%9F%94%A8</text></svg>">
+  <!--
+    St. Clair AI document style for forge docs.
+
+    The palette, type and spacing values below are copied from the St. Clair
+    system tokens (live-agentic-html-editor/vendor/stclair-doc-style/
+    system-tokens.css). This header does NOT link LAHE's ./.lahe-doc-style.css
+    bundle, on purpose: that bundle's document.css styles bare elements and a
+    generic .callout (an ink fill with white text) and puts padding on every body
+    child, and all three collide with the forge structure. So the page is
+    self-contained and reads the same whether or not LAHE is serving it.
+
+    The fonts are the one thing taken from LAHE: it serves the three vendored
+    faces at ./.lahe-fonts/<file>.woff2 from every folder. When that fails, each
+    stack falls back to system-ui and a platform monospace.
+
+    House rules this file keeps: no pills, no shadows, no gradients, no all caps
+    labels, no single-side coloured borders. Colour comes from tints and dots.
+  -->
+  <style>
+    @font-face {
+      font-family: "Schibsted Grotesk"; font-style: normal; font-weight: 500 700; font-display: swap;
+      src: url("./.lahe-fonts/schibsted-grotesk-variable.woff2") format("woff2");
+    }
+    @font-face {
+      font-family: "Hanken Grotesk"; font-style: normal; font-weight: 400 600; font-display: swap;
+      src: url("./.lahe-fonts/hanken-grotesk-variable.woff2") format("woff2");
+    }
+    @font-face {
+      font-family: "JetBrains Mono"; font-style: normal; font-weight: 400 500; font-display: swap;
+      src: url("./.lahe-fonts/jetbrains-mono-variable.woff2") format("woff2");
+    }
+
+    :root {
+      color-scheme: light dark;
+
+      /* St. Clair palette (raw names and values from system-tokens.css) */
+      --white: #ffffff;
+      --paper: #f7f7f5;
+      --ink: #1f1e1a;
+      --ink-soft: #55534b;
+      --ink-faint: #6b6860;
+      --rule: #dcdad6;
+      --purple: #46188c;
+      --purple-tint: #f1ebfa;
+      --link: #6d28d9;
+      --cobalt: #0760c7;
+      --cobalt-tint: #e6effc;
+      --sage-fill: #8fb5a0;
+      --sage: #637a63;
+      --sage-tint: #e7f1ed;
+
+      --font-display: "Schibsted Grotesk", "Hanken Grotesk", system-ui, sans-serif;
+      --font-body: "Hanken Grotesk", system-ui, -apple-system, "Helvetica Neue", sans-serif;
+      --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+
+      --r: 4px;
+
+      /* Forge roles. Prefixed --ff- so none of them can collide with a St. Clair
+         token of the same name if the two ever share a page. Dark mode repoints
+         these and nothing else. */
+      --ff-bg: var(--white);
+      --ff-fg: var(--ink);
+      --ff-soft: var(--ink-soft);
+      --ff-faint: var(--ink-faint);
+      --ff-rule: var(--rule);
+      --ff-divider: var(--ink);
+      --ff-link: var(--link);
+      --ff-accent: var(--cobalt);
+      --ff-panel: var(--paper);
+      --ff-code-bg: var(--cobalt-tint);
+      --ff-bullet: var(--sage);
+      --ff-hl-kw: var(--cobalt);
+      --ff-hl-str: var(--sage);
+      --ff-hl-num: var(--purple);
+
+      /* Callouts: a tint, a dot and a label colour each. */
+      --ff-req-bg: var(--cobalt-tint);      --ff-req-dot: var(--cobalt);    --ff-req-label: var(--cobalt);
+      --ff-nongoal-bg: var(--paper);        --ff-nongoal-dot: var(--ink-faint); --ff-nongoal-label: var(--ink-faint);
+      --ff-metric-bg: var(--sage-tint);     --ff-metric-dot: var(--sage);   --ff-metric-label: var(--ink-soft);
+      --ff-question-bg: var(--purple-tint); --ff-question-dot: var(--purple); --ff-question-label: var(--purple);
+      --ff-suggest-bg: var(--white);        --ff-suggest-dot: var(--sage);  --ff-suggest-label: var(--sage);
+      --ff-flag-bg: var(--ink);             --ff-flag-fg: var(--white);     --ff-flag-dot: var(--sage-fill);
+
+      /* Disposition verdicts */
+      --ff-accepted: var(--sage);
+      --ff-rejected: var(--purple);
+      --ff-deferred: var(--cobalt);
+    }
+
+    /* Dark: the St. Clair on-ink values. Body text is full white on ink, as the
+       system decides; tints are the accent mixed into the ink ground. */
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --ff-bg: var(--ink);
+        --ff-fg: var(--white);
+        --ff-soft: #d9d7d1;   /* --ink-soft-ondark */
+        --ff-faint: #b3b0a8;  /* --ink-faint-ondark */
+        --ff-rule: #4a4842;   /* --rule-ondark */
+        --ff-divider: var(--white);
+        --ff-link: var(--sage-fill);
+        --ff-accent: color-mix(in srgb, var(--cobalt) 45%, var(--white));
+        --ff-panel: color-mix(in srgb, var(--white) 6%, var(--ink));
+        --ff-code-bg: color-mix(in srgb, var(--cobalt) 22%, var(--ink));
+        --ff-bullet: var(--sage-fill);
+        --ff-hl-kw: color-mix(in srgb, var(--cobalt) 40%, var(--white));
+        --ff-hl-str: var(--sage-fill);
+        --ff-hl-num: color-mix(in srgb, var(--purple) 30%, var(--white));
+
+        --ff-req-bg: color-mix(in srgb, var(--cobalt) 22%, var(--ink));
+        --ff-req-dot: color-mix(in srgb, var(--cobalt) 45%, var(--white));
+        --ff-req-label: color-mix(in srgb, var(--cobalt) 35%, var(--white));
+        --ff-nongoal-bg: color-mix(in srgb, var(--white) 6%, var(--ink));
+        --ff-nongoal-dot: #b3b0a8; --ff-nongoal-label: #b3b0a8;
+        --ff-metric-bg: color-mix(in srgb, var(--sage) 30%, var(--ink));
+        --ff-metric-dot: var(--sage-fill); --ff-metric-label: var(--sage-fill);
+        --ff-question-bg: color-mix(in srgb, var(--purple) 45%, var(--ink));
+        --ff-question-dot: color-mix(in srgb, var(--purple) 30%, var(--white));
+        --ff-question-label: color-mix(in srgb, var(--purple) 25%, var(--white));
+        --ff-suggest-bg: var(--ink);
+        --ff-suggest-dot: var(--sage-fill); --ff-suggest-label: var(--sage-fill);
+        --ff-flag-bg: var(--paper); --ff-flag-fg: var(--ink); --ff-flag-dot: var(--sage);
+
+        --ff-accepted: var(--sage-fill);
+        --ff-rejected: color-mix(in srgb, var(--purple) 30%, var(--white));
+        --ff-deferred: color-mix(in srgb, var(--cobalt) 40%, var(--white));
+      }
+    }
+
+    /* Pandoc's own default styles load before this block. The rules marked
+       "pandoc" below undo the ones that fight this look: black table rules,
+       a block-level table, auto hyphens, italic h5/h6, and a:visited in
+       near-black, which outranks a plain a rule. */
+    html { scroll-behavior: smooth; -webkit-print-color-adjust: exact; print-color-adjust: exact; background: var(--ff-bg); }
+    * { box-sizing: border-box; }
+
+    body {
+      font-family: var(--font-body);
+      font-size: 17px;
+      line-height: 1.65;
+      color: var(--ff-fg);
+      background: var(--ff-bg);
+      max-width: 880px;
+      margin: 0 auto;
+      padding: 56px 28px 104px;
+      -webkit-font-smoothing: antialiased;
+      text-rendering: optimizeLegibility;
+      hyphens: manual;   /* pandoc */
+    }
+
+    /* Title block (pandoc emits <header id="title-block-header">) */
+    header#title-block-header { padding-bottom: 8px; margin-bottom: 0; text-align: left; }
+    header#title-block-header h1.title {
+      font-family: var(--font-display);
+      font-size: clamp(34px, 4.6vw, 52px);
+      font-weight: 600;
+      margin: 0 0 12px;
+      letter-spacing: -0.012em;
+      line-height: 1.1;
+    }
+    header#title-block-header p.subtitle,
+    header#title-block-header p.author,
+    header#title-block-header p.date {
+      font-size: 20px;
+      line-height: 1.55;
+      color: var(--ff-soft);
+      margin: 0;
+    }
+
+    /* Cross-doc nav (injected by the build before the TOC). A plain line:
+       "Docs  Crucible · Brief · Architecture", the current doc in ink. */
+    .doc-nav {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: baseline;
+      gap: 4px 0;
+      margin: 20px 0 8px;
+      padding: 12px 0;
+      border-top: 1px solid var(--ff-rule);
+      border-bottom: 1px solid var(--ff-rule);
+      font-size: 15px;
+    }
+    .doc-nav .doc-nav-label {
+      font-family: var(--font-display);
+      font-weight: 600;
+      font-size: 14px;
+      color: var(--ff-faint);
+      margin-right: 14px;
+    }
+    .doc-nav a {
+      color: var(--ff-link);
+      text-decoration: underline;
+      text-decoration-thickness: 1px;
+      text-underline-offset: 3px;
+      border: 0;
+      background: none;
+      padding: 0;
+    }
+    .doc-nav a + a::before {
+      content: "\00B7";
+      display: inline-block;
+      color: var(--ff-faint);
+      margin: 0 10px;
+      text-decoration: none;
+    }
+    .doc-nav a:hover { background: none; text-decoration-thickness: 2px; }
+    .doc-nav a:visited { color: var(--ff-link); }
+    .doc-nav a.current, .doc-nav a.current:visited {
+      color: var(--ff-fg);
+      font-weight: 600;
+      text-decoration: none;
+      cursor: default;
+    }
+
+    /* TOC (pandoc emits <nav id="TOC">) */
+    nav#TOC {
+      margin: 28px 0 44px;
+      font-size: 15px;
+      line-height: 1.5;
+    }
+    nav#TOC::before {
+      content: "Contents";
+      display: block;
+      font-family: var(--font-display);
+      font-weight: 600;
+      font-size: 14px;
+      color: var(--ff-faint);
+      padding-bottom: 8px;
+      margin-bottom: 12px;
+      border-bottom: 2px solid var(--ff-divider);
+    }
+    nav#TOC ul { list-style: none; padding-left: 0; margin: 0; }
+    nav#TOC ul ul { padding-left: 18px; margin-top: 4px; }
+    nav#TOC li { margin-bottom: 4px; }
+    nav#TOC li::marker { content: none; }
+    nav#TOC a, nav#TOC a:visited { color: var(--ff-fg); text-decoration: none; border: 0; }
+    nav#TOC a:hover { color: var(--ff-link); text-decoration: underline; background: none; }
+
+    /* Headings: Schibsted at display weight, sentence case. An h2 hangs under a
+       full-width ink rule, the St. Clair section head. */
+    h1, h2, h3, h4, h5, h6 {
+      font-family: var(--font-display);
+      font-weight: 600;
+      line-height: 1.15;
+      letter-spacing: -0.012em;
+      color: var(--ff-fg);
+    }
+    h2 {
+      font-size: clamp(25px, 3vw, 32px);
+      margin: 64px 0 18px;
+      padding-top: 12px;
+      border-top: 2px solid var(--ff-divider);
+    }
+    h3 { font-size: clamp(19px, 2vw, 23px); margin: 40px 0 12px; }
+    h4 { font-size: 18px; margin: 28px 0 8px; }
+    h5, h6 { font-size: 17px; margin: 24px 0 8px; font-style: normal; font-weight: 600; }   /* pandoc */
+    h6 { color: var(--ff-soft); }
+
+    p { margin: 0 0 18px; }
+    p, li, td, dd { overflow-wrap: anywhere; }
+
+    a {
+      color: var(--ff-link);
+      text-decoration: underline;
+      text-decoration-thickness: 1px;
+      text-underline-offset: 3px;
+    }
+    a:visited { color: var(--ff-link); }   /* pandoc */
+    a:hover { text-decoration-thickness: 2px; }
+    :focus-visible { outline: 2px solid var(--ff-link); outline-offset: 3px; border-radius: var(--r); }
+
+    strong { color: inherit; font-weight: 700; }
+
+    ul, ol { margin: 0 0 18px; padding-left: 1.6em; }
+    li { margin: 0 0 8px; line-height: 1.55; }
+    li > p { margin-bottom: 8px; }
+    ul > li::marker { color: var(--ff-bullet); }
+    .callout ul > li::marker { color: var(--ff-dot); }
+    ol > li::marker { color: var(--ff-fg); font-weight: 600; }
+    li > ul, li > ol { margin-top: 8px; }
+
+    /* Callout boxes (from ::: callout-* fenced divs). A tint holding the text,
+       and a label row generated by CSS: a dot in the callout's colour, then the
+       label in the display face. */
+    .callout {
+      border-radius: var(--r);
+      padding: 16px 22px 18px;
+      margin: 18px 0;
+      background: var(--ff-panel);
+      color: var(--ff-fg);
+      line-height: 1.6;
+    }
+    .callout > :first-child { margin-top: 0; }
+    .callout > :last-child { margin-bottom: 0; }
+    .callout::before {
+      display: flex;
+      align-items: center;
+      gap: 9px;
+      font-family: var(--font-display);
+      font-weight: 600;
+      font-size: 14px;
+      line-height: 1.4;
+      margin-bottom: 6px;
+      padding-left: 16px;   /* room for the dot, which ::after draws */
+    }
+    .callout { position: relative; }
+    .callout::after {
+      content: "";
+      position: absolute;
+      left: 22px;
+      top: 23px;
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: var(--ff-dot, var(--ff-faint));
+    }
+    .callout-req      { background: var(--ff-req-bg);      --ff-dot: var(--ff-req-dot); }
+    .callout-req::before      { content: "Requirement";   color: var(--ff-req-label); }
+    .callout-nongoal  { background: var(--ff-nongoal-bg);  --ff-dot: var(--ff-nongoal-dot); border: 1px solid var(--ff-rule); }
+    .callout-nongoal::before  { content: "Non-goals";     color: var(--ff-nongoal-label); }
+    .callout-metric   { background: var(--ff-metric-bg);   --ff-dot: var(--ff-metric-dot); }
+    .callout-metric::before   { content: "Metrics";       color: var(--ff-metric-label); }
+    .callout-question { background: var(--ff-question-bg); --ff-dot: var(--ff-question-dot); }
+    .callout-question::before { content: "Open question"; color: var(--ff-question-label); }
+    .callout-suggest  { background: var(--ff-suggest-bg);  --ff-dot: var(--ff-suggest-dot); border: 1px solid var(--ff-suggest-dot); }
+    .callout-suggest::before  { content: "Suggestion";    color: var(--ff-suggest-label); }
+    .callout-flag     { background: var(--ff-flag-bg);     --ff-dot: var(--ff-flag-dot); color: var(--ff-flag-fg); }
+    .callout-flag::before     { content: "Red flag";      color: var(--ff-flag-fg); }
+    .callout-flag a, .callout-flag strong, .callout-flag code { color: inherit; }
+    .callout-flag code { background: color-mix(in srgb, currentColor 14%, transparent); }
+    /* The nongoal and suggest boxes carry a 1px border, so their dot moves with it. */
+    .callout-nongoal::after, .callout-suggest::after { left: 21px; top: 22px; }
+
+    /* Reviews section: the _reviews.md files are merged into the HTML below this
+       divider (they stay separate files on disk for agents). The build writes
+       the divider with an inline red rule; this repaints it in the house ink. */
+    hr.reviews-divider {
+      border: 0 !important;
+      border-top: 2px solid var(--ff-divider) !important;
+      margin: 88px 0 6px !important;
+      display: block !important;
+    }
+    hr.reviews-divider + * { margin-top: 0; }
+    .reviews-banner {
+      border-top: 1px solid var(--ff-divider);
+      padding: 14px 0 0;
+      margin: 0 0 32px;
+      font-size: 15px;
+      line-height: 1.55;
+      color: var(--ff-soft);
+    }
+    .reviews-banner::before {
+      display: block;
+      content: "Reviews, full prose";
+      font-family: var(--font-display);
+      font-weight: 600;
+      font-size: clamp(25px, 3vw, 32px);
+      line-height: 1.15;
+      letter-spacing: -0.012em;
+      color: var(--ff-fg);
+      margin-bottom: 8px;
+    }
+    /* Jump target for spec -> review-detail links; offset so the heading clears. */
+    .finding-anchor { display: inline-block; scroll-margin-top: 1.5rem; }
+    td a[href^="#"] { font-weight: 600; }
+
+    /* Inline xref deep-dive (from ::: xref fenced div) */
+    .xref {
+      font-size: 15px;
+      background: var(--ff-code-bg);
+      border-radius: var(--r);
+      padding: 10px 16px;
+      margin: 0 0 18px;
+      color: var(--ff-soft);
+      line-height: 1.5;
+    }
+    .xref::before {
+      content: "\21B3  See";
+      font-family: var(--font-display);
+      font-weight: 600;
+      font-size: 14px;
+      color: var(--ff-accent);
+      margin-right: 8px;
+    }
+    .xref > * { display: inline; margin: 0; }
+    .xref a, .xref a:visited { font-weight: 600; color: var(--ff-fg); }
+
+    /* Tables: the St. Clair naked ruled table. A 2px rule under the head,
+       hairlines between rows, no box, no tint, no shadow. The build wraps every
+       table in .table-scroll; the scrolling itself lives in
+       shared-assets/doc_fixes.css. */
+    .table-scroll { margin: 24px 0 32px; }
+    .table-scroll table { margin: 0; }
+    table {
+      border-collapse: collapse;
+      width: 100%;
+      margin: 24px 0 32px;
+      font-size: 15px;
+      line-height: 1.5;
+      background: none;
+      display: table;   /* pandoc sets block; .table-scroll does the scrolling */
+    }
+    tbody { border: 0; }   /* pandoc */
+    th { border-top: 0; }  /* pandoc */
+    thead th {
+      font-family: var(--font-display);
+      font-weight: 600;
+      font-size: 14px;
+      color: var(--ff-faint);
+      text-align: left;
+      padding: 0 16px 10px 0;
+      border-bottom: 2px solid var(--ff-divider);
+      vertical-align: bottom;
+    }
+    tbody td {
+      padding: 12px 16px 12px 0;
+      border-bottom: 1px solid var(--ff-rule);
+      vertical-align: top;
+    }
+    td:last-child, th:last-child { padding-right: 0; }
+    /* A short id column ("RF 12", "T3") stays on one line beside wide prose. */
+    tbody td:first-child { min-width: 3.4em; }
+    tbody tr:nth-child(even) { background: none; }
+    td > :first-child { margin-top: 0; }
+    td > :last-child { margin-bottom: 0; }
+
+    /* Disposition verdicts rendered by the build (Accepted/Rejected/Deferred).
+       A dot and the word, in the verdict's colour. */
+    td .accepted, span.accepted,
+    td .rejected, span.rejected,
+    td .deferred, span.deferred {
+      font-family: var(--font-display);
+      font-weight: 600;
+      white-space: nowrap;
+    }
+    td .accepted::before, span.accepted::before,
+    td .rejected::before, span.rejected::before,
+    td .deferred::before, span.deferred::before {
+      content: "";
+      display: inline-block;
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: currentColor;
+      margin-right: 7px;
+      vertical-align: 0.12em;
+    }
+    td .accepted, span.accepted { color: var(--ff-accepted); }
+    td .rejected, span.rejected { color: var(--ff-rejected); }
+    td .deferred, span.deferred { color: var(--ff-deferred); }
+
+    /* Inline + block code: JetBrains Mono on the cobalt tint, ink text.
+       Ligatures off, so an arrow in code reads as the two characters it is. */
+    code, pre {
+      font-family: var(--font-mono);
+      font-variant-ligatures: none;
+      font-feature-settings: "liga" 0, "calt" 0;
+    }
+    code {
+      font-size: 0.86em;
+      background: var(--ff-code-bg);
+      color: var(--ff-fg);
+      padding: 0.1em 0.35em;
+      border-radius: 3px;
+    }
+    pre {
+      font-size: 14px;
+      background: var(--ff-code-bg);
+      color: var(--ff-fg);
+      padding: 18px 24px;
+      border-radius: var(--r);
+      overflow-x: auto;
+      margin: 0 0 24px;
+      line-height: 1.55;
+      /* Wrap long lines instead of forcing a horizontal scroll (readability). */
+      white-space: pre-wrap;
+      word-break: break-word;
+      overflow-wrap: anywhere;
+    }
+    pre code { background: none; color: inherit; padding: 0; font-size: inherit; }
+    /* A code chip inside a tinted callout would vanish into the tint. */
+    .callout code { background: color-mix(in srgb, currentColor 9%, transparent); }
+
+    /* Highlighted blocks: pandoc wraps them in div.sourceCode and paints its
+       own transparent ground and a green-and-teal palette. Repaint both in the
+       St. Clair accents. */
+    div.sourceCode { margin: 0 0 24px; }
+    div.sourceCode > pre.sourceCode { background: var(--ff-code-bg); margin: 0; }
+    pre.sourceCode code span.kw, pre.sourceCode code span.cf, pre.sourceCode code span.im,
+    pre.sourceCode code span.op, pre.sourceCode code span.bu { color: var(--ff-hl-kw); font-weight: 500; }
+    pre.sourceCode code span.st, pre.sourceCode code span.ch, pre.sourceCode code span.ss,
+    pre.sourceCode code span.vs, pre.sourceCode code span.sc { color: var(--ff-hl-str); }
+    pre.sourceCode code span.dv, pre.sourceCode code span.fl, pre.sourceCode code span.bn,
+    pre.sourceCode code span.cn, pre.sourceCode code span.dt { color: var(--ff-hl-num); }
+    pre.sourceCode code span.co, pre.sourceCode code span.an, pre.sourceCode code span.cv,
+    pre.sourceCode code span.do, pre.sourceCode code span.in { color: var(--ff-soft); font-style: normal; font-weight: 400; }
+    pre.sourceCode code span.fu, pre.sourceCode code span.va, pre.sourceCode code span.at,
+    pre.sourceCode code span.ot { color: inherit; font-weight: 400; }
+
+    /* Mermaid blocks: pandoc renders ```mermaid as <pre class="mermaid">; the
+       Mermaid script replaces the text with SVG. It is a figure, not code: no
+       tint, a hairline frame, centred. Mermaid source must not wrap before the
+       script swaps it for SVG. */
+    pre.mermaid {
+      white-space: pre;
+      background: none;
+      border: 1px solid var(--ff-rule);
+      border-radius: var(--r);
+      padding: 24px;
+      text-align: center;
+      color: var(--ff-fg);
+      font-family: var(--font-body);
+    }
+    pre.mermaid svg { max-width: 100%; height: auto; }
+
+    blockquote {
+      margin: 18px 0;
+      padding: 2px 0 2px 18px;
+      border-left: 3px solid var(--ff-rule);
+      color: var(--ff-soft);
+    }
+    blockquote p:last-child { margin-bottom: 0; }
+
+    hr { border: none; border-top: 1px solid var(--ff-rule); margin: 44px 0; }
+    hr:has(+ h2) { display: none; }
+
+    img { max-width: 100%; height: auto; }
+
+    /* Task-list checkboxes from "- [ ]" lists */
+    ul.task-list { list-style: none; padding-left: 4px; }
+    ul.task-list li input[type="checkbox"] { margin-right: 8px; accent-color: var(--cobalt); }
+
+    @page { size: letter; margin: 0.7in 0.65in; }
+    @media (max-width: 620px) {
+      body { padding: 32px 16px 64px; font-size: 16px; }
+      .callout { padding: 14px 16px 16px; }
+      .callout::after { left: 16px; top: 22px; }
+      table { font-size: 14px; }
+    }
+    @media print {
+      :root { color-scheme: light; }
+      * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+      html, body { background: #fff; color: var(--ink); }
+      body { max-width: 100%; font-size: 11pt; padding: 0; }
+      .doc-nav { display: none; }
+      a { color: var(--ink); }
+      .callout, table, pre, blockquote { break-inside: avoid; }
+      h2, h3 { break-after: avoid; }
+    }
+  </style>
+  <script type="module">
+    import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.esm.min.mjs";
+    const dark = window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches;
+    mermaid.initialize({
+      startOnLoad: false,
+      theme: dark ? "dark" : "neutral",
+      securityLevel: "loose",
+      themeVariables: { fontFamily: '"Hanken Grotesk", system-ui, sans-serif' },
+    });
+    /* Pandoc emits ```mermaid blocks as <pre class="mermaid"><code>…</code></pre> with the
+       diagram source HTML-entity-encoded. Mermaid 10 reads innerHTML, so it sees the literal
+       <code> tag and &quot;/&gt; entities and throws syntax errors. Flatten each block to a
+       single decoded text node first (textContent decodes entities and drops the wrapper),
+       then render. Same fix as the personal-repo report builds (commit d525c50 there). */
+    function renderMermaid() {
+      document.querySelectorAll("pre.mermaid").forEach(function (el) {
+        if (!el.dataset.mflattened) {
+          el.textContent = el.textContent;
+          el.dataset.mflattened = "1";
+        }
+      });
+      mermaid.run({ querySelector: "pre.mermaid" });
+    }
+    if (document.readyState === "loading") {
+      window.addEventListener("DOMContentLoaded", renderMermaid);
+    } else {
+      renderMermaid();
+    }
+  </script>
+
+  <!-- The review comment module and the shared document fixes are injected here
+       at build time from ~/.claude/skills/shared-assets/ (comment_module.html +
+       doc_fixes.css) by shared_assets.resolve_header(). Do not paste a copy back
+       into this file. -->
+  <style>
+  /* Shared document fixes: one source for both document builds.
+
+     Injected at build time alongside comment_module.html, in place of the
+     <!-- SHARED_ASSETS --> placeholder in each pandoc header. Because it lands
+     last in <head>, these rules win over the same-specificity rules earlier in a
+     header without needing !important.
+
+     Keep this file to fixes that are true for every document we build. Anything
+     that depends on a skill's own look (colors, radius, shadow) belongs in that
+     skill's header. */
+
+  /* --- Tables: never spill past the reading column (plan Task 4.3, defect 1) ---
+     Two halves to the fix, and both are needed.
+     1. A wide table scrolls inside its wrapper. Both builds wrap every table in
+        <div class="table-scroll">.
+     2. Long unbroken strings (URLs, tokens, absolute paths) wrap instead of
+        setting a min-content width that forces the table wider than the page.
+        Without this the table is simply wider than the wrapper and the text is
+        cut off at the wrapper edge. */
+  .table-scroll {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    max-width: 100%;
+  }
+  .table-scroll > table { margin: 0; }
+  table { max-width: 100%; }
+  thead th, tbody td { overflow-wrap: anywhere; word-break: break-word; }
+  thead th code, tbody td code,
+  thead th a, tbody td a { overflow-wrap: anywhere; word-break: break-word; }
+
+  /* Print/PDF has no scrollbars, so show the whole table and let it shrink. */
+  @media print {
+    .table-scroll { overflow: visible; }
+  }
+
+  /* --- Charts: never let a chart set the page width (plan Task 4.3, defect 2) ---
+     The label-truncation fix itself is Plotly's automargin, applied in the
+     report header's render script. This is the CSS guard next to it: a chart
+     that computes a wider layout than its column stays inside the column
+     instead of pushing the whole page sideways. */
+  figure.plotly-chart,
+  figure.plotly-chart > div,
+  figure.chart svg,
+  figure.plotly-chart .main-svg { max-width: 100%; }
+
+  </style>
+</head>
+<body>
+<header id="title-block-header">
+<h1 class="title">Architecture: Free writing</h1>
+</header>
+
+<div class="doc-nav"><span class="doc-nav-label">Docs</span><a href="00_crucible.html">Crucible</a><a href="01_brief_free_writing.html">Brief</a><a href="02_architecture_free_writing.html" class="current">Architecture</a><a href="03_plan_free_writing.html">Plan</a><a href="wireframes/index.html">Index</a><a href="http://127.0.0.1:60007/04_progress_free_writing-9add023a906f9af5.html">Progress</a></div>
+<nav id="TOC" role="doc-toc">
+<ul>
+<li><a href="#summary" id="toc-summary">Summary</a></li>
+<li><a href="#analysis-of-existing-structure"
+id="toc-analysis-of-existing-structure">Analysis of Existing
+Structure</a></li>
+<li><a href="#components--modules-touched"
+id="toc-components--modules-touched">Components / Modules
+Touched</a></li>
+<li><a href="#data--state-changes" id="toc-data--state-changes">Data /
+State Changes</a></li>
+<li><a href="#key-flows" id="toc-key-flows">Key Flows</a></li>
+<li><a href="#rollout-and-old-agents"
+id="toc-rollout-and-old-agents">Rollout and old agents</a></li>
+<li><a href="#alternatives-considered"
+id="toc-alternatives-considered">Alternatives Considered</a></li>
+<li><a href="#failure-modes--edge-cases"
+id="toc-failure-modes--edge-cases">Failure Modes / Edge Cases</a></li>
+<li><a href="#security--privacy-notes"
+id="toc-security--privacy-notes">Security &amp; Privacy Notes</a></li>
+<li><a href="#test-strategy" id="toc-test-strategy">Test
+Strategy</a></li>
+<li><a href="#open-questions" id="toc-open-questions">Open
+Questions</a></li>
+<li><a href="#architect-review" id="toc-architect-review">Architect
+Review</a></li>
+<li><a href="#security-review" id="toc-security-review">Security
+Review</a></li>
+<li><a href="#plan-review-back-patches"
+id="toc-plan-review-back-patches">Plan Review Back-patches</a></li>
+<li><a href="#main-drift-2026-09-28" id="toc-main-drift-2026-09-28">Main
+Drift, 2026-09-28</a></li>
+<li><a href="#reviews-free-writing-architecture"
+id="toc-reviews-free-writing-architecture">Reviews: Free writing
+architecture</a>
+<ul>
+<li><a href="#security-review-round-1"
+id="toc-security-review-round-1">Security Review (Round 1)</a></li>
+<li><a href="#architect-review-round-1"
+id="toc-architect-review-round-1">Architect Review (Round 1)</a></li>
+<li><a href="#requirement-coverage"
+id="toc-requirement-coverage">Requirement coverage</a></li>
+<li><a href="#cleanup-needed" id="toc-cleanup-needed">Cleanup
+needed</a></li>
+</ul></li>
+</ul>
+</nav>
+<h2 id="summary">Summary</h2>
+<p>Free writing extends today's edit. It does not add a second one.</p>
+<ul>
+<li>An edit becomes an existing <strong>anchor block</strong> plus a
+<strong>run</strong> of new sibling blocks written after it: paragraphs,
+headers, or lists.</li>
+<li>A sitting is everything the reviewer writes between opening an edit
+and leaving it. The code calls an open edit a session. One sitting is
+one <code>edit</code> record.</li>
+<li>The record gains:
+<ul>
+<li>a structured list of the new blocks</li>
+<li>the anchor's own new markup</li>
+<li>the anchor's new tag, when the reviewer changed it</li>
+</ul></li>
+<li>Writing in empty space works the same way. The block above the click
+is the anchor, unchanged, and gains a run. On a page with no blocks, the
+page's container is the anchor.</li>
+</ul>
+<p>Lahe's own editing code stays the engine and learns block types. The
+editing-host spike ran, and Lahe's own host passed every check. Tiptap
+works for new blocks, but it cannot share one sitting with an existing
+block. So this architecture recommends Lahe's own code. <strong>Ken
+leans toward Tiptap, so the engine is his call (AQ1, Lahe's code or
+Tiptap).</strong></p>
+<p>Replay, which re-applies the reviewer's edits after each reload,
+learns to insert new blocks after the anchor. It also checks each
+block's words, tag, and bold on its own. That fixes the doubled header
+line, and the left-out bold paragraph that main still loses when it is
+not the edit's first. One shared list of safe tags checks every new
+block three times: when the layer captures it, when the helper stores
+it, and before any write to the page. The agent's instructions gain
+rules for placing new blocks. A new <code>lahe write</code> command
+starts a blank notes page.</p>
+<div class="xref">
+<p><a href="01_brief_free_writing.html#requirements">Brief:
+Requirements</a></p>
+</div>
+<h2 id="analysis-of-existing-structure">Analysis of Existing
+Structure</h2>
+<pre class="mermaid"><code>flowchart LR
+  subgraph Today
+    E1[Enter in a block] --&gt; E2[&quot;new p appended INSIDE the edited element&quot;]
+    E2 --&gt; E3[&quot;after_html = region innerHTML, one string&quot;]
+    E3 --&gt; E4[&quot;replay writes element.innerHTML = after_html&quot;]
+  end
+  subgraph Proposed
+    P1[Enter at end of a block] --&gt; P2[&quot;new block inserted as a SIBLING after it&quot;]
+    P2 --&gt; P3[&quot;record: anchor fields + new_blocks list&quot;]
+    P3 --&gt; P4[&quot;replay: anchor compare on the anchor&#39;s own fields, then check or insert the run block by block&quot;]
+  end</code></pre>
+<ul>
+<li><strong>Stays:</strong>
+<ul>
+<li>the gesture, the frame, and the bar</li>
+<li>the item lifecycle, one commit per session, and <code>before</code>
+pinned at first touch</li>
+<li>the anchor ladder, and the four-branch replay compare for the anchor
+block</li>
+<li>the bold and italic markup rules</li>
+<li>today's replay path for every record without
+<code>new_blocks</code></li>
+</ul></li>
+<li><strong>Changes:</strong> Enter makes a sibling, not a nested block.
+Replay gains an insert path. The page check and the handled check learn
+block structure.</li>
+<li><strong>Root cause of the open bugs</strong>, found by tracing the
+code and re-checked on main after piece-keeps-formatting:
+<ul>
+<li><strong>The doubled line under a header.</strong> Enter nests the
+new <code>&lt;p&gt;</code> inside the <code>&lt;h2&gt;</code>. Replay's
+"already there" check looks only at the next sibling, which on a Lahe
+Markdown render is the "Section 1" label. So replay rewrites the header
+with the nested paragraph, and the text shows twice. Still open on
+main.</li>
+<li><strong>The lone paragraph that lost its bold</strong> (board row
+<code>LAHE-lone-paragraph-loses-markup</code>). Fixed on main. Replay
+now writes a missing first paragraph with its own markup:
+<code>normalize.topLevelBlocks</code> cuts <code>after_html</code> at
+the top level, and <code>pieceMarkup</code> in <code>replay.js</code>
+uses the cut when it lines up with the text. When it does not line up,
+the paragraph still goes in as plain text. This feature keeps a
+regression test under the new record shape and no longer owns the
+fix.</li>
+<li><strong>What is still open from that case.</strong> Replay still
+skips the formatting check once it finds the split on the page. And when
+the left-out bold paragraph is a later one, the anchor cannot be found,
+the record goes lost, and nothing is flagged (see Failure Modes).</li>
+<li>Both open cases go away when new blocks are separate siblings with
+their own markup, read in document order.</li>
+</ul></li>
+<li><strong>The third brief R14 case</strong> (bold two words on a
+Markdown page, commit, rebuild) was reproduced. It works when the agent
+does the work. When the agent changes nothing and replies handled, the
+bold is lost, because the handled check only accepts <code>edit</code>
+records. See Failure Modes, and AQ3 (should the handled check always run
+for new blocks).</li>
+</ul>
+<h2 id="components--modules-touched">Components / Modules Touched</h2>
+<ul>
+<li><strong><code>src/shared/normalize.js</code></strong>:
+<code>cleanBlock(tag, html)</code>, a new allowlist (see Security).
+<code>WRITABLE_BLOCK_TAGS</code>, the six tags a record may carry (p,
+h2, h3, h4, ul, ol); <code>BLOCK_TAGS</code> stays the text reader's
+list. A per-block reader and a run matcher shared by replay, the page
+check, and the handled check. <code>topLevelBlocks</code> (from the
+first-paragraph fix) stays as it is for old records; the per-block
+reader is a different cut, down to leaf blocks and with tags.</li>
+<li><strong><code>src/layer/blocks.js</code></strong> (new): the DOM
+block rules in one copy. The leaf-block walk, the insert point after an
+anchor or at a container's start, the editing host, the element swap,
+and <code>runElementsFor</code>, the one way to find a record's run on
+the page.</li>
+<li><strong><code>src/layer/editing.js</code></strong>:
+<ul>
+<li>the host spanning anchor and run, and its guard</li>
+<li>Enter, block types, Markdown shortcuts, and plain-text paste</li>
+<li>undo within a session</li>
+<li>capture through <code>cleanBlock</code></li>
+<li>the "+ Write here" line</li>
+<li><code>kindFor</code> compares the tag; <code>itemFor</code> maps run
+blocks back to their record</li>
+<li>a polite live region for session start, type change, and send</li>
+</ul></li>
+<li><strong><code>src/layer/highlight.js</code></strong>: one rule that
+hides the host's focus ring.</li>
+<li><strong><code>src/layer/protect.js</code></strong>: protects the
+whole edited area, restores by block position and character offset, and
+rebinds after a tag swap.</li>
+<li><strong><code>src/layer/replay.js</code></strong>: the insert path,
+the take-back removal path, the anchor view, the per-block page check
+(<code>pageCheckReasonFor</code>,
+<code>formattingMissingFromPage</code>), and the held run on the
+conflict card.</li>
+<li><strong><code>src/layer/anchor.js</code></strong>: the
+empty-container rung for <code>start_of_container</code> records. The
+tag tie-breaker accepts the saved tag or
+<code>anchor_tag_after</code>.</li>
+<li><strong><code>src/layer/sync.js</code></strong>: a longer draft
+floor for run records, and no re-post of a refused run event.</li>
+<li><strong><code>src/layer/tab_edits.js</code>,
+<code>tab_done.js</code>, <code>overlay.js</code></strong>: the anchor
+change and new blocks by type; two answers on a proofreading reply.</li>
+<li><strong><code>src/shared/record.js</code></strong>: the new fields
+and their validation, run change text, <code>after_history</code>
+fields, the take-back's <code>remove_blocks</code>, and accepted
+proofreading fixes as a new revision.</li>
+<li><strong><code>src/shared/merge.js</code></strong>:
+<code>CONTENT_FIELDS</code> gains <code>new_blocks</code>,
+<code>anchor_after_html</code>, <code>anchor_tag_after</code>, and
+<code>placement</code>.</li>
+<li><strong><code>src/shared/review_format.js</code></strong>: contract
+lines, projection, field classes, and
+<code>PROOFREAD_MIN_WORDS</code>.</li>
+<li><strong><code>src/shared/protocol.js</code></strong>:
+<code>SERVICE_CONTRACT</code> 13 to 14; a reply can be marked a
+proofread with suggestions.</li>
+<li><strong><code>src/service/log.js</code></strong>:
+<code>cleanBlock</code> over every block on append, refusing the event
+on failure; the size ceiling.</li>
+<li><strong><code>src/service/handled_check.js</code></strong>:
+per-block word checks (see The handled check).</li>
+<li><strong><code>src/service/markdown.js</code></strong>: marks a hero
+title taken from the file name as chrome.</li>
+<li><strong><code>src/service/static_servers.js</code></strong>,
+<strong><code>src/cli/commands/review.js</code></strong>: the one-page
+server for <code>lahe write</code>.</li>
+<li><strong><code>src/cli/commands/write.js</code></strong> (new),
+<strong><code>src/cli/index.js</code></strong>,
+<strong><code>docs/CLI.md</code></strong>: <code>lahe write</code>.</li>
+<li><strong><code>src/cli/commands/reply.js</code></strong>: the
+proofread flag and its suggestions.</li>
+<li><strong>Contract copies:</strong> <code>skills/lahe/SKILL.md</code>,
+<code>docs/CONTRACTS.md</code>,
+<code>test/unit/review_format.test.js</code>, and a <code>dist/</code>
+rebuild.</li>
+</ul>
+<h2 id="data--state-changes">Data / State Changes</h2>
+<p>No new record kind. An edit record gains four optional fields:</p>
+<div class="sourceCode" id="cb2"><pre
+class="sourceCode json"><code class="sourceCode json"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="fu">{</span></span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a>  <span class="dt">&quot;kind&quot;</span><span class="fu">:</span> <span class="st">&quot;edit&quot;</span><span class="fu">,</span></span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a>  <span class="dt">&quot;before&quot;</span><span class="fu">:</span> <span class="st">&quot;What changed&quot;</span><span class="fu">,</span></span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a>  <span class="dt">&quot;before_html&quot;</span><span class="fu">:</span> <span class="st">&quot;What changed&quot;</span><span class="fu">,</span></span>
+<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a>  <span class="dt">&quot;after&quot;</span><span class="fu">:</span> <span class="st">&quot;What changed</span><span class="ch">\n\n</span><span class="st">What the chat window cost me</span><span class="ch">\n\n</span><span class="st">I lost my place every time ...</span><span class="ch">\n\n</span><span class="st">scrolling</span><span class="ch">\n\n</span><span class="st">re-asking&quot;</span><span class="fu">,</span></span>
+<span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a>  <span class="dt">&quot;after_html&quot;</span><span class="fu">:</span> <span class="st">&quot;What changed&lt;h2&gt;What the chat window cost me&lt;/h2&gt;&lt;p&gt;I lost my place &lt;strong&gt;every&lt;/strong&gt; time ...&lt;/p&gt;&lt;ul&gt;&lt;li&gt;scrolling&lt;/li&gt;&lt;li&gt;re-asking&lt;/li&gt;&lt;/ul&gt;&quot;</span><span class="fu">,</span></span>
+<span id="cb2-7"><a href="#cb2-7" aria-hidden="true" tabindex="-1"></a>  <span class="dt">&quot;anchor_after_html&quot;</span><span class="fu">:</span> <span class="st">&quot;What changed&quot;</span><span class="fu">,</span></span>
+<span id="cb2-8"><a href="#cb2-8" aria-hidden="true" tabindex="-1"></a>  <span class="dt">&quot;anchor_tag_after&quot;</span><span class="fu">:</span> <span class="kw">null</span><span class="fu">,</span></span>
+<span id="cb2-9"><a href="#cb2-9" aria-hidden="true" tabindex="-1"></a>  <span class="dt">&quot;new_blocks&quot;</span><span class="fu">:</span> <span class="ot">[</span></span>
+<span id="cb2-10"><a href="#cb2-10" aria-hidden="true" tabindex="-1"></a>    <span class="fu">{</span> <span class="dt">&quot;tag&quot;</span><span class="fu">:</span> <span class="st">&quot;h2&quot;</span><span class="fu">,</span> <span class="dt">&quot;html&quot;</span><span class="fu">:</span> <span class="st">&quot;What the chat window cost me&quot;</span> <span class="fu">}</span><span class="ot">,</span></span>
+<span id="cb2-11"><a href="#cb2-11" aria-hidden="true" tabindex="-1"></a>    <span class="fu">{</span> <span class="dt">&quot;tag&quot;</span><span class="fu">:</span> <span class="st">&quot;p&quot;</span><span class="fu">,</span>  <span class="dt">&quot;html&quot;</span><span class="fu">:</span> <span class="st">&quot;I lost my place &lt;strong&gt;every&lt;/strong&gt; time ...&quot;</span> <span class="fu">}</span><span class="ot">,</span></span>
+<span id="cb2-12"><a href="#cb2-12" aria-hidden="true" tabindex="-1"></a>    <span class="fu">{</span> <span class="dt">&quot;tag&quot;</span><span class="fu">:</span> <span class="st">&quot;ul&quot;</span><span class="fu">,</span> <span class="dt">&quot;html&quot;</span><span class="fu">:</span> <span class="st">&quot;&lt;li&gt;scrolling&lt;/li&gt;&lt;li&gt;re-asking&lt;/li&gt;&quot;</span> <span class="fu">}</span></span>
+<span id="cb2-13"><a href="#cb2-13" aria-hidden="true" tabindex="-1"></a>  <span class="ot">]</span><span class="fu">,</span></span>
+<span id="cb2-14"><a href="#cb2-14" aria-hidden="true" tabindex="-1"></a>  <span class="dt">&quot;placement&quot;</span><span class="fu">:</span> <span class="st">&quot;after_anchor&quot;</span><span class="fu">,</span></span>
+<span id="cb2-15"><a href="#cb2-15" aria-hidden="true" tabindex="-1"></a>  <span class="dt">&quot;change&quot;</span><span class="fu">:</span> <span class="st">&quot;Added 3 blocks after this paragraph: h2, p, ul. Their words are in new_blocks.&quot;</span></span>
+<span id="cb2-16"><a href="#cb2-16" aria-hidden="true" tabindex="-1"></a><span class="fu">}</span></span></code></pre></div>
+<ul>
+<li><p><strong>A run record</strong> has a non-empty
+<code>new_blocks</code>. Every reader tells it apart that way. Any other
+record takes today's paths.</p></li>
+<li><p><strong><code>new_blocks</code></strong>: the run, in order. Each
+block has a <code>tag</code> from <code>WRITABLE_BLOCK_TAGS</code> and
+an <code>html</code> that passed <code>cleanBlock</code>. No
+<code>text</code> is stored; every reader derives words from the cleaned
+html. The projection adds the derived text for the agent.</p>
+<ul>
+<li><code>from_anchor: true</code> marks the tail of an anchor split
+with Enter. Those words moved; they are not new.</li>
+</ul></li>
+<li><p><strong><code>anchor_after_html</code></strong>: the anchor's own
+inner markup after the sitting. Run records only.</p></li>
+<li><p><strong><code>anchor_tag_after</code></strong>: the anchor's new
+block type, or null. Both tags must be in
+<code>WRITABLE_BLOCK_TAGS</code>, so a div or table cell cannot be
+retagged.</p></li>
+<li><p><strong><code>placement</code></strong>:
+<code>after_anchor</code>, or <code>start_of_container</code> when the
+page has no content blocks.</p></li>
+<li><p><strong><code>remove_blocks</code></strong>: take-back records
+only. Each block to remove, with its <code>tag</code> and
+<code>html</code>. A take-back never carries
+<code>new_blocks</code>.</p></li>
+<li><p><strong><code>before</code>, <code>after</code>, and
+<code>after_html</code> still mean the whole sitting.</strong>
+<code>after_html</code> is the anchor's inner markup followed by each
+new block as its own tagged element. <code>after</code> is read from it
+by the shared text reader, so <code>markupSaysAfter</code> keeps
+holding. An agent that only knows "apply after_html" still gets every
+block with its tag.</p></li>
+<li><p><strong>What each reader of <code>after</code> and
+<code>after_html</code> does with a run record:</strong></p>
+<div class="table-scroll"><table>
+<thead>
+<tr>
+<th>Reader</th>
+<th>Run record</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>replay.js</code> anchor compare (<code>compare</code>,
+<code>reflowMatch</code>, <code>splitPieces</code>,
+<code>wouldDuplicate</code>, <code>splitWritePlan</code>,
+<code>pieceMarkup</code>, <code>mayFold</code>,
+<code>formattingLost</code>)</td>
+<td>Reads an anchor view, with <code>anchor_after_html</code> in place
+of <code>after_html</code> and its text in place of <code>after</code>.
+<code>writeRegion</code> never sees the whole sitting, so it cannot
+write the run into the anchor.</td>
+</tr>
+<tr>
+<td><code>replay.js</code> page check</td>
+<td>Checks the anchor and each block on its own.</td>
+</tr>
+<tr>
+<td><code>record.js</code> change text, take-back, history</td>
+<td>Change text gives structure only. A take-back names the run in
+<code>remove_blocks</code>. <code>after_history</code> entries carry the
+new fields.</td>
+</tr>
+<tr>
+<td><code>handled_check.js</code></td>
+<td>Each block's words, in order, each on its own. A run never takes the
+several-paragraph path main added (<code>splitStarts</code>), because a
+section label between blocks would fail it.</td>
+</tr>
+<tr>
+<td><code>status.js</code> drain line</td>
+<td>The three text fields sit under <code>page</code>, like
+<code>after_html</code> (see Projection).</td>
+</tr>
+<tr>
+<td><code>merge.js</code></td>
+<td>Browser wins on the new fields, as on <code>after</code>.</td>
+</tr>
+<tr>
+<td><code>tab_edits.js</code>, <code>tab_done.js</code>,
+<code>review_format.js</code> text formatter</td>
+<td>Show the anchor change, then the new blocks by type.</td>
+</tr>
+<tr>
+<td><code>export.js</code></td>
+<td>Goes through the <code>review_format.js</code> text formatter.</td>
+</tr>
+</tbody>
+</table></div></li>
+<li><p><strong>Change text</strong> for a run describes structure only
+and never quotes a block's words. It restates no rule: "place them as
+written" lives in the contract, read once, not on every item. The anchor
+is named paragraph, heading, list, or block.</p>
+<ul>
+<li>A run: "Added 3 blocks after this paragraph: h2, p, ul. Their words
+are in new_blocks."</li>
+<li>At the start of a page: "Added 2 blocks at the start of the page:
+h2, p. Their words are in new_blocks."</li>
+<li>The anchor reworded: "Reworded this paragraph; its new markup is in
+anchor_after_html."</li>
+<li>The anchor retagged: "Changed this paragraph to h2."</li>
+<li>A split tail: "Split this paragraph in two after the anchor's new
+end. The second part is new_blocks[0], marked from_anchor." A split with
+no typing adds no "Added" sentence.</li>
+</ul></li>
+<li><p><strong>Projection (<code>review.json</code>):</strong></p>
+<ul>
+<li>All five new fields are projected. <code>new_blocks</code>,
+<code>anchor_after_html</code>, and <code>remove_blocks</code> are data
+fields, not instructions.</li>
+<li>For a run record, <code>new_blocks</code>, <code>after_full</code>,
+and <code>after_html</code> skip the 2000-character data bound (brief
+R6, the words stay as typed). The helper's ceiling bounds them.</li>
+<li><code>run_words</code> is the run's word count without
+<code>from_anchor</code> blocks, from one function in
+<code>normalize.js</code>.</li>
+<li><code>proofread: true</code> when <code>run_words</code> is over
+<code>PROOFREAD_MIN_WORDS</code> and the review is not a notes review.
+The agent never counts.</li>
+<li>A <code>lahe write</code> review carries
+<code>notes: true</code>.</li>
+<li>The 2000-character bound is still <code>BEFORE_MAX</code> on main.
+Projected <code>after_history</code> entries stay bounded as today and
+carry no <code>new_blocks</code>.</li>
+</ul></li>
+<li><p><strong>On a drain line</strong>
+(<code>lahe status --session ... --json --quiet</code>), main now groups
+every page-text field under the item's <code>page</code> key, driven by
+<code>review_format.DATA_FIELDS</code>, and repeats no rule text.</p>
+<ul>
+<li><code>new_blocks</code>, <code>anchor_after_html</code>, and
+<code>remove_blocks</code> join <code>DATA_FIELDS</code>, so they sit
+under <code>page</code> beside <code>after_html</code>. The drain code
+needs no change.</li>
+<li><code>anchor_tag_after</code>, <code>placement</code>,
+<code>run_words</code>, and <code>proofread</code> stay at the top level
+as markers, and each gets a class in the field-class table.</li>
+<li><code>notes</code> is review-level and is not repeated on item
+lines. The one behavior it changes reaches each item as
+<code>proofread</code>.</li>
+</ul></li>
+<li><p><strong>Size ceiling:</strong> the helper refuses an event whose
+<code>new_blocks</code> is over a per-record ceiling in blocks and in
+UTF-8 bytes. The plan sets both, far above any real post.</p>
+<ul>
+<li>The bar warns before the reviewer reaches it, and at the ceiling
+refuses input that would grow the run.</li>
+<li>A refused event is not re-posted. The card says the agent has not
+seen it, and the words stay in the browser.</li>
+</ul></li>
+<li><p><strong>History size:</strong> <code>after_history</code> keeps
+<code>new_blocks</code> only for the last few revisions (the plan sets
+how many). Replay's check for an earlier revision that already landed
+(branch three of the anchor compare) needs only recent ones.</p>
+<ul>
+<li>Every older entry still keeps the whole sitting's <code>after</code>
+and <code>after_html</code>, because <code>bumpRev</code> never trims
+history. So a run at the byte ceiling crosses the helper's 8 MiB body
+limit at its 18th history entry. That is a lower bound from a script,
+ignoring JSON escaping.</li>
+<li>The record also stores the run's markup twice
+(<code>after_html</code> and <code>new_blocks</code>). Main's rule since
+oversized-records is to store what identifies a thing once.</li>
+<li>How to bound it is Ken's call (see Open Questions, AQ4).</li>
+</ul></li>
+<li><p><strong>Draft growth:</strong> each draft carries the whole run,
+so a run record gets a longer draft floor than today's 10 seconds (the
+plan sets it). Capture rebuilds only the caret's block.</p></li>
+<li><p><strong>Lifecycle:</strong> unchanged. An unchanged anchor with a
+non-empty run is a real change; <code>kindFor</code> counts the run and
+the tag.</p></li>
+<li><p><strong>Undo of a committed record:</strong> the anchor gets its
+<code>before_html</code> and old tag back, and the run's elements are
+removed.</p>
+<ul>
+<li>An unhandled record is withdrawn, as today, so replay never runs it
+again.</li>
+<li>A handled record raises a take-back naming the placed blocks in
+<code>remove_blocks</code>. Replay removes them where they still are and
+never replays the original run.</li>
+<li>A later sitting on a run joins the same record (see Two sittings in
+the same place), so undo never orphans a later run.</li>
+</ul></li>
+</ul>
+<div class="xref">
+<p><a href="01_brief_free_writing.html#decisions-resolved">Brief:
+Decisions, one sitting is one edit</a></p>
+</div>
+<h2 id="key-flows">Key Flows</h2>
+<h3 id="writing-a-section-after-an-existing-block">Writing a section
+after an existing block</h3>
+<pre class="mermaid"><code>sequenceDiagram
+    participant R as Reviewer
+    participant L as Layer (editing)
+    participant P as Protection
+    participant S as Store and helper
+    participant A as Agent
+    R-&gt;&gt;L: Cmd-Shift-E, then click below &quot;What changed&quot;
+    L-&gt;&gt;L: anchor = &quot;What changed&quot; p; open a session with an empty run
+    L-&gt;&gt;P: protect anchor and run; snapshot
+    R-&gt;&gt;L: types &quot;# &quot;, a header, Enter, a paragraph, &quot;- &quot; and items
+    L-&gt;&gt;L: layer writes each block as a sibling; captures new_blocks through cleanBlock
+    L-&gt;&gt;S: draft saved in the browser on every keystroke
+    R-&gt;&gt;L: Esc
+    L-&gt;&gt;S: commit: edit record, ready, with new_blocks
+    S-&gt;&gt;S: helper runs cleanBlock and the ceiling; refuses a bad event
+    L-&gt;&gt;P: release; replay runs at once
+    A-&gt;&gt;S: reads the item: placement after_anchor, three new blocks
+    A-&gt;&gt;A: writes them after that paragraph in the source, as literal text; rebuilds
+    A-&gt;&gt;S: reply handled
+    S-&gt;&gt;L: page reloads; replay finds the run already there
+    L-&gt;&gt;L: page check: anchor and each block present, tags and bold match</code></pre>
+<h3 id="the-editing-host">The editing host</h3>
+<p>The session makes a <strong>host</strong> element
+<code>contenteditable</code>. The host is the nearest ancestor that
+holds both the anchor and its run. That is the parent of the element the
+"after the anchor" rule climbs to (see Where "after the anchor" is). On
+the Markdown render, an <code>h2</code>'s host is its section, not its
+<code>sheet-head</code>. For a container anchor, the host is the
+container itself.</p>
+<ul>
+<li><strong>The guard.</strong> A <code>beforeinput</code> guard refuses
+every edit outside the anchor and its run. That covers:
+<ul>
+<li>select-all, then typing</li>
+<li>formatting commands and the browser's own undo</li>
+<li>drop and cut</li>
+<li>a composition that starts outside the session</li>
+</ul></li>
+<li><strong>The focus ring.</strong> The frame is the focus indicator.
+The host's own ring is hidden by one rule in <code>highlight.js</code>.
+It goes in the one stylesheet Lahe is allowed to add to a reviewed page
+(decision D8 from the original architecture, whose rule is that Lahe's
+styles never match the page's own markup). This rule keeps to that: it
+matches only the attribute the layer sets on the host, and it goes away
+with that attribute.</li>
+<li><strong>Where a run is offered.</strong> Only where the host can
+hold flow content. In a <code>td</code>, <code>th</code>,
+<code>dt</code>, <code>dd</code>, or <code>figcaption</code>, Enter
+keeps today's break rule.</li>
+<li>The layer removes the attribute at commit. Nothing the layer adds
+reaches a record.</li>
+</ul>
+<p>The spike tested five hosts in Chromium, Firefox, and WebKit, on a
+styled blog page and a real Lahe Markdown render:</p>
+<div class="table-scroll"><table>
+<thead>
+<tr>
+<th>Host</th>
+<th>Caret, arrows, selection, Backspace merge</th>
+<th>Page styling holds</th>
+<th>Result</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Wrapper with <code>display: contents</code></td>
+<td>Cannot even take focus in Chromium and Firefox</td>
+<td>No</td>
+<td>Fail</td>
+</tr>
+<tr>
+<td>Plain wrapper div</td>
+<td>Pass</td>
+<td>No: child and sibling selectors stop matching. Spacing between
+blocks changed from 53px to 31px, and the anchor's font from 21px to
+16px</td>
+<td>Fail</td>
+</tr>
+<tr>
+<td><code>contenteditable</code> on each block</td>
+<td>Selection cannot span blocks</td>
+<td>Yes</td>
+<td>Fail</td>
+</tr>
+<tr>
+<td>Lahe anchor, then a Tiptap run</td>
+<td>Caret cannot cross, no merge, undo runs out of order</td>
+<td>No</td>
+<td>Fail</td>
+</tr>
+<tr>
+<td><strong>Editable parent plus guard</strong></td>
+<td><strong>Pass</strong></td>
+<td><strong>Pass</strong></td>
+<td><strong>Chosen</strong></td>
+</tr>
+</tbody>
+</table></div>
+<p>What the layer owns with this host:</p>
+<ul>
+<li><strong>Edits across a block edge.</strong> The layer cancels and
+writes these itself, because native merges add style spans:
+<ul>
+<li>Backspace at a block start</li>
+<li>Delete at a block end</li>
+<li>typing over a selection that spans blocks</li>
+</ul></li>
+<li><strong>The caret leaving the session</strong> ends the session, as
+a click outside does today.</li>
+<li><strong>A repaint that replaces the parent.</strong> Protection
+re-finds the anchor, puts the held run back, and sets the attribute
+again.</li>
+<li><strong>IME composition.</strong> It cannot be cancelled through
+<code>beforeinput</code>, so composition inside a session block is
+allowed.</li>
+</ul>
+<h3 id="where-after-the-anchor-is">Where "after the anchor" is</h3>
+<p>A new block goes after the anchor as a DOM sibling. Starting at the
+anchor, climb while the parent holds only the anchor plus inline chrome,
+then insert after that parent. On Lahe's Markdown render an
+<code>h2</code> sits in <code>div.sheet-head</code> beside its "Section
+N" label, so a block written after a header goes after the
+<code>sheet-head</code>. Enter, replay's inserts, and a missing block's
+insert point all use this rule. In the spike, a paragraph inside
+<code>sheet-head</code> became a 256px flex item. After it, the
+paragraph matched a normal one in all three browsers.</p>
+<p>A new <code>h2</code> typed mid-section has the page's
+<code>h2</code> styling but no section rule or number until the rebuild.
+Ken sees that look in the wireframe, because it is a small exception to
+brief R4 (new blocks use the page's styling).</p>
+<h3 id="block-types-while-writing">Block types while writing</h3>
+<ul>
+<li><strong>Enter</strong> at the end of a block makes a new
+<code>p</code> after it. Enter in the middle splits the block into two
+siblings, and the tail is marked <code>from_anchor</code>. Enter in an
+empty list item ends the list.</li>
+<li><strong>Shift-Enter</strong> stays a line break.</li>
+<li><strong>Markdown-style shortcuts</strong> at the start of a block:
+<ul>
+<li><code># </code>, <code>## </code>, and <code>### </code> make h2,
+h3, and h4</li>
+<li><code>- </code> or <code>* </code> makes a bulleted list</li>
+<li><code>1. </code> makes a numbered list</li>
+</ul></li>
+<li><strong>The bar's block-type menu</strong> (wireframe direction A)
+sits before B and I. It names the caret's block: Paragraph, Heading,
+Subheading, Small heading, Bulleted list, Numbered list. Each type also
+gets a hotkey (the plan picks the keys). Menu, hotkeys, and shortcuts
+share one function per type.</li>
+<li><strong>Starting in empty space</strong> (direction A):
+<ul>
+<li>While any edit is open, hovering between blocks or below the last
+one shows a thin "+ Write here" line.</li>
+<li>Clicking it commits any open session and opens a new one anchored on
+the block above, with an empty first block.</li>
+<li>Cmd-Shift-E stays caret-based. With the caret in no block, it enters
+edit state with no block open: the lines show and the bar shows a hint.
+Esc leaves.</li>
+<li>From the keyboard, new text starts with Enter at the end of the
+block above.</li>
+</ul></li>
+<li><strong>Headers</strong> start at h2, because h1 is the page
+title.</li>
+<li><strong>No nested lists</strong> and no indent in this cut.</li>
+<li><strong>One engine:</strong> the layer writes every block change, so
+all three browsers produce the same structure.</li>
+<li><strong>Paste:</strong> the layer takes over
+<code>insertFromPaste</code> and inserts plain text. A blank line starts
+a new paragraph; a single newline is a line break. Rich paste needs its
+own mapping layer and waits on board row
+<code>LAHE-rich-paste</code>.</li>
+</ul>
+<h3 id="adding-to-an-existing-list">Adding to an existing list</h3>
+<p>When the caret is in a list item, the anchor is the whole list. Enter
+at the end of an item adds an <code>li</code> inside that list, which is
+a change to <code>anchor_after_html</code>, not a new block. Enter in an
+empty last item ends the list, and what follows is a new <code>p</code>
+in the run.</p>
+<p>Changing the type inside an existing list:</p>
+<ul>
+<li>Bulleted list and Numbered list swap the whole list.</li>
+<li>Paragraph on the last item ends the list and moves that item's words
+into a new <code>p</code> in the run.</li>
+<li>Every other type is unavailable on a list item in this cut, because
+splitting a list in three is outside the record shape.</li>
+</ul>
+<h3 id="changing-an-existing-blocks-type">Changing an existing block's
+type</h3>
+<ul>
+<li><strong>Record:</strong> <code>anchor_tag_after</code> holds the new
+tag. A tag-only change is <code>format_only</code>; a tag change with
+new words is <code>edit</code>. A paragraph turned into a list wraps its
+content in one <code>li</code>, which also edits
+<code>anchor_after_html</code>.</li>
+<li><strong>Change check:</strong> <code>kindFor</code> compares the
+tag, so a tag-only change commits.</li>
+<li><strong>Replay:</strong> the anchor compare gains a tag leg. The
+anchor counts as applied only when its tag equals
+<code>anchor_tag_after</code>. When words and markup match but the tag
+differs, replay swaps the tag.</li>
+<li><strong>Element swap:</strong> one function in
+<code>blocks.js</code>, used by editing, replay, and undo. It checks the
+tag against <code>WRITABLE_BLOCK_TAGS</code>, makes the new element, and
+moves every attribute (<code>data-lahe-id</code> included) and child
+across. Protection rebinds to it. A framework that repaints its own
+element back is treated like any repaint.</li>
+<li><strong>Finding it again:</strong> the ladder's tag tie-breaker
+accepts the saved tag or <code>anchor_tag_after</code>.</li>
+</ul>
+<h3 id="undo-inside-a-session">Undo inside a session</h3>
+<p>The layer writes block changes itself, so the browser's undo stack no
+longer reflects them. The session keeps its own history of changed-block
+snapshots, taken at each block change and at the end of each typing
+burst (the plan sets the pause). A Markdown shortcut is its own step, so
+Cmd-Z right after "1. " becomes a list gives back the typed characters
+(brief R6, the words stay as typed). Cmd-Z and Shift-Cmd-Z walk that
+history while the frame is open. After commit, Cmd-Z is Lahe's
+per-record undo, as today.</p>
+<h3 id="two-sittings-in-the-same-place">Two sittings in the same
+place</h3>
+<p>One rule: <strong>a block that belongs to an outstanding record
+reopens that record.</strong> This is today's <code>itemFor</code> rule,
+extended to run blocks.</p>
+<ul>
+<li>Before the agent places a run, a sitting that starts on or below its
+anchor or run blocks continues the same record at a new revision. The
+caret goes where the reviewer clicked.
+<ul>
+<li>The first keystroke that changes it takes the record off the agent's
+drain until the sitting commits, and later drafts wait for the draft
+floor. Main does this for a <code>ready</code> record and, since
+refused-reword-floor, for a <code>not_handled</code> one too. So the
+agent never places a half-written run.</li>
+</ul></li>
+<li>Once the record is handled, its blocks are the page's own, and a new
+sitting anchors on the block above the click.</li>
+<li>This rule means:
+<ul>
+<li>replay never has to order records</li>
+<li>no record's anchor is another record's unplaced block</li>
+<li>undoing one record never orphans another</li>
+</ul></li>
+<li><code>new_blocks</code> is always the whole run at the current
+revision. The contract tells the agent to place only blocks not already
+in the source.</li>
+</ul>
+<h3 id="empty-page-and-lahe-write">Empty page and
+<code>lahe write</code></h3>
+<pre class="mermaid"><code>flowchart TD
+  W[&quot;lahe write notes/2026-09-28.md&quot;] --&gt; S{&quot;final path a symlink? (lstat)&quot;}
+  S -- yes --&gt; RF[refuse]
+  S -- no --&gt; X{exists?}
+  X -- no --&gt; C[&quot;create with exclusive flag; parent folder must exist&quot;]
+  X -- yes --&gt; V[regular .md file: use it as is]
+  C --&gt; RV[&quot;serve on its own one-page server: never a folder server, no mounts&quot;]
+  V --&gt; RV
+  RV --&gt; PG[&quot;rendered page: file-name title marked as chrome, no content blocks&quot;]
+  PG --&gt; ED[&quot;the reviewer starts writing: anchor is main, placement start_of_container&quot;]</code></pre>
+<ul>
+<li>An empty Markdown file renders to a <code>main</code> container and
+a hero <code>h1</code> from the file name. That title is not in the
+file, so <code>markdown.js</code> marks it as chrome.</li>
+<li>A page with no content blocks, Markdown or HTML, uses the
+empty-container rung. The anchor is the page's one <code>main</code> (or
+<code>body</code>), found by tag, with <code>placement</code>
+<code>start_of_container</code>.</li>
+<li><strong>A container anchor is found by its tag alone.</strong>
+Replay never compares its text. After the notes are placed,
+<code>main</code>'s text is the whole page, and a text compare would
+call that a conflict. The anchor always counts as applied. Only the run
+goes through the presence table.</li>
+<li>The rung serves <code>start_of_container</code> records only. An
+<code>after_anchor</code> record whose anchor is gone is LOST, even on a
+page the agent emptied.</li>
+<li>The run goes at the start of the container, after any leading chrome
+(<code>startPointIn</code>). Once the first record is placed and
+handled, later sittings use <code>after_anchor</code>.</li>
+<li>For the agent, <code>start_of_container</code> means the top of the
+file, below any front matter, or for HTML the start of the container the
+region names. The agent writes the file (brief Decision: who writes the
+notes file).</li>
+<li><strong>Who runs it:</strong> the agent or the reviewer, with the
+same session rules as <code>lahe review</code>. It takes
+<code>--session</code> and <code>--name</code> and prints the URL and
+the wake, monitor, drain, and close commands.</li>
+</ul>
+<h3 id="replay-after-a-rebuild">Replay after a rebuild</h3>
+<pre class="mermaid"><code>flowchart TD
+  A[resolve the anchor as today] --&gt; B{anchor found?}
+  B -- no --&gt; L[LOST, as today. The run is not placed by guess]
+  B -- yes --&gt; C[&quot;anchor compare: today&#39;s four branches, on the anchor view&lt;br/&gt;(skipped for a container anchor)&quot;]
+  C --&gt; K{&quot;branch four: conflict?&quot;}
+  K -- yes --&gt; W[&quot;hold the run; the conflict card shows it; either answer places it&quot;]
+  K -- no --&gt; D[&quot;walk leaf blocks forward from the insert point&quot;]
+  D --&gt; E[&quot;decide each new block by the presence table&quot;]</code></pre>
+<p><strong>Finding a record's run.</strong> Editing, undo, protection,
+and replay all find a run with <code>blocks.runElementsFor</code>, which
+walks from the insert point with the shared matcher.</p>
+<p><strong>The walk.</strong> Replay reads leaf blocks forward from the
+anchor's insert point (or the container's start), in document order.</p>
+<ul>
+<li>A leaf block has a tag in <code>BLOCK_TAGS</code> and no
+<code>BLOCK_TAGS</code> element inside it.</li>
+<li><code>ul</code> and <code>ol</code> are leaves. Their
+<code>li</code> children are lines.</li>
+<li>The "Section N" label is inline text in a <code>div</code> that
+holds an <code>h2</code>, so it is never a leaf.</li>
+<li>Elements with no text, and the marked file-name title, are
+skipped.</li>
+</ul>
+<p><strong>Where the walk stops.</strong> At the first leaf that matches
+no remaining block after at least one match, or after the run's length
+plus a small slack the plan sets. Without a stop, a short block such as
+"Notes" would count as present wherever the word appears lower down.</p>
+<p><strong>The presence table.</strong> Words are compared with
+typography folded.</p>
+<div class="table-scroll"><table>
+<thead>
+<tr>
+<th>Case</th>
+<th>Rule</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>When a block counts as present</td>
+<td>Its words are found in the walk, in run order: as a whole leaf
+block, inside one leaf block that holds several new blocks (joined), or
+spread over consecutive leaf blocks (split). Tag and markup never decide
+presence.</td>
+</tr>
+<tr>
+<td>Present, one-to-one, wrong tag or lost bold or italic</td>
+<td>Rewrite that block in place: swap the tag, or rewrite its inner
+markup. A wrong tag is also flagged on the card. Never insert.</td>
+</tr>
+<tr>
+<td>Present, but joined or split</td>
+<td>Leave it. Tags and markup are not rewritten when blocks do not map
+one to one.</td>
+</tr>
+<tr>
+<td>Missing from the walk, words found elsewhere</td>
+<td>A block of five or more words (<code>SHORT_BLOCK_WORDS</code>) is
+searched for across the page, by whole leaf block, never by substring.
+If found, nothing is written, and the card says the text was placed in a
+different spot.</td>
+</tr>
+<tr>
+<td>Missing from the walk, short block</td>
+<td>A block under five words ("Yes", "Notes") is inserted without a
+page-wide search, because such words appear on pages for other
+reasons.</td>
+</tr>
+<tr>
+<td>Where a missing block goes</td>
+<td>After the last present block that comes before it in run order, or
+at the anchor's insert point if none is present. Each block gets its own
+tag and markup, through <code>cleanBlock</code>.</td>
+</tr>
+<tr>
+<td>Anchor in branch four (conflict)</td>
+<td>Hold the run until the reviewer answers. The conflict card shows the
+run and the anchor's two versions. "Keep mine" applies the anchor and
+places the run. "Take the page's" discards only the anchor change and
+still places the run, and its button says so.</td>
+</tr>
+<tr>
+<td>Branch three (an earlier revision landed)</td>
+<td><code>after_history</code> entries carry <code>new_blocks</code>, so
+an earlier revision's run is checked the same way. A block found
+one-to-one with an earlier revision's words is rewritten in place to the
+current revision. So accepted proofreading fixes reach the page without
+showing twice.</td>
+</tr>
+<tr>
+<td>A take-back (<code>remove_blocks</code>)</td>
+<td>Remove each listed block found one-to-one after the anchor. Never
+insert. The original record's run is never replayed again.</td>
+</tr>
+</tbody>
+</table></div>
+<p><strong>The no-duplicate guarantee:</strong> replay never writes a
+block of five or more words that the page already shows as a whole
+block. A run made only of short blocks that the agent moved elsewhere
+can show twice. That is rare and visible, and the page check still
+compares every block. The plan may tune the five-word line.</p>
+<p><strong>Old records</strong> keep today's replay path, guarded by the
+<code>no_duplicate_text</code> and <code>split_not_conflict</code>
+specs.</p>
+<h3 id="the-page-check-on-a-run">The page check on a run</h3>
+<p>After an item is handled, the browser checks it once per load
+(<code>pageCheckReasonFor</code>). Today it looks for the whole
+<code>after</code> as one string, so the "Section N" label between a
+header and its paragraph would reopen a correct run. For a run record,
+the check reads the anchor and each new block on its own, with replay's
+reader and walk:</p>
+<ul>
+<li>A missing block reopens the item with today's "undone" note.</li>
+<li>Lost bold or italic reopens it with the formatting note.</li>
+<li>A one-to-one block with the wrong tag reopens it with its own note,
+which says the tag is wrong.</li>
+<li>The section label between blocks does not count against it.</li>
+</ul>
+<p>This is where the tag test lives, because it runs after the agent's
+write.</p>
+<h3 id="the-handled-check">The handled check</h3>
+<p><strong>How it works on main now.</strong> Main judges each edit on
+its own passage (handled-check-per-edit, <code>verdictFor</code> in
+<code>handled_check.js</code>). An item is held only when its
+<code>after</code> is not on the built page and one of two things says
+the agent left its passage alone:</p>
+<ul>
+<li><strong>Nothing was written.</strong> No file behind the review
+changed since the reviewer committed (<code>touchedSince</code>,
+review-wide).</li>
+<li><strong>The passage is still there.</strong> The item's
+<code>before</code> is on the page as whole blocks, exactly once.</li>
+</ul>
+<p>An agent that changed the passage, in any words, is not
+second-guessed. A several-paragraph <code>after</code> is looked for
+paragraph by paragraph, so a split nobody made is held.</p>
+<p><strong>What that means for new text.</strong> The per-item rule
+needs a <code>before</code> the agent would have to change. New text has
+none:</p>
+<ul>
+<li>A run whose anchor is unchanged has an <code>after</code> that holds
+the whole <code>before</code>. Main treats that as "only added words"
+and skips the passage test (<code>passageOf</code>). So the run is
+judged only when nothing in the whole review was written.</li>
+<li>A <code>format_only</code> record's <code>before</code> and
+<code>after</code> have the same words, so the same skip applies.</li>
+<li>So an agent that places one run and answers handled on two is not
+caught: it wrote something, so the run it skipped is never judged. AQ3
+(should the handled check always run for new blocks) asks whether to
+close that.</li>
+</ul>
+<p>The check does not test tags. The page check covers placement after a
+real write.</p>
+<p>The helper cannot find a region in a built page, so it matches by
+words:</p>
+<ul>
+<li><strong>A run.</strong> The anchor's own words follow main's
+per-item rule, unless the anchor is a container or has fewer than
+<code>SHORT_BLOCK_WORDS</code> (five) words. The run is found by
+locating the first run block's leaf, page-wide, then matching the rest
+in order with the shared matcher. A section label between blocks does
+not fail it. A run never takes main's several-paragraph path, which
+would fail on that label.</li>
+<li><strong>Bold or italic on a <code>format_only</code>
+record.</strong> Take each span whose bold or italic changed, using the
+reader inside <code>record.formattingChangeText</code>. Require its
+words inside a <code>strong</code> or <code>b</code> (or <code>em</code>
+or <code>i</code>) in the built page's leaf blocks. Bold words elsewhere
+on the page give a false pass, which is accepted because the page check
+runs on the next load.</li>
+</ul>
+<h3 id="the-proofreading-reply">The proofreading reply</h3>
+<p>Brief R11 (proofreading after a long hand-written block) lives in the
+contract.</p>
+<ul>
+<li><strong>The reply.</strong> When the item carries
+<code>proofread: true</code>, the agent places the run, rebuilds, and
+replies <code>question</code>, marked as a proofread, with a list of
+<code>{block, from, to}</code> suggestions (<code>block</code> is the
+index in <code>new_blocks</code>). The reply says the words were placed
+as written. <code>lahe reply</code> refuses a suggestion whose
+<code>from</code> is not found exactly once in that block's words.</li>
+<li><strong>The card.</strong> Only a proofread reply shows two buttons.
+A placement question ("Should this go under Intro?") shows today's
+question card.</li>
+<li><strong>"Use the fixes"</strong> applies the suggestions as the
+reviewer's own reword of the same record, at a new revision. Every check
+then looks for the fixed words, and replay rewrites the placed blocks in
+place (branch three). The button also posts a thread reply, and the
+agent puts the fixes into the source.</li>
+<li><strong>"Keep mine"</strong> posts a thread reply. The agent changes
+nothing and replies handled.</li>
+</ul>
+<p>The button names wait on Ken (plan PQ5, renaming the wireframe's
+"Yes" and "Keep mine"). The plan pins both button texts and the text
+each posts.</p>
+<h2 id="rollout-and-old-agents">Rollout and old agents</h2>
+<ul>
+<li><strong>Helper version.</strong> The helper writes the contract into
+<code>review.json</code> (<code>projectReview</code>).
+<code>SERVICE_CONTRACT</code> goes to 14. An old helper would store run
+records without the allowlist or ceiling, and would not project
+<code>new_blocks</code>. So a new layer or CLI refuses an old helper
+until it restarts.</li>
+<li><strong>An agent on the old contract</strong> keeps acting on
+<code>after_html</code>, which now carries every block with its tag,
+uncut. It places every word, possibly with the wrong structure. The page
+check reopens the item if a block is missing, lost its bold, or has the
+wrong tag. Nothing is dropped silently. It is not told to update.</li>
+<li><strong>Old records</strong> keep today's replay path. Reopening one
+keeps today's single-element session and break rule.</li>
+</ul>
+<h3 id="contract-changes">Contract changes</h3>
+<p>New lines, in the contract and every copy of it:</p>
+<ul>
+<li><strong>new_blocks:</strong> the blocks go after the anchor, in
+order, with their tags and their bold and italic. It is the whole run at
+this revision: place only the blocks not already in the source after the
+anchor.</li>
+<li><strong>remove_blocks:</strong> on a take-back, remove these blocks
+from after the anchor in the source.</li>
+<li><strong>Literal text:</strong> the words in new_blocks are literal
+text. Escape them for the source.
+<ul>
+<li>In Markdown, backslash-escape characters Markdown reads as syntax,
+and write <code>&lt;</code> as <code>&amp;lt;</code>.</li>
+<li>In a template (ERB, Jinja, Liquid, JSX), write them so the template
+prints them and never evaluates them.</li>
+</ul></li>
+<li><strong>from_anchor:</strong> a block marked from_anchor is the
+anchor's own tail. Split the anchor there; do not add those words
+again.</li>
+<li><strong>anchor_tag_after:</strong> change the anchor's element to
+that tag in the source.</li>
+<li><strong>placement:</strong> after_anchor means right after the
+anchor block. start_of_container means the top of the file, below any
+front matter, or the start of the container the region names.</li>
+<li><strong>Proofreading:</strong> the reply under The proofreading
+reply, keyed on <code>proofread: true</code>, with the exact text each
+button posts.</li>
+<li><strong>The brief's AI Behavior rules:</strong>
+<ul>
+<li>On a notes review, place the text and stop. Organize only when the
+reviewer asks.</li>
+<li>Never write prose into a region the reviewer wrote. Suggestions go
+in the reply.</li>
+<li>When you cannot tell where new text belongs, ask with a
+<code>question</code> reply.</li>
+</ul></li>
+<li><strong>Data fields:</strong> the data-fields line adds new_blocks,
+anchor_after_html, and remove_blocks. The drain clause needs no new
+sentence: it already says every page-text field sits under page with its
+review.json name.</li>
+<li><strong>The after_html line</strong> stays true. A new sentence says
+that for a run record, anchor_after_html is the anchor's own change and
+new_blocks is the run.</li>
+<li><strong>The handled-check line</strong> on main says an agent that
+changed the passage is not second-guessed. If Ken says yes to AQ3, a new
+sentence says new_blocks has no old passage, so each block's words are
+checked on every handled reply. The skill's "A handled reply is checked"
+section says the same.</li>
+<li><strong>Said once.</strong> Each rule above is a contract line, read
+once. No rule text rides on an item: the change text points at
+new_blocks and stops, and the per-item signals are fields
+(<code>proofread</code>, <code>placement</code>,
+<code>from_anchor</code>).</li>
+</ul>
+<h2 id="alternatives-considered">Alternatives Considered</h2>
+<ul>
+<li><strong>Tiptap as the engine for new blocks only (Ken's
+lean).</strong> It came closest. AQ1 (Lahe's code or Tiptap) has the
+size and the join test that decided it. The spike also measured:
+<ul>
+<li>h2, p, and ul took the page's styling (p, strong, and ul spacing in
+Chromium; one h2 font size in Firefox and WebKit)</li>
+<li>undo, shortcuts, and rich paste worked out of the box</li>
+<li>its <code>&lt;li&gt;&lt;p&gt;</code> lists space differently,
+because the Markdown style gives <code>li &gt; p</code> its own
+margin</li>
+<li>it adds its own classes and trailing breaks, and takes a page
+repaint as the reviewer's typing</li>
+<li><strong>If Ken picks Tiptap anyway (AQ1, Lahe's code or
+Tiptap):</strong> it comes back for its own security pass before
+anything is built on it. Its paste parser, style tag, and schema are not
+covered here, and its paste output would go through
+<code>cleanBlock</code> like everything else.</li>
+</ul></li>
+<li><strong>Tiptap for every block.</strong> Rejected harder. It changed
+5 of 5 existing blocks through the default schema, dropping classes,
+ids, spans, inline SVG, and styles. With a 23-line extension, 2 of 5
+came back exact. Every inline element a page uses would need a schema
+entry, and a missing one fails silently.</li>
+<li><strong>A new record kind for new text.</strong> Rejected. One
+sitting is one edit, and a second kind would touch every place that
+lists the edit kinds (about 40 places in the code).</li>
+<li><strong>Keep nesting new blocks inside the edited element.</strong>
+Rejected. It causes the doubled header line, a <code>p</code> inside an
+<code>h2</code> is invalid HTML, and it breaks brief R4 (new blocks use
+the page's styling).</li>
+<li><strong>One record per new block.</strong> Rejected by Ken's
+decision on one sitting.</li>
+<li><strong><code>after</code> and <code>after_html</code> narrowed to
+the anchor.</strong> Simpler for replay. Rejected: an agent that only
+knows "apply after_html" would drop every new block.</li>
+<li><strong>A Markdown source pane beside the page</strong> (crucible
+approach C). Rejected there: Markdown only, and it moves writing off the
+document.</li>
+</ul>
+<h2 id="failure-modes--edge-cases">Failure Modes / Edge Cases</h2>
+<p>Cases the sections above already handle are not repeated here.</p>
+<div class="table-scroll"><table>
+<thead>
+<tr>
+<th>Case</th>
+<th>Handling</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>The page repaints mid-sitting</td>
+<td>Protection snapshots the anchor and every run block, restores them
+after the re-found anchor, and puts the caret back by block position and
+character offset (brief R7, a reload does not move the cursor or hide
+text).</td>
+</tr>
+<tr>
+<td>The agent's rebuild lands mid-sitting</td>
+<td>Lahe's rebuild reload waits while an edit is open
+(<code>isBusy</code> in <code>src/layer/index.js</code>, used by the
+reload in <code>sync.js</code>). The page reloads after the sitting
+commits.</td>
+</tr>
+<tr>
+<td>The reviewer reloads or leaves mid-sitting</td>
+<td>Leaving commits the open edit (<code>commitOnUnload</code> in
+<code>sync.js</code>). After the reload, replay inserts the run.
+Cmd-Shift-E on the anchor or any run block reopens the same record
+(brief R5, still there to keep writing).</td>
+</tr>
+<tr>
+<td>The browser crashes mid-sitting</td>
+<td>The draft is in browser storage. The next page load commits it, as
+today.</td>
+</tr>
+<tr>
+<td>Backspace at the start of the first run block</td>
+<td>Merges into the anchor, inside the same sitting.</td>
+</tr>
+<tr>
+<td>A list ended with an empty item</td>
+<td>The empty item is dropped at capture.</td>
+</tr>
+<tr>
+<td>An edit whose bold paragraph is the one the agent left out, and it
+is not the first paragraph</td>
+<td>Found while reproducing the lone-paragraph case, and still true on
+main after the first-paragraph fix (re-run 2026-09-28). The bold
+paragraph never appears, replay counts the record as lost, and no flag
+is raised. The insert path's per-block matching covers it: a missing
+block is inserted with its own markup.</td>
+</tr>
+</tbody>
+</table></div>
+<h2 id="security--privacy-notes">Security &amp; Privacy Notes</h2>
+<ul>
+<li><strong>One allowlist, three places.</strong>
+<code>cleanBlock(tag, html)</code> in
+<code>src/shared/normalize.js</code>:
+<ul>
+<li><code>tag</code> must be one of <code>WRITABLE_BLOCK_TAGS</code>, or
+the block is refused.</li>
+<li>The html is parsed and rebuilt from an allowlist:
+<code>strong</code>, <code>em</code>, <code>br</code>, and the two reset
+tags. <code>li</code> only as a direct child of a <code>ul</code> or
+<code>ol</code> block.</li>
+<li>Every attribute is dropped, and text is escaped again on
+output.</li>
+<li>Elements are made only from the allowlist's constants, never from a
+string in the record.</li>
+<li>It runs at capture, in the helper on append, and in replay and undo
+right before every page write. The helper refuses a failing event rather
+than cleaning it, so a forgery shows up. The write paths include insert,
+partial, formatting, <code>anchor_tag_after</code>, and the undo tag
+restore.</li>
+</ul></li>
+<li><strong>Who can forge a record:</strong> any script holding the
+review token, and any same-origin script through the browser store.</li>
+<li><strong>The anchor's own markup</strong> is page markup with the
+page's own links and spans, so it keeps today's <code>cleanMarkup</code>
+path.</li>
+<li><strong>What reaches the agent:</strong> <code>new_blocks</code> and
+<code>anchor_after_html</code> are data fields, text to place, never
+instructions. <code>change</code> is an intent field, so it never quotes
+run words. A split tail is marked as moved page text.</li>
+<li><strong>Words stay words in the source.</strong> The contract tells
+the agent to escape the reviewer's words for Markdown, raw HTML, and
+templates. An always-on handled check would catch words that became
+markup; see AQ3 (should the handled check always run for new
+blocks).</li>
+<li><strong>Size:</strong> the helper's ceiling keeps a runaway or
+forged record out of <code>review.json</code>.</li>
+<li><strong><code>lahe write</code>:</strong>
+<ul>
+<li>It creates only <code>.md</code> or <code>.markdown</code> files,
+and only when the parent folder exists.</li>
+<li>It checks the final path with <code>lstat</code> before either
+branch, and refuses any symlink, dangling or not.</li>
+<li>It creates with the exclusive-create flag (<code>wx</code>). On
+"already exists" it checks again with <code>lstat</code> and uses the
+file only if it is a regular file.</li>
+<li>It never overwrites.</li>
+<li>It prints the parent folder's real path.</li>
+<li>Every page it creates or opens gets its own one-page server:
+<ul>
+<li>It serves the rendered page and the Lahe style and font files that
+page names. Any other request gets a 404.</li>
+<li>It never joins an existing folder server, even with
+<code>--session</code>.</li>
+<li>It registers no folder mount and no linked-document mounts.</li>
+</ul></li>
+<li>Why not <code>--only</code>: today <code>--only</code> only limits
+which pages get the rail. A single page's server still serves its whole
+folder, and servers are shared by root folder. Notes files often sit in
+a home, Desktop, or Documents folder, and serving that folder would
+serve all of it. Since hidden-files-plain, that includes dotfiles such
+as <code>.env</code> or <code>.ssh</code>, which a folder server now
+serves like any other file. A notes page has no images, so it loses
+nothing.</li>
+</ul></li>
+<li><strong>Follow-ups for the board, older than this feature:</strong>
+<ul>
+<li>The static server has no Host header check. The helper has one.</li>
+<li>The Markdown renderer lets through link schemes other than http,
+https, mailto, and tel. It should reuse
+<code>normalize.isSafeUrlValue</code>.</li>
+<li><code>cleanMarkup</code>, used for anchor markup, is a deny-list
+that keeps <code>svg</code>, <code>img</code>, <code>a</code>, and
+similar tags.</li>
+</ul></li>
+</ul>
+<h2 id="test-strategy">Test Strategy</h2>
+<p>The plan's Test List holds every test. At this level:</p>
+<ul>
+<li><strong>Unit:</strong>
+<ul>
+<li><code>cleanBlock</code> refusals at the helper, with replay writing
+nothing: <code>script</code> and <code>iframe</code> tags, the SVG
+animate href case, <code>&lt;img src&gt;</code>,
+<code>&lt;a href&gt;</code>, and <code>li</code> inside a
+<code>p</code></li>
+<li>record validation, the size ceiling, and change text that quotes no
+run words</li>
+<li><code>after</code> agrees with <code>after_html</code>; projection
+with no 2000-character cut</li>
+<li>merge on load in both directions (the browser's run wins whether
+longer or shorter)</li>
+<li>the reader, the leaf walk, and one test per presence-table row</li>
+<li>the handled check across a section label, and a run the agent
+skipped while it placed another item</li>
+<li>a drain line puts the three text fields under <code>page</code></li>
+<li>every <code>lahe write</code> path: create, no overwrite, missing
+parent, and the three symlink cases</li>
+</ul></li>
+<li><strong>Browser (named specs, three lanes at the
+checkpoint):</strong>
+<ul>
+<li>typing a header, paragraph, and list; the record's shape; a rebuild
+with no doubling; a repaint that leaves the anchor clean</li>
+<li>the first two brief R14 cases (header line, lone bold paragraph) on
+a real <code>lahe review post.md</code> page, with screenshots</li>
+<li>the page check: a correct h2 run stays closed; lost bold and a wrong
+tag reopen</li>
+<li>a paragraph turned into a header; Enter at the end of an existing
+bullet</li>
+<li>repaint and reload mid-sitting</li>
+<li>three sittings on an empty <code>lahe write</code> page</li>
+<li>undo inside the session and of the committed record; plain-text
+paste</li>
+<li>screenshots of the frame and bar, light and dark</li>
+</ul></li>
+<li><strong>Contract:</strong> the copies in
+<code>review_format.test.js</code> and <code>docs/CONTRACTS.md</code>
+match.</li>
+</ul>
+<h2 id="open-questions">Open Questions</h2>
+<p><strong>Ken's decisions at the review gate (2026-09-29):</strong></p>
+<ul>
+<li><strong>AQ1 (Lahe's code or Tiptap):</strong> Lahe's own code for
+now. Tiptap integration is discussed after this ships (board row
+<code>LAHE-tiptap-later</code>).</li>
+<li><strong>AQ3 (always check new blocks on a handled reply):</strong>
+yes.</li>
+<li><strong>AQ4 (bounding a run record's size):</strong> yes, the
+recommendation: old revisions keep words only, and the bar warns before
+a sitting is too big to send.</li>
+<li><strong>PQ1 (blank notes page opens ready to type):</strong>
+yes.</li>
+<li><strong>PQ2 (the bar says "Editing"):</strong> yes.</li>
+<li><strong>PQ3 (no proofreading on notes):</strong> yes, try it.</li>
+<li><strong>PQ4 (what a reload does mid-writing):</strong> the default
+stands.</li>
+<li><strong>PQ5 (button names):</strong> "Use the fixes" and "Keep
+mine". Keep mine matches the conflict card on purpose; the shared word
+is fine.</li>
+</ul>
+<div class="callout callout-question">
+<p><strong>AQ1 (Ken):</strong> Lahe's own code or Tiptap?
+<strong>Recommendation: Lahe's own code.</strong></p>
+<ul>
+<li><strong>The deciding test:</strong> a sitting starts in an existing
+block and flows into new ones. The spike built exactly that join, a
+Lahe-edited block with a Tiptap run after it. In all three browsers:
+<ul>
+<li>the caret cannot cross between them with the arrow keys</li>
+<li>a selection cannot span both</li>
+<li>Backspace at the start of the Tiptap run does not merge into the
+block above</li>
+<li>undo runs out of order, because each side keeps its own history</li>
+<li>the Tiptap paragraphs lose the page's own spacing</li>
+</ul></li>
+<li><strong>Tiptap on every block avoids the join but changes the
+page.</strong> It dropped markup on 5 of 5 existing blocks.</li>
+<li><strong>Lahe's own host passes everything</strong> (see The editing
+host).</li>
+<li><strong>What Tiptap would have given for free:</strong> shortcuts,
+undo, and rich paste. Undo is real work here, and the plan budgets it.
+Rich paste stays on board row <code>LAHE-rich-paste</code>.</li>
+<li><strong>What Tiptap would cost:</strong> 104 to 121 KB gzipped,
+loadable only when a sitting opens.</li>
+</ul>
+</div>
+<div class="callout callout-question">
+<p><strong>AQ3 (Ken):</strong> Should the handled check always run for
+new blocks? (AQ2, which editing host to use, was resolved by the
+editing-host spike.)</p>
+<ul>
+<li><strong>Today, on main:</strong> the check judges each edit on its
+own passage. It holds an item only when the agent left that passage
+alone: its <code>before</code> is still on the page, or nothing in the
+review was written. New text has no <code>before</code> to change, so a
+run is judged only when nothing at all was written. An agent that places
+one run and answers handled on two gets the skipped one through.</li>
+<li><strong>The proposal:</strong> for <code>new_blocks</code>, run it
+every time and compare each block's visible words on the built page.
+Brief R6 (the words stay as typed) allows no rewording of new text, so
+the reason for skipping does not apply.</li>
+<li><strong>What it would catch:</strong> a run the agent skipped while
+it worked on something else. Words that turned into markup or template
+code, which vanish from the visible page; this is the one check that
+sees that. A header placed as a paragraph at reply time.</li>
+<li><strong>Why it is your call:</strong> it goes past the standing rule
+that an agent that changed the passage is not second-guessed on its
+wording. The step is smaller than it was: main already judges each edit
+on its own, and new text has no old wording for the agent to have
+changed.</li>
+<li><strong>Related:</strong> formatting-only records get checked in
+this feature either way, because brief R14 (bold and italic survive the
+rebuild) requires it. Like a run, a bold edit has no changed words for
+the per-edit rule to find, so it is judged only when nothing was
+written. The same answer can cover it.</li>
+</ul>
+<p><strong>Recommendation: yes</strong>, still. The per-edit check makes
+the case stronger: it closed "fix one, answer five" for reworded text,
+and new text is now the main shape it misses.</p>
+</div>
+<div class="callout callout-question">
+<p><strong>AQ4 (Ken):</strong> How should a run record's size be
+bounded?</p>
+<ul>
+<li><strong>The problem.</strong> Every revision adds a history entry
+that keeps the whole sitting's words and markup, and history is never
+trimmed. A run at the byte ceiling (200,000 bytes of markup) crosses the
+helper's 8 MiB request limit at its 18th entry. A notes page the agent
+has not placed yet gains a revision with every sitting. Past the limit
+the helper refuses the whole post as a bad request, and the plan's
+refused-event path knows only its own run codes.</li>
+<li><strong>Store once.</strong> Main's rule since oversized-records is
+to store what identifies a thing once. A run record stores its markup
+twice (<code>after_html</code> and <code>new_blocks</code>), and every
+draft line in the log repeats the whole record.</li>
+<li><strong>Options, each measured by the same script:</strong>
+<ul>
+<li>Older history entries keep the words and drop the markup. The limit
+moves to the 33rd entry. The agent still reads the chain of wordings.
+Replay needs markup only for recent entries.</li>
+<li>Also store the run once, rebuilding <code>after_html</code> and
+<code>after</code> when read, the way main rebuilds an image tag. The
+limit moves to the 41st entry. Every reader of those two fields goes
+through one function, which touches many files.</li>
+<li>Count the whole record against the ceiling the bar already warns on,
+so the reviewer is told to send before the limit. Bounded, and no words
+are cut.</li>
+</ul></li>
+<li><strong>Recommendation:</strong> the first and the third together.
+The second is the fuller fix and can follow on its own.</li>
+</ul>
+</div>
+<h2 id="architect-review">Architect Review</h2>
+<div class="table-scroll"><table>
+<thead>
+<tr>
+<th>#</th>
+<th>Finding</th>
+<th>Disposition</th>
+<th>Rationale</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>AR1</td>
+<td>Splitting <code>after</code> and <code>after_html</code> makes
+replay write the whole sitting into the anchor, and old agents drop the
+run</td>
+<td><span class="accepted">Accepted</span></td>
+<td>Both fields stay the whole sitting; <code>anchor_after_html</code>
+feeds an anchor view; reader table added</td>
+</tr>
+<tr>
+<td>AR2</td>
+<td>The browser page check reopens every placed header on Lahe Markdown
+pages</td>
+<td><span class="accepted">Accepted</span></td>
+<td>Page check reads each block on its own and ignores the section
+label</td>
+</tr>
+<tr>
+<td>AR3</td>
+<td>The insert path's "already there" rule is undefined</td>
+<td><span class="accepted">Accepted</span></td>
+<td>Presence table and no-duplicate guarantee added</td>
+</tr>
+<tr>
+<td>AR4</td>
+<td>A header's next sibling is inside the <code>sheet-head</code> flex
+row</td>
+<td><span class="accepted">Accepted</span></td>
+<td>"After the anchor" climbs out of chrome wrappers; confirmed by the
+spike</td>
+</tr>
+<tr>
+<td>AR5</td>
+<td>Merge on load drops the new fields</td>
+<td><span class="accepted">Accepted</span></td>
+<td>New fields join <code>CONTENT_FIELDS</code>; unit test added</td>
+</tr>
+<tr>
+<td>AR6</td>
+<td>The editing host is deferred to the plan</td>
+<td><span class="accepted">Accepted</span></td>
+<td>Settled by the editing-host spike: editable parent plus guard</td>
+</tr>
+<tr>
+<td>AR7</td>
+<td>The helper's tag test cannot fire behind its gate</td>
+<td><span class="accepted">Accepted</span></td>
+<td>Tag test moved to the page check; "always run it" is AQ3</td>
+</tr>
+<tr>
+<td>AR8</td>
+<td>The reload row describes mechanisms that do not exist</td>
+<td><span class="accepted">Accepted</span></td>
+<td>Rows rewritten around <code>isBusy</code>, commit on unload, and
+<code>itemFor</code></td>
+</tr>
+<tr>
+<td>AR9</td>
+<td>The Tiptap comparison is uneven</td>
+<td><span class="accepted">Accepted</span></td>
+<td>AQ1 rewritten, then decided on the editing-host spike</td>
+</tr>
+<tr>
+<td>AR10</td>
+<td>Old agents and old records have no home</td>
+<td><span class="accepted">Accepted</span></td>
+<td>Rollout section added</td>
+</tr>
+<tr>
+<td>AR11</td>
+<td>Turning the anchor into a header is under-specified</td>
+<td><span class="accepted">Accepted</span></td>
+<td>Changing an existing block's type section added</td>
+</tr>
+<tr>
+<td>AR12</td>
+<td>Adding an item to an existing list has no shape</td>
+<td><span class="accepted">Accepted</span></td>
+<td>The anchor is the whole list; browser test added</td>
+</tr>
+<tr>
+<td>AR13</td>
+<td>Two sittings after the same anchor gives two answers</td>
+<td><span class="accepted">Accepted</span></td>
+<td>One rule: a block of an outstanding record reopens that record</td>
+</tr>
+<tr>
+<td>AR14</td>
+<td>Paste has no design</td>
+<td><span class="accepted">Accepted</span></td>
+<td>Plain-text paste; rich paste to <code>LAHE-rich-paste</code></td>
+</tr>
+<tr>
+<td>AR15</td>
+<td>Proofreading has no home</td>
+<td><span class="accepted">Accepted</span></td>
+<td>Contract line, <code>question</code> reply,
+<code>PROOFREAD_MIN_WORDS</code></td>
+</tr>
+<tr>
+<td>AR16</td>
+<td>The Markdown notes anchor is a title not in the file</td>
+<td><span class="accepted">Accepted</span></td>
+<td>File-name title is chrome; empty-container rung with
+<code>start_of_container</code></td>
+</tr>
+<tr>
+<td>AR17</td>
+<td>"Next content block" matches wrappers</td>
+<td><span class="accepted">Accepted</span></td>
+<td>Walk defined over leaf blocks; <code>WRITABLE_BLOCK_TAGS</code>
+named</td>
+</tr>
+<tr>
+<td>AR18</td>
+<td>A Markdown shortcut should be its own undo step</td>
+<td><span class="accepted">Accepted</span></td>
+<td>Done; test added</td>
+</tr>
+<tr>
+<td>AR19</td>
+<td>The third R14 case has no analysis</td>
+<td><span class="accepted">Accepted</span></td>
+<td>Reproduced; the handled check covers formatting-only records</td>
+</tr>
+<tr>
+<td>AR20</td>
+<td>Who runs <code>lahe write</code>, and which session owns it</td>
+<td><span class="accepted">Accepted</span></td>
+<td>Agent or reviewer, same rules as <code>lahe review</code></td>
+</tr>
+<tr>
+<td>AR21</td>
+<td>Cut <code>placement</code> and the empty-container rule</td>
+<td><span class="rejected">Rejected</span></td>
+<td>The empty Markdown notes page needs it (AR16)</td>
+</tr>
+</tbody>
+</table></div>
+<h2 id="security-review">Security Review</h2>
+<div class="table-scroll"><table>
+<thead>
+<tr>
+<th>#</th>
+<th>Finding</th>
+<th>Disposition</th>
+<th>Rationale</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>SR1</td>
+<td>The block allowlist runs only at capture</td>
+<td><span class="accepted">Accepted</span></td>
+<td><code>cleanBlock</code> at capture, at the helper (refuse), and
+before every page write</td>
+</tr>
+<tr>
+<td>SR2</td>
+<td>The reviewer's words can become live markup or template code</td>
+<td><span class="accepted">Accepted</span></td>
+<td>Escaping contract line; "always check new blocks" is AQ3; link
+schemes to the board</td>
+</tr>
+<tr>
+<td>SR3</td>
+<td><code>lahe write</code> can follow a symlink in both branches</td>
+<td><span class="accepted">Accepted</span></td>
+<td><code>lstat</code> first, exclusive create, recheck, never
+overwrite; tests added</td>
+</tr>
+<tr>
+<td>SR4</td>
+<td>A notes file in a broad folder serves that folder</td>
+<td><span class="accepted">Accepted</span></td>
+<td>Every page <code>lahe write</code> creates or opens gets its own
+one-page server, with no folder or linked-document mounts; static server
+Host check to the board</td>
+</tr>
+<tr>
+<td>SR5</td>
+<td>The change text must not quote the run; a split moves page text</td>
+<td><span class="accepted">Accepted</span></td>
+<td>Structure-only change text; <code>from_anchor</code>; tests
+added</td>
+</tr>
+<tr>
+<td>SR6</td>
+<td><code>new_blocks</code> needs a ceiling</td>
+<td><span class="accepted">Accepted</span></td>
+<td>Helper ceiling set by the plan; longer draft floor</td>
+</tr>
+<tr>
+<td>SR7</td>
+<td>Cut "the page they write into is their own"</td>
+<td><span class="accepted">Accepted</span></td>
+<td>Removed</td>
+</tr>
+<tr>
+<td>SR8</td>
+<td>A Tiptap fallback needs its own security pass</td>
+<td><span class="accepted">Accepted</span></td>
+<td>Stated under Alternatives</td>
+</tr>
+</tbody>
+</table></div>
+<h2 id="plan-review-back-patches">Plan Review Back-patches</h2>
+<p>Changes made here while folding in the four plan reviews
+(<code>03_plan_free_writing_reviews.md</code>).</p>
+<div class="table-scroll"><table>
+<thead>
+<tr>
+<th>#</th>
+<th>Finding</th>
+<th>Disposition</th>
+<th>Rationale</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>EM1, CL4</td>
+<td><code>lahe write</code> relied on <code>--only</code>, which does
+not stop a folder being served</td>
+<td><span class="accepted">Accepted</span></td>
+<td>One-page server per page; <code>static_servers.js</code> and
+<code>review.js</code> added to Components</td>
+</tr>
+<tr>
+<td>EM2, CL3</td>
+<td>A container anchor compares as a conflict once the notes are
+placed</td>
+<td><span class="accepted">Accepted</span></td>
+<td>Container found by tag alone; anchor compare skipped</td>
+</tr>
+<tr>
+<td>CL1, T14</td>
+<td>A take-back carrying the run would make replay put it back</td>
+<td><span class="accepted">Accepted</span></td>
+<td>New <code>remove_blocks</code>; removal row in the presence
+table</td>
+</tr>
+<tr>
+<td>CL2</td>
+<td>No shared way to find a record's run on the page</td>
+<td><span class="accepted">Accepted</span></td>
+<td><code>blocks.js</code> and <code>runElementsFor</code></td>
+</tr>
+<tr>
+<td>CL5</td>
+<td>The editing host was "the anchor's parent", which misses a run after
+<code>sheet-head</code></td>
+<td><span class="accepted">Accepted</span></td>
+<td>Host redefined; the container itself for a container anchor</td>
+</tr>
+<tr>
+<td>T2</td>
+<td>The guard's coverage was stated for the session's edges only</td>
+<td><span class="accepted">Accepted</span></td>
+<td>Every refused input path listed</td>
+</tr>
+<tr>
+<td>DR13</td>
+<td>A shadow-root style cannot hide a page element's focus ring</td>
+<td><span class="accepted">Accepted</span></td>
+<td>One scoped rule in <code>highlight.js</code></td>
+</tr>
+<tr>
+<td>CL28</td>
+<td>Nothing said where a run can go</td>
+<td><span class="accepted">Accepted</span></td>
+<td>Only where the host holds flow content</td>
+</tr>
+<tr>
+<td>DR2, DR3, CL16</td>
+<td>"+ Write here" was unreachable once the caret sat in any block</td>
+<td><span class="accepted">Accepted</span></td>
+<td>Lines show whenever an edit is open; Cmd-Shift-E with no block</td>
+</tr>
+<tr>
+<td>DR8, CL21</td>
+<td>"Small heading" was missing from the menu</td>
+<td><span class="accepted">Accepted</span></td>
+<td>Six types</td>
+</tr>
+<tr>
+<td>DR10</td>
+<td>Changing type inside an existing list was undefined</td>
+<td><span class="accepted">Accepted</span></td>
+<td>Rule added</td>
+</tr>
+<tr>
+<td>CL7, T16</td>
+<td>The replay walk had no end</td>
+<td><span class="accepted">Accepted</span></td>
+<td>Where the walk stops</td>
+</tr>
+<tr>
+<td>CL25</td>
+<td>The leaf rule made each <code>li</code> a block</td>
+<td><span class="accepted">Accepted</span></td>
+<td><code>ul</code> and <code>ol</code> are leaves</td>
+</tr>
+<tr>
+<td>DR14</td>
+<td>A conflict on the anchor could drop the whole run</td>
+<td><span class="accepted">Accepted</span></td>
+<td>Run held and shown; both answers place it</td>
+</tr>
+<tr>
+<td>T1, DR15, DR16, DR17, CL13, CL14</td>
+<td>Accepting proofreading fixes would reopen the item; buttons showed
+on any question; the agent counted words</td>
+<td><span class="accepted">Accepted</span></td>
+<td>Proofreading reply rewritten; <code>run_words</code> and
+<code>proofread</code> projected</td>
+</tr>
+<tr>
+<td>CL8</td>
+<td>A wrong tag reused the bold-and-italic note</td>
+<td><span class="accepted">Accepted</span></td>
+<td>Own note</td>
+</tr>
+<tr>
+<td>CL9, T13, DR22</td>
+<td>The ceiling had no behavior at 100 percent, and a refused event
+looped silently</td>
+<td><span class="accepted">Accepted</span></td>
+<td>Input refused at the ceiling; refused events not re-posted</td>
+</tr>
+<tr>
+<td>CL10</td>
+<td>Run records' <code>after_html</code> was still cut at 2000
+characters</td>
+<td><span class="accepted">Accepted</span></td>
+<td>Exempt for run records</td>
+</tr>
+<tr>
+<td>CL11</td>
+<td><code>after_history</code> had no cap and the ceiling counted
+characters</td>
+<td><span class="accepted">Accepted</span></td>
+<td>History size; blocks and UTF-8 bytes</td>
+</tr>
+<tr>
+<td>CL12</td>
+<td>The handled check had no rule the helper can run</td>
+<td><span class="accepted">Accepted</span></td>
+<td>Both matching rules spelled out</td>
+</tr>
+<tr>
+<td>CL15</td>
+<td>An agent could place revision 1's blocks twice</td>
+<td><span class="accepted">Accepted</span></td>
+<td>Place only what is not in the source</td>
+</tr>
+<tr>
+<td>CL20</td>
+<td>Capture rebuilt the whole run on every keystroke</td>
+<td><span class="accepted">Accepted</span></td>
+<td>Only the caret's block</td>
+</tr>
+<tr>
+<td>CL24</td>
+<td>Change text had three undefined cases</td>
+<td><span class="accepted">Accepted</span></td>
+<td>Sentences added</td>
+</tr>
+<tr>
+<td>CL26</td>
+<td>Architecture and plan disagreed about <code>export.js</code></td>
+<td><span class="accepted">Accepted</span></td>
+<td>Export goes through the text formatter</td>
+</tr>
+<tr>
+<td>CL29</td>
+<td>Session history memory and burst end were unnamed</td>
+<td><span class="accepted">Accepted</span></td>
+<td>Changed blocks only; the plan names the pause</td>
+</tr>
+<tr>
+<td>EM11</td>
+<td>Three of the brief's agent rules had no contract line</td>
+<td><span class="accepted">Accepted</span></td>
+<td>Added</td>
+</tr>
+<tr>
+<td>T10</td>
+<td>The merge test would pass a "longer wins" rule</td>
+<td><span class="accepted">Accepted</span></td>
+<td>Both directions tested</td>
+</tr>
+<tr>
+<td>DR7</td>
+<td>A screen reader heard nothing useful</td>
+<td><span class="accepted">Accepted</span></td>
+<td>Live region added</td>
+</tr>
+</tbody>
+</table></div>
+<h2 id="main-drift-2026-09-28">Main Drift, 2026-09-28</h2>
+<p>Checked against main after the architecture was written:
+piece-keeps-formatting, handled-check-per-edit, oversized-records,
+trim-the-drain, refused-reword-floor, hidden-files-plain, and
+quiet-tab-polling, up to the 2b6eb96 bundle rebuild.
+compact-draft-history was already in the base. The R14 reproduction was
+re-run on main, and the size figures come from a script. Both paths are
+in the plan's spike evidence list.</p>
+<div class="table-scroll"><table>
+<thead>
+<tr>
+<th>#</th>
+<th>Finding</th>
+<th>Disposition</th>
+<th>Rationale</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>MD1</td>
+<td>The lone-paragraph bug is fixed on main
+(<code>topLevelBlocks</code>, <code>pieceMarkup</code>)</td>
+<td><span class="accepted">Accepted</span></td>
+<td>Root cause rewritten; the feature keeps a regression test and no
+longer owns the fix</td>
+</tr>
+<tr>
+<td>MD2</td>
+<td>A left-out bold paragraph that is not the first still loses the edit
+with no flag, and the split branch still skips the formatting check</td>
+<td><span class="accepted">Accepted</span></td>
+<td>Kept as this feature's; Failure Modes row says it was
+re-checked</td>
+</tr>
+<tr>
+<td>MD3</td>
+<td><code>pieceMarkup</code> reads the whole <code>after_html</code> and
+would cut a run record's sitting</td>
+<td><span class="accepted">Accepted</span></td>
+<td>Added to the anchor-view list in the reader table</td>
+</tr>
+<tr>
+<td>MD4</td>
+<td>The handled check now judges each edit on its own passage, not only
+when nothing was written</td>
+<td><span class="accepted">Accepted</span></td>
+<td>The handled check section describes <code>verdictFor</code>; a run
+skips main's several-paragraph path</td>
+</tr>
+<tr>
+<td>MD5</td>
+<td>Under the per-edit rule a run, and a bold-only edit, is judged only
+when nothing in the review was written</td>
+<td><span class="accepted">Accepted</span></td>
+<td>AQ3 restated; recommendation stands and is stronger. Bold-only edits
+named under Related</td>
+</tr>
+<tr>
+<td>MD6</td>
+<td>The drain now groups page text under <code>page</code> by
+<code>DATA_FIELDS</code> and repeats no rule text</td>
+<td><span class="accepted">Accepted</span></td>
+<td>Projection says which new fields join <code>DATA_FIELDS</code> and
+which stay top-level; <code>notes</code> not repeated per item</td>
+</tr>
+<tr>
+<td>MD7</td>
+<td>The run change text repeated a rule ("place them as written") on
+every item</td>
+<td><span class="accepted">Accepted</span></td>
+<td>Dropped from the change text; the contract line carries it once</td>
+</tr>
+<tr>
+<td>MD8</td>
+<td>History is never trimmed, so a ceiling-size run crosses the 8 MiB
+body limit at its 18th entry; the run's markup is stored twice</td>
+<td>Open, to Ken</td>
+<td>AQ4 added with measured options</td>
+</tr>
+<tr>
+<td>MD9</td>
+<td>Rewording a ready or <code>not_handled</code> record now takes it
+off the drain at the first changing keystroke</td>
+<td><span class="accepted">Accepted</span></td>
+<td>Two sittings section says a half-written run never reaches the
+agent</td>
+</tr>
+<tr>
+<td>MD10</td>
+<td>Folder servers now serve dotfiles</td>
+<td><span class="accepted">Accepted</span></td>
+<td>Added to the <code>lahe write</code> reason for its own one-page
+server</td>
+</tr>
+<tr>
+<td>MD11</td>
+<td>The 2000-character bound, <code>MAX_BODY_BYTES</code>, and the draft
+floor are unchanged; oversized-records' paint guard and stamp rule apply
+to comments only</td>
+<td>No change</td>
+<td>Checked; nothing in the design depends on them changing</td>
+</tr>
+</tbody>
+</table></div>
+<hr class="reviews-divider" style="margin:4.5rem 0 1.5rem;border:0;border-top:3px solid #b0463b">
+
+<div class="reviews-banner">
+<p>The sections below are the full verbatim persona + human reviews for
+this document. They live in a separate <code>_reviews.md</code> file (so
+agents read the lean spec), merged here for review.</p>
+</div>
+<h1 id="reviews-free-writing-architecture">Reviews: Free writing
+architecture</h1>
+<p>Architecture under review:
+<code>02_architecture_free_writing.md</code>. Brief:
+<code>01_brief_free_writing.md</code>.</p>
+<h2 id="security-review-round-1">Security Review (Round 1)</h2>
+<p><strong>Summary.</strong> The design names the right controls: a
+block allowlist, <code>new_blocks</code> classed as data, and a careful
+<code>lahe write</code>. The gap is that each control is described at
+one point, and the code paths around that point accept whatever they are
+handed. Three red flags:</p>
+<ul>
+<li>The allowlist runs only in the browser at capture. The helper stores
+records as given, and replay writes record markup into the page as
+given.</li>
+<li>Words placed into a Markdown or template source can turn into live
+markup or code.</li>
+<li><code>lahe write</code> has a symlink hole and, by where notes files
+get made, can serve a whole home folder.</li>
+</ul>
+<p>Two suggestions, one cut, and one question follow.</p>
+<p>Inputs read:</p>
+<ul>
+<li>the architecture and brief</li>
+<li>the repo <code>CLAUDE.md</code></li>
+<li>D6, D7, D11, and D12 in
+<code>docs/features/20260812.01_live_agentic_html_editor/02_architecture_live_agentic_html_editor.md</code></li>
+<li><code>src/shared/review_format.js</code>,
+<code>src/shared/normalize.js</code> (<code>cleanMarkup</code>), and
+<code>src/shared/record.js</code> (<code>editChangeText</code>)</li>
+<li><code>src/cli/commands/review.js</code> and
+<code>src/cli/commands/add.js</code></li>
+<li><code>src/service/static_servers.js</code>,
+<code>src/service/markdown.js</code>, <code>src/service/log.js</code>,
+and <code>src/service/routes.js</code></li>
+<li><code>src/layer/replay.js</code>, <code>src/layer/editing.js</code>,
+and <code>src/layer/store.js</code></li>
+</ul>
+<p><code>docs/CONTRACTS.md</code> was not needed beyond the contract
+text restated in <code>review_format.js</code>.</p>
+<p>Findings ranked worst first. Type is red flag, suggestion, cut, or
+question.</p>
+<h3
+id="sr1-the-block-allowlist-is-enforced-only-where-an-attacker-does-not-have-to-go">SR1.
+The block allowlist is enforced only where an attacker does not have to
+go</h3>
+<ul>
+<li>type: red flag</li>
+<li>severity: blocker</li>
+<li>kind: defect</li>
+<li>where:
+<ul>
+<li>Security &amp; Privacy Notes, "What reaches the agent"</li>
+<li>Data / State Changes, <code>new_blocks</code></li>
+<li>Replay after a rebuild: the insert, partial, and formatting
+branches, and undo's "old tag"</li>
+</ul></li>
+<li>what: The tag list and <code>cleanMarkup</code> run once, in the
+layer, when a record is captured. Every later step trusts the record:
+<ul>
+<li>The helper stores it as given. <code>log.append</code> checks only
+the event id and type (<code>src/service/log.js:436-467</code>).
+<code>projection.js</code> copies <code>event.record</code>
+wholesale.</li>
+<li>Replay writes record markup straight into the page with
+<code>element.innerHTML = item.after_html</code>
+(<code>src/layer/replay.js:2833</code>, <code>:2840</code>). Undo does
+the same with <code>before_html</code>
+(<code>src/layer/editing.js:1804</code>).</li>
+<li>The new insert path adds a worse sink: it makes an element from the
+record's own <code>tag</code> field. <code>anchor_tag_after</code> and
+undo's "old tag" do the same.</li>
+</ul></li>
+<li>why:
+<ul>
+<li><strong>Who can forge a record.</strong> Any script holding the
+review token can post one. D11 says that is any script on any HTML file
+under the served root, or on a linked document. Any script on the same
+origin can also write the browser store that the reload path replays
+from.</li>
+<li><strong>The agent side.</strong> Such a record reaches
+<code>review.json</code>, where the contract tells the agent to place
+<code>new_blocks</code> into the source.</li>
+<li><strong>The page side.</strong> A record with
+<code>tag: "script"</code> goes through
+<code>createElement("script")</code> and is inserted, and that script
+runs. <code>innerHTML</code> scripts do not run, but created ones
+do.</li>
+<li><strong>The layer's own cleaner is not enough anyway.</strong>
+<code>cleanMarkup</code> is a deny-list, not an allowlist. It keeps
+<code>svg</code>, <code>math</code>, <code>form</code>, <code>img</code>
+with an https <code>src</code>, <code>a</code>, and <code>meta</code>.
+So
+<code>&lt;svg&gt;&lt;a&gt;&lt;animate attributeName="href" values="javascript:..."&gt;</code>
+and a remote tracking <code>&lt;img&gt;</code> both pass it.</li>
+<li><strong>Today's reach is narrower than it could become.</strong>
+Nothing in the layer pulls records back from the helper today.
+<code>store.mergeWithHelper</code> (<code>src/layer/store.js:866</code>)
+exists but has no caller, so the live page-side route is same-origin
+storage. The day that merge is wired, a forged helper record replays on
+every page of the review.</li>
+<li><strong>Bottom line.</strong> The design's sentence "the list stops
+page markup, or a paste, from carrying attributes or scripts into a
+record the agent will apply" holds only for records the layer made.</li>
+</ul></li>
+<li>fix:
+<ul>
+<li><strong>One shared function.</strong> Write one function in
+<code>src/shared/normalize.js</code>, for example
+<code>cleanBlock(tag, html)</code>:
+<ul>
+<li><code>tag</code> must be exactly one of p, h2, h3, h4, ul, or ol, or
+the block is refused.</li>
+<li>The html is parsed and rebuilt from an allowlist: strong, em, br,
+and the two reset tags. <code>li</code> is allowed only as a direct
+child when the tag is ul or ol.</li>
+<li>Every attribute is dropped, and text is re-escaped on output.</li>
+</ul></li>
+<li><strong>Call it in three places:</strong>
+<ol type="1">
+<li>At capture.</li>
+<li>In the helper on <code>events.append</code>. Refuse the event there
+rather than cleaning it quietly, so a forgery shows up as a rejected
+event.</li>
+<li>In replay and undo, right before every DOM write. That covers the
+insert, partial, and formatting paths, <code>anchor_tag_after</code>,
+and the undo tag restore.</li>
+</ol></li>
+<li><strong>One source of truth for the words.</strong> Derive each
+block's <code>text</code> from the cleaned html, instead of trusting a
+separate <code>text</code> field. Otherwise the handled check reads one
+thing and the agent writes another.</li>
+<li><strong>Say it in the doc.</strong> State in the architecture that
+the allowlist is new code, not <code>cleanMarkup</code>.</li>
+<li><strong>Tests.</strong> Write unit tests that feed each of these and
+assert the helper refuses them and replay writes nothing:
+<ul>
+<li><code>tag: "script"</code> and <code>tag: "iframe"</code></li>
+<li>the SVG animate href case</li>
+<li><code>&lt;img src="https://..."&gt;</code></li>
+<li><code>&lt;a href&gt;</code></li>
+<li><code>li</code> inside a <code>p</code> block</li>
+</ul></li>
+</ul></li>
+</ul>
+<h3
+id="sr2-the-reviewers-words-can-become-live-markup-or-template-code-in-the-source">SR2.
+The reviewer's words can become live markup or template code in the
+source</h3>
+<ul>
+<li>type: red flag</li>
+<li>severity: important</li>
+<li>kind: risk</li>
+<li>where:
+<ul>
+<li>Key Flows, the "writes them after that paragraph in the source"
+step</li>
+<li>Components, the contract lines</li>
+<li>brief R6 (the words stay as typed) and R9 (the contract says how to
+place new text)</li>
+</ul></li>
+<li>what: The design hands the agent <code>text</code> and
+<code>html</code> and says to place them. It does not say the words must
+stay words. In a Markdown source, Lahe's renderer lets raw HTML through,
+and it renders a <code>javascript:</code> link as an ordinary external
+link (<code>src/service/markdown.js:247-265</code>).</li>
+<li>why:
+<ul>
+<li><strong>Markdown.</strong> Suppose a reviewer writes about HTML
+("wrap it in <code>&lt;script&gt;</code>") or pastes text from another
+document. An agent that copies <code>text</code> into the
+<code>.md</code> produces live HTML or a clickable
+<code>javascript:</code> link, on a page that carries the review token.
+It also breaks R6.</li>
+<li><strong>Templates.</strong> For an ERB, Jinja, Liquid, or JSX
+source, <code>{{ }}</code>, <code>{% %}</code>, and <code>${}</code> in
+the words get evaluated when the page renders. That is code running on
+the reviewer's dev server, if the text came from a paste or from a
+forged record (SR1).</li>
+<li><strong>Nothing catches it today.</strong> The handled check runs
+only when nothing was written since the reviewer typed. So an agent that
+did place the text is never checked, and cannot be caught turning words
+into markup.</li>
+</ul></li>
+<li>fix:
+<ul>
+<li><strong>Contract line.</strong> Add one line to the contract and
+every copy of it: "new_blocks words are literal text. Escape them for
+the source. In Markdown, backslash-escape characters Markdown reads as
+syntax and write &lt; as &lt;. In a template, write them so the template
+prints them and never evaluates them."</li>
+<li><strong>Always check new blocks.</strong> For
+<code>new_blocks</code>, run the handled check every time and compare
+each block's visible text on the built page. R6 allows no rewording of
+new text, so the reason for skipping the check does not apply. Words
+that turned into markup vanish from the visible text, so this is the one
+check that can catch it. This changes a standing rule, so it is Ken's
+call.</li>
+<li><strong>Renderer fix.</strong> Separately, and already true before
+this feature: the Markdown renderer should drop any link scheme other
+than http, https, mailto, or tel. Reuse
+<code>normalize.isSafeUrlValue</code>. Put it on the board.</li>
+</ul></li>
+</ul>
+<h3
+id="sr3-lahe-write-can-follow-a-symlink-in-both-of-its-branches">SR3.
+<code>lahe write</code> can follow a symlink, in both of its
+branches</h3>
+<ul>
+<li>type: red flag</li>
+<li>severity: important</li>
+<li>kind: defect</li>
+<li>where:
+<ul>
+<li>Security &amp; Privacy Notes, <code>lahe write</code> bullets</li>
+<li>Empty page flow, the "file exists? yes, use it as is" branch</li>
+</ul></li>
+<li>what: The design checks whether the file exists, then creates it. It
+lists "refuses a symlink" only among the creation rules. It then says
+the file follows "the same path rules as <code>lahe review</code>", and
+those rules follow symlinks: the renderer resolves the real path.</li>
+<li>why:
+<ul>
+<li><strong>A dangling symlink looks like a missing file.</strong>
+<code>fs.existsSync</code> reports false for one. A plain write then
+follows the link and creates the file wherever it points.</li>
+<li><strong>The existing-file branch is worse.</strong> It serves an
+existing <code>notes.md</code> that is a symlink to any file, and then
+the agent is asked to write the reviewer's notes into it. A cloned repo
+can ship <code>notes/today.md -&gt; ~/.zshrc</code>. The
+<code>.md</code> check reads the link's name, not its target.</li>
+<li><strong>There is a race.</strong> A check followed by a create has a
+gap between the two steps.</li>
+</ul></li>
+<li>fix:
+<ul>
+<li>Check the final path without following links (<code>lstat</code>)
+before either branch. Refuse a symlink whether or not its target
+exists.</li>
+<li>Create the file with an exclusive create
+(<code>fs.openSync(p, "wx")</code>). That fails if anything is already
+there, including a dangling link. On "already exists", check again
+without following links.</li>
+<li>Resolve and print the parent folder's real path.</li>
+<li>Tests:
+<ul>
+<li>a dangling symlink is refused, and nothing is created at its
+target</li>
+<li>a symlink to an existing <code>.md</code> is refused</li>
+<li>a symlink to a non-Markdown file is refused</li>
+</ul></li>
+</ul></li>
+</ul>
+<h3
+id="sr4-a-notes-file-in-a-broad-folder-serves-that-whole-folder">SR4. A
+notes file in a broad folder serves that whole folder</h3>
+<ul>
+<li>type: red flag</li>
+<li>severity: important</li>
+<li>kind: risk</li>
+<li>where: Empty page and <code>lahe write</code>; the Security note
+"serving it is no looser than serving any Markdown file"</li>
+<li>what:
+<ul>
+<li><strong>What gets served.</strong> A Markdown review mounts the
+file's own folder (<code>src/service/markdown.js:358</code>, the asset
+root). It serves every file under it, however deep, that is not
+hidden.</li>
+<li><strong>Where notes files get made.</strong> A notes file is exactly
+the kind of file people make in <code>~</code>, <code>~/Desktop</code>,
+or <code>~/Documents</code>.</li>
+<li><strong>No Host check.</strong> The static server reads no request
+header at all (<code>src/service/static_servers.js:992-1133</code>). The
+helper has the Host check D11 requires; the static server does not.</li>
+</ul></li>
+<li>why:
+<ul>
+<li><code>lahe write ~/notes.md</code> puts all of
+<code>~/Documents</code> and <code>~/Downloads</code> on a loopback port
+for the life of the session. It also exposes <code>~/Library</code>,
+which is not dot-prefixed and holds keychains, messages, and browser
+profiles.</li>
+<li>A website using DNS rebinding can read those files. The port is
+random, but it falls in a known range.</li>
+<li>The design's sentence is true for a Markdown file someone already
+had. The new command changes where Markdown files get made, so the claim
+does not cover the new case.</li>
+</ul></li>
+<li>fix:
+<ul>
+<li><strong>Mount nothing extra.</strong> A page <code>lahe write</code>
+created should mount no asset folder and run as <code>--only</code>. A
+notes page has no images (they are a non-goal), so it loses
+nothing.</li>
+<li><strong>If a mount is kept,</strong> refuse a parent folder that is
+the home folder, a filesystem root, or <code>~/Desktop</code>,
+<code>~/Documents</code>, or <code>~/Downloads</code>, unless the
+reviewer passes an explicit flag.</li>
+<li><strong>Host check.</strong> Add the helper's Host check to the
+static server. The gap predates this feature; put it on the board.</li>
+</ul></li>
+</ul>
+<h3
+id="sr5-the-intent-field-must-not-quote-the-run-and-a-split-moves-page-text-into-the-run">SR5.
+The intent field must not quote the run, and a split moves page text
+into the run</h3>
+<ul>
+<li>type: suggestion</li>
+<li>severity: important</li>
+<li>kind: risk</li>
+<li>where:
+<ul>
+<li>Components, <code>src/shared/record.js</code> "the change text"</li>
+<li>Block types while writing, "Enter in the middle splits the block
+into two siblings"</li>
+</ul></li>
+<li>what:
+<ul>
+<li><strong>Today's change text.</strong> <code>editChangeText</code>
+(<code>src/shared/record.js:1373</code>) quotes the added words into
+<code>change</code>. <code>change</code> is an intent field: carried
+word for word, never bounded, and classed as instruction
+(<code>review_format.js:140</code>).</li>
+<li><strong>The gap.</strong> The design classes <code>new_blocks</code>
+as data, but does not say what <code>change</code> will say for a
+run.</li>
+<li><strong>Page text in the run.</strong> A split moves the tail of an
+existing page block into a new sibling. So a run's first block can be
+the page's own words.</li>
+<li><strong>Pasted text.</strong> Paste is native
+(<code>editing.js:211</code> is <code>contenteditable="true"</code> with
+no paste handler). A paste can carry text that was hidden on its source
+page.</li>
+</ul></li>
+<li>why:
+<ul>
+<li>If <code>change</code> says <code>Added "..."</code> for a run, page
+text and pasted text ride into the instruction channel. That is the
+exact failure D12 was written to stop.</li>
+<li>A split tail recorded as a new block also asks the agent to add
+words the source already has.</li>
+</ul></li>
+<li>fix:
+<ul>
+<li><strong>Structure only.</strong> For a run, <code>change</code>
+gives structure and nothing else. For example: "Added 3 blocks after
+this paragraph: h2, p, ul. Their words are in new_blocks; place them as
+written."</li>
+<li><strong>Mark a split tail as moved.</strong> Record it as moved text
+(for example a <code>from_anchor: true</code> flag on that block), never
+as added words.</li>
+<li><strong>Tests:</strong>
+<ul>
+<li>the change text for a run contains none of the run's words</li>
+<li>a split with no typing produces no "Added" sentence</li>
+</ul></li>
+</ul></li>
+</ul>
+<h3 id="sr6-new_blocks-not-capped-needs-a-ceiling">SR6.
+<code>new_blocks</code> "not capped" needs a ceiling</h3>
+<ul>
+<li>type: suggestion</li>
+<li>severity: minor</li>
+<li>kind: risk</li>
+<li>where: Data / State Changes, Projection; Failure Modes, "A long
+sitting"</li>
+<li>what:
+<ul>
+<li><strong>No cap anywhere but the request limit.</strong> The
+projection has no bound. The helper accepts up to its body limit per
+request (<code>src/service/index.js:57</code>).</li>
+<li><strong>Drafts repeat the whole run.</strong> Drafts flow to the
+helper (<code>src/layer/sync.js:1603</code>), and each draft carries the
+whole run.</li>
+</ul></li>
+<li>why:
+<ul>
+<li>One forged or runaway record puts megabytes into
+<code>review.json</code> and the drain output, which every agent reads
+into its context.</li>
+<li>Posting the whole run on every draft makes <code>events.jsonl</code>
+grow with the square of the post's length.</li>
+</ul></li>
+<li>fix:
+<ul>
+<li>Set a per-record ceiling far above any real post, as a number the
+plan picks. Enforce it at the helper, and show the visible bound marker
+D12 already defines.</li>
+<li>Post drafts on a short delay, or post only the block that
+changed.</li>
+</ul></li>
+</ul>
+<h3 id="sr7-cut-the-sentence-the-page-they-write-into-is-their-own">SR7.
+Cut the sentence "the page they write into is their own"</h3>
+<ul>
+<li>type: cut</li>
+<li>severity: minor</li>
+<li>kind: challenge</li>
+<li>where: Security &amp; Privacy Notes, first bullet</li>
+<li>what: The sentence is used to wave off what the reviewer can
+type.</li>
+<li>why: D11 and D12 both treat reviewing a document someone else sent
+as a supported case. In that case the page is not the reviewer's own,
+and it may carry script.</li>
+<li>fix: Delete the sentence. SR1 is the real answer.</li>
+</ul>
+<h3
+id="sr8-if-tiptap-becomes-the-fallback-it-needs-its-own-security-pass">SR8.
+If Tiptap becomes the fallback, it needs its own security pass</h3>
+<ul>
+<li>type: question</li>
+<li>severity: minor</li>
+<li>kind: risk</li>
+<li>where: Alternatives Considered, "What would change this"</li>
+<li>what: Taking Tiptap as the fallback for the run would bring these
+onto every reviewed page:
+<ul>
+<li>its own paste parser</li>
+<li>a style tag</li>
+<li>its own schema</li>
+</ul></li>
+<li>why: None of these are covered by this review, and the fallback
+would be decided mid-plan.</li>
+<li>fix: If the editing-host task picks Tiptap, send the choice back for
+a security look before building on it. It would need to confirm that
+paste output goes through <code>cleanBlock</code> (SR1) like everything
+else.</li>
+</ul>
+<h2 id="architect-review-round-1">Architect Review (Round 1)</h2>
+<p><strong>Summary.</strong> The overall shape is right: one sitting is
+one edit record, with an anchor block plus a run of new sibling blocks,
+and Lahe's own code stays the engine. Three things need fixing before a
+plan:</p>
+<ul>
+<li><strong>The record model breaks the code it says it keeps.</strong>
+<code>after</code> stays the whole sitting while <code>after_html</code>
+becomes the anchor only. Replay, the page check, and old agents all
+assume the two describe the same text. With the fields split, replay
+writes the whole sitting into the anchor block. That is the doubled text
+this feature exists to remove.</li>
+<li><strong>The duplicate-text rules for the new insert path are not
+written down yet.</strong> Lahe's own Markdown render adds a "Section N"
+label and a header wrapper. The design does not account for either, and
+both break the header case in several places.</li>
+<li><strong>The Tiptap question goes to Ken before the evidence that
+decides it exists.</strong> Nobody has tested whether a Lahe editing
+surface can span several blocks. On Tiptap, the write-up overstates two
+costs and leaves out a benefit Ken asked about. The recommendation may
+still be right, but the question as written is not a fair basis for his
+call.</li>
+</ul>
+<p>Inputs read:</p>
+<ul>
+<li>the architecture, the brief (Decisions included), the crucible, and
+the security review above</li>
+<li>the repo <code>CLAUDE.md</code>, <code>docs/diagrams/</code>
+(README, item_lifecycle, replay_branches, protected_region,
+finding_the_region, merge_on_load, module_map), and
+<code>docs/CONTRACTS.md</code></li>
+<li><code>docs/features/20260922.08_no_duplicate_text/NOTES.md</code></li>
+<li>code: <code>src/layer/editing.js</code>, <code>replay.js</code>,
+<code>protect.js</code>, <code>anchor.js</code>, <code>index.js</code>,
+<code>sync.js</code>; <code>src/shared/record.js</code>,
+<code>normalize.js</code>, <code>review_format.js</code>,
+<code>merge.js</code>; <code>src/service/handled_check.js</code>,
+<code>markdown.js</code>;
+<code>vendor/stclair-doc-style/document.css</code></li>
+<li>the Tiptap spike: <code>results_browser.json</code>,
+<code>results_browser_extra.json</code>, <code>results_sizes.txt</code>,
+and both run scripts</li>
+</ul>
+<p><code>docs/ongoing/ARCHITECTURE.md</code> does not exist in this
+repo. The binding decisions live in the original feature's architecture
+(D1 to D12), and the diagrams cover the flows this feature touches.</p>
+<p>Findings ranked worst first. Type is red flag, suggestion, cut, or
+question.</p>
+<h3
+id="ar1-splitting-what-after-and-after_html-mean-brings-back-the-doubled-text">AR1.
+Splitting what <code>after</code> and <code>after_html</code> mean
+brings back the doubled text</h3>
+<ul>
+<li>type: red flag</li>
+<li>severity: blocker</li>
+<li>kind: defect</li>
+<li>where: Data / State Changes, the <code>before</code>,
+<code>after</code>, <code>after_html</code> bullet (line 76); Replay
+after a rebuild, "anchor compare: today's four branches, on the anchor
+only"</li>
+<li>what: The design keeps <code>after</code> as the whole sitting and
+narrows <code>after_html</code> to the anchor's own markup. Much of
+today's code assumes the two describe the same text.</li>
+<li>why:
+<ul>
+<li><strong>Replay writes.</strong> <code>markupSaysAfter</code>
+(<code>src/layer/replay.js:1171</code>) uses <code>after_html</code>
+only when its text equals <code>after</code>. After this change it never
+does for a run. So <code>writeRegion</code> falls back to
+<code>writeTextWithBreaks(element, item.after)</code>
+(<code>replay.js:2843</code>), which writes the whole sitting, headers
+and all, into the anchor block. The agent's placed blocks still stand
+below it. That is the doubled text again, for every run whose anchor
+compare lands on "re-apply".</li>
+<li><strong>Replay's other checks.</strong> "Today's four branches on
+the anchor only" has no anchor-only text to compare against.
+<code>compare</code>, <code>reflowMatch</code>,
+<code>splitPieces</code>, <code>wouldDuplicate</code>,
+<code>splitWritePlan</code>, and <code>mayFold</code> all read
+<code>after</code>. The record has no field that holds the anchor's own
+new text.</li>
+<li><strong>The formatting checks go dark.</strong>
+<code>formattingLost</code> and <code>formattingMissingFromPage</code>
+both require <code>markupSaysAfter</code> first
+(<code>replay.js:1125</code>, <code>:1426</code>). So bold lost from an
+anchor goes unnoticed, and that is part of the R14 promise (bold and
+italic survive the rebuild).</li>
+<li><strong>Old agents lose the run.</strong> The contract says "Apply
+after_html, not after alone"
+(<code>src/shared/review_format.js:108</code>). An agent that has not
+re-read the contract applies the anchor and drops every new block. It
+also says "Read this contract once" (<code>review_format.js:90</code>),
+so long-running agents will not pick up a new rule. The design keeps
+<code>after</code> whole "so old readers still work", then breaks the
+one field old readers are told to use.</li>
+</ul></li>
+<li>fix:
+<ul>
+<li>Keep the rule that <code>after</code> and <code>after_html</code>
+describe the same content. Pick one of these and write it down:
+<ul>
+<li><strong>(a)</strong> Both describe the whole sitting.
+<code>after_html</code> carries the run's block tags, so an old agent
+applying it gets the headers too. Add one anchor-only field, for example
+<code>anchor_after_html</code>, for replay's anchor compare.</li>
+<li><strong>(b)</strong> Both describe the anchor only. Put the
+whole-sitting text only in <code>new_blocks</code>, and accept that an
+old agent sees just the anchor.</li>
+<li>(a) is kinder to old agents; (b) is simpler for replay.</li>
+</ul></li>
+<li>In the architecture, list every reader of <code>after</code> and
+<code>after_html</code> and say what each does for a record that has
+<code>new_blocks</code>. Today's readers are in <code>replay.js</code>,
+<code>record.js</code>, <code>handled_check.js</code>,
+<code>merge.js</code>, <code>tab_edits.js</code>,
+<code>tab_done.js</code>, <code>export.js</code>, and the text formatter
+in <code>review_format.js</code>.</li>
+<li>Test: a Markdown run with a header, placed by the agent, then a
+repaint. The anchor must not come back holding the run's words.</li>
+</ul></li>
+</ul>
+<h3
+id="ar2-the-browsers-page-check-will-reopen-every-placed-header-as-undone-on-lahe-markdown-pages">AR2.
+The browser's page check will reopen every placed header as "undone" on
+Lahe Markdown pages</h3>
+<ul>
+<li>type: red flag</li>
+<li>severity: blocker</li>
+<li>kind: defect</li>
+<li>where: not in the architecture. Code:
+<code>pageCheckReasonFor</code>,
+<code>src/layer/replay.js:1283</code></li>
+<li>what: After an item is handled, the browser checks it. If the whole
+<code>after</code> text (normalized) is not in the page text but
+<code>before</code> is, it reopens the item with "This change was undone
+on the page."</li>
+<li>why:
+<ul>
+<li>Lahe's Markdown render puts each <code>##</code> header in
+<code>&lt;div class="sheet-head"&gt;&lt;h2&gt;...&lt;/h2&gt;&lt;span class="n"&gt;Section N&lt;/span&gt;&lt;/div&gt;</code>
+(<code>src/service/markdown.js:305</code>). The page text reads "...What
+the chat window cost me Section 3 I lost my place...". The record's
+<code>after</code> reads "...What the chat window cost me I lost my
+place...".</li>
+<li>The containment test misses. The anchor's <code>before</code> is
+still on the page because the anchor did not change. So the check says
+"reverted" and reopens a correct, handled item. The agent is asked to
+redo work it already did.</li>
+<li>This hits every run with a header on the main page type (Ken's posts
+and notes are Markdown). The components list does not name this check,
+and the test list does not cover it.</li>
+<li>The same function's formatting half reads only
+<code>after_html</code>. Under this design that is the anchor alone, so
+bold lost from a new block is never caught.</li>
+</ul></li>
+<li>fix:
+<ul>
+<li>Add the page check to Components. For a record with
+<code>new_blocks</code>, check the anchor and each new block on its own,
+using the same per-block reader replay uses, never one long string.</li>
+<li>Test: a handled run with an h2 on a <code>lahe review post.md</code>
+page is not reopened. A handled run whose paragraph lost its bold is
+reopened with the formatting note.</li>
+</ul></li>
+</ul>
+<h3
+id="ar3-the-insert-paths-already-there-rule-is-not-defined-well-enough-to-promise-no-doubled-text">AR3.
+The insert path's "already there?" rule is not defined well enough to
+promise no doubled text</h3>
+<ul>
+<li>type: red flag</li>
+<li>severity: blocker</li>
+<li>kind: risk</li>
+<li>where: Replay after a rebuild (lines 154 to 169); Failure Modes,
+"The agent places the run elsewhere, or rewords it"</li>
+<li>what: The flow sorts runs into "all match", "none present", "some
+present", and "lost bold". It never says what "present" means, where a
+missing block goes, or what happens when the anchor itself is in
+conflict.</li>
+<li>why: Each gap is a path to doubled or lost words:
+<ul>
+<li><strong>Tag.</strong> Suppose the agent placed the header's words as
+a paragraph. If "present" requires a matching tag, replay inserts an h2
+and the words stand twice. If it does not, the reviewer's header quietly
+stays a paragraph, and the formatting branch only rewrites inner markup,
+never the tag.</li>
+<li><strong>Merged or split blocks.</strong> Today's
+<code>blocksSpell</code> lets one page block hold several pieces. The
+design compares block to block. An agent that joins two short
+paragraphs, or a Markdown soft wrap, reads as "missing", and replay
+inserts it again.</li>
+<li><strong>Whole-page search.</strong> "Looks for their text anywhere
+on the page" is too loose for a list item "Yes" or a header "Notes",
+which exist elsewhere for other reasons. Then the block is silently
+never put back. As a substring match it is looser still.</li>
+<li><strong>Insert point.</strong> "Insert only the missing blocks" does
+not say where. If the block before the gap is a placed h2, "after it" is
+inside the <code>sheet-head</code> flex row (see AR4).</li>
+<li><strong>Anchor in conflict.</strong> The flowchart runs the run
+check after the anchor compare in every case. If the anchor lands in
+branch four (flag and write nothing), inserting the run under a page the
+reviewer has not yet ruled on is a write the conflict card never
+offered.</li>
+<li><strong>Earlier revisions.</strong> Branch three ("an earlier
+revision's after landed") has no run version. <code>after_history</code>
+entries carry <code>after</code> and <code>after_html</code> only.</li>
+</ul></li>
+<li>fix: Write the rule as a short table in the architecture, and add a
+unit test for each row:
+<ul>
+<li><strong>When a block counts as present.</strong> A block is present
+when its words (with typography folded) are found in a leaf block, or in
+a run of leaf blocks, starting from the anchor in document order. Tag
+and markup never decide presence.</li>
+<li><strong>Present with the wrong tag or lost bold.</strong> Rewrite
+the markup in place; flag a wrong tag on the card. Never insert.</li>
+<li><strong>Words found somewhere else.</strong> Search by whole leaf
+block, not by substring. When the words are found elsewhere, flag it on
+the card instead of skipping silently.</li>
+<li><strong>Anchor in branch four.</strong> Insert nothing until the
+conflict is answered.</li>
+<li><strong>Earlier revisions.</strong> Store <code>new_blocks</code> in
+<code>after_history</code>.</li>
+</ul></li>
+</ul>
+<h3
+id="ar4-on-lahes-own-markdown-pages-a-headers-next-sibling-is-inside-a-flex-row">AR4.
+On Lahe's own Markdown pages, a header's "next sibling" is inside a flex
+row</h3>
+<ul>
+<li>type: red flag</li>
+<li>severity: important</li>
+<li>kind: defect</li>
+<li>where: Block types while writing, "Enter at the end of a block makes
+a new p after it"; Key Flows, the insert steps; brief R4 (new blocks use
+the page's own styling) and R14 (the doubled line after a header)</li>
+<li>what: The render wraps every <code>##</code> header and its section
+number in <code>div.sheet-head</code>, a flex row with
+<code>justify-content: space-between</code>
+(<code>document.css:165</code>). A <code>p</code> inserted "after the
+h2" lands inside that row, beside "Section N".</li>
+<li>why:
+<ul>
+<li>This is the exact R14 case (open a header, press Enter, type a
+line). Under the new design it no longer doubles, but it lays out as a
+flex item next to the section number, with the head's border and
+spacing. That breaks R4 while writing.</li>
+<li>The same thing happens to replay's inserts after a placed h2, and to
+"insert the missing blocks".</li>
+<li>A new h2 typed mid-section shows up as a bare h2, with no hanging
+rule or number. After the rebuild it becomes a full section, and every
+later section number shifts by one. So while writing it does not look
+like the page's own headers either.</li>
+</ul></li>
+<li>fix:
+<ul>
+<li>Define "after the anchor" as a DOM rule: climb from the anchor while
+its parent holds only the anchor plus inline chrome (the
+<code>sheet-head</code> case), then insert after that parent.</li>
+<li>For a new h2 while writing, either say the look stops short of a
+full section until the rebuild, or have the layer draw a temporary
+<code>sheet-head</code>. Ken should see that choice on the wireframe,
+since R4 is his wording.</li>
+<li>Test on a real <code>lahe review post.md</code> page: Enter at the
+end of a header, type, and screenshot it while writing and after the
+rebuild.</li>
+</ul></li>
+</ul>
+<h3 id="ar5-merge-on-load-drops-the-new-fields">AR5. Merge on load drops
+the new fields</h3>
+<ul>
+<li>type: red flag</li>
+<li>severity: important</li>
+<li>kind: defect</li>
+<li>where: not in Components. Code: <code>CONTENT_FIELDS</code>,
+<code>src/shared/merge.js:47</code></li>
+<li>what: The browser wins on content only for the fields named in
+<code>CONTENT_FIELDS</code>. <code>new_blocks</code>,
+<code>anchor_tag_after</code>, and <code>placement</code> are not in
+it.</li>
+<li>why:
+<ul>
+<li>Take a same-revision merge while the helper has not acknowledged the
+latest typing, which is the normal state mid-sitting, since drafts back
+up at most every 10 seconds. The merge takes <code>after</code> from the
+browser and <code>new_blocks</code> from the helper's older copy.</li>
+<li>After a reload the record says one thing in <code>after</code> and
+another in the run. Replay then inserts a run that is missing its last
+blocks. That breaks R5 (writing survives a reload) and R7 (a reload does
+not hide what they wrote).</li>
+</ul></li>
+<li>fix: Add the three fields to <code>CONTENT_FIELDS</code>. Add
+<code>merge.js</code> to Components. Add a unit test in which the
+browser has a longer run than the store at the same revision, and the
+merged item keeps the browser's run.</li>
+</ul>
+<h3
+id="ar6-the-editing-host-is-the-core-design-and-it-is-deferred-to-the-plan">AR6.
+The editing host is the core design, and it is deferred to the plan</h3>
+<ul>
+<li>type: red flag</li>
+<li>severity: important</li>
+<li>kind: risk</li>
+<li>where: The editing host (lines 112 to 120); AQ2; Alternatives, "What
+would change this"</li>
+<li>what: Protection, capture, undo, and styling all depend on which
+host wins. The design leaves that to the plan's first task, and makes it
+the thing that would flip AQ1 back to Tiptap.</li>
+<li>why:
+<ul>
+<li><strong>AQ1 comes too early.</strong> Ken is asked to decide AQ1
+(Tiptap or Lahe's own code) before the one result that would change the
+answer exists.</li>
+<li><strong>Candidates 1 and 2 change CSS matching.</strong>
+<code>display: contents</code> removes the box, not the element. Child,
+sibling, and <code>:last-child</code> selectors still see the wrapper.
+<code>document.css:86</code> has
+<code>p:last-child{margin-bottom:0}</code>, so every anchor or run block
+that becomes last in the wrapper loses its bottom margin. That is Ken's
+crucible complaint about inconsistent spacing, made by the tool.</li>
+<li><strong>Candidates 1 and 2 also look foreign to a morph.</strong> A
+page that morphs (Turbo, a dev server) sees an unknown wrapper where the
+anchor used to be a direct child. It removes the wrapper and the anchor
+with it on every repaint. Layer one (skip attributes) and layer two (the
+pre-morph veto in <code>protect.js</code>) are keyed to one element, and
+the design does not say how either one covers blocks the page has never
+seen.</li>
+<li><strong>No candidate handles the risky inputs.</strong> "One engine:
+every change is written by the layer" covers Enter and block types.
+Today <code>onBeforeInput</code> hands every other input type to the
+browser (<code>editing.js:860</code>). In a host that spans blocks, the
+browser's own handling of these differs across engines (Chromium adds
+inline style spans when it merges blocks with different styles):
+<ul>
+<li>a Backspace or Delete across a block edge</li>
+<li>typing over a selection that spans two blocks</li>
+<li>cut, drag, and drop</li>
+<li>paste</li>
+</ul></li>
+<li><strong>The edges of the session.</strong> Nothing says what stops a
+Backspace at the start of the anchor, or a Delete at the end of the last
+run block. Either one would merge a page block that is not in the
+session.</li>
+</ul></li>
+<li>fix:
+<ul>
+<li>Run the host spike now, before AQ1 goes to Ken, in all three
+browsers. It is small next to what hangs on it.</li>
+<li>Add a fourth candidate: <code>contenteditable</code> on the anchor's
+parent, with the layer's <code>beforeinput</code> refusing any change
+outside the session's blocks. There is no wrapper, so selectors and
+morphs see the page's own tree.</li>
+<li>List the input types the layer takes over, with each one's behavior.
+Say how protection's first two layers apply to run blocks, or say
+plainly that only layer three covers them.</li>
+</ul></li>
+</ul>
+<h3
+id="ar7-the-handled-checks-new-tag-test-cannot-fire-in-the-case-it-is-written-for">AR7.
+The handled check's new tag test cannot fire in the case it is written
+for</h3>
+<ul>
+<li>type: red flag</li>
+<li>severity: important</li>
+<li>kind: defect</li>
+<li>where: Components, <code>src/service/handled_check.js</code> "checks
+the words, their order, and their block tags"; Test Strategy, "a header
+placed as a paragraph fails"; sequence diagram, "handled check: words
+present, in order, tags match"</li>
+<li>what: The helper's check only judges an item when nothing the review
+is built from was written since the reviewer committed
+(<code>handled_check.js:309</code>). An agent that placed a header as a
+paragraph wrote the source, so the check returns "not ours to grade"
+before it reads a single tag.</li>
+<li>why:
+<ul>
+<li>The planned test either fails, or passes only because it does not
+reproduce a real agent write.</li>
+<li>R10 (a handled reply for new text is checked the way a hand edit is)
+is already met by today's check. The record's <code>after</code> carries
+every word of the sitting.</li>
+<li>The security review (SR2) reaches the same gate from the other side.
+It proposes always checking new blocks, which is a change to a standing
+rule and is Ken's call.</li>
+</ul></li>
+<li>fix: Choose one and write it in the design:
+<ul>
+<li><strong>Keep the gate.</strong> Drop the tag half from the helper,
+and put tag and per-block checks in the browser's page check (AR2),
+which already grades work after a write.</li>
+<li><strong>Or change the gate for <code>new_blocks</code>.</strong> Put
+that to Ken together with SR2's version.</li>
+</ul></li>
+</ul>
+<h3 id="ar8-the-reload-row-describes-mechanisms-that-do-not-exist">AR8.
+The reload row describes mechanisms that do not exist</h3>
+<ul>
+<li>type: red flag</li>
+<li>severity: important</li>
+<li>kind: defect</li>
+<li>where: Failure Modes, "Reload mid-sitting" (line 191); the R7
+mapping on the repaint row (line 190)</li>
+<li>what: The row says "Replay inserts the run after the anchor. The
+draft stays a draft." None of that happens today.</li>
+<li>why:
+<ul>
+<li>Replay skips drafts. It acts only on ready and not_handled records
+(<code>replay.js:2523</code>).</li>
+<li>Leaving or reloading the page commits the open edit
+(<code>sync.js:2547</code>, <code>commitOnUnload</code>). So a reload
+makes the sitting ready and shows it to the agent, and the session does
+not reopen.</li>
+<li>A Lahe rebuild reload already waits while an edit is open
+(<code>index.js:655</code>, <code>isBusy</code>). That existing behavior
+is what really covers R7 (a reload does not move the cursor) for
+Markdown reviews, and the design does not mention it.</li>
+<li>Only a crash leaves a draft, and the next page commits it.</li>
+<li>"Cmd-Shift-E on any block of the run reopens the same session" needs
+a way to map a replay-inserted block back to its record. That mapping is
+not in the editing components.</li>
+</ul></li>
+<li>fix:
+<ul>
+<li>Rewrite the row from today's real flow: the reload deferral, the
+commit on unload, and replay of the ready record.</li>
+<li>Name the mapping from a run block back to its record in the editing
+components.</li>
+<li>Decide whether R5's "still there to keep writing" means reopening
+the session after a reload, and if it does, where the caret goes.</li>
+</ul></li>
+</ul>
+<h3
+id="ar9-the-tiptap-rejection-reaches-a-defensible-answer-by-an-uneven-comparison">AR9.
+The Tiptap rejection reaches a defensible answer by an uneven
+comparison</h3>
+<ul>
+<li>type: suggestion</li>
+<li>severity: important</li>
+<li>kind: challenge</li>
+<li>where: Summary, paragraph 3; Alternatives Considered, first two
+bullets; AQ1</li>
+<li>what: On the evidence, the deciding argument holds. The rest of the
+case against Tiptap is overstated in two places and leaves out one
+benefit.</li>
+<li>why:
+<ul>
+<li><strong>What holds.</strong>
+<ul>
+<li>Tiptap cannot safely edit existing blocks. The spike shows spans,
+SVG, and classes stripped, and 2 of 5 blocks exact even with the
+attribute extension.</li>
+<li>Ken decided one sitting is one edit and that old and new text must
+look the same. Together those mean Tiptap on the run alone puts a second
+editor inside one sitting.</li>
+<li>Lists come out as <code>&lt;li&gt;&lt;p&gt;</code>, and
+<code>lahe-markdown.css:105</code> gives <code>li &gt; p</code> its own
+margin. So Tiptap lists would space differently from the page's lists.
+The design does not mention this, and it supports the rejection.</li>
+</ul></li>
+<li><strong>Overstated: protection.</strong> "When its parent is
+replaced it fails silently, which breaks protection." In the same spike,
+putting the editor's own node back
+(<code>replaceChildren(ed.view.dom)</code>) reconnected it, and typing
+after that reached the editor's state. The run's node belongs to the
+layer, so holding a reference to it is safe. That is a different restore
+path, not a broken one.</li>
+<li><strong>Overstated: styling.</strong> The injected style tag can be
+turned off with an editor option.</li>
+<li><strong>Overstated: size.</strong> 104 KB gzipped is accurate
+against the unminified layer as shipped. But the file comes from a local
+server, and it could load only when a sitting opens. It does not have to
+cost every page.</li>
+<li><strong>Understated: the claim.</strong> "Styling matched in all
+three browsers" was measured for p, strong, and ul spacing in Chromium
+only. Firefox and WebKit measured one h2 font size.</li>
+<li><strong>Omitted: rich paste.</strong> Ken's decision says to keep
+rich paste if Tiptap brings it for free. The spike shows it does: b,
+span-bold, and i become strong and em, and headers survive. AQ1's "what
+Tiptap would have given for free" lists only undo and shortcuts.</li>
+<li><strong>Understated: undo is not small.</strong> Undo that puts the
+caret back, groups typing into bursts, handles redo, and plays well with
+IME input is the bulk of what an editor library is for.</li>
+<li><strong>Neither side of the deciding question was measured.</strong>
+Nobody spiked the seam (Lahe's anchor next to a Tiptap run), or Lahe's
+own multi-block host.</li>
+</ul></li>
+<li>fix:
+<ul>
+<li>Keep the recommendation, and rewrite AQ1 so it is fair:
+<ul>
+<li>add rich paste and the list spacing</li>
+<li>correct the protection and size claims</li>
+<li>say that undo is real work</li>
+</ul></li>
+<li>Put AQ1 to Ken after the host spike from AR6, and include the seam
+in that spike. If Lahe's host fails, the fallback is already set
+up.</li>
+</ul></li>
+</ul>
+<h3
+id="ar10-the-briefs-rollout-question-and-old-records-have-no-home">AR10.
+The brief's rollout question and old records have no home</h3>
+<ul>
+<li>type: suggestion</li>
+<li>severity: important</li>
+<li>kind: defect</li>
+<li>where: brief, Rollout / Flags ("An agent on an older copy of the
+skill either can still act on new text or is told to update. The
+architecture decides which."); architecture, nowhere</li>
+<li>what: The design does not decide the brief's rollout question. It
+also does not say what happens to records made before this change.</li>
+<li>why:
+<ul>
+<li><strong>Old agents.</strong> An agent already on a review when the
+new layer lands reads the contract once and keeps the old rules (see
+AR1).</li>
+<li><strong>Old records.</strong> Existing reviews hold multi-paragraph
+edits whose <code>after_html</code> has nested blocks. After this
+change, Enter stops nesting, so those records are the only ones left on
+today's split path. If that path is refactored with the insert path,
+legacy records regress.</li>
+<li><strong>Reopened old records.</strong> When a reviewer reopens one,
+the new host finds nested blocks inside the anchor, and the capture
+model does not expect them.</li>
+</ul></li>
+<li>fix:
+<ul>
+<li>State the rollout answer. For example: AR1 option (a) lets old
+agents still act, and a bump to <code>SERVICE_CONTRACT</code> tells the
+rest to update.</li>
+<li>Say that records without <code>new_blocks</code> keep today's replay
+path unchanged, with the existing <code>no_duplicate_text</code> and
+<code>split_not_conflict</code> specs as the guard.</li>
+<li>Say what reopening a legacy nested record does.</li>
+</ul></li>
+</ul>
+<h3 id="ar11-turning-the-anchor-into-a-header-is-under-specified">AR11.
+Turning the anchor into a header is under-specified</h3>
+<ul>
+<li>type: suggestion</li>
+<li>severity: important</li>
+<li>kind: defect</li>
+<li>where: Data / State Changes, <code>anchor_tag_after</code>; brief R3
+(make headers while editing existing text)</li>
+<li>what: The field exists, but no part of the pipeline knows how to
+treat a tag-only change.</li>
+<li>why: "Make this paragraph a header" is one of Ken's crucible pains.
+It touches every stage:
+<ul>
+<li><strong>Deciding the kind.</strong> <code>kindFor</code>
+(<code>editing.js:439</code>) compares text and inner markup. A tag-only
+change is equal on both, so it reads as "no change" and never
+commits.</li>
+<li><strong>Replay.</strong> The four-branch compare has no tag test. A
+repaint that brings back the <code>p</code> reads as applied.</li>
+<li><strong>Writing.</strong> Changing a tag means replacing the page's
+element. That touches its attributes, its <code>data-lahe-id</code>
+stamp, and any framework reference to it. Undo's "old tag" does the same
+in reverse.</li>
+<li><strong>Finding it again.</strong> The finding ladder's tag
+tie-breaker and its "climb back to the saved tag" rule both prefer the
+old <code>p</code>.</li>
+</ul></li>
+<li>fix: Say which record kind a tag-only change is. Add a tag leg to
+the anchor compare. Define element replacement once, carrying attributes
+and the stamp across. Say whether the ladder uses
+<code>anchor_tag_after</code> for the tag tie-breaker once the item is
+handled.</li>
+</ul>
+<h3 id="ar12-adding-an-item-to-an-existing-list-has-no-shape">AR12.
+Adding an item to an existing list has no shape</h3>
+<ul>
+<li>type: suggestion</li>
+<li>severity: important</li>
+<li>kind: defect</li>
+<li>where: Block types while writing; the <code>new_blocks</code> tag
+list (line 73); brief R3 (lists while editing existing text)</li>
+<li>what: <code>new_blocks</code> allows p, h2 to h4, ul, and ol, but
+not li. "Enter at the end of a block makes a new p after it" has no case
+for an anchor inside a page's own list.</li>
+<li>why: Adding a bullet to a list the agent wrote is one of the most
+common edits. As designed, Enter in an existing li either makes a
+<code>p</code> inside a <code>ul</code>, which is invalid HTML, or
+starts a new list after the item.</li>
+<li>fix: Say what the anchor is when the caret is in a list item. The
+simplest option is the whole list, so a new item is a change to the
+anchor's own markup. Add a browser test: Enter at the end of an existing
+bullet, type, commit, rebuild.</li>
+</ul>
+<h3
+id="ar13-two-sittings-after-the-same-anchor-is-undecided-and-it-is-the-notes-jobs-main-path">AR13.
+"Two sittings after the same anchor" is undecided, and it is the notes
+job's main path</h3>
+<ul>
+<li>type: suggestion</li>
+<li>severity: important</li>
+<li>kind: risk</li>
+<li>where: Failure Modes, last row (line 197)</li>
+<li>what: The row gives two answers joined by "or": the second anchor is
+the last block of the first run, or it is the same anchor with the
+second run placed after the first.</li>
+<li>why:
+<ul>
+<li>On a notes page, every sitting after the first is this case. Before
+the agent places the first run, the "last block" is a block that replay
+inserted, so record two depends on record one.</li>
+<li>That needs a replay order, which the design does not have.</li>
+<li>If the reviewer undoes record one, record two's anchor disappears
+and record two goes lost.</li>
+<li>The same-anchor answer needs replay to skip other records' runs,
+which is not in the flow.</li>
+</ul></li>
+<li>fix: Pick one answer. Then spell out what follows from it: replay
+processes records in order of creation, and an undo that would orphan a
+later run either re-anchors that run or warns the reviewer. Add a
+browser test with three sittings on an empty notes page before the agent
+places any of them.</li>
+</ul>
+<h3 id="ar14-paste-has-no-design-and-the-brief-asked-for-its-cost">AR14.
+Paste has no design, and the brief asked for its cost</h3>
+<ul>
+<li>type: suggestion</li>
+<li>severity: minor</li>
+<li>kind: defect</li>
+<li>where: brief Decisions, "Pasting with its formatting... the
+architecture notes what it would cost"; architecture, only a mention in
+Security</li>
+<li>what: Today paste is the browser's default: the edited block is
+plain <code>contenteditable</code> with no paste handler. In a host that
+spans blocks, a pasted page drops its own h1, table, div, and styled
+spans onto the page.</li>
+<li>why: That breaks R4 (styling) during writing. Capture then has to
+guess how to map foreign blocks onto six tags. The security review (SR5)
+covers the words that ride along. The layout side and the cost note are
+this doc's job.</li>
+<li>fix: Take over <code>insertFromPaste</code>: insert plain text, and
+treat a blank line as a new paragraph. Add two sentences on what rich
+paste would cost in Lahe's engine, for the <code>LAHE-rich-paste</code>
+row.</li>
+</ul>
+<h3 id="ar15-proofreading-has-no-home">AR15. Proofreading has no
+home</h3>
+<ul>
+<li>type: suggestion</li>
+<li>severity: minor</li>
+<li>kind: defect</li>
+<li>where: brief R11 (after a long hand-written block lands, the agent
+offers proofreading on the card and leaves the words alone);
+architecture, nowhere</li>
+<li>what: The architecture never mentions proofreading. The contract is
+where that behavior lives, and the threshold needs a place to live.</li>
+<li>fix: Add the contract line to Components. Say where the threshold
+constant sits (for example, <code>review_format.js</code> next to the
+other named limits) and which field the agent measures: the run's word
+count, not <code>after</code>.</li>
+</ul>
+<h3
+id="ar16-the-markdown-notes-anchor-is-a-title-that-is-not-in-the-source">AR16.
+The Markdown notes anchor is a title that is not in the source</h3>
+<ul>
+<li>type: suggestion</li>
+<li>severity: minor</li>
+<li>kind: risk</li>
+<li>where: Empty page and <code>lahe write</code>, "the anchor is that
+hero title"; brief R13 (the agent writes the notes file)</li>
+<li>what: For a file with no <code>#</code> heading, the render's title
+is <code>path.basename(source)</code> (<code>markdown.js:148</code>). So
+the anchor text is "2026-09-28.md", which appears nowhere in the
+file.</li>
+<li>why: An agent told to place blocks "after the anchor" searches the
+source for that text and finds nothing. It may also write a
+<code>#</code> title, which renames the anchor and changes the page
+title.</li>
+<li>fix: One contract line: "When the anchor is the page title of a
+Markdown file with no # heading, place the blocks at the top of the
+file." Add a test on a <code>lahe write</code> page.</li>
+</ul>
+<h3 id="ar17-next-content-block-matches-wrappers">AR17. "Next content
+block" matches wrappers</h3>
+<ul>
+<li>type: suggestion</li>
+<li>severity: minor</li>
+<li>kind: defect</li>
+<li>where: Replay after a rebuild, the definition under the flowchart
+(line 169)</li>
+<li>what: "Next element whose tag is in the normalizer's block list"
+includes <code>div</code> and <code>section</code>
+(<code>normalize.js:570</code>).</li>
+<li>why: After the anchor, the walk meets <code>section.sheet</code>
+first. Its text is the whole section, section label included, so it
+never matches a single new block. There is also a second "allowed block
+tags" list planned for <code>normalize.js</code>, which makes it unclear
+which list the rule means.</li>
+<li>fix: Define the walk over leaf blocks (block elements with no block
+children, where li counts as a leaf of its list). Name which list it
+uses.</li>
+</ul>
+<h3 id="ar18-a-markdown-shortcut-should-be-its-own-undo-step">AR18. A
+Markdown shortcut should be its own undo step</h3>
+<ul>
+<li>type: suggestion</li>
+<li>severity: minor</li>
+<li>kind: risk</li>
+<li>where: Block types while writing, shortcuts; Undo inside a session;
+brief R6 (the words stay as typed)</li>
+<li>what: Typing "1. " or "- " at the start of a line turns it into a
+list and deletes those characters.</li>
+<li>why: A reviewer who meant the literal characters needs one Cmd-Z to
+get them back, the way other editors do. Otherwise the tool has
+rewritten their words.</li>
+<li>fix: Record the conversion as its own history step, and test that
+Cmd-Z right after it restores the typed characters.</li>
+</ul>
+<h3 id="ar19-the-third-r14-case-has-no-analysis">AR19. The third R14
+case has no analysis</h3>
+<ul>
+<li>type: question</li>
+<li>severity: minor</li>
+<li>kind: defect</li>
+<li>where: brief R14, third case ("bold two words in a Markdown page,
+commit, rebuild"); Analysis of Existing Structure</li>
+<li>what: The design explains the root cause of the other two R14 cases.
+It says nothing about this one, which was the crucible's own
+assignment.</li>
+<li>fix: Say whether it passes today, and name the spec that proves it
+(<code>italic_sticks.spec.js</code> looks like the candidate). Or name
+its cause.</li>
+</ul>
+<h3
+id="ar20-who-runs-lahe-write-and-which-agent-session-owns-the-review">AR20.
+Who runs <code>lahe write</code>, and which agent session owns the
+review?</h3>
+<ul>
+<li>type: question</li>
+<li>severity: minor</li>
+<li>kind: risk</li>
+<li>where: Empty page and <code>lahe write</code>; brief R12 (a reviewer
+starts a blank document from the command line)</li>
+<li>what: <code>lahe review</code> starts or joins an agent session and
+prints the wake commands for the agent. If Ken runs
+<code>lahe write</code> in a terminal, a session is created with no
+agent listening.</li>
+<li>why: Ken decided notes with no agent attached are not a design case.
+So the design has to say how an agent gets attached.</li>
+<li>fix: Either the agent runs it (Ken asks his agent for a notes page),
+or <code>lahe write</code> takes <code>--session</code> and the printed
+output tells Ken what to paste to his agent. A <code>--create</code>
+flag on <code>lahe review</code> would get all of review's options for
+free. That is worth one line in Alternatives.</li>
+</ul>
+<h3 id="ar21-cut-placement-and-the-empty-container-anchor-rule">AR21.
+Cut <code>placement</code> and the empty-container anchor rule</h3>
+<ul>
+<li>type: cut</li>
+<li>severity: minor</li>
+<li>kind: taste</li>
+<li>where: Data / State Changes, <code>placement</code>; Empty page,
+"For an HTML page with no blocks at all"; Components,
+<code>anchor.js</code></li>
+<li>what: <code>start_of_container</code> exists only for a hand-made
+HTML page with no blocks. <code>lahe write</code> makes Markdown, and
+every Markdown render has a hero title to anchor on.</li>
+<li>why:
+<ul>
+<li>It is a new rung in the finding ladder, and a bare
+<code>&lt;main&gt;</code> has an empty signature
+(<code>anchor.js:491</code>), so it would fail anyway.</li>
+<li>With it gone, <code>placement</code> has one value and carries
+nothing.</li>
+<li>R1's empty-page case (writing on an empty page) is already met by
+<code>lahe write</code> together with the hero title.</li>
+</ul></li>
+<li>fix: Drop both, and say in one line that an empty hand-made HTML
+page is out of this cut.</li>
+</ul>
+<h2 id="requirement-coverage">Requirement coverage</h2>
+<div class="table-scroll"><table>
+<thead>
+<tr>
+<th>Requirement</th>
+<th>Home in the architecture</th>
+<th>Status</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>R1, write where no text exists (after a block, end of page, empty
+page)</td>
+<td>click in empty space; <code>lahe write</code></td>
+<td>Covered. The empty-container rule can go (AR21)</td>
+</tr>
+<tr>
+<td>R2, feels like today's edit</td>
+<td>same gesture, frame, bar</td>
+<td>Covered</td>
+</tr>
+<tr>
+<td>R3, paragraphs, headers, lists, in new and existing text</td>
+<td>shortcuts; <code>anchor_tag_after</code></td>
+<td>Partial: tag-only changes (AR11), existing lists (AR12)</td>
+</tr>
+<tr>
+<td>R4, new blocks use the page's styling while writing</td>
+<td>host candidates; siblings</td>
+<td>At risk: wrapper selectors (AR6), <code>sheet-head</code> (AR4),
+paste (AR14)</td>
+</tr>
+<tr>
+<td>R5, saved as typed; survives reload and repaint</td>
+<td>drafts; protection</td>
+<td>Reload row is wrong (AR8); merge drops the run (AR5)</td>
+</tr>
+<tr>
+<td>R6, words stay as typed</td>
+<td><code>after</code> uncapped; <code>new_blocks</code> uncapped</td>
+<td>Covered, apart from the shortcut undo (AR18)</td>
+</tr>
+<tr>
+<td>R7, a reload does not move the cursor, hide text, or double it</td>
+<td>repaint row</td>
+<td>Covered in fact by the reload deferral, which the doc does not name
+(AR8); doubling (AR1, AR3)</td>
+</tr>
+<tr>
+<td>R8, agent tells new blocks from changes, with place, type, and
+bold</td>
+<td><code>new_blocks</code></td>
+<td>Covered once AR1 is settled</td>
+</tr>
+<tr>
+<td>R9, contract and skill say how to place new text</td>
+<td>"contract gains rules"</td>
+<td>Rules not drafted; old agents undecided (AR10); Markdown title case
+(AR16)</td>
+</tr>
+<tr>
+<td>R10, handled checked against the built page</td>
+<td>handled check</td>
+<td>Already met by today's check; the new tag half cannot fire
+(AR7)</td>
+</tr>
+<tr>
+<td>R11, proofreading suggestions on long blocks</td>
+<td>none</td>
+<td>Orphan (AR15)</td>
+</tr>
+<tr>
+<td>R12, blank document from the command line</td>
+<td><code>lahe write</code></td>
+<td>Session ownership open (AR20)</td>
+</tr>
+<tr>
+<td>R13, notes land in a file the reviewer named</td>
+<td>agent writes it</td>
+<td>Covered, apart from AR16</td>
+</tr>
+<tr>
+<td>R14, bold and italic edits survive (three named cases)</td>
+<td>root-cause section</td>
+<td>Lone paragraph: fixed for new records only (AR10). Header: new
+layout defect (AR4). Bold two words: no analysis (AR19)</td>
+</tr>
+<tr>
+<td>R15, undo removes new text and asks the agent to take it out</td>
+<td>undo bullet</td>
+<td>Covered</td>
+</tr>
+</tbody>
+</table></div>
+<h2 id="cleanup-needed">Cleanup needed</h2>
+<p>None. This review changed no files other than this one.</p>
+</body>
+</html>

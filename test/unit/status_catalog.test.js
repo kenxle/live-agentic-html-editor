@@ -105,8 +105,9 @@ test("a pending request for the drained session gets past --quiet with nothing e
     protocol.AGENT_LIVENESS.handoffMessage("s_doc", null, false, { library: true, stateDir: stateDir.flagFor(w.dir) }),
     "the Library's hand-off message for the document's session, with the real --state-dir"
   );
-  // Line one is the field classes, which fence the page-text fields.
-  assert.equal(out.lines[0].field_classes["catalog_requests[].title"], "data");
+  // The field classes that fence the page-text fields travel in review.json's
+  // contract, not in the drain (the drain was trimmed on main).
+  assert.equal(require("../../src/shared/review_format.js").PROJECTED_FIELD_CLASS["catalog_requests[].title"], "data");
 });
 
 test("a pending request also gets past --quiet when the session owns reviews with nothing ready", async () => {

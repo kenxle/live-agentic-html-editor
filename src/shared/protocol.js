@@ -285,10 +285,12 @@
       auth: AUTH.REVIEW_TOKEN,
       mutating: true,
       why: "D5's second-window refusal for windows that cannot see each other's storage, plus the takeover",
-      request: "{review, window_id, session_secret?, takeover?}",
+      request: "{review, window_id, session_secret?, takeover?, quiet?}",
       response:
-        "grant {granted:true, since, heartbeat_seconds, took_over, session_secret}; refusal {granted:false, since, " +
-        "heartbeat_seconds, reason, deposed} (no holder id, no secret). deposed is true only when the refused " +
+        "grant {granted:true, since, heartbeat_seconds, quiet_heartbeat_seconds, took_over, session_secret}; " +
+        "refusal {granted:false, since, heartbeat_seconds, quiet_heartbeat_seconds, reason, deposed} (no holder id, " +
+        "no secret). quiet:true on a claim says nobody is looking at that window, so it beats every " +
+        "quiet_heartbeat_seconds and the helper holds it for a longer window. deposed is true only when the refused " +
         "window is the one an explicit Review-here-instead threw out, which is the one refusal the page acts on " +
         "immediately; every other refusal it waits out, because a helper being replaced looks the same from there"
     },
@@ -1286,6 +1288,18 @@
     return "lahe session takeover " + String(sessionId) + stateDirFlag(stateDirPath);
   }
 
+  /**
+   * The one spelling of the command that brings a document's page back: the
+   * session's page server, started again if the helper stopped it because no
+   * window was open (src/service/idle_servers.js). Same state-directory rule.
+   *
+   * @param {string} target the document as the agent named it (the Markdown
+   *   source for a rendered page)
+   */
+  function reviewCommand(target, sessionId, stateDirPath) {
+    return "lahe review " + shellWord(target) + " --session " + String(sessionId) + stateDirFlag(stateDirPath);
+  }
+
   // ---------------------------------------------------------------------------
   // Monitor liveness: what the rail is allowed to claim about an agent
   // ---------------------------------------------------------------------------
@@ -1696,6 +1710,7 @@
     drainCommand: drainCommand,
     monitorCommand: monitorCommand,
     takeoverCommand: takeoverCommand,
+    reviewCommand: reviewCommand,
 
     MONITOR: MONITOR,
     AGENT_LIVENESS: AGENT_LIVENESS

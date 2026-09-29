@@ -183,6 +183,54 @@ test.describe("3D: the Edits tab", () => {
     expect(download.suggestedFilename(), "the click really delivered a file").toMatch(/\.txt$/);
   });
 
+  // THE RULE THAT SAYS WHICH ROW IS THE REVIEWER'S OWN NEW TEXT.
+  //
+  // Every before-and-after pair carries a left rule, and a `data-kind='edit'`
+  // row's is the accent. That is not decoration: it is how the tab says what is
+  // new. Scanning a column of rows, the accent is the only thing separating the
+  // reviewer's typed edits from a deletion or a formatting-only change, which
+  // otherwise draw the same box. Delete either half of it (the rule, or the
+  // accent override) and this goes red.
+  test("an edit row's pair wears the accent rule, and the other kinds wear the neutral one", async ({
+    page
+  }) => {
+    await page.goto(fixtureUrl(pages));
+    await pollPage(page, () => !!window.__lahe && !!window.__laheEdits, undefined, {
+      message: "the real boot to put the library and the fixture's readers on the page"
+    });
+    await runSession(page);
+
+    const drawn = await page.evaluate(() => {
+      const pane = window.__lahe.handle.rail.tabBody("edits");
+      const pairFor = (kind) => {
+        const row = pane.querySelector('.lahe-edits[data-kind="' + kind + '"]');
+        return row ? row.querySelector(".lahe-edits__pair") : null;
+      };
+      const edit = pairFor("edit");
+      const other = pairFor("delete") || pairFor("format_only");
+      if (!edit || !other) return null;
+      const cs = (el) => window.getComputedStyle(el);
+      const probe = document.createElement("div");
+      probe.style.borderLeft = "2px solid var(--accent)";
+      edit.appendChild(probe);
+      const accent = cs(probe).borderLeftColor;
+      probe.remove();
+      return {
+        editColor: cs(edit).borderLeftColor,
+        editWidth: parseFloat(cs(edit).borderLeftWidth),
+        otherColor: cs(other).borderLeftColor,
+        otherWidth: parseFloat(cs(other).borderLeftWidth),
+        accent: accent
+      };
+    });
+
+    expect(drawn, "both an edit row and another kind are on screen to compare").not.toBe(null);
+    expect(drawn.editWidth, "the edit row's rule is really drawn").toBeGreaterThanOrEqual(2);
+    expect(drawn.otherWidth, "and so is the other kind's").toBeGreaterThanOrEqual(2);
+    expect(drawn.editColor, "the edit row's rule is the rail's accent").toBe(drawn.accent);
+    expect(drawn.editColor, "which is not what the other kinds wear").not.toBe(drawn.otherColor);
+  });
+
   // A CROSS-TASK DEFECT 3D found and cannot fix in its own file.
   //
   // comments.outstanding() returns every record that is not handled, hand edits

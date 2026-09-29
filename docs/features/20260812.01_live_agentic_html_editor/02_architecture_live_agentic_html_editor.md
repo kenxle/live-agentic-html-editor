@@ -559,6 +559,9 @@ has its token served on every HTML file under that server's root, not only on th
 recorded, so any script on any of those pages can read it. The root is the reviewed folder, or the
 reviewed page's own folder. `lahe review --only` narrows a review back to its recorded pages, and the
 command prints the root so the reviewer can see what is reachable before deciding.
+A review's token is also readable on the documents its pages link to, in folders mounted for those
+links (2026-09-28, spec 20260922.02): the rail goes only on the linked files themselves, never on
+their neighbours or anything hidden, and an `--only` review keeps its links read-only.
 The final boundary is the user account: a process already running as the reviewer can touch the store
 directly, and no local helper can defend against that.
 

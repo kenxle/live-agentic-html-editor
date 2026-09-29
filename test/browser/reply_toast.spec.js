@@ -177,6 +177,33 @@ test.describe("the toast: an answer that finds a reviewer with the rail closed",
       expect(info.toasts[0].about, "the words the answer is about").toContain("Nine clients checked in this week");
       expect(info.toasts[0].sticky, "a note is not a question, so it can leave on its own").toBe(false);
 
+      // NO ACCENT STRIPE ON A TOAST. The layer uses a rule down one edge to
+      // say "you have not seen this yet." A toast does not need to say it: it
+      // slides in, which is a louder signal than any border. Ken, reviewing
+      // the sweep: "the pop-up toast should not have it because that's gonna
+      // be seen already by virtue of its movement, its animation." So the four
+      // edges match, and putting the stripe back turns this red.
+      //
+      // The toast has no selector of its own (closed root), so the spec walks
+      // up from a card node, which the rail does hand out.
+      const edges = await page.evaluate((itemId) => {
+        const root = window.__lahe.rail.cardNode(itemId).getRootNode();
+        const toast = root.querySelector(".toast");
+        if (!toast) return null;
+        const cs = window.getComputedStyle(toast);
+        return {
+          left: cs.borderLeftWidth,
+          right: cs.borderRightWidth,
+          leftColor: cs.borderLeftColor,
+          topColor: cs.borderTopColor
+        };
+      }, item.id);
+      expect(edges, "the toast is reachable through the rail's own root").not.toBe(null);
+      expect(edges.left, "the left edge is the same weight as the right").toBe(edges.right);
+      expect(edges.leftColor, "and the same colour as the top: one border, not a stripe").toBe(
+        edges.topColor
+      );
+
       // Pressed at the coordinates the rail itself reports, because a closed
       // root has no selector.
       const rect = info.toasts[0].rect;

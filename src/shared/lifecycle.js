@@ -81,6 +81,24 @@
     },
     {
       from: STATE.READY,
+      to: STATE.DRAFT,
+      actor: ACTOR.REVIEWER,
+      why: "the reviewer starts rewording it: the first changing keystroke takes it off the agent's desk until commit"
+    },
+    {
+      from: STATE.NOT_HANDLED,
+      to: STATE.DRAFT,
+      actor: ACTOR.REVIEWER,
+      why: "the reviewer starts rewording an edit the agent said no to, the same way as a ready one"
+    },
+    {
+      from: STATE.DRAFT,
+      to: STATE.NOT_HANDLED,
+      actor: ACTOR.REVIEWER,
+      why: "the reviewer types a withdrawn not_handled edit back to its wording: the agent's answer still stands"
+    },
+    {
+      from: STATE.READY,
       to: STATE.HANDLED,
       actor: ACTOR.AGENT,
       why: "a reply naming the item's CURRENT rev says it made the change"
@@ -210,6 +228,17 @@
           " but the item is at rev " +
           String(item[FIELD.REV]) +
           "; the reviewer reworded it, so it stays outstanding"
+      };
+    }
+    // AN AGENT NEVER ANSWERS A DRAFT, not even with a question. A draft at a
+    // revision an agent has seen is the reviewer rewording it (withdrawn from
+    // ready or not_handled), and a late or rival reply to the old wording must
+    // not move it out or put the half-typed words in front of anyone.
+    if (record.isDraft(item)) {
+      return {
+        accepted: false,
+        state: item[FIELD.STATE],
+        refusal: "the item is a draft (the reviewer is still writing or rewording it); only a ready item is actionable"
       };
     }
     // A question leaves the item exactly where it is. It is the loudest thing

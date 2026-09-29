@@ -125,16 +125,76 @@
   // really was never registered.
   var RESTART_GRACE_MS = 6000;
 
-  // The library's own poll of the helper. A visible review stays responsive;
-  // a hidden document needs only a low-frequency safety check because it polls
-  // immediately when it becomes visible again. The cursor is
-  // protocol.REPLY_CURSOR_FIELD, a seq, never a timestamp.
+  // The library's own poll of the helper (spec 20260928.01, quiet tab polling).
+  // The cursor is protocol.REPLY_CURSOR_FIELD, a seq, never a timestamp.
+  //
+  // EVERY OPEN TAB USED TO ASK ONCE A SECOND (hidden ones every ten), FOREVER.
+  // Each request woke the helper and read from disk, which is battery on a
+  // machine nobody is using (GitHub issue 16). Now the pace follows attention:
+  //
+  //  - FOCUSED: once a second, steadily. Only one tab can have focus, so only
+  //    one tab ever runs at this pace, and it has to feel responsive.
+  //  - VISIBLE BUT NOT FOCUSED (a review page beside the terminal): every 30
+  //    seconds, and nothing else on a clock. The reviewer can see it, so a
+  //    reply still shows up while they watch, without the page running at full
+  //    speed. The rail's agent line needs no request of its own: every poll's
+  //    answer carries agent_liveness. The holder's claim goes quiet, exactly
+  //    as a hidden tab's does (the slow "still open" beat further down), so
+  //    the 10 second heartbeat does not run here either. A read-only window
+  //    does not re-ask for the review until it has focus again.
+  //
+  //    At 15 seconds with the ordinary beat this state cost 600 requests an
+  //    hour, 360 of them heartbeats. The owner: "is too much".
+  //  - HIDDEN (a background tab, a minimized window, a window on another
+  //    desktop): NO POLL AT ALL. Nothing comes from a page nobody can see. The
+  //    only request is the slow "still open" heartbeat further down.
+  //
+  // Gaining focus, or becoming visible, polls at once, so the reviewer never
+  // sees the wait for what arrived meanwhile.
   var POLL_INTERVAL_MS = 1000;
-  var HIDDEN_POLL_INTERVAL_MS = 10000;
+  var VISIBLE_POLL_INTERVAL_MS = 30000;
 
-  function pollIntervalFor(doc) {
-    return doc && doc.hidden === true ? HIDDEN_POLL_INTERVAL_MS : POLL_INTERVAL_MS;
+  var ATTENTION = { FOCUSED: "focused", VISIBLE: "visible", HIDDEN: "hidden" };
+
+  /**
+   * How much attention this page has. Hidden wins. Otherwise focused unless
+   * document.hasFocus says no; focus inside a frame on the page still counts as
+   * focused, because that is what hasFocus answers. A document with no hasFocus
+   * to ask (a test double, an old engine) is treated as focused, which only
+   * ever errs toward polling as often as before.
+   */
+  function attentionOf(doc) {
+    if (!doc) return ATTENTION.FOCUSED;
+    if (doc.hidden === true) return ATTENTION.HIDDEN;
+    if (typeof doc.hasFocus !== "function") return ATTENTION.FOCUSED;
+    try {
+      return doc.hasFocus() === false ? ATTENTION.VISIBLE : ATTENTION.FOCUSED;
+    } catch (error) {
+      return ATTENTION.FOCUSED;
+    }
   }
+
+  /** True when the page does not have focus (visible beside something, or hidden). */
+  function isAway(doc) {
+    return attentionOf(doc) !== ATTENTION.FOCUSED;
+  }
+
+  /** How long until the next reply poll, or null for no poll at all (hidden). */
+  function pollIntervalFor(doc) {
+    var attention = attentionOf(doc);
+    if (attention === ATTENTION.HIDDEN) return null;
+    return attention === ATTENTION.VISIBLE ? VISIBLE_POLL_INTERVAL_MS : POLL_INTERVAL_MS;
+  }
+
+  // A key or a click while the page believes it lacks focus means a focus
+  // event was missed, and the page asks attentionOf again. While focused these
+  // listeners return at once and do nothing, so a keystroke costs no request,
+  // no storage write and no timer.
+  // pointermove is here for a reviewer who comes back by clicking straight into
+  // a frame on the page: the top document gets no focus event and no click,
+  // but the pointer crossed it on the way in.
+  var RETURN_EVENTS = ["keydown", "pointerdown", "pointermove"];
+  var RETURN_LISTENER_OPTIONS = { capture: true, passive: true };
 
   // One reading of the wall clock, in one place, so a test that wants to move it
   // has one thing to move.
@@ -1395,6 +1455,20 @@
     var heartbeatTimer = null;
     var livenessTimer = null;
     var heartbeatMs = 10000;
+    // The slow beat the helper allows while this tab is hidden, or null when the
+    // helper never offered one (an older helper, which would call a slow holder
+    // gone after its fixed 30 seconds). Learned from every answered claim.
+    var quietHeartbeatMs = null;
+    // What the last claim this page sent told the helper: quiet or not. The
+    // beat only slows down once the helper has been told, never before.
+    var toldQuiet = false;
+    // THE POLL CHAIN (spec 20260928.01). `attention` is the page's last reading
+    // of attentionOf, kept so focus, blur and visibility can tell a change from
+    // a repeat. One poll in flight at most, one timer armed at most.
+    var attention = ATTENTION.FOCUSED;
+    var pollInFlight = false;
+    var lastPollAt = 0;
+    var firstPollTimer = null;
     var flushing = false;
     // The post that is in flight right now, so a caller who has to know the
     // outbox is EMPTY (End review) can wait on it instead of being told `busy`
@@ -2333,32 +2407,124 @@
       return true;
     }
 
-    function startPolling() {
-      if (pollTimer) return pollTimer;
-      // harness-allow-timer: adaptive reply polling, with both intervals pinned
-      // above. A timeout reschedules itself so visibility changes can alter the
-      // next cadence without maintaining two timers.
-      pollTimer = setTimeout(function () {
-        pollTimer = null;
-        poll();
-        if (pendingCount() > 0 && !retryTimer && !flushing) flush();
-        if (started) startPolling();
-      }, pollIntervalFor(doc));
+    // -------------------------------------------------------------------------
+    // The poll chain (spec 20260928.01, quiet tab polling)
+    // -------------------------------------------------------------------------
+    //
+    // A CHAIN, NOT A CLOCK. Each poll schedules the next one when it has
+    // answered, at the pace for the page's attention, so a hidden page can
+    // simply not schedule one, and only one poll is ever in flight.
+
+    function schedulePoll() {
+      if (pollTimer) clearTimeout(pollTimer);
+      pollTimer = null;
+      // Hidden polls nothing. Becoming visible restarts the chain.
+      if (!started || attention === ATTENTION.HIDDEN) return null;
+      var wait = attention === ATTENTION.VISIBLE ? VISIBLE_POLL_INTERVAL_MS : POLL_INTERVAL_MS;
+      // harness-allow-timer: the reply poll chain, once a second focused and
+      // every 30 seconds visible (both pinned at the top of this file).
+      pollTimer = setTimeout(runPoll, wait);
       return pollTimer;
     }
 
-    function onVisibilityChange() {
+    function runPoll() {
+      pollTimer = null;
+      if (pollInFlight) return null;
+      pollInFlight = true;
+      lastPollAt = nowMs();
+      var after = function () {
+        pollInFlight = false;
+        if (pendingCount() > 0 && !retryTimer && !flushing) flush();
+        if (started && !pollTimer) schedulePoll();
+      };
+      return poll().then(after, after);
+    }
+
+    function startPolling() {
+      if (pollTimer || pollInFlight) return pollTimer;
+      return schedulePoll();
+    }
+
+    /**
+     * Poll right now, because the reviewer just came back. Once: a return fires
+     * both focus and visibilitychange, and a poll already in flight or started
+     * in the last second answers for both.
+     */
+    function pollNow() {
+      if (!started || pollInFlight) return null;
+      if (lastPollAt && nowMs() - lastPollAt < POLL_INTERVAL_MS) return null;
       if (pollTimer) clearTimeout(pollTimer);
       pollTimer = null;
-      if (doc && doc.hidden !== true) {
-        poll();
-        if (pendingCount() > 0 && !retryTimer && !flushing) flush();
-      } else if (doc && doc.hidden === true && started) {
-        // A hidden tab is often the last thing a page hears before the browser
-        // discards it, so the drafts go now rather than at their floor.
-        flushNow("hide");
+      return runPoll();
+    }
+
+    /**
+     * Focus, blur, and visibility, in one place, so a change that fires two of
+     * them is handled once.
+     *
+     *  - Hiding the tab sends the drafts now, as it always has, because a
+     *    hidden tab is often the last thing a page hears before the browser
+     *    discards it. A blur with nothing queued sends nothing.
+     *  - Going hidden stops the reply poll. Losing focus in any way stops
+     *    the read-only re-ask. The heartbeat is left alone here: its next
+     *    beat, at most 10 seconds out, tells the helper this tab is quiet, and
+     *    only once the helper has granted that does it slow.
+     *  - Gaining focus, or becoming visible from hidden, polls at once. That
+     *    one poll brings any reply that arrived meanwhile and any reload a
+     *    rebuild owes. Then the chain runs at the new pace.
+     *  - Losing focus while still visible only moves the next poll to the
+     *    30 second pace.
+     *  - Gaining focus, when the helper was told quiet, beats at once to say
+     *    otherwise, which is also the check that this window still holds it.
+     *    Visible and hidden are both quiet, so moving between them beats
+     *    nothing.
+     */
+    function onAttention(event) {
+      if (!started) return;
+      var type = event && event.type;
+      if (type === "visibilitychange" && doc && doc.hidden === true) flushNow("hide");
+      var next = attentionOf(doc);
+      if (next === attention) return;
+      var was = attention;
+      attention = next;
+      if (next === ATTENTION.HIDDEN) {
+        goHidden();
+        return;
       }
-      if (started) startPolling();
+      var wake = next === ATTENTION.FOCUSED || was === ATTENTION.HIDDEN;
+      if (wake) pollNow();
+      if (!pollInFlight) schedulePoll();
+      if (next === ATTENTION.FOCUSED && heartbeatTimer && toldQuiet) {
+        clearTimeout(heartbeatTimer);
+        heartbeatTimer = null;
+        postHeartbeat();
+        scheduleHeartbeat();
+      }
+      if (readOnly) {
+        // Asked at once on gaining focus, because it has not asked since it
+        // lost it. Without focus, scheduleLiveness arms nothing.
+        if (next === ATTENTION.FOCUSED) pollLiveness();
+        scheduleLiveness();
+      }
+    }
+
+    function goHidden() {
+      if (pollTimer) clearTimeout(pollTimer);
+      pollTimer = null;
+      if (livenessTimer) clearTimeout(livenessTimer);
+      livenessTimer = null;
+    }
+
+    /**
+     * A key, a click or a pointer move. While focused it returns at once: this
+     * runs on every keystroke, and the owner asked that nothing fire per
+     * keystroke ("we were writing multiple places every keystroke"). Only while
+     * this page believes it lacks focus does it ask again, because a reviewer
+     * typing into the page is here, and a missed focus event must not leave
+     * the page at a slower pace.
+     */
+    function onReturnEvent() {
+      if (attention !== ATTENTION.FOCUSED) onAttention(null);
     }
 
     // -------------------------------------------------------------------------
@@ -2469,6 +2635,8 @@
         return Promise.resolve(null);
       }
       return probeHealth().then(function (healthAnswered) {
+        // A CSP refusal that landed while the probe was out is the answer.
+        if (cspRefused) return null;
         if (healthAnswered !== true) {
           if (!originDiagnosed) return null;
           // Health stopped answering. The origin diagnosis is over, and this is
@@ -2492,6 +2660,15 @@
       if (blocked && helperOrigin && blocked.indexOf(helperOrigin) !== 0) return;
       cspRefused = true;
       state = STATE.REFUSED;
+      // THE REFUSAL CAN ARRIVE AFTER THE FAILURE IT EXPLAINS. The browser
+      // rejects the blocked fetch first and dispatches this event after, so a
+      // request sent at load (the poll every page makes at once, spec
+      // 20260928.01) was already classified as the helper being down. With
+      // connect-src closed the helper's state is unknowable, so that reading is
+      // withdrawn here and this one stands alone.
+      if (helperReachable === false) helperReachable = null;
+      if (lastFailure && failures.canonical(lastFailure.code) === "HELPER_UNREACHABLE") lastFailure = null;
+      onRecovered("HELPER_UNREACHABLE");
       raise(failures.failure("CSP_REFUSED", "connect-src blocked " + (blocked || helperOrigin)));
       recomputeStatus();
     }
@@ -2539,7 +2716,12 @@
 
       if (doc && typeof doc.addEventListener === "function") {
         doc.addEventListener("securitypolicyviolation", onPolicyViolation);
-        doc.addEventListener("visibilitychange", onVisibilityChange);
+        doc.addEventListener("visibilitychange", onAttention);
+        // The missed-focus guard. Passive and capturing, so a key or click
+        // inside the rail's shadow root counts too (see onReturnEvent).
+        RETURN_EVENTS.forEach(function (name) {
+          doc.addEventListener(name, onReturnEvent, RETURN_LISTENER_OPTIONS);
+        });
       }
       if (win && typeof win.addEventListener === "function") {
         // Navigation and unload both commit immediately, with keepalive. R1
@@ -2547,9 +2729,35 @@
         win.addEventListener("pagehide", commitOnUnload);
         win.addEventListener("beforeunload", commitOnUnload);
         win.addEventListener("pageshow", onPageShow);
+        win.addEventListener("focus", onAttention);
+        win.addEventListener("blur", onAttention);
       }
 
-      startPolling();
+      attention = attentionOf(doc);
+      // ONE POLL AT LOAD, WHATEVER THE ATTENTION. The first answer records which
+      // version of the file this page is showing (noteTargetMtime's baseline).
+      // A page that loaded unfocused and waited to ask would record whatever
+      // the file is by then, and a rebuild that landed in between would never
+      // reload it: the reviewer switched to the terminal while a rebuild
+      // reloaded the page, the agent rebuilt again, and they came back to the
+      // older page for good (review, spec 20260928.01). The chain carries on
+      // from this poll at the page's pace; hidden, it stops here.
+      //
+      // ONE SECOND IN, NOT AT ONCE, which is when the first poll always went.
+      // Sent the instant the page boots, it raced two things that settle within
+      // that second: the browser's CSP violation event, which arrives after the
+      // blocked fetch has already failed, and the helper's 500ms mtime cache,
+      // which can still hold the file's previous time and made the next poll
+      // read as a rebuild. Its own timer, so going hidden in that second does
+      // not cancel it.
+      // harness-allow-timer: the load-time poll, POLL_INTERVAL_MS after boot.
+      firstPollTimer = setTimeout(function () {
+        firstPollTimer = null;
+        if (lastPollAt || pollInFlight) return;
+        if (pollTimer) clearTimeout(pollTimer);
+        pollTimer = null;
+        runPoll();
+      }, POLL_INTERVAL_MS);
       // Anything a previous session left unacknowledged goes out now. This is
       // the whole of "re-posts on the next load".
       flush();
@@ -2601,12 +2809,31 @@
     function claimRequest(body) {
       claimSeq += 1;
       var seq = claimSeq;
+      // QUIET, on every claim this page sends: true while the page lacks focus
+      // (visible beside something, or hidden) and the helper has offered the
+      // slow beat. The helper then gives this holder
+      // the longer staleness window, and the beat slows only after it was told
+      // (toldQuiet). Never true against a helper that did not offer it.
+      var quiet = attention !== ATTENTION.FOCUSED && quietHeartbeatMs !== null;
+      body.quiet = quiet;
       return request("window.claim", { method: "POST", body: JSON.stringify(body) })
         .then(parseClaim)
         .then(function (parsed) {
           // Which claim this answer belongs to, so a late answer cannot overwrite
           // a newer one's secret (see rememberSecret).
           parsed.seq = seq;
+          // The slow beat is the helper's to offer, on every answer. An answer
+          // without it is an older helper, and the page stays at the fast beat.
+          if (parsed.granted || parsed.refused) {
+            quietHeartbeatMs = parsed.quietHeartbeatSeconds ? parsed.quietHeartbeatSeconds * 1000 : null;
+          }
+          // THE HELPER HAS BEEN TOLD only when it GRANTED the latest claim.
+          // Counting it at send time went wrong when the helper was replaced
+          // during that one beat: the page slowed to five minutes while the
+          // new helper held it for thirty seconds, and a second window could
+          // take the review (review, spec 20260928.01). A failed or refused
+          // beat leaves the last confirmed answer standing.
+          if (parsed.granted && seq === claimSeq) toldQuiet = quiet;
           return parsed;
         });
     }
@@ -2632,6 +2859,7 @@
           tookOver: b.took_over === true,
           sessionSecret: b.session_secret || null,
           heartbeatSeconds: typeof b.heartbeat_seconds === "number" ? b.heartbeat_seconds : null,
+          quietHeartbeatSeconds: typeof b.quiet_heartbeat_seconds === "number" ? b.quiet_heartbeat_seconds : null,
           body: b
         };
       }
@@ -2679,6 +2907,7 @@
         // The one refusal the page acts on immediately: a person in another
         // window pressed Review here instead. Everything else is waited out.
         deposed: body.deposed === true,
+        quietHeartbeatSeconds: typeof body.quiet_heartbeat_seconds === "number" ? body.quiet_heartbeat_seconds : null,
         body: body,
         error: result.error
       };
@@ -2832,15 +3061,59 @@
 
     function startHeartbeat() {
       if (heartbeatTimer) return heartbeatTimer;
+      return scheduleHeartbeat();
+    }
+
+    /**
+     * The wait until the next beat. The fast beat while focused. Without focus
+     * (visible or hidden), the helper's slow "still open" beat, but only once
+     * the helper has been told this tab is quiet: until then it would call
+     * this holder gone after its ordinary 30 seconds, so the beat that tells
+     * it goes at the fast pace.
+     *
+     * WHY A VISIBLE PAGE GOES QUIET TOO, rather than its 30 second reply poll
+     * counting as the claim. A poll every 30 seconds against a 30 second claim
+     * window lapses on any late answer, so the window would have to stretch
+     * anyway, and the reply poll is a GET that carries no session secret: it
+     * would need the secret in its query string to prove it is the holder.
+     * The quiet window is already the helper's, already restored after a
+     * restart, and already has one holder at a time. The cost is the one a
+     * hidden tab already pays: a page that crashes while unfocused holds its
+     * review for up to 390 seconds. Closing it, and Review here instead, still
+     * free it at once.
+     */
+    function heartbeatDelay() {
+      if (attention !== ATTENTION.FOCUSED && toldQuiet && quietHeartbeatMs !== null) return quietHeartbeatMs;
+      return heartbeatMs;
+    }
+
+    // Bumped whenever the beat is stopped, so an answer that lands after the
+    // stop (a goodbye, a lost review) cannot restart it.
+    var heartbeatGen = 0;
+
+    function scheduleHeartbeat() {
+      if (heartbeatTimer) clearTimeout(heartbeatTimer);
+      var gen = heartbeatGen;
       // harness-allow-timer: the holder's heartbeat. The helper calls a holder
-      // lost after STALE_AFTER_MS of silence, so re-posting the claim on this
-      // cadence is what keeps this window the holder (finding 2).
-      heartbeatTimer = setInterval(postHeartbeat, heartbeatMs);
+      // lost after its staleness window of silence, so re-posting the claim on
+      // this cadence is what keeps this window the holder (finding 2). A chain
+      // rather than an interval, because the pace changes with focus.
+      // The next beat is timed from the ANSWER, because whether it may be slow
+      // depends on whether the helper granted this one (toldQuiet).
+      heartbeatTimer = setTimeout(function () {
+        heartbeatTimer = null;
+        var next = function () {
+          if (gen !== heartbeatGen || heartbeatTimer || readOnly || !lock.acquired || !started) return;
+          scheduleHeartbeat();
+        };
+        postHeartbeat().then(next, next);
+      }, heartbeatDelay());
       return heartbeatTimer;
     }
 
     function stopHeartbeat() {
-      if (heartbeatTimer) clearInterval(heartbeatTimer);
+      heartbeatGen += 1;
+      if (heartbeatTimer) clearTimeout(heartbeatTimer);
       heartbeatTimer = null;
       if (claimRetryTimer) clearTimeout(claimRetryTimer);
       claimRetryTimer = null;
@@ -2914,23 +3187,40 @@
         // uncovered case is actual for as long as this lasts, so the note is up.
         lock.helperGranted = false;
         onLimit(overlay.LIMIT_SEPARATE_STORAGE_NO_HELPER);
-        retryHeartbeatSoon();
+        // Asking again in a second is for a reviewer who is working here. A tab
+        // without focus, with the helper down, waits for its next beat, or it
+        // would ask every second for as long as nobody is looking.
+        if (attention === ATTENTION.FOCUSED) retryHeartbeatSoon();
         return parsed;
       });
     }
 
     function startLiveness() {
       if (livenessTimer) return livenessTimer;
+      return scheduleLiveness();
+    }
+
+    function scheduleLiveness() {
+      if (livenessTimer) clearTimeout(livenessTimer);
+      livenessTimer = null;
+      // Nobody is working in it, so nobody is waiting to take the review over.
+      // The re-ask stops while the page lacks focus (visible beside something,
+      // or hidden), and gaining focus asks at once (onAttention).
+      if (attention !== ATTENTION.FOCUSED) return null;
       // harness-allow-timer: the refused window's liveness poll. It re-attempts
       // the claim with takeover:false; while the holder is alive it is refused
       // and nothing happens, but once the holder goes stale the helper grants it
-      // and this becomes D5's 30s auto-takeover (NEW-2).
-      livenessTimer = setInterval(pollLiveness, heartbeatMs);
+      // and this becomes D5's auto-takeover (NEW-2).
+      livenessTimer = setTimeout(function () {
+        livenessTimer = null;
+        pollLiveness();
+        if (readOnly) scheduleLiveness();
+      }, heartbeatMs);
       return livenessTimer;
     }
 
     function stopLiveness() {
-      if (livenessTimer) clearInterval(livenessTimer);
+      if (livenessTimer) clearTimeout(livenessTimer);
       livenessTimer = null;
     }
 
@@ -3027,6 +3317,8 @@
       if (debounceTimer) clearTimeout(debounceTimer);
       if (retryTimer) clearTimeout(retryTimer);
       if (pollTimer) clearTimeout(pollTimer);
+      if (firstPollTimer) clearTimeout(firstPollTimer);
+      firstPollTimer = null;
       if (reloadTimer) clearTimeout(reloadTimer);
       reloadTimer = null;
       stopHeartbeat();
@@ -3036,12 +3328,17 @@
       pollTimer = null;
       if (doc && typeof doc.removeEventListener === "function") {
         doc.removeEventListener("securitypolicyviolation", onPolicyViolation);
-        doc.removeEventListener("visibilitychange", onVisibilityChange);
+        doc.removeEventListener("visibilitychange", onAttention);
+        RETURN_EVENTS.forEach(function (name) {
+          doc.removeEventListener(name, onReturnEvent, RETURN_LISTENER_OPTIONS);
+        });
       }
       if (win && typeof win.removeEventListener === "function") {
         win.removeEventListener("pagehide", commitOnUnload);
         win.removeEventListener("beforeunload", commitOnUnload);
         win.removeEventListener("pageshow", onPageShow);
+        win.removeEventListener("focus", onAttention);
+        win.removeEventListener("blur", onAttention);
       }
       if (store) store.releaseWindow(review);
       started = false;
@@ -3061,6 +3358,10 @@
         reloadsFired: reloadsFired,
         reloadChecks: reloadChecks,
         readOnly: readOnly,
+        attention: attention,
+        polling: !!pollTimer || pollInFlight,
+        heartbeatInMs: heartbeatTimer ? heartbeatDelay() : null,
+        toldQuiet: toldQuiet,
         cspRefused: cspRefused,
         lastFailure: lastFailure ? lastFailure.code : null,
         counters: Object.assign({}, counters)
@@ -3072,7 +3373,6 @@
       BACKOFF_MS: BACKOFF_MS,
       REQUEST_TIMEOUT_MS: REQUEST_TIMEOUT_MS,
       POLL_INTERVAL_MS: POLL_INTERVAL_MS,
-      HIDDEN_POLL_INTERVAL_MS: HIDDEN_POLL_INTERVAL_MS,
       start: start,
       stop: stop,
       recordItem: recordItem,
@@ -3118,7 +3418,11 @@
     BACKOFF_MS: BACKOFF_MS,
     REQUEST_TIMEOUT_MS: REQUEST_TIMEOUT_MS,
     POLL_INTERVAL_MS: POLL_INTERVAL_MS,
-    HIDDEN_POLL_INTERVAL_MS: HIDDEN_POLL_INTERVAL_MS,
+    RETURN_EVENTS: RETURN_EVENTS,
+    VISIBLE_POLL_INTERVAL_MS: VISIBLE_POLL_INTERVAL_MS,
+    ATTENTION: ATTENTION,
+    attentionOf: attentionOf,
+    isAway: isAway,
     pollIntervalFor: pollIntervalFor,
     RELOAD_DEBOUNCE_MS: RELOAD_DEBOUNCE_MS,
     RELOAD_NOTICE_MS: RELOAD_NOTICE_MS,

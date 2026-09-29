@@ -71,7 +71,6 @@ test("a local link the mount rules refuse renders inert instead of pointing at a
     write(path.join(source, "guide.md"), "# Guide\n");
     const outside = tempDir("lahe-links-outside-");
     write(path.join(outside, "secret.md"), "# Outside\n");
-    write(path.join(home, ".ssh", "notes.md"), "# Hidden\n");
     fs.symlinkSync(path.join(outside, "secret.md"), path.join(source, "escape.md"));
     const registry = links.createRegistry({});
 
@@ -91,15 +90,35 @@ test("a local link the mount rules refuse renders inert instead of pointing at a
     assert.equal(symlinked.kind, "inert");
     assert.equal(symlinked.reason, "outside-home", "the real path decides, so a symlink cannot walk out of home");
 
-    const hidden = links.classify(path.join(home, ".ssh", "notes.md"), source, registry);
-    assert.equal(hidden.kind, "inert");
-    assert.equal(hidden.reason, "hidden");
-
     const directory = links.classify(path.join(home, "docs"), source, registry);
     assert.equal(directory.kind, "inert");
     assert.equal(directory.reason, "not-a-file");
 
     assert.equal(registry.added.length, 0, "a refused link registers no mount");
+  });
+});
+
+test("a link to a hidden location is translated like any other", () => {
+  withHome((home) => {
+    const source = path.join(home, "docs");
+    write(path.join(source, "guide.md"), "# Guide\n");
+    write(path.join(source, ".drafts", "plan.md"), "# Plan\n");
+    const hiddenFile = path.join(home, ".config", "notes", ".todo.md");
+    write(hiddenFile, "# Hidden\n");
+    const registry = links.createRegistry({});
+
+    const hidden = links.classify(hiddenFile, source, registry);
+    assert.equal(hidden.kind, "translate");
+    assert.equal(hidden.url, links.mountPrefix(fs.realpathSync(path.dirname(hiddenFile))) + ".todo.md");
+    assert.equal(registry.added.length, 1, "the hidden folder is mounted like any other");
+    assert.ok(registry.linked.indexOf(fs.realpathSync(hiddenFile)) !== -1);
+
+    const relative = links.classify(".drafts/plan.md", source, registry);
+    assert.equal(relative.kind, "relative");
+    assert.ok(
+      registry.linked.indexOf(fs.realpathSync(path.join(source, ".drafts", "plan.md"))) !== -1,
+      "a relative link into a hidden folder is noted like any other"
+    );
   });
 });
 

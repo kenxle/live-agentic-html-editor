@@ -20,6 +20,9 @@ var logModule = require("./log.js");
 var SCHEMA = 1;
 var HOST = protocol.DEFAULT_HOST;
 var HEALTH_PREFIX = "/.lahe-static-health/";
+// Every link mount lives under this. See the request handler for why only its
+// literal spelling is served.
+var MOUNT_ROOT = "/.lahe-source/";
 
 // The library, served by this server rather than copied into the reviewed
 // page's own folder.
@@ -35,6 +38,95 @@ var HEALTH_PREFIX = "/.lahe-static-health/";
 // The prefix follows HEALTH_PREFIX and the /.lahe-source/ mounts: a dotted,
 // tool-named path segment no ordinary document folder has.
 var LIBRARY_PREFIX = "/.lahe-library/";
+
+// Why a server was stopped, as its record says it. IDLE_REASON is the helper's
+// sweep (src/service/idle_servers.js): no browser window was open on any of
+// the session's pages for the grace. The session stays open, so the server
+// comes back when anyone asks for the page again. A session close is final
+// until the session is reopened.
+var IDLE_REASON = "no window open";
+var CLOSED_REASON = "session closed";
+
+// Test seams, empty in the product. afterStopWait runs between a stopped
+// server's process dying and stopOne writing its record, which is the gap a
+// second starter can land in.
+var hooks = { afterStopWait: null, beforeStaleTakeover: null, startWaitMs: null, onSpawn: null };
+
+// ONE STARTER PER SERVER, ACROSS PROCESSES. The helper (a window coming back)
+// and `lahe review` can both find the same server stopped and start it at the
+// same moment. Two spawns race for one record: one lands on the old port, the
+// other falls back to a random one, and whichever record loses is an orphan
+// nothing will ever stop. So start() holds an exclusive lock file beside the
+// record (`ss_<id>.json.lock`, which list() never reads) for as long as it
+// decides and spawns. A lock older than START_LOCK_STALE_MS belongs to a
+// starter that died, and is taken over: it is longer than start()'s own ten
+// second wait for a server to come up, so a live starter never loses its lock.
+var START_LOCK_STALE_MS = 20 * 1000;
+var START_LOCK_WAIT_MS = 25 * 1000;
+// How long start() waits for a spawned server to answer.
+var START_WAIT_MS = 10 * 1000;
+
+function lockPath(file) {
+  return file + ".lock";
+}
+
+/**
+ * Remove a lock this waiter judged stale, but only if it still is.
+ *
+ * Two waiters can both judge one lock stale. The first removes it and writes
+ * its own; a plain delete by the second would then remove that fresh lock, and
+ * both would hold it. So the lock is renamed aside first, which only one waiter
+ * can do to any one file, and what was renamed is checked: still stale, it is
+ * deleted; fresh, it is another waiter's live lock, and it is linked back
+ * (never over a newer lock) before the aside name goes.
+ */
+function takeOverStaleLock(lock) {
+  var aside = lock + ".stale-" + process.pid + "-" + crypto.randomBytes(6).toString("hex");
+  try { fs.renameSync(lock, aside); } catch (err) { return; }
+  var stale = true;
+  try { stale = Date.now() - fs.statSync(aside).mtimeMs > START_LOCK_STALE_MS; } catch (err) { return; }
+  if (!stale) {
+    try { fs.linkSync(aside, lock); } catch (err) { /* a newer lock is already there */ }
+  }
+  try { fs.unlinkSync(aside); } catch (err) { /* gone already */ }
+}
+
+async function withServerLock(file, task) {
+  var lock = lockPath(file);
+  var deadline = Date.now() + START_LOCK_WAIT_MS;
+  // What this holder wrote, so its release never removes a lock that is not
+  // its own (one taken over after this holder ran past the stale limit).
+  var token = process.pid + " " + crypto.randomBytes(8).toString("hex") + " " + new Date().toISOString() + "\n";
+  for (;;) {
+    try {
+      var fd = fs.openSync(lock, "wx", 0o600);
+      try { fs.writeSync(fd, token); } finally { fs.closeSync(fd); }
+      break;
+    } catch (err) {
+      if (err.code !== "EEXIST") throw err;
+    }
+    var age = null;
+    try { age = Date.now() - fs.statSync(lock).mtimeMs; } catch (err) { continue; }
+    if (age > START_LOCK_STALE_MS) {
+      if (typeof hooks.beforeStaleTakeover === "function") hooks.beforeStaleTakeover();
+      takeOverStaleLock(lock);
+      continue;
+    }
+    if (Date.now() > deadline) {
+      throw new Error("another process is still starting or stopping the static server " + path.basename(file) + "; try again");
+    }
+    await delay(50);
+  }
+  try {
+    return await task();
+  } finally {
+    var held = null;
+    try { held = fs.readFileSync(lock, "utf8"); } catch (err) { held = null; }
+    if (held === token) {
+      try { fs.unlinkSync(lock); } catch (err) { /* already gone */ }
+    }
+  }
+}
 var LIBRARY_PATH = LIBRARY_PREFIX + heal.BUNDLE_BASENAME;
 
 var MIME = {
@@ -130,6 +222,61 @@ function writeMeta(dir, sessionId, meta) {
   return meta;
 }
 
+/**
+ * Two `linked_files` tables as one. Each maps a linked file's real path to the
+ * reviews whose pages linked to it, in the order they were first recorded.
+ * Nothing is ever dropped: reviews are never deleted, and a table that only
+ * grows is one no two writers can shrink by racing.
+ */
+function mergeLinkedFiles(a, b) {
+  var out = {};
+  [a, b].forEach(function (table) {
+    if (!table || typeof table !== "object") return;
+    Object.keys(table).forEach(function (file) {
+      if (!Array.isArray(table[file])) return;
+      var into = out[file] || (out[file] = []);
+      table[file].forEach(function (review) {
+        if (typeof review === "string" && protocol.isSafeId(review) && into.indexOf(review) === -1) into.push(review);
+      });
+    });
+  });
+  return out;
+}
+
+/**
+ * Record that `reviewId`'s page links to each of `targets` (real paths), on the
+ * static server `serverId` of this session.
+ *
+ * THIS IS WHAT PUTS A RAIL ON A LINKED DOCUMENT, and the only thing. A mount
+ * serves the linked file's whole folder so the link works, but the rail goes
+ * only on the files a reviewed page actually linked to, and it rides the
+ * review of the page that linked (spec 20260922.02, requirements 2 and 5).
+ * Three writers call it: `lahe review` after its own render, the helper's
+ * re-render (rebuild.js), and the server when it renders a linked document
+ * that itself carries a rail, which is how a chain rides the first review.
+ *
+ * It writes the server's own metadata file and nothing in the review store.
+ * Read-merge-write, like the mounts beside it.
+ *
+ * @returns {boolean} whether anything new was written
+ */
+function recordLinks(dir, sessionId, serverId, reviewId, targets) {
+  if (!protocol.isSafeId(reviewId) || !Array.isArray(targets) || !targets.length) return false;
+  var file = stateDir.staticServerPath(dir, sessionId, serverId);
+  var current = readJson(file);
+  if (!current || current.session_id !== sessionId) return false;
+  var addition = {};
+  targets.forEach(function (target) {
+    if (typeof target !== "string" || !path.isAbsolute(target)) return;
+    addition[target] = [reviewId];
+  });
+  var merged = mergeLinkedFiles(current.linked_files, addition);
+  if (JSON.stringify(merged) === JSON.stringify(mergeLinkedFiles(current.linked_files, {}))) return false;
+  current.linked_files = merged;
+  stateDir.writeAtomic(file, JSON.stringify(current, null, 2) + "\n");
+  return true;
+}
+
 async function registerMount(dir, sessionId, meta, prefix, rootInput) {
   if (!/^\/\.lahe-source\/[a-f0-9]+\/$/.test(prefix)) throw new Error("invalid static source mount " + JSON.stringify(prefix));
   if (!(await isExactServer(meta))) throw new Error("refusing to update a static server whose identity is no longer live");
@@ -140,6 +287,9 @@ async function registerMount(dir, sessionId, meta, prefix, rootInput) {
   var next = Object.assign({}, meta);
   next.mounts = Object.assign({}, meta.mounts || {}, onDisk && onDisk.mounts ? onDisk.mounts : {});
   if (onDisk && Array.isArray(onDisk.auto_mounts)) next.auto_mounts = onDisk.auto_mounts.slice();
+  // The same for which review linked to which file: the server and the helper
+  // write it while this caller holds an older copy.
+  next.linked_files = mergeLinkedFiles(meta.linked_files, onDisk && onDisk.linked_files);
   next.mounts[prefix] = fs.realpathSync(path.resolve(rootInput));
   writeMeta(dir, sessionId, next);
   try { process.kill(meta.pid, "SIGHUP"); }
@@ -171,6 +321,13 @@ async function start(options) {
   var root = fs.realpathSync(path.resolve(options.root));
   var id = serverId(root);
   var file = stateDir.staticServerPath(dir, sessionId, id);
+  stateDir.ensureStaticServersRoot(dir, sessionId);
+  return withServerLock(file, function () {
+    return startLocked(options, dir, sessionId, root, logicalRoot, id, file);
+  });
+}
+
+async function startLocked(options, dir, sessionId, root, logicalRoot, id, file) {
   var existing = readJson(file);
   if (fs.existsSync(file) && !existing) throw new Error("static server metadata is corrupt: " + file);
   if (existing && existing.root === root && await isExactServer(existing)) {
@@ -179,43 +336,108 @@ async function start(options) {
 
   stateDir.ensureStaticServersRoot(dir, sessionId);
   var instance = crypto.randomBytes(16).toString("hex");
-  // THE OLD PORT FIRST. A restart that comes back on the port it had keeps
-  // every origin a review already registered for it, and an old tab's URL works
+  // THE OLD PORT FIRST. A server coming back on the port it had keeps every
+  // origin its reviews already registered, and an old tab's address works
   // again. When the port is taken the server falls back to a random one (see
-  // runServer), and the caller that cares registers the new origin.
-  var preferredPort = validPort(options.preferredPort) ? options.preferredPort : 0;
+  // runServer). The option and the argument position match feat/lahe_library,
+  // which does the same for the Library's Open.
+  var preferredPort = validPort(options.preferredPort)
+    ? options.preferredPort
+    : (existing && existing.root === root && validPort(existing.port) ? existing.port : 0);
   var child = childProcess.spawn(
     process.execPath,
     [__filename, "--serve", file, sessionId, id, instance, root, dir, logicalRoot, String(preferredPort)],
     { detached: true, stdio: "ignore" }
   );
   child.unref();
+  if (typeof hooks.onSpawn === "function") hooks.onSpawn(child);
 
   var meta = await waitFor(async function () {
     var candidate = readJson(file);
     if (!candidate || candidate.instance !== instance) return null;
     return await isExactServer(candidate) ? candidate : null;
-  }, 10000);
-  if (!meta) throw new Error("the static review server did not start within 10 seconds");
+  }, typeof hooks.startWaitMs === "number" ? hooks.startWaitMs : START_WAIT_MS);
+  if (!meta) {
+    // A child that answers late would write the record after this start has
+    // already failed, or run with no record naming it. It is ours, so it goes.
+    try { process.kill(child.pid, "SIGKILL"); } catch (err) { /* already gone */ }
+    throw new Error("the static review server did not start within 10 seconds");
+  }
   return { meta: meta, started: true };
 }
 
-async function stopOne(dir, sessionId, meta) {
-  if (!meta || meta.stopped_at) return false;
+function validPort(value) {
+  return typeof value === "number" && Number.isInteger(value) && value > 0 && value < 65536;
+}
+
+/**
+ * Stop one server and say why on its record.
+ *
+ * @param {string} [reason] CLOSED_REASON (the default) or IDLE_REASON
+ * @returns {Promise<boolean>} whether this call stopped a running server
+ */
+async function stopOne(dir, sessionId, meta, reason) {
+  var why = reason || CLOSED_REASON;
+  if (!meta) return false;
+  if (meta.stopped_at) {
+    // A session closed after the sweep stopped its servers. The record says
+    // so, or a window claiming later would read "idle" and start it again.
+    if (why === CLOSED_REASON && meta.stop_reason === IDLE_REASON) await markStopped(dir, sessionId, meta, CLOSED_REASON);
+    return false;
+  }
   var exact = await isExactServer(meta);
   if (!exact) {
-    meta.stopped_at = new Date().toISOString();
-    meta.stop_reason = "already down";
-    writeMeta(dir, sessionId, meta);
+    await markStopped(dir, sessionId, meta, why === IDLE_REASON ? IDLE_REASON : "already down");
     return false;
   }
   try { process.kill(meta.pid, "SIGTERM"); }
   catch (err) { if (err.code !== "ESRCH") throw err; }
   var stopped = await waitFor(async function () { return !(await isExactServer(meta)); }, 10000);
   if (!stopped) throw new Error("static review server " + meta.id + " did not stop within 10 seconds");
-  meta.stopped_at = new Date().toISOString();
-  meta.stop_reason = "session closed";
-  writeMeta(dir, sessionId, meta);
+  if (typeof hooks.afterStopWait === "function") await hooks.afterStopWait();
+  await markStopped(dir, sessionId, meta, why);
+  return true;
+}
+
+/**
+ * Write `meta` back as stopped, but only while the record on disk still names
+ * that same process. Stopping takes a moment, and a starter (a window coming
+ * back, `lahe review`) can start the server again in it. Writing the old record
+ * over the new one would call the new process stopped, so a session close
+ * would never stop it and the next start would take a random port. Under the
+ * start lock, so a start cannot land between the read and the write.
+ *
+ * @returns {Promise<boolean>} whether the record was written
+ */
+function markStopped(dir, sessionId, meta, reason) {
+  var file = stateDir.staticServerPath(dir, sessionId, meta.id);
+  return withServerLock(file, async function () {
+    var onDisk = readJson(file);
+    if (onDisk && onDisk.instance !== meta.instance) return false;
+    meta.stopped_at = new Date().toISOString();
+    meta.stop_reason = reason;
+    writeMeta(dir, sessionId, meta);
+    return true;
+  });
+}
+
+/**
+ * Record that a link to this server was just handed to someone.
+ *
+ * `lahe review` calls it every time it prints a link. The helper's idle sweep
+ * counts its grace from this too, so a server reused for a fresh link is not
+ * stopped before the reviewer has had time to open it. Read-merge-write, like
+ * recordLinks.
+ *
+ * @param {string} [at] ISO time, now by default
+ * @returns {boolean} whether the record was found and written
+ */
+function noteLinkGiven(dir, sessionId, serverId, at) {
+  var file = stateDir.staticServerPath(dir, sessionId, serverId);
+  var current = readJson(file);
+  if (!current || current.session_id !== sessionId) return false;
+  current.link_given_at = typeof at === "string" ? at : new Date().toISOString();
+  stateDir.writeAtomic(file, JSON.stringify(current, null, 2) + "\n");
   return true;
 }
 
@@ -769,9 +991,15 @@ function servesPath(dir, sessionId, filePath) {
   var entries;
   try { entries = list(dir, sessionId); } catch (err) { return false; }
   return entries.some(function (meta) {
-    if (meta.stopped_at) return false;
-    if (typeof meta.pid !== "number") return false;
-    try { process.kill(meta.pid, 0); } catch (err) { return false; }
+    // A server the idle sweep stopped still counts. It comes back the moment
+    // anyone asks for the page, and the line on disk this answer would let the
+    // healer write is a review token in the reviewer's own working tree.
+    var idle = !!meta.stopped_at && meta.stop_reason === IDLE_REASON;
+    if (meta.stopped_at && !idle) return false;
+    if (!idle) {
+      if (typeof meta.pid !== "number") return false;
+      try { process.kill(meta.pid, 0); } catch (err) { return false; }
+    }
     return coveragePath(meta, filePath) !== null;
   });
 }
@@ -845,12 +1073,211 @@ function hostIsOwn(hostHeader, port) {
   return value === HOST + ":" + port || value === "localhost:" + port;
 }
 
+// ---------------------------------------------------------------------------
+// Linked documents: pages under a /.lahe-source/ mount.
+//
+// Spec: docs/features/20260922.02_linked_docs_rail/01_spec_linked_docs_rail.md.
+// A reviewed Markdown page links to a document in another folder, and the
+// server mounts that folder so the link works. The reviewer who follows the
+// link keeps the rail, by reuse and never by creating anything:
+//
+//  1. THE DOCUMENT'S OWN REVIEW, by redirect. A document with a review of its
+//     own in this agent session is sent to the page that review already
+//     serves. Its token is never carried over to this URL: the rail groups
+//     items by page path, the earlier comments were made on the review's own
+//     page, and carrying the token here would need a new origin written onto
+//     that review.
+//  2. THE LINKING PAGE'S REVIEW. Otherwise a file some reviewed page linked to
+//     (linked_files, see recordLinks) carries the rail of the newest review
+//     that linked to it. An `--only` review keeps its links read-only.
+//  3. NOTHING. Any other file under a mount is served as it always was.
+//
+// Every fact is read off disk, never off the request: the page that linked is
+// never taken from a Referer header or anything else the browser sends.
+
+function realOrNull(target) {
+  try { return fs.realpathSync(target); } catch (err) { return null; }
+}
+
+function withinDir(candidate, base) {
+  return candidate === base || candidate.indexOf(base + path.sep) === 0;
+}
+
+/** This agent session's reviews, straight off disk: [{id, meta}]. */
+function sessionReviews(dir, sessionId) {
+  var root;
+  try { root = stateDir.reviewsRoot(dir); } catch (err) { return []; }
+  var entries;
+  try { entries = fs.readdirSync(root, { withFileTypes: true }); } catch (err) { return []; }
+  var out = [];
+  entries.forEach(function (entry) {
+    if (!entry.isDirectory() || !protocol.isSafeId(entry.name)) return;
+    var meta = readJson(stateDir.metaPath(dir, entry.name));
+    if (!meta || typeof meta.token !== "string" || meta.agent_session_id !== sessionId) return;
+    out.push({ id: entry.name, meta: meta });
+  });
+  return out;
+}
+
+function targetsOf(meta) {
+  var targets = Array.isArray(meta.target_paths) ? meta.target_paths.slice() : [];
+  if (typeof meta.target_path === "string" && meta.target_path && targets.indexOf(meta.target_path) === -1) {
+    targets.push(meta.target_path);
+  }
+  return targets;
+}
+
+function createdAt(meta) {
+  return typeof meta.created_at === "string" ? meta.created_at : "";
+}
+
+/**
+ * A live static server of this session serving `page`, as the absolute URL of
+ * that page on it, or null. "Live" is the cheap check servesPath uses: an
+ * unstopped lease and a pid that answers.
+ */
+function liveUrlFor(dir, sessionId, page) {
+  var realPage = realOrNull(page);
+  if (!realPage) return null;
+  var entries;
+  try { entries = list(dir, sessionId); } catch (err) { return null; }
+  var url = null;
+  entries.some(function (meta) {
+    if (meta.stopped_at || typeof meta.pid !== "number" || typeof meta.port !== "number") return false;
+    try { process.kill(meta.pid, 0); } catch (err) { return false; }
+    var base = realOrNull(meta.root);
+    if (!base || !withinDir(realPage, base) || realPage === base) return false;
+    var relative = path.relative(base, realPage).split(path.sep).map(encodeURIComponent).join("/");
+    url = "http://" + (meta.host || HOST) + ":" + meta.port + "/" + relative;
+    return true;
+  });
+  return url;
+}
+
+/**
+ * Requirement 1: the page of this document's own review in this session, or
+ * null. A Markdown document matches a review's source_path and is sent to the
+ * rendered page that review serves; an HTML document matches a recorded target.
+ * Newest review wins. Null when that review's server is not running, so the
+ * caller falls through to the linking page's review.
+ */
+function ownReviewUrl(dir, sessionId, realFile) {
+  var isMd = markdown.isMarkdown(realFile);
+  var best = null;
+  sessionReviews(dir, sessionId).forEach(function (entry) {
+    var page = null;
+    if (isMd) {
+      if (typeof entry.meta.source_path === "string" && realOrNull(entry.meta.source_path) === realFile &&
+          typeof entry.meta.target_path === "string") {
+        page = entry.meta.target_path;
+      }
+    } else if (targetsOf(entry.meta).some(function (target) { return realOrNull(target) === realFile; })) {
+      page = realFile;
+    }
+    if (!page) return;
+    if (best && createdAt(entry.meta) <= createdAt(best.meta)) return;
+    best = { meta: entry.meta, page: page };
+  });
+  return best ? liveUrlFor(dir, sessionId, best.page) : null;
+}
+
+/**
+ * Requirement 2: the review a linked file rides, from this server's own
+ * linked_files table.
+ *
+ * @returns {{review: string, token: string}|{readOnly: true}|{missing: true}|null}
+ *   null when no reviewed page linked to this file at all; readOnly when every
+ *   review that did is `--only`; missing when none of them is in this session,
+ *   which should not happen, since reviews are never deleted.
+ */
+function linkingReview(dir, sessionId, serverFile, realFile) {
+  var meta = readJson(serverFile);
+  var table = meta && meta.linked_files && typeof meta.linked_files === "object" ? meta.linked_files : null;
+  var registrants = table && Array.isArray(table[realFile]) ? table[realFile] : [];
+  if (!registrants.length) return null;
+  var known = sessionReviews(dir, sessionId).filter(function (entry) {
+    return registrants.indexOf(entry.id) !== -1;
+  });
+  if (!known.length) return { missing: true };
+  var open = known.filter(function (entry) { return entry.meta.only_recorded_pages !== true; });
+  if (!open.length) return { readOnly: true };
+  var best = null;
+  open.forEach(function (entry) {
+    var candidate = { review: entry.id, token: entry.meta.token, at: createdAt(entry.meta) };
+    if (newer(candidate, best)) best = candidate;
+  });
+  return { review: best.review, token: best.token };
+}
+
+/**
+ * The real file a linked page's browser path names, for an item made on it, or
+ * null (requirements 6 and 7).
+ *
+ * THE HELPER WORKS THIS OUT; THE PAGE NEVER SUPPLIES IT. The page path is
+ * mapped through this session's static server mount tables, read off disk the
+ * same way the server reads them. The result must sit inside the mount's folder
+ * by real path, be a file, and be one this very review put its rail on
+ * (linked_files). Anything else names no file.
+ *
+ * @param {string} dir the state directory
+ * @param {string} sessionId the review's own agent session
+ * @param {string} reviewId
+ * @param {string} pagePath the page's location.pathname, as the item carries it
+ * @returns {string|null}
+ */
+function linkedFileForPage(dir, sessionId, reviewId, pagePath) {
+  if (typeof dir !== "string" || typeof sessionId !== "string" || typeof pagePath !== "string") return null;
+  if (!protocol.isSafeId(reviewId)) return null;
+  // ONE SPELLING. The server refuses a mount prefix that arrives encoded
+  // (/%2Elahe-source/...), so a page path that is not literally under the
+  // prefix is not a linked page this server handed out.
+  if (pagePath.indexOf(MOUNT_ROOT) !== 0) return null;
+  var decoded;
+  try { decoded = decodeURIComponent(pagePath); } catch (err) { return null; }
+  var match = decoded.match(/^(\/\.lahe-source\/[a-f0-9]+\/)(.+)$/);
+  if (!match) return null;
+  var reviewMeta = readJson(stateDir.metaPath(dir, reviewId));
+  if (!reviewMeta || reviewMeta.agent_session_id !== sessionId) return null;
+  var entries;
+  try { entries = list(dir, sessionId); } catch (err) { return null; }
+  var found = null;
+  entries.some(function (meta) {
+    if (!meta.mounts || typeof meta.mounts[match[1]] !== "string") return false;
+    var base = realOrNull(meta.mounts[match[1]]);
+    if (!base) return false;
+    var candidate = path.resolve(base, match[2]);
+    if (!withinDir(candidate, base) || candidate === base) return false;
+    var real = realOrNull(candidate);
+    if (!real || !withinDir(real, base)) return false;
+    try { if (!fs.statSync(real).isFile()) return false; } catch (err) { return false; }
+    // Only a page. A linked script or data file is served as bytes, carries
+    // no rail, and is never named as the file to edit.
+    if (!markdownLinks.isPage(real)) return false;
+    var table = meta.linked_files && typeof meta.linked_files === "object" ? meta.linked_files : {};
+    if (!Array.isArray(table[real]) || table[real].indexOf(reviewId) === -1) return false;
+    found = real;
+    return true;
+  });
+  return found;
+}
+
+/** `html` with a visible note placed just inside <body>, or at the top. */
+function placeNote(html, note) {
+  var text = String(html);
+  var body = text.match(/<body\b[^>]*>/i);
+  if (!body) return note + text;
+  var at = body.index + body[0].length;
+  return text.slice(0, at) + note + text.slice(at);
+}
+
+
 function runServer(file, sessionId, id, instance, rootInput, dir, logicalRootInput, preferredPortInput) {
   var root = fs.realpathSync(rootInput);
   var logicalRoot = typeof logicalRootInput === "string" && logicalRootInput ? logicalRootInput : root;
   var prior = readJson(file);
   var mounts = prior && prior.root === root && prior.mounts && typeof prior.mounts === "object" ? prior.mounts : {};
   var autoMounts = prior && prior.root === root && Array.isArray(prior.auto_mounts) ? prior.auto_mounts.slice() : [];
+  var priorLinks = prior && prior.root === root ? mergeLinkedFiles(prior.linked_files, {}) : {};
   function reloadMounts() {
     var current = readJson(file);
     if (!current || current.root !== root || !current.mounts || typeof current.mounts !== "object") return;
@@ -879,16 +1306,34 @@ function runServer(file, sessionId, id, instance, rootInput, dir, logicalRootInp
     catch (err) { /* the render still answers; the mount is re-derived next start */ }
   }
 
-  // A Markdown file inside a mount is answered with the SAME deterministic
-  // rendering the review artifact uses: read-only, enrolled in no review, no
-  // library script line and no token. Links out of it are translated the same
-  // way, so a chain of documents keeps working.
-  function renderMarkdown(candidate, req, res) {
+  // A Markdown file is answered with the SAME deterministic rendering the
+  // review artifact uses, and links out of it are translated the same way, so
+  // a chain of documents keeps working.
+  //
+  // Three shapes, chosen by the caller (see serveLinked):
+  //  - `match`: a linked document riding the linking page's review. No
+  //    read-only note, the review's script line in the response, and the links
+  //    this render translated are recorded against that same review, which is
+  //    how a chain (hub to B to C) rides the hub's review.
+  //  - `missing`: a linked document whose linking review is not in this
+  //    session. Read-only, with a note that says so and names the command.
+  //  - neither: read-only, enrolled in no review, no script line, no token.
+  function renderMarkdown(candidate, req, res, options) {
+    var opts = options || {};
     var registry = markdownLinks.createRegistry({ mounts: mounts, consumed: autoMounts });
+    var renderOptions = { readOnlyNote: true, links: registry };
+    if (opts.match) renderOptions.note = "";
+    else if (opts.missing) renderOptions.note = markdown.missingReviewNote(opts.realFile || candidate, sessionId);
     var html;
-    try { html = markdown.render(candidate, { readOnlyNote: true, links: registry }); }
+    try { html = markdown.render(candidate, renderOptions); }
     catch (err) { return send(res, 500, "could not render " + path.basename(candidate) + "\n"); }
     persistAutoMounts(registry.added);
+    if (opts.match) {
+      try { recordLinks(dir, sessionId, id, opts.match.review, registry.linked); }
+      catch (err) { /* the page still answers; its links ride no review until the next render */ }
+      var injected = injectForMatch(dir, opts.match, candidate, html);
+      if (injected !== null) html = injected;
+    }
     var body = Buffer.from(html, "utf8");
     res.writeHead(200, {
       "cache-control": "no-store",
@@ -898,6 +1343,53 @@ function runServer(file, sessionId, id, instance, rootInput, dir, logicalRootInp
     });
     if (req.method === "HEAD") return res.end();
     res.end(body);
+  }
+
+  function sendHtml(req, res, html) {
+    var body = Buffer.from(html, "utf8");
+    res.writeHead(200, {
+      "cache-control": "no-store",
+      "content-length": body.length,
+      "content-type": "text/html; charset=utf-8",
+      "x-content-type-options": "nosniff"
+    });
+    if (req.method === "HEAD") return res.end();
+    res.end(body);
+  }
+
+  // A page under a mount: a document some reviewed page linked to, or a file
+  // beside one. See "Linked documents" above for the three outcomes. Returns
+  // false when the plain read-only answer below should be sent instead.
+  var saidMissing = Object.create(null);
+  function serveLinked(candidate, realFile, req, res) {
+    var own = ownReviewUrl(dir, sessionId, realFile);
+    if (own) {
+      res.writeHead(302, { "cache-control": "no-store", location: own, "x-content-type-options": "nosniff" });
+      res.end();
+      return true;
+    }
+    var linking = linkingReview(dir, sessionId, file, realFile);
+    if (linking && linking.missing && !saidMissing[realFile]) {
+      saidMissing[realFile] = true;
+      say("static server " + id + ": " + realFile + " was linked from a reviewed page whose review is not in this session; served read-only, nothing created");
+    }
+    var isMd = markdown.isMarkdown(candidate);
+    if (isMd) {
+      if (linking && linking.review) renderMarkdown(candidate, req, res, { match: linking });
+      else if (linking && linking.missing) renderMarkdown(candidate, req, res, { missing: true, realFile: realFile });
+      else renderMarkdown(candidate, req, res);
+      return true;
+    }
+    if (!linking || linking.readOnly) return false;
+    var html;
+    try { html = fs.readFileSync(candidate, "utf8"); } catch (err) { return false; }
+    if (linking.missing) {
+      sendHtml(req, res, placeNote(html, markdown.missingReviewNote(realFile, sessionId)));
+      return true;
+    }
+    var injected = injectForMatch(dir, linking, candidate, html);
+    sendHtml(req, res, tabIcon.ensure(injected !== null ? injected : html));
+    return true;
   }
   // The built bundle, streamed straight out of the clone. Read-only like
   // everything else here, and unauthenticated like the helper's own
@@ -978,8 +1470,20 @@ function runServer(file, sessionId, id, instance, rootInput, dir, logicalRootInp
     var address = server.address();
     if (!hostIsOwn(req.headers.host, address && address.port)) return send(res, 400, "bad host\n");
     var pathname;
-    try { pathname = decodeURIComponent(new URL(req.url, "http://localhost").pathname); }
+    var rawPathname;
+    try {
+      rawPathname = new URL(req.url, "http://localhost").pathname;
+      pathname = decodeURIComponent(rawPathname);
+    }
     catch (err) { return send(res, 400, "bad request\n"); }
+    // ONE SPELLING FOR A MOUNT. A request whose decoded path lands under a
+    // mount but whose raw path does not literally start with it
+    // (/%2Elahe-source/...) is refused. The browser reports that raw spelling
+    // as the page's path, and every helper-side check looks for the literal
+    // prefix, so serving it would put a rail on a page the helper cannot map.
+    if (pathname.indexOf(MOUNT_ROOT) === 0 && rawPathname.indexOf(MOUNT_ROOT) !== 0) {
+      return send(res, 404, "not found\n");
+    }
     if (pathname === HEALTH_PREFIX + id + "/" + instance) {
       return send(res, 200, JSON.stringify({
         id: id,
@@ -1015,23 +1519,6 @@ function runServer(file, sessionId, id, instance, rootInput, dir, logicalRootInp
       }
       var real = fs.realpathSync(candidate);
       if (real !== servingRoot && real.indexOf(servingRoot + path.sep) !== 0) return send(res, 403, "forbidden\n");
-      // A MOUNT REFUSES ANYTHING HIDDEN. markdown_links.js already refuses a
-      // hidden LOCATION when a link is translated into a mount in the first
-      // place, but this handler used to serve any path under an already-
-      // mounted folder, hidden or not. Checked on both the path as requested
-      // (candidate) and its realpath (real), so a normally-named symlink that
-      // resolves to a hidden file or folder is refused the same as the literal
-      // path would be. The mount's OWN root is never itself dot-prefixed (the
-      // prefix regex above only matches a hex id), so this never fires for the
-      // mount root itself, only for a segment under it.
-      //
-      // The server's OWN root (isMount false) is intentionally unchanged: see
-      // the fallback for .lahe-doc-style.css, .lahe-fonts/, and the Mermaid
-      // runtime below, which resolve to a packaged copy for a mount request
-      // too, never to a real file on disk, so they are unaffected by this.
-      if (isMount && (hasHiddenSegment(servingRoot, candidate) || hasHiddenSegment(servingRoot, real))) {
-        return send(res, 404, "not found\n");
-      }
       if (!stat.isFile()) return send(res, 404, "not found\n");
     } catch (err) {
       // Three files a page may ask for beside itself that the served directory
@@ -1051,8 +1538,11 @@ function runServer(file, sessionId, id, instance, rootInput, dir, logicalRootInp
       else return send(res, 404, "not found\n");
       try { stat = fs.statSync(candidate); } catch (missing) { return send(res, 404, "not found\n"); }
     }
-    if (markdown.isMarkdown(candidate)) return renderMarkdown(candidate, req, res);
-    if (heal.isStaticPage(candidate)) {
+    if (isMount && (markdown.isMarkdown(candidate) || heal.isStaticPage(candidate)) && real) {
+      if (serveLinked(candidate, real, req, res)) return;
+    } else if (markdown.isMarkdown(candidate)) {
+      return renderMarkdown(candidate, req, res);
+    } else if (heal.isStaticPage(candidate)) {
       var filePaths = [candidate];
       if (real && real !== candidate) filePaths.push(real);
       // Only for the unmounted root: a review's target_path was recorded
@@ -1066,9 +1556,8 @@ function runServer(file, sessionId, id, instance, rootInput, dir, logicalRootInp
       var match = findReviewForRequest(dir, {
         filePaths: filePaths,
         sessionId: sessionId,
-        // The server's OWN root only. A mounted folder holds documents a
-        // rendered Markdown page links to, and those are served read-only by
-        // design, so nothing there is put on a review.
+        // The server's OWN root only. A page under a mount never reaches
+        // here: serveLinked above decides it from linked_files.
         roots: ownRoot ? [root, logicalRoot] : []
       });
       if (!match && ownRoot) noReviewBacksThisServer();
@@ -1146,7 +1635,10 @@ function runServer(file, sessionId, id, instance, rootInput, dir, logicalRootInp
       pid: process.pid,
       started_at: startedAt,
       stopped_at: null,
-      mounts: mounts
+      mounts: mounts,
+      // Which review linked to which file outlives a restart, or every linked
+      // document would lose its rail until each hub was rendered again.
+      linked_files: mergeLinkedFiles(priorLinks, (readJson(file) || {}).linked_files)
     };
     stateDir.writeAtomic(file, JSON.stringify(meta, null, 2) + "\n");
   }
@@ -1173,8 +1665,16 @@ if (require.main === module) {
 module.exports = {
   SCHEMA: SCHEMA,
   LIBRARY_PATH: LIBRARY_PATH,
+  IDLE_REASON: IDLE_REASON,
+  _hooks: hooks,
+  _withServerLock: withServerLock,
+  START_LOCK_STALE_MS: START_LOCK_STALE_MS,
+  CLOSED_REASON: CLOSED_REASON,
+  noteLinkGiven: noteLinkGiven,
   servesPath: servesPath,
   coveragePath: coveragePath,
+  recordLinks: recordLinks,
+  linkedFileForPage: linkedFileForPage,
   serverId: serverId,
   isExactServer: isExactServer,
   list: list,

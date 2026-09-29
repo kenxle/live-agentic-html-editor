@@ -26,6 +26,10 @@
 //     agent's answer is dropped and the item is outstanding again. A record
 //     arriving at the SAME revision is the ordinary re-post of something the
 //     helper already knows, and it must not resurrect `ready` over `handled`.
+//     The one exception is the reviewer's withdrawal: a same-revision draft
+//     of a committed ready or not_handled item takes it to draft, and the
+//     helper keeps the agent's state and reply and restores them when the
+//     wording comes back. The browser's claimed state is never taken.
 //
 //  3. DRAFTS ARE NOT IN THE FILE (R7). A draft is the reviewer mid-sentence.
 //     They are durable in the log and they are on the reviewer's rail, and they
@@ -52,6 +56,7 @@ var protocol = require("../shared/protocol.js");
 var record = require("../shared/record.js");
 var lifecycle = require("../shared/lifecycle.js");
 var reviewFormat = require("../shared/review_format.js");
+var staticServers = require("./static_servers.js");
 var reviewWriter = require("./review_writer.js");
 var stateDir = require("./state_dir.js");
 var replies = require("./replies.js");
@@ -63,6 +68,13 @@ var F = record.FIELD;
 // ---------------------------------------------------------------------------
 // The log, read back into items
 // ---------------------------------------------------------------------------
+
+// Has this record been committed before? Its applied-after history says so;
+// a draft from before its first commit has none.
+function wasCommitted(item) {
+  var history = item[F.AFTER_HISTORY];
+  return Array.isArray(history) && history.length > 0;
+}
 
 function recordFromEvent(event) {
   var carried = event.record;
@@ -93,6 +105,10 @@ function createFold() {
     order: [],
     // id -> the revision the current reply answered. Rule 2 above reads it.
     replyRev: Object.create(null),
+    // id -> the state an answered item was in when the reviewer started
+    // rewording it at the same revision (see "A REWORDING TAKES IT OFF THE
+    // DESK" below). Present only while the item is withdrawn.
+    withdrawnFrom: Object.create(null),
     times: { started_at: null, ended_at: null, agent_session_id: "legacy" },
     sourcePath: null,
     seq: 0
@@ -116,6 +132,7 @@ function foldEvents(state, events, options) {
   var onDropped = typeof opts.onDropped === "function" ? opts.onDropped : null;
   var byId = state.byId;
   var replyRev = state.replyRev;
+  var withdrawnFrom = state.withdrawnFrom;
 
   (events || []).forEach(function (event) {
     var seq = event[protocol.EVENT_FIELD.SEQ];
@@ -160,14 +177,41 @@ function foldEvents(state, events, options) {
         // Same revision: the helper's lifecycle stands, the browser's content
         // is taken. This is D5's merge rule, on the helper's side of the wire.
         next[F.REPLY] = prev[F.REPLY];
-        next[F.STATE] = prev[F.STATE];
         // The unbacked handled claim is lifecycle, not content, so it travels
         // with the state rather than with the browser's record.
         next[F.HANDLED_NOT_ON_PAGE] = prev[F.HANDLED_NOT_ON_PAGE] === true;
+        // A REWORDING TAKES IT OFF THE DESK. The one lifecycle move the
+        // browser makes at the same revision as a reply is the reviewer's
+        // withdrawal: typing into an answered item that is still in front of
+        // someone (ready with a question, or not_handled) makes it a draft
+        // until they commit, which bumps the revision, or type the wording
+        // back, which restores the state it was withdrawn from. Without this
+        // the helper kept the old state and put the half-typed words in
+        // review.json on every draft post (spec 20260922.01, review finding
+        // 5). A handled item is never withdrawn: its state stands as before.
+        var id2 = next[F.ID];
+        var from = withdrawnFrom[id2] || prev[F.STATE];
+        // Only a record committed before counts: a first commit keeps revision
+        // one, so a late draft from before it (no history yet) is stale
+        // content, not a withdrawal.
+        if (
+          record.isDraft(next) &&
+          (from === record.STATE.READY || from === record.STATE.NOT_HANDLED) &&
+          wasCommitted(next)
+        ) {
+          withdrawnFrom[id2] = from;
+          next[F.STATE] = record.STATE.DRAFT;
+        } else {
+          // Restored, or an ordinary same-revision content write. The state
+          // is the helper's, never the browser's claim.
+          next[F.STATE] = from;
+          delete withdrawnFrom[id2];
+        }
       } else {
         next[F.REPLY] = null;
         next[F.HANDLED_NOT_ON_PAGE] = false;
         delete replyRev[next[F.ID]];
+        delete withdrawnFrom[next[F.ID]];
       }
       byId[next[F.ID]] = next;
       return;
@@ -177,6 +221,7 @@ function foldEvents(state, events, options) {
       if (!id || !byId[id]) return;
       delete byId[id];
       delete replyRev[id];
+      delete withdrawnFrom[id];
       state.order = state.order.filter(function (each) {
         return each !== id;
       });
@@ -194,6 +239,7 @@ function foldEvents(state, events, options) {
       reopened[F.HANDLED_NOT_ON_PAGE] = false;
       byId[id] = reopened;
       delete replyRev[id];
+      delete withdrawnFrom[id];
       return;
     }
 
@@ -212,6 +258,7 @@ function foldEvents(state, events, options) {
       applied[F.HANDLED_NOT_ON_PAGE] = event.handled_not_on_page === true;
       byId[id] = applied;
       replyRev[id] = item[F.REV];
+      delete withdrawnFrom[id];
       return;
     }
 
@@ -299,6 +346,30 @@ function sourceHintOf(state) {
 }
 
 /**
+ * The file on disk behind every linked page an item was made on, as
+ * {page path: real path or null}.
+ *
+ * `linkedFileFor` is the helper's mount lookup (static_servers.linkedFileForPage
+ * bound to one review), so the file an agent is told to edit comes from the
+ * helper and never from the page (spec 20260922.02, requirement 6). With no
+ * lookup every linked page maps to null, which review_format reads as unknown.
+ */
+function linkedFilesOf(items, linkedFileFor) {
+  var out = {};
+  items.forEach(function (item) {
+    var pagePath = item[F.PAGE_PATH];
+    if (!reviewFormat.isLinkedPage(pagePath)) return;
+    if (Object.prototype.hasOwnProperty.call(out, pagePath)) return;
+    var file = null;
+    if (typeof linkedFileFor === "function") {
+      try { file = linkedFileFor(pagePath); } catch (err) { file = null; }
+    }
+    out[pagePath] = typeof file === "string" && file ? file : null;
+  });
+  return out;
+}
+
+/**
  * The whole `review.json` body for a fold, wherever that fold got to.
  *
  * The route adds `seq`; nothing else is added anywhere, so what an agent reads
@@ -317,7 +388,8 @@ function projectFold(reviewId, state, options) {
     agent_session_id: state.times.agent_session_id,
     generated_at: opts.generated_at || undefined,
     items: actionableItems(itemsOf(state)),
-    source_hint: sourceHintOf(state)
+    source_hint: sourceHintOf(state),
+    linked_files: linkedFilesOf(actionableItems(itemsOf(state)), opts.linkedFileFor)
   });
 }
 
@@ -451,6 +523,20 @@ function createProjector(options) {
     );
   }
 
+  /**
+   * The helper's mount lookup for one review's linked pages: the review's own
+   * agent session is read off its meta.json, and the static servers of that
+   * session are asked (static_servers.linkedFileForPage).
+   */
+  function linkedLookup(reviewId) {
+    return function (pagePath) {
+      var meta;
+      try { meta = JSON.parse(fs.readFileSync(stateDir.metaPath(dir, reviewId), "utf8")); } catch (err) { return null; }
+      if (!meta || typeof meta.agent_session_id !== "string") return null;
+      return staticServers.linkedFileForPage(dir, meta.agent_session_id, reviewId, pagePath);
+    };
+  }
+
   /** The kept fold for a review, minted the first time it is asked for. */
   function entryFor(reviewId) {
     if (!Object.prototype.hasOwnProperty.call(watched, reviewId)) {
@@ -574,7 +660,7 @@ function createProjector(options) {
     // ever be skipped by mistake. The baseline is empty when the helper starts,
     // so the first tick always writes (new contract text lands), and a file
     // someone removed is written again.
-    var projected = projectFold(reviewId, entry.fold);
+    var projected = projectFold(reviewId, entry.fold, { linkedFileFor: linkedLookup(reviewId) });
     var comparable = comparableBytes(projected);
     if (entry.lastBytes === comparable && fileExists(reviewId)) {
       entry.wroteAt = entry.fold.seq;
@@ -604,7 +690,7 @@ function createProjector(options) {
   function currentProjection(reviewId) {
     var entry = catchUp(reviewId);
     return {
-      projection: projectFold(reviewId, entry.fold),
+      projection: projectFold(reviewId, entry.fold, { linkedFileFor: linkedLookup(reviewId) }),
       draft_count: itemsOf(entry.fold).filter(function (item) {
         return item[F.STATE] === record.STATE.DRAFT;
       }).length
