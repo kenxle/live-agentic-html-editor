@@ -877,10 +877,16 @@
     return id;
   }
 
-  /** Every element carrying this exact stamp. More than one is a duplicate. */
+  /**
+   * Every element carrying this exact stamp. More than one is a duplicate.
+   *
+   * The scope itself counts. A whole-page selection on a page whose blocks sit
+   * straight in <body> has <body> as its region, so the stamp is on the scope.
+   */
   function findByStamp(scope, stamp) {
     var out = [];
     if (!stamp) return out;
+    if (isElement(scope) && attrOf(scope, markers.STAMP_ATTR) === stamp) out.push(scope);
     eachElement(scope, function (node) {
       if (attrOf(node, markers.STAMP_ATTR) === stamp) out.push(node);
     });
@@ -1586,37 +1592,6 @@
     return blockCountOf(element) >= 2;
   }
 
-  /**
-   * Does this element hold every word the page has?
-   *
-   * The page itself does, and so does a wrapper around all of it: a <main> or
-   * a <div id="app"> with nothing beside it that has words, and two or more
-   * blocks with words inside it. Such an element is never a passage.
-   *
-   * ONE BLOCK IS ALWAYS A PASSAGE, even when it is the only thing on the page
-   * with words: the heading on a page of image options, the paragraph on a
-   * one-paragraph page. Counting it as the page made a comment on it go lost
-   * the moment the agent reworded it (code review, 2026-09-28). A comment whose region is one is about the page, so its
-   * stamp says nothing about where the comment is, and a paint over its whole
-   * contents washes every character the reviewer can see (docs/features/
-   * 20260928.03_oversized_records, cause 3).
-   *
-   * @param {Element} element
-   * @param {Element|Document} [root] the page; the element's own document
-   *   when omitted
-   * @returns {boolean}
-   */
-  function isPageSized(element, root) {
-    if (!isElement(element)) return false;
-    var tag = tagOf(element);
-    if (tag === "body" || tag === "html") return true;
-    var scope = scopeOf(root, element);
-    if (!isElement(scope)) return false;
-    if (element === scope) return true;
-    var words = textOf(element);
-    return !!words && words === textOf(scope) && isContainerOfBlocks(element);
-  }
-
   return {
     MINT_FAILURE: MINT_FAILURE,
     MINT_FAILURE_CODE: MINT_FAILURE_CODE,
@@ -1626,7 +1601,6 @@
     NEAR_MAX: NEAR_MAX,
     signatureOf: signatureOf,
     subjectFor: subjectFor,
-    isPageSized: isPageSized,
     isContainerOfBlocks: isContainerOfBlocks,
     // The words the engine reads off a node. For size checks outside this file
     // (highlight.js), so there is one reading of "the text under an element".
