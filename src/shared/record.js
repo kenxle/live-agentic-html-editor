@@ -97,6 +97,22 @@
     // stays in NOTE/CHANGE + REPLY until the reviewer continues it.
     THREAD: "thread",
 
+    // Free writing (docs/features/20260928.01_free_writing). All five are
+    // optional: a record without them is today's record and takes today's
+    // paths. A RUN RECORD is one with a non-empty new_blocks.
+    //
+    //   new_blocks         the run, in order: [{tag, html, from_anchor?}]
+    //   anchor_after_html  the anchor's own inner markup after the sitting
+    //   anchor_tag_after   the anchor's new tag, or null
+    //   placement          after_anchor, or start_of_container on a page
+    //                      with no content blocks
+    //   remove_blocks      take-back records only: the blocks to remove
+    NEW_BLOCKS: "new_blocks",
+    ANCHOR_AFTER_HTML: "anchor_after_html",
+    ANCHOR_TAG_AFTER: "anchor_tag_after",
+    PLACEMENT: "placement",
+    REMOVE_BLOCKS: "remove_blocks",
+
     CREATED_AT: "created_at",
     UPDATED_AT: "updated_at"
   };
@@ -217,7 +233,14 @@
     "thread[].reviewer.note": CLASS_DATA,
     "thread[].reviewer.change": CLASS_DATA,
     "thread[].agent.reason": CLASS_DATA,
-    "thread[].agent.text": CLASS_DATA
+    "thread[].agent.text": CLASS_DATA,
+    // Free writing: the reviewer's new words are text to place, never an
+    // instruction, so every one of these is data.
+    new_blocks: CLASS_DATA,
+    anchor_after_html: CLASS_DATA,
+    anchor_tag_after: CLASS_DATA,
+    placement: CLASS_DATA,
+    remove_blocks: CLASS_DATA
   };
 
   function fieldClass(path) {
@@ -770,7 +793,14 @@
 
   // Every sentence the page check writes. collapsePageCheckNote reads this
   // list, so a new one is collapsed the day it is added.
-  var PAGE_CHECK_NOTES = [PAGE_CHECK_NOTE, PAGE_CHECK_FORMAT_NOTE, PAGE_CHECK_STAMP_NOTE];
+  // The check's fourth sentence, for a run record: a new block landed one to
+  // one with the page but carries a different tag from the one in new_blocks
+  // (docs/features/20260928.01_free_writing, The page check on a run).
+  var PAGE_CHECK_TAG_NOTE =
+    "Reopened by the page check: a block landed with a different tag from the one in new_blocks. " +
+    "Give it that tag in the source, or reply not_handled saying why.";
+
+  var PAGE_CHECK_NOTES = [PAGE_CHECK_NOTE, PAGE_CHECK_FORMAT_NOTE, PAGE_CHECK_STAMP_NOTE, PAGE_CHECK_TAG_NOTE];
 
   /**
    * The carried note with `sentence` on the end, AT MOST ONCE.
@@ -955,11 +985,12 @@
     item[FIELD.THREAD] = Array.isArray(src.thread) ? src.thread.slice() : [];
     item[FIELD.CREATED_AT] = at;
     item[FIELD.UPDATED_AT] = src.updated_at || at;
+    copyRunFields(src, item);
 
     // A record that arrives with an `after` starts its history with it, so
     // branch three has something to compare against from the first revision.
     if (!item[FIELD.AFTER_HISTORY].length && typeof item[FIELD.AFTER] === "string") {
-      item[FIELD.AFTER_HISTORY] = [historyEntry(item[FIELD.REV], item[FIELD.AFTER], item[FIELD.AFTER_HTML], at)];
+      item[FIELD.AFTER_HISTORY] = [historyEntry(item[FIELD.REV], item[FIELD.AFTER], item[FIELD.AFTER_HTML], at, item)];
     }
     return item;
   }
@@ -1006,13 +1037,21 @@
   // The applied-`after` history
   // ---------------------------------------------------------------------------
 
-  function historyEntry(rev, after, afterHtml, at) {
-    return {
+  function historyEntry(rev, after, afterHtml, at, runSource) {
+    var entry = {
       rev: rev,
       after: typeof after === "string" ? after : null,
       after_html: typeof afterHtml === "string" ? afterHtml : null,
       at: at || nowIso()
     };
+    // A free-writing record's entry carries its run fields too, so replay's
+    // branch three can check an earlier revision's blocks the same way.
+    if (runSource && hasRunFields(runSource)) {
+      RUN_FIELDS.forEach(function (key) {
+        if (runSource[key] !== undefined && key !== FIELD.REMOVE_BLOCKS) entry[key] = copyRunValue(runSource[key]);
+      });
+    }
+    return entry;
   }
 
   // Every rewording bumps rev, and the previous `after` is kept. Replies name
@@ -1034,10 +1073,12 @@
     // when EITHER the compared after OR the after_html moved.
     var afterMoved = typeof newAfter === "string" && (!last || last.after !== newAfter);
     var htmlMoved = typeof newAfterHtml === "string" && (!last || last.after_html !== newAfterHtml);
-    if (afterMoved || htmlMoved) {
-      history.push(historyEntry(next[FIELD.REV], newAfter, newAfterHtml, next[FIELD.UPDATED_AT]));
+    // A tag-only change moves neither the words nor the markup.
+    var tagMoved = !!last && hasRunFields(next) && (last.anchor_tag_after || null) !== (next[FIELD.ANCHOR_TAG_AFTER] || null);
+    if (afterMoved || htmlMoved || tagMoved) {
+      history.push(historyEntry(next[FIELD.REV], newAfter, newAfterHtml, next[FIELD.UPDATED_AT], next));
     }
-    next[FIELD.AFTER_HISTORY] = history;
+    next[FIELD.AFTER_HISTORY] = isRunRecord(next) ? trimRunHistory(history) : history;
     return next;
   }
 
@@ -1506,6 +1547,7 @@
    * @returns {Object} a new ready record whose before/after point the other way
    */
   function revertOf(item, extra) {
+    if (isRunRecord(item)) return runRevertOf(item, extra);
     var src = extra || {};
     // A delete has no `after` text: what the source holds now is nothing, and
     // what it should hold again is the block. Everything else is the swap.
@@ -1563,6 +1605,391 @@
       return { before: FIELD.BEFORE_HTML, after: FIELD.AFTER_HTML };
     }
     return { before: FIELD.BEFORE, after: FIELD.AFTER };
+  }
+
+  // ---------------------------------------------------------------------------
+  // Free writing: the run record
+  // ---------------------------------------------------------------------------
+  //
+  // docs/features/20260928.01_free_writing, architecture "Data / State
+  // Changes". One sitting is one edit record: an existing anchor block plus a
+  // run of new sibling blocks written after it. The record keeps today's
+  // meaning for before, after and after_html (the whole sitting), and adds the
+  // anchor's own markup, its new tag, the run, and where the run goes.
+
+  var PLACEMENT = { AFTER_ANCHOR: "after_anchor", START_OF_CONTAINER: "start_of_container" };
+  var PLACEMENTS = [PLACEMENT.AFTER_ANCHOR, PLACEMENT.START_OF_CONTAINER];
+
+  var RUN_FIELDS = [FIELD.NEW_BLOCKS, FIELD.ANCHOR_AFTER_HTML, FIELD.ANCHOR_TAG_AFTER, FIELD.PLACEMENT, FIELD.REMOVE_BLOCKS];
+
+  // The ceilings (plan, "Numbers this plan sets"). The helper refuses an event
+  // over any of them, and the bar warns at 90 percent.
+  var NEW_BLOCKS_MAX = 400;
+  var NEW_BLOCKS_MAX_BYTES = 200000;
+  // History entries that keep their run and markup; older ones keep `after`.
+  var RUN_HISTORY_KEEP = 3;
+  // The whole run record as JSON: half the helper's MAX_BODY_BYTES, leaving
+  // room for the event around the record.
+  var RUN_RECORD_MAX_BYTES = 4194304;
+
+  // The refusal codes, spelled in failures.js.
+  var RUN_CODE = {
+    BLOCK_REFUSED: "RUN_BLOCK_REFUSED",
+    OVER_CEILING: "RUN_OVER_CEILING",
+    PLACEMENT_REFUSED: "RUN_PLACEMENT_REFUSED",
+    TAKEBACK_CARRIES_RUN: "RUN_TAKEBACK_CARRIES_RUN",
+    SUGGESTION_NOT_FOUND: "SUGGESTION_NOT_FOUND"
+  };
+
+  function copyRunValue(value) {
+    if (!Array.isArray(value)) return value;
+    return value.map(function (b) {
+      return b && typeof b === "object" ? Object.assign({}, b) : b;
+    });
+  }
+
+  // The run fields ride only when the input carries them. A record without
+  // them is today's record, byte for byte.
+  function copyRunFields(src, item) {
+    RUN_FIELDS.forEach(function (key) {
+      if (src[key] !== undefined) item[key] = copyRunValue(src[key]);
+    });
+  }
+
+  /** A run record: one with a non-empty new_blocks. */
+  function isRunRecord(item) {
+    return !!item && Array.isArray(item[FIELD.NEW_BLOCKS]) && item[FIELD.NEW_BLOCKS].length > 0;
+  }
+
+  /** Carries any of the free-writing fields, run or not (a tag-only change). */
+  function hasRunFields(item) {
+    if (!item) return false;
+    for (var i = 0; i < RUN_FIELDS.length; i += 1) {
+      var v = item[RUN_FIELDS[i]];
+      if (v !== undefined && v !== null && !(Array.isArray(v) && !v.length)) return true;
+    }
+    return false;
+  }
+
+  function utf8Bytes(text) {
+    var s = String(text === null || text === undefined ? "" : text);
+    if (typeof TextEncoder === "function") return new TextEncoder().encode(s).length;
+    return Buffer.byteLength(s, "utf8");
+  }
+
+  /** The UTF-8 bytes of the record as JSON. */
+  function recordBytes(item) {
+    return utf8Bytes(JSON.stringify(item));
+  }
+
+  /** The UTF-8 bytes of a run's block markup. */
+  function blocksBytes(blocks) {
+    var total = 0;
+    (Array.isArray(blocks) ? blocks : []).forEach(function (b) {
+      if (b && typeof b.html === "string") total += utf8Bytes(b.html);
+    });
+    return total;
+  }
+
+  // The anchor's tag, as the anchor engine minted it.
+  function anchorTagOf(item) {
+    var ref = item && item[FIELD.REGION] && item[FIELD.REGION].ref;
+    if (ref && ref.fingerprint && typeof ref.fingerprint.tag === "string" && ref.fingerprint.tag) {
+      return ref.fingerprint.tag.toLowerCase();
+    }
+    var ctx = item && item[FIELD.CONTEXT];
+    if (ctx && typeof ctx.element === "string" && ctx.element) return ctx.element.toLowerCase();
+    return null;
+  }
+
+  var TYPE_NAMES = { p: "paragraph", h1: "heading", h2: "heading", h3: "heading", h4: "heading", h5: "heading", h6: "heading", ul: "list", ol: "list" };
+
+  /** How the change text names the anchor: paragraph, heading, list, or block. */
+  function anchorTypeName(item) {
+    var tag = anchorTagOf(item);
+    return tag && hasOwn(TYPE_NAMES, tag) ? TYPE_NAMES[tag] : "block";
+  }
+
+  // The words of one block as text, entities as the record stores them.
+  function runBlockText(html) {
+    return normalize.blockText(typeof html === "string" ? html : "");
+  }
+
+  /**
+   * The whole sitting: the anchor's markup followed by each new block as its
+   * own element, and the text the shared reader reads off it.
+   *
+   * @returns {{after_html: string, after: string}}
+   */
+  function buildRunAfter(anchorHtml, blocks) {
+    var html = typeof anchorHtml === "string" ? anchorHtml : "";
+    (Array.isArray(blocks) ? blocks : []).forEach(function (b) {
+      html += "<" + b.tag + ">" + b.html + "</" + b.tag + ">";
+    });
+    return { after_html: html, after: normalize.blockText(html) };
+  }
+
+  /**
+   * The record as replay's anchor compare reads it: anchor_after_html in place
+   * of after_html and its text in place of after. An ordinary record is its
+   * own anchor view.
+   */
+  function anchorView(item) {
+    if (!item || typeof item[FIELD.ANCHOR_AFTER_HTML] !== "string") return item;
+    var view = Object.assign({}, item);
+    view[FIELD.AFTER_HTML] = item[FIELD.ANCHOR_AFTER_HTML];
+    view[FIELD.AFTER] = normalize.blockText(item[FIELD.ANCHOR_AFTER_HTML]);
+    return view;
+  }
+
+  function wordsKey(html) {
+    return normalize.normalizeText(normalize.textOf(typeof html === "string" ? html : ""));
+  }
+
+  function emphasisKey(html) {
+    return JSON.stringify(normalize.emphasisRuns(typeof html === "string" ? html : ""));
+  }
+
+  var RUN_TAKEBACK_LINE = "Remove the blocks in remove_blocks from after this {type}; the reviewer undid them.";
+
+  /**
+   * The change text for a free-writing record. Structure only: it names what
+   * moved and where the words are, and never quotes a block's words. No rule
+   * is restated here; those are contract lines, read once.
+   */
+  function runChangeText(item) {
+    var type = anchorTypeName(item);
+    var container = item[FIELD.PLACEMENT] === PLACEMENT.START_OF_CONTAINER;
+    var blocks = Array.isArray(item[FIELD.NEW_BLOCKS]) ? item[FIELD.NEW_BLOCKS] : [];
+    var lines = [];
+    var tailIndex = -1;
+    var tails = [];
+    blocks.forEach(function (b, i) {
+      if (b.from_anchor === true) {
+        if (tailIndex === -1) tailIndex = i;
+        tails.push(b.html);
+      }
+    });
+    if (!container && typeof item[FIELD.ANCHOR_AFTER_HTML] === "string") {
+      var afterAnchor = [item[FIELD.ANCHOR_AFTER_HTML]].concat(tails).join(" ");
+      var before = item[FIELD.BEFORE_HTML];
+      if (typeof before !== "string") before = item[FIELD.BEFORE] || "";
+      var moved = wordsKey(afterAnchor) !== wordsKey(before) || emphasisKey(afterAnchor) !== emphasisKey(before);
+      if (moved) lines.push("Reworded this " + type + "; its new markup is in anchor_after_html.");
+    }
+    var newTag = item[FIELD.ANCHOR_TAG_AFTER];
+    if (!container && typeof newTag === "string" && newTag) lines.push("Changed this " + type + " to " + newTag + ".");
+    if (tailIndex !== -1) {
+      lines.push(
+        "Split this " + type + " in two after the anchor's new end. The second part is new_blocks[" + tailIndex + "], marked from_anchor."
+      );
+    }
+    var added = blocks.filter(function (b) {
+      return b.from_anchor !== true;
+    });
+    if (added.length) {
+      var where = container ? "at the start of the page" : "after this " + type;
+      var tags = added
+        .map(function (b) {
+          return b.tag;
+        })
+        .join(", ");
+      lines.push(
+        "Added " + added.length + (added.length === 1 ? " block " : " blocks ") + where + ": " + tags + ". " +
+          (added.length === 1 ? "Its words are" : "Their words are") + " in new_blocks."
+      );
+    }
+    return lines.join(" ") || "Edited this " + type + ".";
+  }
+
+  function blockListRefusal(list) {
+    for (var i = 0; i < list.length; i += 1) {
+      var b = list[i];
+      if (!b || typeof b !== "object") return "block " + i + " is not an object";
+      if (b.from_anchor !== undefined && typeof b.from_anchor !== "boolean") return "block " + i + " from_anchor is not a boolean";
+      var cleaned = normalize.cleanBlock(b.tag, b.html);
+      if (typeof cleaned.html !== "string") return "block " + i + ": " + cleaned.reason;
+      // The helper refuses rather than cleans: stored markup is exactly what
+      // cleanBlock writes, so anything else is not something the layer sent.
+      if (cleaned.html !== b.html || String(b.tag) !== String(b.tag).toLowerCase()) return "block " + i + " is not clean";
+    }
+    return null;
+  }
+
+  /**
+   * The helper's check on a free-writing record. Null when it may be stored,
+   * or {code, reason} naming the first refusal. A record with none of the
+   * free-writing fields is not this check's business and passes.
+   */
+  function validateRun(item) {
+    if (!item || typeof item !== "object") return { code: RUN_CODE.BLOCK_REFUSED, reason: "not a record" };
+    if (!hasRunFields(item)) return null;
+    var run = Array.isArray(item[FIELD.NEW_BLOCKS]) ? item[FIELD.NEW_BLOCKS] : [];
+    var remove = Array.isArray(item[FIELD.REMOVE_BLOCKS]) ? item[FIELD.REMOVE_BLOCKS] : [];
+    if (item[FIELD.NEW_BLOCKS] !== undefined && item[FIELD.NEW_BLOCKS] !== null && !Array.isArray(item[FIELD.NEW_BLOCKS])) {
+      return { code: RUN_CODE.BLOCK_REFUSED, reason: "new_blocks is not a list" };
+    }
+    if (remove.length && run.length) {
+      return { code: RUN_CODE.TAKEBACK_CARRIES_RUN, reason: "a take-back carries new_blocks" };
+    }
+    var placement = item[FIELD.PLACEMENT];
+    if ((run.length || remove.length || placement !== undefined) && PLACEMENTS.indexOf(placement) === -1) {
+      return { code: RUN_CODE.PLACEMENT_REFUSED, reason: "placement is " + JSON.stringify(placement) };
+    }
+    var tagAfter = item[FIELD.ANCHOR_TAG_AFTER];
+    if (tagAfter !== undefined && tagAfter !== null && normalize.WRITABLE_BLOCK_TAGS.indexOf(tagAfter) === -1) {
+      return { code: RUN_CODE.BLOCK_REFUSED, reason: "anchor_tag_after " + String(tagAfter) + " is not writable" };
+    }
+    var list = run.length ? run : remove;
+    if (list.length > NEW_BLOCKS_MAX) return { code: RUN_CODE.OVER_CEILING, reason: list.length + " blocks" };
+    var refusal = blockListRefusal(list);
+    if (refusal) return { code: RUN_CODE.BLOCK_REFUSED, reason: refusal };
+    if (blocksBytes(list) > NEW_BLOCKS_MAX_BYTES) return { code: RUN_CODE.OVER_CEILING, reason: "the run's markup is over the byte ceiling" };
+    if (recordBytes(item) > RUN_RECORD_MAX_BYTES) return { code: RUN_CODE.OVER_CEILING, reason: "the record is over the size ceiling" };
+    return null;
+  }
+
+  /**
+   * A run record's history, bounded: only the last RUN_HISTORY_KEEP entries
+   * keep their run and markup; every older one keeps its words (after).
+   */
+  function trimRunHistory(history) {
+    var cut = history.length - RUN_HISTORY_KEEP;
+    return history.map(function (entry, i) {
+      if (i >= cut || !entry || typeof entry !== "object") return entry;
+      var out = Object.assign({}, entry);
+      delete out[FIELD.NEW_BLOCKS];
+      out.after_html = null;
+      return out;
+    });
+  }
+
+  // The take-back of a handled run: the anchor goes back to its before, and
+  // the placed blocks are named in remove_blocks. It never carries new_blocks,
+  // so replay can never put the run back.
+  function runRevertOf(item, extra) {
+    var src = extra || {};
+    var type = anchorTypeName(item);
+    var back = newItem({
+      kind: item[FIELD.KIND] === KIND.FORMAT_ONLY ? KIND.FORMAT_ONLY : KIND.EDIT,
+      state: STATE.READY,
+      change: revertChangeText(item[FIELD.KIND]) + " " + RUN_TAKEBACK_LINE.replace("{type}", type),
+      before: typeof item[FIELD.AFTER] === "string" ? item[FIELD.AFTER] : "",
+      after: typeof item[FIELD.BEFORE] === "string" ? item[FIELD.BEFORE] : "",
+      before_html: typeof item[FIELD.AFTER_HTML] === "string" ? item[FIELD.AFTER_HTML] : null,
+      after_html: typeof item[FIELD.BEFORE_HTML] === "string" ? item[FIELD.BEFORE_HTML] : null,
+      reverts: item[FIELD.ID],
+      remove_blocks: copyRunValue(item[FIELD.NEW_BLOCKS]),
+      placement: item[FIELD.PLACEMENT] || PLACEMENT.AFTER_ANCHOR,
+      region: src.region || item[FIELD.REGION] || null,
+      context: src.context || item[FIELD.CONTEXT] || null,
+      page_origin: item[FIELD.PAGE_ORIGIN],
+      page_path: item[FIELD.PAGE_PATH],
+      page_title: item[FIELD.PAGE_TITLE],
+      page_seq: item[FIELD.PAGE_SEQ],
+      source_hint: item[FIELD.SOURCE_HINT],
+      created_at: src.created_at
+    });
+    return back;
+  }
+
+  // Split cleaned block markup into tags and text segments.
+  function markupSegments(html) {
+    return html.split(/(<\/?[a-z-]+>)/).filter(function (part) {
+      return part !== "";
+    });
+  }
+
+  function decodeBasic(text) {
+    return text.replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&amp;/g, "&");
+  }
+
+  function encodeBasic(text) {
+    return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  }
+
+  // Replace `from` with `to` inside the text of one block, leaving every tag
+  // where it is. Null when `from` is not in the block's words exactly once.
+  function rewordBlock(html, from, to) {
+    var parts = markupSegments(html);
+    var texts = [];
+    var joined = "";
+    parts.forEach(function (part, i) {
+      if (/^<\/?[a-z-]+>$/.test(part)) return;
+      var t = decodeBasic(part);
+      texts.push({ index: i, start: joined.length, text: t });
+      joined += t;
+    });
+    var found = joined.indexOf(from);
+    if (found === -1 || joined.indexOf(from, found + 1) !== -1) return null;
+    // Only the part that actually changes is replaced, so a fix that spans a
+    // tag ("every time" to "each time" over a bold "every") leaves the tag on
+    // the words it still covers.
+    var pre = 0;
+    while (pre < from.length && pre < to.length && from.charAt(pre) === to.charAt(pre)) pre += 1;
+    var post = 0;
+    while (post < from.length - pre && post < to.length - pre && from.charAt(from.length - 1 - post) === to.charAt(to.length - 1 - post)) post += 1;
+    var first = found + pre;
+    var end = found + from.length - post;
+    to = to.slice(pre, to.length - post);
+    if (first === end) {
+      // A pure insertion: put it in the segment that holds the point.
+      for (var k = 0; k < texts.length; k += 1) {
+        var sg = texts[k];
+        if (first >= sg.start && first <= sg.start + sg.text.length) {
+          var at = first - sg.start;
+          parts[sg.index] = encodeBasic(sg.text.slice(0, at) + to + sg.text.slice(at));
+          return parts.join("");
+        }
+      }
+      return null;
+    }
+    var placed = false;
+    texts.forEach(function (seg) {
+      var segEnd = seg.start + seg.text.length;
+      if (segEnd <= first || seg.start >= end) return;
+      var cutStart = Math.max(first, seg.start) - seg.start;
+      var cutEnd = Math.min(end, segEnd) - seg.start;
+      var insert = placed ? "" : to;
+      placed = true;
+      parts[seg.index] = encodeBasic(seg.text.slice(0, cutStart) + insert + seg.text.slice(cutEnd));
+    });
+    return parts.join("");
+  }
+
+  /**
+   * The reviewer's "Use the fixes": the proofreading suggestions applied as
+   * their own reword of the same record, at a new revision. Words change
+   * inside text only, so each block keeps its markup, and the result goes
+   * through cleanBlock.
+   *
+   * @param {Object} item a run record
+   * @param {Array<{block: number, from: string, to: string}>} suggestions
+   * @returns {Object} the next revision, or {code: "SUGGESTION_NOT_FOUND", reason}
+   */
+  function applySuggestions(item, suggestions) {
+    var notFound = function (reason) {
+      return { code: RUN_CODE.SUGGESTION_NOT_FOUND, reason: reason };
+    };
+    if (!isRunRecord(item)) return notFound("not a run record");
+    var blocks = copyRunValue(item[FIELD.NEW_BLOCKS]);
+    var list = Array.isArray(suggestions) ? suggestions : [];
+    for (var i = 0; i < list.length; i += 1) {
+      var s = list[i] || {};
+      var b = blocks[s.block];
+      if (!b || typeof s.from !== "string" || !s.from || typeof s.to !== "string") return notFound("suggestion " + i + " does not name a block and a from");
+      var next = rewordBlock(b.html, s.from, s.to);
+      if (next === null) return notFound("suggestion " + i + ": from is not in block " + s.block + " exactly once");
+      var cleaned = normalize.cleanBlock(b.tag, next);
+      if (typeof cleaned.html !== "string") return notFound("suggestion " + i + " leaves block " + s.block + " empty or unsafe");
+      b.html = cleaned.html;
+    }
+    var built = buildRunAfter(item[FIELD.ANCHOR_AFTER_HTML], blocks);
+    var changes = {};
+    changes[FIELD.NEW_BLOCKS] = blocks;
+    changes[FIELD.AFTER_HTML] = built.after_html;
+    changes[FIELD.AFTER] = built.after;
+    return bumpRev(item, changes);
   }
 
   // ---------------------------------------------------------------------------
@@ -1695,6 +2122,29 @@
     PAGE_CHECK_NOTE: PAGE_CHECK_NOTE,
     PAGE_CHECK_FORMAT_NOTE: PAGE_CHECK_FORMAT_NOTE,
     PAGE_CHECK_STAMP_NOTE: PAGE_CHECK_STAMP_NOTE,
+    PAGE_CHECK_TAG_NOTE: PAGE_CHECK_TAG_NOTE,
+    PLACEMENT: PLACEMENT,
+    PLACEMENTS: PLACEMENTS,
+    RUN_FIELDS: RUN_FIELDS,
+    NEW_BLOCKS_MAX: NEW_BLOCKS_MAX,
+    NEW_BLOCKS_MAX_BYTES: NEW_BLOCKS_MAX_BYTES,
+    RUN_HISTORY_KEEP: RUN_HISTORY_KEEP,
+    RUN_RECORD_MAX_BYTES: RUN_RECORD_MAX_BYTES,
+    RUN_CODE: RUN_CODE,
+    RUN_TAKEBACK_LINE: RUN_TAKEBACK_LINE,
+    isRunRecord: isRunRecord,
+    hasRunFields: hasRunFields,
+    utf8Bytes: utf8Bytes,
+    recordBytes: recordBytes,
+    blocksBytes: blocksBytes,
+    anchorTagOf: anchorTagOf,
+    anchorTypeName: anchorTypeName,
+    buildRunAfter: buildRunAfter,
+    anchorView: anchorView,
+    runChangeText: runChangeText,
+    validateRun: validateRun,
+    trimRunHistory: trimRunHistory,
+    applySuggestions: applySuggestions,
     TOOL_ROUND: TOOL_ROUND,
     TOOL_ROUNDS: TOOL_ROUNDS,
     toolRoundOf: toolRoundOf,
