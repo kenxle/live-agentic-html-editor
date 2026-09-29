@@ -1176,6 +1176,28 @@
   }
 
   /**
+   * The reviewer's next turn on an answered item, onto a revision that may
+   * already carry new words (code lead 21). `base` is the item itself, which
+   * is continueThread, or a revision one past it (applySuggestions' output,
+   * for "Use the fixes"): either way the result is exactly one revision past
+   * `item`, with the answered turn archived and the change sentence carried.
+   */
+  function continueOnto(item, base, nextTurn) {
+    var turn = nextTurn || {};
+    var change = typeof turn.change === "string" ? turn.change : typeof item[FIELD.CHANGE] === "string" ? item[FIELD.CHANGE] : null;
+    if (base === item) return continueThread(item, { note: turn.note, change: change });
+    var next = Object.assign({}, base);
+    next[FIELD.THREAD] = chronologicalThread(item).concat([completedRound(item)]);
+    next[FIELD.NOTE] = typeof turn.note === "string" ? turn.note : null;
+    // A base with its own change text (Use the fixes) keeps it: it says what
+    // this revision changed. Otherwise the item's sentence is carried.
+    if (typeof base[FIELD.CHANGE] !== "string") next[FIELD.CHANGE] = change;
+    next[FIELD.STATE] = STATE.READY;
+    next[FIELD.REPLY] = null;
+    return next;
+  }
+
+  /**
    * The reviewer says something more about an item the agent already answered.
    *
    * The change sentence is CARRIED, exactly as Reopen issue carries it. It
@@ -2188,6 +2210,7 @@
     chronologicalThread: chronologicalThread,
     completedRound: completedRound,
     continueThread: continueThread,
+    continueOnto: continueOnto,
     followUp: followUp,
     reopenIssue: reopenIssue,
     historyEntry: historyEntry,

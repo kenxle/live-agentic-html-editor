@@ -152,3 +152,29 @@ test("record.js holds no literal NUL byte, so grep reads it as text", () => {
   const bytes = fs.readFileSync(path.join(__dirname, "../../src/shared/record.js"));
   assert.equal(bytes.indexOf(0), -1);
 });
+
+// --- code lead 21 (record side): one "answer onto a revision" helper ---------
+
+test("continueOnto archives the answered turn onto a revision that already carries new words", () => {
+  const q = fx().proofreadQuestion();
+  const fixed = record.applySuggestions(q, q.reply.suggestions);
+  const next = record.continueOnto(q, fixed, { note: "Use the fixes you listed. Change nothing else." });
+  assert.equal(next.rev, q.rev + 1, "exactly one revision past the item");
+  assert.equal(next.state, record.STATE.READY);
+  assert.equal(next.reply, null);
+  assert.equal(next.note, "Use the fixes you listed. Change nothing else.");
+  assert.deepEqual(next.new_blocks, fixed.new_blocks);
+  assert.equal(next.change, fixed.change, "the fixes revision keeps its own change text");
+  const last = next.thread[next.thread.length - 1];
+  assert.equal(last.rev, q.rev);
+  assert.equal(last.agent.proofread, true);
+});
+
+test("continueOnto with the item itself as the base is continueThread", () => {
+  const q = fx().proofreadQuestion();
+  const a = record.continueOnto(q, q, { note: "Keep mine as written. No changes." });
+  const b = record.continueThread(q, { note: "Keep mine as written. No changes.", change: q.change });
+  assert.equal(a.rev, b.rev);
+  assert.deepEqual(a.thread, b.thread);
+  assert.equal(a.change, q.change, "the change sentence is carried");
+});
