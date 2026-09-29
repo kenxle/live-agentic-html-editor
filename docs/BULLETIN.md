@@ -5,6 +5,8 @@ status: `[ ]` open, `[>]` claimed, `[x]` done, `[!]` blocked.
 
 ## Board
 
+- [ ] @ken 2026-09-29 LAHE-tiptap-later -- **Discuss a Tiptap integration after free writing ships.** Free writing uses Lahe's own editing code (architecture AQ1). Tiptap failed where it meets an existing block (caret, selection, Backspace, undo), but brings rich paste, mature undo, and IME handling. Open question from Ken: how hard would it be to adjust Tiptap's source to span existing blocks, and what else would it bring. Evidence: `docs/features/20260928.01_free_writing/02_architecture_free_writing.md` AQ1 and the two spike results it cites.
+
 - [ ] @anyone 2026-09-28 LAHE-fixture-specs-one-lane -- **Specs that only inject records still run in all three browsers at every checkpoint.** They test no engine behavior, so two of the three runs buy nothing and cost battery. Raised by the free-writing testing review (T28), rejected there because the lane rule is repo-wide. Proposal: tag such specs and run them in Chromium only on gate:all; needs Ken's okay since it changes the checkpoint rule in CLAUDE.md.
 
 - [ ] @anyone 2026-09-28 LAHE-early-rebuild-no-reload -- **A rebuild that lands in the first few seconds after a page load or commit never reloads the page.** The page reloads itself only once it has seen a file time from the helper, and that takes a few seconds. A rebuild written before then becomes the page's starting point (`src/layer/sync.js` `noteTargetMtime`). Found while reproducing the free-writing formatting cases; a real agent is rarely that fast, so it is rare. Fix: take the first file time at page load, before any commit.

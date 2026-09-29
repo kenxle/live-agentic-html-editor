@@ -2,7 +2,7 @@
 
 ## Summary
 
-This plan builds free writing in four phases. One builder first lays the shared pieces: the record shape, the safe-tag check, and the agent's instructions. Three builders then work in parallel on typing, replay, and the helper and CLI. The orchestrator merges their work, has the rail cards built, runs one review with one fix round, and runs the full gates. Five design questions wait on Ken (PQ1 to PQ5 under Open Questions). Until he answers, the plan builds their defaults.
+This plan builds free writing in four phases. The work goes to five workstreams, one agent each. The kernel workstream first lays the shared pieces: the record shape, the safe-tag check, and the agent's instructions. Three workstreams then run in parallel: editing, replay, and helper. The orchestrator merges their work, has the rail workstream build the cards, runs one review with one fix round, and runs the full gates once at the end. Five design questions wait on Ken (PQ1 to PQ5 under Open Questions). Until he answers, the plan builds their defaults.
 
 The plan builds the architecture's recommended answers: Lahe's own editing code (AQ1, Lahe's code or Tiptap), always checking new blocks on a handled reply (AQ3), and bounding a run record's size (AQ4). [If Ken decides otherwise](#if-ken-decides-otherwise) names the tasks that change.
 
@@ -10,19 +10,19 @@ The plan builds the architecture's recommended answers: Lahe's own editing code 
 
 ```mermaid
 flowchart TD
-  P0["Phase 0: orchestrator<br/>base commit, other branches settled with Ken"] --> P1["Phase 1: shared kernel<br/>one builder, feat/free-writing"]
+  P0["Phase 0: orchestrator<br/>base commit, other branches settled with Ken"] --> P1["kernel workstream<br/>Tasks 1.1 to 1.6, feat/free-writing"]
   P1 --> R1{"orchestrator review<br/>gate:unit green"}
-  R1 --> A["2A layer editing<br/>free-writing-2a, tasks 2.1 to 2.4"]
-  R1 --> B["2B replay and page check<br/>free-writing-2b, tasks 2.5 to 2.7"]
-  R1 --> C["2C helper and CLI<br/>free-writing-2c, tasks 2.8 to 2.12"]
-  A --> M["Task 3.1: orchestrator merges 2C, 2B, 2A, then main<br/>into integration/free-writing"]
+  R1 --> A["editing workstream (2A)<br/>free-writing-2a, Tasks 2.1 to 2.4"]
+  R1 --> B["replay workstream (2B)<br/>free-writing-2b, Tasks 2.5 to 2.7"]
+  R1 --> C["helper workstream (2C)<br/>free-writing-2c, Tasks 2.8 to 2.12"]
+  A --> M["Task 3.1: orchestrator merges 2C, 2B, 2A, then main<br/>into integration/free-writing; phase-tier specs"]
   B --> M
   C --> M
-  M --> R3["Tasks 3.2 and 3.3: rail and proofreading card<br/>free-writing-rail, its own worktree"]
+  M --> R3["rail workstream<br/>free-writing-rail, Tasks 3.2 and 3.3"]
   M --> X["Task 3.4: tests that need all three branches<br/>(orchestrator)"]
-  R3 --> RV["Task 3.5: review of the integrated diff<br/>and one fix round"]
+  R3 --> RV["Task 3.5: Phase 7 review roster on the integrated diff<br/>and one fix round"]
   X --> RV
-  RV --> G["Task 3.6: skills install, dist rebuild, gate, gate:all,<br/>story walks, screenshots"]
+  RV --> G["Task 3.6: release tier: skills install, dist rebuild,<br/>gate, gate:all once, story walks, screenshots"]
 ```
 
 **Branches.**
@@ -32,6 +32,29 @@ flowchart TD
 - `integration/free-writing`: branched from `feat/free-writing`. Task 3.1 (merge) brings in the three Phase 2 branches and `main`.
 - `free-writing-rail`: Tasks 3.2 and 3.3 (the rail), in its own worktree, branched from `integration/free-writing` after Task 3.1. Merged back before Task 3.5 (review).
 - `free-writing-fix-<builder>`: Task 3.5's fix branches, off `integration/free-writing`.
+
+**Workstreams.** One agent per workstream, not per task. Tasks that share setup or a module stay together; the only splits are where separate ownership lets work run in parallel. The orchestrator owns Phase 0 and Tasks 3.1, 3.4, 3.5, and 3.6 itself.
+
+| Workstream | Tasks | Owns | Branch | Alerts the orchestrator when |
+|---|---|---|---|---|
+| kernel | 1.1 to 1.6 | every `src/shared/` file it edits, `src/layer/blocks.js`, the contract and every copy, `test/fixtures/free_writing/` | `feat/free-writing` | a shared shape (function signature, field, code) differs from the architecture; any change to `manifest.js` or `review_format.js` |
+| editing (2A) | 2.1 to 2.4 | the 2A row of the Phase 2 ownership table | `free-writing-2a` | it needs a change in `src/shared/`, `blocks.js`, `gestures.js`, or `replay.js`; a hotkey fails in one browser; the list of existing Enter specs whose result changes (before going on) |
+| replay (2B) | 2.5 to 2.7 | the 2B row | `free-writing-2b` | a fixture does not match what the architecture says typing produces; it needs `editing.js`, `anchor.js`, `sync.js`, or `src/shared/` |
+| helper (2C) | 2.8 to 2.12 | the 2C row | `free-writing-2c` | it needs `replay.js`, `editing.js`, or the contract text; a path rule for `lahe write` cannot be met as written |
+| rail | 3.2 and 3.3 | `tab_edits.js`, `tab_done.js`, `overlay.js`, `edits_tab.spec.js`, `agent_replies.spec.js`, `block_changes.test.js` | `free-writing-rail` | it needs a change in any Phase 2 file or `src/shared/`; a pinned word does not fit the card |
+
+If the editing agent runs long, the orchestrator may hand Tasks 2.2 to 2.4 to a fresh agent in the same worktree; that is still one workstream.
+
+**Builder prompts.** Each prompt names the workstream's task numbers and only the brief and architecture sections those tasks list under "Architecture sections", not whole documents. It also names the repo docs a builder reads first (`CLAUDE.md` "Running the loop"). Each agent writes `progress/phaseN_workstream_[shortname].md`, for example `progress/phase2_workstream_editing.md`. The file records what was built, tests added, targeted commands and their results, whether a full suite ran (it should not), duration, deviations, and `## Cleanup needed`.
+
+### Test scope
+
+Repo `CLAUDE.md` rules win where the forge's generic text differs. Here the builder's tests are `npm run gate:unit` plus named Playwright specs.
+
+- **Task tier (each workstream).** `gate:unit`, plus the named browser specs for its own change, by name. No full browser suite. No rerun of a suite whose code did not change just because a new agent or worktree started. Rerun only the spec the latest change touched.
+- **Phase tier (orchestrator, after a batch merges).** After Task 3.1, and again after the rail merges, run the affected browser specs once, by name: every new free-writing spec plus the existing specs on 2A's agreed Enter list and the old-record specs. Per `st-merge`, also rerun a file's tests after any merge where both sides changed that file, clean merges included.
+- **Release tier (orchestrator, Task 3.6).** Only after implementation and every review fix are integrated: dist rebuild, `npm run gate`, `npm run gate:all`, once each. Readiness reuses that result if no code changed after it. Any code change after it means another full run. Each fix in between gets its targeted regression test.
+- **Before a large batch of tests,** the writer maps each test to a behavior or acceptance line and checks for duplicates. There is no raw cap on the test count.
 
 **Who owns the joins between builders.** The orchestrator owns every merge and every test that needs more than one branch.
 
@@ -129,7 +152,7 @@ One spelling each, used exactly in every phase. Words in braces are filled in by
 | Card note, placed elsewhere (`REPLAY_RUN_PLACED_ELSEWHERE`) | "'{first words}' is already further down the page, so Lahe did not add it again." |
 | Card, helper refused the event (`RUN_EVENT_REFUSED`) | "The helper refused this edit, so the agent has not seen it. Your words are still on this page." |
 | Agent note, wrong tag (`PAGE_CHECK_TAG_NOTE`) | "Reopened by the page check: a block landed with a different tag from the one in new_blocks. Give it that tag in the source, or reply not_handled saying why." |
-| Proofreading buttons (PQ5 default: the button names) | "Use the fixes" posts "Use the fixes you listed. Change nothing else." "Keep my words" posts "Keep my words as written. No changes." |
+| Proofreading buttons (PQ5 default: the button names) | "Use the fixes" posts "Use the fixes you listed. Change nothing else." "Keep mine" posts "Keep mine as written. No changes." |
 | Card after either answer | "Waiting on the agent" |
 | Empty rail, both tabs, page with no content blocks | "Nothing written yet" / "Start typing. Your notes go to {file}." / "Each time you stop writing, everything you wrote in that sitting becomes one card here, and the agent places it in the file." / "The agent only places your words. It organizes the notes when you ask it to." On a page with no marked file-name title, the second line is "Start typing." |
 
@@ -141,7 +164,7 @@ One spelling each, used exactly in every phase. Words in braces are filled in by
   - PQ1: a blank notes page opens ready to type
   - PQ2: the bar says "Editing" for every edit
   - PQ4: after a reviewer's reload, the session does not reopen on its own
-  - PQ5: the proofreading buttons read "Use the fixes" and "Keep my words"
+  - PQ5: the proofreading buttons read "Use the fixes" and "Keep mine"
 
 ## Phase 0: Before any builder starts
 
@@ -512,7 +535,7 @@ Architecture sections: Undo inside a session, Undo of a committed record, The ed
   - a repaint that replaces the parent keeps typing working
 - `protected_region.md` shows the run.
 
-**2A's hand-off.** Each 2A task ends with a commit and a short report. If the first agent runs long, the orchestrator may send Tasks 2.2 to 2.4 (block types, empty space, undo) to a fresh agent in the same worktree. Before handoff, 2A runs its six spec files once each in Firefox and WebKit, by name.
+**2A's hand-off.** Each 2A task ends with a commit and a short report. If the first agent runs long, the orchestrator may send Tasks 2.2 to 2.4 (block types, empty space, undo) to a fresh agent in the same worktree, still as the editing workstream. Before handoff, 2A runs its six spec files once each in Firefox and WebKit, by name.
 
 **Don't touch (2.1 to 2.4):** `replay.js`, `sync.js`, anything in `src/service/` or `src/cli/`.
 
@@ -665,8 +688,9 @@ Led by the orchestrator. Tasks 3.2 and 3.3 (the rail) go to one builder so the r
 ### Task 3.1: Merge the three branches
 
 **Spec:** The orchestrator merges 2C, then 2B, then 2A into `integration/free-writing`, using `st-merge`, then merges `main` in once. It clears the `planned` flag on `write.js` in `manifest.js` and runs `gate:unit`.
+Then it runs the phase-tier specs once (see Test scope).
 **Files:** `src/shared/manifest.js`, merge commits only.
-**Acceptance:** `gate:unit` is green on the integration branch. No file shows changes from two builders. Every conflict and its resolution, including those from `main`, is on the progress page.
+**Acceptance:** `gate:unit` is green on the integration branch, and the phase-tier specs pass once. No file shows changes from two builders. Every conflict and its resolution, including those from `main`, is on the progress page.
 
 ### Task 3.2: The edits tab and the card show new blocks
 
@@ -695,7 +719,7 @@ Screenshots, light and dark:
 
 **Spec:** On `free-writing-rail`. Only a `question` reply marked `proofread` shows the two buttons, because its answer is always one of two. The card keeps today's question treatment and its follow-up box. The buttons use the `cardact` register at equal weight, as on the conflict card.
 - "Use the fixes" calls `record.applySuggestions`. The record gets a new revision with the fixed words, the page shows them, and the button posts its pinned text. If `applySuggestions` refuses, the button is not shown, and the reviewer answers in the follow-up box.
-- "Keep my words" posts its pinned text.
+- "Keep mine" posts its pinned text.
 - The card shows "Waiting on the agent" until the agent replies. It never says the fixes were applied before then.
 
 Architecture sections: The proofreading reply. Brief R11 (proofreading after a long hand-written block).
@@ -703,10 +727,10 @@ Architecture sections: The proofreading reply. Brief R11 (proofreading after a l
 **Acceptance:** `agent_replies.spec.js`:
 - a proofread reply shows both buttons; a placement question on a run record shows none
 - "Use the fixes" leaves the record at the next revision with the fixed words, the thread shows the pinned text, and the card waits
-- "Keep my words" posts its pinned text, and the card waits
+- "Keep mine" posts its pinned text, and the card waits
 - a proofread reply whose suggestion cannot apply shows no "Use the fixes" button
 
-Screenshots, light and dark: the question card (wireframe `06b-question`), and the card after each answer. The orchestrator merges `free-writing-rail` into `integration/free-writing` after this task.
+Screenshots, light and dark: the question card (wireframe `06b-question`), and the card after each answer. The orchestrator merges `free-writing-rail` into `integration/free-writing` after this task and runs the rail's specs plus any spec for a file both sides changed.
 
 ### Task 3.4: Tests that need all three branches
 
@@ -731,7 +755,7 @@ Screenshots, light and dark: the question card (wireframe `06b-question`), and t
 - **Rebuild mid-sitting:** `sync.status().reloadPending` is true while the sitting is open, the caret and text stay, and after commit a main-frame navigation brings the rebuilt content.
 - **Handled check:** a real captured run where the agent replies handled and writes nothing is held open. A real run whose words the agent wrote as raw HTML is held open. Two real runs where the agent places one and answers handled on both: the skipped one is held open.
 - **Notes page:** three sittings on an empty `lahe write` page before any placement become one record, placed at the top of the file, every block shown once. A sitting added after revision 1 is placed as revision 2, and every block still shows once.
-- **Proofreading:** a run over 150 words, placed, with a proofread reply. After "Use the fixes" the agent puts the fixes in the source and replies handled. The item is not held open or reopened after two reloads, and the original sentence is gone. The "Keep my words" twin passes too.
+- **Proofreading:** a run over 150 words, placed, with a proofread reply. After "Use the fixes" the agent puts the fixes in the source and replies handled. The item is not held open or reopened after two reloads, and the original sentence is gone. The "Keep mine" twin passes too.
 - **Old agents:** the old-contract agent, in HTML and in Markdown. No block shows twice, and the item is reopened or flagged, never quietly handled.
 
 `free_writing_r14.spec.js`, typed for real:
@@ -741,12 +765,21 @@ Screenshots, light and dark: the question card (wireframe `06b-question`), and t
 
 ### Task 3.5: Review of the integrated diff, and one fix round
 
-**Spec:** The orchestrator runs feature-forge's review set on the diff of `integration/free-writing` against the recorded base. It includes the code lead and security, because serving and paths change (`lahe write`), along with the helper's append path and the page-write allowlist.
+**Spec:** The orchestrator runs feature-forge's Phase 7 roster on the diff of `integration/free-writing` against the recorded base, in parallel and in the background:
+- `feature-dev:code-reviewer` on the integrated diff
+- `review-security`, its second run, because serving and paths change (`lahe write`), along with the helper's append path and the page-write allowlist
+- `review-code-lead`, its second run
+- `review-testing` on the implemented tests
+- `codex review --base <base>`, if codex is available; skipped with a note otherwise
+- `review-adversary` last, handed every other finding
+
+Then:
 - Each finding names its test.
 - A fix goes to the original owner, as a `free-writing-fix-<builder>` branch off `integration/free-writing`, with the test written red, then green.
 - A Task 3.4 test that failed follows the same path. The orchestrator owns those failures and sends the fix builder.
 - The orchestrator merges each fix and checks its test exists and passes.
-- One fix round. A second review only when a fix is itself risky.
+- Each fix runs its targeted regression test, not the full suite.
+- One fix round, per repo `CLAUDE.md`. A second review only when a fix is itself risky.
 
 **Files:** fix branches only, plus the progress page.
 **Acceptance:** every finding has a disposition on the progress page, and every fix's named test exists and passes.
@@ -768,6 +801,8 @@ Screenshots, light and dark: the question card (wireframe `06b-question`), and t
 7. It merges `integration/free-writing` into `feat/free-writing`. It pushes only after it has read "0 failed", as its own step. The pull request opens from `feat/free-writing`.
 
 **Files:** `dist/lahe-layer.js`, `docs/features/20260928.01_free_writing/04_progress_free_writing.md`.
+If a walk leads to a code change, steps 2 to 4 run again after the fix.
+
 **Acceptance:** Both gates show 0 failed in all three lanes. Each user story has a walk note and a screenshot on the progress page. Changes from plan lists every deviation.
 
 **Phase test:** Task 3.6's gates and walks, and the Acceptance Criteria below, each marked green by an evaluator who did not build it.
@@ -799,6 +834,17 @@ Screenshots, light and dark: the question card (wireframe `06b-question`), and t
 
 ## Open Questions
 
+**Ken's decisions at the review gate (2026-09-29):**
+- **AQ1 (Lahe's code or Tiptap):** Lahe's own code for now. Tiptap integration is discussed after this ships (board row `LAHE-tiptap-later`).
+- **AQ3 (always check new blocks on a handled reply):** yes.
+- **AQ4 (bounding a run record's size):** yes, the recommendation: old revisions keep words only, and the bar warns before a sitting is too big to send.
+- **PQ1 (blank notes page opens ready to type):** yes.
+- **PQ2 (the bar says "Editing"):** yes.
+- **PQ3 (no proofreading on notes):** yes, try it.
+- **PQ4 (what a reload does mid-writing):** the default stands.
+- **PQ5 (button names):** "Use the fixes" and "Keep mine". Keep mine matches the conflict card on purpose; the shared word is fine.
+
+
 ::: callout-question
 **PQ1 (Ken):** Does a blank notes page open ready to type? **Default: yes.** The page opens with a session in an empty paragraph after the title, and the rail says "Start typing." The approved wireframe has the reviewer click "+ Write here" first, which a keyboard user cannot do. If Ken keeps the wireframe, Task 2.3 (empty space) shows the line all the time on an empty page, and the rail's line becomes "Click + Write here to start."
 :::
@@ -822,12 +868,14 @@ The approved wireframe (`b3-reloaded`) shows the session still open after a relo
 :::
 
 ::: callout-question
-**PQ5 (Ken):** Rename the wireframe's "Yes" and "Keep mine" to "Use the fixes" and "Keep my words"? **Default: yes.** "Keep mine" already means something else on the conflict card.
+**PQ5 (Ken):** Rename the wireframe's "Yes" to "Use the fixes" and keep "Keep mine"? **Decided: yes.**
 :::
 
 AQ1 (Lahe's code or Tiptap), AQ3 (always check new blocks on a handled reply), and AQ4 (bounding a run record's size) stay open in the [architecture](02_architecture_free_writing.html#open-questions).
 
 ## Test List
+
+Each line below is an index into task Acceptance lines, not an extra test. Where a Phase 2 case and a Task 3.4 case look alike (the skipped run, raw HTML, the R14 cases), they are kept on purpose: Phase 2 tests fixtures, Task 3.4 tests real capture read back from `review.json`.
 
 ::: callout-req
 **Kernel (Phase 1)**
@@ -896,8 +944,7 @@ AQ1 (Lahe's code or Tiptap), AQ3 (always check new blocks on a handled reply), a
 - [ ] A refused run event is posted once and shown on the item.
 - [ ] The handled check passes a correct run across a section label, and escaped special characters.
 - [ ] The handled check holds open a missing block, whether or not the source was written.
-- [ ] The handled check holds open a run the agent skipped while it placed another (AQ3, always check new blocks on a handled reply).
-- [ ] The handled check holds open words written as raw HTML (AQ3, always check new blocks on a handled reply).
+- [ ] The handled check holds open a run the agent skipped while it placed another, and words written as raw HTML (AQ3, always check new blocks on a handled reply).
 - [ ] The handled check holds open a bold edit the agent never made (third R14 case, bold two words).
 - [ ] `lahe write` creates a new file, and reopens an existing one unchanged.
 - [ ] `lahe write` refuses a missing parent, a non-Markdown name, a directory, and every symlink shape the architecture lists.
@@ -922,7 +969,7 @@ AQ1 (Lahe's code or Tiptap), AQ3 (always check new blocks on a handled reply), a
 - [ ] A crash mid-sitting: the next load commits the whole run.
 - [ ] Agent rebuild mid-sitting: a reload is pending, the caret stays, and the reload happens after commit.
 - [ ] Three sittings on a `lahe write` page become one record at the top of the file. A later revision shows every block once.
-- [ ] Proofreading: "Use the fixes" ends handled, not reopened, no duplicate. "Keep my words" ends handled.
+- [ ] Proofreading: "Use the fixes" ends handled, not reopened, no duplicate. "Keep mine" ends handled.
 - [ ] An old-contract agent never shows a block twice and never quietly closes the item.
 - [ ] R14 header case on a real Markdown review: the line shows once, below the `sheet-head`, by click and by Esc.
 - [ ] R14 lone paragraph: bold survives, and a left-out bold paragraph comes back with its bold.
@@ -932,7 +979,7 @@ AQ1 (Lahe's code or Tiptap), AQ3 (always check new blocks on a handled reply), a
 ## Acceptance Criteria
 
 ::: callout-metric
-- [ ] Full test suite green, not just the new tests.
+- [ ] Full test suite green, not just the new tests, run once at the release tier (Task 3.6).
 - [ ] Design and lint gates green (`npm run gate` and `npm run gate:all`).
 - [ ] Every user story in the brief walked end to end in the browser, on the running app.
 - [ ] Nothing punted: no TODOs, no stubbed tests, no "out of scope" that was in scope.
@@ -1106,6 +1153,12 @@ AQ1 (Lahe's code or Tiptap), AQ3 (always check new blocks on a handled reply), a
 | DR26 | Ctrl-Alt digit hotkeys on Windows | Accepted | Merged with CL17 |
 | DR27 | Motion is not specified | Accepted | Line fade, reduced motion, no frame resize animation |
 | DR28 | Narrow windows and the rail | Accepted | Menu opens upward; bar drops its hint first |
+
+## Forge rule update, 2026-09-29
+
+| # | Change | Where |
+|---|--------|-------|
+| FR1 | Tasks grouped into five workstreams (kernel, editing, replay, helper, rail), one agent each, with ownership, branch, and alerts; progress files renamed `phaseN_workstream_[shortname].md` and record tests and runs; builder prompts name only the listed sections; test scope in three tiers (phase-tier specs added after Task 3.1 and the rail merge, full gates only in Task 3.6, rerun after any later code change); Task 3.5 uses the Phase 7 roster with one fix round; the two AQ3 Test List lines merged | How the work is dispatched, Test scope, Tasks 3.1, 3.3, 3.5, 3.6, Test List, Acceptance Criteria |
 
 ## Main Drift, 2026-09-28
 

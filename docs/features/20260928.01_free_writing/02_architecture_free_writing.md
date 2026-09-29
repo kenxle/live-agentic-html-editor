@@ -385,7 +385,7 @@ Brief R11 (proofreading after a long hand-written block) lives in the contract.
 - **The reply.** When the item carries `proofread: true`, the agent places the run, rebuilds, and replies `question`, marked as a proofread, with a list of `{block, from, to}` suggestions (`block` is the index in `new_blocks`). The reply says the words were placed as written. `lahe reply` refuses a suggestion whose `from` is not found exactly once in that block's words.
 - **The card.** Only a proofread reply shows two buttons. A placement question ("Should this go under Intro?") shows today's question card.
 - **"Use the fixes"** applies the suggestions as the reviewer's own reword of the same record, at a new revision. Every check then looks for the fixed words, and replay rewrites the placed blocks in place (branch three). The button also posts a thread reply, and the agent puts the fixes into the source.
-- **"Keep my words"** posts a thread reply. The agent changes nothing and replies handled.
+- **"Keep mine"** posts a thread reply. The agent changes nothing and replies handled.
 
 The button names wait on Ken (plan PQ5, renaming the wireframe's "Yes" and "Keep mine"). The plan pins both button texts and the text each posts.
 
@@ -500,6 +500,17 @@ The plan's Test List holds every test. At this level:
 - **Contract:** the copies in `review_format.test.js` and `docs/CONTRACTS.md` match.
 
 ## Open Questions
+
+**Ken's decisions at the review gate (2026-09-29):**
+- **AQ1 (Lahe's code or Tiptap):** Lahe's own code for now. Tiptap integration is discussed after this ships (board row `LAHE-tiptap-later`).
+- **AQ3 (always check new blocks on a handled reply):** yes.
+- **AQ4 (bounding a run record's size):** yes, the recommendation: old revisions keep words only, and the bar warns before a sitting is too big to send.
+- **PQ1 (blank notes page opens ready to type):** yes.
+- **PQ2 (the bar says "Editing"):** yes.
+- **PQ3 (no proofreading on notes):** yes, try it.
+- **PQ4 (what a reload does mid-writing):** the default stands.
+- **PQ5 (button names):** "Use the fixes" and "Keep mine". Keep mine matches the conflict card on purpose; the shared word is fine.
+
 
 ::: callout-question
 **AQ1 (Ken):** Lahe's own code or Tiptap? **Recommendation: Lahe's own code.**
