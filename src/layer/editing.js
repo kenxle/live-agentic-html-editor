@@ -4508,7 +4508,14 @@
       // one place and then moves it a frame later: the reviewer sees it jump,
       // and anything aiming at a button can miss it.
       var viewport = win.innerHeight || 768;
-      var roomAbove = rect.top - pad - 8;
+      // An untouched anchor sits outside the frame, right above it: the bar
+      // goes above the anchor too, so it never covers the words the reviewer
+      // is writing after.
+      var barRect = rect;
+      if (isRun() && !session.container && framedElements().indexOf(session.anchor) === -1) {
+        barRect = unionRect([session.anchor].concat(framedElements())) || rect;
+      }
+      var roomAbove = barRect.top - pad - 8;
       var left = Math.round(Math.max(8, rect.left - pad));
       barNode.style.left = left + "px";
       if (roomAbove >= 44) {

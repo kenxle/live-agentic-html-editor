@@ -203,19 +203,9 @@ test.describe("free writing: the editing host", () => {
       );
       await page.keyboard.press("ControlOrMeta+KeyV");
     } else {
-      // Firefox and WebKit: Playwright cannot write a rich clipboard there, so
-      // the paste event itself stands in for Meta+V, carrying both types.
-      await page.evaluate(
-        ([h, t]) => {
-          const dt = new DataTransfer();
-          dt.setData("text/html", h);
-          dt.setData("text/plain", t);
-          const target = window.getSelection().focusNode;
-          const el = target.nodeType === 1 ? target : target.parentElement;
-          el.dispatchEvent(new ClipboardEvent("paste", { bubbles: true, cancelable: true, clipboardData: dt }));
-        },
-        [html, text]
-      );
+      // Firefox and WebKit: Playwright cannot write a rich clipboard there.
+      // See fw.pasteText for what stands in for Meta+V in each.
+      await fw.pasteText(page, text, html);
     }
     await fw.commitByEsc(page);
     const item = await fw.onlyEdit(page);

@@ -126,6 +126,37 @@ async function caretToEndOfSession(page) {
   });
 }
 
+/**
+ * What stands in for Meta+V where Playwright cannot write a rich clipboard
+ * (Firefox and WebKit): a paste event carrying both types. Firefox hands a
+ * synthetic paste event an empty clipboard, so there the stand-in is the
+ * beforeinput insertFromPaste the real paste would send, carrying the same
+ * DataTransfer.
+ */
+async function pasteText(page, text, html) {
+  await page.evaluate(
+    ([t, h]) => {
+      const make = () => {
+        const dt = new DataTransfer();
+        if (h) dt.setData("text/html", h);
+        dt.setData("text/plain", t);
+        return dt;
+      };
+      const node = window.getSelection().focusNode;
+      const el = node.nodeType === 1 ? node : node.parentElement;
+      const ev = new ClipboardEvent("paste", { bubbles: true, cancelable: true, clipboardData: make() });
+      if (ev.clipboardData && ev.clipboardData.getData("text/plain") === t) {
+        el.dispatchEvent(ev);
+        return;
+      }
+      el.dispatchEvent(
+        new InputEvent("beforeinput", { bubbles: true, cancelable: true, inputType: "insertFromPaste", dataTransfer: make() })
+      );
+    },
+    [text, html || null]
+  );
+}
+
 function items(page) {
   return page.evaluate(() => window.__lahe.items());
 }
@@ -176,5 +207,6 @@ module.exports = {
   onlyEdit,
   runShape,
   RUN_FIELDS,
-  outsideSnapshot
+  outsideSnapshot,
+  pasteText
 };

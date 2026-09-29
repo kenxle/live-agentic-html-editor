@@ -49,6 +49,9 @@ function sessionTags(page) {
 }
 
 async function pickFromMenu(page, tag) {
+  // The bar follows its frame on every animation frame; aim at it once it has
+  // settled where the frame is now, not where it was a frame ago.
+  await page.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))));
   const b = await bar(page);
   await page.mouse.click(b.typeRect.cx, b.typeRect.cy);
   const open = await bar(page);
@@ -241,8 +244,13 @@ test.describe("free writing: block types", () => {
     expect(await page.evaluate(() => document.querySelectorAll("#list li").length)).toBe(3);
 
     await fw.caretAt(page, "#list li:last-child", 5);
-    b = await bar(page);
-    expect(b.rows.find((r) => r.tag === "p").disabled).toBe(false);
+    // The bar follows the caret on the next frame after selectionchange.
+    await pollPage(
+      page,
+      () => !window.__lahe.handle.editing.barInfo().rows.find((r) => r.tag === "p").disabled,
+      undefined,
+      { message: "Paragraph to be on for the last item" }
+    );
     await page.keyboard.press(CHORD.p);
     expect(await sessionTags(page)).toEqual(["ol", "p"]);
     await fw.commitByEsc(page);
@@ -255,15 +263,7 @@ test.describe("free writing: block types", () => {
   test("at 90 percent the bar warns; at the ceiling one more block is refused and the record is never over it", async ({ page }) => {
     await fw.openFixture(page, server, "blog.html");
     await fw.openEdit(page, "#p1");
-    const paste = (n) =>
-      page.evaluate((count) => {
-        const text = Array.from({ length: count }, (_, i) => "Block " + i).join("\n\n");
-        const dt = new DataTransfer();
-        dt.setData("text/plain", text);
-        const node = window.getSelection().focusNode;
-        const el = node.nodeType === 1 ? node : node.parentElement;
-        el.dispatchEvent(new ClipboardEvent("paste", { bubbles: true, cancelable: true, clipboardData: dt }));
-      }, n);
+    const paste = (n) => fw.pasteText(page, Array.from({ length: n }, (_, i) => "Block " + i).join("\n\n"));
     await page.keyboard.press("Enter");
     await paste(360);
     let b = await bar(page);
