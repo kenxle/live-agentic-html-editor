@@ -1298,6 +1298,12 @@
         host: function () {
           return session ? session.host : null;
         },
+        // A repaint that rebuilt the anchor without an attribute protection
+        // can find it by: the anchor engine finds it by its words.
+        refind: function () {
+          var own = session ? store.readItem(requireReview(), session.itemId) : null;
+          return own ? elementFor(own) : null;
+        },
         container: container,
         placement: placement
       });
