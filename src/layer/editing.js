@@ -1649,7 +1649,7 @@
         insertAfterBlock(block, tail, isFromAnchor(block));
         setCaret(tail, 0);
       });
-      markAllDirty();
+      markDirtyAt(unit);
       session.ceiling = ceilingState(captureRunFields());
     }
 
