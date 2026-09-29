@@ -4,7 +4,7 @@
 
 - **Phase 8, Ship.** PR #19 is open (branch `feat/lahe_library`, worktree `.claude/worktrees/lahe-library`). Ken will not approve until he has seen the real UI.
 - **Release run** on the branch with main merged at 32fe22b: 1886 unit, 1326 browser passed; 2 Firefox failures, both tests from main (board rows LAHE-oversized-image-firefox, LAHE-window-goodbye-firefox-flake).
-- **Preview fixes merged** (task/lib-watch, ten items from Ken's preview comments plus one fix round). gate:all run 4: 1938 unit pass, 0 fail; browser 1335 passed, 2 failed, both Firefox: oversized_records (red on main too) and quiet_tab_polling:276 (passed 3 of 3 alone, boarded under LAHE-window-goodbye-firefox-flake). Pushed at 6528221. Preview helper on 7917 restarted on this code. Waiting on Ken's second look.
+- **Preview fixes merged** (task/lib-watch, ten items from Ken's preview comments plus one fix round). gate:all run 4: 1938 unit pass, 0 fail; browser 1335 passed, 2 failed, both Firefox: oversized_records (red on main too) and quiet_tab_polling:276 (passed 3 of 3 alone, boarded under LAHE-window-goodbye-firefox-flake). Pushed at 6528221. Preview helper on 7917 restarted on this code. Waiting on Ken's second look. **Open comment** itm_ef0e77b0aa8d6818d6e9b8e9: show each row's path from the project root, not shortened in the middle (task/lib-watch builder af8740467f0b16881 has the context). Session monitor is NOT armed; re-arm it first.
 - **LAHE session** `s_5939bc103a1e623e` ("lahe file index"), taken back with Ken's OK. Monitor armed.
 
 ## Preview Ken is reviewing
