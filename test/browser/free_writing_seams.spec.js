@@ -311,9 +311,6 @@ test.describe("free writing seams", () => {
     // record would still show the right words on the page; read the record and
     // the source themselves.
     const recorded = reviewJsonItem(world, ref.id);
-    // The projection's text is the block's words with < > & as entities (see
-    // the progress page: whether the contract should say so is F3's call).
-    // Read back through those entities it must be exactly what was typed.
     const unescaped = recorded.new_blocks[0].text.replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&amp;/g, "&");
     expect(unescaped, "the record holds the typed text").toBe(typed);
     expect(recorded.new_blocks[0].html, "and its html escapes only < > &").toBe(
@@ -743,10 +740,6 @@ test.describe("free writing seams", () => {
     await expectQuietlyHandled(page, world, ref.id);
   });
 
-  // WAITING ON F1 (testing I8): editing.js hasContent() counts the front-matter
-  // block (<details class="frontmatter"><pre>) as page content, so a notes
-  // file holding only front matter never opens ready to type. With hasContent
-  // ignoring details.frontmatter this whole test passes (progress/phase7_fix_f4.md).
   test("notes page with front matter: the page opens ready to type, the blocks sit below the metadata once, and the source keeps its front matter byte for byte", async ({
     page
   }) => {

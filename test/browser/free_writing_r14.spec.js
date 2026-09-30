@@ -37,6 +37,7 @@ const INTRO_SECTION = "main > section:first-of-type";
 const INTRO_P = "main > section:first-of-type > p";
 const INTRO_H2 = "main > section:first-of-type h2";
 const P_BOLD = "First new paragraph has a bold word in it.";
+const P_ITALIC = "First new paragraph has an italic word in it.";
 const P_PLAIN = "Second new paragraph is plain.";
 const NEW_LINE = "A new line";
 
@@ -119,13 +120,21 @@ async function openEdit(page, selector) {
 }
 
 async function pressBold(page) {
-  const rect = await page.evaluate(() => {
-    const node = window.__lahe.handle.editing.buttonNode("bold");
+  await pressButton(page, "bold");
+}
+
+async function pressItalic(page) {
+  await pressButton(page, "italic");
+}
+
+async function pressButton(page, name) {
+  const rect = await page.evaluate((which) => {
+    const node = window.__lahe.handle.editing.buttonNode(which);
     if (!node) return null;
     const r = node.getBoundingClientRect();
     return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
-  });
-  expect(rect, "the edit frame shows its B button").toBeTruthy();
+  }, name);
+  expect(rect, "the edit frame shows its " + name + " button").toBeTruthy();
   await page.mouse.click(rect.x, rect.y);
 }
 
@@ -200,6 +209,34 @@ test.describe("brief R14: bold and italic edits survive the rebuild", () => {
       timeoutMs: 5000
     });
     expect(await countOnPage(page, P_BOLD)).toBe(1);
+    expect(await countOnPage(page, P_PLAIN)).toBe(1);
+    await heldAfterHandled(world, it);
+  });
+
+  test("a lone paragraph: italic in the FIRST new paragraph, left out by the agent, comes back italic", async ({ page }, testInfo) => {
+    world = await makeWorld(testInfo, [ORIGINAL]);
+    await page.goto(world.open);
+    await booted(page);
+    await openEdit(page, INTRO_P);
+    await selectAll(page, INTRO_P);
+    await page.keyboard.type(P_ITALIC, { delay: 2 });
+    await selectPhrase(page, INTRO_P, "italic");
+    await pressItalic(page);
+    await caret(page, INTRO_P, "end");
+    await page.keyboard.press("Enter");
+    await page.keyboard.type(P_PLAIN, { delay: 2 });
+    await commitByEsc(page);
+    const it = await committedEdit(page);
+    await helperHas(world, it.id, it.rev);
+
+    // The agent places only the plain paragraph.
+    await agentWrites(page, world, [ORIGINAL, P_PLAIN]);
+
+    await pollPage(page, (sel) => !!document.querySelector(sel + " em"), INTRO_SECTION, {
+      message: "the italic paragraph to be written back with its italic",
+      timeoutMs: 5000
+    });
+    expect(await countOnPage(page, P_ITALIC)).toBe(1);
     expect(await countOnPage(page, P_PLAIN)).toBe(1);
     await heldAfterHandled(world, it);
   });

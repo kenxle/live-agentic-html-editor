@@ -151,7 +151,7 @@ One spelling each, used exactly in every phase. Words in braces are filled in by
 | Card note, wrong tag (`REPLAY_RUN_WRONG_TAG`) | "The agent placed '{first words}' as a {type}. You wrote a {type}, so Lahe sent it back." |
 | Card note, placed elsewhere (`REPLAY_RUN_PLACED_ELSEWHERE`) | "'{first words}' is already further down the page, so Lahe did not add it again." |
 | Card, helper refused the event (`RUN_EVENT_REFUSED`) | "The helper refused this edit, so the agent has not seen it. Your words are still on this page." |
-| Agent note, wrong tag (`PAGE_CHECK_TAG_NOTE`) | "Reopened by the page check: a block landed with a different tag from the one in new_blocks. Give it that tag in the source, or reply not_handled saying why." |
+| Agent note, wrong tag (`PAGE_CHECK_TAG_NOTE`) | "Reopened by the page check: a block landed with a different tag from the one in new_blocks or anchor_tag_after. Give it that tag in the source, or reply not_handled saying why." |
 | Proofreading buttons (PQ5 default: the button names) | "Use the fixes" posts "Use the fixes you listed. Change nothing else." "Keep mine" posts "Keep mine as written. No changes." |
 | Card after either answer | "Waiting on the agent" |
 | Empty rail, both tabs, page with no content blocks | "Nothing written yet" / "Start typing. Your notes go to {file}." / "Each time you stop writing, everything you wrote in that sitting becomes one card here, and the agent places it in the file." / "The agent only places your words. It organizes the notes when you ask it to." On a page with no marked file-name title, the second line is "Start typing." |
@@ -970,7 +970,7 @@ Each line below is an index into task Acceptance lines, not an extra test. Where
 - [ ] Agent rebuild mid-sitting: a reload is pending, the caret stays, and the reload happens after commit.
 - [ ] Three sittings on a `lahe write` page become one record at the top of the file. A later revision shows every block once.
 - [ ] Proofreading: "Use the fixes" ends handled, not reopened, no duplicate. "Keep mine" ends handled.
-- [ ] An old-contract agent never shows a block twice and never quietly closes the item.
+- [ ] An old-contract agent never shows a block twice. Nothing wrong is handled silently: the item is reopened or flagged, or every block is on the page with its tag and bold. (On HTML the old agent's `after_html` parses into correct blocks, so handled is the right result there.)
 - [ ] R14 header case on a real Markdown review: the line shows once, below the `sheet-head`, by click and by Esc.
 - [ ] R14 lone paragraph: bold survives, and a left-out bold paragraph comes back with its bold.
 - [ ] R14 bold two words: survives with a correct agent; held open with an agent that changes nothing.
