@@ -655,11 +655,22 @@
    * record.applySuggestions refuses one of them: then the button is not shown
    * and the reviewer answers in the follow-up box.
    */
+  // A fix aimed at a from_anchor block would rewrite the page's own words, not
+  // the reviewer's. record.applySuggestions refuses those too (F3); the card
+  // does not offer the button for them either way.
+  function touchesAnchorTail(item, suggestions) {
+    var blocks = item[record.FIELD.NEW_BLOCKS] || [];
+    return suggestions.some(function (sg) {
+      var b = sg && blocks[sg.block];
+      return !!b && b.from_anchor === true;
+    });
+  }
+
   function proofreadOffer(item) {
     if (!isProofreadQuestion(item)) return null;
     var suggestions = item[record.FIELD.REPLY].suggestions;
     var useFixes = null;
-    if (Array.isArray(suggestions) && suggestions.length) {
+    if (Array.isArray(suggestions) && suggestions.length && !touchesAnchorTail(item, suggestions)) {
       var fixed = record.applySuggestions(item, suggestions);
       if (fixed && !fixed.code) useFixes = answerOnto(item, fixed, PROOFREAD.USE_TEXT);
     }

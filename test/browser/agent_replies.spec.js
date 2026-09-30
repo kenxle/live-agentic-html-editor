@@ -1843,4 +1843,135 @@ test.describe("free writing: the proofreading question", () => {
       await app.close();
     }
   });
+
+  /** The fixes as the card draws them: the row's block label, its struck-out words and its new words. */
+  function drawnFixes(page, id) {
+    return page.evaluate((itemId) => {
+      const rail = window.__lahe.rail;
+      rail.collapse(false);
+      rail.selectTab(rail.getCard(itemId).pane);
+      const card = rail.cardNode(itemId);
+      return Array.from(card.querySelectorAll(".lahe-ask [data-lahe-fix]")).map((row) => ({
+        where: row.querySelector(".lahe-fix-where").textContent,
+        from: row.querySelector("[data-lahe-fix-from]").textContent,
+        to: row.querySelector("[data-lahe-fix-to]").textContent,
+        shown: row.getClientRects().length > 0
+      }));
+    }, id);
+  }
+
+  test("the card lists every fix as from and to, in the order the agent gave them", async ({ page }) => {
+    const { app, helper, token } = await startBoth();
+    try {
+      await bootedPage(page, app, helper, token);
+      const run = await typeRunAfterLede(page);
+      await waitForItemInLog(helper, run.id);
+      await askProofread(helper, page, run, [
+        { block: 1, from: "place", to: "spot" },
+        { block: 0, from: "chat", to: "talk" }
+      ]);
+      const fixes = await drawnFixes(page, run.id);
+      expect(fixes).toHaveLength(2);
+      expect(fixes[0]).toMatchObject({ from: "place", to: "spot", shown: true });
+      expect(fixes[0].where).toContain("I lost my place every time");
+      expect(fixes[1]).toMatchObject({ from: "chat", to: "talk", shown: true });
+      expect(fixes[1].where).toContain("What the chat window cost me");
+    } finally {
+      await helper.kill9();
+      await app.close();
+    }
+  });
+
+  test("the fixes are drawn as text: markup in an agent's suggestion never becomes an element", async ({ page }) => {
+    const { app, helper, token } = await startBoth();
+    try {
+      await bootedPage(page, app, helper, token);
+      const run = await typeRunAfterLede(page);
+      await waitForItemInLog(helper, run.id);
+      const sneaky = "<img src=x onerror=\"window.__laheXss=1\">rewritten";
+      await askProofread(helper, page, run, [{ block: 1, from: "place", to: sneaky }]);
+      const fixes = await drawnFixes(page, run.id);
+      expect(fixes[0].to, "the markup shows as words").toBe(sneaky);
+      const inert = await page.evaluate((id) => ({
+        imgs: window.__lahe.rail.cardNode(id).querySelectorAll(".lahe-ask img").length,
+        xss: window.__laheXss === undefined
+      }), run.id);
+      expect(inert).toEqual({ imgs: 0, xss: true });
+    } finally {
+      await helper.kill9();
+      await app.close();
+    }
+  });
+
+  test("a fix aimed at the page's own words (a from_anchor block) shows no Use the fixes button", async ({ page }) => {
+    const { app, helper, token } = await startBoth();
+    try {
+      await bootedPage(page, app, helper, token);
+      await fw.openEdit(page, "p.lede", 20);
+      await page.keyboard.press("Enter");
+      await fw.caretToEndOfSession(page);
+      await page.keyboard.press("Enter");
+      await page.keyboard.type("A line I typed after the split.", { delay: 2 });
+      await fw.commitByEsc(page);
+      const run = (await itemsIn(page)).find((i) => Array.isArray(i.new_blocks) && i.new_blocks.length);
+      expect(run.new_blocks[0].from_anchor, "block 0 is the anchor's own tail").toBe(true);
+      await waitForItemInLog(helper, run.id);
+      const tailHtml = run.new_blocks[0].html;
+      const tailWord = tailHtml.split(" ").find((w) => w.length >= 3 && tailHtml.split(w).length === 2);
+      expect(tailWord, "a word that is in the tail exactly once").toBeTruthy();
+      // Precondition: record.applySuggestions alone would apply this fix, so
+      // the missing button below is the card's own guard and nothing else.
+      const applies = await page.evaluate(
+        ([r, w]) => !window.LAHE.record.applySuggestions(r, [{ block: 0, from: w, to: "REWRITTEN" }]).code,
+        [run, tailWord]
+      );
+      expect(applies, "the fix would apply if the card offered it").toBe(true);
+      await askProofread(helper, page, run, [{ block: 0, from: tailWord, to: "REWRITTEN" }]);
+      const buttons = await proofButtons(page, run.id);
+      expect(buttons.use, "the page's words are not the reviewer's to have rewritten by a button").toBe(null);
+      expect(buttons.keep).toBe("Keep mine");
+      expect((await drawnFixes(page, run.id))[0].to, "but the reviewer still sees what was proposed").toBe("REWRITTEN");
+    } finally {
+      await helper.kill9();
+      await app.close();
+    }
+  });
+
+  // WAITING ON F3 (code lead 21): the waiting state after a proofread answer is
+  // read off the note text, so a reviewer who types the pinned sentence into the
+  // follow-up box of an ordinary question gets the proofread treatment (the
+  // pending turn under the thread and the "Waiting on the agent" notice). F3 adds
+  // a marker on the turn; once it lands this passes.
+  test.fixme("typing the pinned sentence into an ordinary follow-up does not get the proofread treatment", async ({ page }) => {
+    const { app, helper, token } = await startBoth();
+    try {
+      await bootedPage(page, app, helper, token);
+      const run = await typeRunAfterLede(page);
+      await waitForItemInLog(helper, run.id);
+      appendReply(helper, "replies-claude.jsonl", {
+        item: run.id,
+        rev: run.rev,
+        status: "question",
+        agent: "claude",
+        text: "Should this go under the intro instead?"
+      });
+      await pollPage(page, (id) => !!window.__lahe.rail.cardNode(id).querySelector(".lahe-ask"), run.id, {
+        message: "the question to reach the card"
+      });
+      await page.evaluate((id) => {
+        const input = window.__lahe.handle.doneTab().followup(id).querySelector("textarea");
+        input.value = "Keep mine as written. No changes.";
+        input.dispatchEvent(new Event("input", { bubbles: true }));
+        input.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", metaKey: true, bubbles: true }));
+      }, run.id);
+      await pollPage(page, ([id, rev]) => window.__lahe.itemById(id).rev === rev + 1, [run.id, run.rev], {
+        message: "the follow-up to make the next revision"
+      });
+      const words = await cardWords(page, run.id);
+      expect(words.notice, "an ordinary follow-up is not a proofread answer").not.toBe("Waiting on the agent");
+    } finally {
+      await helper.kill9();
+      await app.close();
+    }
+  });
 });
