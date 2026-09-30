@@ -1309,6 +1309,7 @@
   // different tag from the one in new_blocks.
   var TAG_WRONG_NOTE = record.PAGE_CHECK_TAG_NOTE;
   var TAKEBACK_NOTE = record.PAGE_CHECK_TAKEBACK_NOTE;
+  var RUN_MISSING_NOTE = record.PAGE_CHECK_RUN_NOTE;
 
   // The backstop, independent of the stamp rule below. Two checks that both look
   // at the same item cannot reopen it twice inside this window, whatever they
@@ -1346,7 +1347,9 @@
   // The three things the check can find, and the sentence each one carries. A
   // caller that only wants a yes or no asks isRevertedHandledEdit; one that has
   // to write the note asks pageCheckNoteFor.
-  var CHECK_REASON = { REVERTED: "reverted", FORMATTING: "formatting", STAMP: "stamp", TAG: "tag", TAKEBACK: "takeback" };
+  // MISSING is a run's own: a block the reviewer wrote is not on the page.
+  // REVERTED stays for text that went back to what it was before the edit.
+  var CHECK_REASON = { REVERTED: "reverted", MISSING: "missing", FORMATTING: "formatting", STAMP: "stamp", TAG: "tag", TAKEBACK: "takeback" };
 
   /**
    * Why the page check would reopen this item, or null.
@@ -1405,6 +1408,7 @@
   function pageCheckNoteFor(item, pageText, options) {
     var reason = pageCheckReasonFor(item, pageText, options);
     if (reason === CHECK_REASON.REVERTED) return REVERTED_EDIT_NOTE;
+    if (reason === CHECK_REASON.MISSING) return RUN_MISSING_NOTE;
     if (reason === CHECK_REASON.FORMATTING) return FORMATTING_LOST_NOTE;
     if (reason === CHECK_REASON.STAMP) return STAMP_LOST_NOTE;
     if (reason === CHECK_REASON.TAG) return TAG_WRONG_NOTE;
@@ -1422,6 +1426,7 @@
   CHECK_NOTICES[STAMP_LOST_NOTE] = "The id for this element is not in the source. The item is open again.";
   CHECK_NOTICES[TAKEBACK_NOTE] = "Some of the blocks you took back are still on the page. The item is open again.";
   CHECK_NOTICES[TAG_WRONG_NOTE] = "A block in this change is on the page as a different type. The item is open again.";
+  CHECK_NOTICES[RUN_MISSING_NOTE] = "A block you wrote is not on the page as you wrote it. The item is open again.";
 
   /** The rail's line for a page-check note, defaulting to the revert one. */
   function pageCheckNoticeFor(note) {
@@ -2916,6 +2921,20 @@
   var TAKE_THEIRS_RUN_LABEL = "Take the page's, keep my new text";
   var RUN_CONFLICT_LINE = "Your {n} new blocks after this {type} are waiting on this choice. Either answer keeps them.";
   var RUN_CONFLICT_LINE_ONE = "Your 1 new block after this {type} is waiting on this choice. Either answer keeps it.";
+  // The same line once the blocks are on the page while the card waits
+  // (flow walk, Fail 3): the words say where they are, not that they wait.
+  var RUN_SHOWN_LINE = "Your {n} new blocks are on the page after this {type}. Either answer keeps them.";
+  var RUN_SHOWN_LINE_ONE = "Your 1 new block is on the page after this {type}. Either answer keeps it.";
+
+  // What the conflict card's note says on a run record, in place of the
+  // anchor conflict's "This region is neither what you edited nor what you
+  // changed it to" (flow walk, design problem 3). One line for each case.
+  //   the anchor   the page's anchor changed after the reviewer edited it
+  //   a new block  the page shows the reviewer's new block with words added
+  var RUN_ANCHOR_CONFLICT_NOTE =
+    "The page's {type} changed after you edited it, so Lahe did not write your version over it. Your new text is kept.";
+  var RUN_BLOCK_CLASH_NOTE =
+    "On the page, your new {type} has words you did not write. Lahe changed nothing. Pick the version that stands.";
 
   // How the card names a block's type: the block menu's names, lowercased.
   var BLOCK_TYPE_NAMES = {
@@ -3611,7 +3630,7 @@
     var id = item[record.FIELD.ID];
     var result = flagConflict(ctx, view, id, element, theirs, displaced);
     if (conflicts[id]) conflicts[id].run = true;
-    decorateRunConflict(ctx, id, item);
+    setConflictNote(ctx, id, RUN_ANCHOR_CONFLICT_NOTE.replace("{type}", record.anchorTypeName(item)), result);
     // The anchor waits on the reviewer's answer; their new blocks do not.
     // Either answer keeps them, so they stay on the page after the page's
     // anchor while the card waits (flow walk, Fail 3 and design problem 2).
@@ -3627,9 +3646,20 @@
         counters.regionsWritten += 1;
       }
     }
+    if (conflicts[id]) conflicts[id].shown = !clash;
+    decorateRunConflict(ctx, id, item);
     result.item = item;
     result.held = true;
     return result;
+  }
+
+  // The conflict badge with a run's own sentence in place of the anchor
+  // conflict's. Same code, so everything that clears the badge still does.
+  function setConflictNote(ctx, id, message, result) {
+    if (!failures || !result || result.branch !== BRANCH.CONTENT_CHANGED) return;
+    var f = failures.failure("REPLAY_NEITHER_MATCHES", { yours: result.yours, theirs: result.theirs });
+    f.message = message;
+    callCard(ctx, "setCardBadge", id, f);
   }
 
   // ---------------------------------------------------------------------------
@@ -3694,6 +3724,8 @@
       })
       .join("\n\n");
     var result = flagConflict(ctx, item, id, element, leafText(clash.element), false, yours);
+    var first = runList(item, RUN_FIELD.NEW_BLOCKS)[clash.index];
+    setConflictNote(ctx, id, RUN_BLOCK_CLASH_NOTE.replace("{type}", blockTypeName(first ? first.tag : "")), result);
     if (conflicts[id]) {
       conflicts[id].run = true;
       conflicts[id].block = { index: clash.index, blocks: clash.blocks };
@@ -3760,10 +3792,13 @@
     return { resolved: true, choice: choice, reason: null };
   }
 
-  function runConflictLine(item) {
+  // `shown`: the blocks are on the page while the card waits.
+  function runConflictLine(item, shown) {
     var n = runList(item, RUN_FIELD.NEW_BLOCKS).length;
     var type = record.anchorTypeName(item);
-    return (n === 1 ? RUN_CONFLICT_LINE_ONE : RUN_CONFLICT_LINE.replace("{n}", String(n))).replace("{type}", type);
+    var one = shown ? RUN_SHOWN_LINE_ONE : RUN_CONFLICT_LINE_ONE;
+    var many = shown ? RUN_SHOWN_LINE : RUN_CONFLICT_LINE;
+    return (n === 1 ? one : many.replace("{n}", String(n))).replace("{type}", type);
   }
 
   // The run section of the conflict card: the pinned line and each held
@@ -3782,7 +3817,7 @@
     section.textContent = "";
     var line = doc.createElement("div");
     line.setAttribute("data-lahe-conflict-run-line", "");
-    line.textContent = runConflictLine(item);
+    line.textContent = runConflictLine(item, !!(conflicts[id] && conflicts[id].shown));
     section.appendChild(line);
     runList(item, RUN_FIELD.NEW_BLOCKS).forEach(function (b) {
       var row = doc.createElement("div");
@@ -3912,7 +3947,7 @@
         });
         if (hit) starts.push(i - 1);
       });
-      if (!starts.length) return handed.anchor ? null : CHECK_REASON.REVERTED;
+      if (!starts.length) return handed.anchor ? null : CHECK_REASON.MISSING;
     }
     var best = null;
     var readings = later === list || !Object.keys(handed).length ? [list] : [list, later];
@@ -3961,7 +3996,7 @@
       if (leaf.tag !== block.tag) tag = true;
       if (missingEmphasis(block.html, leaf.html)) formatting = true;
     });
-    if (missing) return CHECK_REASON.REVERTED;
+    if (missing) return CHECK_REASON.MISSING;
     if (tag) return CHECK_REASON.TAG;
     if (formatting) return CHECK_REASON.FORMATTING;
     return null;

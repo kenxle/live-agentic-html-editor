@@ -146,7 +146,11 @@ One spelling each, used exactly in every phase. Words in braces are filled in by
 | Screen reader, commit | "Sent to the agent" |
 | Card and edits row, first line | "New text after '{first words of the anchor}'", or "Edit of '{first words}' plus new text" when the anchor changed too, or "New text at the start of the page" |
 | Card and edits row, second line | the run's shape by count, for example "A heading, 'What the chat window cost me', then 2 paragraphs and a 3-item list." |
-| Conflict card, run record | "Your {n} new blocks after this {type} are waiting on this choice. Either answer keeps them." |
+| Conflict card, run record | "Your {n} new blocks are on the page after this {type}. Either answer keeps them." While a block clashes with the page's words, the blocks wait: "Your {n} new blocks after this {type} are waiting on this choice. Either answer keeps them." |
+| Conflict card note, the anchor changed on the page | "The page's {type} changed after you edited it, so Lahe did not write your version over it. Your new text is kept." |
+| Conflict card note, a new block with words the reviewer did not write | "On the page, your new {type} has words you did not write. Lahe changed nothing. Pick the version that stands." |
+| Card line, page check found a run block missing or changed | "A block you wrote is not on the page as you wrote it. The item is open again." |
+| Agent note, page check found a run block missing or changed (`PAGE_CHECK_RUN_NOTE`) | "Reopened by the page check: a block in new_blocks is not on the page as written. Put it in the source as written, or reply not_handled saying why." |
 | Conflict card, second button on a run record | "Take the page's, keep my new text" |
 | Card note, wrong tag (`REPLAY_RUN_WRONG_TAG`) | "The agent placed '{first words}' as a {type}. You wrote a {type}, so Lahe sent it back." |
 | Card note, placed elsewhere (`REPLAY_RUN_PLACED_ELSEWHERE`) | "'{first words}' is already further down the page, so Lahe did not add it again." |

@@ -806,7 +806,21 @@
     "Reopened by the page check: blocks this take-back lists in remove_blocks are still on the page after the anchor. " +
     "Remove them from the source, or reply not_handled saying why.";
 
-  var PAGE_CHECK_NOTES = [PAGE_CHECK_NOTE, PAGE_CHECK_FORMAT_NOTE, PAGE_CHECK_STAMP_NOTE, PAGE_CHECK_TAG_NOTE, PAGE_CHECK_TAKEBACK_NOTE];
+  // The sixth, for a run record: a block the reviewer wrote is not on the page
+  // after the anchor. Nothing was "undone" and no original text came back: the
+  // block is new words, and they are missing or have words added (flow walk).
+  var PAGE_CHECK_RUN_NOTE =
+    "Reopened by the page check: a block in new_blocks is not on the page as written. " +
+    "Put it in the source as written, or reply not_handled saying why.";
+
+  var PAGE_CHECK_NOTES = [
+    PAGE_CHECK_NOTE,
+    PAGE_CHECK_FORMAT_NOTE,
+    PAGE_CHECK_STAMP_NOTE,
+    PAGE_CHECK_TAG_NOTE,
+    PAGE_CHECK_TAKEBACK_NOTE,
+    PAGE_CHECK_RUN_NOTE
+  ];
 
   /**
    * The carried note with `sentence` on the end, AT MOST ONCE.
@@ -2280,6 +2294,7 @@
     acceptedPageTexts: acceptedPageTexts,
     acceptPageText: acceptPageText,
     PAGE_CHECK_NOTE: PAGE_CHECK_NOTE,
+    PAGE_CHECK_RUN_NOTE: PAGE_CHECK_RUN_NOTE,
     PAGE_CHECK_FORMAT_NOTE: PAGE_CHECK_FORMAT_NOTE,
     PAGE_CHECK_STAMP_NOTE: PAGE_CHECK_STAMP_NOTE,
     PAGE_CHECK_TAG_NOTE: PAGE_CHECK_TAG_NOTE,

@@ -95,6 +95,39 @@ async function heldHandled(page, id) {
   );
 }
 
+/**
+ * The card on screen, light and dark, as test attachments. The page picks the
+ * rail's scheme from its background, so dark is a dark page background.
+ */
+async function shootCard(page, testInfo, id, name) {
+  await page.setViewportSize({ width: 1280, height: 1000 });
+  for (const scheme of ["light", "dark"]) {
+    await page.evaluate(
+      ([itemId, want]) => {
+        const bg = want === "dark" ? "#12151a" : "";
+        document.documentElement.style.background = bg;
+        document.body.style.background = bg;
+        const rail = window.__lahe.rail;
+        rail.refreshScheme();
+        rail.collapse(false);
+        rail.selectTab(rail.getCard(itemId).pane);
+        const card = rail.cardNode(itemId);
+        if (card) card.scrollIntoView({ block: "start" });
+      },
+      [id, scheme]
+    );
+    await page.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))));
+    const file = testInfo.outputPath(name + "-" + scheme + ".png");
+    await page.screenshot({ path: file });
+    await testInfo.attach(name + "-" + scheme, { path: file, contentType: "image/png" });
+  }
+  await page.evaluate(() => {
+    document.documentElement.style.background = "";
+    document.body.style.background = "";
+    window.__lahe.rail.refreshScheme();
+  });
+}
+
 test.describe("flow walk fixes, replay and rail side", () => {
   let world = null;
   test.afterEach(() => {
@@ -221,7 +254,7 @@ test.describe("flow walk fixes, replay and rail side", () => {
   for (const c of FAIL3) {
     test("Fail 3 (" + c.name + "): the agent rewords the anchor the reviewer reworded; the card asks which version stands and the new paragraphs stay on the page after it", async ({
       page
-    }) => {
+    }, testInfo) => {
       world = await makeWorld({ file: c.file, text: c.text });
       await page.goto(world.open);
       await booted(page);
@@ -275,6 +308,12 @@ test.describe("flow walk fixes, replay and rail side", () => {
       const blocks = ["Friday ships feel calmer.", "Nobody misses the old way."];
       expect(await nextTwo("counting")).toEqual(blocks);
       for (const t of blocks) expect(await countOnPage(page, t, c.scope), "'" + t + "' once while waiting").toBe(1);
+      const line = await page.evaluate((id) => {
+        const n = window.__lahe.rail.cardNode(id).querySelector("[data-lahe-conflict-run-line]");
+        return n ? n.textContent : null;
+      }, ref.id);
+      expect(line).toBe("Your 2 new blocks are on the page after this paragraph. Either answer keeps them.");
+      await shootCard(page, testInfo, ref.id, "item2-reworded-anchor-" + c.name.toLowerCase());
 
       // Either answer keeps the new blocks, once.
       const res = await page.evaluate(([id, choice]) => window.LAHE.replay.resolveConflict(id, choice), [ref.id, c.choice]);
@@ -285,4 +324,80 @@ test.describe("flow walk fixes, replay and rail side", () => {
       expect(await page.evaluate(() => window.LAHE.replay.conflictIds())).toEqual([]);
     });
   }
+
+  test("the clash card and the reopen line say what is true when the agent adds words to a placed block", async ({ page }, testInfo) => {
+    world = await makeWorld({ file: "doc.md", text: DOC_MD });
+    await page.goto(world.open);
+    await booted(page);
+    await openEditAt(page, ANCHOR_P);
+    await page.keyboard.press("Enter");
+    await page.keyboard.type("Friday ships feel calmer.", { delay: 2 });
+    await page.keyboard.press("Enter");
+    await page.keyboard.type("Nobody misses the old way at all.", { delay: 2 });
+    await fw.commitByEsc(page);
+    const ref = await committed(page);
+    const item = await helperHas(world, ref.id, ref.rev);
+    // The agent places the run, adds a sentence to the second block, and says handled.
+    const placed = agent.place(world.source, readSource(world), item);
+    const extra = placed.replace("Nobody misses the old way at all.", "Nobody misses the old way at all. The agent added this line.");
+    expect(extra).not.toBe(placed);
+    await agentWrites(page, world, extra);
+    const folded = await reply(world, item, "handled");
+    // The helper's handled check reads the block with its added line as not
+    // the reviewer's words, so it holds the item open; the page never sees it
+    // as handled. Either way the agent is never told to reapply anything.
+    expect(folded.handled_not_on_page, "the handled check held it").toBe(true);
+    await reviewerReloads(page);
+    const after = await state(page, ref.id);
+    expect(after.state).toBe("ready");
+    expect(after.note || "").not.toMatch(/original text is back|Reapply/);
+
+    // Replay then finds the clash, and its card says so in its own words.
+    await page.evaluate(() => window.__lahe.replayNow());
+    await pollPage(page, (id) => window.LAHE.replay.conflictIds().indexOf(id) !== -1, ref.id, {
+      message: "the block clash card",
+      timeoutMs: 20000
+    });
+    const badge = await page.evaluate(
+      (id) => window.__lahe.rail.cardBadges(id).filter((b) => b.code === "REPLAY_NEITHER_MATCHES").map((b) => b.message)[0],
+      ref.id
+    );
+    expect(badge).toBe("On the page, your new paragraph has words you did not write. Lahe changed nothing. Pick the version that stands.");
+    await shootCard(page, testInfo, ref.id, "item4-block-clash");
+  });
+
+  test("a placed block a later rebuild drops reopens with the run's own lines, never undone or reapply", async ({ page }, testInfo) => {
+    world = await makeWorld({ file: "doc.md", text: DOC_MD });
+    await page.goto(world.open);
+    await booted(page);
+    await openEditAt(page, ANCHOR_P);
+    await page.keyboard.press("Enter");
+    await page.keyboard.type("Friday ships feel calmer.", { delay: 2 });
+    await page.keyboard.press("Enter");
+    await page.keyboard.type("Nobody misses the old way at all.", { delay: 2 });
+    await fw.commitByEsc(page);
+    const ref = await committed(page);
+    await agentRound(page, world, ref);
+    await heldHandled(page, ref.id);
+    await reviewerReloads(page);
+    expect(await state(page, ref.id)).toMatchObject({ state: "handled" });
+
+    // A later rebuild loses the second block.
+    const dropped = readSource(world).replace("Nobody misses the old way at all.\n\n", "");
+    expect(dropped).not.toBe(readSource(world));
+    await agentWrites(page, world, dropped);
+    await pollPage(page, (id) => window.__lahe.itemById(id).state === "ready", ref.id, {
+      message: "the page check to reopen the run",
+      timeoutMs: 20000
+    });
+    const after = await state(page, ref.id);
+    expect(after.note).toContain("Reopened by the page check: a block in new_blocks is not on the page as written.");
+    expect(after.note).not.toMatch(/original text is back|Reapply/);
+    const notice = await page.evaluate((id) => {
+      const n = window.__lahe.rail.cardNode(id).querySelector(".card__notice");
+      return n ? n.textContent : "";
+    }, ref.id);
+    expect(notice).toBe("A block you wrote is not on the page as you wrote it. The item is open again.");
+    await shootCard(page, testInfo, ref.id, "item4-run-reopened");
+  });
 });

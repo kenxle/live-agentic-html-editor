@@ -101,7 +101,7 @@ test("a header placed as a paragraph is reopened with the tag note, not the form
   expect(note).toBe(record.PAGE_CHECK_TAG_NOTE);
 });
 
-test("a missing block is reopened as undone", async ({ page }) => {
+test("a missing block is reopened as missing, never as undone", async ({ page }) => {
   await mdPage(page);
   const item = handled(
     headerRun([
@@ -110,7 +110,7 @@ test("a missing block is reopened as undone", async ({ page }) => {
     ])
   );
   await placeAfterHead(page, "<p>The placed one zqxcanary</p>");
-  expect(await page.evaluate((i) => window.__check(i), item)).toBe("reverted");
+  expect(await page.evaluate((i) => window.__check(i), item)).toBe("missing");
 });
 
 test.describe("R14, as run records", () => {
@@ -150,7 +150,7 @@ test.describe("R14, as run records", () => {
       const kept = which === "first" ? TWO : ONE;
       const left = which === "first" ? ONE : TWO;
       await page.evaluate((markup) => document.querySelector(".hero p").insertAdjacentHTML("afterend", "<p>" + markup + "</p>"), kept);
-      expect(await page.evaluate((i) => window.__check(i), item)).toBe("reverted");
+      expect(await page.evaluate((i) => window.__check(i), item)).toBe("missing");
       // Reopened, so it is outstanding again, and replay puts it back.
       item.state = record.STATE.READY;
       await setItems(page, [item]);

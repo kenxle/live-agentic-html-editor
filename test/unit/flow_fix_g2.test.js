@@ -98,7 +98,7 @@ test("a placed list with a third item from a later record is not read as undone"
   const later = laterListEdit(f);
   const page = pageWith("<ol><li>First item</li><li>Second item</li><li>Third item</li></ol>", "<p>A paragraph after the list.</p>");
   // Without the other records the check cannot know, and says undone.
-  assert.equal(check(placed, page), "reverted");
+  assert.equal(check(placed, page), "missing");
   assert.equal(check(placed, page, [placed, later]), null);
 });
 
@@ -115,7 +115,7 @@ test("a block the later record did not take is still checked: a missing paragrap
   const placed = placedRun(f);
   const later = laterListEdit(f);
   const page = "<main>" + HEAD + "<p>What changed</p><h2>Plan for the week</h2><ol><li>First item</li><li>Second item</li><li>Third item</li></ol></main>";
-  assert.equal(check(placed, page, [placed, later]), "reverted");
+  assert.equal(check(placed, page, [placed, later]), "missing");
 });
 
 test("revertedHandledEditIds hands the list to the run check", () => {
@@ -146,6 +146,7 @@ test("a later record that rewords the run's own reworded anchor takes the anchor
   });
   assert.equal(record.handedOverBlocks(placed, [placed, later]).anchor.id, later.id);
   const page = "<main>" + HEAD + "<p>What changed today</p><p>Two things today.</p></main>";
+  // Without the later record, the heading's "What changed" reads as the old words back.
   assert.equal(check(placed, page), "reverted");
   assert.equal(check(placed, page, [placed, later]), null);
 });

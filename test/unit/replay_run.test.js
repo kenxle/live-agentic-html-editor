@@ -109,11 +109,11 @@ test("a header placed as a paragraph is reopened with the tag note, not the form
   assert.equal(replay.pageCheckNoteFor(item, page, { pageHtml: page }), record.PAGE_CHECK_TAG_NOTE);
 });
 
-test("a missing block reopens as undone", () => {
+test("a missing block reopens as missing, with the run's own note", () => {
   const item = handled(named("worked example"));
   const page = WORKED_PAGE.replace("<ul><li>scrolling</li><li>re-asking zqxcanary</li></ul>", "");
-  assert.equal(check(item, page), replay.PAGE_CHECK_REASON.REVERTED);
-  assert.equal(replay.pageCheckNoteFor(item, page, { pageHtml: page }), record.PAGE_CHECK_NOTE);
+  assert.equal(check(item, page), replay.PAGE_CHECK_REASON.MISSING);
+  assert.equal(replay.pageCheckNoteFor(item, page, { pageHtml: page }), record.PAGE_CHECK_RUN_NOTE);
 });
 
 test("a block of five or more words the page shows elsewhere is not missing", () => {
@@ -136,7 +136,7 @@ test("a tag-only change the page did not take reopens with the tag note", () => 
 test("a start_of_container run is checked from the container's start", () => {
   const item = handled(named("start of container"));
   assert.equal(check(item, "<main><h2>Notes zqxcanary</h2><p>First thought zqxcanary</p></main>"), null);
-  assert.equal(check(item, "<main><h2>Notes zqxcanary</h2></main>"), replay.PAGE_CHECK_REASON.REVERTED);
+  assert.equal(check(item, "<main><h2>Notes zqxcanary</h2></main>"), replay.PAGE_CHECK_REASON.MISSING);
 });
 
 test("an outstanding run is not checked", () => {
@@ -151,6 +151,25 @@ test("an old record keeps today's check: the whole after as one string", () => {
 // ---------------------------------------------------------------------------
 // What the card says
 // ---------------------------------------------------------------------------
+
+test("a run's missing block has its own lines: never undone, never reapply", () => {
+  const notice = replay.pageCheckNoticeFor(record.PAGE_CHECK_RUN_NOTE);
+  assert.equal(notice, "A block you wrote is not on the page as you wrote it. The item is open again.");
+  assert.doesNotMatch(notice, /undone/);
+  assert.doesNotMatch(record.PAGE_CHECK_RUN_NOTE, /original text is back|Reapply/);
+  assert.ok(record.PAGE_CHECK_NOTES.indexOf(record.PAGE_CHECK_RUN_NOTE) !== -1, "collapsed like every page-check sentence");
+});
+
+test("the held run's line says where the blocks are once they are on the page", () => {
+  assert.equal(
+    replay.runConflictLine(named("worked example"), true),
+    "Your 3 new blocks are on the page after this paragraph. Either answer keeps them."
+  );
+  assert.equal(
+    replay.runConflictLine(named("special characters"), true),
+    "Your 1 new block is on the page after this paragraph. Either answer keeps it."
+  );
+});
 
 test("the rail has a line for the tag note", () => {
   assert.equal(
@@ -178,10 +197,10 @@ test("a block typed with -- and rendered with a dash is not missing", () => {
   assert.equal(check(item, page), null);
 });
 
-test("a handled block the agent added words to reopens as undone", () => {
+test("a handled block the agent added words to reopens as missing", () => {
   const item = handled(named("worked example"));
   const page = WORKED_PAGE.replace("time zqxcanary</p>", "time zqxcanary. The agent added this sentence.</p>");
-  assert.equal(check(item, page), replay.PAGE_CHECK_REASON.REVERTED);
+  assert.equal(check(item, page), replay.PAGE_CHECK_REASON.MISSING);
 });
 
 // ---------------------------------------------------------------------------
@@ -217,9 +236,9 @@ function punctuationFix() {
   return later;
 }
 
-test("a handled punctuation fix whose earlier revision is back on the page reopens as undone", () => {
+test("a handled punctuation fix whose earlier revision is back on the page reopens as missing", () => {
   const item = handled(punctuationFix());
-  assert.equal(check(item, "<main><p>What changed</p><p>A well--known fact about builds zqxcanary</p></main>"), replay.PAGE_CHECK_REASON.REVERTED);
+  assert.equal(check(item, "<main><p>What changed</p><p>A well--known fact about builds zqxcanary</p></main>"), replay.PAGE_CHECK_REASON.MISSING);
   assert.equal(check(item, "<main><p>What changed</p><p>A well-known fact about builds zqxcanary</p></main>"), null);
 });
 
