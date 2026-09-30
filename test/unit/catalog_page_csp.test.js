@@ -52,3 +52,16 @@ test("the Library page has its own tab icon: an inline SVG the content policy's 
   assert.match(csp, /img-src 'self' data:/);
   assert.ok(html.indexOf(m[0]) < html.indexOf("</head>"));
 });
+
+test("the heading carries the Library's brandmark: the favicon's own image, decorative", () => {
+  const tabIcon = require("../../src/service/tab_icon.js");
+  const html = catalogPage.renderPage("tok_test");
+  const h1 = /<h1>([\s\S]*?)<\/h1>/.exec(html);
+  assert.ok(h1, "the page has an h1");
+  const img = /<img\b[^>]*>/.exec(h1[1]);
+  assert.ok(img, "the h1 carries an image");
+  assert.ok(img[0].includes('src="' + tabIcon.LIBRARY_ICON_URI + '"'), "one source for the tab icon and the mark");
+  assert.ok(tabIcon.LIBRARY_LINK.includes(tabIcon.LIBRARY_ICON_URI));
+  assert.ok(img[0].includes('alt=""') && img[0].includes('aria-hidden="true"'), "decorative: read once, as the heading's words");
+  assert.match(h1[1], /Lahe Library\s*$/);
+});

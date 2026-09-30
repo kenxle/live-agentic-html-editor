@@ -112,3 +112,18 @@ The Library page's head carries its own icon, `tab_icon.LIBRARY_LINK`, as an inl
 | `npx playwright test test/browser/catalog_page.spec.js --project=chromium -g "tab icon"` (before) | 1 failed: no icon link | 1.6m (waited for the missing link) |
 | `npx playwright test test/browser/catalog_page.spec.js --project=chromium` | 28 passed, 1 skipped | 12s |
 | `npm run gate:unit` | 1958 tests, 1956 pass, 0 fail, 2 todo | 66s |
+
+## Heading brandmark (itm_2735cc4b52b1ac7945333eb6)
+
+The branch now includes `feat/lahe_library`, with the "Lahe Library" heading. The heading shows the tab icon's books-on-a-shelf drawing on its left. Both use one constant, `tab_icon.LIBRARY_ICON_URI`, so they cannot drift. The mark is 1.25em square and vertically centered on the words. It is decorative (`alt=""`, `aria-hidden`), so the heading's name reads "Lahe Library". In dark mode a faint ring keeps the dark square's edge visible. The unit test failed first. The browser test (the mark loads, sits centered, stays at the left at phone width, no content policy errors) was run only after the change.
+
+![The Library, light](../catalog_page_light.png)
+
+![The Library, dark](../catalog_page_dark.png)
+
+| Command | Result | Time |
+| --- | --- | --- |
+| `node --test test/unit/catalog_page_csp.test.js` (before) | 1 fail: no image in the h1 | under 5s |
+| `npx playwright test test/browser/catalog_page.spec.js --project=chromium` | 29 passed, 1 skipped | 10s |
+| `LAHE_SHOTS=1 ... -g screenshots` | light, dark and phone retaken; I looked at the header in light and dark | 3s |
+| `npm run gate:unit` | 1959 tests, 1957 pass, 0 fail, 2 todo | 46s |

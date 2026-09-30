@@ -27,8 +27,11 @@ var LINK =
 // (a 32px rounded square, one white glyph) but told apart from every document
 // tab at a glance: a dark square instead of the blue one, and books on a shelf
 // instead of a speech bubble, one book leaning in blue.
-var LIBRARY_LINK =
-  "<link rel=\"icon\" href=\"data:image/svg+xml,%3Csvg%20xmlns=%27http://www.w3.org/2000/svg%27%20viewBox=%270%200%2032%2032%27%3E%3Crect%20width=%2732%27%20height=%2732%27%20rx=%277%27%20fill=%27%2323262b%27/%3E%3Cpath%20d=%27M7%208h4v15H7zM12.5%2010h4v13h-4z%27%20fill=%27%23fff%27/%3E%3Cpath%20d=%27M18.2%2010.6l3.8-1.2%204.1%2013.1-3.8%201.2z%27%20fill=%27%235b9bff%27/%3E%3Cpath%20d=%27M5.5%2024h21v2h-21z%27%20fill=%27%23fff%27/%3E%3C/svg%3E\">";
+// One source for the tab icon and the page heading's brandmark, so the two
+// never drift.
+var LIBRARY_ICON_URI =
+  "data:image/svg+xml,%3Csvg%20xmlns=%27http://www.w3.org/2000/svg%27%20viewBox=%270%200%2032%2032%27%3E%3Crect%20width=%2732%27%20height=%2732%27%20rx=%277%27%20fill=%27%2323262b%27/%3E%3Cpath%20d=%27M7%208h4v15H7zM12.5%2010h4v13h-4z%27%20fill=%27%23fff%27/%3E%3Cpath%20d=%27M18.2%2010.6l3.8-1.2%204.1%2013.1-3.8%201.2z%27%20fill=%27%235b9bff%27/%3E%3Cpath%20d=%27M5.5%2024h21v2h-21z%27%20fill=%27%23fff%27/%3E%3C/svg%3E";
+var LIBRARY_LINK = '<link rel="icon" href="' + LIBRARY_ICON_URI + '">';
 
 var LINK_TAG = /<link\b[^>]*>/gi;
 var REL_ATTR = /\brel\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'>]+))/i;
@@ -89,6 +92,7 @@ function ensure(html) {
 }
 
 module.exports = {
+  LIBRARY_ICON_URI: LIBRARY_ICON_URI,
   LIBRARY_LINK: LIBRARY_LINK,
   LINK: LINK,
   hasIcon: hasIcon,

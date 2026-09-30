@@ -145,7 +145,11 @@ var PAGE_STYLE = [
 
   // The masthead: the title and who hand-overs go to.
   ".lib-head{padding-block:var(--s6) var(--s4)}",
-  ".lib-head h1{font-size:var(--text-h2);margin:0 0 var(--s2)}",
+  ".lib-head h1{font-size:var(--text-h2);margin:0 0 var(--s2);display:flex;align-items:center;gap:.4em}",
+  // The brandmark: about the heading's cap height plus a little, square, and
+  // never squeezed. In dark mode a faint ring keeps the dark square's edge.
+  ".lib-brandmark{width:1.25em;height:1.25em;flex:none;border-radius:22%}",
+  "@media (prefers-color-scheme: dark){.lib-brandmark{box-shadow:0 0 0 1px rgba(255,255,255,.18)}}",
   ".lib-agent{margin:0;display:flex;align-items:center;gap:var(--s2);color:var(--lib-soft);font-size:var(--text-meta)}",
   ".lib-agent::before{content:'';flex:none;width:8px;height:8px;border-radius:50%;", // px: a status dot
   "border:1.5px solid var(--lib-faint)}",
@@ -401,7 +405,10 @@ function renderPage(token) {
     '<script src="' + assetUrl("view_model.js") + '" defer></script>',
     '<script src="' + assetUrl("page.js") + '" defer></script>',
     "</head><body>",
-    '<header class="lib-head"><h1>Lahe Library</h1><p class="lib-agent" id="lahe-catalog-agent"></p></header>',
+    // The brandmark is the tab icon's own image, decorative: the heading is
+    // read as its words alone.
+    '<header class="lib-head"><h1><img class="lib-brandmark" src="' + tabIcon.LIBRARY_ICON_URI +
+      '" alt="" aria-hidden="true" width="32" height="32">Lahe Library</h1><p class="lib-agent" id="lahe-catalog-agent"></p></header>',
     '<div class="lib-tools" role="search">',
     '<input type="search" id="lahe-catalog-search" aria-label="Search the Library" autocomplete="off">',
     '<select id="lahe-catalog-project" aria-label="Filter by project"></select>',

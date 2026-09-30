@@ -699,6 +699,28 @@ test.describe("the Library page", () => {
     expect(violations).toEqual([]);
   });
 
+  test("the heading's brandmark loads under the page's content policy, beside the words, with no policy errors", async ({ page }) => {
+    const violations = [];
+    page.on("console", (msg) => { if (/Content Security Policy/i.test(msg.text())) violations.push(msg.text()); });
+    await routeCatalog(page, { list: freshList });
+    await openLibrary(page, helper);
+    const mark = page.locator("h1 img.lib-brandmark");
+    await expect(mark).toHaveCount(1);
+    await expect(page.locator("h1")).toHaveAccessibleName("Lahe Library");
+    expect(await mark.evaluate((img) => img.complete && img.naturalWidth > 0)).toBe(true);
+    const iconHref = await page.locator('link[rel="icon"]').getAttribute("href");
+    expect(await mark.getAttribute("src")).toBe(iconHref);
+    const box = await mark.boundingBox();
+    const h1 = await page.locator("h1").boundingBox();
+    expect(Math.abs(box.y + box.height / 2 - (h1.y + h1.height / 2))).toBeLessThan(4);
+    await page.setViewportSize({ width: 390, height: 844 });
+    const phone = await page.locator("h1").boundingBox();
+    const phoneMark = await mark.boundingBox();
+    expect(phoneMark.y).toBeGreaterThanOrEqual(phone.y - 1);
+    expect(phoneMark.x).toBeLessThan(phone.x + 8);
+    expect(violations).toEqual([]);
+  });
+
   test("the older section's 'Search reaches all of them' is a subtitle, not a heading", async ({ page }) => {
     await routeCatalog(page, { list: freshList });
     await openLibrary(page, helper);
