@@ -192,6 +192,8 @@ release, ending a review, and the first keystroke that withdraws a ready item
 back to draft all post immediately. So coalescing answers how many events one
 wording costs, and the floor answers how often the queue is emptied.
 
+A free-writing run record carries the whole run in every draft, so its floor is longer: 30 seconds (`FLUSH.RUN_DRAFT_FLOOR_MS`). A refused run event (over the size ceiling) is not re-posted. See `docs/ongoing/FREE_WRITING.md`.
+
 ### The one upgrade hazard
 
 A tab that is still running the PREVIOUS bundle writes the items and outbox keys

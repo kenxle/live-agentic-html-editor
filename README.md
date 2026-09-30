@@ -25,6 +25,7 @@ No matter how many files were used to create the HTML page, Lahe knows how to ed
 - **Comment for an agentic rewrite.** Select a passage, say what is wrong, and let the agent write the fix.
 - **Comment on any object, not just text.** Press Cmd-Shift-C with nothing selected to pick an element: hover to outline it, click to comment. Diagrams, images, charts, a whole section.
 - **Edit to use your own words.** Type the correction into the page. Your exact words reach the source file, not a paraphrase with added em dashes.
+- **Write new text in place.** Add paragraphs, headings, and bulleted or numbered lists after any block, or start a notes page from nothing with `lahe write notes.md`. A long piece gets a proofreading question, and your words are placed as you typed them.
 - **Ask questions and get threaded answers.** Ask a question and the answer arrives on the same card, no need to go back to the chat window. An exchange from ten minutes ago is threaded and easy to find, not lost in the neverending scroll of the chat window.
 - **Drafted until sent.** A half-typed thought is private to your browser until you hit Cmd-Enter.
 - **Hotkeys for speed.** Comment, edit, and send without reaching for the mouse.
@@ -85,6 +86,7 @@ If your agent already has the Lahe skill installed, that first line is all it ne
 cd live-agentic-html-editor
 npm run install-cli                       # writes ~/.local/bin/lahe
 lahe review path/to/page.html             # or path/to/notes.md
+lahe write notes/today.md                 # a blank notes page to write into
 ```
 
 ## Which agents this works with
@@ -106,7 +108,9 @@ An idle review costs no model tokens on any of them. The watcher is a small loca
 | --- | --- |
 | Cmd-Shift-C with text selected | Comment on the selection |
 | Cmd-Shift-C with nothing selected | Pick an element: hover to outline, click to comment, Esc to cancel |
-| Cmd-Shift-E | Edit the block under the cursor |
+| Cmd-Shift-E | Edit the block under the cursor. Press Enter at the end of it to write a new paragraph after it |
+| Cmd-Shift-E with the cursor in no block | Edit state with nothing open: click a thin "+ Write here" line between blocks or below the last one to start writing there |
+| The block menu in the edit bar, or its hotkey | Change the block under the cursor: Paragraph, Heading, Subheading, Small heading, Bulleted list, Numbered list. Typing `## `, `### `, `#### `, `- `, or `1. ` at the start of a block does the same |
 | Cmd-Enter in a comment box | This comment is ready, send it to the agent |
 | Cmd-Enter, Esc, or a click outside an edit | Commit the edit and give the block back to the page |
 | The box at the foot of the rail | A note about the page, tied to nothing in particular |
@@ -133,6 +137,7 @@ The rail also shows these as hints, so you do not need this file open to work th
 - [skills/lahe/SKILL.md](skills/lahe/SKILL.md): the instructions an agent follows during a review.
 - [docs/INSTALL.md](docs/INSTALL.md): install details, the CLI wrapper, and dev-server setup.
 - [docs/CLI.md](docs/CLI.md): every command and flag.
+- [docs/ongoing/FREE_WRITING.md](docs/ongoing/FREE_WRITING.md): how writing new paragraphs, headings, and lists works, for the next builder.
 - [docs/CONTRACTS.md](docs/CONTRACTS.md): the wire protocol, the record shape, and the review file format.
 - [docs/](docs/): the build history, including the brief, architecture, plan, and reviews.
 
