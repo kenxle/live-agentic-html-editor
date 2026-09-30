@@ -31,6 +31,8 @@ flowchart LR
 - Not a dark mode. Every style today is light.
 - Not recolouring Mermaid diagrams per style. They keep the house palette.
 - Not a style for a whole folder review in one action. Each page is kept one at a time.
+- Not an uninstall command. A style is removed by deleting its folder.
+- Not adding a runtime dependency. Lahe still runs from a clone with nothing installed, and its tests use a made-up style.
 :::
 
 ## Solution Outline
@@ -49,7 +51,7 @@ flowchart LR
 :::
 
 ::: callout-req
-**R2. It lists what is available.** The International Style first, then every installed style by its own name, with the one the page shows now marked.
+**R2. It lists what is available.** The International Style is always first and needs nothing installed. Every installed style follows by its own name. The style the page shows now is marked.
 :::
 
 ::: callout-req
@@ -57,67 +59,61 @@ flowchart LR
 :::
 
 ::: callout-req
-**R4. A preview survives a reload.** The agent's rebuilds reload the page, so a preview holds on that page in that browser until the reviewer picks another style, or the document itself carries the style being previewed.
+**R4. A preview survives a reload.** The agent's rebuilds reload the page, so a preview holds for that page of that review in that browser. It ends when the reviewer picks another style, chooses "back to the document's style", or the document itself comes to carry the previewed style.
 :::
 
 ::: callout-req
-**R5. The rail is honest about a preview.** When the page shows a style the document does not carry yet, the rail says so in plain words.
+**R5. The rail is honest about a preview.** When the page shows a style the document does not carry, the rail says so in plain words and offers the way back to the document's own style.
 :::
 
 ### Keeping a style
 
 ::: callout-req
-**R6. Keeping is one deliberate action.** "Use this style" sends the agent exactly one request, shown as an ordinary item on the Active tab. Flipping through previews sends nothing.
+**R6. Keeping is one deliberate action.** "Use this style" sends the agent exactly one request, shown as an ordinary item on the Active tab. Flipping through previews sends nothing. The rail shows the request as waiting until the agent answers, and pressing the action again for the same style while one is waiting sends nothing new.
 :::
 
 ::: callout-req
-**R7. The agent can apply it without guessing.** The agent's instructions say exactly what to write for an HTML page and for a Markdown file, how to replace a style the page already has, and how to go back to the International Style. These instructions reach an agent that only reads the review file.
+**R7. The agent applies it correctly from its instructions alone.** The instructions say what to write for an HTML page and for a Markdown file, how to replace a style the page already has, and how to go back to the International Style.
 :::
 
 ::: callout-req
-**R8. A kept style stays with the document.** Once applied, the document shows its style wherever Lahe serves it. A rendered Markdown file saved to disk still shows it with no Lahe running, as the house style does today.
+**R8. A kept style stays with the document.** Once applied, the document shows its style wherever Lahe serves it. A rendered Markdown file saved to disk carries the style's stylesheet and fonts beside it, as it carries the house fonts today, so it still shows the style with no Lahe running.
 :::
 
 ### Installing styles
 
 ::: callout-req
-**R9. One command installs a style folder.** The reviewer or their agent points one Lahe command at a downloaded style folder, and the style appears on the rail the next time the control is opened. Installing the same style again replaces it. A companion listing shows what is installed.
+**R9. One command installs a style folder.** The reviewer or their agent points one Lahe command at a downloaded style folder, and the style appears on the rail the next time the control is opened. Installing the same style again replaces it. A companion listing shows what is installed. Removing a style is deleting its folder by hand.
 :::
 
 ::: callout-req
-**R10. A bad folder is refused with a reason.** A folder that is not a valid style is refused, and the message says what is wrong and what a style folder needs.
+**R10. A bad folder is refused at install, with a reason.** A style folder is a name, one stylesheet, and optionally its fonts. A stylesheet that pulls anything from the network, or reaches for any file other than its own fonts, is refused. The message says what is wrong and what a style folder needs.
 :::
 
 ::: callout-req
-**R11. The International Style needs nothing.** It is always offered, on a machine with no styles installed.
+**R11. No paid styles still shows the control.** With nothing installed, the control offers the International Style and one line naming the command that adds a style.
 :::
 
 ::: callout-req
-**R12. No paid styles still shows the control.** With nothing installed, the control offers the International Style and one line saying how to add a style.
-:::
-
-::: callout-req
-**R13. A missing style falls back and says so.** A document that names a style this machine does not have shows in the International Style, and the rail names the style the document asked for.
+**R12. A missing style falls back and says so.** A document that names a style this machine does not have shows in the International Style, and the rail names the style the document asked for.
 :::
 
 ### Safety
 
 ::: callout-req
-**R14. A style reaches only its own files.** Installing a style makes its stylesheet and its fonts servable, and nothing else on disk. A style cannot load anything from the network.
-:::
-
-::: callout-req
-**R15. Nothing new to install and nothing paid in the repo.** Lahe still runs from a clone with no dependencies, and its tests use a made-up style rather than a paid one.
+**R13. A style cannot expose or load anything beyond its own stylesheet and fonts.** Installing one makes nothing else on the machine readable through Lahe, and a hand-copied folder that breaks the install rules is still refused when a page asks for it.
 :::
 
 ::: callout-metric
-With Ken's six styles installed, one of his own documents can be shown in all seven styles in seven clicks, with no reload and no agent involved. One further action keeps the chosen style, and after the agent answers, reloading the page shows the kept style with no preview active.
+With Ken's six styles installed, one of his own documents can be shown in all seven styles in seven clicks, with no reload and no agent involved. One further action keeps the chosen style, and after the agent answers, reloading the page shows the kept style with no preview active. The same flow, run on a made-up test style, passes in the automated suite.
 :::
 
 ## UX Notes
 
-- The control follows the rail's existing patterns: reached from the rail's head menu, drawn as a panel in the rail like the end-review panel, in the rail's own type and tokens. No new visual language.
-- Each style row shows the style's name and a small strip of its own colours, so a reviewer recognises it before clicking.
+Guidance for the architecture, which may change it without reopening the brief:
+
+- The control follows the rail's existing patterns and its own type and tokens. No new visual language.
+- Each style shows its name and a small strip of its own colours, so a reviewer recognises it before clicking.
 - The rail keeps its current look under every style. Only the document changes.
 - Keyboard: the panel is reachable and usable from the keyboard, as the head menu is today.
 
@@ -142,14 +138,25 @@ No flag. The feature is additive: a page that names no style looks exactly as it
 - **The request to the agent is an ordinary note, not a new kind of item.** The agent already handles notes, and the review file's contract says intent lives in a note's words.
 - **No paid style installed: show the control anyway**, with the International Style and a line on adding a style, so the feature can be found.
 - **International Style is the name on the rail** for the free house style, matching the store.
+- **No store link in the tool.** The nothing-installed line names the command, not the store. Ken can ask for a link at implementation review.
 
 ### Open
 
-::: callout-question
-**Should the "how to add a style" line link to the Lahe Styles store page?** The design includes one quiet link. Ken may prefer the tool carry no sales text. Decide at implementation review.
-:::
+None.
 
 ## PM Review
 
 | # | Finding | Disposition | Rationale |
 |---|---------|-------------|-----------|
+| RF1 | A saved Markdown file cannot show a paid style unless its files travel with it | Accepted | R8 now says the stylesheet and fonts are carried beside the saved file |
+| RF2 | Nothing covers the keep action while no agent has answered, or a double press | Accepted | R6 adds the waiting state and makes a repeat press send nothing |
+| RF3 | "Valid style" was never defined | Accepted | R10 states a style folder in product terms |
+| RF4 | The network rule had no testable point | Accepted | R10 refuses at install; R13 also refuses a hand-copied folder when a page asks |
+| RF5 | No way to discard a preview | Accepted | "Back to the document's style" added to R4 and R5 |
+| RF6 | The agent-instructions and safety requirements read as implementation | Accepted | Reworded as outcomes (R7, agent applies it from instructions; R13, a style reaches only its own files) |
+| RF7 | The no-dependencies requirement was a build constraint, and the metric only ran on Ken's machine | Accepted | Moved to Non-Goals; the metric adds a made-up style run in the suite |
+| RF8 | "International needs nothing" duplicated the list and nothing-installed requirements | Accepted | Folded into R2 (the list); fifteen requirements are now thirteen |
+| RF9 | No way to remove a style | Accepted | Non-goal: delete the folder by hand, stated in R9 |
+| RF10 | "That page" was ambiguous | Accepted | R4 says a page of a review in a browser |
+| RF11 | UX Notes carried design decisions | Accepted | Marked as guidance the architecture may change |
+| RF12 | The store-link question should decide itself | Accepted | Decided: no link; the line names the command. No open questions remain |
