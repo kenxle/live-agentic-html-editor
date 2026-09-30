@@ -5,6 +5,8 @@ status: `[ ]` open, `[>]` claimed, `[x]` done, `[!]` blocked.
 
 ## Board
 
+- [ ] @anyone 2026-09-30 LAHE-untouched-anchor-rewritten -- **New text written after a paragraph the reviewer never touched goes lost if the agent rewrites that paragraph.** Replay cannot find the anchor by its words any more, and it never guesses a location without a card, so the run is marked lost. A fix would find the likely anchor and ask the reviewer with a card before placing the run. From the free-writing flow walk (`docs/features/20260928.01_free_writing/02_architecture_free_writing.md`, BB2).
+
 - [ ] @ken 2026-09-29 LAHE-tiptap-later -- **Discuss a Tiptap integration after free writing ships.** Free writing uses Lahe's own editing code (architecture AQ1). Tiptap failed where it meets an existing block (caret, selection, Backspace, undo), but brings rich paste, mature undo, and IME handling. Open question from Ken: how hard would it be to adjust Tiptap's source to span existing blocks, and what else would it bring. Evidence: `docs/features/20260928.01_free_writing/02_architecture_free_writing.md` AQ1 and the two spike results it cites.
 
 - [ ] @anyone 2026-09-28 LAHE-fixture-specs-one-lane -- **Specs that only inject records still run in all three browsers at every checkpoint.** They test no engine behavior, so two of the three runs buy nothing and cost battery. Raised by the free-writing testing review (T28), rejected there because the lane rule is repo-wide. Proposal: tag such specs and run them in Chromium only on gate:all; needs Ken's okay since it changes the checkpoint rule in CLAUDE.md.
