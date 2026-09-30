@@ -34,6 +34,12 @@ test.describe("the library does not boot inside a frame", () => {
   });
 
   test("the embedded copy boots nothing and says why, and the real window keeps the review", async ({ page }) => {
+    // The fixture names the helper's fixed port, and nothing in this test needs
+    // a helper. A reviewer's own installed helper running there, one service
+    // contract behind, would refuse the page (free-writing design call 9) and
+    // the refusal would read as the frame's doing. Refused here, as on a
+    // machine with nothing running.
+    await page.route(/^http:\/\/127\.0\.0\.1:7817\//, (route) => route.abort("connectionrefused"));
     await page.goto(pages.urlFor("test/fixtures/frames-parent.html"));
 
     // The window the reviewer is actually looking at has the library on it.
