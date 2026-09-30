@@ -881,6 +881,179 @@
       return !!entry && entry.fromAnchor;
     }
 
+    // ---- which words moved (flow walk: the from_anchor bug) ---------------------
+    //
+    // A block split off the anchor with Enter holds the page's own words, which
+    // the agent must not add again. But the reviewer can then type into that
+    // tail, or press Enter inside it again, and before this fix every block of
+    // that lineage kept from_anchor: a literal agent dropped the reviewer's own
+    // sentence. So a lineage entry remembers `moved`, the page's words it
+    // carried at the split (whitespace folded), and capture decides from the
+    // words themselves:
+    //
+    //   the block is exactly the moved words    one from_anchor block
+    //   new words, then the moved words         a new block, then the moved one
+    //   the moved words, then new words         the moved one, then a new block
+    //   anything else                           one new block
+    //
+    // "Anything else" is always safe for a literal agent: anchor_after_html
+    // already leaves the moved words out of the anchor, so adding the whole
+    // block as new puts every word back exactly once.
+
+    // Whitespace folded to single spaces and trimmed, with each folded
+    // character's offset in the raw string.
+    function foldText(raw) {
+      var str = String(raw || "");
+      var out = "";
+      var map = [];
+      var space = false;
+      for (var i = 0; i < str.length; i += 1) {
+        var c = str.charAt(i);
+        if (c === "\u200b") continue;
+        if (/\s/.test(c)) {
+          if (out.length && !space) {
+            out += " ";
+            map.push(i);
+            space = true;
+          }
+          continue;
+        }
+        out += c;
+        map.push(i);
+        space = false;
+      }
+      if (space) {
+        out = out.slice(0, -1);
+        map.pop();
+      }
+      return { text: out, map: map };
+    }
+
+    function folded(raw) {
+      return foldText(raw).text;
+    }
+
+    // A holder in an inert document: markup parsed or cloned into it never
+    // loads, runs or reaches the page.
+    var inertDoc = null;
+    function inertHolder() {
+      if (!inertDoc) inertDoc = doc.implementation.createHTMLDocument("");
+      return inertDoc.createElement("div");
+    }
+
+    // The words of a stored block's markup.
+    function htmlText(html) {
+      var holder = inertHolder();
+      holder.innerHTML = String(html || "");
+      return holder.textContent;
+    }
+
+    function movedOf(block) {
+      var entry = block && block !== session.anchor ? runEntryOf(block) : null;
+      return entry && entry.fromAnchor ? entry.moved || null : null;
+    }
+
+    // What a split tail carries, decided at the split. Off the anchor, the tail
+    // is the page's own words only when those words are in the anchor's
+    // original text: words the reviewer typed into the anchor before pressing
+    // Enter are new. Off a lineage block that was exactly its moved words, the
+    // two halves each keep their own half of them; otherwise the tail inherits
+    // the parent's moved words and capture looks for them.
+    function markSplit(block, tail) {
+      var entry = runEntryOf(tail);
+      if (!entry) return;
+      var tailText = folded(tail.textContent);
+      if (block === session.anchor) {
+        var original = folded(session.before && session.before.text);
+        var fromPage = !!tailText && original.indexOf(tailText) !== -1;
+        entry.fromAnchor = fromPage;
+        entry.moved = fromPage ? tailText : null;
+        return;
+      }
+      var parent = runEntryOf(block);
+      if (!parent || !parent.fromAnchor || !parent.moved) {
+        entry.fromAnchor = false;
+        entry.moved = null;
+        return;
+      }
+      var headText = folded(block.textContent);
+      var squash = function (t) {
+        return t.replace(/ /g, "");
+      };
+      if (squash(headText + tailText) === squash(parent.moved)) {
+        parent.moved = headText || null;
+        parent.fromAnchor = !!headText;
+        entry.moved = tailText || null;
+        entry.fromAnchor = !!tailText;
+        return;
+      }
+      entry.fromAnchor = true;
+      entry.moved = parent.moved;
+    }
+
+    // The markup of the characters [from, to) of el's text, as a run block's
+    // html, or null when that stretch has no words.
+    function sliceHtml(el, tag, from, to) {
+      var nodes = textNodes(el);
+      function point(at) {
+        var left = at;
+        for (var i = 0; i < nodes.length; i += 1) {
+          var len = nodes[i].nodeValue.length;
+          if (left <= len) return { node: nodes[i], offset: left };
+          left -= len;
+        }
+        var last = nodes[nodes.length - 1];
+        return last ? { node: last, offset: last.nodeValue.length } : { node: el, offset: el.childNodes.length };
+      }
+      var r = doc.createRange();
+      var a = point(from);
+      r.setStart(a.node, a.offset);
+      if (to === null) r.setEnd(el, el.childNodes.length);
+      else {
+        var b = point(to);
+        r.setEnd(b.node, b.offset);
+      }
+      var holder = inertHolder();
+      holder.appendChild(r.cloneContents());
+      var cleaned = normalize.cleanBlock(tag, inlineMarkup(holder).replace(/^(\s|&nbsp;|\u00a0)+|(\s|&nbsp;|\u00a0)+$/g, ""));
+      return typeof cleaned.html === "string" ? cleaned.html : null;
+    }
+
+    // One session entry as the record's blocks: usually one, two when a split
+    // tail holds both moved words and new ones.
+    function entryBlocks(r) {
+      var tag = tagOf(r.el);
+      var whole = runBlockHtml(r.el);
+      if (whole === null) return [];
+      if (!r.fromAnchor || !r.moved) return [{ tag: tag, html: whole }];
+      var raw = String(r.el.textContent || "");
+      var f = foldText(raw);
+      var moved = r.moved;
+      if (f.text === moved) return [{ tag: tag, html: whole, from_anchor: true }];
+      if (LIST_TAGS[tag]) return [{ tag: tag, html: whole }];
+      var out = [];
+      var cut;
+      var first;
+      var second;
+      if (f.text.length > moved.length && f.text.slice(f.text.length - moved.length) === moved) {
+        cut = f.map[f.text.length - moved.length];
+        first = sliceHtml(r.el, tag, 0, cut);
+        second = sliceHtml(r.el, tag, cut, null);
+        if (first !== null) out.push({ tag: tag, html: first });
+        if (second !== null) out.push({ tag: tag, html: second, from_anchor: true });
+        return out.length ? out : [{ tag: tag, html: whole }];
+      }
+      if (f.text.length > moved.length && f.text.slice(0, moved.length) === moved) {
+        cut = f.map[moved.length - 1] + 1;
+        first = sliceHtml(r.el, tag, 0, cut);
+        second = sliceHtml(r.el, tag, cut, null);
+        if (first !== null) out.push({ tag: tag, html: first, from_anchor: true });
+        if (second !== null) out.push({ tag: tag, html: second });
+        return out.length ? out : [{ tag: tag, html: whole }];
+      }
+      return [{ tag: tag, html: whole }];
+    }
+
     function liveRange() {
       if (!win || typeof win.getSelection !== "function") return null;
       var sel = win.getSelection();
@@ -996,7 +1169,7 @@
     // Where a new run block after `block` goes. After the anchor it is the one
     // insert-point rule (blocks.insertPointAfter climbs out of a sheet-head);
     // after a run block it is right after that block.
-    function insertAfterBlock(block, el, fromAnchor) {
+    function insertAfterBlock(block, el, fromAnchor, moved) {
       var point;
       var index;
       if (block === session.anchor) {
@@ -1008,7 +1181,7 @@
         index = session.run.indexOf(entry) + 1;
       }
       point.parent.insertBefore(el, point.before);
-      session.run.splice(index, 0, { el: el, fromAnchor: !!fromAnchor, html: null, dirty: true });
+      session.run.splice(index, 0, { el: el, fromAnchor: !!fromAnchor, moved: moved || null, html: null, dirty: true });
       return el;
     }
 
@@ -1103,15 +1276,15 @@
     function captureRunFields() {
       var list = [];
       session.run.forEach(function (r) {
-        if (r.dirty || r.html === undefined) {
-          r.html = runBlockHtml(r.el);
+        if (r.dirty || r.html === undefined || !r.pieces) {
+          r.pieces = entryBlocks(r);
+          r.html = r.pieces.length ? r.pieces.map(function (b) { return b.html; }).join("") : null;
           r.dirty = false;
           counters.blocksCaptured += 1;
         }
-        if (r.html === null) return;
-        var b = { tag: tagOf(r.el), html: r.html };
-        if (r.fromAnchor) b.from_anchor = true;
-        list.push(b);
+        r.pieces.forEach(function (b) {
+          list.push(Object.assign({}, b));
+        });
       });
       var anchorHtml = anchorMarkup();
       var tag = session.container ? null : tagOf(session.anchor);
@@ -1332,9 +1505,24 @@
       var list = item[record.FIELD.NEW_BLOCKS] || [];
       var out = [];
       got.blocks.forEach(function (b) {
+        var rec = list[b.index];
+        var fromAnchor = !!(rec && rec.from_anchor);
+        var moved = fromAnchor ? folded(htmlText(rec.html)) : null;
         b.elements.forEach(function (el) {
-          if (out.some(function (e) { return e.el === el; })) return;
-          out.push({ el: el, fromAnchor: !!(list[b.index] && list[b.index].from_anchor), html: null, dirty: true });
+          var have = null;
+          out.forEach(function (e) {
+            if (e.el === el) have = e;
+          });
+          if (have) {
+            // Two record blocks on one element: a split tail the reviewer
+            // typed into. The element keeps the moved words it carries.
+            if (fromAnchor && !have.fromAnchor) {
+              have.fromAnchor = true;
+              have.moved = moved;
+            }
+            return;
+          }
+          out.push({ el: el, fromAnchor: fromAnchor, moved: moved, html: null, dirty: true });
         });
       });
       return out;
@@ -1591,6 +1779,7 @@
             var entry = runEntryOf(list);
             entry.el = p;
             entry.fromAnchor = false;
+            entry.moved = null;
           } else {
             insertAfterBlock(list, p, false);
           }
@@ -1602,6 +1791,7 @@
         } else {
           var tail = extractTail(range, unit, tagOf(unit));
           insertAfterBlock(block, tail, isFromAnchor(block));
+          markSplit(block, tail);
           setCaret(tail, 0);
         }
       });
@@ -1791,6 +1981,7 @@
         }
         var tail = extractTail(range, unit, tagOf(unit));
         insertAfterBlock(block, tail, isFromAnchor(block));
+        markSplit(block, tail);
         setCaret(tail, 0);
       });
       markDirtyAt(unit);
@@ -1880,7 +2071,8 @@
             while (unit.firstChild) para.appendChild(unit.firstChild);
             ensureLine(para);
             block.removeChild(unit);
-            insertAfterBlock(block, para, isFromAnchor(block));
+            insertAfterBlock(block, para, isFromAnchor(block), movedOf(block));
+            markSplit(block, para);
             moved = para;
           }
         } else if (LIST_TAGS[tag]) {
@@ -1964,7 +2156,7 @@
       var anchorHtml = session.container ? null : share(prev && prev.anchorHtml, session.anchor.innerHTML);
       var run = session.run.map(function (r, i) {
         var was = prev && prev.run[i];
-        return { tag: tagOf(r.el), html: share(was && was.html, r.el.innerHTML), fromAnchor: r.fromAnchor };
+        return { tag: tagOf(r.el), html: share(was && was.html, r.el.innerHTML), fromAnchor: r.fromAnchor, moved: r.moved || null };
       });
       return {
         anchorTag: session.container ? null : tagOf(session.anchor),
@@ -2058,7 +2250,7 @@
         state.run.forEach(function (b) {
           var el = doc.createElement(b.tag);
           el.innerHTML = b.html;
-          insertAfterBlock(prev, el, b.fromAnchor);
+          insertAfterBlock(prev, el, b.fromAnchor, b.moved);
           rememberAlso(el, session.itemId);
           prev = el;
         });
@@ -2604,7 +2796,7 @@
         session.block = built.anchor;
         var old = session.run;
         session.run = built.run.map(function (b, i) {
-          return { el: b, fromAnchor: !!(old[i] && old[i].fromAnchor), html: null, dirty: true };
+          return { el: b, fromAnchor: !!(old[i] && old[i].fromAnchor), moved: (old[i] && old[i].moved) || null, html: null, dirty: true };
         });
       }
       var host = blocks.hostFor(session.anchor, session.placement);
