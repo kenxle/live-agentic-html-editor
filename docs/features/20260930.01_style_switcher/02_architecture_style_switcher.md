@@ -2,7 +2,7 @@
 
 ## Summary
 
-A style is a folder installed once per machine into Lahe's state directory by a new `lahe style add` command, which checks it and copies only the files a page may use. The session's page servers answer one reserved path segment, `.lahe-styles/`, from the installed styles only, from any directory they serve, before they look at the disk, the way they already answer the library route. On a page that uses the house style, the rail gets a Document style panel. A click on a style adds one stylesheet link to the page, right after the house style, so the whole page restyles at once with no reload. The choice is kept in browser storage for that page. "Use this style" sends an ordinary note whose words carry a fixed marker, `lahe-style: <id>`, and only the marker is acted on. The agent turns it into one line of source: a stylesheet link in an HTML page, or a frontmatter line in a Markdown file, which the renderer turns into the same link. No record shape, route or review file field changes. The agent contract gains one instruction.
+A style is a folder installed once per machine into Lahe's state directory by a new `lahe style add` command, which checks it and copies only the files a page may use. The session's page servers answer one reserved path segment, `.lahe-styles/`, from the installed styles only, from any directory they serve, before they look at the disk, the way they already answer the library route. On a page that uses the house style, the rail gets a Document style panel. A click on a style adds one stylesheet link to the page, right after the house style, so the whole page restyles at once with no reload. The choice is kept in browser storage for that page. "Ask the agent to use" a style sends an ordinary note whose words carry a fixed marker, `lahe-style: <id>`, and only the marker is acted on. The agent turns it into one line of source: a stylesheet link in an HTML page, or a frontmatter line in a Markdown file, which the renderer turns into the same link. No record shape, route or review file field changes. The agent contract gains one instruction.
 
 ## Analysis of Existing Structure
 
@@ -108,23 +108,43 @@ sequenceDiagram
     P->>S: preview textbook
     S->>PS: GET .lahe-styles/textbook/style.css, then fonts
     Note over S: page restyles, key saved
-    R->>P: Use this style
+    R->>P: Ask the agent to use Textbook
     P->>A: ready note "... (lahe-style: textbook)" via the outbox
     A->>A: writes the link, or the frontmatter line
     A-->>P: reply handled
     Note over S: page reloads on the rebuild; document style equals preview, key cleared
 ```
 
-**The panel.** The head menu gains "Document style". It opens a panel under the head, built once like the end-review panel, and fetches the list each time it opens. It holds:
+**The panel.** The head menu gains "Document style", placed just before "Hide for presenting", and only on a page that uses the house style. It opens a panel under the head, below the overdue banner when that shows, built once like the end-review panel. It fetches the list each time it opens. Top to bottom:
 
-- a radio group: International first, then installed styles by name, each with a strip of its palette (the layer drops any id or colour that fails its pattern again, so a list from anywhere else cannot inject markup or CSS); the document's own style is labelled "in the document"; arrow keys move and preview, as native radios do
-- a status line while previewing: "Previewing Textbook. The document uses International." with a "Back to the document's style" button, and "Use Textbook for this page" as the one primary button
-- a waiting line once the note is sent, while a ready note on this page carries that same marker and has no reply; the primary button is disabled for that style meanwhile (R6)
-- when the document names a style not in the list: "This document asks for `<id>`, which is not installed here." (R12)
-- when nothing is installed: International alone and "Add a style with `lahe style add <folder>`." (R11)
-- Close, and Esc
+- a title row, "Document style", with Close
+- the status line and its actions, which is what stays when the panel collapses, so nothing moves when it does
+- the list: a radio group, International Style first, then installed styles by name, each with a strip of its palette. The layer drops any id or colour that fails its pattern again, so a list from anywhere else cannot inject markup or CSS. The document's own style carries a faint "in the document". The list scrolls past eight rows. Names wrap; they are never clipped.
+- the nothing-installed or missing-style line, when either applies
 
-When the panel is closed and a preview is active, the panel collapses to its status line, so the rail always says the page is not showing the document's own style (R5). The panel uses the rail's own tokens and type, the menu's item styles and the end-review panel's button styles. Only the palette strips draw colour from the style, through validated hex values.
+It reuses what the rail has: the end-review panel's surface, title and neutral buttons (`.endpanel__no`) for Back and Close; the refusal banner's accent button (`.refusal__btn`) for the one primary action; the menu's keyboard handling; the status line's ellipsis; the hints' `kbd` for the command. Palette strips are six 10px squares with a 1px `var(--line)` border, right-aligned in a fixed width; a style with no palette leaves the space empty. International Style's strip is taken from `system-tokens.css` values, written in the layer with a comment naming each token, the way the Mermaid theme does. Nothing animates: the panel opens and closes like the menu and the end-review panel, the restyle is one paint, and the reading position is restored with instant scrolling.
+
+**The words.** One set, used everywhere:
+
+| Where | Words |
+| --- | --- |
+| Menu item and panel title | Document style |
+| The document's own row | the style's name, then "in the document" |
+| Status while previewing | Previewing Textbook. The document uses International Style. |
+| Collapsed status | Previewing Textbook, with the button "Back to the document's style" |
+| Primary button | Ask the agent to use Textbook |
+| Waiting | Sent to the agent. Waiting for it to add Textbook to this page. |
+| Missing style | This document asks for `foo`, which is not installed here. Showing International Style. |
+| Nothing installed | Add styles with `lahe style add <folder>`, or ask your agent to. |
+| Style removed during a preview | Textbook is no longer installed. Back to the document's style. |
+
+The primary button says the agent does the work, so "waiting" after it is no surprise. If the agent answers not handled or asks a question, the preview stays and the reply card carries the reason.
+
+**Keyboard and screen readers.** Opening the panel puts focus on the checked radio. Arrow keys move and preview, as native radios do, and keep the native focus ring. The status line is `aria-live="polite"`, so each preview and the waiting state are announced. Esc and Close return focus to the menu button. Holding an arrow key starts a load per style it passes, so only the latest pick applies and a load that finishes late is dropped.
+
+**The rail's scheme.** The rail picks light or dark from the page's background. A style with a dark ground would leave a light rail over a dark page, so the switch calls the rail's existing `refreshScheme` once the link and fonts settle, and again on Back.
+
+When the panel is closed and a preview is active, the panel collapses to its status line, so the rail always says the page is not showing the document's own style (R5). Present mode and a collapsed rail show no preview indicator: the pill stays quiet. A reload closes the panel; the handled card confirms a kept style.
 
 **Install.** `lahe style add <folder>...` takes a lock for the id (the lock-file pattern the static servers use; a second add of the same id at once is refused with a message), reads and checks each allowed file once, and writes those bytes into a new folder beside the target. If the id is installed, the old folder is renamed aside, the new one renamed in, and the old one removed; a failure between the renames puts the old one back. It prints each installed id and name, or the first reason for refusal and what a style folder needs (R10). `lahe style list` prints id, name and version from `metadata.json`. Removing a style is deleting its folder, as the brief says.
 
@@ -171,7 +191,7 @@ Grounds [R13 (a style cannot expose or load anything beyond its own stylesheet a
 
 ## Test Strategy
 
-The plan owns the one verification table: [03_plan_style_switcher.md](03_plan_style_switcher.md). The failure modes above each have a row there. Tests use a made-up style under `test/fixtures/styles/`, whose font is a copy of a vendored OFL face. No paid style enters the repo.
+The plan owns the one verification table: [03_plan_style_switcher.md](03_plan_style_switcher.md). The failure modes above each have a row there. Tests use two made-up styles under `test/fixtures/styles/` (one light, one with a dark ground), whose font is a copy of a vendored OFL face. No paid style enters the repo.
 
 ## Open Questions
 

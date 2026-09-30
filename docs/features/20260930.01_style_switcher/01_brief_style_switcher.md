@@ -16,7 +16,7 @@ Prior work: the crucible (`00_crucible_style_switcher.md`), the house style buil
 flowchart LR
     I["Install a style folder<br/>(once per machine)"] --> P["Click a style on the rail<br/>page changes at once"]
     P --> P
-    P --> K["Use this style<br/>one request to the agent"]
+    P --> K["Ask the agent to use it<br/>one request"]
     K --> A["Agent sets the style<br/>in the document's source"]
     A --> D["Document shows that style<br/>wherever Lahe serves it"]
 ```
@@ -39,7 +39,7 @@ flowchart LR
 
 1. **Install.** The reviewer (or their agent) runs one Lahe command on a downloaded style folder. Lahe copies it into its own storage on the machine. The International Style is always there with nothing installed.
 2. **Try.** On a page that uses the Lahe document style, the rail offers a style control. It lists the International Style and every installed style. One click restyles the whole page at once. The reviewer can flip through all of them. Nothing goes to the agent.
-3. **Keep.** One more deliberate action, "use this style", sends the agent one ordinary request on the Active tab. The agent adds one line to the document's source. The page reloads in that style, and the preview is no longer needed.
+3. **Keep.** One more deliberate action, "Ask the agent to use" that style, sends the agent one ordinary request on the Active tab. The agent adds one line to the document's source. The page reloads in that style, and the preview is no longer needed.
 4. **Share.** The document now carries its style. Anywhere Lahe serves it, and in a rendered Markdown file saved to disk, it shows that style.
 
 ## Requirements
@@ -69,7 +69,7 @@ flowchart LR
 ### Keeping a style
 
 ::: callout-req
-**R6. Keeping is one deliberate action.** "Use this style" sends the agent exactly one request, shown as an ordinary item on the Active tab. Flipping through previews sends nothing. The rail shows the request as waiting until the agent answers, and pressing the action again for the same style while one is waiting sends nothing new.
+**R6. Keeping is one deliberate action.** One button ("Ask the agent to use Textbook") sends the agent exactly one request, shown as an ordinary item on the Active tab. Flipping through previews sends nothing. The rail shows the request as waiting until the agent answers, and pressing the action again for the same style while one is waiting sends nothing new.
 :::
 
 ::: callout-req
@@ -160,3 +160,4 @@ None.
 | RF10 | "That page" was ambiguous | Accepted | R4 says a page of a review in a browser |
 | RF11 | UX Notes carried design decisions | Accepted | Marked as guidance the architecture may change |
 | RF12 | The store-link question should decide itself | Accepted | Decided: no link; the line names the command. No open questions remain |
+| DR10 | (Design review of the plan) "Use this style" hid that the agent does the work | Accepted | R6 now names the button "Ask the agent to use Textbook" |
