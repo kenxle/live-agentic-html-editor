@@ -148,9 +148,16 @@ test.describe("2A: two neighbouring regions stay two records (R30)", () => {
   }
 
   test("edit state is on one block, and its neighbour stays a plain part of the page", async ({ page }) => {
-    // The positive control for the assertion above: if the library made a
-    // container editable, both paragraphs would carry the editing attributes
-    // and the two-record assertion would still pass by luck.
+    // The positive control for the assertion above: if the session took in
+    // the neighbour, both paragraphs would land in one record and the
+    // two-record assertion would still pass by luck.
+    //
+    // Free writing moved WHERE contenteditable sits. The session makes the
+    // anchor's host editable (here the body, the nearest ancestor that can hold
+    // the anchor and its run) and a beforeinput guard refuses every edit
+    // outside the anchor and its run (architecture, "The editing host"). So the
+    // attribute on the block is no longer the thing to check. What R30 needs is
+    // that the session is on #alpha alone and #beta cannot be written into it.
     await page.goto(pages.urlFor(FIXTURE) + "?review=edit-two-scope");
 
     await placeCaret(page, { selector: "#alpha", offset: 0 });
@@ -161,14 +168,40 @@ test.describe("2A: two neighbouring regions stay two records (R30)", () => {
 
     const alpha = await page.evaluate(() => window.__laheEdit.blockAttrs("alpha"));
     const beta = await page.evaluate(() => window.__laheEdit.blockAttrs("beta"));
-    const body = await page.evaluate(() => document.body.getAttribute("contenteditable"));
+    const state = await page.evaluate(() => window.__laheEdit.state());
+    const host = await page.evaluate(() => {
+      const el = document.querySelector("[data-lahe-edit-host]");
+      return el
+        ? {
+            isBody: el === document.body,
+            holdsBoth: el.contains(document.getElementById("alpha")) && el.contains(document.getElementById("beta")),
+            contenteditable: el.getAttribute("contenteditable"),
+            spellcheck: el.getAttribute("spellcheck")
+          }
+        : null;
+    });
 
-    expect(alpha.contenteditable).toBe("true");
-    expect(alpha.spellcheck, "the platform must not rewrite a word and have it recorded as intent").toBe(
-      "false"
+    expect(state.blockId, "the session is on #alpha").toBe("alpha");
+    expect("data-lahe-protected" in alpha, "and #alpha is the block protection holds").toBe(true);
+    expect(host, "one host carries the editing attributes").toBeTruthy();
+    expect(host.contenteditable).toBe("true");
+    expect(host.spellcheck, "the platform must not rewrite a word and have it recorded as intent").toBe("false");
+    expect(host.holdsBoth, "the host is the shared parent, so the guard is what keeps #beta out").toBe(true);
+    expect(beta, "the neighbour carries nothing of the layer's").toEqual({ id: "beta" });
+
+    // The guard, proven by typing: a keystroke aimed at the neighbour does not
+    // reach it, and no record is made for it.
+    const betaBefore = await page.evaluate(() => window.__laheEdit.blockText("beta"));
+    await placeCaret(page, { selector: "#beta", offset: 0 });
+    await page.keyboard.type("Q");
+    expect(await page.evaluate(() => window.__laheEdit.blockText("beta")), "the neighbour stays the page").toBe(
+      betaBefore
     );
-    expect(beta.contenteditable, "the neighbour is still the page").toBe(undefined);
-    expect(body, "and so is everything above it").toBe(null);
+    const texts = await page.evaluate(() =>
+      window.__laheEdit.items().map((item) => (item.context && item.context.quote) || item.before || "")
+    );
+    expect(texts.some((t) => t.indexOf("third week hurts") !== -1), "and no record is made for it").toBe(false);
+    await placeCaret(page, { selector: "#alpha", offset: 0 });
 
     // The frame is real, and it is over the block the reviewer is in.
     const frame = await page.evaluate(() => window.__laheEdit.frameRect());
