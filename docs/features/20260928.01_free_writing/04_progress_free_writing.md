@@ -14,9 +14,7 @@
 
 ## Currently working on
 
-| Agent or task | Doing | Started | Branch |
-|---|---|---|---|
-| Docs agent | Checking the ongoing docs, diagrams, README, AGENTS.md and CLI guide against what shipped, and writing `docs/ongoing/FREE_WRITING.md` | 2026-09-30 17:17 | `fw-docs` |
+Nothing is running. Next: the deletion batch and the CLAUDE.md changes, once you answer the cleanup decisions page.
 
 ## Phases
 
@@ -119,6 +117,12 @@ PR [#20](https://github.com/kenxle/live-agentic-html-editor/pull/20) opened 2026
 ## Log
 
 Newest first.
+
+**2026-09-30 17:18.** The living docs now match what shipped:
+- `docs/ongoing/FREE_WRITING.md` is new
+- README, AGENTS.md, three diagrams and four ongoing docs were updated
+
+Your review comments are exported into the feature folder. The board is updated, and one memory is saved: open a preview for you rather than only link it.
 
 **2026-09-30 16:57.** You approved the merge, and PR #20 is on main. Your checkout is pulled, the skill is reinstalled, and the helper restarted on the new code, so free writing is live for you.
 
