@@ -495,9 +495,9 @@
 
   var BLOCK_TYPES = [
     { tag: "p", label: "Paragraph", code: "Digit0", chords: { mac: "Cmd-Option-0", other: "Ctrl-Shift-0" }, markdown: null },
-    { tag: "h2", label: "Heading", code: "Digit2", chords: { mac: "Cmd-Option-2", other: "Ctrl-Shift-2" }, markdown: "# " },
-    { tag: "h3", label: "Subheading", code: "Digit3", chords: { mac: "Cmd-Option-3", other: "Ctrl-Shift-3" }, markdown: "## " },
-    { tag: "h4", label: "Small heading", code: "Digit4", chords: { mac: "Cmd-Option-4", other: "Ctrl-Shift-4" }, markdown: "### " },
+    { tag: "h2", label: "Heading", code: "Digit2", chords: { mac: "Cmd-Option-2", other: "Ctrl-Shift-2" }, markdown: "## " },
+    { tag: "h3", label: "Subheading", code: "Digit3", chords: { mac: "Cmd-Option-3", other: "Ctrl-Shift-3" }, markdown: "### " },
+    { tag: "h4", label: "Small heading", code: "Digit4", chords: { mac: "Cmd-Option-4", other: "Ctrl-Shift-4" }, markdown: "#### " },
     { tag: "ul", label: "Bulleted list", code: "Digit8", chords: { mac: "Cmd-Shift-8", other: "Ctrl-Shift-8" }, markdown: "- " },
     { tag: "ol", label: "Numbered list", code: "Digit7", chords: { mac: "Cmd-Shift-7", other: "Ctrl-Shift-7" }, markdown: "1. " }
   ];
@@ -548,7 +548,10 @@
     return null;
   }
 
-  var MARKDOWN_SHORTCUTS = { "# ": "h2", "## ": "h3", "### ": "h4", "- ": "ul", "* ": "ul", "1. ": "ol" };
+  // Markdown's own heading levels, so "## " makes the h2 that "##" means in
+  // the source (the flow walk found them one level off). "# " makes h2 too:
+  // the body has no h1, because the page title is the h1.
+  var MARKDOWN_SHORTCUTS = { "# ": "h2", "## ": "h2", "### ": "h3", "#### ": "h4", "- ": "ul", "* ": "ul", "1. ": "ol" };
 
   /**
    * The block type a Markdown shortcut asks for: the whole text of the block

@@ -464,3 +464,23 @@ test.describe("opening a block without changing it shows no card", () => {
     });
   }
 });
+
+// Flow walk design problem 5: "## " made a Subheading (h3), one level off
+// from what "##" means in the Markdown source.
+test.describe("Markdown heading shortcuts match Markdown", () => {
+  for (const [typed, tag] of [["# ", "h2"], ["## ", "h2"], ["### ", "h3"], ["#### ", "h4"]]) {
+    test(JSON.stringify(typed) + " makes " + tag, async ({ page }) => {
+      await fw.openFixture(page, server, "blog.html");
+      await fw.openEdit(page, "#p1");
+      await page.keyboard.press("Enter");
+      await page.keyboard.type(typed + "Words", { delay: 2 });
+      const got = await page.evaluate(() =>
+        window.__lahe.handle.editing.sessionElements().map((el) => el.tagName.toLowerCase() + ":" + el.textContent)
+      );
+      expect(got[1]).toBe(tag + ":Words");
+      await fw.commitByEsc(page);
+      const item = await fw.onlyEdit(page);
+      expect(item.new_blocks).toEqual([{ tag: tag, html: "Words" }]);
+    });
+  }
+});

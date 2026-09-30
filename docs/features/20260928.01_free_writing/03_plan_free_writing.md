@@ -120,13 +120,15 @@ Each lives as a named constant in the file shown.
 | Block | Menu label | macOS | Windows and Linux | Markdown shortcut |
 |---|---|---|---|---|
 | p | Paragraph | Cmd-Option-0 | Ctrl-Shift-0 | none |
-| h2 | Heading | Cmd-Option-2 | Ctrl-Shift-2 | `# ` |
-| h3 | Subheading | Cmd-Option-3 | Ctrl-Shift-3 | `## ` |
-| h4 | Small heading | Cmd-Option-4 | Ctrl-Shift-4 | `### ` |
+| h2 | Heading | Cmd-Option-2 | Ctrl-Shift-2 | `## ` (and `# `) |
+| h3 | Subheading | Cmd-Option-3 | Ctrl-Shift-3 | `### ` |
+| h4 | Small heading | Cmd-Option-4 | Ctrl-Shift-4 | `#### ` |
 | ul | Bulleted list | Cmd-Shift-8 | Ctrl-Shift-8 | `- ` or `* ` |
 | ol | Numbered list | Cmd-Shift-7 | Ctrl-Shift-7 | `1. ` |
 
 Each menu row shows its chord for the reviewer's system and its Markdown shortcut, read from the one matcher in `gestures.js`.
+
+The heading shortcuts use Markdown's own levels, so `## ` makes the h2 that `##` means in the source. `# ` makes h2 too, because the body has no h1: the page title is the h1. The flow walk found the first cut one level off (`## ` made h3).
 
 ### Words this plan pins
 

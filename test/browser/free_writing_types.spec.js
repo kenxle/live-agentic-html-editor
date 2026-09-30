@@ -20,7 +20,7 @@ const CHORD = {
   ul: MAC ? "Meta+Shift+Digit8" : "Control+Shift+Digit8",
   ol: MAC ? "Meta+Shift+Digit7" : "Control+Shift+Digit7"
 };
-const SHORTCUT = { h2: "# ", h3: "## ", h4: "### ", ul: "- ", ol: "1. " };
+const SHORTCUT = { h2: "## ", h3: "### ", h4: "#### ", ul: "- ", ol: "1. " };
 const LABEL = {
   p: "Paragraph",
   h2: "Heading",
@@ -152,9 +152,9 @@ test.describe("free writing: block types", () => {
     expect(b.focused).toBe("row:p");
     expect(b.rows.map((r) => [r.label, r.chord, r.markdown])).toEqual([
       ["Paragraph", MAC ? "Cmd-Option-0" : "Ctrl-Shift-0", ""],
-      ["Heading", MAC ? "Cmd-Option-2" : "Ctrl-Shift-2", "#"],
-      ["Subheading", MAC ? "Cmd-Option-3" : "Ctrl-Shift-3", "##"],
-      ["Small heading", MAC ? "Cmd-Option-4" : "Ctrl-Shift-4", "###"],
+      ["Heading", MAC ? "Cmd-Option-2" : "Ctrl-Shift-2", "##"],
+      ["Subheading", MAC ? "Cmd-Option-3" : "Ctrl-Shift-3", "###"],
+      ["Small heading", MAC ? "Cmd-Option-4" : "Ctrl-Shift-4", "####"],
       ["Bulleted list", MAC ? "Cmd-Shift-8" : "Ctrl-Shift-8", "-"],
       ["Numbered list", MAC ? "Cmd-Shift-7" : "Ctrl-Shift-7", "1."]
     ]);
@@ -399,9 +399,9 @@ test.describe("free writing: block types", () => {
     { file: "md_render.html", anchor: "section:first-of-type > p:first-of-type", offset: 10 }
   ];
   const RETYPES = [
-    { tag: "h2", shortcut: "# " },
-    { tag: "h3", shortcut: "## " },
-    { tag: "h4", shortcut: "### " }
+    { tag: "h2", shortcut: "## " },
+    { tag: "h3", shortcut: "### " },
+    { tag: "h4", shortcut: "#### " }
   ];
 
   /** Computed type and spacing of an element, and the gap from its bottom to the next block's top. */
