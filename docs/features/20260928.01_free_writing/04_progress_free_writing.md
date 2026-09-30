@@ -17,12 +17,7 @@
 
 | Agent or task | Doing | Started | Branch |
 |---|---|---|---|
-| Follow-up builder F5 | The last fix-round items:
-  - notes files with front matter
-  - the long proofread
-  - the helper version check
-  - the check that undone blocks are gone
-  - three leftover duplicate lists | 2026-09-29 23:29 | `free-writing-f5` |
+| Follow-up builder F5 | The last fix-round items: notes files with front matter, the long proofread, the helper version check, the check that undone blocks are gone, and three leftover duplicate lists | 2026-09-29 23:29 | `free-writing-f5` |
 
 ## Phases
 
