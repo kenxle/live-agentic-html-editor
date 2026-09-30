@@ -654,3 +654,15 @@ Checked against main after the architecture was written: piece-keeps-formatting,
 | MD9 | Rewording a ready or `not_handled` record now takes it off the drain at the first changing keystroke | Accepted | Two sittings section says a half-written run never reaches the agent |
 | MD10 | Folder servers now serve dotfiles | Accepted | Added to the `lahe write` reason for its own one-page server |
 | MD11 | The 2000-character bound, `MAX_BODY_BYTES`, and the draft floor are unchanged; oversized-records' paint guard and stamp rule apply to comments only | No change | Checked; nothing in the design depends on them changing |
+
+## Build Back-patches
+
+Changes the build made to this design, after the flow walk.
+
+| # | Change | Why |
+|---|---|---|
+| BB1 | When the agent rewords the same anchor the reviewer reworded, replay finds where the anchor now stands, raises the choice card with the run on it, and keeps the run on the page after the anchor while the card waits. The anchor itself is written only when the reviewer answers. Before this, the run was held until the answer, so the reviewer's new paragraphs vanished with no card. | The flow walk found the new text disappearing. Showing it beside the card keeps the reviewer's words visible and still leaves the anchor decision to them. |
+| BB2 | An anchor the reviewer never changed, whose words the agent rewrote, marks the run lost rather than placing it after a guess. | Lahe never guesses a location without a card. Boarded as `LAHE-untouched-anchor-rewritten`. |
+| BB3 | Markdown shortcuts match Markdown: `## ` makes h2, `### ` h3, `#### ` h4, and `# ` also makes h2. | The flow walk found `## ` making an h3, which the agent then wrote as `###`. |
+| BB4 | Words the reviewer typed into the tail of a split paragraph make the whole tail one new block. `from_anchor` marks only a tail of the page's own moved words. | A literal agent would drop words marked `from_anchor`, and the two-block alternative split one paragraph into two. |
+
