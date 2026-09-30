@@ -1,6 +1,6 @@
 /*
  * live-agentic-html-editor review layer
- * version 0.2.0+ab345203a077
+ * version 0.2.0+64fdc4920d48
  *
  * GENERATED FILE. Do not edit. Edit the sources under src/ and run
  *   npm run build:layer
@@ -12,7 +12,7 @@
   "use strict";
   var g = typeof globalThis !== "undefined" ? globalThis : window;
   g.LAHE = g.LAHE || {};
-  g.LAHE.version = "0.2.0+ab345203a077";
+  g.LAHE.version = "0.2.0+64fdc4920d48";
 })();
 /* ---- src/shared/markers.js  (owner: 0A-kernel) ---- */
 // Markers: the attribute and class names that identify DOM the tool added.
@@ -40113,6 +40113,12 @@
     var lineTarget = null;
     var lineRaf = null;
     var linePoint = null;
+    // Where the line's block sat when the line was drawn. The line is fixed to
+    // the window, so a scroll, a reflow, a replay or a rebuild that moves the
+    // block leaves it floating over text (Ken's two leftovers, fix H3). A watch
+    // runs only while the line shows and re-places it when the block moves.
+    var lineAt = null;
+    var lineWatch = null;
     var placeholderNode = null;
     var emptyPageChecked = false;
 
@@ -40139,7 +40145,7 @@
           win.cancelAnimationFrame(frameRaf);
           frameRaf = null;
         }
-        hideLine();
+        removeLine();
       }
       return true;
     }
@@ -40162,6 +40168,9 @@
     function lineStyleHost() {
       var host = surface();
       if (!host) return null;
+      // A morph can replace the layer's root; a line left in the old one is
+      // never drawn again, so a new one is made in the root that is there now.
+      if (lineNode && !lineNode.isConnected) lineNode = null;
       if (!lineNode) {
         lineNode = doc.createElement("div");
         lineNode.className = "lahe-insert-line";
@@ -40189,7 +40198,47 @@
 
     function hideLine() {
       lineTarget = null;
+      lineAt = null;
+      stopLineWatch();
       if (lineNode) lineNode.removeAttribute("data-lahe-show");
+    }
+
+    // Edit state ended: the line comes out of the layer's root, not just
+    // hidden, so nothing of it can stay on screen with no edit open.
+    function removeLine() {
+      hideLine();
+      linePoint = null;
+      if (lineRaf && win && win.cancelAnimationFrame) win.cancelAnimationFrame(lineRaf);
+      lineRaf = null;
+      if (lineNode && lineNode.parentNode) lineNode.parentNode.removeChild(lineNode);
+      lineNode = null;
+    }
+
+    // Is the line's block still where it was when the line was drawn?
+    function lineInPlace() {
+      if (!lineTarget || !lineAt || !lineTarget.isConnected) return false;
+      var r = lineTarget.getBoundingClientRect();
+      return Math.abs(r.bottom - lineAt.bottom) <= 1 && Math.abs(r.left - lineAt.left) <= 1;
+    }
+
+    function stopLineWatch() {
+      if (lineWatch && win && win.cancelAnimationFrame) win.cancelAnimationFrame(lineWatch);
+      lineWatch = null;
+    }
+
+    // One check a frame, only while the line shows: edit state gone removes
+    // it; its block moved (scroll, typing, replay, rebuild) places it again
+    // from the pointer, which hides it when the pointer is no longer in a gap.
+    function watchLine() {
+      if (lineWatch || !win || !win.requestAnimationFrame) return;
+      var tick = function () {
+        lineWatch = null;
+        if (!isEditOpen()) return removeLine();
+        if (!lineTarget) return;
+        if (!lineInPlace()) placeLine();
+        if (lineTarget) lineWatch = win.requestAnimationFrame(tick);
+      };
+      lineWatch = win.requestAnimationFrame(tick);
     }
 
     // The gap under the pointer: between two blocks, or below the last one.
@@ -40240,8 +40289,17 @@
     }
 
     function onLineMove(event) {
-      if (!isEditOpen() || !win) return;
-      if (markers.isInsideOverlay(event.target)) return;
+      if (!win) return;
+      if (!isEditOpen()) {
+        if (lineNode) removeLine();
+        return;
+      }
+      if (markers.isInsideOverlay(event.target)) {
+        // On the layer: the rail, the bar, or the line itself. Only the line
+        // keeps it; moving onto the rail takes it away.
+        if (!onShownLine(event.clientX, event.clientY)) hideLine();
+        return;
+      }
       linePoint = { x: event.clientX, y: event.clientY };
       if (lineRaf) return;
       var run = function () {
@@ -40252,8 +40310,9 @@
     }
 
     function placeLine() {
-      if (!isEditOpen() || !linePoint) return hideLine();
-      if (onShownLine(linePoint.x, linePoint.y)) return;
+      if (!isEditOpen()) return removeLine();
+      if (!linePoint) return hideLine();
+      if (onShownLine(linePoint.x, linePoint.y) && lineInPlace()) return;
       var gap = gapAt(linePoint.x, linePoint.y);
       if (!gap) return hideLine();
       var node = lineStyleHost();
@@ -40281,7 +40340,20 @@
       }
       node.style.left = Math.round(lineLeft) + "px";
       node.style.width = Math.max(40, Math.round(right - lineLeft)) + "px";
+      var at = gap.block.getBoundingClientRect();
+      lineAt = { bottom: at.bottom, left: at.left };
       node.setAttribute("data-lahe-show", "true");
+      watchLine();
+    }
+
+    // The pointer left the window, the window lost focus, or the rail took
+    // focus: the pointer is not in a gap any more.
+    function onLineAway(event) {
+      if (!lineNode) return;
+      if (event && event.type === "mouseout" && event.relatedTarget) return;
+      if (event && event.type === "focusin" && !markers.isInsideOverlay(event.target)) return;
+      if (isEditOpen()) hideLine();
+      else removeLine();
     }
 
     function lineInfo() {
@@ -41034,6 +41106,10 @@
 
     function hideFrame() {
       revealPending = false;
+      // Every way a session closes comes through here. With no edit open after
+      // it, the "+ Write here" line goes too (fix H3: it stayed on screen after
+      // Esc with the pointer resting in a gap).
+      if (!isEditOpen()) removeLine();
       releaseRoom();
       if (menuOpen) closeMenu(false);
       if (frameNode) frameNode.style.display = "none";
@@ -41146,6 +41222,8 @@
       listenerHandles.push(listeners.on(target, "keyup", onRunKeyup, true, LISTENER_GROUP));
       listenerHandles.push(listeners.on(target, "selectionchange", onRunSelectionChange, true, LISTENER_GROUP));
       listenerHandles.push(listeners.on(target, "mousemove", onLineMove, true, LISTENER_GROUP));
+      listenerHandles.push(listeners.on(target, "mouseout", onLineAway, true, LISTENER_GROUP));
+      listenerHandles.push(listeners.on(target, "focusin", onLineAway, true, LISTENER_GROUP));
 
       if (win) {
         // The window losing focus is the reviewer leaving too.
@@ -41411,8 +41489,9 @@
     }
 
     function onWindowBlur(event) {
-      if (!session) return;
       if (event && event.target && win && event.target !== win && event.target !== doc) return;
+      onLineAway(null);
+      if (!session) return;
       commit({ reason: "window blur" });
     }
 
@@ -41499,7 +41578,7 @@
       }
       hideFrame();
       dropRoom();
-      hideLine();
+      removeLine();
       hidePlaceholder();
       [frameNode, barNode, lineNode, placeholderNode, liveNode].forEach(function (node) {
         if (node && node.parentNode) node.parentNode.removeChild(node);
@@ -46413,7 +46492,7 @@
   "use strict";
 
   // Replaced by scripts/build-layer.js at concatenation time.
-  var VERSION = "0.2.0+ab345203a077";
+  var VERSION = "0.2.0+64fdc4920d48";
 
   var protocol = ns.protocol;
   var record = ns.record;
