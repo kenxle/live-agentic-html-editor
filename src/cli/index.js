@@ -37,7 +37,7 @@ var USAGE = [
   "  reply   write one correctly encoded reply line into your reply file",
   "  monitor watch locally for session work, print it, and exit (zero-token no-ops)",
   "",
-  "Run `lahe <command> --help` for a command's own options."
+  "Run `lahe <command> --help` for a command's own options, and `lahe --version` for the version."
 ].join("\n");
 
 // Every public command, in the order the usage text lists them. Dispatch reads
@@ -69,6 +69,11 @@ async function main(argv) {
   if (!command || command === "--help" || command === "-h" || command === "help") {
     process.stdout.write(USAGE + "\n");
     return command ? protocol.CLI_EXIT.OK : protocol.CLI_EXIT.BAD_USAGE;
+  }
+
+  if (command === "--version" || command === "-v" || command === "version") {
+    process.stdout.write(require("../../package.json").version + "\n");
+    return protocol.CLI_EXIT.OK;
   }
 
   if (Object.prototype.hasOwnProperty.call(COMMANDS, command)) return COMMANDS[command]().run(rest);

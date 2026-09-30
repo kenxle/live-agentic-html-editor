@@ -72,6 +72,16 @@ test("missing and unknown commands use the shared CLI bad-usage exit", async () 
   assert.match(unknown.stderr, /unknown command/);
 });
 
+test("--version prints the package version on stdout and exits successfully", async () => {
+  const pkg = require("../../package.json");
+  for (const flag of ["--version", "-v", "version"]) {
+    const result = await captureMain([flag]);
+    assert.equal(result.code, protocol.CLI_EXIT.OK, flag);
+    assert.equal(result.stdout, pkg.version + "\n", flag);
+    assert.equal(result.stderr, "", flag);
+  }
+});
+
 test("add, serve, session, monitor, and reply help use stdout and the successful help exit", async () => {
   for (const command of ["add", "serve", "session", "monitor", "reply"]) {
     const help = await captureMain([command, "--help"]);
