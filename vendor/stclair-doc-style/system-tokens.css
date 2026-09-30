@@ -295,4 +295,19 @@
   --text-small:15px;                 /* .small, code, the section number */
   --text-meta:14px;                  /* table heads, captions, meta lines */
   --text-micro:12px;                 /* chips, labels, month-grid events */
+  /* Three sizes from the X3 components page, which is built on M5. A stat
+     tile is number-first, so its number sits a step above the facts figure;
+     the single large tile is the one number a section is about. A pull quote
+     sits between h3 and h2, so it reads as a quote and not as a heading. */
+  --text-stat:clamp(30px,3.4vw,38px);        /* the number in a stat tile */
+  --text-stat-large:clamp(44px,6vw,64px);    /* the number in the single large stat tile */
+  --text-quote:clamp(22px,2.4vw,28px);       /* a pull quote's line */
+
+  /* ---------- images ----------
+     The frame every image treatment draws (image beside text, image cards,
+     the gallery, the full-width image, the peek pair). A screenshot of a white
+     page on a white page needs an edge, so the house draws a hairline. A style
+     that prints its images as plates or cuts them square sets these. */
+  --image-frame:var(--line);
+  --image-radius:var(--r);
 }

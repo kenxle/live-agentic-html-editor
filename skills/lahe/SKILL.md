@@ -569,6 +569,11 @@ page to load with the helper down.
   only for what the page needs on top, such as a chart. A page that already has
   its own styles, or its own icon, is left as its author made it.
 
+  The stylesheet ships ready-made components: stat tiles, callouts, insight panels,
+  badges, tables, option cards, image layouts, and more. Build the page from them
+  rather than bare paragraphs. `vendor/stclair-doc-style/COMPONENTS.md` in the Lahe
+  clone lists each one with its markup.
+
 Pointers:
 
 - `docs/CLI.md`
