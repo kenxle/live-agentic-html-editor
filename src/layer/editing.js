@@ -441,12 +441,14 @@
     ".lahe-edit-bar__row[aria-disabled='true'] { cursor: default; color: rgba(17, 17, 17, 0.38); background: transparent; }",
     ".lahe-edit-bar__rowkey, .lahe-edit-bar__rowmd { font: 11px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace; color: rgba(17, 17, 17, 0.5); }",
     ".lahe-edit-bar__hint[data-lahe-notice='true'] { color: #2c3f7d; white-space: normal; max-width: 420px; }",
-    ".lahe-insert-line { position: fixed; height: 20px; pointer-events: auto; cursor: text; opacity: 0;",
+    // 28px tall: a comfortable pointer target (the flow walk missed a 20px one
+    // and the session closed with the typing going nowhere).
+    ".lahe-insert-line { position: fixed; height: 28px; pointer-events: auto; cursor: text; opacity: 0;",
     "  transition: opacity 120ms ease; z-index: 1; }",
     ".lahe-insert-line[data-lahe-show='true'] { opacity: 1; }",
     ".lahe-insert-line:not([data-lahe-show='true']) { pointer-events: none; }",
-    ".lahe-insert-line__rule { position: absolute; left: 0; right: 0; top: 9px; border-top: 1.5px solid #3c56a5; }",
-    ".lahe-insert-line__label { position: absolute; left: 0; top: 1px; padding: 0 7px 0 0; background: #ffffff;",
+    ".lahe-insert-line__rule { position: absolute; left: 0; right: 0; top: 13px; border-top: 1.5px solid #3c56a5; }",
+    ".lahe-insert-line__label { position: absolute; left: 0; top: 5px; padding: 0 7px 0 0; background: #ffffff;",
     "  font: 600 11px/18px ui-sans-serif, system-ui, -apple-system, sans-serif; color: #3c56a5; }",
     ".lahe-edit-placeholder { position: fixed; pointer-events: none; color: rgba(17, 17, 17, 0.38); display: none;",
     "  white-space: nowrap; overflow: hidden; }",
@@ -4513,26 +4515,49 @@
 
     // The gap under the pointer: between two blocks, or below the last one.
     // Returns the block above it and where to draw the line.
-    function gapAt(x, y) {
+    // `strict` is the click rule: only the gap itself, never the slack over
+    // a block's own edge, so a click on a last line's descenders still puts
+    // the caret there.
+    function gapAt(x, y, strict) {
       var leaves = blocks.leafWalk(doc.body).filter(function (el) {
         return !markers.isInsideOverlay(el) && el.getClientRects().length > 0;
       });
       if (!leaves.length) return null;
-      var slack = 6;
+      var slack = strict ? 0 : LINE_SLACK;
       for (var i = 0; i < leaves.length; i += 1) {
         var a = leaves[i].getBoundingClientRect();
         var next = leaves[i + 1] ? leaves[i + 1].getBoundingClientRect() : null;
         var inColumn = x >= a.left - 40 && x <= a.right + 40;
         if (!inColumn) continue;
         if (next && next.top >= a.bottom - 1) {
-          if (y >= a.bottom - slack && y <= next.top + slack) {
-            return { block: leaves[i], y: (a.bottom + next.top) / 2, left: Math.min(a.left, next.left), right: Math.max(a.right, next.right) };
+          var inGap = strict ? y > a.bottom && y < next.top : y >= a.bottom - slack && y <= next.top + slack;
+          if (inGap) {
+            return {
+              block: leaves[i],
+              y: (a.bottom + next.top) / 2,
+              top: a.bottom,
+              bottom: next.top,
+              left: Math.min(a.left, next.left),
+              right: Math.max(a.right, next.right)
+            };
           }
-        } else if (!next && y >= a.bottom - slack && y <= a.bottom + 64) {
-          return { block: leaves[i], y: a.bottom + 12, left: a.left, right: a.right };
+        } else if (!next && (strict ? y > a.bottom : y >= a.bottom - slack) && y <= a.bottom + 64) {
+          return { block: leaves[i], y: a.bottom + 14, top: a.bottom, bottom: a.bottom + 64, left: a.left, right: a.right };
         }
       }
       return null;
+    }
+
+    var LINE_SLACK = 10;
+    var LINE_HALF = 14;
+
+    // Is the pointer on the line where it is drawn now? The line stays put
+    // while the pointer is on it, even past the gap's own edge, so reaching
+    // for it never makes it vanish under the pointer.
+    function onShownLine(x, y) {
+      if (!lineNode || !lineTarget || lineNode.getAttribute("data-lahe-show") !== "true") return false;
+      var r = lineNode.getBoundingClientRect();
+      return x >= r.left && x <= r.right && y >= r.top && y <= r.bottom;
     }
 
     function onLineMove(event) {
@@ -4549,6 +4574,7 @@
 
     function placeLine() {
       if (!isEditOpen() || !linePoint) return hideLine();
+      if (onShownLine(linePoint.x, linePoint.y)) return;
       var gap = gapAt(linePoint.x, linePoint.y);
       if (!gap) return hideLine();
       var node = lineStyleHost();
@@ -4556,9 +4582,26 @@
       var limit = (win.innerWidth || 1024) - railAllowance() - 8;
       var right = Math.min(gap.right, limit);
       lineTarget = gap.block;
-      node.style.top = Math.round(gap.y - 10) + "px";
-      node.style.left = Math.round(gap.left) + "px";
-      node.style.width = Math.max(40, Math.round(right - gap.left)) + "px";
+      // Below an open frame, the gap's middle can sit on the frame's bottom
+      // border (flow walk shot 44). The line then goes just under the frame.
+      var y = gap.y;
+      var frame = frameRect();
+      if (frame && gap.y - LINE_HALF < frame.y + frame.height && gap.y > frame.y) {
+        y = frame.y + frame.height + LINE_HALF;
+      }
+      node.style.top = Math.round(y - LINE_HALF) + "px";
+      // The bar can sit in the same gap (below the frame, when there is no
+      // room above it). The line then starts just past the bar, so its label
+      // is never hidden under it.
+      var lineLeft = gap.left;
+      if (barNode && barNode.style.display !== "none") {
+        var bar = barNode.getBoundingClientRect();
+        if (bar.width && bar.top < y + LINE_HALF && bar.bottom > y - LINE_HALF && bar.right + 8 < right - 40) {
+          lineLeft = Math.max(lineLeft, bar.right + 8);
+        }
+      }
+      node.style.left = Math.round(lineLeft) + "px";
+      node.style.width = Math.max(40, Math.round(right - lineLeft)) + "px";
       node.setAttribute("data-lahe-show", "true");
     }
 
@@ -5407,6 +5450,7 @@
      * call is a no-op, and this handler never runs while no session is open.
      */
     function onPointerDown(event) {
+      if (writeInGap(event)) return;
       if (!session) {
         // Edit state with no block open: a press on the rail leaves it. The
         // bar and the "+ Write here" line are the edit state's own.
@@ -5469,7 +5513,45 @@
       commit({ reason: "window blur" });
     }
 
+    // A press that missed "+ Write here" but landed in the page's own gap
+    // between two blocks (or just below the last one) starts writing there,
+    // as the line would have. Before this, a near miss read as a click
+    // outside: the session closed and the typing went nowhere (flow walk,
+    // design problem 7). Only a press on the page's containers counts, never
+    // one on content (an image, a rule), and only while an edit is open.
+    var swallowClick = false;
+    var gapPress = null;
+    function writeInGap(event) {
+      // pointerdown and its compatibility mousedown are one press: the second
+      // is swallowed, never a second opening.
+      if (event.type === "mousedown" && gapPress && gapPress.x === event.clientX && gapPress.y === event.clientY) {
+        gapPress = null;
+        if (typeof event.preventDefault === "function") event.preventDefault();
+        return true;
+      }
+      gapPress = null;
+      swallowClick = false;
+      if (!isEditOpen() || typeof event.clientX !== "number") return false;
+      if (typeof event.button === "number" && event.button !== 0) return false;
+      if (markers.isInsideOverlay(event.target) || pressedOnScrollbar(event)) return false;
+      var gap = gapAt(event.clientX, event.clientY, true);
+      if (!gap) return false;
+      var target = event.target;
+      if (!target || target.nodeType !== 1 || !target.contains(gap.block)) return false;
+      if (typeof event.preventDefault === "function") event.preventDefault();
+      swallowClick = true;
+      if (event.type === "pointerdown") gapPress = { x: event.clientX, y: event.clientY };
+      openAfter(gap.block);
+      return true;
+    }
+
     function onClick(event) {
+      if (swallowClick) {
+        // The press already started writing in the gap; its click is not a
+        // click outside the new session.
+        swallowClick = false;
+        return;
+      }
       if (markers.isInsideOverlay(event.target)) return;
       if (editState && !session) {
         // Edit state with no block open: a click on a block opens it.

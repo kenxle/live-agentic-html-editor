@@ -277,3 +277,120 @@ test.describe("the edit bar never covers the text above the frame", () => {
     await shot(page, "item4-bar-gap-light");
   });
 });
+
+// Flow walk design problem 7: "+ Write here" was a few pixels tall, the first
+// clicks missed, and a miss closed the session with the typing going nowhere.
+test.describe("+ Write here: a comfortable target, and a near miss still writes", () => {
+  // The middle of the page's own gap between #p1 and #h2.
+  function gapPoint(page, xFrom) {
+    return page.evaluate((from) => {
+      const a = document.getElementById("p1").getBoundingClientRect();
+      const b = document.getElementById("h2").getBoundingClientRect();
+      // Toward the right of the column: when the bar sits below the frame it
+      // takes the gap's left part, and the line starts past it.
+      const x = from === "left" ? a.left + 60 : a.right - 40;
+      return { x: x, y: (a.bottom + b.top) / 2, gap: b.top - a.bottom };
+    }, xFrom);
+  }
+
+  async function lineShown(page) {
+    await pollPage(page, () => {
+      const info = window.__lahe.handle.editing.lineInfo();
+      return !!info && info.opacity === "1";
+    }, undefined, { message: "+ Write here to show, past its fade" });
+    return page.evaluate(() => window.__lahe.handle.editing.lineInfo());
+  }
+
+  test("the line is at least 24px tall and stays while the pointer is on it", async ({ page }) => {
+    await fw.openFixture(page, server, "blog.html");
+    await fw.openEdit(page, "#p1");
+    const at = await gapPoint(page);
+    await page.mouse.move(at.x, at.y);
+    const line = await lineShown(page);
+    expect(line.rect.height).toBeGreaterThanOrEqual(24);
+    const bar = await page.evaluate(() => window.__lahe.handle.editing.barInfo().rect);
+    const overlapsBar =
+      line.rect.x < bar.x + bar.width && bar.x < line.rect.x + line.rect.width &&
+      line.rect.y < bar.y + bar.height && bar.y < line.rect.y + line.rect.height;
+    expect(overlapsBar, "the line and its label are never under the bar").toBe(false);
+    // To the line's lower edge, past the gap's own middle: it does not vanish.
+    await page.mouse.move(at.x, line.rect.y + line.rect.height - 2);
+    await page.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))));
+    expect(await page.evaluate(() => !!window.__lahe.handle.editing.lineInfo())).toBe(true);
+    await shot(page, "item5-write-here-light");
+  });
+
+  test("the line in dark mode", async ({ page }) => {
+    await fw.openFixture(page, server, "dark.html");
+    await fw.openEdit(page, "main > p");
+    const at = await page.evaluate(() => {
+      const a = document.querySelector("main > p").getBoundingClientRect();
+      const b = document.querySelector("main > h2").getBoundingClientRect();
+      return { x: a.right - 40, y: (a.bottom + b.top) / 2 };
+    });
+    await page.mouse.move(at.x, at.y);
+    const line = await lineShown(page);
+    expect(line.rect.height).toBeGreaterThanOrEqual(24);
+    await shot(page, "item5-write-here-dark");
+  });
+
+  test("a press in the gap where the line is not drawn starts writing there instead of ending the session", async ({ page }) => {
+    await fw.openFixture(page, server, "blog.html");
+    await fw.openEdit(page, "#p1");
+    await page.keyboard.type(" Kept words.", { delay: 2 });
+    const at = await gapPoint(page);
+    expect(at.gap).toBeGreaterThan(4);
+    // A press with no hover first: the line was never drawn, so this is the
+    // near miss the flow walk hit.
+    await page.evaluate(({ x, y }) => {
+      const target = document.elementFromPoint(x, y);
+      const opts = { bubbles: true, cancelable: true, composed: true, clientX: x, clientY: y, button: 0 };
+      target.dispatchEvent(new PointerEvent("pointerdown", opts));
+      target.dispatchEvent(new MouseEvent("mousedown", opts));
+      target.dispatchEvent(new PointerEvent("pointerup", opts));
+      target.dispatchEvent(new MouseEvent("mouseup", opts));
+      target.dispatchEvent(new MouseEvent("click", opts));
+    }, at);
+    expect(await page.evaluate(() => window.__lahe.isEditing())).toBe(true);
+    const els = await page.evaluate(() =>
+      window.__lahe.handle.editing.sessionElements().map((el) => el.tagName.toLowerCase() + ":" + el.textContent)
+    );
+    expect(els[0]).toBe("p:Most weeks look busy from the outside. This one did not. Kept words.");
+    expect(els[1], "an empty paragraph after the block above the gap, caret in it").toMatch(/^p:\s*$/);
+    await page.keyboard.type("Typed after the miss.", { delay: 2 });
+    await fw.commitByEsc(page);
+    const item = await fw.onlyEdit(page);
+    expect(item.new_blocks).toEqual([{ tag: "p", html: "Typed after the miss." }]);
+    expect(item.anchor_after_html).toBe("Most weeks look busy from the outside. This one did not. Kept words.");
+  });
+
+  test("a real mouse click on the line still opens writing after the block above", async ({ page }) => {
+    await fw.openFixture(page, server, "blog.html");
+    await fw.openEdit(page, "#p2");
+    const at = await gapPoint(page, "left");
+    await page.mouse.move(at.x, at.y);
+    const line = await lineShown(page);
+    await page.mouse.click(line.rect.cx, line.rect.cy);
+    const els = await page.evaluate(() => window.__lahe.handle.editing.sessionElements().map((el) => el.tagName.toLowerCase()));
+    expect(els).toEqual(["p", "p"]);
+    expect(await page.evaluate(() => window.__lahe.handle.editing.sessionElements()[0].id)).toBe("p1");
+  });
+
+  test("a click that really lands outside still commits", async ({ page }) => {
+    await fw.openFixture(page, server, "blog.html");
+    await fw.openEdit(page, "#p1");
+    await page.keyboard.type(" More.", { delay: 2 });
+    const title = await page.evaluate(() => {
+      const r = document.getElementById("title").getBoundingClientRect();
+      return { x: r.left + 20, y: r.top + r.height / 2 };
+    });
+    await page.mouse.click(title.x, title.y);
+    await pollPage(page, () => window.__lahe.isEditing() === false, undefined, { message: "the click outside to commit" });
+    const item = await fw.onlyEdit(page);
+    expect(item.state).toBe("ready");
+    // And a press in the page's margin, outside the column, commits too.
+    await fw.openEdit(page, "#p2");
+    await page.mouse.click(4, title.y + 200);
+    await pollPage(page, () => window.__lahe.isEditing() === false, undefined, { message: "the margin click to commit" });
+  });
+});
