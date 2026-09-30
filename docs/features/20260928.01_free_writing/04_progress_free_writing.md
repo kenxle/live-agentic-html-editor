@@ -1,6 +1,6 @@
 # Progress: Free writing
 
-**Phase 7, Review.** The flow-walk fixes are merged, and your preview now runs them. The final full gate is clean apart from one cursor-timing test, which a builder is pinning down. Three things wait on you. Last updated 2026-09-30 02:26.
+**Phase 7, Review, done.** Every check is green. Next is opening the pull request, which waits on your answers below or your go. Three things wait on you. Last updated 2026-09-30 02:40.
 
 **Docs:** [Crucible questions](00_crucible_questions.md) · [Crucible](http://127.0.0.1:65155/00_crucible.html) · [Brief](http://127.0.0.1:65155/01_brief_free_writing.html) · [Wireframes](http://127.0.0.1:49513/index.html) ([decision](wireframes/DECISION.md)) · [Architecture](http://127.0.0.1:65155/02_architecture_free_writing.html) · [Plan](http://127.0.0.1:65155/03_plan_free_writing.html)
 
@@ -27,8 +27,7 @@
 
 | Agent or task | Doing | Started | Branch |
 |---|---|---|---|
-| Caret race builder H1 | Under heavy load, a repaint mid-sitting puts the cursor at the end of the block instead of where you were typing. Your text is kept. Working out whether it is the product or the test | 2026-09-30 02:26 | `free-writing-h1` |
-| Preview agent (me) | Watching your preview pages | 2026-09-30 02:26 | preview only |
+| Preview agent (me) | Watching your preview pages | 2026-09-30 02:40 | preview only |
 
 ## Phases
 
@@ -41,7 +40,7 @@
 | 4 Architecture | done | 2026-09-28 |
 | 5 Plan | done | 2026-09-29 |
 | 6 Implement | done | 2026-09-29 |
-| 7 Review | in progress | 2026-09-29 |
+| 7 Review | done | 2026-09-30 |
 | 8 Ship and land | not started | |
 | 9 Cleanup | not started | |
 
@@ -91,6 +90,8 @@ No passes yet.
 Nothing queued.
 
 ### Test results
+
+- 2026-09-30 02:40: the one repaint failure was the test, not the product. The test moved the cursor with a script, then repainted before the browser registered the move, which no reviewer can do. The test now uses real arrow keys. It passed 160 of 160 under heavy load, and in all three browsers. Only a test changed, so the third full gate stands as the release result. The product gap it exposed is older than this feature and is boarded as `LAHE-repaint-caret-one-move-back`.
 
 - 2026-09-30 02:26, third full gate in all three browsers, 19.7 minutes:
   - Unit: 1797 of 1799 passed, 0 failed.

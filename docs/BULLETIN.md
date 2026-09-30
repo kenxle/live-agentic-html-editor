@@ -5,6 +5,8 @@ status: `[ ]` open, `[>]` claimed, `[x]` done, `[!]` blocked.
 
 ## Board
 
+- [ ] @anyone 2026-09-30 LAHE-repaint-caret-one-move-back -- **If a repaint destroys the block in the instant between a click or keypress and the browser's caret-moved event, the caret goes back one move.** Text is kept. Protection prefers the live caret, but a destroyed block leaves none, so it falls back to the snapshot from the last key release. Older than free writing; the plain-edit path has it too. Fix: also update the snapshot on mouse-up. Found by the free-writing checkpoint (`docs/features/20260928.01_free_writing/progress/phase7_fix_h1.md` on branch feat/free-writing).
+
 - [ ] @anyone 2026-09-30 LAHE-untouched-anchor-rewritten -- **New text written after a paragraph the reviewer never touched goes lost if the agent rewrites that paragraph.** Replay cannot find the anchor by its words any more, and it never guesses a location without a card, so the run is marked lost. A fix would find the likely anchor and ask the reviewer with a card before placing the run. From the free-writing flow walk (`docs/features/20260928.01_free_writing/02_architecture_free_writing.md`, BB2).
 
 - [ ] @ken 2026-09-29 LAHE-tiptap-later -- **Discuss a Tiptap integration after free writing ships.** Free writing uses Lahe's own editing code (architecture AQ1). Tiptap failed where it meets an existing block (caret, selection, Backspace, undo), but brings rich paste, mature undo, and IME handling. Open question from Ken: how hard would it be to adjust Tiptap's source to span existing blocks, and what else would it bring. Evidence: `docs/features/20260928.01_free_writing/02_architecture_free_writing.md` AQ1 and the two spike results it cites.
