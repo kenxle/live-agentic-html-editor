@@ -5,6 +5,8 @@ status: `[ ]` open, `[>]` claimed, `[x]` done, `[!]` blocked.
 
 ## Board
 
+- [ ] @anyone 2026-09-30 LAHE-markdown-heading-ids -- **The Markdown renderer gives headings no `id`, so in-page links (`[text](#some-heading)`) go nowhere.** Seen reviewing `~/.claude/skills/feature-forge/SKILL.md`: `href="#6-sub-agents-reviews-and-personas"` renders, but every `<h2>` has no id. GitHub-style slugs (lowercase, punctuation dropped, spaces to hyphens) would make the same links work in LAHE and on GitHub.
+
 - [ ] @anyone 2026-09-30 LAHE-file-title-edit-contract -- **Tell agents what an edit of the file-name title means.** A Markdown page with no `#` heading shows the file name as its title (`data-lahe-file-title`). Ken decided it stays editable. The agent contract does not say what to do with such an edit; the right move is to add a real top-level title at the top of the source, never to rename the file. Add that line to the contract and every copy of it (skills/lahe/SKILL.md, docs/CONTRACTS.md, test/unit/review_format.test.js), with a seams test. From the free-writing preview.
 
 - [ ] @anyone 2026-09-30 LAHE-inject-minified-line -- **Serve-time injection puts the script inside `<style>` on minified pages, so the rail never loads.** `placeScriptLine` (`src/shared/script_line.js`) inserts at the start of the line holding the last `</body>`. On a page written as one long line (`...<style>CSS</style></head><body>...</body></html>`) that line starts inside the `<style>` block, so the browser reads the tag as CSS. Seen on the Herald wireframes (personal repo, `docs/features/20260921.01_briefing_app/wireframes/final/`), worked around by putting `</body>` on its own line. Fix: insert directly before the `</body>` match when it doesn't begin its line.
