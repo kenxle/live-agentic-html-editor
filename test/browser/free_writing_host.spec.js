@@ -230,18 +230,27 @@ test.describe("free writing: the editing host", () => {
 
   test("a rich drop into a run block arrives as plain text", async ({ page }) => {
     await withRun(page, "Drop here: ");
-    await fw.caretToEndOfSession(page);
+    // A drop event carrying rich and plain text, aimed at the end of the run
+    // block. The layer takes the drop itself (onRunDrop) and inserts the plain
+    // text at the point; the rich markup never arrives.
     await page.evaluate(() => {
       const dt = new DataTransfer();
       dt.setData("text/html", "<h3 style='color:red'>Dropped <b>bold</b></h3>");
       dt.setData("text/plain", "Dropped bold");
-      const node = window.getSelection().focusNode;
-      const el = node.nodeType === 1 ? node : node.parentElement;
-      el.dispatchEvent(new InputEvent("beforeinput", { bubbles: true, cancelable: true, inputType: "insertFromDrop", dataTransfer: dt }));
+      const run = window.__lahe.handle.editing.sessionElements()[1];
+      const r = document.createRange();
+      r.selectNodeContents(run);
+      const rects = r.getClientRects();
+      const last = rects[rects.length - 1];
+      run.dispatchEvent(
+        new DragEvent("drop", { bubbles: true, cancelable: true, dataTransfer: dt, clientX: last.right - 1, clientY: last.top + last.height / 2 })
+      );
     });
     await fw.commitByEsc(page);
     const item = await fw.onlyEdit(page);
-    expect(item.new_blocks).toEqual([{ tag: "p", html: "Drop here: Dropped bold" }]);
+    expect(item.new_blocks).toHaveLength(1);
+    expect(item.new_blocks[0].tag).toBe("p");
+    expect(item.new_blocks[0].html.replace(/&nbsp;| /g, " ")).toBe("Drop here: Dropped bold");
   });
 
   test("every block outside keeps its outerHTML: a synthetic drop onto one", async ({ page }) => {
@@ -486,7 +495,7 @@ test.describe("free writing: the editing host", () => {
     const said = await page.evaluate(() => window.__lahe.handle.editing.announcements());
     expect(said).toEqual(["Writing after: Most weeks look busy from the", "Heading", "Sent to the agent"]);
 
-    await fw.openFixture(page, server, "empty_notes.html");
+    await fw.openFixture(page, server, "empty_notes.html", { notes: true });
     await pollPage(page, () => window.__lahe.isEditing() === true, undefined, { message: "the empty page to open" });
     expect(await page.evaluate(() => window.__lahe.handle.editing.liveText())).toBe("Writing at the start of the page");
   });

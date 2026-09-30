@@ -577,7 +577,7 @@ test.describe("free writing: the edits row and the card show new blocks", () => 
   });
 
   test("an empty notes page shows the pinned lines on both tabs, with the file name", async ({ page }) => {
-    await fw.openFixture(page, server, "empty_notes.html");
+    await fw.openFixture(page, server, "empty_notes.html", { notes: true });
     for (const tab of ["active", "edits"]) {
       await openRail(page, tab);
       const lines = await pollValue(

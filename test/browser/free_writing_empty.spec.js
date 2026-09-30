@@ -129,7 +129,7 @@ test.describe("free writing: empty space and the empty page", () => {
   });
 
   test("the empty notes page opens ready, and the first sitting is start_of_container on main, not the title", async ({ page }) => {
-    await fw.openFixture(page, server, "empty_notes.html");
+    await fw.openFixture(page, server, "empty_notes.html", { notes: true });
     await pollPage(page, () => window.__lahe.isEditing() === true, undefined, { message: "the empty page to open ready" });
     expect(await page.evaluate(() => window.__lahe.editState().placement)).toBe("start_of_container");
     await page.keyboard.type("First notes line.", { delay: 2 });
@@ -148,7 +148,7 @@ test.describe("free writing: empty space and the empty page", () => {
   });
 
   test("a second sitting before the agent places the first continues the record; after it is handled the next is after_anchor on the last block", async ({ page }) => {
-    await fw.openFixture(page, server, "empty_notes.html");
+    await fw.openFixture(page, server, "empty_notes.html", { notes: true });
     await pollPage(page, () => window.__lahe.isEditing() === true, undefined, { message: "the empty page to open ready" });
     await page.keyboard.type("Line one.", { delay: 2 });
     await fw.commitByEsc(page);

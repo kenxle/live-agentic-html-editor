@@ -899,6 +899,17 @@ test.describe("free writing seams", () => {
       await typeWorkedExample(page, kind === "html" ? "#p2" : ANCHOR_P);
       const ref = await committed(page);
       await agentRound(page, world, ref, { oldContract: true });
+      // The page learns of the reply on its next poll. Reload only once it
+      // holds the reply, or the page check runs on a page that has not heard.
+      await pollPage(
+        page,
+        (i) => {
+          const it = window.__lahe.itemById(i);
+          return !!it && (it.state === "handled" || !!it.reply);
+        },
+        ref.id,
+        { message: "the browser to hold the old agent's reply", timeoutMs: 20000 }
+      );
       await reviewerReloads(page);
       for (const t of [HEADER, PARA].concat(ITEMS)) {
         const n = await countOnPage(page, t, scope);

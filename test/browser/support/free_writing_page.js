@@ -18,12 +18,16 @@ const HELPER = "http://127.0.0.1:1";
 
 let reviewSeq = 0;
 
-/** Open a free-writing fixture with the layer on it. */
+/**
+ * Open a free-writing fixture with the layer on it. `options.notes: true` marks
+ * the review as a notes review, the way `lahe write` does: only a notes review
+ * opens an empty page ready to type.
+ */
 async function openFixture(page, server, file, options) {
   const opts = options || {};
   reviewSeq += 1;
   const review = opts.review || "fw-" + process.pid + "-" + reviewSeq + "-" + Date.now();
-  await withLayer(page, { review: review, token: "fw-token", helper: HELPER });
+  await withLayer(page, { review: review, token: "fw-token", helper: HELPER, notes: opts.notes === true });
   const url = file.indexOf("/") === -1 ? server.urlFor(FIXTURE_DIR + file) : server.urlFor(file);
   await page.goto(url);
   await pollPage(page, () => !!(window.__lahe && window.__lahe.booted), undefined, {
@@ -75,7 +79,33 @@ async function caretAt(page, selector, offset) {
   );
 }
 
+/**
+ * Save each session block's markup as the engine left it, one JSON line per
+ * block, to the running test's output folder (raw-blocks.jsonl). This is the
+ * "before cleaning" markup: what the browser's own editing engine built, which
+ * cleanBlock has not yet seen (testing review I15). Read every
+ * raw-blocks.jsonl under test-results after a run, and add any sample the corpus
+ * lacks to test/fixtures/free_writing/corpus.js (ENGINE). A failure to save
+ * never fails a test.
+ */
+async function saveRawBlocks(page) {
+  try {
+    const blocks = await page.evaluate(() =>
+      window.__lahe.handle.editing.sessionElements().map((el) => ({ tag: el.tagName.toLowerCase(), html: el.innerHTML }))
+    );
+    const info = require("@playwright/test").test.info();
+    const file = info.outputPath("raw-blocks.jsonl");
+    require("node:fs").appendFileSync(
+      file,
+      blocks.map((b) => JSON.stringify(Object.assign({ browser: info.project.name }, b))).join("\n") + "\n"
+    );
+  } catch (err) {
+    // Not in a test, or no session open: nothing to save.
+  }
+}
+
 async function commitByEsc(page) {
+  await saveRawBlocks(page);
   await page.keyboard.press("Escape");
   await pollPage(page, () => window.__lahe.isEditing() === false, undefined, { message: "Esc to commit" });
 }

@@ -617,13 +617,20 @@
    */
   function answerOnto(item, base, text) {
     var F = record.FIELD;
+    // F3's record.continueOnto(item, base, {note}) owns the archive-and-continue
+    // steps and keeps the change text of `base` (the fixed revision). It lands
+    // with F3's branch; until then the fallback below builds the same result on
+    // record.continueThread, so this file never copies those steps by hand.
+    if (typeof record.continueOnto === "function") return record.continueOnto(item, base, { note: text });
     var turn = {
       note: text,
-      change: typeof item[F.CHANGE] === "string" ? item[F.CHANGE] : null
+      change:
+        typeof base[F.CHANGE] === "string"
+          ? base[F.CHANGE]
+          : typeof item[F.CHANGE] === "string"
+          ? item[F.CHANGE]
+          : null
     };
-    // The archive-and-continue steps are record.continueThread's, so a change
-    // to them reaches this path too. What applySuggestions changed on top of
-    // the item (the fixed words) is copied onto that result.
     var next = record.continueThread(item, turn);
     if (base === item) return next;
     var moved = {};
