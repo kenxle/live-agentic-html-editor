@@ -1,6 +1,6 @@
 # Progress: Free writing
 
-**Phase 7, Review.** The fix round is merged, and the unit gate is green. One follow-up builder is finishing the last items. Then comes the full test run, and the final checks. One question waits on you. Last updated 2026-09-29 23:29.
+**Phase 7, Review.** The full gate found 6 existing tests broken in all three browsers. A builder is fixing them now. After that, the full gate runs again, then the workflow walk. One question waits on you. Last updated 2026-09-29 23:59.
 
 **Docs:** [Crucible questions](00_crucible_questions.md) · [Crucible](http://127.0.0.1:65155/00_crucible.html) · [Brief](http://127.0.0.1:65155/01_brief_free_writing.html) · [Wireframes](http://127.0.0.1:49513/index.html) ([decision](wireframes/DECISION.md)) · [Architecture](http://127.0.0.1:65155/02_architecture_free_writing.html) · [Plan](http://127.0.0.1:65155/03_plan_free_writing.html)
 
@@ -17,7 +17,7 @@
 
 | Agent or task | Doing | Started | Branch |
 |---|---|---|---|
-| Follow-up builder F5 | The last fix-round items: notes files with front matter, the long proofread, the helper version check, the check that undone blocks are gone, and three leftover duplicate lists | 2026-09-29 23:29 | `free-writing-f5` |
+| Regression builder F6 | Fixing the 6 existing tests the full gate broke: protection during a page rewrite, a second window with no helper, the framed page, and two edit-state checks. Also checking a Firefox-only image test | 2026-09-29 23:59 | `free-writing-f6` |
 
 ## Phases
 
@@ -80,6 +80,12 @@ No passes yet.
 Nothing queued.
 
 ### Test results
+
+- 2026-09-29 23:59, full gate in all three browsers, 18.5 minutes:
+  - Unit: 1785 of 1787 passed, 0 failed.
+  - Browser: 1978 passed, 19 failed, 19 skipped.
+  - The failures are 6 existing tests, broken in all three browsers, plus 1 Firefox-only image test.
+- Independent spec check: 35 of 46 criteria pass. The 2 fails are the force-quit question and the unrecorded deviations, which are now recorded. The 9 unverified wait on the workflow walk and a clean full gate.
 
 - 2026-09-29 14:28, merged branch: unit gate 1677 passed, 0 failed, 2 to-do.
 - Affected browser specs, once, in Chromium: 187 of 191 passed.
