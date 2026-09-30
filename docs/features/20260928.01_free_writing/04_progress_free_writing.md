@@ -1,33 +1,19 @@
 # Progress: Free writing
 
-**Phase 7, Review, done.** Every check is green. Next is opening the pull request, which waits on your answers below or your go. Three things wait on you. Last updated 2026-09-30 02:40.
+**Phase 7, Review.** You tried the preview and said go once the leftover "+ Write here" bug is fixed. A builder is on it. Then comes one more full gate, and the pull request. Nothing waits on you. Last updated 2026-09-30 09:04.
 
 **Docs:** [Crucible questions](00_crucible_questions.md) · [Crucible](http://127.0.0.1:65155/00_crucible.html) · [Brief](http://127.0.0.1:65155/01_brief_free_writing.html) · [Wireframes](http://127.0.0.1:49513/index.html) ([decision](wireframes/DECISION.md)) · [Architecture](http://127.0.0.1:65155/02_architecture_free_writing.html) · [Plan](http://127.0.0.1:65155/03_plan_free_writing.html)
 
 ## Needs your attention
 
-- [ ] **Try free writing on your own writing.** The preview now runs the flow-walk fixes. Both pages run the feature branch with the editor on them. They sit on a separate helper and a copy of your draft, so nothing of yours changes.
-  - [Your draft "new-debugging-hell-part2", a copy](http://127.0.0.1:59081/new-debugging-hell-part2-236277651c422e90.html). Press Cmd-Shift-E on a paragraph, then hover between paragraphs for "+ Write here". Try a header, a list, and bold. Leave editing, and I place your text as the agent.
-  - [A blank notes page](http://127.0.0.1:59160/notes-2026-09-30-d682203dc75e720a.html). It opens ready to type.
-  - Leave comments on the pages. I answer them there.
-- [ ] **Where the edit bar sits when there is no room above the block.** The bar now goes in the gap above what you are writing, so it never covers the line you are reading. Most gaps between paragraphs are smaller than the bar, so it often lands below the frame instead, over the top of the next block. The screenshots are in [flow_fix_g1](../../../.claude/worktrees/free-writing/docs/features/20260928.01_free_writing/progress/flow_fix_g1/). Options:
-  - keep it as is
-  - make the bar slimmer, so it fits in more gaps
-  - put it beside the block, in the page margin
-
-  Default: keep it. Try it on the preview and say if it bothers you.
-- [ ] **Losing text on a hard kill.** If the browser is force-quit within a moment of typing, that whole sitting is lost. After about 6 seconds everything survives, and a crashed tab keeps everything. The cause is that long writing now saves after a short pause instead of on every keystroke, which keeps typing fast. Options:
-  - keep it as is
-  - save a short sitting on every keystroke, and pause only for long ones
-
-  Default: keep it, since a force-quit within seconds of typing is rare.
-- [ ] For your information, no action needed: the Library feature branch (`feat/lahe_library`) changes some of the same files. Whichever lands second merges the other in.
+Nothing is waiting on you. The bar position and the force-quit trade-off stay on their defaults, per your go.
 
 ## Currently working on
 
 | Agent or task | Doing | Started | Branch |
 |---|---|---|---|
-| Preview agent (me) | Watching your preview pages | 2026-09-30 02:40 | preview only |
+| Fix builder H3 | The leftover "+ Write here" line that stays after an edit ends: after the page reloads itself, and after switching blocks | 2026-09-30 09:04 | `free-writing-h3` |
+| Preview agent (me) | Watching your preview pages | 2026-09-30 09:04 | preview only |
 
 ## Phases
 
@@ -121,6 +107,15 @@ Not shipped yet.
 ## Log
 
 Newest first.
+
+**2026-09-30 09:04.** You tried the preview on your blog draft and a notes page. As the agent, I placed everything you wrote.
+
+What you found:
+- **Writing at the bottom of the page:** there was no room to scroll. Fixed and merged.
+- **A leftover "+ Write here" line:** it stays after an edit ends. Being fixed.
+- **Editing the file-name title:** it raised a question, answered on the card.
+
+What you liked: clicking another block moves the editor to it. You said go once the leftover line is fixed.
 
 **2026-09-30 01:19.** The independent workflow walk ran as the agent from review.json only, in Markdown and HTML.
 
