@@ -1549,6 +1549,10 @@
     var list = Array.isArray(items) ? items : [];
     var takenBack = record.takenBackIds(list);
     var opts = options || {};
+    // The run check reads the other records: a block a later record took over
+    // is that record's now (record.handedOverBlocks). Kept on the caller's
+    // options, so the note it asks for next (pageCheckNoteFor) reads the same.
+    if (!Array.isArray(opts.items)) opts.items = list;
     var out = [];
     for (var i = 0; i < list.length; i += 1) {
       if (takenBack[list[i][record.FIELD.ID]]) continue;
@@ -3213,7 +3217,10 @@
     // before anything is written, so a clash writes nothing at all (R5, R6).
     // A page state the reviewer already answered with Keep mine is rewritten
     // to their block instead, pass after pass, as an anchor's is.
-    var clash = blocks.runClashFor(item, element.ownerDocument, element);
+    var later = laterRun(ctx, item);
+    var clash = blocks.runClashFor(later.item, element.ownerDocument, element);
+    // A block a later record took over is not this record's to clash on.
+    if (clash && later.handed[clash.index]) clash = null;
     var clashWrote = false;
     if (clash) {
       if (!clashAccepted(item, clash)) return holdBlockClash(ctx, item, element, clash);
@@ -3442,9 +3449,10 @@
       });
       return out;
     }
-    var list = runList(item, RUN_FIELD.NEW_BLOCKS);
+    var later = laterRun(ctx, item);
+    var list = runList(later.item, RUN_FIELD.NEW_BLOCKS);
     if (!list.length) return out;
-    var found = blocks.runElementsFor(item, doc, anchor);
+    var found = blocks.runElementsFor(later.item, doc, anchor);
     var priors = priorRunLeaves(item, doc, anchor);
     var index = pageLeafIndex(doc);
     var seen = [];
@@ -3454,6 +3462,13 @@
     var last = null;
     found.blocks.forEach(function (b) {
       var block = list[b.index];
+      // A block a later record took over is that record's to write. Where it
+      // shows, the walk goes on from it; where it does not, nothing is put in
+      // its place, or the page would show the list twice (flow walk, Fail 2).
+      if (later.handed[b.index]) {
+        if (b.status !== "missing") last = b.elements[b.elements.length - 1];
+        return;
+      }
       if (b.status === "whole") {
         // A leaf that shows an earlier revision exactly (a punctuation fix the
         // fold reads past) is branch three: rewritten (code lead finding 18).
@@ -3517,6 +3532,28 @@
       last = el;
     });
     return out;
+  }
+
+  /**
+   * The run as it reads now: each block a later record of the reviewer's took
+   * over (record.handedOverBlocks) carries that record's version. The record
+   * itself is never changed.
+   *
+   * @returns {{item: Object, handed: Object}}
+   */
+  function laterRun(ctx, item) {
+    var handed = record.handedOverBlocks(item, itemsIn(ctx));
+    var indexes = Object.keys(handed).filter(function (k) {
+      return k !== "anchor";
+    });
+    if (!indexes.length) return { item: item, handed: handed };
+    var copy = Object.assign({}, item);
+    copy[RUN_FIELD.NEW_BLOCKS] = runList(item, RUN_FIELD.NEW_BLOCKS).map(function (b, index) {
+      var h = handed[index];
+      if (!h || typeof h.html !== "string") return b;
+      return { tag: h.tag || b.tag, html: h.html };
+    });
+    return { item: copy, handed: handed };
   }
 
   /** Branch four on a run record: flag the anchor, hold the run, say so. */
@@ -3772,8 +3809,20 @@
     var F = record.FIELD;
     var leaves = normalize.leafBlocks(html);
     var list = runList(item, RUN_FIELD.NEW_BLOCKS);
+    // Blocks a later record of the reviewer's took over (flow walk, Fail 2):
+    // their words are that record's now. The run is read twice, once as it
+    // was placed and once with the later versions in place, and the reading
+    // that finds more of it counts. A taken-over block is never judged.
+    var handed = record.handedOverBlocks(item, options && options.items);
+    var later = list.map(function (b, index) {
+      var h = handed[index];
+      if (!h || typeof h.html !== "string") return b;
+      return { tag: h.tag || b.tag, html: h.html };
+    });
     var anchorHtml = typeof item[RUN_FIELD.ANCHOR_AFTER_HTML] === "string" ? item[RUN_FIELD.ANCHOR_AFTER_HTML] : "";
     var anchorWords = normalize.blockWords(anchorHtml);
+    var anchorKeys = [anchorWords];
+    if (handed.anchor && typeof handed.anchor.html === "string") anchorKeys.push(normalize.blockWords(handed.anchor.html));
     var starts = [];
     var anchored = true;
     if (isContainerPlacement(item)) {
@@ -3781,37 +3830,40 @@
       anchored = false;
     } else {
       leaves.forEach(function (leaf, i) {
-        if (anchorWords && leaf.words === anchorWords) starts.push(i);
+        if (leaf.words && anchorKeys.indexOf(leaf.words) !== -1) starts.push(i);
       });
     }
     if (!starts.length) {
       var beforeWords = normalize.blockWords(item[F.BEFORE_HTML] || item[F.BEFORE] || "");
-      var beforeBack = beforeWords && beforeWords !== anchorWords && leaves.some(function (l) {
+      var beforeBack = !handed.anchor && beforeWords && beforeWords !== anchorWords && leaves.some(function (l) {
         return l.words === beforeWords;
       });
       if (beforeBack) return CHECK_REASON.REVERTED;
       if (!list.length) return null;
       anchored = false;
       leaves.forEach(function (leaf, i) {
-        var hit = list.some(function (b) {
+        var hit = list.concat(later).some(function (b) {
           return normalize.blockWords(b.html) === leaf.words;
         });
         if (hit) starts.push(i - 1);
       });
-      if (!starts.length) return CHECK_REASON.REVERTED;
+      if (!starts.length) return handed.anchor ? null : CHECK_REASON.REVERTED;
     }
     var best = null;
+    var readings = later === list || !Object.keys(handed).length ? [list] : [list, later];
     starts.forEach(function (start) {
-      var matched = normalize.matchRun(list, leaves.slice(start + 1));
-      var present = matched.filter(function (m) {
-        return m.status !== "missing";
-      }).length;
-      if (!best || present > best.present) best = { start: start, matched: matched, present: present };
+      readings.forEach(function (reading) {
+        var matched = normalize.matchRun(reading, leaves.slice(start + 1));
+        var present = matched.filter(function (m) {
+          return m.status !== "missing";
+        }).length;
+        if (!best || present > best.present) best = { start: start, matched: matched, present: present, reading: reading };
+      });
     });
     var missing = false;
     var tag = false;
     var formatting = false;
-    var anchorLeaf = anchored && best.start >= 0 ? leaves[best.start] : null;
+    var anchorLeaf = anchored && best.start >= 0 && !handed.anchor ? leaves[best.start] : null;
     if (anchorLeaf) {
       var tagAfter = item[RUN_FIELD.ANCHOR_TAG_AFTER];
       if (tagAfter && anchorLeaf.tag !== tagAfter) tag = true;
@@ -3820,6 +3872,7 @@
       if ((kind === record.KIND.EDIT || kind === record.KIND.FORMAT_ONLY) && missingEmphasis(anchorHtml, anchorLeaf.html)) formatting = true;
     }
     best.matched.forEach(function (m) {
+      if (handed[m.index]) return;
       var block = list[m.index];
       if (m.status === "missing") {
         var words = normalize.blockWords(block.html);
