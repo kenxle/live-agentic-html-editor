@@ -721,6 +721,23 @@
       counters.restoreFailures += 1;
       return false;
     }
+    // WHAT THE PAGE TRIED TO SAY, kept before it is written over: the same
+    // rule as the single-block restore below (see its comment). Every edit
+    // session is a run session now, so without this an agent that rewrote the
+    // anchor while the reviewer was in it was swallowed silently, and the
+    // commit pass never saw the collision. Only the anchor the session is
+    // already on counts: a node the repaint built fresh is the server's
+    // version, not a change the page made under the reviewer.
+    var said = snap.container ? null : snap.entries[0];
+    if (said && anchorEl === active.element && anchorEl.isConnected) {
+      if (anchorEl.textContent !== said.text || anchorEl.innerHTML !== said.html) {
+        active.displaced = {
+          text: typeof anchorEl.textContent === "string" ? anchorEl.textContent : "",
+          html: anchorEl.innerHTML,
+          at: Date.now()
+        };
+      }
+    }
     var doc = ownerDocument(anchorEl);
     var built = [];
     restoring = true;
