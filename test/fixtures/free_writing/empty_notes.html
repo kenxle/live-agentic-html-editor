@@ -79,6 +79,23 @@
   --sage:#637a63;        /* darkened: bullet dots and marks on white */
   --sage-tint:#e7f1ed;
 
+  /* Status. Problems only: a source that wasn't read, a run that stopped, a
+     change that didn't save. They sit outside the accent budget, so a page
+     can show them beside a sage or cobalt panel. They are never decoration:
+     a page with no problem shows neither. Measured by
+     lib/scripts/measure_status_contrast.py; each clears 4.5:1 as text on
+     white, on paper, and on its own tint.
+                      on white   on paper   on its tint
+      --red           7.19:1     6.70:1     6.26:1
+      --amber         6.45:1     6.01:1     5.81:1
+     Amber is darkened to a brown so it passes as text. A status dot or a
+     notice border uses the same colour, so red and amber also differ by
+     shape on the page (a filled dot against a ring), never by hue alone. */
+  --red:#a8231c;
+  --red-tint:#fbeceb;
+  --amber:#8a5100;
+  --amber-tint:#fcf2e0;
+
   /* Deprecated alias, kept because the deck surface vendors this file and a
      rename would break it. Was #84c1ae, now resolves to the brand sage, which
      clears the floor on ink at 7.38:1 and matches the logo. Use --sage-fill. */
@@ -92,6 +109,29 @@
      full white at size glares. */
   --ink-soft-ondark:#d9d7d1;   /* 11.59:1, secondary copy at large sizes */
   --ink-faint-ondark:#b3b0a8;  /* 7.70:1, meta, section numbers, captions */
+
+  /* ---------- palette families, for the specimen ----------
+     Read only by the specimen script in document-every-component.html, which
+     draws the palette as key colours first, then each family's shades. Groups
+     are split by |. The first name in a group is the key colour; the text after
+     the colon is its one-line job. The job sits in the same string rather than
+     a second property so a family and its job cannot drift out of step when a
+     group is added or reordered. A style that leaves this out gets the older
+     view, roles plus leftover colours.
+
+     Sage leads its family, not sage-fill, because sage is what the mark and
+     fill roles use on a white page. Link sits with purple as its brighter
+     sibling. The two light ondark greys sit with white, since they are what
+     stands in for white on an ink ground. Paper is a shade of white here: it
+     only ever raises a ground, it never carries a job of its own. The alias
+     sage-lift is left out on purpose and shows under "Also defined". */
+  --palette-families:"white paper ink-soft-ondark ink-faint-ondark: The page ground, and text on an ink band \
+    | ink ink-soft ink-faint rule rule-ondark: Body text, headings, dividers and the default band \
+    | cobalt cobalt-hover cobalt-tint: The structural accent: the insight label, the accent band, code \
+    | sage sage-fill sage-tint: Bullet dots and marks, the third fill, the default quiet panel \
+    | purple purple-hover purple-tint link: Emphasis, for the one thing worth pausing on, and links \
+    | red red-tint: Status: something failed or is missing, and needs Ken \
+    | amber amber-tint: Status: something may be off, and will likely fix itself";
 
   /* ---------- type ---------- */
 
@@ -108,6 +148,19 @@
   --w-display:600;
   --w-bold:700;
 
+  /* Headings apart from labels. --font-display is the label voice (section
+     numbers, table heads, the facts figure, the insight label, calendar
+     heads); headings read these, which point at it in the house, so a style
+     can set its headings in one face and its labels in another without a
+     rule. The tracking suits a proportional face; a mono sets it to 0. */
+  --font-heading:var(--font-display);
+  --w-heading:var(--w-display);
+  --lh-heading:1.12;
+  --tracking-heading:-.012em;
+  --font-number:var(--font-display);  /* the section number */
+  --font-thead:var(--font-display);   /* a table's column names */
+  --font-caption:var(--font-body);    /* a figure's caption */
+
   /* ---------- spacing, 4px-rooted ---------- */
 
   --s1:4px; --s2:8px; --s3:12px; --s4:18px;
@@ -117,6 +170,11 @@
 
   --r:4px;
   --r-lg:6px;
+  /* Two corners the base used to type as literals, so a square style could
+     not reach them. Inline code is a chip, and a chip rounded as far as a
+     panel reads as a pill; the today marker is a pill on purpose. */
+  --r-code:3px;
+  --r-pill:999px;
   --line:1px solid var(--rule);
   --line-ink:1px solid var(--ink);
   --divider:2px solid var(--ink);
@@ -126,19 +184,102 @@
   --maxw:1080px;
   --read:68ch;
 
+  /* Layout widths a style reads when it moves off the house layout. The base
+     reads none of them except --layout-bleed's arithmetic, so the house page
+     is unchanged by any value here; they are declared once so every style
+     spells the same idea the same way.
+       --layout-margin      a margin column beside the text (Textbook's notes)
+       --layout-rail        a narrow rail with a hairline (Field Guide)
+       --layout-label       a label column beside an entry (Ledger)
+       --layout-hang        the column a display numeral hangs in (Folio)
+       --layout-numeral     the size of a display numeral at a section head
+       --layout-display-h2  a section heading above the h2 token, for a style
+                            whose sections open like covers
+       --layout-bleed       the inline padding that lets a block run edge to
+                            edge while its content stays on the column. It
+                            resolves 100% where it is used, so it is the
+                            element's own width, not the root's.
+       --layout-cols        how many columns a style's page grid has
+       --layout-ruler       the height of a ruler strip showing those columns */
+  --layout-margin:12rem;
+  --layout-rail:9rem;
+  --layout-label:14rem;
+  --layout-hang:9rem;
+  --layout-numeral:calc(var(--text-h1) * 1.6);
+  --layout-display-h2:var(--text-h2);
+  --layout-bleed:max(var(--gutter), calc((100% - var(--maxw)) / 2 + var(--gutter)));
+  --layout-cols:12;
+  --layout-ruler:var(--s2);
+
   /* ---------- semantic roles ----------
      What a surface file writes. Each one points at a raw token above, so a new
      style repoints these rather than editing document.css. */
 
-  /* Colour by job, not by name. */
+  /* Colour by job, not by name. Every colour a component rule in
+     document.css or day-page.css paints is one of these. A second style
+     overrides the roles from its own raw palette, so it never has to pour its
+     colours into slots named after the house hues. */
+
+  /* Ground and text. */
   --surface:var(--white);            /* the page ground */
+  --surface-raised:var(--paper);     /* a quiet ground inside the page: the boxed table's header */
   --on-surface:var(--ink);           /* body text on it */
   --on-surface-soft:var(--ink-soft); /* secondary copy */
   --on-surface-faint:var(--ink-faint); /* meta, captions, section numbers */
-  --accent:var(--cobalt);            /* the one accent a document uses */
-  --structure:var(--ink);            /* heavy structural marks: dividers, filled pills */
   --border:var(--rule);              /* hairline colour */
+
+  /* Accent: the structural colour. */
+  --accent:var(--cobalt);            /* the one accent a document uses */
+  --accent-hover:var(--cobalt-hover); /* its hover state; no document rule uses it today */
+  --accent-tint:var(--cobalt-tint);  /* the structural panel, the insight panel, code */
+  /* --link is declared with the raw colours above and is already a job name,
+     so it serves as both: a style overrides --link directly. */
   --focus:var(--link);               /* the focus ring */
+
+  /* Marks and emphasis. */
+  --mark:var(--sage);                /* bullet dots, accent numerals, small marks on the page ground */
+  --fill:var(--sage);                /* the third fill: the sage callout and icon circle */
+  --on-fill:var(--white);            /* text and glyphs on that fill */
+  --tint:var(--sage-tint);           /* the default quiet panel */
+  --emphasis:var(--purple);          /* the one thing worth pausing on: its band, callout, caveat label */
+  --emphasis-hover:var(--purple-hover); /* its hover state; no document rule uses it today */
+  --emphasis-tint:var(--purple-tint); /* the emphasis panel and the caveat insight */
+
+  /* On a filled ground. */
+  --structure:var(--ink);            /* heavy structural marks: dividers, filled bands, callouts */
+  --on-structure:var(--white);       /* text on a filled band, callout or icon circle */
+  --on-structure-soft:var(--ink-soft-ondark);   /* secondary copy on a filled ground */
+  --on-structure-faint:var(--ink-faint-ondark); /* section numbers and meta on a filled ground */
+  /* Text on the accent and emphasis fills. The house carries white on all
+     three, so both point at --on-structure; a style whose accent or emphasis
+     is light enough to want ink repoints one of these, not a rule. */
+  --on-accent:var(--on-structure);   /* text on the accent callout, band and icon circle */
+  --on-emphasis:var(--on-structure); /* text on the emphasis callout, band and icon circle */
+
+  /* Status, by job. A page paints problems through these, so a style can
+     repoint them. --muted is for a line that is neither fine nor a problem:
+     "pending switchover", "no sources were recorded for this page". It reuses
+     the faint ink on paper, so it reads as quiet rather than as a third
+     status colour. */
+  --danger:var(--red);               /* failed, missing, not saved: the red notice, dot and label */
+  --danger-tint:var(--red-tint);     /* the red notice's ground */
+  --on-danger:var(--white);          /* text on a filled danger button */
+  --warning:var(--amber);            /* may be off: the amber line, ring and label */
+  --warning-tint:var(--amber-tint);  /* the amber line's ground */
+  --muted:var(--ink-faint);          /* neither fine nor a problem */
+  --muted-tint:var(--paper);         /* the muted line's ground */
+
+  /* The section number, the table head and the figure. Each was a fixed
+     choice inside a rule, and every style that wanted another look had to
+     restate the rule; these name the choice so a style sets a value. */
+  --number-color:var(--on-surface-faint); /* the "Section N" label on the page ground */
+  --thead-color:var(--on-surface-faint);  /* a table's column names */
+  --thead-rule:var(--divider);            /* the rule under a naked table's head */
+  --thead-rule-boxed:var(--line);         /* the rule under a boxed table's head */
+  --figure-border:0 solid transparent;    /* a figure's frame; the house has none */
+  --figure-ground:transparent;            /* the ground a figure is printed on */
+  --figure-pad:0;                         /* the room between the frame and the image */
+  --caption-color:var(--on-surface-faint);
 
   /* Spacing by purpose. The numeric scale above still exists; these name the
      three distances a document actually keeps repeating. */
@@ -226,10 +367,10 @@ body{
    padding is the only gap. */
 
 h1,h2,h3,h4,h5,h6{
-  font-family:var(--font-display);
-  font-weight:var(--w-display);
-  line-height:1.12;
-  letter-spacing:-.012em;
+  font-family:var(--font-heading);
+  font-weight:var(--w-heading);
+  line-height:var(--lh-heading);
+  letter-spacing:var(--tracking-heading);
   /* Sentence case only. Never set a heading in all caps. */
 }
 h1{font-size:var(--text-h1);margin:var(--section-gap) 0 var(--block-gap)}
@@ -248,7 +389,8 @@ p{margin:0 0 var(--block-gap)}
 p:last-child{margin-bottom:0}
 
 /* A long unbroken run (a raw URL) wraps rather than widening the page. */
-p,li,td,dd{overflow-wrap:anywhere}
+p,li,dd{overflow-wrap:anywhere}
+td{overflow-wrap:break-word}   /* break-word keeps whole words when columns size; a long URL still breaks */
 
 a{color:var(--link);text-decoration:underline}
 a{
@@ -263,8 +405,10 @@ a{
    optional upgrades, not the only way to get the style. */
 
 img{max-width:100%;height:auto}
-figure{margin:var(--block-gap) 0}
-figcaption{margin-top:var(--s2);font-size:var(--text-meta);line-height:1.5;color:var(--on-surface-faint)}
+/* The frame, ground and padding are all nothing in the house; they are tokens
+   so a style that prints its figures as plates or drawings sets values. */
+figure{margin:var(--block-gap) 0;border:var(--figure-border);background:var(--figure-ground);padding:var(--figure-pad)}
+figcaption{margin-top:var(--s2);font-family:var(--font-caption);font-size:var(--text-meta);line-height:1.5;color:var(--caption-color)}
 blockquote{
   margin:var(--block-gap) 0;
   padding-left:var(--s4);
@@ -306,9 +450,17 @@ p:has(> img:only-child){max-width:none}
 .masthead{padding-block:var(--section-gap-narrow) 0}
 .masthead .meta{margin-top:var(--s2);font-size:var(--text-meta);color:var(--on-surface-faint)}
 
-/* ---------- hero ---------- */
+/* ---------- hero ----------
+   The hero's bottom padding is deliberately small. It used to carry the full
+   section-gap on the assumption that the section below would zero its own
+   top padding and let the hero supply the room; that broke the moment the
+   hero sat on its own coloured ground (a band), because the band's edge, the
+   section's top, and the hanging rule all landed on the same pixel. A block
+   is correct wherever it lands and carries its own space, so the hero keeps
+   a narrow close of its own and the section below always adds its full gap
+   on top of it. */
 
-.hero{padding-block:var(--section-gap-narrow) var(--section-gap)}
+.hero{padding-block:var(--section-gap-narrow) var(--gutter)}
 .hero h1{max-width:17ch;margin-bottom:var(--block-gap)}
 .hero .lede{max-width:58ch}
 
@@ -316,13 +468,11 @@ p:has(> img:only-child){max-width:none}
    A section carries its vertical rhythm and nothing else. The column comes
    from the page rule at the top of this file, so a section is correct
    wherever it lands in the body and cannot be double-padded by a wrapper.
-
-   One bug fix preserved from the reference implementation: the "first section
-   has no top padding" rule is an explicit .first class, never :first-of-type,
-   which misfires on any section that follows a full-bleed band. */
+   That includes the first section: it always pays its own top padding, never
+   zero, so it never depends on whatever sits above it (a hero, a band, a
+   masthead) to supply the room. */
 
 section.sheet{padding-block:var(--section-gap)}
-section.sheet.first{padding-block-start:0}
 
 .sheet-head{
   display:flex;
@@ -335,10 +485,10 @@ section.sheet.first{padding-block-start:0}
   margin-bottom:var(--section-gap-narrow);
 }
 .sheet-head .n{
-  font-family:var(--font-display);
+  font-family:var(--font-number);
   font-weight:var(--w-display);
   font-size:var(--text-small);
-  color:var(--on-surface-faint);
+  color:var(--number-color);
 }
 
 /* ---------- facts (a definition-list grid for key figures) ---------- */
@@ -393,15 +543,15 @@ section.sheet.first{padding-block-start:0}
 code{
   font-family:var(--font-mono);
   font-size:var(--text-small);
-  background:var(--cobalt-tint);
+  background:var(--accent-tint);
   padding:.1em .35em;
-  border-radius:3px;        /* px: a corner this small reads as a chip; var(--r) rounds an inline run too far */
+  border-radius:var(--r-code);   /* a corner this small reads as a chip; var(--r) rounds an inline run too far */
 }
 pre{
   font-family:var(--font-mono);
   font-size:var(--text-small);
   line-height:1.55;
-  background:var(--cobalt-tint);
+  background:var(--accent-tint);
   padding:var(--s4) var(--s5);
   border-radius:var(--r);
   overflow-x:auto;          /* a long line scrolls rather than breaking the page */
@@ -418,13 +568,13 @@ table{width:100%;border-collapse:collapse;font-size:var(--text-body);margin:0 0 
 
 /* 1. Naked ruled table, the default. No outer border, no header tint. */
 thead th{
-  font-family:var(--font-display);
+  font-family:var(--font-thead);
   font-weight:var(--w-display);
   font-size:var(--text-meta);
-  color:var(--on-surface-faint);
+  color:var(--thead-color);
   text-align:left;
   padding:0 var(--s4) var(--s3) 0;
-  border-bottom:var(--divider);
+  border-bottom:var(--thead-rule);
 }
 td{padding:var(--s4) var(--s4) var(--s4) 0;border-bottom:var(--line);vertical-align:top}
 td:last-child,th:last-child{padding-right:0}
@@ -433,8 +583,8 @@ td:last-child,th:last-child{padding-right:0}
       (a scope-and-duration table, a pricing table). Add class "boxed". */
 table.boxed{border:var(--line)}
 table.boxed thead th{
-  background:var(--paper);
-  border-bottom:var(--line);
+  background:var(--surface-raised);
+  border-bottom:var(--thead-rule-boxed);
   padding:var(--s3) var(--s4);
 }
 table.boxed td{padding:var(--s3) var(--s4);border-bottom:var(--line)}
@@ -466,7 +616,7 @@ ul:where(:not([class]), .dot) > li::before{
   width:7px;      /* px: the dot's drawn size, fixed so it does not swell with the line */
   height:7px;     /* px: the dot's drawn size */
   border-radius:50%;
-  background:var(--sage);
+  background:var(--mark);
 }
 ul.dot--cobalt li::before{background:var(--accent)}
 
@@ -509,9 +659,11 @@ ol.steps--two-col{columns:2;column-gap:var(--section-gap-narrow)}
     purple  for the one thing on the page worth pausing on
   One tint per page. Two tinted panels in different colours read as decoration.
 */
-.panel{background:var(--sage-tint);padding:var(--gutter);border-radius:var(--r)}
-.panel--cobalt{background:var(--cobalt-tint)}
-.panel--purple{background:var(--purple-tint)}
+.panel{background:var(--tint);padding:var(--gutter);border-radius:var(--r)}
+/* The modifier names still say the house hues. They paint through roles, so a
+   style never needs to touch them; a follow-up can rename them to the roles. */
+.panel--cobalt{background:var(--accent-tint)}
+.panel--purple{background:var(--emphasis-tint)}
 .panel p:last-child{margin-bottom:0}
 
 /* ---------- insight panel: a tinted panel with a generated label row ---------- */
@@ -543,11 +695,11 @@ ol.steps--two-col{columns:2;column-gap:var(--section-gap-narrow)}
   padding:var(--gutter);
   border-radius:var(--r);
   max-width:var(--read);
-  background:var(--cobalt-tint);
+  background:var(--accent-tint);
   font-size:var(--text-body);
   line-height:1.6;
 }
-.insight--caveat{background:var(--purple-tint)}
+.insight--caveat{background:var(--emphasis-tint)}
 
 .insight::before{
   display:block;
@@ -562,7 +714,7 @@ ol.steps--two-col{columns:2;column-gap:var(--section-gap-narrow)}
 }
 .insight--caveat::before{
   content:"Caveat";
-  color:var(--purple);
+  color:var(--emphasis);
 }
 
 /*
@@ -589,7 +741,7 @@ ol.steps--two-col{columns:2;column-gap:var(--section-gap-narrow)}
   mask-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='1.75' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M9 18h6'/%3E%3Cpath d='M10 22h4'/%3E%3Cpath d='M15.09 14c.18-.98.65-1.74 1.41-2.5A4.65 4.65 0 0 0 18 8 6 6 0 0 0 6 8c0 1 .23 2.23 1.5 3.5A4.61 4.61 0 0 1 8.91 14'/%3E%3C/svg%3E");
 }
 .insight--caveat::after{
-  background-color:var(--purple);
+  background-color:var(--emphasis);
   -webkit-mask-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='1.75' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z'/%3E%3Cpath d='M12 9v4'/%3E%3Cpath d='M12 17h.01'/%3E%3C/svg%3E");
   mask-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='1.75' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z'/%3E%3Cpath d='M12 9v4'/%3E%3Cpath d='M12 17h.01'/%3E%3C/svg%3E");
 }
@@ -605,9 +757,9 @@ ol.steps--two-col{columns:2;column-gap:var(--section-gap-narrow)}
    colour. */
 .insight li{margin:0 0 var(--s2)}
 .insight ol > li::before{color:var(--accent)}
-.insight--caveat ol > li::before{color:var(--purple)}
+.insight--caveat ol > li::before{color:var(--emphasis)}
 .insight ul > li::before{background:var(--accent)}
-.insight--caveat ul > li::before{background:var(--purple)}
+.insight--caveat ul > li::before{background:var(--emphasis)}
 .insight > :first-child{margin-top:0}
 .insight > :last-child{margin-bottom:0}
 
@@ -620,10 +772,13 @@ ol.steps--two-col{columns:2;column-gap:var(--section-gap-narrow)}
   put a long paragraph on sage, and never drop callout text below body size.
   One callout per page. It is the loudest small element available.
 */
-.callout{background:var(--structure);color:var(--white);padding:var(--s4) var(--gutter);border-radius:var(--r)}
-.callout--cobalt{background:var(--cobalt)}
-.callout--purple{background:var(--purple)}
-.callout--sage{background:var(--sage)}
+.callout{background:var(--structure);color:var(--on-structure);padding:var(--s4) var(--gutter);border-radius:var(--r)}
+/* Hue-named modifiers painting through roles; a follow-up can rename them.
+   The third fill names its own text colour, because a style's third fill may
+   be light enough that it carries ink rather than white. */
+.callout--cobalt{background:var(--accent);color:var(--on-accent)}
+.callout--purple{background:var(--emphasis);color:var(--on-emphasis)}
+.callout--sage{background:var(--fill);color:var(--on-fill)}
 .callout p{color:inherit;margin:0}
 
 /* ---------- icons ---------- */
@@ -659,12 +814,13 @@ ol.steps--two-col{columns:2;column-gap:var(--section-gap-narrow)}
   height:44px;     /* px: the circle's drawn size */
   border-radius:50%;
   display:grid; place-items:center; flex:none;
-  background:var(--structure); color:var(--white);
+  background:var(--structure); color:var(--on-structure);
 }
 .icon-circle .icon,.icon-circle svg{width:20px; height:20px; vertical-align:0}   /* px: the glyph inside a 44px circle */
-.icon-circle--cobalt{background:var(--cobalt)}
-.icon-circle--purple{background:var(--purple)}
-.icon-circle--sage{background:var(--sage)}
+/* Hue-named modifiers painting through roles, as with .callout above. */
+.icon-circle--cobalt{background:var(--accent);color:var(--on-accent)}
+.icon-circle--purple{background:var(--emphasis);color:var(--on-emphasis)}
+.icon-circle--sage{background:var(--fill);color:var(--on-fill)}
 
 /* A row of icon-circle plus text, for a short list of capabilities or steps. */
 .icon-row{display:flex; gap:var(--s4); align-items:flex-start; margin-bottom:var(--gutter)}
@@ -679,7 +835,7 @@ ol.steps--two-col{columns:2;column-gap:var(--section-gap-narrow)}
 */
 ol.steps--accent > li::before{
   font-family:var(--font-display); font-weight:var(--w-display);
-  color:var(--sage);
+  color:var(--mark);
 }
 
 /* ---------- folded section ----------
@@ -695,7 +851,6 @@ ol.steps--accent > li::before{
    <details> does not render at all. */
 
 details.fold{padding-block-start:var(--section-gap)}
-details.fold.first{padding-block-start:0}
 
 details.fold summary.fold-head{
   display:flex;
@@ -713,10 +868,10 @@ details.fold summary.fold-head::-webkit-details-marker{display:none}
 details.fold summary.fold-head::marker{content:""}
 details.fold summary.fold-head h2{flex:1 1 auto}
 details.fold summary.fold-head .n{
-  font-family:var(--font-display);
+  font-family:var(--font-number);
   font-weight:var(--w-display);
   font-size:var(--text-small);
-  color:var(--on-surface-faint);
+  color:var(--number-color);
   flex:none;
 }
 details.fold summary.fold-head .fold-arrow{
@@ -794,7 +949,7 @@ details.fold .fold-body{padding-top:var(--section-gap-narrow);padding-bottom:var
   min-width:22px;    /* px: the pill around a two-digit day number */
   height:22px;       /* px: the pill's drawn height */
   padding-inline:var(--s1);
-  border-radius:999px;
+  border-radius:var(--r-pill);
   background:var(--structure);
   color:var(--surface);
 }
@@ -815,7 +970,7 @@ details.fold .fold-body{padding-top:var(--section-gap-narrow);padding-bottom:var
   font-size:var(--text-micro);
   color:var(--on-surface-faint);
 }
-.cal-event--allday .cal-time{color:var(--sage)}
+.cal-event--allday .cal-time{color:var(--mark)}
 .cal-title{color:var(--on-surface)}
 .cal-account{font-size:var(--text-micro);color:var(--on-surface-faint)}
 
@@ -862,7 +1017,7 @@ details.fold .fold-body{padding-top:var(--section-gap-narrow);padding-bottom:var
   min-width:20px;    /* px: the pill around a day number in the tighter month cell */
   height:20px;       /* px: the pill's drawn height */
   padding-inline:var(--s1);
-  border-radius:999px;
+  border-radius:var(--r-pill);
   background:var(--structure);
   color:var(--surface);
 }
@@ -877,12 +1032,12 @@ details.fold .fold-body{padding-top:var(--section-gap-narrow);padding-bottom:var
 
 /* ---------- bands: full-bleed, one per document at most ---------- */
 
-.band{background:var(--structure);color:var(--white);margin-top:var(--section-gap)}
+.band{background:var(--structure);color:var(--on-structure);margin-top:var(--section-gap)}
 .band > *{padding-block:var(--section-gap)}    /* the band's inner element carries the vertical room; the column comes from the page rule */
-.band h2{color:var(--white)}   /* no margin of its own: a band head is a .sheet-head like any other, and a bare h2 takes the base margins */
-.band p,.band li{color:var(--white)}          /* full white on a dark band, never a soft grey, contrast holds this way */
-.band .sheet-head{border-top-color:var(--white)}
-.band .sheet-head .n{color:var(--ink-faint-ondark)}
+.band h2{color:var(--on-structure)}   /* no margin of its own: a band head is a .sheet-head like any other, and a bare h2 takes the base margins */
+.band p,.band li{color:var(--on-structure)}          /* full white on a dark band, never a soft grey, contrast holds this way */
+.band .sheet-head{border-top-color:var(--on-structure)}
+.band .sheet-head .n{color:var(--on-structure-faint)}
 
 /*
   Band colour variants. Ink is the default and the most permissive.
@@ -896,11 +1051,14 @@ details.fold .fold-body{padding-top:var(--section-gap-narrow);padding-bottom:var
   white text only. No grey meta, no sage marks. Purple carries everything ink
   does. Pick the band colour for the document, then obey its row above.
 */
-.band--cobalt{background:var(--cobalt)}
-.band--cobalt .sheet-head .n{color:var(--white); opacity:.72}   /* grey fails here, dim white instead */
-.band--purple{background:var(--purple)}
-.band--purple .sheet-head .n{color:var(--ink-faint-ondark)}
-.band--cobalt .icon-circle,.band--purple .icon-circle,.band .icon-circle{background:var(--white);color:var(--on-surface)}
+/* Hue-named modifiers painting through roles; a follow-up can rename them. */
+.band--cobalt{background:var(--accent)}
+.band--cobalt,.band--cobalt :is(h2,p,li){color:var(--on-accent)}
+.band--cobalt .sheet-head .n{color:var(--on-structure); opacity:.72}   /* grey fails here, dim white instead */
+.band--purple{background:var(--emphasis)}
+.band--purple,.band--purple :is(h2,p,li){color:var(--on-emphasis)}
+.band--purple .sheet-head .n{color:var(--on-structure-faint)}
+.band--cobalt .icon-circle,.band--purple .icon-circle,.band .icon-circle{background:var(--on-structure);color:var(--on-surface)}
 
 /* ---------- footer ----------
    The page footer only. A <footer> inside a card or a component is that

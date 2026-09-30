@@ -5,7 +5,7 @@ status: `[ ]` open, `[>]` claimed, `[x]` done, `[!]` blocked.
 
 ## Board
 
-- [ ] @anyone 2026-09-30 LAHE-empty-notes-fixture-stale -- **`test/unit/markdown_render.test.js` "the rendered empty file matches the empty-notes fixture" fails on main.** The vendored St. Clair CSS was synced (78363b9, new status colour block) after `test/fixtures/free_writing/empty_notes.html` was written, so the fixture's inlined style is stale. Regenerate the fixture from the current render (or compare with the style block stripped) so a style sync does not break it again.
+- [x] @claude 2026-09-30 LAHE-empty-notes-fixture-stale -- **`test/unit/markdown_render.test.js` "the rendered empty file matches the empty-notes fixture" fails on main.** The vendored St. Clair CSS was synced (78363b9, new status colour block) after `test/fixtures/free_writing/empty_notes.html` was written, so the fixture's inlined style is stale. Regenerate the fixture from the current render (or compare with the style block stripped) so a style sync does not break it again. Done: regenerated from the current render on the Library branch; only the inlined style block changed.
 
 - [ ] @anyone 2026-09-30 LAHE-catalog-cross-site-webkit-flake -- **`test/browser/catalog_cross_site.spec.js:382` (the localhost case) timed out at 15s in WebKit under the full three-browser run, with `TypeError: fetch failed`.** It passed 3 of 3 alone (6 of 6 tests). This is the Library's own spec, so it is ours: look for a request the test makes to a server that is still starting or already closing under load, and give the test a readiness wait instead of a fixed timeout.
 
