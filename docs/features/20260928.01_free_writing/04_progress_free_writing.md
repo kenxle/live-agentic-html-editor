@@ -1,15 +1,21 @@
 # Progress: Free writing
 
-**Phase 7, Review.** The independent workflow walk found 3 failures and 7 design problems. Two builders are fixing them. Your preview still has these bugs until the fixes land. Two things wait on you. Last updated 2026-09-30 01:19.
+**Phase 7, Review.** The flow-walk fixes are merged, and your preview now runs them. The final full gate is clean apart from one cursor-timing test, which a builder is pinning down. Three things wait on you. Last updated 2026-09-30 02:26.
 
 **Docs:** [Crucible questions](00_crucible_questions.md) · [Crucible](http://127.0.0.1:65155/00_crucible.html) · [Brief](http://127.0.0.1:65155/01_brief_free_writing.html) · [Wireframes](http://127.0.0.1:49513/index.html) ([decision](wireframes/DECISION.md)) · [Architecture](http://127.0.0.1:65155/02_architecture_free_writing.html) · [Plan](http://127.0.0.1:65155/03_plan_free_writing.html)
 
 ## Needs your attention
 
-- [ ] **Try free writing on your own writing.** Known bugs until the fix lands: undo after a reload, editing text the agent already placed, and the bar covering the line above. Both pages run the feature branch with the editor on them. They sit on a separate helper and a copy of your draft, so nothing of yours changes.
+- [ ] **Try free writing on your own writing.** The preview now runs the flow-walk fixes. Both pages run the feature branch with the editor on them. They sit on a separate helper and a copy of your draft, so nothing of yours changes.
   - [Your draft "new-debugging-hell-part2", a copy](http://127.0.0.1:59081/new-debugging-hell-part2-236277651c422e90.html). Press Cmd-Shift-E on a paragraph, then hover between paragraphs for "+ Write here". Try a header, a list, and bold. Leave editing, and I place your text as the agent.
   - [A blank notes page](http://127.0.0.1:59160/notes-2026-09-30-d682203dc75e720a.html). It opens ready to type.
   - Leave comments on the pages. I answer them there.
+- [ ] **Where the edit bar sits when there is no room above the block.** The bar now goes in the gap above what you are writing, so it never covers the line you are reading. Most gaps between paragraphs are smaller than the bar, so it often lands below the frame instead, over the top of the next block. The screenshots are in [flow_fix_g1](../../../.claude/worktrees/free-writing/docs/features/20260928.01_free_writing/progress/flow_fix_g1/). Options:
+  - keep it as is
+  - make the bar slimmer, so it fits in more gaps
+  - put it beside the block, in the page margin
+
+  Default: keep it. Try it on the preview and say if it bothers you.
 - [ ] **Losing text on a hard kill.** If the browser is force-quit within a moment of typing, that whole sitting is lost. After about 6 seconds everything survives, and a crashed tab keeps everything. The cause is that long writing now saves after a short pause instead of on every keystroke, which keeps typing fast. Options:
   - keep it as is
   - save a short sitting on every keystroke, and pause only for long ones
@@ -21,9 +27,8 @@
 
 | Agent or task | Doing | Started | Branch |
 |---|---|---|---|
-| Fix builder G1, editing | Undo after a reload, mid-paragraph Enter marking your new words as the page's, editing placed text, the bar covering text, the "+ Write here" target, Cmd-Shift-E after the rail, no struck-through draft card, Markdown shortcut levels | 2026-09-30 01:19 | `free-writing-g1` |
-| Fix builder G2, replay and rail | Placed text falsely reopening, a reworded paragraph hiding your new blocks, proofreading on the Active tab, card lines that say untrue things | 2026-09-30 01:19 | `free-writing-g2` |
-| Preview agent (me) | Watching your preview pages | 2026-09-30 01:19 | preview only |
+| Caret race builder H1 | Under heavy load, a repaint mid-sitting puts the cursor at the end of the block instead of where you were typing. Your text is kept. Working out whether it is the product or the test | 2026-09-30 02:26 | `free-writing-h1` |
+| Preview agent (me) | Watching your preview pages | 2026-09-30 02:26 | preview only |
 
 ## Phases
 
@@ -86,6 +91,11 @@ No passes yet.
 Nothing queued.
 
 ### Test results
+
+- 2026-09-30 02:26, third full gate in all three browsers, 19.7 minutes:
+  - Unit: 1797 of 1799 passed, 0 failed.
+  - Browser: 2106 passed, 2 failed, 19 skipped.
+  - Both failures are one repaint test in Chromium, on its two fixtures. The cursor landed at the end of the block under load; the text was kept. It passed 40 of 40 when run alone. The H1 builder is on it.
 
 - 2026-09-30 00:47, second full gate in all three browsers, 20.2 minutes:
   - Unit: 1785 of 1787 passed, 0 failed.
