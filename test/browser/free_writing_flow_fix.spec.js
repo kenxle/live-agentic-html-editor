@@ -400,4 +400,32 @@ test.describe("flow walk fixes, replay and rail side", () => {
     expect(notice).toBe("A block you wrote is not on the page as you wrote it. The item is open again.");
     await shootCard(page, testInfo, ref.id, "item4-run-reopened");
   });
+
+  test("opening a block draws no struck-through draft card until something changes", async ({ page }) => {
+    world = await makeWorld({ file: "doc.md", text: DOC_MD });
+    await page.goto(world.open);
+    await booted(page);
+    await openEditAt(page, ANCHOR_P);
+    const view = () =>
+      page.evaluate(() => {
+        const rail = window.__lahe.rail;
+        const drafts = window.__lahe.items().filter((i) => i.state === "draft" && i.kind === "edit");
+        const shown = drafts.filter((i) => {
+          const card = rail.cardNode(i.id);
+          return !!card && card.getClientRects().length > 0;
+        });
+        return { drafts: drafts.length, shown: shown.length, edits: rail.countFor("edits") };
+      });
+    await page.evaluate(() => {
+      window.__lahe.rail.collapse(false);
+      window.__lahe.rail.selectTab("edits");
+    });
+    // Whether or not capture keeps a draft for an untouched block, none is drawn.
+    const opened = await view();
+    expect(opened.shown, "no draft card for an untouched block").toBe(0);
+    expect(opened.edits, "the Edits count does not move").toBe(0);
+    await page.keyboard.type(" More.", { delay: 2 });
+    await pollPage(page, () => window.__lahe.rail.countFor("edits") === 1, undefined, { message: "the typed change to draw its card" });
+    expect((await view()).shown).toBe(1);
+  });
 });

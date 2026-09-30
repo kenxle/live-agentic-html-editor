@@ -14,6 +14,7 @@ const assert = require("node:assert/strict");
 const record = require("../../src/shared/record.js");
 const replay = require("../../src/layer/replay.js");
 const fixtures = require("../../src/shared/record_fixtures.js");
+const overlay = require("../../src/layer/overlay.js");
 
 function fx() {
   return fixtures.createFixtures({ seed: "g2-unit" });
@@ -149,4 +150,21 @@ test("a later record that rewords the run's own reworded anchor takes the anchor
   // Without the later record, the heading's "What changed" reads as the old words back.
   assert.equal(check(placed, page), "reverted");
   assert.equal(check(placed, page, [placed, later]), null);
+});
+
+// Flow walk, design problem 6: a draft that changes nothing draws no card.
+test("a draft whose words and bold are unchanged is quiet; a typed letter, a new block or a tag change is not", () => {
+  const f = fx();
+  const base = { state: record.STATE.DRAFT, kind: record.KIND.EDIT, before: "Plain words", after: "Plain words", before_html: "Plain <strong>words</strong>", after_html: "Plain <strong>words</strong>" };
+  assert.equal(overlay.isUnchangedDraft(base), true);
+  assert.equal(overlay.isUnchangedDraft(Object.assign({}, base, { after: null, after_html: null })), true, "opened, nothing typed yet");
+  assert.equal(overlay.isQuietDraft(base), true);
+  assert.equal(overlay.isUnchangedDraft(Object.assign({}, base, { after: "Plain words!", after_html: "Plain <strong>words</strong>!" })), false);
+  assert.equal(overlay.isUnchangedDraft(Object.assign({}, base, { after_html: "Plain words" })), false, "bold taken off is a change");
+  assert.equal(overlay.isUnchangedDraft(Object.assign({}, base, { anchor_tag_after: "h2" })), false);
+  assert.equal(overlay.isUnchangedDraft(Object.assign({}, base, { new_blocks: [{ tag: "p", html: "New" }] })), false);
+  assert.equal(overlay.isUnchangedDraft(Object.assign({}, base, { state: record.STATE.READY })), false, "only a draft");
+  const run = f.runItem({ new_blocks: [{ tag: "p", html: "" }] });
+  run.state = record.STATE.DRAFT;
+  assert.equal(overlay.isUnchangedDraft(run), true, "a run whose one new block is still empty");
 });

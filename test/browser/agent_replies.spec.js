@@ -1726,6 +1726,9 @@ test.describe("free writing: the proofreading question", () => {
       await bootedPage(page, app, helper, token);
       const run = await typeRunAfterLede(page);
       await waitForItemInLog(helper, run.id);
+      // The reviewer is on Edits. The question lands on Active, which is not
+      // on screen, so it toasts (a reply on the tab already open does not).
+      await page.evaluate(() => window.__lahe.rail.selectTab("edits"));
       await askProofread(helper, page, run, [{ block: 1, from: "place", to: "spot" }]);
 
       // The question's toast names the run in the reviewer's words, never the
