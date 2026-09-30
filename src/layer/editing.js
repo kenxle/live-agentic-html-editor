@@ -441,12 +441,14 @@
     ".lahe-edit-bar__row[aria-disabled='true'] { cursor: default; color: rgba(17, 17, 17, 0.38); background: transparent; }",
     ".lahe-edit-bar__rowkey, .lahe-edit-bar__rowmd { font: 11px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace; color: rgba(17, 17, 17, 0.5); }",
     ".lahe-edit-bar__hint[data-lahe-notice='true'] { color: #2c3f7d; white-space: normal; max-width: 420px; }",
-    ".lahe-insert-line { position: fixed; height: 20px; pointer-events: auto; cursor: text; opacity: 0;",
+    // 28px tall: a comfortable pointer target (the flow walk missed a 20px one
+    // and the session closed with the typing going nowhere).
+    ".lahe-insert-line { position: fixed; height: 28px; pointer-events: auto; cursor: text; opacity: 0;",
     "  transition: opacity 120ms ease; z-index: 1; }",
     ".lahe-insert-line[data-lahe-show='true'] { opacity: 1; }",
     ".lahe-insert-line:not([data-lahe-show='true']) { pointer-events: none; }",
-    ".lahe-insert-line__rule { position: absolute; left: 0; right: 0; top: 9px; border-top: 1.5px solid #3c56a5; }",
-    ".lahe-insert-line__label { position: absolute; left: 0; top: 1px; padding: 0 7px 0 0; background: #ffffff;",
+    ".lahe-insert-line__rule { position: absolute; left: 0; right: 0; top: 13px; border-top: 1.5px solid #3c56a5; }",
+    ".lahe-insert-line__label { position: absolute; left: 0; top: 5px; padding: 0 7px 0 0; background: #ffffff;",
     "  font: 600 11px/18px ui-sans-serif, system-ui, -apple-system, sans-serif; color: #3c56a5; }",
     ".lahe-edit-placeholder { position: fixed; pointer-events: none; color: rgba(17, 17, 17, 0.38); display: none;",
     "  white-space: nowrap; overflow: hidden; }",
@@ -680,6 +682,10 @@
     var onFailure = typeof opts.onFailure === "function" ? opts.onFailure : null;
     // Is this a notes review (`lahe write`)? See setNotes.
     var notesReview = opts.notes === true;
+    // Does a text field in the rail hold focus (a comment being written)? The
+    // rail's root is closed, so the rail answers. Cmd-Shift-E from there is
+    // left alone: the writer is mid-sentence in the rail.
+    var railTextFocus = typeof opts.railTextFocus === "function" ? opts.railTextFocus : null;
 
     // The one open session, or null. Edit state is per region and there is one
     // of it: a second Cmd-Shift-E commits the first.
@@ -766,9 +772,16 @@
       var refused = durably(function () {
         store.write(requireReview(), item);
       });
-      durably(function () {
-        emit(item, event);
-      });
+      // A block opened and not yet changed is a draft for durability only.
+      // Telling the rail about it drew a card with the whole block struck
+      // through, which reads as a deletion, and moved the Edits count before
+      // anything was typed (flow walk, design problem 6). The first change
+      // emits as usual; so does removing an untouched draft.
+      if (event !== "opened") {
+        durably(function () {
+          emit(item, event);
+        });
+      }
       // THE POST ONLY EVER FOLLOWS A WRITE THAT LANDED.
       //
       // Posting a record the disk does not have is worse than not posting at
@@ -879,6 +892,129 @@
       if (block === session.anchor) return true;
       var entry = runEntryOf(block);
       return !!entry && entry.fromAnchor;
+    }
+
+    // ---- which words moved (flow walk: the from_anchor bug) ---------------------
+    //
+    // A block split off the anchor with Enter holds the page's own words, which
+    // the agent must not add again. But the reviewer can then type into that
+    // tail, or press Enter inside it again, and before this fix every block of
+    // that lineage kept from_anchor: a literal agent dropped the reviewer's own
+    // sentence. So a lineage entry remembers `moved`, the page's words it
+    // carried at the split (whitespace folded), and capture decides from the
+    // words themselves:
+    //
+    //   the block is exactly the moved words    one from_anchor block
+    //   the reviewer typed into it at all       one new block, the whole tail
+    //
+    // The whole tail as new is right for a literal agent: anchor_after_html
+    // already leaves the moved words out of the anchor, so adding the tail as
+    // one new block puts every word back exactly once, and the page keeps the
+    // one paragraph the reviewer wrote (coordinator decision on the split
+    // trade-off; splitting it in two made two paragraphs after the rebuild).
+
+    // Whitespace folded to single spaces and trimmed, with each folded
+    // character's offset in the raw string.
+    function foldText(raw) {
+      var str = String(raw || "");
+      var out = "";
+      var map = [];
+      var space = false;
+      for (var i = 0; i < str.length; i += 1) {
+        var c = str.charAt(i);
+        if (c === "\u200b") continue;
+        if (/\s/.test(c)) {
+          if (out.length && !space) {
+            out += " ";
+            map.push(i);
+            space = true;
+          }
+          continue;
+        }
+        out += c;
+        map.push(i);
+        space = false;
+      }
+      if (space) {
+        out = out.slice(0, -1);
+        map.pop();
+      }
+      return { text: out, map: map };
+    }
+
+    function folded(raw) {
+      return foldText(raw).text;
+    }
+
+    // A holder in an inert document: markup parsed or cloned into it never
+    // loads, runs or reaches the page.
+    var inertDoc = null;
+    function inertHolder() {
+      if (!inertDoc) inertDoc = doc.implementation.createHTMLDocument("");
+      return inertDoc.createElement("div");
+    }
+
+    // The words of a stored block's markup.
+    function htmlText(html) {
+      var holder = inertHolder();
+      holder.innerHTML = String(html || "");
+      return holder.textContent;
+    }
+
+    function movedOf(block) {
+      var entry = block && block !== session.anchor ? runEntryOf(block) : null;
+      return entry && entry.fromAnchor ? entry.moved || null : null;
+    }
+
+    // What a split tail carries, decided at the split. Off the anchor, the tail
+    // is the page's own words only when those words are in the anchor's
+    // original text: words the reviewer typed into the anchor before pressing
+    // Enter are new. Off a lineage block that was exactly its moved words, the
+    // two halves each keep their own half of them; otherwise the tail inherits
+    // the parent's moved words and capture looks for them.
+    function markSplit(block, tail) {
+      var entry = runEntryOf(tail);
+      if (!entry) return;
+      var tailText = folded(tail.textContent);
+      if (block === session.anchor) {
+        var original = folded(session.before && session.before.text);
+        var fromPage = !!tailText && original.indexOf(tailText) !== -1;
+        entry.fromAnchor = fromPage;
+        entry.moved = fromPage ? tailText : null;
+        return;
+      }
+      var parent = runEntryOf(block);
+      if (!parent || !parent.fromAnchor || !parent.moved) {
+        entry.fromAnchor = false;
+        entry.moved = null;
+        return;
+      }
+      var headText = folded(block.textContent);
+      var squash = function (t) {
+        return t.replace(/ /g, "");
+      };
+      if (squash(headText + tailText) === squash(parent.moved)) {
+        parent.moved = headText || null;
+        parent.fromAnchor = !!headText;
+        entry.moved = tailText || null;
+        entry.fromAnchor = !!tailText;
+        return;
+      }
+      entry.fromAnchor = true;
+      entry.moved = parent.moved;
+    }
+
+    // One session entry as the record's block, or none when it has no words.
+    function entryBlocks(r) {
+      var tag = tagOf(r.el);
+      var whole = runBlockHtml(r.el);
+      if (whole === null) return [];
+      if (!r.fromAnchor || !r.moved) return [{ tag: tag, html: whole }];
+      var raw = String(r.el.textContent || "");
+      var f = foldText(raw);
+      var moved = r.moved;
+      if (f.text === moved) return [{ tag: tag, html: whole, from_anchor: true }];
+      return [{ tag: tag, html: whole }];
     }
 
     function liveRange() {
@@ -996,7 +1132,7 @@
     // Where a new run block after `block` goes. After the anchor it is the one
     // insert-point rule (blocks.insertPointAfter climbs out of a sheet-head);
     // after a run block it is right after that block.
-    function insertAfterBlock(block, el, fromAnchor) {
+    function insertAfterBlock(block, el, fromAnchor, moved) {
       var point;
       var index;
       if (block === session.anchor) {
@@ -1008,7 +1144,7 @@
         index = session.run.indexOf(entry) + 1;
       }
       point.parent.insertBefore(el, point.before);
-      session.run.splice(index, 0, { el: el, fromAnchor: !!fromAnchor, html: null, dirty: true });
+      session.run.splice(index, 0, { el: el, fromAnchor: !!fromAnchor, moved: moved || null, html: null, dirty: true });
       return el;
     }
 
@@ -1103,15 +1239,15 @@
     function captureRunFields() {
       var list = [];
       session.run.forEach(function (r) {
-        if (r.dirty || r.html === undefined) {
-          r.html = runBlockHtml(r.el);
+        if (r.dirty || r.html === undefined || !r.pieces) {
+          r.pieces = entryBlocks(r);
+          r.html = r.pieces.length ? r.pieces.map(function (b) { return b.html; }).join("") : null;
           r.dirty = false;
           counters.blocksCaptured += 1;
         }
-        if (r.html === null) return;
-        var b = { tag: tagOf(r.el), html: r.html };
-        if (r.fromAnchor) b.from_anchor = true;
-        list.push(b);
+        r.pieces.forEach(function (b) {
+          list.push(Object.assign({}, b));
+        });
       });
       var anchorHtml = anchorMarkup();
       var tag = session.container ? null : tagOf(session.anchor);
@@ -1312,7 +1448,7 @@
       var items = store.read(reviewId);
       for (var i = 0; i < items.length; i += 1) {
         var item = items[i];
-        if (!record.isRunRecord(item) || item[record.FIELD.STATE] === record.STATE.HANDLED) continue;
+        if (!record.isRunRecord(item) || isPlaced(item)) continue;
         var anchorEl = elementFor(item);
         if (!anchorEl) continue;
         var found = blocks.runElementsFor(item, doc, anchorEl);
@@ -1332,9 +1468,24 @@
       var list = item[record.FIELD.NEW_BLOCKS] || [];
       var out = [];
       got.blocks.forEach(function (b) {
+        var rec = list[b.index];
+        var fromAnchor = !!(rec && rec.from_anchor);
+        var moved = fromAnchor ? folded(htmlText(rec.html)) : null;
         b.elements.forEach(function (el) {
-          if (out.some(function (e) { return e.el === el; })) return;
-          out.push({ el: el, fromAnchor: !!(list[b.index] && list[b.index].from_anchor), html: null, dirty: true });
+          var have = null;
+          out.forEach(function (e) {
+            if (e.el === el) have = e;
+          });
+          if (have) {
+            // Two record blocks on one element: a split tail the reviewer
+            // typed into. The element keeps the moved words it carries.
+            if (fromAnchor && !have.fromAnchor) {
+              have.fromAnchor = true;
+              have.moved = moved;
+            }
+            return;
+          }
+          out.push({ el: el, fromAnchor: fromAnchor, moved: moved, html: null, dirty: true });
         });
       });
       return out;
@@ -1591,6 +1742,7 @@
             var entry = runEntryOf(list);
             entry.el = p;
             entry.fromAnchor = false;
+            entry.moved = null;
           } else {
             insertAfterBlock(list, p, false);
           }
@@ -1602,6 +1754,7 @@
         } else {
           var tail = extractTail(range, unit, tagOf(unit));
           insertAfterBlock(block, tail, isFromAnchor(block));
+          markSplit(block, tail);
           setCaret(tail, 0);
         }
       });
@@ -1791,6 +1944,7 @@
         }
         var tail = extractTail(range, unit, tagOf(unit));
         insertAfterBlock(block, tail, isFromAnchor(block));
+        markSplit(block, tail);
         setCaret(tail, 0);
       });
       markDirtyAt(unit);
@@ -1880,7 +2034,8 @@
             while (unit.firstChild) para.appendChild(unit.firstChild);
             ensureLine(para);
             block.removeChild(unit);
-            insertAfterBlock(block, para, isFromAnchor(block));
+            insertAfterBlock(block, para, isFromAnchor(block), movedOf(block));
+            markSplit(block, para);
             moved = para;
           }
         } else if (LIST_TAGS[tag]) {
@@ -1964,7 +2119,7 @@
       var anchorHtml = session.container ? null : share(prev && prev.anchorHtml, session.anchor.innerHTML);
       var run = session.run.map(function (r, i) {
         var was = prev && prev.run[i];
-        return { tag: tagOf(r.el), html: share(was && was.html, r.el.innerHTML), fromAnchor: r.fromAnchor };
+        return { tag: tagOf(r.el), html: share(was && was.html, r.el.innerHTML), fromAnchor: r.fromAnchor, moved: r.moved || null };
       });
       return {
         anchorTag: session.container ? null : tagOf(session.anchor),
@@ -2058,7 +2213,7 @@
         state.run.forEach(function (b) {
           var el = doc.createElement(b.tag);
           el.innerHTML = b.html;
-          insertAfterBlock(prev, el, b.fromAnchor);
+          insertAfterBlock(prev, el, b.fromAnchor, b.moved);
           rememberAlso(el, session.itemId);
           prev = el;
         });
@@ -2354,6 +2509,7 @@
     }
 
     function onRunSelectionChange() {
+      notePageCaret();
       if (!isRun()) return;
       var range = liveRange();
       if (range) {
@@ -2604,7 +2760,7 @@
         session.block = built.anchor;
         var old = session.run;
         session.run = built.run.map(function (b, i) {
-          return { el: b, fromAnchor: !!(old[i] && old[i].fromAnchor), html: null, dirty: true };
+          return { el: b, fromAnchor: !!(old[i] && old[i].fromAnchor), moved: (old[i] && old[i].moved) || null, html: null, dirty: true };
         });
       }
       var host = blocks.hostFor(session.anchor, session.placement);
@@ -4103,20 +4259,48 @@
       for (i = 0; i < itemForElement.length; i += 1) {
         if (itemForElement[i].el === el) {
           var got = store.readItem(reviewId, itemForElement[i].id);
-          if (got && got[record.FIELD.STATE] !== record.STATE.HANDLED) return got;
+          if (got && !isPlaced(got)) return got;
         }
       }
       var items = store.read(reviewId);
       for (i = 0; i < items.length; i += 1) {
         var item = items[i];
         if (!isEditKind(item)) continue;
-        if (item[record.FIELD.STATE] === record.STATE.HANDLED) continue;
+        if (isPlaced(item)) continue;
         if (elementFor(item) === el) return item;
       }
       // A run block belongs to the record whose run it is (plan Task 2.1:
       // itemFor maps any run block back through blocks.runElementsFor).
       var holding = runRecordHolding(el);
       return holding ? holding.item : null;
+    }
+
+    /**
+     * Is this record's text already in the source (architecture "Two sittings
+     * in the same place")? Then its blocks are the page's own, and a sitting
+     * on one is an ordinary edit of that block, never a reopen.
+     *
+     * - handled: yes.
+     * - handled, but the handled check could not find it on the page: no.
+     * - a run the agent answered with a proofreading question, now or in an
+     *   earlier round: yes. The proofread flow places the words and then asks,
+     *   and "Use the fixes" or "Keep mine" leave it ready at a new revision.
+     *   The flow walk found the second sitting reopening that placed record.
+     *
+     * Any other ready record, a run included, is unplaced and reopens.
+     */
+    function isPlaced(item) {
+      if (!item) return false;
+      if (item[record.FIELD.HANDLED_NOT_ON_PAGE] === true) return false;
+      if (item[record.FIELD.STATE] === record.STATE.HANDLED) return true;
+      if (!record.isRunRecord(item)) return false;
+      var reply = item[record.FIELD.REPLY];
+      if (reply && reply.proofread === true) return true;
+      var thread = Array.isArray(item[record.FIELD.THREAD]) ? item[record.FIELD.THREAD] : [];
+      for (var i = 0; i < thread.length; i += 1) {
+        if (thread[i] && thread[i].agent && thread[i].agent.proofread === true) return true;
+      }
+      return false;
     }
 
     function isEditKind(item) {
@@ -4293,26 +4477,49 @@
 
     // The gap under the pointer: between two blocks, or below the last one.
     // Returns the block above it and where to draw the line.
-    function gapAt(x, y) {
+    // `strict` is the click rule: only the gap itself, never the slack over
+    // a block's own edge, so a click on a last line's descenders still puts
+    // the caret there.
+    function gapAt(x, y, strict) {
       var leaves = blocks.leafWalk(doc.body).filter(function (el) {
         return !markers.isInsideOverlay(el) && el.getClientRects().length > 0;
       });
       if (!leaves.length) return null;
-      var slack = 6;
+      var slack = strict ? 0 : LINE_SLACK;
       for (var i = 0; i < leaves.length; i += 1) {
         var a = leaves[i].getBoundingClientRect();
         var next = leaves[i + 1] ? leaves[i + 1].getBoundingClientRect() : null;
         var inColumn = x >= a.left - 40 && x <= a.right + 40;
         if (!inColumn) continue;
         if (next && next.top >= a.bottom - 1) {
-          if (y >= a.bottom - slack && y <= next.top + slack) {
-            return { block: leaves[i], y: (a.bottom + next.top) / 2, left: Math.min(a.left, next.left), right: Math.max(a.right, next.right) };
+          var inGap = strict ? y > a.bottom && y < next.top : y >= a.bottom - slack && y <= next.top + slack;
+          if (inGap) {
+            return {
+              block: leaves[i],
+              y: (a.bottom + next.top) / 2,
+              top: a.bottom,
+              bottom: next.top,
+              left: Math.min(a.left, next.left),
+              right: Math.max(a.right, next.right)
+            };
           }
-        } else if (!next && y >= a.bottom - slack && y <= a.bottom + 64) {
-          return { block: leaves[i], y: a.bottom + 12, left: a.left, right: a.right };
+        } else if (!next && (strict ? y > a.bottom : y >= a.bottom - slack) && y <= a.bottom + 64) {
+          return { block: leaves[i], y: a.bottom + 14, top: a.bottom, bottom: a.bottom + 64, left: a.left, right: a.right };
         }
       }
       return null;
+    }
+
+    var LINE_SLACK = 10;
+    var LINE_HALF = 14;
+
+    // Is the pointer on the line where it is drawn now? The line stays put
+    // while the pointer is on it, even past the gap's own edge, so reaching
+    // for it never makes it vanish under the pointer.
+    function onShownLine(x, y) {
+      if (!lineNode || !lineTarget || lineNode.getAttribute("data-lahe-show") !== "true") return false;
+      var r = lineNode.getBoundingClientRect();
+      return x >= r.left && x <= r.right && y >= r.top && y <= r.bottom;
     }
 
     function onLineMove(event) {
@@ -4329,6 +4536,7 @@
 
     function placeLine() {
       if (!isEditOpen() || !linePoint) return hideLine();
+      if (onShownLine(linePoint.x, linePoint.y)) return;
       var gap = gapAt(linePoint.x, linePoint.y);
       if (!gap) return hideLine();
       var node = lineStyleHost();
@@ -4336,9 +4544,26 @@
       var limit = (win.innerWidth || 1024) - railAllowance() - 8;
       var right = Math.min(gap.right, limit);
       lineTarget = gap.block;
-      node.style.top = Math.round(gap.y - 10) + "px";
-      node.style.left = Math.round(gap.left) + "px";
-      node.style.width = Math.max(40, Math.round(right - gap.left)) + "px";
+      // Below an open frame, the gap's middle can sit on the frame's bottom
+      // border (flow walk shot 44). The line then goes just under the frame.
+      var y = gap.y;
+      var frame = frameRect();
+      if (frame && gap.y - LINE_HALF < frame.y + frame.height && gap.y > frame.y) {
+        y = frame.y + frame.height + LINE_HALF;
+      }
+      node.style.top = Math.round(y - LINE_HALF) + "px";
+      // The bar can sit in the same gap (below the frame, when there is no
+      // room above it). The line then starts just past the bar, so its label
+      // is never hidden under it.
+      var lineLeft = gap.left;
+      if (barNode && barNode.style.display !== "none") {
+        var bar = barNode.getBoundingClientRect();
+        if (bar.width && bar.top < y + LINE_HALF && bar.bottom > y - LINE_HALF && bar.right + 8 < right - 40) {
+          lineLeft = Math.max(lineLeft, bar.right + 8);
+        }
+      }
+      node.style.left = Math.round(lineLeft) + "px";
+      node.style.width = Math.max(40, Math.round(right - lineLeft)) + "px";
       node.setAttribute("data-lahe-show", "true");
     }
 
@@ -4822,31 +5047,107 @@
       frameNode.style.width = rect.right - rect.left + pad * 2 + "px";
       frameNode.style.height = rect.bottom - rect.top + pad * 2 + "px";
 
-      // The bar sits above the frame, pinned by its BOTTOM edge, so its own
-      // height never enters the calculation. Measuring the height instead
-      // reads zero on the first frame in some engines, which puts the bar in
-      // one place and then moves it a frame later: the reviewer sees it jump,
-      // and anything aiming at a button can miss it.
+      // WHERE THE BAR GOES (flow walk, design problem 1). It used to sit over
+      // whatever was above the frame: the line before the anchor, a heading,
+      // the byline, which is exactly the sentence a writer reads back while
+      // continuing it. Now it goes in the page's own gap above the frame when
+      // the gap is tall enough for it, and below the frame when it is not.
+      // When above, it is pinned by its BOTTOM edge, so a height read as zero
+      // on the first frame in some engines cannot make it jump.
       var viewport = win.innerHeight || 768;
-      // An untouched anchor sits outside the frame, right above it: the bar
-      // goes above the anchor too, so it never covers the words the reviewer
-      // is writing after.
-      var barRect = rect;
-      if (isRun() && !session.container && framedElements().indexOf(session.anchor) === -1) {
-        barRect = unionRect([session.anchor].concat(framedElements())) || rect;
-      }
-      var roomAbove = barRect.top - pad - 8;
+      var barHeight = barNode.getBoundingClientRect().height || BAR_ROOM;
+      var frameTop = rect.top - pad;
+      var frameBottom = rect.bottom + pad;
+      var above = contentBottomAbove(framedElements(), frameTop);
+      var ceiling = Math.max(0, above === null ? 0 : above);
+      var room = frameTop - ceiling;
       var left = Math.round(Math.max(8, rect.left - pad));
       barNode.style.left = left + "px";
-      if (roomAbove >= 44) {
-        barNode.style.bottom = Math.round(viewport - roomAbove) + "px";
+      if (room >= barHeight + BAR_GAP * 2) {
+        barNode.style.bottom = Math.round(viewport - (frameTop - BAR_GAP)) + "px";
         barNode.style.top = "auto";
+        barNode.setAttribute("data-lahe-bar-side", "above");
       } else {
-        barNode.style.top = Math.round(Math.min(rect.bottom + pad + 8, viewport - 44)) + "px";
+        // Below the frame. When the space under it is empty (the end of the
+        // page, or a tall gap), the bar leaves the first line of that space to
+        // "+ Write here", so writing one more block below is still in reach.
+        var below = contentTopBelow(framedElements(), frameBottom);
+        var spaceBelow = below === null ? Infinity : below - frameBottom;
+        var skip = spaceBelow >= LINE_HALF * 2 + barHeight + BAR_GAP * 3 ? LINE_HALF * 2 + BAR_GAP : 0;
+        barNode.style.top = Math.round(Math.max(0, Math.min(frameBottom + BAR_GAP + skip, viewport - barHeight - BAR_GAP))) + "px";
         barNode.style.bottom = "auto";
+        barNode.setAttribute("data-lahe-bar-side", "below");
       }
       fitBar(left);
       return frameNode;
+    }
+
+    // The bar's height before it has been laid out, and the space it keeps
+    // from the frame and from the text above it.
+    var BAR_ROOM = 40;
+    var BAR_GAP = 4;
+
+    // The bottom of the nearest page text above `top`, outside the frame, or
+    // null when there is none. It reads the lines themselves (text node
+    // rects), walking back from the first framed block, so a page's margins
+    // and padding count as gap and its words never do.
+    function contentBottomAbove(list, top) {
+      if (!doc || !doc.body || !list.length) return null;
+      var first = list[0];
+      for (var i = 1; i < list.length; i += 1) {
+        if (list[i] && first.compareDocumentPosition(list[i]) & 2) first = list[i];
+      }
+      var walker = doc.createTreeWalker(doc.body, 4, null);
+      walker.currentNode = first;
+      var looked = 0;
+      for (var n = walker.previousNode(); n && looked < 200; n = walker.previousNode()) {
+        looked += 1;
+        if (!/\S/.test(n.nodeValue || "")) continue;
+        var parent = n.parentElement;
+        if (!parent || markers.isInsideOverlay(parent)) continue;
+        var r = doc.createRange();
+        r.selectNodeContents(n);
+        var rects = r.getClientRects();
+        var best = null;
+        for (var k = 0; k < rects.length; k += 1) {
+          var box = rects[k];
+          if (!box.width && !box.height) continue;
+          if (box.bottom <= top + 1 && (best === null || box.bottom > best)) best = box.bottom;
+        }
+        if (best !== null) return best;
+      }
+      return null;
+    }
+
+    // The top of the nearest page text below `bottom`, after the frame, or
+    // null when there is none.
+    function contentTopBelow(list, bottom) {
+      if (!doc || !doc.body || !list.length) return null;
+      var last = list[0];
+      for (var i = 1; i < list.length; i += 1) {
+        if (list[i] && last.compareDocumentPosition(list[i]) & 4) last = list[i];
+      }
+      var walker = doc.createTreeWalker(doc.body, 4, null);
+      walker.currentNode = last;
+      var looked = 0;
+      for (var n = walker.nextNode(); n && looked < 200; n = walker.nextNode()) {
+        if (last.contains(n)) continue;
+        looked += 1;
+        if (!/\S/.test(n.nodeValue || "")) continue;
+        var parent = n.parentElement;
+        if (!parent || markers.isInsideOverlay(parent)) continue;
+        var r = doc.createRange();
+        r.selectNodeContents(n);
+        var rects = r.getClientRects();
+        var best = null;
+        for (var k = 0; k < rects.length; k += 1) {
+          var box = rects[k];
+          if (!box.width && !box.height) continue;
+          if (box.top >= bottom - 1 && (best === null || box.top < best)) best = box.top;
+        }
+        if (best !== null) return best;
+      }
+      return null;
     }
 
     // On a narrow window the bar drops its hint first.
@@ -5099,6 +5400,55 @@
 
     // Is the caret in a block Cmd-Shift-E can open? No caret, or a caret
     // sitting straight in body or main, is "in no block".
+    // The reviewer's last caret on the page itself, so a chord pressed while
+    // the rail holds focus can put it back (flow walk, design problem 8).
+    var lastPageCaret = null;
+    function notePageCaret() {
+      var range = liveRange();
+      if (!range) return;
+      var node = range.startContainer;
+      var el = node && node.nodeType === 1 ? node : node && node.parentElement;
+      if (!el || !el.isConnected || markers.isInsideOverlay(el)) return;
+      if (!doc.body || !doc.body.contains(el)) return;
+      lastPageCaret = range.cloneRange();
+    }
+
+    /**
+     * Cmd-Shift-E pressed while the rail holds focus. Before this the chord
+     * and the typing after it both went nowhere until the writer clicked the
+     * page, and writers move between the rail and the page all the time. The
+     * focus comes back to the page, the last caret there is put back, and the
+     * chord then does what it does on the page.
+     *
+     * @returns {boolean} true when the chord was handled
+     */
+    function chordFromRail(event) {
+      var got = gestures.gestureFor(describe(event));
+      if (got.gesture !== gestures.GESTURE.EDIT_BLOCK && got.gesture !== gestures.GESTURE.ENTER_EDIT_STATE) return false;
+      if (railTextFocus && railTextFocus()) return false;
+      if (typeof event.preventDefault === "function") event.preventDefault();
+      var active = doc.activeElement;
+      if (active && markers.isInsideOverlay(active) && typeof active.blur === "function") active.blur();
+      if (lastPageCaret && lastPageCaret.startContainer.isConnected && win) {
+        var sel = win.getSelection();
+        sel.removeAllRanges();
+        sel.addRange(lastPageCaret.cloneRange());
+      }
+      if (session) {
+        // An edit is already open: the chord goes back into it.
+        if (session.host && typeof session.host.focus === "function") session.host.focus({ preventScroll: true });
+        else if (session.block && typeof session.block.focus === "function") session.block.focus({ preventScroll: true });
+        return true;
+      }
+      if (caretInBlock()) {
+        leaveEditState();
+        editBlockAtCaret();
+      } else {
+        enterEditState();
+      }
+      return true;
+    }
+
     function caretInBlock() {
       var el = selection.caretContainer();
       if (!el || markers.isInsideOverlay(el)) return false;
@@ -5106,7 +5456,10 @@
     }
 
     function onKeydown(event) {
-      if (markers.isInsideOverlay(event.target)) return;
+      if (markers.isInsideOverlay(event.target)) {
+        chordFromRail(event);
+        return;
+      }
       // Parked for onBeforeInput, which fires next and cannot see the modifiers
       // that produced it. Every key, not only Enter, so a stale Shift from an
       // earlier press cannot turn a later paragraph break into a line break.
@@ -5148,6 +5501,7 @@
      * call is a no-op, and this handler never runs while no session is open.
      */
     function onPointerDown(event) {
+      if (writeInGap(event)) return;
       if (!session) {
         // Edit state with no block open: a press on the rail leaves it. The
         // bar and the "+ Write here" line are the edit state's own.
@@ -5210,7 +5564,45 @@
       commit({ reason: "window blur" });
     }
 
+    // A press that missed "+ Write here" but landed in the page's own gap
+    // between two blocks (or just below the last one) starts writing there,
+    // as the line would have. Before this, a near miss read as a click
+    // outside: the session closed and the typing went nowhere (flow walk,
+    // design problem 7). Only a press on the page's containers counts, never
+    // one on content (an image, a rule), and only while an edit is open.
+    var swallowClick = false;
+    var gapPress = null;
+    function writeInGap(event) {
+      // pointerdown and its compatibility mousedown are one press: the second
+      // is swallowed, never a second opening.
+      if (event.type === "mousedown" && gapPress && gapPress.x === event.clientX && gapPress.y === event.clientY) {
+        gapPress = null;
+        if (typeof event.preventDefault === "function") event.preventDefault();
+        return true;
+      }
+      gapPress = null;
+      swallowClick = false;
+      if (!isEditOpen() || typeof event.clientX !== "number") return false;
+      if (typeof event.button === "number" && event.button !== 0) return false;
+      if (markers.isInsideOverlay(event.target) || pressedOnScrollbar(event)) return false;
+      var gap = gapAt(event.clientX, event.clientY, true);
+      if (!gap) return false;
+      var target = event.target;
+      if (!target || target.nodeType !== 1 || !target.contains(gap.block)) return false;
+      if (typeof event.preventDefault === "function") event.preventDefault();
+      swallowClick = true;
+      if (event.type === "pointerdown") gapPress = { x: event.clientX, y: event.clientY };
+      openAfter(gap.block);
+      return true;
+    }
+
     function onClick(event) {
+      if (swallowClick) {
+        // The press already started writing in the gap; its click is not a
+        // click outside the new session.
+        swallowClick = false;
+        return;
+      }
       if (markers.isInsideOverlay(event.target)) return;
       if (editState && !session) {
         // Edit state with no block open: a click on a block opens it.

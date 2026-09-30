@@ -231,7 +231,8 @@ A new `h2` typed mid-section has the page's `h2` styling but no section rule or 
 - **Enter** at the end of a block makes a new `p` after it. Enter in the middle splits the block into two siblings, and the tail is marked `from_anchor`. Enter in an empty list item ends the list.
 - **Shift-Enter** stays a line break.
 - **Markdown-style shortcuts** at the start of a block:
-  - `# `, `## `, and `### ` make h2, h3, and h4
+  - `## `, `### `, and `#### ` make h2, h3, and h4, Markdown's own levels
+  - `# ` makes h2 too, because the body has no h1
   - `- ` or `* ` makes a bulleted list
   - `1. ` makes a numbered list
 - **The bar's block-type menu** (wireframe direction A) sits before B and I. It names the caret's block: Paragraph, Heading, Subheading, Small heading, Bulleted list, Numbered list. Each type also gets a hotkey (the plan picks the keys). Menu, hotkeys, and shortcuts share one function per type.

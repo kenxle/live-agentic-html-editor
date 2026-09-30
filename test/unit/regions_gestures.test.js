@@ -209,9 +209,9 @@ test("the block types, their menu labels and Markdown shortcuts are the plan's",
     gestures.BLOCK_TYPES.map((t) => [t.tag, t.label, t.markdown]),
     [
       ["p", "Paragraph", null],
-      ["h2", "Heading", "# "],
-      ["h3", "Subheading", "## "],
-      ["h4", "Small heading", "### "],
+      ["h2", "Heading", "## "],
+      ["h3", "Subheading", "### "],
+      ["h4", "Small heading", "#### "],
       ["ul", "Bulleted list", "- "],
       ["ol", "Numbered list", "1. "]
     ]
@@ -277,14 +277,18 @@ test("each menu row names its chord for the reviewer's system", () => {
 });
 
 test("a Markdown shortcut at the start of a block names its type", () => {
+  // Markdown's own levels (flow walk, design problem 5): "## " is h2, as it
+  // is in the source. "# " makes h2 too, because the body has no h1: the
+  // page title is the h1.
   assert.equal(gestures.markdownShortcutFor("# "), "h2");
-  assert.equal(gestures.markdownShortcutFor("## "), "h3");
-  assert.equal(gestures.markdownShortcutFor("### "), "h4");
+  assert.equal(gestures.markdownShortcutFor("## "), "h2");
+  assert.equal(gestures.markdownShortcutFor("### "), "h3");
+  assert.equal(gestures.markdownShortcutFor("#### "), "h4");
   assert.equal(gestures.markdownShortcutFor("- "), "ul");
   assert.equal(gestures.markdownShortcutFor("* "), "ul");
   assert.equal(gestures.markdownShortcutFor("1. "), "ol");
   assert.equal(gestures.markdownShortcutFor("#"), null, "only once the space is typed");
-  assert.equal(gestures.markdownShortcutFor("#### "), null, "headings stop at h4");
+  assert.equal(gestures.markdownShortcutFor("##### "), null, "headings stop at h4");
   assert.equal(gestures.markdownShortcutFor("a # "), null, "only at the start of a block");
   assert.equal(gestures.markdownShortcutFor("2. "), null);
 });

@@ -329,8 +329,8 @@ keystroke, without opening a menu, which is what AC6 is scored on.
 
 **Free writing** adds pure decisions beside `gestureFor`, for the editing host:
 `blockTypeChord` (the six block-type chords, matched on `event.code`, never while AltGraph is on, and
-no Ctrl-Alt), `chordLabelFor`, `markdownShortcutFor` (`# `, `## `, `### `, `- `, `* `, `1. ` at a
-block's start), `enterIntentFor` (sibling at the end, split mid-block, new item or end of list,
+no Ctrl-Alt), `chordLabelFor`, `markdownShortcutFor` (`## `, `### `, `#### ` for h2 to h4, `# ` for h2
+too, `- `, `* `, `1. ` at a block's start), `enterIntentFor` (sibling at the end, split mid-block, new item or end of list,
 Shift-Enter a line, today's rule where a run cannot go), `edgeDeleteFor` (Backspace and Delete across
 a block edge, refused at the session's own edge), and `historyIntentFor` (Cmd-Z and Shift-Cmd-Z walk
 the session's own history). `BLOCK_TYPES` holds each type's menu label, chords and shortcut.
