@@ -11,8 +11,11 @@
 //   - Focus is the switch. Focused: the reply poll runs once a second,
 //     steadily, as before. Keystrokes, clicks and selection changes cost
 //     nothing: no request, no storage write, no timer.
-//   - Visible but not focused (beside the terminal): the reply poll and the
-//     read-only re-ask every 15 seconds; the ordinary 10 second heartbeat.
+//   - Visible but not focused (beside the terminal): the reply poll every 30
+//     seconds, and nothing else on a clock. The rail's agent line is fed by
+//     that poll's answer. The holder's claim goes quiet, as a hidden tab's
+//     does, so the helper holds it for 390 seconds on a 5 minute beat. A
+//     read-only window does not re-ask until it has focus again.
 //   - Hidden: no reply poll and no read-only re-ask at all. The only request
 //     is a "still open" heartbeat every 5 minutes, after a granted beat has
 //     told the helper `quiet`. A blur sends nothing itself.
@@ -86,6 +89,10 @@ function routeOf(url) {
 function rig(t, options) {
   t.mock.timers.enable({ apis: ["setTimeout", "setInterval", "Date"], now: 1000000 });
   const opts = options || {};
+  // A real helper registry answers the claims when asked, on the mocked clock,
+  // so a test can check who the helper says holds the review.
+  const real = opts.realHelper ? realRegistry() : null;
+  const livenessSeen = [];
   const helper = {
     replies: [],
     mtime: "2026-09-28T11:00:00.000Z",
@@ -126,6 +133,10 @@ function rig(t, options) {
       return answer(200, { events: events, seq: seq, target_mtime: helper.mtime, agent_liveness: helper.liveness });
     }
     if (route === "release") return answer(200, { released: true });
+    if (real) {
+      const got = real.reviews.claimWindow(REVIEW, body);
+      return answer(got.granted ? 200 : 409, got);
+    }
     const beat = { heartbeat_seconds: 10 };
     if (helper.quietBeat !== null) beat.quiet_heartbeat_seconds = helper.quietBeat;
     if (helper.refuse) {
@@ -159,7 +170,8 @@ function rig(t, options) {
     document: doc,
     window: win,
     fetch: fetchImpl,
-    reloadNoticeMs: 0
+    reloadNoticeMs: 0,
+    onAgentLiveness: (value) => livenessSeen.push({ at: Date.now(), value: value })
   });
   t.after(() => {
     sync.stop();
@@ -179,6 +191,8 @@ function rig(t, options) {
     requests,
     reloads,
     storageWrites,
+    real,
+    livenessSeen,
     drain,
     polls: () => requests.filter((q) => q.route === "poll").map((q) => q.at),
     claims: () => requests.filter((q) => q.route === "claim"),
@@ -238,6 +252,18 @@ async function backedOff(r) {
   return Date.now();
 }
 
+/** A real helper registry on the mocked clock, holding REVIEW. */
+function realRegistry() {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "lahe-quiet-real-"));
+  const reviews = reviewsModule.createReviews({
+    dir: dir,
+    log: logModule.createEventLog({ dir: dir }),
+    now: () => Date.now()
+  });
+  reviews.create({ id: REVIEW, origins: ["null"] });
+  return { reviews };
+}
+
 function draftItem(note) {
   return record.newItem({
     kind: record.KIND.COMMENT,
@@ -252,12 +278,12 @@ function draftItem(note) {
 // The constants
 // ---------------------------------------------------------------------------
 
-test("the poll is once a second focused, every 15 seconds visible, and not at all hidden", () => {
+test("the poll is once a second focused, every 30 seconds visible, and not at all hidden", () => {
   assert.equal(FAST, 1000);
   assert.equal(syncModule.pollIntervalFor({ hidden: false, hasFocus: () => true }), 1000);
   assert.equal(syncModule.pollIntervalFor({ hidden: true }), null, "hidden: no poll");
-  assert.equal(syncModule.pollIntervalFor({ hidden: false, hasFocus: () => false }), 15000, "visible, unfocused");
-  assert.equal(syncModule.VISIBLE_POLL_INTERVAL_MS, 15000);
+  assert.equal(syncModule.pollIntervalFor({ hidden: false, hasFocus: () => false }), 30000, "visible, unfocused");
+  assert.equal(syncModule.VISIBLE_POLL_INTERVAL_MS, 30000);
   assert.equal(syncModule.pollIntervalFor({ hidden: false }), 1000, "no hasFocus to ask is treated as focused");
   assert.equal(syncModule.isAway(null), false);
 });
@@ -336,7 +362,7 @@ test("200 key presses spread over 10 seconds leave the poll on its clock", async
 // Away: no polling at all
 // ---------------------------------------------------------------------------
 
-test("a visible page without focus polls every 15 seconds and keeps the ordinary heartbeat", async (t) => {
+test("a visible page without focus polls every 30 seconds and goes on the slow beat", async (t) => {
   const r = rig(t);
   await started(r);
   await r.advance(3500);
@@ -344,27 +370,85 @@ test("a visible page without focus polls every 15 seconds and keeps the ordinary
   r.blur();
   await r.drain();
   assert.equal(r.requests.filter((q) => q.at >= at).length, 0, "the blur itself sends nothing");
-  await r.advance(60000, 500);
+  await r.advance(LONG, 500);
   const polls = r.polls().filter((p) => p > at);
-  assert.equal(polls.length, 4, "four polls in a minute: " + polls.map((p) => p - at).join(","));
-  gaps(polls).forEach((g) => assert.equal(g, 15000));
+  assert.equal(polls.length, 30, "thirty polls in fifteen minutes: " + polls.length);
+  gaps(polls).forEach((g) => assert.equal(g, 30000));
   const beats = r.claims().filter((c) => c.at > at);
-  assert.ok(beats.length >= 5, "the 10 second beat carries on: " + beats.length);
-  beats.forEach((b) => assert.equal(b.body.quiet, false, "never quiet: it keeps the 30 second window"));
+  // The beat already due tells the helper this page went quiet; then every
+  // five minutes, as for a hidden tab.
+  assert.ok(beats[0].at - at <= 10000, "the beat that says quiet was the one already due");
+  assert.deepEqual(gaps(beats.map((b) => b.at)), [QUIET_BEAT, QUIET_BEAT]);
+  beats.forEach((b) => assert.equal(b.body.quiet, true, "each beat says quiet"));
 });
 
-test("a visible page without focus shows a reply within 15 seconds", async (t) => {
+test("a visible page without focus makes no request but the reply poll and the slow beat", async (t) => {
+  const r = rig(t);
+  await started(r);
+  await r.advance(3500);
+  const at = Date.now();
+  r.blur();
+  await r.advance(60 * 60 * 1000, 1000);
+  const sent = r.requests.filter((q) => q.at > at);
+  const routes = Array.from(new Set(sent.map((q) => q.route))).sort();
+  assert.deepEqual(routes, ["claim", "poll"], "nothing else is asked");
+  assert.equal(sent.filter((q) => q.route === "poll").length, 120, "one poll every 30 seconds for an hour");
+  assert.ok(sent.filter((q) => q.route === "claim").length <= 13, "one quiet beat, then one every five minutes");
+});
+
+test("a visible page without focus refreshes the agent line from the reply poll alone", async (t) => {
   const r = rig(t);
   await started(r);
   await r.advance(3500);
   r.blur();
-  await r.advance(20000, 500);
+  await r.advance(45000, 500);
+  const at = Date.now();
+  const seenBefore = r.livenessSeen.length;
+  r.helper.liveness = { state: "listening", monitor_at: "2026-09-28T11:05:00.000Z", unanswered: 1 };
+  await r.advance(30000, 500);
+  const fresh = r.livenessSeen.slice(seenBefore);
+  assert.equal(fresh.length, 1, "the rail was told once");
+  assert.equal(fresh[0].value.state, "listening");
+  const between = r.requests.filter((q) => q.at > at && q.at <= fresh[0].at);
+  assert.deepEqual(
+    between.map((q) => q.route),
+    ["poll"],
+    "by the next reply poll, with no request of its own"
+  );
+});
+
+test("a visible holder without focus keeps its review for an hour, and exactly one window holds it", async (t) => {
+  const r = rig(t, { realHelper: true });
+  await started(r);
+  await r.advance(3500);
+  assert.equal(r.sync.lockState().helperGranted, true, "precondition: this page holds the review");
+  r.blur();
+  const other = { review: REVIEW, window_id: "second-window" };
+  // A second window asks every five seconds for the whole hour. Any moment
+  // the claim had lapsed, it would be granted the review.
+  for (let second = 5; second <= 3600; second += 5) {
+    await r.advance(5000, 1000);
+    const holder = r.real.reviews.holderOf(REVIEW);
+    assert.ok(holder && holder.stale === false, second + "s: the helper still sees this page as the holder");
+    const asked = r.real.reviews.claimWindow(REVIEW, Object.assign({}, other));
+    assert.equal(asked.granted, false, second + "s: a second window is refused");
+  }
+  assert.equal(r.sync.lockState().helperGranted, true, "the page still holds it");
+  assert.equal(r.sync.isReadOnly(), false);
+});
+
+test("a visible page without focus shows a reply within 30 seconds", async (t) => {
+  const r = rig(t);
+  await started(r);
+  await r.advance(3500);
+  r.blur();
+  await r.advance(35000, 500);
   r.helper.replies = [{ event: "item.reply", item: "i1", seq: 1 }];
-  await r.advance(15000, 500);
+  await r.advance(30000, 500);
   assert.equal(r.sync.repliesSeen().length, 1, "the reply is on the page");
 });
 
-test("becoming visible from hidden, without focus, polls at once and then every 15 seconds", async (t) => {
+test("becoming visible from hidden, without focus, polls at once and then every 30 seconds", async (t) => {
   const r = rig(t);
   await started(r);
   r.hide();
@@ -373,22 +457,26 @@ test("becoming visible from hidden, without focus, polls at once and then every 
   r.show();
   await r.drain();
   assert.deepEqual(r.polls().filter((p) => p >= at), [at], "one poll right away");
-  await r.advance(31000, 500);
-  assert.deepEqual(gaps(r.polls().filter((p) => p >= at)), [15000, 15000]);
+  await r.advance(61000, 500);
+  assert.deepEqual(gaps(r.polls().filter((p) => p >= at)), [30000, 30000]);
 });
 
-test("a page that goes hidden and back to visible keeps the claim right both ways", async (t) => {
+test("a page that goes hidden, then visible, then focused keeps the claim right each way", async (t) => {
   const r = rig(t);
   await started(r);
   await r.advance(3500);
   r.hide();
   await r.advance(20000, 500);
   assert.ok(r.claims().some((c) => c.body && c.body.quiet === true), "hidden: the helper was told quiet");
-  const at = Date.now();
+  let at = Date.now();
   r.show();
+  await r.advance(60000, 500);
+  assert.equal(r.claims().filter((c) => c.at >= at).length, 0, "visible without focus is still quiet: no beat to undo it");
+  at = Date.now();
+  r.focus();
   await r.drain();
   const back = r.claims().filter((c) => c.at >= at);
-  assert.equal(back.length, 1, "visible again: one beat at once");
+  assert.equal(back.length, 1, "focused: one beat at once");
   assert.equal(back[0].body.quiet, false, "saying it is not quiet, so the 30 second window is back");
   await r.advance(21000, 500);
   assert.equal(r.claims().filter((c) => c.at >= at).length, 3, "then the 10 second beat");
@@ -672,15 +760,19 @@ test("a read-only window re-asks every 10 seconds focused, not at all hidden, an
   assert.equal(r.claims().filter((c) => c.at >= at).length, 2, "and every 10 seconds again");
 });
 
-test("a read-only window beside the terminal re-asks every 15 seconds", async (t) => {
+test("a read-only window beside the terminal does not re-ask until it has focus", async (t) => {
   const r = rig(t, { refuse: true });
   await started(r);
   await r.advance(3500);
   r.blur();
-  const at = Date.now();
-  await r.advance(46000, 500);
-  const asks = r.claims().filter((c) => c.at > at).map((c) => c.at);
-  assert.deepEqual(gaps(asks), [15000, 15000]);
+  let at = Date.now();
+  await r.advance(LONG, 1000);
+  assert.equal(r.claims().filter((c) => c.at > at).length, 0, "no re-ask while visible without focus");
+  assert.equal(r.polls().filter((p) => p > at).length, 30, "only the 30 second reply poll");
+  at = Date.now();
+  r.focus();
+  await r.drain();
+  assert.equal(r.claims().filter((c) => c.at >= at).length, 1, "re-asked at once on focus");
 });
 
 // ---------------------------------------------------------------------------

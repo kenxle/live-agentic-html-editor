@@ -134,9 +134,17 @@
   //
   //  - FOCUSED: once a second, steadily. Only one tab can have focus, so only
   //    one tab ever runs at this pace, and it has to feel responsive.
-  //  - VISIBLE BUT NOT FOCUSED (a review page beside the terminal): every 15
-  //    seconds. The reviewer can see it, so a reply still shows up while they
-  //    watch, without the page running at full speed.
+  //  - VISIBLE BUT NOT FOCUSED (a review page beside the terminal): every 30
+  //    seconds, and nothing else on a clock. The reviewer can see it, so a
+  //    reply still shows up while they watch, without the page running at full
+  //    speed. The rail's agent line needs no request of its own: every poll's
+  //    answer carries agent_liveness. The holder's claim goes quiet, exactly
+  //    as a hidden tab's does (the slow "still open" beat further down), so
+  //    the 10 second heartbeat does not run here either. A read-only window
+  //    does not re-ask for the review until it has focus again.
+  //
+  //    At 15 seconds with the ordinary beat this state cost 600 requests an
+  //    hour, 360 of them heartbeats. The owner: "is too much".
   //  - HIDDEN (a background tab, a minimized window, a window on another
   //    desktop): NO POLL AT ALL. Nothing comes from a page nobody can see. The
   //    only request is the slow "still open" heartbeat further down.
@@ -144,7 +152,7 @@
   // Gaining focus, or becoming visible, polls at once, so the reviewer never
   // sees the wait for what arrived meanwhile.
   var POLL_INTERVAL_MS = 1000;
-  var VISIBLE_POLL_INTERVAL_MS = 15000;
+  var VISIBLE_POLL_INTERVAL_MS = 30000;
 
   var ATTENTION = { FOCUSED: "focused", VISIBLE: "visible", HIDDEN: "hidden" };
 
@@ -2490,7 +2498,7 @@
       if (!started || attention === ATTENTION.HIDDEN) return null;
       var wait = attention === ATTENTION.VISIBLE ? VISIBLE_POLL_INTERVAL_MS : POLL_INTERVAL_MS;
       // harness-allow-timer: the reply poll chain, once a second focused and
-      // every 15 seconds visible (both pinned at the top of this file).
+      // every 30 seconds visible (both pinned at the top of this file).
       pollTimer = setTimeout(runPoll, wait);
       return pollTimer;
     }
@@ -2533,17 +2541,19 @@
      *  - Hiding the tab sends the drafts now, as it always has, because a
      *    hidden tab is often the last thing a page hears before the browser
      *    discards it. A blur with nothing queued sends nothing.
-     *  - Going hidden stops the reply poll and the read-only re-ask. The
-     *    heartbeat is left alone here: its next beat, at most 10 seconds out,
-     *    tells the helper this tab is quiet, and only once the helper has
-     *    granted that does it slow.
+     *  - Going hidden stops the reply poll. Losing focus in any way stops
+     *    the read-only re-ask. The heartbeat is left alone here: its next
+     *    beat, at most 10 seconds out, tells the helper this tab is quiet, and
+     *    only once the helper has granted that does it slow.
      *  - Gaining focus, or becoming visible from hidden, polls at once. That
      *    one poll brings any reply that arrived meanwhile and any reload a
      *    rebuild owes. Then the chain runs at the new pace.
      *  - Losing focus while still visible only moves the next poll to the
-     *    15 second pace.
-     *  - Leaving hidden, when the helper was told quiet, beats at once to say
+     *    30 second pace.
+     *  - Gaining focus, when the helper was told quiet, beats at once to say
      *    otherwise, which is also the check that this window still holds it.
+     *    Visible and hidden are both quiet, so moving between them beats
+     *    nothing.
      */
     function onAttention(event) {
       if (!started) return;
@@ -2560,15 +2570,16 @@
       var wake = next === ATTENTION.FOCUSED || was === ATTENTION.HIDDEN;
       if (wake) pollNow();
       if (!pollInFlight) schedulePoll();
-      if (was === ATTENTION.HIDDEN && heartbeatTimer && toldQuiet) {
+      if (next === ATTENTION.FOCUSED && heartbeatTimer && toldQuiet) {
         clearTimeout(heartbeatTimer);
         heartbeatTimer = null;
         postHeartbeat();
         scheduleHeartbeat();
       }
       if (readOnly) {
-        // Asked at once only on leaving hidden, when it has not asked at all.
-        if (was === ATTENTION.HIDDEN) pollLiveness();
+        // Asked at once on gaining focus, because it has not asked since it
+        // lost it. Without focus, scheduleLiveness arms nothing.
+        if (next === ATTENTION.FOCUSED) pollLiveness();
         scheduleLiveness();
       }
     }
@@ -2883,11 +2894,12 @@
     function claimRequest(body) {
       claimSeq += 1;
       var seq = claimSeq;
-      // QUIET, on every claim this page sends: true while nobody is looking and
-      // the helper has offered the slow beat. The helper then gives this holder
+      // QUIET, on every claim this page sends: true while the page lacks focus
+      // (visible beside something, or hidden) and the helper has offered the
+      // slow beat. The helper then gives this holder
       // the longer staleness window, and the beat slows only after it was told
       // (toldQuiet). Never true against a helper that did not offer it.
-      var quiet = attention === ATTENTION.HIDDEN && quietHeartbeatMs !== null;
+      var quiet = attention !== ATTENTION.FOCUSED && quietHeartbeatMs !== null;
       body.quiet = quiet;
       return request("window.claim", { method: "POST", body: JSON.stringify(body) })
         .then(parseClaim)
@@ -3189,13 +3201,25 @@
     }
 
     /**
-     * The wait until the next beat. The fast beat unless hidden. While hidden,
-     * the helper's slow "still open" beat, but only once the helper has been
-     * told this tab is quiet: until then it would call this holder gone after
-     * its ordinary 30 seconds, so the beat that tells it goes at the fast pace.
+     * The wait until the next beat. The fast beat while focused. Without focus
+     * (visible or hidden), the helper's slow "still open" beat, but only once
+     * the helper has been told this tab is quiet: until then it would call
+     * this holder gone after its ordinary 30 seconds, so the beat that tells
+     * it goes at the fast pace.
+     *
+     * WHY A VISIBLE PAGE GOES QUIET TOO, rather than its 30 second reply poll
+     * counting as the claim. A poll every 30 seconds against a 30 second claim
+     * window lapses on any late answer, so the window would have to stretch
+     * anyway, and the reply poll is a GET that carries no session secret: it
+     * would need the secret in its query string to prove it is the holder.
+     * The quiet window is already the helper's, already restored after a
+     * restart, and already has one holder at a time. The cost is the one a
+     * hidden tab already pays: a page that crashes while unfocused holds its
+     * review for up to 390 seconds. Closing it, and Review here instead, still
+     * free it at once.
      */
     function heartbeatDelay() {
-      if (attention === ATTENTION.HIDDEN && toldQuiet && quietHeartbeatMs !== null) return quietHeartbeatMs;
+      if (attention !== ATTENTION.FOCUSED && toldQuiet && quietHeartbeatMs !== null) return quietHeartbeatMs;
       return heartbeatMs;
     }
 
@@ -3315,9 +3339,10 @@
     function scheduleLiveness() {
       if (livenessTimer) clearTimeout(livenessTimer);
       livenessTimer = null;
-      // Nobody can see it, so nobody is waiting to take the review over. The
-      // re-ask stops, and becoming visible asks at once (onAttention).
-      if (attention === ATTENTION.HIDDEN) return null;
+      // Nobody is working in it, so nobody is waiting to take the review over.
+      // The re-ask stops while the page lacks focus (visible beside something,
+      // or hidden), and gaining focus asks at once (onAttention).
+      if (attention !== ATTENTION.FOCUSED) return null;
       // harness-allow-timer: the refused window's liveness poll. It re-attempts
       // the claim with takeover:false; while the holder is alive it is refused
       // and nothing happens, but once the holder goes stale the helper grants it
@@ -3326,7 +3351,7 @@
         livenessTimer = null;
         pollLiveness();
         if (readOnly) scheduleLiveness();
-      }, attention === ATTENTION.VISIBLE ? VISIBLE_POLL_INTERVAL_MS : heartbeatMs);
+      }, heartbeatMs);
       return livenessTimer;
     }
 

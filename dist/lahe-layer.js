@@ -1,6 +1,6 @@
 /*
  * live-agentic-html-editor review layer
- * version 0.2.0+64fdc4920d48
+ * version 0.2.0+c4d07d8b825d
  *
  * GENERATED FILE. Do not edit. Edit the sources under src/ and run
  *   npm run build:layer
@@ -12,7 +12,7 @@
   "use strict";
   var g = typeof globalThis !== "undefined" ? globalThis : window;
   g.LAHE = g.LAHE || {};
-  g.LAHE.version = "0.2.0+64fdc4920d48";
+  g.LAHE.version = "0.2.0+c4d07d8b825d";
 })();
 /* ---- src/shared/markers.js  (owner: 0A-kernel) ---- */
 // Markers: the attribute and class names that identify DOM the tool added.
@@ -13346,10 +13346,16 @@
     return id;
   }
 
-  /** Every element carrying this exact stamp. More than one is a duplicate. */
+  /**
+   * Every element carrying this exact stamp. More than one is a duplicate.
+   *
+   * The scope itself counts. A whole-page selection on a page whose blocks sit
+   * straight in <body> has <body> as its region, so the stamp is on the scope.
+   */
   function findByStamp(scope, stamp) {
     var out = [];
     if (!stamp) return out;
+    if (isElement(scope) && attrOf(scope, markers.STAMP_ATTR) === stamp) out.push(scope);
     eachElement(scope, function (node) {
       if (attrOf(node, markers.STAMP_ATTR) === stamp) out.push(node);
     });
@@ -14100,37 +14106,6 @@
     return blockCountOf(element) >= 2;
   }
 
-  /**
-   * Does this element hold every word the page has?
-   *
-   * The page itself does, and so does a wrapper around all of it: a <main> or
-   * a <div id="app"> with nothing beside it that has words, and two or more
-   * blocks with words inside it. Such an element is never a passage.
-   *
-   * ONE BLOCK IS ALWAYS A PASSAGE, even when it is the only thing on the page
-   * with words: the heading on a page of image options, the paragraph on a
-   * one-paragraph page. Counting it as the page made a comment on it go lost
-   * the moment the agent reworded it (code review, 2026-09-28). A comment whose region is one is about the page, so its
-   * stamp says nothing about where the comment is, and a paint over its whole
-   * contents washes every character the reviewer can see (docs/features/
-   * 20260928.03_oversized_records, cause 3).
-   *
-   * @param {Element} element
-   * @param {Element|Document} [root] the page; the element's own document
-   *   when omitted
-   * @returns {boolean}
-   */
-  function isPageSized(element, root) {
-    if (!isElement(element)) return false;
-    var tag = tagOf(element);
-    if (tag === "body" || tag === "html") return true;
-    var scope = scopeOf(root, element);
-    if (!isElement(scope)) return false;
-    if (element === scope) return true;
-    var words = textOf(element);
-    return !!words && words === textOf(scope) && isContainerOfBlocks(element);
-  }
-
   return {
     MINT_FAILURE: MINT_FAILURE,
     MINT_FAILURE_CODE: MINT_FAILURE_CODE,
@@ -14140,7 +14115,6 @@
     NEAR_MAX: NEAR_MAX,
     signatureOf: signatureOf,
     subjectFor: subjectFor,
-    isPageSized: isPageSized,
     isContainerOfBlocks: isContainerOfBlocks,
     // The words the engine reads off a node. For size checks outside this file
     // (highlight.js), so there is one reading of "the text under an element".
@@ -16307,14 +16281,30 @@
    */
   function refusesWholePaint(range, quote) {
     if (typeof quote !== "string" || !range) return false;
-    if (!anchor || typeof anchor.isContainerOfBlocks !== "function") return false;
     var start = range.startContainer;
     if (!start || start !== range.endContainer || start.nodeType !== 1) return false;
     if (range.startOffset !== 0) return false;
     var count = start.childNodes ? start.childNodes.length : 0;
     if (range.endOffset !== count) return false;
-    if (!anchor.isContainerOfBlocks(start)) return false;
-    var have = normalize.normalizeText(anchor.wordsOf(start) || "").length;
+    return refusesWholeElement(start, quote);
+  }
+
+  /**
+   * Would a paint over this element's whole contents be refused for this
+   * quote? The element half of refusesWholePaint, for a caller that has the
+   * element and not yet a range: replay asks it before taking a stamp as a
+   * certain place (replay.js, stampedPlace), so a record the highlighter would
+   * never paint is reported lost rather than found and bare.
+   *
+   * @param {Element} element
+   * @param {string|null|undefined} quote as for refusesWholePaint
+   * @returns {boolean}
+   */
+  function refusesWholeElement(element, quote) {
+    if (typeof quote !== "string" || !element) return false;
+    if (!anchor || typeof anchor.isContainerOfBlocks !== "function") return false;
+    if (!anchor.isContainerOfBlocks(element)) return false;
+    var have = normalize.normalizeText(anchor.wordsOf(element) || "").length;
     var want = normalize.normalizeText(quote).length;
     return have > want * WHOLE_PAINT_MAX_RATIO;
   }
@@ -16870,6 +16860,7 @@
 
   return {
     refusesWholePaint: refusesWholePaint,
+    refusesWholeElement: refusesWholeElement,
     WHOLE_PAINT_MAX_RATIO: WHOLE_PAINT_MAX_RATIO,
     PREFIX: PREFIX,
     NAME: NAME,
@@ -28887,9 +28878,17 @@
   //
   //  - FOCUSED: once a second, steadily. Only one tab can have focus, so only
   //    one tab ever runs at this pace, and it has to feel responsive.
-  //  - VISIBLE BUT NOT FOCUSED (a review page beside the terminal): every 15
-  //    seconds. The reviewer can see it, so a reply still shows up while they
-  //    watch, without the page running at full speed.
+  //  - VISIBLE BUT NOT FOCUSED (a review page beside the terminal): every 30
+  //    seconds, and nothing else on a clock. The reviewer can see it, so a
+  //    reply still shows up while they watch, without the page running at full
+  //    speed. The rail's agent line needs no request of its own: every poll's
+  //    answer carries agent_liveness. The holder's claim goes quiet, exactly
+  //    as a hidden tab's does (the slow "still open" beat further down), so
+  //    the 10 second heartbeat does not run here either. A read-only window
+  //    does not re-ask for the review until it has focus again.
+  //
+  //    At 15 seconds with the ordinary beat this state cost 600 requests an
+  //    hour, 360 of them heartbeats. The owner: "is too much".
   //  - HIDDEN (a background tab, a minimized window, a window on another
   //    desktop): NO POLL AT ALL. Nothing comes from a page nobody can see. The
   //    only request is the slow "still open" heartbeat further down.
@@ -28897,7 +28896,7 @@
   // Gaining focus, or becoming visible, polls at once, so the reviewer never
   // sees the wait for what arrived meanwhile.
   var POLL_INTERVAL_MS = 1000;
-  var VISIBLE_POLL_INTERVAL_MS = 15000;
+  var VISIBLE_POLL_INTERVAL_MS = 30000;
 
   var ATTENTION = { FOCUSED: "focused", VISIBLE: "visible", HIDDEN: "hidden" };
 
@@ -31243,7 +31242,7 @@
       if (!started || attention === ATTENTION.HIDDEN) return null;
       var wait = attention === ATTENTION.VISIBLE ? VISIBLE_POLL_INTERVAL_MS : POLL_INTERVAL_MS;
       // harness-allow-timer: the reply poll chain, once a second focused and
-      // every 15 seconds visible (both pinned at the top of this file).
+      // every 30 seconds visible (both pinned at the top of this file).
       pollTimer = setTimeout(runPoll, wait);
       return pollTimer;
     }
@@ -31286,17 +31285,19 @@
      *  - Hiding the tab sends the drafts now, as it always has, because a
      *    hidden tab is often the last thing a page hears before the browser
      *    discards it. A blur with nothing queued sends nothing.
-     *  - Going hidden stops the reply poll and the read-only re-ask. The
-     *    heartbeat is left alone here: its next beat, at most 10 seconds out,
-     *    tells the helper this tab is quiet, and only once the helper has
-     *    granted that does it slow.
+     *  - Going hidden stops the reply poll. Losing focus in any way stops
+     *    the read-only re-ask. The heartbeat is left alone here: its next
+     *    beat, at most 10 seconds out, tells the helper this tab is quiet, and
+     *    only once the helper has granted that does it slow.
      *  - Gaining focus, or becoming visible from hidden, polls at once. That
      *    one poll brings any reply that arrived meanwhile and any reload a
      *    rebuild owes. Then the chain runs at the new pace.
      *  - Losing focus while still visible only moves the next poll to the
-     *    15 second pace.
-     *  - Leaving hidden, when the helper was told quiet, beats at once to say
+     *    30 second pace.
+     *  - Gaining focus, when the helper was told quiet, beats at once to say
      *    otherwise, which is also the check that this window still holds it.
+     *    Visible and hidden are both quiet, so moving between them beats
+     *    nothing.
      */
     function onAttention(event) {
       if (!started) return;
@@ -31313,15 +31314,16 @@
       var wake = next === ATTENTION.FOCUSED || was === ATTENTION.HIDDEN;
       if (wake) pollNow();
       if (!pollInFlight) schedulePoll();
-      if (was === ATTENTION.HIDDEN && heartbeatTimer && toldQuiet) {
+      if (next === ATTENTION.FOCUSED && heartbeatTimer && toldQuiet) {
         clearTimeout(heartbeatTimer);
         heartbeatTimer = null;
         postHeartbeat();
         scheduleHeartbeat();
       }
       if (readOnly) {
-        // Asked at once only on leaving hidden, when it has not asked at all.
-        if (was === ATTENTION.HIDDEN) pollLiveness();
+        // Asked at once on gaining focus, because it has not asked since it
+        // lost it. Without focus, scheduleLiveness arms nothing.
+        if (next === ATTENTION.FOCUSED) pollLiveness();
         scheduleLiveness();
       }
     }
@@ -31636,11 +31638,12 @@
     function claimRequest(body) {
       claimSeq += 1;
       var seq = claimSeq;
-      // QUIET, on every claim this page sends: true while nobody is looking and
-      // the helper has offered the slow beat. The helper then gives this holder
+      // QUIET, on every claim this page sends: true while the page lacks focus
+      // (visible beside something, or hidden) and the helper has offered the
+      // slow beat. The helper then gives this holder
       // the longer staleness window, and the beat slows only after it was told
       // (toldQuiet). Never true against a helper that did not offer it.
-      var quiet = attention === ATTENTION.HIDDEN && quietHeartbeatMs !== null;
+      var quiet = attention !== ATTENTION.FOCUSED && quietHeartbeatMs !== null;
       body.quiet = quiet;
       return request("window.claim", { method: "POST", body: JSON.stringify(body) })
         .then(parseClaim)
@@ -31942,13 +31945,25 @@
     }
 
     /**
-     * The wait until the next beat. The fast beat unless hidden. While hidden,
-     * the helper's slow "still open" beat, but only once the helper has been
-     * told this tab is quiet: until then it would call this holder gone after
-     * its ordinary 30 seconds, so the beat that tells it goes at the fast pace.
+     * The wait until the next beat. The fast beat while focused. Without focus
+     * (visible or hidden), the helper's slow "still open" beat, but only once
+     * the helper has been told this tab is quiet: until then it would call
+     * this holder gone after its ordinary 30 seconds, so the beat that tells
+     * it goes at the fast pace.
+     *
+     * WHY A VISIBLE PAGE GOES QUIET TOO, rather than its 30 second reply poll
+     * counting as the claim. A poll every 30 seconds against a 30 second claim
+     * window lapses on any late answer, so the window would have to stretch
+     * anyway, and the reply poll is a GET that carries no session secret: it
+     * would need the secret in its query string to prove it is the holder.
+     * The quiet window is already the helper's, already restored after a
+     * restart, and already has one holder at a time. The cost is the one a
+     * hidden tab already pays: a page that crashes while unfocused holds its
+     * review for up to 390 seconds. Closing it, and Review here instead, still
+     * free it at once.
      */
     function heartbeatDelay() {
-      if (attention === ATTENTION.HIDDEN && toldQuiet && quietHeartbeatMs !== null) return quietHeartbeatMs;
+      if (attention !== ATTENTION.FOCUSED && toldQuiet && quietHeartbeatMs !== null) return quietHeartbeatMs;
       return heartbeatMs;
     }
 
@@ -32068,9 +32083,10 @@
     function scheduleLiveness() {
       if (livenessTimer) clearTimeout(livenessTimer);
       livenessTimer = null;
-      // Nobody can see it, so nobody is waiting to take the review over. The
-      // re-ask stops, and becoming visible asks at once (onAttention).
-      if (attention === ATTENTION.HIDDEN) return null;
+      // Nobody is working in it, so nobody is waiting to take the review over.
+      // The re-ask stops while the page lacks focus (visible beside something,
+      // or hidden), and gaining focus asks at once (onAttention).
+      if (attention !== ATTENTION.FOCUSED) return null;
       // harness-allow-timer: the refused window's liveness poll. It re-attempts
       // the claim with takeover:false; while the holder is alive it is refused
       // and nothing happens, but once the holder goes stale the helper grants it
@@ -32079,7 +32095,7 @@
         livenessTimer = null;
         pollLiveness();
         if (readOnly) scheduleLiveness();
-      }, attention === ATTENTION.VISIBLE ? VISIBLE_POLL_INTERVAL_MS : heartbeatMs);
+      }, heartbeatMs);
       return livenessTimer;
     }
 
@@ -32820,6 +32836,17 @@
    * so it is the block the selection starts in. The reviewer's quote is theirs
    * and is kept whole, and the repaint covers all of it (see paintRangeFor).
    *
+   * EXCEPT A SELECTION OF A WHOLE ELEMENT. When the reviewer selected nearly
+   * all the words of the smallest element holding the selection (a whole
+   * <main>, a whole page), that element is what they chose, and it is the
+   * region. Ken: "if *I* highlighted the entire page, then that's the
+   * highlight." Anchored on its first block, such a comment shrank to that
+   * block the moment the agent changed any word in it, because the quote could
+   * no longer be found. The bar is WHOLE_SELECTION_SHARE, measured against
+   * that element and not the page, so a site's nav and footer do not count
+   * against a selection of all of <main>, and three of five paragraphs is
+   * never "the whole page". A triple-click (one block) never reaches it.
+   *
    * @param {Range} range
    * @returns {Element|null}
    */
@@ -32828,19 +32855,73 @@
     var ends = selectedTextEnds(range);
     var node = range.commonAncestorContainer;
     if (ends) {
-      var firstBlock = innermostBlockOf(ends.first);
-      var lastBlock = innermostBlockOf(ends.last);
-      if (firstBlock && lastBlock && firstBlock !== lastBlock && firstBlock.contains && !firstBlock.contains(lastBlock)) {
-        return firstBlock;
-      }
       var doc = ends.first.ownerDocument;
       var tight = doc.createRange();
       tight.setStart(ends.first, 0);
       tight.setEnd(ends.last, 0);
-      node = tight.commonAncestorContainer;
+      var holder = tight.commonAncestorContainer;
+      while (holder && holder.nodeType !== 1) holder = holder.parentNode;
+      var firstBlock = innermostBlockOf(ends.first);
+      var lastBlock = innermostBlockOf(ends.last);
+      if (firstBlock && lastBlock && firstBlock !== lastBlock && firstBlock.contains && !firstBlock.contains(lastBlock)) {
+        return selectsNearlyAllOf(range, holder) ? holder : firstBlock;
+      }
+      node = holder;
     }
     while (node && node.nodeType !== 1) node = node.parentNode;
     return node && node.nodeType === 1 ? node : null;
+  }
+
+  // How much of an element's words a selection must cover to be a selection
+  // of the element. Near whole, not "most": the rule is the reviewer's own
+  // choice of the whole thing, and a drag that stops a word or two short of the
+  // end, or skips a caption, is still that choice.
+  var WHOLE_SELECTION_SHARE = 0.9;
+
+  /**
+   * Does the selection cover nearly all the words of this element? Both sides
+   * are counted by one walk, the same way: visible characters in text nodes,
+   * skipping what the anchor engine skips (<script>, <style>, the library's own
+   * chrome). A count that read <script> text on one side and not the other
+   * made a selection look bigger than it was.
+   */
+  function selectsNearlyAllOf(range, holder) {
+    if (!range || !holder) return false;
+    var whole = visibleCharsIn(holder, null);
+    if (!whole) return false;
+    return visibleCharsIn(holder, range) >= whole * WHOLE_SELECTION_SHARE;
+  }
+
+  /** Non-space characters of text under `holder`, within `range` when given. */
+  function visibleCharsIn(holder, range) {
+    var doc = holder.ownerDocument;
+    if (!doc || typeof doc.createTreeWalker !== "function") return 0;
+    var walker = doc.createTreeWalker(holder, 4 /* NodeFilter.SHOW_TEXT */);
+    var count = 0;
+    var node = walker.nextNode();
+    while (node) {
+      if (!skippedBelow(node, holder) && (!range || range.intersectsNode(node))) {
+        var data = String(node.data || "");
+        var from = range && node === range.startContainer ? range.startOffset : 0;
+        var to = range && node === range.endContainer ? range.endOffset : data.length;
+        count += data.slice(from, to).replace(/\s+/g, "").length;
+      }
+      node = walker.nextNode();
+    }
+    return count;
+  }
+
+  /** Is this text node inside something the anchor engine does not read? */
+  function skippedBelow(node, holder) {
+    var skip = (anchor && anchor.SKIP_TAGS) || {};
+    var el = node.parentNode;
+    while (el && el !== holder && el.nodeType === 1) {
+      var tag = String(el.tagName || "").toLowerCase();
+      if (Object.prototype.hasOwnProperty.call(skip, tag)) return true;
+      if (markers && typeof markers.isToolNode === "function" && markers.isToolNode(el)) return true;
+      el = el.parentNode;
+    }
+    return false;
   }
 
   function headingTextFor(element, doc) {
@@ -43973,13 +44054,20 @@
     if (!scope) return null;
     var found = engine.findByStamp(scope, ref.stamp);
     if (found.length !== 1) return null;
-    // A stamp on an element that holds the whole page says nothing about which
-    // passage the comment is on. Its words are every word on the page, so any
-    // change anywhere reads as "the passage was reworded", and taking that as a
-    // certain place painted the entire page as the comment's passage
-    // (docs/features/20260928.03_oversized_records, cause 3). Not certain, so
-    // the pass goes on to the honest answer: lost, and the point ladder's turn.
-    if (typeof engine.isPageSized === "function" && engine.isPageSized(found[0], scope)) return null;
+    // A stamp on the page's own wrapper is a certain place too: a reviewer who
+    // selected the whole page commented on the whole page, and their quote is
+    // the page's own words. But a stamp on a container far bigger than the
+    // quote (a one-line comment stored on <main> before the triple-click fix)
+    // is not a place the highlighter will paint, and taking it as found left a
+    // card with no highlight and no lost notice. Those words are not there:
+    // the record is lost, and the point ladder gets its turn.
+    if (
+      highlightModule &&
+      typeof highlightModule.refusesWholeElement === "function" &&
+      highlightModule.refusesWholeElement(found[0], record.paintQuoteOf(item))
+    ) {
+      return null;
+    }
     return found[0];
   }
 
@@ -46492,7 +46580,7 @@
   "use strict";
 
   // Replaced by scripts/build-layer.js at concatenation time.
-  var VERSION = "0.2.0+64fdc4920d48";
+  var VERSION = "0.2.0+c4d07d8b825d";
 
   var protocol = ns.protocol;
   var record = ns.record;

@@ -500,7 +500,7 @@ reviewer's session with it, which is a worse failure than the one it reports.
 **How the helper notices appends:** it polls each `replies*.jsonl` in the review folder every
 **5 seconds as an inactive-review safety scan**, tracking a **byte offset per file**. Active page
 polls, status reads, and browser event appends trigger the same fold immediately, so ordinary
-review latency stays at the page's poll (one second focused, 15 seconds visible) or better without scanning every accumulated
+review latency stays at the page's poll (one second focused, 30 seconds visible) or better without scanning every accumulated
 review folder four times per second. A file shorter than its recorded offset was truncated
 or rewritten rather than appended to, so the offset **resets to zero and the file is re-folded**,
 which is safe because folding is idempotent (`protocol.nextReadOffset`). A final line with no
@@ -917,16 +917,18 @@ the reviewer's explicit "Review here instead"); a fresh secret is minted on ever
 deposed holder cannot re-assert with its old one.
 
 **How long a holder keeps the review when it goes quiet** (spec 20260928.01, quiet tab polling). A
-holder beats every `heartbeat_seconds` (10) and is stale after `STALE_AFTER_MS` (30s) of silence, and
-that includes a page that is visible but not focused. A HIDDEN page (a background tab, a minimized
-window, a window on another desktop) stops polling entirely and sends `quiet: true` on its next claim; from then on it beats every `quiet_heartbeat_seconds` (300) and the helper holds it for
+focused holder beats every `heartbeat_seconds` (10) and is stale after `STALE_AFTER_MS` (30s) of silence.
+A holder WITHOUT FOCUS, whether visible beside something or hidden (a background tab, a minimized
+window, a window on another desktop), sends `quiet: true` on its next claim; from then on it beats every `quiet_heartbeat_seconds` (300) and the helper holds it for
 `QUIET_STALE_AFTER_MS` (390s: the five minute beat, a minute for Chrome waking long-hidden tabs only once a
 minute, and the same 30 seconds of slack a focused holder gets). `quiet` is a boolean; the numbers are the
 helper's. The page slows only after the helper has GRANTED a claim that said quiet (sent is not told:
 a helper replaced during that beat never heard it), and only when the helper offered
-`quiet_heartbeat_seconds`, so an older helper never sees a slow page it would call gone. Becoming
-visible again beats at once with `quiet: false`. Staleness is still checked only when another window asks. The cost:
-a tab that crashes or is force-quit while hidden holds its review for up to 390 seconds before another
+`quiet_heartbeat_seconds`, so an older helper never sees a slow page it would call gone. Gaining
+focus again beats at once with `quiet: false`. Staleness is still checked only when another window asks. A visible
+page goes quiet rather than letting its 30 second reply poll count as the claim, because a poll every 30 seconds
+against a 30 second window lapses on any late answer, and the poll carries no session secret. The cost:
+a tab that crashes or is force-quit while unfocused holds its review for up to 390 seconds before another
 window takes it on its own. The goodbye on close and "Review here instead" still free it at once.
 After a laptop sleep longer than that window, a quiet page counts as gone until its next beat, so a
 read-only second window may take the review over in the meantime. There is still one holder at a time,
@@ -935,9 +937,10 @@ restart, `page_last_seen_at` falls back to the holder's `last_seen` from `window
 next speaks, so `lahe status` does not report an open, unfocused page as never connected.
 
 **The page's own polling.** Three paces, by attention. Focused: `replies.poll` once a second. Visible
-but not focused (a page beside the terminal): the reply poll and the read-only re-ask every 15 seconds,
-with the ordinary 10 second heartbeat. Hidden: no reply poll and no read-only re-ask at all; the only
-request is the quiet heartbeat. Every page polls once at load whatever its attention, because that
+but not focused (a page beside the terminal): the reply poll every 30 seconds and the quiet heartbeat,
+nothing else. The rail's agent line refreshes from each poll's `agent_liveness`, with no request of its
+own, and a read-only window does not re-ask until it has focus. Hidden: no reply poll and no read-only
+re-ask at all; the only request is the quiet heartbeat. Every page polls once at load whatever its attention, because that
 answer records which version of the file the page shows. Gaining focus, or becoming visible from
 hidden, polls at once, so a reply that arrived meanwhile, and a reload a rebuild owes, happen then.
 Focus is re-checked on a key, click or pointer move while the page lacks focus, for a return that fires

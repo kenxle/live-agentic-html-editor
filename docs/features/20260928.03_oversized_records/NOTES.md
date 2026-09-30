@@ -57,21 +57,55 @@ One comment came to 516 KB.
 
 Both need "something on the page moves", which matches Ken's report.
 
-**Fix, four parts** (the last three reworked after code review):
+**Fix, four parts** (the last three reworked after code review). The third part was changed on 2026-09-29; see "Whole-page selections" below.
 
 - **The real region** (`src/layer/comments.js`, `selectionElementOf`). Range ends that select nothing visible are ignored, so a triple-clicked heading is the heading.
-- **A selection over several blocks is anchored on its first block.** Before, its region was the blocks' shared parent, which on a flat page is the whole page. The page's text became its signature, the largest remaining cause by bytes. The region is only how the tool finds the spot; the reviewer's quote is kept whole. The repaint covers the whole quote: when the quote runs past the region, `paintRangeFor` looks for it in an ancestor. It paints the quote only when it is there exactly once and starts inside the region. The climb stops at the review scope (the page's `<body>`), never above it. **The fallback is the first block alone.** Only the first block is painted when the quote cannot be found across the blocks. That happens when a rebuild reorders the paragraphs, or when the markup has no whitespace between the blocks, so the page's text runs them together and the quote does not match.
-- **Honestly lost** (`src/layer/replay.js`, `stampedPlace`). A stamp on a page-sized element is not a certain place for a comment. The record is reported lost and the point ladder gets its turn. `anchor.isPageSized` is `<body>`, `<html>`, the scope, or an element holding every word on the page in **two or more blocks**. One block is always a passage. The heading on a page of image options is still found by its stamp after the agent rewords it.
+- **A selection over several blocks is anchored on its first block.** Before, its region was the blocks' shared parent, which on a flat page is the whole page. The page's text became its signature, the largest remaining cause by bytes. The region is only how the tool finds the spot; the reviewer's quote is kept whole. The repaint covers the whole quote: when the quote runs past the region, `paintRangeFor` looks for it in an ancestor. It paints the quote only when it is there exactly once and starts inside the region. The climb stops at the review scope (the page's `<body>`), never above it. **The fallback is the first block alone.** Only the first block is painted when the quote cannot be found across the blocks. That happens when a rebuild reorders the paragraphs, or when the markup has no whitespace between the blocks, so the page's text runs them together and the quote does not match. **Except a selection of a whole element** (added 2026-09-29): see "Whole-page selections".
+- **Changed 2026-09-29: "honestly lost".** `stampedPlace` in `src/layer/replay.js` used to refuse a stamp on a page-sized element (`anchor.isPageSized`), so the record went lost. That blocked a reviewer who really did select the whole page. Now it refuses a stamp only when the element is far bigger than the quote, the same test the next part applies to a paint.
 - **No wash far bigger than the reviewer's words** (`src/layer/highlight.js`, `refusesWholePaint`). Every paint goes through this file. Callers now pass the item's quote to it. A range over the whole contents of a container of two or more worded blocks is refused when its text is more than twice the quote. A single block is never refused, so a reworded paragraph is still painted whole. A comment on a whole element is never weighed at all (`record.paintQuoteOf` returns null when `context.subject` is set). Its quote is the element's whole text at click time, and the element stays the region however much it grows. Without this, a card the agent was asked to "add detail" to lost its highlight and its jump emphasis while it was still found for certain (re-review). A refusal clears that item's earlier paint and returns null. `comments.repaint` and replay's `paintAs` now return what `paint` returned.
+
+## Whole-page selections (2026-09-29)
+
+Ken's rule: "if *I* highlighted the entire page, then that's the highlight. that doesn't happen very often, but if that's what i did, then that's what gets highlighted."
+
+**What was wrong.** A drag from the first word to the last was anchored on its first block, the heading. The whole page was painted at first, because the quote was found. Once the agent changed any word, the quote no longer matched, and the paint shrank to the heading. A record whose region was the page (an old one, or a page with no block tags) went lost on any change, because of the stamp rule.
+
+**The change** (after one review round):
+
+- **A selection of a whole element is anchored on that element** (`src/layer/comments.js`, `selectionElementOf`, `selectsNearlyAllOf`). Take the smallest element holding the selection, usually `<main>` or `<body>`. When the selection covers at least 90% of that element's words (`WHOLE_SELECTION_SHARE`), that element is the region. Otherwise the region is the first block, as before.
+  - It is measured against that element, not the page. So a site's nav and footer do not count against a selection of all of `<main>`.
+  - Three of five paragraphs is never "the whole page", however long they are. The first version used "more than half the page", and review showed it painted paragraphs the reviewer never chose after a reword.
+  - Both sides are counted by one walk: visible characters, skipping `<script>`, `<style>` and the library's own chrome.
+- **The page-sized stamp rule is gone** (`anchor.isPageSized` removed). A stamp on the page's wrapper is a certain place.
+- **A stamp on a container far bigger than the quote is lost** (`src/layer/replay.js`, `stampedPlace`, asking `highlight.refusesWholeElement`). This covers an old accidental record: a one-line quote with its stamp on `<main>`. The highlighter would refuse to paint it, so the record is reported lost and gets a probable-place guess. It is not shown as found with no highlight. A whole-page comment's quote is the page's own text, so it passes.
+- **A stamp on the scope itself is found** (`src/layer/anchor.js`, `findByStamp`). On a page with no wrapper the region is `<body>`, and the search used to look only below it.
+- **The size check stays** (`src/layer/highlight.js`, `refusesWholePaint`). The threshold did not change.
+
+**Tests.** `test/browser/whole_page_selection.spec.js`, 5 tests:
+
+- A real mouse drag over the whole page. The region is `<main>`, the record is found, and every word is painted, again after a reload.
+- A whole-page comment after the agent rewords a line and the page reloads. It is still found and still painted whole.
+- Three of five paragraphs on a flat page. The region is the first block.
+- All of `<main>` on a page with a long nav and footer. The region is `<main>`, and it is painted whole after a reword and a reload.
+- Four of five paragraphs plus a long inline `<script>`. The script does not count, so the region is the first block.
+
+Unit tests:
+
+- `replay_pass.test.js`: a whole-page stamp is found and painted. A one-line quote with its stamp on `<main>` is lost, unpainted, and the point ladder is asked.
+- `anchor_cases.test.js`: a stamp on `<body>` itself binds.
+
+Each new test failed on the code before its fix.
+
+**Runs** (Node 20.19, `--workers=1`): `npm run gate:unit` passed, 1,479 pass, 0 fail. Browser specs, 62 passed, 0 failed: whole_page_selection, oversized_records, anchor_engine, element_subject, comments_highlights, highlights_after_reload, late_render_highlights, probable_place, graceful_failure, card_click_jump, selection_popover, change_highlight, heading_context.
 
 ## Tests
 
 | Test | Proves |
 | --- | --- |
-| `test/unit/oversized_records.test.js` (10 tests) | Cause 1: run-out context is the nearest ring, for an unreachable label and for identical items, and D9 still refuses. Cause 2: one copy in the record, distinct and same-source images, an old full-value signature still resolves, `review.json` projects the same tag, and media `<source>` tags. Cause 3: `isPageSized`. |
-| `test/unit/replay_pass.test.js`, "a stamp on an element holding the whole page is not a certain place for a comment" | Cause 3: a stamp on `<main>` gives a lost record and no paint. |
-| `test/unit/oversized_records.test.js`, review round (2 tests) | One block holding every word is not page-sized. Alt text containing `|x=data:` does not make a new signature read as old. |
-| `test/unit/replay_pass.test.js`, review round (2 tests) | A heading that holds every word is found by its stamp after a rewrite. A whole-element paint hands the highlighter the quote. |
+| `test/unit/oversized_records.test.js` (9 tests) | Cause 1: run-out context is the nearest ring, for an unreachable label and for identical items, and D9 still refuses. Cause 2: one copy in the record, distinct and same-source images, an old full-value signature still resolves, `review.json` projects the same tag, and media `<source>` tags. The two `isPageSized` tests went with the rule on 2026-09-29. |
+| `test/unit/replay_pass.test.js`, "a stamp on an element holding the whole page is a certain place, and the whole page is painted" | Rewritten 2026-09-29. It used to prove the record went lost. It now proves the stamp on `<main>` is found, painted whole, and weighed against the reviewer's quote. |
+| `test/unit/oversized_records.test.js`, review round (1 test) | Alt text containing `|x=data:` does not make a new signature read as old. |
+| `test/unit/replay_pass.test.js`, review round (2 tests) | A heading that holds every word is found by its stamp after a rewrite. The second test (a whole-element paint hands the highlighter the quote) was replaced on 2026-09-29: the same record is now lost before any paint. |
 | `test/unit/replay_pass.test.js`, re-review | A comment on a whole card, whose text then triples, is found by its stamp, painted, and not weighed against its old text. |
 | `test/browser/oversized_records.spec.js` (6 tests; the sixth runs a real replay pass on a card whose text triples and checks it is still painted; fixture `test/fixtures/oversized-records.html`) | The three causes in Chromium, with a real 480x240 PNG as a `data:` URL and a real triple-click. The review round adds two tests. A two-paragraph selection anchors on the first paragraph, replay binds it, and the repaint covers both. With a header outside `<main>`, a one-line quote's paint over `<main>` is refused, clears the item's earlier paint, and `repaint` returns false. |
 

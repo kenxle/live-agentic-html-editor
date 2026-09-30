@@ -743,6 +743,24 @@ test("S1/S2 negative: a unique id over the right words writes, as it always did"
   assert.equal(verdict.via, "stamp", "and it says how it got there");
 });
 
+test("S1/S2 negative: a stamp on the scope itself (a page with no wrapper) is found", () => {
+  // A whole-page selection on a page whose blocks sit straight in <body> has
+  // <body> as its region, and its stamp on <body>. The search has to include
+  // the scope, or the comment goes lost after any edit.
+  const paragraphs = [el("p", { text: WORDS[0] }), el("p", { text: WORDS[1] })];
+  const attrs = {};
+  attrs[anchor.STAMP_ATTR] = "e-body";
+  const body = el("body", { attrs: attrs, children: paragraphs });
+  assert.deepEqual(anchor.findByStamp(body, "e-body"), [body], "the body carries the stamp");
+
+  const ref = anchor.mint({ element: body, root: body });
+  ref.stamp = "e-body";
+  const verdict = anchor.resolve(ref, body);
+  assert.equal(verdict.bound, true);
+  assert.equal(verdict.element, body);
+  assert.equal(verdict.via, "stamp");
+});
+
 test("S3: an id the page no longer has falls through to the words, not to a refusal", () => {
   // A rebuild that did not carry the attribute into the source. The stamp says
   // nothing, and the words decide, exactly as they did before stamps existed.

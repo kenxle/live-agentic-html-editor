@@ -480,14 +480,30 @@
    */
   function refusesWholePaint(range, quote) {
     if (typeof quote !== "string" || !range) return false;
-    if (!anchor || typeof anchor.isContainerOfBlocks !== "function") return false;
     var start = range.startContainer;
     if (!start || start !== range.endContainer || start.nodeType !== 1) return false;
     if (range.startOffset !== 0) return false;
     var count = start.childNodes ? start.childNodes.length : 0;
     if (range.endOffset !== count) return false;
-    if (!anchor.isContainerOfBlocks(start)) return false;
-    var have = normalize.normalizeText(anchor.wordsOf(start) || "").length;
+    return refusesWholeElement(start, quote);
+  }
+
+  /**
+   * Would a paint over this element's whole contents be refused for this
+   * quote? The element half of refusesWholePaint, for a caller that has the
+   * element and not yet a range: replay asks it before taking a stamp as a
+   * certain place (replay.js, stampedPlace), so a record the highlighter would
+   * never paint is reported lost rather than found and bare.
+   *
+   * @param {Element} element
+   * @param {string|null|undefined} quote as for refusesWholePaint
+   * @returns {boolean}
+   */
+  function refusesWholeElement(element, quote) {
+    if (typeof quote !== "string" || !element) return false;
+    if (!anchor || typeof anchor.isContainerOfBlocks !== "function") return false;
+    if (!anchor.isContainerOfBlocks(element)) return false;
+    var have = normalize.normalizeText(anchor.wordsOf(element) || "").length;
     var want = normalize.normalizeText(quote).length;
     return have > want * WHOLE_PAINT_MAX_RATIO;
   }
@@ -1043,6 +1059,7 @@
 
   return {
     refusesWholePaint: refusesWholePaint,
+    refusesWholeElement: refusesWholeElement,
     WHOLE_PAINT_MAX_RATIO: WHOLE_PAINT_MAX_RATIO,
     PREFIX: PREFIX,
     NAME: NAME,
