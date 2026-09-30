@@ -406,6 +406,14 @@ test.describe("Cmd-Shift-E right after clicking the rail", () => {
       return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
     }, name);
     await page.mouse.click(rect.x, rect.y);
+    // WebKit does not focus a button on click, as Safari never does; a
+    // keyboard user tabbing into the rail gets there anyway. Focus the tab so
+    // every engine starts from the same place: the rail holding focus.
+    await page.evaluate((label) => {
+      const root = window.__lahe.rail.tabBody("edits").getRootNode();
+      const tab = Array.from(root.querySelectorAll('[role="tab"]')).find((t) => t.textContent.indexOf(label) !== -1);
+      if (root.activeElement !== tab) tab.focus();
+    }, name);
     // The rail holds focus now: the page's active element is the layer's host.
     const onRail = await page.evaluate(() => {
       const a = document.activeElement;
