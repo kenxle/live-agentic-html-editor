@@ -24,7 +24,7 @@ Implements [Components / Modules Touched](02_architecture_style_switcher.md#comp
 Implements [Data / State Changes](02_architecture_style_switcher.md#data--state-changes) and the stylesheet rule in it.
 :::
 
-**Spec:** `styles.js` owns: the styles folder under the state directory, the id rule, the folder rules, the stylesheet rule, the installed list, resolving one served path to a file, and copying a style's served files beside an artifact. Add a made-up style at `test/fixtures/styles/sample/`: a `style.css` that resets a few tokens, one `@font-face` pointing at a copy of a vendored OFL woff2, a `metadata.json` with a palette, a `DESIGN.md`, and a licence file. The fixture's sheet includes both real-world shapes the architecture names (a backslash-continued custom property string, and a `data:` SVG containing an `http://` namespace). Add refusal fixtures beside it, one per rule.
+**Spec:** `styles.js` owns: the styles folder under the state directory, the id rule, the folder and metadata rules, the stylesheet tokenizer and rule, reading each file once without following symlinks, the installed list, answering one served path with checked bytes (cached per file), and copying a style's served files beside an artifact. Add a made-up style at `test/fixtures/styles/sample/`: a `style.css` that resets a few tokens, one `@font-face` pointing at a copy of a vendored OFL woff2, a `metadata.json` with a palette, a `DESIGN.md`, and a licence file. The fixture's sheet includes both real-world shapes the architecture names (a backslash-continued custom property string, and a `data:` SVG containing an `http://` namespace). Refusal cases may be written by the test into a temporary folder rather than kept as fixture folders, one per rule.
 **Files:** `src/service/styles.js`, `src/service/state_dir.js`, `test/fixtures/styles/`, `test/unit/styles.test.js`.
 **Acceptance:** V1 to V4 and V22 pass.
 
@@ -34,7 +34,7 @@ Implements [Data / State Changes](02_architecture_style_switcher.md#data--state-
 Implements the Install flow in [Key Flows](02_architecture_style_switcher.md#key-flows).
 :::
 
-**Spec:** The command wraps `styles.js`: validate, copy to a temporary folder beside the target, rename into place, print id and name, or the first refusal and what a style folder needs. `list` prints id, name and version. Register it in the dispatcher. Document both in `docs/CLI.md`.
+**Spec:** The command wraps `styles.js`: take the per-id lock, read and check each file once, write those bytes to a new folder beside the target, swap it in (old folder aside, new in, old removed, old restored on failure), and print id and name, or the first refusal and what a style folder needs. `list` prints id, name and version. Register it in the dispatcher. Document both in `docs/CLI.md`.
 **Files:** `src/cli/commands/style.js`, `src/cli/index.js`, `docs/CLI.md`, `test/unit/style_command.test.js`.
 **Acceptance:** V1, V2 and V4 pass through the command, run against a temporary `LAHE_STATE_DIR`.
 
@@ -44,7 +44,7 @@ Implements the Install flow in [Key Flows](02_architecture_style_switcher.md#key
 Implements Served paths and What the document carries in [Data / State Changes](02_architecture_style_switcher.md#data--state-changes), and Markdown with a style in [Key Flows](02_architecture_style_switcher.md#key-flows).
 :::
 
-**Spec:** In `static_servers.js`, add the `.lahe-styles/` case to the missing-file fallback and the same route to `servePage`, both answered by `styles.js`, with one helper-log line per server per refused style. In `markdown.js`, mark the inlined bundle `data-lahe-doc-style`, read `lahe-style` from frontmatter, emit the link after the bundle, and copy the style's served files beside a written artifact.
+**Spec:** In `static_servers.js`, answer any path with a `.lahe-styles` segment from `styles.js` before the disk lookup (as the library route is answered), in the folder server and in `servePage`, with one helper-log line per server per refused style through `say()`; add a comment beside `hasHiddenSegment` that reserved segments are answered first. In `markdown.js`, mark the inlined bundle `data-lahe-doc-style`, read the exact `lahe-style` frontmatter line, check the id, emit the link in the head after the bundle, leave out the "Document metadata" block when the frontmatter holds only that line, and copy the style's checked files beside a written artifact.
 **Files:** `src/service/static_servers.js`, `src/service/markdown.js`, `test/unit/static_styles.test.js`, `test/unit/markdown_render.test.js` (new cases only). Regenerate `test/fixtures/free_writing/empty_notes.html` if the marker changes it.
 **Acceptance:** V5 to V7 pass.
 
@@ -64,9 +64,9 @@ Implements Served paths and What the document carries in [Data / State Changes](
 Implements Boot, Applying a preview, and Back to the document's style in [Key Flows](02_architecture_style_switcher.md#key-flows).
 :::
 
-**Spec:** `style_switch.js` detects the house style and the document's own style, applies and clears a preview (chrome-marked link after the house style element, page style links disabled), keeps the preview under its storage key, clears it when the document's style matches, clears it when the preview link fails to load, and fetches `./.lahe-styles/index.json` on request.
-**Files:** `src/layer/style_switch.js`.
-**Acceptance:** V8, V11, V14 to V16 pass.
+**Spec:** `style_switch.js` detects the house style and the document's own style, applies and clears a preview (chrome-marked link after the house style element, page style links disabled), keeps the reading position across a switch, keeps the preview under its storage key, applies a stored preview before the reload scroll restore, clears it when the document's style matches or when the preview link fails to load, fetches `./.lahe-styles/index.json` on request and re-checks its ids and colours, and owns the marker pattern and the waiting test.
+**Files:** `src/layer/style_switch.js`, and in `src/layer/sync.js` only the call that lets a restored preview run before the scroll restore.
+**Acceptance:** V8, V10, V11, V14 to V16, V22 pass.
 
 ### Task 2.2: The panel and the keep request
 
@@ -74,7 +74,7 @@ Implements Boot, Applying a preview, and Back to the document's style in [Key Fl
 Implements The panel in [Key Flows](02_architecture_style_switcher.md#key-flows).
 :::
 
-**Spec:** Add "Document style" to the head menu, shown only when the page uses the house style. Build the panel once, under the head, with the radio group, palette strips, status line, back button, "Use this style" button, waiting line, missing-style line, nothing-installed line, Close and Esc, and the collapsed status line while a preview is active. Add to `comments.js` one function that mints a ready note with given words for the current page, through the same store and outbox path as a confirmed note. Wire both in `index.js`. The waiting state is read from the items the rail already holds: a ready note on this page whose words carry the same marker and which has no reply.
+**Spec:** Add "Document style" to the head menu, shown only when the page uses the house style. Build the panel once, under the head, with the radio group, palette strips, status line, back button, "Use this style" button, waiting line, missing-style line, nothing-installed line, Close and Esc, and the collapsed status line while a preview is active. Add to `comments.js` the two functions the architecture names: mint a ready note with given words for the current page (no box), and re-place every open anchored box. Wire them in `index.js`. The waiting state uses `style_switch.js`'s waiting test over the items the rail holds.
 **Files:** `src/layer/overlay.js`, `src/layer/comments.js`, `src/layer/index.js`, `test/browser/style_switcher.spec.js`, `test/fixtures/style-switch-doc.html`, `test/fixtures/style-switch-own-css.html`, `test/fixtures/style-switch-dark.html`.
 **Acceptance:** V8 to V13, V18 and V19 pass. Screenshots saved under `docs/features/20260930.01_style_switcher/progress/screens/`.
 
@@ -84,7 +84,7 @@ Implements The panel in [Key Flows](02_architecture_style_switcher.md#key-flows)
 Implements The request to the agent in [Data / State Changes](02_architecture_style_switcher.md#data--state-changes).
 :::
 
-**Spec:** The orchestrator adds one instruction to the contract in `src/shared/review_format.js` (frozen): a note carrying `lahe-style: <id>` asks for that page's style; the exact HTML line and where it goes; the exact frontmatter line; `international` removes either; only an id matching the pattern is a style request; reply handled once written. The same words go into the restated copies in `test/unit/review_format.test.js`, `docs/CONTRACTS.md` and `skills/lahe/SKILL.md`, then `npm run install-skills`.
+**Spec:** The orchestrator adds one instruction to the contract in `src/shared/review_format.js` (frozen): a note carrying `lahe-style: <id>` asks for that page's style; the exact HTML line and where it goes; the exact frontmatter line; `international` removes either; only an id matching the pattern is a style request; reply handled once written. The same words go into the restated copies in `test/unit/review_format.test.js` (its verbatim list, and the contract's line count) and `docs/CONTRACTS.md` ("The `contract` field, verbatim"), and into `skills/lahe/SKILL.md`, then `npm run install-skills`.
 **Files:** those four.
 **Acceptance:** V17 passes.
 
@@ -96,7 +96,7 @@ Implements The request to the agent in [Data / State Changes](02_architecture_st
 |---|---|---|---|---|---|---|
 | Set-up | 0.1 | Orchestrator | none | `src/shared/manifest.js`, placeholders | none | A |
 | Service | 1.1, 1.2, 1.3 | New builder, Sonnet | none | `src/service/styles.js`, `state_dir.js`, `static_servers.js`, `markdown.js`, `src/cli/commands/style.js`, `src/cli/index.js`, `docs/CLI.md`, `test/fixtures/styles/`, their unit tests | Set-up | A |
-| Rail | 2.1, 2.2 | New builder, Opus | none | `src/layer/style_switch.js`, `overlay.js`, `comments.js`, `index.js`, the switcher spec and its fixtures | Set-up; Service merged before its browser spec runs | B |
+| Rail | 2.1, 2.2 | New builder, Opus | none | `src/layer/style_switch.js`, `overlay.js`, `comments.js`, `index.js`, the one hook in `sync.js`, the switcher spec and its fixtures | Set-up; Service merged before its browser spec runs | B |
 | Contract and docs | 1.4, 2.3 | Orchestrator | none | `review_format.js`, `review_format.test.js`, `CONTRACTS.md`, `SKILL.md`, `STYLES.md`, the vendor README, `dist/` | Service (1.4); Rail (2.3) | A (1.4), B (2.3) |
 
 ```mermaid
@@ -132,18 +132,18 @@ flowchart LR
 | Row | Requirement | Behaviour and failure case | Check | Evidence |
 |---|---|---|---|---|
 | V1 | R9, installs a folder | The fixture installs; only `style.css`, `metadata.json`, `fonts/*.woff2`, `DESIGN.md` and licences are copied; the id comes from the folder name | `test/unit/styles.test.js`, `style_command.test.js` | test output |
-| V2 | R10, refuses with a reason | Each refusal fixture is refused with its own reason: no `style.css`; no name; bad id; `international`; a symlink at any level; `@import`; an `http` `url()`; a backslash escape outside a string; `image-set`; a font the folder lacks; a non-woff2 font; each size cap | same | test output |
+| V2 | R10, refuses with a reason | Each case is refused with its own reason: no `style.css`; no name; a name with other punctuation, a control character or a bidi override; a bad `version`; bad id; `international`; a symlink at any level; `@import` and `@IMPORT`; an `http` `url()` and `URL()`; a string broken by a newline that hides a `url()`; `/*` inside a string before a `url()`; a backslash escape outside a string; `image-set`; a `data:` type outside the three allowed; a `data:` SVG holding `href`; a font the folder lacks; a non-woff2 font; each size cap | same | test output |
 | V3 | R10, real shapes pass | A backslash-continued custom property string and a `data:` SVG with an `http://` namespace are accepted | `styles.test.js` | test output |
-| V4 | R9, reinstall and list | Installing the same id again replaces it with no leftover files; `list` prints id, name and version | `style_command.test.js` | test output |
-| V5 | R13, serves only what it should | From a folder server's root, a subfolder, a `/.lahe-source/` mount and a one-page server: `index.json`, `style.css` and a font are served with the right types. `DESIGN.md`, `metadata.json`, `../`, an encoded traversal, an unknown id, a symlink planted after install, and a hand-edited sheet with an `http` `url()` are refused, with one log line per server | `test/unit/static_styles.test.js` | test output |
-| V6 | R8, Markdown carries the style | `lahe-style: sample` in frontmatter emits the link after the marked bundle; a written artifact gets the style's files beside it; a missing style emits the link and copies nothing; an invalid id is ignored | `markdown_render.test.js` | test output |
+| V4 | R9, reinstall and list | Installing the same id again replaces it with no leftover files; a failed replace leaves the old install; a second add of the same id while one holds the lock is refused; `list` prints id, name and version | `style_command.test.js` | test output |
+| V5 | R13, serves only what it should | From a folder server's root, a subfolder, a `/.lahe-source/` mount and a one-page server: `index.json`, `style.css` and a font are served with the right types, from the installed styles. A `.lahe-styles/` folder on disk in the reviewed folder or beside an artifact is never served. `DESIGN.md`, `metadata.json`, `../`, an encoded traversal, an unknown id, a symlink planted after install, and a hand-edited sheet with an `http` `url()` are refused, with one log line per server | `test/unit/static_styles.test.js` | test output |
+| V6 | R8, Markdown carries the style | `lahe-style: sample` in frontmatter emits the link in the head after the marked bundle, and no "Document metadata" block when that is the only line; a written artifact gets the style's files beside it; a missing style emits the link and copies nothing; a quoted, upper-case, traversal or markup-bearing value is no style and touches no file | `markdown_render.test.js` | test output |
 | V7 | R8, a rebuild picks it up | Adding the frontmatter line to a reviewed Markdown source re-renders the artifact with the link | `markdown_render.test.js` or the rebuild test | test output |
 | V8 | R1, only where it works | The menu item exists on a rendered Markdown page and on a house-style HTML page, and not on a page with its own CSS | `style_switcher.spec.js` | test output |
 | V9 | R2 and R11, the list | International first, the fixture style with its palette strip, the document's style labelled; with nothing installed, International alone and the add line | same | test output, screenshot |
-| V10 | R3, one click | One click changes the page's computed colours and font with no navigation; an open comment box's text, an edit in progress and a highlight are unchanged | same | test output |
+| V10 | R3, one click | One click changes the page's computed colours and font with no navigation; an open comment box's text is unchanged and the box sits beside its passage after the switch; an edit in progress keeps its text and caret; a highlight still covers its passage; the block at the top of the window stays there | same | test output |
 | V11 | R4, survives a reload | After a reload the preview is back; a second page of the same review is unaffected | same | test output |
 | V12 | R5, honest | The status line reads as the architecture says; Back clears the preview and the key; with the panel closed, the collapsed status line shows | same | test output, screenshot |
-| V13 | R6, one request | "Use this style" makes exactly one ready note with the exact words on the Active tab; flipping previews posts no event; the waiting line shows; a second press makes nothing | same | test output |
+| V13 | R6, one request | "Use this style" makes exactly one ready note with the exact words on the Active tab; flipping previews posts no event; the waiting line shows; a second press makes nothing; an agent reply of any kind ends waiting | same | test output |
 | V14 | R4 and R8, applied | The test writes the link into the fixture's source and reloads; the preview key is cleared and no preview link is in the page | same | test output |
 | V15 | R12, missing style | A page naming an uninstalled style shows the house style and the panel names the missing id | same | test output |
 | V16 | Failure mode, removed style | A preview whose style was removed clears itself and says why | same | test output |
@@ -152,7 +152,7 @@ flowchart LR
 | V19 | UX, looks right | Screenshots: panel open with a preview, collapsed status line, nothing installed; light, and dark on the dark-background fixture | same | PNGs on the progress page |
 | V20 | Metric, real styles | Ken's six styles installed into a copied state directory; one of his documents shown in all seven; one kept through a live agent | by hand, orchestrator | screenshots on the progress page |
 | V21 | Standing rules | Lint (manifest completeness, no jsdom), `dependencies` is `{}` | `npm run gate:unit` | test output |
-| V22 | R13, display | A style name containing markup shows as text; a bad palette value is dropped | `styles.test.js`, `style_switcher.spec.js` | test output |
+| V22 | R13, display | A list served from anywhere with a bad id or a bad colour has those entries or values dropped by the layer; a name reaches the rail as text | `styles.test.js`, `style_switcher.spec.js` | test output |
 :::
 
 ## Acceptance Criteria
