@@ -9,8 +9,9 @@ already carries its own styles is never touched.
 
 | File | Where it came from |
 | --- | --- |
-| `system-tokens.css` | `~/Documents/workspace/personal/lib/templates/system-tokens.css`, copied whole on 2026-09-30 from `main` at `8d72dc8d` |
-| `document.css` | `~/Documents/workspace/personal/lib/templates/document.css`, copied whole on 2026-09-30 from `main` at `8d72dc8d` |
+| `system-tokens.css` | `~/Documents/workspace/personal/lib/templates/system-tokens.css`, copied whole on 2026-09-30 from `main` at `fbd13fcc` (the style-components merge: 14 components and 3 upgrades) |
+| `document.css` | `~/Documents/workspace/personal/lib/templates/document.css`, copied whole on 2026-09-30 from `main` at `fbd13fcc` (the style-components merge: 14 components and 3 upgrades) |
+| `COMPONENTS.md` | written in this repo: an agent-facing catalog of every component class with minimal markup, built from `personal/docs/document-style-guide.md` and `personal/lib/templates/document-every-component.html`. Update it when a sync adds or renames a component |
 | `lahe-markdown.css` | written in this repo, not a copy |
 | `fonts/*.woff2` | Google Fonts, latin subset, fetched 2026-09-16 |
 | `LICENSE` | SIL Open Font License 1.1, with all three font copyright lines |
