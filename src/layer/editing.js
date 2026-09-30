@@ -905,13 +905,13 @@
     // words themselves:
     //
     //   the block is exactly the moved words    one from_anchor block
-    //   new words, then the moved words         a new block, then the moved one
-    //   the moved words, then new words         the moved one, then a new block
-    //   anything else                           one new block
+    //   the reviewer typed into it at all       one new block, the whole tail
     //
-    // "Anything else" is always safe for a literal agent: anchor_after_html
-    // already leaves the moved words out of the anchor, so adding the whole
-    // block as new puts every word back exactly once.
+    // The whole tail as new is right for a literal agent: anchor_after_html
+    // already leaves the moved words out of the anchor, so adding the tail as
+    // one new block puts every word back exactly once, and the page keeps the
+    // one paragraph the reviewer wrote (coordinator decision on the split
+    // trade-off; splitting it in two made two paragraphs after the rebuild).
 
     // Whitespace folded to single spaces and trimmed, with each folded
     // character's offset in the raw string.
@@ -1004,36 +1004,7 @@
       entry.moved = parent.moved;
     }
 
-    // The markup of the characters [from, to) of el's text, as a run block's
-    // html, or null when that stretch has no words.
-    function sliceHtml(el, tag, from, to) {
-      var nodes = textNodes(el);
-      function point(at) {
-        var left = at;
-        for (var i = 0; i < nodes.length; i += 1) {
-          var len = nodes[i].nodeValue.length;
-          if (left <= len) return { node: nodes[i], offset: left };
-          left -= len;
-        }
-        var last = nodes[nodes.length - 1];
-        return last ? { node: last, offset: last.nodeValue.length } : { node: el, offset: el.childNodes.length };
-      }
-      var r = doc.createRange();
-      var a = point(from);
-      r.setStart(a.node, a.offset);
-      if (to === null) r.setEnd(el, el.childNodes.length);
-      else {
-        var b = point(to);
-        r.setEnd(b.node, b.offset);
-      }
-      var holder = inertHolder();
-      holder.appendChild(r.cloneContents());
-      var cleaned = normalize.cleanBlock(tag, inlineMarkup(holder).replace(/^(\s|&nbsp;|\u00a0)+|(\s|&nbsp;|\u00a0)+$/g, ""));
-      return typeof cleaned.html === "string" ? cleaned.html : null;
-    }
-
-    // One session entry as the record's blocks: usually one, two when a split
-    // tail holds both moved words and new ones.
+    // One session entry as the record's block, or none when it has no words.
     function entryBlocks(r) {
       var tag = tagOf(r.el);
       var whole = runBlockHtml(r.el);
@@ -1043,27 +1014,6 @@
       var f = foldText(raw);
       var moved = r.moved;
       if (f.text === moved) return [{ tag: tag, html: whole, from_anchor: true }];
-      if (LIST_TAGS[tag]) return [{ tag: tag, html: whole }];
-      var out = [];
-      var cut;
-      var first;
-      var second;
-      if (f.text.length > moved.length && f.text.slice(f.text.length - moved.length) === moved) {
-        cut = f.map[f.text.length - moved.length];
-        first = sliceHtml(r.el, tag, 0, cut);
-        second = sliceHtml(r.el, tag, cut, null);
-        if (first !== null) out.push({ tag: tag, html: first });
-        if (second !== null) out.push({ tag: tag, html: second, from_anchor: true });
-        return out.length ? out : [{ tag: tag, html: whole }];
-      }
-      if (f.text.length > moved.length && f.text.slice(0, moved.length) === moved) {
-        cut = f.map[moved.length - 1] + 1;
-        first = sliceHtml(r.el, tag, 0, cut);
-        second = sliceHtml(r.el, tag, cut, null);
-        if (first !== null) out.push({ tag: tag, html: first, from_anchor: true });
-        if (second !== null) out.push({ tag: tag, html: second });
-        return out.length ? out : [{ tag: tag, html: whole }];
-      }
       return [{ tag: tag, html: whole }];
     }
 

@@ -72,20 +72,53 @@ test.describe("from_anchor marks only the page's own words", () => {
     expect(item.change).toContain("Added 2 blocks");
   });
 
-  test("words typed at the start of a split tail split off as a new block before the moved words", async ({ page }) => {
+  // What a literal agent writes from the record, rebuilt on the page as the
+  // source would come back: the anchor becomes anchor_after_html, and each
+  // new block not marked from_anchor goes after it; a from_anchor block is
+  // the anchor's own tail, split off as it is. Returns the blocks between the
+  // anchor and #h2, and the page's words.
+  function placeAndRebuild(page, item) {
+    return page.evaluate((rec) => {
+      const p1 = document.getElementById("p1");
+      const original = "Most weeks look busy from the outside. This one did not.";
+      // The source as it was: the session's blocks go, the anchor is the original.
+      while (p1.nextElementSibling && p1.nextElementSibling.id !== "h2") p1.nextElementSibling.remove();
+      p1.textContent = original;
+      p1.innerHTML = rec.anchor_after_html;
+      let at = p1;
+      rec.new_blocks.forEach((b) => {
+        const el = document.createElement(b.tag);
+        el.innerHTML = b.html;
+        at.after(el);
+        at = el;
+      });
+      const out = [];
+      for (let el = p1.nextElementSibling; el && el.id !== "h2"; el = el.nextElementSibling) {
+        out.push(el.tagName.toLowerCase() + ":" + el.textContent);
+      }
+      return { blocks: out, text: document.getElementById("post").textContent };
+    }, item);
+  }
+
+  function count(hay, needle) {
+    return hay.split(needle).length - 1;
+  }
+
+  test("words typed at the start of a split tail make the whole tail one new block", async ({ page }) => {
     await fw.openFixture(page, server, "blog.html");
     await fw.openEdit(page, "#p1", HEAD.length);
     await page.keyboard.press("Enter");
     await page.keyboard.type("Fresh words first. ", { delay: 2 });
     await fw.commitByEsc(page);
     const item = await fw.onlyEdit(page);
-    expect(item.new_blocks).toEqual([
-      { tag: "p", html: "Fresh words first." },
-      { tag: "p", html: TAIL, from_anchor: true }
-    ]);
+    expect(item.new_blocks).toEqual([{ tag: "p", html: "Fresh words first. " + TAIL }]);
+    expect(item.anchor_after_html, "the anchor gives up the moved words").toBe(HEAD);
+    const placed = await placeAndRebuild(page, item);
+    expect(placed.blocks, "one paragraph after placement and rebuild").toEqual(["p:Fresh words first. " + TAIL]);
+    expect(count(placed.text, TAIL), "the moved words show once").toBe(1);
   });
 
-  test("words typed at the end of a split tail split off as a new block after the moved words", async ({ page }) => {
+  test("words typed at the end of a split tail make the whole tail one new block", async ({ page }) => {
     await fw.openFixture(page, server, "blog.html");
     await fw.openEdit(page, "#p1", HEAD.length);
     await page.keyboard.press("Enter");
@@ -93,10 +126,10 @@ test.describe("from_anchor marks only the page's own words", () => {
     await page.keyboard.type(" And then <b>some</b> more.", { delay: 2 });
     await fw.commitByEsc(page);
     const item = await fw.onlyEdit(page);
-    expect(item.new_blocks).toEqual([
-      { tag: "p", html: TAIL, from_anchor: true },
-      { tag: "p", html: "And then &lt;b&gt;some&lt;/b&gt; more." }
-    ]);
+    expect(item.new_blocks).toEqual([{ tag: "p", html: TAIL + " And then &lt;b&gt;some&lt;/b&gt; more." }]);
+    const placed = await placeAndRebuild(page, item);
+    expect(placed.blocks, "one paragraph after placement and rebuild").toEqual(["p:" + TAIL + " And then <b>some</b> more."]);
+    expect(count(placed.text, TAIL), "the moved words show once").toBe(1);
   });
 
   test("words typed into the middle of the moved words make the whole tail new, never moved", async ({ page }) => {
@@ -109,6 +142,8 @@ test.describe("from_anchor marks only the page's own words", () => {
     const item = await fw.onlyEdit(page);
     expect(item.new_blocks).toEqual([{ tag: "p", html: "This one really did not." }]);
     expect(item.anchor_after_html, "the anchor gives up the moved words, so nothing is added twice").toBe(HEAD);
+    const placed = await placeAndRebuild(page, item);
+    expect(placed.blocks).toEqual(["p:This one really did not."]);
   });
 
   test("a tail made of words the reviewer typed into the anchor before splitting is new", async ({ page }) => {
