@@ -208,6 +208,19 @@ files where they are. Removals happen in one batch at the end, by the
 orchestrator, with the whole list in front of Ken. Files under `/tmp` are never
 removed at all; the operating system owns that folder.
 
+The rule covers everything a builder makes along the way:
+
+- temp and probe specs
+- screenshots
+- `test-results/` folders
+- the `.bak` files that `sed -i` leaves (on macOS, write `sed -i ''` so none is made)
+- a locally rebuilt `dist/lahe-layer.js`: put it back with
+  `git checkout -- dist/lahe-layer.js`, never by deleting it
+
+A builder's prompt states this rule near the top, not only in closing
+boilerplate. A one-line "never delete files" at the end did not hold on
+2026-09-29: builders ran `rm` anyway and Ken was blocked on the prompts.
+
 ## Read the result, then push
 
 Run the browser suite as its own command, read the pass and fail counts, and
