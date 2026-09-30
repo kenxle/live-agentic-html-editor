@@ -1,18 +1,16 @@
 # Progress: Free writing
 
-**Phase 8, Ship.** The pull request is open: [#20](https://github.com/kenxle/live-agentic-html-editor/pull/20). It waits on your approval to merge. Last updated 2026-09-30 10:09.
+**Phase 8 done: free writing is merged and live.** [PR #20](https://github.com/kenxle/live-agentic-html-editor/pull/20) merged as 6f3bc6b. Your helper runs the new code. Next is cleanup. Nothing waits on you. Last updated 2026-09-30 16:57.
 
 **Docs:** [Crucible questions](00_crucible_questions.md) · [Crucible](http://127.0.0.1:65155/00_crucible.html) · [Brief](http://127.0.0.1:65155/01_brief_free_writing.html) · [Wireframes](http://127.0.0.1:49513/index.html) ([decision](wireframes/DECISION.md)) · [Architecture](http://127.0.0.1:65155/02_architecture_free_writing.html) · [Plan](http://127.0.0.1:65155/03_plan_free_writing.html)
 
 ## Needs your attention
 
-- [ ] **Approve and merge [PR #20](https://github.com/kenxle/live-agentic-html-editor/pull/20).**
-  - After merge, run `lahe serve --restart`. This build refuses the older helper you have running.
-  - The final gate ran on the branch with main merged in. 2175 passed and 1 failed, and the failure passed 5 of 5 when run alone.
+Nothing is waiting on you.
 
 ## Currently working on
 
-Nothing is running. Next: merge after your approval, then cleanup.
+Nothing is running. Next: cleanup. That covers the worktrees, the preview helper, and the scratch files, with the deletions listed for you in one batch.
 
 ## Phases
 
@@ -26,7 +24,7 @@ Nothing is running. Next: merge after your approval, then cleanup.
 | 5 Plan | done | 2026-09-29 |
 | 6 Implement | done | 2026-09-29 |
 | 7 Review | done | 2026-09-30 |
-| 8 Ship and land | in progress | 2026-09-30 |
+| 8 Ship and land | done | 2026-09-30 |
 | 9 Cleanup | not started | |
 
 ## The record
@@ -107,11 +105,16 @@ Nothing queued.
 
 ### Ship
 
-PR [#20](https://github.com/kenxle/live-agentic-html-editor/pull/20) opened 2026-09-30 10:09. Main was merged in first, then the full gate was run again.
+PR [#20](https://github.com/kenxle/live-agentic-html-editor/pull/20) opened 2026-09-30 10:09. Main was merged in first, then the full gate was run again. The PR's CI gate was green. Merged 2026-09-30 16:57 as 6f3bc6b. After merge:
+- the main checkout was pulled
+- `npm run install-skills` reinstalled the lahe skill
+- `lahe serve --restart` put the helper on contract 14
 
 ## Log
 
 Newest first.
+
+**2026-09-30 16:57.** You approved the merge, and PR #20 is on main. Your checkout is pulled, the skill is reinstalled, and the helper restarted on the new code, so free writing is live for you.
 
 **2026-09-30 09:04.** You tried the preview on your blog draft and a notes page. As the agent, I placed everything you wrote.
 
