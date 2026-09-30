@@ -192,4 +192,97 @@ test.describe("flow walk fixes, replay and rail side", () => {
     expect(res.reason || null, "undo found the anchor").toBeNull();
     expect(res.reverted).toBe(true);
   });
+
+  const BLOG_HTML = require("node:fs").readFileSync(require("node:path").join(fw.REPO_ROOT, "test/fixtures/free_writing/blog.html"), "utf8");
+
+  const FAIL3 = [
+    {
+      name: "Markdown",
+      file: "doc.md",
+      text: DOC_MD,
+      anchor: ANCHOR_P,
+      scope: "main",
+      words: "We stopped measuring motion and started measuring outcomes.",
+      theirs: "We stopped counting motion and started counting outcomes.",
+      choice: "take_theirs"
+    },
+    {
+      name: "HTML",
+      file: "blog.html",
+      text: BLOG_HTML,
+      anchor: "#p2",
+      scope: "#post",
+      words: "and started measuring outcomes.",
+      theirs: "and started counting outcomes.",
+      choice: "keep_mine"
+    }
+  ];
+
+  for (const c of FAIL3) {
+    test("Fail 3 (" + c.name + "): the agent rewords the anchor the reviewer reworded; the card asks which version stands and the new paragraphs stay on the page after it", async ({
+      page
+    }) => {
+      world = await makeWorld({ file: c.file, text: c.text });
+      await page.goto(world.open);
+      await booted(page);
+      // The reviewer rewords the anchor's last word and writes two paragraphs.
+      await openEditAt(page, c.anchor);
+      for (let i = 0; i < "outcomes.".length; i += 1) await page.keyboard.press("Backspace");
+      await page.keyboard.type("results.", { delay: 2 });
+      await page.keyboard.press("Enter");
+      await page.keyboard.type("Friday ships feel calmer.", { delay: 2 });
+      await page.keyboard.press("Enter");
+      await page.keyboard.type("Nobody misses the old way.", { delay: 2 });
+      await fw.commitByEsc(page);
+      const ref = await committed(page);
+      const item = await helperHas(world, ref.id, ref.rev);
+      expect(item.anchor_after_html).toContain("results.");
+
+      // The agent, working on something else, rewords the same sentence.
+      const source = readSource(world);
+      expect(source).toContain(c.words);
+      await world_.agentWrites(page, world, source.replace(c.words, c.theirs));
+      await page.evaluate(() => window.__lahe.replayNow());
+
+      await pollPage(page, (id) => window.LAHE.replay.conflictIds().indexOf(id) !== -1, ref.id, {
+        message: "the conflict card for the reworded anchor",
+        timeoutMs: 20000
+      });
+      const card = await page.evaluate((id) => {
+        const k = window.LAHE.replay.conflictFor(id);
+        return { yours: k.yours, theirs: k.theirs, run: !!k.run };
+      }, ref.id);
+      expect(card.yours).toContain("results.");
+      expect(card.theirs).toContain("counting");
+      expect(card.run, "the card shows the run").toBe(true);
+      expect(
+        await page.evaluate((id) => window.__lahe.rail.cardBadges(id).map((b) => b.code), ref.id),
+        "no bare could-not-be-matched note"
+      ).not.toContain("ANCHOR_NO_TEXT_MATCH");
+      expect(reviewJsonItem(world, ref.id).lost || null, "the record is not stamped lost").toBeNull();
+
+      // The reviewer's new blocks are on the page, right after the page's anchor.
+      const nextTwo = (anchorText) =>
+        page.evaluate(
+          ([t, sel]) => {
+            const a = Array.from(document.querySelectorAll(sel + " p")).find((p) => p.textContent.indexOf(t) !== -1);
+            const n1 = a && a.nextElementSibling;
+            const n2 = n1 && n1.nextElementSibling;
+            return [n1 && n1.textContent.trim(), n2 && n2.textContent.trim()];
+          },
+          [anchorText, c.scope]
+        );
+      const blocks = ["Friday ships feel calmer.", "Nobody misses the old way."];
+      expect(await nextTwo("counting")).toEqual(blocks);
+      for (const t of blocks) expect(await countOnPage(page, t, c.scope), "'" + t + "' once while waiting").toBe(1);
+
+      // Either answer keeps the new blocks, once.
+      const res = await page.evaluate(([id, choice]) => window.LAHE.replay.resolveConflict(id, choice), [ref.id, c.choice]);
+      expect(res.resolved).toBe(true);
+      await page.evaluate(() => window.__lahe.replayNow());
+      expect(await nextTwo(c.choice === "keep_mine" ? "results." : "counting")).toEqual(blocks);
+      for (const t of blocks) expect(await countOnPage(page, t, c.scope), "'" + t + "' once after the answer").toBe(1);
+      expect(await page.evaluate(() => window.LAHE.replay.conflictIds())).toEqual([]);
+    });
+  }
 });

@@ -285,10 +285,18 @@ test.describe("an anchor conflict holds the run", () => {
     return { item, r };
   }
 
-  test("the card shows the run and its count, nothing is placed, and the second button says the run is kept", async ({ page }) => {
+  // The anchor waits on the answer and the run does not: either answer keeps
+  // it, so it stays on the page after the page's anchor while the card waits
+  // (flow walk, Fail 3 and design problem 2). The anchor itself is untouched.
+  test("the card shows the run and its count, the run stays on the page after the page's anchor, and the second button says the run is kept", async ({
+    page
+  }) => {
     const { item, r } = await conflicted(page);
     expect(r[0], JSON.stringify(r[0])).toMatchObject({ branch: "content_changed" });
-    expect(await page.evaluate((t) => window.__count(t), LONG_A)).toBe(0);
+    expect((await articleShape(page)).slice(1, 4)).toEqual(["p: " + THEIRS, "p: " + LONG_A, "p: " + LONG_B]);
+    const again = await page.evaluate(() => window.__pass());
+    expect(again[0].wrote, "a second pass while waiting writes nothing").toBe(false);
+    expect(await page.evaluate((t) => window.__count(t), LONG_A)).toBe(1);
     const card = await page.evaluate((id) => {
       const node = window.__cards.nodes[id];
       return {

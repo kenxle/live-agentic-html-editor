@@ -3138,6 +3138,44 @@
   }
 
   /**
+   * Where a reworded anchor stands when its words are gone, or null.
+   *
+   * Only for a record whose reviewer changed the anchor (so a card will ask),
+   * never for a container, and never when the text ladder found two places:
+   * that is its own answer. The point ladder (pointing.js) scores the page's
+   * elements on identity and place; the element back is the block holding its
+   * pick, and it must read words the record does not already know, so the
+   * conflict card has two versions to show.
+   */
+  function guessedAnchor(item, view, ctx, verdict) {
+    if (isContainerPlacement(item) || anchorUntouched(item, view)) return null;
+    if (verdict && verdict.reason === uniqueness.REASON.AMBIGUOUS) return null;
+    var ref = item[record.FIELD.REGION] ? item[record.FIELD.REGION].ref : null;
+    var ladder = ctx.pointing;
+    if (!ref || !ladder || typeof ladder.bestGuess !== "function") return null;
+    var guess = null;
+    guessing = true;
+    try {
+      guess = ladder.bestGuess(ref, ctx.root);
+    } finally {
+      guessing = false;
+    }
+    var picked = guess && guess.element ? guess.element : null;
+    var el = picked ? blockHolding(picked) || picked : null;
+    if (!el || el.nodeType !== 1 || el.isConnected === false) return null;
+    if (markers && typeof markers.isToolNode === "function" && markers.isToolNode(el)) return null;
+    if (tagOfEl(el) === "main" || tagOfEl(el) === "body") return null;
+    var engine = ctx.anchor || anchorEngine;
+    if (engine && typeof engine.isPageSized === "function" && typeof engine.scopeOf === "function") {
+      var scope = engine.scopeOf(ctx.root, null);
+      if (scope && engine.isPageSized(el, scope)) return null;
+    }
+    var words = normalize.normalizeText(el.textContent || "");
+    if (!words) return null;
+    return el;
+  }
+
+  /**
    * Applies one run record. The contract is applyRecord's, plus the run.
    */
   function applyRun(item, ctx) {
@@ -3170,10 +3208,21 @@
         element = verdict.element;
       }
     }
+    var guessed = false;
     if (!element) {
       var bound = lastElement[id];
       if (bound && bound.isConnected) element = bound;
-      else return markLost(item, verdict || lostVerdict(), ctx);
+      else {
+        // The reviewer reworded the anchor and the page's anchor now reads
+        // neither their words nor its old ones: the agent reworded it too
+        // (flow walk, Fail 3). That is a conflict on the anchor, not a lost
+        // record, so the point ladder is asked where the anchor stands, and
+        // the card asks which version stands. The anchor is never written on
+        // the guess; only the reviewer's answer writes it.
+        element = guessedAnchor(item, view, ctx, verdict);
+        if (!element) return markLost(item, verdict || lostVerdict(), ctx);
+        guessed = true;
+      }
     }
 
     // A record that changes the anchor's tag writes the tag onto a block,
@@ -3210,7 +3259,8 @@
       var verdictBranch = compare(view, domValue, typeof element.innerHTML === "string" ? element.innerHTML : null, null);
       branch = verdictBranch.branch;
       earlierAfter = verdictBranch.earlierAfter;
-      if (branch === BRANCH.CONTENT_CHANGED) return holdRun(ctx, item, view, element, domValue, false);
+      // A guessed anchor is only ever shown to the reviewer, never written.
+      if (branch === BRANCH.CONTENT_CHANGED || guessed) return holdRun(ctx, item, view, element, domValue, false);
     }
 
     // A run block the page holds with words the reviewer never typed. Read
@@ -3562,6 +3612,21 @@
     var result = flagConflict(ctx, view, id, element, theirs, displaced);
     if (conflicts[id]) conflicts[id].run = true;
     decorateRunConflict(ctx, id, item);
+    // The anchor waits on the reviewer's answer; their new blocks do not.
+    // Either answer keeps them, so they stay on the page after the page's
+    // anchor while the card waits (flow walk, Fail 3 and design problem 2).
+    // A block that clashes with the page's words waits too: nothing is put
+    // beside it.
+    lastElement[id] = element;
+    var clash = blocks.runClashFor(laterRun(ctx, item).item, element.ownerDocument, element);
+    if (!clash) {
+      var placed = placeRun(ctx, item, element);
+      result.run = placed;
+      if (placed.wrote) {
+        result.wrote = true;
+        counters.regionsWritten += 1;
+      }
+    }
     result.item = item;
     result.held = true;
     return result;
