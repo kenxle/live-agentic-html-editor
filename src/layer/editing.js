@@ -2814,6 +2814,14 @@
 
     function bindBlock(block) {
       unbindBlock();
+      // Typing and pasting ask for the caret's line to be kept in view (fix
+      // H2). The scroll itself waits for the next frame, after the change is
+      // laid out: see revealCaret. beforeinput too, because the layer cancels
+      // it and writes the change itself (Enter, and a paste in Firefox), and a
+      // cancelled beforeinput sends no input event.
+      blockHandles.push(listeners.on(block, "beforeinput", askReveal, false, LISTENER_GROUP));
+      blockHandles.push(listeners.on(block, "input", askReveal, false, LISTENER_GROUP));
+      blockHandles.push(listeners.on(block, "paste", askReveal, false, LISTENER_GROUP));
       if (isRun()) {
         blockHandles.push(listeners.on(block, "beforeinput", onRunBeforeInput, false, LISTENER_GROUP));
         blockHandles.push(listeners.on(block, "input", onRunInput, false, LISTENER_GROUP));
@@ -5040,6 +5048,11 @@
         return frameNode;
       }
       if (!frameNode) return null;
+      keepRoom();
+      if (revealPending) {
+        revealPending = false;
+        revealCaret();
+      }
       var rect = unionRect(framedElements()) || session.block.getBoundingClientRect();
       var pad = 6;
       frameNode.style.top = rect.top - pad + "px";
@@ -5074,12 +5087,139 @@
         var below = contentTopBelow(framedElements(), frameBottom);
         var spaceBelow = below === null ? Infinity : below - frameBottom;
         var skip = spaceBelow >= LINE_HALF * 2 + barHeight + BAR_GAP * 3 ? LINE_HALF * 2 + BAR_GAP : 0;
-        barNode.style.top = Math.round(Math.max(0, Math.min(frameBottom + BAR_GAP + skip, viewport - barHeight - BAR_GAP))) + "px";
+        var barTop = Math.max(0, Math.min(frameBottom + BAR_GAP + skip, viewport - barHeight - BAR_GAP));
+        // THE BAR NEVER COVERS THE LINE BEING TYPED (fix H2). When the frame
+        // runs past the bottom of the window, the bar is pinned to the
+        // window's bottom edge, which is where the caret's line goes after an
+        // Enter. revealCaret scrolls that line above the bar while typing; if
+        // the writer has scrolled it under the bar by hand, the bar moves to
+        // the top of the window instead, or just under the line when the line
+        // is at the top.
+        var line = caretLineRect();
+        if (line && line.top < barTop + barHeight + BAR_GAP && line.bottom + BAR_GAP > barTop) {
+          barTop = line.top >= barHeight + BAR_GAP * 3 ? BAR_GAP : line.bottom + BAR_GAP;
+        }
+        barNode.style.top = Math.round(barTop) + "px";
         barNode.style.bottom = "auto";
         barNode.setAttribute("data-lahe-bar-side", "below");
       }
       fitBar(left);
       return frameNode;
+    }
+
+    // ---- Room at the bottom, and the caret kept in view (fix H2) ---------------
+    //
+    // Ken, on a real notes page: at the bottom he could not scroll, the line
+    // Enter made went below the window, and the bar sat over it. So while a
+    // session is open the page gets blank room after its end (highlight.js's
+    // setPageRoom, a rule in the one page stylesheet, never a node), every key,
+    // input and paste scrolls the caret's line up above the bar when it would
+    // fall under it, and the bar moves off that line (positionFrame).
+    //
+    // When the session ends the room is not taken away at once: that would
+    // pull the page up under a writer sitting at its end. It shrinks to what
+    // the current scroll position still needs, and goes on shrinking as the
+    // writer scrolls up, until none is left.
+
+    // The room, as a share of the window's height.
+    var ROOM_SHARE = 0.45;
+    // How far above the bar the caret's line is kept.
+    var REVEAL_MARGIN = 24;
+
+    var revealPending = false;
+    var roomRelease = null;
+
+    function askReveal() {
+      if (session) revealPending = true;
+    }
+
+    function canRoom() {
+      return !!(win && doc && highlights && typeof highlights.setPageRoom === "function");
+    }
+
+    function keepRoom() {
+      if (!canRoom()) return;
+      stopRoomRelease();
+      var viewport = win.innerHeight || 768;
+      var want = Math.round(Math.max(viewport * ROOM_SHARE, BAR_ROOM + BAR_GAP * 2 + REVEAL_MARGIN * 3));
+      if (highlights.pageRoom() !== want) highlights.setPageRoom(want);
+    }
+
+    // The room the current scroll position still needs: how far the bottom of
+    // the window reaches past the page's own end.
+    function roomStillNeeded() {
+      var el = doc.scrollingElement || doc.documentElement;
+      var room = highlights.pageRoom();
+      var natural = el.scrollHeight - room;
+      var reach = (win.scrollY || win.pageYOffset || 0) + (win.innerHeight || el.clientHeight);
+      return Math.max(0, Math.min(room, Math.ceil(reach - natural)));
+    }
+
+    function releaseRoom() {
+      if (!canRoom() || !highlights.pageRoom()) return;
+      var shrink = function () {
+        var need = roomStillNeeded();
+        if (need !== highlights.pageRoom()) highlights.setPageRoom(need);
+        if (!need) stopRoomRelease();
+      };
+      shrink();
+      if (!highlights.pageRoom() || roomRelease) return;
+      roomRelease = listeners.on(win, "scroll", shrink, { passive: true }, LISTENER_GROUP);
+    }
+
+    function stopRoomRelease() {
+      if (roomRelease) roomRelease.off();
+      roomRelease = null;
+    }
+
+    function dropRoom() {
+      stopRoomRelease();
+      if (canRoom() && highlights.pageRoom()) highlights.setPageRoom(0);
+    }
+
+    // The caret's line on screen: the text box at the caret, or, on an empty
+    // line (a fresh paragraph holding only a <br>), the block the caret is in.
+    function caretLineRect() {
+      if (!session || !win) return null;
+      var range = liveRange();
+      if (!range || !inSession(range.startContainer)) return null;
+      var rects = range.getClientRects();
+      for (var i = rects.length - 1; i >= 0; i -= 1) {
+        if (rects[i].height) return { top: rects[i].top, bottom: rects[i].bottom };
+      }
+      var node = range.startContainer;
+      if (node.nodeType === 1 && node.childNodes[range.startOffset] && node.childNodes[range.startOffset].nodeType === 1) {
+        node = node.childNodes[range.startOffset];
+      }
+      var el = node.nodeType === 1 ? node : node.parentElement;
+      while (el && el !== doc.body && typeof win.getComputedStyle === "function" && /^inline/.test(win.getComputedStyle(el).display)) {
+        el = el.parentElement;
+      }
+      if (!el || typeof el.getBoundingClientRect !== "function") return null;
+      var r = el.getBoundingClientRect();
+      if (!r.height && !r.width) return null;
+      return { top: r.top, bottom: r.bottom };
+    }
+
+    // Scrolls the caret's line up above the bar, with a margin, when it sits
+    // below that point; and down into the window when it is above the top.
+    function revealCaret() {
+      var line = caretLineRect();
+      if (!line) return;
+      var viewport = win.innerHeight || 768;
+      var barHeight = (barNode && barNode.getBoundingClientRect().height) || BAR_ROOM;
+      var limit = viewport - barHeight - BAR_GAP * 2 - REVEAL_MARGIN;
+      var by = 0;
+      if (line.bottom > limit) by = line.bottom - limit;
+      else if (line.top < 0) by = line.top - REVEAL_MARGIN;
+      if (!by) return;
+      var x = win.scrollX || win.pageXOffset || 0;
+      var y = (win.scrollY || win.pageYOffset || 0) + by;
+      try {
+        win.scrollTo({ left: x, top: y, behavior: "instant" });
+      } catch (err) {
+        win.scrollTo(x, y);
+      }
     }
 
     // The bar's height before it has been laid out, and the space it keeps
@@ -5184,6 +5324,8 @@
     }
 
     function hideFrame() {
+      revealPending = false;
+      releaseRoom();
       if (menuOpen) closeMenu(false);
       if (frameNode) frameNode.style.display = "none";
       if (barNode && !editState) barNode.style.display = "none";
@@ -5464,6 +5606,7 @@
       // that produced it. Every key, not only Enter, so a stale Shift from an
       // earlier press cannot turn a later paragraph break into a line break.
       if (session) session.lastKey = { key: event.key, shiftKey: event.shiftKey === true };
+      if (session && !event.metaKey && !event.ctrlKey && !event.altKey) askReveal();
       if (isRun() && onRunKeydown(event)) return;
       var got = gestures.gestureFor(describe(event));
       if (got.gesture === gestures.GESTURE.EDIT_BLOCK) {
@@ -5646,6 +5789,7 @@
         protect.release(open.block);
       }
       hideFrame();
+      dropRoom();
       hideLine();
       hidePlaceholder();
       [frameNode, barNode, lineNode, placeholderNode, liveNode].forEach(function (node) {
