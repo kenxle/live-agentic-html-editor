@@ -658,6 +658,76 @@ test("deleting an item the helper has seen queues item.deleted; a never-sent dra
   assert.equal(queued[1].event, protocol.EVENT.ITEM_DELETED);
 });
 
+// FLOW WALK FAIL 1 (2026-09-30): undo after a page reload never reached the
+// helper. `seenItems` is in-memory, so a reload made every item the helper
+// holds look never-sent, and the delete was skipped. The item stayed ready on
+// the agent's drain, and an agent following the contract put the words back.
+// What the helper has heard of survives a reload in browser storage: the
+// acknowledged stamp, and any event still queued for it.
+test("after a reload, deleting an item the helper acknowledged still queues item.deleted", (t) => {
+  const store = storeModule.createStore();
+  const make = () =>
+    syncModule.createSync({
+      review: "review-1",
+      token: "t",
+      helperOrigin: "http://127.0.0.1:7817",
+      store: store,
+      document: null,
+      window: null,
+      fetch: null,
+      onStatus: () => {},
+      onFailure: () => {}
+    });
+  const before = make();
+  t.after(() => before.stop());
+  const item = Object.assign({}, draft("placed then undone"), { state: record.STATE.READY });
+  store.write("review-1", item);
+  const sent = before.recordItem(item, { immediate: "ready" });
+  // The helper accepted the post: the outbox drops it and the item is stamped.
+  store.acknowledge("review-1", [sent.event_id]);
+  store.markAcknowledged("review-1", item.id, item.rev);
+  before.stop();
+
+  // The reload: a new client over the same browser storage.
+  const after = make();
+  t.after(() => after.stop());
+  store.remove("review-1", item.id);
+  const event = after.deleteItem(item);
+  assert.ok(event, "the delete is queued, so the agent's drain drops the item");
+  assert.equal(event.event, protocol.EVENT.ITEM_DELETED);
+  assert.equal(event.item, item.id);
+  const queued = store.pendingEvents("review-1");
+  assert.equal(queued.length, 1, "queued durably, so it survives another reload");
+  assert.equal(queued[0].event, protocol.EVENT.ITEM_DELETED);
+});
+
+test("after a reload, deleting an item whose post is still queued also queues item.deleted", (t) => {
+  const store = storeModule.createStore();
+  const make = () =>
+    syncModule.createSync({
+      review: "review-1",
+      token: "t",
+      helperOrigin: "http://127.0.0.1:7817",
+      store: store,
+      document: null,
+      window: null,
+      fetch: null,
+      onStatus: () => {},
+      onFailure: () => {}
+    });
+  const before = make();
+  t.after(() => before.stop());
+  const item = Object.assign({}, draft("queued, never acknowledged"), { state: record.STATE.READY });
+  before.recordItem(item, { immediate: "ready" });
+  before.stop();
+  const after = make();
+  t.after(() => after.stop());
+  const event = after.deleteItem(item);
+  assert.ok(event, "the queued post goes out on the next flush, so the delete must follow it");
+  const queued = store.pendingEvents("review-1");
+  assert.equal(queued[queued.length - 1].event, protocol.EVENT.ITEM_DELETED);
+});
+
 // THE GOODBYE IS PART OF WHAT UNLOADING MEANS, so the promise says so.
 //
 // commitOnUnload does two things: flush the reviewer's last words, then release

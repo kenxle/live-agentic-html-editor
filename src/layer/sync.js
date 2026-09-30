@@ -1695,10 +1695,26 @@
      *
      * @param {Object} item the record as it stood before the delete
      */
+    // Has the helper heard of this item, or will it? `seenItems` alone is
+    // in-memory, so after a page reload it is empty and every item the helper
+    // has held for hours looked never-sent: undo after a reload took the words
+    // off the page and left the item ready on the agent's drain (flow walk,
+    // fail 1). Browser storage keeps the two facts that survive a reload: the
+    // acknowledged stamp (the helper confirmed a revision), and an event still
+    // queued for the item (the next flush will post it, so the delete must
+    // follow it).
+    function helperHeardOf(id) {
+      if (seenItems[id]) return true;
+      if (typeof store.acknowledgedRev === "function" && store.acknowledgedRev(requireReview(), id) !== null) return true;
+      return store.pendingEvents(requireReview()).some(function (event) {
+        return event[protocol.EVENT_FIELD.ITEM] === id;
+      });
+    }
+
     function deleteItem(item) {
       if (readOnly || !item) return null;
       var id = item[record.FIELD.ID];
-      if (!id || !seenItems[id]) return null;
+      if (!id || !helperHeardOf(id)) return null;
       delete seenItems[id];
       var event = protocol.newEvent({
         event: protocol.EVENT.ITEM_DELETED,
