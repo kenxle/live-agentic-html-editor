@@ -73,6 +73,23 @@
   --sage:#637a63;        /* darkened: bullet dots and marks on white */
   --sage-tint:#e7f1ed;
 
+  /* Status. Problems only: a source that wasn't read, a run that stopped, a
+     change that didn't save. They sit outside the accent budget, so a page
+     can show them beside a sage or cobalt panel. They are never decoration:
+     a page with no problem shows neither. Measured by
+     lib/scripts/measure_status_contrast.py; each clears 4.5:1 as text on
+     white, on paper, and on its own tint.
+                      on white   on paper   on its tint
+      --red           7.19:1     6.70:1     6.26:1
+      --amber         6.45:1     6.01:1     5.81:1
+     Amber is darkened to a brown so it passes as text. A status dot or a
+     notice border uses the same colour, so red and amber also differ by
+     shape on the page (a filled dot against a ring), never by hue alone. */
+  --red:#a8231c;
+  --red-tint:#fbeceb;
+  --amber:#8a5100;
+  --amber-tint:#fcf2e0;
+
   /* Deprecated alias, kept because the deck surface vendors this file and a
      rename would break it. Was #84c1ae, now resolves to the brand sage, which
      clears the floor on ink at 7.38:1 and matches the logo. Use --sage-fill. */
@@ -86,6 +103,29 @@
      full white at size glares. */
   --ink-soft-ondark:#d9d7d1;   /* 11.59:1, secondary copy at large sizes */
   --ink-faint-ondark:#b3b0a8;  /* 7.70:1, meta, section numbers, captions */
+
+  /* ---------- palette families, for the specimen ----------
+     Read only by the specimen script in document-every-component.html, which
+     draws the palette as key colours first, then each family's shades. Groups
+     are split by |. The first name in a group is the key colour; the text after
+     the colon is its one-line job. The job sits in the same string rather than
+     a second property so a family and its job cannot drift out of step when a
+     group is added or reordered. A style that leaves this out gets the older
+     view, roles plus leftover colours.
+
+     Sage leads its family, not sage-fill, because sage is what the mark and
+     fill roles use on a white page. Link sits with purple as its brighter
+     sibling. The two light ondark greys sit with white, since they are what
+     stands in for white on an ink ground. Paper is a shade of white here: it
+     only ever raises a ground, it never carries a job of its own. The alias
+     sage-lift is left out on purpose and shows under "Also defined". */
+  --palette-families:"white paper ink-soft-ondark ink-faint-ondark: The page ground, and text on an ink band \
+    | ink ink-soft ink-faint rule rule-ondark: Body text, headings, dividers and the default band \
+    | cobalt cobalt-hover cobalt-tint: The structural accent: the insight label, the accent band, code \
+    | sage sage-fill sage-tint: Bullet dots and marks, the third fill, the default quiet panel \
+    | purple purple-hover purple-tint link: Emphasis, for the one thing worth pausing on, and links \
+    | red red-tint: Status: something failed or is missing, and needs Ken \
+    | amber amber-tint: Status: something may be off, and will likely fix itself";
 
   /* ---------- type ---------- */
 
@@ -102,6 +142,19 @@
   --w-display:600;
   --w-bold:700;
 
+  /* Headings apart from labels. --font-display is the label voice (section
+     numbers, table heads, the facts figure, the insight label, calendar
+     heads); headings read these, which point at it in the house, so a style
+     can set its headings in one face and its labels in another without a
+     rule. The tracking suits a proportional face; a mono sets it to 0. */
+  --font-heading:var(--font-display);
+  --w-heading:var(--w-display);
+  --lh-heading:1.12;
+  --tracking-heading:-.012em;
+  --font-number:var(--font-display);  /* the section number */
+  --font-thead:var(--font-display);   /* a table's column names */
+  --font-caption:var(--font-body);    /* a figure's caption */
+
   /* ---------- spacing, 4px-rooted ---------- */
 
   --s1:4px; --s2:8px; --s3:12px; --s4:18px;
@@ -111,6 +164,11 @@
 
   --r:4px;
   --r-lg:6px;
+  /* Two corners the base used to type as literals, so a square style could
+     not reach them. Inline code is a chip, and a chip rounded as far as a
+     panel reads as a pill; the today marker is a pill on purpose. */
+  --r-code:3px;
+  --r-pill:999px;
   --line:1px solid var(--rule);
   --line-ink:1px solid var(--ink);
   --divider:2px solid var(--ink);
@@ -120,19 +178,102 @@
   --maxw:1080px;
   --read:68ch;
 
+  /* Layout widths a style reads when it moves off the house layout. The base
+     reads none of them except --layout-bleed's arithmetic, so the house page
+     is unchanged by any value here; they are declared once so every style
+     spells the same idea the same way.
+       --layout-margin      a margin column beside the text (Textbook's notes)
+       --layout-rail        a narrow rail with a hairline (Field Guide)
+       --layout-label       a label column beside an entry (Ledger)
+       --layout-hang        the column a display numeral hangs in (Folio)
+       --layout-numeral     the size of a display numeral at a section head
+       --layout-display-h2  a section heading above the h2 token, for a style
+                            whose sections open like covers
+       --layout-bleed       the inline padding that lets a block run edge to
+                            edge while its content stays on the column. It
+                            resolves 100% where it is used, so it is the
+                            element's own width, not the root's.
+       --layout-cols        how many columns a style's page grid has
+       --layout-ruler       the height of a ruler strip showing those columns */
+  --layout-margin:12rem;
+  --layout-rail:9rem;
+  --layout-label:14rem;
+  --layout-hang:9rem;
+  --layout-numeral:calc(var(--text-h1) * 1.6);
+  --layout-display-h2:var(--text-h2);
+  --layout-bleed:max(var(--gutter), calc((100% - var(--maxw)) / 2 + var(--gutter)));
+  --layout-cols:12;
+  --layout-ruler:var(--s2);
+
   /* ---------- semantic roles ----------
      What a surface file writes. Each one points at a raw token above, so a new
      style repoints these rather than editing document.css. */
 
-  /* Colour by job, not by name. */
+  /* Colour by job, not by name. Every colour a component rule in
+     document.css or day-page.css paints is one of these. A second style
+     overrides the roles from its own raw palette, so it never has to pour its
+     colours into slots named after the house hues. */
+
+  /* Ground and text. */
   --surface:var(--white);            /* the page ground */
+  --surface-raised:var(--paper);     /* a quiet ground inside the page: the boxed table's header */
   --on-surface:var(--ink);           /* body text on it */
   --on-surface-soft:var(--ink-soft); /* secondary copy */
   --on-surface-faint:var(--ink-faint); /* meta, captions, section numbers */
-  --accent:var(--cobalt);            /* the one accent a document uses */
-  --structure:var(--ink);            /* heavy structural marks: dividers, filled pills */
   --border:var(--rule);              /* hairline colour */
+
+  /* Accent: the structural colour. */
+  --accent:var(--cobalt);            /* the one accent a document uses */
+  --accent-hover:var(--cobalt-hover); /* its hover state; no document rule uses it today */
+  --accent-tint:var(--cobalt-tint);  /* the structural panel, the insight panel, code */
+  /* --link is declared with the raw colours above and is already a job name,
+     so it serves as both: a style overrides --link directly. */
   --focus:var(--link);               /* the focus ring */
+
+  /* Marks and emphasis. */
+  --mark:var(--sage);                /* bullet dots, accent numerals, small marks on the page ground */
+  --fill:var(--sage);                /* the third fill: the sage callout and icon circle */
+  --on-fill:var(--white);            /* text and glyphs on that fill */
+  --tint:var(--sage-tint);           /* the default quiet panel */
+  --emphasis:var(--purple);          /* the one thing worth pausing on: its band, callout, caveat label */
+  --emphasis-hover:var(--purple-hover); /* its hover state; no document rule uses it today */
+  --emphasis-tint:var(--purple-tint); /* the emphasis panel and the caveat insight */
+
+  /* On a filled ground. */
+  --structure:var(--ink);            /* heavy structural marks: dividers, filled bands, callouts */
+  --on-structure:var(--white);       /* text on a filled band, callout or icon circle */
+  --on-structure-soft:var(--ink-soft-ondark);   /* secondary copy on a filled ground */
+  --on-structure-faint:var(--ink-faint-ondark); /* section numbers and meta on a filled ground */
+  /* Text on the accent and emphasis fills. The house carries white on all
+     three, so both point at --on-structure; a style whose accent or emphasis
+     is light enough to want ink repoints one of these, not a rule. */
+  --on-accent:var(--on-structure);   /* text on the accent callout, band and icon circle */
+  --on-emphasis:var(--on-structure); /* text on the emphasis callout, band and icon circle */
+
+  /* Status, by job. A page paints problems through these, so a style can
+     repoint them. --muted is for a line that is neither fine nor a problem:
+     "pending switchover", "no sources were recorded for this page". It reuses
+     the faint ink on paper, so it reads as quiet rather than as a third
+     status colour. */
+  --danger:var(--red);               /* failed, missing, not saved: the red notice, dot and label */
+  --danger-tint:var(--red-tint);     /* the red notice's ground */
+  --on-danger:var(--white);          /* text on a filled danger button */
+  --warning:var(--amber);            /* may be off: the amber line, ring and label */
+  --warning-tint:var(--amber-tint);  /* the amber line's ground */
+  --muted:var(--ink-faint);          /* neither fine nor a problem */
+  --muted-tint:var(--paper);         /* the muted line's ground */
+
+  /* The section number, the table head and the figure. Each was a fixed
+     choice inside a rule, and every style that wanted another look had to
+     restate the rule; these name the choice so a style sets a value. */
+  --number-color:var(--on-surface-faint); /* the "Section N" label on the page ground */
+  --thead-color:var(--on-surface-faint);  /* a table's column names */
+  --thead-rule:var(--divider);            /* the rule under a naked table's head */
+  --thead-rule-boxed:var(--line);         /* the rule under a boxed table's head */
+  --figure-border:0 solid transparent;    /* a figure's frame; the house has none */
+  --figure-ground:transparent;            /* the ground a figure is printed on */
+  --figure-pad:0;                         /* the room between the frame and the image */
+  --caption-color:var(--on-surface-faint);
 
   /* Spacing by purpose. The numeric scale above still exists; these name the
      three distances a document actually keeps repeating. */
