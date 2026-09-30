@@ -301,6 +301,21 @@
   --text-small:15px;                 /* .small, code, the section number */
   --text-meta:14px;                  /* table heads, captions, meta lines */
   --text-micro:12px;                 /* chips, labels, month-grid events */
+  /* Three sizes from the X3 components page, which is built on M5. A stat
+     tile is number-first, so its number sits a step above the facts figure;
+     the single large tile is the one number a section is about. A pull quote
+     sits between h3 and h2, so it reads as a quote and not as a heading. */
+  --text-stat:clamp(30px,3.4vw,38px);        /* the number in a stat tile */
+  --text-stat-large:clamp(44px,6vw,64px);    /* the number in the single large stat tile */
+  --text-quote:clamp(22px,2.4vw,28px);       /* a pull quote's line */
+
+  /* ---------- images ----------
+     The frame every image treatment draws (image beside text, image cards,
+     the gallery, the full-width image, the peek pair). A screenshot of a white
+     page on a white page needs an edge, so the house draws a hairline. A style
+     that prints its images as plates or cuts them square sets these. */
+  --image-frame:var(--line);
+  --image-radius:var(--r);
 }
 
 /*
@@ -336,9 +351,14 @@
    out (it runs edge to edge) and its inner element opts back in through the
    same rule. Three element types render nothing and are skipped, and
    [data-lahe] is the review layer's own chrome: it lives in the body too, and
-   the page must not lay it out. */
+   the page must not lay it out.
 
-:is(body, .band) > :not(.band, script, style, template, [data-lahe]){
+   A full-width image (.bleed) opts out the same way a band does. Its caption
+   opts back in through the second selector, and only the picture itself runs
+   edge to edge. */
+
+:is(body, .band) > :not(.band, .bleed, script, style, template, [data-lahe]),
+.bleed > :not(img, picture, svg, video){
   max-width:var(--maxw);
   margin-inline:auto;
   padding-inline:var(--gutter);
@@ -380,7 +400,7 @@ h4{font-size:var(--text-h4);margin:var(--s5) 0 var(--s2)}
 h5{font-size:var(--text-body);margin:var(--s5) 0 var(--s2)}
 h6{font-size:var(--text-small);margin:var(--s5) 0 var(--s2);color:var(--on-surface-soft)}
 
-:is(.hero,.sheet-head,.fold-head,.checkin-head,.cols,.icon-row) :is(h1,h2,h3,h4,h5,h6){margin:0}
+:is(.hero,.sheet-head,.fold-head,.checkin-head,.cols,.icon-row,.sequence,.option,.image-card-body,.media-body) :is(h1,h2,h3,h4,h5,h6){margin:0}
 :is(.fold-body,.panel,.insight,.callout,.band,td) > :first-child{margin-top:0}
 
 /* ---------- text ---------- */
@@ -491,6 +511,26 @@ section.sheet{padding-block:var(--section-gap)}
   color:var(--number-color);
 }
 
+/* Two smaller levels under the section head. Each drops one thing: the
+   medium head's rule is 1px ink instead of the 2px divider and it carries an
+   h3 with a label on the right; the small head's rule is a hairline and it
+   carries an h4 alone, with no label. Both still run the full column width,
+   never a stub. They sit inside a section, after other content, so each pays
+   its own top room, and drops it when it is the first thing in its box. */
+.sheet-head--medium{
+  border-top:var(--line-ink);
+  margin-top:var(--section-gap-narrow);
+  margin-bottom:var(--gutter);
+}
+.sheet-head--medium .n{font-size:var(--text-meta)}
+.sheet-head--small{
+  border-top:var(--line);
+  padding-top:var(--s2);
+  margin-top:var(--gutter);
+  margin-bottom:var(--s3);
+}
+:is(.sheet-head--medium,.sheet-head--small):first-child{margin-top:0}
+
 /* ---------- facts (a definition-list grid for key figures) ---------- */
 
 .facts{display:grid;grid-template-columns:repeat(3,1fr);gap:var(--section-gap-narrow)}
@@ -593,6 +633,25 @@ table.boxed td:last-child,table.boxed th:last-child{padding-right:var(--s4)}
 
 .scrollx{overflow-x:auto;-webkit-overflow-scrolling:touch}
 
+/* 3. Data table, for columns of numbers. Add class "data" to either table
+      above: every figure is set in tabular numerals, so digits are the same
+      width and a column of them stacks. A cell or head holding a number takes
+      class "num" and aligns right, so the decimals and dollar signs line up.
+      A total goes in a tfoot row. .num works on its own in any table. */
+table.data,.num{font-variant-numeric:tabular-nums}
+:is(th,td).num{text-align:right}
+
+/* The total row. Any table's tfoot gets it, class or not, because a total
+   row reads the same wherever it is: display weight and a rule above that is
+   heavier than the row rules, so it reads as the sum and not as one more
+   row. The naked table takes the 2px divider, which wins over the hairline
+   under the last body row where the two meet. */
+tfoot td{font-weight:var(--w-display);border-top:var(--divider)}
+tfoot tr:last-child td{border-bottom:0}
+/* The boxed table's total takes the raised ground and a 1px ink rule; the
+   boxed table already drops the hairline under its last body row. */
+table.boxed tfoot td{background:var(--surface-raised);border-top:var(--line-ink)}
+
 /* ---------- two-column prose ---------- */
 
 .cols{display:grid;grid-template-columns:1fr 1fr;gap:var(--section-gap-narrow)}
@@ -649,6 +708,384 @@ ol:where(:not([class]), .steps)[start] > li::before{content:none}
 
 ol.steps--two-col{columns:2;column-gap:var(--section-gap-narrow)}
 
+/* Checklist, for what is included rather than what to do in order. The
+   check is drawn in the mark colour at the list's usual inset, so a
+   checklist lines up with a dot list or a numbered list stacked beside it.
+   Like the insight icon, it is a mask painted with a token, so a restyle can
+   reach its colour. The stroke is 2, since the glyph is drawn smaller than
+   an icon beside body text and a thinner line breaks up at that size. */
+ul.checklist{list-style:none;padding:0;margin:0 0 var(--block-gap)}
+ul.checklist > li{position:relative;padding-left:2.1em;margin-bottom:var(--s3);line-height:1.5}
+ul.checklist > li::before{
+  content:"";
+  position:absolute;
+  left:0;
+  top:.2em;
+  width:1.1em;
+  height:1.1em;
+  background-color:var(--mark);
+  -webkit-mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='2.25' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M20 6 9 17l-5-5'/%3E%3C/svg%3E") center / contain no-repeat;
+  mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='2.25' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M20 6 9 17l-5-5'/%3E%3C/svg%3E") center / contain no-repeat;
+}
+
+/* ---------- step sequence, boxed ----------
+   An ol for a process whose steps each carry a name and a line of detail.
+   Two layouts:
+     .sequence          one ink border round the whole set, the steps side
+                        by side with hairlines between them. Four steps or
+                        fewer; it stacks under the facts grid's width.
+     .sequence--rows    ruled rows, the number hanging at the list inset.
+                        For more than four steps, or a step that needs more
+                        than two lines.
+   The number is drawn by a counter in the accent, the structural colour, so
+   the markup is only the step's name and its line. The plain numbered list
+   (ol.steps) stays: it is for a sequence of sentences, this is for a
+   sequence of named stages. */
+ol.sequence{
+  list-style:none;
+  counter-reset:seq;
+  margin:0 0 var(--block-gap);
+  padding:0;
+  max-width:none;   /* a grid, not prose: it opts out of the reading measure like the facts grid */
+  display:grid;
+  grid-auto-flow:column;
+  grid-auto-columns:minmax(0,1fr);
+  border:var(--line-ink);
+  border-radius:var(--r-lg);
+  overflow:hidden;
+}
+ol.sequence > li{counter-increment:seq;padding:var(--s4) var(--s5) var(--s5);line-height:1.5}
+ol.sequence > li + li{border-left:var(--line)}
+ol.sequence > li::before{
+  content:counter(seq);
+  display:block;
+  margin-bottom:var(--s3);
+  font-family:var(--font-number);
+  font-weight:var(--w-display);
+  font-size:var(--text-small);
+  font-variant-numeric:tabular-nums;
+  color:var(--accent);
+}
+ol.sequence h4{margin-bottom:var(--s1)}
+ol.sequence p{margin:0;font-size:var(--text-small);color:var(--on-surface-soft)}
+
+ol.sequence--rows{display:block;border:0;border-radius:0;overflow:visible}
+ol.sequence--rows > li{
+  display:grid;
+  grid-template-columns:2.1em minmax(0,1fr);   /* the numeral column is the list inset every list shares */
+  padding:var(--s4) 0;
+  border-top:var(--line);
+}
+ol.sequence--rows > li + li{border-left:0}
+ol.sequence--rows > li:last-child{border-bottom:var(--line)}
+ol.sequence--rows > li::before{margin:0;font-size:var(--text-body);line-height:var(--lh-heading)}
+
+/* ---------- eyebrow label ----------
+   A short faint label above a heading: "Quarterly review", "Option B",
+   "Section 2". It carries the heading's top room and the heading after it
+   drops its own, so the pair sits where the heading alone would have. No
+   rule and no box under it: a stub rule under a label is the device that
+   keeps failing. */
+.eyebrow{
+  margin:var(--section-gap-narrow) 0 var(--s2);
+  font-family:var(--font-display);
+  font-weight:var(--w-display);
+  font-size:var(--text-meta);
+  line-height:1.3;
+  color:var(--on-surface-faint);
+}
+.eyebrow:first-child{margin-top:0}
+.eyebrow + :is(h1,h2,h3,h4,h5,h6){margin-top:0}
+
+/* ---------- badges ----------
+   A small square tag for a status or a category: Open, Done, Draft. Square
+   corners in every case; a rounded tag reads as a pill button. Five fills,
+   one per badge:
+     .badge              ink, the loudest
+     .badge--outline     an ink outline on the page ground
+     .badge--cobalt      accent on its tint, 5.17:1
+     .badge--purple      emphasis on its tint, 10.17:1
+     .badge--sage        ink on the sage tint. The sage itself measures
+                         4.05:1 on its tint, under the floor at this size,
+                         so the word is ink and the dot carries the sage.
+   A badge may lead with a status dot (.badge-dot) or a Lucide icon. The
+   border is always drawn, transparent where there is none, so every badge
+   is the same height. */
+.badge{
+  display:inline-flex;
+  align-items:center;
+  gap:var(--s2);
+  padding:var(--s1) var(--s2);
+  border:1px solid var(--structure);
+  border-radius:0;
+  background:var(--structure);
+  color:var(--on-structure);
+  font-family:var(--font-display);
+  font-weight:var(--w-display);
+  font-size:var(--text-micro);
+  line-height:1.4;
+  vertical-align:middle;
+  white-space:nowrap;
+}
+.badge--outline{background:var(--surface);color:var(--on-surface)}
+.badge--cobalt{background:var(--accent-tint);border-color:transparent;color:var(--accent)}
+.badge--purple{background:var(--emphasis-tint);border-color:transparent;color:var(--emphasis)}
+.badge--sage{background:var(--tint);border-color:transparent;color:var(--on-surface)}
+.badge .icon,.badge svg{width:1.15em;height:1.15em;vertical-align:0}
+.badge-dot{
+  width:7px;      /* px: the dot's drawn size, the same as a list's dot */
+  height:7px;     /* px: the dot's drawn size */
+  border-radius:50%;
+  flex:none;
+  background:var(--mark);
+}
+.badge:not([class*="badge--"]) .badge-dot{background:currentColor}   /* the ink badge: a sage dot on ink is under the mark floor */
+/* A row of badges. */
+.badges{display:flex;flex-wrap:wrap;align-items:center;gap:var(--s3);margin:0 0 var(--block-gap)}
+
+/* ---------- stat tiles ----------
+   The number-first sibling of the facts grid, which is words-first. Each tile
+   is a faint label, a large number in tabular numerals, and one meta line.
+   Three looks:
+     .stat            a hairline border
+     .stat--tint      the default quiet tint instead of the border. A tint
+                      is the alternative to a border, never added to it.
+     .stat--large     the one number a section is about. It runs the width
+                      of its row, with the number on the left and the label
+                      and meta beside it.
+   No coloured top edge on any of them: that device is what makes a tile read
+   as a template. The row fits as many tiles as it holds, up to four across
+   in the column, and two across on a phone. */
+.stats{
+  display:grid;
+  grid-template-columns:repeat(auto-fit,minmax(9rem,1fr));
+  gap:var(--block-gap);
+  margin:0 0 var(--block-gap);
+}
+.stat{
+  border:var(--line);
+  border-radius:var(--r-lg);
+  padding:var(--s4) var(--s4) var(--s5);
+  min-width:0;
+}
+.stat--tint{background:var(--tint);border-color:transparent}
+.stat p{margin:0;max-width:none}
+.stat-label{font-size:var(--text-meta);line-height:1.3;color:var(--on-surface-faint)}
+.stat .stat-label{margin-bottom:var(--s3)}
+.stat-value{
+  font-family:var(--font-display);
+  font-weight:var(--w-display);
+  font-size:var(--text-stat);
+  line-height:1;
+  letter-spacing:-.02em;
+  font-variant-numeric:tabular-nums;
+}
+.stat .stat-value{margin-bottom:var(--s2)}
+.stat-meta{font-size:var(--text-meta);line-height:1.35;color:var(--on-surface-soft)}
+
+.stat--large{
+  display:grid;
+  grid-template-columns:auto minmax(0,1fr);
+  grid-template-areas:"value label" "value meta";
+  column-gap:var(--gutter);
+  align-items:end;
+  padding:var(--gutter) var(--s6);
+  margin:0 0 var(--block-gap);
+}
+.stat--large .stat-label{grid-area:label;align-self:end;margin-bottom:var(--s1);font-size:var(--text-small)}
+.stat--large .stat-value{grid-area:value;font-size:var(--text-stat-large);margin:0}
+.stat--large .stat-meta{grid-area:meta;align-self:start;font-size:var(--text-small)}
+
+/* ---------- pull quote ----------
+   One line of the display face, lifted out of the body. Two looks: plain, or
+   ruled above and below with a full-width ink line. Never quotation marks,
+   never a coloured side bar; the base blockquote keeps its hairline side
+   rule, and this is not that. The line is capped at half the reading
+   measure, so it breaks into short lines rather than one long one. */
+blockquote.pullquote{
+  margin:var(--section-gap-narrow) 0;
+  padding:0;
+  border:0;
+  max-width:none;
+  color:var(--on-surface);
+}
+blockquote.pullquote p{
+  max-width:calc(var(--read) / 2);
+  margin:0 0 var(--s4);
+  font-family:var(--font-display);
+  font-weight:var(--w-display);
+  font-size:var(--text-quote);
+  line-height:1.24;
+  letter-spacing:-.012em;
+  overflow-wrap:normal;
+}
+blockquote.pullquote footer{font-size:var(--text-small);line-height:1.5;color:var(--on-surface-soft)}
+blockquote.pullquote.pullquote--ruled{border-block:var(--line-ink);padding-block:var(--s5)}
+
+/* ---------- figure with a caption plate ----------
+   An image or chart printed on a plate: a hairline frame, the picture with
+   room round it, and the caption on its own strip under a hairline, led by a
+   bold figure number. Two plates:
+     figure.plate          white, the default
+     figure.plate--tint    the raised ground behind the picture; the caption
+                           strip stays on the page ground
+   The plain figure (no class) stays as it is: no frame at all. */
+figure.plate{
+  padding:0;
+  border:var(--line);
+  border-radius:var(--r-lg);
+  background:var(--surface);
+  overflow:hidden;
+}
+figure.plate > :is(img,svg,picture){
+  display:block;
+  width:100%;
+  height:auto;
+  padding:var(--s5) var(--s5) var(--s4);
+}
+figure.plate--tint > :is(img,svg,picture){background:var(--surface-raised)}
+figure.plate figcaption{
+  margin:0;
+  padding:var(--s3) var(--s5);
+  border-top:var(--line);
+  font-size:var(--text-small);
+  color:var(--on-surface-soft);
+}
+figure.plate figcaption b{font-family:var(--font-display);font-weight:var(--w-display);color:var(--on-surface)}
+
+/* ---------- option cards ----------
+   A grid of cards for a page that asks the reader to pick. Each card holds a
+   short label (an eyebrow or a badge), a name, a line or two, and, if it
+   helps, a short list. The grid fits as many cards as the column holds and
+   stacks on a phone. A recommended option says so with a badge, not with a
+   coloured edge. */
+.options{
+  display:grid;
+  grid-template-columns:repeat(auto-fit,minmax(15rem,1fr));
+  gap:var(--block-gap);
+  margin:0 0 var(--block-gap);
+}
+.option{
+  border:var(--line);
+  border-radius:var(--r-lg);
+  padding:var(--s5);
+  min-width:0;
+}
+.option > :first-child{margin-top:0}
+.option > :last-child{margin-bottom:0}
+.option h4{margin-bottom:var(--s2)}
+.option .badge{margin-bottom:var(--s3)}
+.option p:not(.eyebrow){color:var(--on-surface-soft)}
+.option :is(ul,ol) > li{margin-bottom:var(--s2)}
+
+/* ---------- images ----------
+   Five ways to place a picture beyond the plain one in the column. Every one
+   draws the same frame (--image-frame, a hairline in the house) so a
+   screenshot of a white page does not melt into the white page. */
+
+/* Image beside text: a picture and a short block of text side by side, the
+   picture taking two fifths. .media--right puts the picture on the right.
+   Under the facts grid's width it stacks, picture first either way. */
+.media{
+  display:grid;
+  grid-template-columns:minmax(0,2fr) minmax(0,3fr);
+  gap:var(--gutter);
+  align-items:start;
+  margin:0 0 var(--gutter);
+}
+.media > img,.media > .peek-pair{border:var(--image-frame);border-radius:var(--image-radius)}
+.media > img{display:block;width:100%;height:auto}
+.media--right{grid-template-columns:minmax(0,3fr) minmax(0,2fr)}
+.media--right > :is(img,.peek-pair){order:2}
+.media-body h4{margin-bottom:var(--s2)}
+
+/* Image cards: a picture on top, then a name and a line. Two across by
+   default, .image-cards--3 for three. The picture is cropped to one shape so
+   a row lines up, anchored at the top, where a screenshot's title is. */
+.image-cards{
+  display:grid;
+  grid-template-columns:repeat(2,minmax(0,1fr));
+  gap:var(--block-gap);
+  margin:0 0 var(--block-gap);
+}
+.image-cards--3{grid-template-columns:repeat(3,minmax(0,1fr))}
+.image-card{border:var(--image-frame);border-radius:var(--r-lg);overflow:hidden;min-width:0}
+.image-card > img{
+  display:block;
+  width:100%;
+  aspect-ratio:16 / 10;
+  object-fit:cover;
+  object-position:top;
+  border-bottom:var(--image-frame);
+}
+.image-card-body{padding:var(--s4) var(--s5) var(--s5)}
+.image-card-body h4{margin-bottom:var(--s1)}
+.image-card-body p{margin:0;font-size:var(--text-small);color:var(--on-surface-soft)}
+
+/* Gallery: a grid of figures, each with one caption line. Two-up by default,
+   .gallery--3 for three-up. It holds figures, not cards, so there is no box
+   round each one, only the picture's frame. Three-up drops to two under the
+   facts grid's width; two-up stays two, since a gallery is thumbnails. */
+.gallery{
+  display:grid;
+  grid-template-columns:repeat(2,minmax(0,1fr));
+  gap:var(--block-gap);
+  margin:0 0 var(--block-gap);
+}
+.gallery--3{grid-template-columns:repeat(3,minmax(0,1fr))}
+.gallery figure{margin:0;min-width:0}
+.gallery img{
+  display:block;
+  width:100%;
+  aspect-ratio:4 / 3;
+  object-fit:cover;
+  object-position:top;
+  border:var(--image-frame);
+  border-radius:var(--image-radius);
+}
+
+/* Full-width image: a picture that runs to the page edge, for a hero shot or
+   a wide chart. It works the way a band does: a figure.bleed is a direct
+   child of the body, the column rule at the top of this file lets it run
+   edge to edge, and its caption comes back into the column. A picture taller
+   than most of the screen is cropped from the top. */
+figure.bleed{margin:0;padding:0;border:0;background:none}
+.bleed > :is(img,picture,svg,video){
+  display:block;
+  width:100%;
+  height:auto;
+  max-height:70vh;
+  object-fit:cover;
+  object-position:top;
+  border-block:var(--image-frame);
+}
+.bleed > figcaption{margin-top:var(--s2)}
+
+/* Peek pair: a main picture filling a frame, with a second one inset at an
+   angle, peeking in from the lower right. For showing two views of one thing
+   (a page and its table). The pair fills the width it is given and keeps one
+   shape, so put it in a grid cell, a .media block or an image card rather
+   than across the whole column. The inset carries an ink frame so it reads as
+   a second sheet laid on the first. */
+.peek-pair{
+  position:relative;
+  display:block;
+  aspect-ratio:16 / 11;
+  overflow:hidden;
+  background:var(--surface-raised);
+  border:var(--image-frame);
+  border-radius:var(--image-radius);
+}
+.peek-pair > img{position:absolute;display:block;height:auto}
+.peek-pair > img:first-child{inset:0;width:100%;height:100%;object-fit:cover;object-position:top}
+.peek-pair > img + img{
+  width:60%;
+  right:-7%;
+  bottom:-16%;
+  transform:rotate(4deg);
+  border:var(--line-ink);
+}
+
 /* ---------- panel: a tint holding a short aside (one to three sentences) ---------- */
 
 /*
@@ -664,6 +1101,18 @@ ol.steps--two-col{columns:2;column-gap:var(--section-gap-narrow)}
    style never needs to touch them; a follow-up can rename them to the roles. */
 .panel--cobalt{background:var(--accent-tint)}
 .panel--purple{background:var(--emphasis-tint)}
+/*
+  The error panel. The one panel that carries the danger red, and only for a
+  problem: something failed, is missing, or did not save. Same shape as the
+  other three (tint, padding, corner), plus the full 1px border every status
+  notice carries, so red never relies on hue alone. The bold lead is the
+  label and takes the red; the explanation after it stays ink.
+    danger label on its tint   6.26:1
+    ink on the danger tint    14.54:1
+  It sits outside the one-tint-per-page budget, like every status colour.
+*/
+.panel--danger{background:var(--danger-tint);border:1px solid var(--danger)}
+.panel--danger b{color:var(--danger)}
 .panel p:last-child{margin-bottom:0}
 
 /* ---------- insight panel: a tinted panel with a generated label row ---------- */
@@ -821,6 +1270,41 @@ ol.steps--two-col{columns:2;column-gap:var(--section-gap-narrow)}
 .icon-circle--cobalt{background:var(--accent);color:var(--on-accent)}
 .icon-circle--purple{background:var(--emphasis);color:var(--on-emphasis)}
 .icon-circle--sage{background:var(--fill);color:var(--on-fill)}
+
+/*
+  The icon reference. Twelve Lucide icons cover what documents need: check,
+  arrow-right, file-text, calendar, users, mail, search, terminal,
+  git-branch, book-open, clock, triangle-alert. A new one is added to this
+  list, and to the skeleton's reference section, before it is used.
+
+  Stroke follows type weight. 1.75 is the default above, for an icon beside
+  body text. Beside display type (a heading, a badge, an eyebrow) the letters
+  are heavier, so the stroke steps up to 2 to match.
+
+  Four colours, and an icon takes one of them: ink (the default, inherited
+  from the text), the accent for structure, the emphasis for the one thing to
+  act on, and the mark for status. */
+:is(h1,h2,h3,h4,h5,h6,.badge,.eyebrow) :is(.icon,[data-lucide],svg.lucide){stroke-width:2}
+/* :is() lifts these above the .icon-line colour, so a colour class wins
+   wherever the icon sits. */
+:is(.icon,svg,i).icon--cobalt{color:var(--accent)}
+:is(.icon,svg,i).icon--purple{color:var(--emphasis)}
+:is(.icon,svg,i).icon--sage{color:var(--mark)}
+/* The reference grid in the skeleton: each icon at its drawn size over its
+   name. */
+.icon-set{
+  display:grid;
+  grid-template-columns:repeat(6,minmax(0,1fr));
+  gap:var(--block-gap);
+  list-style:none;
+  margin:0 0 var(--block-gap);
+  padding:0;
+  max-width:none;   /* a grid, not prose */
+}
+.icon-set li{display:flex;overflow-wrap:anywhere;flex-direction:column;align-items:center;gap:var(--s2);text-align:center;font-size:var(--text-meta);line-height:1.3;color:var(--on-surface-faint)}
+.icon-set li > :is(.icon,[data-lucide],svg):not([class*="icon--"]){color:var(--on-surface)}
+.icon-set code{font-size:var(--text-micro)}
+.icon-set :is(.icon,[data-lucide],svg){width:24px;height:24px}   /* px: Lucide's drawn size, one-to-one with its 24-unit grid */
 
 /* A row of icon-circle plus text, for a short list of capabilities or steps. */
 .icon-row{display:flex; gap:var(--s4); align-items:flex-start; margin-bottom:var(--gutter)}
@@ -1083,6 +1567,22 @@ body > footer a{color:var(--on-surface)}
   .cal-week{display:block}
   .cal-day{padding-top:var(--s3);padding-bottom:var(--s3)}
   .cal-day-head{margin-bottom:var(--s2)}
+
+  /* The boxed sequence stacks, hairlines between the steps instead of beside. */
+  ol.sequence{grid-auto-flow:row}
+  ol.sequence > li + li{border-left:0;border-top:var(--line)}
+  ol.sequence--rows > li + li{border-top:var(--line)}
+
+  /* Image beside text stacks, picture first whichever side it sat on. */
+  .media,.media--right{grid-template-columns:minmax(0,1fr)}
+  .media--right > :is(img,.peek-pair){order:0}
+  .image-cards,.image-cards--3{grid-template-columns:minmax(0,1fr)}
+  .gallery--3{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .icon-set{grid-template-columns:repeat(3,minmax(0,1fr))}
+
+  /* The large stat stacks: label, number, meta, the way a small tile reads. */
+  .stat--large{grid-template-columns:minmax(0,1fr);grid-template-areas:"label" "value" "meta";padding:var(--gutter)}
+  .stat--large .stat-value{margin-bottom:var(--s2)}
 }
 
 @media (prefers-reduced-motion:reduce){
@@ -1102,6 +1602,8 @@ body > footer a{color:var(--on-surface)}
   */
   .sheet-head{break-after:avoid}
   table,.panel,.insight,.callout{break-inside:avoid}
+  .badge,.stat,.stat--tint,.panel--danger{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  .stat,ol.sequence,figure.plate,.option,.image-card,.media,.peek-pair,blockquote.pullquote{break-inside:avoid}
 }
 
 
