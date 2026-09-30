@@ -606,7 +606,15 @@ test.describe("free writing seams", () => {
         await crashed;
         await browserSession.send("Browser.close").catch(() => null);
       } else {
-        if (how === "sigkill-late") await new Promise((r) => setTimeout(r, 6000));
+        if (how === "sigkill-late") {
+          // No signal says the browser's storage reached disk; the condition is
+          // the clock: six seconds since the last keystroke.
+          const flushedBy = Date.now() + 6000;
+          await pollUntil(() => (Date.now() >= flushedBy ? true : null), {
+            message: "six seconds to pass since the last keystroke, so the browser has flushed its storage",
+            timeoutMs: 20000
+          });
+        }
         // The browser process for this profile: the one line naming the
         // profile that is not a child (renderer, GPU, utility) process.
         const main = psLines().filter((l) => l.indexOf(profile) !== -1 && l.indexOf("--type=") === -1);

@@ -1860,7 +1860,7 @@ test.describe("free writing: the proofreading question", () => {
     }, id);
   }
 
-  test("the card lists every fix as from and to, in the order the agent gave them", async ({ page }) => {
+  test("the card lists every fix as from and to, in the order the agent gave them", async ({ page }, testInfo) => {
     const { app, helper, token } = await startBoth();
     try {
       await bootedPage(page, app, helper, token);
@@ -1876,6 +1876,26 @@ test.describe("free writing: the proofreading question", () => {
       expect(fixes[0].where).toContain("I lost my place every time");
       expect(fixes[1]).toMatchObject({ from: "chat", to: "talk", shown: true });
       expect(fixes[1].where).toContain("What the chat window cost me");
+
+      // The picture of the card, light and dark, from the same run that proved it.
+      // Tall enough that the whole card, buttons included, is in the picture.
+      await page.setViewportSize({ width: 1280, height: 1100 });
+      for (const scheme of ["light", "dark"]) {
+        // The page picks the rail's scheme (highlight samples its background).
+        await page.evaluate((want) => {
+          const bg = want === "dark" ? "#12151a" : "";
+          document.documentElement.style.background = bg;
+          document.body.style.background = bg;
+          window.__lahe.rail.refreshScheme();
+        }, scheme);
+        const box = await page.evaluate((id) => {
+          const r = window.__lahe.rail.cardNode(id).getBoundingClientRect();
+          return { x: Math.max(0, r.x - 8), y: Math.max(0, r.y - 8), width: r.width + 16, height: r.height + 16 };
+        }, run.id);
+        const file = testInfo.outputPath("proofread-card-" + scheme + ".png");
+        await page.screenshot({ path: file, clip: box });
+        await testInfo.attach("proofread-card-" + scheme, { path: file, contentType: "image/png" });
+      }
     } finally {
       await helper.kill9();
       await app.close();
