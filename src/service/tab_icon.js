@@ -23,6 +23,13 @@
 var LINK =
   "<link rel=\"icon\" href=\"data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2032%2032'%3E%3Crect%20width='32'%20height='32'%20rx='7'%20fill='%231a73e8'/%3E%3Cpath%20d='M9%208h14a3%203%200%200%201%203%203v8a3%203%200%200%201-3%203h-6l-6%205v-5H9a3%203%200%200%201-3-3v-8a3%203%200%200%201%203-3z'%20fill='%23fff'/%3E%3C/svg%3E\">";
 
+// The Library page's own icon (itm_1c30f3ece7748d0bab3f9b75). Same family
+// (a 32px rounded square, one white glyph) but told apart from every document
+// tab at a glance: a dark square instead of the blue one, and books on a shelf
+// instead of a speech bubble, one book leaning in blue.
+var LIBRARY_LINK =
+  "<link rel=\"icon\" href=\"data:image/svg+xml,%3Csvg%20xmlns=%27http://www.w3.org/2000/svg%27%20viewBox=%270%200%2032%2032%27%3E%3Crect%20width=%2732%27%20height=%2732%27%20rx=%277%27%20fill=%27%2323262b%27/%3E%3Cpath%20d=%27M7%208h4v15H7zM12.5%2010h4v13h-4z%27%20fill=%27%23fff%27/%3E%3Cpath%20d=%27M18.2%2010.6l3.8-1.2%204.1%2013.1-3.8%201.2z%27%20fill=%27%235b9bff%27/%3E%3Cpath%20d=%27M5.5%2024h21v2h-21z%27%20fill=%27%23fff%27/%3E%3C/svg%3E\">";
+
 var LINK_TAG = /<link\b[^>]*>/gi;
 var REL_ATTR = /\brel\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'>]+))/i;
 var HEAD_OPEN = /<head\b[^>]*>/i;
@@ -82,6 +89,7 @@ function ensure(html) {
 }
 
 module.exports = {
+  LIBRARY_LINK: LIBRARY_LINK,
   LINK: LINK,
   hasIcon: hasIcon,
   ensure: ensure

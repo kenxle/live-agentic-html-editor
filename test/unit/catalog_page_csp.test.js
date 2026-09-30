@@ -40,3 +40,15 @@ test("the Library page's content policy is default-src 'none' with self-only con
   assert.equal(csp.includes("unsafe-inline"), false);
   assert.equal(/style="/.test(html), false, "no style attribute, which a hash would not allow");
 });
+
+test("the Library page has its own tab icon: an inline SVG the content policy's img-src allows", () => {
+  const tabIcon = require("../../src/service/tab_icon.js");
+  const html = catalogPage.renderPage("tok_test");
+  const m = /<link rel="icon" href="(data:image\/svg\+xml,[^"]+)">/.exec(html);
+  assert.ok(m, "the page head carries an icon link");
+  assert.equal(html.indexOf(tabIcon.LIBRARY_LINK) !== -1, true, "the Library's own icon, spelled in tab_icon.js");
+  assert.notEqual(tabIcon.LIBRARY_LINK, tabIcon.LINK, "not the reviewed-page fallback: a different drawing");
+  const csp = catalogPage.securityHeaders()["Content-Security-Policy"];
+  assert.match(csp, /img-src 'self' data:/);
+  assert.ok(html.indexOf(m[0]) < html.indexOf("</head>"));
+});

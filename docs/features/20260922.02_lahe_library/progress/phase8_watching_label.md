@@ -101,3 +101,14 @@ Enter or clicking outside saves. Escape cancels, and the blur that Escape causes
 | `npx playwright test test/browser/catalog_page.spec.js --project=chromium -g "clicking outside"` (before the change) | 1 failed: no request on blur | 6s |
 | `npx playwright test test/browser/catalog_page.spec.js --project=chromium` | 27 passed, 1 skipped | 5s |
 | `npm run gate:unit` | 1957 tests, 1955 pass, 0 fail, 2 todo | 40s |
+
+## Library tab icon (itm_1c30f3ece7748d0bab3f9b75)
+
+The Library page's head carries its own icon, `tab_icon.LIBRARY_LINK`, as an inline SVG data URI, so there is no new asset route. The page's `img-src 'self' data:` already allows it. It keeps the document icon's family (a 32px rounded square with a white glyph), but it differs from the document icon in two ways, so a Library tab stands apart from document tabs: a dark ink square instead of blue, and books on a shelf (one leaning, in blue) instead of a speech bubble. I rendered both icons side by side at 96px and looked at them. The tab does not appear in the page screenshots, so those were not retaken.
+
+| Command | Result | Time |
+| --- | --- | --- |
+| `node --test test/unit/catalog_page_csp.test.js` (before) | 1 fail: no icon link | under 5s |
+| `npx playwright test test/browser/catalog_page.spec.js --project=chromium -g "tab icon"` (before) | 1 failed: no icon link | 1.6m (waited for the missing link) |
+| `npx playwright test test/browser/catalog_page.spec.js --project=chromium` | 28 passed, 1 skipped | 12s |
+| `npm run gate:unit` | 1958 tests, 1956 pass, 0 fail, 2 todo | 66s |
