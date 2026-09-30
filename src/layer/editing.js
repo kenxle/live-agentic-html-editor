@@ -5118,7 +5118,13 @@
         barNode.style.top = "auto";
         barNode.setAttribute("data-lahe-bar-side", "above");
       } else {
-        barNode.style.top = Math.round(Math.max(0, Math.min(frameBottom + BAR_GAP, viewport - barHeight - BAR_GAP))) + "px";
+        // Below the frame. When the space under it is empty (the end of the
+        // page, or a tall gap), the bar leaves the first line of that space to
+        // "+ Write here", so writing one more block below is still in reach.
+        var below = contentTopBelow(framedElements(), frameBottom);
+        var spaceBelow = below === null ? Infinity : below - frameBottom;
+        var skip = spaceBelow >= LINE_HALF * 2 + barHeight + BAR_GAP * 3 ? LINE_HALF * 2 + BAR_GAP : 0;
+        barNode.style.top = Math.round(Math.max(0, Math.min(frameBottom + BAR_GAP + skip, viewport - barHeight - BAR_GAP))) + "px";
         barNode.style.bottom = "auto";
         barNode.setAttribute("data-lahe-bar-side", "below");
       }
@@ -5157,6 +5163,37 @@
           var box = rects[k];
           if (!box.width && !box.height) continue;
           if (box.bottom <= top + 1 && (best === null || box.bottom > best)) best = box.bottom;
+        }
+        if (best !== null) return best;
+      }
+      return null;
+    }
+
+    // The top of the nearest page text below `bottom`, after the frame, or
+    // null when there is none.
+    function contentTopBelow(list, bottom) {
+      if (!doc || !doc.body || !list.length) return null;
+      var last = list[0];
+      for (var i = 1; i < list.length; i += 1) {
+        if (list[i] && last.compareDocumentPosition(list[i]) & 4) last = list[i];
+      }
+      var walker = doc.createTreeWalker(doc.body, 4, null);
+      walker.currentNode = last;
+      var looked = 0;
+      for (var n = walker.nextNode(); n && looked < 200; n = walker.nextNode()) {
+        if (last.contains(n)) continue;
+        looked += 1;
+        if (!/\S/.test(n.nodeValue || "")) continue;
+        var parent = n.parentElement;
+        if (!parent || markers.isInsideOverlay(parent)) continue;
+        var r = doc.createRange();
+        r.selectNodeContents(n);
+        var rects = r.getClientRects();
+        var best = null;
+        for (var k = 0; k < rects.length; k += 1) {
+          var box = rects[k];
+          if (!box.width && !box.height) continue;
+          if (box.top >= bottom - 1 && (best === null || box.top < best)) best = box.top;
         }
         if (best !== null) return best;
       }
