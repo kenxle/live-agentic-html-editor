@@ -260,7 +260,7 @@ var NON_BUNDLE_FILES = [
   {
     path: "src/service/catalog_store.js",
     owner: "Library 1.1",
-    why: "the only reader and writer of catalog.json (stars and the reopened map). Never overwrites a corrupt file"
+    why: "the only reader and writer of catalog.json (stars, row and session names, and the reopened map). Never overwrites a corrupt file"
   },
   {
     path: "src/service/catalog_requests.js",
