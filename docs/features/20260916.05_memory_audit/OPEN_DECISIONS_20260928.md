@@ -1,5 +1,7 @@
 # What I still need from you
 
+**Project:** LAHE, the live agentic HTML editor. **Feature:** the performance and token work (the memory audit), which began 2026-09-16 after Claude Code kept stopping LAHE monitors for low memory. Its hub is [the memory audit page](MEMORY_AUDIT_20260916.md).
+
 **Short version:** one call on the wake banner, two small goes, and one read. The auto-answer docs come to you when they are all written.
 
 ## Still open
