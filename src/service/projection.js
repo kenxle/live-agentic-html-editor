@@ -154,6 +154,16 @@ function foldEvents(state, events, options) {
         }
         return;
       }
+      // THE FOLD CHECKS WHAT IT FOLDS (security review 8). log.append refuses
+      // a run record that fails validateRun, but a line already in the log (an
+      // older helper's, or one written straight into the file) never passed
+      // that door. It is dropped here with the same code, and the drop is
+      // reported like any other.
+      var runProblem = record.validateRun(next);
+      if (runProblem) {
+        if (onDropped) onDropped(event, runProblem.code + ": " + runProblem.reason);
+        return;
+      }
       var prev = byId[next[F.ID]];
       if (!prev) state.order.push(next[F.ID]);
       // A continuation is composed against the reply the browser last saw.

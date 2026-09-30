@@ -246,6 +246,7 @@ function splitStarts(blocks, parts) {
  * @returns {boolean|null} true shown, false held open, null not ours to grade
  */
 function verdictFor(pages, item, nothingWritten) {
+  if (isRunTakeBack(item)) return takeBackVerdictFor(pages, item);
   if (record.isRunRecord(item)) return runVerdictFor(pages, item, nothingWritten);
   if (item[record.FIELD.KIND] === record.KIND.FORMAT_ONLY) return formatVerdictFor(pages, item, nothingWritten);
   var needle = comparable(item[record.FIELD.AFTER]);
@@ -385,6 +386,64 @@ function runVerdictFor(pages, item, nothingWritten) {
   return anchor === false ? false : true;
 }
 
+// A take-back of placed blocks: a revert that names the blocks to remove.
+function isRunTakeBack(item) {
+  var remove = item && item[record.FIELD.REMOVE_BLOCKS];
+  return record.isRevert(item) && Array.isArray(remove) && remove.length > 0;
+}
+
+/**
+ * A take-back of placed blocks (adversary review 3). Its after is the
+ * anchor's old words, which stay on the page whether or not the blocks came
+ * out, so the words prove nothing. What proves the work is an absence: no
+ * listed block is still a leaf right after the anchor.
+ *
+ * The anchor is found by its old words. Where it is found, the leaves after
+ * it (as many as the take-back lists, plus the walk's slack) must hold none of
+ * the listed blocks. Where it is not found, any listed block with at least
+ * SHORT_BLOCK_WORDS words still on the page holds the item; a shorter one is
+ * too likely to be the page's own words to count.
+ *
+ * @returns {boolean|null} false when a listed block is still there
+ */
+function takeBackVerdictFor(pages, item) {
+  var pageLeaves = leavesOf(pages);
+  if (pageLeaves.length === 0) return null;
+  var removed = item[record.FIELD.REMOVE_BLOCKS].map(function (b) {
+    return normalize.blockWords(b && b.html);
+  }).filter(function (words) {
+    return !!words;
+  });
+  if (!removed.length) return null;
+  var container = item[record.FIELD.PLACEMENT] === record.PLACEMENT.START_OF_CONTAINER;
+  var anchorWords = container ? null : normalize.blockWords(item[record.FIELD.AFTER_HTML] || item[record.FIELD.AFTER] || "");
+  var span = removed.length + normalize.RUN_WALK_SLACK;
+  var stillThere = pageLeaves.some(function (leaves) {
+    var words = leaves.map(function (leaf) {
+      return normalize.blockWords(leaf.html);
+    });
+    var starts = [];
+    if (container) starts.push(-1);
+    else if (anchorWords) {
+      words.forEach(function (w, i) {
+        if (w === anchorWords) starts.push(i);
+      });
+    }
+    if (!starts.length) {
+      return removed.some(function (r) {
+        return wordCount(r) >= normalize.SHORT_BLOCK_WORDS && words.indexOf(r) !== -1;
+      });
+    }
+    return starts.some(function (start) {
+      var window = words.slice(start + 1, start + 1 + span);
+      return removed.some(function (r) {
+        return window.indexOf(r) !== -1;
+      });
+    });
+  });
+  return !stillThere;
+}
+
 var EMPHASIS_TAGS = ["strong", "em"];
 
 /**
@@ -452,6 +511,8 @@ function formatVerdictFor(pages, item, nothingWritten) {
  *    really prove the work is an absence this test cannot see. Checking it also
  *    broke a real flow: test/browser/undo_reaches_helper.spec.js hung waiting
  *    for a handled reply that was correct to fold.
+ *    The one exception is a take-back of placed blocks, whose absence this
+ *    CAN see: its listed blocks must be gone from after the anchor.
  *  - NOT A TOOL ROUND. A page-check reopen is the tool asking the agent for one
  *    specific thing, usually to carry a data-lahe-id into the source, and the
  *    page check has already formed its own opinion about what is on the page.
@@ -466,6 +527,10 @@ function checkable(item) {
   // survive the rebuild): its words are the same, but its bold is not.
   var kind = item[record.FIELD.KIND];
   if (kind !== record.KIND.EDIT && kind !== record.KIND.FORMAT_ONLY) return false;
+  // A take-back of placed blocks IS checked, by absence (takeBackVerdictFor):
+  // a run only adds text, so without it an agent that ignored the take-back
+  // closed the undo (adversary review 3). Every other take-back is not.
+  if (isRunTakeBack(item)) return true;
   if (record.isRevert(item)) return false;
   if (record.toolRoundOf(item)) return false;
   var after = item[record.FIELD.AFTER];

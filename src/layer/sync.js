@@ -1792,6 +1792,11 @@
         var ev = byId[id];
         var itemId = ev && ev[protocol.EVENT_FIELD.ITEM];
         if (itemId && refusedRuns[itemId]) delete refusedRuns[itemId];
+        if (itemId && typeof store.clearRefused === "function") {
+          failures.tolerateStorageQuota(function () {
+            store.clearRefused(requireReview(), itemId);
+          }, onFailure);
+        }
       });
       var ids = [];
       rejected.forEach(function (entry) {
@@ -1806,6 +1811,14 @@
           reason: typeof entry.reason === "string" ? entry.reason : null
         });
         refusedRuns[itemId] = raised;
+        // In browser storage too, so a reload still says "Not sent" (code
+        // lead 5): the event is gone from the outbox and the helper never
+        // stored the item, so nothing else would remember it.
+        if (typeof store.markRefused === "function") {
+          failures.tolerateStorageQuota(function () {
+            store.markRefused(requireReview(), itemId, raised);
+          }, onFailure);
+        }
         onItemRefused(itemId, raised);
       });
       return ids;
@@ -2794,10 +2807,19 @@
         pollTimer = null;
         runPoll();
       }, POLL_INTERVAL_MS);
-      // Anything a previous session left unacknowledged goes out now. This is
-      // the whole of "re-posts on the next load".
-      flush();
+      // THE VERSION CHECK COMES FIRST (design call 9). An older helper stores
+      // run records with no allowlist and never projects new_blocks, so nothing
+      // is posted to it: the page goes read-only with the failure shown. Only
+      // then does anything a previous session left unacknowledged go out, which
+      // is the whole of "re-posts on the next load".
+      return checkHelperContract().then(function (older) {
+        if (older) return lock;
+        flush();
+        return claimAtStart();
+      });
+    }
 
+    function claimAtStart() {
       return store
         .claimWindow(requireReview())
         .then(function (got) {
@@ -2992,6 +3014,53 @@
     // The window-session state machine (D5)
     // -------------------------------------------------------------------------
 
+    // -------------------------------------------------------------------------
+    // The helper's service contract (design call 9)
+    // -------------------------------------------------------------------------
+    //
+    // The architecture's "a new layer or CLI refuses an old helper": health is
+    // read once at start, unauthenticated like probeHealth. A helper that
+    // reports an older service_contract is refused, and the page goes
+    // read-only for good with HELPER_CONTRACT_OLDER on the rail. A newer helper
+    // is fine (this page is the one behind), and a health answer with no
+    // number, or none at all, is not a verdict: the page goes on as before and
+    // the ordinary failure paths say what is wrong.
+    var contractRefused = null;
+
+    function checkHelperContract() {
+      if (!fetchImpl) return Promise.resolve(false);
+      return Promise.resolve()
+        .then(function () {
+          return fetchImpl(helperOrigin + protocol.route("health").path, { method: "GET" });
+        })
+        .then(function (response) {
+          if (!response || !response.ok || typeof response.json !== "function") return null;
+          return response.json();
+        })
+        .catch(function () {
+          return null;
+        })
+        .then(function (health) {
+          if (!health || !Number.isInteger(health.service_contract)) return false;
+          if (protocol.helperContractVerdict(health) !== protocol.CONTRACT_VERDICT.OLDER) return false;
+          refuseOlderHelper(health.service_contract);
+          return true;
+        });
+    }
+
+    function refuseOlderHelper(live) {
+      var failure = failures.failure(
+        "HELPER_CONTRACT_OLDER",
+        "the helper reports service contract " + live + "; this page needs " + protocol.SERVICE_CONTRACT
+      );
+      contractRefused = { message: failures.describe("HELPER_CONTRACT_OLDER").message, failure: failure };
+      readOnly = true;
+      stopHeartbeat();
+      lock = { checked: true, acquired: false, holder: null, reason: contractRefused.message, refusedBy: "contract", unchecked: false };
+      raise(failure);
+      onRefused({ reason: contractRefused.message, refusedBy: "contract" });
+    }
+
     function finalizeClaim() {
       if (!lock.acquired) {
         // Refused, by the client lock or the helper. READ-ONLY, and a light
@@ -3015,6 +3084,7 @@
     // The read-only window becomes the holder: on auto-takeover (holder went
     // stale, granted by the liveness poll) or on the reviewer's Review-here.
     function becomeHolder(parsed) {
+      if (contractRefused) return;
       readOnly = false;
       claimMisses = 0;
       rememberSecret(parsed.sessionSecret, parsed.seq);
@@ -3042,6 +3112,9 @@
      * @returns {Promise<{ok: boolean, reason?: string}>}
      */
     function takeover() {
+      // Review here instead cannot talk past the version check: the helper
+      // itself is the problem, and only restarting it fixes that.
+      if (contractRefused) return Promise.resolve({ ok: false, reason: contractRefused.message });
       return claimRequest({ review: requireReview(), window_id: store.windowId, takeover: true }).then(function (parsed) {
         if (parsed.granted) {
           becomeHolder(parsed);
@@ -3405,7 +3478,10 @@
       deleteItem: deleteItem,
       /** The RUN_EVENT_REFUSED failure an item carries, or null. */
       refusalFor: function (itemId) {
-        return refusedRuns[itemId] || null;
+        if (refusedRuns[itemId]) return refusedRuns[itemId];
+        var stored = store && typeof store.refusedFor === "function" ? store.refusedFor(requireReview(), itemId) : null;
+        if (stored) refusedRuns[itemId] = stored;
+        return stored || null;
       },
       eventFor: eventFor,
       flush: flush,

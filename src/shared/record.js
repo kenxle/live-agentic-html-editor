@@ -797,7 +797,7 @@
   // one with the page but carries a different tag from the one in new_blocks
   // (docs/features/20260928.01_free_writing, The page check on a run).
   var PAGE_CHECK_TAG_NOTE =
-    "Reopened by the page check: a block landed with a different tag from the one in new_blocks. " +
+    "Reopened by the page check: a block landed with a different tag from the one in new_blocks or anchor_tag_after. " +
     "Give it that tag in the source, or reply not_handled saying why.";
 
   var PAGE_CHECK_NOTES = [PAGE_CHECK_NOTE, PAGE_CHECK_FORMAT_NOTE, PAGE_CHECK_STAMP_NOTE, PAGE_CHECK_TAG_NOTE];
@@ -1115,7 +1115,7 @@
 
   function copyReply(reply) {
     if (!reply) return null;
-    return {
+    var out = {
       status: reply.status || null,
       agent: reply.agent || null,
       reason: reply.reason || null,
@@ -1123,6 +1123,16 @@
       files: Array.isArray(reply.files) ? reply.files.slice() : [],
       at: reply.at || null
     };
+    // A proofread question keeps its fixes when it becomes history, so the
+    // revision "Use the fixes" makes still says, in review.json, which words
+    // changed to which (free writing, fix round design call 6).
+    if (reply.proofread === true) {
+      out.proofread = true;
+      out.suggestions = (Array.isArray(reply.suggestions) ? reply.suggestions : []).map(function (sg) {
+        return { block: sg && sg.block, from: sg && sg.from, to: sg && sg.to };
+      });
+    }
+    return out;
   }
 
   /** The completed current exchange, ready to become immutable history. */
@@ -1160,6 +1170,28 @@
       change: typeof turn.change === "string" ? turn.change : null,
       thread: history
     });
+    next[FIELD.STATE] = STATE.READY;
+    next[FIELD.REPLY] = null;
+    return next;
+  }
+
+  /**
+   * The reviewer's next turn on an answered item, onto a revision that may
+   * already carry new words (code lead 21). `base` is the item itself, which
+   * is continueThread, or a revision one past it (applySuggestions' output,
+   * for "Use the fixes"): either way the result is exactly one revision past
+   * `item`, with the answered turn archived and the change sentence carried.
+   */
+  function continueOnto(item, base, nextTurn) {
+    var turn = nextTurn || {};
+    var change = typeof turn.change === "string" ? turn.change : typeof item[FIELD.CHANGE] === "string" ? item[FIELD.CHANGE] : null;
+    if (base === item) return continueThread(item, { note: turn.note, change: change });
+    var next = Object.assign({}, base);
+    next[FIELD.THREAD] = chronologicalThread(item).concat([completedRound(item)]);
+    next[FIELD.NOTE] = typeof turn.note === "string" ? turn.note : null;
+    // A base with its own change text (Use the fixes) keeps it: it says what
+    // this revision changed. Otherwise the item's sentence is carried.
+    if (typeof base[FIELD.CHANGE] !== "string") next[FIELD.CHANGE] = change;
     next[FIELD.STATE] = STATE.READY;
     next[FIELD.REPLY] = null;
     return next;
@@ -1391,7 +1423,7 @@
   var RESET_FOR = { strong: normalize.NOT_BOLD_TAG, em: normalize.NOT_ITALIC_TAG };
 
   function runKey(run) {
-    return run.tag + " " + run.text;
+    return run.tag + "\u0000" + run.text;
   }
 
   // How many of each run a list holds, so two identical bold runs in one block
@@ -1547,7 +1579,9 @@
    * @returns {Object} a new ready record whose before/after point the other way
    */
   function revertOf(item, extra) {
-    if (isRunRecord(item)) return runRevertOf(item, extra);
+    // Any record with the free-writing fields, a tag-only change included,
+    // takes the run take-back, so the old tag rides back with it.
+    if (hasRunFields(item)) return runRevertOf(item, extra);
     var src = extra || {};
     // A delete has no `after` text: what the source holds now is nothing, and
     // what it should hold again is the block. Everything else is the swap.
@@ -1751,6 +1785,12 @@
   }
 
   var RUN_TAKEBACK_LINE = "Remove the blocks in remove_blocks from after this {type}; the reviewer undid them.";
+  // A take-back of a retag: the old tag is in anchor_tag_after.
+  var RUN_TAKEBACK_TAG_LINE = "Change this {type} back to {tag}, the tag in anchor_tag_after; the reviewer undid the type change.";
+  // The revision "Use the fixes" makes. Structure only, like every run change
+  // text: the fixes themselves are in the thread's last agent turn.
+  var USE_FIXES_CHANGE =
+    "The reviewer took your proofreading fixes, {n} in all. In the source, replace each fix's from words with its to words in the block you already placed, in place, so it matches new_blocks; do not add any block again. The fixes are listed as block, from and to under suggestions in the thread's last agent turn.";
 
   /**
    * The change text for a free-writing record. Structure only: it names what
@@ -1842,11 +1882,51 @@
     }
     var list = run.length ? run : remove;
     if (list.length > NEW_BLOCKS_MAX) return { code: RUN_CODE.OVER_CEILING, reason: list.length + " blocks" };
-    var refusal = blockListRefusal(list);
-    if (refusal) return { code: RUN_CODE.BLOCK_REFUSED, reason: refusal };
+    // Sizes before the parse, so the byte ceiling bounds cleanBlock's work
+    // (security review 2): measuring is linear, parsing nested tags is not.
     if (blocksBytes(list) > NEW_BLOCKS_MAX_BYTES) return { code: RUN_CODE.OVER_CEILING, reason: "the run's markup is over the byte ceiling" };
     if (recordBytes(item) > RUN_RECORD_MAX_BYTES) return { code: RUN_CODE.OVER_CEILING, reason: "the record is over the size ceiling" };
+    var refusal = blockListRefusal(list);
+    if (refusal) return { code: RUN_CODE.BLOCK_REFUSED, reason: refusal };
+    var anchorSet = item[FIELD.ANCHOR_AFTER_HTML] !== undefined && item[FIELD.ANCHOR_AFTER_HTML] !== null;
+    var markup = run.length || anchorSet ? sittingRefusal(item, run) : null;
+    if (!markup && remove.length) markup = takeBackRefusal(item, remove);
+    if (markup) return { code: RUN_CODE.BLOCK_REFUSED, reason: markup };
     return null;
+  }
+
+  // Is this markup what cleanMarkup writes? The anchor's markup is captured
+  // through cleanMarkup, so anything else is not something the layer sent.
+  function cleanMarkupRefusal(name, html) {
+    if (typeof html !== "string") return name + " is not a string";
+    if (utf8Bytes(html) > NEW_BLOCKS_MAX_BYTES) return name + " is over the byte ceiling";
+    if (normalize.cleanMarkup(html) !== html) return name + " is not clean";
+    return null;
+  }
+
+  // Security review 1: the whole sitting (after_html and after) is exactly the
+  // anchor's markup plus the run, and the anchor's markup is clean. So every
+  // markup field an agent may apply has passed the same allowlist as the run.
+  function sittingRefusal(item, run) {
+    var anchorHtml = item[FIELD.ANCHOR_AFTER_HTML];
+    var anchorProblem = cleanMarkupRefusal("anchor_after_html", anchorHtml);
+    if (anchorProblem) return anchorProblem;
+    var built = buildRunAfter(anchorHtml, run);
+    if (item[FIELD.AFTER_HTML] !== built.after_html) return "after_html is not anchor_after_html followed by new_blocks";
+    if (item[FIELD.AFTER] !== built.after) return "after is not the words of after_html";
+    return null;
+  }
+
+  // A take-back's before_html is the sitting it undoes: clean anchor markup
+  // followed by exactly the blocks it removes.
+  function takeBackRefusal(item, remove) {
+    var before = item[FIELD.BEFORE_HTML];
+    if (typeof before !== "string") return "a take-back has no before_html";
+    var tail = buildRunAfter("", remove).after_html;
+    if (before.length < tail.length || before.slice(before.length - tail.length) !== tail) {
+      return "before_html does not end with the blocks in remove_blocks";
+    }
+    return cleanMarkupRefusal("the take-back's anchor markup", before.slice(0, before.length - tail.length));
   }
 
   /**
@@ -1870,10 +1950,23 @@
   function runRevertOf(item, extra) {
     var src = extra || {};
     var type = anchorTypeName(item);
+    var lines = [revertChangeText(item[FIELD.KIND])];
+    if (isRunRecord(item)) lines.push(RUN_TAKEBACK_LINE.replace("{type}", type));
+    // A retag is undone by the old tag riding back as this record's own
+    // anchor_tag_after, so the existing contract line and replay's tag leg
+    // both act on it. The old tag is the one the anchor engine minted.
+    var newTag = item[FIELD.ANCHOR_TAG_AFTER];
+    var oldTag = typeof newTag === "string" && newTag ? anchorTagOf(item) : null;
+    if (oldTag && oldTag !== newTag && normalize.WRITABLE_BLOCK_TAGS.indexOf(oldTag) !== -1) {
+      var newType = hasOwn(TYPE_NAMES, newTag) ? TYPE_NAMES[newTag] : "block";
+      lines.push(RUN_TAKEBACK_TAG_LINE.replace("{type}", newType).replace("{tag}", oldTag));
+    } else {
+      oldTag = null;
+    }
     var back = newItem({
       kind: item[FIELD.KIND] === KIND.FORMAT_ONLY ? KIND.FORMAT_ONLY : KIND.EDIT,
       state: STATE.READY,
-      change: revertChangeText(item[FIELD.KIND]) + " " + RUN_TAKEBACK_LINE.replace("{type}", type),
+      change: lines.join(" "),
       before: typeof item[FIELD.AFTER] === "string" ? item[FIELD.AFTER] : "",
       after: typeof item[FIELD.BEFORE] === "string" ? item[FIELD.BEFORE] : "",
       before_html: typeof item[FIELD.AFTER_HTML] === "string" ? item[FIELD.AFTER_HTML] : null,
@@ -1890,6 +1983,7 @@
       source_hint: item[FIELD.SOURCE_HINT],
       created_at: src.created_at
     });
+    if (oldTag) back[FIELD.ANCHOR_TAG_AFTER] = oldTag;
     return back;
   }
 
@@ -1978,6 +2072,9 @@
       var s = list[i] || {};
       var b = blocks[s.block];
       if (!b || typeof s.from !== "string" || !s.from || typeof s.to !== "string") return notFound("suggestion " + i + " does not name a block and a from");
+      // A from_anchor block is the anchor's own tail: the page's words, not
+      // the reviewer's, so a proofread never rewrites it (security review 3).
+      if (b.from_anchor === true) return notFound("suggestion " + i + ": block " + s.block + " is marked from_anchor, the page's own words");
       var next = rewordBlock(b.html, s.from, s.to);
       if (next === null) return notFound("suggestion " + i + ": from is not in block " + s.block + " exactly once");
       var cleaned = normalize.cleanBlock(b.tag, next);
@@ -1986,6 +2083,7 @@
     }
     var built = buildRunAfter(item[FIELD.ANCHOR_AFTER_HTML], blocks);
     var changes = {};
+    changes[FIELD.CHANGE] = USE_FIXES_CHANGE.replace("{n}", String(list.length));
     changes[FIELD.NEW_BLOCKS] = blocks;
     changes[FIELD.AFTER_HTML] = built.after_html;
     changes[FIELD.AFTER] = built.after;
@@ -2112,6 +2210,7 @@
     chronologicalThread: chronologicalThread,
     completedRound: completedRound,
     continueThread: continueThread,
+    continueOnto: continueOnto,
     followUp: followUp,
     reopenIssue: reopenIssue,
     historyEntry: historyEntry,
@@ -2132,6 +2231,8 @@
     RUN_RECORD_MAX_BYTES: RUN_RECORD_MAX_BYTES,
     RUN_CODE: RUN_CODE,
     RUN_TAKEBACK_LINE: RUN_TAKEBACK_LINE,
+    RUN_TAKEBACK_TAG_LINE: RUN_TAKEBACK_TAG_LINE,
+    USE_FIXES_CHANGE: USE_FIXES_CHANGE,
     isRunRecord: isRunRecord,
     hasRunFields: hasRunFields,
     utf8Bytes: utf8Bytes,

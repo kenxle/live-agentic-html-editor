@@ -120,7 +120,7 @@
       tag = doc.querySelector(protocol.SCRIPT_SELECTOR);
       from = tag ? "selector" : null;
     }
-    if (!tag) return { review: null, token: null, helper: null, frames: null, start: null, from: null };
+    if (!tag) return { review: null, token: null, helper: null, frames: null, start: null, notes: null, from: null };
     return {
       review: tag.getAttribute(attr.REVIEW) || null,
       token: tag.getAttribute(attr.TOKEN) || null,
@@ -129,6 +129,8 @@
       // start with nothing of the library's on screen.
       frames: tag.getAttribute(attr.FRAMES) || null,
       start: tag.getAttribute(attr.START) || null,
+      // A `lahe write` notes review: the one value protocol.NOTES_ON, or null.
+      notes: tag.getAttribute(attr.NOTES) || null,
       from: from
     };
   }
@@ -143,6 +145,9 @@
       helper: opts.helper || fromTag.helper || protocol.DEFAULT_HELPER_ORIGIN,
       frames: opts.frames !== undefined ? opts.frames : fromTag.frames,
       start: opts.start !== undefined ? opts.start : fromTag.start,
+      // True only on a notes review (design call 2). Editing reads it to open
+      // an empty page for typing; every other empty page stays in reading.
+      notes: opts.notes !== undefined ? opts.notes === true : fromTag.notes === protocol.NOTES_ON,
       from: opts.review ? "options" : fromTag.from
     };
   }
@@ -779,6 +784,9 @@
       reviewId: reviewId,
       page: page,
       sync: sync,
+      // The review's notes flag (design call 2): only a notes review opens an
+      // empty page for typing.
+      notes: config.notes === true,
       // Same reason as the comment surface above: a full browser storage during
       // typing is said on the rail rather than thrown at the input handler.
       onFailure: function (failure) {

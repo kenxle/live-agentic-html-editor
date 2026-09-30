@@ -232,6 +232,8 @@ test("boot reads its config from the script tag, and options win over it", () =>
     // it says otherwise.
     frames: null,
     start: null,
+    // The notes flag is absent too: only a notes review's tag carries it.
+    notes: null,
     from: "currentScript"
   });
 
@@ -243,7 +245,7 @@ test("boot reads its config from the script tag, and options win over it", () =>
 test("no script tag and no options means no configuration, and the helper default fills in", () => {
   const doc = { querySelector: () => null };
   const empty = layer.readScriptConfig(doc, null);
-  assert.deepEqual(empty, { review: null, token: null, helper: null, frames: null, start: null, from: null });
+  assert.deepEqual(empty, { review: null, token: null, helper: null, frames: null, start: null, notes: null, from: null });
   assert.equal(layer.resolveConfig(doc, {}, null).helper, protocol.DEFAULT_HELPER_ORIGIN);
 });
 

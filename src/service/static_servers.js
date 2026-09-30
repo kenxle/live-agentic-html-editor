@@ -292,7 +292,7 @@ function recordLinks(dir, sessionId, serverId, reviewId, targets) {
 }
 
 async function registerMount(dir, sessionId, meta, prefix, rootInput) {
-  if (meta && typeof meta.root === "string" && isPageRoot(meta.root)) {
+  if (meta && (meta.page === true || (typeof meta.root === "string" && isPageRoot(meta.root)))) {
     throw new Error("a one-page server takes no mounts: it serves its page and nothing else");
   }
   if (!/^\/\.lahe-source\/[a-f0-9]+\/$/.test(prefix)) throw new Error("invalid static source mount " + JSON.stringify(prefix));
@@ -708,7 +708,10 @@ function injectForMatch(dir, match, target, html) {
     review: match.review,
     token: match.token,
     helper: helperOrigin,
-    fallback: helperOrigin + protocol.route("library.get").path
+    fallback: helperOrigin + protocol.route("library.get").path,
+    // The notes flag rides the tag, so the layer knows at boot that an empty
+    // page here opens for typing (free writing, design call 2).
+    notes: stateDir.isNotesReview(dir, match.review)
   });
   return scriptLine.placeScriptLine(html, tag).html;
 }
@@ -1192,8 +1195,20 @@ function runServer(file, sessionId, id, instance, rootInput, dir, logicalRootInp
     fs.createReadStream(packaged).on("error", function () { res.destroy(); }).pipe(res);
   }
 
+  // A NOTES PAGE ANSWERS ITS OWN ADDRESS ONLY (security review 6). A site
+  // using DNS rebinding can find the port and ask for the page under its own
+  // name; the helper's Host check keeps the token from being used, but the
+  // reviewer's private notes would still be read. So in page mode a Host that
+  // is not this server's loopback address and port is a 404.
+  function hostIsOurs(req) {
+    var port = server.address() && server.address().port;
+    var host = String(req.headers.host || "").toLowerCase();
+    return host === HOST + ":" + port || host === "localhost:" + port;
+  }
+
   var startedAt = new Date().toISOString();
   var server = http.createServer(function (req, res) {
+    if (pageMode && !hostIsOurs(req)) return send(res, 404, "not found\n");
     var pathname;
     var rawPathname;
     try {
@@ -1346,6 +1361,9 @@ function runServer(file, sessionId, id, instance, rootInput, dir, logicalRootInp
       pid: process.pid,
       started_at: startedAt,
       stopped_at: null,
+      // A one-page server says so on its record, so a reader never has to
+      // stat the root to tell (code lead 23).
+      page: pageMode === true,
       mounts: mounts,
       // Which review linked to which file outlives a restart, or every linked
       // document would lose its rail until each hub was rendered again.

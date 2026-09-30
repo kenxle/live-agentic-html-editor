@@ -78,6 +78,10 @@
   var GEN_PREFIX = "lahe.gen.v1:";
   var CHIPS_PREFIX = "lahe.chips.v1:";
   var ACKED_PREFIX = "lahe.acked.v1:";
+  // The run events the helper refused, per review: itemId -> the
+  // RUN_EVENT_REFUSED failure. Beside the acknowledged stamps, so "Not sent"
+  // survives a reload (free writing, fix round code lead 5).
+  var REFUSED_PREFIX = "lahe.refused.v1:";
   var HOLDER_PREFIX = "lahe.holder.v1:";
   var LOCK_PREFIX = "lahe.window.v1:";
   var UI_PREFIX = "lahe.ui.v1:";
@@ -804,6 +808,28 @@
       return true;
     }
 
+    // The helper refused this item's run event: remember the failure the card
+    // shows, until an accepted event for the item clears it.
+    function markRefused(reviewId, id, failure) {
+      var all = readJson(REFUSED_PREFIX + reviewId, null) || {};
+      all[id] = failure;
+      writeJson(REFUSED_PREFIX + reviewId, all);
+      return true;
+    }
+
+    function clearRefused(reviewId, id) {
+      var all = readJson(REFUSED_PREFIX + reviewId, null) || {};
+      if (!Object.prototype.hasOwnProperty.call(all, id)) return false;
+      delete all[id];
+      writeJson(REFUSED_PREFIX + reviewId, all);
+      return true;
+    }
+
+    function refusedFor(reviewId, id) {
+      var all = readJson(REFUSED_PREFIX + reviewId, null) || {};
+      return Object.prototype.hasOwnProperty.call(all, id) ? all[id] : null;
+    }
+
     // The rev the helper has confirmed for an item, or null. Test-facing; the
     // product reads this only through the merge.
     function acknowledgedRev(reviewId, id) {
@@ -1495,6 +1521,9 @@
       readItem: readItem,
       markAcknowledged: markAcknowledged,
       acknowledgedRev: acknowledgedRev,
+      markRefused: markRefused,
+      clearRefused: clearRefused,
+      refusedFor: refusedFor,
       remove: remove,
       reviews: reviews,
       mergeWithHelper: mergeWithHelper,
