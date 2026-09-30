@@ -800,7 +800,13 @@
     "Reopened by the page check: a block landed with a different tag from the one in new_blocks or anchor_tag_after. " +
     "Give it that tag in the source, or reply not_handled saying why.";
 
-  var PAGE_CHECK_NOTES = [PAGE_CHECK_NOTE, PAGE_CHECK_FORMAT_NOTE, PAGE_CHECK_STAMP_NOTE, PAGE_CHECK_TAG_NOTE];
+  // The fifth, for a take-back of placed blocks: the reviewer undid a sitting,
+  // and blocks its remove_blocks lists are still on the page after the anchor.
+  var PAGE_CHECK_TAKEBACK_NOTE =
+    "Reopened by the page check: blocks this take-back lists in remove_blocks are still on the page after the anchor. " +
+    "Remove them from the source, or reply not_handled saying why.";
+
+  var PAGE_CHECK_NOTES = [PAGE_CHECK_NOTE, PAGE_CHECK_FORMAT_NOTE, PAGE_CHECK_STAMP_NOTE, PAGE_CHECK_TAG_NOTE, PAGE_CHECK_TAKEBACK_NOTE];
 
   /**
    * The carried note with `sentence` on the end, AT MOST ONCE.
@@ -2222,6 +2228,7 @@
     PAGE_CHECK_FORMAT_NOTE: PAGE_CHECK_FORMAT_NOTE,
     PAGE_CHECK_STAMP_NOTE: PAGE_CHECK_STAMP_NOTE,
     PAGE_CHECK_TAG_NOTE: PAGE_CHECK_TAG_NOTE,
+    PAGE_CHECK_TAKEBACK_NOTE: PAGE_CHECK_TAKEBACK_NOTE,
     PLACEMENT: PLACEMENT,
     PLACEMENTS: PLACEMENTS,
     RUN_FIELDS: RUN_FIELDS,

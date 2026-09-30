@@ -258,3 +258,34 @@ test("a handled take-back of a retagged run checks the anchor's old tag too", ()
   assert.equal(check(back, "<main><p>What changed</p></main>"), null);
   assert.equal(check(back, "<main><h3>What changed</h3></main>"), replay.PAGE_CHECK_REASON.TAG);
 });
+
+// The page's side of a take-back of placed blocks (adversary review 3): the
+// same rule as the helper's takeBackVerdictFor. The anchor's old words stay on
+// the page either way, so the check reads the listed blocks by absence.
+function blockTakeBack() {
+  const orig = named("worked example");
+  const back = record.revertOf(orig);
+  assert.ok(Array.isArray(back.remove_blocks) && back.remove_blocks.length > 0, "the fixture take-back lists blocks");
+  return { back: handled(back), blocks: back.remove_blocks };
+}
+
+function pageWith(anchor, blocks) {
+  return "<main><h2>" + anchor + "</h2>" + blocks.map((b) => "<" + b.tag + ">" + b.html + "</" + b.tag + ">").join("") + "</main>";
+}
+
+test("a handled take-back is reopened while a listed block is still after the anchor", () => {
+  const { back, blocks } = blockTakeBack();
+  const page = pageWith("What changed", blocks);
+  assert.equal(check(back, page), replay.PAGE_CHECK_REASON.TAKEBACK);
+  assert.equal(replay.pageCheckNoteFor(back, page, { pageHtml: page }), record.PAGE_CHECK_TAKEBACK_NOTE);
+});
+
+test("a handled take-back is held while only one of its blocks is gone", () => {
+  const { back, blocks } = blockTakeBack();
+  assert.equal(check(back, pageWith("What changed", blocks.slice(1))), replay.PAGE_CHECK_REASON.TAKEBACK);
+});
+
+test("a handled take-back is not reopened once every listed block is gone", () => {
+  const { back } = blockTakeBack();
+  assert.equal(check(back, "<main><h2>What changed</h2><p>Something else entirely, well past the anchor</p></main>"), null);
+});

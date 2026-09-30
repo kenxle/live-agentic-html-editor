@@ -1308,6 +1308,7 @@
   // And the fourth, for a run record: a block landed one to one with a
   // different tag from the one in new_blocks.
   var TAG_WRONG_NOTE = record.PAGE_CHECK_TAG_NOTE;
+  var TAKEBACK_NOTE = record.PAGE_CHECK_TAKEBACK_NOTE;
 
   // The backstop, independent of the stamp rule below. Two checks that both look
   // at the same item cannot reopen it twice inside this window, whatever they
@@ -1345,7 +1346,7 @@
   // The three things the check can find, and the sentence each one carries. A
   // caller that only wants a yes or no asks isRevertedHandledEdit; one that has
   // to write the note asks pageCheckNoteFor.
-  var CHECK_REASON = { REVERTED: "reverted", FORMATTING: "formatting", STAMP: "stamp", TAG: "tag" };
+  var CHECK_REASON = { REVERTED: "reverted", FORMATTING: "formatting", STAMP: "stamp", TAG: "tag", TAKEBACK: "takeback" };
 
   /**
    * Why the page check would reopen this item, or null.
@@ -1368,6 +1369,8 @@
     // A take-back of a type change carries the old tag (design call 4). Its
     // words are checked the old way below; its tag is checked here.
     if (takeBackTagWrong(item, options)) return CHECK_REASON.TAG;
+    // A take-back of placed blocks is held while a listed block is still there.
+    if (takeBackBlocksRemain(item, options)) return CHECK_REASON.TAKEBACK;
 
     var after = item[record.FIELD.AFTER];
     var before = item[record.FIELD.BEFORE];
@@ -1405,6 +1408,7 @@
     if (reason === CHECK_REASON.FORMATTING) return FORMATTING_LOST_NOTE;
     if (reason === CHECK_REASON.STAMP) return STAMP_LOST_NOTE;
     if (reason === CHECK_REASON.TAG) return TAG_WRONG_NOTE;
+    if (reason === CHECK_REASON.TAKEBACK) return TAKEBACK_NOTE;
     return null;
   }
 
@@ -1416,6 +1420,7 @@
   CHECK_NOTICES[FORMATTING_LOST_NOTE] =
     "The bold or italic in this change is not on the page. The item is open again.";
   CHECK_NOTICES[STAMP_LOST_NOTE] = "The id for this element is not in the source. The item is open again.";
+  CHECK_NOTICES[TAKEBACK_NOTE] = "Some of the blocks you took back are still on the page. The item is open again.";
   CHECK_NOTICES[TAG_WRONG_NOTE] = "A block in this change is on the page as a different type. The item is open again.";
 
   /** The rail's line for a page-check note, defaulting to the revert one. */
@@ -3890,6 +3895,55 @@
   }
 
   /**
+   * A handled take-back of placed blocks (adversary review 3), the page's side.
+   * The same rule as the helper's takeBackVerdictFor in
+   * src/service/handled_check.js: the take-back's after is the anchor's old
+   * words, which stay on the page whether or not the blocks came out, so the
+   * words prove nothing. What proves the work is an absence. Where the anchor is
+   * found, the leaves after it (as many as the take-back lists, plus the walk's
+   * slack) must hold none of the listed blocks. Where it is not found, a listed
+   * block of at least SHORT_BLOCK_WORDS words still on the page holds the item;
+   * a shorter one is too likely to be the page's own words to count.
+   */
+  function takeBackBlocksRemain(item, options) {
+    if (!isTakeBack(item) || !record.isRevert(item)) return false;
+    var html = options && typeof options.pageHtml === "string" ? options.pageHtml : null;
+    if (html === null) return false;
+    var F = record.FIELD;
+    var removed = runList(item, RUN_FIELD.REMOVE_BLOCKS)
+      .map(function (b) {
+        return normalize.blockWords(b && b.html);
+      })
+      .filter(Boolean);
+    if (!removed.length) return false;
+    var words = normalize.leafBlocks(html).map(function (leaf) {
+      return leaf.words;
+    });
+    if (!words.length) return false;
+    var container = isContainerPlacement(item);
+    var anchorWords = container ? null : normalize.blockWords(item[F.AFTER_HTML] || item[F.AFTER] || "");
+    var span = removed.length + normalize.RUN_WALK_SLACK;
+    var starts = [];
+    if (container) starts.push(-1);
+    else if (anchorWords) {
+      words.forEach(function (w, i) {
+        if (w === anchorWords) starts.push(i);
+      });
+    }
+    if (!starts.length) {
+      return removed.some(function (r) {
+        return r.split(" ").length >= normalize.SHORT_BLOCK_WORDS && words.indexOf(r) !== -1;
+      });
+    }
+    return starts.some(function (start) {
+      var window = words.slice(start + 1, start + 1 + span);
+      return removed.some(function (r) {
+        return window.indexOf(r) !== -1;
+      });
+    });
+  }
+
+  /**
    * Is a handled take-back's anchor on the page with the wrong tag? The
    * take-back names the old tag in anchor_tag_after. The anchor is the leaf
    * whose words are the take-back's after (the words the undo restored); when
@@ -4090,6 +4144,7 @@
     FORMATTING_LOST_NOTE: FORMATTING_LOST_NOTE,
     STAMP_LOST_NOTE: STAMP_LOST_NOTE,
     TAG_WRONG_NOTE: TAG_WRONG_NOTE,
+    TAKEBACK_NOTE: TAKEBACK_NOTE,
     CHECK_NOTICES: CHECK_NOTICES,
     TAKE_THEIRS_RUN_LABEL: TAKE_THEIRS_RUN_LABEL,
     runAnchorView: runAnchorView,
