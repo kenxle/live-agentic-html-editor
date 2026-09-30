@@ -81,15 +81,16 @@ for (const where of PAGES) {
       await page.keyboard.type("Run one.", { delay: 2 });
       await page.keyboard.press("Enter");
       await page.keyboard.type("Run two here.", { delay: 2 });
-      await page.evaluate(() => {
-        const els = window.__lahe.handle.editing.sessionElements();
-        const t = els[2].firstChild;
-        const r = document.createRange();
-        r.setStart(t, 3);
-        r.collapse(true);
-        window.getSelection().removeAllRanges();
-        window.getSelection().addRange(r);
-      });
+      // Move the caret the way a reviewer does, with keys: from the end of
+      // "Run two here." (13) back to offset 3. Each keyup snapshots the live
+      // caret synchronously (protect.js onTyping), so the layer has the new
+      // spot before the repaint below. A programmatic addRange has no keyup;
+      // it waits on selectionchange, a task that under full-suite load arrived
+      // AFTER the repaint in 2 of 160 runs, and by then the run block holding
+      // the live caret was gone, so the snapshot's end-of-block caret was all
+      // there was (phase7_fix_h1.md).
+      for (let i = 0; i < "Run two here.".length - 3; i += 1) await page.keyboard.press("ArrowLeft");
+      expect(await caretSpot(page), "the caret is where the arrows put it").toEqual({ block: 2, offset: 3 });
       const before = await sessionTexts(page);
 
       await repaint(page, where.frame, "inner");
