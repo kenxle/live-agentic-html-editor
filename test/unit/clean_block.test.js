@@ -123,3 +123,43 @@ test("cleanBlock keeps the words of the engine corpus", () => {
     assert.equal(normalize.blockWords(once.html), normalize.blockWords(sample.html), sample.name + " keeps its words");
   }
 });
+
+// Security review finding 2: each closing tag walked the whole open stack, so N
+// <em> then N </b> was N x N, and the tidy-up passes recursed once per level.
+// A depth cap bounds both. A real block is a few levels deep: four inline tags
+// and li exist.
+function repeat(s, n) {
+  return new Array(n + 1).join(s);
+}
+
+test("a 1 MiB block of nested tags is refused in well under a second", () => {
+  const n = Math.floor((1024 * 1024) / 8);
+  const html = repeat("<em>", n) + "words" + repeat("</b>", n);
+  const start = Date.now();
+  refused("p", html);
+  assert.ok(Date.now() - start < 500, "took " + (Date.now() - start) + "ms");
+});
+
+test("a block nested deeper than the cap is refused, not thrown", () => {
+  const depth = normalize.MAX_BLOCK_NESTING + 1;
+  refused("p", repeat("<em>", depth) + "words" + repeat("</em>", depth));
+  refused("ul", "<li>" + repeat("<strong>", depth) + "words" + repeat("</strong>", depth) + "</li>");
+});
+
+test("a block nested up to the cap still cleans, words kept", () => {
+  const depth = normalize.MAX_BLOCK_NESTING - 1;
+  const got = normalize.cleanBlock("ul", "<li>" + repeat("<em>", depth) + "deep words" + repeat("</em>", depth) + "</li>");
+  assert.equal(typeof got.html, "string");
+  assert.equal(normalize.blockWords(got.html), "deep words");
+});
+
+test("many empty elements between words clean in linear time", () => {
+  // Each empty element used to join the text around it again with a regex over
+  // the whole joined string: N x N on the text length.
+  const n = 50000;
+  const html = repeat("a<em></em>", n);
+  const start = Date.now();
+  const got = normalize.cleanBlock("p", html);
+  assert.equal(got.html, repeat("a", n));
+  assert.ok(Date.now() - start < 500, "took " + (Date.now() - start) + "ms");
+});

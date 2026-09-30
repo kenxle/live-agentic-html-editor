@@ -94,10 +94,13 @@
   // it. A run of hyphens folds to one, after the dashes do: a Markdown source
   // spells a dash "--" or "---" and a smart renderer draws it as one, so the
   // typed and the rendered text must fold to the same string for every reader
-  // (the run walk, the page check, the handled check, the split search). Verification (3B) uses it for a second pass when the literal pass
-  // misses, because a markdown source holds a straight quote where the built
-  // HTML holds a curly one. Nothing else may use it: replay folding typography
-  // would silently discard a reviewer's punctuation fix.
+  // (the run walk, the page check, the handled check, the split search).
+  // Verification (3B) uses it for a second pass when the literal pass misses,
+  // because a markdown source holds a straight quote where the built HTML
+  // holds a curly one. The fold decides only where a block is, never whether
+  // its words are right: replay and the page check compare a found block with
+  // each revision WITHOUT the fold, so a reviewer's punctuation fix (well--known
+  // to well-known) is still written and still checked.
   function foldTypography(input) {
     return normalizeText(input)
       .replace(/[\u2018\u2019\u201A\u201B\u2032]/g, "'")
@@ -1115,6 +1118,12 @@
   // The refusal code, spelled once in failures.js.
   var RUN_BLOCK_REFUSED = "RUN_BLOCK_REFUSED";
 
+  // How deep a block's elements may nest, li included. A real block is a few
+  // levels deep (four inline tags and li exist). The cap bounds the closing-tag
+  // scan and every recursive pass below, so hostile markup costs linear time
+  // and never overflows the stack (security review, finding 2).
+  var MAX_BLOCK_NESTING = 32;
+
   // Inline elements a new block may hold, and the constant each is written as.
   // Nothing in a record ever names an element: output tags come from here.
   var INLINE_ALLOWED = {
@@ -1230,6 +1239,7 @@
         if (parent !== rootNode) return refuse("a nested item");
         var li = { name: "li", children: [] };
         rootNode.children.push(li);
+        if (stack.length > MAX_BLOCK_NESTING) return refuse("nesting deeper than " + MAX_BLOCK_NESTING);
         stack.push(li);
         if (parsed.selfClosing) stack.pop();
         continue;
@@ -1238,7 +1248,9 @@
       if (isList && parent === rootNode) return refuse("formatting outside an item in a list block");
       var el = { name: INLINE_ALLOWED[name], children: [] };
       parent.children.push(el);
-      if (!parsed.selfClosing) stack.push(el);
+      if (parsed.selfClosing) continue;
+      if (stack.length > MAX_BLOCK_NESTING) return refuse("nesting deeper than " + MAX_BLOCK_NESTING);
+      stack.push(el);
     }
 
     var out;
@@ -1278,22 +1290,34 @@
 
   // An element with no words goes, and a text node that is only space between
   // two breaks or at an edge is left to trimEdge.
+  //
+  // Neighbouring text (text either side of an element that went) is joined
+  // once, at the end of the run of text, never once per piece: joining per
+  // piece rescanned the whole joined string each time, which is N x N on a
+  // block of many empty elements.
   function pruneEmpty(nodes) {
     var out = [];
+    var pending = null;
+    function flush() {
+      if (!pending) return;
+      out.push({ text: pending.length === 1 ? pending[0] : pending.join("").replace(/ +/g, " ") });
+      pending = null;
+    }
     for (var i = 0; i < nodes.length; i += 1) {
       var node = nodes[i];
       if (node.children) {
         if (!hasWords(node)) continue;
+        flush();
         out.push({ name: node.name, children: pruneEmpty(node.children) });
       } else if (node.text !== undefined) {
         if (!node.text) continue;
-        var prev = out.length ? out[out.length - 1] : null;
-        if (prev && prev.text !== undefined) prev.text = (prev.text + node.text).replace(/ +/g, " ");
-        else out.push({ text: node.text });
+        (pending = pending || []).push(node.text);
       } else {
+        flush();
         out.push(node);
       }
     }
+    flush();
     return out;
   }
 
@@ -1666,10 +1690,19 @@
    * consecutive missing blocks all sit inside that leaf, the clash covers
    * them all.
    *
+   * With nothing matched yet, that first leaf is usually the page's own next
+   * paragraph (the agent has not placed the run). A block of fewer than
+   * SHORT_BLOCK_WORDS words ("Next", "Yes") sits inside such a paragraph for
+   * other reasons, so it only clashes after an earlier block matched.
+   *
    * @param {Array<{tag: string, html: string}>} blocks the run
    * @param {Array<{tag: string, html: string, words?: string}>} leaves from the insert point
    * @returns {{index: number, blocks: number, leaf: number}|null} the first clash
    */
+  function wordTotal(words) {
+    return words ? words.split(" ").length : 0;
+  }
+
   function runClash(blocks, leaves) {
     var runBlocks = Array.isArray(blocks) ? blocks : [];
     var pageLeaves = Array.isArray(leaves) ? leaves : [];
@@ -1693,6 +1726,7 @@
       if (i > 0 && matched[i - 1].status === "missing") continue;
       if (nextLeaf >= limit || used[nextLeaf]) continue;
       var leafWords = lw[nextLeaf];
+      if (nextLeaf === 0 && wordTotal(bw[i]) < SHORT_BLOCK_WORDS) continue;
       if (!heldInside(leafWords, bw[i])) continue;
       var count = 1;
       var acc = bw[i];
@@ -1893,6 +1927,7 @@
     SAFE_SCHEMES: SAFE_SCHEMES,
     DROP_SUBTREE_TAGS: DROP_SUBTREE_TAGS,
     WRITABLE_BLOCK_TAGS: WRITABLE_BLOCK_TAGS,
+    MAX_BLOCK_NESTING: MAX_BLOCK_NESTING,
     SHORT_BLOCK_WORDS: SHORT_BLOCK_WORDS,
     RUN_WALK_SLACK: RUN_WALK_SLACK,
     RUN_BLOCK_REFUSED: RUN_BLOCK_REFUSED,
