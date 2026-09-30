@@ -428,4 +428,37 @@ test.describe("flow walk fixes, replay and rail side", () => {
     await pollPage(page, () => window.__lahe.rail.countFor("edits") === 1, undefined, { message: "the typed change to draw its card" });
     expect((await view()).shown).toBe(1);
   });
+
+  test("an untouched draft left in storage draws no card after a reload", async ({ page }) => {
+    world = await makeWorld({ file: "doc.md", text: DOC_MD });
+    await page.goto(world.open);
+    await booted(page);
+    await openEditAt(page, ANCHOR_P);
+    const draft = await page.evaluate(() => window.__lahe.items().find((i) => i.state === "draft" && i.kind === "edit") || null);
+    expect(draft, "opening a block stores a draft").toBeTruthy();
+    // Leave it in storage the way a closed tab would, then load the page again.
+    await page.evaluate(() => document.activeElement && document.activeElement.blur());
+    await page.reload();
+    await booted(page);
+    await page.evaluate((d) => {
+      const h = window.__lahe.handle;
+      if (!h.allStore.read(h.review).some((i) => i.id === d.id)) h.allStore.write(h.review, d);
+    }, draft);
+    await page.reload();
+    await booted(page);
+    const got = await page.evaluate((id) => {
+      const rail = window.__lahe.rail;
+      rail.collapse(false);
+      rail.selectTab("edits");
+      const card = rail.cardNode(id);
+      return {
+        stored: window.__lahe.items().some((i) => i.id === id && i.state === "draft"),
+        shown: !!card && card.getClientRects().length > 0,
+        edits: rail.countFor("edits")
+      };
+    }, draft.id);
+    expect(got.stored, "the draft is still in storage").toBe(true);
+    expect(got.shown, "no card for it").toBe(false);
+    expect(got.edits, "and no count").toBe(0);
+  });
 });

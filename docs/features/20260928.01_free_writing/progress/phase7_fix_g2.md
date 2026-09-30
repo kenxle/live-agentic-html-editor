@@ -83,6 +83,7 @@ Each line below is added to the plan's "Words this plan pins".
 
 - Tests: `flow_fix_g2.test.js` (the rules) and `free_writing_flow_fix.spec.js` ("opening a block draws no struck-through draft card until something changes"). The browser test was red before the fix: one draft card shown.
 - This is the card side only. G1 owns whether capture keeps the draft.
+- G1's follow-up: an untouched draft left in storage was still drawn by the boot-time card code after a reload. The same check covers it, because the card paint uses `isQuietDraft` for every card, boot-time ones included. Test: `free_writing_flow_fix.spec.js`, "an untouched draft left in storage draws no card after a reload". It was red on the overlay from before this item (card shown) and passes now in Chromium, WebKit and Firefox.
 
 ## Item 6: record shape for G1's split
 
