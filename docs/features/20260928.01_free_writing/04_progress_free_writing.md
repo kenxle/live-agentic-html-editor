@@ -1,11 +1,15 @@
 # Progress: Free writing
 
-**Phase 7, Review.** The full gate found 6 existing tests broken in all three browsers. A builder is fixing them now. After that, the full gate runs again, then the workflow walk. One question waits on you. Last updated 2026-09-29 23:59.
+**Phase 7, Review.** The full gate is clean apart from one known-flaky test. Your preview is ready: try free writing on a copy of your blog draft and on a blank notes page. An independent workflow walk is running. Two things wait on you. Last updated 2026-09-30 00:47.
 
 **Docs:** [Crucible questions](00_crucible_questions.md) · [Crucible](http://127.0.0.1:65155/00_crucible.html) · [Brief](http://127.0.0.1:65155/01_brief_free_writing.html) · [Wireframes](http://127.0.0.1:49513/index.html) ([decision](wireframes/DECISION.md)) · [Architecture](http://127.0.0.1:65155/02_architecture_free_writing.html) · [Plan](http://127.0.0.1:65155/03_plan_free_writing.html)
 
 ## Needs your attention
 
+- [ ] **Try free writing on your own writing.** Both pages run the feature branch with the editor on them. They sit on a separate helper and a copy of your draft, so nothing of yours changes.
+  - [Your draft "new-debugging-hell-part2", a copy](http://127.0.0.1:59081/new-debugging-hell-part2-236277651c422e90.html). Press Cmd-Shift-E on a paragraph, then hover between paragraphs for "+ Write here". Try a header, a list, and bold. Leave editing, and I place your text as the agent.
+  - [A blank notes page](http://127.0.0.1:59160/notes-2026-09-30-d682203dc75e720a.html). It opens ready to type.
+  - Leave comments on the pages. I answer them there.
 - [ ] **Losing text on a hard kill.** If the browser is force-quit within a moment of typing, that whole sitting is lost. After about 6 seconds everything survives, and a crashed tab keeps everything. The cause is that long writing now saves after a short pause instead of on every keystroke, which keeps typing fast. Options:
   - keep it as is
   - save a short sitting on every keystroke, and pause only for long ones
@@ -17,7 +21,8 @@
 
 | Agent or task | Doing | Started | Branch |
 |---|---|---|---|
-| Regression builder F6 | Fixing the 6 existing tests the full gate broke: protection during a page rewrite, a second window with no helper, the framed page, and two edit-state checks. Also checking a Firefox-only image test | 2026-09-29 23:59 | `free-writing-f6` |
+| Flow walker | An independent walk of all six user stories on the running app. It acts as the agent from review.json only, and takes screenshots | 2026-09-30 00:47 | `feat/free-writing` |
+| Preview agent (me) | Watching your preview pages, and placing your writing into the draft copy as the agent | 2026-09-30 00:47 | preview only |
 
 ## Phases
 
@@ -81,6 +86,11 @@ Nothing queued.
 
 ### Test results
 
+- 2026-09-30 00:47, second full gate in all three browsers, 20.2 minutes:
+  - Unit: 1785 of 1787 passed, 0 failed.
+  - Browser: 1999 passed, 1 failed, 19 skipped.
+  - The failure was `duplicate_tab` in Chromium only. It passed 10 of 10 when run alone, so it was load during the full run. No code changed after this run, so it stands as the release result.
+
 - 2026-09-29 23:59, full gate in all three browsers, 18.5 minutes:
   - Unit: 1785 of 1787 passed, 0 failed.
   - Browser: 1978 passed, 19 failed, 19 skipped.
@@ -99,6 +109,14 @@ Not shipped yet.
 ## Log
 
 Newest first.
+
+**2026-09-30 00:47.** The regression builder fixed the 6 broken tests.
+- **One product bug:** protection lost the agent's rewrite during a page rewrite.
+- **Five test problems:** among them, two tests were reaching your real helper, which runs an older version.
+
+The second full gate is clean apart from one known-flaky test.
+
+**Before this ships:** your installed helper is one version behind this build, and this build refuses it by design. After merge, the helper needs a restart onto the new code (`lahe serve --restart`).
 
 **2026-09-29 23:29.** All four fix builders returned green, and their branches merged with no conflicts. One stale test was updated. Fixed, among others:
 - removed blocks no longer reach the agent
