@@ -2959,9 +2959,7 @@
   // The first few words of a block, for a card note. Never the whole block.
   var FIRST_WORDS = 6;
   function firstWords(html) {
-    var text = normalize.normalizeText(normalize.textOf(typeof html === "string" ? html : ""));
-    var parts = text ? text.split(" ") : [];
-    return parts.length > FIRST_WORDS ? parts.slice(0, FIRST_WORDS).join(" ") + "..." : parts.join(" ");
+    return normalize.firstWords(normalize.textOf(typeof html === "string" ? html : ""), FIRST_WORDS, "...");
   }
 
   /**

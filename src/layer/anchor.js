@@ -83,7 +83,8 @@
       root.LAHE.uniqueness,
       root.LAHE.regions,
       root.LAHE.markers,
-      root.LAHE.record
+      root.LAHE.record,
+      root.LAHE.blocks
     );
   } else {
     module.exports = factory(
@@ -91,10 +92,11 @@
       require("../shared/uniqueness.js"),
       require("../shared/regions.js"),
       require("../shared/markers.js"),
-      require("../shared/record.js")
+      require("../shared/record.js"),
+      require("./blocks.js")
     );
   }
-})(typeof globalThis !== "undefined" ? globalThis : this, function (normalize, uniqueness, regions, markers, record) {
+})(typeof globalThis !== "undefined" ? globalThis : this, function (normalize, uniqueness, regions, markers, record, blocks) {
   "use strict";
 
   // Elements that carry no reviewable prose. Their text would otherwise join
@@ -1333,12 +1335,10 @@
     return verdict;
   }
 
-  var CONTAINER_TAGS = { main: 1, body: 1 };
-
   function containerRung(ref, scope, options) {
     if (!options || options.placement !== record.PLACEMENT.START_OF_CONTAINER) return null;
     var tag = ref.fingerprint && typeof ref.fingerprint.tag === "string" ? ref.fingerprint.tag.toLowerCase() : "";
-    if (!CONTAINER_TAGS[tag]) return null;
+    if (blocks.CONTAINER_TAGS.indexOf(tag) === -1) return null;
     var found = [];
     if (tag === "main") {
       eachElement(scope, function (node) {

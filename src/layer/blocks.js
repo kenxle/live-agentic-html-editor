@@ -200,9 +200,11 @@
     return { parent: container, before: node || null };
   }
 
+  // The tags a run can start at the top of: the page's one main, or its body.
+  var CONTAINER_TAGS = ["main", "body"];
+
   function isContainerAnchor(anchor) {
-    var tag = tagOf(anchor);
-    return tag === "main" || tag === "body";
+    return CONTAINER_TAGS.indexOf(tagOf(anchor)) !== -1;
   }
 
   /**
@@ -353,6 +355,7 @@
     startPointIn: startPointIn,
     hostFor: hostFor,
     canHoldRun: canHoldRun,
+    CONTAINER_TAGS: CONTAINER_TAGS,
     isContainerAnchor: isContainerAnchor,
     runElementsFor: runElementsFor,
     runClashFor: runClashFor,

@@ -289,3 +289,12 @@ test("a handled take-back is not reopened once every listed block is gone", () =
   const { back } = blockTakeBack();
   assert.equal(check(back, "<main><h2>What changed</h2><p>Something else entirely, well past the anchor</p></main>"), null);
 });
+
+// Fix round F5 (CL 20): the one shared copy of "the first few words".
+test("normalize.firstWords cuts to the word limit and adds the suffix only when it cut", () => {
+  const normalize = require("../../src/shared/normalize.js");
+  assert.equal(normalize.firstWords("  one   two three four  ", 3), "one two three");
+  assert.equal(normalize.firstWords("one two three four", 3, "..."), "one two three...");
+  assert.equal(normalize.firstWords("one two", 3, "..."), "one two");
+  assert.equal(normalize.firstWords(null, 3, "..."), "");
+});

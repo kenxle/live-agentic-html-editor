@@ -1135,6 +1135,16 @@
   INLINE_ALLOWED[NOT_BOLD_TAG] = NOT_BOLD_TAG;
   INLINE_ALLOWED[NOT_ITALIC_TAG] = NOT_ITALIC_TAG;
 
+  /**
+   * The first `max` words of some text, after normalizeText. `more` is added
+   * when words were cut (an ellipsis for a card line, nothing for a live
+   * region). The one copy: editing, replay and the rail all read it.
+   */
+  function firstWords(text, max, more) {
+    var words = normalizeText(String(text || "")).split(" ").filter(Boolean);
+    return words.length > max ? words.slice(0, max).join(" ") + (more || "") : words.join(" ");
+  }
+
   var NAMED_ENTITIES = { amp: "&", lt: "<", gt: ">", quot: '"', apos: "'", nbsp: " " };
 
   // Entities resolved to characters. An unknown named entity stays as its own
@@ -1930,6 +1940,8 @@
     MAX_BLOCK_NESTING: MAX_BLOCK_NESTING,
     SHORT_BLOCK_WORDS: SHORT_BLOCK_WORDS,
     RUN_WALK_SLACK: RUN_WALK_SLACK,
+    INLINE_ALLOWED: INLINE_ALLOWED,
+    firstWords: firstWords,
     RUN_BLOCK_REFUSED: RUN_BLOCK_REFUSED,
     decodeEntities: decodeEntities,
     cleanBlock: cleanBlock,
