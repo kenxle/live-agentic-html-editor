@@ -772,9 +772,16 @@
       var refused = durably(function () {
         store.write(requireReview(), item);
       });
-      durably(function () {
-        emit(item, event);
-      });
+      // A block opened and not yet changed is a draft for durability only.
+      // Telling the rail about it drew a card with the whole block struck
+      // through, which reads as a deletion, and moved the Edits count before
+      // anything was typed (flow walk, design problem 6). The first change
+      // emits as usual; so does removing an untouched draft.
+      if (event !== "opened") {
+        durably(function () {
+          emit(item, event);
+        });
+      }
       // THE POST ONLY EVER FOLLOWS A WRITE THAT LANDED.
       //
       // Posting a record the disk does not have is worse than not posting at

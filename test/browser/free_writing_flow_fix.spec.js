@@ -437,3 +437,30 @@ test.describe("Cmd-Shift-E right after clicking the rail", () => {
     });
   });
 });
+
+// Flow walk design problem 6: Cmd-Shift-E on a paragraph, nothing typed, drew
+// a Draft card with the whole block struck through and moved the Edits count.
+test.describe("opening a block without changing it shows no card", () => {
+  for (const scheme of ["light", "dark"]) {
+    test("no card and no count until the first change, and the draft is still stored (" + scheme + ")", async ({ page }) => {
+      await fw.openFixture(page, server, scheme === "dark" ? "dark.html" : "blog.html", { collapseRail: false });
+      await page.evaluate(() => window.__lahe.rail.selectTab("edits"));
+      const target = scheme === "dark" ? "main > p" : "#p1";
+      await fw.openEdit(page, target);
+      const opened = await page.evaluate(() => {
+        const h = window.__lahe.handle;
+        return {
+          cards: window.__lahe.cardIds().length,
+          edits: window.__lahe.rail.tabNewCount ? window.__lahe.rail.tabNewCount("edits") : null,
+          stored: h.store.read(h.review).filter((it) => it.kind === "edit" && it.state === "draft").length
+        };
+      });
+      expect(opened.cards, "no card for an untouched block").toBe(0);
+      expect(opened.stored, "the draft is still in browser storage").toBe(1);
+      await shot(page, "item7-opened-no-card-" + scheme);
+      await page.keyboard.type(" x", { delay: 2 });
+      await pollPage(page, () => window.__lahe.cardIds().length === 1, undefined, { message: "the first change to draw the card" });
+      await fw.commitByEsc(page);
+    });
+  }
+});
