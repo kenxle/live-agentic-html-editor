@@ -91,3 +91,13 @@ Each of these changes has a test that failed first. The reader and view model te
 | `npx playwright test test/browser/catalog_library.spec.js --project=chromium` | 3 passed, after two runs that failed on the expected display-name changes | 31s |
 | `npm run gate:unit` | 1 fail (the list fixture, before it was regenerated), then 1957 tests, 1955 pass, 0 fail, 2 todo | 35s |
 | `LAHE_SHOTS=1 ... -g screenshots` | light and dark retaken and looked at | 2s |
+
+## Rename exits (itm_c35bead0caf28c887da62099)
+
+Enter or clicking outside saves. Escape cancels, and the blur that Escape causes saves nothing. An empty or unchanged value changes nothing, and typing the original name back clears the rename. This works the same for row names and session names. The new test in `catalog_page.spec.js` covers blur-save for a row and for a session, Escape plus a following click sending nothing, and empty and unchanged values sending nothing. It failed first, before the change.
+
+| Command | Result | Time |
+| --- | --- | --- |
+| `npx playwright test test/browser/catalog_page.spec.js --project=chromium -g "clicking outside"` (before the change) | 1 failed: no request on blur | 6s |
+| `npx playwright test test/browser/catalog_page.spec.js --project=chromium` | 27 passed, 1 skipped | 5s |
+| `npm run gate:unit` | 1957 tests, 1955 pass, 0 fail, 2 todo | 40s |
