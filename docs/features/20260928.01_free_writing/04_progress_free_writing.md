@@ -1,19 +1,18 @@
 # Progress: Free writing
 
-**Phase 7, Review.** You tried the preview and said go once the leftover "+ Write here" bug is fixed. A builder is on it. Then comes one more full gate, and the pull request. Nothing waits on you. Last updated 2026-09-30 09:04.
+**Phase 8, Ship.** The pull request is open: [#20](https://github.com/kenxle/live-agentic-html-editor/pull/20). It waits on your approval to merge. Last updated 2026-09-30 10:09.
 
 **Docs:** [Crucible questions](00_crucible_questions.md) · [Crucible](http://127.0.0.1:65155/00_crucible.html) · [Brief](http://127.0.0.1:65155/01_brief_free_writing.html) · [Wireframes](http://127.0.0.1:49513/index.html) ([decision](wireframes/DECISION.md)) · [Architecture](http://127.0.0.1:65155/02_architecture_free_writing.html) · [Plan](http://127.0.0.1:65155/03_plan_free_writing.html)
 
 ## Needs your attention
 
-Nothing is waiting on you. The bar position and the force-quit trade-off stay on their defaults, per your go.
+- [ ] **Approve and merge [PR #20](https://github.com/kenxle/live-agentic-html-editor/pull/20).**
+  - After merge, run `lahe serve --restart`. This build refuses the older helper you have running.
+  - The final gate ran on the branch with main merged in. 2175 passed and 1 failed, and the failure passed 5 of 5 when run alone.
 
 ## Currently working on
 
-| Agent or task | Doing | Started | Branch |
-|---|---|---|---|
-| Fix builder H3 | The leftover "+ Write here" line that stays after an edit ends: after the page reloads itself, and after switching blocks | 2026-09-30 09:04 | `free-writing-h3` |
-| Preview agent (me) | Watching your preview pages | 2026-09-30 09:04 | preview only |
+Nothing is running. Next: merge after your approval, then cleanup.
 
 ## Phases
 
@@ -27,7 +26,7 @@ Nothing is waiting on you. The bar position and the force-quit trade-off stay on
 | 5 Plan | done | 2026-09-29 |
 | 6 Implement | done | 2026-09-29 |
 | 7 Review | done | 2026-09-30 |
-| 8 Ship and land | not started | |
+| 8 Ship and land | in progress | 2026-09-30 |
 | 9 Cleanup | not started | |
 
 ## The record
@@ -77,6 +76,12 @@ Nothing queued.
 
 ### Test results
 
+- 2026-09-30 10:09, release result on the branch with main merged in, all three browsers, 22.4 minutes:
+  - Unit: 1799 of 1801 passed, 0 failed.
+  - Browser: 2175 passed, 1 failed, 20 skipped.
+  - The failure was `ac2_walk` in Chromium only. It passed 5 of 5 when run alone, and passed in every earlier full run.
+- The run before main was merged in was fully green: 2161 passed, 0 failed.
+
 - 2026-09-30 02:40: the one repaint failure was the test, not the product. The test moved the cursor with a script, then repainted before the browser registered the move, which no reviewer can do. The test now uses real arrow keys. It passed 160 of 160 under heavy load, and in all three browsers. Only a test changed, so the third full gate stands as the release result. The product gap it exposed is older than this feature and is boarded as `LAHE-repaint-caret-one-move-back`.
 
 - 2026-09-30 02:26, third full gate in all three browsers, 19.7 minutes:
@@ -102,7 +107,7 @@ Nothing queued.
 
 ### Ship
 
-Not shipped yet.
+PR [#20](https://github.com/kenxle/live-agentic-html-editor/pull/20) opened 2026-09-30 10:09. Main was merged in first, then the full gate was run again.
 
 ## Log
 
