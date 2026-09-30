@@ -556,6 +556,53 @@
     function removeStylesheet() {
       if (styleNode && styleNode.parentNode) styleNode.parentNode.removeChild(styleNode);
       styleNode = null;
+      roomRule = null;
+      roomPx = 0;
+    }
+
+    // ROOM TO WRITE AT THE BOTTOM OF THE PAGE (free writing, fix H2). While a
+    // writing session is open, the page needs to scroll far enough that the
+    // line being typed sits above the edit bar. The room is one rule in the
+    // stylesheet above, a blank `:root::after` box of a set height: it comes
+    // after everything the page draws, it is not a node (so nothing in the
+    // page's own markup changes and capture never sees it), and with no
+    // session the rule is not in the sheet at all, so the page's own layout is
+    // exactly its own. The height is set through the CSSOM rather than by
+    // rewriting the sheet's text, so shrinking it on every scroll is cheap.
+    var roomRule = null;
+    var roomPx = 0;
+
+    function setPageRoom(px) {
+      var want = Math.max(0, Math.round(Number(px) || 0));
+      var node = ensureStylesheet();
+      var sheet = node && node.sheet;
+      if (!sheet) return 0;
+      var rules = sheet.cssRules;
+      var at = -1;
+      for (var i = 0; roomRule && i < rules.length; i += 1) if (rules[i] === roomRule) at = i;
+      if (!want) {
+        if (at !== -1) sheet.deleteRule(at);
+        roomRule = null;
+        roomPx = 0;
+        return 0;
+      }
+      if (at === -1) {
+        var index = sheet.insertRule(
+          "@media not print { :root::after { content: \"\"; display: block; height: " +
+            want +
+            "px; pointer-events: none; } }",
+          rules.length
+        );
+        roomRule = sheet.cssRules[index];
+      } else if (roomRule.cssRules && roomRule.cssRules[0]) {
+        roomRule.cssRules[0].style.height = want + "px";
+      }
+      roomPx = want;
+      return roomPx;
+    }
+
+    function pageRoom() {
+      return roomRule ? roomPx : 0;
     }
 
     // ------------------------------------------------------------------------
@@ -966,6 +1013,8 @@
       SURFACE_ID: SURFACE_ID,
       supported: supported,
       ensureStylesheet: ensureStylesheet,
+      setPageRoom: setPageRoom,
+      pageRoom: pageRoom,
       paint: paint,
       setActive: setActive,
       clear: clear,
