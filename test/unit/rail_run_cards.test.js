@@ -174,7 +174,8 @@ test("Use the fixes is the reviewer's reword at the next revision, carrying the 
   assert.match(next.after, /cost us/);
   assert.equal(next.thread.length, proof.thread ? proof.thread.length + 1 : 1, "the question is archived as a round");
   assert.equal(next.thread[next.thread.length - 1].agent.status, record.REPLY_STATUS.QUESTION);
-  assert.equal(next.change, proof.change, "the change sentence is carried");
+  assert.match(next.change, /took your proofreading fixes/, "the change sentence tells the agent to replace the fixed words in place");
+  assert.ok(!next.proofread, "the fixes revision is not proofread again");
 });
 
 test("Keep mine carries the pinned text and changes no words", () => {
