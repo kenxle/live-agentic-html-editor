@@ -1,0 +1,14 @@
+{
+  "schema": 1,
+  "id": "ss_other",
+  "session_id": "s_ops",
+  "instance": "inst_ss_other",
+  "root": "${ROOT}/home/projects/alpha/other",
+  "logical_root": "${ROOT}/home/projects/alpha/other",
+  "host": "127.0.0.1",
+  "port": 54021,
+  "pid": 515151,
+  "started_at": "2026-09-20T10:00:00.000Z",
+  "stopped_at": "2026-09-21T10:00:00.000Z",
+  "mounts": {}
+}

@@ -1,0 +1,15 @@
+{
+  "id": "r_wt_vanished",
+  "token": "fixture-token-r_wt_vanished-not-a-secret",
+  "origins": [
+    "http://127.0.0.1:54000"
+  ],
+  "target_path": "${ROOT}/home/projects/alpha/.claude/worktrees/wt-gone/docs/vanished.html",
+  "target_paths": [
+    "${ROOT}/home/projects/alpha/.claude/worktrees/wt-gone/docs/vanished.html"
+  ],
+  "source_path": null,
+  "only_recorded_pages": false,
+  "created_at": "2026-09-23T16:00:00.000Z",
+  "agent_session_id": "s_ops"
+}

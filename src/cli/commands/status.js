@@ -40,6 +40,7 @@
 "use strict";
 
 var fs = require("node:fs");
+var os = require("node:os");
 var path = require("node:path");
 
 var protocol = require("../../shared/protocol.js");
@@ -51,6 +52,8 @@ var agentSessionsModule = require("../../service/agent_sessions.js");
 var reviewFormat = require("../../shared/review_format.js");
 var healModule = require("../../service/heal.js");
 var staticServersModule = require("../../service/static_servers.js");
+var catalogRequestsModule = require("../../service/catalog_requests.js");
+var catalogReaderModule = require("../../service/catalog_reader.js");
 
 // Shared CLI codes. OK means status completed, whether or not it found an item.
 var EXIT = protocol.CLI_EXIT;
@@ -623,6 +626,261 @@ function readFromDisk(dir, reviewId) {
 }
 
 // ---------------------------------------------------------------------------
+// The Library's requests (the catalog_requests section)
+// ---------------------------------------------------------------------------
+//
+// A pending Library request ("Pick this up", "Launch a new agent") is work for
+// the session it is `for`, the agent that opened the Library. It is listed in
+// the summary line beside ended_reviews, one entry per pending request whose
+// `for` is a drained session, until it is answered or expires.
+//
+// The entry's id and helper-value fields are filled here. `kind` and the four
+// page-text fields (title, path, candidate, handoff) come from the describe
+// step, which by default is the catalog reader's describeReview (Library 2.1):
+// one description of a review, shared with the Library's own list, so the
+// drain and the page can never name a document two ways. The page-text fields
+// are data, classed so in PROJECTED_FIELD_CLASS, and line one of every --json
+// drain carries those classes.
+
+/**
+ * The default describe step: the reader's describeReview, plus the rail's own
+ * hand-off message for the document's session.
+ *
+ * One reader per drain, made only when there is a request to describe, so an
+ * idle monitor poll never scans the state dir. `candidate` is the reader's,
+ * already checked (under the repository by real path, no hidden segment, owned
+ * by this user, a page) or null. The request itself never carries a path.
+ */
+function readerDescriber(dir, nowMs) {
+  var reader = null;
+  var sessions = agentSessionsModule.createStore({ dir: dir });
+  return function (request) {
+    if (!reader) reader = catalogReaderModule.createReader({ dir: dir });
+    var described = reader.describeReview(request.review, nowMs);
+    var sessionId = request.session;
+    var name = null;
+    try {
+      var session = sessions.read(sessionId);
+      // Never a name read off a page's title: this is a new agent's first prompt.
+      name = agentSessionsModule.handoffName(session);
+    } catch (err) {
+      name = null;
+    }
+    // "legacy" is not a session anybody can take over; the message then points
+    // the new agent at `lahe session list` instead.
+    var takeable = protocol.isSafeId(sessionId) && sessionId !== agentSessionsModule.LEGACY_ID;
+    // A legacy or worktree row has no session a new agent could take over, so
+    // it gets no hand-off at all: never one that sends a new agent to
+    // `lahe session list` to pick a session nobody named (adversary fixes).
+    var noTakeover = !described || described.kind === "legacy" || described.kind === "worktree";
+    return {
+      kind: described ? described.kind : null,
+      origin: described && described.origin ? described.origin : null,
+      title: described ? described.display_name : null,
+      path: described ? described.path : null,
+      candidate: described ? described.candidate : null,
+      folder: described ? projectFolder(launchRoot(described)) : null,
+      // The rail's hand-off message in its Library form: take-over wording,
+      // with the real --state-dir when it is not the default.
+      handoff: noTakeover ? null : protocol.AGENT_LIVENESS.handoffMessage(takeable ? sessionId : null, takeable ? name : null, false, {
+        library: true,
+        stateDir: stateDirModule.flagFor(dir)
+      })
+    };
+  };
+}
+
+/**
+ * Where the launch folder is looked for, from records a page cannot write:
+ * a static row's covering server record root, a worktree row's candidate
+ * (itself derived from that root), a legacy row's document only when it holds
+ * the review's own script line. meta.json's source_path and target_path are
+ * page text (review.write records them), so they never name the folder.
+ */
+function launchRoot(described) {
+  if (described.kind === "static") return described.server_root || null;
+  if (described.kind === "worktree") return described.candidate || null;
+  if (described.kind === "legacy") return described.verified_path || null;
+  return null;
+}
+
+var DESCRIBED_FIELDS = ["kind", "origin", "title", "path", "candidate", "folder", "handoff"];
+
+/** The home folder as given and by real path, so either spelling stops the walk. */
+function homeFolders() {
+  var home = os.homedir();
+  if (!home) return [];
+  var out = [path.resolve(home)];
+  try {
+    var real = fs.realpathSync(home);
+    if (out.indexOf(real) === -1) out.push(real);
+  } catch (err) {
+    // a home folder that is not there stops nothing extra
+  }
+  return out;
+}
+
+/**
+ * The folder a launched agent starts in: the repository that holds the
+ * document (the nearest folder with a .git, below the home folder), else the
+ * document's own folder.
+ * Null for no path, or for a folder with a control character in it, which the
+ * Launch steps could not read back as one line.
+ */
+function projectFolder(docPath) {
+  if (typeof docPath !== "string" || !docPath) return null;
+  var start = docPath;
+  while (!fs.existsSync(start)) {
+    var up = path.dirname(start);
+    if (up === start) return null;
+    start = up;
+  }
+  try {
+    if (!fs.statSync(start).isDirectory()) start = path.dirname(start);
+  } catch (err) {
+    return null;
+  }
+  var found = start;
+  // The walk stops at the home folder: a dotfiles repository in ~ is never a
+  // document's project, and a new agent must not start there.
+  var homes = homeFolders();
+  for (var current = start; ; current = path.dirname(current)) {
+    if (homes.indexOf(current) !== -1) break;
+    if (fs.existsSync(path.join(current, ".git"))) {
+      found = current;
+      break;
+    }
+    if (path.dirname(current) === current) break;
+  }
+  // eslint-disable-next-line no-control-regex
+  return /[\u0000-\u001f\u007f]/.test(found) ? null : found;
+}
+
+/** The other reviews in the document's session: they move with a takeover. */
+function movesWith(dir, request) {
+  return reviewsOnDisk(dir).filter(function (id) {
+    return id !== request.review && ownerOfReview(dir, id) === request.session;
+  });
+}
+
+/**
+ * The catalog_requests entries for the drained session (or every session when
+ * the drain names none), at `nowMs`. The CLI's queue computes expiry and
+ * writes nothing: only the helper records an expired line.
+ */
+function catalogEntries(dir, sessionId, nowMs, describe, keep) {
+  var queue = catalogRequestsModule.createQueue({ dir: dir });
+  var pending = sessionId ? queue.pendingFor(sessionId, nowMs) : queue.pending(nowMs);
+  // Filtered BEFORE anything is described (fix round CL6): describing scans
+  // the state dir, and the monitor polls every few seconds while a request it
+  // already delivered waits for the agent to answer it.
+  if (typeof keep === "function") pending = pending.filter(keep);
+  var describer = typeof describe === "function" ? describe : readerDescriber(dir, nowMs);
+  return pending.map(function (request) {
+    var described = describer(request, { dir: dir }) || {};
+    var fields = {};
+    DESCRIBED_FIELDS.forEach(function (key) {
+      fields[key] = described[key] === undefined ? null : described[key];
+    });
+    return {
+      request: request.id,
+      action: request.action,
+      review: request.review,
+      session: request.session,
+      kind: fields.kind,
+      // A dev-server row's origin, so a refusal can say which server to start.
+      origin: fields.origin,
+      moves_with: movesWith(dir, request),
+      at: request.at,
+      title: fields.title,
+      path: fields.path,
+      candidate: fields.candidate,
+      folder: fields.folder,
+      handoff: fields.handoff,
+      // A helper sentence, not page text: what serving a legacy row does.
+      note: fields.kind === "legacy" ? protocol.CATALOG_LEGACY_NOTE(request.review) : null,
+      // Not printed: which agent answers it. The human output names it in the
+      // answer command.
+      _for: request.for
+    };
+  });
+}
+
+/** An entry as it is printed: the documented keys only. */
+function printableEntry(entry) {
+  var out = Object.assign({}, entry);
+  delete out._for;
+  return out;
+}
+
+/**
+ * The keys a delivered log holds, one per line.
+ *
+ * @returns {{keys: Object<string, true>, error: string|null}}
+ */
+function readDelivered(file) {
+  var keys = Object.create(null);
+  try {
+    if (fs.existsSync(file)) {
+      fs.readFileSync(file, "utf8").split("\n").forEach(function (line) {
+        var trimmed = line.trim();
+        if (trimmed) keys[trimmed] = true;
+      });
+    }
+  } catch (readErr) {
+    return { keys: keys, error: "could not read " + file + ": " + readErr.message };
+  }
+  return { keys: keys, error: null };
+}
+
+/**
+ * Record `keys` in a delivered log. The one writer for both delivered logs,
+ * ended-delivered.log and catalog-delivered.log.
+ *
+ * LOUD ON FAILURE: a dedupe that silently broke does not go quiet, it nags
+ * forever, and the agent pays a turn for each one.
+ *
+ * @returns {string|null} the error, or null when written
+ */
+function markDelivered(dir, sessionId, file, keys) {
+  if (keys.length === 0) return null;
+  try {
+    stateDirModule.ensureAgentSessionDir(dir, sessionId);
+    stateDirModule.appendLine(file, keys.join("\n") + "\n");
+  } catch (writeErr) {
+    return "could not write " + file + ": " + writeErr.message;
+  }
+  return null;
+}
+
+/**
+ * ONCE PER REQUEST PER HANDOFF REV, FOR THE MONITOR ONLY. A pending request
+ * stays pending while the agent works it, so a monitor that woke on it with no
+ * memory would wake on it again on every relaunch. catalog-delivered.log keeps
+ * "<request-id> <handoff_rev>" per delivery; a takeover bumps the rev, so the
+ * agent that owns the session now is woken for it again.
+ */
+function catalogDeliveredKey(requestId, rev) {
+  return requestId + " " + rev;
+}
+
+/** The human lines for pending requests. */
+function catalogLines(entries, dir) {
+  var lines = [];
+  entries.forEach(function (entry) {
+    lines.push(
+      "library request " + entry.request + "  " + entry.action + "  review " + entry.review + "  session " + entry.session
+    );
+    lines.push(
+      "  answer it: lahe library answer " + entry.request + " --session " + entry._for +
+        " --status done|refused --text \"...\"" + protocol.stateDirFlag(stateDirModule.flagFor(dir))
+    );
+  });
+  if (lines.length) lines.push("");
+  return lines;
+}
+
+// ---------------------------------------------------------------------------
 // The command
 // ---------------------------------------------------------------------------
 
@@ -720,6 +978,61 @@ async function run(argv, options) {
     }
   }
 
+  // The Library's pending requests for this drain. Read before the reviews, so
+  // a session that owns no review still hears about a request it is `for`.
+  // The monitor's drain reports only the requests not yet delivered at this
+  // rev, and records them; every other drain lists every pending one. The
+  // delivered log is read first, so only fresh requests are described.
+  var monitorDrain = !!(opts.markEndedDelivered && args.session);
+  var catalogRev = 0;
+  var catalogDelivered = { keys: Object.create(null), error: null };
+  if (monitorDrain) {
+    try {
+      catalogRev = agentSessionsModule.handoffRev(agentSessionsModule.createStore({ dir: dir }).read(args.session));
+    } catch (error) {
+      catalogRev = 0;
+    }
+    catalogDelivered = readDelivered(stateDirModule.catalogDeliveredPath(dir, args.session));
+  }
+  var catalogPending;
+  try {
+    catalogPending = catalogDelivered.error ? [] : catalogEntries(
+      dir,
+      args.session,
+      nowMs,
+      opts.describeRequest,
+      monitorDrain
+        ? function (request) { return !catalogDelivered.keys[catalogDeliveredKey(request.id, catalogRev)]; }
+        : null
+    );
+  } catch (error) {
+    err("lahe status: could not read the Library's requests: " + error.message + "\n");
+    catalogPending = [];
+  }
+
+  /** The catalog entries this output reports, recorded as delivered on the monitor's drain. */
+  function catalogToReport() {
+    if (!monitorDrain) return { entries: catalogPending, error: null };
+    if (catalogDelivered.error) return { entries: [], error: catalogDelivered.error };
+    var writeError = markDelivered(
+      dir,
+      args.session,
+      stateDirModule.catalogDeliveredPath(dir, args.session),
+      catalogPending.map(function (entry) { return catalogDeliveredKey(entry.request, catalogRev); })
+    );
+    if (writeError) return { entries: [], error: writeError };
+    var marked = { entries: catalogPending, error: null };
+    if (marked.entries.length > 0) {
+      // THE MONITOR IS ABOUT TO EXIT ON THIS, and it takes its heartbeat down
+      // as it does. The request's expiry reads "is the agent listening" through
+      // the liveness function, so without this stamp a Library poll in the gap
+      // before the agent's own drain would expire the very request that woke
+      // it. Handing an agent work is the agent's work starting.
+      agentSessionsModule.createStore({ dir: dir }).touchActivity(args.session);
+    }
+    return marked;
+  }
+
   // Which reviews. The helper's own list first, because that is what is live,
   // then anything else with state on disk so a review the helper has not been
   // asked about yet is still visible.
@@ -742,11 +1055,31 @@ async function run(argv, options) {
   }
 
   if (ids.length === 0) {
-    if (args.quiet) return EXIT.OK;
     if (args.json) {
-      out(JSON.stringify({ reviews: 0, unanswered_ready: 0, state_dir: dir }) + "\n");
+      var emptyCatalog = catalogToReport();
+      if (emptyCatalog.error) {
+        err("lahe status: " + emptyCatalog.error + "\n");
+        return EXIT.BAD_USAGE;
+      }
+      // A Library request is work even for a session with no reviews of its
+      // own, which is the usual shape of the agent that opened the Library.
+      if (args.quiet && emptyCatalog.entries.length === 0) return EXIT.OK;
+      out(
+        JSON.stringify({
+          reviews: 0,
+          unanswered_ready: 0,
+          catalog_requests: emptyCatalog.entries.map(printableEntry),
+          state_dir: dir
+        }) + "\n"
+      );
     } else {
-      out("lahe status: no reviews in " + stateDirModule.reviewsRoot(dir) + ". Start one with `lahe review <page>`.\n");
+      // Parse refuses --quiet without --json today; this keeps the rule if
+      // that ever loosens: quiet with nothing waiting prints nothing.
+      if (args.quiet && catalogPending.length === 0) return EXIT.OK;
+      out(
+        catalogLines(catalogPending, dir).join("\n") +
+          "lahe status: no reviews in " + stateDirModule.reviewsRoot(dir) + ". Start one with `lahe review <page>`.\n"
+      );
     }
     return EXIT.OK;
   }
@@ -956,7 +1289,7 @@ async function run(argv, options) {
     lines.push("");
   }
 
-  if (!seenAny) {
+  if (!seenAny && catalogPending.length === 0) {
     err("lahe status: nothing readable in " + stateDirModule.reviewsRoot(dir) + "\n");
     return EXIT.HELPER_UNREACHABLE;
   }
@@ -1042,7 +1375,15 @@ async function run(argv, options) {
     // NOT SILENT WHEN A REVIEW ENDED. --quiet exists so a watcher that wakes on
     // nothing prints nothing, and the wake line's own drain command uses it. An
     // ended review is something, so it has to get past this.
-    if (args.quiet && toPrint.length === 0 && endedToReport.length === 0) return EXIT.OK;
+    var catalogReport = catalogToReport();
+    if (catalogReport.error) {
+      err("lahe status: " + catalogReport.error + "\n");
+      return EXIT.BAD_USAGE;
+    }
+    // A new Library request gets past it too: it is work for this agent.
+    if (args.quiet && toPrint.length === 0 && endedToReport.length === 0 && catalogReport.entries.length === 0) {
+      return EXIT.OK;
+    }
 
     toPrint.forEach(function (item) {
       out(JSON.stringify(item) + "\n");
@@ -1052,6 +1393,7 @@ async function run(argv, options) {
         reviews: ids.length,
         unanswered_ready: totalUnanswered,
         ended_reviews: endedToReport,
+        catalog_requests: catalogReport.entries.map(printableEntry),
         // Only when there are any, so a drain line is unchanged for everyone else.
         stopped_servers: stoppedServers.length ? stoppedServers : undefined,
         liveness: livenessOfPrinted(toPrint, livenessByReview),
@@ -1096,7 +1438,7 @@ async function run(argv, options) {
     return EXIT.OK;
   }
 
-  out(lines.join("\n") + "\n");
+  out(lines.concat(catalogLines(catalogPending, dir)).join("\n") + "\n");
   return EXIT.OK;
 }
 
@@ -1123,5 +1465,6 @@ module.exports = {
   reviewsOnDisk: reviewsOnDisk,
   ownerOfReview: ownerOfReview,
   targetPathsOfReview: targetPathsOfReview,
+  catalogEntries: catalogEntries,
   run: run
 };

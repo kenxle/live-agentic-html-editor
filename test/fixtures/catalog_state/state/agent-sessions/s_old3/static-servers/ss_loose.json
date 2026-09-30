@@ -1,0 +1,14 @@
+{
+  "schema": 1,
+  "id": "ss_loose",
+  "session_id": "s_old3",
+  "instance": "inst_ss_loose",
+  "root": "${ROOT}/home/loose",
+  "logical_root": "${ROOT}/home/loose",
+  "host": "127.0.0.1",
+  "port": 54031,
+  "pid": 515151,
+  "started_at": "2026-09-20T10:00:00.000Z",
+  "stopped_at": "2026-09-21T10:00:00.000Z",
+  "mounts": {}
+}

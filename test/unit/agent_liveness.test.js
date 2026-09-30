@@ -490,11 +490,13 @@ test("replies.poll answers with how long it has been, not with a claim", () => {
     "oldest_unanswered_item",
     "session_id",
     "session_name",
+    "session_name_from_page",
     "state",
     "state_dir_flag_needed",
     "unanswered"
   ]);
   assert.equal(liveness.oldest_unanswered_item, item[record.FIELD.ID], "the notice is keyed on this item");
+  assert.equal(Object.prototype.hasOwnProperty.call(liveness, "presence"), false, "presence is the Library's, never on the rail's payload");
   assert.equal(liveness.session_id, "s_wire");
 
   // The agent answers. The line now reports the answer rather than the wait, and
@@ -987,4 +989,41 @@ test("a review with no agent session is told the truth, and never accused of nob
   );
   assert.equal(answer.body.agent_liveness.state, STATE.NONE);
   assert.equal(answer.body.agent_liveness.listening, null);
+});
+
+// ---------------------------------------------------------------------------
+// Presence (phase 8): what the Library may say about an agent
+// ---------------------------------------------------------------------------
+
+function presenceAt(spec) {
+  return agentSessions.livenessFrom(Object.assign({ session: { handoff_rev: 0 }, nowMs: NOW, pidAlive: livingPid, listening: null }, spec))[LIVENESS.FIELD.PRESENCE];
+}
+
+test("presence: a live monitor heartbeat is listening, whatever the activity stamp says", () => {
+  const monitor = { pid: 1, handoff_rev: 0, at: agoMs(1000) };
+  assert.equal(presenceAt({ monitor }), LIVENESS.PRESENCE.LISTENING);
+  assert.equal(presenceAt({ monitor, activity: { at: agoMs(60 * 60 * 1000) } }), LIVENESS.PRESENCE.LISTENING);
+});
+
+test("presence: no live monitor but a lahe command inside CATALOG.WORKING_MS is working, and exactly at the edge still is", () => {
+  const dead = { pid: 1, handoff_rev: 0, at: agoMs(protocol.MONITOR.HEARTBEAT_FRESH_MS + 1) };
+  assert.equal(presenceAt({ monitor: dead, activity: { at: agoMs(1000) } }), LIVENESS.PRESENCE.WORKING);
+  assert.equal(presenceAt({ activity: { at: agoMs(protocol.CATALOG.WORKING_MS) } }), LIVENESS.PRESENCE.WORKING);
+});
+
+test("presence: a lahe command older than CATALOG.WORKING_MS is away, even though the queue still counts it as listening", () => {
+  const got = agentSessions.livenessFrom({
+    session: { handoff_rev: 0 }, nowMs: NOW, pidAlive: livingPid, listening: null,
+    activity: { at: agoMs(protocol.CATALOG.WORKING_MS + 1) }
+  });
+  assert.equal(got[LIVENESS.FIELD.PRESENCE], LIVENESS.PRESENCE.AWAY);
+  assert.equal(got[LIVENESS.FIELD.LISTENING], true, "the queue's ten-minute rule is unchanged");
+});
+
+test("presence: a killed monitor's fresh heartbeat is not listening", () => {
+  assert.equal(presenceAt({ monitor: { pid: 1, handoff_rev: 0, at: agoMs(1000) }, pidAlive: deadPid }), LIVENESS.PRESENCE.AWAY);
+});
+
+test("the working window is two minutes, spelled once in CATALOG", () => {
+  assert.equal(protocol.CATALOG.WORKING_MS, 2 * 60 * 1000);
 });

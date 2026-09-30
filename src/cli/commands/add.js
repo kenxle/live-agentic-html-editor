@@ -85,6 +85,7 @@ var agentSessionsModule = require("../../service/agent_sessions.js");
 var staticServersModule = require("../../service/static_servers.js");
 var sourceStamp = require("../../service/source_stamp.js");
 var service = require("../../service/index.js");
+var catalogRequests = require("../../service/catalog_requests.js");
 
 var REPO_ROOT = path.join(__dirname, "..", "..", "..");
 var BIN = path.join(REPO_ROOT, "bin", "lahe.js");
@@ -153,6 +154,10 @@ var USAGE = [
   "  --review <id>        re-attach this page to a review that already exists, by id. Use it when a",
   "                       rebuild stripped the script line and the page did not match by path.",
   "  --session <id>       enroll or reuse only reviews owned by this open agent session.",
+  "  --adopt              with --review and --session: take a review from before sessions into this",
+  "                       session, old comments and all. Only for a Library pick-up that is pending",
+  "                       for this session; `lahe library serve` passes it. A review that already",
+  "                       belongs to a session is never moved.",
   "  --only               keep this review to the page it was given. Our static server serves the",
   "                       page's whole folder, and by default the rail follows the reviewer onto",
   "                       every page in it. Use this when that folder holds files they did not ask",
@@ -178,6 +183,7 @@ function parseArgs(argv) {
   var options = {
     target: null,
     isNew: false,
+    adopt: false,
     remove: false,
     // `--only`: this review answers for the pages it recorded and nothing else
     // in their folder. Off by default, because the default is the rail
@@ -231,6 +237,8 @@ function parseArgs(argv) {
         options.underReview = true;
       } else if (name === "--new") {
         options.isNew = true;
+      } else if (name === "--adopt") {
+        options.adopt = true;
       } else if (name === "--only") {
         options.only = true;
       } else if (name === "--notes") {
@@ -278,6 +286,9 @@ function parseArgs(argv) {
   }
   if (options.session !== null && !protocol.isSafeId(options.session)) {
     return { ok: false, message: "--session must be an agent session id: " + String(protocol.SAFE_ID) + "\n\n" + USAGE };
+  }
+  if (options.adopt && (options.review === null || options.session === null)) {
+    return { ok: false, message: "--adopt takes a review from before sessions into --session; it needs --review and --session.\n\n" + USAGE };
   }
   if (options.review !== null && options.isNew) {
     return { ok: false, message: "--review names a review to re-attach to and --new mints a fresh one; pick one.\n\n" + USAGE };
@@ -782,48 +793,11 @@ function sameBytes(a, b) {
   }
 }
 
-/**
- * The `.html` and `.htm` files directly in a directory, in name order.
- *
- * The folder's OWN pages, not a recursive walk. The served root and the open
- * link have to agree, and `lahe review <folder>` roots its server at the folder
- * itself: a lone page three directories down would be served at a URL nobody
- * would guess, and a project checkout that happens to hold a built HTML file
- * somewhere would stop being the app-in-dev row it has always been.
- *
- * @param {string} dirPath
- * @returns {string[]} file names, byte order, so two runs pick the same page
- */
-function folderPages(dirPath) {
-  var entries;
-  try {
-    entries = fs.readdirSync(dirPath, { withFileTypes: true });
-  } catch (err) {
-    return [];
-  }
-  return entries
-    .filter(function (entry) {
-      return entry.isFile() && STATIC_EXTENSIONS.indexOf(path.extname(entry.name).toLowerCase()) !== -1;
-    })
-    .map(function (entry) { return entry.name; })
-    .sort();
-}
-
-/**
- * The page `lahe review <folder>` prints as the open link: `index.html` when the
- * folder has one, then `index.htm`, else the first page in name order. Null when
- * the folder holds no pages at all.
- *
- * @param {string} dirPath
- * @returns {string|null}
- */
-function folderEntryPage(dirPath) {
-  var pages = folderPages(dirPath);
-  if (pages.length === 0) return null;
-  if (pages.indexOf("index.html") !== -1) return "index.html";
-  if (pages.indexOf("index.htm") !== -1) return "index.htm";
-  return pages[0];
-}
+// folderPages and folderEntryPage live in src/service/static_servers.js, so the
+// Library's Open (in the helper) opens a folder review on the same page
+// `lahe review <folder>` prints. One rule, one place.
+var folderPages = staticServersModule.folderPages;
+var folderEntryPage = staticServersModule.folderEntryPage;
 
 /**
  * What kind of thing is this target?
@@ -1037,6 +1011,21 @@ async function run(argv) {
     return !!readMetaOnDisk(dir, reviewId);
   }
 
+  function pendingPickup(reviewId) {
+    try {
+      return catalogRequests.createQueue({ dir: dir }).pendingFor(agentSessionId, Date.now()).some(function (r) {
+        return r.review === reviewId && r.action === catalogRequests.ACTION.PICKUP;
+      });
+    } catch (err) {
+      return false;
+    }
+  }
+
+  // True while this run is taking a legacy review into the session.
+  function adopting(reviewId) {
+    return !!(options.adopt && reviewId && ownershipOf(reviewId) === agentSessionsModule.LEGACY_ID);
+  }
+
   function ownershipOf(reviewId) {
     var meta = readMetaOnDisk(dir, reviewId);
     return meta && typeof meta.agent_session_id === "string"
@@ -1047,6 +1036,16 @@ async function run(argv) {
   function refuseForeign(reviewId) {
     var owner = ownershipOf(reviewId);
     if (owner === agentSessionId) return false;
+    // A review from before sessions, taken in by a Library pick-up pending for
+    // this very session. Anything else is still refused.
+    if (options.adopt && owner === agentSessionsModule.LEGACY_ID) {
+      if (pendingPickup(reviewId)) return false;
+      process.stderr.write(
+        "lahe add: --adopt needs a Library pick-up of review " + reviewId + " pending for agent session " +
+          agentSessionId + ", and there is none.\n"
+      );
+      return true;
+    }
     process.stderr.write(
       "lahe add: review " + reviewId + " belongs to agent session " + owner +
         ", not " + agentSessionId + ". Start a new review or use the owning session.\n"
@@ -1194,6 +1193,7 @@ async function run(argv) {
       source_path: pathWrites.source_path,
       agent_session_id: agentSessionId,
       only_recorded_pages: options.only,
+      adopt: adopting(reuseId),
       notes: options.notes === true
     };
     if (reuseId) spec.id = reuseId;
@@ -1233,7 +1233,9 @@ async function run(argv) {
   // reviewer has just looked at what else is in that folder and asked for it to
   // stop being served. Nothing to write is only true when it is already set.
   var isolationAlreadySet = !!heldMeta && (!options.only || heldMeta.only_recorded_pages === true);
+  var adoptNow = adopting(reuseId);
   var nothingToWrite =
+    !adoptNow &&
     heldByHelper &&
     !options.source &&
     pathsAlreadyRecorded &&
@@ -1260,6 +1262,9 @@ async function run(argv) {
       // purpose (src/shared/protocol.js), so there is nothing to send for a run
       // without the flag.
       only_recorded_pages: options.only ? true : undefined,
+      // A Library pick-up of a review from before sessions: the helper takes
+      // it into this session, and only for a pick-up pending for it.
+      adopt_session: adoptNow ? agentSessionId : undefined,
       notes: options.notes ? true : undefined
     });
     if (!handedToHelper) {

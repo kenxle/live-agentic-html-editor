@@ -467,16 +467,282 @@ async function stopAll(dir, sessionId) {
   return stopped;
 }
 
+/** The start() options that bring a recorded server back as it was. */
+function restartSpec(dir, sessionId, meta) {
+  return {
+    dir: dir,
+    sessionId: sessionId,
+    root: meta.root,
+    logicalRoot: typeof meta.logical_root === "string" ? meta.logical_root : null,
+    preferredPort: meta.port
+  };
+}
+
 async function restartAll(dir, sessionId) {
-  var entries = list(dir, sessionId).map(function (meta) {
-    return { root: meta.root, logicalRoot: typeof meta.logical_root === "string" ? meta.logical_root : null };
-  });
+  var entries = list(dir, sessionId);
   var started = 0;
   for (var i = 0; i < entries.length; i += 1) {
-    var result = await start({ dir: dir, sessionId: sessionId, root: entries[i].root, logicalRoot: entries[i].logicalRoot });
+    var result = await start(restartSpec(dir, sessionId, entries[i]));
     if (result.started) started += 1;
   }
   return started;
+}
+
+/**
+ * The two loopback origins a static server on `port` is reached by.
+ * `lahe review` registers exactly these (127.0.0.1, plus the localhost twin
+ * add.js adds), so they are the only ones a restart swaps.
+ */
+function loopbackOrigins(port) {
+  return ["http://" + HOST + ":" + port, "http://localhost:" + port];
+}
+
+// The pages `lahe review <folder>` serves and opens, spelled here so the CLI
+// and the helper's Open agree (src/cli/commands/add.js uses these).
+var PAGE_EXTENSIONS = [".html", ".htm"];
+
+/**
+ * The `.html` and `.htm` files directly in a directory, in name order.
+ *
+ * The folder's OWN pages, not a recursive walk. The served root and the open
+ * link have to agree, and `lahe review <folder>` roots its server at the folder
+ * itself: a lone page three directories down would be served at a URL nobody
+ * would guess, and a project checkout that happens to hold a built HTML file
+ * somewhere would stop being the app-in-dev row it has always been.
+ *
+ * @param {string} dirPath
+ * @returns {string[]} file names, byte order, so two runs pick the same page
+ */
+function folderPages(dirPath) {
+  var entries;
+  try {
+    entries = fs.readdirSync(dirPath, { withFileTypes: true });
+  } catch (err) {
+    return [];
+  }
+  return entries
+    .filter(function (entry) {
+      return entry.isFile() && PAGE_EXTENSIONS.indexOf(path.extname(entry.name).toLowerCase()) !== -1;
+    })
+    .map(function (entry) { return entry.name; })
+    .sort();
+}
+
+/**
+ * The page `lahe review <folder>` prints as the open link: `index.html` when the
+ * folder has one, then `index.htm`, else the first page in name order. Null when
+ * the folder holds no pages at all.
+ *
+ * @param {string} dirPath
+ * @returns {string|null}
+ */
+function folderEntryPage(dirPath) {
+  var pages = folderPages(dirPath);
+  if (pages.length === 0) return null;
+  if (pages.indexOf("index.html") !== -1) return "index.html";
+  if (pages.indexOf("index.htm") !== -1) return "index.htm";
+  return pages[0];
+}
+
+/**
+ * The reviews of `sessionId` that `meta`'s server serves, read off disk: a
+ * review with a recorded target (a page or a folder) that coveragePath covers
+ * on that server, mounts included. ONE COVERAGE RULE (fix round CL3): the
+ * reader decides a review is openable through this same rule, so the reviews
+ * whose origins a restart swaps are exactly the ones Open can land on.
+ * `alsoReview`, the review Open asked for, is always in the answer when it
+ * belongs to the session.
+ */
+function reviewsServedBy(dir, sessionId, meta, alsoReview) {
+  var root;
+  try { root = stateDir.reviewsRoot(dir); } catch (err) { return []; }
+  if (!fs.existsSync(root)) return [];
+  return fs.readdirSync(root, { withFileTypes: true })
+    .filter(function (entry) { return entry.isDirectory() && protocol.isSafeId(entry.name); })
+    .map(function (entry) { return entry.name; })
+    .filter(function (reviewId) {
+      var recorded = readJson(stateDir.metaPath(dir, reviewId));
+      if (!recorded || recorded.agent_session_id !== sessionId) return false;
+      if (reviewId === alsoReview) return true;
+      var targets = Array.isArray(recorded.target_paths) ? recorded.target_paths.slice() : [];
+      if (typeof recorded.target_path === "string") targets.push(recorded.target_path);
+      return targets.some(function (target) { return coveragePath(meta, target) !== null; });
+    })
+    .sort();
+}
+
+/**
+ * The helper's side of the Library's Open and of its reopened-session sweep.
+ *
+ * The CLI's own `lahe session reopen` and `close` keep working as they did;
+ * these are the same acts run from inside the helper, which holds the review
+ * registry in memory and so is the one process that can swap a review's
+ * origins without a restart.
+ *
+ * @param {{dir: string, reviews: object, sessions?: object}} options
+ *   `reviews` is the helper's registry (reviews.js), `sessions` an
+ *   agent_sessions store (one over `dir` when left out).
+ */
+// Where a reopenForCatalog error came from, as `err.stage`: the start itself
+// (nothing was reopened or left running), or a later step (undone, and
+// `err.rolledBack` says whether the undo worked).
+var REOPEN_STAGE = { START: "start", AFTER_START: "after_start" };
+
+function createCatalogOps(options) {
+  var opts = options || {};
+  if (!opts.dir) throw new Error("createCatalogOps: dir is required");
+  if (!opts.reviews) throw new Error("createCatalogOps: reviews is required");
+  var dir = opts.dir;
+  var reviews = opts.reviews;
+  var sessions = opts.sessions || require("./agent_sessions.js").createStore({ dir: dir });
+
+  /**
+   * Bring back `sessionId`'s one recorded server `serverId` (old port first),
+   * then reopen the session if it is closed, register that server's origins on every review
+   * it serves (by coveragePath, mounts included, plus `reviewId`, the review
+   * Open asked for), and remove the loopback origins of its EARLIER ports from those
+   * same reviews. Nothing else is removed: not a dev server's origin, not a
+   * non-loopback one, not a port another server of this session is on now.
+   *
+   * A server that is already up is not restarted; the origin pass still runs
+   * and is a no-op when everything is already in place.
+   *
+   * @returns {Promise<{server: object, started: boolean, origin: string,
+   *   reviews: string[], registered: string[], removed: string[]}>}
+   */
+  async function reopenForCatalog(sessionId, serverId, reviewId) {
+    var session = sessions.read(sessionId);
+    if (!session || session.synthetic) throw new Error("unknown agent session " + JSON.stringify(sessionId));
+    var record = list(dir, sessionId).filter(function (meta) { return meta.id === serverId; })[0];
+    if (!record) {
+      throw new Error("agent session " + sessionId + " has no recorded static server " + JSON.stringify(String(serverId)));
+    }
+    // The server first, the session second. A restart that fails (a root that
+    // is gone, a server that never answers) then leaves a closed session
+    // closed, with nothing reopened for the sweep to have to find.
+    var result;
+    try {
+      result = await start(restartSpec(dir, sessionId, record));
+    } catch (err) {
+      err.stage = REOPEN_STAGE.START;
+      throw err;
+    }
+    // From here on the server is up. A throw undoes what this call did: it
+    // stops a server it started and closes a session it reopened, so a failed
+    // Open leaves nothing running (adversary fixes). Only a start that threw
+    // above has done nothing to undo.
+    var reopenedHere = false;
+    try {
+      if (session.closed_at) {
+        sessions.reopen(sessionId);
+        reopenedHere = true;
+      }
+      return originPass(sessionId, result, reviewId);
+    } catch (err) {
+      err.stage = REOPEN_STAGE.AFTER_START;
+      err.rolledBack = await rollBack(sessionId, result, reopenedHere);
+      throw err;
+    }
+  }
+
+  /** Undo an Open's restart: stop a server it started, close a session it reopened. */
+  async function rollBack(sessionId, result, reopenedHere) {
+    var ok = true;
+    if (result.started) {
+      try {
+        await stopOne(dir, sessionId, result.meta);
+      } catch (err) {
+        ok = false;
+      }
+    }
+    if (reopenedHere) {
+      try {
+        sessions.close(sessionId);
+      } catch (err) {
+        ok = false;
+      }
+    }
+    return ok;
+  }
+
+  function originPass(sessionId, result, reviewId) {
+    var server = result.meta;
+
+    var current = loopbackOrigins(server.port);
+    // A port another server of this session is on right now keeps its origins,
+    // even if this server once had it.
+    var othersNow = list(dir, sessionId)
+      .filter(function (meta) { return meta.id !== server.id && !meta.stopped_at; })
+      .map(function (meta) { return meta.port; });
+    var stale = [];
+    (Array.isArray(server.ports) ? server.ports : []).forEach(function (port) {
+      if (port === server.port || othersNow.indexOf(port) !== -1) return;
+      loopbackOrigins(port).forEach(function (origin) { stale.push(origin); });
+    });
+
+    var served = reviewsServedBy(dir, sessionId, server, reviewId);
+    var registered = [];
+    var removed = [];
+    served.forEach(function (reviewId) {
+      var review = reviews.get(reviewId) || (typeof reviews.ensureKnown === "function" ? reviews.ensureKnown(reviewId) : null);
+      if (!review) return;
+      current.forEach(function (origin) {
+        if (review.origins.indexOf(origin) === -1) registered.push(origin);
+        reviews.registerOrigin(reviewId, origin);
+      });
+      stale.forEach(function (origin) {
+        if (review.origins.indexOf(origin) === -1) return;
+        reviews.removeOrigin(reviewId, origin);
+        removed.push(origin);
+      });
+    });
+    return {
+      server: server,
+      started: result.started,
+      origin: current[0],
+      reviews: served,
+      registered: registered,
+      removed: removed
+    };
+  }
+
+  /**
+   * Close a session from inside the helper: stop its static servers and mark
+   * it closed. Unlike `lahe session close`, it prints nothing and never stops
+   * the helper, which is the process running it.
+   *
+   * @returns {Promise<{stopped: number}>}
+   */
+  async function closeQuiet(sessionId) {
+    var stopped = await stopAll(dir, sessionId);
+    sessions.close(sessionId);
+    return { stopped: stopped };
+  }
+
+  return { reopenForCatalog: reopenForCatalog, closeQuiet: closeQuiet };
+}
+
+/**
+ * Does `candidate`, relative to `base`, cross a dotfile segment?
+ *
+ * Used only for mount requests (see isMount in runServer): the mount rule in
+ * markdown_links.js already refuses a hidden LOCATION when a link is
+ * translated, and this is the matching check at serve time, so a hidden file
+ * or folder already inside a mounted directory (e.g. `.env`, `.git/config`)
+ * is refused too, whether it was requested by its own name or reached
+ * through a normally-named symlink (call this once for the requested path
+ * and once for its realpath).
+ *
+ * @param {string} base the mount's own root (never itself dot-prefixed: the
+ *   mount prefix regex only matches a hex id)
+ * @param {string} candidate an absolute path under `base`
+ * @returns {boolean}
+ */
+function hasHiddenSegment(base, candidate) {
+  if (candidate === base) return false;
+  return path.relative(base, candidate).split(path.sep).some(function (segment) {
+    return segment.length > 0 && segment.charAt(0) === ".";
+  });
 }
 
 function send(res, status, body, type) {
@@ -740,9 +1006,6 @@ function servesPath(dir, sessionId, filePath) {
   if (typeof dir !== "string" || typeof sessionId !== "string" || typeof filePath !== "string") return false;
   var entries;
   try { entries = list(dir, sessionId); } catch (err) { return false; }
-  var target = path.resolve(filePath);
-  var realTarget = target;
-  try { realTarget = fs.realpathSync(target); } catch (err) { /* the plain path still answers */ }
   return entries.some(function (meta) {
     // A server the idle sweep stopped still counts. It comes back the moment
     // anyone asks for the page, and the line on disk this answer would let the
@@ -753,17 +1016,77 @@ function servesPath(dir, sessionId, filePath) {
       if (typeof meta.pid !== "number") return false;
       try { process.kill(meta.pid, 0); } catch (err) { return false; }
     }
-    var roots = [meta.root, meta.logical_root];
-    if (meta.mounts && typeof meta.mounts === "object") {
-      Object.keys(meta.mounts).forEach(function (prefix) { roots.push(meta.mounts[prefix]); });
-    }
-    return roots.some(function (base) {
-      if (typeof base !== "string" || !base) return false;
-      return [target, realTarget].some(function (candidate) {
-        return candidate === base || candidate.indexOf(base + path.sep) === 0;
-      });
-    });
+    return coveragePath(meta, filePath) !== null;
   });
+}
+
+/**
+ * Which files a server's root and mounts cover, and the URL path each has there.
+ *
+ * ONE RULE, ONE PLACE. servesPath asks this plus "is that server running right
+ * now". The Library's reader asks this alone: Open restarts a stopped server,
+ * so a stopped record still makes its review openable, and a second copy of
+ * the containment half is how the two would drift apart.
+ *
+ * A file is covered when it (or its real path) is the server's root, its
+ * logical root (the pre-realpath spelling `lahe review` recorded), or a mount,
+ * or sits under one. Roots come first, then mounts in their recorded order.
+ *
+ * @param {object} meta an ss_*.json record
+ * @param {string} filePath an absolute path
+ * @returns {string|null} the URL path the file has on that server, or null
+ */
+function coveragePath(meta, filePath) {
+  if (!meta || typeof meta !== "object" || typeof filePath !== "string" || !filePath) return null;
+  var target = path.resolve(filePath);
+  var candidates = [target];
+  try {
+    var real = fs.realpathSync(target);
+    if (real !== target) candidates.push(real);
+  } catch (err) {
+    // the plain path still answers
+  }
+  var bases = [];
+  if (typeof meta.root === "string" && meta.root) bases.push({ base: meta.root, prefix: "/" });
+  if (typeof meta.logical_root === "string" && meta.logical_root) bases.push({ base: meta.logical_root, prefix: "/" });
+  if (meta.mounts && typeof meta.mounts === "object") {
+    Object.keys(meta.mounts).forEach(function (prefix) {
+      if (typeof meta.mounts[prefix] === "string" && meta.mounts[prefix]) {
+        bases.push({ base: meta.mounts[prefix], prefix: prefix });
+      }
+    });
+  }
+  for (var i = 0; i < bases.length; i += 1) {
+    for (var j = 0; j < candidates.length; j += 1) {
+      var base = bases[i].base;
+      var candidate = candidates[j];
+      if (candidate === base || candidate.indexOf(base + path.sep) === 0) {
+        return bases[i].prefix + path.relative(base, candidate)
+          .split(path.sep)
+          .filter(function (segment) { return segment.length > 0; })
+          .map(encodeURIComponent)
+          .join("/");
+      }
+    }
+  }
+  return null;
+}
+
+/**
+ * Does this Host header name this server, at its own port?
+ *
+ * THE DNS-REBINDING GUARD. A page on a name the attacker controls can be
+ * re-pointed at 127.0.0.1 and then read whatever this server answers, and a
+ * served page carries its review's token. The browser still sends the
+ * attacker's name as the Host, so only `127.0.0.1:<port>` and
+ * `localhost:<port>` are answered. A missing Host is refused too: a browser
+ * always sends one. The helper has the same rule (D11, protocol.hostAllowed);
+ * this one is narrower because it pins the port as well.
+ */
+function hostIsOwn(hostHeader, port) {
+  if (typeof hostHeader !== "string" || !hostHeader || !port) return false;
+  var value = hostHeader.toLowerCase();
+  return value === HOST + ":" + port || value === "localhost:" + port;
 }
 
 // ---------------------------------------------------------------------------
@@ -1200,15 +1523,12 @@ function runServer(file, sessionId, id, instance, rootInput, dir, logicalRootInp
   // name; the helper's Host check keeps the token from being used, but the
   // reviewer's private notes would still be read. So in page mode a Host that
   // is not this server's loopback address and port is a 404.
-  function hostIsOurs(req) {
-    var port = server.address() && server.address().port;
-    var host = String(req.headers.host || "").toLowerCase();
-    return host === HOST + ":" + port || host === "localhost:" + port;
-  }
-
   var startedAt = new Date().toISOString();
   var server = http.createServer(function (req, res) {
-    if (pageMode && !hostIsOurs(req)) return send(res, 404, "not found\n");
+    // Before anything else, on every path: pages, the reserved library route,
+    // the health probe, and a 404 alike.
+    var address = server.address();
+    if (!hostIsOwn(req.headers.host, address && address.port)) return send(res, 400, "bad host\n");
     var pathname;
     var rawPathname;
     try {
@@ -1335,20 +1655,34 @@ function runServer(file, sessionId, id, instance, rootInput, dir, logicalRootInp
     if (req.method === "HEAD") return res.end();
     fs.createReadStream(candidate).on("error", function () { res.destroy(); }).pipe(res);
   });
+  // THE PORT HISTORY. Every port this record has listened on, oldest first,
+  // so a restart knows which loopback origins came from this server and may be
+  // removed (createCatalogOps). A record written before the history existed
+  // seeds it with the one port it names.
+  var ports = [];
+  if (prior && prior.root === root) {
+    if (Array.isArray(prior.ports)) ports = prior.ports.filter(validPort);
+    else if (validPort(prior.port)) ports = [prior.port];
+  }
   var preferredPort = Number(preferredPortInput);
   if (!validPort(preferredPort)) preferredPort = 0;
+  function listen(port) {
+    server.listen(port, HOST, onListening);
+  }
   server.once("error", function (err) {
     // The old port is taken (or refused): fall back to any free one. Any other
     // failure, or a failure on port 0, ends the process, and start() reports
     // that the server did not come up.
     if (preferredPort && (err.code === "EADDRINUSE" || err.code === "EACCES")) {
       preferredPort = 0;
-      return server.listen(0, HOST, onListening);
+      return listen(0);
     }
     throw err;
   });
-  server.listen(preferredPort, HOST, onListening);
+  listen(preferredPort);
   function onListening() {
+    var port = server.address().port;
+    if (ports.indexOf(port) === -1) ports.push(port);
     var meta = {
       schema: SCHEMA,
       id: id,
@@ -1357,7 +1691,8 @@ function runServer(file, sessionId, id, instance, rootInput, dir, logicalRootInp
       root: root,
       logical_root: logicalRoot,
       host: HOST,
-      port: server.address().port,
+      port: port,
+      ports: ports.slice(),
       pid: process.pid,
       started_at: startedAt,
       stopped_at: null,
@@ -1401,6 +1736,7 @@ module.exports = {
   CLOSED_REASON: CLOSED_REASON,
   noteLinkGiven: noteLinkGiven,
   servesPath: servesPath,
+  coveragePath: coveragePath,
   recordLinks: recordLinks,
   linkedFileForPage: linkedFileForPage,
   serverId: serverId,
@@ -1412,5 +1748,10 @@ module.exports = {
   stopOne: stopOne,
   stopAll: stopAll,
   restartAll: restartAll,
+  createCatalogOps: createCatalogOps,
+  REOPEN_STAGE: REOPEN_STAGE,
+  folderPages: folderPages,
+  folderEntryPage: folderEntryPage,
+  hostIsOwn: hostIsOwn,
   runServer: runServer
 };

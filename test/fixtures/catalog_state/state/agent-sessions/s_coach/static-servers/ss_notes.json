@@ -1,0 +1,16 @@
+{
+  "schema": 1,
+  "id": "ss_notes",
+  "session_id": "s_coach",
+  "instance": "inst_ss_notes",
+  "root": "${ROOT}/state/agent-sessions/s_coach/review-artifacts/notes1",
+  "logical_root": "${ROOT}/state/agent-sessions/s_coach/review-artifacts/notes1",
+  "host": "127.0.0.1",
+  "port": 54012,
+  "pid": 515151,
+  "started_at": "2026-09-20T10:00:00.000Z",
+  "stopped_at": "2026-09-21T10:00:00.000Z",
+  "mounts": {
+    "/.lahe-source/ab12cd/": "${ROOT}/home/projects/alpha/shared"
+  }
+}

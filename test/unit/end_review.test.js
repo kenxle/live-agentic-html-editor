@@ -396,3 +396,15 @@ test("a review with no owning session ends without a wake and without a throw", 
   assert.equal(typeof result.body.ended_at, "string", "the review still ends");
   assert.equal(result.body.woke, false, "and reports plainly that nobody was woken");
 });
+
+test("a route whose dependency the helper did not pass names that dependency, not a planning task", () => {
+  const routesModule = require("../../src/service/routes.js");
+  assert.equal(routesModule.notImplemented, undefined, "no not-implemented stub left");
+  for (const name of ["library.get", "review.read", "review.end"]) {
+    assert.throws(
+      () => routesModule.handlerFor(name)({ routeName: name, review: "r_x", body: {}, query: {}, requestId: "q" }, {}),
+      (err) => err.code === "MISSING_DEPENDENCY" && /needs deps\./.test(err.message) && !/Task/.test(err.message),
+      name
+    );
+  }
+});

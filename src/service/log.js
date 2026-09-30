@@ -129,8 +129,12 @@ function createEventLog(options) {
   // Per review: the highest seq handed out, and every event_id already on disk.
   var loaded = Object.create(null);
 
-  function helperLog(line) {
-    var stamped = new Date().toISOString() + " " + sanitizeLogLine(line) + "\n";
+  // `at` (a time in ms, optional) stamps the line with a caller's clock. The
+  // Library's actions pass the helper's `now`, so the catalog lines a test
+  // captures carry the times it chose (scripts/catalog_opens.py counts them).
+  function helperLog(line, at) {
+    var when = typeof at === "number" && isFinite(at) ? new Date(at) : new Date();
+    var stamped = when.toISOString() + " " + sanitizeLogLine(line) + "\n";
     stateDir.ensureDir(dir);
     stateDir.appendLine(stateDir.helperLogPath(dir), stamped);
     if (typeof opts.onHelperLog === "function") opts.onHelperLog(stamped);

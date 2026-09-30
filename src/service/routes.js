@@ -21,10 +21,12 @@ var crypto = require("node:crypto");
 
 var protocol = require("../shared/protocol.js");
 var record = require("../shared/record.js");
+var catalogPage = require("./catalog_page.js");
 
-function notImplemented(routeName, owner) {
-  var err = new Error("route " + routeName + " is not implemented yet: Task " + owner + " owns it");
-  err.code = "NOT_IMPLEMENTED";
+/** A route called without a dependency the helper always passes: a wiring bug. */
+function missingDependency(routeName, dependency) {
+  var err = new Error("route " + routeName + " needs deps." + dependency + ", which the helper did not pass");
+  err.code = "MISSING_DEPENDENCY";
   return err;
 }
 
@@ -49,7 +51,11 @@ var HANDLERS = {
         version: deps.version,
         api: protocol.API_VERSION,
         service_contract: protocol.SERVICE_CONTRACT,
-        started_at: deps.startedAt
+        started_at: deps.startedAt,
+        // The last authenticated catalog.list, or null. `lahe session close`
+        // reads it to decide whether the Library keeps the helper up. A time,
+        // never the token.
+        catalog_seen_at: deps.catalog && typeof deps.catalog.seenAt === "function" ? deps.catalog.seenAt() : null
       }
     };
   },
@@ -111,7 +117,7 @@ var HANDLERS = {
   // 404 a reviewer meets as a page that does nothing.
   "library.get": function (request, deps) {
     if (!deps.library || typeof deps.library.source !== "string") {
-      throw notImplemented("library.get", "1A");
+      throw missingDependency("library.get", "library");
     }
     return {
       status: 200,
@@ -187,6 +193,33 @@ var HANDLERS = {
       };
     }
 
+    // ADOPTION (LAHE Library, phase 8). A review from before sessions is taken
+    // into an agent session, and only when the reviewer's own Library click
+    // queued a pick-up of THIS review for THAT session. The review token is
+    // readable by scripts on the reviewed page, so the pending request is
+    // what keeps a page from moving itself into some agent's drain. A review
+    // with a real session is never adopted.
+    var adoptedInto = null;
+    if (body.adopt_session !== undefined) {
+      var into = body.adopt_session;
+      var queue = deps.catalogQueue;
+      var asked = !!queue && protocol.isSafeId(into) && queue.pendingFor(into, deps.now ? deps.now() : Date.now()).some(function (r) {
+        return r.review === request.review && r.action === "pickup";
+      });
+      var owner = held ? held.agent_session_id : null;
+      if (!asked || (owner !== "legacy" && owner !== into)) {
+        return {
+          status: 409,
+          error: {
+            code: "PROTO_BAD_REQUEST",
+            detail: "refused adopt_session: only a review from before sessions, with a Library pick-up pending for that session"
+          }
+        };
+      }
+      deps.reviews.adopt(request.review, into);
+      adoptedInto = into;
+    }
+
     var applied = [];
     origins.forEach(function (origin) {
       deps.reviews.registerOrigin(request.review, origin);
@@ -248,6 +281,7 @@ var HANDLERS = {
         recorded_source: recordedSource,
         recorded_paths: recordedPaths,
         only_recorded_pages: isolated,
+        adopted_into: adoptedInto,
         notes: notes,
         seq: deps.log.currentSeq(request.review)
       }
@@ -264,7 +298,7 @@ var HANDLERS = {
   // on load and on every reconnect.
   "review.read": function (request, deps) {
     if (!deps.projection || typeof deps.projection.project !== "function") {
-      throw notImplemented("review.read", "3A");
+      throw missingDependency("review.read", "projection");
     }
     if (typeof deps.projection.startWatching === "function") {
       deps.projection.startWatching(deps, [request.review]);
@@ -420,7 +454,7 @@ var HANDLERS = {
   // truncated: outstanding work stays in the log where it can still be read.
   "review.end": function (request, deps) {
     if (!deps.projection || typeof deps.projection.itemsFrom !== "function") {
-      throw notImplemented("review.end", "3A");
+      throw missingDependency("review.end", "projection");
     }
     // BEFORE the archive, not after. endReview drops the review's holder record,
     // and that record is where the owning agent session is named, so asking
@@ -686,12 +720,16 @@ function agentLiveness(request, deps, owner) {
   // existed) is reached some other way, so there is no monitor to be missing.
   // Saying "no agent watching" there would be a false alarm about nobody.
   if (!owner) return livenessNone(work);
-  return deps.agentSessions.liveness(owner, {
+  var out = deps.agentSessions.liveness(owner, {
     unanswered: work.unanswered,
     oldestUnansweredAt: work.oldest,
     oldestUnansweredItem: work.oldestItem,
     lastReplyAt: work.lastReplyAt
   });
+  // `presence` is the Library's answer (listening, working, away), not the
+  // rail's. The rail's payload keeps exactly the fields the rail reads.
+  if (out) delete out[protocol.AGENT_LIVENESS.FIELD.PRESENCE];
+  return out;
 }
 
 /**
@@ -719,11 +757,73 @@ function livenessNone(work) {
   return out;
 }
 
+// ---------------------------------------------------------------------------
+// The Library's routes (LAHE Library, D11 amendment)
+// ---------------------------------------------------------------------------
+//
+// Every request here has passed auth.checkCatalogRequest: the Host, the
+// Sec-Fetch-Site value, and for the API routes the Library token, the JSON
+// body and the exact Origin. Nothing here reads a review token, and nothing
+// here returns an origin to echo, so no catalog response carries CORS.
+//
+// The page and its assets are Task 1.2's. list, open, star and request are
+// Task 2.1's and hand straight to catalog_actions.js, which joins the reader,
+// the store, the request queue and the static servers' restart.
+var CATALOG_HANDLERS = {
+  "catalog.page": function (request, deps) {
+    return {
+      status: 200,
+      catalogRaw: { contentType: "text/html; charset=utf-8", bytes: Buffer.from(catalogPage.renderPage(deps.catalog.token), "utf8") }
+    };
+  },
+
+  // The asset name is the rest of the path, taken as it arrived: nothing is
+  // decoded or resolved. catalogPage.readAsset matches it against a fixed
+  // allowlist or returns null, and null is a 404 with no file bytes.
+  "catalog.asset": function (request) {
+    var name = request.assetName;
+    var asset = catalogPage.readAsset(name);
+    if (!asset) {
+      return { status: 404, error: { code: "PROTO_BAD_REQUEST", detail: "no such Library asset" } };
+    }
+    return { status: 200, catalogRaw: { contentType: asset.contentType, bytes: asset.bytes } };
+  },
+
+  // Every clock is the helper's (deps.now), so a test drives expiry, the
+  // sweep and the log line's age by choosing the time.
+  "catalog.list": async function (request, deps) {
+    var nowMs = deps.now();
+    var outcome = await deps.catalogActions.list(nowMs);
+    // Only an authenticated list reaches this line (auth.check ran first), and
+    // only it counts as the Library being open: `lahe session close` reads the
+    // time from health before it stops the helper.
+    deps.catalog.markSeen(nowMs);
+    return outcome;
+  },
+  "catalog.open": function (request, deps) {
+    return deps.catalogActions.open(request.body || {}, deps.now());
+  },
+  "catalog.star": function (request, deps) {
+    return deps.catalogActions.star(request.body || {}, deps.now());
+  },
+  "catalog.rename": function (request, deps) {
+    return deps.catalogActions.rename(request.body || {}, deps.now());
+  },
+  "catalog.request": function (request, deps) {
+    return deps.catalogActions.request(request.body || {}, deps.now());
+  }
+};
+
 // Every route on the wire has a handler, checked at LOAD rather than at request
 // time. A route with no handler is a 500 in front of a reviewer otherwise.
 protocol.ROUTES.forEach(function (r) {
   if (typeof HANDLERS[r.name] !== "function") {
     throw new Error("src/service/routes.js has no handler for protocol route " + r.name);
+  }
+});
+protocol.CATALOG_ROUTES.forEach(function (r) {
+  if (typeof CATALOG_HANDLERS[r.name] !== "function") {
+    throw new Error("src/service/routes.js has no handler for catalog route " + r.name);
   }
 });
 
@@ -736,16 +836,51 @@ function matchRoute(method, pathname) {
   return null;
 }
 
-function handlerFor(name) {
-  if (!Object.prototype.hasOwnProperty.call(HANDLERS, name)) {
-    throw new Error("unknown route: " + String(name));
+/**
+ * Match a method and a RAW request path (before any URL normalization) to a
+ * catalog route, or null. The raw path is used so that `../` and its encoded
+ * forms reach catalog.asset as a name it does not know, rather than being
+ * resolved by a URL parser into some other route's path.
+ *
+ * @returns {{route: object, assetName: string|null}|null}
+ */
+function matchCatalogRoute(method, rawPath) {
+  var pathOnly = String(rawPath || "").split("?")[0];
+  var upper = String(method).toUpperCase();
+  for (var i = 0; i < protocol.CATALOG_ROUTES.length; i += 1) {
+    var r = protocol.CATALOG_ROUTES[i];
+    if (r.method !== upper) continue;
+    if (r.prefix) {
+      if (pathOnly.indexOf(r.path) === 0) return { route: r, assetName: pathOnly.slice(r.path.length) };
+    } else if (pathOnly === r.path) {
+      return { route: r, assetName: null };
+    }
   }
-  return HANDLERS[name];
+  return null;
+}
+
+/**
+ * Is this raw path one of the Library's, for any method? The preflight uses it
+ * to refuse every catalog path whatever origin asks.
+ */
+function isCatalogPath(rawPath) {
+  var pathOnly = String(rawPath || "").split("?")[0];
+  return protocol.CATALOG_ROUTES.some(function (r) {
+    return r.prefix ? pathOnly.indexOf(r.path) === 0 : pathOnly === r.path;
+  });
+}
+
+function handlerFor(name) {
+  if (Object.prototype.hasOwnProperty.call(HANDLERS, name)) return HANDLERS[name];
+  if (Object.prototype.hasOwnProperty.call(CATALOG_HANDLERS, name)) return CATALOG_HANDLERS[name];
+  throw new Error("unknown route: " + String(name));
 }
 
 module.exports = {
   HANDLERS: HANDLERS,
+  CATALOG_HANDLERS: CATALOG_HANDLERS,
   handlerFor: handlerFor,
   matchRoute: matchRoute,
-  notImplemented: notImplemented
+  matchCatalogRoute: matchCatalogRoute,
+  isCatalogPath: isCatalogPath
 };

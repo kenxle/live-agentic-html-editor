@@ -31,17 +31,23 @@ flowchart TD
         SV_SESS["agent_sessions.js, wake_feed.js,<br/>watchers.js, static_servers.js<br/>session lifecycle and heartbeat,<br/>the wake feed a host tails, liveness checks,<br/>session-owned static servers"]
         SV_STORE["state_dir.js, reviews.js, review_writer.js,<br/>projection.js, replies.js, handled_check.js<br/>on-disk layout, review creation and tokens,<br/>the single writer of review.json,<br/>log-to-projection, reply folding,<br/>is a handled claim true on the built page"]
         SV_MISC["markdown.js, markdown_links.js, rebuild.js,<br/>tab_icon.js, heal.js, source_stamp.js<br/>Markdown rendering, link rewriting,<br/>re-rendering a Markdown review when its<br/>source moves, fallback tab icon, putting the<br/>script line back after a rebuild,<br/>helper-version check"]
+        SV_CAT["catalog_reader.js, catalog_store.js,<br/>catalog_requests.js, catalog_actions.js,<br/>catalog_page.js<br/>the Library: the list from disk, stars,<br/>the request queue, Open and the sweep,<br/>the page template and its asset allowlist"]
         SV_INDEX["index.js<br/>serve"]
+    end
+
+    subgraph CATPAGE["layer/catalog slash - the Library page, CATALOG_PAGE list"]
+        CP["view_model.js, page.js<br/>served raw from src/ by catalog.asset,<br/>never bundled into dist/"]
     end
 
     subgraph CLI["cli slash - the command surface"]
         CLI_INDEX["index.js<br/>the command dispatcher"]
-        CLI_CMDS["serve, review, session,<br/>add, status, reply, monitor,<br/>write: notes on a blank page,<br/>on its own one-page server"]
+        CLI_CMDS["serve, review, session,<br/>add, status, reply, monitor, library,<br/>write: notes on a blank page,<br/>on its own one-page server"]
         CLI_INDEX --> CLI_CMDS
     end
 
     LAYER --> SHARED
     SERVICE --> SHARED
+    CATPAGE --> SHARED
     CLI --> SERVICE
 
     classDef frozen fill:#f5d0d0,stroke:#a33,stroke-width:2px;
@@ -50,7 +56,8 @@ flowchart TD
 
 ## What to notice
 
-- **What each folder is for.** `shared/` is the one place a wire-protocol field name or item-record shape gets spelled out. Both `layer/` and `service/` import from it instead of each defining their own copy. `layer/` is the code that runs in the reviewer's browser. `service/` is the code that runs in the local helper process. `cli/` is the set of commands (`serve`, `review`, `session`, `add`, `status`, `reply`, `monitor`, `write`) a person or an agent types.
+- **What each folder is for.** `shared/` is the one place a wire-protocol field name or item-record shape gets spelled out. Both `layer/` and `service/` import from it instead of each defining their own copy. `layer/` is the code that runs in the reviewer's browser. `service/` is the code that runs in the local helper process. `cli/` is the set of commands (`serve`, `review`, `session`, `add`, `status`, `reply`, `monitor`, `library`, `write`) a person or an agent types.
+- **The Library page is its own list.** `src/layer/catalog/` holds the Library page's two scripts. They run in the browser like `layer/`, but they are not part of the rail's bundle: `manifest.js` lists them in `CATALOG_PAGE`, and the helper serves them raw from `src/` beside `protocol.js`. So a change to them never makes `dist/` stale. The `catalog_*.js` files in `service/` are the helper side of the same feature.
 - **Which way dependencies point.** Both `layer/` and `service/` depend on `shared/`. Neither depends on the other. If you find yourself wanting `layer/` code to call `service/` code directly, or the reverse, that is a sign the shared piece belongs in `shared/` instead.
 - **Why `layer/` is an ordered list, not a cloud.** The browser has no module loader, so the whole library ships as one concatenated file (`dist/lahe-layer.js`). The order files are glued in is the order they can depend on each other: a file may only use something a file above it in the list already registered. `manifest.js` writes that order down, and the diagram's chain (`listeners.js` through `index.js`) is that same order.
 - **The three frozen files**, shaded red above: `manifest.js`, `review_format.js`, and `layer/selection.js`. A change to any of them goes through the orchestrator rather than through whichever builder happens to be touching nearby code, because other files depend on their exact shape.
@@ -58,4 +65,4 @@ flowchart TD
 
 ## What got grouped, and why
 
-`layer/` is close to 30 files, which is too many to draw as separate boxes and still read. The six groups above (L1 through L7) follow the manifest's own load order and cluster files that do one job together: boot and wiring, caret/anchoring, protection and highlighting, the rail's chrome and tabs, the sync/comment/edit loop, and replay plus injection. `service/` got a similar treatment, grouped by job (routing and logging, session lifecycle, on-disk store and projection, Markdown/heal/version misc) rather than manifest order, since the helper has no load-order constraint the way the browser bundle does.
+`layer/` is close to 30 files, which is too many to draw as separate boxes and still read. The six groups above (L1 through L7) follow the manifest's own load order and cluster files that do one job together: boot and wiring, caret/anchoring, protection and highlighting, the rail's chrome and tabs, the sync/comment/edit loop, and replay plus injection. `service/` got a similar treatment, grouped by job (routing and logging, session lifecycle, on-disk store and projection, Markdown/heal/version misc, the Library) rather than manifest order, since the helper has no load-order constraint the way the browser bundle does.

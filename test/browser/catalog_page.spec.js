@@ -1,0 +1,798 @@
+// The Library page in a real browser. LAHE Library plan, Task 2.2, "Page in the
+// browser (2.2)" in the Test List.
+//
+// What is real and what is stubbed:
+//
+//  - The PAGE is real. A real helper (port 0, its own temporary state dir, never
+//    7817) serves /catalog and its assets, so the content policy, the token meta
+//    tag and the script loading are the ones that ship.
+//  - catalog.list goes to that helper first, so its auth is real: after a helper
+//    restart the old token really gets a 401. A 200 is then answered with
+//    test/fixtures/catalog_list.json, so the page draws a fixed list.
+//  - open, star and request are answered by the test, which also checks that
+//    the page sent the Library's own headers.
+//
+// Every state and every string is proved in the view model's unit tests; this
+// file proves only what needs a DOM: text stays text, Open's tab sequence, the
+// dialog, the panel, the toggle, the restart. No test waits out a poll: the page
+// exposes window.__laheCatalogPollNow().
+
+"use strict";
+
+const path = require("node:path");
+const { test, expect } = require("@playwright/test");
+const { startService, SERVICE_ENTRY } = require("../helpers");
+const { pollPage } = require("../helpers/poll");
+const { startAppServer } = require("../fixtures/app/server");
+
+const protocol = require("../../src/shared/protocol.js");
+
+const LIST = require("../fixtures/catalog_list.json");
+const NOW = "2026-09-28T16:00:00.000Z";
+const SHOTS = path.join(__dirname, "..", "..", "docs", "features", "20260922.02_lahe_library");
+const EPHEMERAL_PORT = ["--port", "0"];
+
+function freshList() {
+  return JSON.parse(JSON.stringify(LIST));
+}
+
+function reviewIn(list, id) {
+  for (const s of list.sessions) for (const r of s.reviews) if (r.id === id) return r;
+  throw new Error("no review " + id);
+}
+
+// Route the Library's API for one page. `list` is read on every poll, so a
+// test can change it between polls. `answers` maps a route name to a function
+// (body) => {status, body}. Every POST is recorded.
+async function routeCatalog(page, options) {
+  const calls = [];
+  const realStatuses = [];
+  calls.realStatuses = realStatuses;
+  const listPath = protocol.route("catalog.list").path;
+  await page.route("**" + listPath, async (route) => {
+    // Playwright's route.fetch replays the request without the headers the
+    // browser adds at the network layer, Sec-Fetch-Site among them, and the
+    // helper refuses a list call that lacks it. The page's own call is
+    // same-origin, so that is the value restored; the token and the client
+    // header are the page's own.
+    const real = await route.fetch({
+      headers: Object.assign({}, route.request().headers(), { "sec-fetch-site": "same-origin" })
+    });
+    realStatuses.push(real.status());
+    if (real.status() === 401) {
+      await route.fulfill({ response: real });
+      return;
+    }
+    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(options.list()) });
+  });
+  for (const name of ["catalog.open", "catalog.star", "catalog.rename", "catalog.request"]) {
+    await page.route("**" + protocol.route(name).path, async (route) => {
+      const req = route.request();
+      const headers = req.headers();
+      const body = JSON.parse(req.postData() || "{}");
+      calls.push({ name, body, headers });
+      const answer = (options.answers && options.answers[name]) || (() => ({ status: 200, body: {} }));
+      const out = await answer(body);
+      await route.fulfill({ status: out.status, contentType: "application/json", body: JSON.stringify(out.body) });
+    });
+  }
+  return calls;
+}
+
+// Record every action POST the page starts, from the moment it is called.
+// page.on("request") fires when the browser starts a request, before any route
+// handler runs, so a click's request cannot slip past it.
+function recordActions(page) {
+  const paths = ["catalog.open", "catalog.star", "catalog.rename", "catalog.request"].map((n) => protocol.route(n).path);
+  const sent = [];
+  page.on("request", (req) => {
+    const url = new URL(req.url());
+    if (req.method() === "POST" && paths.indexOf(url.pathname) !== -1) sent.push(url.pathname);
+  });
+  return sent;
+}
+
+// "Nothing was sent": one more poll-now round trip first, so a request a click
+// started has had every chance to show up before the count is read.
+async function expectNothingSent(page, sent, message) {
+  await page.evaluate(() => window.__laheCatalogPollNow());
+  expect(sent, message).toEqual([]);
+}
+
+// Screenshots are written only on request (LAHE_SHOTS=1) and only on Chromium,
+// so an ordinary run never rewrites a committed image.
+function shotsWanted(browserName) {
+  return process.env.LAHE_SHOTS === "1" && browserName === "chromium";
+}
+
+async function openLibrary(page, helper) {
+  await page.clock.setFixedTime(new Date(NOW));
+  await page.goto(helper.url + protocol.CATALOG_PAGE_PATH);
+  await pollPage(page, () => !!document.querySelector("#lahe-catalog-main .lib-section"), undefined, {
+    message: "the Library to render its first list"
+  });
+}
+
+function rowLocator(page, reviewId) {
+  return page.locator('li[data-review="' + reviewId + '"]');
+}
+
+// Pick this up and Launch sit behind the row's Hand to agent menu.
+async function handTo(page, reviewId, action) {
+  const row = rowLocator(page, reviewId);
+  const menu = row.locator('[data-act="menu"]');
+  if ((await menu.getAttribute("aria-expanded")) !== "true") await menu.click();
+  await row.locator('[data-act="' + action + '"]').click();
+}
+
+test.use({ timezoneId: "UTC", viewport: { width: 1200, height: 900 } });
+
+test.describe("the Library page", () => {
+  let helper;
+
+  test.beforeEach(async () => {
+    helper = await startService({ entry: SERVICE_ENTRY, args: EPHEMERAL_PORT });
+  });
+
+  // The page goes before the helper. An action ends with a follow-up list poll,
+  // and a test's last assertion can pass before that poll comes back. Stopping
+  // the helper first (Playwright closes the page only after afterEach) ended
+  // the helper's connections under that poll's route.fetch, which threw
+  // "socket hang up" into whichever test was finishing. unrouteAll waits for a
+  // handler already running, and closing the page stops any new poll.
+  test.afterEach(async ({ page }) => {
+    await page.unrouteAll({ behavior: "wait" });
+    await page.close();
+    if (helper) await helper.stop();
+  });
+
+  test("the browser applies the inline style under the page's content policy, with no violation", async ({ page }) => {
+    // The policy allows the one inline <style> by its hash. The unit test pins
+    // the hash against the rendered style; this checks a real browser agrees.
+    await page.addInitScript(() => {
+      window.__cspViolations = [];
+      document.addEventListener("securitypolicyviolation", (e) => {
+        window.__cspViolations.push(e.violatedDirective + " " + (e.blockedURI || "inline"));
+      });
+    });
+    await routeCatalog(page, { list: () => freshList() });
+    await openLibrary(page, helper);
+    const primary = await page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue("--lib-primary").trim());
+    expect(primary, "the inline style's custom property is set, so the style ran").toBe("#3c56a5");
+    expect(await page.evaluate(() => window.__cspViolations)).toEqual([]);
+  });
+
+  test("row text containing HTML renders as text", async ({ page }) => {
+    const hostile = '<img src=x onerror="window.__pwned=1"><b>bold</b>';
+    const list = freshList();
+    reviewIn(list, "r_stale").display_name = hostile;
+    reviewIn(list, "r_stale").project_path = "<i>folder</i>/stale.html";
+    list.sessions.filter((s) => s.id === "s_coach")[0].name = "<script>window.__pwned=2</script>";
+    await routeCatalog(page, { list: () => list });
+    await openLibrary(page, helper);
+
+    const row = rowLocator(page, "r_stale");
+    await expect(row.locator(".lib-name")).toHaveText(hostile);
+    await expect(row.locator(".lib-where")).toContainText("<i>folder</i>");
+    await expect(page.locator('details[data-session="s_coach"] .lib-card-title')).toHaveText("<script>window.__pwned=2</script>");
+    expect(await page.locator("#lahe-catalog-main img, #lahe-catalog-main b, #lahe-catalog-main i, #lahe-catalog-main script").count()).toBe(0);
+    expect(await page.evaluate(() => window.__pwned)).toBeUndefined();
+  });
+
+  test("Open: the new tab has no opener, lands on the helper's URL, and the rail boots there", async ({ page, context }) => {
+    const appServer = await startAppServer();
+    const review = helper.reviewIds[0];
+    // A second helper that knows the app's origin, so the opened document's
+    // rail has a helper to talk to. The Library's own helper stays as it is.
+    const docHelper = await startService({ entry: SERVICE_ENTRY, args: EPHEMERAL_PORT, reviews: [review], allowedOrigins: [appServer.origin] });
+    try {
+      appServer.useLayer({ review: review, token: docHelper.tokenFor(review), helper: docHelper.url });
+      const target = appServer.urlFor("/");
+      const calls = await routeCatalog(page, {
+        list: freshList,
+        answers: { "catalog.open": () => ({ status: 200, body: { url: target, request_id: null, not_asked: null } }) }
+      });
+      await openLibrary(page, helper);
+
+      const tabPromise = context.waitForEvent("page");
+      // s_old3 has no watcher, so Open goes straight through.
+      await rowLocator(page, "r_stale").locator('[data-act="open"]').click();
+      const tab = await tabPromise;
+      await tab.waitForURL(target);
+      expect(tab.url()).toBe(target);
+      expect(await tab.evaluate(() => window.opener)).toBeNull();
+      await pollPage(tab, () => !!(window.__lahe && window.__lahe.booted), undefined, {
+        message: "the rail to boot in the opened tab"
+      });
+
+      expect(calls.length).toBe(1);
+      expect(calls[0].body).toEqual({ review: "r_stale", handoff: true, confirmed: false });
+      expect(calls[0].headers[protocol.HEADER.CLIENT]).toBe(protocol.CLIENT_CATALOG);
+      expect(calls[0].headers[protocol.HEADER.CONTENT_TYPE]).toBe(protocol.JSON_CONTENT_TYPE);
+      expect(calls[0].headers[protocol.HEADER.TOKEN]).toMatch(/\S/);
+      await expect(page.locator("#lahe-catalog-banner")).toHaveText('"Stale Projection" is open in a new tab.');
+      await tab.close();
+    } finally {
+      await docHelper.stop();
+      await appServer.close();
+    }
+  });
+
+  test("Open closes the tab and says why when the helper answers with a non-loopback URL", async ({ page, context }) => {
+    await routeCatalog(page, {
+      list: freshList,
+      answers: { "catalog.open": () => ({ status: 200, body: { url: "http://evil.test/", request_id: null, not_asked: null } }) }
+    });
+    await openLibrary(page, helper);
+    const tabPromise = context.waitForEvent("page");
+    await rowLocator(page, "r_stale").locator('[data-act="open"]').click();
+    const tab = await tabPromise;
+    if (!tab.isClosed()) await tab.waitForEvent("close");
+    await expect(rowLocator(page, "r_stale").locator(".lib-note-text")).toHaveText(
+      "LAHE answered with an address that is not on this computer, so the Library did not open it."
+    );
+  });
+
+  test("Open answered with no URL closes the blank tab and shows the row waiting for the agent", async ({ page, context }) => {
+    await routeCatalog(page, {
+      list: freshList,
+      answers: { "catalog.open": () => ({ status: 200, body: { url: null, request_id: "cq_s", not_asked: null } }) }
+    });
+    await openLibrary(page, helper);
+    const tabPromise = context.waitForEvent("page");
+    await rowLocator(page, "r_stale").locator('[data-act="open"]').click();
+    const tab = await tabPromise;
+    if (!tab.isClosed()) await tab.waitForEvent("close");
+    await expect(rowLocator(page, "r_stale").locator(".lib-note-text")).toHaveText("Waiting for document index.");
+    await expect(page.locator("#lahe-catalog-banner")).toHaveText("");
+  });
+
+  test("a watched session asks before a hand-over, naming the agent and the other reviews", async ({ page }) => {
+    const sent = recordActions(page);
+    const calls = await routeCatalog(page, {
+      list: freshList,
+      answers: { "catalog.request": () => ({ status: 200, body: { request_id: "cq_new" } }) }
+    });
+    await openLibrary(page, helper);
+    await handTo(page, "r_mounted", "pickup");
+
+    const dialog = page.locator("#lahe-catalog-confirm");
+    await expect(dialog).toBeVisible();
+    await expect(dialog.locator("h2")).toHaveText("Another agent is on this session.");
+    await expect(dialog.locator("p")).toHaveText([
+      "Its own agent is listening. 3 comments are waiting.",
+      '"Figure" belongs to session "coach activity". Handing it to document index moves the whole session and stops the other agent. These reviews move with it:'
+    ]);
+    await expect(dialog.locator("li")).toHaveText(["Feature Brief: Coach Activity", "Shared Title", "Coach Notes", "Deleted Page"]);
+    await expect(dialog.locator("button")).toHaveText(["Move the session", "Just open it to read", "Cancel"]);
+    await expectNothingSent(page, sent, "nothing is sent before the reader decides");
+
+    await dialog.locator('[data-act="move"]').click();
+    await expect(dialog).toBeHidden();
+    // The dialog closes before the request is routed, so poll for it rather than
+    // reading the call list the instant the dialog hides.
+    await expect.poll(() => calls.map((c) => c.body)).toEqual([{ review: "r_mounted", action: "pickup", confirmed: true }]);
+    await expect(rowLocator(page, "r_mounted").locator(".lib-note-text")).toHaveText("Waiting for document index.");
+  });
+
+  test("Cancel and Escape leave the watched session alone", async ({ page }) => {
+    const sent = recordActions(page);
+    await routeCatalog(page, { list: freshList });
+    await openLibrary(page, helper);
+    const dialog = page.locator("#lahe-catalog-confirm");
+    await handTo(page, "r_mounted", "launch");
+    await dialog.locator('[data-act="cancel"]').click();
+    await expect(dialog).toBeHidden();
+    await handTo(page, "r_mounted", "launch");
+    await expect(dialog).toBeVisible();
+    await page.keyboard.press("Escape");
+    await expect(dialog).toBeHidden();
+    await expectNothingSent(page, sent);
+  });
+
+  test("with no agent attached, Pick this up and Launch show the hand-off message", async ({ page }) => {
+    const list = freshList();
+    list.attached = null;
+    const sent = recordActions(page);
+    await routeCatalog(page, { list: () => list });
+    await openLibrary(page, helper);
+    await expect(page.locator("#lahe-catalog-agent")).toHaveText(
+      "No agent attached. Open still works; hand-overs give you a message to paste."
+    );
+    const message = protocol.AGENT_LIVENESS.handoffMessage("s_coach", "coach activity", false, { library: true, stateDir: null });
+    for (const action of ["pickup", "launch"]) {
+      await handTo(page, "r_mounted", action);
+      const panel = rowLocator(page, "r_mounted").locator(".lib-panel");
+      await expect(panel.locator("p")).toHaveText(
+        "No agent is attached. This is the same hand-off message the rail already copies. Paste it into any agent:"
+      );
+      await expect(panel.locator("pre")).toHaveText(message);
+      await expect(panel.locator('[data-act="copy"]')).toBeFocused();
+      await panel.locator('[data-act="close-panel"]').click();
+      await expect(panel).toHaveCount(0);
+    }
+    await expectNothingSent(page, sent);
+  });
+
+  test("a second click while a request waits does nothing and says so", async ({ page }) => {
+    const sent = recordActions(page);
+    await routeCatalog(page, { list: freshList });
+    await openLibrary(page, helper);
+    const row = rowLocator(page, "r_brief");
+    await expect(row.locator(".lib-note-text")).toHaveText("Waiting for document index.");
+    await handTo(page, "r_brief", "pickup");
+    await expect(row.locator(".lib-note-text")).toHaveText("Already waiting for document index.");
+    await handTo(page, "r_brief", "launch");
+    await expect(row.locator(".lib-note-text")).toHaveText("Already waiting for document index.");
+    await expectNothingSent(page, sent);
+  });
+
+  test("a double click on Open sends one request and shows Open busy until it answers", async ({ page, context }) => {
+    const sent = recordActions(page);
+    let release;
+    const held = new Promise((resolve) => {
+      release = resolve;
+    });
+    const tabs = [];
+    context.on("page", (p) => tabs.push(p));
+    await routeCatalog(page, {
+      list: freshList,
+      answers: {
+        "catalog.open": async () => {
+          await held;
+          return { status: 200, body: { url: "http://evil.test/", request_id: null, not_asked: null } };
+        }
+      }
+    });
+    await openLibrary(page, helper);
+    const open = rowLocator(page, "r_stale").locator('[data-act="open"]');
+    await open.dblclick();
+    await expect(rowLocator(page, "r_stale").locator('[data-act="open"]')).toHaveAttribute("aria-busy", "true");
+    await rowLocator(page, "r_stale").locator('[data-act="open"]').click();
+    await expect.poll(() => sent.length).toBe(1);
+    release();
+    // The answer is refused (not loopback), which closes the one tab and ends
+    // the busy state. Its note is the sign the answer arrived.
+    await expect(rowLocator(page, "r_stale").locator(".lib-note-text")).toHaveText(
+      "LAHE answered with an address that is not on this computer, so the Library did not open it."
+    );
+    await expect(rowLocator(page, "r_stale").locator('[data-act="open"]')).not.toHaveAttribute("aria-busy", "true");
+    await page.evaluate(() => window.__laheCatalogPollNow());
+    expect(sent).toEqual([protocol.route("catalog.open").path]);
+    expect(tabs.length, "one tab for one Open").toBe(1);
+  });
+
+  test("the missing toggle shows and hides missing rows", async ({ page }) => {
+    await routeCatalog(page, { list: freshList });
+    await openLibrary(page, helper);
+    await expect(rowLocator(page, "r_deleted")).toHaveCount(0);
+    await page.locator('[data-act="show-missing"]').click();
+    const section = page.locator('[data-section="missing"]');
+    await expect(section.locator("h2")).toHaveText("Missing (3). Neither the file nor a main-repo copy exists.");
+    await expect(section.locator("li[data-review]")).toHaveCount(3);
+    await expect(rowLocator(page, "r_deleted").locator('[data-act="open"]')).toBeDisabled();
+    await expect(rowLocator(page, "r_deleted").locator('[data-act="star"]')).toBeEnabled();
+    await section.locator('[data-act="hide-missing"]').click();
+    await expect(rowLocator(page, "r_deleted")).toHaveCount(0);
+    await expect(page.locator('[data-act="show-missing"]')).toHaveText("Show 3 missing");
+  });
+
+  test("a star changes when the helper answers, and a failed one goes back and says why", async ({ page }) => {
+    let fail = false;
+    const list = freshList();
+    await routeCatalog(page, {
+      list: () => list,
+      answers: {
+        "catalog.star": (body) => {
+          if (fail) {
+            return { status: 500, body: { error: { code: "PROTO_CATALOG_UNREADABLE", message: "m.", remedy: "Move catalog.json aside." } } };
+          }
+          reviewIn(list, body.review).starred = body.starred;
+          return { status: 200, body: { review: body.review, starred: body.starred } };
+        }
+      }
+    });
+    await openLibrary(page, helper);
+    const star = rowLocator(page, "r_stale").locator('[data-act="star"]');
+    await expect(star).toHaveAttribute("aria-pressed", "false");
+    await star.click();
+    await expect(rowLocator(page, "r_stale").locator('[data-act="star"]')).toHaveAttribute("aria-pressed", "true");
+
+    fail = true;
+    await rowLocator(page, "r_stale").locator('[data-act="star"]').click();
+    await expect(rowLocator(page, "r_stale").locator(".lib-note-text")).toHaveText(
+      "Couldn't save the star: Move catalog.json aside. The star goes back."
+    );
+    await expect(rowLocator(page, "r_stale").locator('[data-act="star"]')).toHaveAttribute("aria-pressed", "true");
+  });
+
+  test("restarting the helper under an open Library says so, and a reload recovers", async ({ page }) => {
+    const calls = await routeCatalog(page, { list: freshList });
+    await openLibrary(page, helper);
+    // The real helper passed the page's token: not a refusal.
+    expect(calls.realStatuses.length).toBeGreaterThan(0);
+    calls.realStatuses.forEach((status) => expect(status).toBe(200));
+    const port = helper.port;
+    const stateDir = helper.stateDir;
+    await helper.stop();
+    helper = await startService({ entry: SERVICE_ENTRY, args: ["--port", String(port)], stateDir: stateDir });
+    expect(helper.port).toBe(port);
+
+    await page.evaluate(() => window.__laheCatalogPollNow());
+    const banner = page.locator("#lahe-catalog-banner");
+    await expect(banner.locator("p")).toHaveText("LAHE restarted, reload this page.");
+    await expect(banner.locator('[data-act="reload"]')).toHaveText("Reload");
+
+    await banner.locator('[data-act="reload"]').click();
+    await pollPage(page, () => !!document.querySelector("#lahe-catalog-main .lib-section"), undefined, {
+      message: "the reloaded Library to render"
+    });
+    await expect(banner).toHaveText("");
+  });
+
+  test("a watched card names its agent once, on its summary line, and its rows do not repeat it", async ({ page }) => {
+    await routeCatalog(page, { list: freshList });
+    await openLibrary(page, helper);
+    // The card of s_coach's reviews that do not wait: several rows.
+    const coach = page.locator('details[data-session="s_coach:earlier"]');
+    // Its watcher is itself, so the card does not repeat its own title.
+    await expect(coach.locator("summary .lib-card-watch")).toHaveText("its own agent is listening");
+    await expect(coach.locator('summary .lib-badge[data-badge="watching"]')).toHaveCount(1);
+    expect(await coach.locator("li[data-review]").count()).toBeGreaterThan(1);
+    await expect(coach.locator('li[data-review] [data-badge="watching"]')).toHaveCount(0);
+    await expect(page.locator('details[data-session="s_ops"] summary .lib-card-watch')).toHaveText(
+      "document index (the agent that opened this Library) is listening"
+    );
+    // A missing row is listed outside its card, so it keeps the badge.
+    await page.locator('[data-act="show-missing"]').click();
+    await expect(rowLocator(page, "r_deleted").locator('[data-badge="watching"]')).toHaveText("agent listening: coach activity");
+  });
+
+  test("phase 8: an agent that is neither listening nor working says when it was last active, and a hand-over asks nothing", async ({ page }) => {
+    const list = freshList();
+    const coach = list.sessions.find((x) => x.id === "s_coach");
+    coach.watching = null;
+    coach.away = { session: "s_other", name: "other agent", last_active: "2026-09-28T15:48:00.000Z" };
+    const calls = await routeCatalog(page, {
+      list: () => list,
+      answers: { "catalog.request": () => ({ status: 200, body: { request_id: "cq_new" } }) }
+    });
+    await openLibrary(page, helper);
+    const card = page.locator('details[data-session="s_coach"]');
+    await expect(card.locator("summary .lib-card-watch")).toHaveText(/^other agent last active .+, not listening$/);
+    await expect(card.locator('summary .lib-badge[data-badge="watching"]')).toHaveCount(0);
+    await expect(card.locator("summary .lib-waiting")).toHaveText("3 waiting");
+    await handTo(page, "r_mounted", "pickup");
+    await expect.poll(() => calls.map((c) => c.body)).toEqual([{ review: "r_mounted", action: "pickup", confirmed: false }]);
+    await expect(page.locator("#lahe-catalog-confirm")).toBeHidden();
+  });
+
+  test("a row shows Open at rest; Pick this up and Launch open from its one Hand to agent menu", async ({ page }) => {
+    await routeCatalog(page, { list: freshList });
+    await openLibrary(page, helper);
+    const row = rowLocator(page, "r_mounted");
+    await expect(row.locator(".lib-acts > .lib-btn")).toHaveText(["Open"]);
+    await expect(row.locator('[data-act="pickup"], [data-act="launch"]')).toHaveCount(0);
+    const menu = row.locator('[data-act="menu"]');
+    await expect(menu).toHaveText("Hand to agent");
+    await expect(menu).toHaveAttribute("aria-expanded", "false");
+    await menu.click();
+    await expect(menu).toHaveAttribute("aria-expanded", "true");
+    await expect(row.locator(".lib-menu-list .lib-btn")).toHaveText(["Pick this up", "Launch a new agent"]);
+    await expect(row.locator('[data-act="pickup"]')).toBeFocused();
+    // A poll does not close it under the reader.
+    await page.evaluate(() => window.__laheCatalogPollNow());
+    await expect(menu).toHaveAttribute("aria-expanded", "true");
+    await page.keyboard.press("Escape");
+    await expect(row.locator(".lib-menu-list")).toHaveCount(0);
+    await expect(menu).toBeFocused();
+  });
+
+  test("no Hand to agent where the Library's agent already watches, and a disabled one with its reason on a dev-server row", async ({ page }) => {
+    await routeCatalog(page, { list: freshList });
+    await openLibrary(page, helper);
+    // s_ops is watched by document index, the Library's own agent.
+    await expect(rowLocator(page, "r_old4").locator('[data-act="menu"]')).toHaveCount(0);
+    await expect(rowLocator(page, "r_old4").locator('[data-act="open"]')).toBeEnabled();
+    const dev = rowLocator(page, "r_dev");
+    await expect(dev.locator('[data-act="menu"]')).toBeDisabled();
+    await expect(dev.locator(".lib-line")).toContainText([
+      "An app's dev server serves this page, so no agent can take it from here. Start the dev server and open the page yourself."
+    ]);
+  });
+
+  test("Launch is disabled with its reason on a legacy and a worktree row; Pick this up stays", async ({ page }) => {
+    // The worktree row's session is watched by the Library's own agent in the
+    // fixture, which hides its menu; nobody watches it here.
+    const list = freshList();
+    list.sessions.forEach((s) => { if (s.reviews.some((r) => r.id === "r_wt_gone")) s.watching = null; });
+    await routeCatalog(page, { list: () => list });
+    await openLibrary(page, helper);
+    for (const id of ["r_legacy", "r_wt_gone"]) {
+      const row = rowLocator(page, id);
+      await row.locator('[data-act="menu"]').click();
+      await expect(row.locator('[data-act="pickup"]')).toBeEnabled();
+      const launch = row.locator('[data-act="launch"]');
+      await expect(launch).toBeDisabled();
+      await expect(launch).toHaveAttribute("title", /no session for a new agent to take over/);
+      await page.keyboard.press("Escape");
+    }
+    // A static row keeps Launch.
+    const mounted = rowLocator(page, "r_mounted");
+    await mounted.locator('[data-act="menu"]').click();
+    await expect(mounted.locator('[data-act="launch"]')).toBeEnabled();
+  });
+
+  test("the header says no agent attached when the attached session is closed", async ({ page }) => {
+    const list = freshList();
+    list.attached = { session: "s_index", name: "document index", watching: false, closed: true };
+    await routeCatalog(page, { list: () => list });
+    await openLibrary(page, helper);
+    await expect(page.locator("#lahe-catalog-agent")).toHaveText(
+      "No agent attached. Open still works; hand-overs give you a message to paste."
+    );
+  });
+
+  test("at phone width the page never scrolls sideways, and the chevron sits on the name's line", async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await routeCatalog(page, { list: freshList });
+    await openLibrary(page, helper);
+    const widths = await page.evaluate(() => ({ scroll: document.documentElement.scrollWidth, view: window.innerWidth }));
+    expect(widths.scroll, "no sideways scroll").toBeLessThanOrEqual(widths.view);
+    const summary = page.locator('details[data-session="s_ops"] > summary');
+    const chev = await summary.locator(".lib-chev").boundingBox();
+    const title = await summary.locator(".lib-card-title").boundingBox();
+    const titleMid = title.y + Math.min(title.height, 30) / 2;
+    expect(Math.abs(chev.y + chev.height / 2 - titleMid), "the chevron is on the title's first line").toBeLessThan(16);
+    // No meta item is split from its separator: each item's own box starts
+    // with its separator and never holds just a dot.
+    const loneDots = await page.evaluate(() =>
+      Array.from(document.querySelectorAll(".lib-card-meta > span")).filter((s) => s.textContent.trim() === "").length
+    );
+    expect(loneDots).toBe(0);
+  });
+
+  test("the confirm dialog's list bullet sits with its text", async ({ page }) => {
+    await routeCatalog(page, { list: freshList });
+    await openLibrary(page, helper);
+    await handTo(page, "r_mounted", "pickup");
+    const li = page.locator("#lahe-catalog-confirm li").first();
+    const style = await li.evaluate((el) => ({
+      marker: getComputedStyle(el.parentElement).listStyleType,
+      before: getComputedStyle(el, "::before").content
+    }));
+    expect(style.marker).toBe("disc");
+    expect(style.before).toBe("none");
+  });
+
+  test("rename: a click on the name opens a field, Enter saves and shows both names, Escape sends nothing", async ({ page }) => {
+    const list = freshList();
+    const calls = await routeCatalog(page, {
+      list: () => list,
+      answers: { "catalog.rename": (body) => {
+        reviewIn(list, body.review).custom_name = body.name.trim() || null;
+        return { status: 200, body: { review: body.review, name: body.name.trim() || null } };
+      } }
+    });
+    await openLibrary(page, helper);
+    const brief = rowLocator(page, "r_brief");
+    await expect(page.locator('[data-act="rename"].lib-btn')).toHaveCount(0);
+    await expect(brief.locator('button.lib-name')).toHaveAttribute("aria-label", "Rename: Feature Brief: Coach Activity");
+    await brief.locator("button.lib-name").click();
+    const input = brief.locator(".lib-rename-input");
+    await expect(input).toBeFocused();
+    await input.fill("Coach brief v2");
+    await input.press("Enter");
+    await expect.poll(() => calls.filter((c) => c.name === "catalog.rename").map((c) => c.body)).toEqual([{ review: "r_brief", name: "Coach brief v2" }]);
+    await expect(brief.locator(".lib-name")).toHaveText("Coach brief v2");
+    await expect(brief.locator(".lib-original")).toHaveText("Feature Brief: Coach Activity");
+    await expect(brief.locator("button.lib-name")).toBeFocused();
+
+    const sent = recordActions(page);
+    const spec = rowLocator(page, "r_spec");
+    await spec.locator("button.lib-name").focus();
+    await page.keyboard.press("Enter");
+    await expect(spec.locator(".lib-rename-input")).toBeFocused();
+    await page.keyboard.type("nope");
+    await page.keyboard.press("Escape");
+    await expect(spec.locator(".lib-rename-input")).toHaveCount(0);
+    await expect(spec.locator(".lib-name")).toHaveText("Shared Title");
+    await expectNothingSent(page, sent);
+  });
+
+  test("rename: clicking outside saves like Enter; Escape cancels and sends nothing; empty or unchanged sends nothing", async ({ page }) => {
+    const list = freshList();
+    const calls = await routeCatalog(page, {
+      list: () => list,
+      answers: { "catalog.rename": (body) => {
+        if (body.review) reviewIn(list, body.review).custom_name = body.name.trim() || null;
+        else list.sessions.find((x) => x.id === body.session).custom_name = body.name.trim() || null;
+        return { status: 200, body: Object.assign({}, body, { name: body.name.trim() || null }) };
+      } }
+    });
+    const renames = () => calls.filter((c) => c.name === "catalog.rename").map((c) => c.body);
+    await openLibrary(page, helper);
+
+    // Blur saves: type, then click somewhere else on the page.
+    const brief = rowLocator(page, "r_brief");
+    await brief.locator("button.lib-name").click();
+    await brief.locator(".lib-rename-input").fill("Saved by blur");
+    await page.locator("h1").click();
+    await expect.poll(renames).toEqual([{ review: "r_brief", name: "Saved by blur" }]);
+    await expect(brief.locator(".lib-name")).toHaveText("Saved by blur");
+
+    // Escape cancels, and the blur that follows does not save.
+    const spec = rowLocator(page, "r_spec");
+    await spec.locator("button.lib-name").click();
+    await spec.locator(".lib-rename-input").fill("Never saved");
+    await spec.locator(".lib-rename-input").press("Escape");
+    await page.locator("h1").click();
+    await expect(spec.locator(".lib-name")).toHaveText("Shared Title");
+
+    // Empty keeps the current name; so does an unchanged one, by Enter or by blur.
+    await spec.locator("button.lib-name").click();
+    await spec.locator(".lib-rename-input").fill("   ");
+    await spec.locator(".lib-rename-input").press("Enter");
+    await expect(spec.locator(".lib-name")).toHaveText("Shared Title");
+    await spec.locator("button.lib-name").click();
+    await page.locator("h1").click();
+    await expect(spec.locator(".lib-rename-input")).toHaveCount(0);
+
+    // A session's name behaves the same: blur saves.
+    const old3 = page.locator('details[data-session="s_old3"]');
+    await old3.locator(".lib-card-name").click();
+    await old3.locator(".lib-rename-input").fill("Blurred session");
+    await page.locator("h1").click();
+    await expect(old3.locator(".lib-card-name")).toHaveText("Blurred session");
+    expect(renames()).toEqual([{ review: "r_brief", name: "Saved by blur" }, { session: "s_old3", name: "Blurred session" }]);
+  });
+
+  test("rename a session: a click on the card's name edits it; the card keeps its fold and shows the original under it", async ({ page }) => {
+    const list = freshList();
+    const calls = await routeCatalog(page, {
+      list: () => list,
+      answers: { "catalog.rename": (body) => {
+        list.sessions.find((x) => x.id === body.session).custom_name = body.name.trim() || null;
+        return { status: 200, body: { session: body.session, name: body.name.trim() || null } };
+      } }
+    });
+    await openLibrary(page, helper);
+    const old3 = page.locator('details[data-session="s_old3"]');
+    const wasOpen = await old3.evaluate((el) => el.open);
+    await old3.locator(".lib-card-name").click();
+    const input = old3.locator(".lib-rename-input");
+    await expect(input).toBeFocused();
+    await input.fill("Old loose pages");
+    await input.press("Enter");
+    await expect.poll(() => calls.filter((c) => c.name === "catalog.rename").map((c) => c.body)).toEqual([{ session: "s_old3", name: "Old loose pages" }]);
+    await expect(old3.locator(".lib-card-name")).toHaveText("Old loose pages");
+    await expect(old3.locator(".lib-card-original")).toHaveText('Unnamed session, started on "Page Five"');
+    expect(await old3.evaluate((el) => el.open)).toBe(wasOpen);
+  });
+
+  test("the Hand to agent menu floats: opening it does not change the buttons' width", async ({ page }) => {
+    await routeCatalog(page, { list: freshList });
+    await openLibrary(page, helper);
+    const r = rowLocator(page, "r_stale");
+    const before = await r.locator('[data-act="open"]').boundingBox();
+    await r.locator('[data-act="menu"]').click();
+    await expect(r.locator('[data-act="pickup"]')).toBeVisible();
+    const after = await r.locator('[data-act="open"]').boundingBox();
+    expect(after.width).toBe(before.width);
+  });
+
+  test("the tab icon loads under the page's content policy, with no policy errors", async ({ page }) => {
+    const violations = [];
+    page.on("console", (msg) => { if (/Content Security Policy/i.test(msg.text())) violations.push(msg.text()); });
+    await routeCatalog(page, { list: freshList });
+    await openLibrary(page, helper);
+    const href = await page.locator('link[rel="icon"]').getAttribute("href");
+    expect(href).toMatch(/^data:image\/svg\+xml,/);
+    // The same URL as an image on the page: img-src governs both.
+    const loaded = await page.evaluate((src) => new Promise((resolve) => {
+      const img = new Image();
+      img.onload = () => resolve(img.naturalWidth > 0);
+      img.onerror = () => resolve(false);
+      img.src = src;
+    }), href);
+    expect(loaded).toBe(true);
+    expect(violations).toEqual([]);
+  });
+
+  test("the heading's brandmark loads under the page's content policy, beside the words, with no policy errors", async ({ page }) => {
+    const violations = [];
+    page.on("console", (msg) => { if (/Content Security Policy/i.test(msg.text())) violations.push(msg.text()); });
+    await routeCatalog(page, { list: freshList });
+    await openLibrary(page, helper);
+    const mark = page.locator("h1 img.lib-brandmark");
+    await expect(mark).toHaveCount(1);
+    await expect(page.locator("h1")).toHaveAccessibleName("Lahe Library");
+    expect(await mark.evaluate((img) => img.complete && img.naturalWidth > 0)).toBe(true);
+    const iconHref = await page.locator('link[rel="icon"]').getAttribute("href");
+    expect(await mark.getAttribute("src")).toBe(iconHref);
+    const box = await mark.boundingBox();
+    const h1 = await page.locator("h1").boundingBox();
+    expect(Math.abs(box.y + box.height / 2 - (h1.y + h1.height / 2))).toBeLessThan(4);
+    await page.setViewportSize({ width: 390, height: 844 });
+    const phone = await page.locator("h1").boundingBox();
+    const phoneMark = await mark.boundingBox();
+    expect(phoneMark.y).toBeGreaterThanOrEqual(phone.y - 1);
+    expect(phoneMark.x).toBeLessThan(phone.x + 8);
+    expect(violations).toEqual([]);
+  });
+
+  test("the older section's 'Search reaches all of them' is a subtitle, not a heading", async ({ page }) => {
+    await routeCatalog(page, { list: freshList });
+    await openLibrary(page, helper);
+    const older = page.locator('[data-section="older"]');
+    await expect(older.locator("h2")).toHaveText(/^Older than a week: \d+ reviews?$/);
+    await expect(older.locator(".lib-section-sub")).toHaveText("Search reaches all of them.");
+  });
+
+  test("long lists collapse: a card's Show N more and a review's N pages open from the keyboard", async ({ page }) => {
+    const list = freshList();
+    // Nothing on s_ops waits, so its six reviews are one card.
+    list.sessions.find((x) => x.id === "s_ops").reviews.forEach((r) => { r.waiting = 0; r.starred = false; });
+    reviewIn(list, "r_brief").pages = [
+      { title: "One", path: "/one.html" }, { title: "Two", path: "/two.html" }, { title: "Three", path: "/three.html" }
+    ];
+    await routeCatalog(page, { list: () => list });
+    await openLibrary(page, helper);
+    const ops = page.locator('details[data-session="s_ops"]');
+    await expect(ops.locator("li[data-review]")).toHaveCount(5);
+    const more = ops.locator('[data-act="more"]');
+    await expect(more).toHaveText("Show 1 more");
+    await more.focus();
+    await page.keyboard.press("Enter");
+    await expect(ops.locator("li[data-review]")).toHaveCount(6);
+    await expect(ops.locator('[data-act="more"]')).toHaveAttribute("aria-expanded", "true");
+
+    const brief = rowLocator(page, "r_brief");
+    await expect(brief.locator(".lib-pages")).toHaveCount(0);
+    const pages = brief.locator('[data-act="pages"]');
+    await expect(pages).toHaveText("3 pages");
+    await pages.focus();
+    await page.keyboard.press("Enter");
+    await expect(brief.locator(".lib-pages li")).toHaveCount(3);
+  });
+
+  test("screenshots, light and dark", async ({ page, browserName }) => {
+    test.skip(!shotsWanted(browserName), "screenshots are written only with LAHE_SHOTS=1 on Chromium");
+    const list = freshList();
+    // Ken's case: s_coach's agent has no live monitor but ran a lahe command
+    // a minute ago, so the card and the confirm dialog say "working".
+    list.sessions.find((x) => x.id === "s_coach").watching.state = "working";
+    list.sessions.find((x) => x.id === "s_coach").watching.last_active = "2026-09-28T15:58:00.000Z";
+    // A renamed row, so the picture shows the reviewer's name over the original.
+    reviewIn(list, "r_spec").custom_name = "Beta spec, second pass";
+    await routeCatalog(page, { list: () => list });
+    await openLibrary(page, helper);
+    await page.locator("#lahe-catalog-main").waitFor();
+    await page.evaluate(() => document.fonts.ready);
+    await page.emulateMedia({ colorScheme: "light" });
+    await page.screenshot({ path: path.join(SHOTS, "catalog_page_light.png"), fullPage: true });
+    await page.emulateMedia({ colorScheme: "dark" });
+    await page.screenshot({ path: path.join(SHOTS, "catalog_page_dark.png"), fullPage: true });
+    // One row's Hand to agent menu open, and the confirm dialog, in dark.
+    await handTo(page, "r_mounted", "pickup");
+    await expect(page.locator("#lahe-catalog-confirm")).toBeVisible();
+    await page.screenshot({ path: path.join(SHOTS, "catalog_confirm_dark.png") });
+    await page.keyboard.press("Escape");
+    await page.emulateMedia({ colorScheme: "light" });
+    await rowLocator(page, "r_mounted").locator('[data-act="menu"]').click();
+    await rowLocator(page, "r_mounted").screenshot({ path: path.join(SHOTS, "catalog_menu_light.png") });
+    await page.keyboard.press("Escape");
+    // A legacy row's menu: Launch is off, with its reason as the tooltip.
+    for (const scheme of ["light", "dark"]) {
+      await page.emulateMedia({ colorScheme: scheme });
+      const legacy = rowLocator(page, "r_legacy");
+      await legacy.locator('[data-act="menu"]').click();
+      await legacy.locator('[data-act="launch"]').hover();
+      await legacy.screenshot({ path: path.join(SHOTS, "catalog_menu_legacy_" + scheme + ".png") });
+      await page.keyboard.press("Escape");
+    }
+    await page.emulateMedia({ colorScheme: "light" });
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.screenshot({ path: path.join(SHOTS, "catalog_page_phone.png") });
+  });
+});

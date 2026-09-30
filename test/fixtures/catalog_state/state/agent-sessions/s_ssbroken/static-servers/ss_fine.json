@@ -1,0 +1,14 @@
+{
+  "schema": 1,
+  "id": "ss_fine",
+  "session_id": "s_ssbroken",
+  "instance": "inst_ss_fine",
+  "root": "${ROOT}/home/loose/nowhere-else",
+  "logical_root": "${ROOT}/home/loose/nowhere-else",
+  "host": "127.0.0.1",
+  "port": 54040,
+  "pid": 515151,
+  "started_at": "2026-09-20T10:00:00.000Z",
+  "stopped_at": "2026-09-21T10:00:00.000Z",
+  "mounts": {}
+}

@@ -1,0 +1,1353 @@
+// The catalog reader: the Library's list, built from files already on disk.
+//
+// Owner: LAHE Library 1.1 (docs/features/20260922.02_lahe_library, architecture
+// "The list response" and "Failure Modes"). It reads, it never writes: no
+// review.json is regenerated here, no log is repaired, nothing is created.
+//
+// WHERE EACH FIELD COMES FROM
+//
+//   meta.json         the review's session, target, source and creation time
+//   review.json       title, pages, counts, ended_at
+//   events.jsonl      its modified time (a review's `last`; when the log ends
+//                     in origin events, the newest other event's time, from
+//                     the tail only), unless the
+//                     log is newer than review.json and small enough to fold
+//                     here (REPROJECT_MAX_BYTES), in which case the one review
+//                     is projected in memory with the helper's own projection
+//   session.json      the session's name
+//   monitor.json      who is watching, through agent_sessions.livenessFrom,
+//   activity.json     with the recent-command stamp the request queue counts
+//   ss_*.json         whether Open can restart a server for the review, and
+//                     (with a probe) whether one is serving it right now
+//   catalog.json      stars, through catalog_store
+//
+// Two inputs come from the request queue (Library 1.4) and are passed in, so
+// this module never reads catalog-attach.json or catalog-requests.jsonl itself.
+// They are always the queue's own (queueInputs below): `attachment(now)` is
+// readAttached, with its own `watching`, and `requestFor(reviewId, now)` the
+// latest request on a review, with `by_name` already filled. The helper also
+// passes `requestsAt(now)`, the same answers from one read of the queue, so a
+// list reads catalog-requests.jsonl once rather than once per row.
+//
+// ONE CORRUPT FILE DEGRADES ONE ROW. Every read is caught and turned into
+// `unreadable: true` on the row it belongs to; the rest of the list returns.
+//
+// NEVER IN THE LIST: comment text (the reader takes only titles, paths and
+// counts from a projection), review tokens, and absolute paths (a folder is
+// shown as `path_hint`, with the home directory written as ~).
+//
+// Node-only.
+
+"use strict";
+
+var fs = require("node:fs");
+var os = require("node:os");
+var path = require("node:path");
+
+var protocol = require("../shared/protocol.js");
+var record = require("../shared/record.js");
+var stateDir = require("./state_dir.js");
+var agentSessions = require("./agent_sessions.js");
+var staticServers = require("./static_servers.js");
+var projection = require("./projection.js");
+var catalogStore = require("./catalog_store.js");
+var scriptLine = require("../shared/script_line.js");
+
+var CATALOG = protocol.CATALOG;
+var PRESENCE = protocol.AGENT_LIVENESS.PRESENCE;
+var FOLD_CUTOFF_MS = Date.parse(CATALOG.FOLD_CUTOFF);
+var LEGACY = agentSessions.LEGACY_ID;
+var HEARTBEAT = protocol.MONITOR.HEARTBEAT_FIELD;
+
+// What counts as "a page" for folding and for a worktree candidate: the
+// extensions `lahe add` serves as a static page, plus the Markdown sources
+// `lahe review` renders.
+var PAGE_EXTENSIONS = [".html", ".htm", ".md", ".markdown"];
+var SINGLE_PAGE_EXTENSIONS = [".html", ".htm"];
+
+// A legacy document larger than this is not read for its script line.
+var SCRIPT_LINE_SCAN_MAX_BYTES = 8 * 1024 * 1024;
+
+// A quote, a backslash or a control character in a candidate path: never
+// offered. The path is page-derived, and an agent hands it on.
+// eslint-disable-next-line no-control-regex
+var UNSAFE_PATH_CHARS = /['"`\\\u0000-\u001f\u007f-\u009f]/;
+
+// <repo>/.claude/worktrees/<name>/<rest>
+var WORKTREE = /^(.*)\/\.claude\/worktrees\/[^/]+(?:\/(.*))?$/;
+// The project label for files under ~/.claude (skills, agent settings).
+var CLAUDE_CONFIG_PROJECT = "claude config";
+
+function toMs(now) {
+  if (typeof now === "number") return now;
+  if (typeof now === "string") return Date.parse(now);
+  return Date.now();
+}
+
+function iso(ms) {
+  return new Date(ms).toISOString();
+}
+
+function statOrNull(file) {
+  try {
+    return fs.statSync(file);
+  } catch (err) {
+    return null;
+  }
+}
+
+function exists(file) {
+  return typeof file === "string" && !!file && statOrNull(file) !== null;
+}
+
+function hasHiddenSegment(rel) {
+  return rel.split(/[\\/]/).some(function (segment) {
+    return segment.length > 0 && segment.charAt(0) === ".";
+  });
+}
+
+/**
+ * @param {{dir: string, home?: string, readFile?: function, pidAlive?: function,
+ *          probe?: function, attachment?: function, requestFor?: function,
+ *          requestsAt?: function}} options
+ *   `readFile` defaults to fs.readFileSync; tests pass a counting one.
+ *   `probe(meta)` resolves true when the recorded server is really that server;
+ *   it defaults to static_servers.isExactServer.
+ */
+function createReader(options) {
+  var opts = options || {};
+  if (!opts.dir) throw new Error("catalog_reader.createReader: dir is required");
+  var dir = opts.dir;
+  var home = typeof opts.home === "string" && opts.home ? path.resolve(opts.home) : os.homedir();
+  var readFile = typeof opts.readFile === "function" ? opts.readFile : fs.readFileSync;
+  var pidAlive = typeof opts.pidAlive === "function" ? opts.pidAlive : agentSessions.pidAlive;
+  var probe = typeof opts.probe === "function" ? opts.probe : staticServers.isExactServer;
+  var attachment = typeof opts.attachment === "function" ? opts.attachment : function () { return null; };
+  var requestFor = typeof opts.requestFor === "function" ? opts.requestFor : function () { return null; };
+  // `requestsAt(now)` returns a `(reviewId) => request` lookup built from one
+  // read of the queue. When given, list uses it once per call instead of
+  // calling requestFor once per row.
+  var requestsAt = typeof opts.requestsAt === "function" ? opts.requestsAt : null;
+  var store = catalogStore.createCatalogStore({ dir: dir, readFile: readFile });
+
+  // ---------------------------------------------------------------------------
+  // Reading files, cached per file on modified time plus size
+  // ---------------------------------------------------------------------------
+
+  var fileCache = Object.create(null);
+
+  /**
+   * @returns {{state: "missing"} | {state: "bad"} | {state: "ok", value: *, stat: fs.Stats}}
+   */
+  function cached(file, parse) {
+    var stat = statOrNull(file);
+    if (!stat) {
+      delete fileCache[file];
+      return { state: "missing" };
+    }
+    var key = stat.mtimeMs + ":" + stat.size;
+    var hit = fileCache[file];
+    if (hit && hit.key === key) return hit.result;
+    var result;
+    try {
+      result = { state: "ok", value: parse(readFile(file, "utf8")), stat: stat };
+    } catch (err) {
+      result = { state: "bad", stat: stat };
+    }
+    fileCache[file] = { key: key, result: result };
+    return result;
+  }
+
+  function cachedJson(file) {
+    return cached(file, function (text) {
+      var value = JSON.parse(text);
+      if (!value || typeof value !== "object") throw new Error("not an object");
+      return value;
+    });
+  }
+
+  // ---------------------------------------------------------------------------
+  // A review's `last`: the newest work event's own time
+  // ---------------------------------------------------------------------------
+
+  // `last` is the `ts` of the newest event that is work on the document
+  // (CATALOG.NOT_WORK_EVENTS are not: an Open's origin swap, fix round CR5,
+  // and a visit). It is never the log's modified time: compaction rewrites a
+  // log in place, and every compacted review read "worked on today". The log
+  // is read backwards from its end, in chunks, and never folded; the scan
+  // stops at REPROJECT_MAX_BYTES and then the caller falls back.
+  var TAIL_BYTES = 64 * 1024;
+  var tailCache = Object.create(null);
+
+  /** The newest work event's time in ms, or null when none was found. */
+  function newestWorkEvent(file, stat) {
+    var key = stat.mtimeMs + ":" + stat.size;
+    var hit = tailCache[file];
+    if (hit && hit.key === key) return hit.value;
+    var value = null;
+    var fd = null;
+    try {
+      fd = fs.openSync(file, "r");
+      var end = stat.size;
+      var carry = "";
+      var scanned = 0;
+      while (end > 0 && value === null && scanned < CATALOG.REPROJECT_MAX_BYTES) {
+        var length = Math.min(end, TAIL_BYTES);
+        var buf = Buffer.alloc(length);
+        fs.readSync(fd, buf, 0, length, end - length);
+        end -= length;
+        scanned += length;
+        var lines = (buf.toString("utf8") + carry).split("\n");
+        // The first line may be cut; it is carried into the next chunk, and
+        // trusted only once the start of the file is reached.
+        carry = end > 0 ? lines.shift() : "";
+        for (var i = lines.length - 1; i >= 0; i -= 1) {
+          if (!lines[i].trim()) continue;
+          var event;
+          try {
+            event = JSON.parse(lines[i]);
+          } catch (err) {
+            continue;
+          }
+          if (!event || typeof event !== "object" || typeof event.event !== "string") continue;
+          if (CATALOG.NOT_WORK_EVENTS.indexOf(event.event) !== -1) continue;
+          var ts = typeof event.ts === "string" ? Date.parse(event.ts) : NaN;
+          if (Number.isNaN(ts)) continue;
+          value = ts;
+          break;
+        }
+      }
+    } catch (err) {
+      value = null;
+    } finally {
+      if (fd !== null) {
+        try {
+          fs.closeSync(fd);
+        } catch (err) {
+          // nothing to do
+        }
+      }
+    }
+    tailCache[file] = { key: key, value: value };
+    return value;
+  }
+
+  // ---------------------------------------------------------------------------
+  // Sessions, heartbeats and servers
+  // ---------------------------------------------------------------------------
+
+  function readSession(sessionId) {
+    if (sessionId === LEGACY) return { state: "ok", value: { id: LEGACY, synthetic: true } };
+    if (!protocol.isSafeId(sessionId)) return { state: "bad" };
+    var got;
+    try {
+      got = cachedJson(stateDir.agentSessionPath(dir, sessionId));
+    } catch (err) {
+      return { state: "bad" };
+    }
+    if (got.state === "ok" && (got.value.schema !== agentSessions.SCHEMA || got.value.id !== sessionId)) {
+      return { state: "bad" };
+    }
+    return got;
+  }
+
+  function nameOf(sessionId) {
+    var s = readSession(sessionId);
+    return s.state === "ok" ? agentSessions.cleanName(s.value.name) : null;
+  }
+
+  /** Was the session's name read off a page's title? Then no hand-off carries it. */
+  function nameFromPage(sessionId) {
+    var s = readSession(sessionId);
+    return s.state === "ok" && !!agentSessions.cleanName(s.value.name) && s.value.name_source === agentSessions.NAME_SOURCE_PAGE;
+  }
+
+  /**
+   * What is known about the agent on this session, read only through
+   * livenessFrom with the inputs the request queue uses (fix round CL2), and
+   * its `presence` answer (phase 8): `listening` for a fresh heartbeat on this
+   * handoff rev whose pid is alive, `working` for a lahe command inside
+   * CATALOG.WORKING_MS, else `away`. `lastActive` is the later of the
+   * heartbeat and the command; `known` is false when neither was ever written.
+   * `beat` is the heartbeat record, stale or not, for its `primary`.
+   */
+  function presenceOf(sessionId, nowMs) {
+    var none = { known: false, presence: PRESENCE.AWAY, lastActive: null, beat: null };
+    if (sessionId === LEGACY || !protocol.isSafeId(sessionId)) return none;
+    var beat = null;
+    var activity = null;
+    try {
+      var got = cachedJson(stateDir.monitorPath(dir, sessionId));
+      beat = got.state === "ok" ? got.value : null;
+    } catch (err) {
+      beat = null;
+    }
+    try {
+      var act = cachedJson(stateDir.activityPath(dir, sessionId));
+      activity = act.state === "ok" ? act.value : null;
+    } catch (err) {
+      activity = null;
+    }
+    if (!beat && !activity) return none;
+    var s = readSession(sessionId);
+    var liveness = agentSessions.livenessFrom({
+      session: s.state === "ok" ? s.value : null,
+      monitor: beat,
+      activity: activity,
+      listening: null,
+      nowMs: nowMs,
+      pidAlive: pidAlive
+    });
+    var times = [liveness[protocol.AGENT_LIVENESS.FIELD.MONITOR_AT], liveness[protocol.AGENT_LIVENESS.FIELD.ACTIVITY_AT]]
+      .filter(function (t) { return typeof t === "string" && !Number.isNaN(Date.parse(t)); })
+      .sort(function (a, b) { return Date.parse(b) - Date.parse(a); });
+    return {
+      known: true,
+      presence: liveness[protocol.AGENT_LIVENESS.FIELD.PRESENCE],
+      lastActive: times.length ? new Date(Date.parse(times[0])).toISOString() : null,
+      beat: beat
+    };
+  }
+
+  function laterOf(a, b) {
+    if (!a) return b;
+    if (!b) return a;
+    return Date.parse(a) >= Date.parse(b) ? a : b;
+  }
+
+  /**
+   * The session's agent: {session, name, state, last_active} or null for no
+   * agent ever seen. `state` is a PRESENCE value. The list splits it into
+   * `watching` (listening or working: Open asks before a hand-over) and
+   * `away` (last active, neither).
+   */
+  function agentOf(sessionId, nowMs) {
+    var m = presenceOf(sessionId, nowMs);
+    if (!m.known) return null;
+    var primary = m.beat ? m.beat[HEARTBEAT.PRIMARY] : null;
+    var who = typeof primary === "string" && protocol.isSafeId(primary) ? primary : sessionId;
+    var out = function (presence, lastActive) {
+      return { session: who, name: nameOf(who), state: presence, last_active: lastActive };
+    };
+    if (m.presence !== PRESENCE.AWAY) return out(m.presence, m.lastActive);
+    // WATCHED THROUGH ANOTHER SESSION'S MONITOR (story walk). An agent that
+    // took this session over watches it from its own multi-session monitor,
+    // and that monitor exits to work a batch. Right after the agent answers,
+    // this session's heartbeat is stale, but the agent named as `primary` may
+    // be listening or working on its own session: it is still the one on
+    // this session. Only for a heartbeat on this session's current handoff
+    // rev, so a takeover since does not count.
+    if (who === sessionId || !m.beat) return out(PRESENCE.AWAY, m.lastActive);
+    var own = readSession(sessionId);
+    var rev = own.state === "ok" ? agentSessions.handoffRev(own.value) : 0;
+    if (m.beat[HEARTBEAT.HANDOFF_REV] !== rev) return out(PRESENCE.AWAY, m.lastActive);
+    var p = presenceOf(who, nowMs);
+    if (p.presence !== PRESENCE.AWAY) return out(p.presence, p.lastActive);
+    return out(PRESENCE.AWAY, laterOf(m.lastActive, p.lastActive));
+  }
+
+  /** Listening or working: the agent Open asks about before a hand-over. */
+  function watchingOf(sessionId, nowMs) {
+    var a = agentOf(sessionId, nowMs);
+    return a && a.state !== PRESENCE.AWAY ? a : null;
+  }
+
+  /** Seen before, but neither listening nor working now. */
+  function awayOf(sessionId, nowMs) {
+    var a = agentOf(sessionId, nowMs);
+    return a && a.state === PRESENCE.AWAY ? { session: a.session, name: a.name, last_active: a.last_active } : null;
+  }
+
+  /**
+   * A session's server records, read one by one so a corrupt record degrades
+   * the rows it might have served rather than the whole session. The shape
+   * check is static_servers.list's.
+   */
+  function serversOf(sessionId) {
+    var out = { records: [], bad: false };
+    if (sessionId === LEGACY || !protocol.isSafeId(sessionId)) return out;
+    var root;
+    try {
+      root = stateDir.staticServersRoot(dir, sessionId);
+    } catch (err) {
+      out.bad = true;
+      return out;
+    }
+    var names;
+    try {
+      names = fs.readdirSync(root);
+    } catch (err) {
+      return out;
+    }
+    names
+      .filter(function (name) { return /^ss_[A-Za-z0-9_-]+\.json$/.test(name); })
+      .sort()
+      .forEach(function (name) {
+        var got = cachedJson(path.join(root, name));
+        var meta = got.state === "ok" ? got.value : null;
+        if (
+          !meta || meta.schema !== staticServers.SCHEMA || meta.session_id !== sessionId ||
+          !protocol.isSafeId(meta.id) || typeof meta.root !== "string"
+        ) {
+          out.bad = true;
+          return;
+        }
+        out.records.push(meta);
+      });
+    return out;
+  }
+
+  /** The record that would serve this file: a running one first, then the newest. */
+  function coveringRecord(records, file) {
+    var best = null;
+    records.forEach(function (meta) {
+      var urlPath = staticServers.coveragePath(meta, file);
+      if (urlPath === null) return;
+      var candidate = { meta: meta, urlPath: urlPath };
+      if (!best) best = candidate;
+      else if (!!best.meta.stopped_at !== !!meta.stopped_at) {
+        if (!meta.stopped_at) best = candidate;
+      } else if (String(meta.started_at || "") > String(best.meta.started_at || "")) {
+        best = candidate;
+      }
+    });
+    return best;
+  }
+
+  /**
+   * The URL path Open lands on for a FOLDER review (story walk). The coverage
+   * rule gives a folder its server root, `/`, and a folder of pages with no
+   * index.html answers that with "not found". So: the page the review's
+   * comments are on, when it is a page in that folder, else the entry page
+   * `lahe review <folder>` opens (static_servers.folderEntryPage). A single
+   * page's path is returned as it is.
+   */
+  function openPathOf(info, covering) {
+    if (!covering || !info.servedPath) return covering ? covering.urlPath : null;
+    var stat = statOrNull(info.servedPath);
+    if (!stat || !stat.isDirectory()) return covering.urlPath;
+    var folder = info.servedPath;
+    var pages = info.summary && Array.isArray(info.summary.pages) ? info.summary.pages : [];
+    for (var i = 0; i < pages.length; i += 1) {
+      var file = pageFileIn(folder, pages[i] && pages[i].path);
+      var onServer = file ? staticServers.coveragePath(covering.meta, file) : null;
+      if (onServer) return onServer;
+    }
+    var entry = staticServers.folderEntryPage(folder);
+    var entryPath = entry ? staticServers.coveragePath(covering.meta, path.join(folder, entry)) : null;
+    return entryPath || covering.urlPath;
+  }
+
+  /**
+   * A page's recorded URL path as a file in `folder`, or null. The path is
+   * page-derived, so it must be plain: rooted, no dot or hidden segment, no
+   * backslash or control character, and an existing .html or .htm file under
+   * the folder by real path.
+   */
+  function pageFileIn(folder, urlPath) {
+    if (typeof urlPath !== "string" || urlPath.charAt(0) !== "/" || /[\\\u0000-\u001f\u007f]/.test(urlPath)) return null;
+    var segments = [];
+    var raw = urlPath.split("?")[0].split("#")[0].split("/").filter(function (seg) { return seg.length > 0; });
+    for (var i = 0; i < raw.length; i += 1) {
+      var seg;
+      try {
+        seg = decodeURIComponent(raw[i]);
+      } catch (err) {
+        return null;
+      }
+      if (!seg || seg.charAt(0) === "." || /[\/\\\u0000-\u001f\u007f]/.test(seg)) return null;
+      segments.push(seg);
+    }
+    if (!segments.length) return null;
+    if (SINGLE_PAGE_EXTENSIONS.indexOf(path.extname(segments[segments.length - 1]).toLowerCase()) === -1) return null;
+    var file = path.join.apply(path, [folder].concat(segments));
+    try {
+      var realFolder = fs.realpathSync(folder);
+      var realFile = fs.realpathSync(file);
+      if (realFile.indexOf(realFolder + path.sep) !== 0) return null;
+      if (!fs.statSync(realFile).isFile()) return null;
+    } catch (err) {
+      return null;
+    }
+    return file;
+  }
+
+  // ---------------------------------------------------------------------------
+  // Projects and the worktree candidate
+  // ---------------------------------------------------------------------------
+
+  function repoNameAt(dirPath) {
+    var marker = path.join(dirPath, ".git");
+    var stat;
+    try {
+      stat = fs.lstatSync(marker);
+    } catch (err) {
+      return null;
+    }
+    if (stat.isDirectory()) return path.basename(dirPath);
+    if (stat.isFile()) {
+      // A worktree's .git file: "gitdir: <repo>/.git/worktrees/<name>".
+      try {
+        var text = String(readFile(marker, "utf8"));
+        var m = /^gitdir:\s*(.+?)\s*$/m.exec(text);
+        if (m) {
+          var owned = /^(.*)[\\/]\.git[\\/]worktrees[\\/][^\\/]+$/.exec(m[1]);
+          if (owned) return path.basename(owned[1]);
+        }
+      } catch (err) {
+        // fall through to the folder's own name
+      }
+      return path.basename(dirPath);
+    }
+    return null;
+  }
+
+  /** The git project a document belongs to, or null. A worktree's is its owner's. */
+  /**
+   * The project a document belongs to: {name, root}, or null. One rule for the
+   * label and for the path line. `root` is the folder the row's path is shown
+   * from: the repository, the worktree itself for a worktree, or ~/.claude.
+   */
+  function projectRootOf(docPath) {
+    if (typeof docPath !== "string" || !docPath) return null;
+    // ~/.claude holds skills and agent settings. It is often a git
+    // repository, whose folder name ".claude" is no project name.
+    var claudeHome = path.join(home, ".claude");
+    if (docPath === claudeHome || docPath.indexOf(claudeHome + path.sep) === 0) return { name: CLAUDE_CONFIG_PROJECT, root: claudeHome };
+    // A worktree at <repo>/.claude/worktrees/<name> belongs to <repo>, even
+    // when neither it nor the repo has a .git left to read. Its paths are
+    // shown from the worktree's own root, which mirrors the repo's.
+    var wt = WORKTREE.exec(docPath);
+    if (wt && wt[1]) {
+      var wtRoot = docPath.slice(0, docPath.length - (wt[2] ? wt[2].length + 1 : 0));
+      return { name: repoNameAt(wt[1]) || path.basename(wt[1]), root: wtRoot };
+    }
+    var current = docPath;
+    while (!exists(current)) {
+      var up = path.dirname(current);
+      if (up === current) return null;
+      current = up;
+    }
+    var stat = statOrNull(current);
+    if (stat && !stat.isDirectory()) current = path.dirname(current);
+    for (;;) {
+      var name = repoNameAt(current);
+      if (name) return { name: name, root: current };
+      var parent = path.dirname(current);
+      if (parent === current) return null;
+      current = parent;
+    }
+  }
+
+  function projectOf(docPath) {
+    var p = projectRootOf(docPath);
+    return p ? p.name : null;
+  }
+
+  /**
+   * The row's path line: from the project root, else the ~ path. Never
+   * shortened; the page wraps it at slashes.
+   */
+  function projectPath(fullPath) {
+    if (typeof fullPath !== "string" || !fullPath) return null;
+    var p = projectRootOf(fullPath);
+    if (p && p.root) {
+      var rel = path.relative(p.root, fullPath);
+      if (rel && rel.indexOf("..") !== 0 && !path.isAbsolute(rel)) return rel.split(path.sep).join("/");
+    }
+    return pathHint(fullPath);
+  }
+
+
+  /**
+   * The main repository's copy of a document whose worktree copy is gone, or
+   * null. Every check must pass: under the repository by real path, no hidden
+   * segment, owned by the current user, a page by its REAL path's extension (a
+   * symlink `x.md` to a `.json` is not a page), and no quote or control
+   * character anywhere in it (the path is page-derived and an agent serves it).
+   * The real path is what is returned.
+   */
+  function worktreeCandidate(docPath) {
+    if (typeof docPath !== "string" || !docPath || exists(docPath)) return null;
+    var wt = WORKTREE.exec(docPath);
+    if (!wt || !wt[2]) return null;
+    var repo = wt[1];
+    var rest = wt[2];
+    if (hasHiddenSegment(rest)) return null;
+    var candidate = path.join(repo, rest);
+    if (UNSAFE_PATH_CHARS.test(candidate)) return null;
+    var realRepo;
+    var realCandidate;
+    try {
+      realRepo = fs.realpathSync(repo);
+      realCandidate = fs.realpathSync(candidate);
+    } catch (err) {
+      return null;
+    }
+    if (realCandidate.indexOf(realRepo + path.sep) !== 0) return null;
+    if (hasHiddenSegment(path.relative(realRepo, realCandidate))) return null;
+    if (UNSAFE_PATH_CHARS.test(realCandidate)) return null;
+    if (PAGE_EXTENSIONS.indexOf(path.extname(realCandidate).toLowerCase()) === -1) return null;
+    var stat = statOrNull(realCandidate);
+    if (!stat || !stat.isFile()) return null;
+    if (typeof process.getuid === "function" && stat.uid !== process.getuid()) return null;
+    return realCandidate;
+  }
+
+  /**
+   * Does `file` carry this review's own script line? The one proof a legacy
+   * review's recorded path is really its document: meta.json's paths are page
+   * text, but a page cannot write a file. Null when it does not.
+   */
+  function ownScriptLineFile(file, reviewId) {
+    if (typeof file !== "string" || !file) return null;
+    var stat = statOrNull(file);
+    if (!stat || !stat.isFile() || stat.size > SCRIPT_LINE_SCAN_MAX_BYTES) return null;
+    var text;
+    try {
+      text = String(readFile(file, "utf8"));
+    } catch (err) {
+      return null;
+    }
+    var tags = new RegExp(scriptLine.EXISTING_TAG.source, "gi");
+    var m;
+    while ((m = tags.exec(text)) !== null) {
+      if (m[1] === reviewId) return file;
+    }
+    return null;
+  }
+
+  function pathHint(folderPath) {
+    if (typeof folderPath !== "string" || !folderPath) return null;
+    if (folderPath === home) return "~";
+    if (folderPath.indexOf(home + path.sep) === 0) return "~" + folderPath.slice(home.length);
+    return folderPath;
+  }
+
+  // ---------------------------------------------------------------------------
+  // One review
+  // ---------------------------------------------------------------------------
+
+  function parseEvents(text) {
+    var events = [];
+    String(text).split("\n").forEach(function (line) {
+      if (!line.trim()) return;
+      try {
+        var event = JSON.parse(line);
+        if (event && typeof event === "object") events.push(event);
+      } catch (err) {
+        // A torn last line, or a stray one: skipped, as the helper's reader does.
+      }
+    });
+    return events;
+  }
+
+  /** What a projection says about a review, and nothing else (no comment text). */
+  function summaryOf(projected) {
+    var title = null;
+    var pages = [];
+    var waiting = 0;
+    var total = 0;
+    (projected.pages || []).forEach(function (page) {
+      if (!title && typeof page.title === "string" && page.title.trim()) title = page.title.trim();
+      if (!pages.some(function (p) { return p.path === page.path; })) {
+        pages.push({ title: typeof page.title === "string" && page.title ? page.title : null, path: page.path, count: (page.items || []).length });
+      }
+      (page.items || []).forEach(function (item) {
+        total += 1;
+        if (record.isUnansweredReady(item)) waiting += 1;
+      });
+    });
+    var review = projected.review || {};
+    return {
+      title: title,
+      pages: pages,
+      waiting: waiting,
+      total: total,
+      ended: !!review.ended_at,
+      generated_at: typeof projected.generated_at === "string" ? projected.generated_at : null,
+      agent_session_id: typeof review.agent_session_id === "string" ? review.agent_session_id : null
+    };
+  }
+
+  /**
+   * The review's own page leads, and names it (phase 8). A review of a
+   * Markdown file that links to a wireframe was named after whichever page
+   * got a comment first, so the name and the path line described two
+   * different pages. The own page is the one whose file is the review's
+   * target; with none, the page with the most comments. With no page title at
+   * all, the title comes from the file: the built page's <title>, else the
+   * Markdown's first heading. A copy, never the cached summary.
+   */
+  function withOwnPageFirst(summary, servedPath, sourcePath) {
+    var pages = (summary.pages || []).slice();
+    var targetName = servedPath ? path.basename(servedPath) : null;
+    var ownIndex = -1;
+    pages.forEach(function (p, i) {
+      if (ownIndex !== -1 || !targetName || typeof p.path !== "string") return;
+      var name;
+      try {
+        name = decodeURIComponent(p.path.split("?")[0].split("/").pop() || "");
+      } catch (err) {
+        name = p.path.split("/").pop();
+      }
+      if (name === targetName) ownIndex = i;
+    });
+    if (ownIndex === -1 && pages.length > 1) {
+      var most = 0;
+      pages.forEach(function (p, i) {
+        if ((p.count || 0) > (pages[most].count || 0)) most = i;
+      });
+      ownIndex = most;
+    }
+    if (ownIndex > 0) pages.unshift(pages.splice(ownIndex, 1)[0]);
+    var title = pages.length && pages[0].title ? pages[0].title : summary.title;
+    if (!title) title = fileTitle(servedPath, sourcePath);
+    return Object.assign({}, summary, { pages: pages, title: title || null });
+  }
+
+  var titleCache = Object.create(null);
+
+  /** A page's own <title>, else a Markdown file's first "# " heading, or null. */
+  function fileTitle(servedPath, sourcePath) {
+    var candidates = [];
+    if (servedPath && /\.html?$/i.test(servedPath)) candidates.push({ file: servedPath, kind: "html" });
+    if (sourcePath && /\.(md|markdown)$/i.test(sourcePath)) candidates.push({ file: sourcePath, kind: "md" });
+    if (servedPath && /\.(md|markdown)$/i.test(servedPath)) candidates.push({ file: servedPath, kind: "md" });
+    for (var i = 0; i < candidates.length; i += 1) {
+      var c = candidates[i];
+      var stat = statOrNull(c.file);
+      if (!stat || !stat.isFile()) continue;
+      var key = c.file + "|" + stat.mtimeMs + "|" + stat.size;
+      if (!Object.prototype.hasOwnProperty.call(titleCache, key)) titleCache[key] = readTitle(c.file, c.kind, stat.size);
+      if (titleCache[key]) return titleCache[key];
+    }
+    return null;
+  }
+
+  function readTitle(file, kind, size) {
+    var text;
+    try {
+      var length = Math.min(size, TAIL_BYTES);
+      var buf = Buffer.alloc(length);
+      var fd = fs.openSync(file, "r");
+      try {
+        fs.readSync(fd, buf, 0, length, 0);
+      } finally {
+        fs.closeSync(fd);
+      }
+      text = buf.toString("utf8");
+    } catch (err) {
+      return null;
+    }
+    var m = kind === "html" ? /<title[^>]*>([\s\S]*?)<\/title>/i.exec(text) : /^#[ \t]+(.+?)[ \t#]*$/m.exec(text);
+    if (!m) return null;
+    var t = m[1].replace(/\s+/g, " ").trim();
+    if (kind === "html") t = t.replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, "\"").replace(/&#39;/g, "'");
+    return agentSessions.cleanName(t) ? t.slice(0, 200) : null;
+  }
+
+  function readReview(reviewId) {
+    var info = { id: reviewId, unreadable: false };
+
+    var meta = null;
+    try {
+      var gotMeta = cachedJson(stateDir.metaPath(dir, reviewId));
+      if (gotMeta.state === "ok") meta = gotMeta.value;
+      else info.unreadable = true;
+    } catch (err) {
+      info.unreadable = true;
+    }
+
+    var eventsFile = stateDir.eventsPath(dir, reviewId);
+    var reviewFile = stateDir.reviewJsonPath(dir, reviewId);
+    var eventsStat = statOrNull(eventsFile);
+    var rj = cached(reviewFile, function (text) {
+      var value = JSON.parse(text);
+      if (!value || typeof value !== "object" || !Array.isArray(value.pages)) throw new Error("not a review.json");
+      return summaryOf(value);
+    });
+    if (rj.state === "bad") info.unreadable = true;
+
+    var createdMs = meta && typeof meta.created_at === "string" ? Date.parse(meta.created_at) : NaN;
+    info.createdMs = Number.isNaN(createdMs) ? null : createdMs;
+    // `last`: the newest work event's time; else review.json's generated time;
+    // else meta's created_at. Never a file's modified time.
+    var generatedMs = rj.state === "ok" && typeof rj.value.generated_at === "string" ? Date.parse(rj.value.generated_at) : NaN;
+    if (Number.isNaN(generatedMs)) generatedMs = null;
+    var workMs = eventsStat ? newestWorkEvent(eventsFile, eventsStat) : null;
+    info.lastMs = workMs !== null ? workMs : generatedMs !== null ? generatedMs : info.createdMs !== null ? info.createdMs : 0;
+
+    var summary = null;
+    var countsAsOf = null;
+    var logIsNewer = eventsStat && (rj.state !== "ok" || eventsStat.mtimeMs > rj.stat.mtimeMs);
+    if (logIsNewer && eventsStat.size <= CATALOG.REPROJECT_MAX_BYTES) {
+      var projected = cached(eventsFile, function (text) {
+        return summaryOf(projection.project(reviewId, parseEvents(text)));
+      });
+      if (projected.state === "ok") {
+        summary = projected.value;
+        countsAsOf = info.lastMs;
+      }
+    }
+    if (!summary && rj.state === "ok") {
+      summary = rj.value;
+      // A log review.json has not caught up with: its counts are as of when
+      // it was generated, and never later than `last`.
+      countsAsOf = logIsNewer ? Math.min(generatedMs !== null ? generatedMs : rj.stat.mtimeMs, info.lastMs) : info.lastMs;
+    }
+    info.summary = summary || { title: null, pages: [], waiting: 0, total: 0, ended: false, agent_session_id: null };
+    info.metaServedPath = meta && typeof meta.target_path === "string" && meta.target_path ? meta.target_path : null;
+    info.summary = withOwnPageFirst(info.summary, info.metaServedPath, meta && typeof meta.source_path === "string" ? meta.source_path : null);
+    info.countsAsOfMs = summary ? countsAsOf : null;
+
+    var sessionId = meta
+      ? typeof meta.agent_session_id === "string" && meta.agent_session_id ? meta.agent_session_id : LEGACY
+      : info.summary.agent_session_id || LEGACY;
+    info.sessionId = protocol.isSafeId(sessionId) ? sessionId : LEGACY;
+
+    info.servedPath = meta && typeof meta.target_path === "string" && meta.target_path ? meta.target_path : null;
+    var source = meta && typeof meta.source_path === "string" && meta.source_path ? meta.source_path : null;
+    info.docPath = source || info.servedPath;
+    info.origins = meta && Array.isArray(meta.origins)
+      ? meta.origins.filter(function (o) { return typeof o === "string" && /^https?:\/\//.test(o); })
+      : [];
+    return info;
+  }
+
+  /**
+   * The review's dev server origin, or null. A registered http origin no static
+   * server record of this session serves (by port), on a target LAHE would not
+   * serve itself: a folder or a non-page file, or no target at all. A page file
+   * with no covering record is a static review whose record was lost.
+   */
+  function devServerOrigin(info, servers) {
+    if (info.servedPath) {
+      var stat = statOrNull(info.servedPath);
+      if (stat && stat.isFile() && PAGE_EXTENSIONS.indexOf(path.extname(info.servedPath).toLowerCase()) !== -1) return null;
+    }
+    var staticPorts = (servers.records || []).map(function (meta) { return String(meta.port); });
+    for (var i = 0; i < info.origins.length; i += 1) {
+      var port;
+      try {
+        var url = new URL(info.origins[i]);
+        port = url.port || (url.protocol === "https:" ? "443" : "80");
+      } catch (err) {
+        continue;
+      }
+      if (staticPorts.indexOf(port) === -1) return info.origins[i];
+    }
+    return null;
+  }
+
+  // ---------------------------------------------------------------------------
+  // Every row
+  // ---------------------------------------------------------------------------
+
+  function reviewIds() {
+    var root = stateDir.reviewsRoot(dir);
+    var entries;
+    try {
+      entries = fs.readdirSync(root, { withFileTypes: true });
+    } catch (err) {
+      return [];
+    }
+    return entries
+      .filter(function (entry) { return entry.isDirectory() && protocol.isSafeId(entry.name); })
+      .map(function (entry) { return entry.name; })
+      .sort();
+  }
+
+  function placeRow(info, sessionState, servers) {
+    var docOnDisk = exists(info.docPath);
+    var covering = info.servedPath && info.sessionId !== LEGACY ? coveringRecord(servers.records, info.servedPath) : null;
+    if (covering) covering = { meta: covering.meta, urlPath: openPathOf(info, covering) };
+    var kind;
+    var openable;
+    var candidate = null;
+    var devOrigin = null;
+    var recordLost = false;
+    // dev-server only on a registered origin no static record serves. A
+    // review with no covering record and no such origin is a static review
+    // whose record was lost: static, and unreadable. `lahe add` script-line
+    // reviews have no session.
+    if (info.sessionId === LEGACY) kind = "legacy";
+    else if (covering) kind = "static";
+    else if ((devOrigin = devServerOrigin(info, servers))) kind = "dev-server";
+    else {
+      kind = "static";
+      recordLost = true;
+    }
+
+    if (!info.docPath) {
+      // No path on record: a dev server named only by its origin, or a review
+      // whose meta.json cannot be read, which has nothing left to open.
+      openable = info.unreadable ? "missing" : "via-agent";
+    } else if (docOnDisk) {
+      openable = covering ? "yes" : "via-agent";
+    } else {
+      // A worktree row comes only from a record a page cannot write: the
+      // covering server record's root must itself be in a worktree, and the
+      // document must be under that root. meta.json's paths alone are page
+      // text (review.write records them with the page's own token).
+      var inWorktree = covering && typeof covering.meta.root === "string" && WORKTREE.test(covering.meta.root) &&
+        staticServers.coveragePath(covering.meta, info.docPath) !== null;
+      candidate = inWorktree ? worktreeCandidate(info.docPath) : null;
+      if (candidate) {
+        kind = "worktree";
+        openable = "via-agent";
+      } else {
+        openable = "missing";
+      }
+    }
+
+    var unreadable = info.unreadable || sessionState === "bad" || (servers.bad && !covering) || recordLost;
+    return {
+      info: info,
+      kind: kind,
+      origin: kind === "dev-server" ? devOrigin : null,
+      openable: openable,
+      candidate: candidate,
+      covering: covering,
+      unreadable: unreadable
+    };
+  }
+
+  function foldable(placed) {
+    var info = placed.info;
+    if (info.unreadable || info.createdMs === null || info.createdMs >= FOLD_CUTOFF_MS) return false;
+    if (!info.docPath) return false;
+    if (SINGLE_PAGE_EXTENSIONS.indexOf(path.extname(info.docPath).toLowerCase()) === -1) return false;
+    var stat = statOrNull(info.docPath);
+    return !stat || stat.isFile();
+  }
+
+  function newestFirst(a, b) {
+    if (a.info.lastMs !== b.info.lastMs) return b.info.lastMs - a.info.lastMs;
+    if ((a.info.createdMs || 0) !== (b.info.createdMs || 0)) return (b.info.createdMs || 0) - (a.info.createdMs || 0);
+    return a.info.id < b.info.id ? 1 : -1;
+  }
+
+  /** Group placed reviews into rows: old per-page reviews fold by folder. */
+  function foldSession(placedList) {
+    var groups = Object.create(null);
+    var rows = [];
+    placedList.forEach(function (placed) {
+      if (!foldable(placed)) {
+        rows.push({ parts: [placed] });
+        return;
+      }
+      var key = path.dirname(placed.info.docPath);
+      (groups[key] = groups[key] || []).push(placed);
+    });
+    Object.keys(groups).forEach(function (key) {
+      var parts = groups[key];
+      if (parts.length < 2) rows.push({ parts: parts });
+      else rows.push({ parts: parts.slice().sort(newestFirst), folder: key });
+    });
+    // SAME DOCUMENT, ONE ROW (phase 8). Two reviews of one document in one
+    // session (a double start, or a re-review) are one row, newest first. A
+    // legacy review with no path on record is keyed by its one page and title.
+    var byDoc = Object.create(null);
+    var merged = [];
+    rows.forEach(function (row) {
+      var key = row.folder ? null : documentKey(row.parts[0]);
+      if (!key) {
+        merged.push(row);
+        return;
+      }
+      if (byDoc[key]) {
+        byDoc[key].parts = byDoc[key].parts.concat(row.parts);
+        byDoc[key].foldKind = "document";
+        return;
+      }
+      byDoc[key] = row;
+      merged.push(row);
+    });
+    merged.forEach(function (row) {
+      if (row.folder) row.foldKind = "folder";
+      row.parts.sort(newestFirst);
+      row.lead = row.parts[0];
+    });
+    return merged;
+  }
+
+  function documentKey(placed) {
+    var info = placed.info;
+    if (info.unreadable) return null;
+    if (info.docPath) return "doc:" + info.docPath;
+    var pages = info.summary && info.summary.pages ? info.summary.pages : [];
+    if (info.sessionId === LEGACY && pages.length === 1 && pages[0].title) return "page:" + pages[0].path + "|" + pages[0].title;
+    return null;
+  }
+
+  function scan(nowMs) {
+    var starsRead = store.read();
+    var stars = starsRead.ok ? starsRead.data.stars : {};
+    var names = starsRead.ok ? starsRead.data.names || {} : {};
+    var sessionCache = Object.create(null);
+    function sessionContext(sessionId) {
+      if (!sessionCache[sessionId]) {
+        sessionCache[sessionId] = {
+          state: readSession(sessionId).state,
+          servers: serversOf(sessionId)
+        };
+      }
+      return sessionCache[sessionId];
+    }
+
+    var bySession = Object.create(null);
+    reviewIds().forEach(function (reviewId) {
+      var info = readReview(reviewId);
+      var ctx = sessionContext(info.sessionId);
+      (bySession[info.sessionId] = bySession[info.sessionId] || []).push(placeRow(info, ctx.state, ctx.servers));
+    });
+
+    var sessions = Object.keys(bySession).map(function (sessionId) {
+      return {
+        id: sessionId,
+        state: sessionContext(sessionId).state,
+        rows: foldSession(bySession[sessionId])
+      };
+    });
+
+    // Titles and display names, across the whole list.
+    var allRows = [];
+    sessions.forEach(function (s) {
+      s.rows.forEach(function (row) {
+        var lead = row.lead.info;
+        row.title = row.folder ? path.basename(row.folder) : lead.summary.title;
+        row.file = row.folder ? null : lead.docPath ? path.basename(lead.docPath) : null;
+        var folderPath = row.folder || (lead.docPath ? path.dirname(lead.docPath) : null);
+        row.folderName = folderPath ? path.basename(folderPath) : null;
+        row.pathHint = pathHint(folderPath);
+        row.projectPath = projectPath(row.folder || lead.docPath);
+        allRows.push(row);
+      });
+    });
+    allRows.forEach(function (row) {
+      // The title, else just the file name: the path line under it carries
+      // the folder (phase 8). Two rows may share a title; their path lines
+      // tell them apart.
+      row.displayName = row.title || row.file || row.folderName || row.lead.info.id;
+      row.starred = row.parts.some(function (p) { return Object.prototype.hasOwnProperty.call(stars, p.info.id); });
+      // The reviewer's own name: the lead's, else any part's.
+      row.customName = null;
+      row.parts.forEach(function (p) {
+        if (!row.customName && Object.prototype.hasOwnProperty.call(names, p.info.id)) row.customName = String(names[p.info.id]);
+      });
+      if (Object.prototype.hasOwnProperty.call(names, row.lead.info.id)) row.customName = String(names[row.lead.info.id]);
+    });
+
+    var sessionNames = starsRead.ok ? starsRead.data.session_names || {} : {};
+    sessions.forEach(function (s) {
+      s.customName = Object.prototype.hasOwnProperty.call(sessionNames, s.id) ? String(sessionNames[s.id]) : null;
+    });
+    return { sessions: sessions, notice: starsRead.ok ? null : starsRead.code, nowMs: nowMs };
+  }
+
+  // ---------------------------------------------------------------------------
+  // Probes
+  // ---------------------------------------------------------------------------
+
+  var probeCache = Object.create(null);
+
+  function probeOnce(meta, nowMs) {
+    var key = meta.id + "|" + meta.instance + "|" + meta.port + "|" + meta.pid + "|" + meta.started_at;
+    var hit = probeCache[key];
+    if (hit && nowMs - hit.at < CATALOG.POLL_MS) return hit.answer;
+    var answer = Promise.resolve()
+      .then(function () { return probe(meta); })
+      .then(function (ok) { return ok === true; }, function () { return false; });
+    probeCache[key] = { at: nowMs, answer: answer };
+    return answer;
+  }
+
+  // ---------------------------------------------------------------------------
+  // The response
+  // ---------------------------------------------------------------------------
+
+  function requestOf(reviewId, nowMs, lookup) {
+    var r = lookup(reviewId);
+    if (!r || typeof r !== "object") return null;
+    var answered = typeof r.answered_at === "string" && r.answered_at ? r.answered_at : null;
+    if ((r.state === "done" || r.state === "refused") && answered) {
+      if (nowMs - Date.parse(answered) >= CATALOG.ANSWER_SHOWN_MS) return null;
+    }
+    // The queue's requestsAt (Library 1.4) has already named the agent
+    // (`by_name`, its name or its id).
+    return {
+      id: r.id,
+      action: r.action,
+      at: r.at,
+      state: r.state,
+      by_name: typeof r.by_name === "string" && r.by_name ? r.by_name : null,
+      text: typeof r.text === "string" ? r.text : null,
+      answered_at: answered,
+      // Why an expired request expired (attach_changed, monitor_dead,
+      // timeout), so the page can say which; null in every other state.
+      reason: r.state === "expired" && typeof r.reason === "string" ? r.reason : null
+    };
+  }
+
+  function attachedOf(nowMs) {
+    var a = attachment(nowMs);
+    if (!a || typeof a.session !== "string" || !protocol.isSafeId(a.session) || a.session === LEGACY) return null;
+    // The queue's readAttached (Library 1.4) answers null for an attach with no
+    // session behind it, and `watching` with the same liveness rule it uses to
+    // hand out and expire requests. Taking its answer keeps the header and
+    // Open from disagreeing.
+    // `closed` is true when the attached session has been closed; the page
+    // then reads it as no agent rather than one that stopped watching.
+    return { session: a.session, name: nameOf(a.session), watching: a.watching === true, closed: a.closed === true };
+  }
+
+  /**
+   * Where a page really lives, as the row's path line says it: from the
+   * project root. A page behind a .lahe-source mount maps through the
+   * server's mounts; the rendered page of a Markdown review is its .md. Never
+   * the internal mount path.
+   */
+  function pageSource(placed, pagePath) {
+    if (typeof pagePath !== "string" || !pagePath) return null;
+    var info = placed.info;
+    var clean;
+    try {
+      clean = decodeURIComponent(pagePath.split("?")[0]);
+    } catch (err) {
+      clean = pagePath.split("?")[0];
+    }
+    var name = clean.split("/").pop();
+    // The review's own page: its file by name, or the server root's "/" when
+    // the server is rooted at the page's folder.
+    var meta0 = placed.covering ? placed.covering.meta : null;
+    var ownByRoot = clean === "/" && meta0 && info.metaServedPath && path.dirname(info.metaServedPath) === meta0.root;
+    if (info.metaServedPath && (name === path.basename(info.metaServedPath) || ownByRoot)) {
+      return shownPath(info.docPath || info.metaServedPath);
+    }
+    var meta = placed.covering ? placed.covering.meta : null;
+    var mounts = meta && meta.mounts && typeof meta.mounts === "object" ? meta.mounts : {};
+    var prefixes = Object.keys(mounts);
+    for (var i = 0; i < prefixes.length; i += 1) {
+      var prefix = prefixes[i];
+      if (clean.indexOf(prefix) === 0 && typeof mounts[prefix] === "string") {
+        var rest = clean.slice(prefix.length);
+        if (rest.split("/").indexOf("..") !== -1) return null;
+        return shownPath(path.join(mounts[prefix], rest));
+      }
+    }
+    if (clean.indexOf("/.lahe-source/") === 0) {
+      // A mount this server no longer lists: say where inside it, not how.
+      return clean.split("/").slice(3).join("/") || null;
+    }
+    if (meta && typeof meta.root === "string" && clean.charAt(0) === "/" && clean.split("/").indexOf("..") === -1) {
+      return shownPath(path.join(meta.root, clean));
+    }
+    return null;
+  }
+
+  /** projectPath, but never an absolute path outside the home folder: null then. */
+  function shownPath(file) {
+    var shown = projectPath(file);
+    return shown && shown.charAt(0) === "/" ? null : shown;
+  }
+
+  function rowOut(row, nowMs, servedUrl, lookup) {
+    var lead = row.lead;
+    var info = lead.info;
+    var waiting = 0;
+    var total = 0;
+    // Counts are as of the row's `last` unless a part's are stale; then the
+    // oldest stale part's time, so the page says so.
+    var asOf = info.countsAsOfMs;
+    var stalest = null;
+    var pages = [];
+    row.parts.forEach(function (p) {
+      waiting += p.info.summary.waiting;
+      total += p.info.summary.total;
+      var partAsOf = p.info.countsAsOfMs;
+      if (partAsOf !== null && partAsOf < p.info.lastMs && (stalest === null || partAsOf < stalest)) stalest = partAsOf;
+      p.info.summary.pages.forEach(function (page) {
+        if (!pages.some(function (q) { return q.path === page.path; })) {
+          pages.push({ title: page.title, path: page.path, source: pageSource(p, page.path) });
+        }
+      });
+    });
+    if (stalest !== null) asOf = stalest;
+    return {
+      id: info.id,
+      title: row.title,
+      display_name: row.displayName,
+      file: row.file,
+      folder: row.folderName,
+      path_hint: row.pathHint,
+      // The document's path from its project root (worktree root, ~/.claude),
+      // else its ~ path: the row's second line.
+      project_path: row.projectPath || null,
+      // "folder" for old per-page reviews folded by folder, "document" for
+      // several reviews of one document; null for a single review.
+      fold_kind: row.parts.length > 1 ? row.foldKind || "folder" : null,
+      project: projectOf(row.folder || info.docPath),
+      last: iso(info.lastMs),
+      waiting: waiting,
+      total: total,
+      counts_as_of: asOf === null ? null : iso(asOf),
+      ended: info.summary.ended,
+      served_url: servedUrl || null,
+      openable: lead.openable,
+      kind: lead.kind,
+      starred: row.starred,
+      // The reviewer's rename, or null. List only: describeReview, the drain
+      // and every hand-off keep the original name.
+      custom_name: row.customName || null,
+      unreadable: row.parts.some(function (p) { return p.unreadable; }),
+      request: requestOf(info.id, nowMs, lookup),
+      pages: pages,
+      folded_from: row.parts.slice(1).map(function (p) { return p.info.id; }).sort()
+    };
+  }
+
+  /**
+   * The catalog.list response.
+   *
+   * @param {number|string} now
+   * @returns {Promise<object>}
+   */
+  async function list(now) {
+    var nowMs = toMs(now);
+    var scanned = scan(nowMs);
+
+    var jobs = [];
+    scanned.sessions.forEach(function (s) {
+      s.rows.forEach(function (row) {
+        var cover = row.lead.covering;
+        row.served = null;
+        if (row.lead.openable !== "yes" || !cover || cover.meta.stopped_at) return;
+        jobs.push(probeOnce(cover.meta, nowMs).then(function (ok) {
+          if (ok) row.served = "http://" + protocol.DEFAULT_HOST + ":" + cover.meta.port + cover.urlPath;
+        }));
+      });
+    });
+    await Promise.all(jobs);
+
+    // The request queue is read once per list, not once per row.
+    var lookup = requestsAt
+      ? requestsAt(nowMs)
+      : function (reviewId) { return requestFor(reviewId, nowMs); };
+    var sessions = scanned.sessions.map(function (s) {
+      var reviews = s.rows
+        .map(function (row) { return rowOut(row, nowMs, row.served, lookup); })
+        .sort(function (a, b) { return a.last < b.last ? 1 : a.last > b.last ? -1 : a.id < b.id ? 1 : -1; });
+      var projects = [];
+      reviews.forEach(function (r) {
+        if (r.project && projects.indexOf(r.project) === -1) projects.push(r.project);
+      });
+      return {
+        id: s.id,
+        name: s.state === "ok" ? nameOf(s.id) : null,
+        name_from_page: s.state === "ok" && nameFromPage(s.id),
+        // The reviewer's rename of the card, or null. List only: every
+        // hand-off keeps session.json's own name.
+        custom_name: s.customName || null,
+        projects: projects.sort(),
+        watching: watchingOf(s.id, nowMs),
+        away: awayOf(s.id, nowMs),
+        last: reviews.length ? reviews[0].last : null,
+        reviews: reviews
+      };
+    });
+    sessions.sort(function (a, b) {
+      if (a.last !== b.last) return a.last < b.last ? 1 : -1;
+      return a.id < b.id ? -1 : 1;
+    });
+
+    return {
+      attached: attachedOf(nowMs),
+      notice: scanned.notice,
+      sessions: sessions
+    };
+  }
+
+  /**
+   * One review, for the drain and for `lahe session name --from-review`.
+   *
+   * @param {string} reviewId
+   * @param {number|string} [now]
+   * @returns {{review: string, session: string, display_name: string, title: string|null,
+   *            path: string|null, kind: string, openable: string, candidate: string|null,
+   *            server: string|null, url_path: string|null, served_path: string|null,
+   *            watching: object|null, last: string, fold: string[]}|null}
+   *   `display_name` is the name of the row the review shows on (a folded
+   *   review's is its folder's). `path` is the document's own path on disk.
+   *   `candidate` is the checked main-repository copy for a gone worktree.
+   *   For Open (Library 2.1): `server` is the id of the recorded server that
+   *   covers the review's served file, `server_root` that record's root, and
+   *   `url_path` that file's path on it (all null when none does); `served_path` is the file itself, `verified_path`
+   *   a legacy review's document when it holds this review's own script line, `watching`
+   *   the session's watcher as the list shows it, and `last` the review's own
+   *   newest event time. `fold` is every review on the same row, this one
+   *   included (just this one for a row that is not a fold), so Star can act
+   *   on the whole row the way the list reads it.
+   */
+  function describeReview(reviewId, now) {
+    if (!protocol.isSafeId(reviewId)) return null;
+    var nowMs = toMs(now);
+    var scanned = scan(nowMs);
+    for (var i = 0; i < scanned.sessions.length; i += 1) {
+      var s = scanned.sessions[i];
+      for (var j = 0; j < s.rows.length; j += 1) {
+        var row = s.rows[j];
+        for (var k = 0; k < row.parts.length; k += 1) {
+          var part = row.parts[k];
+          if (part.info.id !== reviewId) continue;
+          return {
+            review: reviewId,
+            session: s.id,
+            display_name: row.displayName,
+            title: part.info.summary.title,
+            path: part.info.docPath,
+            kind: part.kind,
+            openable: part.openable,
+            candidate: part.candidate,
+            origin: part.origin,
+            server: part.covering ? part.covering.meta.id : null,
+            server_root: part.covering && typeof part.covering.meta.root === "string" ? part.covering.meta.root : null,
+            url_path: part.covering ? part.covering.urlPath : null,
+            served_path: part.info.servedPath,
+            // A legacy review's document, only when it holds this review's
+            // own script line; null otherwise and for every other kind.
+            verified_path: part.kind === "legacy" ? ownScriptLineFile(part.info.docPath, reviewId) : null,
+            watching: watchingOf(s.id, nowMs),
+            last: iso(part.info.lastMs),
+            fold: row.parts.map(function (p) { return p.info.id; }).sort()
+          };
+        }
+      }
+    }
+    return null;
+  }
+
+  return {
+    list: list,
+    describeReview: describeReview
+  };
+}
+
+/**
+ * The reader's two inputs from the request queue (Library 1.4), spelled once so
+ * the helper and the tests wire them the same way.
+ *
+ * @param {object} queue a catalog_requests.createQueue
+ */
+function queueInputs(queue) {
+  return {
+    attachment: queue.readAttached,
+    requestFor: queue.requestFor,
+    requestsAt: queue.requestsAt
+  };
+}
+
+module.exports = {
+  createReader: createReader,
+  queueInputs: queueInputs
+};

@@ -57,6 +57,9 @@ var rebuildModule = require("./rebuild.js");
 var staticServersModule = require("./static_servers.js");
 var reviewFormatModule = require("../shared/review_format.js");
 
+// The owner of a review from before agent sessions existed.
+var LEGACY_OWNER = "legacy";
+
 var TOKEN_BYTES = 32;
 
 // The holder tells the helper it is still there on this cadence, and the helper
@@ -325,9 +328,18 @@ function createReviews(options) {
         if (event.token && typeof event.token === "string") token = event.token;
         if (typeof event.agent_session_id === "string") agentSessionId = event.agent_session_id;
         if (!createdAt) createdAt = event[protocol.EVENT_FIELD.TS] || null;
+      } else if (type === protocol.EVENT.REVIEW_ADOPTED) {
+        if (typeof event.agent_session_id === "string") agentSessionId = event.agent_session_id;
       } else if (type === protocol.EVENT.ORIGIN_REGISTERED) {
         var origin = event.origin || (event.payload && event.payload.origin);
         if (typeof origin === "string" && origins.indexOf(origin) === -1) origins.push(origin);
+      } else if (type === protocol.EVENT.ORIGIN_REMOVED) {
+        // Applied in order with origin.registered, so a restarted static
+        // server's old port stays refused after a rebuild from the log, and an
+        // origin registered again later is held again.
+        var removed = event.origin || (event.payload && event.payload.origin);
+        var at = origins.indexOf(removed);
+        if (at !== -1) origins.splice(at, 1);
       }
     });
     if (!token) {
@@ -486,6 +498,11 @@ function createReviews(options) {
 
     var existing = get(id);
     if (existing) {
+      // A Library pick-up of a review from before sessions takes it into the
+      // agent's session (adopt). Only a legacy review: a real owner stands.
+      if (spec.adopt === true && typeof spec.agent_session_id === "string" && existing.agent_session_id === LEGACY_OWNER) {
+        adopt(id, spec.agent_session_id);
+      }
       if (
         typeof spec.agent_session_id === "string" &&
         existing.agent_session_id !== spec.agent_session_id
@@ -553,6 +570,38 @@ function createReviews(options) {
   }
 
   /**
+   * Take a review from before sessions (owner "legacy") into an agent session.
+   * Once: meta.json says the new owner and the log records a review.adopted
+   * event, so a lost meta is recovered with the same owner. Adopting into the
+   * session that already owns it is a no-op. A review with a real session is
+   * refused: its owner never changes here.
+   */
+  function adopt(reviewId, sessionId) {
+    var review = get(reviewId);
+    if (!review) throw new Error("no review " + reviewId);
+    if (typeof sessionId !== "string" || !protocol.isSafeId(sessionId) || sessionId === LEGACY_OWNER) {
+      throw new Error("adopt needs an agent session id");
+    }
+    if (review.agent_session_id === sessionId) return review;
+    if (review.agent_session_id !== LEGACY_OWNER) {
+      throw new Error("review " + reviewId + " belongs to agent session " + review.agent_session_id + ", not " + sessionId);
+    }
+    review.agent_session_id = sessionId;
+    persist(review);
+    log.append(reviewId, [
+      protocol.newEvent({
+        event: protocol.EVENT.REVIEW_ADOPTED,
+        event_id: "ev_" + crypto.randomBytes(8).toString("hex"),
+        review: reviewId,
+        payload: { agent_session_id: sessionId }
+      })
+    ]);
+    log.helperLog("review " + reviewId + " adopted into agent session " + sessionId);
+    if (lastReadyDetails) writeReadyFile(lastReadyDetails);
+    return review;
+  }
+
+  /**
    * Add an origin to a review's set.
    *
    * The set is what makes one review span `localhost` and `127.0.0.1`. Adding
@@ -579,6 +628,43 @@ function createReviews(options) {
     // (`add` and `status`) know what this helper holds. An
     // origin registered while the helper is running has to reach it, or `add`
     // would keep believing the origin is missing and writing it again.
+    if (lastReadyDetails) writeReadyFile(lastReadyDetails);
+    return review;
+  }
+
+  /**
+   * Take one origin off a review's set.
+   *
+   * ONLY A PLAIN LOOPBACK HTTP ORIGIN. The one caller is a restarted static
+   * server dropping its own earlier ports (static_servers.createCatalogOps),
+   * and the architecture's rule is that nothing else is ever removed: not a
+   * dev server's https origin, not a named host, not the file origin "null".
+   * The guard is here too, so a caller that computes the wrong list cannot
+   * widen that rule.
+   *
+   * Removing an origin the review does not hold is a no-op, like registering
+   * one it already holds.
+   */
+  function removeOrigin(reviewId, origin) {
+    var review = get(reviewId);
+    if (!review) throw new Error("removeOrigin: no review named " + JSON.stringify(reviewId));
+    var value = String(origin);
+    if (!/^http:\/\/(127\.0\.0\.1|localhost):\d{1,5}$/.test(value)) {
+      throw new Error("removeOrigin: only a loopback http origin is ever removed, not " + JSON.stringify(value));
+    }
+    var at = review.origins.indexOf(value);
+    if (at === -1) return review;
+    review.origins.splice(at, 1);
+    persist(review);
+    log.append(reviewId, [
+      protocol.newEvent({
+        event: protocol.EVENT.ORIGIN_REMOVED,
+        event_id: "ev_" + crypto.randomBytes(8).toString("hex"),
+        review: reviewId,
+        payload: { origin: value }
+      })
+    ]);
+    log.helperLog("review " + reviewId + " removed stale origin " + value);
     if (lastReadyDetails) writeReadyFile(lastReadyDetails);
     return review;
   }
@@ -1405,10 +1491,12 @@ function createReviews(options) {
     RESCAN_TRACKED_MAX: RESCAN_TRACKED_MAX,
     loadFromDisk: loadFromDisk,
     create: create,
+    adopt: adopt,
     get: get,
     ensureKnown: ensureKnown,
     list: list,
     registerOrigin: registerOrigin,
+    removeOrigin: removeOrigin,
     recordPaths: recordPaths,
     isolate: isolate,
     isNotes: isNotes,

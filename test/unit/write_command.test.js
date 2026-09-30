@@ -336,14 +336,16 @@ test("lahe review on a notes file keeps the one-page server: .env beside it is a
   assert.equal(projected(r.state, reviewIdOf(again.stdout)).review.notes, true);
 });
 
-// Security review 6.
+// Security review 6. Every static server now answers a foreign Host with 400
+// on every path, before routing (static_servers.js hostIsOwn, the Library's
+// DNS-rebinding guard), and the one-page server shares that check.
 test("the one-page server refuses a Host that is not its own loopback address", async (t) => {
   const r = await rig(t);
   const folder = tempDir("lahe-write-host-");
   const out = r.run("write", [path.join(folder, "n.md")]);
   assert.equal(out.code, 0, out.stdout + out.stderr);
   const url = openUrl(out.stdout);
-  assert.equal((await getWithHost(url.href, "attacker.example:" + url.port)).status, 404);
+  assert.equal((await getWithHost(url.href, "attacker.example:" + url.port)).status, 400);
   assert.equal((await getWithHost(url.href, "127.0.0.1:" + url.port)).status, 200);
   assert.equal((await getWithHost(url.href, "localhost:" + url.port)).status, 200);
 });

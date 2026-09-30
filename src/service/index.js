@@ -45,6 +45,12 @@ var authModule = require("./auth.js");
 var routes = require("./routes.js");
 var projection = require("./projection.js");
 var agentSessionsModule = require("./agent_sessions.js");
+var catalogPage = require("./catalog_page.js");
+var catalogReader = require("./catalog_reader.js");
+var catalogStore = require("./catalog_store.js");
+var catalogRequests = require("./catalog_requests.js");
+var catalogActions = require("./catalog_actions.js");
+var staticServers = require("./static_servers.js");
 var idleServersModule = require("./idle_servers.js");
 
 // Read from package.json rather than restated here, so the version the helper
@@ -162,7 +168,12 @@ function readBody(req, limit) {
  * Start the helper.
  *
  * @param {{port?: number, host?: string, stateDir?: string, reviews?: string[],
- *          origins?: string[], quiet?: boolean}} [options]
+ *          origins?: string[], quiet?: boolean, now?: function(): number,
+ *          pidAlive?: function, uid?: number, schedule?: function}} [options]
+ *   `now`, `pidAlive`, `uid` and `schedule` are for tests of the Library: the
+ *   clock every Library action and the reopened-session sweep read, the
+ *   liveness seam for monitor pids, the user a file Open restarts must belong
+ *   to, and a stand-in for setInterval that runs the sweep's timer.
  * @returns {Promise<object>} a handle with port, url, close, and the pieces the
  *   tests and `add` reach for: log, reviews, dir.
  */
@@ -188,7 +199,11 @@ async function serve(options) {
   // this every replacement threw the reviewer's open page out of its own review
   // (see the session table note in reviews.js).
   reviews.loadSessions();
-  var auth = authModule.createAuth({ log: log, reviews: reviews });
+  // The Library token (the D11 amendment), minted in memory for this helper's
+  // life only. Its port is filled in once the listener is bound, and until then
+  // every catalog request fails the Host check.
+  var catalog = authModule.createCatalogState();
+  var auth = authModule.createAuth({ log: log, reviews: reviews, catalog: catalog });
   // Created here rather than down with the rest of `deps` (below) because the
   // review-creation loop right after this needs it too: a review named on the
   // command line can also name the agent session that owns it (opts.reviewSessions,
@@ -221,6 +236,39 @@ async function serve(options) {
     });
   }
 
+  // THE LIBRARY (LAHE Library 2.1). One of each piece, built here and nowhere
+  // else, so the list, Open and the sweep all read the same queue, the same
+  // store and the same registry:
+  //
+  //   the queue       the helper's own, the one that records an expired line
+  //   the reader      joined with the queue's attach and per-review requests
+  //   the ops         reopenForCatalog and closeQuiet over this helper's
+  //                   in-memory review registry, which is why only the helper
+  //                   can swap a restarted server's origins
+  var now = typeof opts.now === "function" ? opts.now : function () { return Date.now(); };
+  var catalogQueue = catalogRequests.createQueue({
+    dir: dir,
+    writeExpired: true,
+    pidAlive: opts.pidAlive,
+    log: function (line) { log.helperLog(line); }
+  });
+  var catalogReaderInstance = catalogReader.createReader(Object.assign({
+    dir: dir,
+    pidAlive: opts.pidAlive
+  }, catalogReader.queueInputs(catalogQueue)));
+  var catalogOps = staticServers.createCatalogOps({ dir: dir, reviews: reviews, sessions: agentSessions });
+  var catalogActionsInstance = catalogActions.createCatalogActions({
+    dir: dir,
+    reader: catalogReaderInstance,
+    queue: catalogQueue,
+    store: catalogStore.createCatalogStore({ dir: dir }),
+    ops: catalogOps,
+    sessions: agentSessions,
+    pidAlive: opts.pidAlive,
+    uid: opts.uid,
+    log: function (line, atMs) { log.helperLog(line, atMs); }
+  });
+
   // Page servers nobody has had open for two minutes are stopped; the session
   // stays open (idle_servers.js). The two env knobs are for tests only.
   var idleServers = idleServersModule.createIdleServers({
@@ -241,6 +289,10 @@ async function serve(options) {
     // used to be things the reviewer could only get by asking the agent.
     agentSessions: agentSessions,
     library: loadLibrary(),
+    catalog: catalog,
+    catalogActions: catalogActionsInstance,
+    catalogQueue: catalogQueue,
+    now: now,
     version: VERSION,
     startedAt: startedAt
   };
@@ -294,6 +346,26 @@ async function serve(options) {
     res.end(raw.text);
   }
 
+  // Every catalog response, refusals included: the page's policies, and no CORS
+  // header of any kind. The Library is same-origin only.
+  function respondCatalog(res, status, contentType, bytes, requestId) {
+    var headers = catalogPage.securityHeaders();
+    headers["Content-Type"] = contentType;
+    if (requestId) headers[protocol.HEADER.REQUEST_ID] = requestId;
+    res.writeHead(status, headers);
+    res.end(bytes);
+  }
+
+  function respondCatalogJson(res, status, body, requestId) {
+    respondCatalog(
+      res,
+      status,
+      protocol.JSON_CONTENT_TYPE,
+      body === null || body === undefined ? "" : JSON.stringify(body),
+      requestId
+    );
+  }
+
   /** Every origin any review has registered, for the preflight answer. */
   function anyReviewRegistered(origin) {
     if (!origin) return false;
@@ -314,6 +386,22 @@ async function serve(options) {
     // origin. It grants the browser permission to SEND the real request; the
     // real request is then checked in full, which is where a refusal happens.
     if (req.method === "OPTIONS") {
+      // The preflight never approves a catalog route, whatever origin asks. The
+      // Library's own page is same-origin and never preflights; anything that
+      // does is another page, including a document on another loopback port
+      // whose origin a review registered.
+      if (routes.isCatalogPath(req.url)) {
+        log.helperLog(
+          "refused preflight: catalog path, origin " + JSON.stringify(effectiveOrigin.slice(0, 200)) + " [request " + requestId + "]"
+        );
+        respondCatalogJson(
+          res,
+          protocol.statusFor("PROTO_CROSS_SITE"),
+          protocol.errorBody("PROTO_CROSS_SITE", null, requestId, protocol.CHECK.SEC_FETCH_SITE),
+          requestId
+        );
+        return;
+      }
       if (!anyReviewRegistered(effectiveOrigin)) {
         log.helperLog(
           "refused preflight: origin " + effectiveOrigin + " is registered on no review [request " + requestId + "]"
@@ -333,6 +421,14 @@ async function serve(options) {
         Vary: "Origin"
       });
       res.end();
+      return;
+    }
+
+    // The Library's routes match on the RAW path, before URL normalization, so a
+    // `../` in an asset name stays inside the asset name (see matchCatalogRoute).
+    var catalogMatch = routes.matchCatalogRoute(req.method, req.url);
+    if (catalogMatch) {
+      await handleCatalog(req, res, catalogMatch, url, requestId);
       return;
     }
 
@@ -417,7 +513,7 @@ async function serve(options) {
         deps
       );
     } catch (err) {
-      var status = err.code === "NOT_IMPLEMENTED" ? 501 : 500;
+      var status = 500;
       log.helperLog("route " + route.name + " failed: " + err.message + " [request " + requestId + "]");
       respond(res, status, protocol.errorBody("PROTO_BAD_REQUEST", err.message, requestId, null), checked.origin, requestId);
       return;
@@ -441,6 +537,70 @@ async function serve(options) {
     respond(res, (outcome && outcome.status) || 200, outcome ? outcome.body : null, checked.origin, requestId);
   }
 
+  // One catalog request: body, the one auth.check call site's catalog branch,
+  // then the handler. Every response goes out through respondCatalog, so no
+  // path here can send a CORS header or leave off the page's policies.
+  async function handleCatalog(req, res, match, url, requestId) {
+    var route = match.route;
+    var body = null;
+    if (req.method === "POST") {
+      var rawBody;
+      try {
+        rawBody = await readBody(req, MAX_BODY_BYTES);
+      } catch (err) {
+        auth.refuse({ routeName: route.name, requestId: requestId }, "PROTO_BAD_REQUEST", err.message);
+        respondCatalogJson(res, 400, protocol.errorBody("PROTO_BAD_REQUEST", err.message, requestId, null), requestId);
+        return;
+      }
+      try {
+        body = rawBody ? JSON.parse(rawBody) : null;
+      } catch (err) {
+        body = null;
+      }
+    }
+
+    var checked = auth.check({
+      routeName: route.name,
+      headers: req.headers,
+      review: null,
+      method: req.method,
+      path: url.pathname,
+      requestId: requestId
+    });
+    if (!checked.ok) {
+      respondCatalogJson(res, checked.status, protocol.errorBody(checked.code, null, requestId, checked.check), requestId);
+      return;
+    }
+
+    var outcome;
+    try {
+      outcome = await routes.handlerFor(route.name)(
+        { routeName: route.name, assetName: match.assetName, body: body, requestId: requestId },
+        deps
+      );
+    } catch (err) {
+      var status = 500;
+      log.helperLog("route " + route.name + " failed: " + err.message + " [request " + requestId + "]");
+      respondCatalogJson(res, status, protocol.errorBody("PROTO_BAD_REQUEST", err.message, requestId, null), requestId);
+      return;
+    }
+
+    if (outcome && outcome.catalogRaw) {
+      respondCatalog(res, outcome.status || 200, outcome.catalogRaw.contentType, outcome.catalogRaw.bytes, requestId);
+      return;
+    }
+    if (outcome && outcome.error) {
+      respondCatalogJson(
+        res,
+        outcome.status || protocol.statusFor(outcome.error.code),
+        protocol.errorBody(outcome.error.code, outcome.error.detail, requestId, null),
+        requestId
+      );
+      return;
+    }
+    respondCatalogJson(res, (outcome && outcome.status) || 200, outcome ? outcome.body : null, requestId);
+  }
+
   await new Promise(function (resolve, reject) {
     server.once("error", reject);
     server.listen(port, host, function () {
@@ -450,6 +610,34 @@ async function serve(options) {
   });
 
   var boundPort = server.address().port;
+  catalog.port = boundPort;
+
+  // The reopened-session sweep (architecture, Helper lifetime). One run at a
+  // time: a slow close must not overlap the next tick. unref'd, so it never
+  // holds a process open on its own.
+  var sweeping = false;
+  function sweepReopened(atMs) {
+    return catalogActionsInstance.sweepReopened(typeof atMs === "number" ? atMs : now());
+  }
+  function sweepLibrarySessions(atMs) {
+    return catalogActionsInstance.sweepLibrarySessions(typeof atMs === "number" ? atMs : now());
+  }
+  // `opts.schedule` stands in for setInterval in a test, which then runs the
+  // tick itself instead of waiting POLL_MS.
+  var schedule = typeof opts.schedule === "function" ? opts.schedule : setInterval;
+  var sweepTimer = schedule(function () {
+    if (sweeping) return Promise.resolve();
+    sweeping = true;
+    return sweepReopened()
+      .then(function () { return sweepLibrarySessions(); })
+      .catch(function (err) {
+        log.helperLog("Library sweep failed: " + err.message);
+      })
+      .then(function () {
+        sweeping = false;
+      });
+  }, protocol.CATALOG.POLL_MS);
+  if (sweepTimer && typeof sweepTimer.unref === "function") sweepTimer.unref();
 
   // The readiness file goes out AFTER the listener is bound. A readiness file
   // that arrives before the socket is a lie, and the durability tests race it.
@@ -468,8 +656,16 @@ async function serve(options) {
     dir: dir,
     log: log,
     reviews: reviews,
+    // The Library state (token, port, last list). Tests and Task 2.1 reach it
+    // here; it is never written anywhere.
+    catalog: catalog,
+    // The sweep, run by hand: the helper runs it every POLL_MS on its own, and
+    // tests drive it with the time they choose.
+    sweepReopened: sweepReopened,
+    sweepLibrarySessions: sweepLibrarySessions,
     server: server,
     close: function () {
+      if (!opts.schedule) clearInterval(sweepTimer);
       idleServers.stop();
       return new Promise(function (resolve) {
         server.close(function () {

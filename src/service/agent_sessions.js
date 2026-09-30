@@ -40,6 +40,15 @@ var NAME_MAX = 80;
  * @returns {string|null} null for anything that is not a non-blank string
  */
 function cleanName(value) {
+  var stripped = stripName(value);
+  if (!stripped) return null;
+  var chars = Array.from(stripped);
+  if (chars.length > NAME_MAX) stripped = chars.slice(0, NAME_MAX).join("").trim();
+  return stripped || null;
+}
+
+/** cleanName without the length cap: trimmed, with the unsafe characters out. */
+function stripName(value) {
   if (typeof value !== "string") return null;
   // eslint-disable-next-line no-control-regex
   // Control characters, and the invisible ones that can make a name read as
@@ -49,18 +58,63 @@ function cleanName(value) {
   var stripped = value
     .replace(/[\u0000-\u001f\u007f-\u009f\u200b-\u200f\u2028-\u202e\u2066-\u2069\ufeff]/g, "")
     .trim();
-  if (!stripped) return null;
-  var chars = Array.from(stripped);
-  if (chars.length > NAME_MAX) stripped = chars.slice(0, NAME_MAX).join("").trim();
   return stripped || null;
 }
 
-/** Put a cleaned name on a session record, or take the field off for none. */
-function applyName(session, value) {
+/**
+ * A long text made into a name: cleaned, then, when it runs past NAME_MAX,
+ * cut where a word ends and closed with an ellipsis, still within NAME_MAX
+ * characters. One word longer than that is cut hard. For a name read off a
+ * page title, which cleanName alone would stop mid-word.
+ *
+ * @param {*} value
+ * @returns {string|null}
+ */
+function fitName(value) {
+  var full = stripName(typeof value === "string" ? value.replace(/\s+/g, " ") : value);
+  if (!full) return null;
+  var chars = Array.from(full);
+  if (chars.length <= NAME_MAX) return full;
+  var room = chars.slice(0, NAME_MAX - 1).join("");
+  // At the space just past `room`, or back to room's last space. One word
+  // with no space in it is cut hard.
+  var atWord = chars[NAME_MAX - 1] === " " ? room : room.replace(/\s+\S*$/, "");
+  var kept = atWord.replace(/[\s,:;.\-]+$/, "") || room.trim();
+  return kept + "\u2026";
+}
+
+// Where a name came from. "page" marks a name read off a document's own title
+// (`lahe session name <id> --from-review`): text the page chose. The rail and
+// the Library may show it, but no hand-off message carries it, since a hand-off
+// is the first prompt a new agent reads. Any other name is the human's.
+var NAME_SOURCE_PAGE = "page";
+
+/**
+ * Put a cleaned name on a session record, or take the field off for none.
+ *
+ * @param {object} session
+ * @param {*} value
+ * @param {string} [source] NAME_SOURCE_PAGE for a page-derived name
+ */
+function applyName(session, value, source) {
   var name = cleanName(value);
   if (name) session.name = name;
   else delete session.name;
+  if (name && source === NAME_SOURCE_PAGE) session.name_source = NAME_SOURCE_PAGE;
+  else delete session.name_source;
   return session;
+}
+
+/**
+ * The name a hand-off message may carry: the human's name, or null when there
+ * is none or the name came from a page.
+ *
+ * @param {object|null} session
+ * @returns {string|null}
+ */
+function handoffName(session) {
+  if (!session || session.name_source === NAME_SOURCE_PAGE) return null;
+  return cleanName(session.name);
 }
 
 function mintId() {
@@ -176,6 +230,14 @@ function livenessFrom(input) {
     withinMs(activityAt, nowMs, protocol.AGENT_LIVENESS.ACTIVE_MS) ||
     withinMs(lastReplyAt, nowMs, protocol.AGENT_LIVENESS.ACTIVE_MS);
 
+  // PRESENCE (the Library, phase 8): what is actually known, in three steps.
+  // The ten-minute "listening" above only withholds an accusation; a person
+  // deciding whether to take a session over is told the narrower truth.
+  var presence;
+  if (watcher === true || monitorLive) presence = protocol.AGENT_LIVENESS.PRESENCE.LISTENING;
+  else if (withinMs(activityAt, nowMs, protocol.CATALOG.WORKING_MS)) presence = protocol.AGENT_LIVENESS.PRESENCE.WORKING;
+  else presence = protocol.AGENT_LIVENESS.PRESENCE.AWAY;
+
   var state;
   if (unanswered === 0) state = states.NONE;
   else if (active) state = states.WORKING;
@@ -190,6 +252,7 @@ function livenessFrom(input) {
   out[protocol.AGENT_LIVENESS.FIELD.LISTENING] = listening;
   out[protocol.AGENT_LIVENESS.FIELD.MONITOR_AT] = monitorAt;
   out[protocol.AGENT_LIVENESS.FIELD.ACTIVITY_AT] = activityAt;
+  out[protocol.AGENT_LIVENESS.FIELD.PRESENCE] = presence;
   // Passed in by the store, which knows the state directory. The pure half has
   // no directory to put in the command, so it claims none.
   out[protocol.AGENT_LIVENESS.FIELD.OLDEST_ITEM] =
@@ -201,6 +264,9 @@ function livenessFrom(input) {
   out[protocol.AGENT_LIVENESS.FIELD.STATE_DIR_FLAG] = spec.stateDirFlagNeeded === true;
   // Which agent, in the human's words, so the rail can say which window to check.
   out[protocol.AGENT_LIVENESS.FIELD.NAME] = cleanName(spec.session && spec.session.name);
+  // A name read off a page's title is shown, but the rail's hand-off leaves it out.
+  out[protocol.AGENT_LIVENESS.FIELD.NAME_FROM_PAGE] =
+    !!out[protocol.AGENT_LIVENESS.FIELD.NAME] && !!spec.session && spec.session.name_source === NAME_SOURCE_PAGE;
   return out;
 }
 
@@ -300,7 +366,11 @@ function createStore(options) {
     // before the feed existed gets one.
     feed.ensure(id);
     if (existing) return existing;
-    return write(applyName({ schema: SCHEMA, id: id, created_at: now(), closed_at: null, handoff_rev: 0 }, spec.name));
+    var fresh = { schema: SCHEMA, id: id, created_at: now(), closed_at: null, handoff_rev: 0 };
+    // Who made it, when that matters to a sweep: bare `lahe library` marks its
+    // sessions so the helper can close them when idle.
+    if (spec.created_by === protocol.CATALOG.CREATED_BY_LIBRARY) fresh.created_by = spec.created_by;
+    return write(applyName(fresh, spec.name));
   }
 
   /**
@@ -308,11 +378,13 @@ function createStore(options) {
    *
    * @param {string} id
    * @param {string|null} name
+   * @param {{source?: string}} [options] source NAME_SOURCE_PAGE for a name
+   *   read off a page's title
    */
-  function setName(id, name) {
+  function setName(id, name, options) {
     var session = read(id);
     if (!session || session.synthetic) throw new Error("unknown agent session " + JSON.stringify(id));
-    return write(applyName(session, name));
+    return write(applyName(session, name, options && options.source));
   }
 
   function list() {
@@ -406,6 +478,10 @@ function createStore(options) {
     record[protocol.MONITOR.HEARTBEAT_FIELD.PID] = Number.isInteger(s.pid) ? s.pid : process.pid;
     record[protocol.MONITOR.HEARTBEAT_FIELD.HANDOFF_REV] = Number.isInteger(s.handoff_rev) ? s.handoff_rev : 0;
     record[protocol.MONITOR.HEARTBEAT_FIELD.AT] = s.at || now();
+    // Only when given: a single-session monitor's heartbeat is unchanged.
+    if (typeof s.primary === "string" && protocol.isSafeId(s.primary)) {
+      record[protocol.MONITOR.HEARTBEAT_FIELD.PRIMARY] = s.primary;
+    }
     stateDir.writeAtomic(stateDir.monitorPath(dir, id), JSON.stringify(record, null, 2) + "\n");
     return record;
   }
@@ -562,7 +638,10 @@ module.exports = {
   SCHEMA: SCHEMA,
   LEGACY_ID: LEGACY_ID,
   NAME_MAX: NAME_MAX,
+  NAME_SOURCE_PAGE: NAME_SOURCE_PAGE,
   cleanName: cleanName,
+  fitName: fitName,
+  handoffName: handoffName,
   mintId: mintId,
   handoffRev: handoffRev,
   pidAlive: pidAlive,
