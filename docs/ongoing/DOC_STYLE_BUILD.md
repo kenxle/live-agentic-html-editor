@@ -33,6 +33,8 @@ Pages that already carry their own styles are never touched.
   Mermaid script (around line 525). Fonts are served the same way at
   `.lahe-fonts/<file>.woff2`.
 
+- **A file-name title is chrome.** A Markdown file with no `#` heading shows its file name as the hero title. `markdown.js` marks that `h1` (`data-lahe-file-title`) so free writing never counts it as a content block. On a blank notes page the first run goes after it. See `docs/ongoing/FREE_WRITING.md`.
+
 ## Source of truth for the style
 
 `~/Documents/workspace/personal/lib/templates/system-tokens.css` (tokens) and

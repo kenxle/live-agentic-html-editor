@@ -68,7 +68,8 @@ sequenceDiagram
 - The check after the reply line is not bookkeeping. A handled claim for a
   hand edit is compared against the built page, and an item whose words are
   not there stays outstanding rather than retiring on the agent's word. See
-  `src/service/handled_check.js`.
+  `src/service/handled_check.js`. A free-writing run is checked block by
+  block, by words only; see `docs/ongoing/FREE_WRITING.md`.
 - The `file://` branch is marked because it is the one path where the loop
   can quietly break. There is no server putting the script line into a
   response, so the line is written into the HTML file itself. An agent that

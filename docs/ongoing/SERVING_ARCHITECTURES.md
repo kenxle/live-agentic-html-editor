@@ -444,6 +444,11 @@ Variations that are not separate architectures:
   documents that happen to sit one inside the other, each rooted at its own
   folder, so the newer inner review never takes over the outer one's pages.
 
+  **`lahe write` is the one exception to the folder rule.** A notes page gets a
+  one-page server that serves that page, the style and fonts it names, and a
+  404 for everything else, dotfiles included. It takes no mounts and answers
+  only its own loopback address. See `docs/ongoing/FREE_WRITING.md`.
+
   **A page recorded on its own keeps its own review**, and the wider review
   covers the rest. That happens when someone ran `lahe review page.html` on a
   file in the folder before or after opening the folder itself. It is legal and

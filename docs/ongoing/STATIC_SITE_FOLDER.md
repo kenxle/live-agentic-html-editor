@@ -56,6 +56,7 @@ folders, served under `/.lahe-source/<hash>/` mounts. Spec:
   links B, B links C) rides the hub's review.
 - Only recorded link targets get the rail, never their neighbours. An `--only`
   review keeps its links read-only.
+- A notes page from `lahe write` is outside all of this. Its one-page server serves that page and nothing else, so no folder, link, or mount rule applies (`docs/ongoing/FREE_WRITING.md`).
 - Hidden (dot-prefixed) files get no special handling. The served folder and a
   linked folder serve them like any other file, and a link to one translates
   like any other link. What bounds a request is containment: a path, or a
