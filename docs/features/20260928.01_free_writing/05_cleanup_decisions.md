@@ -24,7 +24,43 @@ Not touched: `test/browser/tmp_image_pick.spec.js` in the main checkout. It is n
 
 ## 3. Lessons waiting for review
 
-Five lessons are in `docs/lessons/proposed/` from earlier work. Default: I serve them on a page for you another time, since this close-out is long enough.
+Six lessons are waiting. For each, comment promote, discard, or merge. My recommendation is in bold.
+
+### A "no helper running" test reaches your real helper (testing)
+
+A test meant to check "no helper is running" still points at the default port. On your laptop your real helper is listening there, so the test talks to it. The test passes or fails for the wrong reason. This is the one from this feature.
+
+**Promote.** It is a real trap, and the symptoms are what a stuck agent would search for.
+
+### The browsers disagree about what an editing gesture means (browser)
+
+The same keystroke produces different markup in Chromium, Firefox and WebKit. So a reviewer's Enter or Bold can be recorded as no change at all. The fix is to decide the gesture before the browser does.
+
+**Promote.** It is still true after free writing, which builds on exactly that rule.
+
+### One matching rule cannot serve both replay and painting (layer)
+
+The rule that lets replay find a reworded region also lets the highlight paint the whole page while it is still loading. They need separate rules.
+
+**Promote.** It is a real trap, and the "everything is highlighted" symptom is what someone would see.
+
+### The browser tests run the built bundle, not the source you just edited (testing)
+
+The browser suite loads the built bundle, and nothing rebuilds it before a test run. So a test can be green about old code, or stay red after you fix it. Stashing and reverting then both mislead you.
+
+**Promote.** The builders hit it again on this feature.
+
+### "No work waiting" means both "finished" and "caught up" (service)
+
+An ended review and a review with nothing left to answer looked identical to the agent. The fix gave "ended" its own line. The lesson explains why, so nobody simplifies it away.
+
+**Promote.**
+
+### Opening a review is not listening to it (process)
+
+An agent served a page and never started watching for comments.
+
+**Discard.** It is a workflow rule, not a trap in the code, and the lahe skill already says it in its steps.
 
 ## 4. The draft's name in git history
 
