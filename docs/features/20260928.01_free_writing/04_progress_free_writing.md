@@ -56,6 +56,16 @@ No passes yet.
 
 - **Words the agent adds to your new paragraph:** the architecture counted your words as placed even when the agent added a sentence to your paragraph. Per the brief's R6 (your words stay as typed), that is now flagged on the card, with Keep mine and Take the page's. Decided at merge.
 
+- **Only notes pages open ready to type.** An empty page takes writing on its own only on a notes review made by `lahe write`. Any other empty page stays in reading state. From the fix round's design calls.
+- **Proofreading ends on a record once it has asked.** After one proofreading question, later sittings on that record are not proofread again.
+- **A force-quit within seconds of typing can lose the sitting.** Long writing saves after a short pause. This is open for you under Needs your attention.
+- **The old agent on an HTML page counts as correct.** Its `after_html` parses into the right blocks, so "handled" is the right result. The plan line was corrected.
+- **Tab reaches the block-type menu.** The plan pinned no key for it.
+- **The wrong-tag note also names `anchor_tag_after`.** The plan's pinned wording is older.
+- **Two tests run in Chromium only:** East Asian input and a real drag-and-drop. Only Chromium can drive them.
+- **Two files were edited outside their builders' rows.** `replies.js` passes proofread fixes through. `store.js` keeps "Not sent" across a reload.
+- **Undoing a retagged run carries the old tag.** This replaces the first design, where the record never stored the old tag.
+
 ### Follow-ups
 
 - Board rows added from the architecture reviews and the reproduction, all older than this feature:
