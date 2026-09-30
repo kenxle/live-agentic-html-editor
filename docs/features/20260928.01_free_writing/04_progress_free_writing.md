@@ -1,16 +1,22 @@
 # Progress: Free writing
 
-**Phase 8 done: free writing is merged and live.** [PR #20](https://github.com/kenxle/live-agentic-html-editor/pull/20) merged as 6f3bc6b. Your helper runs the new code. Next is cleanup. Nothing waits on you. Last updated 2026-09-30 16:57.
+**Phase 9, Cleanup.** Free writing is merged and live ([PR #20](https://github.com/kenxle/live-agentic-html-editor/pull/20)). One page of cleanup decisions waits on you. Last updated 2026-09-30 17:17.
 
-**Docs:** [Crucible questions](00_crucible_questions.md) · [Crucible](http://127.0.0.1:65155/00_crucible.html) · [Brief](http://127.0.0.1:65155/01_brief_free_writing.html) · [Wireframes](http://127.0.0.1:49513/index.html) ([decision](wireframes/DECISION.md)) · [Architecture](http://127.0.0.1:65155/02_architecture_free_writing.html) · [Plan](http://127.0.0.1:65155/03_plan_free_writing.html)
+**Docs:** [Crucible questions](00_crucible_questions.md) · [Crucible](http://127.0.0.1:65155/00_crucible.html) · [Brief](http://127.0.0.1:65155/01_brief_free_writing.html) · [Wireframes](http://127.0.0.1:49513/index.html) ([decision](wireframes/DECISION.md)) · [Architecture](http://127.0.0.1:65155/02_architecture_free_writing.html) · [Plan](http://127.0.0.1:65155/03_plan_free_writing.html) · Review logs: [progress](04_progress_free_writing_review_log.md), [crucible questions](04_progress_free_writing_review_log_crucible_questions.md), [crucible](04_progress_free_writing_review_log_crucible.md), [brief, architecture, plan](04_progress_free_writing_review_log_brief_architecture_plan.md), [wireframes](04_progress_free_writing_review_log_wireframes.md) · [Cleanup decisions](http://127.0.0.1:60007/05_cleanup_decisions-9485fee2d3c81c3d.html)
 
 ## Needs your attention
 
-Nothing is waiting on you.
+- [ ] **[Cleanup decisions](http://127.0.0.1:60007/05_cleanup_decisions-9485fee2d3c81c3d.html)**, each with a default:
+  - three proposed CLAUDE.md rules
+  - the deletion batch: 23 worktrees, the remote branch, and the preview
+  - the lesson queue
+  - the draft name left in git history
 
 ## Currently working on
 
-Nothing is running. Next: cleanup. That covers the worktrees, the preview helper, and the scratch files, with the deletions listed for you in one batch.
+| Agent or task | Doing | Started | Branch |
+|---|---|---|---|
+| Docs agent | Checking the ongoing docs, diagrams, README, AGENTS.md and CLI guide against what shipped, and writing `docs/ongoing/FREE_WRITING.md` | 2026-09-30 17:17 | `fw-docs` |
 
 ## Phases
 
@@ -25,7 +31,7 @@ Nothing is running. Next: cleanup. That covers the worktrees, the preview helper
 | 6 Implement | done | 2026-09-29 |
 | 7 Review | done | 2026-09-30 |
 | 8 Ship and land | done | 2026-09-30 |
-| 9 Cleanup | not started | |
+| 9 Cleanup | in progress | 2026-09-30 |
 
 ## The record
 
@@ -70,7 +76,7 @@ No passes yet.
 
 ### Cleanup queue
 
-Nothing queued.
+Listed on the [cleanup decisions page](http://127.0.0.1:60007/05_cleanup_decisions-9485fee2d3c81c3d.html), waiting on your yes.
 
 ### Test results
 
