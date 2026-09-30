@@ -285,10 +285,18 @@ test.describe("an anchor conflict holds the run", () => {
     return { item, r };
   }
 
-  test("the card shows the run and its count, nothing is placed, and the second button says the run is kept", async ({ page }) => {
+  // The anchor waits on the answer and the run does not: either answer keeps
+  // it, so it stays on the page after the page's anchor while the card waits
+  // (flow walk, Fail 3 and design problem 2). The anchor itself is untouched.
+  test("the card shows the run and its count, the run stays on the page after the page's anchor, and the second button says the run is kept", async ({
+    page
+  }) => {
     const { item, r } = await conflicted(page);
     expect(r[0], JSON.stringify(r[0])).toMatchObject({ branch: "content_changed" });
-    expect(await page.evaluate((t) => window.__count(t), LONG_A)).toBe(0);
+    expect((await articleShape(page)).slice(1, 4)).toEqual(["p: " + THEIRS, "p: " + LONG_A, "p: " + LONG_B]);
+    const again = await page.evaluate(() => window.__pass());
+    expect(again[0].wrote, "a second pass while waiting writes nothing").toBe(false);
+    expect(await page.evaluate((t) => window.__count(t), LONG_A)).toBe(1);
     const card = await page.evaluate((id) => {
       const node = window.__cards.nodes[id];
       return {
@@ -297,7 +305,9 @@ test.describe("an anchor conflict holds the run", () => {
         buttons: Array.from(node.querySelectorAll("[data-lahe-conflict-choice]")).map((b) => b.textContent)
       };
     }, item.id);
-    expect(card.line).toBe("Your 2 new blocks after this paragraph are waiting on this choice. Either answer keeps them.");
+    expect(card.line).toBe("Your 2 new blocks are on the page after this paragraph. Either answer keeps them.");
+    const note = await page.evaluate((id) => window.__cards.badges[id].REPLAY_NEITHER_MATCHES.message, item.id);
+    expect(note).toBe("The page's paragraph changed after you edited it, so Lahe did not write your version over it. Your new text is kept.");
     expect(card.blocks).toEqual([LONG_A, LONG_B]);
     expect(card.buttons).toEqual(["Keep mine", "Take the page's, keep my new text"]);
   });
@@ -354,6 +364,9 @@ test.describe("a run block the page holds with words the reviewer never typed is
     expect(await page.evaluate(() => document.getElementById("post").innerHTML)).toBe(before);
     expect(await page.evaluate((t) => window.__count(t), LONG_C)).toBe(0);
     expect(await page.evaluate((id) => !!window.__cards.badges[id].REPLAY_NEITHER_MATCHES, item.id)).toBe(true);
+    expect(await page.evaluate((id) => window.__cards.badges[id].REPLAY_NEITHER_MATCHES.message, item.id)).toBe(
+      "On the page, your new paragraph has words you did not write. Lahe changed nothing. Pick the version that stands."
+    );
     expect(await sides(page, item.id)).toEqual({ yours: LONG_B, theirs: EXTRA });
     expect(await page.evaluate(() => window.LAHE.replay.conflictIds())).toEqual([item.id]);
   });

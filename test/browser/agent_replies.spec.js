@@ -1726,6 +1726,9 @@ test.describe("free writing: the proofreading question", () => {
       await bootedPage(page, app, helper, token);
       const run = await typeRunAfterLede(page);
       await waitForItemInLog(helper, run.id);
+      // The reviewer is on Edits. The question lands on Active, which is not
+      // on screen, so it toasts (a reply on the tab already open does not).
+      await page.evaluate(() => window.__lahe.rail.selectTab("edits"));
       await askProofread(helper, page, run, [{ block: 1, from: "place", to: "spot" }]);
 
       // The question's toast names the run in the reviewer's words, never the
@@ -1796,6 +1799,56 @@ test.describe("free writing: the proofreading question", () => {
       const words = await cardWords(page, run.id);
       expect(words.thread).toContain("Keep mine as written. No changes.");
       expect(words.notice).toBe("Waiting on the agent");
+    } finally {
+      await helper.kill9();
+      await app.close();
+    }
+  });
+
+  // Flow walk, design problem 4: the question waits on the reviewer, so the
+  // card goes back to Active (wireframe 06b). Once answered it waits on the
+  // agent, and it goes back to Edits.
+  test("a proofread question sits on the Active tab while it waits on the reviewer, and goes back to Edits once answered", async ({
+    page
+  }, testInfo) => {
+    const { app, helper, token } = await startBoth();
+    try {
+      await bootedPage(page, app, helper, token);
+      const run = await typeRunAfterLede(page);
+      await waitForItemInLog(helper, run.id);
+      const before = await page.evaluate((id) => window.__lahe.rail.getCard(id).pane, run.id);
+      expect(before, "a run waiting on the agent is an Edits card").toBe("edits");
+      await askProofread(helper, page, run, [{ block: 1, from: "place", to: "spot" }]);
+      const asked = await page.evaluate((id) => {
+        const rail = window.__lahe.rail;
+        rail.collapse(false);
+        rail.selectTab("active");
+        return { pane: rail.getCard(id).pane, active: rail.countFor("active"), edits: rail.countFor("edits") };
+      }, run.id);
+      expect(asked, "the question is on Active, and Active counts it").toEqual({ pane: "active", active: 1, edits: 0 });
+      expect((await proofButtons(page, run.id)).use, "the buttons show on Active").toBe("Use the fixes");
+
+      await page.setViewportSize({ width: 1280, height: 1100 });
+      for (const scheme of ["light", "dark"]) {
+        await page.evaluate((want) => {
+          const bg = want === "dark" ? "#12151a" : "";
+          document.documentElement.style.background = bg;
+          document.body.style.background = bg;
+          window.__lahe.rail.refreshScheme();
+          window.__lahe.rail.selectTab("active");
+        }, scheme);
+        const file = testInfo.outputPath("proofread-on-active-" + scheme + ".png");
+        await page.screenshot({ path: file });
+        await testInfo.attach("proofread-on-active-" + scheme, { path: file, contentType: "image/png" });
+      }
+
+      await pressProof(page, run.id, "keep-mine");
+      await pollPage(page, (args) => window.__lahe.itemById(args[0]).rev === args[1] + 1, [run.id, run.rev], {
+        message: "Keep mine to post the next revision"
+      });
+      await pollPage(page, (id) => window.__lahe.rail.getCard(id).pane === "edits", run.id, {
+        message: "the answered card to go back to Edits"
+      });
     } finally {
       await helper.kill9();
       await app.close();

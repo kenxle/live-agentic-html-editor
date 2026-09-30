@@ -806,7 +806,21 @@
     "Reopened by the page check: blocks this take-back lists in remove_blocks are still on the page after the anchor. " +
     "Remove them from the source, or reply not_handled saying why.";
 
-  var PAGE_CHECK_NOTES = [PAGE_CHECK_NOTE, PAGE_CHECK_FORMAT_NOTE, PAGE_CHECK_STAMP_NOTE, PAGE_CHECK_TAG_NOTE, PAGE_CHECK_TAKEBACK_NOTE];
+  // The sixth, for a run record: a block the reviewer wrote is not on the page
+  // after the anchor. Nothing was "undone" and no original text came back: the
+  // block is new words, and they are missing or have words added (flow walk).
+  var PAGE_CHECK_RUN_NOTE =
+    "Reopened by the page check: a block in new_blocks is not on the page as written. " +
+    "Put it in the source as written, or reply not_handled saying why.";
+
+  var PAGE_CHECK_NOTES = [
+    PAGE_CHECK_NOTE,
+    PAGE_CHECK_FORMAT_NOTE,
+    PAGE_CHECK_STAMP_NOTE,
+    PAGE_CHECK_TAG_NOTE,
+    PAGE_CHECK_TAKEBACK_NOTE,
+    PAGE_CHECK_RUN_NOTE
+  ];
 
   /**
    * The carried note with `sentence` on the end, AT MOST ONCE.
@@ -1782,6 +1796,61 @@
     return view;
   }
 
+  /**
+   * The blocks of a run that a LATER record of the reviewer's took over.
+   *
+   * Once the agent placed a run, its blocks are the page's own, and a new
+   * sitting on one of them is a record of its own whose anchor is that block
+   * (architecture, Two sittings in the same place). From then on the block's
+   * words are that record's to change. So the placed run must not read the
+   * block's new words as its own going missing: that told the agent "the
+   * original text is back. Reapply it" and raised a "Which version stands?"
+   * card between the reviewer's two versions (flow walk, Fail 2).
+   *
+   * A block is taken over when another hand edit, not a take-back, made at or
+   * after this one, has an anchor whose words before its sitting are exactly
+   * that block's words. The run's anchor is checked the same way, under the
+   * key "anchor".
+   *
+   * @param {Object} item the run record
+   * @param {Array<Object>} items every record the caller holds
+   * @returns {Object} index (or "anchor") -> {id, tag, html}: the later
+   *   record's id and its version of the block
+   */
+  function handedOverBlocks(item, items) {
+    var out = {};
+    var list = Array.isArray(items) ? items : [];
+    var blocks = Array.isArray(item && item[FIELD.NEW_BLOCKS]) ? item[FIELD.NEW_BLOCKS] : [];
+    if (!item || !list.length) return out;
+    var keys = blocks.map(function (b) {
+      return b && typeof b.html === "string" ? normalize.blockWords(b.html) : "";
+    });
+    var anchorKey =
+      typeof item[FIELD.ANCHOR_AFTER_HTML] === "string" && item[FIELD.PLACEMENT] !== PLACEMENT.START_OF_CONTAINER
+        ? normalize.blockWords(item[FIELD.ANCHOR_AFTER_HTML])
+        : "";
+    var mine = item[FIELD.CREATED_AT];
+    list.forEach(function (other) {
+      if (!other || other === item || other[FIELD.ID] === item[FIELD.ID]) return;
+      if (!isHandEdit(other) || isRevert(other)) return;
+      if (typeof mine === "string" && typeof other[FIELD.CREATED_AT] === "string" && other[FIELD.CREATED_AT] < mine) return;
+      var before = typeof other[FIELD.BEFORE_HTML] === "string" ? other[FIELD.BEFORE_HTML] : other[FIELD.BEFORE];
+      var key = typeof before === "string" ? normalize.blockWords(before) : "";
+      if (!key) return;
+      var html = typeof other[FIELD.ANCHOR_AFTER_HTML] === "string" ? other[FIELD.ANCHOR_AFTER_HTML] : other[FIELD.AFTER_HTML];
+      var taken = {
+        id: other[FIELD.ID],
+        tag: typeof other[FIELD.ANCHOR_TAG_AFTER] === "string" && other[FIELD.ANCHOR_TAG_AFTER] ? other[FIELD.ANCHOR_TAG_AFTER] : null,
+        html: typeof html === "string" ? html : null
+      };
+      keys.forEach(function (k, index) {
+        if (k && k === key && !out[index]) out[index] = taken;
+      });
+      if (anchorKey && anchorKey === key && !out.anchor) out.anchor = taken;
+    });
+    return out;
+  }
+
   function wordsKey(html) {
     return normalize.normalizeText(normalize.textOf(typeof html === "string" ? html : ""));
   }
@@ -2225,6 +2294,7 @@
     acceptedPageTexts: acceptedPageTexts,
     acceptPageText: acceptPageText,
     PAGE_CHECK_NOTE: PAGE_CHECK_NOTE,
+    PAGE_CHECK_RUN_NOTE: PAGE_CHECK_RUN_NOTE,
     PAGE_CHECK_FORMAT_NOTE: PAGE_CHECK_FORMAT_NOTE,
     PAGE_CHECK_STAMP_NOTE: PAGE_CHECK_STAMP_NOTE,
     PAGE_CHECK_TAG_NOTE: PAGE_CHECK_TAG_NOTE,
@@ -2249,6 +2319,7 @@
     anchorTypeName: anchorTypeName,
     buildRunAfter: buildRunAfter,
     anchorView: anchorView,
+    handedOverBlocks: handedOverBlocks,
     runChangeText: runChangeText,
     validateRun: validateRun,
     trimRunHistory: trimRunHistory,

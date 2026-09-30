@@ -126,6 +126,19 @@
    * how the two drift apart. Pure: item in, tab name out, no card required, so
    * it answers for an item the rail has never been handed.
    */
+  // The agent's proofreading question on a run, not yet answered. The same
+  // test as tab_done's isProofreadQuestion, on the record alone.
+  function isProofreadWaiting(item) {
+    var reply = item && item[record.FIELD.REPLY];
+    return (
+      !!reply &&
+      reply.status === record.REPLY_STATUS.QUESTION &&
+      reply.proofread === true &&
+      item[record.FIELD.STATE] === record.STATE.READY &&
+      record.isRunRecord(item)
+    );
+  }
+
   function paneForItem(item) {
     var kind = item[record.FIELD.KIND];
     // The state the REVIEWER is shown, which is the state their card is placed
@@ -134,6 +147,11 @@
     // (record.displayState, and Ken on 2026-09-15).
     var state = record.displayState(item);
     if (state === record.STATE.HANDLED) return TAB.DONE;
+    // A proofreading question waits on the reviewer, not the agent, so its
+    // card goes back to Active until they answer (wireframe 06b: "The card is
+    // back on Active because it needs an answer"). Once answered it waits on
+    // the agent again, and goes back to Edits with every other hand edit.
+    if (isProofreadWaiting(item)) return TAB.ACTIVE;
     if (kind === record.KIND.EDIT || kind === record.KIND.FORMAT_ONLY || kind === record.KIND.DELETE) {
       return TAB.EDITS;
     }
@@ -1398,6 +1416,40 @@
     var list = Array.isArray(item[F.NEW_BLOCKS]) ? item[F.NEW_BLOCKS] : [];
     for (var i = 0; i < list.length; i += 1) if (wordsOfHtml(list[i] && list[i].html)) return false;
     return !normalize.normalizeText(String(item[F.AFTER] || ""));
+  }
+
+  /**
+   * A draft that changes nothing yet: the reviewer opened a block and has not
+   * typed. Its card showed the whole block struck through, which reads as a
+   * deletion, and moved the Edits count before anything was typed (flow walk,
+   * design problem 6). Such a draft is not drawn and not counted, like the
+   * blank draft an empty page opens with. It is still a draft in the store;
+   * the first keystroke that changes something draws its card.
+   */
+  function isUnchangedDraft(item) {
+    var F = record.FIELD;
+    if (!item || item[F.STATE] !== record.STATE.DRAFT) return false;
+    if (item[F.KIND] !== record.KIND.EDIT && item[F.KIND] !== record.KIND.FORMAT_ONLY) return false;
+    if (item[F.ANCHOR_TAG_AFTER]) return false;
+    var list = Array.isArray(item[F.NEW_BLOCKS]) ? item[F.NEW_BLOCKS] : [];
+    for (var i = 0; i < list.length; i += 1) if (list[i] && wordsOfHtml(list[i].html)) return false;
+    if (Array.isArray(item[F.REMOVE_BLOCKS]) && item[F.REMOVE_BLOCKS].length) return false;
+    // A draft persisted the moment a block opens has no after yet.
+    var noAfter = item[F.AFTER] === null || item[F.AFTER] === undefined;
+    var noAfterHtml = item[F.AFTER_HTML] === null || item[F.AFTER_HTML] === undefined;
+    if (noAfter && noAfterHtml && typeof item[F.ANCHOR_AFTER_HTML] !== "string") return true;
+    var before = normalize.normalizeText(String(item[F.BEFORE] || ""));
+    var after = normalize.normalizeText(String(item[F.AFTER] || ""));
+    if (before !== after) return false;
+    var bh = typeof item[F.BEFORE_HTML] === "string" ? item[F.BEFORE_HTML] : null;
+    var ah = typeof item[F.ANCHOR_AFTER_HTML] === "string" ? item[F.ANCHOR_AFTER_HTML] : typeof item[F.AFTER_HTML] === "string" ? item[F.AFTER_HTML] : null;
+    if (bh === null || ah === null) return bh === ah;
+    return JSON.stringify(normalize.emphasisRuns(bh)) === JSON.stringify(normalize.emphasisRuns(ah));
+  }
+
+  /** A draft the rail does not draw or count: blank, or changing nothing yet. */
+  function isQuietDraft(item) {
+    return isBlankStartDraft(item) || isUnchangedDraft(item);
   }
   //
   // A page with no content blocks (a brand-new notes page from `lahe write`)
@@ -3075,7 +3127,7 @@
       // On the card itself too, so anything a tab owner attached can be shown or
       // withdrawn by the card's own state without a second file being told.
       card.node.setAttribute("data-state", card.state);
-      if (isBlankStartDraft(item)) card.node.setAttribute("data-lahe-blank", "true");
+      if (isQuietDraft(item)) card.node.setAttribute("data-lahe-blank", "true");
       else card.node.removeAttribute("data-lahe-blank");
       paintCardWait(card);
       var quote = (item[record.FIELD.CONTEXT] && item[record.FIELD.CONTEXT].quote) || "";
@@ -3421,13 +3473,13 @@
 
     function countFor(tab) {
       return Object.keys(cards).filter(function (id) {
-        return cards[id].pane === tab && !isBlankStartDraft(cards[id].item);
+        return cards[id].pane === tab && !isQuietDraft(cards[id].item);
       }).length;
     }
 
     function countIncomplete() {
       return Object.keys(cards).filter(function (id) {
-        if (isBlankStartDraft(cards[id].item)) return false;
+        if (isQuietDraft(cards[id].item)) return false;
         // Pane placement and completion are separate. Direct edits stay in the
         // Edits pane so they do not bury comments, but they are still work for
         // the agent until a handled reply lands.
@@ -6378,6 +6430,8 @@
     runSummary: runSummary,
     emptyPageLines: emptyPageLines,
     isBlankStartDraft: isBlankStartDraft,
+    isUnchangedDraft: isUnchangedDraft,
+    isQuietDraft: isQuietDraft,
     clipAtWord: clipAtWord,
     TAB: TAB,
     TABS: TABS,

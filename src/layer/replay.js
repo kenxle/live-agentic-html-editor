@@ -1309,6 +1309,7 @@
   // different tag from the one in new_blocks.
   var TAG_WRONG_NOTE = record.PAGE_CHECK_TAG_NOTE;
   var TAKEBACK_NOTE = record.PAGE_CHECK_TAKEBACK_NOTE;
+  var RUN_MISSING_NOTE = record.PAGE_CHECK_RUN_NOTE;
 
   // The backstop, independent of the stamp rule below. Two checks that both look
   // at the same item cannot reopen it twice inside this window, whatever they
@@ -1346,7 +1347,9 @@
   // The three things the check can find, and the sentence each one carries. A
   // caller that only wants a yes or no asks isRevertedHandledEdit; one that has
   // to write the note asks pageCheckNoteFor.
-  var CHECK_REASON = { REVERTED: "reverted", FORMATTING: "formatting", STAMP: "stamp", TAG: "tag", TAKEBACK: "takeback" };
+  // MISSING is a run's own: a block the reviewer wrote is not on the page.
+  // REVERTED stays for text that went back to what it was before the edit.
+  var CHECK_REASON = { REVERTED: "reverted", MISSING: "missing", FORMATTING: "formatting", STAMP: "stamp", TAG: "tag", TAKEBACK: "takeback" };
 
   /**
    * Why the page check would reopen this item, or null.
@@ -1405,6 +1408,7 @@
   function pageCheckNoteFor(item, pageText, options) {
     var reason = pageCheckReasonFor(item, pageText, options);
     if (reason === CHECK_REASON.REVERTED) return REVERTED_EDIT_NOTE;
+    if (reason === CHECK_REASON.MISSING) return RUN_MISSING_NOTE;
     if (reason === CHECK_REASON.FORMATTING) return FORMATTING_LOST_NOTE;
     if (reason === CHECK_REASON.STAMP) return STAMP_LOST_NOTE;
     if (reason === CHECK_REASON.TAG) return TAG_WRONG_NOTE;
@@ -1422,6 +1426,7 @@
   CHECK_NOTICES[STAMP_LOST_NOTE] = "The id for this element is not in the source. The item is open again.";
   CHECK_NOTICES[TAKEBACK_NOTE] = "Some of the blocks you took back are still on the page. The item is open again.";
   CHECK_NOTICES[TAG_WRONG_NOTE] = "A block in this change is on the page as a different type. The item is open again.";
+  CHECK_NOTICES[RUN_MISSING_NOTE] = "A block you wrote is not on the page as you wrote it. The item is open again.";
 
   /** The rail's line for a page-check note, defaulting to the revert one. */
   function pageCheckNoticeFor(note) {
@@ -1549,6 +1554,10 @@
     var list = Array.isArray(items) ? items : [];
     var takenBack = record.takenBackIds(list);
     var opts = options || {};
+    // The run check reads the other records: a block a later record took over
+    // is that record's now (record.handedOverBlocks). Kept on the caller's
+    // options, so the note it asks for next (pageCheckNoteFor) reads the same.
+    if (!Array.isArray(opts.items)) opts.items = list;
     var out = [];
     for (var i = 0; i < list.length; i += 1) {
       if (takenBack[list[i][record.FIELD.ID]]) continue;
@@ -2912,6 +2921,20 @@
   var TAKE_THEIRS_RUN_LABEL = "Take the page's, keep my new text";
   var RUN_CONFLICT_LINE = "Your {n} new blocks after this {type} are waiting on this choice. Either answer keeps them.";
   var RUN_CONFLICT_LINE_ONE = "Your 1 new block after this {type} is waiting on this choice. Either answer keeps it.";
+  // The same line once the blocks are on the page while the card waits
+  // (flow walk, Fail 3): the words say where they are, not that they wait.
+  var RUN_SHOWN_LINE = "Your {n} new blocks are on the page after this {type}. Either answer keeps them.";
+  var RUN_SHOWN_LINE_ONE = "Your 1 new block is on the page after this {type}. Either answer keeps it.";
+
+  // What the conflict card's note says on a run record, in place of the
+  // anchor conflict's "This region is neither what you edited nor what you
+  // changed it to" (flow walk, design problem 3). One line for each case.
+  //   the anchor   the page's anchor changed after the reviewer edited it
+  //   a new block  the page shows the reviewer's new block with words added
+  var RUN_ANCHOR_CONFLICT_NOTE =
+    "The page's {type} changed after you edited it, so Lahe did not write your version over it. Your new text is kept.";
+  var RUN_BLOCK_CLASH_NOTE =
+    "On the page, your new {type} has words you did not write. Lahe changed nothing. Pick the version that stands.";
 
   // How the card names a block's type: the block menu's names, lowercased.
   var BLOCK_TYPE_NAMES = {
@@ -3134,6 +3157,44 @@
   }
 
   /**
+   * Where a reworded anchor stands when its words are gone, or null.
+   *
+   * Only for a record whose reviewer changed the anchor (so a card will ask),
+   * never for a container, and never when the text ladder found two places:
+   * that is its own answer. The point ladder (pointing.js) scores the page's
+   * elements on identity and place; the element back is the block holding its
+   * pick, and it must read words the record does not already know, so the
+   * conflict card has two versions to show.
+   */
+  function guessedAnchor(item, view, ctx, verdict) {
+    if (isContainerPlacement(item) || anchorUntouched(item, view)) return null;
+    if (verdict && verdict.reason === uniqueness.REASON.AMBIGUOUS) return null;
+    var ref = item[record.FIELD.REGION] ? item[record.FIELD.REGION].ref : null;
+    var ladder = ctx.pointing;
+    if (!ref || !ladder || typeof ladder.bestGuess !== "function") return null;
+    var guess = null;
+    guessing = true;
+    try {
+      guess = ladder.bestGuess(ref, ctx.root);
+    } finally {
+      guessing = false;
+    }
+    var picked = guess && guess.element ? guess.element : null;
+    var el = picked ? blockHolding(picked) || picked : null;
+    if (!el || el.nodeType !== 1 || el.isConnected === false) return null;
+    if (markers && typeof markers.isToolNode === "function" && markers.isToolNode(el)) return null;
+    if (tagOfEl(el) === "main" || tagOfEl(el) === "body") return null;
+    var engine = ctx.anchor || anchorEngine;
+    if (engine && typeof engine.isPageSized === "function" && typeof engine.scopeOf === "function") {
+      var scope = engine.scopeOf(ctx.root, null);
+      if (scope && engine.isPageSized(el, scope)) return null;
+    }
+    var words = normalize.normalizeText(el.textContent || "");
+    if (!words) return null;
+    return el;
+  }
+
+  /**
    * Applies one run record. The contract is applyRecord's, plus the run.
    */
   function applyRun(item, ctx) {
@@ -3166,10 +3227,21 @@
         element = verdict.element;
       }
     }
+    var guessed = false;
     if (!element) {
       var bound = lastElement[id];
       if (bound && bound.isConnected) element = bound;
-      else return markLost(item, verdict || lostVerdict(), ctx);
+      else {
+        // The reviewer reworded the anchor and the page's anchor now reads
+        // neither their words nor its old ones: the agent reworded it too
+        // (flow walk, Fail 3). That is a conflict on the anchor, not a lost
+        // record, so the point ladder is asked where the anchor stands, and
+        // the card asks which version stands. The anchor is never written on
+        // the guess; only the reviewer's answer writes it.
+        element = guessedAnchor(item, view, ctx, verdict);
+        if (!element) return markLost(item, verdict || lostVerdict(), ctx);
+        guessed = true;
+      }
     }
 
     // A record that changes the anchor's tag writes the tag onto a block,
@@ -3206,14 +3278,18 @@
       var verdictBranch = compare(view, domValue, typeof element.innerHTML === "string" ? element.innerHTML : null, null);
       branch = verdictBranch.branch;
       earlierAfter = verdictBranch.earlierAfter;
-      if (branch === BRANCH.CONTENT_CHANGED) return holdRun(ctx, item, view, element, domValue, false);
+      // A guessed anchor is only ever shown to the reviewer, never written.
+      if (branch === BRANCH.CONTENT_CHANGED || guessed) return holdRun(ctx, item, view, element, domValue, false);
     }
 
     // A run block the page holds with words the reviewer never typed. Read
     // before anything is written, so a clash writes nothing at all (R5, R6).
     // A page state the reviewer already answered with Keep mine is rewritten
     // to their block instead, pass after pass, as an anchor's is.
-    var clash = blocks.runClashFor(item, element.ownerDocument, element);
+    var later = laterRun(ctx, item);
+    var clash = blocks.runClashFor(later.item, element.ownerDocument, element);
+    // A block a later record took over is not this record's to clash on.
+    if (clash && later.handed[clash.index]) clash = null;
     var clashWrote = false;
     if (clash) {
       if (!clashAccepted(item, clash)) return holdBlockClash(ctx, item, element, clash);
@@ -3442,9 +3518,10 @@
       });
       return out;
     }
-    var list = runList(item, RUN_FIELD.NEW_BLOCKS);
+    var later = laterRun(ctx, item);
+    var list = runList(later.item, RUN_FIELD.NEW_BLOCKS);
     if (!list.length) return out;
-    var found = blocks.runElementsFor(item, doc, anchor);
+    var found = blocks.runElementsFor(later.item, doc, anchor);
     var priors = priorRunLeaves(item, doc, anchor);
     var index = pageLeafIndex(doc);
     var seen = [];
@@ -3454,6 +3531,13 @@
     var last = null;
     found.blocks.forEach(function (b) {
       var block = list[b.index];
+      // A block a later record took over is that record's to write. Where it
+      // shows, the walk goes on from it; where it does not, nothing is put in
+      // its place, or the page would show the list twice (flow walk, Fail 2).
+      if (later.handed[b.index]) {
+        if (b.status !== "missing") last = b.elements[b.elements.length - 1];
+        return;
+      }
       if (b.status === "whole") {
         // A leaf that shows an earlier revision exactly (a punctuation fix the
         // fold reads past) is branch three: rewritten (code lead finding 18).
@@ -3519,15 +3603,63 @@
     return out;
   }
 
+  /**
+   * The run as it reads now: each block a later record of the reviewer's took
+   * over (record.handedOverBlocks) carries that record's version. The record
+   * itself is never changed.
+   *
+   * @returns {{item: Object, handed: Object}}
+   */
+  function laterRun(ctx, item) {
+    var handed = record.handedOverBlocks(item, itemsIn(ctx));
+    var indexes = Object.keys(handed).filter(function (k) {
+      return k !== "anchor";
+    });
+    if (!indexes.length) return { item: item, handed: handed };
+    var copy = Object.assign({}, item);
+    copy[RUN_FIELD.NEW_BLOCKS] = runList(item, RUN_FIELD.NEW_BLOCKS).map(function (b, index) {
+      var h = handed[index];
+      if (!h || typeof h.html !== "string") return b;
+      return { tag: h.tag || b.tag, html: h.html };
+    });
+    return { item: copy, handed: handed };
+  }
+
   /** Branch four on a run record: flag the anchor, hold the run, say so. */
   function holdRun(ctx, item, view, element, theirs, displaced) {
     var id = item[record.FIELD.ID];
     var result = flagConflict(ctx, view, id, element, theirs, displaced);
     if (conflicts[id]) conflicts[id].run = true;
+    setConflictNote(ctx, id, RUN_ANCHOR_CONFLICT_NOTE.replace("{type}", record.anchorTypeName(item)), result);
+    // The anchor waits on the reviewer's answer; their new blocks do not.
+    // Either answer keeps them, so they stay on the page after the page's
+    // anchor while the card waits (flow walk, Fail 3 and design problem 2).
+    // A block that clashes with the page's words waits too: nothing is put
+    // beside it.
+    lastElement[id] = element;
+    var clash = blocks.runClashFor(laterRun(ctx, item).item, element.ownerDocument, element);
+    if (!clash) {
+      var placed = placeRun(ctx, item, element);
+      result.run = placed;
+      if (placed.wrote) {
+        result.wrote = true;
+        counters.regionsWritten += 1;
+      }
+    }
+    if (conflicts[id]) conflicts[id].shown = !clash;
     decorateRunConflict(ctx, id, item);
     result.item = item;
     result.held = true;
     return result;
+  }
+
+  // The conflict badge with a run's own sentence in place of the anchor
+  // conflict's. Same code, so everything that clears the badge still does.
+  function setConflictNote(ctx, id, message, result) {
+    if (!failures || !result || result.branch !== BRANCH.CONTENT_CHANGED) return;
+    var f = failures.failure("REPLAY_NEITHER_MATCHES", { yours: result.yours, theirs: result.theirs });
+    f.message = message;
+    callCard(ctx, "setCardBadge", id, f);
   }
 
   // ---------------------------------------------------------------------------
@@ -3592,6 +3724,8 @@
       })
       .join("\n\n");
     var result = flagConflict(ctx, item, id, element, leafText(clash.element), false, yours);
+    var first = runList(item, RUN_FIELD.NEW_BLOCKS)[clash.index];
+    setConflictNote(ctx, id, RUN_BLOCK_CLASH_NOTE.replace("{type}", blockTypeName(first ? first.tag : "")), result);
     if (conflicts[id]) {
       conflicts[id].run = true;
       conflicts[id].block = { index: clash.index, blocks: clash.blocks };
@@ -3658,10 +3792,13 @@
     return { resolved: true, choice: choice, reason: null };
   }
 
-  function runConflictLine(item) {
+  // `shown`: the blocks are on the page while the card waits.
+  function runConflictLine(item, shown) {
     var n = runList(item, RUN_FIELD.NEW_BLOCKS).length;
     var type = record.anchorTypeName(item);
-    return (n === 1 ? RUN_CONFLICT_LINE_ONE : RUN_CONFLICT_LINE.replace("{n}", String(n))).replace("{type}", type);
+    var one = shown ? RUN_SHOWN_LINE_ONE : RUN_CONFLICT_LINE_ONE;
+    var many = shown ? RUN_SHOWN_LINE : RUN_CONFLICT_LINE;
+    return (n === 1 ? one : many.replace("{n}", String(n))).replace("{type}", type);
   }
 
   // The run section of the conflict card: the pinned line and each held
@@ -3680,7 +3817,7 @@
     section.textContent = "";
     var line = doc.createElement("div");
     line.setAttribute("data-lahe-conflict-run-line", "");
-    line.textContent = runConflictLine(item);
+    line.textContent = runConflictLine(item, !!(conflicts[id] && conflicts[id].shown));
     section.appendChild(line);
     runList(item, RUN_FIELD.NEW_BLOCKS).forEach(function (b) {
       var row = doc.createElement("div");
@@ -3772,8 +3909,20 @@
     var F = record.FIELD;
     var leaves = normalize.leafBlocks(html);
     var list = runList(item, RUN_FIELD.NEW_BLOCKS);
+    // Blocks a later record of the reviewer's took over (flow walk, Fail 2):
+    // their words are that record's now. The run is read twice, once as it
+    // was placed and once with the later versions in place, and the reading
+    // that finds more of it counts. A taken-over block is never judged.
+    var handed = record.handedOverBlocks(item, options && options.items);
+    var later = list.map(function (b, index) {
+      var h = handed[index];
+      if (!h || typeof h.html !== "string") return b;
+      return { tag: h.tag || b.tag, html: h.html };
+    });
     var anchorHtml = typeof item[RUN_FIELD.ANCHOR_AFTER_HTML] === "string" ? item[RUN_FIELD.ANCHOR_AFTER_HTML] : "";
     var anchorWords = normalize.blockWords(anchorHtml);
+    var anchorKeys = [anchorWords];
+    if (handed.anchor && typeof handed.anchor.html === "string") anchorKeys.push(normalize.blockWords(handed.anchor.html));
     var starts = [];
     var anchored = true;
     if (isContainerPlacement(item)) {
@@ -3781,37 +3930,40 @@
       anchored = false;
     } else {
       leaves.forEach(function (leaf, i) {
-        if (anchorWords && leaf.words === anchorWords) starts.push(i);
+        if (leaf.words && anchorKeys.indexOf(leaf.words) !== -1) starts.push(i);
       });
     }
     if (!starts.length) {
       var beforeWords = normalize.blockWords(item[F.BEFORE_HTML] || item[F.BEFORE] || "");
-      var beforeBack = beforeWords && beforeWords !== anchorWords && leaves.some(function (l) {
+      var beforeBack = !handed.anchor && beforeWords && beforeWords !== anchorWords && leaves.some(function (l) {
         return l.words === beforeWords;
       });
       if (beforeBack) return CHECK_REASON.REVERTED;
       if (!list.length) return null;
       anchored = false;
       leaves.forEach(function (leaf, i) {
-        var hit = list.some(function (b) {
+        var hit = list.concat(later).some(function (b) {
           return normalize.blockWords(b.html) === leaf.words;
         });
         if (hit) starts.push(i - 1);
       });
-      if (!starts.length) return CHECK_REASON.REVERTED;
+      if (!starts.length) return handed.anchor ? null : CHECK_REASON.MISSING;
     }
     var best = null;
+    var readings = later === list || !Object.keys(handed).length ? [list] : [list, later];
     starts.forEach(function (start) {
-      var matched = normalize.matchRun(list, leaves.slice(start + 1));
-      var present = matched.filter(function (m) {
-        return m.status !== "missing";
-      }).length;
-      if (!best || present > best.present) best = { start: start, matched: matched, present: present };
+      readings.forEach(function (reading) {
+        var matched = normalize.matchRun(reading, leaves.slice(start + 1));
+        var present = matched.filter(function (m) {
+          return m.status !== "missing";
+        }).length;
+        if (!best || present > best.present) best = { start: start, matched: matched, present: present, reading: reading };
+      });
     });
     var missing = false;
     var tag = false;
     var formatting = false;
-    var anchorLeaf = anchored && best.start >= 0 ? leaves[best.start] : null;
+    var anchorLeaf = anchored && best.start >= 0 && !handed.anchor ? leaves[best.start] : null;
     if (anchorLeaf) {
       var tagAfter = item[RUN_FIELD.ANCHOR_TAG_AFTER];
       if (tagAfter && anchorLeaf.tag !== tagAfter) tag = true;
@@ -3820,6 +3972,7 @@
       if ((kind === record.KIND.EDIT || kind === record.KIND.FORMAT_ONLY) && missingEmphasis(anchorHtml, anchorLeaf.html)) formatting = true;
     }
     best.matched.forEach(function (m) {
+      if (handed[m.index]) return;
       var block = list[m.index];
       if (m.status === "missing") {
         var words = normalize.blockWords(block.html);
@@ -3843,7 +3996,7 @@
       if (leaf.tag !== block.tag) tag = true;
       if (missingEmphasis(block.html, leaf.html)) formatting = true;
     });
-    if (missing) return CHECK_REASON.REVERTED;
+    if (missing) return CHECK_REASON.MISSING;
     if (tag) return CHECK_REASON.TAG;
     if (formatting) return CHECK_REASON.FORMATTING;
     return null;
