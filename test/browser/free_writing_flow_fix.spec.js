@@ -6,8 +6,35 @@
 
 "use strict";
 
-const { test, expect, startStaticServer } = require("../helpers");
+const path = require("node:path");
+const fs = require("node:fs");
+
+const { test, expect, startStaticServer, pollPage } = require("../helpers");
 const fw = require("./support/free_writing_page");
+
+// Screenshots for the progress page: set LAHE_SHOTS_DIR to save them. They are
+// taken after the assertions that prove the change, in the same run.
+async function shot(page, name) {
+  const dir = process.env.LAHE_SHOTS_DIR;
+  if (!dir) return;
+  fs.mkdirSync(dir, { recursive: true });
+  const lane = test.info().project.name;
+  await page.screenshot({ path: path.join(dir, name + (lane === "chromium" ? "" : "-" + lane) + ".png") });
+}
+
+// A dense page: no margins between blocks, tight lines. There is no gap for
+// the bar anywhere, which is where it used to cover the text above.
+const DENSE_CSS =
+  "p, h1, h2, ul, article > p, h2 + p { margin: 0 !important; } body { line-height: 1.3 !important; margin-top: 90px !important; }";
+const DARK_CSS = "html, body { background: #16181d !important; color: #e6e6e6 !important; } strong { color: #ffd479 !important; }";
+
+async function addStyle(page, css) {
+  await page.evaluate((text) => {
+    const el = document.createElement("style");
+    el.textContent = text;
+    document.head.appendChild(el);
+  }, css);
+}
 
 let server;
 
@@ -184,5 +211,69 @@ test.describe("a sitting on a placed block is an ordinary edit", () => {
     expect(edits).toHaveLength(1);
     expect(edits[0].id).toBe(run.id);
     expect(edits[0].rev).toBe(run.rev + 1);
+  });
+});
+
+// Flow walk design problem 1: the bar sat over the text just above what the
+// writer was writing (the anchor's last line, a heading, the byline).
+test.describe("the edit bar never covers the text above the frame", () => {
+  // Every text line of these blocks, as rects.
+  function lineRects(page, selectors) {
+    return page.evaluate((sels) => {
+      const out = [];
+      sels.forEach((sel) => {
+        const el = document.querySelector(sel);
+        const r = document.createRange();
+        r.selectNodeContents(el);
+        Array.from(r.getClientRects()).forEach((b) => {
+          if (b.width && b.height) out.push({ sel, top: b.top, bottom: b.bottom, left: b.left, right: b.right });
+        });
+      });
+      return out;
+    }, selectors);
+  }
+
+  function overlaps(a, b) {
+    return a.left < b.right && b.left < a.right && a.top < b.bottom && b.top < a.bottom;
+  }
+
+  async function writeAfterP2(page) {
+    await fw.openEdit(page, "#p2");
+    await page.keyboard.press("Enter");
+    await page.keyboard.type("A new paragraph written after the list intro.", { delay: 2 });
+    await pollPage(page, () => {
+      const b = window.__lahe.handle.editing.barInfo();
+      return !!b && b.rect.height > 0;
+    }, undefined, { message: "the bar to lay out" });
+    // Two frames, so the frame watcher has placed the bar for this layout.
+    await page.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))));
+    return page.evaluate(() => ({
+      bar: window.__lahe.handle.editing.barInfo().rect,
+      frame: window.__lahe.handle.editing.frameRect()
+    }));
+  }
+
+  for (const scheme of ["light", "dark"]) {
+    test("on a dense page with no gap, the bar goes below the frame (" + scheme + ")", async ({ page }) => {
+      await fw.openFixture(page, server, "blog.html");
+      await addStyle(page, DENSE_CSS + (scheme === "dark" ? DARK_CSS : ""));
+      const got = await writeAfterP2(page);
+      const bar = { top: got.bar.y, bottom: got.bar.y + got.bar.height, left: got.bar.x, right: got.bar.x + got.bar.width };
+      expect(bar.top, "below the frame").toBeGreaterThanOrEqual(got.frame.y + got.frame.height);
+      const above = await lineRects(page, ["#title", "#p1", "#h2", "#p2"]);
+      above.forEach((line) => expect(overlaps(bar, line), "the bar covers a line of " + line.sel).toBe(false));
+      await shot(page, "item4-bar-dense-" + scheme);
+    });
+  }
+
+  test("with a real gap above the frame, the bar sits in it and covers nothing", async ({ page }) => {
+    await fw.openFixture(page, server, "blog.html");
+    await addStyle(page, "#p2 { margin-bottom: 80px !important; }");
+    const got = await writeAfterP2(page);
+    const bar = { top: got.bar.y, bottom: got.bar.y + got.bar.height, left: got.bar.x, right: got.bar.x + got.bar.width };
+    expect(bar.bottom, "above the frame").toBeLessThanOrEqual(got.frame.y);
+    const above = await lineRects(page, ["#title", "#p1", "#h2", "#p2"]);
+    above.forEach((line) => expect(overlaps(bar, line), "the bar covers a line of " + line.sel).toBe(false));
+    await shot(page, "item4-bar-gap-light");
   });
 });

@@ -5042,31 +5042,70 @@
       frameNode.style.width = rect.right - rect.left + pad * 2 + "px";
       frameNode.style.height = rect.bottom - rect.top + pad * 2 + "px";
 
-      // The bar sits above the frame, pinned by its BOTTOM edge, so its own
-      // height never enters the calculation. Measuring the height instead
-      // reads zero on the first frame in some engines, which puts the bar in
-      // one place and then moves it a frame later: the reviewer sees it jump,
-      // and anything aiming at a button can miss it.
+      // WHERE THE BAR GOES (flow walk, design problem 1). It used to sit over
+      // whatever was above the frame: the line before the anchor, a heading,
+      // the byline, which is exactly the sentence a writer reads back while
+      // continuing it. Now it goes in the page's own gap above the frame when
+      // the gap is tall enough for it, and below the frame when it is not.
+      // When above, it is pinned by its BOTTOM edge, so a height read as zero
+      // on the first frame in some engines cannot make it jump.
       var viewport = win.innerHeight || 768;
-      // An untouched anchor sits outside the frame, right above it: the bar
-      // goes above the anchor too, so it never covers the words the reviewer
-      // is writing after.
-      var barRect = rect;
-      if (isRun() && !session.container && framedElements().indexOf(session.anchor) === -1) {
-        barRect = unionRect([session.anchor].concat(framedElements())) || rect;
-      }
-      var roomAbove = barRect.top - pad - 8;
+      var barHeight = barNode.getBoundingClientRect().height || BAR_ROOM;
+      var frameTop = rect.top - pad;
+      var frameBottom = rect.bottom + pad;
+      var above = contentBottomAbove(framedElements(), frameTop);
+      var ceiling = Math.max(0, above === null ? 0 : above);
+      var room = frameTop - ceiling;
       var left = Math.round(Math.max(8, rect.left - pad));
       barNode.style.left = left + "px";
-      if (roomAbove >= 44) {
-        barNode.style.bottom = Math.round(viewport - roomAbove) + "px";
+      if (room >= barHeight + BAR_GAP * 2) {
+        barNode.style.bottom = Math.round(viewport - (frameTop - BAR_GAP)) + "px";
         barNode.style.top = "auto";
+        barNode.setAttribute("data-lahe-bar-side", "above");
       } else {
-        barNode.style.top = Math.round(Math.min(rect.bottom + pad + 8, viewport - 44)) + "px";
+        barNode.style.top = Math.round(Math.max(0, Math.min(frameBottom + BAR_GAP, viewport - barHeight - BAR_GAP))) + "px";
         barNode.style.bottom = "auto";
+        barNode.setAttribute("data-lahe-bar-side", "below");
       }
       fitBar(left);
       return frameNode;
+    }
+
+    // The bar's height before it has been laid out, and the space it keeps
+    // from the frame and from the text above it.
+    var BAR_ROOM = 40;
+    var BAR_GAP = 4;
+
+    // The bottom of the nearest page text above `top`, outside the frame, or
+    // null when there is none. It reads the lines themselves (text node
+    // rects), walking back from the first framed block, so a page's margins
+    // and padding count as gap and its words never do.
+    function contentBottomAbove(list, top) {
+      if (!doc || !doc.body || !list.length) return null;
+      var first = list[0];
+      for (var i = 1; i < list.length; i += 1) {
+        if (list[i] && first.compareDocumentPosition(list[i]) & 2) first = list[i];
+      }
+      var walker = doc.createTreeWalker(doc.body, 4, null);
+      walker.currentNode = first;
+      var looked = 0;
+      for (var n = walker.previousNode(); n && looked < 200; n = walker.previousNode()) {
+        looked += 1;
+        if (!/\S/.test(n.nodeValue || "")) continue;
+        var parent = n.parentElement;
+        if (!parent || markers.isInsideOverlay(parent)) continue;
+        var r = doc.createRange();
+        r.selectNodeContents(n);
+        var rects = r.getClientRects();
+        var best = null;
+        for (var k = 0; k < rects.length; k += 1) {
+          var box = rects[k];
+          if (!box.width && !box.height) continue;
+          if (box.bottom <= top + 1 && (best === null || box.bottom > best)) best = box.bottom;
+        }
+        if (best !== null) return best;
+      }
+      return null;
     }
 
     // On a narrow window the bar drops its hint first.
