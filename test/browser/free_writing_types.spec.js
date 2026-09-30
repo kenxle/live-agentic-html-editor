@@ -189,7 +189,17 @@ test.describe("free writing: block types", () => {
     });
     await page.evaluate(() => document.getElementById("list").scrollIntoView({ block: "end" }));
     await fw.openEdit(page, "#list li:last-child");
+    // The layer keeps the caret in view and moves the bar to the top of the
+    // window when the caret's line would sit under it, so put the frame's
+    // bottom about 240px down a 420px window: the bar sits under the frame,
+    // well below the top, with less room under it than the menu needs.
+    await page.evaluate(() => {
+      const r = document.querySelector("#list li:last-child").getBoundingClientRect();
+      window.scrollBy(0, r.bottom - 240);
+    });
+    await page.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))));
     const b = await bar(page);
+    expect(b.rect.y, "the bar is near the bottom, not moved to the top").toBeGreaterThan(200);
     await page.mouse.click(b.typeRect.cx, b.typeRect.cy);
     const open = await bar(page);
     expect(open.menuUp).toBe(true);
