@@ -682,6 +682,10 @@
     var onFailure = typeof opts.onFailure === "function" ? opts.onFailure : null;
     // Is this a notes review (`lahe write`)? See setNotes.
     var notesReview = opts.notes === true;
+    // Does a text field in the rail hold focus (a comment being written)? The
+    // rail's root is closed, so the rail answers. Cmd-Shift-E from there is
+    // left alone: the writer is mid-sentence in the rail.
+    var railTextFocus = typeof opts.railTextFocus === "function" ? opts.railTextFocus : null;
 
     // The one open session, or null. Edit state is per region and there is one
     // of it: a second Cmd-Shift-E commits the first.
@@ -2548,6 +2552,7 @@
     }
 
     function onRunSelectionChange() {
+      notePageCaret();
       if (!isRun()) return;
       var range = liveRange();
       if (range) {
@@ -5401,6 +5406,55 @@
 
     // Is the caret in a block Cmd-Shift-E can open? No caret, or a caret
     // sitting straight in body or main, is "in no block".
+    // The reviewer's last caret on the page itself, so a chord pressed while
+    // the rail holds focus can put it back (flow walk, design problem 8).
+    var lastPageCaret = null;
+    function notePageCaret() {
+      var range = liveRange();
+      if (!range) return;
+      var node = range.startContainer;
+      var el = node && node.nodeType === 1 ? node : node && node.parentElement;
+      if (!el || !el.isConnected || markers.isInsideOverlay(el)) return;
+      if (!doc.body || !doc.body.contains(el)) return;
+      lastPageCaret = range.cloneRange();
+    }
+
+    /**
+     * Cmd-Shift-E pressed while the rail holds focus. Before this the chord
+     * and the typing after it both went nowhere until the writer clicked the
+     * page, and writers move between the rail and the page all the time. The
+     * focus comes back to the page, the last caret there is put back, and the
+     * chord then does what it does on the page.
+     *
+     * @returns {boolean} true when the chord was handled
+     */
+    function chordFromRail(event) {
+      var got = gestures.gestureFor(describe(event));
+      if (got.gesture !== gestures.GESTURE.EDIT_BLOCK && got.gesture !== gestures.GESTURE.ENTER_EDIT_STATE) return false;
+      if (railTextFocus && railTextFocus()) return false;
+      if (typeof event.preventDefault === "function") event.preventDefault();
+      var active = doc.activeElement;
+      if (active && markers.isInsideOverlay(active) && typeof active.blur === "function") active.blur();
+      if (lastPageCaret && lastPageCaret.startContainer.isConnected && win) {
+        var sel = win.getSelection();
+        sel.removeAllRanges();
+        sel.addRange(lastPageCaret.cloneRange());
+      }
+      if (session) {
+        // An edit is already open: the chord goes back into it.
+        if (session.host && typeof session.host.focus === "function") session.host.focus({ preventScroll: true });
+        else if (session.block && typeof session.block.focus === "function") session.block.focus({ preventScroll: true });
+        return true;
+      }
+      if (caretInBlock()) {
+        leaveEditState();
+        editBlockAtCaret();
+      } else {
+        enterEditState();
+      }
+      return true;
+    }
+
     function caretInBlock() {
       var el = selection.caretContainer();
       if (!el || markers.isInsideOverlay(el)) return false;
@@ -5408,7 +5462,10 @@
     }
 
     function onKeydown(event) {
-      if (markers.isInsideOverlay(event.target)) return;
+      if (markers.isInsideOverlay(event.target)) {
+        chordFromRail(event);
+        return;
+      }
       // Parked for onBeforeInput, which fires next and cannot see the modifiers
       // that produced it. Every key, not only Enter, so a stale Shift from an
       // earlier press cannot turn a later paragraph break into a line break.

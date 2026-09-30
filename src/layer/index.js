@@ -787,6 +787,12 @@
       // The review's notes flag (design call 2): only a notes review opens an
       // empty page for typing.
       notes: config.notes === true,
+      // Cmd-Shift-E from the rail returns focus to the page, unless the
+      // reviewer is typing in one of the rail's own fields.
+      railTextFocus: function () {
+        var info = rail && typeof rail.activeElementInfo === "function" ? rail.activeElementInfo() : null;
+        return !!info && (info.tag === "TEXTAREA" || info.tag === "INPUT" || info.isCardInput === true);
+      },
       // Same reason as the comment surface above: a full browser storage during
       // typing is said on the rail rather than thrown at the input handler.
       onFailure: function (failure) {

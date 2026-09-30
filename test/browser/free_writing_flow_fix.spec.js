@@ -394,3 +394,46 @@ test.describe("+ Write here: a comfortable target, and a near miss still writes"
     await pollPage(page, () => window.__lahe.isEditing() === false, undefined, { message: "the margin click to commit" });
   });
 });
+
+// Flow walk design problem 8: after a click on the rail, Cmd-Shift-E and the
+// typing after it went nowhere until the writer clicked the page.
+test.describe("Cmd-Shift-E right after clicking the rail", () => {
+  async function clickRailTab(page, name) {
+    const rect = await page.evaluate((label) => {
+      const root = window.__lahe.rail.tabBody("edits").getRootNode();
+      const tab = Array.from(root.querySelectorAll('[role="tab"]')).find((t) => t.textContent.indexOf(label) !== -1);
+      const r = tab.getBoundingClientRect();
+      return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+    }, name);
+    await page.mouse.click(rect.x, rect.y);
+    // The rail holds focus now: the page's active element is the layer's host.
+    const onRail = await page.evaluate(() => {
+      const a = document.activeElement;
+      return !!a && a !== document.body && !document.querySelector("article").contains(a);
+    });
+    expect(onRail, "the click put focus on the rail").toBe(true);
+  }
+
+  test("the chord opens the block the caret was last in, and typing lands there", async ({ page }) => {
+    await fw.openFixture(page, server, "blog.html", { collapseRail: false });
+    await fw.caretAt(page, "#p1", HEAD.length);
+    await page.evaluate(() => new Promise((r) => requestAnimationFrame(r)));
+    await clickRailTab(page, "Edits");
+    await page.keyboard.press("ControlOrMeta+Shift+KeyE");
+    await pollPage(page, () => window.__lahe.isEditing() === true, undefined, { message: "the chord to open #p1" });
+    expect(await page.evaluate(() => window.__lahe.handle.editing.sessionElements()[0].id)).toBe("p1");
+    await page.keyboard.type(" Typed after the rail.", { delay: 2 });
+    expect(await page.evaluate(() => document.getElementById("p1").textContent)).toContain("Typed after the rail.");
+    await fw.commitByEsc(page);
+  });
+
+  test("with no caret on the page, the chord still enters edit state", async ({ page }) => {
+    await fw.openFixture(page, server, "blog.html", { collapseRail: false });
+    await page.evaluate(() => window.getSelection().removeAllRanges());
+    await clickRailTab(page, "Edits");
+    await page.keyboard.press("ControlOrMeta+Shift+KeyE");
+    await pollPage(page, () => window.__lahe.editState().editState === true || window.__lahe.isEditing() === true, undefined, {
+      message: "the chord to enter edit state"
+    });
+  });
+});
