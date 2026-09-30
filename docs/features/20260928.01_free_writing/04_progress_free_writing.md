@@ -1,21 +1,28 @@
 # Progress: Free writing
 
-**Phase 7, Review.** All six reviews are in. Four builders are running the one fix round in parallel. Nothing is blocked on you. Last updated 2026-09-29 17:54.
+**Phase 7, Review.** The fix round is merged, and the unit gate is green. One follow-up builder is finishing the last items. Then comes the full test run, and the final checks. One question waits on you. Last updated 2026-09-29 23:29.
 
 **Docs:** [Crucible questions](00_crucible_questions.md) · [Crucible](http://127.0.0.1:65155/00_crucible.html) · [Brief](http://127.0.0.1:65155/01_brief_free_writing.html) · [Wireframes](http://127.0.0.1:49513/index.html) ([decision](wireframes/DECISION.md)) · [Architecture](http://127.0.0.1:65155/02_architecture_free_writing.html) · [Plan](http://127.0.0.1:65155/03_plan_free_writing.html)
 
 ## Needs your attention
 
-- [ ] **For your information, no action needed unless you disagree.** The Library feature branch (`feat/lahe_library`, 160 commits) changes some of the same files: the rail, the page server, the command list, and shared files. Plan: build free writing on main, and whichever of the two lands second merges the other in. If you want one to land first, say so.
+- [ ] **Losing text on a hard kill.** If the browser is force-quit within a moment of typing, that whole sitting is lost. After about 6 seconds everything survives, and a crashed tab keeps everything. The cause is that long writing now saves after a short pause instead of on every keystroke, which keeps typing fast. Options:
+  - keep it as is
+  - save a short sitting on every keystroke, and pause only for long ones
+
+  Default: keep it, since a force-quit within seconds of typing is rare.
+- [ ] For your information, no action needed: the Library feature branch (`feat/lahe_library`) changes some of the same files. Whichever lands second merges the other in.
 
 ## Currently working on
 
 | Agent or task | Doing | Started | Branch |
 |---|---|---|---|
-| Fix builder F1, editing | Removed blocks, the empty-page trigger, undo after a question, bold lost in a repaint | 2026-09-29 17:54 | `free-writing-f1` |
-| Fix builder F2, replay | Never comparing a paragraph you did not change, header take-backs, lists, stale notes, the helper freeze | 2026-09-29 17:54 | `free-writing-f2` |
-| Fix builder F3, helper and instructions | Checks on the paragraph you started from, the notes folder leak, proofreading that never stops, drain size, refusing an old helper | 2026-09-29 17:54 | `free-writing-f3` |
-| Fix builder F4, rail and tests | Showing each proofread fix on the card, and 16 test gaps | 2026-09-29 17:54 | `free-writing-f4` |
+| Follow-up builder F5 | The last fix-round items:
+  - notes files with front matter
+  - the long proofread
+  - the helper version check
+  - the check that undone blocks are gone
+  - three leftover duplicate lists | 2026-09-29 23:29 | `free-writing-f5` |
 
 ## Phases
 
@@ -81,6 +88,18 @@ Not shipped yet.
 ## Log
 
 Newest first.
+
+**2026-09-29 23:29.** All four fix builders returned green, and their branches merged with no conflicts. One stale test was updated. Fixed, among others:
+- removed blocks no longer reach the agent
+- an undone header change stays undone
+- only notes pages open ready to type
+- a repaint that strips your bold is restored
+- the helper can no longer be frozen
+- the notes folder no longer leaks
+- the card shows each proofread fix
+- the page refuses an outdated helper
+
+The four end-to-end specs now pass in Firefox and WebKit too. The rail builder ran delete commands before being stopped, which blocked you. Builder prompts now spell out the no-delete rule at the top.
 
 **2026-09-29 17:54.** The adversarial review found six more problems. The two worst:
 - Undo after a proofread question never takes the words out of the source.
