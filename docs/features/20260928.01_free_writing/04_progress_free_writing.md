@@ -1,12 +1,12 @@
 # Progress: Free writing
 
-**Phase 7, Review.** The full gate is clean apart from one known-flaky test. Your preview is ready: try free writing on a copy of your blog draft and on a blank notes page. An independent workflow walk is running. Two things wait on you. Last updated 2026-09-30 00:47.
+**Phase 7, Review.** The independent workflow walk found 3 failures and 7 design problems. Two builders are fixing them. Your preview still has these bugs until the fixes land. Two things wait on you. Last updated 2026-09-30 01:19.
 
 **Docs:** [Crucible questions](00_crucible_questions.md) · [Crucible](http://127.0.0.1:65155/00_crucible.html) · [Brief](http://127.0.0.1:65155/01_brief_free_writing.html) · [Wireframes](http://127.0.0.1:49513/index.html) ([decision](wireframes/DECISION.md)) · [Architecture](http://127.0.0.1:65155/02_architecture_free_writing.html) · [Plan](http://127.0.0.1:65155/03_plan_free_writing.html)
 
 ## Needs your attention
 
-- [ ] **Try free writing on your own writing.** Both pages run the feature branch with the editor on them. They sit on a separate helper and a copy of your draft, so nothing of yours changes.
+- [ ] **Try free writing on your own writing.** Known bugs until the fix lands: undo after a reload, editing text the agent already placed, and the bar covering the line above. Both pages run the feature branch with the editor on them. They sit on a separate helper and a copy of your draft, so nothing of yours changes.
   - [Your draft "new-debugging-hell-part2", a copy](http://127.0.0.1:59081/new-debugging-hell-part2-236277651c422e90.html). Press Cmd-Shift-E on a paragraph, then hover between paragraphs for "+ Write here". Try a header, a list, and bold. Leave editing, and I place your text as the agent.
   - [A blank notes page](http://127.0.0.1:59160/notes-2026-09-30-d682203dc75e720a.html). It opens ready to type.
   - Leave comments on the pages. I answer them there.
@@ -21,8 +21,9 @@
 
 | Agent or task | Doing | Started | Branch |
 |---|---|---|---|
-| Flow walker | An independent walk of all six user stories on the running app. It acts as the agent from review.json only, and takes screenshots | 2026-09-30 00:47 | `feat/free-writing` |
-| Preview agent (me) | Watching your preview pages, and placing your writing into the draft copy as the agent | 2026-09-30 00:47 | preview only |
+| Fix builder G1, editing | Undo after a reload, mid-paragraph Enter marking your new words as the page's, editing placed text, the bar covering text, the "+ Write here" target, Cmd-Shift-E after the rail, no struck-through draft card, Markdown shortcut levels | 2026-09-30 01:19 | `free-writing-g1` |
+| Fix builder G2, replay and rail | Placed text falsely reopening, a reworded paragraph hiding your new blocks, proofreading on the Active tab, card lines that say untrue things | 2026-09-30 01:19 | `free-writing-g2` |
+| Preview agent (me) | Watching your preview pages | 2026-09-30 01:19 | preview only |
 
 ## Phases
 
@@ -109,6 +110,24 @@ Not shipped yet.
 ## Log
 
 Newest first.
+
+**2026-09-30 01:19.** The independent workflow walk ran as the agent from review.json only, in Markdown and HTML.
+
+These passed:
+- all six user stories
+- the agent placing text
+- proofreading with both buttons
+- a rebuild or reload mid-sitting
+- bold and italic surviving
+- the direction A layout
+- dark mode
+
+It found 3 failures:
+- undo after a reload never reaches the helper
+- editing text the agent already placed reopens it falsely
+- a paragraph you and the agent both reworded hides your new blocks
+
+It also found 7 design problems. One of them: typing `## ` made a level-3 header. That now matches Markdown, so `## ` makes a level-2 header. The report and 89 screenshots are in [flow_walk.md](../../../.claude/worktrees/free-writing/docs/features/20260928.01_free_writing/reviews_impl/flow_walk.md).
 
 **2026-09-30 00:47.** The regression builder fixed the 6 broken tests.
 - **One product bug:** protection lost the agent's rewrite during a page rewrite.
