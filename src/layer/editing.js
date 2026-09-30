@@ -253,6 +253,98 @@
   var SESSION_HISTORY_MAX = 100;
   // The pause that ends a typing burst, which is one undo step.
   var TYPING_BURST_IDLE_MS = 1000;
+  // And a cap on what the session history holds, in characters of block
+  // markup. Steps share every block they did not change (stateNow), so this
+  // is a guard for a pathological session, not the everyday limit.
+  var SESSION_HISTORY_MAX_CHARS = 4000000;
+
+  // The size of the record a run commits (code_lead 6). The run rides in the
+  // committed record up to six times (new_blocks, after_html, after, and the
+  // same three in the history entry the commit adds), and JSON escapes some
+  // characters to two bytes. The record is measured exactly when the session
+  // opens and at every block change; between measurements each byte typed is
+  // counted RUN_BYTES_FACTOR times and each new block RUN_BLOCK_OVERHEAD
+  // bytes, and RUN_REMEASURE_BYTES of typing forces a new measurement.
+  var RUN_BYTES_FACTOR = 8;
+  var RUN_BLOCK_OVERHEAD = 96;
+  var RUN_REMEASURE_BYTES = 4096;
+
+  // A long run's draft is written on a pause, not on every keystroke
+  // (code_reviewer 5). Below RUN_DRAFT_DEFER_BYTES of run markup every
+  // keystroke is still written at once, as today. Above it a keystroke is
+  // written RUN_DRAFT_IDLE_MS after typing stops, and never later than
+  // RUN_DRAFT_MAX_WAIT_MS after the first unwritten one. A block change, a
+  // state change and the commit write at once.
+  var RUN_DRAFT_DEFER_BYTES = 16384;
+  var RUN_DRAFT_IDLE_MS = 300;
+  var RUN_DRAFT_MAX_WAIT_MS = 1500;
+
+  // The applied-after history a commit appends to: a new entry only when the
+  // words moved.
+  function appendHistoryTo(item, committed) {
+    var history = (item[record.FIELD.AFTER_HISTORY] || []).slice();
+    var last = history.length ? history[history.length - 1] : null;
+    var value = committed[record.FIELD.AFTER];
+    if (typeof value === "string" && (!last || last.after !== value)) {
+      history.push(
+        record.historyEntry(
+          committed[record.FIELD.REV],
+          value,
+          committed[record.FIELD.AFTER_HTML],
+          committed[record.FIELD.UPDATED_AT],
+          committed
+        )
+      );
+    }
+    return history;
+  }
+
+  // What a run sitting's commit changes on the record.
+  function runChanges(item, fields, kind) {
+    var candidate = Object.assign({}, item, {
+      after: fields.after,
+      after_html: fields.after_html,
+      anchor_after_html: fields.anchor_after_html,
+      anchor_tag_after: fields.anchor_tag_after,
+      new_blocks: fields.new_blocks,
+      placement: fields.placement,
+      kind: kind
+    });
+    return {
+      kind: kind,
+      change: record.runChangeText(candidate),
+      after: fields.after,
+      after_html: fields.after_html,
+      anchor_after_html: fields.anchor_after_html,
+      anchor_tag_after: fields.anchor_tag_after,
+      new_blocks: fields.new_blocks,
+      placement: fields.placement,
+      state: record.STATE.READY
+    };
+  }
+
+  // The record a commit writes, from the stored item and its changes: the
+  // first commit keeps the revision and starts the history; a later one
+  // bumps it. The one rule for both commit paths and for the size estimate.
+  function committedRecord(item, changes, wasCommitted) {
+    if (wasCommitted) return record.bumpRev(item, changes);
+    var committed = Object.assign({}, item, changes);
+    committed[record.FIELD.UPDATED_AT] = record.nowIso();
+    committed[record.FIELD.AFTER_HISTORY] = appendHistoryTo(item, committed);
+    return committed;
+  }
+
+  /**
+   * The bytes of the record a run sitting would commit, as the helper
+   * measures it (record.recordBytes).
+   *
+   * @param {Object} item the stored record (the draft)
+   * @param {Object} fields the sitting's run fields (captureRunFields)
+   * @param {boolean} wasCommitted whether the record was committed before
+   */
+  function runRecordBytes(item, fields, wasCommitted) {
+    return record.recordBytes(committedRecord(item, runChanges(item, fields, record.KIND.EDIT), wasCommitted));
+  }
 
   // Counters the draft-cost script and the specs read. blocksCaptured counts
   // run blocks rebuilt through cleanBlock, so a spec can prove a keystroke
@@ -586,6 +678,8 @@
     // failure list (src/layer/index.js); a caller that builds a surface by hand
     // gets nothing, and persist below works either way.
     var onFailure = typeof opts.onFailure === "function" ? opts.onFailure : null;
+    // Is this a notes review (`lahe write`)? See setNotes.
+    var notesReview = opts.notes === true;
 
     // The one open session, or null. Edit state is per region and there is one
     // of it: a second Cmd-Shift-E commits the first.
@@ -950,7 +1044,9 @@
     function afterStructural() {
       markAllDirty();
       if (protect && typeof protect.snapshot === "function") protect.snapshot();
-      captureTyping();
+      // A block change is measured exactly and written at once.
+      if (session && isRun()) captureRunTyping({ now: true, remeasure: true });
+      else captureTyping();
       refreshBar();
     }
 
@@ -1034,18 +1130,42 @@
       };
     }
 
-    // Does this sitting take the run record's shape? Once a record has it, it
-    // keeps it. Otherwise a new block, a tag change, a list anchor or a
-    // container anchor gives it; a plain reword of one block stays today's
-    // record, byte for byte.
-    function runShaped(fields) {
+    // Which record shape does this sitting write (design call 3)?
+    //
+    // - RUN: a new block, a tag change, a list anchor or a container anchor.
+    // - PLAIN: a reword of one block that never had run fields. Today's
+    //   record, byte for byte.
+    // - CLEARED: the sitting (or the record it reopened) had run fields, and
+    //   the reviewer took every new block away and put the tag back. The run
+    //   fields are written empty, on purpose, so no stale block or tag from
+    //   an earlier draft rides into the commit (code_reviewer 2, code_lead 1).
+    //
+    // One exception keeps RUN: a reopened run record none of whose blocks
+    // were found on the page. The reviewer never saw those blocks, so they
+    // did not take them away.
+    var SHAPE = { RUN: "run", PLAIN: "plain", CLEARED: "cleared" };
+
+    function liveRun(fields) {
       return (
-        session.runShaped ||
         session.container ||
         fields.new_blocks.length > 0 ||
         !!fields.anchor_tag_after ||
         !!LIST_TAGS[session.anchorTag]
       );
+    }
+
+    function shapeFor(fields) {
+      if (liveRun(fields) || session.runUnseen) return SHAPE.RUN;
+      return session.runShaped ? SHAPE.CLEARED : SHAPE.PLAIN;
+    }
+
+    // The run fields, emptied.
+    function clearRunFields(target) {
+      target[record.FIELD.NEW_BLOCKS] = [];
+      target[record.FIELD.ANCHOR_AFTER_HTML] = null;
+      target[record.FIELD.ANCHOR_TAG_AFTER] = null;
+      target[record.FIELD.PLACEMENT] = null;
+      return target;
     }
 
     function runVerdict(fields, beforeArg) {
@@ -1082,12 +1202,25 @@
 
     // ---- the ceiling ---------------------------------------------------------
 
-    function ceilingState(fields) {
+    // The committed record's size, measured: the stored item with this
+    // sitting's commit applied, the way commitRun builds it.
+    function measureCommitted(fields) {
+      var item = reviewId ? store.readItem(reviewId, session.itemId) : null;
+      if (!item) return 0;
+      return runRecordBytes(item, fields, session.wasCommitted);
+    }
+
+    function ceilingState(fields, remeasure) {
       var count = fields.new_blocks.length;
       var bytes = record.blocksBytes(fields.new_blocks);
-      // The record apart from the run is measured once, when the session
-      // opens; the run rides in it twice (new_blocks and after_html).
-      var estimate = session.baseBytes + bytes * 2 + count * 48;
+      // Measured exactly at open and at every block change; between those,
+      // each byte typed counts RUN_BYTES_FACTOR times (see the constant).
+      var cal = session.measured;
+      if (remeasure || !cal || bytes - cal.bytes > RUN_REMEASURE_BYTES) {
+        cal = session.measured = { bytes: bytes, count: count, size: measureCommitted(fields) };
+      }
+      var estimate =
+        cal.size + Math.max(0, bytes - cal.bytes) * RUN_BYTES_FACTOR + Math.max(0, count - cal.count) * RUN_BLOCK_OVERHEAD;
       var ratio = Math.max(
         count / record.NEW_BLOCKS_MAX,
         bytes / record.NEW_BLOCKS_MAX_BYTES,
@@ -1098,11 +1231,11 @@
 
     // Would this much more (blocks, bytes) take the run over a ceiling?
     function overCeiling(moreBlocks, moreBytes) {
-      var c = session.ceiling || { count: 0, bytes: 0, estimate: session.baseBytes };
+      var c = session.ceiling || { count: 0, bytes: 0, estimate: 0 };
       return (
         c.count + moreBlocks > record.NEW_BLOCKS_MAX ||
         c.bytes + moreBytes > record.NEW_BLOCKS_MAX_BYTES ||
-        c.estimate + moreBytes * 2 + moreBlocks * 48 > record.RUN_RECORD_MAX_BYTES
+        c.estimate + moreBytes * RUN_BYTES_FACTOR + moreBlocks * RUN_BLOCK_OVERHEAD > record.RUN_RECORD_MAX_BYTES
       );
     }
 
@@ -1165,12 +1298,15 @@
       return el;
     }
 
+    // Any block tag in normalize.BLOCK_TAGS, opening.
+    var OLD_SHAPE_TAG = new RegExp("<(" + Object.keys(normalize.BLOCK_TAGS).join("|") + ")[\\s>]", "i");
+
     // A record from before free writing: no run fields, and markup that
     // nests blocks inside the edited element. Reopening it keeps today's
     // single-element session and break rule.
     function isOldShape(item) {
       if (!item || record.hasRunFields(item)) return false;
-      return /<(p|div|h[1-6]|ul|ol|li|blockquote|pre)[\s>]/i.test(String(item[record.FIELD.AFTER_HTML] || ""));
+      return OLD_SHAPE_TAG.test(String(item[record.FIELD.AFTER_HTML] || ""));
     }
 
     // The outstanding run record one of whose run blocks is `el`, with its
@@ -1270,14 +1406,20 @@
         wasNew: !existing,
         wasCommitted: !!existing && isCommittedEdit(existing),
         withdrawFrom: existing && withdrawable(existing) ? existing[record.FIELD.STATE] : null,
+        // Sticky: once any draft of this sitting wrote run fields, or the
+        // reopened record had them, the sitting never falls back to PLAIN.
         runShaped: !!existing && record.hasRunFields(existing),
+        runUnseen: !!existing && record.isRunRecord(existing) && !(o.run && o.run.length),
+        draftTimer: null,
+        draftSince: 0,
+        withdrawnWritten: false,
+        measured: null,
         anchorDirty: true,
         anchorHtml: undefined,
         openedKey: null,
         opened: existing
           ? { text: existing[record.FIELD.AFTER], html: existing[record.FIELD.AFTER_HTML] }
           : before,
-        baseBytes: record.recordBytes(Object.assign({}, item, { new_blocks: [], after_html: "", after: "" })),
         ceiling: null,
         ceilingRefused: false,
         history: { undo: [], redo: [], burst: null },
@@ -1809,15 +1951,63 @@
 
     // ---- session history (Task 2.4) --------------------------------------------
 
+    // One step of the session history. Each block's markup is SHARED with
+    // the step before it when that block did not change: the new string is
+    // compared, then dropped in favour of the one already held, so a step
+    // costs only the blocks it changed (code_lead 11). `cost` is what this
+    // step added.
     function stateNow() {
+      var h = session.history;
+      var prev = h.undo.length ? h.undo[h.undo.length - 1] : null;
+      var cost = 0;
+      function share(held, now) {
+        if (typeof held === "string" && held === now) return held;
+        cost += now ? now.length : 0;
+        return now;
+      }
+      var anchorHtml = session.container ? null : share(prev && prev.anchorHtml, session.anchor.innerHTML);
+      var run = session.run.map(function (r, i) {
+        var was = prev && prev.run[i];
+        return { tag: tagOf(r.el), html: share(was && was.html, r.el.innerHTML), fromAnchor: r.fromAnchor };
+      });
       return {
         anchorTag: session.container ? null : tagOf(session.anchor),
-        anchorHtml: session.container ? null : session.anchor.innerHTML,
-        run: session.run.map(function (r) {
-          return { tag: tagOf(r.el), html: r.el.innerHTML, fromAnchor: r.fromAnchor };
-        }),
-        caret: saveCaret()
+        anchorHtml: anchorHtml,
+        run: run,
+        caret: saveCaret(),
+        cost: cost
       };
+    }
+
+    // Keep the undo stack within SESSION_HISTORY_MAX steps and, as a guard,
+    // SESSION_HISTORY_MAX_CHARS of markup. The newest step always stays.
+    function trimHistory(h) {
+      var total = 0;
+      h.undo.forEach(function (st) {
+        total += st.cost || 0;
+      });
+      while (h.undo.length > 1 && (h.undo.length > SESSION_HISTORY_MAX || total > SESSION_HISTORY_MAX_CHARS)) {
+        total -= h.undo.shift().cost || 0;
+      }
+    }
+
+    /** The characters of markup the session history holds, each string once. */
+    function historyChars() {
+      if (!session || !session.history) return 0;
+      var seen = new Set();
+      var total = 0;
+      function add(str) {
+        if (typeof str !== "string" || seen.has(str)) return;
+        seen.add(str);
+        total += str.length;
+      }
+      session.history.undo.concat(session.history.redo).forEach(function (st) {
+        add(st.anchorHtml);
+        st.run.forEach(function (b) {
+          add(b.html);
+        });
+      });
+      return total;
     }
 
     function pushHistory(force) {
@@ -1825,7 +2015,7 @@
       var h = session.history;
       if (h.burst && !force) closeBurst();
       h.undo.push(stateNow());
-      while (h.undo.length > SESSION_HISTORY_MAX) h.undo.shift();
+      trimHistory(h);
       h.redo = [];
     }
 
@@ -1836,7 +2026,7 @@
       var h = session.history;
       if (!h.burst) {
         h.undo.push(stateNow());
-        while (h.undo.length > SESSION_HISTORY_MAX) h.undo.shift();
+        trimHistory(h);
         h.redo = [];
         h.burst = { timer: null };
       }
@@ -2459,6 +2649,7 @@
         info.ceilingRatio = session.ceiling ? session.ceiling.ratio : 0;
         info.historyDepth = session.history.undo.length;
         info.redoDepth = session.history.redo.length;
+        info.historyChars = historyChars();
       }
       return info;
     }
@@ -2734,23 +2925,76 @@
 
     // The run session's keystroke: the whole sitting into the record, every
     // time, with only the dirty blocks rebuilt (see captureRunFields).
-    function captureRunTyping() {
+    //
+    // A long run's keystroke is written on a pause (RUN_DRAFT_DEFER_BYTES):
+    // the fields and the ceiling are still worked out now, so the bar is
+    // right on every keystroke, but the store write and the post wait. A block
+    // change, the keystroke that withdraws a ready record, and the commit all
+    // write at once.
+    function captureRunTyping(options) {
+      var o = options || {};
       var fields = captureRunFields();
-      session.ceiling = ceilingState(fields);
+      session.ceiling = ceilingState(fields, !!o.remeasure);
+      if (!o.now && deferDraft()) {
+        scheduleRunDraft();
+        positionFrame();
+        return null;
+      }
+      return writeRunDraft(fields);
+    }
+
+    function deferDraft() {
+      if (!win || !session.ceiling || session.ceiling.bytes < RUN_DRAFT_DEFER_BYTES) return false;
+      // The keystroke that takes a ready record off ready posts at once.
+      if (session.withdrawFrom && !session.withdrawnWritten) return false;
+      if (session.draftTimer && Date.now() - session.draftSince >= RUN_DRAFT_MAX_WAIT_MS) return false;
+      return true;
+    }
+
+    function scheduleRunDraft() {
+      var owner = session;
+      if (owner.draftTimer) win.clearTimeout(owner.draftTimer);
+      else owner.draftSince = Date.now();
+      owner.draftTimer = win.setTimeout(function () {
+        owner.draftTimer = null;
+        if (session === owner) writeRunDraft(captureRunFields());
+      }, RUN_DRAFT_IDLE_MS);
+      return null;
+    }
+
+    function cancelRunDraft(open) {
+      var s = open || session;
+      if (s && s.draftTimer && win) win.clearTimeout(s.draftTimer);
+      if (s) s.draftTimer = null;
+    }
+
+    /** Writes a deferred run draft now. Null when nothing was waiting. */
+    function flushRunDraft() {
+      if (!session || !isRun() || !session.draftTimer) return null;
+      cancelRunDraft();
+      return writeRunDraft(captureRunFields());
+    }
+
+    function writeRunDraft(fields) {
+      cancelRunDraft();
       var item = store.readItem(requireReview(), session.itemId);
       if (!item) return null;
       var wasOutstandingBeforeThisKeystroke = withdrawable(item);
       var next = Object.assign({}, item);
-      if (runShaped(fields)) {
+      var shape = shapeFor(fields);
+      if (shape === SHAPE.RUN) {
         applyRunFields(next, fields, null);
+        session.runShaped = true;
       } else {
         var plain = capture(session.anchor);
         next[record.FIELD.AFTER] = plain.text;
         next[record.FIELD.AFTER_HTML] = plain.html;
+        if (shape === SHAPE.CLEARED) clearRunFields(next);
       }
       next[record.FIELD.UPDATED_AT] = record.nowIso();
       if (session.withdrawFrom) {
         next[record.FIELD.STATE] = runKey(fields) !== session.openedKey ? record.STATE.DRAFT : session.withdrawFrom;
+        session.withdrawnWritten = next[record.FIELD.STATE] === record.STATE.DRAFT;
       }
       var postOptions = session.wasNew ? null : { existing: true };
       if (wasOutstandingBeforeThisKeystroke && next[record.FIELD.STATE] === record.STATE.DRAFT) {
@@ -2826,15 +3070,20 @@
       return out;
     }
 
-    // Did a run draft change anything? New words, a split, a new tag, or new
-    // anchor words. The blank page's own draft (opened ready to type, nothing
-    // typed) did not, and stays a draft.
-    function runChanged(item) {
-      var blocksNow = item[record.FIELD.NEW_BLOCKS] || [];
-      if (blocksNow.length) return true;
-      if (item[record.FIELD.ANCHOR_TAG_AFTER]) return true;
-      var anchorNow = item[record.FIELD.ANCHOR_AFTER_HTML];
-      return typeof anchorNow === "string" && anchorNow !== item[record.FIELD.BEFORE_HTML];
+    // Did a run draft change anything, and what kind of change is it? The
+    // same verdict commit uses (code_lead 14): a crashed tag-only sitting is
+    // format_only, as it would have been at Esc. The blank page's own draft
+    // (opened ready to type, nothing typed) did not change, and stays a draft.
+    function runDraftVerdict(item) {
+      var fields = {
+        anchor_after_html: typeof item[record.FIELD.ANCHOR_AFTER_HTML] === "string" ? item[record.FIELD.ANCHOR_AFTER_HTML] : "",
+        anchor_tag_after: item[record.FIELD.ANCHOR_TAG_AFTER] || null,
+        new_blocks: item[record.FIELD.NEW_BLOCKS] || []
+      };
+      return runVerdictFor(fields, {
+        text: String(item[record.FIELD.BEFORE] || ""),
+        html: String(item[record.FIELD.BEFORE_HTML] || "")
+      });
     }
 
     /**
@@ -2846,15 +3095,12 @@
      * a later one bumps it.
      */
     function recoverRun(item) {
-      if (!runChanged(item)) return null;
-      var changes = { change: record.runChangeText(item), state: record.STATE.READY };
-      var committed;
-      if (isCommittedEdit(item)) committed = record.bumpRev(item, changes);
-      else {
-        committed = Object.assign({}, item, changes);
-        committed[record.FIELD.UPDATED_AT] = record.nowIso();
-        committed[record.FIELD.AFTER_HISTORY] = appendHistory(item, committed);
-      }
+      var verdict = runDraftVerdict(item);
+      if (!verdict.changed) return null;
+      var kinded = Object.assign({}, item);
+      kinded[record.FIELD.KIND] = verdict.kind;
+      var changes = { kind: verdict.kind, change: record.runChangeText(kinded), state: record.STATE.READY };
+      var committed = committedRecord(item, changes, isCommittedEdit(item));
       record.validateItem(committed);
       persist(committed, "committed", "ready");
       return committed;
@@ -2965,38 +3211,28 @@
         after.html
       );
 
-      var committed;
       // WHETHER IT WAS EVER COMMITTED, read when the block opened, never whether
       // the record is a draft now: a committed edit being rewritten is a draft
       // until this line, and reading its state here would commit the rewording
       // at the old revision, where a reply to the old wording would still land.
-      if (!open.wasCommitted) {
-        // First commit. The revision stays at one; the history gets its first
-        // entry, which is what replay's branch three reads.
-        committed = Object.assign({}, item);
-        committed[record.FIELD.KIND] = verdict.kind;
-        committed[record.FIELD.STATE] = record.STATE.READY;
-        committed[record.FIELD.CHANGE] = changeText;
-        committed[record.FIELD.AFTER] = after.text;
-        committed[record.FIELD.AFTER_HTML] = after.html;
-        committed[record.FIELD.UPDATED_AT] = record.nowIso();
-        committed[record.FIELD.AFTER_HISTORY] = appendHistory(item, committed);
-        record.validateItem(committed);
-        persist(committed, "committed", immediate);
-      } else {
-        // A rewording of something already committed. The revision moves
-        // exactly once, here, which is what makes a stale reply naming the old
-        // revision refusable (R21).
-        committed = record.bumpRev(item, {
+      // A first commit keeps revision one and starts the history (what
+      // replay's branch three reads); a rewording of something already
+      // committed moves the revision exactly once, here, which is what makes a
+      // stale reply naming the old revision refusable (R21). committedRecord
+      // is the one rule, shared with the run commit.
+      var committed = committedRecord(
+        item,
+        {
           kind: verdict.kind,
           change: changeText,
           after: after.text,
           after_html: after.html,
           state: record.STATE.READY
-        });
-        record.validateItem(committed);
-        persist(committed, "committed", immediate);
-      }
+        },
+        open.wasCommitted
+      );
+      record.validateItem(committed);
+      persist(committed, "committed", immediate);
 
       remember(block, committed[record.FIELD.ID]);
       // Protection lifts on the committed record, and lifting it runs the
@@ -3016,8 +3252,13 @@
       var open = session;
       var reason = (options || {}).reason || "commit";
       var immediate = reason === "navigation" ? null : "ready";
+      // A long run's draft still waiting is written first, so every path
+      // below that keeps the stored record (a reword back to the original,
+      // say) keeps the sitting as it ended.
+      flushRunDraft();
       var fields = captureRunFields();
-      var shaped = runShaped(fields);
+      var shape = shapeFor(fields);
+      var shaped = shape === SHAPE.RUN;
       var changedSinceOpen = runKey(fields) !== open.openedKey;
       closeBurst();
       session = null;
@@ -3080,18 +3321,7 @@
 
       var changes;
       if (shaped) {
-        var candidate = applyRunFields(Object.assign({}, item), fields, verdict);
-        changes = {
-          kind: verdict.kind,
-          change: record.runChangeText(candidate),
-          after: fields.after,
-          after_html: fields.after_html,
-          anchor_after_html: fields.anchor_after_html,
-          anchor_tag_after: fields.anchor_tag_after,
-          new_blocks: fields.new_blocks,
-          placement: fields.placement,
-          state: record.STATE.READY
-        };
+        changes = runChanges(item, fields, verdict.kind);
       } else {
         changes = {
           kind: verdict.kind,
@@ -3100,15 +3330,11 @@
           after_html: plain.html,
           state: record.STATE.READY
         };
+        // Every new block taken away and the tag put back: the run fields go
+        // out empty, rather than whatever the last draft carried.
+        if (shape === SHAPE.CLEARED) clearRunFields(changes);
       }
-      var committed;
-      if (!open.wasCommitted) {
-        committed = Object.assign({}, item, changes);
-        committed[record.FIELD.UPDATED_AT] = record.nowIso();
-        committed[record.FIELD.AFTER_HISTORY] = appendHistory(item, committed);
-      } else {
-        committed = record.bumpRev(item, changes);
-      }
+      var committed = committedRecord(item, changes, open.wasCommitted);
       record.validateItem(committed);
       persist(committed, "committed", immediate);
       remember(open.anchor, committed[record.FIELD.ID]);
@@ -3122,24 +3348,6 @@
 
     function runVerdictFor(fields, before) {
       return runVerdict(fields, before || { text: "", html: "" });
-    }
-
-    function appendHistory(item, committed) {
-      var history = (item[record.FIELD.AFTER_HISTORY] || []).slice();
-      var last = history.length ? history[history.length - 1] : null;
-      var value = committed[record.FIELD.AFTER];
-      if (typeof value === "string" && (!last || last.after !== value)) {
-        history.push(
-          record.historyEntry(
-            committed[record.FIELD.REV],
-            value,
-            committed[record.FIELD.AFTER_HTML],
-            committed[record.FIELD.UPDATED_AT],
-            committed
-          )
-        );
-      }
-      return history;
     }
 
     // ------------------------------------------------------------------------
@@ -3624,7 +3832,11 @@
       // Dropping the record is only right when nothing landed in the source.
       // Asked BEFORE the page moves, so a refusal never leaves the reviewer
       // looking at a page that disagrees with every store in the system.
-      var drops = lifecycle.canDelete(item[record.FIELD.STATE], lifecycle.ACTOR.REVIEWER);
+      // An agent reply on a ready item means the words may already be in the
+      // source (the proofread flow places them and then asks), so that undo
+      // takes back too (design call 5, adversary A1).
+      var takesBack = lifecycle.undoTakesBack(item);
+      var drops = !takesBack && lifecycle.canDelete(item[record.FIELD.STATE], lifecycle.ACTOR.REVIEWER);
       if (!drops && record.takenBackIds(store.read(requireReview()))[itemId]) {
         // Undone once already. A second revert record would ask the agent to
         // remove a change that is already on its way out of the file.
@@ -3666,6 +3878,15 @@
         // "ready" flushes immediately, the same as a committed edit: the agent
         // is being asked to change a file, and a debounce would sit on it.
         persist(revert, "reverted", "ready");
+        if (item[record.FIELD.STATE] !== record.STATE.HANDLED) {
+          // A ready item the agent answered is still actionable. Left in the
+          // review, the agent would be asked to place the words and to take
+          // them out at once. The take-back carries everything the agent
+          // needs (remove_blocks, before and after), so the original leaves.
+          store.remove(requireReview(), itemId);
+          unpersist(item);
+          emit(item, "undone");
+        }
         selection.placeCaretAtStart(restored.element);
         scheduleReplay("undo");
         return { reverted: true, kind: kind, reason: null, revert: revert[record.FIELD.ID] };
@@ -3718,6 +3939,7 @@
       var open = session;
       session = null;
       closeBurstOf(open);
+      cancelRunDraft(open);
       unbindBlock();
       if (open.mode === MODE.RUN) clearHostAttrs(open);
       else clearEditableAttrs(open.block);
@@ -3735,19 +3957,60 @@
      * a field, so it is read off the region's fingerprint, which was minted
      * before the sitting changed anything.
      */
+    /**
+     * The page elements an undo may take out for this run: only ones the
+     * reviewer wrote (code_lead 15).
+     *
+     * - The blocks this page remembers for the record (rememberAlso at
+     *   commit), while they are still on the page.
+     * - The run as blocks.runElementsFor finds it, but only the part that
+     *   starts at the first run block, on the first leaf after the insert
+     *   point, with no leaf skipped. matchRun skips leaves before its first
+     *   match, so when the first block is gone a page block carrying a later
+     *   block's short words can match. That block is the page's own, and it
+     *   stays.
+     */
+    function ownRunElements(item, anchorEl) {
+      var id = item[record.FIELD.ID];
+      var out = [];
+      function add(node) {
+        if (node && node !== anchorEl && node.isConnected !== false && out.indexOf(node) === -1) out.push(node);
+      }
+      itemForElement.forEach(function (row) {
+        if (row.id === id && row.el !== anchorEl) add(row.el);
+      });
+      var found = blocks.runElementsFor(item, doc, anchorEl);
+      var leaves = blocks.leafWalk(doc.body, found.start);
+      var next = 0;
+      var last = null;
+      for (var b = 0; b < found.blocks.length; b += 1) {
+        var els = found.blocks[b].elements;
+        if (!els.length) break;
+        // A joined leaf holds several run blocks: the same element again.
+        if (els.length === 1 && els[0] === last) continue;
+        var inOrder = true;
+        for (var k = 0; k < els.length; k += 1) {
+          if (leaves[next + k] !== els[k]) inOrder = false;
+        }
+        if (!inOrder) break;
+        els.forEach(add);
+        next += els.length;
+        last = els[els.length - 1];
+      }
+      return out;
+    }
+
     function restoreRun(item) {
       var el = elementFor(item);
       if (!el) return { element: null, reason: "the anchor this record points at is not on the page" };
-      var found = record.isRunRecord(item) ? blocks.runElementsFor(item, doc, el) : { blocks: [] };
+      var own = record.isRunRecord(item) ? ownRunElements(item, el) : [];
       var container = item[record.FIELD.PLACEMENT] === record.PLACEMENT.START_OF_CONTAINER;
       var ref = item[record.FIELD.REGION] && item[record.FIELD.REGION].ref;
       var oldTag = ref && ref.fingerprint && ref.fingerprint.tag ? String(ref.fingerprint.tag).toLowerCase() : tagOf(el);
       var beforeHtml = item[record.FIELD.BEFORE_HTML];
       epoch.write("editing.undo_run", function () {
-        found.blocks.forEach(function (b) {
-          b.elements.forEach(function (node) {
-            if (node !== el && node.parentNode) node.parentNode.removeChild(node);
-          });
+        own.forEach(function (node) {
+          if (node !== el && node.parentNode) node.parentNode.removeChild(node);
         });
         if (container) return;
         if (tagOf(el) !== oldTag) {
@@ -3758,8 +4021,12 @@
         if (built) {
           while (el.firstChild) el.removeChild(el.firstChild);
           while (built.firstChild) el.appendChild(built.firstChild);
-        } else if (typeof beforeHtml === "string") el.innerHTML = beforeHtml;
-        else el.textContent = String(item[record.FIELD.BEFORE] || "");
+        } else if (typeof beforeHtml === "string") {
+          // The anchor is the page's own block and may hold what the run
+          // allowlist refuses (a link). It is cleaned, never written raw, the
+          // same as replay's writeAnchor (security 1).
+          el.innerHTML = normalize.cleanMarkup(beforeHtml);
+        } else el.textContent = String(item[record.FIELD.BEFORE] || "");
       });
       return { element: el, reason: null };
     }
@@ -4165,7 +4432,7 @@
     }
 
     function openEmptyPage() {
-      if (!doc || !doc.body || !reviewId || session || hasContent()) return null;
+      if (!notesReview || !doc || !doc.body || !reviewId || session || hasContent()) return null;
       var outstanding = store.read(reviewId).some(function (item) {
         return item[record.FIELD.PLACEMENT] === record.PLACEMENT.START_OF_CONTAINER && record.isOutstanding(item);
       });
@@ -4184,10 +4451,25 @@
       return sessionInfo();
     }
 
+    // Only a notes review opens its empty page ready to type (design call
+    // 2, code_reviewer 1). Any other page with no content blocks, such as an
+    // app shell still loading, stays in reading state.
     function scheduleEmptyPage() {
-      if (emptyPageChecked || !win) return;
+      if (!notesReview || emptyPageChecked || !win || !listenerHandles.length) return;
       emptyPageChecked = true;
       win.setTimeout(openEmptyPage, 0);
+    }
+
+    /**
+     * Says whether this review is a notes review (`lahe write`). The one input
+     * the empty-page session reads. Boot passes it as `notes` when it knows at
+     * construction, or calls this when the answer arrives later (from the
+     * helper). Setting it true on a bound surface runs the empty-page check.
+     */
+    function setNotes(flag) {
+      notesReview = flag === true;
+      scheduleEmptyPage();
+      return notesReview;
     }
 
     function drawFrame(block) {
@@ -4963,6 +5245,8 @@
       unbind();
       unbindBlock();
       editState = false;
+      // Whatever a long run was waiting to write goes to storage first.
+      flushRunDraft();
       if (session) {
         var open = session;
         session = null;
@@ -4996,6 +5280,11 @@
       COMMANDS: COMMANDS,
       setReview: setReview,
       setPage: setPage,
+      setNotes: setNotes,
+      isNotes: function () {
+        return notesReview;
+      },
+      flushDraft: flushRunDraft,
       onChange: onChange,
       bind: bind,
       unbind: unbind,
@@ -5076,6 +5365,14 @@
     FIRST_WORDS: FIRST_WORDS,
     SESSION_HISTORY_MAX: SESSION_HISTORY_MAX,
     TYPING_BURST_IDLE_MS: TYPING_BURST_IDLE_MS,
+    SESSION_HISTORY_MAX_CHARS: SESSION_HISTORY_MAX_CHARS,
+    RUN_BYTES_FACTOR: RUN_BYTES_FACTOR,
+    RUN_BLOCK_OVERHEAD: RUN_BLOCK_OVERHEAD,
+    RUN_REMEASURE_BYTES: RUN_REMEASURE_BYTES,
+    RUN_DRAFT_DEFER_BYTES: RUN_DRAFT_DEFER_BYTES,
+    RUN_DRAFT_IDLE_MS: RUN_DRAFT_IDLE_MS,
+    RUN_DRAFT_MAX_WAIT_MS: RUN_DRAFT_MAX_WAIT_MS,
+    runRecordBytes: runRecordBytes,
     counters: counters,
     TOOL_ATTR: markers.TOOL_ATTR,
     BREAK_SHAPE: BREAK_SHAPE,

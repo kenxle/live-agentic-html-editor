@@ -1336,7 +1336,7 @@
   var CONTAINER_TAGS = { main: 1, body: 1 };
 
   function containerRung(ref, scope, options) {
-    if (!options || options.placement !== "start_of_container") return null;
+    if (!options || options.placement !== record.PLACEMENT.START_OF_CONTAINER) return null;
     var tag = ref.fingerprint && typeof ref.fingerprint.tag === "string" ? ref.fingerprint.tag.toLowerCase() : "";
     if (!CONTAINER_TAGS[tag]) return null;
     var found = [];
