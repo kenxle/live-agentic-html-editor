@@ -4422,7 +4422,9 @@
     // leading chrome such as the marked file-name title.
     function hasContent() {
       return blocks.leafWalk(doc.body).some(function (el) {
-        return !markers.isInsideOverlay(el);
+        if (markers.isInsideOverlay(el)) return false;
+        // The rendered front matter is metadata, not something the reviewer wrote.
+        return !(el.closest && el.closest("details.frontmatter"));
       });
     }
 

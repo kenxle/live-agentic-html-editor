@@ -747,7 +747,7 @@ test.describe("free writing seams", () => {
   // block (<details class="frontmatter"><pre>) as page content, so a notes
   // file holding only front matter never opens ready to type. With hasContent
   // ignoring details.frontmatter this whole test passes (progress/phase7_fix_f4.md).
-  test.fixme("notes page with front matter: the page opens ready to type, the blocks sit below the metadata once, and the source keeps its front matter byte for byte", async ({
+  test("notes page with front matter: the page opens ready to type, the blocks sit below the metadata once, and the source keeps its front matter byte for byte", async ({
     page
   }) => {
     const front = "---\ntitle: Field notes\ndate: 2026-09-29\n---\n";
