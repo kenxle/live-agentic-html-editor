@@ -121,7 +121,7 @@ test("a row with no request has no note", () => {
 
 test("the header names the attached agent before any click", () => {
   const view = build(freshList(), okState());
-  assert.equal(view.title, "LAHE Library");
+  assert.equal(view.title, "Lahe Library");
   assert.equal(view.agent.attached, true);
   assert.equal(view.agent.text, "Hand-overs go to: document index");
 });

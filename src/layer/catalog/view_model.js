@@ -41,7 +41,7 @@
   var LEGACY_SESSION = "legacy";
 
   var TEXT = {
-    TITLE: "LAHE Library",
+    TITLE: "Lahe Library",
     AGENT_ATTACHED: "Hand-overs go to: {agent}",
     AGENT_NONE: "No agent attached. Open still works; hand-overs give you a message to paste.",
     AGENT_STOPPED: "{agent} is attached but has stopped watching. Open still works; hand-overs give you a message to paste.",
