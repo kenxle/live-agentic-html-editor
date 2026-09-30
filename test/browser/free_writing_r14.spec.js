@@ -24,16 +24,13 @@
 
 "use strict";
 
-const fs = require("node:fs");
-const os = require("node:os");
-const net = require("node:net");
-const path = require("node:path");
-const { execFileSync } = require("node:child_process");
+const { test, expect, pollPage } = require("../helpers");
+// The world helpers are shared with the seams spec (support/lahe_world.js). This
+// file kept its own copies once, and they drifted: the copy of reply did not
+// wait for a new reply.at, and its agentWrites used a fixed mtime offset.
+const world_ = require("./support/lahe_world");
 
-const { test, expect, pollPage, pollUntil } = require("../helpers");
-
-const REPO_ROOT = process.env.LAHE_REPO || path.join(__dirname, "..", "..");
-const CLI = path.join(REPO_ROOT, "bin", "lahe.js");
+const { closeWorld, booted, claim, settled, helperHas, reviewJsonItem, countOnPage, reply } = world_;
 
 const ORIGINAL = "Runners come back too fast after a layoff.";
 const INTRO_SECTION = "main > section:first-of-type";
@@ -50,81 +47,8 @@ function md(introBlocks) {
     .join("\n");
 }
 
-function freePort() {
-  return new Promise(function (resolve, reject) {
-    const server = net.createServer();
-    server.once("error", reject);
-    server.listen(0, "127.0.0.1", function () {
-      const port = server.address().port;
-      server.close(function () {
-        resolve(port);
-      });
-    });
-  });
-}
-
-function labelled(output, label) {
-  const match = new RegExp("^\\s*" + label + "\\s+(\\S+)", "m").exec(output);
-  return match ? match[1] : null;
-}
-
-async function makeWorld(testInfo, blocks) {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), "lahe-r14-"));
-  const stateDir = path.join(root, "state");
-  const work = path.join(root, "work");
-  fs.mkdirSync(work, { recursive: true });
-  const source = path.join(work, "post.md");
-  fs.writeFileSync(source, md(blocks));
-  const env = Object.assign({}, process.env, { LAHE_STATE_DIR: stateDir });
-  delete env.XDG_STATE_HOME;
-  const port = await freePort();
-  const cli = function (args) {
-    return execFileSync(process.execPath, [CLI].concat(args), {
-      cwd: REPO_ROOT,
-      env: env,
-      encoding: "utf8",
-      stdio: ["ignore", "pipe", "pipe"]
-    });
-  };
-  const out = cli(["review", source, "--port", String(port)]);
-  const world = {
-    root: root,
-    stateDir: stateDir,
-    source: source,
-    cli: cli,
-    session: labelled(out, "session"),
-    review: labelled(out, "review"),
-    open: labelled(out, "open")
-  };
-  world.reviewDir = path.join(stateDir, "reviews", world.review);
-  expect(world.open, "`lahe review` printed the page URL").toBeTruthy();
-  return world;
-}
-
-function closeWorld(world) {
-  if (!world) return;
-  try {
-    world.cli(["session", "close", world.session]);
-  } catch (err) {
-    // A session that already went down is not a test failure.
-  }
-}
-
-async function booted(page) {
-  await pollPage(page, () => !!(window.__lahe && window.__lahe.booted), undefined, {
-    message: "the layer to boot",
-    timeoutMs: 20000
-  });
-  await page.evaluate(() => window.__lahe.interactionBusy(50));
-}
-
-async function claim(page) {
-  if (await page.evaluate(() => window.__lahe.handle.sync.status().readOnly)) {
-    await page.evaluate(() => window.__lahe.handle.sync.takeover());
-    await pollPage(page, () => window.__lahe.handle.sync.lockState().acquired === true, undefined, {
-      message: "this window to take the review"
-    });
-  }
+function makeWorld(testInfo, blocks) {
+  return world_.makeWorld({ file: "post.md", text: md(blocks) });
 }
 
 function caret(page, selector, offset) {
@@ -228,86 +152,18 @@ async function committedEdit(page) {
   );
 }
 
-function reviewJsonItem(world, id) {
-  try {
-    const json = JSON.parse(fs.readFileSync(path.join(world.reviewDir, "review.json"), "utf8"));
-    for (const p of json.pages) for (const it of p.items) if (it.id === id) return it;
-  } catch (err) {
-    // Mid-write; the poll tries again.
-  }
-  return null;
-}
-
-async function helperHas(world, id, rev) {
-  return pollUntil(
-    () => {
-      const it = reviewJsonItem(world, id);
-      return it && it.rev === rev ? it : null;
-    },
-    { message: "review.json to hold " + id + " at rev " + rev, timeoutMs: 20000 }
-  );
-}
-
-/** Settle the page after a load: the layer booted, the check ran, one replay pass. */
-async function settled(page) {
-  await booted(page);
-  await pollPage(page, () => window.__lahe.counters.revertChecks >= 1, undefined, {
-    message: "the page check to run on this load",
-    timeoutMs: 20000
-  });
-  await page.evaluate(() => window.__lahe.replayNow());
-}
-
 /** The agent writes the .md; the page reloads itself off the new render. */
-async function agentWrites(page, world, blocks) {
-  await pollPage(page, () => !!window.__lahe.handle.sync.status().targetMtime, undefined, {
-    message: "the page's mtime baseline",
-    timeoutMs: 20000
-  });
-  let navigations = 0;
-  const onNav = (frame) => {
-    if (frame === page.mainFrame()) navigations += 1;
-  };
-  page.on("framenavigated", onNav);
-  fs.writeFileSync(world.source, md(blocks));
-  const later = new Date(Date.now() + 10000);
-  fs.utimesSync(world.source, later, later);
-  await pollUntil(() => navigations > 0, { message: "the page to reload after the rebuild", timeoutMs: 30000 });
-  page.off("framenavigated", onNav);
-  await page.waitForLoadState("load");
-  await settled(page);
+function agentWrites(page, world, blocks) {
+  return world_.agentWrites(page, world, md(blocks));
 }
 
 function sectionText(page) {
   return page.evaluate((sel) => document.querySelector(sel).innerText.replace(/\s+/g, " "), INTRO_SECTION);
 }
 
-function countOnPage(page, text) {
-  return page.evaluate((t) => {
-    const words = document.querySelector("main").innerText.replace(/\s+/g, " ");
-    let n = 0;
-    for (let at = words.indexOf(t); at !== -1; at = words.indexOf(t, at + 1)) n += 1;
-    return n;
-  }, text);
-}
-
-function reply(world, it) {
-  return world.cli([
-    "reply", "--review", world.review, "--item", it.id, "--rev", String(it.rev),
-    "--status", "handled", "--agent", "r14", "--file", world.source
-  ]);
-}
-
 /** The agent says handled. The words it left out keep the item open. */
 async function heldAfterHandled(world, it) {
-  reply(world, it);
-  const got = await pollUntil(
-    () => {
-      const now = reviewJsonItem(world, it.id);
-      return now && now.reply ? now : null;
-    },
-    { message: "the helper to fold the handled reply", timeoutMs: 20000 }
-  );
+  const got = await reply(world, it, "handled");
   expect(got.state, "the item reopens: it is still in front of the agent").toBe("ready");
   expect(got.handled_not_on_page).toBe(true);
 }
@@ -420,14 +276,7 @@ test.describe("brief R14: bold and italic edits survive the rebuild", () => {
     expect(it.kind).toBe("format_only");
     await helperHas(world, it.id, it.rev);
 
-    reply(world, it);
-    const folded = await pollUntil(
-      () => {
-        const got = reviewJsonItem(world, it.id);
-        return got && got.reply ? got : null;
-      },
-      { message: "the helper to fold the handled reply", timeoutMs: 20000 }
-    );
+    const folded = await reply(world, it, "handled");
     expect(folded.state).toBe("ready");
     expect(folded.handled_not_on_page).toBe(true);
   });
@@ -444,14 +293,7 @@ test.describe("brief R14: bold and italic edits survive the rebuild", () => {
     await helperHas(world, it.id, it.rev);
 
     await agentWrites(page, world, ["Runners come back **too fast** after a layoff."]);
-    reply(world, it);
-    const folded = await pollUntil(
-      () => {
-        const got = reviewJsonItem(world, it.id);
-        return got && got.reply ? got : null;
-      },
-      { message: "the helper to fold the handled reply", timeoutMs: 20000 }
-    );
+    const folded = await reply(world, it, "handled");
     expect(folded.state).toBe("handled");
     expect(folded.handled_not_on_page).toBe(false);
     await page.reload();

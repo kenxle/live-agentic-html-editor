@@ -34,7 +34,18 @@
     { name: "uppercase tags", tag: "h2", html: "An <STRONG>Uppercase</STRONG> <EM>heading</EM>" },
     { name: "list items", tag: "ul", html: "<li>First <b>item</b></li><LI>Second item<br></LI>" },
     { name: "numbered list", tag: "ol", html: "<li>One</li><li>Two &amp; three</li>" },
-    { name: "line break mid", tag: "p", html: "Line one<br>Line two" }
+    { name: "line break mid", tag: "p", html: "Line one<br>Line two" },
+    // The two samples below were CAPTURED, not written: every session block
+    // the free_writing_capture, host, types, undo and repaint specs left behind
+    // (raw-blocks.jsonl, saved by support/free_writing_page.js before the
+    // commit cleaned them) in Chromium, Firefox and WebKit, 415 distinct blocks.
+    // These are the only non-empty ones that differ from the samples above; the
+    // rest are plain words. (An empty block, just <br>, is captured too and is
+    // dropped by cleanBlock on purpose, so it is not a sample here.)
+    // Native engine litter (<span style>, <div> wrappers, <br type="_moz">) never
+    // appeared: the layer's own editing keeps it out.
+    { name: "captured: empty last list item", tag: "ul", html: "<li>only item</li><li><br></li>" },
+    { name: "captured: nbsp after a drop", tag: "p", html: "Drop here:&nbsp;Dropped bold" }
   ];
 
   var api = { MALFORMED: MALFORMED, ENGINE: ENGINE };

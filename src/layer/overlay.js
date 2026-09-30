@@ -831,6 +831,7 @@
     ":host([data-lahe-scheme='dark']) .refusal__btn{color:#12151a}",
     ".refusal__btn:hover{filter:brightness(1.06)}",
     ".refusal__btn[disabled]{opacity:.6;cursor:default}",
+    ".refusal__btn[hidden]{display:none}",
 
     // The confirm before the door. There is no window.confirm anywhere in this
     // library: a browser dialog is the page's chrome, not the rail's, and it
@@ -1298,7 +1299,8 @@
   function shapePhrase(block) {
     var tag = block.tag;
     if (tag === "h1" || tag === "h2" || tag === "h3" || tag === "h4") {
-      var name = tag === "h3" ? "subheading" : tag === "h4" ? "small heading" : "heading";
+      // The menu's own names (gestures.BLOCK_TYPES); h1 reads as a heading.
+      var name = blockLabel(tag === "h1" ? "h2" : tag).toLowerCase();
       return "a " + name + ", '" + firstWordsOf(wordsOfHtml(block.html), RUN_HEADING_WORDS) + "'";
     }
     if (tag === "ul" || tag === "ol") {
@@ -4301,11 +4303,15 @@
       var i = info || {};
       // Remembered before the dom check on purpose: a refusal that arrives
       // before mount (or between remounts) is re-applied by mount, not lost.
-      refusalInfo = { reason: i.reason || null };
+      refusalInfo = { reason: i.reason || null, refusedBy: i.refusedBy || null };
       if (!dom) return false;
       dom.refusalReason.textContent = i.reason || "This review is already open in another window.";
       dom.refusalBtn.disabled = false;
       dom.refusalBtn.textContent = "Review here instead";
+      // Taking the review over cannot fix an older helper: the refusal is about
+      // the helper's version, not another window holding the review. The button
+      // would only promise something it cannot do.
+      dom.refusalBtn.hidden = refusalInfo.refusedBy === "contract";
       dom.refusal.setAttribute("data-shown", "true");
       // A refusal behind the collapsed pill is invisible, and a reviewer who
       // cannot type and is told nothing reads it as "broken" (Ken hit exactly
@@ -4322,6 +4328,7 @@
       // Reset the button out of its "Moving the review here…" pending state,
       // so the next refusal (or a probe) never meets a stuck disabled button.
       dom.refusalBtn.disabled = false;
+      dom.refusalBtn.hidden = false;
       dom.refusalBtn.textContent = "Review here instead";
       // Put the rail back where the reviewer chose to keep it. If they changed
       // that choice while the refusal was visible, preferredCollapsed already

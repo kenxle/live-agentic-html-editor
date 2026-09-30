@@ -87,15 +87,50 @@ test.describe("free writing: the editing host", () => {
     expect((await state(page)).open).toBe(true);
   });
 
+  // The layer takes Cmd-A itself and selects the session, so the native
+  // select-all never runs. The precondition is that the selection covers the
+  // whole session and no more; the outside blocks staying put is then the
+  // layer's own doing.
   for (const how of ["Cmd-A then type", "Cmd-A then Backspace"]) {
     test("every block outside the session keeps its outerHTML: " + how, async ({ page }) => {
       await withRun(page);
       const before = await fw.outsideSnapshot(page, OUTSIDE);
       await page.keyboard.press("ControlOrMeta+KeyA");
+      const sel = await page.evaluate(() => {
+        const s = window.getSelection();
+        const blocks = window.__lahe.handle.editing.sessionElements();
+        return {
+          coversSession: blocks.every((b) => s.containsNode(b, true)) && !s.isCollapsed,
+          reachesOutside: ["#h2", "#p2", "#list"].some((sel) => s.containsNode(document.querySelector(sel), true))
+        };
+      });
+      expect(sel, "Cmd-A selected the session and stopped at its edge").toEqual({ coversSession: true, reachesOutside: false });
       if (how === "Cmd-A then type") await page.keyboard.type("Replaced.", { delay: 2 });
       else await page.keyboard.press("Backspace");
       expect(await fw.outsideSnapshot(page, OUTSIDE)).toEqual(before);
       expect((await state(page)).open).toBe(true);
+    });
+  }
+
+  // The guard itself, with a selection that really does reach the outside
+  // blocks (set by the Selection API, the way a native select-all would).
+  for (const how of ["type", "Backspace"]) {
+    test("every block outside keeps its outerHTML: a selection over the whole host, then " + how, async ({ page }) => {
+      await withRun(page);
+      const before = await fw.outsideSnapshot(page, OUTSIDE);
+      const reached = await page.evaluate(() => {
+        const host = document.getElementById("p1").parentElement;
+        const r = document.createRange();
+        r.selectNodeContents(host);
+        const s = window.getSelection();
+        s.removeAllRanges();
+        s.addRange(r);
+        return ["#h2", "#p2", "#list"].map((sel) => s.containsNode(document.querySelector(sel), true));
+      });
+      expect(reached, "the selection reaches the outside blocks").toEqual([true, true, true]);
+      if (how === "type") await page.keyboard.type("Replaced.", { delay: 2 });
+      else await page.keyboard.press("Backspace");
+      expect(await fw.outsideSnapshot(page, OUTSIDE)).toEqual(before);
     });
   }
 
@@ -113,7 +148,112 @@ test.describe("free writing: the editing host", () => {
     expect(await fw.outsideSnapshot(page, OUTSIDE)).toEqual(before);
   });
 
-  test("every block outside keeps its outerHTML: a drop onto one", async ({ page }) => {
+  test("every block outside keeps its outerHTML: Cmd-B and Cmd-Z with the session open and a selection reaching into #p2", async ({ page }) => {
+    await withRun(page);
+    const before = await fw.outsideSnapshot(page, OUTSIDE);
+    await page.evaluate(() => {
+      const run = window.__lahe.handle.editing.sessionElements()[1];
+      const p2 = document.getElementById("p2");
+      const r = document.createRange();
+      r.setStart(run.firstChild, 2);
+      r.setEnd(p2.firstChild, 5);
+      const s = window.getSelection();
+      s.removeAllRanges();
+      s.addRange(r);
+    });
+    expect(await page.evaluate(() => window.__lahe.isEditing()), "the session is still open").toBe(true);
+    expect(
+      await page.evaluate(() => window.getSelection().containsNode(document.getElementById("p2"), true)),
+      "the selection reaches into #p2"
+    ).toBe(true);
+    await page.keyboard.press("ControlOrMeta+KeyB");
+    await page.keyboard.press("ControlOrMeta+KeyZ");
+    expect(await fw.outsideSnapshot(page, OUTSIDE)).toEqual(before);
+  });
+
+  // A synthetic DragEvent("drop") runs no default action in any browser, so a
+  // test built on one is green with the guard deleted. These three go through
+  // a real drag, and through the beforeinput the engine sends for a drop.
+  test("every block outside keeps its outerHTML: a trusted drop onto #p2", async ({ page, browserName }) => {
+    test.skip(browserName !== "chromium", "a trusted drop is driven through the Chromium DevTools protocol only; the beforeinput case below covers the guard in every lane");
+    await withRun(page, "Words to drag away.");
+    const before = await fw.outsideSnapshot(page, OUTSIDE);
+    await page.evaluate(() => {
+      window.__dragLog = { dropOnP2: 0, trusted: false, prevented: null };
+      document.getElementById("p2").addEventListener(
+        "drop",
+        (e) => {
+          window.__dragLog.dropOnP2 += 1;
+          window.__dragLog.trusted = e.isTrusted;
+        },
+        true
+      );
+      // Bubble phase on window: after the layer's handler has run.
+      window.addEventListener("drop", (e) => (window.__dragLog.prevented = e.defaultPrevented), false);
+    });
+    const at = await page.evaluate(() => {
+      const b = document.getElementById("p2").getBoundingClientRect();
+      return { x: Math.round(b.left + 20), y: Math.round(b.top + b.height / 2) };
+    });
+    const cdp = await page.context().newCDPSession(page);
+    const data = { items: [{ mimeType: "text/plain", data: "dropped words" }], dragOperationsMask: 1 };
+    await cdp.send("Input.dispatchDragEvent", { type: "dragEnter", x: at.x, y: at.y, data });
+    await cdp.send("Input.dispatchDragEvent", { type: "dragOver", x: at.x, y: at.y, data });
+    await cdp.send("Input.dispatchDragEvent", { type: "drop", x: at.x, y: at.y, data });
+    const log = await page.evaluate(() => window.__dragLog);
+    expect(log.dropOnP2, "the drop reached #p2").toBeGreaterThan(0);
+    expect(log.trusted, "and it was a trusted event").toBe(true);
+    expect(log.prevented, "the guard cancelled the drop's default action").toBe(true);
+    expect(await fw.outsideSnapshot(page, OUTSIDE)).toEqual(before);
+  });
+
+  test("a beforeinput insertFromDrop aimed at #p2 is cancelled", async ({ page }) => {
+    await withRun(page);
+    const before = await fw.outsideSnapshot(page, OUTSIDE);
+    const prevented = await page.evaluate(() => {
+      const p2 = document.getElementById("p2");
+      const r = document.createRange();
+      r.setStart(p2.firstChild, 3);
+      r.collapse(true);
+      const s = window.getSelection();
+      s.removeAllRanges();
+      s.addRange(r);
+      const dt = new DataTransfer();
+      dt.setData("text/plain", "dropped words");
+      const ev = new InputEvent("beforeinput", { bubbles: true, cancelable: true, inputType: "insertFromDrop", dataTransfer: dt });
+      p2.dispatchEvent(ev);
+      return ev.defaultPrevented;
+    });
+    expect(prevented, "the guard cancelled the drop's beforeinput").toBe(true);
+    expect(await fw.outsideSnapshot(page, OUTSIDE)).toEqual(before);
+  });
+
+  test("a rich drop into a run block arrives as plain text", async ({ page }) => {
+    await withRun(page, "Drop here: ");
+    // A drop event carrying rich and plain text, aimed at the end of the run
+    // block. The layer takes the drop itself (onRunDrop) and inserts the plain
+    // text at the point; the rich markup never arrives.
+    await page.evaluate(() => {
+      const dt = new DataTransfer();
+      dt.setData("text/html", "<h3 style='color:red'>Dropped <b>bold</b></h3>");
+      dt.setData("text/plain", "Dropped bold");
+      const run = window.__lahe.handle.editing.sessionElements()[1];
+      const r = document.createRange();
+      r.selectNodeContents(run);
+      const rects = r.getClientRects();
+      const last = rects[rects.length - 1];
+      run.dispatchEvent(
+        new DragEvent("drop", { bubbles: true, cancelable: true, dataTransfer: dt, clientX: last.right - 1, clientY: last.top + last.height / 2 })
+      );
+    });
+    await fw.commitByEsc(page);
+    const item = await fw.onlyEdit(page);
+    expect(item.new_blocks).toHaveLength(1);
+    expect(item.new_blocks[0].tag).toBe("p");
+    expect(item.new_blocks[0].html.replace(/&nbsp;| /g, " ")).toBe("Drop here: Dropped bold");
+  });
+
+  test("every block outside keeps its outerHTML: a synthetic drop onto one", async ({ page }) => {
     await withRun(page);
     const before = await fw.outsideSnapshot(page, OUTSIDE);
     await page.evaluate(() => {
@@ -141,8 +281,31 @@ test.describe("free writing: the editing host", () => {
       s.removeAllRanges();
       s.addRange(r);
     });
+    // Precondition: the selection really reaches outside the session, so the
+    // cut is the risky one.
+    expect(
+      await page.evaluate(() => window.getSelection().containsNode(document.getElementById("h2"), true)),
+      "the selection reaches #h2"
+    ).toBe(true);
+    const runBefore = (await runTexts(page))[1];
     await page.keyboard.press("ControlOrMeta+KeyX");
     expect(await fw.outsideSnapshot(page, OUTSIDE)).toEqual(before);
+    expect((await runTexts(page))[1], "a cut that reaches outside deletes nothing in the run either").toBe(runBefore);
+  });
+
+  test("a cut wholly inside the session deletes its characters", async ({ page }) => {
+    await withRun(page, "Cut these words out.");
+    await page.evaluate(() => {
+      const run = window.__lahe.handle.editing.sessionElements()[1];
+      const r = document.createRange();
+      r.setStart(run.firstChild, 4);
+      r.setEnd(run.firstChild, 10);
+      const s = window.getSelection();
+      s.removeAllRanges();
+      s.addRange(r);
+    });
+    await page.keyboard.press("ControlOrMeta+KeyX");
+    expect((await runTexts(page))[1]).toBe("Cut words out.");
   });
 
   test("every block outside keeps its outerHTML: a composition started outside", async ({ page, browserName }) => {
@@ -332,7 +495,7 @@ test.describe("free writing: the editing host", () => {
     const said = await page.evaluate(() => window.__lahe.handle.editing.announcements());
     expect(said).toEqual(["Writing after: Most weeks look busy from the", "Heading", "Sent to the agent"]);
 
-    await fw.openFixture(page, server, "empty_notes.html");
+    await fw.openFixture(page, server, "empty_notes.html", { notes: true });
     await pollPage(page, () => window.__lahe.isEditing() === true, undefined, { message: "the empty page to open" });
     expect(await page.evaluate(() => window.__lahe.handle.editing.liveText())).toBe("Writing at the start of the page");
   });

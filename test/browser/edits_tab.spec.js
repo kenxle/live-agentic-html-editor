@@ -512,6 +512,64 @@ test.describe("free writing: the edits row and the card show new blocks", () => 
     expect(keys.sort()).toEqual([0, 1, 2, 3].map((i) => "run:" + item.id + ":" + i));
   });
 
+  // The wash reads anchor, blocks and highlight. They are a named option of the
+  // tab (washModules), so the dependency is visible, and the tab does not reach
+  // for the page's global namespace when it is given them (code lead 22).
+  test("the commit wash uses the modules the tab was given, not the page's global namespace", async ({ page }) => {
+    await fw.openFixture(page, server, "blog.html");
+    const item = await typeWorkedRun(page);
+    const got = await page.evaluate((id) => {
+      const calls = { resolved: 0, runElements: 0, marks: [] };
+      const target = document.getElementById("p1");
+      const stubs = {
+        anchor: {
+          resolve() {
+            calls.resolved += 1;
+            return { element: target };
+          }
+        },
+        blocks: {
+          runElementsFor() {
+            calls.runElements += 1;
+            return { blocks: [{ status: "whole", index: 1, elements: [target] }] };
+          }
+        },
+        highlight: {
+          shared: {
+            markChanged(key) {
+              calls.marks.push(key);
+              return true;
+            }
+          }
+        }
+      };
+      let notify = null;
+      const editing = {
+        onChange(fn) {
+          notify = fn;
+          return function () {};
+        }
+      };
+      const h = window.__lahe.handle;
+      const host = document.createElement("div");
+      document.body.appendChild(host);
+      const tab = window.LAHE.tabEdits.createEditsTab({
+        store: h.store,
+        reviewId: h.review,
+        overlay: window.__lahe.rail,
+        host: host,
+        editing: editing,
+        washModules: stubs
+      });
+      tab.mount();
+      notify(window.__lahe.itemById(id), "committed");
+      return calls;
+    }, item.id);
+    expect(got.resolved, "the given anchor module found the run").toBe(1);
+    expect(got.runElements, "the given blocks module listed its elements").toBe(1);
+    expect(got.marks, "the given highlight module marked the block").toEqual(["run:" + item.id + ":1"]);
+  });
+
   test("both replay notes show on the card", async ({ page }) => {
     await fw.openFixture(page, server, "blog.html");
     const item = await typeWorkedRun(page);
@@ -577,7 +635,7 @@ test.describe("free writing: the edits row and the card show new blocks", () => 
   });
 
   test("an empty notes page shows the pinned lines on both tabs, with the file name", async ({ page }) => {
-    await fw.openFixture(page, server, "empty_notes.html");
+    await fw.openFixture(page, server, "empty_notes.html", { notes: true });
     for (const tab of ["active", "edits"]) {
       await openRail(page, tab);
       const lines = await pollValue(

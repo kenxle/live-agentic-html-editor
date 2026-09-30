@@ -138,7 +138,7 @@ test.describe("free writing: typing produces every run fixture", () => {
   });
 
   test("start_of_container, on the empty notes page", async ({ page }) => {
-    await fw.openFixture(page, server, "empty_notes.html");
+    await fw.openFixture(page, server, "empty_notes.html", { notes: true });
     await pollPage(page, () => window.__lahe.isEditing() === true, undefined, {
       message: "the empty page to open ready to type"
     });

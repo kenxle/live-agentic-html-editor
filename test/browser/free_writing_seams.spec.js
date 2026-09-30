@@ -203,7 +203,22 @@ const BLOG_HTML = require("node:fs").readFileSync(require("node:path").join(fw.R
 /** The item is handled on both sides: the helper did not hold it, the page did not reopen it. */
 async function expectQuietlyHandled(page, world, id) {
   expect(reviewJsonItem(world, id), "the handled check let it through").toMatchObject({ state: "handled", handled_not_on_page: false });
+  // The page learns of the agent's reply on its next poll. Until it holds the
+  // handled state, "the page check did not reopen it" cannot be told apart from
+  // "the page check has not seen the reply yet". So wait for the browser to
+  // hold it, then load again so the page check runs on a page that has it.
+  await pollPage(
+    page,
+    (i) => {
+      const it = window.__lahe.itemById(i);
+      return !!it && it.state === "handled";
+    },
+    id,
+    { message: "the browser to hold " + id + " as handled", timeoutMs: 20000 }
+  );
+  await reviewerReloads(page);
   expect(await state(page, id), "the page check did not reopen it").toMatchObject({ state: "handled" });
+  expect(await page.evaluate(() => window.__lahe.counters.revertReopens), "the page check reopened nothing on this load").toBe(0);
   expect(await badges(page, id), "no note on the card").toEqual([]);
 }
 
@@ -291,6 +306,23 @@ test.describe("free writing seams", () => {
     await fw.commitByEsc(page);
     const ref = await committed(page);
     await agentRound(page, world, ref);
+    // R6: the words match on the page, in the record, and in the source. The
+    // scripted agent decodes and escapes everything it is given, so a mangled
+    // record would still show the right words on the page; read the record and
+    // the source themselves.
+    const recorded = reviewJsonItem(world, ref.id);
+    // The projection's text is the block's words with < > & as entities (see
+    // the progress page: whether the contract should say so is F3's call).
+    // Read back through those entities it must be exactly what was typed.
+    const unescaped = recorded.new_blocks[0].text.replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&amp;/g, "&");
+    expect(unescaped, "the record holds the typed text").toBe(typed);
+    expect(recorded.new_blocks[0].html, "and its html escapes only < > &").toBe(
+      typed.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+    );
+    const placedSource = readSource(world)
+      .split(/\n[ \t]*\n/)
+      .find((b) => agent.mdWords(b) === agent.htmlWords(typed.replace(/&/g, "&amp;").replace(/</g, "&lt;")));
+    expect(placedSource, "the source holds the typed words as its own block").toBeTruthy();
     const shown = await page.evaluate((anchor) => {
       const a = Array.from(document.querySelectorAll("main p")).find((p) => p.textContent.trim() === anchor);
       const next = a && a.nextElementSibling;
@@ -394,13 +426,23 @@ test.describe("free writing seams", () => {
     const taken = await agentRound(page, world, back);
     expect(taken.remove_blocks.length).toBe(3);
     expect(readSource(world)).not.toContain(HEADER);
+    // The page holds the take-back's answer before any of the checks below can mean anything.
+    await pollPage(
+      page,
+      (i) => {
+        const it = window.__lahe.itemById(i);
+        return !!it && it.state === "handled";
+      },
+      back.id,
+      { message: "the browser to hold the take-back as handled", timeoutMs: 20000 }
+    );
     for (let i = 0; i < 2; i += 1) {
+      await reviewerReloads(page);
       for (const t of [HEADER, PARA].concat(ITEMS)) expect(await countOnPage(page, t), "'" + t + "' is not reinserted").toBe(0);
       expect(await state(page, back.id)).toMatchObject({ state: "handled" });
       expect(reviewJsonItem(world, back.id)).toMatchObject({ state: "handled", handled_not_on_page: false });
       expect(["handled", "reverted", "withdrawn"]).toContain((await state(page, ref.id) || { state: "withdrawn" }).state);
       expect(drainLines(world).map((l) => l.id)).not.toContain(ref.id);
-      await reviewerReloads(page);
     }
   });
 
@@ -481,6 +523,8 @@ test.describe("free writing seams", () => {
     await openEditAt(page, ANCHOR_P);
     await page.keyboard.press("Enter");
     await page.keyboard.type("Half a thought", { delay: 2 });
+    const caretBefore = await fw.caretSpot(page);
+    expect(caretBefore, "the caret is in the run before the rebuild").toMatchObject({ block: 1 });
     const nav = world_.navCounter(page);
     world_.writeSource(world, DOC_MD.replace("A short lede that sits in the hero.", "A lede the agent rebuilt."));
     await pollPage(
@@ -505,6 +549,7 @@ test.describe("free writing seams", () => {
     expect(during.open).toBe(true);
     expect(during.text).toContain("Half a thought");
     expect(during.caretInRun).toBe(true);
+    expect(await fw.caretSpot(page), "the caret stayed at its block and offset").toEqual(caretBefore);
     await page.keyboard.type(" more", { delay: 2 });
     await fw.commitByEsc(page);
     await pollUntil(() => nav.count > 0, { message: "the commit to let the rebuild reload the page", timeoutMs: 30000 });
@@ -515,64 +560,115 @@ test.describe("free writing seams", () => {
     expect(await countOnPage(page, "Half a thought more")).toBe(1);
   });
 
-  test("crash mid-sitting (persistent context): the next load commits the whole run", async ({ browserName }, testInfo) => {
-    test.skip(browserName !== "chromium", "a persistent Chromium context and a renderer crash");
-    const { chromium } = require("@playwright/test");
-    world = await newWorld("doc.md", DOC_MD);
-    const profile = testInfo.outputPath("profile");
-    let ctx = await chromium.launchPersistentContext(profile, { headless: true });
-    let page = ctx.pages()[0] || (await ctx.newPage());
-    await page.goto(world.open);
-    await booted(page);
-    await openEditAt(page, ANCHOR_P);
-    await page.keyboard.press("Enter");
-    await page.keyboard.type("# " + HEADER, { delay: 2 });
-    await page.keyboard.press("Enter");
-    await page.keyboard.type(PARA, { delay: 2 });
-    await page.keyboard.press("Enter");
-    await page.keyboard.type("A third block before the crash", { delay: 2 });
-    await pollPage(
-      page,
-      () => {
-        const d = window.__lahe.items().find((i) => i.kind === "edit");
-        return !!d && Array.isArray(d.new_blocks) && d.new_blocks.length === 3;
-      },
-      undefined,
-      { message: "the draft to hold all three blocks" }
-    );
-    // Crash the renderer, so no unload runs, then let the browser go down.
-    const spare = await ctx.newPage();
-    const browserSession = await ctx.newCDPSession(spare);
-    const gone = new Promise((resolve) => ctx.once("close", resolve));
-    const cdp = await ctx.newCDPSession(page);
-    const crashed = new Promise((resolve) => page.once("crash", resolve));
-    cdp.send("Page.crash").catch(() => null); // never answers: the renderer is gone
-    await crashed;
-    await browserSession.send("Browser.close").catch(() => null);
-    await gone;
-    // The old browser has exited before the new one opens its profile.
-    const { execFileSync } = require("node:child_process");
-    await pollUntil(() => execFileSync("ps", ["-ax", "-o", "command"], { encoding: "utf8", maxBuffer: 64 * 1024 * 1024 }).indexOf(profile) === -1, {
-      message: "the crashed browser to exit",
-      timeoutMs: 20000
-    });
-
-    ctx = await chromium.launchPersistentContext(profile, { headless: true, timeout: 20000 });
-    try {
-      page = ctx.pages()[0] || (await ctx.newPage());
+  // Two ways the browser goes down mid-sitting. "renderer" crashes the
+  // renderer and then closes the browser cleanly (browser storage is flushed
+  // on the way out). "sigkill" kills the browser process itself, the way a real
+  // crash or a force quit does, with nothing flushed.
+  // "sigkill-late" waits 6 seconds after the last keystroke first, longer than
+  // a browser takes to flush its storage: what was typed that long ago must
+  // survive. "sigkill" kills at once, and only records how much survived.
+  for (const how of ["renderer", "sigkill", "sigkill-late"]) {
+    test("crash mid-sitting, " + how + " (persistent context): the next load commits the whole run, each block once, and the run reopens", async ({ browserName }, testInfo) => {
+      test.skip(browserName !== "chromium", "a persistent Chromium context and a renderer crash");
+      const { chromium } = require("@playwright/test");
+      const { execFileSync } = require("node:child_process");
+      world = await newWorld("doc.md", DOC_MD);
+      const profile = testInfo.outputPath("profile");
+      let ctx = await chromium.launchPersistentContext(profile, { headless: true });
+      let page = ctx.pages()[0] || (await ctx.newPage());
       await page.goto(world.open);
       await booted(page);
-      // The dead tab's hold on the review is the reviewer's to take back.
-      await claim(page);
-      await settled(page);
-      const ref = await committed(page);
-      const item = await helperHas(world, ref.id, ref.rev);
-      expect(item.state).toBe("ready");
-      expect(item.new_blocks.map((b) => b.text)).toEqual([HEADER, PARA, "A third block before the crash"]);
-    } finally {
-      await ctx.close();
-    }
-  });
+      await openEditAt(page, ANCHOR_P);
+      await page.keyboard.press("Enter");
+      await page.keyboard.type("# " + HEADER, { delay: 2 });
+      await page.keyboard.press("Enter");
+      await page.keyboard.type(PARA, { delay: 2 });
+      await page.keyboard.press("Enter");
+      await page.keyboard.type("A third block before the crash", { delay: 2 });
+      await pollPage(
+        page,
+        () => {
+          const d = window.__lahe.items().find((i) => i.kind === "edit");
+          return !!d && Array.isArray(d.new_blocks) && d.new_blocks.length === 3;
+        },
+        undefined,
+        { message: "the draft to hold all three blocks" }
+      );
+      const psLines = () => execFileSync("ps", ["-ax", "-o", "pid=,command="], { encoding: "utf8", maxBuffer: 64 * 1024 * 1024 }).split("\n");
+      const gone = new Promise((resolve) => ctx.once("close", resolve));
+      if (how === "renderer") {
+        // Crash the renderer, so no unload runs, then let the browser go down.
+        const spare = await ctx.newPage();
+        const browserSession = await ctx.newCDPSession(spare);
+        const cdp = await ctx.newCDPSession(page);
+        const crashed = new Promise((resolve) => page.once("crash", resolve));
+        cdp.send("Page.crash").catch(() => null); // never answers: the renderer is gone
+        await crashed;
+        await browserSession.send("Browser.close").catch(() => null);
+      } else {
+        if (how === "sigkill-late") {
+          // No signal says the browser's storage reached disk; the condition is
+          // the clock: six seconds since the last keystroke.
+          const flushedBy = Date.now() + 6000;
+          await pollUntil(() => (Date.now() >= flushedBy ? true : null), {
+            message: "six seconds to pass since the last keystroke, so the browser has flushed its storage",
+            timeoutMs: 20000
+          });
+        }
+        // The browser process for this profile: the one line naming the
+        // profile that is not a child (renderer, GPU, utility) process.
+        const main = psLines().filter((l) => l.indexOf(profile) !== -1 && l.indexOf("--type=") === -1);
+        expect(main.length, "exactly one browser process owns the profile").toBe(1);
+        process.kill(Number(main[0].trim().split(/\s+/)[0]), "SIGKILL");
+      }
+      await gone;
+      // The old browser has exited before the new one opens its profile.
+      await pollUntil(() => psLines().every((l) => l.indexOf(profile) === -1), { message: "the crashed browser to exit", timeoutMs: 20000 });
+
+      ctx = await chromium.launchPersistentContext(profile, { headless: true, timeout: 20000 });
+      try {
+        page = ctx.pages()[0] || (await ctx.newPage());
+        await page.goto(world.open);
+        await booted(page);
+        // The dead tab's hold on the review is the reviewer's to take back.
+        await claim(page);
+        await settled(page);
+        const typed = [HEADER, PARA, "A third block before the crash"];
+        let ref = null;
+        try {
+          ref = await committed(page);
+        } catch (err) {
+          // Nothing in the store: only an immediate SIGKILL may lose it all.
+          expect(how, "a run typed 6 seconds before the kill, or a clean close, is not lost").toBe("sigkill");
+        }
+        testInfo.annotations.push({ type: "kept-after-" + how, description: ref ? "a ready record" : "nothing in the browser store" });
+        if (!ref) return;
+        const item = await helperHas(world, ref.id, ref.rev);
+        expect(item.state).toBe("ready");
+        const kept = item.new_blocks.map((b) => b.text);
+        // How much a SIGKILL loses is a product question, not a test fix: the
+        // kept blocks are recorded on the progress page. What must hold either
+        // way is that what was kept is a prefix of what was typed.
+        testInfo.annotations.push({ type: "kept-after-" + how, description: JSON.stringify(kept) });
+        expect(kept, "what survived is the start of what was typed, in order").toEqual(typed.slice(0, kept.length));
+        if (how !== "sigkill") expect(kept).toEqual(typed);
+        // R5: the reviewer can reopen it and keep writing. Each kept block is
+        // on the page once, and Cmd-Shift-E on the last one reopens the record.
+        for (const t of kept) expect(await countOnPage(page, t), "'" + t + "' shows once after the relaunch").toBe(1);
+        const last = kept[kept.length - 1];
+        await page.evaluate((w) => {
+          const p = Array.from(document.querySelectorAll("main h2, main h3, main p")).find((n) => n.textContent.trim() === w);
+          p.setAttribute("data-seams-probe", "1");
+        }, last);
+        await fw.caretAt(page, "[data-seams-probe]", 2);
+        await page.keyboard.press("ControlOrMeta+Shift+KeyE");
+        await pollPage(page, () => window.__lahe.editState().open === true, undefined, { message: "Cmd-Shift-E on the last kept block" });
+        expect(await page.evaluate(() => window.__lahe.editState().itemId), "it reopened the record").toBe(ref.id);
+      } finally {
+        await ctx.close();
+      }
+    });
+  }
 
   test("handled check: a real run answered handled with nothing written is held open", async ({ page }) => {
     world = await newWorld("doc.md", DOC_MD);
@@ -647,6 +743,46 @@ test.describe("free writing seams", () => {
     await expectQuietlyHandled(page, world, ref.id);
   });
 
+  // WAITING ON F1 (testing I8): editing.js hasContent() counts the front-matter
+  // block (<details class="frontmatter"><pre>) as page content, so a notes
+  // file holding only front matter never opens ready to type. With hasContent
+  // ignoring details.frontmatter this whole test passes (progress/phase7_fix_f4.md).
+  test.fixme("notes page with front matter: the page opens ready to type, the blocks sit below the metadata once, and the source keeps its front matter byte for byte", async ({
+    page
+  }) => {
+    const front = "---\ntitle: Field notes\ndate: 2026-09-29\n---\n";
+    world = await makeWorld({ file: "notes.md", command: "write", create: true, text: front });
+    await page.goto(world.open);
+    await booted(page);
+    await claim(page);
+    await pollPage(page, () => window.__lahe.editState().open === true, undefined, {
+      message: "a front-matter-only page to open ready to type"
+    });
+    await page.keyboard.type("First thought", { delay: 2 });
+    await page.keyboard.press("Enter");
+    await page.keyboard.type("Second thought", { delay: 2 });
+    await fw.commitByEsc(page);
+    const ref = await committed(page);
+    const item = await agentRound(page, world, ref);
+    expect(item.placement).toBe("start_of_container");
+    const src = readSource(world);
+    expect(src.startsWith(front), "the front matter is untouched, byte for byte").toBe(true);
+    expect(src.slice(front.length).replace(/^\n+/, "")).toBe("First thought\n\nSecond thought\n");
+    for (const t of ["First thought", "Second thought"]) expect(await countOnPage(page, t), t + " once").toBe(1);
+    // Below the metadata: the page's first typed block does not come before the
+    // block the front matter renders as.
+    const order = await page.evaluate(() => {
+      const all = Array.from(document.querySelectorAll("main *, body > *"));
+      const at = (t) => all.findIndex((n) => n.children.length === 0 && n.textContent.trim() === t);
+      return { meta: all.findIndex((n) => /Field notes/.test(n.textContent) && n.children.length === 0), first: at("First thought"), second: at("Second thought") };
+    });
+    expect(order.first, "the first block is on the page").toBeGreaterThan(-1);
+    if (order.meta > -1) expect(order.meta, "the metadata comes before the typed blocks").toBeLessThan(order.first);
+    expect(order.first).toBeLessThan(order.second);
+    await reviewerReloads(page);
+    await expectQuietlyHandled(page, world, ref.id);
+  });
+
   test("notes page: a sitting added after revision 1 is placed is placed as revision 2, every block once", async ({ page }) => {
     world = await makeWorld({ file: "notes.md", command: "write", create: false });
     await page.goto(world.open);
@@ -668,13 +804,32 @@ test.describe("free writing seams", () => {
     await expectQuietlyHandled(page, world, one.id);
   });
 
-  for (const answer of ["use-fixes", "keep-mine"]) {
-    test("proofreading: a run over 150 words, placed, proofread; " + answer + ", the agent answers; not held or reopened over two reloads", async ({
+  // The "long" case is a sitting past the 2000 characters review.json keeps of
+  // each earlier revision (review_format BEFORE_MAX): the typo sits in a block
+  // past that cut, so an agent reading only review.json cannot find the old
+  // words in after_history. WAITING ON F3 (testing I3, ADV 4): the contract
+  // decision (keep new_blocks uncut for run records, or tell the agent to find
+  // the old words by the suggestion's from). Once that lands this case is the
+  // guard; the scripted agent then follows the contract's new line.
+  const PROOF_CASES = [
+    { answer: "use-fixes", long: false },
+    { answer: "keep-mine", long: false },
+    { answer: "use-fixes", long: true }
+  ];
+  for (const { answer, long } of PROOF_CASES) {
+    const proofTest = long ? test.fixme : test;
+    proofTest("proofreading" + (long ? " (long run, typo past character 2000)" : "") + ": a run over 150 words, placed, proofread; " + answer + ", the agent answers; not held or reopened over two reloads", async ({
       page
     }) => {
       const wrong = "I lost my place evry time I scrolled back.";
       const right = "I lost my place every time I scrolled back.";
-      const filler = Array.from({ length: 16 }, (_, i) => "Sentence " + (i + 1) + " of the long sitting has ten words in it.").join(" ");
+      const filler = long
+        ? Array.from({ length: 12 }, (_, p) =>
+            Array.from({ length: 6 }, (_, i) => "Sentence " + (p * 6 + i + 1) + " of the long sitting has ten words in it.").join(" ")
+          ).join("\n\n")
+        : Array.from({ length: 16 }, (_, i) => "Sentence " + (i + 1) + " of the long sitting has ten words in it.").join(" ");
+      // The block the typo is in: the run's last (1 for the short sitting).
+      const typoBlock = long ? 12 : 1;
       world = await newWorld("doc.md", DOC_MD);
       await page.goto(world.open);
       await booted(page);
@@ -691,7 +846,7 @@ test.describe("free writing seams", () => {
         "--text",
         "I placed your words as written. One typo, if you want it fixed.",
         "--suggest",
-        "1",
+        String(typoBlock),
         "evry",
         "every"
       ]);
@@ -708,14 +863,19 @@ test.describe("free writing seams", () => {
         ([id, act]) => window.__lahe.rail.cardNode(id).querySelector(".lahe-ask [data-lahe-act='" + act + "']").click(),
         [ref.id, answer]
       );
+      // A question keeps the item outstanding, so a ready edit is already in
+      // the store; wait for the bump itself, as agent_replies does.
+      await pollPage(page, ([id, rev]) => window.__lahe.itemById(id).rev === rev + 1, [ref.id, ref.rev], {
+        message: "the answer to make revision " + (ref.rev + 1)
+      });
       const again = await committed(page);
       expect(again).toEqual({ id: ref.id, rev: ref.rev + 1 });
       const fixed = await agentRound(page, world, again);
       if (answer === "use-fixes") {
-        expect(fixed.new_blocks[1].text).toBe(right);
+        expect(fixed.new_blocks[typoBlock].text).toBe(right);
         expect(readSource(world)).not.toContain(wrong);
       } else {
-        expect(fixed.new_blocks[1].text).toBe(wrong);
+        expect(fixed.new_blocks[typoBlock].text).toBe(wrong);
       }
       const shown = answer === "use-fixes" ? right : wrong;
       for (let i = 0; i < 2; i += 1) {
@@ -747,8 +907,26 @@ test.describe("free writing seams", () => {
       await typeWorkedExample(page, kind === "html" ? "#p2" : ANCHOR_P);
       const ref = await committed(page);
       await agentRound(page, world, ref, { oldContract: true });
+      // The page learns of the reply on its next poll. Reload only once it
+      // holds the reply, or the page check runs on a page that has not heard.
+      await pollPage(
+        page,
+        (i) => {
+          const it = window.__lahe.itemById(i);
+          return !!it && (it.state === "handled" || !!it.reply);
+        },
+        ref.id,
+        { message: "the browser to hold the old agent's reply", timeoutMs: 20000 }
+      );
       await reviewerReloads(page);
-      for (const t of [HEADER, PARA].concat(ITEMS)) expect(await countOnPage(page, t, scope), "'" + t + "' at most once").toBeLessThanOrEqual(1);
+      for (const t of [HEADER, PARA].concat(ITEMS)) {
+        const n = await countOnPage(page, t, scope);
+        expect(n, "'" + t + "' at most once").toBeLessThanOrEqual(1);
+        // The architecture says an old agent places every word, with whatever
+        // tag it manages. A Markdown agent that dropped a block would pass "at
+        // most once", so there each block's words must show exactly once.
+        if (kind === "md") expect(n, "'" + t + "' is on the page, once").toBe(1);
+      }
       const seen = { json: reviewJsonItem(world, ref.id), page: await state(page, ref.id), badges: await badges(page, ref.id) };
       const reopened = seen.json.state === "ready" || (seen.page && seen.page.state === "ready");
       const flagged = seen.json.handled_not_on_page === true || seen.badges.length > 0;
