@@ -1939,13 +1939,13 @@ test.describe("free writing: the proofreading question", () => {
       const tailHtml = run.new_blocks[0].html;
       const tailWord = tailHtml.split(" ").find((w) => w.length >= 3 && tailHtml.split(w).length === 2);
       expect(tailWord, "a word that is in the tail exactly once").toBeTruthy();
-      // Precondition: record.applySuggestions alone would apply this fix, so
-      // the missing button below is the card's own guard and nothing else.
-      const applies = await page.evaluate(
-        ([r, w]) => !window.LAHE.record.applySuggestions(r, [{ block: 0, from: w, to: "REWRITTEN" }]).code,
+      // record.applySuggestions refuses a from_anchor block itself (fix round
+      // F3), and the card does not offer the button either: two guards.
+      const refused = await page.evaluate(
+        ([r, w]) => !!window.LAHE.record.applySuggestions(r, [{ block: 0, from: w, to: "REWRITTEN" }]).code,
         [run, tailWord]
       );
-      expect(applies, "the fix would apply if the card offered it").toBe(true);
+      expect(refused, "the record layer refuses a fix aimed at the anchor's tail").toBe(true);
       await askProofread(helper, page, run, [{ block: 0, from: tailWord, to: "REWRITTEN" }]);
       const buttons = await proofButtons(page, run.id);
       expect(buttons.use, "the page's words are not the reviewer's to have rewritten by a button").toBe(null);
@@ -1957,12 +1957,10 @@ test.describe("free writing: the proofreading question", () => {
     }
   });
 
-  // WAITING ON F3 (code lead 21): the waiting state after a proofread answer is
-  // read off the note text, so a reviewer who types the pinned sentence into the
-  // follow-up box of an ordinary question gets the proofread treatment (the
-  // pending turn under the thread and the "Waiting on the agent" notice). F3 adds
-  // a marker on the turn; once it lands this passes.
-  test.fixme("typing the pinned sentence into an ordinary follow-up does not get the proofread treatment", async ({ page }) => {
+  // Code lead 21: the waiting state after a proofread answer is read off the
+  // answered turn's proofread flag, not the note text, so the pinned sentence
+  // typed into an ordinary follow-up gets no proofread treatment.
+  test("typing the pinned sentence into an ordinary follow-up does not get the proofread treatment", async ({ page }) => {
     const { app, helper, token } = await startBoth();
     try {
       await bootedPage(page, app, helper, token);

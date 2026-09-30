@@ -1082,7 +1082,10 @@
         reviewId: reviewId,
         overlay: rail,
         host: rail.tabBody(ns.overlay.TAB.EDITS),
-        editing: editing
+        editing: editing,
+        // The commit wash reads these three; named here, not fished out of the
+        // page's namespace by the tab.
+        washModules: { anchor: ns.anchor, blocks: ns.blocks, highlight: ns.highlight }
       });
       made.mount();
       return made;

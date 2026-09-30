@@ -6,10 +6,7 @@
 // service_contract from the helper's health answer and goes read-only, with the
 // failure shown. The CLI half is test/unit/helper_contract_cli.test.js.
 //
-// WAITING ON F3 (fix round design call 9, CR 4, CL 24): the layer makes no
-// contract check yet (src/layer/sync.js and index.js are F3's). Until it does,
-// this test fails for the right reason: the page stays writable. Written as
-// SERVICE_CONTRACT - 1 so it still tests the bump at 15.
+// The test is written as SERVICE_CONTRACT - 1 so it follows the bump.
 
 "use strict";
 
@@ -28,7 +25,7 @@ test.afterAll(async () => {
   await server.close();
 });
 
-test.fixme("a layer on this contract goes read-only against a helper one contract behind, and takes no edits", async ({ page }) => {
+test("a layer on this contract goes read-only against a helper one contract behind, and takes no edits", async ({ page }) => {
   await refusingHelper.install(page, "http://127.0.0.1:1", { contract: protocol.SERVICE_CONTRACT - 1 });
   await fw.openFixture(page, server, "blog.html");
   await pollPage(page, () => window.__lahe.handle.sync.status().readOnly === true, undefined, {

@@ -617,10 +617,8 @@
    */
   function answerOnto(item, base, text) {
     var F = record.FIELD;
-    // F3's record.continueOnto(item, base, {note}) owns the archive-and-continue
-    // steps and keeps the change text of `base` (the fixed revision). It lands
-    // with F3's branch; until then the fallback below builds the same result on
-    // record.continueThread, so this file never copies those steps by hand.
+    // record.continueOnto owns the archive-and-continue steps and keeps the
+    // change text of `base` (the fixed revision).
     if (typeof record.continueOnto === "function") return record.continueOnto(item, base, { note: text });
     var turn = {
       note: text,
@@ -682,7 +680,13 @@
   function answeredProofread(item) {
     var F = record.FIELD;
     if (!item || item[F.REPLY] || item[F.STATE] !== record.STATE.READY) return false;
-    if (!record.threadOf(item).length) return false;
+    var thread = record.threadOf(item);
+    if (!thread.length) return false;
+    // The marker is on the answered turn itself: the last round's agent reply
+    // was a proofread question. The pinned sentence typed into an ordinary
+    // follow-up does not qualify (code lead 21).
+    var lastAgent = thread[thread.length - 1] && thread[thread.length - 1].agent;
+    if (!lastAgent || lastAgent.proofread !== true) return false;
     return item[F.NOTE] === PROOFREAD.USE_TEXT || item[F.NOTE] === PROOFREAD.KEEP_TEXT;
   }
 

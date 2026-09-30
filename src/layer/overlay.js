@@ -1277,8 +1277,7 @@
   }
 
   function firstWordsOf(text, max) {
-    var parts = text ? String(text).split(" ") : [];
-    return parts.length > max ? parts.slice(0, max).join(" ") + "..." : parts.join(" ");
+    return normalize.firstWords(text, max, "...");
   }
 
   // The block menu's own labels, from gestures.js, so the card and the menu

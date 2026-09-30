@@ -1056,9 +1056,6 @@
       return String(text).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
     }
 
-    var INLINE_KEEP = { strong: "strong", b: "strong", em: "em", i: "em" };
-    INLINE_KEEP[normalize.NOT_BOLD_TAG] = normalize.NOT_BOLD_TAG;
-    INLINE_KEEP[normalize.NOT_ITALIC_TAG] = normalize.NOT_ITALIC_TAG;
 
     // The markup a run block's words carry, spelled only with what cleanBlock
     // keeps: text, strong, em, br and the reset tags, and li in a list. Any
@@ -1075,8 +1072,8 @@
         var tag = tagOf(child);
         if (tag === "br") out += "<br>";
         else if (tag === "li") out += "<li>" + inlineMarkup(child) + "</li>";
-        else if (Object.prototype.hasOwnProperty.call(INLINE_KEEP, tag)) {
-          out += "<" + INLINE_KEEP[tag] + ">" + inlineMarkup(child) + "</" + INLINE_KEEP[tag] + ">";
+        else if (Object.prototype.hasOwnProperty.call(normalize.INLINE_ALLOWED, tag)) {
+          out += "<" + normalize.INLINE_ALLOWED[tag] + ">" + inlineMarkup(child) + "</" + normalize.INLINE_ALLOWED[tag] + ">";
         } else if (tag !== "script" && tag !== "style" && tag !== "template") out += inlineMarkup(child);
       }
       return out;
@@ -1275,8 +1272,7 @@
     }
 
     function firstWords(text) {
-      var words = normalize.normalizeText(String(text || "")).split(" ").filter(Boolean);
-      return words.slice(0, FIRST_WORDS).join(" ");
+      return normalize.firstWords(text, FIRST_WORDS);
     }
 
     // ---- opening --------------------------------------------------------------
@@ -4422,7 +4418,9 @@
     // leading chrome such as the marked file-name title.
     function hasContent() {
       return blocks.leafWalk(doc.body).some(function (el) {
-        return !markers.isInsideOverlay(el);
+        if (markers.isInsideOverlay(el)) return false;
+        // The rendered front matter is metadata, not something the reviewer wrote.
+        return !(el.closest && el.closest("details.frontmatter"));
       });
     }
 

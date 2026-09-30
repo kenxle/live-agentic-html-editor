@@ -409,7 +409,36 @@ function placeHtml(text, item, options) {
 }
 
 /** Place by the source's kind, told by its file name. */
+/**
+ * The fixes the reviewer accepted, as the contract says to find them: the
+ * suggestions on the thread's last agent turn (block, from, to). Only when the
+ * item's last reviewer turn is "Use the fixes"; a Keep mine turn carries none.
+ */
+function acceptedFixes(item) {
+  const thread = Array.isArray(item.thread) ? item.thread : [];
+  // The current instruction is the item's own note; the thread is history.
+  if (!/^Use the fixes/i.test(String(item.note || ""))) return null;
+  const lastAgent = [...thread].reverse().find((t) => t && t.agent && t.agent.proofread === true);
+  const list = lastAgent && Array.isArray(lastAgent.agent.suggestions) ? lastAgent.agent.suggestions : [];
+  return list.length ? list : null;
+}
+
+/** The contract's line: replace each fix's from words with its to words in the block already placed, and add no block again. */
+function applyFixes(text, fixes, md) {
+  let out = String(text);
+  fixes.forEach((fix) => {
+    const from = md ? mdEscape(fix.from) : fix.from;
+    const to = md ? mdEscape(fix.to) : fix.to;
+    const at = out.indexOf(from);
+    if (at !== -1) out = out.slice(0, at) + to + out.slice(at + from.length);
+  });
+  return out;
+}
+
 function place(file, text, item, options) {
+  const md = /\.(md|markdown)$/i.test(file);
+  const fixes = !(options && options.oldContract) ? acceptedFixes(item) : null;
+  if (fixes) return applyFixes(text, fixes, md);
   return /\.(md|markdown)$/i.test(file) ? placeMarkdown(text, item, options) : placeHtml(text, item, options);
 }
 

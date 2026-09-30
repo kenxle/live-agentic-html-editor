@@ -747,7 +747,7 @@ test.describe("free writing seams", () => {
   // block (<details class="frontmatter"><pre>) as page content, so a notes
   // file holding only front matter never opens ready to type. With hasContent
   // ignoring details.frontmatter this whole test passes (progress/phase7_fix_f4.md).
-  test.fixme("notes page with front matter: the page opens ready to type, the blocks sit below the metadata once, and the source keeps its front matter byte for byte", async ({
+  test("notes page with front matter: the page opens ready to type, the blocks sit below the metadata once, and the source keeps its front matter byte for byte", async ({
     page
   }) => {
     const front = "---\ntitle: Field notes\ndate: 2026-09-29\n---\n";
@@ -807,17 +807,16 @@ test.describe("free writing seams", () => {
   // The "long" case is a sitting past the 2000 characters review.json keeps of
   // each earlier revision (review_format BEFORE_MAX): the typo sits in a block
   // past that cut, so an agent reading only review.json cannot find the old
-  // words in after_history. WAITING ON F3 (testing I3, ADV 4): the contract
-  // decision (keep new_blocks uncut for run records, or tell the agent to find
-  // the old words by the suggestion's from). Once that lands this case is the
-  // guard; the scripted agent then follows the contract's new line.
+  // words in after_history. The scripted agent follows the contract's line: it
+  // reads the fixes (block, from, to) from the thread's last agent turn and
+  // replaces the words in place.
   const PROOF_CASES = [
     { answer: "use-fixes", long: false },
     { answer: "keep-mine", long: false },
     { answer: "use-fixes", long: true }
   ];
   for (const { answer, long } of PROOF_CASES) {
-    const proofTest = long ? test.fixme : test;
+    const proofTest = test;
     proofTest("proofreading" + (long ? " (long run, typo past character 2000)" : "") + ": a run over 150 words, placed, proofread; " + answer + ", the agent answers; not held or reopened over two reloads", async ({
       page
     }) => {
