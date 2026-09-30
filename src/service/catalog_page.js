@@ -28,6 +28,7 @@ var fs = require("node:fs");
 var path = require("node:path");
 
 var protocol = require("../shared/protocol.js");
+var tabIcon = require("./tab_icon.js");
 var markdown = require("./markdown.js");
 
 var SRC = path.join(__dirname, "..");
@@ -393,6 +394,7 @@ function renderPage(token) {
     '<meta name="viewport" content="width=device-width, initial-scale=1">',
     '<meta name="' + protocol.CATALOG_TOKEN_META + '" content="' + escapeAttribute(token) + '">',
     "<title>LAHE Library</title>",
+    tabIcon.LIBRARY_LINK,
     '<link rel="stylesheet" href="' + assetUrl(markdown.DOC_STYLE_ASSET) + '">',
     "<style>" + PAGE_STYLE + "</style>",
     '<script src="' + assetUrl("protocol.js") + '" defer></script>',

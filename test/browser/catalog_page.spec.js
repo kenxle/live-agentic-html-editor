@@ -681,6 +681,24 @@ test.describe("the Library page", () => {
     expect(after.width).toBe(before.width);
   });
 
+  test("the tab icon loads under the page's content policy, with no policy errors", async ({ page }) => {
+    const violations = [];
+    page.on("console", (msg) => { if (/Content Security Policy/i.test(msg.text())) violations.push(msg.text()); });
+    await routeCatalog(page, { list: freshList });
+    await openLibrary(page, helper);
+    const href = await page.locator('link[rel="icon"]').getAttribute("href");
+    expect(href).toMatch(/^data:image\/svg\+xml,/);
+    // The same URL as an image on the page: img-src governs both.
+    const loaded = await page.evaluate((src) => new Promise((resolve) => {
+      const img = new Image();
+      img.onload = () => resolve(img.naturalWidth > 0);
+      img.onerror = () => resolve(false);
+      img.src = src;
+    }), href);
+    expect(loaded).toBe(true);
+    expect(violations).toEqual([]);
+  });
+
   test("the older section's 'Search reaches all of them' is a subtitle, not a heading", async ({ page }) => {
     await routeCatalog(page, { list: freshList });
     await openLibrary(page, helper);
