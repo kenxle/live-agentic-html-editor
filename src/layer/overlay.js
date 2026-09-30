@@ -126,6 +126,19 @@
    * how the two drift apart. Pure: item in, tab name out, no card required, so
    * it answers for an item the rail has never been handed.
    */
+  // The agent's proofreading question on a run, not yet answered. The same
+  // test as tab_done's isProofreadQuestion, on the record alone.
+  function isProofreadWaiting(item) {
+    var reply = item && item[record.FIELD.REPLY];
+    return (
+      !!reply &&
+      reply.status === record.REPLY_STATUS.QUESTION &&
+      reply.proofread === true &&
+      item[record.FIELD.STATE] === record.STATE.READY &&
+      record.isRunRecord(item)
+    );
+  }
+
   function paneForItem(item) {
     var kind = item[record.FIELD.KIND];
     // The state the REVIEWER is shown, which is the state their card is placed
@@ -134,6 +147,11 @@
     // (record.displayState, and Ken on 2026-09-15).
     var state = record.displayState(item);
     if (state === record.STATE.HANDLED) return TAB.DONE;
+    // A proofreading question waits on the reviewer, not the agent, so its
+    // card goes back to Active until they answer (wireframe 06b: "The card is
+    // back on Active because it needs an answer"). Once answered it waits on
+    // the agent again, and goes back to Edits with every other hand edit.
+    if (isProofreadWaiting(item)) return TAB.ACTIVE;
     if (kind === record.KIND.EDIT || kind === record.KIND.FORMAT_ONLY || kind === record.KIND.DELETE) {
       return TAB.EDITS;
     }
