@@ -600,6 +600,53 @@ test.describe("the Library page", () => {
     await expectNothingSent(page, sent);
   });
 
+  test("rename: clicking outside saves like Enter; Escape cancels and sends nothing; empty or unchanged sends nothing", async ({ page }) => {
+    const list = freshList();
+    const calls = await routeCatalog(page, {
+      list: () => list,
+      answers: { "catalog.rename": (body) => {
+        if (body.review) reviewIn(list, body.review).custom_name = body.name.trim() || null;
+        else list.sessions.find((x) => x.id === body.session).custom_name = body.name.trim() || null;
+        return { status: 200, body: Object.assign({}, body, { name: body.name.trim() || null }) };
+      } }
+    });
+    const renames = () => calls.filter((c) => c.name === "catalog.rename").map((c) => c.body);
+    await openLibrary(page, helper);
+
+    // Blur saves: type, then click somewhere else on the page.
+    const brief = rowLocator(page, "r_brief");
+    await brief.locator("button.lib-name").click();
+    await brief.locator(".lib-rename-input").fill("Saved by blur");
+    await page.locator("h1").click();
+    await expect.poll(renames).toEqual([{ review: "r_brief", name: "Saved by blur" }]);
+    await expect(brief.locator(".lib-name")).toHaveText("Saved by blur");
+
+    // Escape cancels, and the blur that follows does not save.
+    const spec = rowLocator(page, "r_spec");
+    await spec.locator("button.lib-name").click();
+    await spec.locator(".lib-rename-input").fill("Never saved");
+    await spec.locator(".lib-rename-input").press("Escape");
+    await page.locator("h1").click();
+    await expect(spec.locator(".lib-name")).toHaveText("Shared Title");
+
+    // Empty keeps the current name; so does an unchanged one, by Enter or by blur.
+    await spec.locator("button.lib-name").click();
+    await spec.locator(".lib-rename-input").fill("   ");
+    await spec.locator(".lib-rename-input").press("Enter");
+    await expect(spec.locator(".lib-name")).toHaveText("Shared Title");
+    await spec.locator("button.lib-name").click();
+    await page.locator("h1").click();
+    await expect(spec.locator(".lib-rename-input")).toHaveCount(0);
+
+    // A session's name behaves the same: blur saves.
+    const old3 = page.locator('details[data-session="s_old3"]');
+    await old3.locator(".lib-card-name").click();
+    await old3.locator(".lib-rename-input").fill("Blurred session");
+    await page.locator("h1").click();
+    await expect(old3.locator(".lib-card-name")).toHaveText("Blurred session");
+    expect(renames()).toEqual([{ review: "r_brief", name: "Saved by blur" }, { session: "s_old3", name: "Blurred session" }]);
+  });
+
   test("rename a session: a click on the card's name edits it; the card keeps its fold and shows the original under it", async ({ page }) => {
     const list = freshList();
     const calls = await routeCatalog(page, {

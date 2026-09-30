@@ -238,9 +238,36 @@
     if (found && found.select) found.select();
   }
 
+  // Set while an edit is being closed by Enter or Escape, so the blur that
+  // closing causes does not save a second time (or save a cancelled edit).
+  var renameClosing = false;
+
+  /**
+   * Save what the field holds. Empty or unchanged saves nothing and just
+   * closes the field; typing the original name back clears the rename.
+   */
+  // True while the field is losing focus to somewhere else: the reader's
+  // click goes where they put it, not back to the name.
+  var blurTarget = false;
+  function blurring() {
+    return blurTarget;
+  }
+
+  function commitRename(input) {
+    var id = input.getAttribute("data-rename");
+    var typed = String(input.value || "").trim();
+    var current = input.getAttribute("data-current") || "";
+    var original = input.getAttribute("data-original") || "";
+    if (!typed || typed === current) {
+      cancelRename(id);
+      return;
+    }
+    saveRename(id, typed === original ? "" : typed);
+  }
+
   function saveRename(reviewId, value) {
     renameDraft = { id: null, value: "" };
-    focusKey(reviewId + ":rename");
+    if (!blurring()) focusKey(reviewId + ":rename");
     update(VM.beginRename(state, reviewId, value));
     var body = reviewId.indexOf("session:") === 0
       ? { session: reviewId.slice("session:".length), name: value }
@@ -253,7 +280,7 @@
 
   function cancelRename(reviewId) {
     renameDraft = { id: null, value: "" };
-    focusKey(reviewId + ":rename");
+    if (!blurring()) focusKey(reviewId + ":rename");
     update(VM.withRenaming(state, null));
   }
 
@@ -388,6 +415,8 @@
           class: "lib-rename-input",
           "data-rename": row.id,
           "data-key": row.id + ":rename-input",
+          "data-current": row.rename.value,
+          "data-original": row.rename.original,
           value: typed,
           maxlength: "80",
           "aria-label": row.rename.label + ": " + row.rename.original,
@@ -571,6 +600,8 @@
           class: "lib-rename-input",
           "data-rename": key,
           "data-key": key + ":rename-input",
+          "data-current": card.rename.value,
+          "data-original": card.rename.original,
           value: typed,
           maxlength: "80",
           "aria-label": card.rename.label + ": " + card.rename.original,
@@ -848,12 +879,27 @@
     if (!id) return;
     if (event.key === "Enter") {
       event.preventDefault();
-      saveRename(id, event.target.value);
+      renameClosing = true;
+      commitRename(event.target);
+      renameClosing = false;
     } else if (event.key === "Escape") {
       event.preventDefault();
       event.stopPropagation();
+      renameClosing = true;
       cancelRename(id);
+      renameClosing = false;
     }
+  });
+  // Clicking outside, or tabbing away, saves like Enter.
+  els.main.addEventListener("focusout", function (event) {
+    var input = event.target;
+    if (renameClosing || !input || !input.getAttribute || !input.getAttribute("data-rename")) return;
+    if (!input.isConnected) return;
+    renameClosing = true;
+    blurTarget = true;
+    commitRename(input);
+    blurTarget = false;
+    renameClosing = false;
   });
   els.search.addEventListener("input", function () {
     update(VM.withQuery(state, els.search.value));

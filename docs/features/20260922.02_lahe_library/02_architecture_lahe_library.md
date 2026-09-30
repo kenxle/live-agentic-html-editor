@@ -265,7 +265,7 @@ The view model owns these; the list response does not change for them.
 - Reviews from before sessions get one card per project, titled "<project>, from before sessions"; reviews with no project keep "Reviews from before sessions". Cards sort by their newest review's `last`.
 - A notice every row of a card carries (for example the pre-session pick-up note, or "needs an agent" with none attached) is said once on the card and taken off the rows.
 - The top section holds only the waiting and starred reviews, under their session's header. A session's other reviews appear in the time section their own newest time picks, as a second card of that session. "Search reaches all of them." is the older section's subtitle, not part of its heading.
-- A row's name and a session card's title are the rename control: a click or Enter edits them in place. After a rename the original sits small under it; a rename equal to the original shows once.
+- A row's name and a session card's title are the rename control: a click or Enter edits them in place. Enter or clicking outside (blur) saves; Escape cancels and the blur it causes saves nothing. An empty or unchanged value changes nothing; typing the original name back clears the rename. After a rename the original sits small under it; a rename equal to the original shows once.
 - The Hand to agent menu floats under its button, so opening it never widens the action column.
 - Long lists collapse for the page's lifetime: a review's pages show as "N pages" with a toggle, and a card with more than 5 reviews shows its newest 5 plus any waiting, starred, or acted-on row, with "Show N more". Search shows everything that matches.
 
