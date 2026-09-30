@@ -61,8 +61,18 @@
     FIELD.PAGE_SEQ,
     FIELD.SOURCE_HINT,
     FIELD.THREAD,
-    FIELD.UPDATED_AT
+    FIELD.UPDATED_AT,
+    // Free writing: the run is the reviewer's typing like `after` is.
+    FIELD.NEW_BLOCKS,
+    FIELD.ANCHOR_AFTER_HTML,
+    FIELD.ANCHOR_TAG_AFTER,
+    FIELD.PLACEMENT
   ];
+
+  // Optional content fields: absent on today's records. When the browser copy
+  // does not carry one, the merged item does not either, rather than carrying
+  // the key with an undefined value.
+  var OPTIONAL_CONTENT_FIELDS = [FIELD.NEW_BLOCKS, FIELD.ANCHOR_AFTER_HTML, FIELD.ANCHOR_TAG_AFTER, FIELD.PLACEMENT];
 
   // The reasons a merge decided what it decided. Returned on the result so a
   // failing test says which half of the rule broke, and so the rail can say
@@ -85,7 +95,12 @@
   function copyContent(from, onto) {
     var out = Object.assign({}, onto);
     for (var i = 0; i < CONTENT_FIELDS.length; i += 1) {
-      out[CONTENT_FIELDS[i]] = from[CONTENT_FIELDS[i]];
+      var key = CONTENT_FIELDS[i];
+      if (OPTIONAL_CONTENT_FIELDS.indexOf(key) !== -1 && from[key] === undefined) {
+        delete out[key];
+        continue;
+      }
+      out[key] = from[key];
     }
     return out;
   }

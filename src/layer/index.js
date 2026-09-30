@@ -120,7 +120,7 @@
       tag = doc.querySelector(protocol.SCRIPT_SELECTOR);
       from = tag ? "selector" : null;
     }
-    if (!tag) return { review: null, token: null, helper: null, frames: null, start: null, from: null };
+    if (!tag) return { review: null, token: null, helper: null, frames: null, start: null, notes: null, from: null };
     return {
       review: tag.getAttribute(attr.REVIEW) || null,
       token: tag.getAttribute(attr.TOKEN) || null,
@@ -129,6 +129,8 @@
       // start with nothing of the library's on screen.
       frames: tag.getAttribute(attr.FRAMES) || null,
       start: tag.getAttribute(attr.START) || null,
+      // A `lahe write` notes review: the one value protocol.NOTES_ON, or null.
+      notes: tag.getAttribute(attr.NOTES) || null,
       from: from
     };
   }
@@ -143,6 +145,9 @@
       helper: opts.helper || fromTag.helper || protocol.DEFAULT_HELPER_ORIGIN,
       frames: opts.frames !== undefined ? opts.frames : fromTag.frames,
       start: opts.start !== undefined ? opts.start : fromTag.start,
+      // True only on a notes review (design call 2). Editing reads it to open
+      // an empty page for typing; every other empty page stays in reading.
+      notes: opts.notes !== undefined ? opts.notes === true : fromTag.notes === protocol.NOTES_ON,
       from: opts.review ? "options" : fromTag.from
     };
   }
@@ -507,8 +512,19 @@
         sync: function () {
           return sync;
         },
-        onContinued: function () {
+        onContinued: function (next) {
           tab.refresh();
+          // The Edits row reads the record too: after "Use the fixes" its block
+          // list has to show the fixed words.
+          if (editsTab && typeof editsTab.refresh === "function") editsTab.refresh();
+          // "Use the fixes" is the reviewer's reword of a placed run at a new
+          // revision, and the page has to show the fixed words: replay's
+          // branch three rewrites the placed blocks in place. Only a run
+          // record; every other continuation leaves the page as it is.
+          if (next && ns.record.isRunRecord(next)) {
+            refreshItems();
+            ns.replay.schedule(ns.replay.REASON.REPLY, { immediate: true });
+          }
         },
         isReadOnly: function () {
           return readOnlyActive;
@@ -585,6 +601,13 @@
       // The condition ended, so its chip goes too (clear, not dismiss: dismiss
       // would suppress every future refusal's chip).
       rail.failures.clear("SECOND_WINDOW_REFUSED");
+      // This window is now the review's holder, so it does what boot does for
+      // a holder: commit what a dead window left as a draft. After a crash the
+      // helper still names the dead window for a while, so the next load
+      // starts read-only and only gets here once it takes the review back.
+      if (typeof editing.recoverWithdrawn === "function" && editing.recoverWithdrawn().length) {
+        ns.replay.schedule(ns.replay.REASON.BOOT);
+      }
       // A collision flagged while this window was refused was held, not spent.
       // The reviewer has taken the review back, so tell it now.
       if (conflictToasts) conflictToasts.sync();
@@ -630,6 +653,13 @@
       onLimit: function (text) {
         rail.setLimitNote(text);
       },
+      // The helper refused a run event (record.validateRun), so the agent has
+      // not seen it. The refusal lives in sync; the card asks for it through
+      // the source set below and repaints now, so a refused item is never shown
+      // as sent (free writing, plan Task 3.2).
+      onItemRefused: function (itemId) {
+        rail.refreshCard(itemId);
+      },
       onRefused: function (info) {
         enterReadOnly(info);
       },
@@ -673,6 +703,10 @@
       onPageChanged: function () {
         rail.setStatusLine(ns.overlay.STATUS.PAGE_RELOADING);
       }
+    });
+
+    rail.setRefusalSource(function (itemId) {
+      return sync && typeof sync.refusalFor === "function" ? sync.refusalFor(itemId) : null;
     });
 
     // The refusal panel's "Review here instead" button (finding 12), through the
@@ -750,6 +784,15 @@
       reviewId: reviewId,
       page: page,
       sync: sync,
+      // The review's notes flag (design call 2): only a notes review opens an
+      // empty page for typing.
+      notes: config.notes === true,
+      // Cmd-Shift-E from the rail returns focus to the page, unless the
+      // reviewer is typing in one of the rail's own fields.
+      railTextFocus: function () {
+        var info = rail && typeof rail.activeElementInfo === "function" ? rail.activeElementInfo() : null;
+        return !!info && (info.tag === "TEXTAREA" || info.tag === "INPUT" || info.isCardInput === true);
+      },
       // Same reason as the comment surface above: a full browser storage during
       // typing is said on the rail rather than thrown at the input handler.
       onFailure: function (failure) {
@@ -1045,7 +1088,10 @@
         reviewId: reviewId,
         overlay: rail,
         host: rail.tabBody(ns.overlay.TAB.EDITS),
-        editing: editing
+        editing: editing,
+        // The commit wash reads these three; named here, not fished out of the
+        // page's namespace by the tab.
+        washModules: { anchor: ns.anchor, blocks: ns.blocks, highlight: ns.highlight }
       });
       made.mount();
       return made;

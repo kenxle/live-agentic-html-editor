@@ -169,6 +169,25 @@
     "." + ROW_CLASS + "__structure:empty{display:none}",
     "." + ROW_CLASS + "__said{font-size:12px;color:var(--ink-soft)}",
     "." + ROW_CLASS + "__said:empty{display:none}",
+    // A run's two pinned lines: where the new text went, then its shape. The
+    // first reads as the row's header, the second as its quieter subtitle.
+    "." + ROW_CLASS + "__run{display:flex;flex-direction:column;gap:2px}",
+    "." + ROW_CLASS + "__run[hidden]{display:none}",
+    "." + ROW_CLASS + "__run-first{margin:0;font-size:13px;line-height:1.4;color:var(--ink);font-weight:550}",
+    "." + ROW_CLASS + "__run-second{margin:0;font-size:12.5px;line-height:1.45;color:var(--ink-soft)}",
+    // The blocks by type, under the card's disclosure. Each carries the accent
+    // rule an edit pair wears, because every block here is the reviewer's own
+    // new text; a moved tail wears the neutral rule, because it is not.
+    "." + ROW_CLASS + "__blocks{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:5px}",
+    "." + ROW_CLASS + "__blocks[hidden]{display:none}",
+    "." + ROW_CLASS + "__block{display:flex;flex-direction:column;gap:1px;",
+    "border-left:2px solid var(--accent);padding-left:9px}",
+    "." + ROW_CLASS + "__block[data-lahe-run-block='moved']{border-left-color:var(--line)}",
+    "." + ROW_CLASS + "__block-label{font-size:10px;font-weight:650;letter-spacing:.06em;",
+    "text-transform:uppercase;color:var(--ink-faint)}",
+    "." + ROW_CLASS + "__block-words{font-size:12.5px;line-height:1.45;color:var(--ink);white-space:pre-wrap;",
+    "display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}",
+    "." + ROW_CLASS + "__pair[hidden]{display:none}",
     // An undo that could not be carried out says so here, on the row it failed
     // on, in the rail's warning color. Never a silent no-op.
     "." + ROW_CLASS + "__failed{font-size:11.5px;color:var(--warn);",
@@ -292,6 +311,39 @@
   }
 
   // ---------------------------------------------------------------------------
+  // A free-writing run (plan Task 3.2)
+  // ---------------------------------------------------------------------------
+  //
+  // A run's row leads with overlay's pinned two-line summary, then lists its
+  // blocks by the block menu's labels. The before-and-after pair stays only
+  // when the anchor itself changed, and then it shows the anchor alone: the
+  // whole sitting's before-and-after is the list below it, said twice.
+
+  /** The new_blocks indexes a commit washes: new text only, never a moved tail. */
+  function runWashIndexes(item) {
+    var list = item && Array.isArray(item[record.FIELD.NEW_BLOCKS]) ? item[record.FIELD.NEW_BLOCKS] : [];
+    var out = [];
+    list.forEach(function (b, i) {
+      if (b && b.from_anchor !== true) out.push(i);
+    });
+    return out;
+  }
+
+  // The anchor's own before and after, when the sitting changed it.
+  function runAnchorPair(item) {
+    var F = record.FIELD;
+    var before = normalize.blockText(typeof item[F.BEFORE_HTML] === "string" ? item[F.BEFORE_HTML] : "");
+    var afterHtml = typeof item[F.ANCHOR_AFTER_HTML] === "string" ? item[F.ANCHOR_AFTER_HTML] : null;
+    if (afterHtml === null) return null;
+    var after = normalize.blockText(afterHtml);
+    var tagAfter = item[F.ANCHOR_TAG_AFTER];
+    if (normalize.normalizeText(before) === normalize.normalizeText(after) && !(typeof tagAfter === "string" && tagAfter)) {
+      return null;
+    }
+    return { before: before, after: after };
+  }
+
+  // ---------------------------------------------------------------------------
   // The tab
   // ---------------------------------------------------------------------------
 
@@ -320,6 +372,10 @@
     var rail = opts.overlay || overlayModule.shared;
     var host = opts.host || null;
     var editing = opts.editing || null;
+    // The three browser modules the commit wash reads. Named here so the
+    // dependency is visible; a caller that passes none gets the page's own
+    // namespace, which is what index.js relies on today.
+    var washModules = opts.washModules || null;
 
     var mounted = false;
     var unsubscribe = null;
@@ -381,8 +437,9 @@
       addStyle();
       buildBar();
       if (editing && typeof editing.onChange === "function") {
-        unsubscribe = editing.onChange(function () {
+        unsubscribe = editing.onChange(function (item, event) {
           refresh();
+          if (event === "committed" && item) washCommitted(item);
         });
       }
       refresh();
@@ -453,7 +510,14 @@
         if (!seen[id]) dropRow(id);
       });
 
-      paintBar(items.length);
+      // The empty draft an empty page opens with, and a draft that changes
+      // nothing yet, are not hand edits: the rail does not draw them, so the
+      // count does not claim them either.
+      paintBar(
+        items.filter(function (item) {
+          return !overlayModule.isQuietDraft(item);
+        }).length
+      );
       return api;
     }
 
@@ -469,10 +533,28 @@
       // change stated a second time after the reviewer had just read it.
       row.appendChild(el("p", ROW_CLASS + "__said", ""));
 
+      // A free-writing run's two pinned lines. Built for every row and hidden
+      // on the rows that are not runs, so a row's shape never changes under a
+      // repaint.
+      var run = el("div", ROW_CLASS + "__run");
+      var runFirst = el("p", ROW_CLASS + "__run-first", "");
+      runFirst.setAttribute("data-lahe-run-first", "");
+      var runSecond = el("p", ROW_CLASS + "__run-second", "");
+      runSecond.setAttribute("data-lahe-run-second", "");
+      run.appendChild(runFirst);
+      run.appendChild(runSecond);
+      run.hidden = true;
+      row.appendChild(run);
+
       var pair = el("div", ROW_CLASS + "__pair");
       pair.appendChild(el("p", ROW_CLASS + "__before", ""));
       pair.appendChild(el("p", ROW_CLASS + "__after", ""));
       row.appendChild(pair);
+
+      var blockList = el("ol", ROW_CLASS + "__blocks");
+      blockList.setAttribute("aria-label", "New blocks");
+      blockList.hidden = true;
+      row.appendChild(blockList);
 
       row.appendChild(el("p", ROW_CLASS + "__structure", ""));
 
@@ -561,16 +643,96 @@
 
     function updateRow(row, item) {
       var text = rowText(item);
+      var summary = overlayModule.runSummary(item);
       row.setAttribute("data-kind", item[record.FIELD.KIND]);
       var before = row.querySelector("." + ROW_CLASS + "__before");
       var after = row.querySelector("." + ROW_CLASS + "__after");
-      before.textContent = text.before;
-      after.textContent = text.after;
-      after.setAttribute("data-empty", text.emptyAfter ? "true" : "false");
-      row.querySelector("." + ROW_CLASS + "__structure").textContent = text.structure;
-      row.querySelector("." + ROW_CLASS + "__said").textContent = item[record.FIELD.CHANGE] || "";
+      var pair = row.querySelector("." + ROW_CLASS + "__pair");
+      if (summary) {
+        // The anchor alone, and only when the sitting changed it: the whole
+        // sitting's before-and-after is the block list below, said twice.
+        var anchorPair = runAnchorPair(item);
+        before.textContent = anchorPair ? anchorPair.before : "";
+        after.textContent = anchorPair ? anchorPair.after : "";
+        after.setAttribute("data-empty", "false");
+        pair.hidden = !anchorPair;
+      } else {
+        before.textContent = text.before;
+        after.textContent = text.after;
+        after.setAttribute("data-empty", text.emptyAfter ? "true" : "false");
+        pair.hidden = false;
+      }
+      row.querySelector("." + ROW_CLASS + "__structure").textContent = summary ? "" : text.structure;
+      // A run's change text is written for the agent, so the row leads with
+      // the reviewer's two lines instead.
+      row.querySelector("." + ROW_CLASS + "__said").textContent = summary ? "" : item[record.FIELD.CHANGE] || "";
+      paintRun(row, summary);
       paintUndoButton(row.querySelector("[data-lahe-act='undo']"));
       return row;
+    }
+
+    // The two lines and the block list, written into nodes that already exist.
+    // The list is rebuilt only when what it says changed, so a repaint of an
+    // unchanged row moves nothing.
+    function paintRun(row, summary) {
+      var run = row.querySelector("." + ROW_CLASS + "__run");
+      var list = row.querySelector("." + ROW_CLASS + "__blocks");
+      run.hidden = !summary;
+      list.hidden = !summary;
+      row.querySelector("[data-lahe-run-first]").textContent = summary ? summary.first : "";
+      row.querySelector("[data-lahe-run-second]").textContent = summary ? summary.second : "";
+      var key = summary ? JSON.stringify(summary.blocks) : "";
+      if (list.getAttribute("data-lahe-run-key") === key) return;
+      list.setAttribute("data-lahe-run-key", key);
+      while (list.firstChild) list.removeChild(list.firstChild);
+      if (!summary) return;
+      summary.blocks.forEach(function (b) {
+        var li = el("li", ROW_CLASS + "__block");
+        li.setAttribute("data-lahe-run-block", b.moved ? "moved" : "new");
+        var label = el("span", ROW_CLASS + "__block-label", b.moved ? b.label + ", moved" : b.label);
+        label.setAttribute("data-lahe-run-label", "");
+        var words = el("span", ROW_CLASS + "__block-words", b.text);
+        words.setAttribute("data-lahe-run-words", "");
+        li.appendChild(label);
+        li.appendChild(words);
+        list.appendChild(li);
+      });
+    }
+
+    // -------------------------------------------------------------------------
+    // The wash on commit
+    // -------------------------------------------------------------------------
+    //
+    // The wireframe's dashed "sent, not yet placed" rule is cut. When a sitting
+    // commits, its new blocks wear the changed-text wash (highlight.js) for a
+    // moment, the same mark an agent's change wears after a rebuild. A moved
+    // tail is not new text and is not washed. Everything here is resolved off
+    // the namespace, because anchor, blocks and highlight are browser modules
+    // this file does not need anywhere else.
+    function washCommitted(item) {
+      var ns = washModules || (root && root.LAHE ? root.LAHE : null);
+      if (!doc || !ns || !ns.anchor || !ns.blocks || !ns.highlight || !ns.highlight.shared) return 0;
+      var indexes = runWashIndexes(item);
+      if (!indexes.length) return 0;
+      var F = record.FIELD;
+      var ref = item[F.REGION] && item[F.REGION].ref;
+      if (!ref) return 0;
+      var marked = 0;
+      try {
+        var found = ns.anchor.resolve(ref, doc, { placement: item[F.PLACEMENT], tagAfter: item[F.ANCHOR_TAG_AFTER] });
+        if (!found || !found.element) return 0;
+        var run = ns.blocks.runElementsFor(item, doc, found.element);
+        run.blocks.forEach(function (b) {
+          if (b.status !== "whole" || indexes.indexOf(b.index) === -1 || !b.elements[0]) return;
+          var range = doc.createRange();
+          range.selectNodeContents(b.elements[0]);
+          if (ns.highlight.shared.markChanged("run:" + item[F.ID] + ":" + b.index, range)) marked += 1;
+        });
+      } catch (err) {
+        // A wash is an attention mark. A page it cannot be found on gets none.
+        return marked;
+      }
+      return marked;
     }
 
     function dropRow(id) {
@@ -667,7 +829,8 @@
               before: text.before,
               after: text.after,
               structure: text.structure,
-              said: item[record.FIELD.CHANGE] || null
+              said: item[record.FIELD.CHANGE] || null,
+              run: overlayModule.runSummary(item)
             };
           });
       },
@@ -716,6 +879,7 @@
     isHandEdit: isHandEdit,
     structuralSummary: structuralSummary,
     rowText: rowText,
+    runWashIndexes: runWashIndexes,
     createEditsTab: createEditsTab
   };
 });

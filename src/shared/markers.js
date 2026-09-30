@@ -65,6 +65,26 @@
   // to write it into the source.
   var STAMP_ATTR = "data-lahe-id";
 
+  // FREE WRITING (docs/features/20260928.01_free_writing).
+  //
+  // The hero title a Markdown render takes from the FILE NAME when the file has
+  // no "#" heading. It is not in the file, so it is page chrome: the block
+  // reader skips it, the run starts after it, and no agent is ever asked to
+  // write it. Only src/service/markdown.js sets it. Its value is always
+  // FILE_TITLE_VALUE.
+  var FILE_TITLE_ATTR = "data-lahe-file-title";
+  var FILE_TITLE_VALUE = "file-name";
+
+  // Set by the layer on the editing host (the nearest ancestor holding the
+  // anchor and its run) while a writing session is open, and removed at
+  // commit. highlight.js hides that element's focus ring with one rule that
+  // matches this attribute and nothing of the page's own (D8).
+  var EDIT_HOST_ATTR = "data-lahe-edit-host";
+
+  function isFileTitle(el) {
+    return !!(el && typeof el.getAttribute === "function" && el.getAttribute(FILE_TITLE_ATTR) === FILE_TITLE_VALUE);
+  }
+
   function isToolAttrName(name) {
     if (typeof name !== "string") return false;
     return name.toLowerCase().indexOf(TOOL_ATTR_PREFIX) === 0;
@@ -117,6 +137,10 @@
     PROTECTED_ATTR: PROTECTED_ATTR,
     TURBO_PERMANENT_ATTR: TURBO_PERMANENT_ATTR,
     AUTHOR_REGION_ATTR: AUTHOR_REGION_ATTR,
+    FILE_TITLE_ATTR: FILE_TITLE_ATTR,
+    FILE_TITLE_VALUE: FILE_TITLE_VALUE,
+    EDIT_HOST_ATTR: EDIT_HOST_ATTR,
+    isFileTitle: isFileTitle,
     isToolAttrName: isToolAttrName,
     isToolClassToken: isToolClassToken,
     roleOf: roleOf,

@@ -103,16 +103,22 @@ test.describe("oversized records", () => {
     await bootLayer(page);
 
     // A real picture as a data: URL, the size the recorded one was.
+    //
+    // The generator multiplies with Math.imul and reads its HIGH bits. A plain
+    // `*` overflows a double's 53 bits and loses the low ones, which left the
+    // noise with a pattern: Firefox's PNG encoder compressed it to about 70KB,
+    // under the size this test needs, while Chromium and WebKit did not. Noise
+    // with no pattern compresses to about the same size in every browser.
     const src = await page.evaluate(function () {
       var canvas = document.createElement("canvas");
-      canvas.width = 480;
-      canvas.height = 240;
+      canvas.width = 240;
+      canvas.height = 120;
       var ctx = canvas.getContext("2d");
-      var data = ctx.createImageData(480, 240);
+      var data = ctx.createImageData(240, 120);
       var seed = 7;
       for (var i = 0; i < data.data.length; i += 1) {
-        seed = (seed * 1103515245 + 12345) & 0x7fffffff;
-        data.data[i] = i % 4 === 3 ? 255 : seed & 0xff;
+        seed = (Math.imul(seed, 1103515245) + 12345) & 0x7fffffff;
+        data.data[i] = i % 4 === 3 ? 255 : (seed >>> 16) & 0xff;
       }
       ctx.putImageData(data, 0, 0);
       var url = canvas.toDataURL("image/png");

@@ -17,6 +17,7 @@ var marked = markedPackage.marked;
 var links = require("./markdown_links.js");
 var tabIcon = require("./tab_icon.js");
 var stateDir = require("./state_dir.js");
+var markers = require("../shared/markers.js");
 
 var MARKDOWN_EXTENSIONS = links.MARKDOWN_EXTENSIONS;
 var MERMAID_ASSET = ".lahe-mermaid-11.16.1.js";
@@ -148,6 +149,14 @@ function titleFrom(source, body) {
   return heading ? heading[1].replace(/[*_`]/g, "").trim() : path.basename(source);
 }
 
+// A title taken from the file name is not in the file, so it is page chrome:
+// the layer never anchors to it and the handled check never reads it as a
+// block (docs/features/20260928.01_free_writing, "Empty page and lahe write").
+function fileTitleAttr(source, body, title) {
+  if (title !== path.basename(source)) return "";
+  return " " + markers.FILE_TITLE_ATTR + "=\"" + markers.FILE_TITLE_VALUE + "\"";
+}
+
 function artifactPath(dir, sessionId, source) {
   var resolved = path.resolve(source);
   var hash = crypto.createHash("sha256").update(resolved).digest("hex").slice(0, 16);
@@ -234,10 +243,39 @@ function missingReviewNote(sourcePath, sessionId) {
     "onclick=\"navigator.clipboard&&navigator.clipboard.writeText(this.getAttribute('data-command'))\">Copy the command</button></p>";
 }
 
+/**
+ * The Markdown source's text. With noFollow (a notes review, security review
+ * 5) the file is opened once without following a symlink, checked on that
+ * same handle to be a regular file with one link, and read from it, so a swap
+ * between a check and the read cannot point the render somewhere else.
+ */
+function readSource(file, noFollow) {
+  if (!noFollow) return fs.readFileSync(file, "utf8");
+  var nofollow = fs.constants.O_NOFOLLOW;
+  if (!nofollow && fs.lstatSync(file).isSymbolicLink()) {
+    throw new Error(file + " is a symlink; a notes page is read from a real file only");
+  }
+  var fd;
+  try {
+    fd = fs.openSync(file, fs.constants.O_RDONLY | (nofollow || 0));
+  } catch (err) {
+    if (err.code === "ELOOP") throw new Error(file + " is a symlink; a notes page is read from a real file only (ELOOP)");
+    throw err;
+  }
+  try {
+    var stat = fs.fstatSync(fd);
+    if (!stat.isFile()) throw new Error(file + " is not a regular file");
+    if (stat.nlink > 1) throw new Error(file + " has more than one hard link; a notes page is read from a file with one name only");
+    return fs.readFileSync(fd, "utf8");
+  } finally {
+    fs.closeSync(fd);
+  }
+}
+
 function render(source, options) {
   var opts = options || {};
   var resolved = path.resolve(source);
-  var markdown = fs.readFileSync(resolved, "utf8").replace(/^[\u200B\u200C\u200D\u200E\u200F\uFEFF]/, "");
+  var markdown = readSource(resolved, opts.noFollow === true).replace(/^[\u200B\u200C\u200D\u200E\u200F\uFEFF]/, "");
   var parts = splitFrontmatter(markdown);
   var prefix = opts.assetPrefix || assetPrefix(resolved);
   var registry = opts.links || links.createRegistry({ mounts: keyedMount(prefix, resolved) });
@@ -291,7 +329,9 @@ function render(source, options) {
   var lede = parseChunk(parser, page.lede, lexed.links);
   var blocks = [
     "<div class=\"hero\">",
-    "<h1>" + (page.heading ? parser.parseInline(page.heading.tokens) : escapeHtml(title)) + "</h1>",
+    page.heading
+      ? "<h1>" + parser.parseInline(page.heading.tokens) + "</h1>"
+      : "<h1" + fileTitleAttr(resolved, parts.body, title) + ">" + escapeHtml(title) + "</h1>",
     lede,
     "</div>"
   ];
@@ -338,12 +378,17 @@ function copyFonts(dir) {
   });
 }
 
-function writeArtifact(dir, sessionId, source) {
+/**
+ * @param {{noFollow?: boolean}} [options] noFollow for a notes review: see
+ *   readSource.
+ */
+function writeArtifact(dir, sessionId, source, options) {
+  var noFollow = !!(options && options.noFollow === true);
   stateDir.ensureReviewArtifactsRoot(dir, sessionId);
   var target = artifactPath(dir, sessionId, source);
   var prefix = assetPrefix(source);
   var registry = links.createRegistry({ mounts: keyedMount(prefix, path.resolve(source)) });
-  var html = render(source, { assetPrefix: prefix, links: registry });
+  var html = render(source, { assetPrefix: prefix, links: registry, noFollow: noFollow });
   if (html.indexOf("./" + MERMAID_ASSET) !== -1) {
     fs.copyFileSync(MERMAID_SOURCE, path.join(path.dirname(target), MERMAID_ASSET));
   }

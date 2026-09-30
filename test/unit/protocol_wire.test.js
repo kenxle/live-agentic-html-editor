@@ -439,3 +439,90 @@ test("the drain and monitor commands carry a state directory, quoted when the pa
     "lahe monitor --session s_1 --state-dir '/Users/a b/Library/Application Support/lahe'"
   );
 });
+
+// ---------------------------------------------------------------------------
+// Free writing (docs/features/20260928.01_free_writing, plan Task 1.5)
+// ---------------------------------------------------------------------------
+
+test("the service contract is 14: an old helper stores run records unchecked", () => {
+  assert.equal(protocol.SERVICE_CONTRACT, 14);
+});
+
+test("the version check refuses a helper on contract 13 and accepts 14", () => {
+  assert.equal(protocol.helperContractVerdict({ service_contract: 13 }), protocol.CONTRACT_VERDICT.OLDER);
+  assert.equal(protocol.helperContractVerdict({ service_contract: 14 }), protocol.CONTRACT_VERDICT.CURRENT);
+  assert.equal(protocol.helperContractVerdict({ service_contract: 15 }), protocol.CONTRACT_VERDICT.NEWER);
+  assert.equal(protocol.helperContractVerdict({}), protocol.CONTRACT_VERDICT.OLDER, "a helper that names no contract is older");
+});
+
+test("run records get a longer draft floor, and other drafts keep 10 seconds", () => {
+  assert.equal(protocol.FLUSH.RUN_DRAFT_FLOOR_MS, 30000);
+  assert.equal(protocol.FLUSH.DRAFT_FLOOR_MS, 10000);
+});
+
+test("a review write may mark the review as notes, and only as true", () => {
+  assert.match(protocol.route("review.write").request, /notes\?: true/);
+  assert.equal(protocol.acceptsNotesFlag({ notes: true }), true);
+  assert.equal(protocol.acceptsNotesFlag({ notes: false }), false);
+  assert.equal(protocol.acceptsNotesFlag({ notes: "true" }), false);
+  assert.equal(protocol.acceptsNotesFlag({}), false);
+});
+
+test("the reply field names include proofread and suggestions", () => {
+  assert.equal(protocol.REPLY_FIELD.PROOFREAD, "proofread");
+  assert.equal(protocol.REPLY_FIELD.SUGGESTIONS, "suggestions");
+});
+
+function replyLine(fields) {
+  return JSON.stringify(Object.assign({ item: "itm_1", rev: 2, agent: "claude" }, fields));
+}
+
+test("the reply parser accepts a proofread question with suggestions", () => {
+  const got = protocol.parseReplyLine(replyLine({
+    status: "question",
+    text: "I placed your words as written. Two fixes you may want.",
+    proofread: true,
+    suggestions: [{ block: 0, from: "teh", to: "the" }, { block: 3, from: "its", to: "it's" }]
+  }));
+  assert.equal(got.ok, true, got.reason);
+  assert.equal(got.reply.proofread, true);
+  assert.deepEqual(got.reply.suggestions, [{ block: 0, from: "teh", to: "the" }, { block: 3, from: "its", to: "it's" }]);
+});
+
+test("an ordinary reply carries no proofread keys", () => {
+  const got = protocol.parseReplyLine(replyLine({ status: "handled" }));
+  assert.equal(got.ok, true);
+  assert.equal(Object.prototype.hasOwnProperty.call(got.reply, "proofread"), false);
+  assert.equal(Object.prototype.hasOwnProperty.call(got.reply, "suggestions"), false);
+});
+
+test("the reply parser refuses suggestions on a handled reply", () => {
+  const got = protocol.parseReplyLine(replyLine({ status: "handled", suggestions: [{ block: 0, from: "a", to: "b" }] }));
+  assert.equal(got.ok, false);
+  assert.equal(got.code, "REPLY_LINE_MALFORMED");
+  const marked = protocol.parseReplyLine(replyLine({ status: "not_handled", reason: "x", proofread: true }));
+  assert.equal(marked.ok, false);
+});
+
+test("the reply parser refuses suggestions of the wrong shape", () => {
+  const bad = [
+    [{ block: -1, from: "a", to: "b" }],
+    [{ block: 1.5, from: "a", to: "b" }],
+    [{ block: "0", from: "a", to: "b" }],
+    [{ block: 0, from: "", to: "b" }],
+    [{ block: 0, from: "a" }],
+    [{ block: 0, from: "a", to: 3 }],
+    ["not an object"],
+    { block: 0, from: "a", to: "b" }
+  ];
+  for (const suggestions of bad) {
+    const got = protocol.parseReplyLine(replyLine({ status: "question", text: "q", proofread: true, suggestions: suggestions }));
+    assert.equal(got.ok, false, JSON.stringify(suggestions));
+    assert.equal(got.code, "REPLY_LINE_MALFORMED");
+  }
+});
+
+test("proofread must be the literal true", () => {
+  const got = protocol.parseReplyLine(replyLine({ status: "question", text: "q", proofread: "yes", suggestions: [] }));
+  assert.equal(got.ok, false);
+});

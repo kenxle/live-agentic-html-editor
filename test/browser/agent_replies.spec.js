@@ -1632,3 +1632,417 @@ test.describe("the reviewer's way back from handled", () => {
     }
   });
 });
+
+// ---------------------------------------------------------------------------
+// The proofreading question on the card (free writing, plan Task 3.3)
+// ---------------------------------------------------------------------------
+//
+// A run typed on the real app page, stored by the real helper, and answered by
+// an agent appending one line marked proofread. Only that question gets the two
+// buttons; any other question, a placement question on the same kind of record
+// included, keeps today's treatment and its follow-up box.
+
+const fw = require("./support/free_writing_page");
+
+const HEADING = "What the chat window cost me";
+const SENTENCE = "I lost my place every time I scrolled back.";
+
+async function typeRunAfterLede(page) {
+  await fw.openEdit(page, "p.lede");
+  await page.keyboard.press("Enter");
+  await page.keyboard.type("# " + HEADING, { delay: 2 });
+  await page.keyboard.press("Enter");
+  await page.keyboard.type(SENTENCE, { delay: 2 });
+  await fw.commitByEsc(page);
+  const run = (await itemsIn(page)).find((i) => Array.isArray(i.new_blocks) && i.new_blocks.length);
+  expect(run, "the sitting is one run record").toBeTruthy();
+  return run;
+}
+
+/** The two buttons on the card, as the reviewer sees them. */
+function proofButtons(page, id) {
+  return page.evaluate((itemId) => {
+    // Shown means on screen, so the rail is open on the card's own tab.
+    const rail = window.__lahe.rail;
+    rail.collapse(false);
+    rail.selectTab(rail.getCard(itemId).pane);
+    const card = rail.cardNode(itemId);
+    const ask = card && card.querySelector(".lahe-ask");
+    const find = (act) => {
+      const b = ask && ask.querySelector("[data-lahe-act='" + act + "']");
+      return b && b.getClientRects().length > 0 ? b.textContent : null;
+    };
+    return {
+      asked: !!ask,
+      use: find("use-fixes"),
+      keep: find("keep-mine"),
+      followup: !!(card && card.querySelector(".lahe-followup textarea"))
+    };
+  }, id);
+}
+
+function pressProof(page, id, act) {
+  return page.evaluate(
+    ([itemId, which]) => {
+      const card = window.__lahe.rail.cardNode(itemId);
+      card.querySelector(".lahe-ask [data-lahe-act='" + which + "']").click();
+    },
+    [id, act]
+  );
+}
+
+function cardWords(page, id) {
+  return page.evaluate((itemId) => {
+    const card = window.__lahe.rail.cardNode(itemId);
+    const thread = card.querySelector(".lahe-thread");
+    return {
+      notice: (card.querySelector(".card__notice") || {}).textContent || "",
+      thread: thread ? thread.textContent : ""
+    };
+  }, id);
+}
+
+async function askProofread(helper, page, run, suggestions) {
+  appendReply(helper, "replies-claude.jsonl", {
+    item: run.id,
+    rev: run.rev,
+    status: "question",
+    agent: "claude",
+    text: "I placed your words as written. One fix you may want.",
+    proofread: true,
+    suggestions: suggestions
+  });
+  await pollPage(page, (id) => !!window.__lahe.rail.cardNode(id).querySelector(".lahe-ask"), run.id, {
+    message: "the proofreading question to reach the card"
+  });
+}
+
+test.describe("free writing: the proofreading question", () => {
+  test("a proofread shows both buttons, and Use the fixes makes the next revision with the fixed words", async ({
+    page
+  }) => {
+    const { app, helper, token } = await startBoth();
+    try {
+      await bootedPage(page, app, helper, token);
+      const run = await typeRunAfterLede(page);
+      await waitForItemInLog(helper, run.id);
+      // The reviewer is on Edits. The question lands on Active, which is not
+      // on screen, so it toasts (a reply on the tab already open does not).
+      await page.evaluate(() => window.__lahe.rail.selectTab("edits"));
+      await askProofread(helper, page, run, [{ block: 1, from: "place", to: "spot" }]);
+
+      // The question's toast names the run in the reviewer's words, never the
+      // change text written for the agent.
+      const toasts = await page.evaluate(() => window.__lahe.rail.toastInfo().toasts.map((t) => t.about));
+      expect(toasts).toContain("New text after 'Nine clients checked in this week....'");
+
+      const buttons = await proofButtons(page, run.id);
+      expect(buttons).toEqual({ asked: true, use: "Use the fixes", keep: "Keep mine", followup: true });
+
+      await pressProof(page, run.id, "use-fixes");
+      await pollPage(page, (args) => window.__lahe.itemById(args[0]).rev === args[1] + 1, [run.id, run.rev], {
+        message: "Use the fixes to make the next revision"
+      });
+      const next = await page.evaluate((id) => window.__lahe.itemById(id), run.id);
+      expect(next.new_blocks[1].html).toBe("I lost my spot every time I scrolled back.");
+      expect(next.note).toBe("Use the fixes you listed. Change nothing else.");
+      expect(next.state).toBe("ready");
+
+      // The page shows the fixed words, in the block that was placed.
+      await pollPage(
+        page,
+        () => Array.from(document.querySelectorAll("p")).some((p) => p.textContent === "I lost my spot every time I scrolled back."),
+        undefined,
+        { message: "replay to rewrite the placed block with the fixed words" }
+      );
+
+      const words = await cardWords(page, run.id);
+      expect(words.thread).toContain("Use the fixes you listed. Change nothing else.");
+      expect(words.thread, "the agent-facing change text stays off a run's thread").not.toContain("new_blocks");
+      expect(words.notice).toBe("Waiting on the agent");
+      expect((await proofButtons(page, run.id)).asked, "the question is answered").toBe(false);
+      const listed = await page.evaluate((id) =>
+        Array.from(window.__lahe.rail.cardNode(id).querySelectorAll("[data-lahe-run-words]")).map((n) => n.textContent),
+        run.id
+      );
+      expect(listed[1], "the Edits row lists the fixed words").toBe("I lost my spot every time I scrolled back.");
+
+      // The agent reads the fixed words from review.json at the new revision.
+      await pollUntil(
+        () => {
+          const projected = projectedItems(reviewJson(helper)).find((i) => i.id === run.id);
+          return projected && projected.rev === run.rev + 1 ? projected : null;
+        },
+        { message: "the fixed revision to reach review.json" }
+      );
+    } finally {
+      await helper.kill9();
+      await app.close();
+    }
+  });
+
+  test("Keep mine posts its pinned text and the card waits", async ({ page }) => {
+    const { app, helper, token } = await startBoth();
+    try {
+      await bootedPage(page, app, helper, token);
+      const run = await typeRunAfterLede(page);
+      await waitForItemInLog(helper, run.id);
+      await askProofread(helper, page, run, [{ block: 1, from: "place", to: "spot" }]);
+
+      await pressProof(page, run.id, "keep-mine");
+      await pollPage(page, (args) => window.__lahe.itemById(args[0]).rev === args[1] + 1, [run.id, run.rev], {
+        message: "Keep mine to post the next revision"
+      });
+      const next = await page.evaluate((id) => window.__lahe.itemById(id), run.id);
+      expect(next.note).toBe("Keep mine as written. No changes.");
+      expect(next.new_blocks).toEqual(run.new_blocks);
+      const words = await cardWords(page, run.id);
+      expect(words.thread).toContain("Keep mine as written. No changes.");
+      expect(words.notice).toBe("Waiting on the agent");
+    } finally {
+      await helper.kill9();
+      await app.close();
+    }
+  });
+
+  // Flow walk, design problem 4: the question waits on the reviewer, so the
+  // card goes back to Active (wireframe 06b). Once answered it waits on the
+  // agent, and it goes back to Edits.
+  test("a proofread question sits on the Active tab while it waits on the reviewer, and goes back to Edits once answered", async ({
+    page
+  }, testInfo) => {
+    const { app, helper, token } = await startBoth();
+    try {
+      await bootedPage(page, app, helper, token);
+      const run = await typeRunAfterLede(page);
+      await waitForItemInLog(helper, run.id);
+      const before = await page.evaluate((id) => window.__lahe.rail.getCard(id).pane, run.id);
+      expect(before, "a run waiting on the agent is an Edits card").toBe("edits");
+      await askProofread(helper, page, run, [{ block: 1, from: "place", to: "spot" }]);
+      const asked = await page.evaluate((id) => {
+        const rail = window.__lahe.rail;
+        rail.collapse(false);
+        rail.selectTab("active");
+        return { pane: rail.getCard(id).pane, active: rail.countFor("active"), edits: rail.countFor("edits") };
+      }, run.id);
+      expect(asked, "the question is on Active, and Active counts it").toEqual({ pane: "active", active: 1, edits: 0 });
+      expect((await proofButtons(page, run.id)).use, "the buttons show on Active").toBe("Use the fixes");
+
+      await page.setViewportSize({ width: 1280, height: 1100 });
+      for (const scheme of ["light", "dark"]) {
+        await page.evaluate((want) => {
+          const bg = want === "dark" ? "#12151a" : "";
+          document.documentElement.style.background = bg;
+          document.body.style.background = bg;
+          window.__lahe.rail.refreshScheme();
+          window.__lahe.rail.selectTab("active");
+        }, scheme);
+        const file = testInfo.outputPath("proofread-on-active-" + scheme + ".png");
+        await page.screenshot({ path: file });
+        await testInfo.attach("proofread-on-active-" + scheme, { path: file, contentType: "image/png" });
+      }
+
+      await pressProof(page, run.id, "keep-mine");
+      await pollPage(page, (args) => window.__lahe.itemById(args[0]).rev === args[1] + 1, [run.id, run.rev], {
+        message: "Keep mine to post the next revision"
+      });
+      await pollPage(page, (id) => window.__lahe.rail.getCard(id).pane === "edits", run.id, {
+        message: "the answered card to go back to Edits"
+      });
+    } finally {
+      await helper.kill9();
+      await app.close();
+    }
+  });
+
+  test("a proofread whose suggestion cannot apply shows no Use the fixes button", async ({ page }) => {
+    const { app, helper, token } = await startBoth();
+    try {
+      await bootedPage(page, app, helper, token);
+      const run = await typeRunAfterLede(page);
+      await waitForItemInLog(helper, run.id);
+      await askProofread(helper, page, run, [{ block: 1, from: "words that are not in it", to: "x" }]);
+
+      const buttons = await proofButtons(page, run.id);
+      expect(buttons.use, "a fix that cannot apply is not offered").toBe(null);
+      expect(buttons.keep).toBe("Keep mine");
+      expect(buttons.followup, "the reviewer can still answer in the box").toBe(true);
+    } finally {
+      await helper.kill9();
+      await app.close();
+    }
+  });
+
+  test("a placement question on a run record shows neither button", async ({ page }) => {
+    const { app, helper, token } = await startBoth();
+    try {
+      await bootedPage(page, app, helper, token);
+      const run = await typeRunAfterLede(page);
+      await waitForItemInLog(helper, run.id);
+      appendReply(helper, "replies-claude.jsonl", {
+        item: run.id,
+        rev: run.rev,
+        status: "question",
+        agent: "claude",
+        text: "Should this go under the intro instead?"
+      });
+      await pollPage(page, (id) => !!window.__lahe.rail.cardNode(id).querySelector(".lahe-ask"), run.id, {
+        message: "the question to reach the card"
+      });
+      const buttons = await proofButtons(page, run.id);
+      expect(buttons).toEqual({ asked: true, use: null, keep: null, followup: true });
+    } finally {
+      await helper.kill9();
+      await app.close();
+    }
+  });
+
+  /** The fixes as the card draws them: the row's block label, its struck-out words and its new words. */
+  function drawnFixes(page, id) {
+    return page.evaluate((itemId) => {
+      const rail = window.__lahe.rail;
+      rail.collapse(false);
+      rail.selectTab(rail.getCard(itemId).pane);
+      const card = rail.cardNode(itemId);
+      return Array.from(card.querySelectorAll(".lahe-ask [data-lahe-fix]")).map((row) => ({
+        where: row.querySelector(".lahe-fix-where").textContent,
+        from: row.querySelector("[data-lahe-fix-from]").textContent,
+        to: row.querySelector("[data-lahe-fix-to]").textContent,
+        shown: row.getClientRects().length > 0
+      }));
+    }, id);
+  }
+
+  test("the card lists every fix as from and to, in the order the agent gave them", async ({ page }, testInfo) => {
+    const { app, helper, token } = await startBoth();
+    try {
+      await bootedPage(page, app, helper, token);
+      const run = await typeRunAfterLede(page);
+      await waitForItemInLog(helper, run.id);
+      await askProofread(helper, page, run, [
+        { block: 1, from: "place", to: "spot" },
+        { block: 0, from: "chat", to: "talk" }
+      ]);
+      const fixes = await drawnFixes(page, run.id);
+      expect(fixes).toHaveLength(2);
+      expect(fixes[0]).toMatchObject({ from: "place", to: "spot", shown: true });
+      expect(fixes[0].where).toContain("I lost my place every time");
+      expect(fixes[1]).toMatchObject({ from: "chat", to: "talk", shown: true });
+      expect(fixes[1].where).toContain("What the chat window cost me");
+
+      // The picture of the card, light and dark, from the same run that proved it.
+      // Tall enough that the whole card, buttons included, is in the picture.
+      await page.setViewportSize({ width: 1280, height: 1100 });
+      for (const scheme of ["light", "dark"]) {
+        // The page picks the rail's scheme (highlight samples its background).
+        await page.evaluate((want) => {
+          const bg = want === "dark" ? "#12151a" : "";
+          document.documentElement.style.background = bg;
+          document.body.style.background = bg;
+          window.__lahe.rail.refreshScheme();
+        }, scheme);
+        const box = await page.evaluate((id) => {
+          const r = window.__lahe.rail.cardNode(id).getBoundingClientRect();
+          return { x: Math.max(0, r.x - 8), y: Math.max(0, r.y - 8), width: r.width + 16, height: r.height + 16 };
+        }, run.id);
+        const file = testInfo.outputPath("proofread-card-" + scheme + ".png");
+        await page.screenshot({ path: file, clip: box });
+        await testInfo.attach("proofread-card-" + scheme, { path: file, contentType: "image/png" });
+      }
+    } finally {
+      await helper.kill9();
+      await app.close();
+    }
+  });
+
+  test("the fixes are drawn as text: markup in an agent's suggestion never becomes an element", async ({ page }) => {
+    const { app, helper, token } = await startBoth();
+    try {
+      await bootedPage(page, app, helper, token);
+      const run = await typeRunAfterLede(page);
+      await waitForItemInLog(helper, run.id);
+      const sneaky = "<img src=x onerror=\"window.__laheXss=1\">rewritten";
+      await askProofread(helper, page, run, [{ block: 1, from: "place", to: sneaky }]);
+      const fixes = await drawnFixes(page, run.id);
+      expect(fixes[0].to, "the markup shows as words").toBe(sneaky);
+      const inert = await page.evaluate((id) => ({
+        imgs: window.__lahe.rail.cardNode(id).querySelectorAll(".lahe-ask img").length,
+        xss: window.__laheXss === undefined
+      }), run.id);
+      expect(inert).toEqual({ imgs: 0, xss: true });
+    } finally {
+      await helper.kill9();
+      await app.close();
+    }
+  });
+
+  test("a fix aimed at the page's own words (a from_anchor block) shows no Use the fixes button", async ({ page }) => {
+    const { app, helper, token } = await startBoth();
+    try {
+      await bootedPage(page, app, helper, token);
+      await fw.openEdit(page, "p.lede", 20);
+      await page.keyboard.press("Enter");
+      await fw.caretToEndOfSession(page);
+      await page.keyboard.press("Enter");
+      await page.keyboard.type("A line I typed after the split.", { delay: 2 });
+      await fw.commitByEsc(page);
+      const run = (await itemsIn(page)).find((i) => Array.isArray(i.new_blocks) && i.new_blocks.length);
+      expect(run.new_blocks[0].from_anchor, "block 0 is the anchor's own tail").toBe(true);
+      await waitForItemInLog(helper, run.id);
+      const tailHtml = run.new_blocks[0].html;
+      const tailWord = tailHtml.split(" ").find((w) => w.length >= 3 && tailHtml.split(w).length === 2);
+      expect(tailWord, "a word that is in the tail exactly once").toBeTruthy();
+      // record.applySuggestions refuses a from_anchor block itself (fix round
+      // F3), and the card does not offer the button either: two guards.
+      const refused = await page.evaluate(
+        ([r, w]) => !!window.LAHE.record.applySuggestions(r, [{ block: 0, from: w, to: "REWRITTEN" }]).code,
+        [run, tailWord]
+      );
+      expect(refused, "the record layer refuses a fix aimed at the anchor's tail").toBe(true);
+      await askProofread(helper, page, run, [{ block: 0, from: tailWord, to: "REWRITTEN" }]);
+      const buttons = await proofButtons(page, run.id);
+      expect(buttons.use, "the page's words are not the reviewer's to have rewritten by a button").toBe(null);
+      expect(buttons.keep).toBe("Keep mine");
+      expect((await drawnFixes(page, run.id))[0].to, "but the reviewer still sees what was proposed").toBe("REWRITTEN");
+    } finally {
+      await helper.kill9();
+      await app.close();
+    }
+  });
+
+  // Code lead 21: the waiting state after a proofread answer is read off the
+  // answered turn's proofread flag, not the note text, so the pinned sentence
+  // typed into an ordinary follow-up gets no proofread treatment.
+  test("typing the pinned sentence into an ordinary follow-up does not get the proofread treatment", async ({ page }) => {
+    const { app, helper, token } = await startBoth();
+    try {
+      await bootedPage(page, app, helper, token);
+      const run = await typeRunAfterLede(page);
+      await waitForItemInLog(helper, run.id);
+      appendReply(helper, "replies-claude.jsonl", {
+        item: run.id,
+        rev: run.rev,
+        status: "question",
+        agent: "claude",
+        text: "Should this go under the intro instead?"
+      });
+      await pollPage(page, (id) => !!window.__lahe.rail.cardNode(id).querySelector(".lahe-ask"), run.id, {
+        message: "the question to reach the card"
+      });
+      await page.evaluate((id) => {
+        const input = window.__lahe.handle.doneTab().followup(id).querySelector("textarea");
+        input.value = "Keep mine as written. No changes.";
+        input.dispatchEvent(new Event("input", { bubbles: true }));
+        input.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", metaKey: true, bubbles: true }));
+      }, run.id);
+      await pollPage(page, ([id, rev]) => window.__lahe.itemById(id).rev === rev + 1, [run.id, run.rev], {
+        message: "the follow-up to make the next revision"
+      });
+      const words = await cardWords(page, run.id);
+      expect(words.notice, "an ordinary follow-up is not a proofread answer").not.toBe("Waiting on the agent");
+    } finally {
+      await helper.kill9();
+      await app.close();
+    }
+  });
+});

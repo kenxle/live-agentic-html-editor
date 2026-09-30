@@ -136,6 +136,7 @@
       // kinds cannot disagree about which heading a block sits under.
       root.LAHE.comments,
       root.LAHE.failures,
+      root.LAHE.blocks,
       // replay.js loads AFTER this file (it depends on everything), so it is
       // resolved when a pass is scheduled rather than when this module loads.
       function () {
@@ -159,6 +160,7 @@
       require("./protect.js"),
       require("./comments.js"),
       require("../shared/failures.js"),
+      require("./blocks.js"),
       function () {
         return require("./replay.js");
       }
@@ -180,6 +182,7 @@
   protect,
   commentsModule,
   failuresModule,
+  blocks,
   replayRef
 ) {
   "use strict";
@@ -218,8 +221,135 @@
   };
 
   // Ken's copy, one spelling, used on the frame.
-  var LABEL_EDITING = "Editing this block";
+  var LABEL_EDITING = "Editing";
   var HINT_FINISH = "Cmd-Enter or Esc to finish";
+
+  // ---------------------------------------------------------------------------
+  // Free writing (docs/features/20260928.01_free_writing): the pinned words and
+  // the numbers the plan sets for this file.
+  // ---------------------------------------------------------------------------
+
+  // Which kind of session is open. RUN is free writing: an anchor plus the
+  // blocks written after it. LEGACY is today's single-block session, kept for
+  // a record from before free writing and for a block that cannot hold a run
+  // (a table cell, a caption).
+  var MODE = { RUN: "run", LEGACY: "legacy" };
+
+  var HINT_EDIT_STATE = "Click + Write here to add text. Esc to finish.";
+  var INSERT_LINE_LABEL = "+ Write here";
+  var PLACEHOLDER = "Start writing";
+  var CEILING_WARN = "This edit is getting long. Press Esc to send it. Once the agent places it, you can keep writing.";
+  var CEILING_FULL = "This edit is full. Press Esc to send it. Once the agent places it, you can keep writing.";
+  var ANNOUNCE = {
+    AFTER: "Writing after: {words}",
+    START_OF_PAGE: "Writing at the start of the page",
+    COMMIT: "Sent to the agent"
+  };
+  // How many of the anchor's words the screen reader line quotes.
+  var FIRST_WORDS = 6;
+  // The warning shows at this share of any of the three ceilings.
+  var CEILING_WARN_RATIO = 0.9;
+  // Session undo steps kept, changed blocks only.
+  var SESSION_HISTORY_MAX = 100;
+  // The pause that ends a typing burst, which is one undo step.
+  var TYPING_BURST_IDLE_MS = 1000;
+  // And a cap on what the session history holds, in characters of block
+  // markup. Steps share every block they did not change (stateNow), so this
+  // is a guard for a pathological session, not the everyday limit.
+  var SESSION_HISTORY_MAX_CHARS = 4000000;
+
+  // The size of the record a run commits (code_lead 6). The run rides in the
+  // committed record up to six times (new_blocks, after_html, after, and the
+  // same three in the history entry the commit adds), and JSON escapes some
+  // characters to two bytes. The record is measured exactly when the session
+  // opens and at every block change; between measurements each byte typed is
+  // counted RUN_BYTES_FACTOR times and each new block RUN_BLOCK_OVERHEAD
+  // bytes, and RUN_REMEASURE_BYTES of typing forces a new measurement.
+  var RUN_BYTES_FACTOR = 8;
+  var RUN_BLOCK_OVERHEAD = 96;
+  var RUN_REMEASURE_BYTES = 4096;
+
+  // A long run's draft is written on a pause, not on every keystroke
+  // (code_reviewer 5). Below RUN_DRAFT_DEFER_BYTES of run markup every
+  // keystroke is still written at once, as today. Above it a keystroke is
+  // written RUN_DRAFT_IDLE_MS after typing stops, and never later than
+  // RUN_DRAFT_MAX_WAIT_MS after the first unwritten one. A block change, a
+  // state change and the commit write at once.
+  var RUN_DRAFT_DEFER_BYTES = 16384;
+  var RUN_DRAFT_IDLE_MS = 300;
+  var RUN_DRAFT_MAX_WAIT_MS = 1500;
+
+  // The applied-after history a commit appends to: a new entry only when the
+  // words moved.
+  function appendHistoryTo(item, committed) {
+    var history = (item[record.FIELD.AFTER_HISTORY] || []).slice();
+    var last = history.length ? history[history.length - 1] : null;
+    var value = committed[record.FIELD.AFTER];
+    if (typeof value === "string" && (!last || last.after !== value)) {
+      history.push(
+        record.historyEntry(
+          committed[record.FIELD.REV],
+          value,
+          committed[record.FIELD.AFTER_HTML],
+          committed[record.FIELD.UPDATED_AT],
+          committed
+        )
+      );
+    }
+    return history;
+  }
+
+  // What a run sitting's commit changes on the record.
+  function runChanges(item, fields, kind) {
+    var candidate = Object.assign({}, item, {
+      after: fields.after,
+      after_html: fields.after_html,
+      anchor_after_html: fields.anchor_after_html,
+      anchor_tag_after: fields.anchor_tag_after,
+      new_blocks: fields.new_blocks,
+      placement: fields.placement,
+      kind: kind
+    });
+    return {
+      kind: kind,
+      change: record.runChangeText(candidate),
+      after: fields.after,
+      after_html: fields.after_html,
+      anchor_after_html: fields.anchor_after_html,
+      anchor_tag_after: fields.anchor_tag_after,
+      new_blocks: fields.new_blocks,
+      placement: fields.placement,
+      state: record.STATE.READY
+    };
+  }
+
+  // The record a commit writes, from the stored item and its changes: the
+  // first commit keeps the revision and starts the history; a later one
+  // bumps it. The one rule for both commit paths and for the size estimate.
+  function committedRecord(item, changes, wasCommitted) {
+    if (wasCommitted) return record.bumpRev(item, changes);
+    var committed = Object.assign({}, item, changes);
+    committed[record.FIELD.UPDATED_AT] = record.nowIso();
+    committed[record.FIELD.AFTER_HISTORY] = appendHistoryTo(item, committed);
+    return committed;
+  }
+
+  /**
+   * The bytes of the record a run sitting would commit, as the helper
+   * measures it (record.recordBytes).
+   *
+   * @param {Object} item the stored record (the draft)
+   * @param {Object} fields the sitting's run fields (captureRunFields)
+   * @param {boolean} wasCommitted whether the record was committed before
+   */
+  function runRecordBytes(item, fields, wasCommitted) {
+    return record.recordBytes(committedRecord(item, runChanges(item, fields, record.KIND.EDIT), wasCommitted));
+  }
+
+  // Counters the draft-cost script and the specs read. blocksCaptured counts
+  // run blocks rebuilt through cleanBlock, so a spec can prove a keystroke
+  // rebuilds only the caret's block.
+  var counters = { blocksCaptured: 0, refused: 0 };
 
   // The frame's look. Quiet on purpose: the reviewer is reading their own
   // sentence, not the tool. One accent, the rail's, used for the outline and
@@ -284,7 +414,61 @@
     ":host([data-lahe-scheme='dark']) ." + BAR_CLASS + " { background: #1b1b1d; color: #f2f2f2; border-color: rgba(255,255,255,0.16); }",
     ":host([data-lahe-scheme='dark']) .lahe-edit-bar__label { color: #b7c4f2; }",
     ":host([data-lahe-scheme='dark']) .lahe-edit-bar__hint { color: rgba(242,242,242,0.55); }",
-    ":host([data-lahe-scheme='dark']) .lahe-edit-bar__sep { background: rgba(255,255,255,0.16); }"
+    ":host([data-lahe-scheme='dark']) .lahe-edit-bar__sep { background: rgba(255,255,255,0.16); }",
+    // Free writing. The block-type menu is the rail's "More actions" menu in
+    // the bar's own register; the line and the placeholder use the frame's
+    // accent and its 120ms opacity transition, and nothing else moves.
+    ".lahe-edit-bar__typewrap { position: relative; display: inline-flex; }",
+    ".lahe-edit-bar__type { border-color: rgba(17, 17, 17, 0.14); min-width: 92px; text-align: left; }",
+    ".lahe-edit-bar__type::after { content: ''; display: inline-block; margin-left: 6px; vertical-align: 2px;",
+    "  border-left: 3.5px solid transparent; border-right: 3.5px solid transparent; border-top: 4px solid currentColor; opacity: 0.6; }",
+    ".lahe-edit-bar__type[aria-expanded='true'] { background: rgba(60, 86, 165, 0.09); border-color: #3c56a5; }",
+    ".lahe-edit-bar__type:disabled { cursor: default; color: rgba(17, 17, 17, 0.45); }",
+    ".lahe-edit-bar__type:disabled::after { display: none; }",
+    ".lahe-edit-bar__btn:disabled { cursor: default; opacity: 0.45; }",
+    ".lahe-edit-bar__btn:disabled:hover { background: transparent; }",
+    ".lahe-edit-bar__menu { position: absolute; top: calc(100% + 7px); left: 0; min-width: 236px; z-index: 3;",
+    "  display: flex; flex-direction: column; gap: 1px; padding: 5px; background: #ffffff;",
+    "  border: 1px solid rgba(17, 17, 17, 0.10); border-radius: 7px;",
+    "  box-shadow: 0 6px 20px rgba(17, 17, 17, 0.14), 0 1px 2px rgba(17, 17, 17, 0.08); }",
+    ".lahe-edit-bar__menu[hidden] { display: none; }",
+    ".lahe-edit-bar__menu--up { top: auto; bottom: calc(100% + 7px); }",
+    ".lahe-edit-bar__row { display: grid; grid-template-columns: 1fr auto 2.2em; gap: 10px; align-items: baseline;",
+    "  width: 100%; text-align: left; white-space: nowrap; font: inherit; font-size: 12.5px; color: inherit;",
+    "  padding: 6px 9px; border: 0; border-radius: 5px; background: transparent; cursor: pointer; }",
+    ".lahe-edit-bar__row:hover, .lahe-edit-bar__row:focus-visible { background: rgba(60, 86, 165, 0.09); outline: none; }",
+    ".lahe-edit-bar__row[aria-checked='true'] .lahe-edit-bar__rowname { font-weight: 600; color: #2c3f7d; }",
+    ".lahe-edit-bar__row[aria-disabled='true'] { cursor: default; color: rgba(17, 17, 17, 0.38); background: transparent; }",
+    ".lahe-edit-bar__rowkey, .lahe-edit-bar__rowmd { font: 11px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace; color: rgba(17, 17, 17, 0.5); }",
+    ".lahe-edit-bar__hint[data-lahe-notice='true'] { color: #2c3f7d; white-space: normal; max-width: 420px; }",
+    // 28px tall: a comfortable pointer target (the flow walk missed a 20px one
+    // and the session closed with the typing going nowhere).
+    ".lahe-insert-line { position: fixed; height: 28px; pointer-events: auto; cursor: text; opacity: 0;",
+    "  transition: opacity 120ms ease; z-index: 1; }",
+    ".lahe-insert-line[data-lahe-show='true'] { opacity: 1; }",
+    ".lahe-insert-line:not([data-lahe-show='true']) { pointer-events: none; }",
+    ".lahe-insert-line__rule { position: absolute; left: 0; right: 0; top: 13px; border-top: 1.5px solid #3c56a5; }",
+    ".lahe-insert-line__label { position: absolute; left: 0; top: 5px; padding: 0 7px 0 0; background: #ffffff;",
+    "  font: 600 11px/18px ui-sans-serif, system-ui, -apple-system, sans-serif; color: #3c56a5; }",
+    ".lahe-edit-placeholder { position: fixed; pointer-events: none; color: rgba(17, 17, 17, 0.38); display: none;",
+    "  white-space: nowrap; overflow: hidden; }",
+    ".lahe-edit-live { position: fixed; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0);",
+    "  clip-path: inset(50%); white-space: nowrap; }",
+    "@media (prefers-reduced-motion: reduce) { ." + FRAME_CLASS + ", .lahe-insert-line { transition: none; } }",
+    ":host([data-lahe-scheme='dark']) .lahe-edit-bar__type { border-color: rgba(255,255,255,0.18); }",
+    ":host([data-lahe-scheme='dark']) .lahe-edit-bar__type[aria-expanded='true'] { background: rgba(147, 167, 234, 0.14); border-color: #93a7ea; }",
+    ":host([data-lahe-scheme='dark']) .lahe-edit-bar__type:disabled { color: rgba(242,242,242,0.45); }",
+    ":host([data-lahe-scheme='dark']) .lahe-edit-bar__menu { background: #1b1b1d; border-color: rgba(255,255,255,0.16);",
+    "  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4); }",
+    ":host([data-lahe-scheme='dark']) .lahe-edit-bar__row:hover, :host([data-lahe-scheme='dark']) .lahe-edit-bar__row:focus-visible { background: rgba(147, 167, 234, 0.14); }",
+    ":host([data-lahe-scheme='dark']) .lahe-edit-bar__row[aria-checked='true'] .lahe-edit-bar__rowname { color: #b7c4f2; }",
+    ":host([data-lahe-scheme='dark']) .lahe-edit-bar__row[aria-disabled='true'] { color: rgba(242,242,242,0.38); }",
+    ":host([data-lahe-scheme='dark']) .lahe-edit-bar__rowkey, :host([data-lahe-scheme='dark']) .lahe-edit-bar__rowmd { color: rgba(242,242,242,0.5); }",
+    ":host([data-lahe-scheme='dark']) .lahe-edit-bar__hint[data-lahe-notice='true'] { color: #b7c4f2; }",
+    ":host([data-lahe-scheme='dark']) .lahe-edit-bar__btn:hover, :host([data-lahe-scheme='dark']) .lahe-edit-bar__btn:focus-visible { outline-color: #93a7ea; }",
+    ":host([data-lahe-scheme='dark']) .lahe-insert-line__rule { border-top-color: #93a7ea; }",
+    ":host([data-lahe-scheme='dark']) .lahe-insert-line__label { background: #1b1b1d; color: #93a7ea; }",
+    ":host([data-lahe-scheme='dark']) .lahe-edit-placeholder { color: rgba(242,242,242,0.4); }"
   ].join("\n");
 
   // ---------------------------------------------------------------------------
@@ -496,6 +680,12 @@
     // failure list (src/layer/index.js); a caller that builds a surface by hand
     // gets nothing, and persist below works either way.
     var onFailure = typeof opts.onFailure === "function" ? opts.onFailure : null;
+    // Is this a notes review (`lahe write`)? See setNotes.
+    var notesReview = opts.notes === true;
+    // Does a text field in the rail hold focus (a comment being written)? The
+    // rail's root is closed, so the rail answers. Cmd-Shift-E from there is
+    // left alone: the writer is mid-sentence in the rail.
+    var railTextFocus = typeof opts.railTextFocus === "function" ? opts.railTextFocus : null;
 
     // The one open session, or null. Edit state is per region and there is one
     // of it: a second Cmd-Shift-E commits the first.
@@ -582,9 +772,16 @@
       var refused = durably(function () {
         store.write(requireReview(), item);
       });
-      durably(function () {
-        emit(item, event);
-      });
+      // A block opened and not yet changed is a draft for durability only.
+      // Telling the rail about it drew a card with the whole block struck
+      // through, which reads as a deletion, and moved the Edits count before
+      // anything was typed (flow walk, design problem 6). The first change
+      // emits as usual; so does removing an untouched draft.
+      if (event !== "opened") {
+        durably(function () {
+          emit(item, event);
+        });
+      }
       // THE POST ONLY EVER FOLLOWS A WRITE THAT LANDED.
       //
       // Posting a record the disk does not have is worse than not posting at
@@ -603,6 +800,1728 @@
         });
       }
       return item;
+    }
+
+    // ------------------------------------------------------------------------
+    // Free writing: the run session
+    // ------------------------------------------------------------------------
+    //
+    // docs/features/20260928.01_free_writing, architecture "The editing host".
+    // A run session edits an ANCHOR block plus a RUN of new sibling blocks
+    // written after it. The host (blocks.hostFor) is the element made
+    // editable; a beforeinput guard refuses every edit outside the anchor and
+    // the run, and the layer writes every edit that crosses a block edge
+    // itself, so all three engines produce the same structure.
+    //
+    // Words:
+    //   block  the anchor, or one run element (p, h2, h3, h4, ul, ol)
+    //   unit   one line the caret can be on: a block, or one li of a list block
+
+    var LIST_TAGS = { ul: 1, ol: 1 };
+    var TYPE_LABELS = {};
+    gestures.BLOCK_TYPES.forEach(function (t) {
+      TYPE_LABELS[t.tag] = t.label;
+    });
+
+    function tagOf(el) {
+      return el && typeof el.tagName === "string" ? el.tagName.toLowerCase() : "";
+    }
+
+    function isRun() {
+      return !!session && session.mode === MODE.RUN;
+    }
+
+    // The anchor, unless it is a container (main or body on an empty page),
+    // then every run block, in document order.
+    function sessionBlocks() {
+      if (!isRun()) return session ? [session.block] : [];
+      var out = session.container ? [] : [session.anchor];
+      session.run.forEach(function (r) {
+        out.push(r.el);
+      });
+      return out;
+    }
+
+    function unitsOf(block) {
+      if (LIST_TAGS[tagOf(block)]) {
+        var items = [];
+        for (var c = block.firstElementChild; c; c = c.nextElementSibling) if (tagOf(c) === "li") items.push(c);
+        return items.length ? items : [block];
+      }
+      return [block];
+    }
+
+    function sessionUnits() {
+      var out = [];
+      sessionBlocks().forEach(function (b) {
+        out.push.apply(out, unitsOf(b));
+      });
+      return out;
+    }
+
+    function contains(el, node) {
+      return !!el && !!node && (el === node || (typeof el.contains === "function" && el.contains(node)));
+    }
+
+    function inSession(node) {
+      if (!session || !node) return false;
+      var list = sessionBlocks();
+      for (var i = 0; i < list.length; i += 1) if (contains(list[i], node)) return true;
+      return false;
+    }
+
+    function blockOf(node) {
+      var list = sessionBlocks();
+      for (var i = 0; i < list.length; i += 1) if (contains(list[i], node)) return list[i];
+      return null;
+    }
+
+    function unitOf(node) {
+      var units = sessionUnits();
+      for (var i = 0; i < units.length; i += 1) if (contains(units[i], node)) return units[i];
+      return null;
+    }
+
+    function runEntryOf(el) {
+      for (var i = 0; i < session.run.length; i += 1) if (session.run[i].el === el) return session.run[i];
+      return null;
+    }
+
+    function isFromAnchor(block) {
+      if (!block) return false;
+      if (block === session.anchor) return true;
+      var entry = runEntryOf(block);
+      return !!entry && entry.fromAnchor;
+    }
+
+    // ---- which words moved (flow walk: the from_anchor bug) ---------------------
+    //
+    // A block split off the anchor with Enter holds the page's own words, which
+    // the agent must not add again. But the reviewer can then type into that
+    // tail, or press Enter inside it again, and before this fix every block of
+    // that lineage kept from_anchor: a literal agent dropped the reviewer's own
+    // sentence. So a lineage entry remembers `moved`, the page's words it
+    // carried at the split (whitespace folded), and capture decides from the
+    // words themselves:
+    //
+    //   the block is exactly the moved words    one from_anchor block
+    //   the reviewer typed into it at all       one new block, the whole tail
+    //
+    // The whole tail as new is right for a literal agent: anchor_after_html
+    // already leaves the moved words out of the anchor, so adding the tail as
+    // one new block puts every word back exactly once, and the page keeps the
+    // one paragraph the reviewer wrote (coordinator decision on the split
+    // trade-off; splitting it in two made two paragraphs after the rebuild).
+
+    // Whitespace folded to single spaces and trimmed, with each folded
+    // character's offset in the raw string.
+    function foldText(raw) {
+      var str = String(raw || "");
+      var out = "";
+      var map = [];
+      var space = false;
+      for (var i = 0; i < str.length; i += 1) {
+        var c = str.charAt(i);
+        if (c === "\u200b") continue;
+        if (/\s/.test(c)) {
+          if (out.length && !space) {
+            out += " ";
+            map.push(i);
+            space = true;
+          }
+          continue;
+        }
+        out += c;
+        map.push(i);
+        space = false;
+      }
+      if (space) {
+        out = out.slice(0, -1);
+        map.pop();
+      }
+      return { text: out, map: map };
+    }
+
+    function folded(raw) {
+      return foldText(raw).text;
+    }
+
+    // A holder in an inert document: markup parsed or cloned into it never
+    // loads, runs or reaches the page.
+    var inertDoc = null;
+    function inertHolder() {
+      if (!inertDoc) inertDoc = doc.implementation.createHTMLDocument("");
+      return inertDoc.createElement("div");
+    }
+
+    // The words of a stored block's markup.
+    function htmlText(html) {
+      var holder = inertHolder();
+      holder.innerHTML = String(html || "");
+      return holder.textContent;
+    }
+
+    function movedOf(block) {
+      var entry = block && block !== session.anchor ? runEntryOf(block) : null;
+      return entry && entry.fromAnchor ? entry.moved || null : null;
+    }
+
+    // What a split tail carries, decided at the split. Off the anchor, the tail
+    // is the page's own words only when those words are in the anchor's
+    // original text: words the reviewer typed into the anchor before pressing
+    // Enter are new. Off a lineage block that was exactly its moved words, the
+    // two halves each keep their own half of them; otherwise the tail inherits
+    // the parent's moved words and capture looks for them.
+    function markSplit(block, tail) {
+      var entry = runEntryOf(tail);
+      if (!entry) return;
+      var tailText = folded(tail.textContent);
+      if (block === session.anchor) {
+        var original = folded(session.before && session.before.text);
+        var fromPage = !!tailText && original.indexOf(tailText) !== -1;
+        entry.fromAnchor = fromPage;
+        entry.moved = fromPage ? tailText : null;
+        return;
+      }
+      var parent = runEntryOf(block);
+      if (!parent || !parent.fromAnchor || !parent.moved) {
+        entry.fromAnchor = false;
+        entry.moved = null;
+        return;
+      }
+      var headText = folded(block.textContent);
+      var squash = function (t) {
+        return t.replace(/ /g, "");
+      };
+      if (squash(headText + tailText) === squash(parent.moved)) {
+        parent.moved = headText || null;
+        parent.fromAnchor = !!headText;
+        entry.moved = tailText || null;
+        entry.fromAnchor = !!tailText;
+        return;
+      }
+      entry.fromAnchor = true;
+      entry.moved = parent.moved;
+    }
+
+    // One session entry as the record's block, or none when it has no words.
+    function entryBlocks(r) {
+      var tag = tagOf(r.el);
+      var whole = runBlockHtml(r.el);
+      if (whole === null) return [];
+      if (!r.fromAnchor || !r.moved) return [{ tag: tag, html: whole }];
+      var raw = String(r.el.textContent || "");
+      var f = foldText(raw);
+      var moved = r.moved;
+      if (f.text === moved) return [{ tag: tag, html: whole, from_anchor: true }];
+      return [{ tag: tag, html: whole }];
+    }
+
+    function liveRange() {
+      if (!win || typeof win.getSelection !== "function") return null;
+      var sel = win.getSelection();
+      if (!sel || sel.rangeCount === 0) return null;
+      return sel.getRangeAt(0);
+    }
+
+    function setCaret(node, offset) {
+      if (!win || !doc) return null;
+      var r = doc.createRange();
+      r.setStart(node, offset);
+      r.collapse(true);
+      var sel = win.getSelection();
+      sel.removeAllRanges();
+      sel.addRange(r);
+      return r;
+    }
+
+    function textNodes(el) {
+      var out = [];
+      if (!el) return out;
+      var walker = doc.createTreeWalker(el, 4, null);
+      for (var n = walker.nextNode(); n; n = walker.nextNode()) out.push(n);
+      return out;
+    }
+
+    // A caret as {block index, unit index, character offset}: the measurement
+    // that survives any node the layer rebuilds.
+    function caretSpot(node, offset) {
+      var unit = unitOf(node);
+      if (!unit) return null;
+      var units = sessionUnits();
+      var r = doc.createRange();
+      r.selectNodeContents(unit);
+      try {
+        r.setEnd(node, offset);
+      } catch (err) {
+        return { unit: units.indexOf(unit), offset: 0 };
+      }
+      return { unit: units.indexOf(unit), offset: r.toString().length };
+    }
+
+    function saveCaret() {
+      var range = liveRange();
+      if (!range) return null;
+      var start = caretSpot(range.startContainer, range.startOffset);
+      var end = caretSpot(range.endContainer, range.endOffset);
+      return start ? { start: start, end: end || start } : null;
+    }
+
+    function pointAt(spot) {
+      var units = sessionUnits();
+      var unit = units[Math.max(0, Math.min(units.length - 1, spot.unit))];
+      if (!unit) return null;
+      var nodes = textNodes(unit);
+      var left = spot.offset;
+      for (var i = 0; i < nodes.length; i += 1) {
+        var len = nodes[i].nodeValue.length;
+        if (left <= len) return { node: nodes[i], offset: left };
+        left -= len;
+      }
+      if (nodes.length) return { node: nodes[nodes.length - 1], offset: nodes[nodes.length - 1].nodeValue.length };
+      return { node: unit, offset: 0 };
+    }
+
+    function restoreCaret(saved) {
+      if (!saved || !win) return false;
+      var a = pointAt(saved.start);
+      var b = pointAt(saved.end);
+      if (!a) return false;
+      var r = doc.createRange();
+      r.setStart(a.node, a.offset);
+      if (b) {
+        try {
+          r.setEnd(b.node, b.offset);
+        } catch (err) {
+          r.collapse(true);
+        }
+      }
+      var sel = win.getSelection();
+      sel.removeAllRanges();
+      sel.addRange(r);
+      return true;
+    }
+
+    // An element with nothing in it is not a line the caret can be on, so
+    // every empty block or item gets the placeholder break the engines use.
+    // It normalizes away.
+    function ensureLine(el) {
+      if (!hasAnyContent(el)) el.appendChild(doc.createElement("br"));
+      return el;
+    }
+
+    function isEmptyUnit(el) {
+      return String(el.textContent || "").replace(/[\s ​]/g, "") === "";
+    }
+
+    // Is there any word after (or before) the caret inside this unit?
+    function atUnitEnd(range, unit) {
+      var r = doc.createRange();
+      r.setStart(range.endContainer, range.endOffset);
+      r.setEnd(unit, unit.childNodes.length);
+      return r.toString() === "";
+    }
+
+    function atUnitStart(range, unit) {
+      var r = doc.createRange();
+      r.setStart(unit, 0);
+      r.setEnd(range.startContainer, range.startOffset);
+      return r.toString() === "";
+    }
+
+    // Where a new run block after `block` goes. After the anchor it is the one
+    // insert-point rule (blocks.insertPointAfter climbs out of a sheet-head);
+    // after a run block it is right after that block.
+    function insertAfterBlock(block, el, fromAnchor, moved) {
+      var point;
+      var index;
+      if (block === session.anchor) {
+        point = session.container ? blocks.startPointIn(session.anchor) : blocks.insertPointAfter(session.anchor);
+        index = 0;
+      } else {
+        point = { parent: block.parentNode, before: block.nextSibling };
+        var entry = runEntryOf(block);
+        index = session.run.indexOf(entry) + 1;
+      }
+      point.parent.insertBefore(el, point.before);
+      session.run.splice(index, 0, { el: el, fromAnchor: !!fromAnchor, moved: moved || null, html: null, dirty: true });
+      return el;
+    }
+
+    function removeRunBlock(el) {
+      var entry = runEntryOf(el);
+      if (entry) session.run.splice(session.run.indexOf(entry), 1);
+      if (el.parentNode) el.parentNode.removeChild(el);
+    }
+
+    function markAllDirty() {
+      session.run.forEach(function (r) {
+        r.dirty = true;
+      });
+      session.anchorDirty = true;
+    }
+
+    function markDirtyAt(node) {
+      var block = blockOf(node);
+      if (!block) return;
+      if (block === session.anchor) session.anchorDirty = true;
+      var entry = runEntryOf(block);
+      if (entry) entry.dirty = true;
+    }
+
+    // One structural change: written inside a write epoch, then everything that
+    // reads the blocks catches up at once (protection, the record, the frame).
+    function structural(label, fn) {
+      var result = epoch.write("editing.run:" + label, fn);
+      afterStructural();
+      return result;
+    }
+
+    function afterStructural() {
+      markAllDirty();
+      if (protect && typeof protect.snapshot === "function") protect.snapshot();
+      // A block change is measured exactly and written at once.
+      if (session && isRun()) captureRunTyping({ now: true, remeasure: true });
+      else captureTyping();
+      refreshBar();
+    }
+
+    // ---- capture ------------------------------------------------------------
+
+    function escapeText(text) {
+      return String(text).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    }
+
+
+    // The markup a run block's words carry, spelled only with what cleanBlock
+    // keeps: text, strong, em, br and the reset tags, and li in a list. Any
+    // other element (a link in a split tail) gives up its tag and keeps its
+    // words. cleanBlock then has the last word.
+    function inlineMarkup(node) {
+      var out = "";
+      for (var child = node.firstChild; child; child = child.nextSibling) {
+        if (child.nodeType === 3 || child.nodeType === 4) {
+          out += escapeText(child.nodeValue);
+          continue;
+        }
+        if (child.nodeType !== 1 || markers.isInsideOverlay(child)) continue;
+        var tag = tagOf(child);
+        if (tag === "br") out += "<br>";
+        else if (tag === "li") out += "<li>" + inlineMarkup(child) + "</li>";
+        else if (Object.prototype.hasOwnProperty.call(normalize.INLINE_ALLOWED, tag)) {
+          out += "<" + normalize.INLINE_ALLOWED[tag] + ">" + inlineMarkup(child) + "</" + normalize.INLINE_ALLOWED[tag] + ">";
+        } else if (tag !== "script" && tag !== "style" && tag !== "template") out += inlineMarkup(child);
+      }
+      return out;
+    }
+
+    /**
+     * One run block as the record stores it: exactly what cleanBlock returns,
+     * or null when the block has no words (an empty new paragraph, a list of
+     * empty items), which never reaches the record.
+     */
+    function runBlockHtml(el) {
+      var cleaned = normalize.cleanBlock(tagOf(el), inlineMarkup(el));
+      return typeof cleaned.html === "string" ? cleaned.html : null;
+    }
+
+    function anchorMarkup() {
+      if (session.container) return "";
+      if (session.anchorDirty || typeof session.anchorHtml !== "string") {
+        session.anchorHtml = normalize.cleanMarkup(session.anchor.innerHTML);
+        session.anchorDirty = false;
+      }
+      return session.anchorHtml;
+    }
+
+    // Capture rebuilds only the blocks marked dirty: on a keystroke that is the
+    // caret's block, and only a structural change marks them all.
+    function captureRunFields() {
+      var list = [];
+      session.run.forEach(function (r) {
+        if (r.dirty || r.html === undefined || !r.pieces) {
+          r.pieces = entryBlocks(r);
+          r.html = r.pieces.length ? r.pieces.map(function (b) { return b.html; }).join("") : null;
+          r.dirty = false;
+          counters.blocksCaptured += 1;
+        }
+        r.pieces.forEach(function (b) {
+          list.push(Object.assign({}, b));
+        });
+      });
+      var anchorHtml = anchorMarkup();
+      var tag = session.container ? null : tagOf(session.anchor);
+      var tagAfter = !session.container && tag !== session.anchorTag ? tag : null;
+      var built = record.buildRunAfter(anchorHtml, list);
+      return {
+        anchor_after_html: anchorHtml,
+        anchor_tag_after: tagAfter,
+        new_blocks: list,
+        placement: session.placement,
+        after: built.after,
+        after_html: built.after_html
+      };
+    }
+
+    // Which record shape does this sitting write (design call 3)?
+    //
+    // - RUN: a new block, a tag change, a list anchor or a container anchor.
+    // - PLAIN: a reword of one block that never had run fields. Today's
+    //   record, byte for byte.
+    // - CLEARED: the sitting (or the record it reopened) had run fields, and
+    //   the reviewer took every new block away and put the tag back. The run
+    //   fields are written empty, on purpose, so no stale block or tag from
+    //   an earlier draft rides into the commit (code_reviewer 2, code_lead 1).
+    //
+    // One exception keeps RUN: a reopened run record none of whose blocks
+    // were found on the page. The reviewer never saw those blocks, so they
+    // did not take them away.
+    var SHAPE = { RUN: "run", PLAIN: "plain", CLEARED: "cleared" };
+
+    function liveRun(fields) {
+      return (
+        session.container ||
+        fields.new_blocks.length > 0 ||
+        !!fields.anchor_tag_after ||
+        !!LIST_TAGS[session.anchorTag]
+      );
+    }
+
+    function shapeFor(fields) {
+      if (liveRun(fields) || session.runUnseen) return SHAPE.RUN;
+      return session.runShaped ? SHAPE.CLEARED : SHAPE.PLAIN;
+    }
+
+    // The run fields, emptied.
+    function clearRunFields(target) {
+      target[record.FIELD.NEW_BLOCKS] = [];
+      target[record.FIELD.ANCHOR_AFTER_HTML] = null;
+      target[record.FIELD.ANCHOR_TAG_AFTER] = null;
+      target[record.FIELD.PLACEMENT] = null;
+      return target;
+    }
+
+    function runVerdict(fields, beforeArg) {
+      var before = beforeArg || session.before || { text: "", html: "" };
+      var anchorText = normalize.blockText(fields.anchor_after_html || "");
+      var textSame = normalize.equalsInMode(normalize.MODE.TEXT, String(before.text || ""), anchorText);
+      var structureSame = normalize.equalsInMode(
+        normalize.MODE.STRUCTURE,
+        String(before.html || ""),
+        String(fields.anchor_after_html || "")
+      );
+      var changed = fields.new_blocks.length > 0 || !!fields.anchor_tag_after || !textSame || !structureSame;
+      if (!changed) return { changed: false, kind: null };
+      var edit = fields.new_blocks.length > 0 || !textSame;
+      return { changed: true, kind: edit ? record.KIND.EDIT : record.KIND.FORMAT_ONLY };
+    }
+
+    // Is the sitting, as it stands, different from where it opened? Used on
+    // reopen, where "changed" means changed since this sitting began.
+    function runKey(fields) {
+      return JSON.stringify([fields.anchor_after_html, fields.anchor_tag_after, fields.new_blocks]);
+    }
+
+    function applyRunFields(target, fields, verdict) {
+      target[record.FIELD.AFTER] = fields.after;
+      target[record.FIELD.AFTER_HTML] = fields.after_html;
+      target[record.FIELD.ANCHOR_AFTER_HTML] = fields.anchor_after_html;
+      target[record.FIELD.ANCHOR_TAG_AFTER] = fields.anchor_tag_after;
+      target[record.FIELD.NEW_BLOCKS] = fields.new_blocks;
+      target[record.FIELD.PLACEMENT] = fields.placement;
+      if (verdict && verdict.kind) target[record.FIELD.KIND] = verdict.kind;
+      return target;
+    }
+
+    // ---- the ceiling ---------------------------------------------------------
+
+    // The committed record's size, measured: the stored item with this
+    // sitting's commit applied, the way commitRun builds it.
+    function measureCommitted(fields) {
+      var item = reviewId ? store.readItem(reviewId, session.itemId) : null;
+      if (!item) return 0;
+      return runRecordBytes(item, fields, session.wasCommitted);
+    }
+
+    function ceilingState(fields, remeasure) {
+      var count = fields.new_blocks.length;
+      var bytes = record.blocksBytes(fields.new_blocks);
+      // Measured exactly at open and at every block change; between those,
+      // each byte typed counts RUN_BYTES_FACTOR times (see the constant).
+      var cal = session.measured;
+      if (remeasure || !cal || bytes - cal.bytes > RUN_REMEASURE_BYTES) {
+        cal = session.measured = { bytes: bytes, count: count, size: measureCommitted(fields) };
+      }
+      var estimate =
+        cal.size + Math.max(0, bytes - cal.bytes) * RUN_BYTES_FACTOR + Math.max(0, count - cal.count) * RUN_BLOCK_OVERHEAD;
+      var ratio = Math.max(
+        count / record.NEW_BLOCKS_MAX,
+        bytes / record.NEW_BLOCKS_MAX_BYTES,
+        estimate / record.RUN_RECORD_MAX_BYTES
+      );
+      return { count: count, bytes: bytes, estimate: estimate, ratio: ratio };
+    }
+
+    // Would this much more (blocks, bytes) take the run over a ceiling?
+    function overCeiling(moreBlocks, moreBytes) {
+      var c = session.ceiling || { count: 0, bytes: 0, estimate: 0 };
+      return (
+        c.count + moreBlocks > record.NEW_BLOCKS_MAX ||
+        c.bytes + moreBytes > record.NEW_BLOCKS_MAX_BYTES ||
+        c.estimate + moreBytes * RUN_BYTES_FACTOR + moreBlocks * RUN_BLOCK_OVERHEAD > record.RUN_RECORD_MAX_BYTES
+      );
+    }
+
+    function refuseAtCeiling() {
+      session.ceilingRefused = true;
+      refreshBar();
+    }
+
+    function utf8Length(text) {
+      var s = String(text || "");
+      if (typeof TextEncoder === "function") return new TextEncoder().encode(s).length;
+      return s.length;
+    }
+
+    // ---- the live region -----------------------------------------------------
+
+    var liveNode = null;
+    var announced = [];
+
+    function announce(text) {
+      announced.push(text);
+      if (announced.length > 50) announced.shift();
+      var host = surface();
+      if (!host) return text;
+      if (!liveNode) {
+        liveNode = doc.createElement("div");
+        liveNode.className = "lahe-edit-live";
+        liveNode.setAttribute("role", "status");
+        liveNode.setAttribute("aria-live", "polite");
+        markers.markChrome(liveNode);
+        host.appendChild(liveNode);
+      }
+      // Cleared first, so saying the same line twice is still heard twice.
+      liveNode.textContent = "";
+      liveNode.textContent = text;
+      return text;
+    }
+
+    function firstWords(text) {
+      return normalize.firstWords(text, FIRST_WORDS);
+    }
+
+    // ---- opening --------------------------------------------------------------
+
+    /**
+     * The block a gesture on `el` anchors a sitting on: the whole list for a
+     * list item, otherwise the block itself.
+     */
+    function anchorBlockFor(el) {
+      var node = el;
+      while (node && node.nodeType === 1) {
+        if (LIST_TAGS[tagOf(node)]) return node;
+        if (tagOf(node) === "li") {
+          node = node.parentElement;
+          continue;
+        }
+        break;
+      }
+      return el;
+    }
+
+    // Any block tag in normalize.BLOCK_TAGS, opening.
+    var OLD_SHAPE_TAG = new RegExp("<(" + Object.keys(normalize.BLOCK_TAGS).join("|") + ")[\\s>]", "i");
+
+    // A record from before free writing: no run fields, and markup that
+    // nests blocks inside the edited element. Reopening it keeps today's
+    // single-element session and break rule.
+    function isOldShape(item) {
+      if (!item || record.hasRunFields(item)) return false;
+      return OLD_SHAPE_TAG.test(String(item[record.FIELD.AFTER_HTML] || ""));
+    }
+
+    // The outstanding run record one of whose run blocks is `el`, with its
+    // resolved anchor and the run's elements.
+    function runRecordHolding(el) {
+      if (!reviewId) return null;
+      var items = store.read(reviewId);
+      for (var i = 0; i < items.length; i += 1) {
+        var item = items[i];
+        if (!record.isRunRecord(item) || isPlaced(item)) continue;
+        var anchorEl = elementFor(item);
+        if (!anchorEl) continue;
+        var found = blocks.runElementsFor(item, doc, anchorEl);
+        for (var b = 0; b < found.blocks.length; b += 1) {
+          var els = found.blocks[b].elements;
+          for (var k = 0; k < els.length; k += 1) {
+            if (contains(els[k], el)) return { item: item, anchor: anchorEl, found: found };
+          }
+        }
+      }
+      return null;
+    }
+
+    // The run a reopened record already has on the page, as session entries.
+    function runEntriesFor(item, anchorEl, found) {
+      var got = found || blocks.runElementsFor(item, doc, anchorEl);
+      var list = item[record.FIELD.NEW_BLOCKS] || [];
+      var out = [];
+      got.blocks.forEach(function (b) {
+        var rec = list[b.index];
+        var fromAnchor = !!(rec && rec.from_anchor);
+        var moved = fromAnchor ? folded(htmlText(rec.html)) : null;
+        b.elements.forEach(function (el) {
+          var have = null;
+          out.forEach(function (e) {
+            if (e.el === el) have = e;
+          });
+          if (have) {
+            // Two record blocks on one element: a split tail the reviewer
+            // typed into. The element keeps the moved words it carries.
+            if (fromAnchor && !have.fromAnchor) {
+              have.fromAnchor = true;
+              have.moved = moved;
+            }
+            return;
+          }
+          out.push({ el: el, fromAnchor: fromAnchor, moved: moved, html: null, dirty: true });
+        });
+      });
+      return out;
+    }
+
+    function isContainerTag(el) {
+      return blocks.isContainerAnchor(el);
+    }
+
+    /**
+     * Opens a run session.
+     *
+     * @param {Element} anchorEl the anchor (a container for an empty page)
+     * @param {Object} opts {existing, run, placement, caretEl}
+     */
+    function openRun(anchorEl, opts) {
+      var o = opts || {};
+      var existing = o.existing || null;
+      var placement = o.placement || (isContainerTag(anchorEl) ? record.PLACEMENT.START_OF_CONTAINER : record.PLACEMENT.AFTER_ANCHOR);
+      var container = placement === record.PLACEMENT.START_OF_CONTAINER;
+      var saved = liveRange() ? liveRange().cloneRange() : null;
+      bootCommands();
+
+      var before;
+      var item;
+      if (existing) {
+        item = existing;
+        before = { text: item[record.FIELD.BEFORE], html: item[record.FIELD.BEFORE_HTML] };
+      } else {
+        before = container ? { text: "", html: "" } : capture(anchorEl);
+        var editRegion = regionFor(anchorEl);
+        item = record.newItem({
+          kind: record.KIND.EDIT,
+          state: record.STATE.DRAFT,
+          before: before.text,
+          before_html: before.html,
+          page_origin: pageField("origin"),
+          page_path: pageField("path"),
+          page_title: pageField("title"),
+          page_seq: pageField("seq"),
+          source_hint: pageField("source_hint"),
+          region: editRegion,
+          context: contextFor(anchorEl, editRegion)
+        });
+        persist(item, "opened");
+      }
+
+      var ref = item[record.FIELD.REGION] && item[record.FIELD.REGION].ref;
+      var mintedTag = ref && ref.fingerprint && ref.fingerprint.tag ? String(ref.fingerprint.tag).toLowerCase() : tagOf(anchorEl);
+      var host = blocks.hostFor(anchorEl, placement);
+
+      session = {
+        mode: MODE.RUN,
+        block: anchorEl,
+        anchor: anchorEl,
+        anchorTag: container ? tagOf(anchorEl) : mintedTag,
+        container: container,
+        placement: placement,
+        host: host,
+        run: o.run || [],
+        itemId: item[record.FIELD.ID],
+        before: before,
+        composing: false,
+        lastKey: null,
+        wasNew: !existing,
+        wasCommitted: !!existing && isCommittedEdit(existing),
+        withdrawFrom: existing && withdrawable(existing) ? existing[record.FIELD.STATE] : null,
+        // Sticky: once any draft of this sitting wrote run fields, or the
+        // reopened record had them, the sitting never falls back to PLAIN.
+        runShaped: !!existing && record.hasRunFields(existing),
+        runUnseen: !!existing && record.isRunRecord(existing) && !(o.run && o.run.length),
+        draftTimer: null,
+        draftSince: 0,
+        withdrawnWritten: false,
+        measured: null,
+        anchorDirty: true,
+        anchorHtml: undefined,
+        openedKey: null,
+        opened: existing
+          ? { text: existing[record.FIELD.AFTER], html: existing[record.FIELD.AFTER_HTML] }
+          : before,
+        ceiling: null,
+        ceilingRefused: false,
+        history: { undo: [], redo: [], burst: null },
+        hostAttrs: {},
+        startedAt: Date.now()
+      };
+      session.openedKey = runKey(captureRunFields());
+      session.openedAnchorHtml = anchorMarkup();
+      session.ceiling = ceilingState(captureRunFields());
+
+      applyHostAttrs(host);
+      protect.mark(anchorEl, {
+        reason: "edit",
+        item: item[record.FIELD.ID],
+        blocks: function () {
+          return sessionBlocks();
+        },
+        host: function () {
+          return session ? session.host : null;
+        },
+        // A repaint that rebuilt the anchor without an attribute protection
+        // can find it by: the anchor engine finds it by its words.
+        refind: function () {
+          var own = session ? store.readItem(requireReview(), session.itemId) : null;
+          return own ? elementFor(own) : null;
+        },
+        container: container,
+        placement: placement
+      });
+      rememberSession();
+      bindBlock(host);
+      drawFrame(anchorEl);
+      if (typeof host.focus === "function") {
+        try {
+          host.focus({ preventScroll: true });
+        } catch (err) {
+          host.focus();
+        }
+      }
+      if (o.caretEl) setCaret(o.caretEl, 0);
+      else if (saved && inSession(saved.startContainer)) {
+        var sel = win.getSelection();
+        sel.removeAllRanges();
+        sel.addRange(saved);
+      } else if (!container) {
+        var last = textNodes(anchorEl).pop();
+        if (last) setCaret(last, last.nodeValue.length);
+        else setCaret(anchorEl, 0);
+      }
+      if (protect && typeof protect.snapshot === "function") protect.snapshot();
+      announce(
+        container ? ANNOUNCE.START_OF_PAGE : ANNOUNCE.AFTER.replace("{words}", firstWords(anchorEl.textContent))
+      );
+      refreshBar();
+      return sessionInfo();
+    }
+
+    function rememberSession() {
+      if (!session) return;
+      remember(session.anchor, session.itemId);
+      session.run.forEach(function (r) {
+        rememberAlso(r.el, session.itemId);
+      });
+    }
+
+    function applyHostAttrs(host) {
+      epoch.write("editing.enter", function () {
+        var all = Object.assign({}, EDITABLE_ATTRS);
+        all[markers.EDIT_HOST_ATTR] = "true";
+        Object.keys(all).forEach(function (name) {
+          if (!Object.prototype.hasOwnProperty.call(session.hostAttrs, name)) {
+            session.hostAttrs[name] = host.hasAttribute(name) ? host.getAttribute(name) : null;
+          }
+          host.setAttribute(name, all[name]);
+        });
+      });
+    }
+
+    function clearHostAttrs(open) {
+      var host = open.host;
+      if (!host) return;
+      epoch.write("editing.leave", function () {
+        Object.keys(open.hostAttrs).forEach(function (name) {
+          var was = open.hostAttrs[name];
+          if (was === null) host.removeAttribute(name);
+          else host.setAttribute(name, was);
+        });
+      });
+    }
+
+    // ---- Enter -------------------------------------------------------------------
+
+    function newParagraph() {
+      return ensureLine(doc.createElement("p"));
+    }
+
+    function extractTail(range, unit, tag) {
+      var tail = doc.createElement(tag);
+      var rest = doc.createRange();
+      rest.setStart(range.endContainer, range.endOffset);
+      rest.setEnd(unit, unit.childNodes.length);
+      tail.appendChild(rest.extractContents());
+      // The space at a split point goes with the split, as in every editor:
+      // the head does not end in one and the tail does not start with one.
+      trimEdgeSpace(unit, false);
+      trimEdgeSpace(tail, true);
+      ensureLine(tail);
+      ensureLine(unit);
+      return tail;
+    }
+
+    function trimEdgeSpace(el, leading) {
+      var nodes = textNodes(el);
+      if (!nodes.length) return;
+      var n = leading ? nodes[0] : nodes[nodes.length - 1];
+      n.nodeValue = leading ? n.nodeValue.replace(/^[ \u00a0]+/, "") : n.nodeValue.replace(/[ \u00a0]+$/, "");
+    }
+
+    /**
+     * Enter inside a run session, decided by gestures.enterIntentFor.
+     *
+     * @returns {boolean} true when the layer wrote the change
+     */
+    function runEnter(shiftKey) {
+      var range = liveRange();
+      if (!range) return false;
+      var unit = unitOf(range.startContainer);
+      if (!unit || unit !== unitOf(range.endContainer)) {
+        if (!deleteSpan()) return false;
+        range = liveRange();
+        unit = unitOf(range.startContainer);
+        if (!unit) return false;
+      }
+      var block = blockOf(unit);
+      var inItem = tagOf(unit) === "li";
+      var intent = gestures.enterIntentFor({
+        shiftKey: shiftKey,
+        atEnd: atUnitEnd(range, unit),
+        inListItem: inItem,
+        itemEmpty: inItem && isEmptyUnit(unit),
+        lastItem: inItem && !unit.nextElementSibling,
+        runAllowed: true
+      });
+      var grows = intent === gestures.ENTER.SIBLING || intent === gestures.ENTER.SPLIT || intent === gestures.ENTER.END_LIST;
+      if (grows && overCeiling(1, 0)) {
+        refuseAtCeiling();
+        return true;
+      }
+      pushHistory();
+      if (intent === gestures.ENTER.LINE) {
+        epoch.write("editing.run:line", function () {
+          range.deleteContents();
+          var caret = writeLineBreak(range, unit);
+          win.getSelection().removeAllRanges();
+          win.getSelection().addRange(caret);
+        });
+        markDirtyAt(unit);
+        afterStructural();
+        return true;
+      }
+      structural("enter", function () {
+        range.deleteContents();
+        if (intent === gestures.ENTER.NEW_ITEM) {
+          var li = extractTail(range, unit, "li");
+          unit.parentNode.insertBefore(li, unit.nextSibling);
+          setCaret(li, 0);
+        } else if (intent === gestures.ENTER.END_LIST) {
+          var list = unit.parentNode;
+          list.removeChild(unit);
+          var p = newParagraph();
+          if (!list.firstElementChild && list !== session.anchor) {
+            list.parentNode.replaceChild(p, list);
+            var entry = runEntryOf(list);
+            entry.el = p;
+            entry.fromAnchor = false;
+            entry.moved = null;
+          } else {
+            insertAfterBlock(list, p, false);
+          }
+          setCaret(p, 0);
+        } else if (intent === gestures.ENTER.SIBLING) {
+          var sib = newParagraph();
+          insertAfterBlock(block, sib, false);
+          setCaret(sib, 0);
+        } else {
+          var tail = extractTail(range, unit, tagOf(unit));
+          insertAfterBlock(block, tail, isFromAnchor(block));
+          markSplit(block, tail);
+          setCaret(tail, 0);
+        }
+      });
+      return true;
+    }
+
+    // ---- deletes across a block edge ----------------------------------------------
+
+    // Merge unit `b` into the end of unit `a`, and remove `b` (and its block,
+    // when that leaves the block with nothing).
+    function mergeUnits(a, b) {
+      var at = textNodes(a).pop();
+      var spot = at ? { node: at, offset: at.nodeValue.length } : null;
+      // A trailing placeholder break in `a` goes: the words after it are real.
+      var lastEl = a.lastChild;
+      while (lastEl && lastEl.nodeType === 3 && lastEl.nodeValue === "") lastEl = lastEl.previousSibling;
+      if (lastEl && tagOf(lastEl) === "br") a.removeChild(lastEl);
+      var firstMoved = null;
+      while (b.firstChild) {
+        var child = b.firstChild;
+        if (!firstMoved) firstMoved = child;
+        if (tagOf(child) === "br" && !child.nextSibling) {
+          b.removeChild(child);
+          continue;
+        }
+        a.appendChild(child);
+      }
+      var bBlock = blockOf(b) || b;
+      if (bBlock === b) removeRunBlock(b);
+      else {
+        b.parentNode.removeChild(b);
+        if (!bBlock.firstElementChild && bBlock !== session.anchor) removeRunBlock(bBlock);
+      }
+      ensureLine(a);
+      if (spot && spot.node.parentNode) setCaret(spot.node, spot.offset);
+      else setCaret(a, 0);
+    }
+
+    // Delete a selection that spans units, keeping the head of the first and
+    // the tail of the last as one unit. Every unit in between goes.
+    function deleteSpan() {
+      var range = liveRange();
+      if (!range || range.collapsed) return false;
+      var first = unitOf(range.startContainer);
+      var last = unitOf(range.endContainer);
+      if (!first || !last) return false;
+      if (first === last) {
+        epoch.write("editing.run:delete", function () {
+          range.deleteContents();
+          ensureLine(first);
+        });
+        markDirtyAt(first);
+        return true;
+      }
+      var units = sessionUnits();
+      var from = units.indexOf(first);
+      var to = units.indexOf(last);
+      epoch.write("editing.run:delete_span", function () {
+        var head = doc.createRange();
+        head.setStart(range.startContainer, range.startOffset);
+        head.setEnd(first, first.childNodes.length);
+        head.deleteContents();
+        var tail = doc.createRange();
+        tail.setStart(last, 0);
+        tail.setEnd(range.endContainer, range.endOffset);
+        tail.deleteContents();
+        for (var i = from + 1; i < to; i += 1) {
+          var u = units[i];
+          var ub = blockOf(u);
+          if (ub === u) removeRunBlock(u);
+          else {
+            u.parentNode.removeChild(u);
+            if (!ub.firstElementChild && ub !== session.anchor) removeRunBlock(ub);
+          }
+        }
+        mergeUnits(first, last);
+      });
+      afterStructural();
+      return true;
+    }
+
+    function runEdgeDelete(key) {
+      var range = liveRange();
+      if (!range) return null;
+      var unit = unitOf(range.startContainer);
+      if (!unit) return null;
+      var units = sessionUnits();
+      var index = units.indexOf(unit);
+      var spans = !range.collapsed && unitOf(range.endContainer) !== unit;
+      var intent = gestures.edgeDeleteFor({
+        key: key,
+        collapsed: range.collapsed,
+        spansBlocks: spans,
+        atBlockStart: range.collapsed && atUnitStart(range, unit),
+        atBlockEnd: range.collapsed && atUnitEnd(range, unit),
+        firstBlock: index === 0,
+        lastBlock: index === units.length - 1
+      });
+      if (!intent) return null;
+      if (intent === gestures.EDGE.REFUSE) return intent;
+      pushHistory();
+      if (intent === gestures.EDGE.DELETE_SELECTION) {
+        deleteSpan();
+        return intent;
+      }
+      structural("merge", function () {
+        if (intent === gestures.EDGE.MERGE_PREVIOUS) mergeUnits(units[index - 1], unit);
+        else mergeUnits(unit, units[index + 1]);
+      });
+      return intent;
+    }
+
+    // ---- plain text in: typing over a span, paste, drop -------------------------
+
+    function insertTextAtCaret(text) {
+      var range = liveRange();
+      if (!range) return false;
+      var node = doc.createTextNode(text);
+      range.deleteContents();
+      range.insertNode(node);
+      // A placeholder break right after the new words is no longer needed.
+      var next = node.nextSibling;
+      if (next && tagOf(next) === "br" && !next.nextSibling && text) next.parentNode.removeChild(next);
+      setCaret(node, node.nodeValue.length);
+      markDirtyAt(node);
+      return true;
+    }
+
+    /**
+     * Plain text into the session at the caret: a blank line starts a new
+     * paragraph, a single newline is a line break. Rich paste waits on board
+     * row LAHE-rich-paste.
+     */
+    function insertPlain(text) {
+      var paragraphs = String(text || "").replace(/\r\n?/g, "\n").split(/\n[ \t]*\n+/);
+      pushHistory();
+      if (liveRange() && !liveRange().collapsed) deleteSpan();
+      for (var i = 0; i < paragraphs.length; i += 1) {
+        if (i > 0) {
+          if (overCeiling(1, 0)) {
+            refuseAtCeiling();
+            break;
+          }
+          runEnterRaw();
+        }
+        var lines = paragraphs[i].split("\n");
+        for (var l = 0; l < lines.length; l += 1) {
+          if (l > 0) {
+            var r = liveRange();
+            epoch.write("editing.run:paste_line", function () {
+              var caret = writeLineBreak(r, unitOf(r.startContainer));
+              win.getSelection().removeAllRanges();
+              win.getSelection().addRange(caret);
+            });
+          }
+          if (!lines[l]) continue;
+          if (overCeiling(0, utf8Length(lines[l]))) {
+            refuseAtCeiling();
+            i = paragraphs.length;
+            break;
+          }
+          epoch.write("editing.run:paste", insertTextAtCaret.bind(null, lines[l]));
+          session.ceiling = ceilingState(captureRunFields());
+        }
+      }
+      afterStructural();
+      return true;
+    }
+
+    // Enter as paste uses it: no history step of its own, no ceiling check.
+    function runEnterRaw() {
+      var range = liveRange();
+      var unit = unitOf(range.startContainer);
+      var block = blockOf(unit);
+      epoch.write("editing.run:paste_break", function () {
+        if (tagOf(unit) === "li") {
+          var li = extractTail(range, unit, "li");
+          unit.parentNode.insertBefore(li, unit.nextSibling);
+          setCaret(li, 0);
+          return;
+        }
+        if (atUnitEnd(range, unit)) {
+          var p = newParagraph();
+          insertAfterBlock(block, p, false);
+          setCaret(p, 0);
+          return;
+        }
+        var tail = extractTail(range, unit, tagOf(unit));
+        insertAfterBlock(block, tail, isFromAnchor(block));
+        markSplit(block, tail);
+        setCaret(tail, 0);
+      });
+      markDirtyAt(unit);
+      session.ceiling = ceilingState(captureRunFields());
+    }
+
+    // ---- block types -------------------------------------------------------------
+
+    /**
+     * What the menu, the hotkeys and the shortcuts may do for the caret's unit.
+     *
+     * @returns {{label: string, other: boolean, enabled: Object}}
+     */
+    function typeState() {
+      var enabled = {};
+      gestures.BLOCK_TYPES.forEach(function (t) {
+        enabled[t.tag] = false;
+      });
+      if (!isRun()) return { label: gestures.OTHER_BLOCK_LABEL, other: true, enabled: enabled, tag: null };
+      var range = liveRange();
+      var unit = range ? unitOf(range.startContainer) : null;
+      if (!unit && session.caretUnit && session.caretUnit.isConnected) unit = session.caretUnit;
+      if (!unit) return { label: gestures.OTHER_BLOCK_LABEL, other: true, enabled: enabled, tag: null };
+      var block = blockOf(unit);
+      var tag = tagOf(block);
+      if (!Object.prototype.hasOwnProperty.call(TYPE_LABELS, tag)) {
+        return { label: gestures.OTHER_BLOCK_LABEL, other: true, enabled: enabled, tag: tag };
+      }
+      if (LIST_TAGS[tag]) {
+        enabled.ul = true;
+        enabled.ol = true;
+        enabled.p = tagOf(unit) === "li" && !unit.nextElementSibling;
+      } else {
+        Object.keys(enabled).forEach(function (k) {
+          enabled[k] = true;
+        });
+      }
+      return { label: TYPE_LABELS[tag], other: false, enabled: enabled, tag: tag };
+    }
+
+    function replaceBlock(oldEl, nextEl) {
+      if (oldEl === session.anchor) {
+        session.anchor = nextEl;
+        session.block = nextEl;
+        if (protect && typeof protect.rebindTo === "function") protect.rebindTo(nextEl);
+        remember(nextEl, session.itemId);
+      } else {
+        var entry = runEntryOf(oldEl);
+        if (entry) entry.el = nextEl;
+        rememberAlso(nextEl, session.itemId);
+      }
+      return nextEl;
+    }
+
+    /**
+     * The one function every block type goes through. The menu, the hotkeys
+     * and the Markdown shortcuts each call typeActions[tag], which lands here.
+     *
+     * @returns {boolean} true when the block changed
+     */
+    function applyType(tag) {
+      var state = typeState();
+      if (state.other || !state.enabled[tag]) return false;
+      var range = liveRange();
+      var unit = range ? unitOf(range.startContainer) : session.caretUnit;
+      if (!unit) return false;
+      var block = blockOf(unit);
+      var current = tagOf(block);
+      if (current === tag && !(tag === "p" && tagOf(unit) === "li")) return false;
+      var caret = saveCaret();
+      pushHistory();
+      var caretBlockIndex = sessionBlocks().indexOf(block);
+      var moved = null;
+      structural("type:" + tag, function () {
+        if (LIST_TAGS[current] && LIST_TAGS[tag]) {
+          replaceBlock(block, blocks.swapTag(block, tag));
+        } else if (LIST_TAGS[current] && tag === "p") {
+          var items = unitsOf(block);
+          if (items.length === 1) {
+            var p = replaceBlock(block, blocks.swapTag(block, "p"));
+            var only = p.firstElementChild;
+            while (only.firstChild) p.insertBefore(only.firstChild, only);
+            p.removeChild(only);
+            ensureLine(p);
+          } else {
+            var para = doc.createElement("p");
+            while (unit.firstChild) para.appendChild(unit.firstChild);
+            ensureLine(para);
+            block.removeChild(unit);
+            insertAfterBlock(block, para, isFromAnchor(block), movedOf(block));
+            markSplit(block, para);
+            moved = para;
+          }
+        } else if (LIST_TAGS[tag]) {
+          var list = replaceBlock(block, blocks.swapTag(block, tag));
+          var li = doc.createElement("li");
+          while (list.firstChild) li.appendChild(list.firstChild);
+          ensureLine(li);
+          list.appendChild(li);
+        } else {
+          replaceBlock(block, blocks.swapTag(block, tag));
+        }
+      });
+      if (moved) setCaret(moved, 0);
+      else if (caret) {
+        void caretBlockIndex;
+        restoreCaret(caret);
+      }
+      if (protect && typeof protect.snapshot === "function") protect.snapshot();
+      announce(TYPE_LABELS[tag]);
+      refreshBar();
+      return true;
+    }
+
+    var typeActions = {};
+    gestures.BLOCK_TYPES.forEach(function (t) {
+      typeActions[t.tag] = function () {
+        return applyType(t.tag);
+      };
+    });
+
+    // "# " and the rest, typed at the start of a block. Its own history step,
+    // so Cmd-Z gives back the typed characters (brief R6).
+    function maybeShortcut() {
+      var range = liveRange();
+      if (!range || !range.collapsed) return false;
+      var unit = unitOf(range.startContainer);
+      if (!unit || tagOf(unit) === "li") return false;
+      var head = doc.createRange();
+      head.setStart(unit, 0);
+      head.setEnd(range.startContainer, range.startOffset);
+      var tag = gestures.markdownShortcutFor(head.toString().replace(/ /g, " "));
+      if (!tag || !typeState().enabled[tag]) return false;
+      closeBurst();
+      pushHistory(true);
+      epoch.write("editing.run:shortcut", function () {
+        head.deleteContents();
+        ensureLine(unit);
+      });
+      setCaret(unit.firstChild && unit.firstChild.nodeType === 3 ? unit.firstChild : unit, 0);
+      markDirtyAt(unit);
+      var changed = applyTypeNoHistory(tag);
+      return changed;
+    }
+
+    function applyTypeNoHistory(tag) {
+      var saved = session.history.suspend;
+      session.history.suspend = true;
+      try {
+        return applyType(tag);
+      } finally {
+        session.history.suspend = saved;
+      }
+    }
+
+    // ---- session history (Task 2.4) --------------------------------------------
+
+    // One step of the session history. Each block's markup is SHARED with
+    // the step before it when that block did not change: the new string is
+    // compared, then dropped in favour of the one already held, so a step
+    // costs only the blocks it changed (code_lead 11). `cost` is what this
+    // step added.
+    function stateNow() {
+      var h = session.history;
+      var prev = h.undo.length ? h.undo[h.undo.length - 1] : null;
+      var cost = 0;
+      function share(held, now) {
+        if (typeof held === "string" && held === now) return held;
+        cost += now ? now.length : 0;
+        return now;
+      }
+      var anchorHtml = session.container ? null : share(prev && prev.anchorHtml, session.anchor.innerHTML);
+      var run = session.run.map(function (r, i) {
+        var was = prev && prev.run[i];
+        return { tag: tagOf(r.el), html: share(was && was.html, r.el.innerHTML), fromAnchor: r.fromAnchor, moved: r.moved || null };
+      });
+      return {
+        anchorTag: session.container ? null : tagOf(session.anchor),
+        anchorHtml: anchorHtml,
+        run: run,
+        caret: saveCaret(),
+        cost: cost
+      };
+    }
+
+    // Keep the undo stack within SESSION_HISTORY_MAX steps and, as a guard,
+    // SESSION_HISTORY_MAX_CHARS of markup. The newest step always stays.
+    function trimHistory(h) {
+      var total = 0;
+      h.undo.forEach(function (st) {
+        total += st.cost || 0;
+      });
+      while (h.undo.length > 1 && (h.undo.length > SESSION_HISTORY_MAX || total > SESSION_HISTORY_MAX_CHARS)) {
+        total -= h.undo.shift().cost || 0;
+      }
+    }
+
+    /** The characters of markup the session history holds, each string once. */
+    function historyChars() {
+      if (!session || !session.history) return 0;
+      var seen = new Set();
+      var total = 0;
+      function add(str) {
+        if (typeof str !== "string" || seen.has(str)) return;
+        seen.add(str);
+        total += str.length;
+      }
+      session.history.undo.concat(session.history.redo).forEach(function (st) {
+        add(st.anchorHtml);
+        st.run.forEach(function (b) {
+          add(b.html);
+        });
+      });
+      return total;
+    }
+
+    function pushHistory(force) {
+      if (!isRun() || session.history.suspend) return;
+      var h = session.history;
+      if (h.burst && !force) closeBurst();
+      h.undo.push(stateNow());
+      trimHistory(h);
+      h.redo = [];
+    }
+
+    // A typing burst is one step: its state before the first keystroke goes on
+    // the stack, and a pause of TYPING_BURST_IDLE_MS ends it.
+    function noteTyping() {
+      if (!isRun() || session.history.suspend) return;
+      var h = session.history;
+      if (!h.burst) {
+        h.undo.push(stateNow());
+        trimHistory(h);
+        h.redo = [];
+        h.burst = { timer: null };
+      }
+      if (h.burst.timer && win) win.clearTimeout(h.burst.timer);
+      if (win) {
+        h.burst.timer = win.setTimeout(function () {
+          if (session && session.history === h) closeBurst();
+        }, TYPING_BURST_IDLE_MS);
+      }
+    }
+
+    function closeBurstOf(open) {
+      if (open && open.history && open.history.burst && open.history.burst.timer && win) win.clearTimeout(open.history.burst.timer);
+    }
+
+    function closeBurst() {
+      if (!session) return;
+      var h = session.history;
+      if (h.burst && h.burst.timer && win) win.clearTimeout(h.burst.timer);
+      h.burst = null;
+    }
+
+    function applyState(state) {
+      epoch.write("editing.run:history", function () {
+        if (!session.container) {
+          if (tagOf(session.anchor) !== state.anchorTag) replaceBlock(session.anchor, blocks.swapTag(session.anchor, state.anchorTag));
+          session.anchor.innerHTML = state.anchorHtml;
+        }
+        session.run.slice().forEach(function (r) {
+          removeRunBlock(r.el);
+        });
+        var prev = session.anchor;
+        state.run.forEach(function (b) {
+          var el = doc.createElement(b.tag);
+          el.innerHTML = b.html;
+          insertAfterBlock(prev, el, b.fromAnchor, b.moved);
+          rememberAlso(el, session.itemId);
+          prev = el;
+        });
+      });
+      restoreCaret(state.caret);
+      afterStructural();
+    }
+
+    function historyStep(intent) {
+      if (!isRun()) return false;
+      closeBurst();
+      var h = session.history;
+      var from = intent === gestures.HISTORY.UNDO ? h.undo : h.redo;
+      var to = intent === gestures.HISTORY.UNDO ? h.redo : h.undo;
+      if (!from.length) return false;
+      var target = from.pop();
+      to.push(stateNow());
+      applyState(target);
+      return true;
+    }
+
+    // ---- the guard --------------------------------------------------------------
+
+    function rangeInSession(range) {
+      if (!range) return false;
+      return inSession(range.startContainer) && inSession(range.endContainer);
+    }
+
+    function targetRange(event) {
+      if (typeof event.getTargetRanges === "function") {
+        var ranges = event.getTargetRanges();
+        if (ranges && ranges.length) return ranges[0];
+      }
+      return liveRange();
+    }
+
+    var ALLOWED_FORMATS = { formatBold: 1, formatItalic: 1 };
+
+    /**
+     * Every edit in the host comes through here first. Anything outside the
+     * anchor and the run is refused; anything that crosses a block edge is
+     * cancelled and written by the layer.
+     */
+    function onRunBeforeInput(event) {
+      if (!isRun() || markers.isInsideOverlay(event.target)) return;
+      var type = String(event.inputType || "");
+      if (session.composing || type === "insertCompositionText") return;
+      var refuse = function () {
+        if (typeof event.preventDefault === "function") event.preventDefault();
+        counters.refused += 1;
+      };
+      var sel = liveRange();
+      if (!rangeInSession(sel) || !rangeInSession(targetRange(event))) {
+        // A Backspace at the anchor's start reaches into the page block before
+        // it; that is the refused edge, not a guard hit worth more than that.
+        refuse();
+        return;
+      }
+      if (type === "historyUndo" || type === "historyRedo") {
+        refuse();
+        historyStep(type === "historyUndo" ? gestures.HISTORY.UNDO : gestures.HISTORY.REDO);
+        return;
+      }
+      if (type === "insertParagraph" || type === "insertLineBreak") {
+        refuse();
+        var shift =
+          type === "insertLineBreak" ||
+          !!(session.lastKey && session.lastKey.key === "Enter" && session.lastKey.shiftKey);
+        runEnter(shift);
+        return;
+      }
+      if (/^delete/.test(type)) {
+        var key = /Forward$/.test(type) ? "Delete" : "Backspace";
+        var spans = sel && !sel.collapsed && unitOf(sel.startContainer) !== unitOf(sel.endContainer);
+        if (spans) {
+          refuse();
+          pushHistory();
+          deleteSpan();
+          return;
+        }
+        if (type === "deleteContentBackward" || type === "deleteContentForward") {
+          var edge = runEdgeDelete(key);
+          if (edge) refuse();
+          else noteTyping();
+        } else noteTyping();
+        return;
+      }
+      if (type === "insertFromPaste" || type === "insertFromDrop" || type === "insertFromPasteAsQuotation" || type === "insertFromYank") {
+        refuse();
+        var data = event.dataTransfer && typeof event.dataTransfer.getData === "function" ? event.dataTransfer.getData("text/plain") : null;
+        if (data === null || data === undefined) data = typeof event.data === "string" ? event.data : "";
+        if (data && !session.pasteHandled) insertPlain(data);
+        session.pasteHandled = false;
+        return;
+      }
+      if (/^format/.test(type)) {
+        if (!ALLOWED_FORMATS[type]) refuse();
+        return;
+      }
+      if (type === "insertText" || type === "insertReplacementText") {
+        var text = typeof event.data === "string" ? event.data : "";
+        if (text && overCeiling(0, utf8Length(text))) {
+          refuse();
+          refuseAtCeiling();
+          return;
+        }
+        if (sel && !sel.collapsed && unitOf(sel.startContainer) !== unitOf(sel.endContainer)) {
+          refuse();
+          pushHistory();
+          deleteSpan();
+          if (text) {
+            epoch.write("editing.run:type_over", insertTextAtCaret.bind(null, text));
+            afterStructural();
+          }
+          return;
+        }
+        noteTyping();
+        return;
+      }
+      // Anything else an engine may send (insertOrderedList, insertHorizontalRule,
+      // and the rest): not a gesture this tool has, so it does nothing.
+      if (/^insert/.test(type) && type !== "insertText") refuse();
+    }
+
+    function onRunPaste(event) {
+      if (!isRun() || markers.isInsideOverlay(event.target)) return;
+      if (typeof event.preventDefault === "function") event.preventDefault();
+      if (!rangeInSession(liveRange())) return;
+      var cd = event.clipboardData;
+      var text = cd && typeof cd.getData === "function" ? cd.getData("text/plain") : "";
+      session.pasteHandled = true;
+      if (text) insertPlain(text);
+      if (win) {
+        win.setTimeout(function () {
+          if (session) session.pasteHandled = false;
+        }, 0);
+      }
+    }
+
+    function onRunDrop(event) {
+      if (!isRun() || markers.isInsideOverlay(event.target)) return;
+      if (typeof event.preventDefault === "function") event.preventDefault();
+      var dt = event.dataTransfer;
+      var text = dt && typeof dt.getData === "function" ? dt.getData("text/plain") : "";
+      var point = null;
+      if (typeof doc.caretRangeFromPoint === "function") point = doc.caretRangeFromPoint(event.clientX, event.clientY);
+      else if (typeof doc.caretPositionFromPoint === "function") {
+        var pos = doc.caretPositionFromPoint(event.clientX, event.clientY);
+        if (pos) {
+          point = doc.createRange();
+          point.setStart(pos.offsetNode, pos.offset);
+        }
+      }
+      if (!point || !inSession(point.startContainer) || !text) return;
+      setCaret(point.startContainer, point.startOffset);
+      session.pasteHandled = true;
+      insertPlain(text);
+      if (win) {
+        win.setTimeout(function () {
+          if (session) session.pasteHandled = false;
+        }, 0);
+      }
+    }
+
+    // A cut that reaches outside the session copies nothing and deletes
+    // nothing; one inside it is deleted by the guard like any spanning delete.
+    function onRunCut(event) {
+      if (!isRun() || markers.isInsideOverlay(event.target)) return;
+      if (!rangeInSession(liveRange()) && typeof event.preventDefault === "function") event.preventDefault();
+    }
+
+    // A composition cannot be cancelled. One that starts outside the session
+    // has the block it lands in put back when it ends.
+    function onRunCompositionStart(event) {
+      if (!isRun()) return;
+      var range = liveRange();
+      if (range && !inSession(range.startContainer)) {
+        var el = range.startContainer.nodeType === 1 ? range.startContainer : range.startContainer.parentElement;
+        var block = selection.blockFor(el) || el;
+        session.stray = { el: block, html: block.innerHTML };
+        return;
+      }
+      session.composing = true;
+    }
+
+    function onRunCompositionEnd() {
+      if (!isRun()) return;
+      if (session.stray) {
+        var stray = session.stray;
+        session.stray = null;
+        epoch.write("editing.run:stray_composition", function () {
+          stray.el.innerHTML = stray.html;
+        });
+        commit({ reason: "composition outside" });
+        return;
+      }
+      session.composing = false;
+      markDirtyAt(liveRange() ? liveRange().startContainer : null);
+      if (protect && typeof protect.snapshot === "function") protect.snapshot();
+      captureTyping();
+    }
+
+    function onRunInput(event) {
+      if (!isRun() || session.composing) return;
+      var type = String((event && event.inputType) || "");
+      var range = liveRange();
+      if (range) markDirtyAt(range.startContainer);
+      if (type === "insertText" && event.data === " " && maybeShortcut()) return;
+      captureTyping();
+      refreshBar();
+    }
+
+    // Cmd-A inside a session selects the session, not the host.
+    function selectSession() {
+      var units = sessionUnits();
+      if (!units.length) return false;
+      var r = doc.createRange();
+      r.setStart(units[0], 0);
+      var last = units[units.length - 1];
+      r.setEnd(last, last.childNodes.length);
+      var sel = win.getSelection();
+      sel.removeAllRanges();
+      sel.addRange(r);
+      return true;
+    }
+
+    function platform() {
+      var nav = win && win.navigator ? win.navigator : null;
+      var p = nav ? String(nav.platform || nav.userAgent || "") : "";
+      return /Mac|iPhone|iPad/.test(p) ? "mac" : "other";
+    }
+
+    /**
+     * The run session's own keys, asked before the gesture table. True when
+     * the key was the session's.
+     */
+    function onRunKeydown(event) {
+      if (!isRun()) return false;
+      var mod = event.metaKey === true || event.ctrlKey === true;
+      var chord = gestures.blockTypeChord({
+        code: event.code,
+        key: event.key,
+        metaKey: event.metaKey === true,
+        ctrlKey: event.ctrlKey === true,
+        altKey: event.altKey === true,
+        shiftKey: event.shiftKey === true,
+        altGraph: typeof event.getModifierState === "function" && event.getModifierState("AltGraph") === true,
+        platform: platform()
+      });
+      if (chord) {
+        event.preventDefault();
+        typeActions[chord]();
+        return true;
+      }
+      var history = gestures.historyIntentFor({
+        code: event.code,
+        key: event.key,
+        metaKey: event.metaKey === true,
+        ctrlKey: event.ctrlKey === true,
+        shiftKey: event.shiftKey === true,
+        altKey: event.altKey === true,
+        editing: true,
+        platform: platform()
+      });
+      if (history) {
+        event.preventDefault();
+        historyStep(history);
+        return true;
+      }
+      if (mod && !event.shiftKey && !event.altKey && (event.code === "KeyA" || String(event.key).toLowerCase() === "a")) {
+        event.preventDefault();
+        selectSession();
+        return true;
+      }
+      if (event.key === "Tab" && !event.shiftKey && !mod) {
+        event.preventDefault();
+        focusMenuButton();
+        return true;
+      }
+      return false;
+    }
+
+    // An arrow key that takes the caret out of the session ends it.
+    function onRunKeyup(event) {
+      if (!isRun()) return;
+      if (!/^(Arrow|Page|Home|End)/.test(String(event.key || ""))) return;
+      var range = liveRange();
+      if (!range) return;
+      var sel = win.getSelection();
+      var focus = sel && sel.focusNode ? sel.focusNode : range.endContainer;
+      if (!inSession(focus)) commit({ reason: "arrow out" });
+      else refreshBar();
+    }
+
+    function onRunSelectionChange() {
+      notePageCaret();
+      if (!isRun()) return;
+      var range = liveRange();
+      if (range) {
+        var unit = unitOf(range.startContainer);
+        if (unit) session.caretUnit = unit;
+      }
+      if (win && !session.barRaf && win.requestAnimationFrame) {
+        session.barRaf = win.requestAnimationFrame(function () {
+          if (session) session.barRaf = null;
+          refreshBar();
+        });
+      }
     }
 
     // ------------------------------------------------------------------------
@@ -665,14 +2584,44 @@
      * @param {Element} block
      * @returns {null|Object} {itemId, block, before, kind}
      */
-    function editBlock(block) {
+    function editBlock(block, options) {
       if (!block || markers.isInsideOverlay(block)) return null;
-      if (session && session.block === block) return sessionInfo();
+      if (session && (session.block === block || (isRun() && inSession(block)))) return sessionInfo();
       if (session) commit({ reason: "another block" });
+      leaveEditState();
 
+      var existing = itemFor(block) || itemFor(anchorBlockFor(block));
+      var existingEl = existing ? elementFor(existing) : null;
+      // A record from before free writing, or one anchored on a single list
+      // item, keeps today's session and break rule.
+      if (existing && (isOldShape(existing) || tagOf(existingEl) === "li")) return openLegacy(block, existing);
+      if (existing && record.hasRunFields(existing) && existingEl) {
+        return openRun(existingEl, {
+          existing: existing,
+          run: runEntriesFor(existing, existingEl),
+          placement: existing[record.FIELD.PLACEMENT] || undefined,
+          caretEl: (options || {}).caretEl
+        });
+      }
+      if (!existing) {
+        var holding = runRecordHolding(block);
+        if (holding) {
+          return openRun(holding.anchor, {
+            existing: holding.item,
+            run: runEntriesFor(holding.item, holding.anchor, holding.found),
+            placement: holding.item[record.FIELD.PLACEMENT] || undefined,
+            caretEl: (options || {}).caretEl
+          });
+        }
+      }
+      var anchorEl = existingEl || anchorBlockFor(block);
+      if (!blocks.canHoldRun(anchorEl)) return openLegacy(block, existing);
+      return openRun(anchorEl, { existing: existing, caretEl: (options || {}).caretEl });
+    }
+
+    /** Today's single-block session. */
+    function openLegacy(block, existing) {
       bootCommands();
-
-      var existing = itemFor(block);
       var before;
       var item;
 
@@ -706,6 +2655,7 @@
       }
 
       session = {
+        mode: MODE.LEGACY,
         block: block,
         itemId: item[record.FIELD.ID],
         before: before,
@@ -734,6 +2684,7 @@
       };
 
       applyEditableAttrs(block);
+      announce(ANNOUNCE.AFTER.replace("{words}", firstWords(block.textContent)));
       // The record goes on the mark. Protection is then able to answer "which
       // record is the reviewer in" for replay, instead of replay inferring it
       // from the node it last bound that record to (2C's CP2-mid ask).
@@ -782,6 +2733,7 @@
      */
     function rebind(el) {
       if (!session || !el) return false;
+      if (isRun()) return rebindRun(el);
       if (session.block === el) return false; // same node, same listeners
       session.block = el;
       applyEditableAttrs(el);
@@ -791,14 +2743,67 @@
       return true;
     }
 
+    /**
+     * Protection rebuilt the run after a repaint: the session moves onto the
+     * blocks it built, and the host (which the repaint may have replaced) is
+     * made editable again.
+     */
+    function rebindRun(el) {
+      var built = protect && typeof protect.protectedBlocks === "function" ? protect.protectedBlocks() : null;
+      if (!built) {
+        if (el !== session.anchor && !session.container) {
+          session.anchor = el;
+          session.block = el;
+        }
+      } else {
+        session.anchor = built.anchor;
+        session.block = built.anchor;
+        var old = session.run;
+        session.run = built.run.map(function (b, i) {
+          return { el: b, fromAnchor: !!(old[i] && old[i].fromAnchor), moved: (old[i] && old[i].moved) || null, html: null, dirty: true };
+        });
+      }
+      var host = blocks.hostFor(session.anchor, session.placement);
+      if (host !== session.host || !host.hasAttribute(markers.EDIT_HOST_ATTR)) {
+        session.host = host;
+        session.hostAttrs = {};
+        applyHostAttrs(host);
+        bindBlock(host);
+      }
+      markAllDirty();
+      rememberSession();
+      positionFrame();
+      return true;
+    }
+
     function sessionInfo() {
-      if (!session) return { open: false, itemId: null, blockId: null, before: null };
-      return {
+      if (!session) {
+        return { open: false, itemId: null, blockId: null, before: null, editState: !!editState, mode: null };
+      }
+      var info = {
         open: true,
+        mode: session.mode,
         itemId: session.itemId,
         blockId: session.block.id || null,
-        before: session.before ? session.before.text : null
+        before: session.before ? session.before.text : null,
+        editState: false
       };
+      if (isRun()) {
+        var t = typeState();
+        info.anchorTag = session.container ? null : tagOf(session.anchor);
+        info.placement = session.placement;
+        info.runTags = session.run.map(function (r) {
+          return tagOf(r.el);
+        });
+        info.menuLabel = t.label;
+        info.menuDisabled = t.other;
+        info.enabledTypes = t.enabled;
+        info.ceilingRatio = session.ceiling ? session.ceiling.ratio : 0;
+        info.historyDepth = session.history.undo.length;
+        info.redoDepth = session.history.redo.length;
+        info.historyChars = historyChars();
+      }
+      return info;
     }
 
     // ------------------------------------------------------------------------
@@ -809,6 +2814,24 @@
 
     function bindBlock(block) {
       unbindBlock();
+      // Typing and pasting ask for the caret's line to be kept in view (fix
+      // H2). The scroll itself waits for the next frame, after the change is
+      // laid out: see revealCaret. beforeinput too, because the layer cancels
+      // it and writes the change itself (Enter, and a paste in Firefox), and a
+      // cancelled beforeinput sends no input event.
+      blockHandles.push(listeners.on(block, "beforeinput", askReveal, false, LISTENER_GROUP));
+      blockHandles.push(listeners.on(block, "input", askReveal, false, LISTENER_GROUP));
+      blockHandles.push(listeners.on(block, "paste", askReveal, false, LISTENER_GROUP));
+      if (isRun()) {
+        blockHandles.push(listeners.on(block, "beforeinput", onRunBeforeInput, false, LISTENER_GROUP));
+        blockHandles.push(listeners.on(block, "input", onRunInput, false, LISTENER_GROUP));
+        blockHandles.push(listeners.on(block, "paste", onRunPaste, false, LISTENER_GROUP));
+        blockHandles.push(listeners.on(block, "drop", onRunDrop, false, LISTENER_GROUP));
+        blockHandles.push(listeners.on(block, "cut", onRunCut, false, LISTENER_GROUP));
+        blockHandles.push(listeners.on(block, "compositionstart", onRunCompositionStart, false, LISTENER_GROUP));
+        blockHandles.push(listeners.on(block, "compositionend", onRunCompositionEnd, false, LISTENER_GROUP));
+        return;
+      }
       // beforeinput comes FIRST because it is the only one of these that can
       // still say no. The break the reviewer typed is written by this file, not
       // by the engine: see onBeforeInput.
@@ -1028,6 +3051,7 @@
     // not_handled, same revision, reply kept, when the wording matches again.
     function captureTyping() {
       if (!session) return null;
+      if (isRun()) return captureRunTyping();
       var after = capture(session.block);
       var item = store.readItem(requireReview(), session.itemId);
       if (!item) return null;
@@ -1052,6 +3076,88 @@
         // behind a floor left by an earlier draft (review finding, spec
         // 20260922.01 requirement 6): the agent should stop seeing the old
         // wording the moment the reviewer starts changing it.
+        postOptions = Object.assign({}, postOptions || {}, { withdrawnFromReady: true });
+      }
+      persist(next, "typed", null, postOptions);
+      positionFrame();
+      return next;
+    }
+
+    // The run session's keystroke: the whole sitting into the record, every
+    // time, with only the dirty blocks rebuilt (see captureRunFields).
+    //
+    // A long run's keystroke is written on a pause (RUN_DRAFT_DEFER_BYTES):
+    // the fields and the ceiling are still worked out now, so the bar is
+    // right on every keystroke, but the store write and the post wait. A block
+    // change, the keystroke that withdraws a ready record, and the commit all
+    // write at once.
+    function captureRunTyping(options) {
+      var o = options || {};
+      var fields = captureRunFields();
+      session.ceiling = ceilingState(fields, !!o.remeasure);
+      if (!o.now && deferDraft()) {
+        scheduleRunDraft();
+        positionFrame();
+        return null;
+      }
+      return writeRunDraft(fields);
+    }
+
+    function deferDraft() {
+      if (!win || !session.ceiling || session.ceiling.bytes < RUN_DRAFT_DEFER_BYTES) return false;
+      // The keystroke that takes a ready record off ready posts at once.
+      if (session.withdrawFrom && !session.withdrawnWritten) return false;
+      if (session.draftTimer && Date.now() - session.draftSince >= RUN_DRAFT_MAX_WAIT_MS) return false;
+      return true;
+    }
+
+    function scheduleRunDraft() {
+      var owner = session;
+      if (owner.draftTimer) win.clearTimeout(owner.draftTimer);
+      else owner.draftSince = Date.now();
+      owner.draftTimer = win.setTimeout(function () {
+        owner.draftTimer = null;
+        if (session === owner) writeRunDraft(captureRunFields());
+      }, RUN_DRAFT_IDLE_MS);
+      return null;
+    }
+
+    function cancelRunDraft(open) {
+      var s = open || session;
+      if (s && s.draftTimer && win) win.clearTimeout(s.draftTimer);
+      if (s) s.draftTimer = null;
+    }
+
+    /** Writes a deferred run draft now. Null when nothing was waiting. */
+    function flushRunDraft() {
+      if (!session || !isRun() || !session.draftTimer) return null;
+      cancelRunDraft();
+      return writeRunDraft(captureRunFields());
+    }
+
+    function writeRunDraft(fields) {
+      cancelRunDraft();
+      var item = store.readItem(requireReview(), session.itemId);
+      if (!item) return null;
+      var wasOutstandingBeforeThisKeystroke = withdrawable(item);
+      var next = Object.assign({}, item);
+      var shape = shapeFor(fields);
+      if (shape === SHAPE.RUN) {
+        applyRunFields(next, fields, null);
+        session.runShaped = true;
+      } else {
+        var plain = capture(session.anchor);
+        next[record.FIELD.AFTER] = plain.text;
+        next[record.FIELD.AFTER_HTML] = plain.html;
+        if (shape === SHAPE.CLEARED) clearRunFields(next);
+      }
+      next[record.FIELD.UPDATED_AT] = record.nowIso();
+      if (session.withdrawFrom) {
+        next[record.FIELD.STATE] = runKey(fields) !== session.openedKey ? record.STATE.DRAFT : session.withdrawFrom;
+        session.withdrawnWritten = next[record.FIELD.STATE] === record.STATE.DRAFT;
+      }
+      var postOptions = session.wasNew ? null : { existing: true };
+      if (wasOutstandingBeforeThisKeystroke && next[record.FIELD.STATE] === record.STATE.DRAFT) {
         postOptions = Object.assign({}, postOptions || {}, { withdrawnFromReady: true });
       }
       persist(next, "typed", null, postOptions);
@@ -1097,8 +3203,14 @@
       store.read(requireReview()).forEach(function (item) {
         var kind = item[record.FIELD.KIND];
         if (kind !== record.KIND.EDIT && kind !== record.KIND.FORMAT_ONLY) return;
-        if (!record.isDraft(item) || !isCommittedEdit(item)) return;
+        if (!record.isDraft(item)) return;
         if (session && session.itemId === item[record.FIELD.ID]) return;
+        if (record.hasRunFields(item)) {
+          var run = recoverRun(item);
+          if (run) out.push(run);
+          return;
+        }
+        if (!isCommittedEdit(item)) return;
         var before = { text: item[record.FIELD.BEFORE], html: item[record.FIELD.BEFORE_HTML] };
         var after = { text: item[record.FIELD.AFTER], html: item[record.FIELD.AFTER_HTML] };
         var verdict = kindFor(before, after);
@@ -1118,6 +3230,42 @@
       return out;
     }
 
+    // Did a run draft change anything, and what kind of change is it? The
+    // same verdict commit uses (code_lead 14): a crashed tag-only sitting is
+    // format_only, as it would have been at Esc. The blank page's own draft
+    // (opened ready to type, nothing typed) did not change, and stays a draft.
+    function runDraftVerdict(item) {
+      var fields = {
+        anchor_after_html: typeof item[record.FIELD.ANCHOR_AFTER_HTML] === "string" ? item[record.FIELD.ANCHOR_AFTER_HTML] : "",
+        anchor_tag_after: item[record.FIELD.ANCHOR_TAG_AFTER] || null,
+        new_blocks: item[record.FIELD.NEW_BLOCKS] || []
+      };
+      return runVerdictFor(fields, {
+        text: String(item[record.FIELD.BEFORE] || ""),
+        html: String(item[record.FIELD.BEFORE_HTML] || "")
+      });
+    }
+
+    /**
+     * A run draft left by a page that died mid-sitting (architecture, Failure
+     * Modes: "The next page load commits it"). A run's first sitting has no
+     * committed wording anywhere else: the draft is the only copy, and replay
+     * never shows a draft. So it is committed with the run's own change text,
+     * as leaving the page would have: a first sitting stays at its revision,
+     * a later one bumps it.
+     */
+    function recoverRun(item) {
+      var verdict = runDraftVerdict(item);
+      if (!verdict.changed) return null;
+      var kinded = Object.assign({}, item);
+      kinded[record.FIELD.KIND] = verdict.kind;
+      var changes = { kind: verdict.kind, change: record.runChangeText(kinded), state: record.STATE.READY };
+      var committed = committedRecord(item, changes, isCommittedEdit(item));
+      record.validateItem(committed);
+      persist(committed, "committed", "ready");
+      return committed;
+    }
+
     // ------------------------------------------------------------------------
     // Committing
     // ------------------------------------------------------------------------
@@ -1132,6 +3280,7 @@
      */
     function commit(options) {
       if (!session) return null;
+      if (isRun()) return commitRun(options);
       var open = session;
       // FIRST. Removing contenteditable below fires blur, and anything that
       // reads edit state from here on must see it closed.
@@ -1222,38 +3371,28 @@
         after.html
       );
 
-      var committed;
       // WHETHER IT WAS EVER COMMITTED, read when the block opened, never whether
       // the record is a draft now: a committed edit being rewritten is a draft
       // until this line, and reading its state here would commit the rewording
       // at the old revision, where a reply to the old wording would still land.
-      if (!open.wasCommitted) {
-        // First commit. The revision stays at one; the history gets its first
-        // entry, which is what replay's branch three reads.
-        committed = Object.assign({}, item);
-        committed[record.FIELD.KIND] = verdict.kind;
-        committed[record.FIELD.STATE] = record.STATE.READY;
-        committed[record.FIELD.CHANGE] = changeText;
-        committed[record.FIELD.AFTER] = after.text;
-        committed[record.FIELD.AFTER_HTML] = after.html;
-        committed[record.FIELD.UPDATED_AT] = record.nowIso();
-        committed[record.FIELD.AFTER_HISTORY] = appendHistory(item, committed);
-        record.validateItem(committed);
-        persist(committed, "committed", immediate);
-      } else {
-        // A rewording of something already committed. The revision moves
-        // exactly once, here, which is what makes a stale reply naming the old
-        // revision refusable (R21).
-        committed = record.bumpRev(item, {
+      // A first commit keeps revision one and starts the history (what
+      // replay's branch three reads); a rewording of something already
+      // committed moves the revision exactly once, here, which is what makes a
+      // stale reply naming the old revision refusable (R21). committedRecord
+      // is the one rule, shared with the run commit.
+      var committed = committedRecord(
+        item,
+        {
           kind: verdict.kind,
           change: changeText,
           after: after.text,
           after_html: after.html,
           state: record.STATE.READY
-        });
-        record.validateItem(committed);
-        persist(committed, "committed", immediate);
-      }
+        },
+        open.wasCommitted
+      );
+      record.validateItem(committed);
+      persist(committed, "committed", immediate);
 
       remember(block, committed[record.FIELD.ID]);
       // Protection lifts on the committed record, and lifting it runs the
@@ -1265,21 +3404,110 @@
       return committed;
     }
 
-    function appendHistory(item, committed) {
-      var history = (item[record.FIELD.AFTER_HISTORY] || []).slice();
-      var last = history.length ? history[history.length - 1] : null;
-      var value = committed[record.FIELD.AFTER];
-      if (typeof value === "string" && (!last || last.after !== value)) {
-        history.push(
-          record.historyEntry(
-            committed[record.FIELD.REV],
-            value,
-            committed[record.FIELD.AFTER_HTML],
-            committed[record.FIELD.UPDATED_AT]
-          )
-        );
+    /**
+     * Commits a run session. The same rules as commit() above, over the
+     * whole sitting: the anchor's change, its new tag, and the run.
+     */
+    function commitRun(options) {
+      var open = session;
+      var reason = (options || {}).reason || "commit";
+      var immediate = reason === "navigation" ? null : "ready";
+      // A long run's draft still waiting is written first, so every path
+      // below that keeps the stored record (a reword back to the original,
+      // say) keeps the sitting as it ended.
+      flushRunDraft();
+      var fields = captureRunFields();
+      var shape = shapeFor(fields);
+      var shaped = shape === SHAPE.RUN;
+      var changedSinceOpen = runKey(fields) !== open.openedKey;
+      closeBurst();
+      session = null;
+      if (open.barRaf && win && win.cancelAnimationFrame) win.cancelAnimationFrame(open.barRaf);
+
+      unbindBlock();
+      // Nothing the layer added stays on the page without words: an empty new
+      // block, and an empty item in a list, go at commit exactly as they never
+      // reached the record.
+      epoch.write("editing.run:tidy", function () {
+        open.run.forEach(function (r) {
+          if (!r.el.parentNode) return;
+          if (LIST_TAGS[tagOf(r.el)]) {
+            unitsOf(r.el).forEach(function (li) {
+              if (tagOf(li) === "li" && isEmptyUnit(li)) li.parentNode.removeChild(li);
+            });
+          }
+          if (r.html === null || isEmptyUnit(r.el)) r.el.parentNode.removeChild(r.el);
+        });
+      });
+      clearHostAttrs(open);
+      hideFrame();
+      hidePlaceholder();
+
+      var item = store.readItem(requireReview(), open.itemId);
+      if (!item) {
+        protect.release(open.anchor);
+        return null;
       }
-      return history;
+      var verdict;
+      var plain = null;
+      if (shaped) verdict = runVerdictFor(fields, open.before);
+      else {
+        plain = capture(open.anchor);
+        verdict = kindFor(open.before, plain);
+      }
+      if (!open.wasNew && !changedSinceOpen) {
+        protect.release(open.anchor);
+        return null;
+      }
+      if (!verdict.changed && open.wasCommitted) {
+        if (open.withdrawFrom && record.isDraft(item)) {
+          var restored = Object.assign({}, item);
+          restored[record.FIELD.STATE] = open.withdrawFrom;
+          restored[record.FIELD.UPDATED_AT] = record.nowIso();
+          persist(restored, "typed", null, { existing: true });
+        }
+        protect.release(open.anchor);
+        return null;
+      }
+      if (!verdict.changed) {
+        if (open.wasNew) {
+          store.remove(requireReview(), open.itemId);
+          forget(open.itemId);
+          emit(item, "discarded");
+        }
+        protect.release(open.anchor);
+        return null;
+      }
+
+      var changes;
+      if (shaped) {
+        changes = runChanges(item, fields, verdict.kind);
+      } else {
+        changes = {
+          kind: verdict.kind,
+          change: record.editChangeText(verdict.kind, open.before.text, plain.text, open.before.html, plain.html),
+          after: plain.text,
+          after_html: plain.html,
+          state: record.STATE.READY
+        };
+        // Every new block taken away and the tag put back: the run fields go
+        // out empty, rather than whatever the last draft carried.
+        if (shape === SHAPE.CLEARED) clearRunFields(changes);
+      }
+      var committed = committedRecord(item, changes, open.wasCommitted);
+      record.validateItem(committed);
+      persist(committed, "committed", immediate);
+      remember(open.anchor, committed[record.FIELD.ID]);
+      open.run.forEach(function (r) {
+        if (r.el.parentNode) rememberAlso(r.el, committed[record.FIELD.ID]);
+      });
+      announce(ANNOUNCE.COMMIT);
+      protect.release(open.anchor);
+      return committed;
+    }
+
+    function runVerdictFor(fields, before) {
+      return runVerdict(fields, before || { text: "", html: "" });
     }
 
     // ------------------------------------------------------------------------
@@ -1294,6 +3522,40 @@
      * @returns {null|Object} the record
      */
     function deleteBlock(block) {
+      if (!block && isRun()) {
+        // In a run session, Delete block takes the caret's run block out of
+        // the run. On the anchor it is today's delete, and only while the run
+        // is empty: a deleted anchor has nowhere for the run to go.
+        var range = liveRange();
+        var unit = range ? unitOf(range.startContainer) : session.caretUnit;
+        var target = unit ? blockOf(unit) : null;
+        if (target && target !== session.anchor) {
+          pushHistory();
+          var prev = sessionBlocks()[sessionBlocks().indexOf(target) - 1];
+          structural("delete_block", function () {
+            removeRunBlock(target);
+          });
+          var last = prev ? textNodes(prev).pop() : null;
+          if (last) setCaret(last, last.nodeValue.length);
+          else if (prev) setCaret(prev, 0);
+          return null;
+        }
+        if (session.run.length || session.container) return null;
+        var anchorEl = session.anchor;
+        var openRunSession = session;
+        session = null;
+        closeBurstOf(openRunSession);
+        unbindBlock();
+        clearHostAttrs(openRunSession);
+        protect.release(anchorEl);
+        hideFrame();
+        var own = store.readItem(requireReview(), openRunSession.itemId);
+        if (openRunSession.wasNew && own && record.isDraft(own)) {
+          store.remove(requireReview(), openRunSession.itemId);
+          forget(openRunSession.itemId);
+        }
+        return deleteBlock(anchorEl);
+      }
       var el = block || (session ? session.block : null);
       if (!el || !el.parentNode) return null;
 
@@ -1415,6 +3677,10 @@
       // A formatting change is a change, so it is captured the same way a
       // keystroke is: the record's markup moves, its text does not, and the
       // commit reads that as kind format_only.
+      if (isRun()) {
+        markAllDirty();
+        if (protect && typeof protect.snapshot === "function") protect.snapshot();
+      }
       captureTyping();
       return { command: command, applied: applied === true, intent: intent };
     }
@@ -1428,6 +3694,15 @@
      * looking at the words, not at the markup. Measured true in all three
      * engines for both, on 2026-08-23.
      */
+    // The block a formatting command acts in: the open block, or in a run
+    // session the unit the caret is in.
+    function formatScope() {
+      if (!session) return null;
+      if (!isRun()) return session.block;
+      var range = liveRange();
+      return (range && unitOf(range.startContainer)) || session.caretUnit || session.anchor;
+    }
+
     function commandActive(command) {
       if (!doc || typeof doc.queryCommandState !== "function") return false;
       try {
@@ -1467,7 +3742,7 @@
      */
     function unwrapResets(command) {
       var tag = formatShapeFor(command, gestures.FORMAT.REMOVE);
-      var block = session && session.block;
+      var block = formatScope();
       if (!tag || !block || typeof block.querySelectorAll !== "function") return false;
       var range = selectionRange(block);
       if (!range) return false;
@@ -1588,7 +3863,7 @@
      */
     function convertResets(command, skip) {
       var tag = formatShapeFor(command, gestures.FORMAT.REMOVE);
-      var block = session && session.block;
+      var block = formatScope();
       if (!tag) return 0;
       var styled = resetStyled(command);
       var property = command === COMMANDS.bold ? "font-weight" : "font-style";
@@ -1620,7 +3895,7 @@
     // Every element in the block whose own style attribute says this format is
     // off, in document order.
     function resetStyled(command) {
-      var block = session && session.block;
+      var block = formatScope();
       if (!block || typeof block.querySelectorAll !== "function") return [];
       var styled = block.querySelectorAll("[style]");
       var out = [];
@@ -1650,7 +3925,7 @@
      */
     function wrapSelection(command) {
       var tag = formatShapeFor(command, gestures.FORMAT.REMOVE);
-      var block = session && session.block;
+      var block = formatScope();
       if (!tag || !block || !doc) return false;
       var range = selectionRange(block);
       if (!range || range.collapsed) return false;
@@ -1717,7 +3992,11 @@
       // Dropping the record is only right when nothing landed in the source.
       // Asked BEFORE the page moves, so a refusal never leaves the reviewer
       // looking at a page that disagrees with every store in the system.
-      var drops = lifecycle.canDelete(item[record.FIELD.STATE], lifecycle.ACTOR.REVIEWER);
+      // An agent reply on a ready item means the words may already be in the
+      // source (the proofread flow places them and then asks), so that undo
+      // takes back too (design call 5, adversary A1).
+      var takesBack = lifecycle.undoTakesBack(item);
+      var drops = !takesBack && lifecycle.canDelete(item[record.FIELD.STATE], lifecycle.ACTOR.REVIEWER);
       if (!drops && record.takenBackIds(store.read(requireReview()))[itemId]) {
         // Undone once already. A second revert record would ask the agent to
         // remove a change that is already on its way out of the file.
@@ -1727,12 +4006,7 @@
       if (session && session.itemId === itemId) {
         // Undoing the record the reviewer is inside. Edit state goes first, and
         // it goes without committing: the undo is the decision.
-        var open = session;
-        session = null;
-        unbindBlock();
-        clearEditableAttrs(open.block);
-        protect.release(open.block);
-        hideFrame();
+        dropSession();
       }
 
       var kind = item[record.FIELD.KIND];
@@ -1764,6 +4038,15 @@
         // "ready" flushes immediately, the same as a committed edit: the agent
         // is being asked to change a file, and a debounce would sit on it.
         persist(revert, "reverted", "ready");
+        if (item[record.FIELD.STATE] !== record.STATE.HANDLED) {
+          // A ready item the agent answered is still actionable. Left in the
+          // review, the agent would be asked to place the words and to take
+          // them out at once. The take-back carries everything the agent
+          // needs (remove_blocks, before and after), so the original leaves.
+          store.remove(requireReview(), itemId);
+          unpersist(item);
+          emit(item, "undone");
+        }
         selection.placeCaretAtStart(restored.element);
         scheduleReplay("undo");
         return { reverted: true, kind: kind, reason: null, revert: revert[record.FIELD.ID] };
@@ -1797,12 +4080,7 @@
       if (session && session.itemId === itemId) {
         // Retiring the record the reviewer is inside. Edit state goes first, and
         // it goes without committing: retiring is the decision.
-        var open = session;
-        session = null;
-        unbindBlock();
-        clearEditableAttrs(open.block);
-        protect.release(open.block);
-        hideFrame();
+        dropSession();
       }
 
       store.remove(requireReview(), itemId);
@@ -1814,7 +4092,107 @@
       return { retired: true, kind: item[record.FIELD.KIND], reason: null };
     }
 
+    // Close the open session without committing: an undo or a retire is the
+    // decision.
+    function dropSession() {
+      if (!session) return null;
+      var open = session;
+      session = null;
+      closeBurstOf(open);
+      cancelRunDraft(open);
+      unbindBlock();
+      if (open.mode === MODE.RUN) clearHostAttrs(open);
+      else clearEditableAttrs(open.block);
+      protect.release(open.block);
+      hideFrame();
+      hidePlaceholder();
+      return open;
+    }
+
+    /**
+     * Undo of a committed run record, on the page: the run's elements come
+     * out (found with blocks.runElementsFor, before the anchor moves, since
+     * the run is found from the anchor's insert point), and the anchor gets
+     * its old tag and its before back. The record never stored the old tag as
+     * a field, so it is read off the region's fingerprint, which was minted
+     * before the sitting changed anything.
+     */
+    /**
+     * The page elements an undo may take out for this run: only ones the
+     * reviewer wrote (code_lead 15).
+     *
+     * - The blocks this page remembers for the record (rememberAlso at
+     *   commit), while they are still on the page.
+     * - The run as blocks.runElementsFor finds it, but only the part that
+     *   starts at the first run block, on the first leaf after the insert
+     *   point, with no leaf skipped. matchRun skips leaves before its first
+     *   match, so when the first block is gone a page block carrying a later
+     *   block's short words can match. That block is the page's own, and it
+     *   stays.
+     */
+    function ownRunElements(item, anchorEl) {
+      var id = item[record.FIELD.ID];
+      var out = [];
+      function add(node) {
+        if (node && node !== anchorEl && node.isConnected !== false && out.indexOf(node) === -1) out.push(node);
+      }
+      itemForElement.forEach(function (row) {
+        if (row.id === id && row.el !== anchorEl) add(row.el);
+      });
+      var found = blocks.runElementsFor(item, doc, anchorEl);
+      var leaves = blocks.leafWalk(doc.body, found.start);
+      var next = 0;
+      var last = null;
+      for (var b = 0; b < found.blocks.length; b += 1) {
+        var els = found.blocks[b].elements;
+        if (!els.length) break;
+        // A joined leaf holds several run blocks: the same element again.
+        if (els.length === 1 && els[0] === last) continue;
+        var inOrder = true;
+        for (var k = 0; k < els.length; k += 1) {
+          if (leaves[next + k] !== els[k]) inOrder = false;
+        }
+        if (!inOrder) break;
+        els.forEach(add);
+        next += els.length;
+        last = els[els.length - 1];
+      }
+      return out;
+    }
+
+    function restoreRun(item) {
+      var el = elementFor(item);
+      if (!el) return { element: null, reason: "the anchor this record points at is not on the page" };
+      var own = record.isRunRecord(item) ? ownRunElements(item, el) : [];
+      var container = item[record.FIELD.PLACEMENT] === record.PLACEMENT.START_OF_CONTAINER;
+      var ref = item[record.FIELD.REGION] && item[record.FIELD.REGION].ref;
+      var oldTag = ref && ref.fingerprint && ref.fingerprint.tag ? String(ref.fingerprint.tag).toLowerCase() : tagOf(el);
+      var beforeHtml = item[record.FIELD.BEFORE_HTML];
+      epoch.write("editing.undo_run", function () {
+        own.forEach(function (node) {
+          if (node !== el && node.parentNode) node.parentNode.removeChild(node);
+        });
+        if (container) return;
+        if (tagOf(el) !== oldTag) {
+          var swapped = blocks.swapTag(el, oldTag);
+          if (swapped) el = swapped;
+        }
+        var built = typeof beforeHtml === "string" ? blocks.writeBlock(oldTag, beforeHtml, doc) : null;
+        if (built) {
+          while (el.firstChild) el.removeChild(el.firstChild);
+          while (built.firstChild) el.appendChild(built.firstChild);
+        } else if (typeof beforeHtml === "string") {
+          // The anchor is the page's own block and may hold what the run
+          // allowlist refuses (a link). It is cleaned, never written raw, the
+          // same as replay's writeAnchor (security 1).
+          el.innerHTML = normalize.cleanMarkup(beforeHtml);
+        } else el.textContent = String(item[record.FIELD.BEFORE] || "");
+      });
+      return { element: el, reason: null };
+    }
+
     function restoreRegion(item) {
+      if (record.hasRunFields(item)) return restoreRun(item);
       var el = elementFor(item);
       if (!el) return { element: null, reason: "the region this record points at is not on the page" };
       var beforeHtml = item[record.FIELD.BEFORE_HTML];
@@ -1853,6 +4231,14 @@
       itemForElement.push({ el: el, id: id });
     }
 
+    // One more element for a record that already has one: a run block.
+    function rememberAlso(el, id) {
+      itemForElement = itemForElement.filter(function (row) {
+        return row.el !== el;
+      });
+      itemForElement.push({ el: el, id: id });
+    }
+
     // Drops this record's row, and any row whose block is out of the document.
     //
     // The retire paths (undo, commit, retire) already call this, so a record
@@ -1881,17 +4267,48 @@
       for (i = 0; i < itemForElement.length; i += 1) {
         if (itemForElement[i].el === el) {
           var got = store.readItem(reviewId, itemForElement[i].id);
-          if (got && got[record.FIELD.STATE] !== record.STATE.HANDLED) return got;
+          if (got && !isPlaced(got)) return got;
         }
       }
       var items = store.read(reviewId);
       for (i = 0; i < items.length; i += 1) {
         var item = items[i];
         if (!isEditKind(item)) continue;
-        if (item[record.FIELD.STATE] === record.STATE.HANDLED) continue;
+        if (isPlaced(item)) continue;
         if (elementFor(item) === el) return item;
       }
-      return null;
+      // A run block belongs to the record whose run it is (plan Task 2.1:
+      // itemFor maps any run block back through blocks.runElementsFor).
+      var holding = runRecordHolding(el);
+      return holding ? holding.item : null;
+    }
+
+    /**
+     * Is this record's text already in the source (architecture "Two sittings
+     * in the same place")? Then its blocks are the page's own, and a sitting
+     * on one is an ordinary edit of that block, never a reopen.
+     *
+     * - handled: yes.
+     * - handled, but the handled check could not find it on the page: no.
+     * - a run the agent answered with a proofreading question, now or in an
+     *   earlier round: yes. The proofread flow places the words and then asks,
+     *   and "Use the fixes" or "Keep mine" leave it ready at a new revision.
+     *   The flow walk found the second sitting reopening that placed record.
+     *
+     * Any other ready record, a run included, is unplaced and reopens.
+     */
+    function isPlaced(item) {
+      if (!item) return false;
+      if (item[record.FIELD.HANDLED_NOT_ON_PAGE] === true) return false;
+      if (item[record.FIELD.STATE] === record.STATE.HANDLED) return true;
+      if (!record.isRunRecord(item)) return false;
+      var reply = item[record.FIELD.REPLY];
+      if (reply && reply.proofread === true) return true;
+      var thread = Array.isArray(item[record.FIELD.THREAD]) ? item[record.FIELD.THREAD] : [];
+      for (var i = 0; i < thread.length; i += 1) {
+        if (thread[i] && thread[i].agent && thread[i].agent.proofread === true) return true;
+      }
+      return false;
     }
 
     function isEditKind(item) {
@@ -1902,7 +4319,10 @@
     function elementFor(item) {
       var region = item[record.FIELD.REGION];
       if (!region || !region.ref || !doc) return null;
-      var verdict = anchor.resolve(region.ref, doc);
+      var verdict = anchor.resolve(region.ref, doc, {
+        placement: item[record.FIELD.PLACEMENT] || null,
+        tagAfter: item[record.FIELD.ANCHOR_TAG_AFTER] || null
+      });
       return verdict && verdict.bound ? verdict.element : null;
     }
 
@@ -1974,6 +4394,387 @@
       return got.root || got.host;
     }
 
+    // ------------------------------------------------------------------------
+    // Free writing: edit state with no block open, "+ Write here", and the
+    // placeholder (plan Task 2.3)
+    // ------------------------------------------------------------------------
+
+    var editState = false;
+    var lineNode = null;
+    var lineTarget = null;
+    var lineRaf = null;
+    var linePoint = null;
+    // Where the line's block sat when the line was drawn. The line is fixed to
+    // the window, so a scroll, a reflow, a replay or a rebuild that moves the
+    // block leaves it floating over text (Ken's two leftovers, fix H3). A watch
+    // runs only while the line shows and re-places it when the block moves.
+    var lineAt = null;
+    var lineWatch = null;
+    var placeholderNode = null;
+    var emptyPageChecked = false;
+
+    /**
+     * Cmd-Shift-E with the caret in no block: the same edit state with nothing
+     * selected. The bar shows near the top with its hint; the lines show on
+     * hover; a click on a block opens that block; Esc, or the rail, leaves.
+     */
+    function enterEditState() {
+      if (session) commit({ reason: "edit state" });
+      editState = true;
+      drawFrame(null);
+      positionStateBar();
+      refreshBar();
+      return sessionInfo();
+    }
+
+    function leaveEditState() {
+      if (!editState) return false;
+      editState = false;
+      if (!session) {
+        if (barNode) barNode.style.display = "none";
+        if (frameRaf && win && win.cancelAnimationFrame) {
+          win.cancelAnimationFrame(frameRaf);
+          frameRaf = null;
+        }
+        removeLine();
+      }
+      return true;
+    }
+
+    function positionStateBar() {
+      if (!barNode || !win) return;
+      var main = doc.querySelector("main") || doc.body;
+      var r = main.getBoundingClientRect();
+      var left = Math.round(Math.max(8, r.left));
+      barNode.style.top = "12px";
+      barNode.style.bottom = "auto";
+      barNode.style.left = left + "px";
+      fitBar(left);
+    }
+
+    function isEditOpen() {
+      return !!session || editState;
+    }
+
+    function lineStyleHost() {
+      var host = surface();
+      if (!host) return null;
+      // A morph can replace the layer's root; a line left in the old one is
+      // never drawn again, so a new one is made in the root that is there now.
+      if (lineNode && !lineNode.isConnected) lineNode = null;
+      if (!lineNode) {
+        lineNode = doc.createElement("div");
+        lineNode.className = "lahe-insert-line";
+        lineNode.setAttribute("role", "button");
+        lineNode.setAttribute("aria-label", INSERT_LINE_LABEL);
+        markers.markChrome(lineNode);
+        var rule = doc.createElement("span");
+        rule.className = "lahe-insert-line__rule";
+        var text = doc.createElement("span");
+        text.className = "lahe-insert-line__label";
+        text.textContent = INSERT_LINE_LABEL;
+        lineNode.appendChild(rule);
+        lineNode.appendChild(text);
+        lineNode.addEventListener("mousedown", function (event) {
+          event.preventDefault();
+        });
+        lineNode.addEventListener("click", function (event) {
+          event.preventDefault();
+          if (lineTarget) openAfter(lineTarget);
+        });
+        host.appendChild(lineNode);
+      }
+      return lineNode;
+    }
+
+    function hideLine() {
+      lineTarget = null;
+      lineAt = null;
+      stopLineWatch();
+      if (lineNode) lineNode.removeAttribute("data-lahe-show");
+    }
+
+    // Edit state ended: the line comes out of the layer's root, not just
+    // hidden, so nothing of it can stay on screen with no edit open.
+    function removeLine() {
+      hideLine();
+      linePoint = null;
+      if (lineRaf && win && win.cancelAnimationFrame) win.cancelAnimationFrame(lineRaf);
+      lineRaf = null;
+      if (lineNode && lineNode.parentNode) lineNode.parentNode.removeChild(lineNode);
+      lineNode = null;
+    }
+
+    // Is the line's block still where it was when the line was drawn?
+    function lineInPlace() {
+      if (!lineTarget || !lineAt || !lineTarget.isConnected) return false;
+      var r = lineTarget.getBoundingClientRect();
+      return Math.abs(r.bottom - lineAt.bottom) <= 1 && Math.abs(r.left - lineAt.left) <= 1;
+    }
+
+    function stopLineWatch() {
+      if (lineWatch && win && win.cancelAnimationFrame) win.cancelAnimationFrame(lineWatch);
+      lineWatch = null;
+    }
+
+    // One check a frame, only while the line shows: edit state gone removes
+    // it; its block moved (scroll, typing, replay, rebuild) places it again
+    // from the pointer, which hides it when the pointer is no longer in a gap.
+    function watchLine() {
+      if (lineWatch || !win || !win.requestAnimationFrame) return;
+      var tick = function () {
+        lineWatch = null;
+        if (!isEditOpen()) return removeLine();
+        if (!lineTarget) return;
+        if (!lineInPlace()) placeLine();
+        if (lineTarget) lineWatch = win.requestAnimationFrame(tick);
+      };
+      lineWatch = win.requestAnimationFrame(tick);
+    }
+
+    // The gap under the pointer: between two blocks, or below the last one.
+    // Returns the block above it and where to draw the line.
+    // `strict` is the click rule: only the gap itself, never the slack over
+    // a block's own edge, so a click on a last line's descenders still puts
+    // the caret there.
+    function gapAt(x, y, strict) {
+      var leaves = blocks.leafWalk(doc.body).filter(function (el) {
+        return !markers.isInsideOverlay(el) && el.getClientRects().length > 0;
+      });
+      if (!leaves.length) return null;
+      var slack = strict ? 0 : LINE_SLACK;
+      for (var i = 0; i < leaves.length; i += 1) {
+        var a = leaves[i].getBoundingClientRect();
+        var next = leaves[i + 1] ? leaves[i + 1].getBoundingClientRect() : null;
+        var inColumn = x >= a.left - 40 && x <= a.right + 40;
+        if (!inColumn) continue;
+        if (next && next.top >= a.bottom - 1) {
+          var inGap = strict ? y > a.bottom && y < next.top : y >= a.bottom - slack && y <= next.top + slack;
+          if (inGap) {
+            return {
+              block: leaves[i],
+              y: (a.bottom + next.top) / 2,
+              top: a.bottom,
+              bottom: next.top,
+              left: Math.min(a.left, next.left),
+              right: Math.max(a.right, next.right)
+            };
+          }
+        } else if (!next && (strict ? y > a.bottom : y >= a.bottom - slack) && y <= a.bottom + 64) {
+          return { block: leaves[i], y: a.bottom + 14, top: a.bottom, bottom: a.bottom + 64, left: a.left, right: a.right };
+        }
+      }
+      return null;
+    }
+
+    var LINE_SLACK = 10;
+    var LINE_HALF = 14;
+
+    // Is the pointer on the line where it is drawn now? The line stays put
+    // while the pointer is on it, even past the gap's own edge, so reaching
+    // for it never makes it vanish under the pointer.
+    function onShownLine(x, y) {
+      if (!lineNode || !lineTarget || lineNode.getAttribute("data-lahe-show") !== "true") return false;
+      var r = lineNode.getBoundingClientRect();
+      return x >= r.left && x <= r.right && y >= r.top && y <= r.bottom;
+    }
+
+    function onLineMove(event) {
+      if (!win) return;
+      if (!isEditOpen()) {
+        if (lineNode) removeLine();
+        return;
+      }
+      if (markers.isInsideOverlay(event.target)) {
+        // On the layer: the rail, the bar, or the line itself. Only the line
+        // keeps it; moving onto the rail takes it away.
+        if (!onShownLine(event.clientX, event.clientY)) hideLine();
+        return;
+      }
+      linePoint = { x: event.clientX, y: event.clientY };
+      if (lineRaf) return;
+      var run = function () {
+        lineRaf = null;
+        placeLine();
+      };
+      lineRaf = win.requestAnimationFrame ? win.requestAnimationFrame(run) : (run(), null);
+    }
+
+    function placeLine() {
+      if (!isEditOpen()) return removeLine();
+      if (!linePoint) return hideLine();
+      if (onShownLine(linePoint.x, linePoint.y) && lineInPlace()) return;
+      var gap = gapAt(linePoint.x, linePoint.y);
+      if (!gap) return hideLine();
+      var node = lineStyleHost();
+      if (!node) return;
+      var limit = (win.innerWidth || 1024) - railAllowance() - 8;
+      var right = Math.min(gap.right, limit);
+      lineTarget = gap.block;
+      // Below an open frame, the gap's middle can sit on the frame's bottom
+      // border (flow walk shot 44). The line then goes just under the frame.
+      var y = gap.y;
+      var frame = frameRect();
+      if (frame && gap.y - LINE_HALF < frame.y + frame.height && gap.y > frame.y) {
+        y = frame.y + frame.height + LINE_HALF;
+      }
+      node.style.top = Math.round(y - LINE_HALF) + "px";
+      // The bar can sit in the same gap (below the frame, when there is no
+      // room above it). The line then starts just past the bar, so its label
+      // is never hidden under it.
+      var lineLeft = gap.left;
+      if (barNode && barNode.style.display !== "none") {
+        var bar = barNode.getBoundingClientRect();
+        if (bar.width && bar.top < y + LINE_HALF && bar.bottom > y - LINE_HALF && bar.right + 8 < right - 40) {
+          lineLeft = Math.max(lineLeft, bar.right + 8);
+        }
+      }
+      node.style.left = Math.round(lineLeft) + "px";
+      node.style.width = Math.max(40, Math.round(right - lineLeft)) + "px";
+      var at = gap.block.getBoundingClientRect();
+      lineAt = { bottom: at.bottom, left: at.left };
+      node.setAttribute("data-lahe-show", "true");
+      watchLine();
+    }
+
+    // The pointer left the window, the window lost focus, or the rail took
+    // focus: the pointer is not in a gap any more.
+    function onLineAway(event) {
+      if (!lineNode) return;
+      if (event && event.type === "mouseout" && event.relatedTarget) return;
+      if (event && event.type === "focusin" && !markers.isInsideOverlay(event.target)) return;
+      if (isEditOpen()) hideLine();
+      else removeLine();
+    }
+
+    function lineInfo() {
+      if (!lineNode || lineNode.getAttribute("data-lahe-show") !== "true") return null;
+      var r = lineNode.getBoundingClientRect();
+      return {
+        rect: { x: r.x, y: r.y, width: r.width, height: r.height, cx: r.x + r.width / 2, cy: r.y + r.height / 2 },
+        label: lineNode.textContent,
+        opacity: win.getComputedStyle(lineNode).opacity,
+        transition: win.getComputedStyle(lineNode).transitionDuration,
+        after: lineTarget ? normalize.normalizeText(lineTarget.textContent || "").slice(0, 80) : null
+      };
+    }
+
+    /**
+     * "+ Write here": commits any open session and opens a new one anchored
+     * on the block above, with an empty first paragraph.
+     */
+    function openAfter(block) {
+      hideLine();
+      if (session) commit({ reason: "write here" });
+      leaveEditState();
+      if (!block || !block.isConnected) return null;
+      var info = editBlock(block);
+      if (!info || !isRun()) return info;
+      var holder = inSession(block) ? blockOf(block) : session.anchor;
+      pushHistory();
+      var p = newParagraph();
+      structural("write_here", function () {
+        insertAfterBlock(holder, p, false);
+        setCaret(p, 0);
+      });
+      setCaret(p, 0);
+      refreshBar();
+      return sessionInfo();
+    }
+
+    // The placeholder is drawn in the layer's own root over the empty block,
+    // never in the page, and it goes on the first keystroke.
+    function updatePlaceholder(unit) {
+      var show = !!session && isRun() && !!unit && unit !== session.anchor && blockOf(unit) !== session.anchor && isEmptyUnit(unit);
+      if (!show) return hidePlaceholder();
+      var host = surface();
+      if (!host) return;
+      if (!placeholderNode) {
+        placeholderNode = doc.createElement("div");
+        placeholderNode.className = "lahe-edit-placeholder";
+        placeholderNode.setAttribute("aria-hidden", "true");
+        placeholderNode.textContent = PLACEHOLDER;
+        markers.markChrome(placeholderNode);
+        host.appendChild(placeholderNode);
+      }
+      var r = unit.getBoundingClientRect();
+      var cs = win.getComputedStyle(unit);
+      placeholderNode.style.top = r.top + "px";
+      placeholderNode.style.left = r.left + (parseFloat(cs.paddingLeft) || 0) + "px";
+      placeholderNode.style.height = r.height + "px";
+      placeholderNode.style.fontSize = cs.fontSize;
+      placeholderNode.style.lineHeight = cs.lineHeight;
+      placeholderNode.style.fontFamily = cs.fontFamily;
+      placeholderNode.style.display = "block";
+    }
+
+    function hidePlaceholder() {
+      if (placeholderNode) placeholderNode.style.display = "none";
+    }
+
+    function placeholderInfo() {
+      if (!placeholderNode || placeholderNode.style.display === "none") return null;
+      var r = placeholderNode.getBoundingClientRect();
+      return { text: placeholderNode.textContent, rect: { x: r.x, y: r.y, width: r.width, height: r.height } };
+    }
+
+    // An empty page opens ready to type (PQ1): a session in an empty
+    // paragraph at the start of the page's one main (or body), after any
+    // leading chrome such as the marked file-name title.
+    function hasContent() {
+      return blocks.leafWalk(doc.body).some(function (el) {
+        if (markers.isInsideOverlay(el)) return false;
+        // The rendered front matter is metadata, not something the reviewer wrote.
+        return !(el.closest && el.closest("details.frontmatter"));
+      });
+    }
+
+    function containerOfPage() {
+      var mains = doc.getElementsByTagName("main");
+      return mains.length === 1 ? mains[0] : doc.body;
+    }
+
+    function openEmptyPage() {
+      if (!notesReview || !doc || !doc.body || !reviewId || session || hasContent()) return null;
+      var outstanding = store.read(reviewId).some(function (item) {
+        return item[record.FIELD.PLACEMENT] === record.PLACEMENT.START_OF_CONTAINER && record.isOutstanding(item);
+      });
+      if (outstanding) return null;
+      return openAtStart(containerOfPage());
+    }
+
+    function openAtStart(container) {
+      openRun(container, { placement: record.PLACEMENT.START_OF_CONTAINER });
+      var p = newParagraph();
+      structural("start_of_page", function () {
+        insertAfterBlock(container, p, false);
+      });
+      setCaret(p, 0);
+      refreshBar();
+      return sessionInfo();
+    }
+
+    // Only a notes review opens its empty page ready to type (design call
+    // 2, code_reviewer 1). Any other page with no content blocks, such as an
+    // app shell still loading, stays in reading state.
+    function scheduleEmptyPage() {
+      if (!notesReview || emptyPageChecked || !win || !listenerHandles.length) return;
+      emptyPageChecked = true;
+      win.setTimeout(openEmptyPage, 0);
+    }
+
+    /**
+     * Says whether this review is a notes review (`lahe write`). The one input
+     * the empty-page session reads. Boot passes it as `notes` when it knows at
+     * construction, or calls this when the answer arrives later (from the
+     * helper). Setting it true on a bound surface runs the empty-page check.
+     */
+    function setNotes(flag) {
+      notesReview = flag === true;
+      scheduleEmptyPage();
+      return notesReview;
+    }
+
     function drawFrame(block) {
       var host = surface();
       if (!host) return null;
@@ -1987,26 +4788,98 @@
         barNode = buildBar();
         host.appendChild(barNode);
       }
-      frameNode.style.display = "block";
+      frameNode.style.display = block ? "block" : "none";
       barNode.style.display = "flex";
+      barNode.setAttribute("data-lahe-edit-state", block ? "block" : "none");
+      refreshBar();
       positionFrame();
       watchFrame();
-      void block;
       return frameNode;
     }
+
+    var barParts = null;
+    var menuOpen = false;
+    var menuSavedRange = null;
 
     function buildBar() {
       var bar = doc.createElement("div");
       bar.className = BAR_CLASS;
       markers.markChrome(bar);
+      barParts = {};
 
       var label = doc.createElement("span");
       label.className = "lahe-edit-bar__label";
       label.textContent = LABEL_EDITING;
       bar.appendChild(label);
 
-      bar.appendChild(separator());
+      var firstSep = separator();
+      bar.appendChild(firstSep);
 
+      // The block-type menu, before B and I (wireframe direction A). Built from
+      // the rail's "More actions" menu: role=menu, aria-haspopup,
+      // aria-expanded, arrow keys, and focus returned on close.
+      var wrap = doc.createElement("span");
+      wrap.className = "lahe-edit-bar__typewrap";
+      var typeBtn = doc.createElement("button");
+      typeBtn.type = "button";
+      typeBtn.className = "lahe-edit-bar__btn lahe-edit-bar__type";
+      typeBtn.setAttribute("data-lahe-command", "block-type");
+      typeBtn.setAttribute("aria-haspopup", "menu");
+      typeBtn.setAttribute("aria-expanded", "false");
+      typeBtn.textContent = "Paragraph";
+      var menu = doc.createElement("div");
+      menu.className = "lahe-edit-bar__menu";
+      menu.setAttribute("role", "menu");
+      menu.setAttribute("aria-label", "Block type");
+      menu.hidden = true;
+      var rows = gestures.BLOCK_TYPES.map(function (t) {
+        var row = doc.createElement("button");
+        row.type = "button";
+        row.className = "lahe-edit-bar__row";
+        row.setAttribute("role", "menuitem");
+        row.setAttribute("data-lahe-type", t.tag);
+        row.tabIndex = -1;
+        var name = doc.createElement("span");
+        name.className = "lahe-edit-bar__rowname";
+        name.textContent = t.label;
+        var chord = doc.createElement("span");
+        chord.className = "lahe-edit-bar__rowkey";
+        chord.textContent = gestures.chordLabelFor(t.tag, platform());
+        var md = doc.createElement("span");
+        md.className = "lahe-edit-bar__rowmd";
+        md.textContent = t.markdown ? t.markdown.trim() : "";
+        row.appendChild(name);
+        row.appendChild(chord);
+        row.appendChild(md);
+        row.addEventListener("click", function () {
+          if (row.getAttribute("aria-disabled") === "true") return;
+          closeMenu(true);
+          typeActions[t.tag]();
+        });
+        menu.appendChild(row);
+        return row;
+      });
+      typeBtn.addEventListener("click", function () {
+        if (menuOpen) closeMenu(true);
+        else openMenu(0);
+      });
+      typeBtn.addEventListener("keydown", function (event) {
+        if (event.key === "ArrowDown" || event.key === "ArrowUp" || event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          openMenu(event.key === "ArrowUp" ? rows.length - 1 : 0);
+        } else if (event.key === "Escape" || (event.key === "Tab" && event.shiftKey)) {
+          event.preventDefault();
+          returnFocusToCaret();
+        }
+      });
+      menu.addEventListener("keydown", onMenuKey);
+      wrap.appendChild(typeBtn);
+      wrap.appendChild(menu);
+      bar.appendChild(wrap);
+      var typeSep = separator();
+      bar.appendChild(typeSep);
+
+      var formatButtons = [];
       Object.keys(COMMANDS).forEach(function (command) {
         var button = doc.createElement("button");
         button.type = "button";
@@ -2018,6 +4891,7 @@
           format(command);
         });
         bar.appendChild(button);
+        formatButtons.push(button);
       });
 
       var remove = doc.createElement("button");
@@ -2030,7 +4904,8 @@
       });
       bar.appendChild(remove);
 
-      bar.appendChild(separator());
+      var lastSep = separator();
+      bar.appendChild(lastSep);
 
       var hint = doc.createElement("span");
       hint.className = "lahe-edit-bar__hint";
@@ -2043,6 +4918,18 @@
       bar.addEventListener("mousedown", function (event) {
         event.preventDefault();
       });
+      barParts = {
+        typeWrap: wrap,
+        typeBtn: typeBtn,
+        typeSep: typeSep,
+        menu: menu,
+        rows: rows,
+        formatButtons: formatButtons,
+        remove: remove,
+        hint: hint,
+        firstSep: firstSep,
+        lastSep: lastSep
+      };
       return bar;
     }
 
@@ -2052,39 +4939,453 @@
       return sep;
     }
 
+    function show(el, on) {
+      if (el) el.style.display = on ? "" : "none";
+    }
+
+    /** Brings the bar's words and controls in line with the session. */
+    function refreshBar() {
+      if (!barNode || !barParts) return;
+      var run = isRun();
+      var noBlock = !!editState && !session;
+      show(barParts.typeWrap, run);
+      show(barParts.typeSep, run);
+      barParts.formatButtons.forEach(function (b) {
+        show(b, !noBlock);
+      });
+      show(barParts.remove, !noBlock);
+      show(barParts.firstSep, !noBlock);
+      barNode.setAttribute("data-lahe-edit-state", noBlock ? "none" : "block");
+      var hintText = noBlock ? HINT_EDIT_STATE : HINT_FINISH;
+      var notice = false;
+      if (run) {
+        var t = typeState();
+        barParts.typeBtn.textContent = t.label;
+        barParts.typeBtn.disabled = t.other;
+        barParts.typeBtn.setAttribute("aria-disabled", t.other ? "true" : "false");
+        barParts.rows.forEach(function (row) {
+          var tag = row.getAttribute("data-lahe-type");
+          var on = !!t.enabled[tag];
+          row.setAttribute("aria-disabled", on ? "false" : "true");
+          row.setAttribute("aria-checked", tag === t.tag ? "true" : "false");
+        });
+        var ratio = session.ceiling ? session.ceiling.ratio : 0;
+        if (session.ceilingRefused || ratio >= 1) {
+          hintText = CEILING_FULL;
+          notice = true;
+        } else if (ratio >= CEILING_WARN_RATIO) {
+          hintText = CEILING_WARN;
+          notice = true;
+        }
+        var range = liveRange();
+        var unit = range ? unitOf(range.startContainer) : null;
+        var inAnchor = unit && blockOf(unit) === session.anchor;
+        barParts.remove.disabled = !!inAnchor && session.run.length > 0;
+        updatePlaceholder(unit);
+      }
+      if (barParts.hint.textContent !== hintText) barParts.hint.textContent = hintText;
+      barParts.hint.setAttribute("data-lahe-notice", notice ? "true" : "false");
+      barParts.hint.setAttribute("role", notice ? "status" : "presentation");
+    }
+
+    function openMenu(index) {
+      if (!barParts || menuOpen || barParts.typeBtn.disabled) return false;
+      var range = liveRange();
+      if (range && inSession(range.startContainer)) menuSavedRange = range.cloneRange();
+      menuOpen = true;
+      barParts.menu.hidden = false;
+      barParts.typeBtn.setAttribute("aria-expanded", "true");
+      // Opens upward when there is no room below the bar.
+      barParts.menu.classList.remove("lahe-edit-bar__menu--up");
+      var bar = barNode.getBoundingClientRect();
+      var menuHeight = barParts.menu.getBoundingClientRect().height;
+      if (win && bar.bottom + menuHeight + 8 > (win.innerHeight || 768)) barParts.menu.classList.add("lahe-edit-bar__menu--up");
+      focusRow(index || 0);
+      return true;
+    }
+
+    function focusRow(index) {
+      var rows = barParts.rows;
+      var n = rows.length;
+      var next = ((index % n) + n) % n;
+      rows[next].focus();
+      return next;
+    }
+
+    function closeMenu(returnFocus) {
+      if (!menuOpen) return false;
+      menuOpen = false;
+      barParts.menu.hidden = true;
+      barParts.typeBtn.setAttribute("aria-expanded", "false");
+      if (returnFocus) returnFocusToCaret();
+      return true;
+    }
+
+    // Focus back where the reviewer was typing: the host, with the caret the
+    // menu opened on.
+    function returnFocusToCaret() {
+      if (!session || !isRun()) return false;
+      var host = session.host;
+      if (host && typeof host.focus === "function") {
+        try {
+          host.focus({ preventScroll: true });
+        } catch (err) {
+          host.focus();
+        }
+      }
+      if (menuSavedRange && inSession(menuSavedRange.startContainer)) {
+        var sel = win.getSelection();
+        sel.removeAllRanges();
+        sel.addRange(menuSavedRange);
+      }
+      return true;
+    }
+
+    function focusMenuButton() {
+      if (!barParts || barParts.typeBtn.disabled) return false;
+      var range = liveRange();
+      if (range && inSession(range.startContainer)) menuSavedRange = range.cloneRange();
+      barParts.typeBtn.focus();
+      return true;
+    }
+
+    function onMenuKey(event) {
+      var root = barParts.menu.getRootNode();
+      var index = barParts.rows.indexOf(root.activeElement);
+      var got = gestures.gestureFor({ type: "keydown", key: event.key, blockMenuOpen: true, editing: true });
+      if (got.gesture === gestures.GESTURE.CLOSE_MENU) {
+        event.preventDefault();
+        event.stopPropagation();
+        closeMenu(true);
+        return;
+      }
+      if (event.key === "ArrowDown") {
+        event.preventDefault();
+        focusRow(index + 1);
+      } else if (event.key === "ArrowUp") {
+        event.preventDefault();
+        focusRow(index - 1);
+      } else if (event.key === "Home") {
+        event.preventDefault();
+        focusRow(0);
+      } else if (event.key === "End") {
+        event.preventDefault();
+        focusRow(barParts.rows.length - 1);
+      } else if (event.key === "Tab") {
+        closeMenu(false);
+      }
+    }
+
+    // The blocks the frame wraps: every block the sitting created or changed,
+    // plus the caret's block. An untouched anchor stays outside it.
+    function framedElements() {
+      if (!session) return [];
+      if (!isRun()) return [session.block];
+      var out = [];
+      var anchorChanged =
+        !session.container &&
+        (tagOf(session.anchor) !== session.anchorTag || anchorMarkup() !== session.openedAnchorHtml);
+      if (anchorChanged) out.push(session.anchor);
+      session.run.forEach(function (r) {
+        out.push(r.el);
+      });
+      var range = liveRange();
+      var unit = range ? unitOf(range.startContainer) : null;
+      var caretBlock = unit ? blockOf(unit) : null;
+      if (!caretBlock && !out.length && !session.container) caretBlock = session.anchor;
+      if (caretBlock && out.indexOf(caretBlock) === -1) out.push(caretBlock);
+      return out;
+    }
+
+    function unionRect(list) {
+      var box = null;
+      list.forEach(function (el) {
+        if (!el || typeof el.getBoundingClientRect !== "function") return;
+        var r = el.getBoundingClientRect();
+        if (!box) box = { top: r.top, left: r.left, right: r.right, bottom: r.bottom };
+        else {
+          box.top = Math.min(box.top, r.top);
+          box.left = Math.min(box.left, r.left);
+          box.right = Math.max(box.right, r.right);
+          box.bottom = Math.max(box.bottom, r.bottom);
+        }
+      });
+      return box;
+    }
+
     function positionFrame() {
-      if (!frameNode || !session || !win) return null;
-      var rect = session.block.getBoundingClientRect();
+      if (!barNode || !win) return null;
+      if (!session) {
+        if (editState) positionStateBar();
+        return frameNode;
+      }
+      if (!frameNode) return null;
+      keepRoom();
+      if (revealPending) {
+        revealPending = false;
+        revealCaret();
+      }
+      var rect = unionRect(framedElements()) || session.block.getBoundingClientRect();
       var pad = 6;
       frameNode.style.top = rect.top - pad + "px";
       frameNode.style.left = rect.left - pad + "px";
-      frameNode.style.width = rect.width + pad * 2 + "px";
-      frameNode.style.height = rect.height + pad * 2 + "px";
+      frameNode.style.width = rect.right - rect.left + pad * 2 + "px";
+      frameNode.style.height = rect.bottom - rect.top + pad * 2 + "px";
 
-      if (barNode) {
-        // The bar sits above the block, pinned by its BOTTOM edge, so its own
-        // height never enters the calculation. Measuring the height instead
-        // reads zero on the first frame in some engines, which puts the bar in
-        // one place and then moves it a frame later: the reviewer sees it jump,
-        // and anything aiming at a button can miss it.
-        var viewport = win.innerHeight || 768;
-        var roomAbove = rect.top - pad - 8;
-        barNode.style.left = Math.round(Math.max(8, rect.left - pad)) + "px";
-        if (roomAbove >= 44) {
-          barNode.style.bottom = Math.round(viewport - roomAbove) + "px";
-          barNode.style.top = "auto";
-        } else {
-          barNode.style.top = Math.round(rect.bottom + pad + 8) + "px";
-          barNode.style.bottom = "auto";
+      // WHERE THE BAR GOES (flow walk, design problem 1). It used to sit over
+      // whatever was above the frame: the line before the anchor, a heading,
+      // the byline, which is exactly the sentence a writer reads back while
+      // continuing it. Now it goes in the page's own gap above the frame when
+      // the gap is tall enough for it, and below the frame when it is not.
+      // When above, it is pinned by its BOTTOM edge, so a height read as zero
+      // on the first frame in some engines cannot make it jump.
+      var viewport = win.innerHeight || 768;
+      var barHeight = barNode.getBoundingClientRect().height || BAR_ROOM;
+      var frameTop = rect.top - pad;
+      var frameBottom = rect.bottom + pad;
+      var above = contentBottomAbove(framedElements(), frameTop);
+      var ceiling = Math.max(0, above === null ? 0 : above);
+      var room = frameTop - ceiling;
+      var left = Math.round(Math.max(8, rect.left - pad));
+      barNode.style.left = left + "px";
+      if (room >= barHeight + BAR_GAP * 2) {
+        barNode.style.bottom = Math.round(viewport - (frameTop - BAR_GAP)) + "px";
+        barNode.style.top = "auto";
+        barNode.setAttribute("data-lahe-bar-side", "above");
+      } else {
+        // Below the frame. When the space under it is empty (the end of the
+        // page, or a tall gap), the bar leaves the first line of that space to
+        // "+ Write here", so writing one more block below is still in reach.
+        var below = contentTopBelow(framedElements(), frameBottom);
+        var spaceBelow = below === null ? Infinity : below - frameBottom;
+        var skip = spaceBelow >= LINE_HALF * 2 + barHeight + BAR_GAP * 3 ? LINE_HALF * 2 + BAR_GAP : 0;
+        var barTop = Math.max(0, Math.min(frameBottom + BAR_GAP + skip, viewport - barHeight - BAR_GAP));
+        // THE BAR NEVER COVERS THE LINE BEING TYPED (fix H2). When the frame
+        // runs past the bottom of the window, the bar is pinned to the
+        // window's bottom edge, which is where the caret's line goes after an
+        // Enter. revealCaret scrolls that line above the bar while typing; if
+        // the writer has scrolled it under the bar by hand, the bar moves to
+        // the top of the window instead, or just under the line when the line
+        // is at the top.
+        var line = caretLineRect();
+        if (line && line.top < barTop + barHeight + BAR_GAP && line.bottom + BAR_GAP > barTop) {
+          barTop = line.top >= barHeight + BAR_GAP * 3 ? BAR_GAP : line.bottom + BAR_GAP;
         }
+        barNode.style.top = Math.round(barTop) + "px";
+        barNode.style.bottom = "auto";
+        barNode.setAttribute("data-lahe-bar-side", "below");
       }
+      fitBar(left);
       return frameNode;
+    }
+
+    // ---- Room at the bottom, and the caret kept in view (fix H2) ---------------
+    //
+    // Ken, on a real notes page: at the bottom he could not scroll, the line
+    // Enter made went below the window, and the bar sat over it. So while a
+    // session is open the page gets blank room after its end (highlight.js's
+    // setPageRoom, a rule in the one page stylesheet, never a node), every key,
+    // input and paste scrolls the caret's line up above the bar when it would
+    // fall under it, and the bar moves off that line (positionFrame).
+    //
+    // When the session ends the room is not taken away at once: that would
+    // pull the page up under a writer sitting at its end. It shrinks to what
+    // the current scroll position still needs, and goes on shrinking as the
+    // writer scrolls up, until none is left.
+
+    // The room, as a share of the window's height.
+    var ROOM_SHARE = 0.45;
+    // How far above the bar the caret's line is kept.
+    var REVEAL_MARGIN = 24;
+
+    var revealPending = false;
+    var roomRelease = null;
+
+    function askReveal() {
+      if (session) revealPending = true;
+    }
+
+    function canRoom() {
+      return !!(win && doc && highlights && typeof highlights.setPageRoom === "function");
+    }
+
+    function keepRoom() {
+      if (!canRoom()) return;
+      stopRoomRelease();
+      var viewport = win.innerHeight || 768;
+      var want = Math.round(Math.max(viewport * ROOM_SHARE, BAR_ROOM + BAR_GAP * 2 + REVEAL_MARGIN * 3));
+      if (highlights.pageRoom() !== want) highlights.setPageRoom(want);
+    }
+
+    // The room the current scroll position still needs: how far the bottom of
+    // the window reaches past the page's own end.
+    function roomStillNeeded() {
+      var el = doc.scrollingElement || doc.documentElement;
+      var room = highlights.pageRoom();
+      var natural = el.scrollHeight - room;
+      var reach = (win.scrollY || win.pageYOffset || 0) + (win.innerHeight || el.clientHeight);
+      return Math.max(0, Math.min(room, Math.ceil(reach - natural)));
+    }
+
+    function releaseRoom() {
+      if (!canRoom() || !highlights.pageRoom()) return;
+      var shrink = function () {
+        var need = roomStillNeeded();
+        if (need !== highlights.pageRoom()) highlights.setPageRoom(need);
+        if (!need) stopRoomRelease();
+      };
+      shrink();
+      if (!highlights.pageRoom() || roomRelease) return;
+      roomRelease = listeners.on(win, "scroll", shrink, { passive: true }, LISTENER_GROUP);
+    }
+
+    function stopRoomRelease() {
+      if (roomRelease) roomRelease.off();
+      roomRelease = null;
+    }
+
+    function dropRoom() {
+      stopRoomRelease();
+      if (canRoom() && highlights.pageRoom()) highlights.setPageRoom(0);
+    }
+
+    // The caret's line on screen: the text box at the caret, or, on an empty
+    // line (a fresh paragraph holding only a <br>), the block the caret is in.
+    function caretLineRect() {
+      if (!session || !win) return null;
+      var range = liveRange();
+      if (!range || !inSession(range.startContainer)) return null;
+      var rects = range.getClientRects();
+      for (var i = rects.length - 1; i >= 0; i -= 1) {
+        if (rects[i].height) return { top: rects[i].top, bottom: rects[i].bottom };
+      }
+      var node = range.startContainer;
+      if (node.nodeType === 1 && node.childNodes[range.startOffset] && node.childNodes[range.startOffset].nodeType === 1) {
+        node = node.childNodes[range.startOffset];
+      }
+      var el = node.nodeType === 1 ? node : node.parentElement;
+      while (el && el !== doc.body && typeof win.getComputedStyle === "function" && /^inline/.test(win.getComputedStyle(el).display)) {
+        el = el.parentElement;
+      }
+      if (!el || typeof el.getBoundingClientRect !== "function") return null;
+      var r = el.getBoundingClientRect();
+      if (!r.height && !r.width) return null;
+      return { top: r.top, bottom: r.bottom };
+    }
+
+    // Scrolls the caret's line up above the bar, with a margin, when it sits
+    // below that point; and down into the window when it is above the top.
+    function revealCaret() {
+      var line = caretLineRect();
+      if (!line) return;
+      var viewport = win.innerHeight || 768;
+      var barHeight = (barNode && barNode.getBoundingClientRect().height) || BAR_ROOM;
+      var limit = viewport - barHeight - BAR_GAP * 2 - REVEAL_MARGIN;
+      var by = 0;
+      if (line.bottom > limit) by = line.bottom - limit;
+      else if (line.top < 0) by = line.top - REVEAL_MARGIN;
+      if (!by) return;
+      var x = win.scrollX || win.pageXOffset || 0;
+      var y = (win.scrollY || win.pageYOffset || 0) + by;
+      try {
+        win.scrollTo({ left: x, top: y, behavior: "instant" });
+      } catch (err) {
+        win.scrollTo(x, y);
+      }
+    }
+
+    // The bar's height before it has been laid out, and the space it keeps
+    // from the frame and from the text above it.
+    var BAR_ROOM = 40;
+    var BAR_GAP = 4;
+
+    // The bottom of the nearest page text above `top`, outside the frame, or
+    // null when there is none. It reads the lines themselves (text node
+    // rects), walking back from the first framed block, so a page's margins
+    // and padding count as gap and its words never do.
+    function contentBottomAbove(list, top) {
+      if (!doc || !doc.body || !list.length) return null;
+      var first = list[0];
+      for (var i = 1; i < list.length; i += 1) {
+        if (list[i] && first.compareDocumentPosition(list[i]) & 2) first = list[i];
+      }
+      var walker = doc.createTreeWalker(doc.body, 4, null);
+      walker.currentNode = first;
+      var looked = 0;
+      for (var n = walker.previousNode(); n && looked < 200; n = walker.previousNode()) {
+        looked += 1;
+        if (!/\S/.test(n.nodeValue || "")) continue;
+        var parent = n.parentElement;
+        if (!parent || markers.isInsideOverlay(parent)) continue;
+        var r = doc.createRange();
+        r.selectNodeContents(n);
+        var rects = r.getClientRects();
+        var best = null;
+        for (var k = 0; k < rects.length; k += 1) {
+          var box = rects[k];
+          if (!box.width && !box.height) continue;
+          if (box.bottom <= top + 1 && (best === null || box.bottom > best)) best = box.bottom;
+        }
+        if (best !== null) return best;
+      }
+      return null;
+    }
+
+    // The top of the nearest page text below `bottom`, after the frame, or
+    // null when there is none.
+    function contentTopBelow(list, bottom) {
+      if (!doc || !doc.body || !list.length) return null;
+      var last = list[0];
+      for (var i = 1; i < list.length; i += 1) {
+        if (list[i] && last.compareDocumentPosition(list[i]) & 4) last = list[i];
+      }
+      var walker = doc.createTreeWalker(doc.body, 4, null);
+      walker.currentNode = last;
+      var looked = 0;
+      for (var n = walker.nextNode(); n && looked < 200; n = walker.nextNode()) {
+        if (last.contains(n)) continue;
+        looked += 1;
+        if (!/\S/.test(n.nodeValue || "")) continue;
+        var parent = n.parentElement;
+        if (!parent || markers.isInsideOverlay(parent)) continue;
+        var r = doc.createRange();
+        r.selectNodeContents(n);
+        var rects = r.getClientRects();
+        var best = null;
+        for (var k = 0; k < rects.length; k += 1) {
+          var box = rects[k];
+          if (!box.width && !box.height) continue;
+          if (box.top >= bottom - 1 && (best === null || box.top < best)) best = box.top;
+        }
+        if (best !== null) return best;
+      }
+      return null;
+    }
+
+    // On a narrow window the bar drops its hint first.
+    function fitBar(left) {
+      if (!barParts || !win) return;
+      var room = (win.innerWidth || 1024) - left - 8 - railAllowance();
+      barParts.hint.style.display = "";
+      barParts.lastSep.style.display = "";
+      if (barNode.getBoundingClientRect().width > room && barParts.hint.getAttribute("data-lahe-notice") !== "true") {
+        barParts.hint.style.display = "none";
+        barParts.lastSep.style.display = "none";
+      }
+    }
+
+    function railAllowance() {
+      if (!doc || !win || typeof win.getComputedStyle !== "function") return 0;
+      var host = doc.getElementById(highlightModule.SURFACE_ID);
+      if (!host) return 0;
+      var px = parseFloat(win.getComputedStyle(host).getPropertyValue(highlightModule.RAIL_ALLOWANCE_PROP));
+      return isFinite(px) && px > 0 ? px : 0;
     }
 
     function watchFrame() {
       if (frameRaf || !win) return;
       var tick = function () {
-        if (!session) {
+        if (!session && !editState) {
           frameRaf = null;
           return;
         }
@@ -2095,10 +5396,19 @@
     }
 
     function hideFrame() {
+      revealPending = false;
+      // Every way a session closes comes through here. With no edit open after
+      // it, the "+ Write here" line goes too (fix H3: it stayed on screen after
+      // Esc with the pointer resting in a gap).
+      if (!isEditOpen()) removeLine();
+      releaseRoom();
+      if (menuOpen) closeMenu(false);
       if (frameNode) frameNode.style.display = "none";
-      if (barNode) barNode.style.display = "none";
-      if (frameRaf && win && win.cancelAnimationFrame) win.cancelAnimationFrame(frameRaf);
-      frameRaf = null;
+      if (barNode && !editState) barNode.style.display = "none";
+      if (frameRaf && win && win.cancelAnimationFrame && !editState) {
+        win.cancelAnimationFrame(frameRaf);
+        frameRaf = null;
+      }
       return true;
     }
 
@@ -2111,6 +5421,45 @@
     function frameLabel() {
       if (!barNode || barNode.style.display === "none") return null;
       return barNode.textContent;
+    }
+
+    // What the bar shows, for a spec: a closed root cannot be queried.
+    function barInfo() {
+      if (!barNode || barNode.style.display === "none" || !barParts) return null;
+      var r = barNode.getBoundingClientRect();
+      var root = barNode.getRootNode();
+      var active = root && root.activeElement ? root.activeElement : null;
+      return {
+        rect: { x: r.x, y: r.y, width: r.width, height: r.height },
+        label: barNode.querySelector(".lahe-edit-bar__label").textContent,
+        hint: barParts.hint.style.display === "none" ? null : barParts.hint.textContent,
+        notice: barParts.hint.getAttribute("data-lahe-notice") === "true",
+        typeVisible: barParts.typeWrap.style.display !== "none",
+        typeLabel: barParts.typeBtn.textContent,
+        typeDisabled: barParts.typeBtn.disabled,
+        formatVisible: barParts.formatButtons[0].style.display !== "none",
+        deleteVisible: barParts.remove.style.display !== "none",
+        menuOpen: menuOpen,
+        menuUp: barParts.menu.classList.contains("lahe-edit-bar__menu--up"),
+        menuRect: menuOpen ? rectOf(barParts.menu) : null,
+        typeRect: rectOf(barParts.typeBtn),
+        focused: active === barParts.typeBtn ? "type" : barParts.rows.indexOf(active) !== -1 ? "row:" + barParts.rows[barParts.rows.indexOf(active)].getAttribute("data-lahe-type") : null,
+        rows: barParts.rows.map(function (row) {
+          return {
+            tag: row.getAttribute("data-lahe-type"),
+            label: row.querySelector(".lahe-edit-bar__rowname").textContent,
+            chord: row.querySelector(".lahe-edit-bar__rowkey").textContent,
+            markdown: row.querySelector(".lahe-edit-bar__rowmd").textContent,
+            disabled: row.getAttribute("aria-disabled") === "true",
+            rect: menuOpen ? rectOf(row) : null
+          };
+        })
+      };
+    }
+
+    function rectOf(el) {
+      var r = el.getBoundingClientRect();
+      return { x: r.x, y: r.y, width: r.width, height: r.height, cx: r.x + r.width / 2, cy: r.y + r.height / 2 };
     }
 
     function buttonNode(name) {
@@ -2159,6 +5508,13 @@
       // idempotent, so the pair costs nothing.
       listenerHandles.push(listeners.on(target, "pointerdown", onPointerDown, true, LISTENER_GROUP));
       listenerHandles.push(listeners.on(target, "mousedown", onPointerDown, true, LISTENER_GROUP));
+      // Free writing: an arrow out of the session ends it, the caret's block
+      // drives the menu, and the pointer over a gap shows "+ Write here".
+      listenerHandles.push(listeners.on(target, "keyup", onRunKeyup, true, LISTENER_GROUP));
+      listenerHandles.push(listeners.on(target, "selectionchange", onRunSelectionChange, true, LISTENER_GROUP));
+      listenerHandles.push(listeners.on(target, "mousemove", onLineMove, true, LISTENER_GROUP));
+      listenerHandles.push(listeners.on(target, "mouseout", onLineAway, true, LISTENER_GROUP));
+      listenerHandles.push(listeners.on(target, "focusin", onLineAway, true, LISTENER_GROUP));
 
       if (win) {
         // The window losing focus is the reviewer leaving too.
@@ -2176,7 +5532,8 @@
       // and the open block's own input handlers are in that group. Without this
       // line the reviewer's block is still contenteditable and still on screen
       // after a morph, and every keystroke into it is recorded nowhere.
-      if (session && session.block) bindBlock(session.block);
+      if (session && session.block) bindBlock(isRun() ? session.host : session.block);
+      scheduleEmptyPage();
       return { bound: true, listeners: listenerHandles.length };
     }
 
@@ -2251,23 +5608,99 @@
         inOverlay: markers.isInsideOverlay(event.target),
         pickMode: false,
         editing: !!session,
-        inEditedBlock: !!session && !!event.target && (session.block === event.target || session.block.contains(event.target))
+        editState: !!editState && !session,
+        blockMenuOpen: menuOpen,
+        inBlock: event.type === "keydown" && !session ? caretInBlock() : undefined,
+        inEditedBlock:
+          !!session &&
+          !!event.target &&
+          (isRun() ? inSession(event.target) : session.block === event.target || session.block.contains(event.target))
       };
     }
 
+    // Is the caret in a block Cmd-Shift-E can open? No caret, or a caret
+    // sitting straight in body or main, is "in no block".
+    // The reviewer's last caret on the page itself, so a chord pressed while
+    // the rail holds focus can put it back (flow walk, design problem 8).
+    var lastPageCaret = null;
+    function notePageCaret() {
+      var range = liveRange();
+      if (!range) return;
+      var node = range.startContainer;
+      var el = node && node.nodeType === 1 ? node : node && node.parentElement;
+      if (!el || !el.isConnected || markers.isInsideOverlay(el)) return;
+      if (!doc.body || !doc.body.contains(el)) return;
+      lastPageCaret = range.cloneRange();
+    }
+
+    /**
+     * Cmd-Shift-E pressed while the rail holds focus. Before this the chord
+     * and the typing after it both went nowhere until the writer clicked the
+     * page, and writers move between the rail and the page all the time. The
+     * focus comes back to the page, the last caret there is put back, and the
+     * chord then does what it does on the page.
+     *
+     * @returns {boolean} true when the chord was handled
+     */
+    function chordFromRail(event) {
+      var got = gestures.gestureFor(describe(event));
+      if (got.gesture !== gestures.GESTURE.EDIT_BLOCK && got.gesture !== gestures.GESTURE.ENTER_EDIT_STATE) return false;
+      if (railTextFocus && railTextFocus()) return false;
+      if (typeof event.preventDefault === "function") event.preventDefault();
+      var active = doc.activeElement;
+      if (active && markers.isInsideOverlay(active) && typeof active.blur === "function") active.blur();
+      if (lastPageCaret && lastPageCaret.startContainer.isConnected && win) {
+        var sel = win.getSelection();
+        sel.removeAllRanges();
+        sel.addRange(lastPageCaret.cloneRange());
+      }
+      if (session) {
+        // An edit is already open: the chord goes back into it.
+        if (session.host && typeof session.host.focus === "function") session.host.focus({ preventScroll: true });
+        else if (session.block && typeof session.block.focus === "function") session.block.focus({ preventScroll: true });
+        return true;
+      }
+      if (caretInBlock()) {
+        leaveEditState();
+        editBlockAtCaret();
+      } else {
+        enterEditState();
+      }
+      return true;
+    }
+
+    function caretInBlock() {
+      var el = selection.caretContainer();
+      if (!el || markers.isInsideOverlay(el)) return false;
+      return !!selection.blockFor(el);
+    }
+
     function onKeydown(event) {
-      if (markers.isInsideOverlay(event.target)) return;
+      if (markers.isInsideOverlay(event.target)) {
+        chordFromRail(event);
+        return;
+      }
       // Parked for onBeforeInput, which fires next and cannot see the modifiers
       // that produced it. Every key, not only Enter, so a stale Shift from an
       // earlier press cannot turn a later paragraph break into a line break.
       if (session) session.lastKey = { key: event.key, shiftKey: event.shiftKey === true };
+      if (session && !event.metaKey && !event.ctrlKey && !event.altKey) askReveal();
+      if (isRun() && onRunKeydown(event)) return;
       var got = gestures.gestureFor(describe(event));
       if (got.gesture === gestures.GESTURE.EDIT_BLOCK) {
         if (got.preventDefault) event.preventDefault();
+        leaveEditState();
         editBlockAtCaret();
+      } else if (got.gesture === gestures.GESTURE.ENTER_EDIT_STATE) {
+        if (got.preventDefault) event.preventDefault();
+        enterEditState();
       } else if (got.gesture === gestures.GESTURE.COMMIT_EDIT) {
         if (got.preventDefault) event.preventDefault();
-        commit({ reason: event.key === "Escape" ? "escape" : "primary enter" });
+        if (session) commit({ reason: event.key === "Escape" ? "escape" : "primary enter" });
+        else leaveEditState();
+      } else if (got.gesture === gestures.GESTURE.CLOSE_MENU) {
+        if (got.preventDefault) event.preventDefault();
+        closeMenu(true);
       }
     }
 
@@ -2289,7 +5722,13 @@
      * call is a no-op, and this handler never runs while no session is open.
      */
     function onPointerDown(event) {
-      if (!session) return;
+      if (writeInGap(event)) return;
+      if (!session) {
+        // Edit state with no block open: a press on the rail leaves it. The
+        // bar and the "+ Write here" line are the edit state's own.
+        if (editState && markers.isInsideOverlay(event.target) && !onOwnFrame(event)) leaveEditState();
+        return;
+      }
       // THE ONE EXEMPTION: the edit frame's own bar (Bold, Italic, Delete
       // block). Those buttons act ON the open edit, so a pointer landing on one
       // is the reviewer still editing, not leaving. The bar lives in the
@@ -2320,7 +5759,16 @@
      * rectangle does.
      */
     function onOwnFrame(event) {
-      if (!barNode || typeof event.clientX !== "number") return false;
+      if (typeof event.clientX !== "number") return false;
+      var inside = function (node) {
+        if (!node || node.style.display === "none" || node.hidden) return false;
+        var r = node.getBoundingClientRect();
+        if (!r || (r.width === 0 && r.height === 0)) return false;
+        return event.clientX >= r.left && event.clientX <= r.right && event.clientY >= r.top && event.clientY <= r.bottom;
+      };
+      if (lineNode && lineNode.getAttribute("data-lahe-show") === "true" && inside(lineNode)) return true;
+      if (menuOpen && barParts && inside(barParts.menu)) return true;
+      if (!barNode) return false;
       var rect = barNode.getBoundingClientRect();
       if (!rect || (rect.width === 0 && rect.height === 0)) return false;
       return (
@@ -2332,13 +5780,61 @@
     }
 
     function onWindowBlur(event) {
-      if (!session) return;
       if (event && event.target && win && event.target !== win && event.target !== doc) return;
+      onLineAway(null);
+      if (!session) return;
       commit({ reason: "window blur" });
     }
 
+    // A press that missed "+ Write here" but landed in the page's own gap
+    // between two blocks (or just below the last one) starts writing there,
+    // as the line would have. Before this, a near miss read as a click
+    // outside: the session closed and the typing went nowhere (flow walk,
+    // design problem 7). Only a press on the page's containers counts, never
+    // one on content (an image, a rule), and only while an edit is open.
+    var swallowClick = false;
+    var gapPress = null;
+    function writeInGap(event) {
+      // pointerdown and its compatibility mousedown are one press: the second
+      // is swallowed, never a second opening.
+      if (event.type === "mousedown" && gapPress && gapPress.x === event.clientX && gapPress.y === event.clientY) {
+        gapPress = null;
+        if (typeof event.preventDefault === "function") event.preventDefault();
+        return true;
+      }
+      gapPress = null;
+      swallowClick = false;
+      if (!isEditOpen() || typeof event.clientX !== "number") return false;
+      if (typeof event.button === "number" && event.button !== 0) return false;
+      if (markers.isInsideOverlay(event.target) || pressedOnScrollbar(event)) return false;
+      var gap = gapAt(event.clientX, event.clientY, true);
+      if (!gap) return false;
+      var target = event.target;
+      if (!target || target.nodeType !== 1 || !target.contains(gap.block)) return false;
+      if (typeof event.preventDefault === "function") event.preventDefault();
+      swallowClick = true;
+      if (event.type === "pointerdown") gapPress = { x: event.clientX, y: event.clientY };
+      openAfter(gap.block);
+      return true;
+    }
+
     function onClick(event) {
+      if (swallowClick) {
+        // The press already started writing in the gap; its click is not a
+        // click outside the new session.
+        swallowClick = false;
+        return;
+      }
       if (markers.isInsideOverlay(event.target)) return;
+      if (editState && !session) {
+        // Edit state with no block open: a click on a block opens it.
+        var clicked = selection.blockFor(event.target);
+        if (clicked) {
+          leaveEditState();
+          editBlock(clicked);
+        }
+        return;
+      }
       var got = gestures.gestureFor(describe(event));
       if (got.gesture !== gestures.GESTURE.COMMIT_EDIT) return;
       // The click still reaches the page. Browse is native, so clicking a link
@@ -2360,16 +5856,31 @@
     function teardown() {
       unbind();
       unbindBlock();
+      editState = false;
+      // Whatever a long run was waiting to write goes to storage first.
+      flushRunDraft();
       if (session) {
-        clearEditableAttrs(session.block);
-        protect.release(session.block);
+        var open = session;
         session = null;
+        closeBurstOf(open);
+        if (open.mode === MODE.RUN) clearHostAttrs(open);
+        else clearEditableAttrs(open.block);
+        protect.release(open.block);
       }
       hideFrame();
-      if (frameNode && frameNode.parentNode) frameNode.parentNode.removeChild(frameNode);
-      if (barNode && barNode.parentNode) barNode.parentNode.removeChild(barNode);
+      dropRoom();
+      removeLine();
+      hidePlaceholder();
+      [frameNode, barNode, lineNode, placeholderNode, liveNode].forEach(function (node) {
+        if (node && node.parentNode) node.parentNode.removeChild(node);
+      });
       frameNode = null;
       barNode = null;
+      barParts = null;
+      lineNode = null;
+      placeholderNode = null;
+      liveNode = null;
+      menuOpen = false;
       return true;
     }
 
@@ -2382,6 +5893,11 @@
       COMMANDS: COMMANDS,
       setReview: setReview,
       setPage: setPage,
+      setNotes: setNotes,
+      isNotes: function () {
+        return notesReview;
+      },
+      flushDraft: flushRunDraft,
       onChange: onChange,
       bind: bind,
       unbind: unbind,
@@ -2405,6 +5921,36 @@
       frameRect: frameRect,
       frameLabel: frameLabel,
       buttonNode: buttonNode,
+      barInfo: barInfo,
+      // The anchor (unless it is a container) and the run, in order.
+      sessionElements: function () {
+        return session ? sessionBlocks() : [];
+      },
+      lineInfo: lineInfo,
+      placeholderInfo: placeholderInfo,
+      announcements: function () {
+        return announced.slice();
+      },
+      liveText: function () {
+        return liveNode ? liveNode.textContent : null;
+      },
+      enterEditState: enterEditState,
+      leaveEditState: leaveEditState,
+      isInEditState: function () {
+        return !!editState && !session;
+      },
+      openAfter: openAfter,
+      openEmptyPage: openEmptyPage,
+      openMenu: function () {
+        return openMenu(0);
+      },
+      closeMenu: closeMenu,
+      setBlockType: function (tag) {
+        return typeActions[tag] ? typeActions[tag]() : false;
+      },
+      typeActions: typeActions,
+      historyStep: historyStep,
+      counters: counters,
       items: function () {
         return store.read(requireReview());
       }
@@ -2421,6 +5967,26 @@
     EDITABLE_ATTRS: EDITABLE_ATTRS,
     LABEL_EDITING: LABEL_EDITING,
     HINT_FINISH: HINT_FINISH,
+    MODE: MODE,
+    HINT_EDIT_STATE: HINT_EDIT_STATE,
+    INSERT_LINE_LABEL: INSERT_LINE_LABEL,
+    PLACEHOLDER: PLACEHOLDER,
+    CEILING_WARN: CEILING_WARN,
+    CEILING_FULL: CEILING_FULL,
+    CEILING_WARN_RATIO: CEILING_WARN_RATIO,
+    ANNOUNCE: ANNOUNCE,
+    FIRST_WORDS: FIRST_WORDS,
+    SESSION_HISTORY_MAX: SESSION_HISTORY_MAX,
+    TYPING_BURST_IDLE_MS: TYPING_BURST_IDLE_MS,
+    SESSION_HISTORY_MAX_CHARS: SESSION_HISTORY_MAX_CHARS,
+    RUN_BYTES_FACTOR: RUN_BYTES_FACTOR,
+    RUN_BLOCK_OVERHEAD: RUN_BLOCK_OVERHEAD,
+    RUN_REMEASURE_BYTES: RUN_REMEASURE_BYTES,
+    RUN_DRAFT_DEFER_BYTES: RUN_DRAFT_DEFER_BYTES,
+    RUN_DRAFT_IDLE_MS: RUN_DRAFT_IDLE_MS,
+    RUN_DRAFT_MAX_WAIT_MS: RUN_DRAFT_MAX_WAIT_MS,
+    runRecordBytes: runRecordBytes,
+    counters: counters,
     TOOL_ATTR: markers.TOOL_ATTR,
     BREAK_SHAPE: BREAK_SHAPE,
     breakShapeFor: breakShapeFor,

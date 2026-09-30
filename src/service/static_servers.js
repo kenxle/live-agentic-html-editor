@@ -159,6 +159,20 @@ async function waitFor(check, timeoutMs) {
   return null;
 }
 
+// A ONE-PAGE SERVER (docs/features/20260928.01_free_writing, `lahe write`).
+// Its root is the page file itself, not a folder, so:
+//  - its id is keyed by the page, and it never reuses a folder server;
+//  - it serves that page, the Lahe style and fonts the page names, the
+//    library, and nothing else: a sibling, a dotfile, another review's render
+//    are all 404s;
+//  - it registers no mounts, and every reader that compares a server's root
+//    with a folder (rebuild's mergeMounts, liveUrlFor) passes it by.
+// start({root: <file>}) is the whole API, so the idle sweep's restart, which
+// passes a record's root back, brings it back as the same one-page server.
+function isPageRoot(root) {
+  try { return fs.statSync(root).isFile(); } catch (err) { return false; }
+}
+
 function serverId(root) {
   return "ss_" + crypto.createHash("sha256").update(path.resolve(root)).digest("hex").slice(0, 16);
 }
@@ -278,6 +292,9 @@ function recordLinks(dir, sessionId, serverId, reviewId, targets) {
 }
 
 async function registerMount(dir, sessionId, meta, prefix, rootInput) {
+  if (meta && (meta.page === true || (typeof meta.root === "string" && isPageRoot(meta.root)))) {
+    throw new Error("a one-page server takes no mounts: it serves its page and nothing else");
+  }
   if (!/^\/\.lahe-source\/[a-f0-9]+\/$/.test(prefix)) throw new Error("invalid static source mount " + JSON.stringify(prefix));
   if (!(await isExactServer(meta))) throw new Error("refusing to update a static server whose identity is no longer live");
   // The server registers link mounts itself while rendering a linked document,
@@ -691,7 +708,10 @@ function injectForMatch(dir, match, target, html) {
     review: match.review,
     token: match.token,
     helper: helperOrigin,
-    fallback: helperOrigin + protocol.route("library.get").path
+    fallback: helperOrigin + protocol.route("library.get").path,
+    // The notes flag rides the tag, so the layer knows at boot that an empty
+    // page here opens for typing (free writing, design call 2).
+    notes: stateDir.isNotesReview(dir, match.review)
   });
   return scriptLine.placeScriptLine(html, tag).html;
 }
@@ -1136,8 +1156,59 @@ function runServer(file, sessionId, id, instance, rootInput, dir, logicalRootInp
     );
   }
 
+  // One page, and the packaged files it names. Nothing is read off disk but
+  // the page itself: the style is built, and the fonts and Mermaid runtime
+  // come from the clone, so no path in the request ever reaches the folder
+  // the page sits in.
+  var pageMode = isPageRoot(root);
+  var pageName = path.basename(root);
+  function servePage(pathname, req, res) {
+    if (pathname === "/" + pageName) {
+      var html;
+      try { html = fs.readFileSync(root, "utf8"); } catch (err) { return send(res, 404, "not found\n"); }
+      var match = findReviewForRequest(dir, {
+        filePaths: logicalRoot !== root ? [root, logicalRoot] : [root],
+        sessionId: sessionId,
+        roots: []
+      });
+      if (!match) noReviewBacksThisServer();
+      var injected = match ? injectForMatch(dir, match, root, html) : null;
+      return sendHtml(req, res, tabIcon.ensure(injected !== null ? injected : html));
+    }
+    if (pathname === "/" + markdown.DOC_STYLE_ASSET) return sendDocStyle(req, res);
+    var packaged = null;
+    if (pathname === "/" + markdown.MERMAID_ASSET) packaged = markdown.MERMAID_SOURCE;
+    var fontPrefix = "/" + markdown.FONT_ASSET_DIR + "/";
+    if (pathname.indexOf(fontPrefix) === 0 && markdown.FONT_ASSETS.indexOf(pathname.slice(fontPrefix.length)) !== -1) {
+      packaged = path.join(markdown.FONT_SOURCE_DIR, pathname.slice(fontPrefix.length));
+    }
+    if (!packaged) return send(res, 404, "not found\n");
+    var stat;
+    try { stat = fs.statSync(packaged); } catch (err) { return send(res, 404, "not found\n"); }
+    res.writeHead(200, {
+      "cache-control": "no-store",
+      "content-length": stat.size,
+      "content-type": MIME[path.extname(packaged).toLowerCase()] || "application/octet-stream",
+      "x-content-type-options": "nosniff"
+    });
+    if (req.method === "HEAD") return res.end();
+    fs.createReadStream(packaged).on("error", function () { res.destroy(); }).pipe(res);
+  }
+
+  // A NOTES PAGE ANSWERS ITS OWN ADDRESS ONLY (security review 6). A site
+  // using DNS rebinding can find the port and ask for the page under its own
+  // name; the helper's Host check keeps the token from being used, but the
+  // reviewer's private notes would still be read. So in page mode a Host that
+  // is not this server's loopback address and port is a 404.
+  function hostIsOurs(req) {
+    var port = server.address() && server.address().port;
+    var host = String(req.headers.host || "").toLowerCase();
+    return host === HOST + ":" + port || host === "localhost:" + port;
+  }
+
   var startedAt = new Date().toISOString();
   var server = http.createServer(function (req, res) {
+    if (pageMode && !hostIsOurs(req)) return send(res, 404, "not found\n");
     var pathname;
     var rawPathname;
     try {
@@ -1167,6 +1238,7 @@ function runServer(file, sessionId, id, instance, rootInput, dir, logicalRootInp
     // root is looked at, so a folder that happens to be named for it cannot
     // shadow the one file every injected page depends on.
     if (pathname === LIBRARY_PATH) return sendLibrary(req, res);
+    if (pageMode) return servePage(pathname, req, res);
     var servingRoot = root;
     var relative = pathname.replace(/^\/+/, "");
     var isMount = false;
@@ -1289,6 +1361,9 @@ function runServer(file, sessionId, id, instance, rootInput, dir, logicalRootInp
       pid: process.pid,
       started_at: startedAt,
       stopped_at: null,
+      // A one-page server says so on its record, so a reader never has to
+      // stat the root to tell (code lead 23).
+      page: pageMode === true,
       mounts: mounts,
       // Which review linked to which file outlives a restart, or every linked
       // document would lose its rail until each hub was rendered again.
@@ -1330,6 +1405,7 @@ module.exports = {
   linkedFileForPage: linkedFileForPage,
   serverId: serverId,
   isExactServer: isExactServer,
+  isPageRoot: isPageRoot,
   list: list,
   start: start,
   registerMount: registerMount,

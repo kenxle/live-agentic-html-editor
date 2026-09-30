@@ -141,7 +141,17 @@ function recordedReviewFor(dir, sessionId, target) {
   return best ? best.id : null;
 }
 
-async function run(argv) {
+/**
+ * @param {string[]} argv
+ * @param {{notes?: boolean, notesFolder?: string}} [mode] `lahe write` runs
+ *   this with notes: true (src/cli/commands/write.js), after its own path
+ *   checks. The page then gets its own one-page server (static_servers.js),
+ *   no asset mount and no link mounts, and the review is minted as a notes
+ *   review. `notesFolder` is the real parent path it prints.
+ */
+async function run(argv, mode) {
+  var notesMode = !!(mode && mode.notes);
+  var notesFolder = mode && mode.notesFolder ? mode.notesFolder : null;
   var list = (argv || []).slice();
   if (list.indexOf("--help") !== -1 || list.indexOf("-h") !== -1) {
     process.stdout.write(USAGE + "\n\n" + add.USAGE + "\n");
@@ -208,57 +218,46 @@ async function run(argv) {
   }
   if (newSession && list.indexOf("--new") === -1) list.push("--new");
   if (!opts.session) list.push("--session", sessionId);
+  // PAGE MODE IS THE REVIEW'S, NOT THE COMMAND'S (adversary review 5). A
+  // Markdown file whose render already belongs to a notes review is a notes
+  // page, whichever command brings it back: `lahe review notes.md --session
+  // <id>` gets the same one-page server `lahe write` gave it, and the same
+  // path rules. The notes flag wins.
+  if (!notesMode && markdownTarget) {
+    var prior = recordedReviewFor(dir, sessionId, markdown.artifactPath(dir, sessionId, originalTarget));
+    if (prior && stateDir.isNotesReview(dir, prior)) {
+      var checked = require("./write.js").prepare(originalTarget);
+      if (checked.error) {
+        if (createdSession) store.close(sessionId);
+        process.stderr.write("lahe review: this file is a notes page, and " + checked.error + "\n");
+        return protocol.CLI_EXIT.BAD_USAGE;
+      }
+      notesMode = true;
+      notesFolder = checked.folder;
+    }
+  }
   var staticServer = null;
   var rendered = null;
   var served = null;
   var openPage = null;
   var target = originalTarget;
   try {
+    if (notesMode && !markdownTarget) throw new Error("lahe write serves a Markdown file only");
     if (markdownTarget) {
-      rendered = markdown.writeArtifact(dir, sessionId, originalTarget);
+      rendered = markdown.writeArtifact(dir, sessionId, originalTarget, { noFollow: notesMode });
       var targetIndex = list.indexOf(opts.target);
       if (targetIndex === -1) throw new Error("could not identify the Markdown target argument");
       list[targetIndex] = rendered.target;
       list.push("--source", originalTarget);
       target = rendered.target;
     }
-    served = servedKind(target, opts);
-    if (served) {
-      // A single page's server is rooted at the page's own folder; a folder of
-      // pages is its own root, so links between the pages resolve and a page
-      // added later is served the moment it exists.
-      staticServer = await staticServers.start({
-        dir: dir,
-        sessionId: sessionId,
-        root: served === "folder" ? target : path.dirname(target)
-      });
-      if (served === "folder") {
-        openPage = add.folderEntryPage(target);
-        if (!openPage) throw new Error("there are no pages in " + target + " to open");
-      } else {
-        openPage = path.basename(target);
-      }
-      if (rendered) {
-        await staticServers.registerMount(
-          dir,
-          sessionId,
-          staticServer.meta,
-          rendered.assetPrefix,
-          rendered.assetRoot
-        );
-        // Local links the renderer translated need their target directory
-        // served read-only. The Markdown on disk keeps the links its author
-        // wrote; only the rendered page points at these mounts.
-        for (var i = 0; i < rendered.linkMounts.length; i += 1) {
-          await staticServers.registerMount(
-            dir,
-            sessionId,
-            staticServer.meta,
-            rendered.linkMounts[i].prefix,
-            rendered.linkMounts[i].dir
-          );
-        }
-      }
+    var started = notesMode
+      ? await startNotesServer(dir, sessionId, rendered, list)
+      : await startFolderServer(dir, sessionId, target, rendered, opts);
+    if (started) {
+      staticServer = started.server;
+      openPage = started.openPage;
+      served = started.served;
       list.push("--origin", "http://" + staticServer.meta.host + ":" + staticServer.meta.port);
       // This command owns the server, knows the exact path under it, and
       // prints its own "server"/"open" lines below. `--under-review` tells
@@ -283,7 +282,7 @@ async function run(argv) {
       }
     }
   }
-  if (code === 0 && rendered && staticServer) {
+  if (code === 0 && rendered && staticServer && !notesMode) {
     // WHICH REVIEW LINKED TO WHICH FILE, recorded once the review exists. The
     // mounts above had to be registered before `add` ran, when this review may
     // not have had an id yet. A linked document rides this review's rail only
@@ -309,40 +308,17 @@ async function run(argv) {
           "\n  open      http://" + staticServer.meta.host + ":" + staticServer.meta.port +
           "/" + encodeURIComponent(openPage) + "\n"
       );
-      // THE SERVED ROOT, PRINTED. It is not always the folder the reviewer
-      // named: a single page's server is rooted at the page's own directory,
-      // which is what decides whether `../assets/x.png` resolves and what else
-      // on disk is reachable over the link being handed out. Not labelled
-      // "folder": `add` already prints that for the review's own directory in
-      // the state dir, and two different paths under one label is how a reader
-      // (or a script) takes the wrong one.
-      process.stdout.write(
-        "  root      " + staticServer.meta.root +
-          (served === "folder"
-            ? "  (every page in it is this one review; links between them keep the rail)"
-            : "  (the page's own folder, which is everything this server can serve)") +
-          "\n"
-      );
-      if (opts.only) {
-        process.stdout.write(
-          "  scope     only this page. Other pages under that root are served without the rail\n"
-        );
-      } else if (served === "file") {
-        process.stdout.write(
-          "  scope     the rail follows links onto any page under that root.\n" +
-          "            Rerun with --only to keep this review to the one page.\n"
-        );
-      }
+      printScope(notesMode ? "notes" : served, staticServer, opts, notesFolder);
     }
     if (rendered) {
       process.stdout.write(
         "  source    " + originalTarget + "  (Markdown rendered deterministically)\n" +
         "  rebuild   nothing to do. Edit the Markdown and the page re-renders and reloads itself\n" +
-        (rendered.linkMounts.length
+        (rendered.linkMounts.length && !notesMode
           ? "  links     " + rendered.linkMounts.length + " linked folder" +
             (rendered.linkMounts.length === 1 ? "" : "s") + " served read-only for this session\n"
           : "") +
-        (rendered.linkMountsSkipped
+        (rendered.linkMountsSkipped && !notesMode
           ? "  links     " + rendered.linkMountsSkipped + " local link" +
             (rendered.linkMountsSkipped === 1 ? "" : "s") + " past the " + markdown.MOUNT_CAP +
             "-folder cap render as inert text\n"
@@ -354,6 +330,90 @@ async function run(argv) {
     );
   }
   return code;
+}
+
+/**
+ * A notes page's server: ITS OWN ONE-PAGE SERVER, keyed by the page and never
+ * by a folder, so it never reuses a folder server even with --session.
+ * Nothing else in the notes folder, or in the folder of renders, is reachable
+ * over it. No mounts. The review is minted as a notes review; a render of this
+ * file that already has an ordinary review keeps that review, and this run
+ * starts a new one.
+ */
+async function startNotesServer(dir, sessionId, rendered, list) {
+  var server = await staticServers.start({ dir: dir, sessionId: sessionId, root: rendered.target });
+  var existing = recordedReviewFor(dir, sessionId, rendered.target);
+  if (existing && !stateDir.isNotesReview(dir, existing) && list.indexOf("--new") === -1) list.push("--new");
+  if (list.indexOf("--notes") === -1) list.push("--notes");
+  return { server: server, openPage: path.basename(rendered.target), served: "page" };
+}
+
+/**
+ * Any other page's server, or null when the target is not served. A single
+ * page's server is rooted at the page's own folder; a folder of pages is its
+ * own root, so links between the pages resolve and a page added later is
+ * served the moment it exists. A rendered Markdown page also mounts its
+ * source folder, for its images, and each folder its local links point into.
+ */
+async function startFolderServer(dir, sessionId, target, rendered, opts) {
+  var served = servedKind(target, opts);
+  if (!served) return null;
+  var server = await staticServers.start({
+    dir: dir,
+    sessionId: sessionId,
+    root: served === "folder" ? target : path.dirname(target)
+  });
+  var openPage;
+  if (served === "folder") {
+    openPage = add.folderEntryPage(target);
+    if (!openPage) throw new Error("there are no pages in " + target + " to open");
+  } else {
+    openPage = path.basename(target);
+  }
+  if (rendered) {
+    await staticServers.registerMount(dir, sessionId, server.meta, rendered.assetPrefix, rendered.assetRoot);
+    // Local links the renderer translated need their target directory served
+    // read-only. The Markdown on disk keeps the links its author wrote; only
+    // the rendered page points at these mounts.
+    for (var i = 0; i < rendered.linkMounts.length; i += 1) {
+      await staticServers.registerMount(dir, sessionId, server.meta, rendered.linkMounts[i].prefix, rendered.linkMounts[i].dir);
+    }
+  }
+  return { server: server, openPage: openPage, served: served };
+}
+
+/**
+ * THE SERVED ROOT, PRINTED. It is not always the folder the reviewer named: a
+ * single page's server is rooted at the page's own directory, which is what
+ * decides whether `../assets/x.png` resolves and what else on disk is
+ * reachable over the link being handed out. Not labelled "folder": `add`
+ * already prints that for the review's own directory in the state dir, and two
+ * different paths under one label is how a reader (or a script) takes the
+ * wrong one. A notes page prints its scope and the real folder instead.
+ */
+function printScope(kind, staticServer, opts, notesFolder) {
+  if (kind === "notes") {
+    process.stdout.write(
+      "  scope     this page only, on its own server. Nothing else in its folder is served\n" +
+        (notesFolder ? "  notes in  " + notesFolder + "\n" : "")
+    );
+    return;
+  }
+  process.stdout.write(
+    "  root      " + staticServer.meta.root +
+      (kind === "folder"
+        ? "  (every page in it is this one review; links between them keep the rail)"
+        : "  (the page's own folder, which is everything this server can serve)") +
+      "\n"
+  );
+  if (opts.only) {
+    process.stdout.write("  scope     only this page. Other pages under that root are served without the rail\n");
+  } else if (kind === "file") {
+    process.stdout.write(
+      "  scope     the rail follows links onto any page under that root.\n" +
+        "            Rerun with --only to keep this review to the one page.\n"
+    );
+  }
 }
 
 module.exports = { USAGE: USAGE, inferSession: inferSession, servedKind: servedKind, takeName: takeName, nameAction: nameAction, run: run };

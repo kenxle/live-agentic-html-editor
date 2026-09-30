@@ -260,12 +260,25 @@ test.describe("the selection popover", () => {
       message: "the Edit button to put the block into edit state"
     });
 
-    const editable = await page.evaluate(function () {
-      return document.querySelector("#reset-scratch").getAttribute("contenteditable");
+    // Free writing made the block's host editable rather than the block
+    // itself, with a guard keeping edits on the session's blocks (architecture,
+    // "The editing host"). So the block being edited is the session's anchor:
+    // the one the session names and protection holds.
+    const edited = await page.evaluate(function () {
+      var block = document.querySelector("#reset-scratch");
+      return {
+        blockId: window.__lahe.editing.state().blockId,
+        protectedIds: Array.prototype.map.call(document.querySelectorAll("[data-lahe-protected]"), function (el) {
+          return el.id;
+        }),
+        hostHoldsIt: !!block.closest("[data-lahe-edit-host][contenteditable='true']")
+      };
     });
-    expect(editable, "the block holding the selection is the one being edited").toBe("true");
+    expect(edited.blockId, "the block holding the selection is the one being edited").toBe("reset-scratch");
+    expect(edited.protectedIds, "and it is the only block protection holds").toEqual(["reset-scratch"]);
+    expect(edited.hostHoldsIt, "inside the one editable host").toBe(true);
 
-    // Only that block.
+    // One editable element on the page: the session's host.
     const others = await page.evaluate(function () {
       return document.querySelectorAll("[contenteditable='true']").length;
     });

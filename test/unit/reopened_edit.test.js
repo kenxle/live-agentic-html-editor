@@ -266,3 +266,41 @@ test("recovery leaves a never-committed draft edit, and the edit being typed, al
   const later = surfaceOver(store, posted);
   assert.equal(later.recoverWithdrawn().length, 0);
 });
+
+// Free writing (plan Task 3.4, architecture Failure Modes: "The browser crashes
+// mid-sitting ... The next page load commits it"). A run is a sitting of new
+// blocks: if the page dies before the first commit, the draft is the only copy
+// of what the reviewer wrote, and replay never shows a draft. So a run draft
+// with words in it is committed by the next holder, as leaving would have.
+function runDraft(name, mutate) {
+  const { createFixtures } = require("../../src/shared/record_fixtures.js");
+  const fx = createFixtures({ seed: "crash" }).runFixtures().find((f) => f.name === name).item;
+  const draft = Object.assign({}, fx, { review: REVIEW, state: record.STATE.DRAFT, rev: 1, after_history: [] });
+  return mutate ? mutate(draft) : draft;
+}
+
+test("a run draft the page never committed is committed by the next holder, whole", () => {
+  const store = storeModule.createStore();
+  const posted = [];
+  const draft = runDraft("worked example");
+  store.write(REVIEW, draft);
+  const later = surfaceOver(store, posted);
+  const recovered = later.recoverWithdrawn();
+  assert.equal(recovered.length, 1);
+  const item = store.readItem(REVIEW, draft.id);
+  assert.equal(item.state, record.STATE.READY);
+  assert.equal(item.rev, 1, "a first commit stays at revision one");
+  assert.deepEqual(item.new_blocks, draft.new_blocks, "every block the reviewer wrote");
+  assert.equal(item.change, record.runChangeText(item), "the run's own change text, not a plain edit's");
+  assert.equal(item.after_history.length, 1);
+});
+
+test("an empty run draft (the blank page's own) is left alone", () => {
+  const store = storeModule.createStore();
+  const posted = [];
+  const blank = runDraft("start of container", (d) =>
+    Object.assign(d, { new_blocks: [{ tag: "p", html: "" }].filter((b) => b.html), after: "", after_html: "" })
+  );
+  store.write(REVIEW, blank);
+  assert.equal(surfaceOver(store, posted).recoverWithdrawn().length, 0);
+});

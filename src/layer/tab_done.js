@@ -550,6 +550,17 @@
     // the accent border, so it is the first thing in the tab and reads as one
     // object with the block inside it.
     ".card[" + ASKING_ATTR + "='true']{order:-1;border-color:var(--accent)}",
+    // The proofreading answers sit under the question, two at equal weight.
+    "." + ASK_CLASS + " .lahe-ask-acts{justify-content:flex-start}",
+    // The fixes "Use the fixes" would apply, as from and to, one per row.
+    "." + ASK_CLASS + " .lahe-ask-fixes{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px}",
+    "." + ASK_CLASS + " .lahe-fix{font-size:13px;line-height:1.4;color:var(--ink);overflow-wrap:anywhere;",
+    "border-top:1px solid var(--rule,rgba(128,128,128,.25));padding-top:6px}",
+    "." + ASK_CLASS + " .lahe-fix-where{display:block;font-size:10px;font-weight:700;letter-spacing:.06em;",
+    "text-transform:uppercase;color:var(--ink-faint)}",
+    "." + ASK_CLASS + " .lahe-fix-from{text-decoration:line-through;color:var(--ink-faint);white-space:pre-wrap}",
+    "." + ASK_CLASS + " .lahe-fix-to{white-space:pre-wrap}",
+    "." + ASK_CLASS + " .lahe-ask-acts [hidden]{display:none}",
 
     // The unseen mark. A reply the agent flagged (or a question, or a refusal)
     // that folded while the reviewer was looking at another tab is the only
@@ -567,6 +578,117 @@
     ".card[" + UNSEEN_ATTR + "='true']{box-shadow:inset 3px 0 0 0 var(--accent)}",
     ".card[" + UNSEEN_ATTR + "='true'][" + ASKING_ATTR + "='true']{box-shadow:none}"
   ].join("");
+
+  // ---------------------------------------------------------------------------
+  // The proofreading question (free writing, plan Task 3.3)
+  // ---------------------------------------------------------------------------
+  //
+  // After placing a long hand-written run, the agent may reply with a question
+  // marked proofread, listing {block, from, to} fixes. That question has only
+  // two answers, so only that question gets two buttons. Any other question,
+  // including a placement question on a run record, keeps today's treatment and
+  // is answered in the follow-up box. The words are pinned in the plan (PQ5).
+  var PROOFREAD = {
+    USE_LABEL: "Use the fixes",
+    USE_TEXT: "Use the fixes you listed. Change nothing else.",
+    KEEP_LABEL: "Keep mine",
+    KEEP_TEXT: "Keep mine as written. No changes.",
+    // What the card says after either answer, until the agent replies. It
+    // never says the fixes were applied before the agent says so.
+    WAITING: "Waiting on the agent"
+  };
+
+  function isProofreadQuestion(item) {
+    var reply = item && item[record.FIELD.REPLY];
+    return (
+      !!reply &&
+      reply.status === record.REPLY_STATUS.QUESTION &&
+      reply.proofread === true &&
+      record.isRunRecord(item)
+    );
+  }
+
+  /**
+   * The answered question, archived, and the reviewer's next turn: the same
+   * move as a follow-up (record.continueThread), onto a revision that may
+   * already carry new words. `base` is either the record itself or the record
+   * applySuggestions produced, which is one revision on already; either way
+   * the result is exactly one revision past `item`.
+   */
+  function answerOnto(item, base, text) {
+    var F = record.FIELD;
+    // record.continueOnto owns the archive-and-continue steps and keeps the
+    // change text of `base` (the fixed revision).
+    if (typeof record.continueOnto === "function") return record.continueOnto(item, base, { note: text });
+    var turn = {
+      note: text,
+      change:
+        typeof base[F.CHANGE] === "string"
+          ? base[F.CHANGE]
+          : typeof item[F.CHANGE] === "string"
+          ? item[F.CHANGE]
+          : null
+    };
+    var next = record.continueThread(item, turn);
+    if (base === item) return next;
+    var moved = {};
+    moved[F.REV] = moved[F.THREAD] = moved[F.NOTE] = moved[F.CHANGE] = moved[F.STATE] = moved[F.REPLY] = true;
+    moved[F.UPDATED_AT] = true;
+    Object.keys(base).forEach(function (key) {
+      if (moved[key] || base[key] === item[key]) return;
+      next[key] = base[key];
+    });
+    return next;
+  }
+
+  /** "Keep mine": the pinned reply, and not a word changed. */
+  function keepMineRecord(item) {
+    return answerOnto(item, item, PROOFREAD.KEEP_TEXT);
+  }
+
+  /**
+   * What the two buttons would do, or null when this is not a proofread.
+   *
+   * `useFixes` is the next revision with the fixed words, or null when
+   * record.applySuggestions refuses one of them: then the button is not shown
+   * and the reviewer answers in the follow-up box.
+   */
+  // A fix aimed at a from_anchor block would rewrite the page's own words, not
+  // the reviewer's. record.applySuggestions refuses those too (F3); the card
+  // does not offer the button for them either way.
+  function touchesAnchorTail(item, suggestions) {
+    var blocks = item[record.FIELD.NEW_BLOCKS] || [];
+    return suggestions.some(function (sg) {
+      var b = sg && blocks[sg.block];
+      return !!b && b.from_anchor === true;
+    });
+  }
+
+  function proofreadOffer(item) {
+    if (!isProofreadQuestion(item)) return null;
+    var suggestions = item[record.FIELD.REPLY].suggestions;
+    var useFixes = null;
+    if (Array.isArray(suggestions) && suggestions.length && !touchesAnchorTail(item, suggestions)) {
+      var fixed = record.applySuggestions(item, suggestions);
+      if (fixed && !fixed.code) useFixes = answerOnto(item, fixed, PROOFREAD.USE_TEXT);
+    }
+    return { keepMine: true, useFixes: useFixes };
+  }
+
+  // Is this record waiting on the agent after a proofreading answer? Read off
+  // the record, so a reload says it too.
+  function answeredProofread(item) {
+    var F = record.FIELD;
+    if (!item || item[F.REPLY] || item[F.STATE] !== record.STATE.READY) return false;
+    var thread = record.threadOf(item);
+    if (!thread.length) return false;
+    // The marker is on the answered turn itself: the last round's agent reply
+    // was a proofread question. The pinned sentence typed into an ordinary
+    // follow-up does not qualify (code lead 21).
+    var lastAgent = thread[thread.length - 1] && thread[thread.length - 1].agent;
+    if (!lastAgent || lastAgent.proofread !== true) return false;
+    return item[F.NOTE] === PROOFREAD.USE_TEXT || item[F.NOTE] === PROOFREAD.KEEP_TEXT;
+  }
 
   function createDoneTab(options) {
     var opts = options || {};
@@ -978,6 +1100,9 @@
         }
         if (record.threadOf(item).length) drawThread(item);
         else clearThread(item[record.FIELD.ID]);
+        // After a proofreading answer the card says what was sent and that the
+        // agent has not answered yet, from the record, so a reload says it too.
+        if (answeredProofread(item)) rail.setCardNotice(item[record.FIELD.ID], PROOFREAD.WAITING);
         if (tool) {
           // THE TOOL'S OWN ROUND. The reviewer's card carries on saying what it
           // said when they last looked at it. The only thing that can appear is
@@ -1213,6 +1338,13 @@
       rounds.forEach(function (round, index) {
         node.appendChild(buildRound(id, round, index, rounds.length));
       });
+      // The reviewer's proofreading answer, sent and not yet answered. It is
+      // the current turn rather than a round, so it follows the rounds.
+      if (answeredProofread(item)) {
+        var pending = el("div", "lahe-thread-pending");
+        appendTurn(pending, "You", item[record.FIELD.NOTE], item[record.FIELD.UPDATED_AT] || null, "reviewer");
+        node.appendChild(pending);
+      }
       return node;
     }
 
@@ -1229,7 +1361,11 @@
 
       var reviewer = round.reviewer || {};
       if (reviewer.note) appendTurn(turns, "Reviewer note", reviewer.note, reviewer.at, "reviewer");
-      if (reviewer.change) appendTurn(turns, "Reviewer change", reviewer.change, reviewer.at, "reviewer");
+      // A run's change text is written for the agent, and the card already
+      // leads with the reviewer's own two lines for it, so a round on a run
+      // record does not print it again.
+      var runCard = !!overlayModule.runSummary(itemById(id));
+      if (reviewer.change && !runCard) appendTurn(turns, "Reviewer change", reviewer.change, reviewer.at, "reviewer");
       var agent = round.agent || {};
       if (agent.text) appendTurn(turns, agent.agent || "Agent", agent.text, agent.at, "agent");
       if (agent.reason) appendTurn(turns, (agent.agent || "Agent") + " reason", agent.reason, agent.at, "agent");
@@ -1404,7 +1540,10 @@
       // this", and there is nothing here for them to look at.
       if (quiet) return next;
       repaintReopened(next[record.FIELD.ID]);
-      rail.selectTab(rail.TAB.ACTIVE);
+      // A proofreading answer is made on a hand edit's card, which lives in the
+      // Edits pane; sending the reviewer to Active would take the card away
+      // from under the press.
+      rail.selectTab(options && options.stayInPane ? overlayModule.paneForItem(next) : rail.TAB.ACTIVE);
       var card = rail.cardNode(next[record.FIELD.ID]);
       if (card && typeof card.focus === "function") {
         card.tabIndex = -1;
@@ -1577,6 +1716,10 @@
     function aboutWords(item) {
       if (!item) return "";
       var context = item[record.FIELD.CONTEXT] || {};
+      // A run's change text is written for the agent; the reviewer's line is
+      // the run summary's first line, as on the folded card.
+      var run = overlayModule.runSummary(item);
+      if (run) return run.first;
       if (record.isHandEdit(item)) return item[record.FIELD.CHANGE] || context.quote || "";
       return context.quote || item[record.FIELD.NOTE] || item[record.FIELD.CHANGE] || "";
     }
@@ -2028,6 +2171,16 @@
         at: event[protocol.EVENT_FIELD.TS] || null,
         user_needs_to_see_reply: reply.user_needs_to_see_reply === true
       };
+      // A proofread question keeps its fixes: the card's "Use the fixes" is
+      // built from them. Only on a reply that has them.
+      if (reply.proofread === true) {
+        next[record.FIELD.REPLY].proofread = true;
+        next[record.FIELD.REPLY].suggestions = Array.isArray(reply.suggestions)
+          ? reply.suggestions.map(function (sg) {
+              return { block: sg.block, from: sg.from, to: sg.to };
+            })
+          : [];
+      }
       var notOnPage = event.handled_not_on_page === true;
       next[record.FIELD.HANDLED_NOT_ON_PAGE] = notOnPage;
       if (next[record.FIELD.STATE] === record.STATE.HANDLED) forgetLostAnchor(next);
@@ -2128,8 +2281,113 @@
         time.removeAttribute("title");
       }
       node.querySelector(".lahe-ask-text").textContent = boundedText(reply.text || "");
+      paintProofread(node, item);
       markCard(id, true);
       return node;
+    }
+
+    /**
+     * The proofreading question's two answers, on the question block.
+     *
+     * Only a question marked proofread gets them, because its answer is always
+     * one of two. They wear the conflict card's register (`cardact`, two at
+     * equal weight). "Use the fixes" is left out when a fix cannot apply; the
+     * reviewer then answers in the follow-up box below, as for any question.
+     */
+    function paintProofread(node, item) {
+      var acts = node.querySelector("[data-lahe-proofread]");
+      var offer = proofreadOffer(item);
+      if (!offer) {
+        if (acts) acts.parentNode.removeChild(acts);
+        return null;
+      }
+      paintFixes(node, item);
+      if (!acts) {
+        acts = el("div", "cardacts lahe-ask-acts");
+        acts.setAttribute("data-lahe-proofread", "");
+        var use = el("button", "cardact", PROOFREAD.USE_LABEL);
+        use.setAttribute("type", "button");
+        use.setAttribute("data-lahe-act", "use-fixes");
+        use.addEventListener("click", function () {
+          answerProofread(item[record.FIELD.ID], "use");
+        });
+        var keep = el("button", "cardact", PROOFREAD.KEEP_LABEL);
+        keep.setAttribute("type", "button");
+        keep.setAttribute("data-lahe-act", "keep-mine");
+        keep.addEventListener("click", function () {
+          answerProofread(item[record.FIELD.ID], "keep");
+        });
+        acts.appendChild(use);
+        acts.appendChild(keep);
+        node.appendChild(acts);
+      }
+      var useBtn = acts.querySelector("[data-lahe-act='use-fixes']");
+      useBtn.hidden = !offer.useFixes;
+      var readOnly = isReadOnly();
+      useBtn.disabled = readOnly;
+      acts.querySelector("[data-lahe-act='keep-mine']").disabled = readOnly;
+      return acts;
+    }
+
+    /**
+     * The fixes, drawn as from and to from the same list proofreadOffer
+     * applies, so what the reviewer reads is what the button does. Every
+     * word is set with textContent; the agent wrote them.
+     */
+    function paintFixes(node, item) {
+      var list = node.querySelector(".lahe-ask-fixes");
+      var suggestions = item[record.FIELD.REPLY].suggestions;
+      if (!Array.isArray(suggestions) || !suggestions.length) {
+        if (list) list.parentNode.removeChild(list);
+        return null;
+      }
+      if (!list) {
+        list = el("ol", "lahe-ask-fixes");
+        list.setAttribute("data-lahe-fixes", "");
+        var anchorNode = node.querySelector("[data-lahe-proofread]");
+        node.insertBefore(list, anchorNode);
+      }
+      while (list.firstChild) list.removeChild(list.firstChild);
+      var blocks = item[record.FIELD.NEW_BLOCKS] || [];
+      suggestions.forEach(function (sg) {
+        var row = el("li", "lahe-fix");
+        row.setAttribute("data-lahe-fix", "");
+        var block = blocks[sg.block];
+        var start = block && typeof block.html === "string" ? plainStart(block.html) : "";
+        row.appendChild(el("span", "lahe-fix-where", "Block " + (Number(sg.block) + 1) + (start ? ": " + start : "")));
+        var from = el("span", "lahe-fix-from", boundedText(String(sg.from)));
+        from.setAttribute("data-lahe-fix-from", "");
+        var to = el("span", "lahe-fix-to", boundedText(String(sg.to)));
+        to.setAttribute("data-lahe-fix-to", "");
+        row.appendChild(from);
+        row.appendChild(doc.createTextNode(" \u2192 "));
+        row.appendChild(to);
+        list.appendChild(row);
+      });
+      return list;
+    }
+
+    /** The block's first words as plain text, for the row's label. */
+    function plainStart(html) {
+      // A template's content is inert: nothing loads and no handler runs.
+      var probe = doc.createElement("template");
+      probe.innerHTML = String(html).slice(0, 2000);
+      var text = (probe.content.textContent || "").replace(/\s+/g, " ").trim();
+      return text.length > 40 ? text.slice(0, 40) + "..." : text;
+    }
+
+    /**
+     * Answer the proofreading question from its button. Read off the record as
+     * it stands at the press, not as it stood when the button was drawn.
+     */
+    function answerProofread(id, which) {
+      var item = itemById(id);
+      var offer = item ? proofreadOffer(item) : null;
+      if (!offer || isReadOnly()) return item;
+      var next = which === "use" ? offer.useFixes : keepMineRecord(item);
+      if (!next) return item;
+      lifecycle.assertTransition(item[record.FIELD.STATE], record.STATE.READY, lifecycle.ACTOR.REVIEWER);
+      return continueItem(item, next, PROOFREAD.WAITING, { stayInPane: true });
     }
 
     function buildQuestion(id) {
@@ -2298,6 +2556,9 @@
     UNSEEN_ATTR: UNSEEN_ATTR,
     STALE_NOTICE: STALE_NOTICE,
     NOT_ON_PAGE_NOTICE: NOT_ON_PAGE_NOTICE,
+    PROOFREAD: PROOFREAD,
+    proofreadOffer: proofreadOffer,
+    keepMineRecord: keepMineRecord,
     STYLE: STYLE,
     TOAST_LABEL: TOAST_LABEL,
     NEGLECT_MS: NEGLECT_MS,

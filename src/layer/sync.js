@@ -1481,6 +1481,16 @@
     // previous session left queued is due at once, which is "re-posts on the
     // next load".
     var draftSentAt = Object.create(null);
+    // Item id -> true when its latest write is a free-writing run record. Its
+    // drafts carry the whole run, so they wait protocol.FLUSH.RUN_DRAFT_FLOOR_MS
+    // instead (docs/features/20260928.01_free_writing, Task 2.8).
+    var runDraftItems = Object.create(null);
+    // Item id -> the RUN_EVENT_REFUSED failure the helper's refusal raised.
+    // The refused event is dropped from the outbox, so it is posted once; the
+    // words stay in browser storage and the card says the agent has not seen
+    // them. A later event for the item that the helper accepts clears it.
+    var refusedRuns = Object.create(null);
+    var onItemRefused = typeof opts.onItemRefused === "function" ? opts.onItemRefused : function () {};
     // When the armed flush timer fires, and whether it was asked for by
     // something that skips the floor. The timer keeps the EARLIEST deadline it
     // is given (requirement 5): a later request never pushes it back.
@@ -1693,10 +1703,26 @@
      *
      * @param {Object} item the record as it stood before the delete
      */
+    // Has the helper heard of this item, or will it? `seenItems` alone is
+    // in-memory, so after a page reload it is empty and every item the helper
+    // has held for hours looked never-sent: undo after a reload took the words
+    // off the page and left the item ready on the agent's drain (flow walk,
+    // fail 1). Browser storage keeps the two facts that survive a reload: the
+    // acknowledged stamp (the helper confirmed a revision), and an event still
+    // queued for the item (the next flush will post it, so the delete must
+    // follow it).
+    function helperHeardOf(id) {
+      if (seenItems[id]) return true;
+      if (typeof store.acknowledgedRev === "function" && store.acknowledgedRev(requireReview(), id) !== null) return true;
+      return store.pendingEvents(requireReview()).some(function (event) {
+        return event[protocol.EVENT_FIELD.ITEM] === id;
+      });
+    }
+
     function deleteItem(item) {
       if (readOnly || !item) return null;
       var id = item[record.FIELD.ID];
-      if (!id || !seenItems[id]) return null;
+      if (!id || !helperHeardOf(id)) return null;
       delete seenItems[id];
       var event = protocol.newEvent({
         event: protocol.EVENT.ITEM_DELETED,
@@ -1734,6 +1760,7 @@
       // nothing calls this; the guard is the belt to that suspenders.
       if (readOnly) return null;
       var opts2 = options || {};
+      runDraftItems[item[record.FIELD.ID]] = record.isRunRecord(item);
       var event = eventFor(item, opts2);
       store.queueEvent(requireReview(), event);
       if (opts2.immediate) {
@@ -1774,11 +1801,59 @@
       return event;
     }
 
+    // The helper refused some run events (record.validateRun). Each one is
+    // taken out of the outbox, so it is not re-posted on every flush and
+    // reconnect, and its item carries RUN_EVENT_REFUSED. Only the run codes
+    // are handled here: any other refusal keeps today's behavior.
+    // Returns the refused event ids.
+    var RUN_REFUSAL_CODES = ["RUN_BLOCK_REFUSED", "RUN_OVER_CEILING", "RUN_PLACEMENT_REFUSED", "RUN_TAKEBACK_CARRIES_RUN"];
+    function refuseRunEvents(sent, rejected, accepted) {
+      var byId = Object.create(null);
+      sent.forEach(function (ev) {
+        byId[ev.event_id] = ev;
+      });
+      accepted.forEach(function (id) {
+        var ev = byId[id];
+        var itemId = ev && ev[protocol.EVENT_FIELD.ITEM];
+        if (itemId && refusedRuns[itemId]) delete refusedRuns[itemId];
+        if (itemId && typeof store.clearRefused === "function") {
+          failures.tolerateStorageQuota(function () {
+            store.clearRefused(requireReview(), itemId);
+          }, onFailure);
+        }
+      });
+      var ids = [];
+      rejected.forEach(function (entry) {
+        if (!entry || RUN_REFUSAL_CODES.indexOf(entry.code) === -1) return;
+        var ev = byId[entry.event_id];
+        if (!ev) return;
+        ids.push(entry.event_id);
+        var itemId = ev[protocol.EVENT_FIELD.ITEM];
+        var raised = failures.failure("RUN_EVENT_REFUSED", {
+          item: itemId,
+          helper_code: entry.code,
+          reason: typeof entry.reason === "string" ? entry.reason : null
+        });
+        refusedRuns[itemId] = raised;
+        // In browser storage too, so a reload still says "Not sent" (code
+        // lead 5): the event is gone from the outbox and the helper never
+        // stored the item, so nothing else would remember it.
+        if (typeof store.markRefused === "function") {
+          failures.tolerateStorageQuota(function () {
+            store.markRefused(requireReview(), itemId, raised);
+          }, onFailure);
+        }
+        onItemRefused(itemId, raised);
+      });
+      return ids;
+    }
+
     // When an item's drafts may next go to the helper: the floor after its last
     // draft post, or now when this page has never posted it.
     function draftDueAt(itemId) {
       var at = draftSentAt[itemId];
-      return typeof at === "number" ? at + protocol.FLUSH.DRAFT_FLOOR_MS : 0;
+      var floor = runDraftItems[itemId] ? protocol.FLUSH.RUN_DRAFT_FLOOR_MS : protocol.FLUSH.DRAFT_FLOOR_MS;
+      return typeof at === "number" ? at + floor : 0;
     }
 
     /**
@@ -1980,6 +2055,7 @@
         flushing = false;
         if (result.ok) {
           var accepted = (result.body && result.body.accepted) || [];
+          var refusedIds = refuseRunEvents(events, (result.body && result.body.rejected) || [], accepted);
           // BOTH OF THESE ARE WRITES INTO BROWSER STORAGE, inside a promise
           // chain with no catch of its own. A full storage throwing here is an
           // unhandled rejection raised after `flushing` has already gone back to
@@ -1987,7 +2063,7 @@
           // console error nobody sees. Guarded, it is a chip on the rail and the
           // events simply stay queued for the next flush.
           failures.tolerateStorageQuota(function () {
-            store.acknowledge(requireReview(), accepted);
+            store.acknowledge(requireReview(), accepted.concat(refusedIds));
           }, onFailure);
           // Finding 10: beside dropping the accepted events from the outbox,
           // stamp the item acknowledged when the helper named the event carrying
@@ -2758,10 +2834,19 @@
         pollTimer = null;
         runPoll();
       }, POLL_INTERVAL_MS);
-      // Anything a previous session left unacknowledged goes out now. This is
-      // the whole of "re-posts on the next load".
-      flush();
+      // THE VERSION CHECK COMES FIRST (design call 9). An older helper stores
+      // run records with no allowlist and never projects new_blocks, so nothing
+      // is posted to it: the page goes read-only with the failure shown. Only
+      // then does anything a previous session left unacknowledged go out, which
+      // is the whole of "re-posts on the next load".
+      return checkHelperContract().then(function (older) {
+        if (older) return lock;
+        flush();
+        return claimAtStart();
+      });
+    }
 
+    function claimAtStart() {
       return store
         .claimWindow(requireReview())
         .then(function (got) {
@@ -2957,6 +3042,53 @@
     // The window-session state machine (D5)
     // -------------------------------------------------------------------------
 
+    // -------------------------------------------------------------------------
+    // The helper's service contract (design call 9)
+    // -------------------------------------------------------------------------
+    //
+    // The architecture's "a new layer or CLI refuses an old helper": health is
+    // read once at start, unauthenticated like probeHealth. A helper that
+    // reports an older service_contract is refused, and the page goes
+    // read-only for good with HELPER_CONTRACT_OLDER on the rail. A newer helper
+    // is fine (this page is the one behind), and a health answer with no
+    // number, or none at all, is not a verdict: the page goes on as before and
+    // the ordinary failure paths say what is wrong.
+    var contractRefused = null;
+
+    function checkHelperContract() {
+      if (!fetchImpl) return Promise.resolve(false);
+      return Promise.resolve()
+        .then(function () {
+          return fetchImpl(helperOrigin + protocol.route("health").path, { method: "GET" });
+        })
+        .then(function (response) {
+          if (!response || !response.ok || typeof response.json !== "function") return null;
+          return response.json();
+        })
+        .catch(function () {
+          return null;
+        })
+        .then(function (health) {
+          if (!health || !Number.isInteger(health.service_contract)) return false;
+          if (protocol.helperContractVerdict(health) !== protocol.CONTRACT_VERDICT.OLDER) return false;
+          refuseOlderHelper(health.service_contract);
+          return true;
+        });
+    }
+
+    function refuseOlderHelper(live) {
+      var failure = failures.failure(
+        "HELPER_CONTRACT_OLDER",
+        "the helper reports service contract " + live + "; this page needs " + protocol.SERVICE_CONTRACT
+      );
+      contractRefused = { message: failures.describe("HELPER_CONTRACT_OLDER").message, failure: failure };
+      readOnly = true;
+      stopHeartbeat();
+      lock = { checked: true, acquired: false, holder: null, reason: contractRefused.message, refusedBy: "contract", unchecked: false };
+      raise(failure);
+      onRefused({ reason: contractRefused.message, refusedBy: "contract" });
+    }
+
     function finalizeClaim() {
       if (!lock.acquired) {
         // Refused, by the client lock or the helper. READ-ONLY, and a light
@@ -2980,6 +3112,7 @@
     // The read-only window becomes the holder: on auto-takeover (holder went
     // stale, granted by the liveness poll) or on the reviewer's Review-here.
     function becomeHolder(parsed) {
+      if (contractRefused) return;
       readOnly = false;
       claimMisses = 0;
       rememberSecret(parsed.sessionSecret, parsed.seq);
@@ -3007,6 +3140,9 @@
      * @returns {Promise<{ok: boolean, reason?: string}>}
      */
     function takeover() {
+      // Review here instead cannot talk past the version check: the helper
+      // itself is the problem, and only restarting it fixes that.
+      if (contractRefused) return Promise.resolve({ ok: false, reason: contractRefused.message });
       return claimRequest({ review: requireReview(), window_id: store.windowId, takeover: true }).then(function (parsed) {
         if (parsed.granted) {
           becomeHolder(parsed);
@@ -3381,6 +3517,13 @@
         return stampCarriable;
       },
       deleteItem: deleteItem,
+      /** The RUN_EVENT_REFUSED failure an item carries, or null. */
+      refusalFor: function (itemId) {
+        if (refusedRuns[itemId]) return refusedRuns[itemId];
+        var stored = store && typeof store.refusedFor === "function" ? store.refusedFor(requireReview(), itemId) : null;
+        if (stored) refusedRuns[itemId] = stored;
+        return stored || null;
+      },
       eventFor: eventFor,
       flush: flush,
       flushNow: flushNow,

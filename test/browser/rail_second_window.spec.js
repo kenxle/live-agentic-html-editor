@@ -50,6 +50,17 @@ function railUrl(server, helper, token) {
   return server.urlFor("test/fixtures/rail.html") + "?" + query.toString();
 }
 
+// "No helper" has to mean no helper. The default origin is the helper's fixed
+// port, and on a machine where the reviewer's own installed helper is running
+// there, these pages used to reach it. Since the layer reads the helper's
+// service contract before claiming (free-writing design call 9), an installed
+// helper one contract behind refuses every such page, and the test then says
+// nothing about the lock. The connection is refused here, the way a machine
+// with nothing running refuses it.
+async function refuseDefaultHelper(context) {
+  await context.route(/^http:\/\/127\.0\.0\.1:7817\//, (route) => route.abort("connectionrefused"));
+}
+
 async function startAndClaim(page) {
   return page.evaluate(async () => {
     await window.__laheRail.startSync();
@@ -71,6 +82,7 @@ test.describe("a second window is refused with a reason", () => {
   test("shared storage with no helper: the client lock refuses and names the first window", async ({ browser }) => {
     const tabs = await openTwoTabs(browser, railUrl(pages));
     try {
+      await refuseDefaultHelper(tabs.context);
       const first = await startAndClaim(tabs.first.page);
       expect(first.acquired).toBe(true);
 
@@ -153,6 +165,8 @@ test.describe("a second window is refused with a reason", () => {
   test("separate storage with no helper: stated as a limit, never claimed as a refusal", async ({ browser }) => {
     const contexts = await openTwoContexts(browser, railUrl(pages));
     try {
+      await refuseDefaultHelper(contexts.first.context);
+      await refuseDefaultHelper(contexts.second.context);
       const first = await startAndClaim(contexts.first.page);
       const second = await startAndClaim(contexts.second.page);
 

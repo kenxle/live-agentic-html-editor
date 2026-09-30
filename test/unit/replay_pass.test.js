@@ -1531,6 +1531,14 @@ test("duplicate: a rebuild that curled a quote and lengthened a dash is still ap
   assert.equal(verdict.branch, replay.BRANCH.ALREADY_APPLIED, "typography alone is not a clash");
 });
 
+test("duplicate: a split typed with -- and rendered with a dash is still applied", () => {
+  // The Markdown source keeps the reviewer's "--" and a smart renderer draws
+  // it as a dash. The split search reads it through the shared fold.
+  const item = splitEdit("First paragraph.", "First paragraph.\n\nThe builder's day is not over -- it starts.");
+  const verdict = replay.compare(item, "First paragraph.", null, ["The builder’s day is not over — it starts."]);
+  assert.equal(verdict.branch, replay.BRANCH.ALREADY_APPLIED, "a rendered dash is not a clash");
+});
+
 test("duplicate: typography is read past for a split only, never for one block", () => {
   // A punctuation fix the reviewer made to a single paragraph still re-applies.
   const item = splitEdit("The builder's day - old.", "The builder's day - new.");

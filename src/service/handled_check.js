@@ -246,6 +246,9 @@ function splitStarts(blocks, parts) {
  * @returns {boolean|null} true shown, false held open, null not ours to grade
  */
 function verdictFor(pages, item, nothingWritten) {
+  if (isRunTakeBack(item)) return takeBackVerdictFor(pages, item);
+  if (record.isRunRecord(item)) return runVerdictFor(pages, item, nothingWritten);
+  if (item[record.FIELD.KIND] === record.KIND.FORMAT_ONLY) return formatVerdictFor(pages, item, nothingWritten);
   var needle = comparable(item[record.FIELD.AFTER]);
   if (!needle) return null;
   var passage = passageOf(item);
@@ -299,6 +302,195 @@ function verdictFor(pages, item, nothingWritten) {
   return false;
 }
 
+// ---------------------------------------------------------------------------
+// Free writing (docs/features/20260928.01_free_writing, "The handled check")
+// ---------------------------------------------------------------------------
+
+function leavesOf(pages) {
+  var out = [];
+  pages.forEach(function (html) {
+    try {
+      out.push(normalize.leafBlocks(String(html)));
+    } catch (error) {
+      // An unreadable page is not evidence either way.
+    }
+  });
+  return out;
+}
+
+/**
+ * Is the whole run on one of these pages, in order? The first run block's
+ * leaf is located page-wide, then the shared matcher (normalize.matchRun)
+ * matches the rest in order. Leaves are content blocks only, so a section
+ * label between two blocks is not a leaf and does not fail the match. A run
+ * never takes the several-paragraph path (splitStarts), which would.
+ */
+// A Markdown renderer with smart punctuation turns "--" into a dash;
+// normalize.foldTypography (under blockWords) folds both to "-", so the two
+// sides agree here with no fold of this file's own.
+function runWordsOf(entry) {
+  return { words: normalize.blockWords(entry && entry.html) };
+}
+
+function runOnPage(pageLeaves, runBlocks) {
+  var blocks = (Array.isArray(runBlocks) ? runBlocks : []).map(runWordsOf);
+  return pageLeaves.map(function (leaves) {
+    return leaves.map(runWordsOf);
+  }).some(function (leaves) {
+    for (var i = 0; i < leaves.length; i += 1) {
+      var result = normalize.matchRun(blocks, leaves.slice(i));
+      var first = result[0];
+      if (!first || first.status === "missing" || first.leaves[0] !== 0) continue;
+      var whole = result.every(function (entry) {
+        return entry.status !== "missing";
+      });
+      if (whole) return true;
+    }
+    return false;
+  });
+}
+
+function wordCount(text) {
+  var words = String(text || "").trim();
+  return words ? words.split(/\s+/).length : 0;
+}
+
+/**
+ * A run record's verdict.
+ *
+ * THE BLOCKS ARE CHECKED ON EVERY HANDLED REPLY (AQ3), whatever else was
+ * written: new text has no `before` an agent would have to change, so main's
+ * per-edit rule would judge a run only when nothing in the review was written,
+ * and an agent that places one run and answers handled on two would slip the
+ * second past.
+ *
+ * THE ANCHOR follows main's per-edit rule (verdictFor on the anchor's own
+ * view), unless it is a container or has fewer than SHORT_BLOCK_WORDS words,
+ * where its words say too little to be found.
+ */
+function runVerdictFor(pages, item, nothingWritten) {
+  var pageLeaves = leavesOf(pages);
+  if (pageLeaves.length === 0) return null;
+  if (!runOnPage(pageLeaves, item[record.FIELD.NEW_BLOCKS])) return false;
+
+  var container = item[record.FIELD.PLACEMENT] === record.PLACEMENT.START_OF_CONTAINER;
+  var anchorTag = item[record.FIELD.REGION] && item[record.FIELD.REGION].ref && item[record.FIELD.REGION].ref.fingerprint
+    ? item[record.FIELD.REGION].ref.fingerprint.tag
+    : null;
+  if (container || anchorTag === "main" || anchorTag === "body") return true;
+  var view = record.anchorView(item);
+  if (wordCount(view[record.FIELD.AFTER]) < normalize.SHORT_BLOCK_WORDS) return true;
+  var anchorOnly = Object.assign({}, view);
+  delete anchorOnly[record.FIELD.NEW_BLOCKS];
+  var anchor = verdictFor(pages, anchorOnly, nothingWritten);
+  return anchor === false ? false : true;
+}
+
+// A take-back of placed blocks: a revert that names the blocks to remove.
+function isRunTakeBack(item) {
+  var remove = item && item[record.FIELD.REMOVE_BLOCKS];
+  return record.isRevert(item) && Array.isArray(remove) && remove.length > 0;
+}
+
+/**
+ * A take-back of placed blocks (adversary review 3). Its after is the
+ * anchor's old words, which stay on the page whether or not the blocks came
+ * out, so the words prove nothing. What proves the work is an absence: no
+ * listed block is still a leaf right after the anchor.
+ *
+ * The anchor is found by its old words. Where it is found, the leaves after
+ * it (as many as the take-back lists, plus the walk's slack) must hold none of
+ * the listed blocks. Where it is not found, any listed block with at least
+ * SHORT_BLOCK_WORDS words still on the page holds the item; a shorter one is
+ * too likely to be the page's own words to count.
+ *
+ * @returns {boolean|null} false when a listed block is still there
+ */
+function takeBackVerdictFor(pages, item) {
+  var pageLeaves = leavesOf(pages);
+  if (pageLeaves.length === 0) return null;
+  var removed = item[record.FIELD.REMOVE_BLOCKS].map(function (b) {
+    return normalize.blockWords(b && b.html);
+  }).filter(function (words) {
+    return !!words;
+  });
+  if (!removed.length) return null;
+  var container = item[record.FIELD.PLACEMENT] === record.PLACEMENT.START_OF_CONTAINER;
+  var anchorWords = container ? null : normalize.blockWords(item[record.FIELD.AFTER_HTML] || item[record.FIELD.AFTER] || "");
+  var span = removed.length + normalize.RUN_WALK_SLACK;
+  var stillThere = pageLeaves.some(function (leaves) {
+    var words = leaves.map(function (leaf) {
+      return normalize.blockWords(leaf.html);
+    });
+    var starts = [];
+    if (container) starts.push(-1);
+    else if (anchorWords) {
+      words.forEach(function (w, i) {
+        if (w === anchorWords) starts.push(i);
+      });
+    }
+    if (!starts.length) {
+      return removed.some(function (r) {
+        return wordCount(r) >= normalize.SHORT_BLOCK_WORDS && words.indexOf(r) !== -1;
+      });
+    }
+    return starts.some(function (start) {
+      var window = words.slice(start + 1, start + 1 + span);
+      return removed.some(function (r) {
+        return window.indexOf(r) !== -1;
+      });
+    });
+  });
+  return !stillThere;
+}
+
+var EMPHASIS_TAGS = ["strong", "em"];
+
+/**
+ * A bold or italic edit's verdict. Its words do not change, so main's rule
+ * judges it only when nothing was written (no `before` the agent must
+ * change). Then each span whose bold or italic was added (the reader inside
+ * record.formattingChangeText, normalize.emphasisRuns) must sit inside a
+ * strong or b (em or i) in one of the built page's leaf blocks. Bold words
+ * elsewhere on the page give a false pass, which is accepted: the page check
+ * runs on the next load.
+ */
+function formatVerdictFor(pages, item, nothingWritten) {
+  if (!nothingWritten) return null;
+  var before = normalize.emphasisRuns(String(item[record.FIELD.BEFORE_HTML] || ""));
+  var after = normalize.emphasisRuns(String(item[record.FIELD.AFTER_HTML] || ""));
+  var had = Object.create(null);
+  before.forEach(function (run) {
+    had[run.tag + " " + run.text] = (had[run.tag + " " + run.text] || 0) + 1;
+  });
+  var added = after.filter(function (run) {
+    if (EMPHASIS_TAGS.indexOf(run.tag) === -1) return false;
+    var key = run.tag + " " + run.text;
+    if (had[key]) {
+      had[key] -= 1;
+      return false;
+    }
+    return true;
+  });
+  if (!added.length) return null;
+  var pageLeaves = leavesOf(pages);
+  if (pageLeaves.length === 0) return null;
+  var shown = [];
+  pageLeaves.forEach(function (leaves) {
+    leaves.forEach(function (leaf) {
+      normalize.emphasisRuns(leaf.html).forEach(function (run) {
+        shown.push({ tag: run.tag, text: normalize.foldTypography(decodeEntities(run.text)) });
+      });
+    });
+  });
+  return added.every(function (run) {
+    var words = normalize.foldTypography(decodeEntities(run.text));
+    return shown.some(function (s) {
+      return s.tag === run.tag && s.text.indexOf(words) !== -1;
+    });
+  });
+}
+
 /**
  * Can this item's claim be checked at all?
  *
@@ -307,10 +499,11 @@ function verdictFor(pages, item, nothingWritten) {
  * to look for or means something the words cannot answer, and running the check
  * on it holds a finished item open forever.
  *
- *  - NOT A COMMENT, and not a DELETE or a FORMAT_ONLY record. A comment asks for
- *    something in words and the agent decides what that means on the page. A
- *    delete's after is empty. A format-only record's after is identical to its
- *    before by construction, so finding it proves nothing.
+ *  - NOT A COMMENT, and not a DELETE. A comment asks for something in words
+ *    and the agent decides what that means on the page. A delete's after is
+ *    empty. A FORMAT_ONLY record IS checked, by the bold and italic it added
+ *    rather than its words (formatVerdictFor), and a run record by its blocks
+ *    (runVerdictFor).
  *  - NOT A REVERT. The reviewer undid a change and is asking for text to be
  *    TAKEN OUT of the source. Its after is the wording that should stand again,
  *    which the agent may well have left exactly where it was, so containment
@@ -318,6 +511,8 @@ function verdictFor(pages, item, nothingWritten) {
  *    really prove the work is an absence this test cannot see. Checking it also
  *    broke a real flow: test/browser/undo_reaches_helper.spec.js hung waiting
  *    for a handled reply that was correct to fold.
+ *    The one exception is a take-back of placed blocks, whose absence this
+ *    CAN see: its listed blocks must be gone from after the anchor.
  *  - NOT A TOOL ROUND. A page-check reopen is the tool asking the agent for one
  *    specific thing, usually to carry a data-lahe-id into the source, and the
  *    page check has already formed its own opinion about what is on the page.
@@ -328,7 +523,14 @@ function verdictFor(pages, item, nothingWritten) {
  */
 function checkable(item) {
   if (!item) return false;
-  if (item[record.FIELD.KIND] !== record.KIND.EDIT) return false;
+  // A FORMAT_ONLY record is checked since free writing (R14, bold and italic
+  // survive the rebuild): its words are the same, but its bold is not.
+  var kind = item[record.FIELD.KIND];
+  if (kind !== record.KIND.EDIT && kind !== record.KIND.FORMAT_ONLY) return false;
+  // A take-back of placed blocks IS checked, by absence (takeBackVerdictFor):
+  // a run only adds text, so without it an agent that ignored the take-back
+  // closed the undo (adversary review 3). Every other take-back is not.
+  if (isRunTakeBack(item)) return true;
   if (record.isRevert(item)) return false;
   if (record.toolRoundOf(item)) return false;
   var after = item[record.FIELD.AFTER];

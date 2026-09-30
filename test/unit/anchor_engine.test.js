@@ -717,3 +717,62 @@ test("the climb stops at an ancestor with other words: that is a different regio
   assert.equal(got.bound, true);
   assert.equal(got.element, em, "never widened onto a paragraph with other words");
 });
+
+// ---------------------------------------------------------------------------
+// Free writing: the empty-container rung (plan Task 2.3)
+// ---------------------------------------------------------------------------
+//
+// A sitting on an empty page is anchored on the page's one main, placement
+// start_of_container. That anchor is found by its tag alone: once the agent
+// places the notes, main's text is the whole page and a text compare would
+// call it lost. The rung serves start_of_container records only.
+
+function notesPage(blocks) {
+  const title = el("h1", { attrs: { "data-lahe-file-title": "file-name" }, text: "2026-09-28" });
+  const hero = el("div", { attrs: { class: "hero" }, children: [title] });
+  const main = el("main", { children: [hero].concat(blocks || []) });
+  return { body: el("body", { children: [main] }), main: main };
+}
+
+test("free writing: the rung resolves a start_of_container record on an empty page", () => {
+  const page = notesPage();
+  const ref = anchor.mint({ element: page.main, root: page.body });
+  const again = notesPage();
+  const verdict = anchor.resolve(ref, again.body, { placement: "start_of_container" });
+  assert.equal(verdict.bound, true);
+  assert.equal(verdict.element, again.main);
+  assert.equal(verdict.failureCode, null, "not lost");
+});
+
+test("free writing: the rung resolves the same record once the page has content", () => {
+  const page = notesPage();
+  const ref = anchor.mint({ element: page.main, root: page.body });
+  const placed = notesPage([el("h2", { text: "Notes" }), el("p", { text: "First thought, now placed by the agent." })]);
+  const verdict = anchor.resolve(ref, placed.body, { placement: "start_of_container" });
+  assert.equal(verdict.bound, true);
+  assert.equal(verdict.element, placed.main);
+  // Without the rung the words decide, and main's words are the whole page now.
+  assert.notEqual(anchor.resolve(ref, placed.body).element, placed.main);
+});
+
+test("free writing: an after_anchor record whose anchor is gone is lost on a page with content", () => {
+  const page = notesPage([el("p", { text: "The paragraph the reviewer wrote after." }), el("p", { text: "Another one." })]);
+  const ref = anchor.mint({ element: page.main.children[1], root: page.body });
+  const later = notesPage([el("p", { text: "Another one." })]);
+  const verdict = anchor.resolve(ref, later.body, { placement: "after_anchor" });
+  assert.equal(verdict.bound, false);
+  assert.equal(verdict.element, null);
+});
+
+test("free writing: an after_anchor record whose anchor is gone is lost on a page the agent emptied", () => {
+  const page = notesPage([el("p", { text: "The paragraph the reviewer wrote after." })]);
+  const ref = anchor.mint({ element: page.main.children[1], root: page.body });
+  const emptied = notesPage();
+  for (const placement of ["after_anchor", undefined]) {
+    const verdict = anchor.resolve(ref, emptied.body, { placement: placement });
+    assert.equal(verdict.bound, false, "the rung never catches it (placement " + placement + ")");
+  }
+  // And a start_of_container claim on a reference minted on a paragraph is
+  // still not the rung's: it is a container anchor or nothing.
+  assert.equal(anchor.resolve(ref, emptied.body, { placement: "start_of_container" }).bound, false);
+});

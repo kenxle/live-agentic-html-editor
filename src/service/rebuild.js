@@ -283,7 +283,9 @@ function createRebuilder(options) {
 
     var result;
     try {
-      result = markdown.writeArtifact(dir, pair.session, pair.source);
+      // A notes review's source is read without following a symlink, on every
+      // render and not only the first (security review 5).
+      result = markdown.writeArtifact(dir, pair.session, pair.source, { noFollow: !!review && review.notes === true });
     } catch (error) {
       // Rule 2. A Markdown file mid-save, or one the renderer cannot take, is
       // not a reason for the poll to fail. The page keeps the render it has.

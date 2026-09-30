@@ -17,12 +17,13 @@ flowchart TD
         direction TB
         L1["listeners.js<br/>the listener registry, loads first"]
         L2["selection.js<br/>FROZEN<br/>the caret accessor"]
+        L2B["blocks.js<br/>the DOM block rules: leaf walk, insert point,<br/>editing host, tag swap, a record's run"]
         L3["store.js, anchor.js, pointing.js<br/>browser storage on every keystroke;<br/>mint and resolve a region; where a comment<br/>points when its words are gone"]
         L4["protect.js, highlight.js<br/>the three protection layers while a block<br/>is being edited; the page highlight API"]
         L5["overlay.js, tab_active.js, tab_done.js,<br/>tab_edits.js, conflict_toast.js, export.js<br/>the rail: chrome, each tab's contents,<br/>the conflict toast, copy and export"]
         L6["sync.js, comments.js, editing.js<br/>post and reply-poll loop; comment boxes;<br/>per-block edit state"]
         L7["replay.js, inject.js, index.js<br/>the four-branch replay compare;<br/>remount and CSP checks; boots the library last"]
-        L1 --> L2 --> L3 --> L4 --> L5 --> L6 --> L7
+        L1 --> L2 --> L2B --> L3 --> L4 --> L5 --> L6 --> L7
     end
 
     subgraph SERVICE["service slash - runs in the helper process"]
@@ -35,7 +36,7 @@ flowchart TD
 
     subgraph CLI["cli slash - the command surface"]
         CLI_INDEX["index.js<br/>the command dispatcher"]
-        CLI_CMDS["serve, review, session,<br/>add, status, reply, monitor"]
+        CLI_CMDS["serve, review, session,<br/>add, status, reply, monitor,<br/>write: notes on a blank page,<br/>on its own one-page server"]
         CLI_INDEX --> CLI_CMDS
     end
 
