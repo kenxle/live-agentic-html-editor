@@ -33,7 +33,7 @@ flowchart TD
     Helper -->|"tells the page what the agent said"| Lib
     Session -->|"owns"| Static
 
-    Cat -->|"catalog.list, open, star, request<br/>(Library token, same-origin only)"| Helper
+    Cat -->|"catalog.list, open, star, rename, request<br/>(Library token, same-origin only)"| Helper
     Helper -->|"Open: restarts the review's<br/>recorded static server"| Static
     Helper -->|"Pick this up, Launch:<br/>appends a request"| Queue
     Queue -->|"catalog_requests in the drain"| Agent
@@ -58,8 +58,9 @@ flowchart TD
   polling) the library all read from. Nothing that happens on screen can take
   a record back; the store is the truth and the page is only a view of it.
 - The Library page talks only to the helper, with its own token. It can list,
-  open, star, and queue a request. It cannot post to a review or name a file
-  to serve: Open restarts a server the review already had.
+  open, star, rename, and queue a request. It cannot post to a review or name
+  a file to serve: Open restarts a server the review already had. How it works
+  now is `docs/ongoing/LIBRARY.md`.
 - The request queue is how the page reaches an agent. Only the helper appends
   requests, and only `lahe library answer` appends answers. The agent sees a
   request in its normal drain, the same way it sees an ended review.

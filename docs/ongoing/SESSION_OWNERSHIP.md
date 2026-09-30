@@ -37,3 +37,9 @@ The shape of ownership and takeover is drawn in
 - **Nobody asked for a handoff.** The tool refuses to attach a page or a review
   to a session that does not own it. Takeover is the one way across, and the
   skill tells agents to run it only when a human asks.
+- **A review from before sessions is picked up in the Library.** It belongs to
+  no session, so nothing is taken from another agent. The pick-up adopts it
+  into the agent's own session with its old comments, once, and records a
+  `review.adopted` event. This needs a Library pick-up of that review pending
+  for that session, and the helper checks that again. A review that already
+  belongs to a session is never adopted. See `docs/ongoing/LIBRARY.md`.

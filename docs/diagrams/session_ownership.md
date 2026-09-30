@@ -45,7 +45,10 @@ flowchart TD
   session A's servers running.
 - The immutable-owner rule is not about people, it is about the session
   record. A review remembers the session that created it, and no later
-  command can move it to a different session by accident.
+  command can move it to a different session by accident. The one exception
+  is a review from before sessions, which has no owner: a Library pick-up
+  adopts it into the agent's session (a `review.adopted` event), and only
+  while that pick-up is pending.
 - Takeover does not delete anything and does not require the old agent to
   cooperate. It advances a fence number that every running monitor checks on
   its own next look, which is what makes an old monitor for the same session
@@ -54,7 +57,7 @@ flowchart TD
 - Two credentials exist, and neither can do the other's job. Each review has
   its own token, which only a page of that review holds. The Library page has
   one Library token, minted in memory at each helper start, which can list,
-  open, star, and queue a request, but cannot post to any review.
+  open, star, rename, and queue a request, but cannot post to any review.
 
 ## Hand-over from the Library
 
@@ -78,7 +81,9 @@ flowchart TD
     Confirm -->|"confirmed"| Queue[("catalog-requests.jsonl<br/>request: ids only")]
     AttachFile -.->|"names who the request is for"| Queue
     Queue -->|"catalog_requests in the drain,<br/>wakes the monitor once"| Agent["attached agent"]
-    Agent -->|"pickup"| Take["lahe session takeover doc-session"]
+    Agent -->|"pickup, static row"| Take["lahe session takeover doc-session"]
+    Agent -->|"pickup, pre-session or worktree row"| Serve["lahe library serve request:<br/>adopts a pre-session review into its own session,<br/>or serves the main-repo copy of a worktree"]
+    Serve --> Answer
     Take --> Both["lahe monitor --session own<br/>--session doc-session"]
     Agent -->|"launch"| Name["lahe session name doc-session<br/>--from-review review"]
     Name --> NewAgent["new agent in a new Terminal window,<br/>given the hand-off message"]
@@ -124,5 +129,7 @@ flowchart TD
 
 - There is no self-stop timer. The helper stops at the next close that finds
   everything quiet, or at a restart.
+- The same sweep closes a session that bare `lahe library` started, once it
+  owns no reviews and its agent has been quiet for 30 minutes.
 - A session reopened with `lahe session reopen` is not in the `reopened` map,
   so the sweep never closes it.
