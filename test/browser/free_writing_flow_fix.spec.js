@@ -257,6 +257,8 @@ test.describe("the edit bar never covers the text above the frame", () => {
     test("on a dense page with no gap, the bar goes below the frame (" + scheme + ")", async ({ page }) => {
       await fw.openFixture(page, server, "blog.html");
       await addStyle(page, DENSE_CSS + (scheme === "dark" ? DARK_CSS : ""));
+      // The layer samples the page's background at boot; this page turned dark after it.
+      if (scheme === "dark") await page.evaluate(() => window.__lahe.rail.refreshScheme());
       const got = await writeAfterP2(page);
       const bar = { top: got.bar.y, bottom: got.bar.y + got.bar.height, left: got.bar.x, right: got.bar.x + got.bar.width };
       expect(bar.top, "below the frame").toBeGreaterThanOrEqual(got.frame.y + got.frame.height);
