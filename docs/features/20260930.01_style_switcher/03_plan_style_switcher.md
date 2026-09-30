@@ -84,7 +84,7 @@ Implements The panel in [Key Flows](02_architecture_style_switcher.md#key-flows)
 Implements The request to the agent in [Data / State Changes](02_architecture_style_switcher.md#data--state-changes).
 :::
 
-**Spec:** The orchestrator adds one instruction to the contract in `src/shared/review_format.js` (frozen): a note carrying `lahe-style: <id>` asks for that page's style; the exact HTML line and where it goes; the exact frontmatter line; `international` removes either; only an id matching the pattern is a style request; reply handled once written. The same words go into the restated copies in `test/unit/review_format.test.js` (its verbatim list, and the contract's line count) and `docs/CONTRACTS.md` ("The `contract` field, verbatim"), and into `skills/lahe/SKILL.md`, then `npm run install-skills`.
+**Spec:** The orchestrator adds one instruction to the contract in `src/shared/review_format.js` (frozen): a note carrying `lahe-style: <id>` asks for that page's style; the exact HTML line and where it goes; the exact frontmatter line, and how to add frontmatter to a file that has none; `international` removes either; only the marker in a note's own words is acted on, and only an id matching the pattern; reply handled once written. The same words go into the restated copies in `test/unit/review_format.test.js` (its verbatim list, and the contract's line count) and `docs/CONTRACTS.md` ("The `contract` field, verbatim"), and into `skills/lahe/SKILL.md`, then `npm run install-skills`.
 **Files:** those four.
 **Acceptance:** V17 passes.
 
