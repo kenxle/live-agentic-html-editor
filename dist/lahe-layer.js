@@ -1,6 +1,6 @@
 /*
  * live-agentic-html-editor review layer
- * version 0.2.0+eb1aa19dd945
+ * version 0.2.0+17c2b646bd5d
  *
  * GENERATED FILE. Do not edit. Edit the sources under src/ and run
  *   npm run build:layer
@@ -12,7 +12,7 @@
   "use strict";
   var g = typeof globalThis !== "undefined" ? globalThis : window;
   g.LAHE = g.LAHE || {};
-  g.LAHE.version = "0.2.0+eb1aa19dd945";
+  g.LAHE.version = "0.2.0+17c2b646bd5d";
 })();
 /* ---- src/shared/markers.js  (owner: 0A-kernel) ---- */
 // Markers: the attribute and class names that identify DOM the tool added.
@@ -3499,7 +3499,21 @@
     "Reopened by the page check: blocks this take-back lists in remove_blocks are still on the page after the anchor. " +
     "Remove them from the source, or reply not_handled saying why.";
 
-  var PAGE_CHECK_NOTES = [PAGE_CHECK_NOTE, PAGE_CHECK_FORMAT_NOTE, PAGE_CHECK_STAMP_NOTE, PAGE_CHECK_TAG_NOTE, PAGE_CHECK_TAKEBACK_NOTE];
+  // The sixth, for a run record: a block the reviewer wrote is not on the page
+  // after the anchor. Nothing was "undone" and no original text came back: the
+  // block is new words, and they are missing or have words added (flow walk).
+  var PAGE_CHECK_RUN_NOTE =
+    "Reopened by the page check: a block in new_blocks is not on the page as written. " +
+    "Put it in the source as written, or reply not_handled saying why.";
+
+  var PAGE_CHECK_NOTES = [
+    PAGE_CHECK_NOTE,
+    PAGE_CHECK_FORMAT_NOTE,
+    PAGE_CHECK_STAMP_NOTE,
+    PAGE_CHECK_TAG_NOTE,
+    PAGE_CHECK_TAKEBACK_NOTE,
+    PAGE_CHECK_RUN_NOTE
+  ];
 
   /**
    * The carried note with `sentence` on the end, AT MOST ONCE.
@@ -4475,6 +4489,61 @@
     return view;
   }
 
+  /**
+   * The blocks of a run that a LATER record of the reviewer's took over.
+   *
+   * Once the agent placed a run, its blocks are the page's own, and a new
+   * sitting on one of them is a record of its own whose anchor is that block
+   * (architecture, Two sittings in the same place). From then on the block's
+   * words are that record's to change. So the placed run must not read the
+   * block's new words as its own going missing: that told the agent "the
+   * original text is back. Reapply it" and raised a "Which version stands?"
+   * card between the reviewer's two versions (flow walk, Fail 2).
+   *
+   * A block is taken over when another hand edit, not a take-back, made at or
+   * after this one, has an anchor whose words before its sitting are exactly
+   * that block's words. The run's anchor is checked the same way, under the
+   * key "anchor".
+   *
+   * @param {Object} item the run record
+   * @param {Array<Object>} items every record the caller holds
+   * @returns {Object} index (or "anchor") -> {id, tag, html}: the later
+   *   record's id and its version of the block
+   */
+  function handedOverBlocks(item, items) {
+    var out = {};
+    var list = Array.isArray(items) ? items : [];
+    var blocks = Array.isArray(item && item[FIELD.NEW_BLOCKS]) ? item[FIELD.NEW_BLOCKS] : [];
+    if (!item || !list.length) return out;
+    var keys = blocks.map(function (b) {
+      return b && typeof b.html === "string" ? normalize.blockWords(b.html) : "";
+    });
+    var anchorKey =
+      typeof item[FIELD.ANCHOR_AFTER_HTML] === "string" && item[FIELD.PLACEMENT] !== PLACEMENT.START_OF_CONTAINER
+        ? normalize.blockWords(item[FIELD.ANCHOR_AFTER_HTML])
+        : "";
+    var mine = item[FIELD.CREATED_AT];
+    list.forEach(function (other) {
+      if (!other || other === item || other[FIELD.ID] === item[FIELD.ID]) return;
+      if (!isHandEdit(other) || isRevert(other)) return;
+      if (typeof mine === "string" && typeof other[FIELD.CREATED_AT] === "string" && other[FIELD.CREATED_AT] < mine) return;
+      var before = typeof other[FIELD.BEFORE_HTML] === "string" ? other[FIELD.BEFORE_HTML] : other[FIELD.BEFORE];
+      var key = typeof before === "string" ? normalize.blockWords(before) : "";
+      if (!key) return;
+      var html = typeof other[FIELD.ANCHOR_AFTER_HTML] === "string" ? other[FIELD.ANCHOR_AFTER_HTML] : other[FIELD.AFTER_HTML];
+      var taken = {
+        id: other[FIELD.ID],
+        tag: typeof other[FIELD.ANCHOR_TAG_AFTER] === "string" && other[FIELD.ANCHOR_TAG_AFTER] ? other[FIELD.ANCHOR_TAG_AFTER] : null,
+        html: typeof html === "string" ? html : null
+      };
+      keys.forEach(function (k, index) {
+        if (k && k === key && !out[index]) out[index] = taken;
+      });
+      if (anchorKey && anchorKey === key && !out.anchor) out.anchor = taken;
+    });
+    return out;
+  }
+
   function wordsKey(html) {
     return normalize.normalizeText(normalize.textOf(typeof html === "string" ? html : ""));
   }
@@ -4918,6 +4987,7 @@
     acceptedPageTexts: acceptedPageTexts,
     acceptPageText: acceptPageText,
     PAGE_CHECK_NOTE: PAGE_CHECK_NOTE,
+    PAGE_CHECK_RUN_NOTE: PAGE_CHECK_RUN_NOTE,
     PAGE_CHECK_FORMAT_NOTE: PAGE_CHECK_FORMAT_NOTE,
     PAGE_CHECK_STAMP_NOTE: PAGE_CHECK_STAMP_NOTE,
     PAGE_CHECK_TAG_NOTE: PAGE_CHECK_TAG_NOTE,
@@ -4942,6 +5012,7 @@
     anchorTypeName: anchorTypeName,
     buildRunAfter: buildRunAfter,
     anchorView: anchorView,
+    handedOverBlocks: handedOverBlocks,
     runChangeText: runChangeText,
     validateRun: validateRun,
     trimRunHistory: trimRunHistory,
@@ -6505,9 +6576,9 @@
 
   var BLOCK_TYPES = [
     { tag: "p", label: "Paragraph", code: "Digit0", chords: { mac: "Cmd-Option-0", other: "Ctrl-Shift-0" }, markdown: null },
-    { tag: "h2", label: "Heading", code: "Digit2", chords: { mac: "Cmd-Option-2", other: "Ctrl-Shift-2" }, markdown: "# " },
-    { tag: "h3", label: "Subheading", code: "Digit3", chords: { mac: "Cmd-Option-3", other: "Ctrl-Shift-3" }, markdown: "## " },
-    { tag: "h4", label: "Small heading", code: "Digit4", chords: { mac: "Cmd-Option-4", other: "Ctrl-Shift-4" }, markdown: "### " },
+    { tag: "h2", label: "Heading", code: "Digit2", chords: { mac: "Cmd-Option-2", other: "Ctrl-Shift-2" }, markdown: "## " },
+    { tag: "h3", label: "Subheading", code: "Digit3", chords: { mac: "Cmd-Option-3", other: "Ctrl-Shift-3" }, markdown: "### " },
+    { tag: "h4", label: "Small heading", code: "Digit4", chords: { mac: "Cmd-Option-4", other: "Ctrl-Shift-4" }, markdown: "#### " },
     { tag: "ul", label: "Bulleted list", code: "Digit8", chords: { mac: "Cmd-Shift-8", other: "Ctrl-Shift-8" }, markdown: "- " },
     { tag: "ol", label: "Numbered list", code: "Digit7", chords: { mac: "Cmd-Shift-7", other: "Ctrl-Shift-7" }, markdown: "1. " }
   ];
@@ -6558,7 +6629,10 @@
     return null;
   }
 
-  var MARKDOWN_SHORTCUTS = { "# ": "h2", "## ": "h3", "### ": "h4", "- ": "ul", "* ": "ul", "1. ": "ol" };
+  // Markdown's own heading levels, so "## " makes the h2 that "##" means in
+  // the source (the flow walk found them one level off). "# " makes h2 too:
+  // the body has no h1, because the page title is the h1.
+  var MARKDOWN_SHORTCUTS = { "# ": "h2", "## ": "h2", "### ": "h3", "#### ": "h4", "- ": "ul", "* ": "ul", "1. ": "ol" };
 
   /**
    * The block type a Markdown shortcut asks for: the whole text of the block
@@ -16902,6 +16976,19 @@
    * how the two drift apart. Pure: item in, tab name out, no card required, so
    * it answers for an item the rail has never been handed.
    */
+  // The agent's proofreading question on a run, not yet answered. The same
+  // test as tab_done's isProofreadQuestion, on the record alone.
+  function isProofreadWaiting(item) {
+    var reply = item && item[record.FIELD.REPLY];
+    return (
+      !!reply &&
+      reply.status === record.REPLY_STATUS.QUESTION &&
+      reply.proofread === true &&
+      item[record.FIELD.STATE] === record.STATE.READY &&
+      record.isRunRecord(item)
+    );
+  }
+
   function paneForItem(item) {
     var kind = item[record.FIELD.KIND];
     // The state the REVIEWER is shown, which is the state their card is placed
@@ -16910,6 +16997,11 @@
     // (record.displayState, and Ken on 2026-09-15).
     var state = record.displayState(item);
     if (state === record.STATE.HANDLED) return TAB.DONE;
+    // A proofreading question waits on the reviewer, not the agent, so its
+    // card goes back to Active until they answer (wireframe 06b: "The card is
+    // back on Active because it needs an answer"). Once answered it waits on
+    // the agent again, and goes back to Edits with every other hand edit.
+    if (isProofreadWaiting(item)) return TAB.ACTIVE;
     if (kind === record.KIND.EDIT || kind === record.KIND.FORMAT_ONLY || kind === record.KIND.DELETE) {
       return TAB.EDITS;
     }
@@ -18174,6 +18266,40 @@
     var list = Array.isArray(item[F.NEW_BLOCKS]) ? item[F.NEW_BLOCKS] : [];
     for (var i = 0; i < list.length; i += 1) if (wordsOfHtml(list[i] && list[i].html)) return false;
     return !normalize.normalizeText(String(item[F.AFTER] || ""));
+  }
+
+  /**
+   * A draft that changes nothing yet: the reviewer opened a block and has not
+   * typed. Its card showed the whole block struck through, which reads as a
+   * deletion, and moved the Edits count before anything was typed (flow walk,
+   * design problem 6). Such a draft is not drawn and not counted, like the
+   * blank draft an empty page opens with. It is still a draft in the store;
+   * the first keystroke that changes something draws its card.
+   */
+  function isUnchangedDraft(item) {
+    var F = record.FIELD;
+    if (!item || item[F.STATE] !== record.STATE.DRAFT) return false;
+    if (item[F.KIND] !== record.KIND.EDIT && item[F.KIND] !== record.KIND.FORMAT_ONLY) return false;
+    if (item[F.ANCHOR_TAG_AFTER]) return false;
+    var list = Array.isArray(item[F.NEW_BLOCKS]) ? item[F.NEW_BLOCKS] : [];
+    for (var i = 0; i < list.length; i += 1) if (list[i] && wordsOfHtml(list[i].html)) return false;
+    if (Array.isArray(item[F.REMOVE_BLOCKS]) && item[F.REMOVE_BLOCKS].length) return false;
+    // A draft persisted the moment a block opens has no after yet.
+    var noAfter = item[F.AFTER] === null || item[F.AFTER] === undefined;
+    var noAfterHtml = item[F.AFTER_HTML] === null || item[F.AFTER_HTML] === undefined;
+    if (noAfter && noAfterHtml && typeof item[F.ANCHOR_AFTER_HTML] !== "string") return true;
+    var before = normalize.normalizeText(String(item[F.BEFORE] || ""));
+    var after = normalize.normalizeText(String(item[F.AFTER] || ""));
+    if (before !== after) return false;
+    var bh = typeof item[F.BEFORE_HTML] === "string" ? item[F.BEFORE_HTML] : null;
+    var ah = typeof item[F.ANCHOR_AFTER_HTML] === "string" ? item[F.ANCHOR_AFTER_HTML] : typeof item[F.AFTER_HTML] === "string" ? item[F.AFTER_HTML] : null;
+    if (bh === null || ah === null) return bh === ah;
+    return JSON.stringify(normalize.emphasisRuns(bh)) === JSON.stringify(normalize.emphasisRuns(ah));
+  }
+
+  /** A draft the rail does not draw or count: blank, or changing nothing yet. */
+  function isQuietDraft(item) {
+    return isBlankStartDraft(item) || isUnchangedDraft(item);
   }
   //
   // A page with no content blocks (a brand-new notes page from `lahe write`)
@@ -19851,7 +19977,7 @@
       // On the card itself too, so anything a tab owner attached can be shown or
       // withdrawn by the card's own state without a second file being told.
       card.node.setAttribute("data-state", card.state);
-      if (isBlankStartDraft(item)) card.node.setAttribute("data-lahe-blank", "true");
+      if (isQuietDraft(item)) card.node.setAttribute("data-lahe-blank", "true");
       else card.node.removeAttribute("data-lahe-blank");
       paintCardWait(card);
       var quote = (item[record.FIELD.CONTEXT] && item[record.FIELD.CONTEXT].quote) || "";
@@ -20197,13 +20323,13 @@
 
     function countFor(tab) {
       return Object.keys(cards).filter(function (id) {
-        return cards[id].pane === tab && !isBlankStartDraft(cards[id].item);
+        return cards[id].pane === tab && !isQuietDraft(cards[id].item);
       }).length;
     }
 
     function countIncomplete() {
       return Object.keys(cards).filter(function (id) {
-        if (isBlankStartDraft(cards[id].item)) return false;
+        if (isQuietDraft(cards[id].item)) return false;
         // Pane placement and completion are separate. Direct edits stay in the
         // Edits pane so they do not bury comments, but they are still work for
         // the agent until a handled reply lands.
@@ -23154,6 +23280,8 @@
     runSummary: runSummary,
     emptyPageLines: emptyPageLines,
     isBlankStartDraft: isBlankStartDraft,
+    isUnchangedDraft: isUnchangedDraft,
+    isQuietDraft: isQuietDraft,
     clipAtWord: clipAtWord,
     TAB: TAB,
     TABS: TABS,
@@ -27219,11 +27347,12 @@
         if (!seen[id]) dropRow(id);
       });
 
-      // The empty draft an empty page opens with is not a hand edit yet: the
-      // rail does not draw it, so the count does not claim it either.
+      // The empty draft an empty page opens with, and a draft that changes
+      // nothing yet, are not hand edits: the rail does not draw them, so the
+      // count does not claim them either.
       paintBar(
         items.filter(function (item) {
-          return !overlayModule.isBlankStartDraft(item);
+          return !overlayModule.isQuietDraft(item);
         }).length
       );
       return api;
@@ -30270,10 +30399,26 @@
      *
      * @param {Object} item the record as it stood before the delete
      */
+    // Has the helper heard of this item, or will it? `seenItems` alone is
+    // in-memory, so after a page reload it is empty and every item the helper
+    // has held for hours looked never-sent: undo after a reload took the words
+    // off the page and left the item ready on the agent's drain (flow walk,
+    // fail 1). Browser storage keeps the two facts that survive a reload: the
+    // acknowledged stamp (the helper confirmed a revision), and an event still
+    // queued for the item (the next flush will post it, so the delete must
+    // follow it).
+    function helperHeardOf(id) {
+      if (seenItems[id]) return true;
+      if (typeof store.acknowledgedRev === "function" && store.acknowledgedRev(requireReview(), id) !== null) return true;
+      return store.pendingEvents(requireReview()).some(function (event) {
+        return event[protocol.EVENT_FIELD.ITEM] === id;
+      });
+    }
+
     function deleteItem(item) {
       if (readOnly || !item) return null;
       var id = item[record.FIELD.ID];
-      if (!id || !seenItems[id]) return null;
+      if (!id || !helperHeardOf(id)) return null;
       delete seenItems[id];
       var event = protocol.newEvent({
         event: protocol.EVENT.ITEM_DELETED,
@@ -35956,12 +36101,14 @@
     ".lahe-edit-bar__row[aria-disabled='true'] { cursor: default; color: rgba(17, 17, 17, 0.38); background: transparent; }",
     ".lahe-edit-bar__rowkey, .lahe-edit-bar__rowmd { font: 11px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace; color: rgba(17, 17, 17, 0.5); }",
     ".lahe-edit-bar__hint[data-lahe-notice='true'] { color: #2c3f7d; white-space: normal; max-width: 420px; }",
-    ".lahe-insert-line { position: fixed; height: 20px; pointer-events: auto; cursor: text; opacity: 0;",
+    // 28px tall: a comfortable pointer target (the flow walk missed a 20px one
+    // and the session closed with the typing going nowhere).
+    ".lahe-insert-line { position: fixed; height: 28px; pointer-events: auto; cursor: text; opacity: 0;",
     "  transition: opacity 120ms ease; z-index: 1; }",
     ".lahe-insert-line[data-lahe-show='true'] { opacity: 1; }",
     ".lahe-insert-line:not([data-lahe-show='true']) { pointer-events: none; }",
-    ".lahe-insert-line__rule { position: absolute; left: 0; right: 0; top: 9px; border-top: 1.5px solid #3c56a5; }",
-    ".lahe-insert-line__label { position: absolute; left: 0; top: 1px; padding: 0 7px 0 0; background: #ffffff;",
+    ".lahe-insert-line__rule { position: absolute; left: 0; right: 0; top: 13px; border-top: 1.5px solid #3c56a5; }",
+    ".lahe-insert-line__label { position: absolute; left: 0; top: 5px; padding: 0 7px 0 0; background: #ffffff;",
     "  font: 600 11px/18px ui-sans-serif, system-ui, -apple-system, sans-serif; color: #3c56a5; }",
     ".lahe-edit-placeholder { position: fixed; pointer-events: none; color: rgba(17, 17, 17, 0.38); display: none;",
     "  white-space: nowrap; overflow: hidden; }",
@@ -36195,6 +36342,10 @@
     var onFailure = typeof opts.onFailure === "function" ? opts.onFailure : null;
     // Is this a notes review (`lahe write`)? See setNotes.
     var notesReview = opts.notes === true;
+    // Does a text field in the rail hold focus (a comment being written)? The
+    // rail's root is closed, so the rail answers. Cmd-Shift-E from there is
+    // left alone: the writer is mid-sentence in the rail.
+    var railTextFocus = typeof opts.railTextFocus === "function" ? opts.railTextFocus : null;
 
     // The one open session, or null. Edit state is per region and there is one
     // of it: a second Cmd-Shift-E commits the first.
@@ -36281,9 +36432,16 @@
       var refused = durably(function () {
         store.write(requireReview(), item);
       });
-      durably(function () {
-        emit(item, event);
-      });
+      // A block opened and not yet changed is a draft for durability only.
+      // Telling the rail about it drew a card with the whole block struck
+      // through, which reads as a deletion, and moved the Edits count before
+      // anything was typed (flow walk, design problem 6). The first change
+      // emits as usual; so does removing an untouched draft.
+      if (event !== "opened") {
+        durably(function () {
+          emit(item, event);
+        });
+      }
       // THE POST ONLY EVER FOLLOWS A WRITE THAT LANDED.
       //
       // Posting a record the disk does not have is worse than not posting at
@@ -36394,6 +36552,129 @@
       if (block === session.anchor) return true;
       var entry = runEntryOf(block);
       return !!entry && entry.fromAnchor;
+    }
+
+    // ---- which words moved (flow walk: the from_anchor bug) ---------------------
+    //
+    // A block split off the anchor with Enter holds the page's own words, which
+    // the agent must not add again. But the reviewer can then type into that
+    // tail, or press Enter inside it again, and before this fix every block of
+    // that lineage kept from_anchor: a literal agent dropped the reviewer's own
+    // sentence. So a lineage entry remembers `moved`, the page's words it
+    // carried at the split (whitespace folded), and capture decides from the
+    // words themselves:
+    //
+    //   the block is exactly the moved words    one from_anchor block
+    //   the reviewer typed into it at all       one new block, the whole tail
+    //
+    // The whole tail as new is right for a literal agent: anchor_after_html
+    // already leaves the moved words out of the anchor, so adding the tail as
+    // one new block puts every word back exactly once, and the page keeps the
+    // one paragraph the reviewer wrote (coordinator decision on the split
+    // trade-off; splitting it in two made two paragraphs after the rebuild).
+
+    // Whitespace folded to single spaces and trimmed, with each folded
+    // character's offset in the raw string.
+    function foldText(raw) {
+      var str = String(raw || "");
+      var out = "";
+      var map = [];
+      var space = false;
+      for (var i = 0; i < str.length; i += 1) {
+        var c = str.charAt(i);
+        if (c === "\u200b") continue;
+        if (/\s/.test(c)) {
+          if (out.length && !space) {
+            out += " ";
+            map.push(i);
+            space = true;
+          }
+          continue;
+        }
+        out += c;
+        map.push(i);
+        space = false;
+      }
+      if (space) {
+        out = out.slice(0, -1);
+        map.pop();
+      }
+      return { text: out, map: map };
+    }
+
+    function folded(raw) {
+      return foldText(raw).text;
+    }
+
+    // A holder in an inert document: markup parsed or cloned into it never
+    // loads, runs or reaches the page.
+    var inertDoc = null;
+    function inertHolder() {
+      if (!inertDoc) inertDoc = doc.implementation.createHTMLDocument("");
+      return inertDoc.createElement("div");
+    }
+
+    // The words of a stored block's markup.
+    function htmlText(html) {
+      var holder = inertHolder();
+      holder.innerHTML = String(html || "");
+      return holder.textContent;
+    }
+
+    function movedOf(block) {
+      var entry = block && block !== session.anchor ? runEntryOf(block) : null;
+      return entry && entry.fromAnchor ? entry.moved || null : null;
+    }
+
+    // What a split tail carries, decided at the split. Off the anchor, the tail
+    // is the page's own words only when those words are in the anchor's
+    // original text: words the reviewer typed into the anchor before pressing
+    // Enter are new. Off a lineage block that was exactly its moved words, the
+    // two halves each keep their own half of them; otherwise the tail inherits
+    // the parent's moved words and capture looks for them.
+    function markSplit(block, tail) {
+      var entry = runEntryOf(tail);
+      if (!entry) return;
+      var tailText = folded(tail.textContent);
+      if (block === session.anchor) {
+        var original = folded(session.before && session.before.text);
+        var fromPage = !!tailText && original.indexOf(tailText) !== -1;
+        entry.fromAnchor = fromPage;
+        entry.moved = fromPage ? tailText : null;
+        return;
+      }
+      var parent = runEntryOf(block);
+      if (!parent || !parent.fromAnchor || !parent.moved) {
+        entry.fromAnchor = false;
+        entry.moved = null;
+        return;
+      }
+      var headText = folded(block.textContent);
+      var squash = function (t) {
+        return t.replace(/ /g, "");
+      };
+      if (squash(headText + tailText) === squash(parent.moved)) {
+        parent.moved = headText || null;
+        parent.fromAnchor = !!headText;
+        entry.moved = tailText || null;
+        entry.fromAnchor = !!tailText;
+        return;
+      }
+      entry.fromAnchor = true;
+      entry.moved = parent.moved;
+    }
+
+    // One session entry as the record's block, or none when it has no words.
+    function entryBlocks(r) {
+      var tag = tagOf(r.el);
+      var whole = runBlockHtml(r.el);
+      if (whole === null) return [];
+      if (!r.fromAnchor || !r.moved) return [{ tag: tag, html: whole }];
+      var raw = String(r.el.textContent || "");
+      var f = foldText(raw);
+      var moved = r.moved;
+      if (f.text === moved) return [{ tag: tag, html: whole, from_anchor: true }];
+      return [{ tag: tag, html: whole }];
     }
 
     function liveRange() {
@@ -36511,7 +36792,7 @@
     // Where a new run block after `block` goes. After the anchor it is the one
     // insert-point rule (blocks.insertPointAfter climbs out of a sheet-head);
     // after a run block it is right after that block.
-    function insertAfterBlock(block, el, fromAnchor) {
+    function insertAfterBlock(block, el, fromAnchor, moved) {
       var point;
       var index;
       if (block === session.anchor) {
@@ -36523,7 +36804,7 @@
         index = session.run.indexOf(entry) + 1;
       }
       point.parent.insertBefore(el, point.before);
-      session.run.splice(index, 0, { el: el, fromAnchor: !!fromAnchor, html: null, dirty: true });
+      session.run.splice(index, 0, { el: el, fromAnchor: !!fromAnchor, moved: moved || null, html: null, dirty: true });
       return el;
     }
 
@@ -36618,15 +36899,15 @@
     function captureRunFields() {
       var list = [];
       session.run.forEach(function (r) {
-        if (r.dirty || r.html === undefined) {
-          r.html = runBlockHtml(r.el);
+        if (r.dirty || r.html === undefined || !r.pieces) {
+          r.pieces = entryBlocks(r);
+          r.html = r.pieces.length ? r.pieces.map(function (b) { return b.html; }).join("") : null;
           r.dirty = false;
           counters.blocksCaptured += 1;
         }
-        if (r.html === null) return;
-        var b = { tag: tagOf(r.el), html: r.html };
-        if (r.fromAnchor) b.from_anchor = true;
-        list.push(b);
+        r.pieces.forEach(function (b) {
+          list.push(Object.assign({}, b));
+        });
       });
       var anchorHtml = anchorMarkup();
       var tag = session.container ? null : tagOf(session.anchor);
@@ -36827,7 +37108,7 @@
       var items = store.read(reviewId);
       for (var i = 0; i < items.length; i += 1) {
         var item = items[i];
-        if (!record.isRunRecord(item) || item[record.FIELD.STATE] === record.STATE.HANDLED) continue;
+        if (!record.isRunRecord(item) || isPlaced(item)) continue;
         var anchorEl = elementFor(item);
         if (!anchorEl) continue;
         var found = blocks.runElementsFor(item, doc, anchorEl);
@@ -36847,9 +37128,24 @@
       var list = item[record.FIELD.NEW_BLOCKS] || [];
       var out = [];
       got.blocks.forEach(function (b) {
+        var rec = list[b.index];
+        var fromAnchor = !!(rec && rec.from_anchor);
+        var moved = fromAnchor ? folded(htmlText(rec.html)) : null;
         b.elements.forEach(function (el) {
-          if (out.some(function (e) { return e.el === el; })) return;
-          out.push({ el: el, fromAnchor: !!(list[b.index] && list[b.index].from_anchor), html: null, dirty: true });
+          var have = null;
+          out.forEach(function (e) {
+            if (e.el === el) have = e;
+          });
+          if (have) {
+            // Two record blocks on one element: a split tail the reviewer
+            // typed into. The element keeps the moved words it carries.
+            if (fromAnchor && !have.fromAnchor) {
+              have.fromAnchor = true;
+              have.moved = moved;
+            }
+            return;
+          }
+          out.push({ el: el, fromAnchor: fromAnchor, moved: moved, html: null, dirty: true });
         });
       });
       return out;
@@ -37106,6 +37402,7 @@
             var entry = runEntryOf(list);
             entry.el = p;
             entry.fromAnchor = false;
+            entry.moved = null;
           } else {
             insertAfterBlock(list, p, false);
           }
@@ -37117,6 +37414,7 @@
         } else {
           var tail = extractTail(range, unit, tagOf(unit));
           insertAfterBlock(block, tail, isFromAnchor(block));
+          markSplit(block, tail);
           setCaret(tail, 0);
         }
       });
@@ -37306,6 +37604,7 @@
         }
         var tail = extractTail(range, unit, tagOf(unit));
         insertAfterBlock(block, tail, isFromAnchor(block));
+        markSplit(block, tail);
         setCaret(tail, 0);
       });
       markDirtyAt(unit);
@@ -37395,7 +37694,8 @@
             while (unit.firstChild) para.appendChild(unit.firstChild);
             ensureLine(para);
             block.removeChild(unit);
-            insertAfterBlock(block, para, isFromAnchor(block));
+            insertAfterBlock(block, para, isFromAnchor(block), movedOf(block));
+            markSplit(block, para);
             moved = para;
           }
         } else if (LIST_TAGS[tag]) {
@@ -37479,7 +37779,7 @@
       var anchorHtml = session.container ? null : share(prev && prev.anchorHtml, session.anchor.innerHTML);
       var run = session.run.map(function (r, i) {
         var was = prev && prev.run[i];
-        return { tag: tagOf(r.el), html: share(was && was.html, r.el.innerHTML), fromAnchor: r.fromAnchor };
+        return { tag: tagOf(r.el), html: share(was && was.html, r.el.innerHTML), fromAnchor: r.fromAnchor, moved: r.moved || null };
       });
       return {
         anchorTag: session.container ? null : tagOf(session.anchor),
@@ -37573,7 +37873,7 @@
         state.run.forEach(function (b) {
           var el = doc.createElement(b.tag);
           el.innerHTML = b.html;
-          insertAfterBlock(prev, el, b.fromAnchor);
+          insertAfterBlock(prev, el, b.fromAnchor, b.moved);
           rememberAlso(el, session.itemId);
           prev = el;
         });
@@ -37869,6 +38169,7 @@
     }
 
     function onRunSelectionChange() {
+      notePageCaret();
       if (!isRun()) return;
       var range = liveRange();
       if (range) {
@@ -38119,7 +38420,7 @@
         session.block = built.anchor;
         var old = session.run;
         session.run = built.run.map(function (b, i) {
-          return { el: b, fromAnchor: !!(old[i] && old[i].fromAnchor), html: null, dirty: true };
+          return { el: b, fromAnchor: !!(old[i] && old[i].fromAnchor), moved: (old[i] && old[i].moved) || null, html: null, dirty: true };
         });
       }
       var host = blocks.hostFor(session.anchor, session.placement);
@@ -39618,20 +39919,48 @@
       for (i = 0; i < itemForElement.length; i += 1) {
         if (itemForElement[i].el === el) {
           var got = store.readItem(reviewId, itemForElement[i].id);
-          if (got && got[record.FIELD.STATE] !== record.STATE.HANDLED) return got;
+          if (got && !isPlaced(got)) return got;
         }
       }
       var items = store.read(reviewId);
       for (i = 0; i < items.length; i += 1) {
         var item = items[i];
         if (!isEditKind(item)) continue;
-        if (item[record.FIELD.STATE] === record.STATE.HANDLED) continue;
+        if (isPlaced(item)) continue;
         if (elementFor(item) === el) return item;
       }
       // A run block belongs to the record whose run it is (plan Task 2.1:
       // itemFor maps any run block back through blocks.runElementsFor).
       var holding = runRecordHolding(el);
       return holding ? holding.item : null;
+    }
+
+    /**
+     * Is this record's text already in the source (architecture "Two sittings
+     * in the same place")? Then its blocks are the page's own, and a sitting
+     * on one is an ordinary edit of that block, never a reopen.
+     *
+     * - handled: yes.
+     * - handled, but the handled check could not find it on the page: no.
+     * - a run the agent answered with a proofreading question, now or in an
+     *   earlier round: yes. The proofread flow places the words and then asks,
+     *   and "Use the fixes" or "Keep mine" leave it ready at a new revision.
+     *   The flow walk found the second sitting reopening that placed record.
+     *
+     * Any other ready record, a run included, is unplaced and reopens.
+     */
+    function isPlaced(item) {
+      if (!item) return false;
+      if (item[record.FIELD.HANDLED_NOT_ON_PAGE] === true) return false;
+      if (item[record.FIELD.STATE] === record.STATE.HANDLED) return true;
+      if (!record.isRunRecord(item)) return false;
+      var reply = item[record.FIELD.REPLY];
+      if (reply && reply.proofread === true) return true;
+      var thread = Array.isArray(item[record.FIELD.THREAD]) ? item[record.FIELD.THREAD] : [];
+      for (var i = 0; i < thread.length; i += 1) {
+        if (thread[i] && thread[i].agent && thread[i].agent.proofread === true) return true;
+      }
+      return false;
     }
 
     function isEditKind(item) {
@@ -39808,26 +40137,49 @@
 
     // The gap under the pointer: between two blocks, or below the last one.
     // Returns the block above it and where to draw the line.
-    function gapAt(x, y) {
+    // `strict` is the click rule: only the gap itself, never the slack over
+    // a block's own edge, so a click on a last line's descenders still puts
+    // the caret there.
+    function gapAt(x, y, strict) {
       var leaves = blocks.leafWalk(doc.body).filter(function (el) {
         return !markers.isInsideOverlay(el) && el.getClientRects().length > 0;
       });
       if (!leaves.length) return null;
-      var slack = 6;
+      var slack = strict ? 0 : LINE_SLACK;
       for (var i = 0; i < leaves.length; i += 1) {
         var a = leaves[i].getBoundingClientRect();
         var next = leaves[i + 1] ? leaves[i + 1].getBoundingClientRect() : null;
         var inColumn = x >= a.left - 40 && x <= a.right + 40;
         if (!inColumn) continue;
         if (next && next.top >= a.bottom - 1) {
-          if (y >= a.bottom - slack && y <= next.top + slack) {
-            return { block: leaves[i], y: (a.bottom + next.top) / 2, left: Math.min(a.left, next.left), right: Math.max(a.right, next.right) };
+          var inGap = strict ? y > a.bottom && y < next.top : y >= a.bottom - slack && y <= next.top + slack;
+          if (inGap) {
+            return {
+              block: leaves[i],
+              y: (a.bottom + next.top) / 2,
+              top: a.bottom,
+              bottom: next.top,
+              left: Math.min(a.left, next.left),
+              right: Math.max(a.right, next.right)
+            };
           }
-        } else if (!next && y >= a.bottom - slack && y <= a.bottom + 64) {
-          return { block: leaves[i], y: a.bottom + 12, left: a.left, right: a.right };
+        } else if (!next && (strict ? y > a.bottom : y >= a.bottom - slack) && y <= a.bottom + 64) {
+          return { block: leaves[i], y: a.bottom + 14, top: a.bottom, bottom: a.bottom + 64, left: a.left, right: a.right };
         }
       }
       return null;
+    }
+
+    var LINE_SLACK = 10;
+    var LINE_HALF = 14;
+
+    // Is the pointer on the line where it is drawn now? The line stays put
+    // while the pointer is on it, even past the gap's own edge, so reaching
+    // for it never makes it vanish under the pointer.
+    function onShownLine(x, y) {
+      if (!lineNode || !lineTarget || lineNode.getAttribute("data-lahe-show") !== "true") return false;
+      var r = lineNode.getBoundingClientRect();
+      return x >= r.left && x <= r.right && y >= r.top && y <= r.bottom;
     }
 
     function onLineMove(event) {
@@ -39844,6 +40196,7 @@
 
     function placeLine() {
       if (!isEditOpen() || !linePoint) return hideLine();
+      if (onShownLine(linePoint.x, linePoint.y)) return;
       var gap = gapAt(linePoint.x, linePoint.y);
       if (!gap) return hideLine();
       var node = lineStyleHost();
@@ -39851,9 +40204,26 @@
       var limit = (win.innerWidth || 1024) - railAllowance() - 8;
       var right = Math.min(gap.right, limit);
       lineTarget = gap.block;
-      node.style.top = Math.round(gap.y - 10) + "px";
-      node.style.left = Math.round(gap.left) + "px";
-      node.style.width = Math.max(40, Math.round(right - gap.left)) + "px";
+      // Below an open frame, the gap's middle can sit on the frame's bottom
+      // border (flow walk shot 44). The line then goes just under the frame.
+      var y = gap.y;
+      var frame = frameRect();
+      if (frame && gap.y - LINE_HALF < frame.y + frame.height && gap.y > frame.y) {
+        y = frame.y + frame.height + LINE_HALF;
+      }
+      node.style.top = Math.round(y - LINE_HALF) + "px";
+      // The bar can sit in the same gap (below the frame, when there is no
+      // room above it). The line then starts just past the bar, so its label
+      // is never hidden under it.
+      var lineLeft = gap.left;
+      if (barNode && barNode.style.display !== "none") {
+        var bar = barNode.getBoundingClientRect();
+        if (bar.width && bar.top < y + LINE_HALF && bar.bottom > y - LINE_HALF && bar.right + 8 < right - 40) {
+          lineLeft = Math.max(lineLeft, bar.right + 8);
+        }
+      }
+      node.style.left = Math.round(lineLeft) + "px";
+      node.style.width = Math.max(40, Math.round(right - lineLeft)) + "px";
       node.setAttribute("data-lahe-show", "true");
     }
 
@@ -40337,31 +40707,107 @@
       frameNode.style.width = rect.right - rect.left + pad * 2 + "px";
       frameNode.style.height = rect.bottom - rect.top + pad * 2 + "px";
 
-      // The bar sits above the frame, pinned by its BOTTOM edge, so its own
-      // height never enters the calculation. Measuring the height instead
-      // reads zero on the first frame in some engines, which puts the bar in
-      // one place and then moves it a frame later: the reviewer sees it jump,
-      // and anything aiming at a button can miss it.
+      // WHERE THE BAR GOES (flow walk, design problem 1). It used to sit over
+      // whatever was above the frame: the line before the anchor, a heading,
+      // the byline, which is exactly the sentence a writer reads back while
+      // continuing it. Now it goes in the page's own gap above the frame when
+      // the gap is tall enough for it, and below the frame when it is not.
+      // When above, it is pinned by its BOTTOM edge, so a height read as zero
+      // on the first frame in some engines cannot make it jump.
       var viewport = win.innerHeight || 768;
-      // An untouched anchor sits outside the frame, right above it: the bar
-      // goes above the anchor too, so it never covers the words the reviewer
-      // is writing after.
-      var barRect = rect;
-      if (isRun() && !session.container && framedElements().indexOf(session.anchor) === -1) {
-        barRect = unionRect([session.anchor].concat(framedElements())) || rect;
-      }
-      var roomAbove = barRect.top - pad - 8;
+      var barHeight = barNode.getBoundingClientRect().height || BAR_ROOM;
+      var frameTop = rect.top - pad;
+      var frameBottom = rect.bottom + pad;
+      var above = contentBottomAbove(framedElements(), frameTop);
+      var ceiling = Math.max(0, above === null ? 0 : above);
+      var room = frameTop - ceiling;
       var left = Math.round(Math.max(8, rect.left - pad));
       barNode.style.left = left + "px";
-      if (roomAbove >= 44) {
-        barNode.style.bottom = Math.round(viewport - roomAbove) + "px";
+      if (room >= barHeight + BAR_GAP * 2) {
+        barNode.style.bottom = Math.round(viewport - (frameTop - BAR_GAP)) + "px";
         barNode.style.top = "auto";
+        barNode.setAttribute("data-lahe-bar-side", "above");
       } else {
-        barNode.style.top = Math.round(Math.min(rect.bottom + pad + 8, viewport - 44)) + "px";
+        // Below the frame. When the space under it is empty (the end of the
+        // page, or a tall gap), the bar leaves the first line of that space to
+        // "+ Write here", so writing one more block below is still in reach.
+        var below = contentTopBelow(framedElements(), frameBottom);
+        var spaceBelow = below === null ? Infinity : below - frameBottom;
+        var skip = spaceBelow >= LINE_HALF * 2 + barHeight + BAR_GAP * 3 ? LINE_HALF * 2 + BAR_GAP : 0;
+        barNode.style.top = Math.round(Math.max(0, Math.min(frameBottom + BAR_GAP + skip, viewport - barHeight - BAR_GAP))) + "px";
         barNode.style.bottom = "auto";
+        barNode.setAttribute("data-lahe-bar-side", "below");
       }
       fitBar(left);
       return frameNode;
+    }
+
+    // The bar's height before it has been laid out, and the space it keeps
+    // from the frame and from the text above it.
+    var BAR_ROOM = 40;
+    var BAR_GAP = 4;
+
+    // The bottom of the nearest page text above `top`, outside the frame, or
+    // null when there is none. It reads the lines themselves (text node
+    // rects), walking back from the first framed block, so a page's margins
+    // and padding count as gap and its words never do.
+    function contentBottomAbove(list, top) {
+      if (!doc || !doc.body || !list.length) return null;
+      var first = list[0];
+      for (var i = 1; i < list.length; i += 1) {
+        if (list[i] && first.compareDocumentPosition(list[i]) & 2) first = list[i];
+      }
+      var walker = doc.createTreeWalker(doc.body, 4, null);
+      walker.currentNode = first;
+      var looked = 0;
+      for (var n = walker.previousNode(); n && looked < 200; n = walker.previousNode()) {
+        looked += 1;
+        if (!/\S/.test(n.nodeValue || "")) continue;
+        var parent = n.parentElement;
+        if (!parent || markers.isInsideOverlay(parent)) continue;
+        var r = doc.createRange();
+        r.selectNodeContents(n);
+        var rects = r.getClientRects();
+        var best = null;
+        for (var k = 0; k < rects.length; k += 1) {
+          var box = rects[k];
+          if (!box.width && !box.height) continue;
+          if (box.bottom <= top + 1 && (best === null || box.bottom > best)) best = box.bottom;
+        }
+        if (best !== null) return best;
+      }
+      return null;
+    }
+
+    // The top of the nearest page text below `bottom`, after the frame, or
+    // null when there is none.
+    function contentTopBelow(list, bottom) {
+      if (!doc || !doc.body || !list.length) return null;
+      var last = list[0];
+      for (var i = 1; i < list.length; i += 1) {
+        if (list[i] && last.compareDocumentPosition(list[i]) & 4) last = list[i];
+      }
+      var walker = doc.createTreeWalker(doc.body, 4, null);
+      walker.currentNode = last;
+      var looked = 0;
+      for (var n = walker.nextNode(); n && looked < 200; n = walker.nextNode()) {
+        if (last.contains(n)) continue;
+        looked += 1;
+        if (!/\S/.test(n.nodeValue || "")) continue;
+        var parent = n.parentElement;
+        if (!parent || markers.isInsideOverlay(parent)) continue;
+        var r = doc.createRange();
+        r.selectNodeContents(n);
+        var rects = r.getClientRects();
+        var best = null;
+        for (var k = 0; k < rects.length; k += 1) {
+          var box = rects[k];
+          if (!box.width && !box.height) continue;
+          if (box.top >= bottom - 1 && (best === null || box.top < best)) best = box.top;
+        }
+        if (best !== null) return best;
+      }
+      return null;
     }
 
     // On a narrow window the bar drops its hint first.
@@ -40614,6 +41060,55 @@
 
     // Is the caret in a block Cmd-Shift-E can open? No caret, or a caret
     // sitting straight in body or main, is "in no block".
+    // The reviewer's last caret on the page itself, so a chord pressed while
+    // the rail holds focus can put it back (flow walk, design problem 8).
+    var lastPageCaret = null;
+    function notePageCaret() {
+      var range = liveRange();
+      if (!range) return;
+      var node = range.startContainer;
+      var el = node && node.nodeType === 1 ? node : node && node.parentElement;
+      if (!el || !el.isConnected || markers.isInsideOverlay(el)) return;
+      if (!doc.body || !doc.body.contains(el)) return;
+      lastPageCaret = range.cloneRange();
+    }
+
+    /**
+     * Cmd-Shift-E pressed while the rail holds focus. Before this the chord
+     * and the typing after it both went nowhere until the writer clicked the
+     * page, and writers move between the rail and the page all the time. The
+     * focus comes back to the page, the last caret there is put back, and the
+     * chord then does what it does on the page.
+     *
+     * @returns {boolean} true when the chord was handled
+     */
+    function chordFromRail(event) {
+      var got = gestures.gestureFor(describe(event));
+      if (got.gesture !== gestures.GESTURE.EDIT_BLOCK && got.gesture !== gestures.GESTURE.ENTER_EDIT_STATE) return false;
+      if (railTextFocus && railTextFocus()) return false;
+      if (typeof event.preventDefault === "function") event.preventDefault();
+      var active = doc.activeElement;
+      if (active && markers.isInsideOverlay(active) && typeof active.blur === "function") active.blur();
+      if (lastPageCaret && lastPageCaret.startContainer.isConnected && win) {
+        var sel = win.getSelection();
+        sel.removeAllRanges();
+        sel.addRange(lastPageCaret.cloneRange());
+      }
+      if (session) {
+        // An edit is already open: the chord goes back into it.
+        if (session.host && typeof session.host.focus === "function") session.host.focus({ preventScroll: true });
+        else if (session.block && typeof session.block.focus === "function") session.block.focus({ preventScroll: true });
+        return true;
+      }
+      if (caretInBlock()) {
+        leaveEditState();
+        editBlockAtCaret();
+      } else {
+        enterEditState();
+      }
+      return true;
+    }
+
     function caretInBlock() {
       var el = selection.caretContainer();
       if (!el || markers.isInsideOverlay(el)) return false;
@@ -40621,7 +41116,10 @@
     }
 
     function onKeydown(event) {
-      if (markers.isInsideOverlay(event.target)) return;
+      if (markers.isInsideOverlay(event.target)) {
+        chordFromRail(event);
+        return;
+      }
       // Parked for onBeforeInput, which fires next and cannot see the modifiers
       // that produced it. Every key, not only Enter, so a stale Shift from an
       // earlier press cannot turn a later paragraph break into a line break.
@@ -40663,6 +41161,7 @@
      * call is a no-op, and this handler never runs while no session is open.
      */
     function onPointerDown(event) {
+      if (writeInGap(event)) return;
       if (!session) {
         // Edit state with no block open: a press on the rail leaves it. The
         // bar and the "+ Write here" line are the edit state's own.
@@ -40725,7 +41224,45 @@
       commit({ reason: "window blur" });
     }
 
+    // A press that missed "+ Write here" but landed in the page's own gap
+    // between two blocks (or just below the last one) starts writing there,
+    // as the line would have. Before this, a near miss read as a click
+    // outside: the session closed and the typing went nowhere (flow walk,
+    // design problem 7). Only a press on the page's containers counts, never
+    // one on content (an image, a rule), and only while an edit is open.
+    var swallowClick = false;
+    var gapPress = null;
+    function writeInGap(event) {
+      // pointerdown and its compatibility mousedown are one press: the second
+      // is swallowed, never a second opening.
+      if (event.type === "mousedown" && gapPress && gapPress.x === event.clientX && gapPress.y === event.clientY) {
+        gapPress = null;
+        if (typeof event.preventDefault === "function") event.preventDefault();
+        return true;
+      }
+      gapPress = null;
+      swallowClick = false;
+      if (!isEditOpen() || typeof event.clientX !== "number") return false;
+      if (typeof event.button === "number" && event.button !== 0) return false;
+      if (markers.isInsideOverlay(event.target) || pressedOnScrollbar(event)) return false;
+      var gap = gapAt(event.clientX, event.clientY, true);
+      if (!gap) return false;
+      var target = event.target;
+      if (!target || target.nodeType !== 1 || !target.contains(gap.block)) return false;
+      if (typeof event.preventDefault === "function") event.preventDefault();
+      swallowClick = true;
+      if (event.type === "pointerdown") gapPress = { x: event.clientX, y: event.clientY };
+      openAfter(gap.block);
+      return true;
+    }
+
     function onClick(event) {
+      if (swallowClick) {
+        // The press already started writing in the gap; its click is not a
+        // click outside the new session.
+        swallowClick = false;
+        return;
+      }
       if (markers.isInsideOverlay(event.target)) return;
       if (editState && !session) {
         // Edit state with no block open: a click on a block opens it.
@@ -42212,6 +42749,7 @@
   // different tag from the one in new_blocks.
   var TAG_WRONG_NOTE = record.PAGE_CHECK_TAG_NOTE;
   var TAKEBACK_NOTE = record.PAGE_CHECK_TAKEBACK_NOTE;
+  var RUN_MISSING_NOTE = record.PAGE_CHECK_RUN_NOTE;
 
   // The backstop, independent of the stamp rule below. Two checks that both look
   // at the same item cannot reopen it twice inside this window, whatever they
@@ -42249,7 +42787,9 @@
   // The three things the check can find, and the sentence each one carries. A
   // caller that only wants a yes or no asks isRevertedHandledEdit; one that has
   // to write the note asks pageCheckNoteFor.
-  var CHECK_REASON = { REVERTED: "reverted", FORMATTING: "formatting", STAMP: "stamp", TAG: "tag", TAKEBACK: "takeback" };
+  // MISSING is a run's own: a block the reviewer wrote is not on the page.
+  // REVERTED stays for text that went back to what it was before the edit.
+  var CHECK_REASON = { REVERTED: "reverted", MISSING: "missing", FORMATTING: "formatting", STAMP: "stamp", TAG: "tag", TAKEBACK: "takeback" };
 
   /**
    * Why the page check would reopen this item, or null.
@@ -42308,6 +42848,7 @@
   function pageCheckNoteFor(item, pageText, options) {
     var reason = pageCheckReasonFor(item, pageText, options);
     if (reason === CHECK_REASON.REVERTED) return REVERTED_EDIT_NOTE;
+    if (reason === CHECK_REASON.MISSING) return RUN_MISSING_NOTE;
     if (reason === CHECK_REASON.FORMATTING) return FORMATTING_LOST_NOTE;
     if (reason === CHECK_REASON.STAMP) return STAMP_LOST_NOTE;
     if (reason === CHECK_REASON.TAG) return TAG_WRONG_NOTE;
@@ -42325,6 +42866,7 @@
   CHECK_NOTICES[STAMP_LOST_NOTE] = "The id for this element is not in the source. The item is open again.";
   CHECK_NOTICES[TAKEBACK_NOTE] = "Some of the blocks you took back are still on the page. The item is open again.";
   CHECK_NOTICES[TAG_WRONG_NOTE] = "A block in this change is on the page as a different type. The item is open again.";
+  CHECK_NOTICES[RUN_MISSING_NOTE] = "A block you wrote is not on the page as you wrote it. The item is open again.";
 
   /** The rail's line for a page-check note, defaulting to the revert one. */
   function pageCheckNoticeFor(note) {
@@ -42452,6 +42994,10 @@
     var list = Array.isArray(items) ? items : [];
     var takenBack = record.takenBackIds(list);
     var opts = options || {};
+    // The run check reads the other records: a block a later record took over
+    // is that record's now (record.handedOverBlocks). Kept on the caller's
+    // options, so the note it asks for next (pageCheckNoteFor) reads the same.
+    if (!Array.isArray(opts.items)) opts.items = list;
     var out = [];
     for (var i = 0; i < list.length; i += 1) {
       if (takenBack[list[i][record.FIELD.ID]]) continue;
@@ -43815,6 +44361,20 @@
   var TAKE_THEIRS_RUN_LABEL = "Take the page's, keep my new text";
   var RUN_CONFLICT_LINE = "Your {n} new blocks after this {type} are waiting on this choice. Either answer keeps them.";
   var RUN_CONFLICT_LINE_ONE = "Your 1 new block after this {type} is waiting on this choice. Either answer keeps it.";
+  // The same line once the blocks are on the page while the card waits
+  // (flow walk, Fail 3): the words say where they are, not that they wait.
+  var RUN_SHOWN_LINE = "Your {n} new blocks are on the page after this {type}. Either answer keeps them.";
+  var RUN_SHOWN_LINE_ONE = "Your 1 new block is on the page after this {type}. Either answer keeps it.";
+
+  // What the conflict card's note says on a run record, in place of the
+  // anchor conflict's "This region is neither what you edited nor what you
+  // changed it to" (flow walk, design problem 3). One line for each case.
+  //   the anchor   the page's anchor changed after the reviewer edited it
+  //   a new block  the page shows the reviewer's new block with words added
+  var RUN_ANCHOR_CONFLICT_NOTE =
+    "The page's {type} changed after you edited it, so Lahe did not write your version over it. Your new text is kept.";
+  var RUN_BLOCK_CLASH_NOTE =
+    "On the page, your new {type} has words you did not write. Lahe changed nothing. Pick the version that stands.";
 
   // How the card names a block's type: the block menu's names, lowercased.
   var BLOCK_TYPE_NAMES = {
@@ -44037,6 +44597,44 @@
   }
 
   /**
+   * Where a reworded anchor stands when its words are gone, or null.
+   *
+   * Only for a record whose reviewer changed the anchor (so a card will ask),
+   * never for a container, and never when the text ladder found two places:
+   * that is its own answer. The point ladder (pointing.js) scores the page's
+   * elements on identity and place; the element back is the block holding its
+   * pick, and it must read words the record does not already know, so the
+   * conflict card has two versions to show.
+   */
+  function guessedAnchor(item, view, ctx, verdict) {
+    if (isContainerPlacement(item) || anchorUntouched(item, view)) return null;
+    if (verdict && verdict.reason === uniqueness.REASON.AMBIGUOUS) return null;
+    var ref = item[record.FIELD.REGION] ? item[record.FIELD.REGION].ref : null;
+    var ladder = ctx.pointing;
+    if (!ref || !ladder || typeof ladder.bestGuess !== "function") return null;
+    var guess = null;
+    guessing = true;
+    try {
+      guess = ladder.bestGuess(ref, ctx.root);
+    } finally {
+      guessing = false;
+    }
+    var picked = guess && guess.element ? guess.element : null;
+    var el = picked ? blockHolding(picked) || picked : null;
+    if (!el || el.nodeType !== 1 || el.isConnected === false) return null;
+    if (markers && typeof markers.isToolNode === "function" && markers.isToolNode(el)) return null;
+    if (tagOfEl(el) === "main" || tagOfEl(el) === "body") return null;
+    var engine = ctx.anchor || anchorEngine;
+    if (engine && typeof engine.isPageSized === "function" && typeof engine.scopeOf === "function") {
+      var scope = engine.scopeOf(ctx.root, null);
+      if (scope && engine.isPageSized(el, scope)) return null;
+    }
+    var words = normalize.normalizeText(el.textContent || "");
+    if (!words) return null;
+    return el;
+  }
+
+  /**
    * Applies one run record. The contract is applyRecord's, plus the run.
    */
   function applyRun(item, ctx) {
@@ -44069,10 +44667,21 @@
         element = verdict.element;
       }
     }
+    var guessed = false;
     if (!element) {
       var bound = lastElement[id];
       if (bound && bound.isConnected) element = bound;
-      else return markLost(item, verdict || lostVerdict(), ctx);
+      else {
+        // The reviewer reworded the anchor and the page's anchor now reads
+        // neither their words nor its old ones: the agent reworded it too
+        // (flow walk, Fail 3). That is a conflict on the anchor, not a lost
+        // record, so the point ladder is asked where the anchor stands, and
+        // the card asks which version stands. The anchor is never written on
+        // the guess; only the reviewer's answer writes it.
+        element = guessedAnchor(item, view, ctx, verdict);
+        if (!element) return markLost(item, verdict || lostVerdict(), ctx);
+        guessed = true;
+      }
     }
 
     // A record that changes the anchor's tag writes the tag onto a block,
@@ -44109,14 +44718,18 @@
       var verdictBranch = compare(view, domValue, typeof element.innerHTML === "string" ? element.innerHTML : null, null);
       branch = verdictBranch.branch;
       earlierAfter = verdictBranch.earlierAfter;
-      if (branch === BRANCH.CONTENT_CHANGED) return holdRun(ctx, item, view, element, domValue, false);
+      // A guessed anchor is only ever shown to the reviewer, never written.
+      if (branch === BRANCH.CONTENT_CHANGED || guessed) return holdRun(ctx, item, view, element, domValue, false);
     }
 
     // A run block the page holds with words the reviewer never typed. Read
     // before anything is written, so a clash writes nothing at all (R5, R6).
     // A page state the reviewer already answered with Keep mine is rewritten
     // to their block instead, pass after pass, as an anchor's is.
-    var clash = blocks.runClashFor(item, element.ownerDocument, element);
+    var later = laterRun(ctx, item);
+    var clash = blocks.runClashFor(later.item, element.ownerDocument, element);
+    // A block a later record took over is not this record's to clash on.
+    if (clash && later.handed[clash.index]) clash = null;
     var clashWrote = false;
     if (clash) {
       if (!clashAccepted(item, clash)) return holdBlockClash(ctx, item, element, clash);
@@ -44345,9 +44958,10 @@
       });
       return out;
     }
-    var list = runList(item, RUN_FIELD.NEW_BLOCKS);
+    var later = laterRun(ctx, item);
+    var list = runList(later.item, RUN_FIELD.NEW_BLOCKS);
     if (!list.length) return out;
-    var found = blocks.runElementsFor(item, doc, anchor);
+    var found = blocks.runElementsFor(later.item, doc, anchor);
     var priors = priorRunLeaves(item, doc, anchor);
     var index = pageLeafIndex(doc);
     var seen = [];
@@ -44357,6 +44971,13 @@
     var last = null;
     found.blocks.forEach(function (b) {
       var block = list[b.index];
+      // A block a later record took over is that record's to write. Where it
+      // shows, the walk goes on from it; where it does not, nothing is put in
+      // its place, or the page would show the list twice (flow walk, Fail 2).
+      if (later.handed[b.index]) {
+        if (b.status !== "missing") last = b.elements[b.elements.length - 1];
+        return;
+      }
       if (b.status === "whole") {
         // A leaf that shows an earlier revision exactly (a punctuation fix the
         // fold reads past) is branch three: rewritten (code lead finding 18).
@@ -44422,15 +45043,63 @@
     return out;
   }
 
+  /**
+   * The run as it reads now: each block a later record of the reviewer's took
+   * over (record.handedOverBlocks) carries that record's version. The record
+   * itself is never changed.
+   *
+   * @returns {{item: Object, handed: Object}}
+   */
+  function laterRun(ctx, item) {
+    var handed = record.handedOverBlocks(item, itemsIn(ctx));
+    var indexes = Object.keys(handed).filter(function (k) {
+      return k !== "anchor";
+    });
+    if (!indexes.length) return { item: item, handed: handed };
+    var copy = Object.assign({}, item);
+    copy[RUN_FIELD.NEW_BLOCKS] = runList(item, RUN_FIELD.NEW_BLOCKS).map(function (b, index) {
+      var h = handed[index];
+      if (!h || typeof h.html !== "string") return b;
+      return { tag: h.tag || b.tag, html: h.html };
+    });
+    return { item: copy, handed: handed };
+  }
+
   /** Branch four on a run record: flag the anchor, hold the run, say so. */
   function holdRun(ctx, item, view, element, theirs, displaced) {
     var id = item[record.FIELD.ID];
     var result = flagConflict(ctx, view, id, element, theirs, displaced);
     if (conflicts[id]) conflicts[id].run = true;
+    setConflictNote(ctx, id, RUN_ANCHOR_CONFLICT_NOTE.replace("{type}", record.anchorTypeName(item)), result);
+    // The anchor waits on the reviewer's answer; their new blocks do not.
+    // Either answer keeps them, so they stay on the page after the page's
+    // anchor while the card waits (flow walk, Fail 3 and design problem 2).
+    // A block that clashes with the page's words waits too: nothing is put
+    // beside it.
+    lastElement[id] = element;
+    var clash = blocks.runClashFor(laterRun(ctx, item).item, element.ownerDocument, element);
+    if (!clash) {
+      var placed = placeRun(ctx, item, element);
+      result.run = placed;
+      if (placed.wrote) {
+        result.wrote = true;
+        counters.regionsWritten += 1;
+      }
+    }
+    if (conflicts[id]) conflicts[id].shown = !clash;
     decorateRunConflict(ctx, id, item);
     result.item = item;
     result.held = true;
     return result;
+  }
+
+  // The conflict badge with a run's own sentence in place of the anchor
+  // conflict's. Same code, so everything that clears the badge still does.
+  function setConflictNote(ctx, id, message, result) {
+    if (!failures || !result || result.branch !== BRANCH.CONTENT_CHANGED) return;
+    var f = failures.failure("REPLAY_NEITHER_MATCHES", { yours: result.yours, theirs: result.theirs });
+    f.message = message;
+    callCard(ctx, "setCardBadge", id, f);
   }
 
   // ---------------------------------------------------------------------------
@@ -44495,6 +45164,8 @@
       })
       .join("\n\n");
     var result = flagConflict(ctx, item, id, element, leafText(clash.element), false, yours);
+    var first = runList(item, RUN_FIELD.NEW_BLOCKS)[clash.index];
+    setConflictNote(ctx, id, RUN_BLOCK_CLASH_NOTE.replace("{type}", blockTypeName(first ? first.tag : "")), result);
     if (conflicts[id]) {
       conflicts[id].run = true;
       conflicts[id].block = { index: clash.index, blocks: clash.blocks };
@@ -44561,10 +45232,13 @@
     return { resolved: true, choice: choice, reason: null };
   }
 
-  function runConflictLine(item) {
+  // `shown`: the blocks are on the page while the card waits.
+  function runConflictLine(item, shown) {
     var n = runList(item, RUN_FIELD.NEW_BLOCKS).length;
     var type = record.anchorTypeName(item);
-    return (n === 1 ? RUN_CONFLICT_LINE_ONE : RUN_CONFLICT_LINE.replace("{n}", String(n))).replace("{type}", type);
+    var one = shown ? RUN_SHOWN_LINE_ONE : RUN_CONFLICT_LINE_ONE;
+    var many = shown ? RUN_SHOWN_LINE : RUN_CONFLICT_LINE;
+    return (n === 1 ? one : many.replace("{n}", String(n))).replace("{type}", type);
   }
 
   // The run section of the conflict card: the pinned line and each held
@@ -44583,7 +45257,7 @@
     section.textContent = "";
     var line = doc.createElement("div");
     line.setAttribute("data-lahe-conflict-run-line", "");
-    line.textContent = runConflictLine(item);
+    line.textContent = runConflictLine(item, !!(conflicts[id] && conflicts[id].shown));
     section.appendChild(line);
     runList(item, RUN_FIELD.NEW_BLOCKS).forEach(function (b) {
       var row = doc.createElement("div");
@@ -44675,8 +45349,20 @@
     var F = record.FIELD;
     var leaves = normalize.leafBlocks(html);
     var list = runList(item, RUN_FIELD.NEW_BLOCKS);
+    // Blocks a later record of the reviewer's took over (flow walk, Fail 2):
+    // their words are that record's now. The run is read twice, once as it
+    // was placed and once with the later versions in place, and the reading
+    // that finds more of it counts. A taken-over block is never judged.
+    var handed = record.handedOverBlocks(item, options && options.items);
+    var later = list.map(function (b, index) {
+      var h = handed[index];
+      if (!h || typeof h.html !== "string") return b;
+      return { tag: h.tag || b.tag, html: h.html };
+    });
     var anchorHtml = typeof item[RUN_FIELD.ANCHOR_AFTER_HTML] === "string" ? item[RUN_FIELD.ANCHOR_AFTER_HTML] : "";
     var anchorWords = normalize.blockWords(anchorHtml);
+    var anchorKeys = [anchorWords];
+    if (handed.anchor && typeof handed.anchor.html === "string") anchorKeys.push(normalize.blockWords(handed.anchor.html));
     var starts = [];
     var anchored = true;
     if (isContainerPlacement(item)) {
@@ -44684,37 +45370,40 @@
       anchored = false;
     } else {
       leaves.forEach(function (leaf, i) {
-        if (anchorWords && leaf.words === anchorWords) starts.push(i);
+        if (leaf.words && anchorKeys.indexOf(leaf.words) !== -1) starts.push(i);
       });
     }
     if (!starts.length) {
       var beforeWords = normalize.blockWords(item[F.BEFORE_HTML] || item[F.BEFORE] || "");
-      var beforeBack = beforeWords && beforeWords !== anchorWords && leaves.some(function (l) {
+      var beforeBack = !handed.anchor && beforeWords && beforeWords !== anchorWords && leaves.some(function (l) {
         return l.words === beforeWords;
       });
       if (beforeBack) return CHECK_REASON.REVERTED;
       if (!list.length) return null;
       anchored = false;
       leaves.forEach(function (leaf, i) {
-        var hit = list.some(function (b) {
+        var hit = list.concat(later).some(function (b) {
           return normalize.blockWords(b.html) === leaf.words;
         });
         if (hit) starts.push(i - 1);
       });
-      if (!starts.length) return CHECK_REASON.REVERTED;
+      if (!starts.length) return handed.anchor ? null : CHECK_REASON.MISSING;
     }
     var best = null;
+    var readings = later === list || !Object.keys(handed).length ? [list] : [list, later];
     starts.forEach(function (start) {
-      var matched = normalize.matchRun(list, leaves.slice(start + 1));
-      var present = matched.filter(function (m) {
-        return m.status !== "missing";
-      }).length;
-      if (!best || present > best.present) best = { start: start, matched: matched, present: present };
+      readings.forEach(function (reading) {
+        var matched = normalize.matchRun(reading, leaves.slice(start + 1));
+        var present = matched.filter(function (m) {
+          return m.status !== "missing";
+        }).length;
+        if (!best || present > best.present) best = { start: start, matched: matched, present: present, reading: reading };
+      });
     });
     var missing = false;
     var tag = false;
     var formatting = false;
-    var anchorLeaf = anchored && best.start >= 0 ? leaves[best.start] : null;
+    var anchorLeaf = anchored && best.start >= 0 && !handed.anchor ? leaves[best.start] : null;
     if (anchorLeaf) {
       var tagAfter = item[RUN_FIELD.ANCHOR_TAG_AFTER];
       if (tagAfter && anchorLeaf.tag !== tagAfter) tag = true;
@@ -44723,6 +45412,7 @@
       if ((kind === record.KIND.EDIT || kind === record.KIND.FORMAT_ONLY) && missingEmphasis(anchorHtml, anchorLeaf.html)) formatting = true;
     }
     best.matched.forEach(function (m) {
+      if (handed[m.index]) return;
       var block = list[m.index];
       if (m.status === "missing") {
         var words = normalize.blockWords(block.html);
@@ -44746,7 +45436,7 @@
       if (leaf.tag !== block.tag) tag = true;
       if (missingEmphasis(block.html, leaf.html)) formatting = true;
     });
-    if (missing) return CHECK_REASON.REVERTED;
+    if (missing) return CHECK_REASON.MISSING;
     if (tag) return CHECK_REASON.TAG;
     if (formatting) return CHECK_REASON.FORMATTING;
     return null;
@@ -45530,7 +46220,7 @@
   "use strict";
 
   // Replaced by scripts/build-layer.js at concatenation time.
-  var VERSION = "0.2.0+eb1aa19dd945";
+  var VERSION = "0.2.0+17c2b646bd5d";
 
   var protocol = ns.protocol;
   var record = ns.record;
@@ -46242,6 +46932,12 @@
       // The review's notes flag (design call 2): only a notes review opens an
       // empty page for typing.
       notes: config.notes === true,
+      // Cmd-Shift-E from the rail returns focus to the page, unless the
+      // reviewer is typing in one of the rail's own fields.
+      railTextFocus: function () {
+        var info = rail && typeof rail.activeElementInfo === "function" ? rail.activeElementInfo() : null;
+        return !!info && (info.tag === "TEXTAREA" || info.tag === "INPUT" || info.isCardInput === true);
+      },
       // Same reason as the comment surface above: a full browser storage during
       // typing is said on the rail rather than thrown at the input handler.
       onFailure: function (failure) {
