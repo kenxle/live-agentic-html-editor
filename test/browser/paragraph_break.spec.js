@@ -244,8 +244,15 @@ test.describe("a paragraph break the reviewer types is kept", () => {
     expect(item.after).toBe(SPLIT);
     expect(item.after.includes("\n\n"), "a paragraph break is a blank line").toBe(true);
     expect(item.before).toBe(ONE_PARAGRAPH);
-    // And the intent field says what the reviewer did, in words.
-    expect(item.change).toBe(record.BREAK_ADDED_PARAGRAPH);
+    // And the intent field says what the reviewer did, in words. Since free
+    // writing (docs/features/20260928.01_free_writing) Enter mid-paragraph
+    // splits the block into two sibling paragraphs, and the tail is the
+    // anchor's own words, marked from_anchor.
+    expect(item.change).toBe(
+      "Split this paragraph in two after the anchor's new end. The second part is new_blocks[0], marked from_anchor."
+    );
+    expect(item.new_blocks).toEqual([{ tag: "p", html: SECOND, from_anchor: true }]);
+    expect(item.anchor_after_html).toBe(FIRST);
 
     // Through the projection the agent actually reads. It is written when the
     // record reaches the helper, so it is waited for rather than assumed.
@@ -330,10 +337,12 @@ test.describe("a paragraph break the reviewer types is kept", () => {
     // Everything the block said is still there, in one piece, with the typed
     // sentence as a new paragraph under it. The change line says that plainly
     // rather than as a break sentence plus a long quotation (2026-09-14).
-    expect(item.change, "the change line says a paragraph was added, and where").toContain(
-      "Added a paragraph after"
+    // Since free writing the typed sentence is a new sibling block, carried in
+    // new_blocks; the change line gives structure only and never quotes it.
+    expect(item.change, "the change line says a block was added, and where").toBe(
+      "Added 1 block after this paragraph: p. Its words are in new_blocks."
     );
-    expect(item.change, "and it names the words").toContain(TAIL);
+    expect(item.new_blocks).toEqual([{ tag: "p", html: TAIL }]);
     expect(await pageBlockText(page, "#split")).toBe(ONE_PARAGRAPH + "\n\n" + TAIL);
   });
 

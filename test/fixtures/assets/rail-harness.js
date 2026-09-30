@@ -206,8 +206,14 @@
     refusalShown: function () {
       return rail.refusalShown();
     },
-    showRefusal: function (reason) {
-      return rail.showRefusal({ reason: reason || "This review is already open in another window." });
+    showRefusal: function (reason, refusedBy) {
+      return rail.showRefusal({
+        reason: reason || "This review is already open in another window.",
+        refusedBy: refusedBy || null
+      });
+    },
+    refusalButton: function () {
+      return rail.refusalButtonInfo();
     },
     hideRefusal: function () {
       return rail.hideRefusal();

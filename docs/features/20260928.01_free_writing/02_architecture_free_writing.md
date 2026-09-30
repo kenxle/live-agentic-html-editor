@@ -231,7 +231,8 @@ A new `h2` typed mid-section has the page's `h2` styling but no section rule or 
 - **Enter** at the end of a block makes a new `p` after it. Enter in the middle splits the block into two siblings, and the tail is marked `from_anchor`. Enter in an empty list item ends the list.
 - **Shift-Enter** stays a line break.
 - **Markdown-style shortcuts** at the start of a block:
-  - `# `, `## `, and `### ` make h2, h3, and h4
+  - `## `, `### `, and `#### ` make h2, h3, and h4, Markdown's own levels
+  - `# ` makes h2 too, because the body has no h1
   - `- ` or `* ` makes a bulleted list
   - `1. ` makes a numbered list
 - **The bar's block-type menu** (wireframe direction A) sits before B and I. It names the caret's block: Paragraph, Heading, Subheading, Small heading, Bulleted list, Numbered list. Each type also gets a hotkey (the plan picks the keys). Menu, hotkeys, and shortcuts share one function per type.
@@ -331,9 +332,10 @@ flowchart TD
 
 | Case | Rule |
 |---|---|
-| When a block counts as present | Its words are found in the walk, in run order: as a whole leaf block, inside one leaf block that holds several new blocks (joined), or spread over consecutive leaf blocks (split). Tag and markup never decide presence. |
+| When a block counts as present | Its words are found in the walk, in run order: as a whole leaf block, inside one leaf block whose words are exactly several new blocks and nothing else (joined), or spread over consecutive leaf blocks (split). Tag and markup never decide presence. |
 | Present, one-to-one, wrong tag or lost bold or italic | Rewrite that block in place: swap the tag, or rewrite its inner markup. A wrong tag is also flagged on the card. Never insert. |
 | Present, but joined or split | Leave it. Tags and markup are not rewritten when blocks do not map one to one. |
+| Inside a leaf that also holds words the reviewer never typed | A conflict on that block (brief R6: the words stay as typed). Only the leaf where the block would sit is read: the one after the last present block, or the first leaf after the insert point. With no block present yet, that first leaf is usually the page's own next paragraph, so a block under five words (`SHORT_BLOCK_WORDS`) clashes there only after an earlier block matched. Replay writes nothing, anchor included. The item is flagged on the card with the conflict toast, and the card shows the reviewer's block and the page's. "Keep mine" rewrites that leaf to the reviewer's block through `blocks.writeBlock`, and remembers the page state with `acceptPageText`, so a repaint from a source that still disagrees is rewritten again, not raised again. "Take the page's" makes the page's block the record's own, as a new revision, so the walk reads it as present from then on. Either answer then places the rest of the run. The anchor conflict's card, badge and buttons are reused. |
 | Missing from the walk, words found elsewhere | A block of five or more words (`SHORT_BLOCK_WORDS`) is searched for across the page, by whole leaf block, never by substring. If found, nothing is written, and the card says the text was placed in a different spot. |
 | Missing from the walk, short block | A block under five words ("Yes", "Notes") is inserted without a page-wide search, because such words appear on pages for other reasons. |
 | Where a missing block goes | After the last present block that comes before it in run order, or at the anchor's insert point if none is present. Each block gets its own tag and markup, through `cleanBlock`. |
@@ -626,6 +628,15 @@ Changes made here while folding in the four plan reviews (`03_plan_free_writing_
 | T10 | The merge test would pass a "longer wins" rule | Accepted | Both directions tested |
 | DR7 | A screen reader heard nothing useful | Accepted | Live region added |
 
+## Build Back-patches
+
+Changes made after the Phase 2 branches merged.
+
+| # | Finding | Disposition | Rationale |
+|---|---------|-------------|-----------|
+| BP1 | A run block whose words sat inside a leaf with a sentence the agent added was neither present nor missing: the walk stopped there, and replay inserted the block again below it with no conflict (`split_not_conflict`'s control) | Accepted | "Joined" means exactly new blocks and nothing else. A leaf with extra words is a conflict on that block; presence-table row added. `normalize.runClash` and `blocks.runClashFor` find it. Fix round: with no block present yet, a block under five words never clashes with the first leaf, which is the page's own next paragraph (code lead finding 3) |
+| BP2 | `foldTypography` folded a drawn dash to "-" but left a typed "--", so the two never matched | Accepted | Runs of hyphens fold to one in the shared normalizer, for every reader; the handled check's local fold is gone |
+
 ## Main Drift, 2026-09-28
 
 Checked against main after the architecture was written: piece-keeps-formatting, handled-check-per-edit, oversized-records, trim-the-drain, refused-reword-floor, hidden-files-plain, and quiet-tab-polling, up to the 2b6eb96 bundle rebuild. compact-draft-history was already in the base. The R14 reproduction was re-run on main, and the size figures come from a script. Both paths are in the plan's spike evidence list.
@@ -643,3 +654,15 @@ Checked against main after the architecture was written: piece-keeps-formatting,
 | MD9 | Rewording a ready or `not_handled` record now takes it off the drain at the first changing keystroke | Accepted | Two sittings section says a half-written run never reaches the agent |
 | MD10 | Folder servers now serve dotfiles | Accepted | Added to the `lahe write` reason for its own one-page server |
 | MD11 | The 2000-character bound, `MAX_BODY_BYTES`, and the draft floor are unchanged; oversized-records' paint guard and stamp rule apply to comments only | No change | Checked; nothing in the design depends on them changing |
+
+## Build Back-patches
+
+Changes the build made to this design, after the flow walk.
+
+| # | Change | Why |
+|---|---|---|
+| BB1 | When the agent rewords the same anchor the reviewer reworded, replay finds where the anchor now stands, raises the choice card with the run on it, and keeps the run on the page after the anchor while the card waits. The anchor itself is written only when the reviewer answers. Before this, the run was held until the answer, so the reviewer's new paragraphs vanished with no card. | The flow walk found the new text disappearing. Showing it beside the card keeps the reviewer's words visible and still leaves the anchor decision to them. |
+| BB2 | An anchor the reviewer never changed, whose words the agent rewrote, marks the run lost rather than placing it after a guess. | Lahe never guesses a location without a card. Boarded as `LAHE-untouched-anchor-rewritten`. |
+| BB3 | Markdown shortcuts match Markdown: `## ` makes h2, `### ` h3, `#### ` h4, and `# ` also makes h2. | The flow walk found `## ` making an h3, which the agent then wrote as `###`. |
+| BB4 | Words the reviewer typed into the tail of a split paragraph make the whole tail one new block. `from_anchor` marks only a tail of the page's own moved words. | A literal agent would drop words marked `from_anchor`, and the two-block alternative split one paragraph into two. |
+

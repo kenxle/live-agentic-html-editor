@@ -25,6 +25,15 @@
 // is estimated: every number is a counter this script increments.
 //
 // Node-only. Not part of the tool.
+//
+// With --run it measures a free-writing session instead: a 5,000-word run
+// typed after one paragraph, 250 paragraphs of 20 words, in real Chromium
+// with the tree's built bundle (run `npm run build:layer` first). It counts
+// browser-storage writes per keystroke and run blocks rebuilt per keystroke;
+// the second is 1 when capture is limited to the caret's block. Storage writes
+// are split into the record's own write (lahe.item.*) and everything else a
+// write brings with it today (the generation stamps and the outbox). Each word goes
+// in as one input event, which is one keystroke to the layer.
 
 "use strict";
 
@@ -35,9 +44,25 @@ var path = require("node:path");
 var args = process.argv.slice(2);
 var asJson = args.indexOf("--json") !== -1;
 var rootArg = args.filter(function (a) {
-  return a !== "--json";
+  return a !== "--json" && a !== "--run";
 })[0];
 var ROOT = path.resolve(rootArg || path.join(__dirname, ".."));
+
+// --run: the free-writing session (docs/features/20260928.01_free_writing,
+// plan Task 2.1) instead of the comment session. It needs a real browser, so it
+// runs before the virtual clock below is installed, and returns.
+if (args.indexOf("--run") !== -1) {
+  runSession().then(
+    function () {
+      process.exit(0);
+    },
+    function (err) {
+      process.stderr.write(String((err && err.stack) || err) + "\n");
+      process.exit(1);
+    }
+  );
+  return;
+}
 
 // ---------------------------------------------------------------------------
 // A virtual clock. Installed before the tree's modules load, so sync.js's
@@ -309,3 +334,104 @@ main().catch(function (err) {
   process.stderr.write(String((err && err.stack) || err) + "\n");
   process.exit(1);
 });
+
+// ---------------------------------------------------------------------------
+// --run: the free-writing session
+// ---------------------------------------------------------------------------
+
+async function runSession() {
+  var playwright = require("@playwright/test");
+  var http = require("node:http");
+  var bundle = fs.readFileSync(path.join(ROOT, "dist", "lahe-layer.js"), "utf8");
+  var page0 = fs.readFileSync(path.join(ROOT, "test", "fixtures", "free_writing", "blog.html"), "utf8");
+  var tag =
+    '<script src="/lahe-layer.js" data-lahe-review="draft-cost-run" data-lahe-token="t" data-lahe-helper="http://127.0.0.1:1"></script>';
+  var server = http.createServer(function (req, res) {
+    if (req.url.indexOf("/lahe-layer.js") === 0) {
+      res.writeHead(200, { "Content-Type": "text/javascript" });
+      res.end(bundle);
+      return;
+    }
+    res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
+    res.end(page0.replace("</body>", tag + "\n</body>"));
+  });
+  await new Promise(function (resolve) {
+    server.listen(0, "127.0.0.1", resolve);
+  });
+  var browser = await playwright.chromium.launch();
+  try {
+    var page = await browser.newPage();
+    await page.addInitScript(function () {
+      var real = Storage.prototype.setItem;
+      window.__drafts = { writes: 0, records: 0, keys: {} };
+      Storage.prototype.setItem = function (k, v) {
+        window.__drafts.writes += 1;
+        if (String(k).indexOf("lahe.item.") === 0) window.__drafts.records += 1;
+        window.__drafts.keys[k] = (window.__drafts.keys[k] || 0) + 1;
+        return real.call(this, k, v);
+      };
+    });
+    await page.goto("http://127.0.0.1:" + server.address().port + "/");
+    await page.waitForFunction(function () {
+      return !!(window.__lahe && window.__lahe.booted);
+    });
+    await page.evaluate(function () {
+      window.__lahe.rail.collapse(true);
+      var p = document.getElementById("p1");
+      var r = document.createRange();
+      r.selectNodeContents(p);
+      r.collapse(false);
+      var s = window.getSelection();
+      s.removeAllRanges();
+      s.addRange(r);
+    });
+    await page.keyboard.press("ControlOrMeta+Shift+KeyE");
+    await page.waitForFunction(function () {
+      return window.__lahe.isEditing();
+    });
+    var PARAGRAPHS = Number(process.env.FW_PARAGRAPHS || 250);
+    var WORDS = 20;
+    var counts = { keystrokes: 0, words: 0, record_writes: 0, max_record_writes_per_keystroke: 0, storage_writes: 0, blocks_rebuilt: 0, max_writes_per_keystroke: 0, max_blocks_per_keystroke: 0 };
+    var started = Date.now();
+    for (var p = 0; p < PARAGRAPHS; p += 1) {
+      await page.keyboard.press("Enter");
+      for (var w = 0; w < WORDS; w += 1) {
+        var before = await page.evaluate(function () {
+          return { writes: window.__drafts.writes, records: window.__drafts.records, blocks: window.__lahe.handle.editing.counters.blocksCaptured };
+        });
+        await page.keyboard.insertText((w ? " " : "") + "word" + p + "x" + w);
+        var after = await page.evaluate(function () {
+          return { writes: window.__drafts.writes, records: window.__drafts.records, blocks: window.__lahe.handle.editing.counters.blocksCaptured };
+        });
+        var dr = after.records - before.records;
+        counts.record_writes += dr;
+        counts.max_record_writes_per_keystroke = Math.max(counts.max_record_writes_per_keystroke, dr);
+        var dw = after.writes - before.writes;
+        var db = after.blocks - before.blocks;
+        counts.keystrokes += 1;
+        counts.words += 1;
+        counts.storage_writes += dw;
+        counts.blocks_rebuilt += db;
+        counts.max_writes_per_keystroke = Math.max(counts.max_writes_per_keystroke, dw);
+        counts.max_blocks_per_keystroke = Math.max(counts.max_blocks_per_keystroke, db);
+      }
+    }
+    counts.session_ms = Date.now() - started;
+    var run = await page.evaluate(function () {
+      var item = window.__lahe.items()[0];
+      return { blocks: item.new_blocks.length, bytes: JSON.stringify(item).length };
+    });
+    counts.run_blocks = run.blocks;
+    counts.record_json_chars = run.bytes;
+    await page.keyboard.press("Escape");
+    if (asJson) process.stdout.write(JSON.stringify(counts, null, 2) + "\n");
+    else {
+      Object.keys(counts).forEach(function (key) {
+        process.stdout.write(key + "\t" + counts[key] + "\n");
+      });
+    }
+  } finally {
+    await browser.close();
+    server.close();
+  }
+}

@@ -154,6 +154,16 @@ function foldEvents(state, events, options) {
         }
         return;
       }
+      // THE FOLD CHECKS WHAT IT FOLDS (security review 8). log.append refuses
+      // a run record that fails validateRun, but a line already in the log (an
+      // older helper's, or one written straight into the file) never passed
+      // that door. It is dropped here with the same code, and the drop is
+      // reported like any other.
+      var runProblem = record.validateRun(next);
+      if (runProblem) {
+        if (onDropped) onDropped(event, runProblem.code + ": " + runProblem.reason);
+        return;
+      }
       var prev = byId[next[F.ID]];
       if (!prev) state.order.push(next[F.ID]);
       // A continuation is composed against the reply the browser last saw.
@@ -266,6 +276,9 @@ function foldEvents(state, events, options) {
     if (type === EVENT.REVIEW_CREATED) {
       if (!state.times.started_at) state.times.started_at = ts;
       if (typeof event.agent_session_id === "string") state.times.agent_session_id = event.agent_session_id;
+      // A `lahe write` notes review (free writing). It rides the created
+      // event, so every fold of this log agrees on it.
+      if (event.notes === true) state.times.notes = true;
       return;
     }
 
@@ -392,6 +405,7 @@ function projectFold(reviewId, state, options) {
     started_at: state.times.started_at,
     ended_at: state.times.ended_at,
     agent_session_id: state.times.agent_session_id,
+    notes: state.times.notes === true,
     generated_at: opts.generated_at || undefined,
     items: actionableItems(itemsOf(state)),
     source_hint: sourceHintOf(state),

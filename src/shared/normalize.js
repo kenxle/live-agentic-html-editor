@@ -91,15 +91,22 @@
   }
 
   // An additional transform, applied ON TOP of normalizeText, never instead of
-  // it. Verification (3B) uses it for a second pass when the literal pass
-  // misses, because a markdown source holds a straight quote where the built
-  // HTML holds a curly one. Nothing else may use it: replay folding typography
-  // would silently discard a reviewer's punctuation fix.
+  // it. A run of hyphens folds to one, after the dashes do: a Markdown source
+  // spells a dash "--" or "---" and a smart renderer draws it as one, so the
+  // typed and the rendered text must fold to the same string for every reader
+  // (the run walk, the page check, the handled check, the split search).
+  // Verification (3B) uses it for a second pass when the literal pass misses,
+  // because a markdown source holds a straight quote where the built HTML
+  // holds a curly one. The fold decides only where a block is, never whether
+  // its words are right: replay and the page check compare a found block with
+  // each revision WITHOUT the fold, so a reviewer's punctuation fix (well--known
+  // to well-known) is still written and still checked.
   function foldTypography(input) {
     return normalizeText(input)
       .replace(/[\u2018\u2019\u201A\u201B\u2032]/g, "'")
       .replace(/[\u201C\u201D\u201E\u201F\u2033]/g, '"')
       .replace(/[\u2010\u2011\u2012\u2013\u2014\u2015\u2212]/g, "-")
+      .replace(/-{2,}/g, "-")
       .replace(/\u2026/g, "...");
   }
 
@@ -1083,6 +1090,678 @@
   }
 
   // ---------------------------------------------------------------------------
+  // Free writing: the block allowlist, the block reader, and the run matcher
+  // ---------------------------------------------------------------------------
+  //
+  // docs/features/20260928.01_free_writing, architecture "Security & Privacy
+  // Notes" and "Replay after a rebuild". A run record carries new blocks as
+  // {tag, html}. Three things read them, and all three live here so the helper
+  // and the layer run the same code:
+  //
+  //   cleanBlock   the one allowlist. It runs at capture, at the helper on
+  //                append (which REFUSES a failing event rather than cleaning
+  //                it, so a forgery shows up), and before every page write.
+  //   leafBlocks   the string reader: a page's leaf blocks in document order.
+  //                src/layer/blocks.js walks the live DOM by the same rule.
+  //   matchRun     which of a run's blocks the page already shows, and where.
+
+  // The six tags a record may carry. BLOCK_TAGS stays the text reader's list.
+  var WRITABLE_BLOCK_TAGS = ["p", "h2", "h3", "h4", "ul", "ol"];
+  var LIST_BLOCK_TAGS = { ul: 1, ol: 1 };
+
+  // A block under this many words is never searched for across the page: such
+  // words ("Yes", "Notes") appear on pages for other reasons.
+  var SHORT_BLOCK_WORDS = 5;
+  // How many leaves past the run's own length the walk reads before it stops.
+  var RUN_WALK_SLACK = 2;
+
+  // The refusal code, spelled once in failures.js.
+  var RUN_BLOCK_REFUSED = "RUN_BLOCK_REFUSED";
+
+  // How deep a block's elements may nest, li included. A real block is a few
+  // levels deep (four inline tags and li exist). The cap bounds the closing-tag
+  // scan and every recursive pass below, so hostile markup costs linear time
+  // and never overflows the stack (security review, finding 2).
+  var MAX_BLOCK_NESTING = 32;
+
+  // Inline elements a new block may hold, and the constant each is written as.
+  // Nothing in a record ever names an element: output tags come from here.
+  var INLINE_ALLOWED = {
+    strong: "strong",
+    b: "strong",
+    em: "em",
+    i: "em"
+  };
+  INLINE_ALLOWED[NOT_BOLD_TAG] = NOT_BOLD_TAG;
+  INLINE_ALLOWED[NOT_ITALIC_TAG] = NOT_ITALIC_TAG;
+
+  /**
+   * The first `max` words of some text, after normalizeText. `more` is added
+   * when words were cut (an ellipsis for a card line, nothing for a live
+   * region). The one copy: editing, replay and the rail all read it.
+   */
+  function firstWords(text, max, more) {
+    var words = normalizeText(String(text || "")).split(" ").filter(Boolean);
+    return words.length > max ? words.slice(0, max).join(" ") + (more || "") : words.join(" ");
+  }
+
+  var NAMED_ENTITIES = { amp: "&", lt: "<", gt: ">", quot: '"', apos: "'", nbsp: " " };
+
+  // Entities resolved to characters. An unknown named entity stays as its own
+  // literal text, which is what it reads as.
+  function decodeEntities(text) {
+    return String(text).replace(/&(#[xX][0-9a-fA-F]+|#\d+|[A-Za-z]+);/g, function (whole, body) {
+      if (body.charAt(0) === "#") {
+        var code = body.charAt(1) === "x" || body.charAt(1) === "X" ? parseInt(body.slice(2), 16) : parseInt(body.slice(1), 10);
+        if (!isFinite(code) || code <= 0 || code > 0x10ffff) return whole;
+        try {
+          return String.fromCodePoint(code);
+        } catch (err) {
+          return whole;
+        }
+      }
+      var name = body.toLowerCase();
+      return hasOwn(NAMED_ENTITIES, name) ? NAMED_ENTITIES[name] : whole;
+    });
+  }
+
+  function escapeText(text) {
+    return String(text).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  }
+
+  function refuse(reason) {
+    return { code: RUN_BLOCK_REFUSED, reason: reason };
+  }
+
+  function cleanText(raw) {
+    var t = decodeEntities(raw).normalize("NFC").replace(INVISIBLES, "");
+    t = stripAllControls(t);
+    return t.replace(UNICODE_SPACES, " ").replace(/ +/g, " ");
+  }
+
+  /**
+   * The one allowlist for a new block.
+   *
+   * The html is parsed and REBUILT: strong, em, br and the two reset tags, and
+   * li only as a direct child of a ul or ol block. Every attribute is dropped,
+   * text is escaped again on output, and every element is written from the
+   * constants above. Anything else refuses the whole block. Whitespace folds,
+   * a trailing break and empty elements go, and an empty item goes, so the
+   * output is a fixed point: cleaning it again gives it back unchanged.
+   *
+   * @param {string} tag the block's tag
+   * @param {string} html the block's inner markup
+   * @returns {{html: string}|{code: string, reason: string}}
+   */
+  function cleanBlock(tag, html) {
+    var blockTag = typeof tag === "string" ? tag.toLowerCase() : "";
+    if (WRITABLE_BLOCK_TAGS.indexOf(blockTag) === -1) return refuse("tag " + String(tag) + " is not writable");
+    if (typeof html !== "string") return refuse("html must be a string");
+    var isList = hasOwn(LIST_BLOCK_TAGS, blockTag);
+
+    var rootNode = { name: blockTag, children: [] };
+    var stack = [rootNode];
+    var i = 0;
+    var n = html.length;
+    while (i < n) {
+      var lt = html.indexOf("<", i);
+      var textEnd = lt === -1 ? n : lt;
+      if (textEnd > i) {
+        var chunk = cleanText(html.slice(i, textEnd));
+        var top = stack[stack.length - 1];
+        if (isList && top === rootNode) {
+          if (chunk.trim()) return refuse("words outside an item in a list block");
+        } else if (chunk) {
+          top.children.push({ text: chunk });
+        }
+      }
+      if (lt === -1) break;
+      var next = html.charAt(lt + 1);
+      if (next === "!" || next === "?") return refuse("a comment or declaration in a block");
+      var parsed = parseTag(html, lt);
+      if (!parsed) {
+        var cur = stack[stack.length - 1];
+        if (isList && cur === rootNode) return refuse("words outside an item in a list block");
+        cur.children.push({ text: "<" });
+        i = lt + 1;
+        continue;
+      }
+      i = parsed.end;
+      var name = parsed.name;
+      if (parsed.closing) {
+        var want = hasOwn(INLINE_ALLOWED, name) ? INLINE_ALLOWED[name] : name;
+        for (var s = stack.length - 1; s > 0; s -= 1) {
+          if (stack[s].name === want) {
+            stack.length = s;
+            break;
+          }
+        }
+        continue;
+      }
+      var parent = stack[stack.length - 1];
+      if (name === "br") {
+        if (isList && parent === rootNode) return refuse("a break outside an item in a list block");
+        parent.children.push({ br: true });
+        continue;
+      }
+      if (name === "li") {
+        if (!isList) return refuse("li inside a " + blockTag + " block");
+        if (parent !== rootNode) return refuse("a nested item");
+        var li = { name: "li", children: [] };
+        rootNode.children.push(li);
+        if (stack.length > MAX_BLOCK_NESTING) return refuse("nesting deeper than " + MAX_BLOCK_NESTING);
+        stack.push(li);
+        if (parsed.selfClosing) stack.pop();
+        continue;
+      }
+      if (!hasOwn(INLINE_ALLOWED, name)) return refuse("element " + name + " is not allowed in a block");
+      if (isList && parent === rootNode) return refuse("formatting outside an item in a list block");
+      var el = { name: INLINE_ALLOWED[name], children: [] };
+      parent.children.push(el);
+      if (parsed.selfClosing) continue;
+      if (stack.length > MAX_BLOCK_NESTING) return refuse("nesting deeper than " + MAX_BLOCK_NESTING);
+      stack.push(el);
+    }
+
+    var out;
+    if (isList) {
+      var items = [];
+      for (var k = 0; k < rootNode.children.length; k += 1) {
+        var item = finishInline(rootNode.children[k].children);
+        if (item) items.push("<li>" + item + "</li>");
+      }
+      if (!items.length) return refuse("a list block with no words");
+      out = items.join("");
+    } else {
+      out = finishInline(rootNode.children);
+      if (!out) return refuse("a block with no words");
+    }
+    return { html: out };
+  }
+
+  // Tidy one block's (or one item's) inline content and serialize it. Empty
+  // string when it holds no words.
+  function finishInline(children) {
+    var nodes = pruneEmpty(children);
+    trimEdge(nodes, true);
+    trimEdge(nodes, false);
+    dropTrailingBreaks(nodes);
+    nodes = pruneEmpty(nodes);
+    var html = serializeInline(nodes);
+    return textOf(html) ? html : "";
+  }
+
+  function hasWords(node) {
+    if (node.text !== undefined) return node.text.trim() !== "";
+    if (node.br) return false;
+    for (var i = 0; i < node.children.length; i += 1) if (hasWords(node.children[i])) return true;
+    return false;
+  }
+
+  // An element with no words goes, and a text node that is only space between
+  // two breaks or at an edge is left to trimEdge.
+  //
+  // Neighbouring text (text either side of an element that went) is joined
+  // once, at the end of the run of text, never once per piece: joining per
+  // piece rescanned the whole joined string each time, which is N x N on a
+  // block of many empty elements.
+  function pruneEmpty(nodes) {
+    var out = [];
+    var pending = null;
+    function flush() {
+      if (!pending) return;
+      out.push({ text: pending.length === 1 ? pending[0] : pending.join("").replace(/ +/g, " ") });
+      pending = null;
+    }
+    for (var i = 0; i < nodes.length; i += 1) {
+      var node = nodes[i];
+      if (node.children) {
+        if (!hasWords(node)) continue;
+        flush();
+        out.push({ name: node.name, children: pruneEmpty(node.children) });
+      } else if (node.text !== undefined) {
+        if (!node.text) continue;
+        (pending = pending || []).push(node.text);
+      } else {
+        flush();
+        out.push(node);
+      }
+    }
+    flush();
+    return out;
+  }
+
+  // Trim the space at the start (or end) of the content, reaching into the
+  // first (or last) element, and past any break.
+  function trimEdge(nodes, atStart) {
+    var guard = 0;
+    while (nodes.length && guard < 1000) {
+      guard += 1;
+      var idx = atStart ? 0 : nodes.length - 1;
+      var node = nodes[idx];
+      if (node.text !== undefined) {
+        node.text = atStart ? node.text.replace(/^ +/, "") : node.text.replace(/ +$/, "");
+        if (!node.text) {
+          nodes.splice(idx, 1);
+          continue;
+        }
+        return;
+      }
+      if (node.children) {
+        trimEdge(node.children, atStart);
+        if (!node.children.length) {
+          nodes.splice(idx, 1);
+          continue;
+        }
+        return;
+      }
+      if (node.br && atStart) {
+        nodes.splice(idx, 1);
+        continue;
+      }
+      return;
+    }
+  }
+
+  function dropTrailingBreaks(nodes) {
+    while (nodes.length) {
+      var last = nodes[nodes.length - 1];
+      if (last.br) {
+        nodes.pop();
+        continue;
+      }
+      if (last.text !== undefined && !last.text.trim()) {
+        nodes.pop();
+        continue;
+      }
+      if (last.children) {
+        dropTrailingBreaks(last.children);
+        if (!last.children.length) {
+          nodes.pop();
+          continue;
+        }
+        if (last.children[last.children.length - 1].text !== undefined) {
+          var t = last.children[last.children.length - 1];
+          t.text = t.text.replace(/ +$/, "");
+        }
+      } else if (last.text !== undefined) {
+        last.text = last.text.replace(/ +$/, "");
+      }
+      return;
+    }
+  }
+
+  function serializeInline(nodes) {
+    var out = "";
+    for (var i = 0; i < nodes.length; i += 1) {
+      var node = nodes[i];
+      if (node.text !== undefined) out += escapeText(node.text);
+      else if (node.br) out += "<br>";
+      else out += "<" + node.name + ">" + serializeInline(node.children) + "</" + node.name + ">";
+    }
+    return out;
+  }
+
+  /**
+   * A block's words, the way every reader of a run compares them: entities
+   * resolved, whitespace folded, typography folded. Tags and markup never
+   * decide presence, so none survive here.
+   */
+  function blockWords(html) {
+    if (typeof html !== "string") return "";
+    return foldTypography(decodeEntities(textOf(html)));
+  }
+
+  // ---------------------------------------------------------------------------
+  // The string block reader
+  // ---------------------------------------------------------------------------
+  //
+  // A small tree builder, enough to agree with a browser's parse on the cases
+  // the fixtures name: a p closed by a block start, an li closed by the next li,
+  // raw-text elements (script, style), inert template contents, comments.
+
+  var RAW_TEXT_TAGS = { script: 1, style: 1, textarea: 1, title: 1, xmp: 1, noscript: 1 };
+  // Start tags that close an open p (the HTML parser's "close a p element").
+  var CLOSES_P = {
+    address: 1, article: 1, aside: 1, blockquote: 1, details: 1, div: 1, dl: 1, fieldset: 1,
+    figcaption: 1, figure: 1, footer: 1, form: 1, h1: 1, h2: 1, h3: 1, h4: 1, h5: 1, h6: 1,
+    header: 1, hgroup: 1, hr: 1, main: 1, nav: 1, ol: 1, p: 1, pre: 1, section: 1, table: 1,
+    ul: 1, li: 1, dd: 1, dt: 1, summary: 1
+  };
+
+  function parseTree(html) {
+    var rootNode = { name: "#root", attrs: [], children: [], parent: null };
+    var cur = rootNode;
+    var i = 0;
+    var n = html.length;
+
+    function openName(name) {
+      for (var node = cur; node && node !== rootNode; node = node.parent) if (node.name === name) return node;
+      return null;
+    }
+    function closeTo(node) {
+      cur = node.parent;
+    }
+
+    while (i < n) {
+      var lt = html.indexOf("<", i);
+      var end = lt === -1 ? n : lt;
+      if (end > i) cur.children.push({ text: html.slice(i, end) });
+      if (lt === -1) break;
+      if (html.substr(lt, 4) === "<!--") {
+        var ce = html.indexOf("-->", lt + 4);
+        i = ce === -1 ? n : ce + 3;
+        continue;
+      }
+      var nx = html.charAt(lt + 1);
+      if (nx === "!" || nx === "?") {
+        var ge = html.indexOf(">", lt);
+        i = ge === -1 ? n : ge + 1;
+        continue;
+      }
+      var tag = parseTag(html, lt);
+      if (!tag) {
+        cur.children.push({ text: "<" });
+        i = lt + 1;
+        continue;
+      }
+      i = tag.end;
+      var name = tag.name;
+      if (tag.closing) {
+        var open = openName(name);
+        if (open) closeTo(open);
+        continue;
+      }
+      if (hasOwn(CLOSES_P, name)) {
+        var p = openName("p");
+        if (p) closeTo(p);
+      }
+      if (name === "li") {
+        for (var node = cur; node && node !== rootNode; node = node.parent) {
+          if (node.name === "ul" || node.name === "ol") break;
+          if (node.name === "li") {
+            closeTo(node);
+            break;
+          }
+        }
+      }
+      var el = { name: name, attrs: tag.attrs, children: [], parent: cur };
+      cur.children.push(el);
+      if (hasOwn(VOID_TAGS, name) || tag.selfClosing) continue;
+      if (hasOwn(RAW_TEXT_TAGS, name)) {
+        var close = html.toLowerCase().indexOf("</" + name, i);
+        var stop = close === -1 ? n : close;
+        el.children.push({ text: html.slice(i, stop), raw: true });
+        var gt = close === -1 ? -1 : html.indexOf(">", close);
+        i = gt === -1 ? n : gt + 1;
+        continue;
+      }
+      cur = el;
+    }
+    return rootNode;
+  }
+
+  function attrOf(el, name) {
+    for (var i = 0; i < el.attrs.length; i += 1) if (el.attrs[i].name === name) return el.attrs[i].value;
+    return null;
+  }
+
+  // Not page content at all: skipped by the walk and by the leaf test.
+  function isNotContent(el) {
+    if (hasOwn(DROP_SUBTREE_TAGS, el.name) || el.name === "head") return true;
+    if (attrOf(el, markers.TOOL_ATTR) === markers.ROLE_CHROME) return true;
+    return attrOf(el, "id") === markers.OVERLAY_ROOT_ID;
+  }
+
+  // Skipped by the walk. The marked file-name title is still a block for the
+  // leaf test, so the hero that holds only the title is not read as a leaf.
+  function isSkippedElement(el) {
+    return isNotContent(el) || attrOf(el, markers.FILE_TITLE_ATTR) === markers.FILE_TITLE_VALUE;
+  }
+
+  function serializeTree(nodes) {
+    var out = "";
+    for (var i = 0; i < nodes.length; i += 1) {
+      var node = nodes[i];
+      if (node.text !== undefined) {
+        out += node.text;
+        continue;
+      }
+      var attrs = "";
+      for (var a = 0; a < node.attrs.length; a += 1) {
+        attrs += " " + node.attrs[a].name + '="' + escapeAttrValue(node.attrs[a].value) + '"';
+      }
+      out += "<" + node.name + attrs + ">";
+      if (hasOwn(VOID_TAGS, node.name)) continue;
+      out += serializeTree(node.children) + "</" + node.name + ">";
+    }
+    return out;
+  }
+
+  function hasBlockInside(el) {
+    for (var i = 0; i < el.children.length; i += 1) {
+      var child = el.children[i];
+      if (!child.name || isNotContent(child)) continue;
+      if (hasOwn(BLOCK_TAGS, child.name) || hasBlockInside(child)) return true;
+    }
+    return false;
+  }
+
+  /**
+   * The leaf blocks of a markup string, in document order.
+   *
+   * A leaf has a tag in BLOCK_TAGS and no BLOCK_TAGS element inside it; a ul or
+   * ol is always a leaf and its items are its lines. Loose text in a block that
+   * holds blocks (the "Section N" label beside an h2) is never a leaf. Leaves
+   * with no words, tool chrome, and the marked file-name title are skipped.
+   *
+   * @param {string} html
+   * @returns {Array<{tag: string, html: string, words: string}>}
+   */
+  function leafBlocks(html) {
+    if (typeof html !== "string") return [];
+    var out = [];
+    (function walk(nodes) {
+      for (var i = 0; i < nodes.length; i += 1) {
+        var el = nodes[i];
+        if (!el.name || isSkippedElement(el)) continue;
+        var isBlock = hasOwn(BLOCK_TAGS, el.name);
+        if (isBlock && (hasOwn(LIST_BLOCK_TAGS, el.name) || !hasBlockInside(el))) {
+          var inner = cleanMarkup(serializeTree(el.children));
+          var words = blockWords(inner);
+          if (words) out.push({ tag: el.name, html: inner, words: words });
+          continue;
+        }
+        walk(el.children);
+      }
+    })(parseTree(html).children);
+    return out;
+  }
+
+  // ---------------------------------------------------------------------------
+  // The run matcher
+  // ---------------------------------------------------------------------------
+
+  function wordsFor(entry) {
+    if (!entry) return "";
+    if (typeof entry.words === "string") return entry.words;
+    return blockWords(entry.html);
+  }
+
+  function joinWords(list) {
+    return list.filter(Boolean).join(" ");
+  }
+
+  /**
+   * Which of a run's blocks the leaves already show, walking in run order.
+   *
+   * A block is present as a WHOLE leaf, JOINED with the blocks after it inside
+   * one leaf (the leaf's words are exactly two or more consecutive blocks), or
+   * SPLIT over two or more consecutive leaves. Tag and markup never decide
+   * presence. Leaves that match nothing are skipped only before the first
+   * match; after one, the first leaf that matches no remaining block stops the
+   * walk. The walk never reads more than blocks.length + RUN_WALK_SLACK leaves.
+   *
+   * @param {Array<{tag: string, html: string}>} blocks the run
+   * @param {Array<{tag: string, html: string, words?: string}>} leaves from the insert point
+   * @returns {Array<{index: number, status: string, leaves: number[]}>}
+   */
+  function matchRun(blocks, leaves) {
+    var runBlocks = Array.isArray(blocks) ? blocks : [];
+    var pageLeaves = Array.isArray(leaves) ? leaves : [];
+    var bw = runBlocks.map(wordsFor);
+    var lw = pageLeaves.map(wordsFor);
+    var limit = Math.min(lw.length, runBlocks.length + RUN_WALK_SLACK);
+    var result = runBlocks.map(function (_b, index) {
+      return { index: index, status: "missing", leaves: [] };
+    });
+    var bi = 0;
+    var li = 0;
+    var matched = 0;
+
+    function tryAt(b, l) {
+      if (!bw[b]) return null;
+      if (lw[l] === bw[b]) return { status: "whole", blocks: 1, leaves: 1 };
+      // joined: this leaf is exactly blocks b..b+k-1, k >= 2
+      var acc = bw[b];
+      for (var k = b + 1; k < bw.length; k += 1) {
+        acc = joinWords([acc, bw[k]]);
+        if (acc === lw[l]) return { status: "joined", blocks: k - b + 1, leaves: 1 };
+        if (acc.length > lw[l].length) break;
+      }
+      // split: this block is exactly leaves l..l+m-1, m >= 2
+      var spread = lw[l];
+      for (var m = l + 1; m < limit; m += 1) {
+        spread = joinWords([spread, lw[m]]);
+        if (spread === bw[b]) return { status: "split", blocks: 1, leaves: m - l + 1 };
+        if (spread.length > bw[b].length) break;
+      }
+      return null;
+    }
+
+    while (li < limit && bi < runBlocks.length) {
+      var hit = null;
+      var at = -1;
+      for (var b = bi; b < runBlocks.length; b += 1) {
+        hit = tryAt(b, li);
+        if (hit) {
+          at = b;
+          break;
+        }
+      }
+      if (!hit) {
+        if (matched > 0) break;
+        li += 1;
+        continue;
+      }
+      var leafList = [];
+      for (var x = 0; x < hit.leaves; x += 1) leafList.push(li + x);
+      for (var y = 0; y < hit.blocks; y += 1) {
+        result[at + y] = { index: at + y, status: hit.status, leaves: leafList.slice() };
+      }
+      matched += 1;
+      bi = at + hit.blocks;
+      li += hit.leaves;
+    }
+    return result;
+  }
+
+  // Do these words sit inside this leaf's words as whole words, with more
+  // words around them? A letter or digit on either side is a longer word, not
+  // a boundary ("Beta" is not inside "Betamax").
+  var WORD_CHAR = /[\p{L}\p{N}]/u;
+  function heldInside(leafWords, words) {
+    if (!words || !leafWords || leafWords === words || leafWords.length <= words.length) return false;
+    var from = 0;
+    for (;;) {
+      var at = leafWords.indexOf(words, from);
+      if (at === -1) return false;
+      var before = at === 0 ? "" : leafWords.charAt(at - 1);
+      var after = leafWords.charAt(at + words.length);
+      if ((!before || !WORD_CHAR.test(before)) && (!after || !WORD_CHAR.test(after))) return true;
+      from = at + 1;
+    }
+  }
+
+  /**
+   * A run block whose words the page shows inside a leaf that also holds
+   * words the reviewer never typed (the agent added a sentence to it).
+   *
+   * "Joined" is exact: a leaf whose words are exactly two or more new blocks.
+   * A leaf holding a block's words plus anything else is not presence, and it
+   * is not a missing block either, since inserting the block would show the
+   * reviewer's words twice. It is a clash on that block, and replay writes
+   * nothing until the reviewer answers.
+   *
+   * Only the leaf where the missing block would sit is read: the one right
+   * after the last block the walk found, or the first leaf after the insert
+   * point when the walk found none. So a short block ("Notes") is never a
+   * clash with a paragraph further down that happens to use the word. When
+   * consecutive missing blocks all sit inside that leaf, the clash covers
+   * them all.
+   *
+   * With nothing matched yet, that first leaf is usually the page's own next
+   * paragraph (the agent has not placed the run). A block of fewer than
+   * SHORT_BLOCK_WORDS words ("Next", "Yes") sits inside such a paragraph for
+   * other reasons, so it only clashes after an earlier block matched.
+   *
+   * @param {Array<{tag: string, html: string}>} blocks the run
+   * @param {Array<{tag: string, html: string, words?: string}>} leaves from the insert point
+   * @returns {{index: number, blocks: number, leaf: number}|null} the first clash
+   */
+  function wordTotal(words) {
+    return words ? words.split(" ").length : 0;
+  }
+
+  function runClash(blocks, leaves) {
+    var runBlocks = Array.isArray(blocks) ? blocks : [];
+    var pageLeaves = Array.isArray(leaves) ? leaves : [];
+    var matched = matchRun(runBlocks, pageLeaves);
+    var bw = runBlocks.map(wordsFor);
+    var lw = pageLeaves.map(wordsFor);
+    var limit = Math.min(lw.length, runBlocks.length + RUN_WALK_SLACK);
+    var used = {};
+    matched.forEach(function (m) {
+      m.leaves.forEach(function (l) {
+        used[l] = true;
+      });
+    });
+    var nextLeaf = 0;
+    for (var i = 0; i < matched.length; i += 1) {
+      var m = matched[i];
+      if (m.status !== "missing") {
+        nextLeaf = m.leaves[m.leaves.length - 1] + 1;
+        continue;
+      }
+      if (i > 0 && matched[i - 1].status === "missing") continue;
+      if (nextLeaf >= limit || used[nextLeaf]) continue;
+      var leafWords = lw[nextLeaf];
+      if (nextLeaf === 0 && wordTotal(bw[i]) < SHORT_BLOCK_WORDS) continue;
+      if (!heldInside(leafWords, bw[i])) continue;
+      var count = 1;
+      var acc = bw[i];
+      for (var k = i + 1; k < matched.length && matched[k].status === "missing"; k += 1) {
+        acc = joinWords([acc, bw[k]]);
+        if (!heldInside(leafWords, acc)) break;
+        count += 1;
+      }
+      return { index: i, blocks: count, leaf: nextLeaf };
+    }
+    return null;
+  }
+
+  /** The run's words, skipping the from_anchor tail (those words moved). */
+  function runWords(blocks) {
+    var total = 0;
+    (Array.isArray(blocks) ? blocks : []).forEach(function (b) {
+      if (!b || b.from_anchor === true) return;
+      var words = normalizeText(decodeEntities(textOf(typeof b.html === "string" ? b.html : "")));
+      if (words) total += words.split(" ").length;
+    });
+    return total;
+  }
+
+  // ---------------------------------------------------------------------------
   // canonicalTarget: THE target identity
   // ---------------------------------------------------------------------------
   //
@@ -1255,6 +1934,21 @@
     isLoopbackHost: isLoopbackHost,
     targetSlug: targetSlug,
     SLUG_MAX: SLUG_MAX,
-    SAFE_SCHEMES: SAFE_SCHEMES
+    SAFE_SCHEMES: SAFE_SCHEMES,
+    DROP_SUBTREE_TAGS: DROP_SUBTREE_TAGS,
+    WRITABLE_BLOCK_TAGS: WRITABLE_BLOCK_TAGS,
+    MAX_BLOCK_NESTING: MAX_BLOCK_NESTING,
+    SHORT_BLOCK_WORDS: SHORT_BLOCK_WORDS,
+    RUN_WALK_SLACK: RUN_WALK_SLACK,
+    INLINE_ALLOWED: INLINE_ALLOWED,
+    firstWords: firstWords,
+    RUN_BLOCK_REFUSED: RUN_BLOCK_REFUSED,
+    decodeEntities: decodeEntities,
+    cleanBlock: cleanBlock,
+    blockWords: blockWords,
+    leafBlocks: leafBlocks,
+    matchRun: matchRun,
+    runClash: runClash,
+    runWords: runWords
   };
 });

@@ -80,7 +80,12 @@ function scriptTagFor(config) {
     attrs.HELPER +
     '="' +
     config.helper +
-    '"></script>'
+    '"' +
+    // A notes review (`lahe write`) marks its script tag, and only a notes
+    // review opens an empty page ready to type. protocol.SCRIPT_ATTR.NOTES is
+    // F3's; the literal is the fallback until that lands on this branch.
+    (config.notes === true ? " " + (attrs.NOTES || "data-lahe-notes") + '="true"' : "") +
+    "></script>"
   );
 }
 

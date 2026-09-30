@@ -496,3 +496,19 @@ test("topLevelBlocks: cuts markup at its top-level paragraphs, and refuses what 
   assert.equal(topLevelBlocks('One.<p><img src="a.png"></p>'), null, "markup with no words is not a paragraph");
   assert.equal(topLevelBlocks(null), null);
 });
+
+// A straight "--" or "---" is how a Markdown source spells a dash, and a smart
+// renderer draws it as one. Every reader folds through foldTypography (and
+// blockWords, on top of it), so a run of hyphens folds here once, for all.
+test("foldTypography folds a run of hyphens to one, so a typed -- matches a rendered dash", () => {
+  assert.equal(n.foldTypography("then -- left"), "then - left");
+  assert.equal(n.foldTypography("then---left"), "then-left");
+  assert.equal(n.foldTypography("then -- left"), n.foldTypography("then — left"));
+  assert.equal(n.foldTypography("then --- left"), n.foldTypography("then – left"));
+  assert.equal(n.foldTypography("re-asking"), "re-asking");
+});
+
+test("blockWords agrees: a block typed with -- has the words of the rendered dash", () => {
+  assert.equal(n.blockWords("She said no -- then left"), n.blockWords("She said no &#8212; then left"));
+  assert.equal(n.blockWords("<p>a — b</p>"), "a - b");
+});

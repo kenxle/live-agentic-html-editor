@@ -82,7 +82,10 @@
       root.LAHE.failures,
       root.LAHE.record,
       root.LAHE.highlight,
-      root.LAHE.protocol
+      root.LAHE.protocol,
+      root.LAHE.gestures,
+      root.LAHE.normalize,
+      root.LAHE.blocks
     );
   } else {
     module.exports = factory(
@@ -90,10 +93,22 @@
       require("../shared/failures.js"),
       require("../shared/record.js"),
       require("./highlight.js"),
-      require("../shared/protocol.js")
+      require("../shared/protocol.js"),
+      require("../shared/gestures.js"),
+      require("../shared/normalize.js"),
+      require("./blocks.js")
     );
   }
-})(typeof globalThis !== "undefined" ? globalThis : this, function (markers, failuresModule, record, highlightModule, protocol) {
+})(typeof globalThis !== "undefined" ? globalThis : this, function (
+  markers,
+  failuresModule,
+  record,
+  highlightModule,
+  protocol,
+  gestures,
+  normalize,
+  blocksModule
+) {
   "use strict";
 
   // D10's three tabs. Contents come from the three tab files; the shell is
@@ -111,6 +126,19 @@
    * how the two drift apart. Pure: item in, tab name out, no card required, so
    * it answers for an item the rail has never been handed.
    */
+  // The agent's proofreading question on a run, not yet answered. The same
+  // test as tab_done's isProofreadQuestion, on the record alone.
+  function isProofreadWaiting(item) {
+    var reply = item && item[record.FIELD.REPLY];
+    return (
+      !!reply &&
+      reply.status === record.REPLY_STATUS.QUESTION &&
+      reply.proofread === true &&
+      item[record.FIELD.STATE] === record.STATE.READY &&
+      record.isRunRecord(item)
+    );
+  }
+
   function paneForItem(item) {
     var kind = item[record.FIELD.KIND];
     // The state the REVIEWER is shown, which is the state their card is placed
@@ -119,6 +147,11 @@
     // (record.displayState, and Ken on 2026-09-15).
     var state = record.displayState(item);
     if (state === record.STATE.HANDLED) return TAB.DONE;
+    // A proofreading question waits on the reviewer, not the agent, so its
+    // card goes back to Active until they answer (wireframe 06b: "The card is
+    // back on Active because it needs an answer"). Once answered it waits on
+    // the agent again, and goes back to Edits with every other hand edit.
+    if (isProofreadWaiting(item)) return TAB.ACTIVE;
     if (kind === record.KIND.EDIT || kind === record.KIND.FORMAT_ONLY || kind === record.KIND.DELETE) {
       return TAB.EDITS;
     }
@@ -229,6 +262,9 @@
   function holdCountText(n) {
     return "Holding, " + n + " queued";
   }
+  // The state chip on an item the helper refused. Never "Ready", which reads as
+  // sent (plan Task 3.2).
+  var NOT_SENT_LABEL = "Not sent";
   var KIND_LABEL = {
     comment: "Comment",
     edit: "Edit",
@@ -529,8 +565,15 @@
     ".pane{flex:1;overflow-y:auto;padding:12px;display:none;flex-direction:column;gap:10px}",
     ".pane[data-current='true']{display:flex}",
     ".empty{color:var(--ink-faint);font-size:12px;padding:18px 4px;text-align:center}",
-    ".pane:not(:has(.card)) .empty{display:block}",
-    ".pane:has(.card) .empty{display:none}",
+    ".pane:not(:has(.card:not([data-lahe-blank]))) .empty{display:block}",
+    ".pane:has(.card:not([data-lahe-blank])) .empty{display:none}",
+    ".card[data-lahe-blank]{display:none}",
+    // The empty-page lines: read left to right like the card text they stand in
+    // for, with the first line as a small heading.
+    ".empty[data-lahe-empty='page']{text-align:left;padding:14px 6px;flex-direction:column;gap:7px}",
+    ".pane:not(:has(.card:not([data-lahe-blank]))) .empty[data-lahe-empty='page']{display:flex}",
+    ".empty__title{margin:0;font-size:13px;font-weight:600;color:var(--ink)}",
+    ".empty__line{margin:0;font-size:12.5px;line-height:1.45;color:var(--ink-soft)}",
 
     // --- cards --------------------------------------------------------------
     ".card{background:var(--paper);border:1px solid var(--line);border-radius:var(--radius-sm);",
@@ -623,6 +666,7 @@
     ".card__state[data-state='handled']{color:var(--good);background:transparent;",
     "border:1px solid currentColor}",
     ".card__state[data-state='not_handled']{color:var(--warn);background:var(--warn-wash)}",
+    ".card__state[data-state='refused']{color:var(--warn);background:var(--warn-wash)}",
     // A quote rule, which is what a quote has looked like since print. It is
     // decoration, not a signal: it says "these are the page's words, not the
     // reviewer's," and it never means anything is new or unread.
@@ -805,6 +849,7 @@
     ":host([data-lahe-scheme='dark']) .refusal__btn{color:#12151a}",
     ".refusal__btn:hover{filter:brightness(1.06)}",
     ".refusal__btn[disabled]{opacity:.6;cursor:default}",
+    ".refusal__btn[hidden]{display:none}",
 
     // The confirm before the door. There is no window.confirm anywhere in this
     // library: a browser dialog is the page's chrome, not the rail's, and it
@@ -1229,6 +1274,199 @@
     return kept.replace(/[\s,.;:!?-]+$/, "") + "…";
   }
 
+  // ---------------------------------------------------------------------------
+  // A free-writing record, read the way a reviewer reads it
+  // ---------------------------------------------------------------------------
+  //
+  // A run record's `change` is written for the agent ("Added 3 blocks after this
+  // paragraph: h2, p, ul. Their words are in new_blocks."). The reviewer gets
+  // the plan's pinned two lines instead: where the new text went, and its shape
+  // by count. Both lines are counted by code, never typed by hand. Module scope
+  // and pure, because the folded line (here) and the Edits row (tab_edits.js)
+  // must say the same thing.
+
+  // The first few words of a block on a card, as replay's card notes cut them.
+  var RUN_FIRST_WORDS = 6;
+  // A heading is named in full up to this many words.
+  var RUN_HEADING_WORDS = 8;
+
+  function wordsOfHtml(html) {
+    return normalize.normalizeText(normalize.textOf(typeof html === "string" ? html : ""));
+  }
+
+  function firstWordsOf(text, max) {
+    return normalize.firstWords(text, max, "...");
+  }
+
+  // The block menu's own labels, from gestures.js, so the card and the menu
+  // cannot name a type two ways.
+  function blockLabel(tag) {
+    var types = gestures.BLOCK_TYPES;
+    for (var i = 0; i < types.length; i += 1) if (types[i].tag === tag) return types[i].label;
+    return gestures.OTHER_BLOCK_LABEL;
+  }
+
+  function listItemCount(html) {
+    var found = String(html || "").match(/<li[\s>]/gi);
+    return found ? found.length : 0;
+  }
+
+  // One block as a phrase in the shape line. Headings carry their words, a
+  // list its item count; paragraphs are grouped by the caller.
+  function shapePhrase(block) {
+    var tag = block.tag;
+    if (tag === "h1" || tag === "h2" || tag === "h3" || tag === "h4") {
+      // The menu's own names (gestures.BLOCK_TYPES); h1 reads as a heading.
+      var name = blockLabel(tag === "h1" ? "h2" : tag).toLowerCase();
+      return "a " + name + ", '" + firstWordsOf(wordsOfHtml(block.html), RUN_HEADING_WORDS) + "'";
+    }
+    if (tag === "ul" || tag === "ol") {
+      return "a " + listItemCount(block.html) + "-item " + (tag === "ol" ? "numbered list" : "list");
+    }
+    return "a block";
+  }
+
+  function shapeLine(list) {
+    var parts = [];
+    var i = 0;
+    while (i < list.length) {
+      var b = list[i];
+      if (b.from_anchor === true) {
+        parts.push("a " + blockLabel(b.tag).toLowerCase() + " moved out of it");
+        i += 1;
+        continue;
+      }
+      if (b.tag === "p") {
+        var n = 0;
+        while (i < list.length && list[i].tag === "p" && list[i].from_anchor !== true) {
+          n += 1;
+          i += 1;
+        }
+        parts.push(n === 1 ? "a paragraph" : n + " paragraphs");
+        continue;
+      }
+      parts.push(shapePhrase(b));
+      i += 1;
+    }
+    if (!parts.length) return "";
+    var head = parts[0].charAt(0).toUpperCase() + parts[0].slice(1);
+    if (parts.length === 1) return head + ".";
+    var rest = parts.slice(1);
+    var tail = rest.length === 1 ? rest[0] : rest.slice(0, -1).join(", ") + " and " + rest[rest.length - 1];
+    return head + ", then " + tail + ".";
+  }
+
+  /**
+   * The pinned two-line summary of a run record, and its blocks by type.
+   *
+   * @param {Object} item a record
+   * @returns {{first: string, second: string, blocks: Array<{label: string,
+   *   moved: boolean, text: string}>}|null} null for a record with no
+   *   new_blocks, whose row stays as it always was
+   */
+  function runSummary(item) {
+    var F = record.FIELD;
+    if (!item || !Array.isArray(item[F.NEW_BLOCKS]) || !item[F.NEW_BLOCKS].length) return null;
+    var list = item[F.NEW_BLOCKS];
+    var added = list.filter(function (b) {
+      return b && b.from_anchor !== true;
+    });
+    var first;
+    if (item[F.PLACEMENT] === record.PLACEMENT.START_OF_CONTAINER) {
+      first = "New text at the start of the page";
+    } else {
+      var beforeHtml = typeof item[F.BEFORE_HTML] === "string" ? item[F.BEFORE_HTML] : item[F.BEFORE] || "";
+      var anchorAfter = typeof item[F.ANCHOR_AFTER_HTML] === "string" ? item[F.ANCHOR_AFTER_HTML] : beforeHtml;
+      var tagAfter = item[F.ANCHOR_TAG_AFTER];
+      // A split changes the anchor: its paragraph is shorter than it was.
+      var changed = wordsOfHtml(anchorAfter) !== wordsOfHtml(beforeHtml) || (typeof tagAfter === "string" && !!tagAfter);
+      var quoted = "'" + firstWordsOf(wordsOfHtml(beforeHtml), RUN_FIRST_WORDS) + "'";
+      if (!changed) first = "New text after " + quoted;
+      else first = "Edit of " + quoted + (added.length ? " plus new text" : "");
+    }
+    return {
+      first: first,
+      second: shapeLine(list),
+      blocks: list.map(function (b) {
+        return {
+          label: blockLabel(b.tag),
+          moved: b.from_anchor === true,
+          // A list's items one to a line, not a blank line apart.
+          text: normalize
+            .blockText(typeof b.html === "string" ? "<" + b.tag + ">" + b.html + "</" + b.tag + ">" : "")
+            .replace(/\n{2,}/g, "\n")
+        };
+      })
+    };
+  }
+
+  // ---------------------------------------------------------------------------
+  // The empty page
+  // ---------------------------------------------------------------------------
+  //
+  // An empty page opens ready to type (PQ1), and the session persists its
+  // draft at open. That draft holds no words yet, and a card for it would hide
+  // the lines below behind a card that says nothing. So a draft at the start of
+  // the page with no words in it is not drawn and not counted, until the
+  // reviewer types.
+  function isBlankStartDraft(item) {
+    var F = record.FIELD;
+    if (!item || item[F.STATE] !== record.STATE.DRAFT) return false;
+    if (item[F.PLACEMENT] !== record.PLACEMENT.START_OF_CONTAINER) return false;
+    var list = Array.isArray(item[F.NEW_BLOCKS]) ? item[F.NEW_BLOCKS] : [];
+    for (var i = 0; i < list.length; i += 1) if (wordsOfHtml(list[i] && list[i].html)) return false;
+    return !normalize.normalizeText(String(item[F.AFTER] || ""));
+  }
+
+  /**
+   * A draft that changes nothing yet: the reviewer opened a block and has not
+   * typed. Its card showed the whole block struck through, which reads as a
+   * deletion, and moved the Edits count before anything was typed (flow walk,
+   * design problem 6). Such a draft is not drawn and not counted, like the
+   * blank draft an empty page opens with. It is still a draft in the store;
+   * the first keystroke that changes something draws its card.
+   */
+  function isUnchangedDraft(item) {
+    var F = record.FIELD;
+    if (!item || item[F.STATE] !== record.STATE.DRAFT) return false;
+    if (item[F.KIND] !== record.KIND.EDIT && item[F.KIND] !== record.KIND.FORMAT_ONLY) return false;
+    if (item[F.ANCHOR_TAG_AFTER]) return false;
+    var list = Array.isArray(item[F.NEW_BLOCKS]) ? item[F.NEW_BLOCKS] : [];
+    for (var i = 0; i < list.length; i += 1) if (list[i] && wordsOfHtml(list[i].html)) return false;
+    if (Array.isArray(item[F.REMOVE_BLOCKS]) && item[F.REMOVE_BLOCKS].length) return false;
+    // A draft persisted the moment a block opens has no after yet.
+    var noAfter = item[F.AFTER] === null || item[F.AFTER] === undefined;
+    var noAfterHtml = item[F.AFTER_HTML] === null || item[F.AFTER_HTML] === undefined;
+    if (noAfter && noAfterHtml && typeof item[F.ANCHOR_AFTER_HTML] !== "string") return true;
+    var before = normalize.normalizeText(String(item[F.BEFORE] || ""));
+    var after = normalize.normalizeText(String(item[F.AFTER] || ""));
+    if (before !== after) return false;
+    var bh = typeof item[F.BEFORE_HTML] === "string" ? item[F.BEFORE_HTML] : null;
+    var ah = typeof item[F.ANCHOR_AFTER_HTML] === "string" ? item[F.ANCHOR_AFTER_HTML] : typeof item[F.AFTER_HTML] === "string" ? item[F.AFTER_HTML] : null;
+    if (bh === null || ah === null) return bh === ah;
+    return JSON.stringify(normalize.emphasisRuns(bh)) === JSON.stringify(normalize.emphasisRuns(ah));
+  }
+
+  /** A draft the rail does not draw or count: blank, or changing nothing yet. */
+  function isQuietDraft(item) {
+    return isBlankStartDraft(item) || isUnchangedDraft(item);
+  }
+  //
+  // A page with no content blocks (a brand-new notes page from `lahe write`)
+  // has nothing for either tab to list, and "No hand edits yet." says nothing
+  // about what to do. These are the plan's pinned lines. The file name is the
+  // text of the marked file-name title; a page without one gets the
+  // instruction alone.
+  function emptyPageLines(fileName) {
+    var name = typeof fileName === "string" ? fileName.trim() : "";
+    return [
+      "Nothing written yet",
+      name ? "Start typing. Your notes go to " + name + "." : "Start typing.",
+      "Each time you stop writing, everything you wrote in that sitting becomes one card here, and the agent places it in the file.",
+      "The agent only places your words. It organizes the notes when you ask it to."
+    ];
+  }
+
   /**
    * What a folded card says it is about, from the record alone.
    *
@@ -1254,6 +1492,10 @@
    */
   function collapsedLineText(item, max) {
     if (!item) return "";
+    // A run's change text is written for the agent; the reviewer's line is the
+    // summary's first line.
+    var run = runSummary(item);
+    if (run) return clipAtWord(run.first, max);
     var kind = item[record.FIELD.KIND];
     var context = item[record.FIELD.CONTEXT] || {};
     var quote = oneLine(context.quote);
@@ -1366,6 +1608,10 @@
 
     var cards = Object.create(null);
     var cardSequence = 0;
+    // Who to ask whether the helper refused an item's run event (sync's
+    // refusalFor, wired at boot). The refusal lives in sync, not on the record,
+    // so the card asks every paint rather than being told once.
+    var refusalSource = null;
     var chips = [];
     var dismissed = Object.create(null);
     var status = null;
@@ -2065,6 +2311,50 @@
       if (mo.hidden) setCollapsed(true, false);
       if (refusalInfo) showRefusal(refusalInfo);
       return { rootId: markers.OVERLAY_ROOT_ID, remounted: false };
+    }
+
+    // Is the page empty of content? Asked while it still is: once a page has a
+    // content block it is not asked again on this mount (a rebuild reloads the
+    // page, and a remount asks afresh), so a long page never pays for the walk.
+    var pageHadContent = false;
+    function pageIsEmpty() {
+      if (pageHadContent || !doc || !doc.body || !blocksModule) return false;
+      var any = blocksModule.leafWalk(doc.body).some(function (node) {
+        return !markers.isInsideOverlay(node);
+      });
+      if (any) pageHadContent = true;
+      return !any;
+    }
+
+    // The text of the marked file-name title, when the page has one.
+    function fileTitleText() {
+      if (!doc || typeof doc.querySelector !== "function") return null;
+      var node = doc.querySelector("[" + markers.FILE_TITLE_ATTR + "='" + markers.FILE_TITLE_VALUE + "']");
+      return node ? String(node.textContent || "").trim() || null : null;
+    }
+
+    // The Active and Edits panes on a page with nothing on it say how to start,
+    // in the plan's pinned lines. Written into the pane's existing empty node.
+    function paintEmptyPanes() {
+      if (!dom) return;
+      var empty = pageIsEmpty();
+      [TAB.ACTIVE, TAB.EDITS].forEach(function (name) {
+        var node = dom.panes[name] && dom.panes[name].querySelector(".empty");
+        if (!node) return;
+        var want = empty ? "page" : "plain";
+        if (node.getAttribute("data-lahe-empty") === want) return;
+        node.setAttribute("data-lahe-empty", want);
+        node.textContent = "";
+        if (!empty) {
+          node.textContent = emptyTextFor(name);
+          return;
+        }
+        emptyPageLines(fileTitleText()).forEach(function (line, i) {
+          var child = el(i === 0 ? "p" : "p", i === 0 ? "empty__title" : "empty__line", line);
+          child.setAttribute("data-lahe-empty-line", "");
+          node.appendChild(child);
+        });
+      });
     }
 
     function emptyTextFor(name) {
@@ -2831,18 +3121,21 @@
         p.time.removeAttribute("datetime");
         p.time.removeAttribute("title");
       }
-      p.state.textContent = STATE_LABEL[card.state] || card.state;
-      p.state.setAttribute("data-state", card.state);
+      var refused = refusalOf(card.id);
+      p.state.textContent = refused ? NOT_SENT_LABEL : STATE_LABEL[card.state] || card.state;
+      p.state.setAttribute("data-state", refused ? "refused" : card.state);
       // On the card itself too, so anything a tab owner attached can be shown or
       // withdrawn by the card's own state without a second file being told.
       card.node.setAttribute("data-state", card.state);
+      if (isQuietDraft(item)) card.node.setAttribute("data-lahe-blank", "true");
+      else card.node.removeAttribute("data-lahe-blank");
       paintCardWait(card);
       var quote = (item[record.FIELD.CONTEXT] && item[record.FIELD.CONTEXT].quote) || "";
       p.quote.textContent = quote;
       p.quote.style.display = quote ? "" : "none";
 
       p.badges.textContent = "";
-      card.badges.forEach(function (badge) {
+      cardBadges(card.id).forEach(function (badge) {
         var row = el("div", "badge", badge.message || badge.code);
         p.badges.appendChild(row);
       });
@@ -3045,6 +3338,37 @@
 
     // failure comes from failures.failure(code, detail). Adding the same code
     // twice replaces the existing badge rather than stacking duplicates.
+    /**
+     * The RUN_EVENT_REFUSED failure the helper raised for this item, or null.
+     *
+     * A refused item is never shown as sent: its state chip reads "Not sent",
+     * the refusal is drawn as a badge, and the late-card clock does not run on
+     * it, because nobody is being slow about work that never arrived.
+     */
+    function refusalOf(id) {
+      if (typeof refusalSource !== "function") return null;
+      try {
+        var got = refusalSource(id);
+        return got && got.code ? got : null;
+      } catch (err) {
+        return null;
+      }
+    }
+
+    function setRefusalSource(fn) {
+      refusalSource = typeof fn === "function" ? fn : null;
+      Object.keys(cards).forEach(function (id) {
+        paintCard(cards[id]);
+      });
+    }
+
+    /** Repaint one card from what it already holds. */
+    function refreshCard(id) {
+      if (!cards[id]) return null;
+      paintCard(cards[id]);
+      return handleFor(id);
+    }
+
     function setCardBadge(id, failure) {
       if (!cards[id]) return null;
       if (!failure || !failure.code) throw new TypeError("setCardBadge expects a failure object");
@@ -3066,7 +3390,11 @@
     }
 
     function cardBadges(id) {
-      return cards[id] ? cards[id].badges.slice() : [];
+      if (!cards[id]) return [];
+      var out = cards[id].badges.slice();
+      var refused = refusalOf(id);
+      if (refused && !out.some(function (b) { return b.code === refused.code; })) out.unshift(refused);
+      return out;
     }
 
     // R34. reply is {status, agent, reason, text, files, at}. The card is where
@@ -3145,12 +3473,13 @@
 
     function countFor(tab) {
       return Object.keys(cards).filter(function (id) {
-        return cards[id].pane === tab;
+        return cards[id].pane === tab && !isQuietDraft(cards[id].item);
       }).length;
     }
 
     function countIncomplete() {
       return Object.keys(cards).filter(function (id) {
+        if (isQuietDraft(cards[id].item)) return false;
         // Pane placement and completion are separate. Direct edits stay in the
         // Edits pane so they do not bury comments, but they are still work for
         // the agent until a handled reply lands.
@@ -3591,6 +3920,8 @@
       var item = card && card.item;
       var none = { overdue: false, waitedMs: null, text: "" };
       if (!item || status !== STATUS.STORED || !record.isUnansweredReady(item)) return none;
+      // Refused by the helper: the agent has not seen it, so no clock runs.
+      if (refusalOf(item[record.FIELD.ID])) return none;
       // AN ANSWER THE PAGE DID NOT BEAR OUT IS STILL AN ANSWER. An item the
       // handled check held open counts as unanswered above, because it belongs
       // on the agent's drain list. It must not also run this clock: the card
@@ -4025,11 +4356,15 @@
       var i = info || {};
       // Remembered before the dom check on purpose: a refusal that arrives
       // before mount (or between remounts) is re-applied by mount, not lost.
-      refusalInfo = { reason: i.reason || null };
+      refusalInfo = { reason: i.reason || null, refusedBy: i.refusedBy || null };
       if (!dom) return false;
       dom.refusalReason.textContent = i.reason || "This review is already open in another window.";
       dom.refusalBtn.disabled = false;
       dom.refusalBtn.textContent = "Review here instead";
+      // Taking the review over cannot fix an older helper: the refusal is about
+      // the helper's version, not another window holding the review. The button
+      // would only promise something it cannot do.
+      dom.refusalBtn.hidden = refusalInfo.refusedBy === "contract";
       dom.refusal.setAttribute("data-shown", "true");
       // A refusal behind the collapsed pill is invisible, and a reviewer who
       // cannot type and is told nothing reads it as "broken" (Ken hit exactly
@@ -4046,6 +4381,7 @@
       // Reset the button out of its "Moving the review here…" pending state,
       // so the next refusal (or a probe) never meets a stuck disabled button.
       dom.refusalBtn.disabled = false;
+      dom.refusalBtn.hidden = false;
       dom.refusalBtn.textContent = "Review here instead";
       // Put the rail back where the reviewer chose to keep it. If they changed
       // that choice while the refusal was visible, preferredCollapsed already
@@ -4277,6 +4613,7 @@
 
     function renderTabs() {
       if (!dom) return;
+      paintEmptyPanes();
       TABS.forEach(function (name) {
         dom.tabButtons[name].setAttribute("aria-selected", name === activeTab ? "true" : "false");
         dom.panes[name].setAttribute("data-current", name === activeTab ? "true" : "false");
@@ -6025,6 +6362,8 @@
       releaseCard: releaseCard,
       setCardState: setCardState,
       setCardBadge: setCardBadge,
+      setRefusalSource: setRefusalSource,
+      refreshCard: refreshCard,
       clearCardBadge: clearCardBadge,
       cardBadges: cardBadges,
       setAgentMessage: setAgentMessage,
@@ -6090,6 +6429,11 @@
     COLLAPSED_LINE_MAX: COLLAPSED_LINE_MAX,
     CHEVRON_ICON: CHEVRON_ICON,
     collapsedLineText: collapsedLineText,
+    runSummary: runSummary,
+    emptyPageLines: emptyPageLines,
+    isBlankStartDraft: isBlankStartDraft,
+    isUnchangedDraft: isUnchangedDraft,
+    isQuietDraft: isQuietDraft,
     clipAtWord: clipAtWord,
     TAB: TAB,
     TABS: TABS,

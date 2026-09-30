@@ -23,6 +23,10 @@ next comment without spending model turns.
 `npm run install-skills` copies the skill to both skill folders. `lahe review`
 prints the exact monitor command for each session.
 
+## Writing new text
+
+A reviewer can write new paragraphs, headings, and lists on a page, and can start a blank notes page with `lahe write notes/day.md`. That command prints what `lahe review` prints, so the wake and drain steps are the same. The items that come back carry `new_blocks`, and the rules for placing them are in the skill. How it works inside is `docs/ongoing/FREE_WRITING.md`.
+
 ## Install
 
 See `docs/INSTALL.md`.
@@ -33,4 +37,5 @@ See `docs/INSTALL.md`.
 - `docs/INSTALL.md`
 - `docs/CLI.md`
 - `docs/CONTRACTS.md`
+- `docs/ongoing/FREE_WRITING.md`
 - `docs/diagrams/`

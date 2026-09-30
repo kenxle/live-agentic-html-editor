@@ -145,4 +145,27 @@ test.describe("the rail updates in place", () => {
       "the forced expansion never overwrote browser storage"
     ).toBe(true);
   });
+
+  test("a refusal because the helper is older hides Review here instead; a refusal by another window keeps it", async ({ page }) => {
+    const url = server.urlFor("test/fixtures/rail.html") + "?review=refusal-contract-review";
+    await page.goto(url);
+
+    await page.evaluate(() => window.__laheRail.showRefusal("Held by another window.", "holder"));
+    expect(await page.evaluate(() => window.__laheRail.refusalButton()), "another window: the button offers the takeover").toMatchObject({
+      visible: true,
+      label: "Review here instead"
+    });
+    await page.evaluate(() => window.__laheRail.hideRefusal());
+
+    await page.evaluate(() => window.__laheRail.showRefusal("The helper is older than this page.", "contract"));
+    expect(await page.evaluate(() => window.__laheRail.refusalShown()), "the panel is up").toBe(true);
+    expect(await page.evaluate(() => window.__laheRail.refusalButton()), "an older helper: taking the review over cannot help").toMatchObject({
+      visible: false
+    });
+
+    // The next refusal, of the other kind, gets its button back.
+    await page.evaluate(() => window.__laheRail.hideRefusal());
+    await page.evaluate(() => window.__laheRail.showRefusal("Held by another window.", "holder"));
+    expect((await page.evaluate(() => window.__laheRail.refusalButton())).visible).toBe(true);
+  });
 });

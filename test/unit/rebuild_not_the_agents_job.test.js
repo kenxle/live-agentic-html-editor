@@ -382,7 +382,7 @@ test("an empty after is never checked: there is nothing to look for", () => {
   assert.equal(handledCheck.checkable(anEdit({ after: null })), false);
 });
 
-test("a delete and a format-only record are never checked", () => {
+test("a delete is never checked; a format-only record is, by its bold and italic (free writing, R14)", () => {
   const deleted = record.newItem({
     id: "itm_deleted",
     kind: record.KIND.DELETE,
@@ -404,7 +404,10 @@ test("a delete and a format-only record are never checked", () => {
     page_origin: "http://127.0.0.1:4321",
     page_path: "/guide.html"
   });
-  assert.equal(handledCheck.checkable(formatOnly), false, "its after equals its before by construction");
+  // Its words equal its before by construction, so it is judged by the bold
+  // and italic it added, and only when nothing was written
+  // (test/unit/handled_check_run.test.js).
+  assert.equal(handledCheck.checkable(formatOnly), true);
 });
 
 test("an ordinary edit IS checked, so the exemptions above are exemptions", () => {

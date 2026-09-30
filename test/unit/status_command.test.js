@@ -1011,3 +1011,31 @@ test("a plain --json read lists every ended review and marks nothing", async () 
   assert.deepEqual(endedIn(await runStatus(DRAIN, dir)), ["rendaudit"], "and the drain is still told");
   assert.deepEqual(endedIn(await runStatus(audit, dir)), ["rendaudit"], "an audit after the drain still sees it");
 });
+
+test("on a drain line, a run item's new text sits under page and its markers stay at the top level", async () => {
+  const { createFixtures } = require("../../src/shared/record_fixtures.js");
+  const dir = tempState();
+  const f = createFixtures({ seed: "drain" });
+  const run = f.runFixtures().find((x) => x.name === "worked example").item;
+  const back = f.runFixtures().find((x) => x.name === "take-back").item;
+  seed(dir, "rev1", [run, back]);
+  const out = await runStatus(["--session", "legacy", "--json", "--quiet"], dir);
+  const lines = out.stdout.trim().split("\n").map((text) => JSON.parse(text));
+  const items = lines.slice(0, -1);
+  assert.equal(items.length, 2);
+  const runLine = items.find((l) => l.id === run.id);
+  const backLine = items.find((l) => l.id === back.id);
+  for (const field of ["new_blocks", "anchor_after_html", "remove_blocks"]) {
+    assert.equal(Object.prototype.hasOwnProperty.call(runLine, field), false, field + " is not at the top level");
+    assert.ok(Object.prototype.hasOwnProperty.call(runLine.page, field), field + " is under page");
+  }
+  assert.equal(runLine.page.new_blocks.length, 3);
+  assert.equal(backLine.page.remove_blocks.length, 3);
+  for (const marker of ["placement", "proofread", "anchor_tag_after", "run_words"]) {
+    assert.ok(Object.prototype.hasOwnProperty.call(runLine, marker), marker + " stays at the top level");
+  }
+  assert.equal(runLine.placement, "after_anchor");
+  assert.equal(runLine.proofread, false);
+  items.forEach((line) => assert.equal(Object.prototype.hasOwnProperty.call(line, "notes"), false, "no item line carries notes"));
+  assert.equal(/instruction|never|trust/i.test(out.stdout), false, "the drain repeats no rule text");
+});

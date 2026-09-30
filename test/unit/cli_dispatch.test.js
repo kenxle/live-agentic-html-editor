@@ -47,6 +47,9 @@ test("the dispatcher advertises review and session lifecycle", async () => {
   // how a multi-paragraph answer becomes three rejected lines.
   assert.match(help.stdout, /\breply\b/);
   assert.equal(/\bwait\b/.test(help.stdout), false);
+  // `write` opens notes on a blank page (free writing, plan Task 2.10).
+  assert.match(help.stdout, /\bwrite\b/);
+  assert.ok(cli.COMMAND_NAMES.indexOf("write") !== -1);
 });
 
 test("the dispatcher routes `session list`, the one session action that needs no id", async () => {
@@ -70,6 +73,16 @@ test("missing and unknown commands use the shared CLI bad-usage exit", async () 
   const unknown = await captureMain(["not-a-command"]);
   assert.equal(unknown.code, protocol.CLI_EXIT.BAD_USAGE);
   assert.match(unknown.stderr, /unknown command/);
+});
+
+test("--version prints the package version on stdout and exits successfully", async () => {
+  const pkg = require("../../package.json");
+  for (const flag of ["--version", "-v", "version"]) {
+    const result = await captureMain([flag]);
+    assert.equal(result.code, protocol.CLI_EXIT.OK, flag);
+    assert.equal(result.stdout, pkg.version + "\n", flag);
+    assert.equal(result.stderr, "", flag);
+  }
 });
 
 test("add, serve, session, monitor, and reply help use stdout and the successful help exit", async () => {

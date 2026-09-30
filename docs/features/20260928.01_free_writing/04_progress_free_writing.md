@@ -1,18 +1,20 @@
 # Progress: Free writing
 
-**Phase 6, Implement.** You approved the plan and all nine decisions. The first builder is laying the shared pieces. Nothing is blocked on you. Last updated 2026-09-29 12:58.
+**Phase 9, Cleanup.** Free writing is merged and live ([PR #20](https://github.com/kenxle/live-agentic-html-editor/pull/20)). One page of cleanup decisions waits on you. Last updated 2026-09-30 17:17.
 
-**Docs:** [Crucible questions](00_crucible_questions.md) · [Crucible](http://127.0.0.1:65155/00_crucible.html) · [Brief](http://127.0.0.1:65155/01_brief_free_writing.html) · [Wireframes](http://127.0.0.1:49513/index.html) ([decision](wireframes/DECISION.md)) · [Architecture](http://127.0.0.1:65155/02_architecture_free_writing.html) · [Plan](http://127.0.0.1:65155/03_plan_free_writing.html)
+**Docs:** [Crucible questions](00_crucible_questions.md) · [Crucible](http://127.0.0.1:65155/00_crucible.html) · [Brief](http://127.0.0.1:65155/01_brief_free_writing.html) · [Wireframes](http://127.0.0.1:49513/index.html) ([decision](wireframes/DECISION.md)) · [Architecture](http://127.0.0.1:65155/02_architecture_free_writing.html) · [Plan](http://127.0.0.1:65155/03_plan_free_writing.html) · Review logs: [progress](04_progress_free_writing_review_log.md), [crucible questions](04_progress_free_writing_review_log_crucible_questions.md), [crucible](04_progress_free_writing_review_log_crucible.md), [brief, architecture, plan](04_progress_free_writing_review_log_brief_architecture_plan.md), [wireframes](04_progress_free_writing_review_log_wireframes.md) · [Cleanup decisions](http://127.0.0.1:60007/05_cleanup_decisions-9485fee2d3c81c3d.html)
 
 ## Needs your attention
 
-- [ ] **For your information, no action needed unless you disagree.** The Library feature branch (`feat/lahe_library`, 160 commits) changes some of the same files: the rail, the page server, the command list, and shared files. Plan: build free writing on main, and whichever of the two lands second merges the other in. If you want one to land first, say so.
+- [ ] **[Cleanup decisions](http://127.0.0.1:60007/05_cleanup_decisions-9485fee2d3c81c3d.html)**, each with a default:
+  - three proposed CLAUDE.md rules
+  - the deletion batch: 23 worktrees, the remote branch, and the preview
+  - the lesson queue
+  - the draft name left in git history
 
 ## Currently working on
 
-| Agent or task | Doing | Started | Branch |
-|---|---|---|---|
-| Kernel builder | Phase 1: the record's new fields, the safe-tag check, the block reader, the agent's instructions and every copy of them | 2026-09-29 12:58 | `feat/free-writing` |
+Nothing is running. Next: the deletion batch and the CLAUDE.md changes, once you answer the cleanup decisions page.
 
 ## Phases
 
@@ -24,16 +26,24 @@
 | 3 Wireframe | done | 2026-09-28 |
 | 4 Architecture | done | 2026-09-28 |
 | 5 Plan | done | 2026-09-29 |
-| 6 Implement | in progress | 2026-09-29 |
-| 7 Review | not started | |
-| 8 Ship and land | not started | |
-| 9 Cleanup | not started | |
+| 6 Implement | done | 2026-09-29 |
+| 7 Review | done | 2026-09-30 |
+| 8 Ship and land | done | 2026-09-30 |
+| 9 Cleanup | in progress | 2026-09-30 |
 
 ## The record
 
 ### Task index
 
-No tasks dispatched yet.
+| Phase | Workstream | Tasks | Status | Detail | Outcome |
+|---|---|---|---|---|---|
+| 3 | seams | 3.4 | merged | [detail](../../../.claude/worktrees/free-writing-seams/docs/features/20260928.01_free_writing/progress/phase3_workstream_seams.md) | 21 end-to-end tests with a scripted agent that follows only the agent's instructions. Fixed a false "further down the page" note, and a crash that lost your writing. |
+| 3 | rail | 3.2, 3.3 | merged | [detail](../../../.claude/worktrees/free-writing-rail/docs/features/20260928.01_free_writing/progress/phase3_workstream_rail.md) | Unit gate: 1694 passed, 0 failed. 81 browser tests passed. 16 screenshots of every card state, light and dark. One replay bug left for the seams builder. |
+| 3 | integration fixes | after the Phase 2 merge | merged | [detail](../../../.claude/worktrees/free-writing-fix/docs/features/20260928.01_free_writing/progress/phase3_workstream_fixes.md) | Unit gate: 1691 passed, 0 failed. 73 browser tests passed. The agent's extra words now show as a conflict on the card, and "--" matches a rendered dash everywhere. |
+| 2 | editing (2A) | 2.1 to 2.4 | merged | [detail](../../../.claude/worktrees/free-writing-2a/docs/features/20260928.01_free_writing/progress/phase2_workstream_editing.md) | Unit gate green. 98 browser tests passed in Chromium; Firefox and WebKit also ran. 22 screenshots. |
+| 2 | replay (2B) | 2.5 to 2.7 | merged | [detail](../../../.claude/worktrees/free-writing-2b/docs/features/20260928.01_free_writing/progress/phase2_workstream_replay.md) | Unit gate: 1619 of 1621 passed, 0 failed, 2 to-do. 53 new browser tests and 40 existing replay tests passed in Chromium. Four screenshots, light and dark. |
+| 2 | helper (2C) | 2.8 to 2.12 | merged | [detail](../../../.claude/worktrees/free-writing-2c/docs/features/20260928.01_free_writing/progress/phase2_workstream_helper.md) | Unit gate: 1645 of 1647 passed, 0 failed, 2 to-do. Built: the check on arrival, always checking new text, `lahe write` with its own one-page server, `lahe reply --proofread`. |
+| 1 | kernel | 1.1 to 1.6 | done | [detail](progress/phase1_workstream_kernel.md) | Seven commits. The unit gate passed 1601 of 1604 with 2 to-do. One timing test failed under full-suite load; alone, it runs the same on the branch and on main. |
 
 ### Loop passes
 
@@ -41,7 +51,17 @@ No passes yet.
 
 ### Changes from plan
 
-None.
+- **Words the agent adds to your new paragraph:** the architecture counted your words as placed even when the agent added a sentence to your paragraph. Per the brief's R6 (your words stay as typed), that is now flagged on the card, with Keep mine and Take the page's. Decided at merge.
+
+- **Only notes pages open ready to type.** An empty page takes writing on its own only on a notes review made by `lahe write`. Any other empty page stays in reading state. From the fix round's design calls.
+- **Proofreading ends on a record once it has asked.** After one proofreading question, later sittings on that record are not proofread again.
+- **A force-quit within seconds of typing can lose the sitting.** Long writing saves after a short pause. This is open for you under Needs your attention.
+- **The old agent on an HTML page counts as correct.** Its `after_html` parses into the right blocks, so "handled" is the right result. The plan line was corrected.
+- **Tab reaches the block-type menu.** The plan pinned no key for it.
+- **The wrong-tag note also names `anchor_tag_after`.** The plan's pinned wording is older.
+- **Two tests run in Chromium only:** East Asian input and a real drag-and-drop. Only Chromium can drive them.
+- **Two files were edited outside their builders' rows.** `replies.js` passes proofread fixes through. `store.js` keeps "Not sent" across a reload.
+- **Undoing a retagged run carries the old tag.** This replaces the first design, where the record never stored the old tag.
 
 ### Follow-ups
 
@@ -54,19 +74,153 @@ None.
 
 ### Cleanup queue
 
-Nothing queued.
+Listed on the [cleanup decisions page](http://127.0.0.1:60007/05_cleanup_decisions-9485fee2d3c81c3d.html), waiting on your yes.
 
 ### Test results
 
-No test run yet.
+- 2026-09-30 10:09, release result on the branch with main merged in, all three browsers, 22.4 minutes:
+  - Unit: 1799 of 1801 passed, 0 failed.
+  - Browser: 2175 passed, 1 failed, 20 skipped.
+  - The failure was `ac2_walk` in Chromium only. It passed 5 of 5 when run alone, and passed in every earlier full run.
+- The run before main was merged in was fully green: 2161 passed, 0 failed.
+
+- 2026-09-30 02:40: the one repaint failure was the test, not the product. The test moved the cursor with a script, then repainted before the browser registered the move, which no reviewer can do. The test now uses real arrow keys. It passed 160 of 160 under heavy load, and in all three browsers. Only a test changed, so the third full gate stands as the release result. The product gap it exposed is older than this feature and is boarded as `LAHE-repaint-caret-one-move-back`.
+
+- 2026-09-30 02:26, third full gate in all three browsers, 19.7 minutes:
+  - Unit: 1797 of 1799 passed, 0 failed.
+  - Browser: 2106 passed, 2 failed, 19 skipped.
+  - Both failures are one repaint test in Chromium, on its two fixtures. The cursor landed at the end of the block under load; the text was kept. It passed 40 of 40 when run alone. The H1 builder is on it.
+
+- 2026-09-30 00:47, second full gate in all three browsers, 20.2 minutes:
+  - Unit: 1785 of 1787 passed, 0 failed.
+  - Browser: 1999 passed, 1 failed, 19 skipped.
+  - The failure was `duplicate_tab` in Chromium only. It passed 10 of 10 when run alone, so it was load during the full run. No code changed after this run, so it stands as the release result.
+
+- 2026-09-29 23:59, full gate in all three browsers, 18.5 minutes:
+  - Unit: 1785 of 1787 passed, 0 failed.
+  - Browser: 1978 passed, 19 failed, 19 skipped.
+  - The failures are 6 existing tests, broken in all three browsers, plus 1 Firefox-only image test.
+- Independent spec check: 35 of 46 criteria pass. The 2 fails are the force-quit question and the unrecorded deviations, which are now recorded. The 9 unverified wait on the workflow walk and a clean full gate.
+
+- 2026-09-29 14:28, merged branch: unit gate 1677 passed, 0 failed, 2 to-do.
+- Affected browser specs, once, in Chromium: 187 of 191 passed.
+  - Three header and bold-edit tests are marked as expected failures, and they now pass. That is good news, and the marks are coming off.
+  - One split-paragraph test shows a real gap: when the agent adds a sentence to your paragraph, it is no longer flagged. The fix builder has it.
 
 ### Ship
 
-Not shipped yet.
+PR [#20](https://github.com/kenxle/live-agentic-html-editor/pull/20) opened 2026-09-30 10:09. Main was merged in first, then the full gate was run again. The PR's CI gate was green. Merged 2026-09-30 16:57 as 6f3bc6b. After merge:
+- the main checkout was pulled
+- `npm run install-skills` reinstalled the lahe skill
+- `lahe serve --restart` put the helper on contract 14
 
 ## Log
 
 Newest first.
+
+**2026-09-30 17:18.** The living docs now match what shipped:
+- `docs/ongoing/FREE_WRITING.md` is new
+- README, AGENTS.md, three diagrams and four ongoing docs were updated
+
+Your review comments are exported into the feature folder. The board is updated, and one memory is saved: open a preview for you rather than only link it.
+
+**2026-09-30 16:57.** You approved the merge, and PR #20 is on main. Your checkout is pulled, the skill is reinstalled, and the helper restarted on the new code, so free writing is live for you.
+
+**2026-09-30 09:04.** You tried the preview on your blog draft and a notes page. As the agent, I placed everything you wrote.
+
+What you found:
+- **Writing at the bottom of the page:** there was no room to scroll. Fixed and merged.
+- **A leftover "+ Write here" line:** it stays after an edit ends. Being fixed.
+- **Editing the file-name title:** it raised a question, answered on the card.
+
+What you liked: clicking another block moves the editor to it. You said go once the leftover line is fixed.
+
+**2026-09-30 01:19.** The independent workflow walk ran as the agent from review.json only, in Markdown and HTML.
+
+These passed:
+- all six user stories
+- the agent placing text
+- proofreading with both buttons
+- a rebuild or reload mid-sitting
+- bold and italic surviving
+- the direction A layout
+- dark mode
+
+It found 3 failures:
+- undo after a reload never reaches the helper
+- editing text the agent already placed reopens it falsely
+- a paragraph you and the agent both reworded hides your new blocks
+
+It also found 7 design problems. One of them: typing `## ` made a level-3 header. That now matches Markdown, so `## ` makes a level-2 header. The report and 89 screenshots are in [flow_walk.md](../../../.claude/worktrees/free-writing/docs/features/20260928.01_free_writing/reviews_impl/flow_walk.md).
+
+**2026-09-30 00:47.** The regression builder fixed the 6 broken tests.
+- **One product bug:** protection lost the agent's rewrite during a page rewrite.
+- **Five test problems:** among them, two tests were reaching your real helper, which runs an older version.
+
+The second full gate is clean apart from one known-flaky test.
+
+**Before this ships:** your installed helper is one version behind this build, and this build refuses it by design. After merge, the helper needs a restart onto the new code (`lahe serve --restart`).
+
+**2026-09-29 23:29.** All four fix builders returned green, and their branches merged with no conflicts. One stale test was updated. Fixed, among others:
+- removed blocks no longer reach the agent
+- an undone header change stays undone
+- only notes pages open ready to type
+- a repaint that strips your bold is restored
+- the helper can no longer be frozen
+- the notes folder no longer leaks
+- the card shows each proofread fix
+- the page refuses an outdated helper
+
+The four end-to-end specs now pass in Firefox and WebKit too. The rail builder ran delete commands before being stopped, which blocked you. Builder prompts now spell out the no-delete rule at the top.
+
+**2026-09-29 17:54.** The adversarial review found six more problems. The two worst:
+- Undo after a proofread question never takes the words out of the source.
+- Writing after a paragraph the agent later changes hides your section behind a conflict.
+
+I made nine design calls for the fix round and wrote them in [FIX_ROUND.md](../../../.claude/worktrees/free-writing/docs/features/20260928.01_free_writing/reviews_impl/FIX_ROUND.md). The main one: a paragraph you did not change is never compared, so the agent fixing it can never hide your new section. Four builders are now fixing everything in parallel.
+
+**2026-09-29 17:41.** Five reviews of the built code are back. They are saved in [reviews_impl](../../../.claude/worktrees/free-writing/docs/features/20260928.01_free_writing/reviews_impl/). The findings that matter most:
+- A block you add and then delete in the same sitting still reaches the agent.
+- Undoing a header change comes back at the next rebuild.
+- Any page with no content opens editing on its own, not only notes pages.
+- A page repaint that keeps your words but strips your bold loses the bold.
+- The safe-tag check covers new blocks but not the paragraph you started from.
+- One oversized post can freeze the helper.
+- "Use the fixes" applies changes the card does not show you.
+- Several tests cannot fail, and the end-to-end tests have run only in Chromium.
+
+One fix round covers all of it.
+
+**2026-09-29 14:55.** The rail merged. The cards for new text are built:
+- each card leads with a short summary
+- blocks are listed by their menu names
+- refused records say "Not sent"
+- a notes page gets its own empty-tab lines
+- the proofreading buttons appear only on a proofread
+
+The rail builder also fixed the helper dropping proofread suggestions, so the buttons can show at all. The seams builder was dispatched.
+
+**2026-09-29 14:43.** The fix branch merged. The gap was worse than it looked: when the agent added a sentence to your paragraph, replay wrote your paragraph again below it. Now it shows as a conflict with Keep mine and Take the page's. Screenshots are on the fix builder's page. Waiting on the rail builder.
+
+**2026-09-29 14:28.** The three Phase 2 branches merged with no conflicts, and the unit gate is green. The affected browser tests ran once:
+- The header line no longer doubles, and a bold edit the agent never made is no longer accepted as handled. Both came from the editing and replay work together.
+- One gap was found and is being fixed: flagging extra words the agent adds to your paragraph.
+
+The rail builder started in parallel.
+
+**2026-09-29 13:58.** The replay builder (2B) returned green. The header case still shows as an expected failure until the editing builder's typing change merges. The conflict card keeps your new text, and choosing "take the page's" still places it.
+
+**2026-09-29 13:58.** The helper builder (2C) returned green. Two things for the merge:
+- straight `--` does not match a rendered dash in the shared text folding; I will fold it in the shared normalizer so every check agrees
+- the rail needs wiring for refused records, which Phase 3 picks up
+
+**2026-09-29 13:37.** Phase 1 (the shared pieces) is done and verified:
+- the new record fields
+- the safe-tag check
+- the block reader
+- contract version 14, with every copy of the agent's instructions updated together
+
+The three Phase 2 builders were dispatched in their own worktrees.
 
 **2026-09-29 12:58.** You approved the plan, and all nine decisions are recorded:
 - Lahe's own code for now, Tiptap discussed later

@@ -399,3 +399,23 @@ test("an agent may not retire an item that is not ready", () => {
   assert.match(summary.refused[0].refusal, /only a ready item is actionable/);
   assert.equal(itemsNow(log)[0].state, record.STATE.DRAFT);
 });
+
+// Code lead 25 (fix round): the proofread fold had only a browser spec.
+test("a proofread question keeps proofread and its suggestions, and a plain question keeps neither", () => {
+  const { dir, log, folder } = setup();
+  const proof = readyItem({ id: "itm_proof" });
+  const plain = readyItem({ id: "itm_plain" });
+  postItem(log, proof, protocol.EVENT.ITEM_READY);
+  postItem(log, plain, protocol.EVENT.ITEM_READY);
+  writeReplyFile(dir, "replies.jsonl", [
+    replyLine({ item: proof.id, rev: 1, status: "question", agent: "claude", text: "Placed as written. One fix?", proofread: true, suggestions: [{ block: 0, from: "Nine", to: "Ten" }] }),
+    replyLine({ item: plain.id, rev: 1, status: "question", agent: "claude", text: "Which client?" })
+  ]);
+  folder.fold(REVIEW);
+  const byId = {};
+  itemsNow(log).forEach((it) => (byId[it.id] = it));
+  assert.equal(byId[proof.id].reply.proofread, true);
+  assert.deepEqual(byId[proof.id].reply.suggestions, [{ block: 0, from: "Nine", to: "Ten" }]);
+  assert.equal(Object.prototype.hasOwnProperty.call(byId[plain.id].reply, "proofread"), false);
+  assert.equal(Object.prototype.hasOwnProperty.call(byId[plain.id].reply, "suggestions"), false);
+});

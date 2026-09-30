@@ -17,12 +17,13 @@ flowchart TD
         direction TB
         L1["listeners.js<br/>the listener registry, loads first"]
         L2["selection.js<br/>FROZEN<br/>the caret accessor"]
+        L2B["blocks.js<br/>the DOM block rules: leaf walk, insert point,<br/>editing host, tag swap, a record's run"]
         L3["store.js, anchor.js, pointing.js<br/>browser storage on every keystroke;<br/>mint and resolve a region; where a comment<br/>points when its words are gone"]
         L4["protect.js, highlight.js<br/>the three protection layers while a block<br/>is being edited; the page highlight API"]
         L5["overlay.js, tab_active.js, tab_done.js,<br/>tab_edits.js, conflict_toast.js, export.js<br/>the rail: chrome, each tab's contents,<br/>the conflict toast, copy and export"]
         L6["sync.js, comments.js, editing.js<br/>post and reply-poll loop; comment boxes;<br/>per-block edit state"]
         L7["replay.js, inject.js, index.js<br/>the four-branch replay compare;<br/>remount and CSP checks; boots the library last"]
-        L1 --> L2 --> L3 --> L4 --> L5 --> L6 --> L7
+        L1 --> L2 --> L2B --> L3 --> L4 --> L5 --> L6 --> L7
     end
 
     subgraph SERVICE["service slash - runs in the helper process"]
@@ -40,7 +41,7 @@ flowchart TD
 
     subgraph CLI["cli slash - the command surface"]
         CLI_INDEX["index.js<br/>the command dispatcher"]
-        CLI_CMDS["serve, review, session,<br/>add, status, reply, monitor, library"]
+        CLI_CMDS["serve, review, session,<br/>add, status, reply, monitor, library,<br/>write: notes on a blank page,<br/>on its own one-page server"]
         CLI_INDEX --> CLI_CMDS
     end
 
@@ -55,7 +56,7 @@ flowchart TD
 
 ## What to notice
 
-- **What each folder is for.** `shared/` is the one place a wire-protocol field name or item-record shape gets spelled out. Both `layer/` and `service/` import from it instead of each defining their own copy. `layer/` is the code that runs in the reviewer's browser. `service/` is the code that runs in the local helper process. `cli/` is the set of commands (`serve`, `review`, `session`, `add`, `status`, `reply`, `monitor`, `library`) a person or an agent types.
+- **What each folder is for.** `shared/` is the one place a wire-protocol field name or item-record shape gets spelled out. Both `layer/` and `service/` import from it instead of each defining their own copy. `layer/` is the code that runs in the reviewer's browser. `service/` is the code that runs in the local helper process. `cli/` is the set of commands (`serve`, `review`, `session`, `add`, `status`, `reply`, `monitor`, `library`, `write`) a person or an agent types.
 - **The Library page is its own list.** `src/layer/catalog/` holds the Library page's two scripts. They run in the browser like `layer/`, but they are not part of the rail's bundle: `manifest.js` lists them in `CATALOG_PAGE`, and the helper serves them raw from `src/` beside `protocol.js`. So a change to them never makes `dist/` stale. The `catalog_*.js` files in `service/` are the helper side of the same feature.
 - **Which way dependencies point.** Both `layer/` and `service/` depend on `shared/`. Neither depends on the other. If you find yourself wanting `layer/` code to call `service/` code directly, or the reverse, that is a sign the shared piece belongs in `shared/` instead.
 - **Why `layer/` is an ordered list, not a cloud.** The browser has no module loader, so the whole library ships as one concatenated file (`dist/lahe-layer.js`). The order files are glued in is the order they can depend on each other: a file may only use something a file above it in the list already registered. `manifest.js` writes that order down, and the diagram's chain (`listeners.js` through `index.js`) is that same order.

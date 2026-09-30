@@ -440,6 +440,23 @@ function drainLine(where, item) {
     page[field] = line[field];
     delete line[field];
   });
+  // A RUN'S WORDS RIDE TWICE, NOT FOUR TIMES (adversary review 6). A run item
+  // carries the whole sitting in new_blocks (html and text) and again in
+  // after_full and after_html, and a drain reprints every unanswered item on
+  // every wake, and after_history repeats each earlier sitting twice more. On
+  // a drain line an item with new_blocks carries after_full and after_html as
+  // null, and its history entries keep their rev and time with the words
+  // null. review.json keeps all of it whole, for an agent that only knows
+  // after_html.
+  if (Array.isArray(page.new_blocks) && page.new_blocks.length) {
+    if (Object.prototype.hasOwnProperty.call(page, "after_full")) page.after_full = null;
+    if (Object.prototype.hasOwnProperty.call(page, "after_html")) page.after_html = null;
+    if (Array.isArray(page.after_history)) {
+      page.after_history = page.after_history.map(function (entry) {
+        return Object.assign({}, entry, { after: null, after_html: null });
+      });
+    }
+  }
   line[DRAIN_PAGE_KEY] = page;
   return line;
 }

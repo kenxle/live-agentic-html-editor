@@ -43,3 +43,56 @@ flowchart LR
 - **A handled item is never stamped lost.** If an agent already said it made the fix, a failed re-anchor on that item means the fix rewrote the very passage the item pointed at, which is the fix working, not the feedback going missing.
 - **The same pass runs for both directions of editing.** When the agent lands a change and the page reloads itself, that reload is just another repaint: the agent's change is the new page, the reviewer's outstanding records are re-applied on top of it, and a genuine collision between the two is exactly the "matches none of these" branch, surfaced rather than fought over silently.
 - **On commit, this pass runs immediately**, not on the next scheduled tick, so a change the page tried to make while a block was protected surfaces right away instead of vanishing. See `docs/diagrams/protected_region.md` for that half.
+
+## A run record (free writing)
+
+A record with free-writing fields (`new_blocks`, `anchor_after_html`, `anchor_tag_after`, `placement`, or a take-back's `remove_blocks`) takes its own path in `applyRun`. Every other record takes the path above, unchanged. The anchor compare is the same four branches, read on the **anchor view**: the anchor's own after in place of the whole sitting, so the run's words are never written into the anchor. Then the run is placed block by block.
+
+```mermaid
+flowchart TD
+  S(["pass for one run record"]) --> P{"placement"}
+  P -- "start_of_container" --> Cn["the page's one main (or body),<br/>found by tag alone.<br/>No anchor compare"]
+  P -- "after_anchor" --> A{"find the anchor<br/>(probes from the anchor view)"}
+  A -- "not found" --> L["LOST. Nothing placed"]
+  A -- "found" --> U{"anchor left alone?<br/>(same markup before and after,<br/>no new tag)"}
+  U -- "yes: place only,<br/>never compared or written" --> R
+  U -- "no" --> V{"four branches<br/>on the anchor view"}
+  V -- "1: applied" --> T{"tag is anchor_tag_after?"}
+  V -- "2 or 3: re-apply" --> W["write the anchor's own markup<br/>with its new tag<br/>(writeBlock, swapTag)"]
+  V -- "4: conflict" --> H["HOLD the run. The card shows<br/>the anchor's two versions and the run"]
+  T -- "no" --> W
+  T -- "yes" --> R
+  W --> R
+  Cn --> R{"take-back?"}
+  R -- "yes" --> Rm["remove each remove_blocks block<br/>found one to one after the anchor.<br/>Never insert"]
+  R -- "no" --> Walk["runElementsFor: walk leaf blocks<br/>from the insert point"]
+  Walk --> Cl{"runClashFor: a leaf holds a block's words<br/>plus words nobody typed?"}
+  Cl -- "no" --> Row["decide each block by the presence table"]
+  Cl -- "yes, a page state already answered Keep mine" --> KB["rewrite that leaf to the reviewer's block,<br/>then the presence table"]
+  Cl -- "yes" --> HB["CONFLICT on that block. Nothing written.<br/>The card shows the reviewer's block and the page's"]
+  HB --> Cb{"reviewer picks"}
+  Cb -- "Keep mine" --> KB2["rewrite the leaf (writeBlock), remember the page state<br/>(acceptPageText), place the rest"]
+  Cb -- "Take the page's" --> TB["record takes the page's block<br/>(a new revision), place the rest"]
+  H --> Ch{"reviewer picks"}
+  Ch -- "Keep mine" --> KM["write the anchor, then place the run"]
+  Ch -- "Take the page's, keep my new text" --> TT["record takes the page's anchor<br/>(a new revision), then place the run"]
+```
+
+The presence table, as `placeRun` applies it:
+
+| Found in the walk | What replay does |
+|---|---|
+| whole, one to one | swap a wrong tag (and say so on the card, `REPLAY_RUN_WRONG_TAG`); rebuild instead of swapping when the block moves into or out of a list; rewrite the markup when bold or italic is missing, or when the leaf shows an earlier revision's words exactly (a punctuation fix the fold reads past) |
+| joined (a leaf whose words are exactly two or more new blocks, nothing else) or split | leave it |
+| inside a leaf that also holds words the reviewer never typed (the clash, checked before anything is written; with no block present yet, a block under five words never clashes, since that leaf is the page's own next paragraph) | write nothing, anchor included; flag the record with `REPLAY_NEITHER_MATCHES` and the conflict card, which shows the reviewer's block and the page's. Keep mine rewrites the leaf and remembers the page state; Take the page's makes the page's block the record's (a new revision). Either answer then places the rest |
+| missing, an earlier revision's block is there one to one | rewrite that block in place to the current words (branch three for the run) |
+| missing, five or more words, a whole leaf elsewhere on the page | write nothing; the card says it is already further down (`REPLAY_RUN_PLACED_ELSEWHERE`) |
+| missing otherwise | insert it after the last present block before it (or at the insert point), with its own tag and markup |
+
+- **A forged block writes nothing.** When any block's tag is outside the six writable ones or `cleanBlock` refuses its markup, the whole record writes nothing, anchor included.
+- **A taken-back run is never replayed again**, even while the original record is still outstanding in the store.
+- **An anchor the reviewer left alone is never compared.** When the sitting only added blocks, the anchor says where the run goes and nothing more, so an agent's later fix to that paragraph is not a conflict.
+- **A tag change lands on a block.** The anchor is resolved with its new tag as the tie-breaker's hint, and the tag is written onto the block holding the anchor's words, never onto an inline element. A take-back names the old tag in `anchor_tag_after`, and the tag leg turns the anchor back.
+- **The run notes clear.** Each `placeRun` clears the wrong-tag and placed-elsewhere notes and sets them again from what it finds. A wrong tag replay swapped itself stays noted while replay's own element is on the page.
+- **One page walk per `placeRun`**, kept in step with what it writes.
+- **The page check reads a handled run block by block** (`runCheckReason`) from the page's markup with the string twin of the walk: a missing block reopens as undone, a wrong tag with the tag note, lost bold or italic with the formatting note, in that order. A take-back keeps the whole-text check, plus a tag check when it names the old tag.

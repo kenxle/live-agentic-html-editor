@@ -6,7 +6,10 @@ The picture below is a ladder. Every rung is a way of finding the element again 
 
 ```mermaid
 flowchart TD
-  Start(["a record needs its region"]) --> Stamp{"does one element carry<br/>the record's data-lahe-id stamp,<br/>holding words the record knows?"}
+  Start(["a record needs its region"]) --> Container{"placement start_of_container,<br/>minted on main or body?"}
+  Container -- "yes, and the page has exactly one" --> Bind
+  Container -- "yes, but there are two, or none" --> Lost
+  Container -- "no: every other record" --> Stamp{"does one element carry<br/>the record's data-lahe-id stamp,<br/>holding words the record knows?"}
 
   Stamp -- "yes, exactly one" --> Bind["BIND: write here"]
   Stamp -- "two carry it" --> Lost
@@ -28,4 +31,6 @@ flowchart TD
 - **The stamp is the top rung, and it is real.** `data-lahe-id` is written onto every element the reviewer touches (D9, amended 2026-08-26). The agent carries that attribute into the source when it edits the element, so the next build reproduces it and the page finds the element with certainty. `anchor.js` `stampVerdict` asks first: exactly one element carrying the stamp, and still holding words the record knows, binds. Two elements carrying it, or one carrying words the record has never held, is a refusal with its own reason on the card ("two elements carry this id", "the stamp points at different words"), not a fall-through to the text rung.
 - **Nothing depends on the stamp existing.** A page that cannot be written to, an element the agent never touched, or a rebuild that dropped the attribute all fall straight through to the text and signature rungs. The stamp is meant to be the fastest rung, never the only one.
 - **A bind climbs back to the saved tag when an inline wrapper holds all the words.** After BIND finds a match, if the tag it landed on differs from the tag the record was minted on, it climbs through parents that hold exactly the same words and takes the first one with the saved tag (`<p><em>A</em></p>`: a record minted on the `<p>` binds the `<p>`, not the `<em>` that happens to hold the same words). This step corroborates the bind found by text; it never counts toward uniqueness, and it stops the moment an ancestor holds any other words.
+- **The empty-container rung comes first, and it serves one kind of record.** A free-writing sitting on an empty page is anchored on the page's one `main` (or `body`) with `placement: start_of_container`. That anchor is found by its tag alone: once the agent places the notes, the container's words are the whole page, and a text compare would call it lost. The caller passes the record's `placement` to `anchor.resolve`, and the rung answers only when it is `start_of_container` and the reference was minted on a container. An `after_anchor` record whose anchor is gone never reaches it, so it stays LOST, even on a page the agent emptied.
+- **The tag climb accepts the anchor's new tag too.** A free-writing record that changed its anchor's type (`anchor_tag_after`) passes that tag to `anchor.resolve`, and the climb above stops at either the minted tag or the new one. Without it, `<p><em>A</em></p>` retagged to `<h2><em>A</em></h2>` would bind the `<em>`.
 - **LOST is an honest answer, not a bug.** A record that cannot be placed uniquely is surfaced as lost, on the page and in `review.json`, rather than being silently dropped or bound to the nearest thing that looks right.

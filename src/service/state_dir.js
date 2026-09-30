@@ -403,6 +403,20 @@ function metaPath(dir, reviewId) {
 }
 
 /**
+ * Is this review a `lahe write` notes review? Read off its meta.json, which is
+ * where the helper records the marker at creation (src/service/reviews.js).
+ * The one on-disk reader: the helper answers from its own loaded copy
+ * (reviews.isNotes), and every command reads it here.
+ */
+function isNotesReview(dir, reviewId) {
+  try {
+    return JSON.parse(fs.readFileSync(metaPath(dir, reviewId), "utf8")).notes === true;
+  } catch (err) {
+    return false;
+  }
+}
+
+/**
  * A reply file inside one review, by its filename.
  *
  * The agent segment of replies-<agent>.jsonl is a path component too, so it goes
@@ -490,6 +504,7 @@ module.exports = {
   compactedIdsPath: compactedIdsPath,
   reviewJsonPath: reviewJsonPath,
   metaPath: metaPath,
+  isNotesReview: isNotesReview,
   replyFilePath: replyFilePath,
   writeAtomic: writeAtomic,
   appendLine: appendLine

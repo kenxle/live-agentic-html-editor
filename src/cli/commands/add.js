@@ -241,6 +241,10 @@ function parseArgs(argv) {
         options.adopt = true;
       } else if (name === "--only") {
         options.only = true;
+      } else if (name === "--notes") {
+        // Internal, like --under-review: only `lahe write` passes it, and only
+        // on a run that mints a new review (see review.js runNotes).
+        options.notes = true;
       } else if (name === "--remove") {
         options.remove = true;
       } else if (name === "--origin") {
@@ -1122,7 +1126,8 @@ async function run(argv) {
   // moment.
   if (alive) {
     var liveContract = Number.isInteger(alive.service_contract) ? alive.service_contract : 0;
-    if (liveContract > protocol.SERVICE_CONTRACT) {
+    var verdict = protocol.helperContractVerdict(alive);
+    if (verdict === protocol.CONTRACT_VERDICT.NEWER) {
       process.stderr.write(
         "lahe add: the running helper uses service contract " + liveContract +
           ", but this clone supports " + protocol.SERVICE_CONTRACT +
@@ -1130,7 +1135,7 @@ async function run(argv) {
       );
       return EXIT.FAILED;
     }
-    if (liveContract < protocol.SERVICE_CONTRACT) {
+    if (verdict === protocol.CONTRACT_VERDICT.OLDER) {
       restartReason =
         "the verified helper uses older service contract " + liveContract +
         "; this clone requires " + protocol.SERVICE_CONTRACT;
@@ -1188,7 +1193,8 @@ async function run(argv) {
       source_path: pathWrites.source_path,
       agent_session_id: agentSessionId,
       only_recorded_pages: options.only,
-      adopt: adopting(reuseId)
+      adopt: adopting(reuseId),
+      notes: options.notes === true
     };
     if (reuseId) spec.id = reuseId;
     review = reviews.create(spec);
@@ -1258,7 +1264,8 @@ async function run(argv) {
       only_recorded_pages: options.only ? true : undefined,
       // A Library pick-up of a review from before sessions: the helper takes
       // it into this session, and only for a pick-up pending for it.
-      adopt_session: adoptNow ? agentSessionId : undefined
+      adopt_session: adoptNow ? agentSessionId : undefined,
+      notes: options.notes ? true : undefined
     });
     if (!handedToHelper) {
       // The helper is up and would not take the writes. Only now is a restart
@@ -1374,7 +1381,8 @@ async function run(argv) {
     review: review.id,
     token: review.token,
     helper: helperOrigin,
-    fallback: fallbackSrc
+    fallback: fallbackSrc,
+    notes: options.notes === true
   });
 
   say("lahe add: " + target);
