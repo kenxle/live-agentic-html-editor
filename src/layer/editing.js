@@ -1485,7 +1485,7 @@
       var items = store.read(reviewId);
       for (var i = 0; i < items.length; i += 1) {
         var item = items[i];
-        if (!record.isRunRecord(item) || item[record.FIELD.STATE] === record.STATE.HANDLED) continue;
+        if (!record.isRunRecord(item) || isPlaced(item)) continue;
         var anchorEl = elementFor(item);
         if (!anchorEl) continue;
         var found = blocks.runElementsFor(item, doc, anchorEl);
@@ -4295,20 +4295,48 @@
       for (i = 0; i < itemForElement.length; i += 1) {
         if (itemForElement[i].el === el) {
           var got = store.readItem(reviewId, itemForElement[i].id);
-          if (got && got[record.FIELD.STATE] !== record.STATE.HANDLED) return got;
+          if (got && !isPlaced(got)) return got;
         }
       }
       var items = store.read(reviewId);
       for (i = 0; i < items.length; i += 1) {
         var item = items[i];
         if (!isEditKind(item)) continue;
-        if (item[record.FIELD.STATE] === record.STATE.HANDLED) continue;
+        if (isPlaced(item)) continue;
         if (elementFor(item) === el) return item;
       }
       // A run block belongs to the record whose run it is (plan Task 2.1:
       // itemFor maps any run block back through blocks.runElementsFor).
       var holding = runRecordHolding(el);
       return holding ? holding.item : null;
+    }
+
+    /**
+     * Is this record's text already in the source (architecture "Two sittings
+     * in the same place")? Then its blocks are the page's own, and a sitting
+     * on one is an ordinary edit of that block, never a reopen.
+     *
+     * - handled: yes.
+     * - handled, but the handled check could not find it on the page: no.
+     * - a run the agent answered with a proofreading question, now or in an
+     *   earlier round: yes. The proofread flow places the words and then asks,
+     *   and "Use the fixes" or "Keep mine" leave it ready at a new revision.
+     *   The flow walk found the second sitting reopening that placed record.
+     *
+     * Any other ready record, a run included, is unplaced and reopens.
+     */
+    function isPlaced(item) {
+      if (!item) return false;
+      if (item[record.FIELD.HANDLED_NOT_ON_PAGE] === true) return false;
+      if (item[record.FIELD.STATE] === record.STATE.HANDLED) return true;
+      if (!record.isRunRecord(item)) return false;
+      var reply = item[record.FIELD.REPLY];
+      if (reply && reply.proofread === true) return true;
+      var thread = Array.isArray(item[record.FIELD.THREAD]) ? item[record.FIELD.THREAD] : [];
+      for (var i = 0; i < thread.length; i += 1) {
+        if (thread[i] && thread[i].agent && thread[i].agent.proofread === true) return true;
+      }
+      return false;
     }
 
     function isEditKind(item) {

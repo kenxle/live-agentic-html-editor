@@ -104,3 +104,85 @@ test.describe("from_anchor marks only the page's own words", () => {
     expect(item.new_blocks).toEqual([{ tag: "p", html: TAIL, from_anchor: true }]);
   });
 });
+
+// Flow walk fail 2, capture side: adding an item to a list the agent had
+// already placed reopened the placed run record. Architecture "Two sittings in
+// the same place": once the agent placed a run, its blocks are the page's own,
+// so a sitting there is an ordinary edit of that block. Only an unplaced run
+// reopens its record.
+test.describe("a sitting on a placed block is an ordinary edit", () => {
+  const LIST = "- first item";
+
+  async function commitRunWithList(page) {
+    await fw.openFixture(page, server, "blog.html");
+    await fw.openEdit(page, "#p1");
+    await page.keyboard.press("Enter");
+    await page.keyboard.type(LIST, { delay: 2 });
+    await page.keyboard.press("Enter");
+    await page.keyboard.type("second item", { delay: 2 });
+    await fw.commitByEsc(page);
+    return fw.onlyEdit(page);
+  }
+
+  async function setState(page, id, patch) {
+    await page.evaluate(
+      ([itemId, fields]) => {
+        const h = window.__lahe.handle;
+        h.store.write(h.review, Object.assign({}, h.store.readItem(h.review, itemId), fields));
+      },
+      [id, patch]
+    );
+  }
+
+  async function addThirdItem(page) {
+    await fw.openEdit(page, "#p1 + ul li:last-child");
+    await page.keyboard.press("Enter");
+    await page.keyboard.type("third item", { delay: 2 });
+    await fw.commitByEsc(page);
+  }
+
+  test("a handled run: the list edit is a new record whose before is the placed list", async ({ page }) => {
+    const run = await commitRunWithList(page);
+    await setState(page, run.id, { state: "handled" });
+    await addThirdItem(page);
+    const all = await fw.items(page);
+    const same = all.find((it) => it.id === run.id);
+    expect(same.rev, "the placed record is not reopened").toBe(run.rev);
+    expect(same.state).toBe("handled");
+    const fresh = all.filter((it) => it.id !== run.id);
+    expect(fresh).toHaveLength(1);
+    expect(fresh[0].before.replace(/\s+/g, " ").trim()).toBe("first item second item");
+    expect(fresh[0].state).toBe("ready");
+  });
+
+  test("a run the agent placed and then asked a proofreading question on: same, a new record", async ({ page }) => {
+    const run = await commitRunWithList(page);
+    await setState(page, run.id, {
+      reply: {
+        status: "question",
+        agent: "claude",
+        text: "Two fixes?",
+        at: new Date().toISOString(),
+        proofread: true,
+        suggestions: [{ block: 0, from: "first", to: "First" }]
+      }
+    });
+    await addThirdItem(page);
+    const all = await fw.items(page);
+    const same = all.find((it) => it.id === run.id);
+    expect(same.rev, "the placed record is not reopened").toBe(run.rev);
+    expect(same.state).toBe("ready");
+    const fresh = all.filter((it) => it.id !== run.id);
+    expect(fresh).toHaveLength(1);
+    expect(fresh[0].before.replace(/\s+/g, " ").trim()).toBe("first item second item");
+  });
+
+  test("an unplaced run still reopens its own record", async ({ page }) => {
+    const run = await commitRunWithList(page);
+    await addThirdItem(page);
+    const edits = (await fw.items(page)).filter((it) => it.kind === "edit");
+    expect(edits).toHaveLength(1);
+    expect(edits[0].id).toBe(run.id);
+    expect(edits[0].rev).toBe(run.rev + 1);
+  });
+});
