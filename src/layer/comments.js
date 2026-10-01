@@ -2991,8 +2991,16 @@
       return !!(markers && typeof markers.isToolNode === "function" && markers.isToolNode(node));
     }
 
-    /** The text node and offset a raw index names, or null. */
-    function positionAt(segments, rawIndex) {
+    /**
+     * The text node and offset a raw index names, or null.
+     *
+     * NOT called positionAt: that name is the box placer above, and two
+     * function declarations in one scope means the later one wins. From
+     * 58157dc (2026-08-23) to the style switcher this one did, so every
+     * anchored box was "placed" by a function that only reads segments and
+     * stayed in the corner its CSS gave it.
+     */
+    function segmentAt(segments, rawIndex) {
       for (var i = 0; i < segments.length; i += 1) {
         var segment = segments[i];
         if (rawIndex >= segment.start && rawIndex < segment.start + segment.length) {
@@ -3065,8 +3073,8 @@
 
     /** A live range over `length` characters of a scan, starting at `start`. */
     function rangeOver(scan, start, length) {
-      var first = positionAt(scan.segments, rawIndexOfCollapsed(scan.raw, start));
-      var last = positionAt(scan.segments, rawIndexOfCollapsed(scan.raw, start + length - 1));
+      var first = segmentAt(scan.segments, rawIndexOfCollapsed(scan.raw, start));
+      var last = segmentAt(scan.segments, rawIndexOfCollapsed(scan.raw, start + length - 1));
       if (!first || !last) return null;
       var range = doc.createRange();
       try {
