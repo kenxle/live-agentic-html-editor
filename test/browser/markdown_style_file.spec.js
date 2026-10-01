@@ -54,7 +54,8 @@ test("V24: a saved file shows the style's colours and font through its relative 
   // #fbf3e4 and #2b1d0e, the fixture's page ground and ink.
   expect(look.background).toBe("rgb(251, 243, 228)");
   expect(look.color).toBe("rgb(43, 29, 14)");
-  expect(look.fontFamily).toMatch(/^"Sample Face"/);
+  // WebKit reports the family without quotes, Chromium and Firefox with them.
+  expect(look.fontFamily).toMatch(/^"?Sample Face"?(,|$)/);
   expect(look.sampleFaceStatus).toContain("loaded");
   expect(look.sampleFaceUsable).toBe(true);
 });

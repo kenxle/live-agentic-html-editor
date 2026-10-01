@@ -1,6 +1,6 @@
 /*
  * live-agentic-html-editor review layer
- * version 0.2.0+521374f3d649
+ * version 0.2.0+787f1ce2fd98
  *
  * GENERATED FILE. Do not edit. Edit the sources under src/ and run
  *   npm run build:layer
@@ -12,7 +12,7 @@
   "use strict";
   var g = typeof globalThis !== "undefined" ? globalThis : window;
   g.LAHE = g.LAHE || {};
-  g.LAHE.version = "0.2.0+521374f3d649";
+  g.LAHE.version = "0.2.0+787f1ce2fd98";
 })();
 /* ---- src/shared/markers.js  (owner: 0A-kernel) ---- */
 // Markers: the attribute and class names that identify DOM the tool added.
@@ -17453,7 +17453,7 @@
       return "Sent to the agent. Waiting for it to add " + name + " to this page.";
     },
     removed: function (name) {
-      return name + " is no longer installed. Back to the document's style.";
+      return name + " is no longer installed, so the page is back to its own style.";
     }
   };
 
@@ -17565,6 +17565,15 @@
     });
     var documentId = isStyleId(s.documentId) ? s.documentId : HOUSE_ID;
     var shown = isStyleId(s.shown) ? s.shown : documentId;
+    var knownNames = s.knownNames || {};
+    var removedState = s.removed || null;
+    // A previewed style the list no longer has was removed while the page was
+    // open. It is a failed load that happened elsewhere, and the panel says so
+    // the same way: no previewing line, nothing to ask the agent for.
+    if (shown !== documentId && shown !== HOUSE_ID && s.listLoaded && !byId[shown]) {
+      removedState = removedState || { id: shown, name: knownNames[shown] || null };
+      shown = documentId;
+    }
     var previewing = shown !== documentId;
 
     function nameOf(id) {
@@ -17604,9 +17613,8 @@
     else status = WORDS.uses(nameOf(documentId));
 
     var notes = [];
-    var removed = s.removed && isStyleId(s.removed.id) ? s.removed : null;
-    var removedName = null;
-    if (removed) removedName = isStyleName(removed.name) ? removed.name : byId[removed.id] ? byId[removed.id].name : null;
+    var removed = removedState && isStyleId(removedState.id) ? removedState : null;
+    var removedName = !removed ? null : [removed.name, byId[removed.id] && byId[removed.id].name, knownNames[removed.id]].filter(isStyleName)[0] || null;
     var removedText = removed ? WORDS.removed(removedName || removed.id) : null;
     if (removed) {
       // A style removed before this page could learn its name (a reload, then
@@ -17679,7 +17687,6 @@
     // is in flight.
     var settledSeq = 0;
     var previewId = null;
-    var previewLink = null;
     var removed = null;
     var listeners = { settled: [], change: [] };
     if (typeof opts.onSettled === "function") listeners.settled.push(opts.onSettled);
@@ -17835,16 +17842,67 @@
     }
 
     // --- switching -----------------------------------------------------------
+    //
+    // ONE PAINT PER RESTYLE. A new preview link goes in beside whatever is on
+    // screen and changes nothing until its sheet has loaded. In that same task,
+    // before the browser paints, the swap happens: the new sheet is on, and the
+    // document's own style links and every other preview link are off. So the
+    // page goes from one style straight to the next, never through the house
+    // style for a frame. A load that fails leaves the old style where it was.
 
-    function removePreviewLink() {
-      if (previewLink && previewLink.parentNode) previewLink.parentNode.removeChild(previewLink);
-      previewLink = null;
+    // The pick still loading: {link, resolve}, or null. A newer pick, Back, or
+    // a clear takes its link out and settles its promise as superseded, so no
+    // caller waits on a link that will never fire.
+    var pending = null;
+    // What is on screen from a preview: its link (null for International,
+    // which needs none) and its id, or both null when the document's own style
+    // is showing.
+    var landedLink = null;
+    var landedId = null;
+
+    function dropLink(link) {
+      if (link && link.parentNode) link.parentNode.removeChild(link);
+    }
+
+    function cancelPending() {
+      if (!pending) return;
+      var was = pending;
+      pending = null;
+      dropLink(was.link);
+      was.resolve({ ok: false, superseded: true });
     }
 
     function setDocumentLinksDisabled(disabled) {
       documentLinks().forEach(function (link) {
         link.disabled = disabled;
       });
+    }
+
+    function dropOtherPreviewLinks(keep) {
+      stylesheetLinks().forEach(function (link) {
+        if (isPreviewLink(link) && link !== keep) dropLink(link);
+      });
+    }
+
+    /** The swap, in one task: this preview on, everything it replaces off. */
+    function swapIn(link, id) {
+      setDocumentLinksDisabled(true);
+      dropOtherPreviewLinks(link);
+      landedLink = link;
+      landedId = id;
+    }
+
+    /** Where a new preview link goes: after the house style, the document's
+     * own style links and the preview on screen, so it wins the cascade the
+     * moment it loads. */
+    function insertionPoint() {
+      var after = houseElement();
+      var candidates = documentLinks();
+      if (landedLink && landedLink.isConnected) candidates.push(landedLink);
+      candidates.forEach(function (el) {
+        if (after && after.compareDocumentPosition(el) & 4) after = el; // DOCUMENT_POSITION_FOLLOWING
+      });
+      return after;
     }
 
     function fontsReady() {
@@ -17858,8 +17916,9 @@
       return Promise.resolve();
     }
 
-    // The link has loaded (or there was none to load). Once its fonts have too,
-    // put the reader back where they were and tell whoever re-places things.
+    // The swap has happened (or there was none to make). Once the fonts have
+    // loaded too, put the reader back where they were and tell whoever
+    // re-places things.
     function settle(mine, position) {
       return fontsReady().then(function () {
         if (mine !== seq) return { ok: false, superseded: true };
@@ -17878,49 +17937,70 @@
      * @param {string} id
      * @param {{keepPosition?: boolean}} [how]  false on boot: sync.js restores
      *   the reading position across the reload itself
-     * @returns {Promise<{ok: boolean}>}
+     * @returns {Promise<{ok: boolean}>}  always settles: a pick overtaken by a
+     *   newer one resolves {superseded: true}
      */
     function preview(id, how) {
       var h = how || {};
       if (!usesHouseStyle() || !isStyleId(id)) return Promise.resolve({ ok: false, reason: "not-available" });
       if (id === documentStyle()) return back();
       var position = h.keepPosition === false ? null : capturePosition();
+      cancelPending();
       seq += 1;
       var mine = seq;
       removed = null;
-      removePreviewLink();
-      setDocumentLinksDisabled(true);
       previewId = id;
       writeKey(id);
       if (id === HOUSE_ID) {
+        // Nothing to load: the document's own links go off, in this task.
+        swapIn(null, HOUSE_ID);
         tell("change", { shown: id, pending: true });
         return settle(mine, position);
       }
-      var house = houseElement();
       var link = doc.createElement("link");
       markers.markChrome(link);
       link.setAttribute(PREVIEW_ATTR, id);
       link.rel = "stylesheet";
       link.href = "./.lahe-styles/" + id + "/style.css";
-      previewLink = link;
       var done = new Promise(function (resolve) {
+        pending = { link: link, resolve: resolve };
         link.addEventListener("load", function () {
+          if (!pending || pending.link !== link) {
+            // Overtaken: it must not paint, so it goes in this same task.
+            dropLink(link);
+            return;
+          }
+          pending = null;
+          swapIn(link, id);
           resolve(settle(mine, position));
         });
         link.addEventListener("error", function () {
+          dropLink(link);
+          if (!pending || pending.link !== link) return;
+          pending = null;
           resolve(failed(mine, id, position));
         });
       });
-      house.parentNode.insertBefore(link, house.nextSibling);
+      var at = insertionPoint();
+      at.parentNode.insertBefore(link, at.nextSibling);
       tell("change", { shown: id, pending: true });
       return done;
     }
 
     // The style's stylesheet did not load: it was removed, or this page is not
-    // served by a Lahe page server at all. The preview clears itself and the
-    // panel says why.
+    // served by a Lahe page server at all. When another preview is still on
+    // screen it stays, and the switch says so; otherwise the preview clears
+    // itself and the panel says why.
     function failed(mine, id, position) {
       if (mine !== seq) return Promise.resolve({ ok: false, superseded: true });
+      if (landedId) {
+        previewId = landedId;
+        writeKey(landedId);
+        settledSeq = mine;
+        var info = { shown: shown(), documentId: documentStyle(), previewing: true };
+        tell("change", info);
+        return Promise.resolve(Object.assign({ ok: false, failed: id }, info));
+      }
       removed = { id: id, name: typeof opts.nameOf === "function" ? opts.nameOf(id) : null };
       return clear(position).then(function (result) {
         return Object.assign({}, result, { ok: false, removed: id });
@@ -17928,9 +18008,12 @@
     }
 
     function clear(position) {
+      cancelPending();
       seq += 1;
       var mine = seq;
-      removePreviewLink();
+      dropOtherPreviewLinks(null);
+      landedLink = null;
+      landedId = null;
       setDocumentLinksDisabled(false);
       previewId = null;
       clearKey();
@@ -17944,11 +18027,29 @@
     }
 
     /**
+     * The list has answered and the style being previewed is not in it: it was
+     * removed while the page was open. That is a failed load that happened
+     * elsewhere, so it is treated the same way: the preview ends, the stored
+     * choice goes, and the panel says why.
+     *
+     * @param {string|null} name  the style's name, when the page ever knew it
+     */
+    function dropMissing(name) {
+      if (!previewId || previewId === HOUSE_ID) return Promise.resolve({ ok: false, reason: "nothing-to-drop" });
+      removed = { id: previewId, name: isStyleName(name) ? name : null };
+      return clear(capturePosition()).then(function (result) {
+        return Object.assign({}, result, { ok: false, removed: removed.id });
+      });
+    }
+
+    /**
      * On boot, before sync.js restores the reading position: put a kept
      * preview back, or drop it when the document now carries that style (the
      * agent applied it).
      *
-     * @returns {{restored: string|null, cleared: boolean}}
+     * @returns {{restored: string|null, cleared: boolean, landed?: Promise}}
+     *   landed settles once the restored preview has loaded, failed, or been
+     *   overtaken; boot waits on it before putting the reader back
      */
     function restore() {
       if (!usesHouseStyle()) return { restored: null, cleared: false };
@@ -18031,6 +18132,7 @@
       back: back,
       restore: restore,
       dismissRemoved: dismissRemoved,
+      dropMissing: dropMissing,
       fetchList: fetchList,
       onSettled: function (fn) {
         listeners.settled.push(fn);
@@ -48237,7 +48339,7 @@
   "use strict";
 
   // Replaced by scripts/build-layer.js at concatenation time.
-  var VERSION = "0.2.0+521374f3d649";
+  var VERSION = "0.2.0+787f1ce2fd98";
 
   var protocol = ns.protocol;
   var record = ns.record;
@@ -48260,6 +48362,12 @@
   // way to be sure nobody is mid-thought. The reload is deferred, not
   // cancelled: every poll re-asks, so it lands as soon as they stop.
   var INTERACTION_BUSY_MS = 10000;
+
+  // How long boot waits for a restored document style preview to load before
+  // it puts the reader back anyway (docs/features/20260930.01_style_switcher).
+  // A page server answers a local stylesheet in milliseconds; this bounds the
+  // case where it never answers at all.
+  var STYLE_RESTORE_WAIT_MS = 1500;
 
   // ---------------------------------------------------------------------------
   // Configuration
@@ -48471,29 +48579,51 @@
           return styleNameOf(id);
         }
       });
-    styleSwitch.restore();
+    var restoredStyle = styleSwitch.restore();
 
     // LAHE's hashless auto-reload leaves one exact, one-shot viewport marker.
     // Consume it before mounting the rail, merging records, or replaying edits,
     // all of which are avoidable layout work. This call only lives on boot, so
     // an SPA/Turbo remount and a bfcache restore never apply numeric scrolling.
-    if (ns.sync.restoreViewportAfterReload(win, reviewId)) {
-      // The restore put the reviewer's block back under their eye. The page is
-      // not finished arriving yet, though: mermaid has not drawn, images with no
-      // dimensions have not reserved their space, and a webfont may still swap.
-      // Each of those moves the layout after the restore, which is the jump the
-      // reviewer sees. So the block is re-asserted across the same window replay
-      // defers a lost verdict over, and the page is held invisible for the first
-      // few hundred milliseconds of it so the correcting does not read as jitter.
-      var landing = ns.sync.lastReloadRestore();
-      if (landing && landing.byBlock) {
-        ns.sync.steadyAfterReload(win, {
-          text: landing.text,
-          offset: landing.offset,
-          settleMs: ns.replay.SETTLE_MS
-        });
+    //
+    // A restored style preview changes the layout once its stylesheet and fonts
+    // land, so the reader is put back after that, not before: the block would
+    // otherwise be placed against the document's own style and then move. The
+    // wait is bounded, so a stylesheet that never answers cannot hold the
+    // reader at the top of the page.
+    if (restoredStyle && restoredStyle.landed && typeof win.setTimeout === "function") {
+      var putBack = false;
+      var putReaderBack = function () {
+        if (putBack) return;
+        putBack = true;
+        restoreReadingPosition();
+      };
+      restoredStyle.landed.then(putReaderBack, putReaderBack);
+      win.setTimeout(putReaderBack, STYLE_RESTORE_WAIT_MS);
+    } else {
+      restoreReadingPosition();
+    }
+
+    function restoreReadingPosition() {
+      if (ns.sync.restoreViewportAfterReload(win, reviewId)) {
+        // The restore put the reviewer's block back under their eye. The page is
+        // not finished arriving yet, though: mermaid has not drawn, images with no
+        // dimensions have not reserved their space, and a webfont may still swap.
+        // Each of those moves the layout after the restore, which is the jump the
+        // reviewer sees. So the block is re-asserted across the same window replay
+        // defers a lost verdict over, and the page is held invisible for the first
+        // few hundred milliseconds of it so the correcting does not read as jitter.
+        var landing = ns.sync.lastReloadRestore();
+        if (landing && landing.byBlock) {
+          ns.sync.steadyAfterReload(win, {
+            text: landing.text,
+            offset: landing.offset,
+            settleMs: ns.replay.SETTLE_MS
+          });
+        }
       }
     }
+
     var store = opts.store || ns.store.createStore();
     var rail =
       opts.rail ||
@@ -49451,12 +49581,15 @@
     // The list is fetched each time the panel opens, never on boot, except to
     // name a preview that came back with the page.
     var styleList = { loaded: false, styles: [] };
+    // Every name this page has seen in a list, kept after a style leaves it,
+    // so a style removed while the page is open is still named by its name.
+    var knownStyleNames = Object.create(null);
 
     function styleNameOf(id) {
       if (id === ns.styleSwitch.HOUSE_ID) return ns.styleSwitch.HOUSE_NAME;
       var styles = styleList ? styleList.styles : [];
       for (var i = 0; i < styles.length; i += 1) if (styles[i].id === id) return styles[i].name;
-      return null;
+      return knownStyleNames ? knownStyleNames[id] || null : null;
     }
 
     function refreshStylePanel() {
@@ -49474,7 +49607,8 @@
           list: styleList.styles,
           listLoaded: styleList.loaded,
           waiting: ns.styleSwitch.isWaiting(scopedStore.read(reviewId), shown),
-          removed: styleSwitch.removed()
+          removed: styleSwitch.removed(),
+          knownNames: knownStyleNames
         })
       );
     }
@@ -49482,9 +49616,37 @@
     function loadStyleList() {
       return styleSwitch.fetchList().then(function (got) {
         styleList = { loaded: true, styles: got.styles };
+        got.styles.forEach(function (entry) {
+          knownStyleNames[entry.id] = entry.name;
+        });
+        // A preview of a style the list no longer has: it was removed while the
+        // page was open. End it the way a failed load ends, which also drops the
+        // stored choice so the next reload does not try it again.
+        var shownId = styleSwitch.shown();
+        if (
+          styleSwitch.isPreviewing() &&
+          shownId !== ns.styleSwitch.HOUSE_ID &&
+          !got.styles.some(function (entry) {
+            return entry.id === shownId;
+          })
+        ) {
+          styleSwitch.dropMissing(knownStyleNames[shownId] || null);
+        }
         refreshStylePanel();
         return got;
       });
+    }
+
+    // ONE request. A press while one for this style is still waiting sends
+    // nothing new. Named, so a spec can prove the guard by calling it.
+    function askForStyle(id) {
+      if (id !== styleSwitch.shown()) return null;
+      if (ns.styleSwitch.isWaiting(scopedStore.read(reviewId), id)) return null;
+      var words = ns.styleSwitch.noteWords(id, styleNameOf(id) || id);
+      if (!words) return null;
+      var asked = comments.mintReadyNote(words, page);
+      refreshStylePanel();
+      return asked;
     }
 
     // A switch has landed: the open boxes follow their passages, and the rail
@@ -49510,17 +49672,7 @@
       dismiss: function () {
         return styleSwitch.dismissRemoved();
       },
-      // ONE request. A press while one for this style is still waiting sends
-      // nothing new.
-      ask: function (id) {
-        if (id !== styleSwitch.shown()) return null;
-        if (ns.styleSwitch.isWaiting(scopedStore.read(reviewId), id)) return null;
-        var words = ns.styleSwitch.noteWords(id, styleNameOf(id) || id);
-        if (!words) return null;
-        var asked = comments.mintReadyNote(words, page);
-        refreshStylePanel();
-        return asked;
-      }
+      ask: askForStyle
     });
     refreshStylePanel();
     if (styleSwitch.isPreviewing()) loadStyleList();
@@ -50063,6 +50215,8 @@
       comments: comments,
       // The document style switch, and a way to fetch its list again.
       styleSwitch: styleSwitch,
+      // The keep request's own handler, the one the panel's button runs.
+      askForStyle: askForStyle,
       styleList: function () {
         return styleList;
       },
