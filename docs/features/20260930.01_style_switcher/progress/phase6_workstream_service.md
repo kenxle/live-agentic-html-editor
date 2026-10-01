@@ -86,6 +86,71 @@ All six were then installed into a scratch state directory under `/private/tmp`,
 - `attr()` is not refused. CSS forbids an `attr()` value from becoming a URL, and no paid style uses it. If the security reviewer wants it refused anyway, it is one name in `FETCHING_FUNCTIONS`.
 - Two folder names can make the same id ("Field Guide" and "field_guide"). The second install replaces the first, as a reinstall does.
 
+## Fix round 1
+
+The security and code reviews of pull request A came back. I started from `origin/feat/style-switcher` at `6e2cd2e`, which holds this work, the docs task and the `planned: true` manifest entry for `src/shared/style_rules.js`. Every fix has a test, and each test ran red before its fix.
+
+### What changed
+
+- **Encodings (the blocker).** `checkStylesheetBytes` is the one bytes-taking check that install and serve both call. It refuses:
+  - a sheet starting with FE FF or FF FE
+  - any NUL byte
+  - bytes that `TextDecoder("utf-8", {fatal: true})` rejects
+  - an `@charset` other than `"utf-8"`, in any case, quoted or not
+
+  A UTF-8 byte-order mark is still allowed, since a browser reads it as UTF-8. A decoded `data:` SVG gets the same NUL, byte-order-mark and UTF-8 checks. The tests include a UTF-16LE sheet holding `@import url(https://evil.example/x.css);`, refused both at install and when copied into the store by hand.
+- **`data:` URLs are read the way a browser's URL parser reads them.**
+  - Tab, CR and LF are dropped from the whole `url()` value, and leading and trailing spaces and control characters are trimmed.
+  - The payload is base64 only when the header ends in `;base64`. A `base64` anywhere else is refused as an unknown parameter.
+  - The payload is percent-decoded first, then base64-decoded.
+  - A decoded SVG is also refused for `src=`, `<foreignobject`, `<style`, `image-set`, `image(` and `src(`. I added one more: an XML `encoding=` declaration other than UTF-8.
+- **The install lock.**
+  - The lock holds a random 16-byte value.
+  - A stale lock is renamed aside and removed only if it still holds what was read. If it changed, it goes back and the add stands down.
+  - An add releases the lock only while it still holds its own value.
+  - The first rename is inside the `try`, and every failure inside `install()` is a `refuse()` with a reason, including a non-EEXIST error from taking the lock, and a thrown non-Error.
+  - A failure removes the `.new-` folder and puts the `.old-` one back, so neither is left behind.
+- **The serve cache key** now holds `ctimeMs` too. The test rewrites the sheet keeping its size, inode and (whole-second) modification time, and the next serve refuses it.
+- **The path race** is recorded in `docs/ongoing/STYLES.md` under Known limits as accepted. There is no code change.
+- **`src/shared/style_rules.js`** holds:
+  - the id pattern and `isStyleId`
+  - the reserved id and name
+  - the hex rule and `isHexColour`
+  - the name rule and `isStyleName`
+  - `NAME_MAX`, `DESCRIPTION_MAX` and `PALETTE_MAX`
+
+  It uses the `markers.js` registration pattern, so it loads in Node and registers as `LAHE.styleRules` in the layer. `styles.js` takes all of these from it.
+- **Smaller fixes.**
+  - The RESERVED SEGMENTS comment now sits above the `hasHiddenSegment` JSDoc.
+  - `sendStyle`'s catch logs once through `say()`, as "could not answer ...".
+  - `writeArtifact`'s `copyBeside` catch logs once to `helper.log`, as "could not copy style ...". `markdown.js` has no `say()`, so it uses its own once-per-message latch through `log.js`.
+  - `BAD_CHARS` is built from a string of `\u` escapes, and a test checks that no literal bidi character is left in `styles.js` or `style_rules.js`.
+  - A `.woff2` file is a font before the licence-name check, so `ofl-sans.woff2` counts as a font.
+  - The refusal log latch is keyed on id plus reason.
+
+### Tests
+
+- `npm run gate:unit`: lint passed (403 files, no jsdom, manifest complete). 2370 tests: 2368 pass, 0 fail, 2 todo. The 24 new tests are 21 in `styles.test.js`, 2 in `static_styles.test.js` and 1 in `markdown_style.test.js`.
+- `test/browser/markdown_style_file.spec.js`: 2 passed, Chromium.
+- Three tests changed to match the new rules:
+  - The V5 symlink test now expects two log lines: the font and the sheet are refused for different reasons, and the latch is now per reason.
+  - The tab-stripping test splits `href` with tabs only. A CR or LF inside a CSS string ends the string before the URL parser sees it.
+  - The unwritable-folder test puts a file where the styles folder goes. `ensureDir` re-applies 0700 to a folder, so a `chmod` cannot make it unwritable.
+
+### The six paid styles, again
+
+All six read, install and serve with a 200 under the new rules: Field Guide, Folio, Ledger, Poster, Schematic and Textbook. Schematic's two `data:` SVGs pass the wider SVG check. I installed them into a scratch state folder under `/private/tmp`, outside any checkout.
+
+### For the orchestrator
+
+- `src/shared/style_rules.js` now exists while its manifest entry still says `planned: true`. Removing the mark and rebuilding `dist/` at the checkpoint is yours.
+- The `sendStyle` catch test makes an installed `fonts/` folder unreadable (`chmod 000`). The test restores it in `t.after`.
+
 ## To delete at cleanup
 
-Nothing in the repo. Scratch under `/private/tmp/claude-501/.../scratchpad/` (`paid-state/` with the six paid styles installed, `smoke-state/`, `edit_markdown.py`, gate output) stays where it is, since `/tmp` is never cleaned by hand.
+Nothing in the repo. Scratch under `/private/tmp/claude-501/.../scratchpad/` stays where it is, since `/tmp` is never cleaned by hand:
+
+- `paid-state/` and `paid-state-fix1/`, with the six paid styles installed
+- `smoke-state/`
+- `edit_markdown.py`, `fix1_styles.py` and `fix1_static.py`
+- gate output

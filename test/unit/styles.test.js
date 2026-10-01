@@ -477,3 +477,257 @@ test("install refuses the reserved id before touching the state directory", () =
   assert.equal(result.ok, false);
   assert.match(result.reason, /International/);
 });
+
+// ---------------------------------------------------------------------------
+// Fix round 1: encodings (security review blocker)
+// ---------------------------------------------------------------------------
+//
+// The rule reads a sheet as UTF-8. A browser decodes a sheet with a UTF-16
+// byte-order mark as UTF-16 whatever else it says, so a sheet the checker saw
+// as harmless bytes is live CSS that fetches. So the bytes-taking check, the
+// one install and serve both run, refuses every byte shape a browser could
+// read another way.
+
+function sheetBytes(bytes, fonts) {
+  return styles.checkStylesheetBytes(bytes, { fonts: fonts || FONTS });
+}
+
+const EVIL = "@import url(https://evil.example/x.css);\nbody{color:red}\n";
+
+test("a UTF-8 sheet passes through the bytes check, with or without a UTF-8 byte-order mark", () => {
+  assert.deepEqual(sheetBytes(Buffer.from("body{color:red}")), { ok: true });
+  assert.deepEqual(sheetBytes(Buffer.concat([Buffer.from([0xef, 0xbb, 0xbf]), Buffer.from("body{color:red}")])), { ok: true });
+  assert.deepEqual(sheetBytes(fs.readFileSync(path.join(FIXTURES, "sample", "style.css"))), { ok: true });
+});
+
+test("a UTF-16LE sheet holding @import, with its FF FE mark, is refused", () => {
+  const bytes = Buffer.concat([Buffer.from([0xff, 0xfe]), Buffer.from(EVIL, "utf16le")]);
+  assertRefused(sheetBytes(bytes), /UTF-16|byte-order/i, "UTF-16LE");
+});
+
+test("a UTF-16BE sheet, with its FE FF mark, is refused", () => {
+  const le = Buffer.from(EVIL, "utf16le");
+  const be = Buffer.alloc(le.length);
+  for (let i = 0; i < le.length; i += 2) { be[i] = le[i + 1]; be[i + 1] = le[i]; }
+  assertRefused(sheetBytes(Buffer.concat([Buffer.from([0xfe, 0xff]), be])), /UTF-16|byte-order/i, "UTF-16BE");
+});
+
+test("a UTF-16 mark with harmless-looking content is still refused", () => {
+  assertRefused(sheetBytes(Buffer.concat([Buffer.from([0xff, 0xfe]), Buffer.from("a")])), /UTF-16|byte-order/i);
+});
+
+test("a NUL byte anywhere is refused", () => {
+  assertRefused(sheetBytes(Buffer.from("body{color:red}\u0000")), /NUL/, "trailing NUL");
+  assertRefused(sheetBytes(Buffer.from(EVIL, "utf16le")), /NUL/, "UTF-16 with no mark");
+});
+
+test("bytes that are not valid UTF-8 are refused", () => {
+  assertRefused(sheetBytes(Buffer.from([0x62, 0x6f, 0x64, 0x79, 0xc3, 0x28])), /UTF-8/, "a broken sequence");
+  assertRefused(sheetBytes(Buffer.from([0x61, 0xff, 0x62])), /UTF-8/, "a lone 0xFF");
+});
+
+test("@charset other than utf-8 is refused; utf-8 in any case passes", () => {
+  assert.deepEqual(sheetBytes(Buffer.from("@charset \"utf-8\";\nbody{color:red}")), { ok: true });
+  assert.deepEqual(sheetBytes(Buffer.from("@charset \"UTF-8\";\nbody{color:red}")), { ok: true });
+  assertRefused(sheetBytes(Buffer.from("@charset \"utf-16\";\nbody{color:red}")), /@charset/, "utf-16");
+  assertRefused(sheetBytes(Buffer.from("@charset \"iso-2022-jp\";\nbody{color:red}")), /@charset/, "iso-2022-jp");
+  assertRefused(sheetBytes(Buffer.from("@CHARSET \"windows-1252\";")), /@charset/, "upper case");
+  assertRefused(sheetBytes(Buffer.from("@charset utf-16;")), /@charset/, "unquoted");
+});
+
+test("install refuses a UTF-16 sheet, and a page server refuses one copied in by hand", () => {
+  const state = tempState();
+  const folder = copyFixture("sample");
+  fs.writeFileSync(path.join(folder, "style.css"), Buffer.concat([Buffer.from([0xff, 0xfe]), Buffer.from(EVIL, "utf16le")]));
+  assertRefused(styles.install(state, folder), /UTF-16|byte-order/i, "install");
+
+  assert.equal(styles.install(state, copyFixture("sample")).ok, true);
+  const installed = path.join(stateDirModule.stylesRoot(state), "sample", "style.css");
+  fs.writeFileSync(installed, Buffer.concat([Buffer.from([0xff, 0xfe]), Buffer.from(EVIL, "utf16le")]));
+  const served = styles.answer(state, ["sample", "style.css"]);
+  assert.equal(served.status, 404);
+  assert.match(served.refused[0].reason, /UTF-16|byte-order/i);
+});
+
+test("a base64 data: SVG with a NUL or a UTF-16 mark is refused", () => {
+  const utf16 = Buffer.concat([Buffer.from([0xff, 0xfe]), Buffer.from("<svg><image href='https://evil.example/x'/></svg>", "utf16le")]);
+  assertRefused(sheet('a{mask:url("data:image/svg+xml;base64,' + utf16.toString("base64") + '")}'), /UTF-16|byte-order|NUL/i, "UTF-16 SVG");
+  const nul = Buffer.from("<svg>\u0000</svg>");
+  assertRefused(sheet('a{mask:url("data:image/svg+xml;base64,' + nul.toString("base64") + '")}'), /NUL/, "NUL in SVG");
+  assertRefused(sheet('a{mask:url("data:image/svg+xml,%3Csvg%3E%00%3C/svg%3E")}'), /NUL/, "percent-encoded NUL");
+});
+
+// ---------------------------------------------------------------------------
+// Fix round 1: a data: URL is read the way a browser's URL parser reads it
+// ---------------------------------------------------------------------------
+
+test("tab, CR and LF are stripped from the whole value before the check", () => {
+  // A browser drops these anywhere in a URL, so "h<tab>r<tab>ef" is href. CR
+  // and LF cannot sit inside a CSS string (they end it), so a tab is the one
+  // that reaches the URL parser from a quoted value.
+  const tabbed = "%3Csvg%3E%3Cimage h\tr\tef='https://evil.example/x'/%3E%3C/svg%3E";
+  assertRefused(sheet('a{mask:url("data:image/svg+xml,' + tabbed + '")}'), /href/i, "href split by tabs");
+  assertRefused(sheet('a{mask:url("da\tta:text/html,x")}'), /data:/i, "a tab inside data:");
+});
+
+test("the payload is base64 only when the header ends in ;base64", () => {
+  // Read as base64 this would hide its href. A browser reads it as plain text,
+  // so the check must too, and then it sees the href.
+  const plain = "%3Csvg%3E%3Cimage href='https://evil.example/x'/%3E%3C/svg%3E";
+  assertRefused(sheet('a{mask:url("data:image/svg+xml;base64;charset=utf-8,' + plain + '")}'), /href|parameter/i, "base64 not last");
+});
+
+test("percent-decoding comes before base64-decoding", () => {
+  const b64 = Buffer.from("<svg><image href='https://evil.example/x'/></svg>").toString("base64");
+  const encoded = b64.replace(/[A-Za-z]/g, (c) => "%" + c.charCodeAt(0).toString(16));
+  assertRefused(sheet('a{mask:url("data:image/svg+xml;base64,' + encoded + '")}'), /href/i, "percent-encoded base64");
+});
+
+test("a decoded SVG may not hold src=, foreignObject, style, image-set, image( or src(", () => {
+  for (const [markup, label] of [
+    ["<svg><x src='https://evil.example/x'/></svg>", "src="],
+    ["<svg><x SRC = 'https://evil.example/x'/></svg>", "SRC ="],
+    ["<svg><foreignObject><p>x</p></foreignObject></svg>", "foreignObject"],
+    ["<svg><style>rect{fill:red}</style></svg>", "style"],
+    ["<svg><rect style='fill:image-set(x 1x)'/></svg>", "image-set"],
+    ["<svg><rect style='fill:image(x)'/></svg>", "image("],
+    ["<svg><rect style='fill:src(x)'/></svg>", "src("]
+  ]) {
+    const encoded = encodeURIComponent(markup);
+    assertRefused(sheet('a{mask:url("data:image/svg+xml,' + encoded + '")}'), /SVG/, label);
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Fix round 1: the install lock, and failures as answers
+// ---------------------------------------------------------------------------
+
+test("install leaves another add's lock alone", (t) => {
+  const state = tempState();
+  const lock = () => styles._lockPath(state, "sample");
+  styles._hooks.afterLock = function () {
+    // Another add replaced our lock (say it judged ours stale). Releasing
+    // must not remove theirs.
+    fs.writeFileSync(lock(), "someone-else\n");
+  };
+  t.after(() => { styles._hooks.afterLock = null; });
+  assert.equal(styles.install(state, copyFixture("sample")).ok, true);
+  assert.equal(fs.readFileSync(lock(), "utf8"), "someone-else\n");
+});
+
+test("a stale lock is taken over only if it still holds what was read", (t) => {
+  const state = tempState();
+  stateDirModule.ensureStylesRoot(state);
+  const lock = styles._lockPath(state, "sample");
+  fs.writeFileSync(lock, "dead-add\n");
+  const old = new Date(Date.now() - 5 * 60 * 1000);
+  fs.utimesSync(lock, old, old);
+  styles._hooks.beforeStaleTakeover = function () {
+    // A live add took the lock between our read and our takeover.
+    fs.writeFileSync(lock, "live-add\n");
+  };
+  t.after(() => { styles._hooks.beforeStaleTakeover = null; });
+  const result = styles.install(state, copyFixture("sample"));
+  assertRefused(result, /another lahe style add/, "the live add's lock stands");
+  assert.equal(fs.readFileSync(lock, "utf8"), "live-add\n");
+  assert.equal(fs.existsSync(path.join(stateDirModule.stylesRoot(state), "sample")), false);
+});
+
+test("every failure inside install is an answer with a reason, and leaves no .new- or .old- folder", (t) => {
+  const state = tempState();
+  assert.equal(styles.install(state, copyFixture("sample")).ok, true);
+  const root = stateDirModule.stylesRoot(state);
+  t.after(() => {
+    styles._hooks.betweenRenames = null;
+    styles._hooks.beforeFirstRename = null;
+  });
+
+  styles._hooks.beforeFirstRename = function () { throw "not even an Error"; };
+  const first = styles.install(state, copyFixture("sample"));
+  assertRefused(first, /could not/, "a throw before the first rename");
+  assert.equal(/\n\s+at /.test(first.reason), false, "no stack trace");
+  styles._hooks.beforeFirstRename = null;
+
+  styles._hooks.betweenRenames = function () { throw new Error("disk full"); };
+  assertRefused(styles.install(state, copyFixture("sample")), /earlier install is kept/, "between the renames");
+  styles._hooks.betweenRenames = null;
+
+  assert.deepEqual(fs.readdirSync(root).sort(), ["sample"], "no temp, aside or lock left");
+});
+
+test("a styles folder that cannot be made is a refusal, not a thrown error", () => {
+  // A file where the styles folder should be: the mkdir before the lock
+  // fails with a file system error that is not EEXIST from the lock itself.
+  const state = tempState();
+  fs.mkdirSync(state, { recursive: true });
+  fs.writeFileSync(path.join(state, "styles"), "not a folder");
+  const result = styles.install(state, copyFixture("sample"));
+  assertRefused(result, /could not/, "a file system error before the lock");
+  assert.equal(/\n\s+at /.test(result.reason), false, "no stack trace");
+  assert.equal(fs.readFileSync(path.join(state, "styles"), "utf8"), "not a folder");
+});
+
+// ---------------------------------------------------------------------------
+// Fix round 1: the serve cache key
+// ---------------------------------------------------------------------------
+
+test("the serve cache sees a rewrite that keeps the size, the modification time and the inode", () => {
+  const state = tempState();
+  assert.equal(styles.install(state, copyFixture("sample")).ok, true);
+  const installed = path.join(stateDirModule.stylesRoot(state), "sample", "style.css");
+  // A whole-second time, so putting it back is exact on every file system.
+  const when = new Date(Math.floor(Date.now() / 1000) * 1000 - 60000);
+  fs.utimesSync(installed, when, when);
+  assert.equal(styles.answer(state, ["sample", "style.css"]).status, 200);
+
+  const before = fs.statSync(installed);
+  const good = fs.readFileSync(installed, "utf8");
+  // Same length, same inode, mtime put back: only ctime moves.
+  const bad = "a{background:url(https://evil.example/x)}";
+  fs.writeFileSync(installed, bad + " ".repeat(Buffer.byteLength(good) - Buffer.byteLength(bad)));
+  fs.utimesSync(installed, when, when);
+  const after = fs.statSync(installed);
+  assert.equal(after.size, before.size);
+  assert.equal(after.mtimeMs, before.mtimeMs);
+  assert.equal(after.ino, before.ino);
+  assert.equal(styles.answer(state, ["sample", "style.css"]).status, 404);
+});
+
+// ---------------------------------------------------------------------------
+// Fix round 1: smaller fixes
+// ---------------------------------------------------------------------------
+
+test("a font whose name looks like a licence (ofl-sans.woff2) is a font", () => {
+  const folder = copyFixture("sample");
+  fs.copyFileSync(path.join(folder, "fonts", "sample-face.woff2"), path.join(folder, "fonts", "ofl-sans.woff2"));
+  fs.appendFileSync(path.join(folder, "style.css"), '\n@font-face{font-family:"O";src:url("./fonts/ofl-sans.woff2")}\n');
+  const result = styles.readStyleFolder(folder);
+  assert.equal(result.ok, true, result.reason);
+  assert.ok(result.files.some((f) => f.rel === "fonts/ofl-sans.woff2"));
+});
+
+test("the style sources spell their bidi characters as escapes", () => {
+  for (const file of [["service", "styles.js"], ["shared", "style_rules.js"]]) {
+    const source = fs.readFileSync(path.join(__dirname, "..", "..", "src", ...file), "utf8");
+    assert.equal(/[‪-‮⁦-⁩]/.test(source), false, file.join("/"));
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Fix round 1: the shared rules
+// ---------------------------------------------------------------------------
+
+test("the id, colour and name rules are spelled once, in src/shared/style_rules.js", () => {
+  const rules = require("../../src/shared/style_rules.js");
+  assert.equal(rules.isStyleId("sample-dark"), true);
+  assert.equal(rules.isStyleId("Sample"), false);
+  assert.equal(rules.isHexColour("#1f6b3a"), true);
+  assert.equal(rules.isHexColour("#12345"), false);
+  assert.equal(rules.isStyleName("Rock & Roll"), true);
+  assert.equal(rules.isStyleName("Use it. Now!"), false);
+  assert.equal(rules.RESERVED_ID, "international");
+  assert.equal(rules.NAME_MAX, 40);
+  assert.equal(rules.DESCRIPTION_MAX, 300);
+  assert.equal(rules.PALETTE_MAX, 6);
+  assert.equal(styles.isStyleId, rules.isStyleId, "styles.js uses the shared rule itself");
+});

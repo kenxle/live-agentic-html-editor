@@ -198,9 +198,11 @@ test("V5: a symlink planted after install is refused, and said once in the helpe
   fs.symlinkSync(path.join(FIXTURES, "sample", "style.css"), sheetLink);
   assert.equal((await request(server.meta, "/.lahe-styles/sample/style.css")).status, 404);
   assert.equal((await request(server.meta, "/.lahe-styles/sample/style.css")).status, 404);
+  // One line per server per style and reason: the font, then the sheet, each
+  // said once although the sheet was asked for twice.
   const lines = logLines(f.state, "refused style sample");
-  assert.equal(lines.length, 1, "one line per server per style: " + JSON.stringify(lines));
-  assert.match(lines[0], /symlink/);
+  assert.equal(lines.length, 2, "one line per reason: " + JSON.stringify(lines));
+  assert.ok(lines.every((line) => /symlink/.test(line)));
 });
 
 test("V5: a good sheet is served, then edited to fetch, then refused, with one log line per server", async (t) => {
@@ -225,4 +227,39 @@ test("V5: a good sheet is served, then edited to fetch, then refused, with one l
   const lines = logLines(f.state, "refused style sample");
   assert.equal(lines.length, 2, "one line for each of the two servers: " + JSON.stringify(lines));
   assert.ok(lines.every((line) => /url\(/.test(line)), "the line names the reason");
+});
+
+test("fix round 1: a style refused for a new reason is said again, once per reason", async (t) => {
+  const f = setup();
+  const server = await staticServers.start({ dir: f.state, sessionId: "s_styles_reasons", root: f.root });
+  t.after(async () => { await staticServers.stopAll(f.state, "s_styles_reasons"); });
+
+  const sheet = path.join(f.installed, "style.css");
+  fs.appendFileSync(sheet, "\na{background:url(\"https://example.com/leak\")}\n");
+  assert.equal((await request(server.meta, "/.lahe-styles/sample/style.css")).status, 404);
+  assert.equal((await request(server.meta, "/.lahe-styles/sample/style.css")).status, 404);
+
+  fs.rmSync(sheet);
+  fs.symlinkSync(path.join(FIXTURES, "sample", "style.css"), sheet);
+  assert.equal((await request(server.meta, "/.lahe-styles/sample/style.css")).status, 404);
+  assert.equal((await request(server.meta, "/.lahe-styles/sample/style.css")).status, 404);
+
+  const lines = logLines(f.state, "refused style sample");
+  assert.equal(lines.length, 2, JSON.stringify(lines));
+  assert.match(lines[0], /url\(/);
+  assert.match(lines[1], /symlink/);
+});
+
+test("fix round 1: an error while answering a style is a 404 and one helper-log line, not silence", async (t) => {
+  const f = setup();
+  const fonts = path.join(f.installed, "fonts");
+  fs.chmodSync(fonts, 0o000);
+  t.after(() => fs.chmodSync(fonts, 0o700));
+  const server = await staticServers.start({ dir: f.state, sessionId: "s_styles_error", root: f.root });
+  t.after(async () => { await staticServers.stopAll(f.state, "s_styles_error"); });
+
+  assert.equal((await request(server.meta, "/.lahe-styles/sample/style.css")).status, 404);
+  assert.equal((await request(server.meta, "/.lahe-styles/sample/style.css")).status, 404);
+  const lines = logLines(f.state, "could not answer");
+  assert.equal(lines.length, 1, JSON.stringify(lines));
 });

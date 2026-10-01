@@ -36,31 +36,34 @@
 
 "use strict";
 
+var crypto = require("node:crypto");
 var fs = require("node:fs");
 var path = require("node:path");
 
 var stateDir = require("./state_dir.js");
+var rules = require("../shared/style_rules.js");
 
 // The reserved path segment. Any request whose path has it is answered from
 // the installed styles, never from the disk under a served root.
 var SEGMENT = ".lahe-styles";
 
-// The house style, which is always there and is never installed.
-var RESERVED_ID = "international";
-var RESERVED_NAME = "International Style";
+// The house style, which is always there and is never installed. The id,
+// colour and name rules live in src/shared/style_rules.js so the rail checks
+// the same ones.
+var RESERVED_ID = rules.RESERVED_ID;
+var RESERVED_NAME = rules.RESERVED_NAME;
 
-var ID_PATTERN = /^[a-z0-9][a-z0-9-]{0,39}$/;
 var FONT_NAME = /^[a-z0-9][a-z0-9._-]*\.woff2$/;
 var LICENCE_NAME = /^(?:licen[cs]e|copying|ofl)(?:[._-][A-Za-z0-9._-]*)?$/i;
 var READER_FILES = ["DESIGN.md"];
-var HEX = /^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$/;
-var NAME_CHARS = /^[\p{L}\p{N} '&-]+$/u;
 var VERSION = /^[A-Za-z0-9.+-]{1,20}$/;
 // Control characters (C0, DEL, C1) and the bidirectional overrides and
 // isolates. A metadata string is printed in a terminal and a name is written
-// into a note to the agent, so none of these may ride in on one.
-var BAD_CHARS = /[\u0000-\u001f\u007f-\u009f‪-‮⁦-⁩]/;
-var BAD_CHARS_ALL = /[\u0000-\u001f\u007f-\u009f‪-‮⁦-⁩]/g;
+// into a note to the agent, so none of these may ride in on one. Spelled as
+// escapes: a literal bidi character in source reorders what a reviewer sees.
+var BAD_CHARS_SOURCE = "[\\u0000-\\u001f\\u007f-\\u009f\\u202a-\\u202e\\u2066-\\u2069]";
+var BAD_CHARS = new RegExp(BAD_CHARS_SOURCE);
+var BAD_CHARS_ALL = new RegExp(BAD_CHARS_SOURCE, "g");
 
 var LIMITS = {
   sheetBytes: 1024 * 1024,
@@ -70,9 +73,9 @@ var LIMITS = {
   // DESIGN.md and licences are never served, but they are read into memory,
   // so they get a cap too.
   readerBytes: 1024 * 1024,
-  nameChars: 40,
-  descriptionChars: 300,
-  paletteColours: 6
+  nameChars: rules.NAME_MAX,
+  descriptionChars: rules.DESCRIPTION_MAX,
+  paletteColours: rules.PALETTE_MAX
 };
 
 // Functions that fetch a file named by a string. url() is checked on its own.
@@ -93,10 +96,13 @@ var FOLDER_HELP = [
 
 var O_NOFOLLOW = fs.constants.O_NOFOLLOW || 0;
 
-// Test seams, empty in the product. betweenRenames runs after an installed
-// style has been renamed aside and before the new one is renamed in, which is
-// the one moment a failure must put the old install back.
-var hooks = { betweenRenames: null };
+// Test seams, empty in the product.
+//  - afterLock: the lock is held and nothing is written yet.
+//  - beforeStaleTakeover: a stale lock has been read and not yet taken over.
+//  - beforeFirstRename: the new folder is written; nothing is renamed yet.
+//  - betweenRenames: an installed style has been renamed aside and the new one
+//    not yet renamed in, the one moment a failure must put the old one back.
+var hooks = { afterLock: null, beforeStaleTakeover: null, beforeFirstRename: null, betweenRenames: null };
 
 var LOCK_STALE_MS = 60 * 1000;
 
@@ -104,9 +110,7 @@ var LOCK_STALE_MS = 60 * 1000;
 // Small rules
 // ---------------------------------------------------------------------------
 
-function isStyleId(value) {
-  return typeof value === "string" && ID_PATTERN.test(value);
-}
+var isStyleId = rules.isStyleId;
 
 /** The id a folder name makes, or null: lowercased, spaces and underscores to hyphens. */
 function idFromFolderName(name) {
@@ -225,49 +229,81 @@ function readUrl(css, start) {
   return { ok: true, value: css.slice(j), end: css.length };
 }
 
-// Percent-decoding a data: URL's payload the way a browser does, one byte per
-// %XX. The checks below look for ASCII words, so a non-ASCII byte decoding to
-// the wrong character cannot hide one.
-function percentDecode(payload) {
-  return payload.replace(/%([0-9A-Fa-f]{2})/g, function (whole, hex) {
-    return String.fromCharCode(parseInt(hex, 16));
-  });
+// Percent-decoding a data: URL's payload the way a browser does: each %XX is
+// one byte, and every other character is its UTF-8 bytes.
+function percentDecodeBytes(payload) {
+  var bytes = [];
+  for (var i = 0; i < payload.length; i += 1) {
+    var c = payload[i];
+    if (c === "%" && /^[0-9A-Fa-f]{2}$/.test(payload.slice(i + 1, i + 3))) {
+      bytes.push(parseInt(payload.slice(i + 1, i + 3), 16));
+      i += 2;
+    } else {
+      var encoded = Buffer.from(c, "utf8");
+      for (var b = 0; b < encoded.length; b += 1) bytes.push(encoded[b]);
+    }
+  }
+  return Buffer.from(bytes);
 }
 
+// Words a decoded data: SVG may not hold, and why. An SVG used behind mask,
+// filter or clip-path loads as a document of its own, so anything that names
+// another file, or a way to spell one this check cannot read, is refused.
+var SVG_REFUSALS = [
+  [/href/, "href, which can load another file"],
+  [/url\(/, "url(, which can load another file"],
+  [/@import/, "@import, which can load another file"],
+  [/&/, "an & entity, which can spell a fetch this check cannot read"],
+  [/\\/, "a backslash, which can spell a fetch this check cannot read"],
+  [/\bsrc\s*=/, "src=, which can load another file"],
+  [/<foreignobject/, "foreignObject, which can hold HTML"],
+  [/<style/, "a style element, which is CSS this check does not read"],
+  [/image-set/, "image-set, which can load another file"],
+  [/\bimage\s*\(/, "image(, which can load another file"],
+  [/\bsrc\s*\(/, "src(, which can load another file"],
+  [/<\?xml[^>]*encoding\s*=\s*["']?(?!utf-8["'\s?])/, "an XML encoding other than UTF-8"]
+];
+
 /**
- * A data: URL is allowed only as an SVG, a PNG or a woff2 font. An SVG used
- * behind mask, filter or clip-path loads as a document of its own, so once
- * decoded it may not hold href, url( or @import. It also may not hold an XML
- * entity or a backslash, which can spell those words in a way this check
- * would have to decode twice to see.
+ * A data: URL is allowed only as an SVG, a PNG or a woff2 font, read the way
+ * a browser's URL parser reads it: tab, CR and LF are dropped from the whole
+ * value, the payload is percent-decoded, and only then base64-decoded, and
+ * only when the header ends in ;base64. A decoded SVG must be UTF-8 text with
+ * no NUL and none of SVG_REFUSALS.
  */
 function checkDataUrl(value) {
   var comma = value.indexOf(",");
   if (comma === -1) return refuse("it has a data: url with no comma");
-  var header = value.slice(5, comma).toLowerCase().split(";");
-  var type = header[0];
+  var headerText = value.slice(5, comma).toLowerCase();
+  var header = headerText.split(";");
+  var type = header[0].trim();
   if (DATA_TYPES.indexOf(type) === -1) {
     return refuse("it has a data: url of type " + clean(type || "none") +
       "; only data:image/svg+xml, data:image/png and data:font/woff2 are allowed");
   }
-  var base64 = false;
+  var base64 = /;[ ]*base64[ ]*$/.test(headerText);
   for (var i = 1; i < header.length; i += 1) {
     var param = header[i].trim();
-    if (param === "base64") base64 = true;
-    else if (!/^charset=[a-z0-9._-]+$/.test(param)) return refuse("it has a data: url with the parameter " + clean(param));
+    if (param === "base64" && i === header.length - 1) continue;
+    if (!/^charset=[a-z0-9._-]+$/.test(param)) return refuse("it has a data: url with the parameter " + clean(param));
   }
   if (type !== "image/svg+xml") return { ok: true };
-  var payload = value.slice(comma + 1);
-  var text = (base64 ? Buffer.from(payload, "base64").toString("latin1") : percentDecode(payload)).toLowerCase();
-  if (text.indexOf("href") !== -1) return refuse("its data: SVG holds href, which can load another file");
-  if (text.indexOf("url(") !== -1) return refuse("its data: SVG holds url(, which can load another file");
-  if (text.indexOf("@import") !== -1) return refuse("its data: SVG holds @import, which can load another file");
-  if (text.indexOf("&") !== -1) return refuse("its data: SVG holds an & entity, which can spell a fetch this check cannot read");
-  if (text.indexOf("\\") !== -1) return refuse("its data: SVG holds a backslash, which can spell a fetch this check cannot read");
+  var bytes = percentDecodeBytes(value.slice(comma + 1));
+  if (base64) bytes = Buffer.from(bytes.toString("latin1"), "base64");
+  var problem = encodingProblem(bytes, "its data: SVG");
+  if (problem) return refuse(problem);
+  var text = UTF8.decode(bytes).toLowerCase();
+  for (var r = 0; r < SVG_REFUSALS.length; r += 1) {
+    if (SVG_REFUSALS[r][0].test(text)) return refuse("its data: SVG holds " + SVG_REFUSALS[r][1]);
+  }
   return { ok: true };
 }
 
-function checkUrlValue(value, fonts) {
+function checkUrlValue(rawValue, fonts) {
+  // A browser's URL parser drops tab, CR and LF anywhere in a URL and trims
+  // leading and trailing C0 controls and spaces, so the check reads it the
+  // same way.
+  var value = rawValue.replace(/[\t\r\n]/g, "").replace(/^[\u0000-\u0020]+|[\u0000-\u0020]+$/g, "");
   if (value.indexOf("\\") !== -1) return refuse("it has a url() holding a backslash escape; write the path plainly");
   var font = /^(?:\.\/)?fonts\/([^/]*)$/.exec(value);
   if (font) {
@@ -309,6 +345,14 @@ function checkStylesheet(text, options) {
     if (c === "@") {
       var at = readIdent(css, i + 1);
       if (baseName(at.name) === "import") return refuse("it uses @import, which loads another stylesheet");
+      if (at.name === "charset") {
+        var k = at.end;
+        while (k < css.length && isWhitespace(css[k])) k += 1;
+        var named = css[k] === "\"" || css[k] === "'" ? readString(css, k) : null;
+        if (!named || named.bad || named.value.toLowerCase() !== "utf-8") {
+          return refuse("it has an @charset other than \"utf-8\"; a style must be UTF-8");
+        }
+      }
       i = Math.max(at.end, i + 1);
       continue;
     }
@@ -334,6 +378,42 @@ function checkStylesheet(text, options) {
     i += 1;
   }
   return { ok: true };
+}
+
+// THE BYTES COME FIRST. The tokenizer reads text as UTF-8. A browser reads a
+// stylesheet with a UTF-16 byte-order mark as UTF-16 whatever the server or
+// the sheet says, and an @charset can name another encoding for a file opened
+// from disk. Either way the checked text is not the text the browser runs. So
+// the one check install and serve both call refuses every byte shape a
+// browser could decode as anything but the UTF-8 that was checked.
+var UTF8 = new TextDecoder("utf-8", { fatal: true });
+
+/** A reason the bytes could be read as anything but plain UTF-8, or null. */
+function encodingProblem(bytes, label) {
+  if (bytes.length >= 2 && ((bytes[0] === 0xfe && bytes[1] === 0xff) || (bytes[0] === 0xff && bytes[1] === 0xfe))) {
+    return label + " starts with a UTF-16 byte-order mark; a style must be UTF-8";
+  }
+  if (bytes.indexOf(0) !== -1) return label + " holds a NUL byte; a style must be UTF-8 text";
+  try {
+    UTF8.decode(bytes);
+  } catch (err) {
+    return label + " is not valid UTF-8";
+  }
+  return null;
+}
+
+/**
+ * The stylesheet rule on the file's bytes, which is what install and serve
+ * both run. A UTF-8 byte-order mark is allowed (a browser reads it as UTF-8)
+ * and dropped before the tokenizer.
+ *
+ * @returns {{ok: true} | {ok: false, reason: string}}
+ */
+function checkStylesheetBytes(bytes, options) {
+  var buffer = Buffer.isBuffer(bytes) ? bytes : Buffer.from(bytes);
+  var problem = encodingProblem(buffer, "the sheet");
+  if (problem) return refuse(problem);
+  return checkStylesheet(UTF8.decode(buffer), options);
 }
 
 // ---------------------------------------------------------------------------
@@ -365,7 +445,7 @@ function checkMetadata(value) {
   var bad = badStringPath(value, "metadata");
   if (bad) return refuse("metadata.json has a control character or a bidi override in " + bad);
   var name = value.name;
-  if (typeof name !== "string" || !name || name.length > LIMITS.nameChars || name !== name.trim() || !NAME_CHARS.test(name)) {
+  if (!rules.isStyleName(name)) {
     return refuse("metadata.json needs a name of letters, digits, spaces, hyphens, apostrophes and ampersands, " +
       "at most " + LIMITS.nameChars + " characters");
   }
@@ -388,7 +468,7 @@ function checkMetadata(value) {
     if (!Array.isArray(value.palette)) return refuse("metadata.json's palette must be a list of {\"value\": \"#hex\"}");
     for (var i = 0; i < value.palette.length; i += 1) {
       var entry = value.palette[i];
-      if (!entry || typeof entry !== "object" || typeof entry.value !== "string" || !HEX.test(entry.value)) {
+      if (!entry || typeof entry !== "object" || !rules.isHexColour(entry.value)) {
         return refuse("metadata.json's palette entry " + (i + 1) + " is not {\"value\": \"#hex\"} with 3, 4, 6 or 8 hex digits");
       }
       if (palette.length < LIMITS.paletteColours) palette.push(entry.value);
@@ -446,7 +526,7 @@ function readOnce(file, maxBytes, label, options) {
       if (real.indexOf(opts.realRoot + path.sep) !== 0) return refuse(label + " resolves outside the styles folder");
     }
     if (opts.cached && opts.cached.size === stat.size && opts.cached.mtimeMs === stat.mtimeMs &&
-        opts.cached.ino === stat.ino && opts.cached.dev === stat.dev) {
+        opts.cached.ctimeMs === stat.ctimeMs && opts.cached.ino === stat.ino && opts.cached.dev === stat.dev) {
       return { ok: true, bytes: opts.cached.bytes, stat: stat, fromCache: true };
     }
     var bytes = fs.readFileSync(fd);
@@ -521,7 +601,8 @@ function readStyleFolder(folder) {
       var name = names[i];
       if (name.charAt(0) === ".") continue;
       var rel = "fonts/" + name;
-      if (LICENCE_NAME.test(name)) {
+      // A .woff2 is a font whatever its name says, so ofl-sans.woff2 counts.
+      if (!/\.woff2$/i.test(name) && LICENCE_NAME.test(name)) {
         var licence = readOnce(path.join(fontsDir, name), LIMITS.readerBytes, rel);
         if (!licence.ok) return licence;
         files.push({ rel: rel, bytes: licence.bytes });
@@ -543,7 +624,7 @@ function readStyleFolder(folder) {
     }
   }
 
-  var verdict = checkStylesheet(sheet.bytes.toString("utf8"), { fonts: fonts });
+  var verdict = checkStylesheetBytes(sheet.bytes, { fonts: fonts });
   if (!verdict.ok) return refuse("style.css is refused: " + verdict.reason);
 
   var top = sortedNames(abs);
@@ -570,24 +651,55 @@ function lockPath(dir, id) {
   return path.join(stateDir.stylesRoot(dir), "." + id + ".lock");
 }
 
-/** Take the per-id install lock, or return null when another add holds it. */
+function readOrNull(file) {
+  try { return fs.readFileSync(file, "utf8"); } catch (err) { return null; }
+}
+
+function errorWords(err) {
+  if (err && typeof err === "object") return String(err.code || err.message || "unknown error");
+  return String(err);
+}
+
+/**
+ * Take the per-id install lock. Returns the nonce written into it, or null
+ * when another add holds it. Throws only on a file system error.
+ *
+ * A lock older than a minute belongs to an add that died and is taken over,
+ * but only if it still holds what was read: it is renamed aside (atomic),
+ * and if what was renamed is not what was read, a live add took the lock in
+ * between, so it is put back and this add stands down.
+ */
 function takeLock(lock) {
+  var nonce = crypto.randomBytes(16).toString("hex");
   for (var attempt = 0; attempt < 2; attempt += 1) {
     try {
       var fd = fs.openSync(lock, "wx", stateDir.FILE_MODE);
-      fs.writeSync(fd, String(process.pid) + "\n");
-      fs.closeSync(fd);
-      return lock;
+      try { fs.writeSync(fd, nonce + "\n"); } finally { fs.closeSync(fd); }
+      return nonce;
     } catch (err) {
-      if (err.code !== "EEXIST") throw err;
-      var age;
-      try { age = Date.now() - fs.lstatSync(lock).mtimeMs; } catch (gone) { continue; }
-      // A lock older than a minute belongs to an add that died.
-      if (age <= LOCK_STALE_MS) return null;
-      try { fs.unlinkSync(lock); } catch (gone) { /* another add took it over first */ }
+      if (!err || err.code !== "EEXIST") throw err;
     }
+    var seen = readOrNull(lock);
+    var age;
+    try { age = Date.now() - fs.lstatSync(lock).mtimeMs; } catch (gone) { continue; }
+    if (age <= LOCK_STALE_MS || seen === null) return null;
+    if (typeof hooks.beforeStaleTakeover === "function") hooks.beforeStaleTakeover();
+    var aside = lock + ".stale-" + nonce;
+    try { fs.renameSync(lock, aside); } catch (gone) { continue; }
+    if (readOrNull(aside) !== seen) {
+      try { fs.linkSync(aside, lock); } catch (taken) { /* a newer lock is already there */ }
+      try { fs.unlinkSync(aside); } catch (gone) { /* already gone */ }
+      return null;
+    }
+    try { fs.unlinkSync(aside); } catch (gone) { /* already gone */ }
   }
   return null;
+}
+
+/** Release the lock only if it is still ours. */
+function releaseLock(lock, nonce) {
+  if (readOrNull(lock) !== nonce + "\n") return;
+  try { fs.unlinkSync(lock); } catch (err) { /* already gone */ }
 }
 
 function writeStyleFiles(folder, files) {
@@ -599,12 +711,17 @@ function writeStyleFiles(folder, files) {
   });
 }
 
+function removeQuietly(target) {
+  try { fs.rmSync(target, { recursive: true, force: true }); } catch (err) { /* reported by the caller's answer */ }
+}
+
 /**
  * Install a style folder into the state directory. Reads and checks every
  * file once, writes those same bytes into a new folder beside the target,
  * then swaps it in: an installed style is renamed aside, the new one renamed
  * in, and the old one removed. A failure between the two renames puts the old
- * one back.
+ * one back. Every failure is an answer with a reason, never a thrown error,
+ * and no .new- or .old- folder is left behind.
  *
  * @returns {{ok: true, id: string, name: string, replaced: boolean, folder: string}
  *   | {ok: false, reason: string}}
@@ -612,39 +729,54 @@ function writeStyleFiles(folder, files) {
 function install(dir, folder) {
   var read = readStyleFolder(folder);
   if (!read.ok) return read;
-  var root = stateDir.ensureStylesRoot(dir);
   var id = read.id;
-  var lock = takeLock(lockPath(dir, id));
-  if (!lock) return refuse("another lahe style add of " + id + " is running; try again when it finishes");
-  var stamp = process.pid + "-" + Date.now();
+  var root;
+  var lock;
+  var nonce;
+  try {
+    root = stateDir.ensureStylesRoot(dir);
+    lock = lockPath(dir, id);
+    nonce = takeLock(lock);
+  } catch (err) {
+    return refuse("could not take the install lock for " + id + " (" + errorWords(err) + ")");
+  }
+  if (!nonce) return refuse("another lahe style add of " + id + " is running; try again when it finishes");
+  var stamp = process.pid + "-" + nonce.slice(0, 8);
   var fresh = path.join(root, "." + id + ".new-" + stamp);
   var aside = path.join(root, "." + id + ".old-" + stamp);
   var target = path.join(root, id);
+  var movedAside = false;
   try {
-    try {
-      writeStyleFiles(fresh, read.files);
-    } catch (err) {
-      fs.rmSync(fresh, { recursive: true, force: true });
-      return refuse("could not write the style into " + clean(root) + " (" + (err.code || err.message) + ")");
-    }
+    if (typeof hooks.afterLock === "function") hooks.afterLock();
+    writeStyleFiles(fresh, read.files);
+    if (typeof hooks.beforeFirstRename === "function") hooks.beforeFirstRename();
     var existing = lstatOrNull(target);
     if (existing) {
       fs.renameSync(target, aside);
-      try {
-        if (typeof hooks.betweenRenames === "function") hooks.betweenRenames();
-        fs.renameSync(fresh, target);
-      } catch (err) {
-        fs.renameSync(aside, target);
-        fs.rmSync(fresh, { recursive: true, force: true });
-        return refuse("could not replace the installed " + id + " (" + (err.code || err.message) + "); the earlier install is kept");
-      }
-      fs.rmSync(aside, { recursive: true, force: true });
-    } else {
-      fs.renameSync(fresh, target);
+      movedAside = true;
+      if (typeof hooks.betweenRenames === "function") hooks.betweenRenames();
+    }
+    fs.renameSync(fresh, target);
+    if (movedAside) {
+      movedAside = false;
+      removeQuietly(aside);
     }
     return { ok: true, id: id, name: read.metadata.name, replaced: !!existing, folder: target };
+  } catch (err) {
+    var kept = "";
+    if (movedAside) {
+      try {
+        fs.renameSync(aside, target);
+        kept = "; the earlier install is kept";
+      } catch (restoreErr) {
+        kept = "; the earlier install could not be put back (" + errorWords(restoreErr) + "), so reinstall it";
+        removeQuietly(aside);
+      }
+    }
+    removeQuietly(fresh);
+    return refuse("could not install " + id + " (" + errorWords(err) + ")" + kept);
   } finally {
-    try { fs.unlinkSync(lock); } catch (err) { /* already gone */ }
+    releaseLock(lock, nonce);
   }
 }
 
@@ -653,7 +785,9 @@ function install(dir, folder) {
 // ---------------------------------------------------------------------------
 
 // Checked bytes per file, keyed on its path and valid while its size,
-// modification time and inode are unchanged. A stylesheet's entry also
+// modification time, change time, inode and device are unchanged. The change
+// time is there because a rewrite can keep the size and put the modification
+// time back; it cannot put the change time back. A stylesheet's entry also
 // records the font list it was checked against.
 var cache = new Map();
 
@@ -669,7 +803,7 @@ function readCached(file, maxBytes, label, realRoot, check, extraKey) {
   var result = check ? check(read.bytes) : { ok: true };
   result = result.ok ? Object.assign({}, result, { bytes: read.bytes }) : result;
   cache.set(file, {
-    size: read.stat.size, mtimeMs: read.stat.mtimeMs, ino: read.stat.ino, dev: read.stat.dev,
+    size: read.stat.size, mtimeMs: read.stat.mtimeMs, ctimeMs: read.stat.ctimeMs, ino: read.stat.ino, dev: read.stat.dev,
     bytes: read.bytes, extraKey: extraKey, result: result
   });
   return result;
@@ -718,7 +852,7 @@ function inspect(dir, id) {
   if (!meta.ok) return meta.missing ? refuse("the folder has no metadata.json") : meta;
 
   var sheet = readCached(path.join(folder, "style.css"), LIMITS.sheetBytes, "style.css", root.real, function (bytes) {
-    var verdict = checkStylesheet(bytes.toString("utf8"), { fonts: fonts });
+    var verdict = checkStylesheetBytes(bytes, { fonts: fonts });
     return verdict.ok ? verdict : refuse("style.css is refused: " + verdict.reason);
   }, fonts.join("/"));
   if (!sheet.ok) return sheet.missing ? refuse("the folder has no style.css") : sheet;
@@ -872,7 +1006,7 @@ module.exports = {
   SEGMENT: SEGMENT,
   RESERVED_ID: RESERVED_ID,
   RESERVED_NAME: RESERVED_NAME,
-  ID_PATTERN: ID_PATTERN,
+  ID_PATTERN: rules.ID_PATTERN,
   LIMITS: LIMITS,
   FOLDER_HELP: FOLDER_HELP,
   isStyleId: isStyleId,
@@ -890,6 +1024,7 @@ module.exports = {
   hrefFor: hrefFor,
   linkTag: linkTag,
   copyBeside: copyBeside,
+  checkStylesheetBytes: checkStylesheetBytes,
   _hooks: hooks,
   _lockPath: lockPath
 };

@@ -723,6 +723,12 @@ function createCatalogOps(options) {
   return { reopenForCatalog: reopenForCatalog, closeQuiet: closeQuiet };
 }
 
+// THE RESERVED SEGMENTS COME FIRST. `.lahe-styles` (installed document
+// styles), `.lahe-doc-style.css` and `.lahe-fonts` are answered before any
+// hidden-segment rule could look at them: the request handler answers the
+// first ahead of the disk lookup, and the other two in its packaged-asset
+// fallback. Nothing calls this helper today; if something starts to, it must
+// keep running after those answers, or a page under a mount loses its styles.
 /**
  * Does `candidate`, relative to `base`, cross a dotfile segment?
  *
@@ -739,12 +745,6 @@ function createCatalogOps(options) {
  * @param {string} candidate an absolute path under `base`
  * @returns {boolean}
  */
-// THE RESERVED SEGMENTS COME FIRST. `.lahe-styles` (installed document
-// styles), `.lahe-doc-style.css` and `.lahe-fonts` are answered before any
-// hidden-segment rule could look at them: the request handler answers the
-// first ahead of the disk lookup, and the other two in its packaged-asset
-// fallback. Nothing calls this helper today; if something starts to, it must
-// keep running after those answers, or a page under a mount loses its styles.
 function hasHiddenSegment(base, candidate) {
   if (candidate === base) return false;
   return path.relative(base, candidate).split(path.sep).some(function (segment) {
@@ -1455,17 +1455,27 @@ function runServer(file, sessionId, id, instance, rootInput, dir, logicalRootInp
   // from any directory, and never from the disk under the served root: a copy
   // of a style in a reviewed folder, or the one written beside an artifact for
   // file://, is never served. A refused style is a 404 and one helper-log line
-  // per server per style, naming the reason, so "my style does not show" can
-  // be diagnosed without a line per request burying everything else.
+  // per server per style and reason, naming the reason, so "my style does
+  // not show" can be diagnosed without a line per request burying everything
+  // else. A style that breaks a second way is said again.
   var saidStyle = Object.create(null);
+  function sayStyleOnce(key, line) {
+    if (saidStyle[key]) return;
+    saidStyle[key] = true;
+    say(line);
+  }
   function sendStyle(req, res, rest) {
     var out;
     try { out = styles.answer(dir, rest); }
-    catch (err) { out = { status: 404, refused: [] }; }
+    catch (err) {
+      var why = styles.clean((err && (err.code || err.message)) || String(err));
+      sayStyleOnce("error\u0000" + rest.join("/") + "\u0000" + why,
+        "static server " + id + ": could not answer " + styles.SEGMENT + "/" + styles.clean(rest.join("/")) + ": " + why);
+      out = { status: 404, refused: [] };
+    }
     (out.refused || []).forEach(function (refusal) {
-      if (saidStyle[refusal.id]) return;
-      saidStyle[refusal.id] = true;
-      say("static server " + id + ": refused style " + refusal.id + ": " + refusal.reason);
+      sayStyleOnce(refusal.id + "\u0000" + refusal.reason,
+        "static server " + id + ": refused style " + refusal.id + ": " + refusal.reason);
     });
     if (out.status !== 200) return send(res, 404, "not found\n");
     res.writeHead(200, {

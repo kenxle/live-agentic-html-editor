@@ -425,6 +425,21 @@ function render(source, options) {
   return renderPage(source, options).html;
 }
 
+// One helper-log line per state directory and message for the life of this
+// process. A rebuild re-renders on every source change, and a line per render
+// would bury everything else in helper.log under one unchanging sentence.
+var said = Object.create(null);
+function sayOnce(dir, line) {
+  var key = path.resolve(dir) + "\u0000" + line;
+  if (said[key]) return;
+  said[key] = true;
+  try {
+    require("./log.js").createEventLog({ dir: dir }).helperLog(line);
+  } catch (err) {
+    // Diagnostic only; a render that cannot log still renders.
+  }
+}
+
 function copyFonts(dir) {
   var target = path.join(dir, FONT_ASSET_DIR);
   fs.mkdirSync(target, { recursive: true });
@@ -459,7 +474,12 @@ function writeArtifact(dir, sessionId, source, options) {
   // be written never costs the render.
   if (page.styleId) {
     try { styles.copyBeside(dir, page.styleId, path.dirname(target)); }
-    catch (err) { /* the served page still shows the installed style */ }
+    catch (err) {
+      // The served page still shows the installed style; only a copy opened
+      // from disk misses it, so it is said once rather than thrown.
+      sayOnce(dir, "could not copy style " + page.styleId + " beside " + target + ": " +
+        styles.clean((err && err.message) || String(err)));
+    }
   }
   stateDir.writeAtomic(target, html);
   return {
