@@ -1,18 +1,17 @@
 # Progress: Style switcher
 
-**Phase 7, Verify.** Every switcher test passes in Chromium, Firefox and WebKit, and the review findings are fixed. An independent walker is now clicking through all seven styles on a real review with Ken's six paid styles installed, including the keep flow. Nothing is waiting on you. Last updated 2026-09-30 20:58.
+**Phase 8, Ship.** The switcher is done and verified, and pull request 23 is open: https://github.com/kenxle/live-agentic-html-editor/pull/23. Two things are waiting on you: try it on a live page, and approve the merge. Last updated 2026-09-30 21:20.
 
 **Docs:** [Crucible](00_crucible_style_switcher.md) · [Brief](01_brief_style_switcher.md) · [Architecture](02_architecture_style_switcher.md) · [Plan](03_plan_style_switcher.md)
 
 ## Needs your attention
 
-Nothing is waiting on you. Ken asked to review the implementation rather than the documents, so the human document review (Phase 5) is waived.
+- [ ] **Try the switcher.** Your component proposal is open on a test copy of Lahe with your six styles installed: http://127.0.0.1:65491/component_additions-644232c952a00412.html. Open the rail's menu (the three dots) and choose Document style. It runs on its own helper (port 7837) and state folder, so the shared review server is untouched. Comment on the page; I'm watching it.
+- [ ] **Approve pull request 23** (https://github.com/kenxle/live-agentic-html-editor/pull/23), the switcher. It carries pull request 21 (the component catalog for agents) and the same fix as pull request 22 (comment boxes beside their passage). Main's gate is red on an unrelated free-writing test, so these merge against your rule of a green gate only if you say so.
 
 ## Currently working on
 
-| Agent or task | Doing | Started | Branch |
-| --- | --- | --- | --- |
-| Flow walker (Opus) | V20: all seven styles on a real review, reload, keep, back to International Style, keyboard | 2026-09-30 20:58 | `feat/style-switcher` at `955c3e9` |
+Nothing is running. Next: wait for Ken's comments on the test page and his call on the merge.
 
 ## Phases
 
@@ -25,8 +24,8 @@ Nothing is waiting on you. Ken asked to review the implementation rather than th
 | 4 Plan | done | 2026-09-30 19:51 |
 | 5 Human review | waived, Ken reviews the implementation | 2026-09-30 19:20 |
 | 6 Implement | done | 2026-09-30 20:35 |
-| 7 Verify | in progress | 2026-09-30 20:35 |
-| 8 Ship and land | not started | 2026-09-30 19:20 |
+| 7 Verify | done | 2026-09-30 21:20 |
+| 8 Ship and land | in progress | 2026-09-30 21:20 |
 | 9 Cleanup | not started | 2026-09-30 19:20 |
 
 ## The record
@@ -40,6 +39,7 @@ Nothing is waiting on you. Ken asked to review the implementation rather than th
 
 ### Passes
 
+- Pass 6, 2026-09-30 21:20: rail fix round 2 merged (going back leaves no empty block, the reading position holds in long tables, the waiting line for going back, the style's name from the first frame on reload); switcher specs 132 of 132 across Chromium, Firefox and WebKit; gate:unit 2394 pass, 0 fail.
 - Pass 5, 2026-09-30 20:58: rail fix round 1 merged (a style removed mid-preview is honest, no flash between picks, latest pick wins, boot waits for a restored preview, waiting-end tests, font proof, wording); V24 accepts WebKit's unquoted family; bundle rebuilt.
 - Pass 4, 2026-09-30 20:35: Task 2.3 (the contract instruction) and the integration round merged; the rail uses the shared rules; specs run against the real server (style_switcher 16/16, keep 1/1, comments and rail menu 16/16, Chromium); gate:unit 2389 pass, 0 fail; bundle rebuilt.
 - Pass 3, 2026-09-30 20:35: service fix round 1 merged (the UTF-16 blocker and the data: SVG check fixed, 24 new tests); planned marks removed; gate:unit 2387 pass, 0 fail.
@@ -68,10 +68,11 @@ Nothing queued.
 
 ### Ship
 
-Not shipped yet.
+- 2026-09-30 21:20: pull request 23 opened, https://github.com/kenxle/live-agentic-html-editor/pull/23. Waiting on Ken's approval.
 
 ## Log
 
+- 2026-09-30 21:20. Flow walk with all six real paid styles passed end to end. It found: going back left an empty frontmatter block (fixed), the reading position drifting in long tables (fixed), the waiting line for going back (fixed), the raw id on reload (fixed), and three style-file problems (Field Guide under the rail; Folio and Ledger mis-laying the opening section), logged on Ken's personal board. Known limit: a reload while previewing shows the house style for about 40 ms.
 - 2026-09-30 20:35. Final code review: no bugs in the layer; two test gaps (latest pick wins, waiting ends on every reply kind) and a one-frame flash of the house style between picks. Independent spec check: all 13 requirements met in code; one honesty gap (a style removed during a live preview still reads as previewing and offers Ask), V20 (the real-styles walk) not done yet, the progress page was stale. All sent to the rail builder as one round; V20 goes to the flow walker.
 
   What the panel looks like now, light and dark:
