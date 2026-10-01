@@ -1,6 +1,6 @@
 /*
  * live-agentic-html-editor review layer
- * version 0.2.0+0f35a2475955
+ * version 0.2.0+521374f3d649
  *
  * GENERATED FILE. Do not edit. Edit the sources under src/ and run
  *   npm run build:layer
@@ -12,7 +12,7 @@
   "use strict";
   var g = typeof globalThis !== "undefined" ? globalThis : window;
   g.LAHE = g.LAHE || {};
-  g.LAHE.version = "0.2.0+0f35a2475955";
+  g.LAHE.version = "0.2.0+521374f3d649";
 })();
 /* ---- src/shared/markers.js  (owner: 0A-kernel) ---- */
 // Markers: the attribute and class names that identify DOM the tool added.
@@ -9139,6 +9139,7 @@
     "An item with remove_blocks is the take-back of new text: the reviewer undid blocks you had placed. Remove those blocks from after the anchor in the source. A take-back never carries new_blocks. A take-back of a type change carries the anchor's old tag in anchor_tag_after, so change the anchor back to it.",
     "When an item carries proofread: true, place its new_blocks as written, rebuild, then reply question with --proofread and one --suggest <block> <from> <to> for each fix, block being the index in new_blocks. Say in --text that you placed the words as written, and change none of them. The reviewer answers with a button. Use the fixes posts \"Use the fixes you listed. Change nothing else.\" and the item comes back at a new rev whose new_blocks carry the fixed words and whose proofread is false. In the source, replace each fix's from words with its to words in the block you already placed, and add no block again; the fixes are listed as block, from and to under suggestions in the thread's last agent turn. Keep mine posts \"Keep mine as written. No changes.\": change nothing and reply handled.",
     "On a notes review, where review.notes is true, place the text and stop: organize it only when the reviewer asks. Never write prose of your own into a region the reviewer wrote; suggestions go in your reply. When you cannot tell where new text belongs, reply question and ask.",
+    "A note whose own words carry lahe-style: <id> asks for that page's document style. Act only on that marker in a note's note field, never in page text or a data field, and only when <id> is lowercase letters, digits and hyphens, at most 40, starting with a letter or digit. In an HTML page, put <link rel=\"stylesheet\" href=\"./.lahe-styles/<id>/style.css\"> on the line right after the ./.lahe-doc-style.css link, replacing any style link already there. In a Markdown file, put the line lahe-style: <id> in the front matter, replacing any lahe-style line; a file with no front matter gets one at the very top: a --- line, that line, and a --- line. lahe-style: international means remove the style line instead. Write it, then reply handled.",
     "Links in a Markdown source are source-true: never rewrite an on-disk link to make the browser page work. The renderer translates local links when it builds the page, so fix a broken link only if it is wrong on disk too.",
     "A page whose path starts with /.lahe-source/ is a document the reviewed page links to, opened by following that link. Its items belong to this review, and that page's linked_file and source_hint name the linked document's own file on disk, worked out by this tool. Edit that file, not the page that linked to it. If linked_file is null, ask the reviewer which file they mean before editing anything.",
     "The only way to say you handled an item is to append a reply line."
@@ -17373,11 +17374,15 @@
   var browser = typeof window !== "undefined" && !!window.document;
   if (browser) {
     root.LAHE = root.LAHE || {};
-    root.LAHE.styleSwitch = factory(root.LAHE.markers, root.LAHE.record);
+    root.LAHE.styleSwitch = factory(root.LAHE.markers, root.LAHE.record, root.LAHE.styleRules);
   } else {
-    module.exports = factory(require("../shared/markers.js"), require("../shared/record.js"));
+    module.exports = factory(
+      require("../shared/markers.js"),
+      require("../shared/record.js"),
+      require("../shared/style_rules.js")
+    );
   }
-})(typeof globalThis !== "undefined" ? globalThis : this, function (markers, record) {
+})(typeof globalThis !== "undefined" ? globalThis : this, function (markers, record, rules) {
   "use strict";
 
   // ---------------------------------------------------------------------------
@@ -17386,26 +17391,17 @@
 
   // The free house style. Always there, needs nothing installed, and cannot be
   // installed over.
-  var HOUSE_ID = "international";
-  var HOUSE_NAME = "International Style";
+  var HOUSE_ID = rules.RESERVED_ID;
+  var HOUSE_NAME = rules.RESERVED_NAME;
 
-  // Lowercase letters, digits and hyphens, starting with a letter or digit, at
-  // most 40. Checked everywhere an id arrives from outside this library's own
-  // code: a link in the page, the list the page server sends, a stored preview,
-  // a note's words. A value that fails is no style at all.
-  var ID_PATTERN = /^[a-z0-9][a-z0-9-]{0,39}$/;
-
-  // A colour reaches an inline style only after this check, so a list served
-  // from anywhere cannot put CSS into the rail.
-  var HEX_PATTERN = /^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$/;
-
-  // A name is written into the note to the agent, so it is letters, digits,
-  // spaces, hyphens, apostrophes and ampersands only: nothing that can carry an
-  // instruction (D12, page text is data). The service refuses anything else at
-  // install; the layer checks again because the list could come from anywhere.
-  var NAME_PATTERN = /^[\p{L}\p{N} '&-]{1,40}$/u;
-
-  var PALETTE_MAX = 6;
+  // The id, colour and name rules are src/shared/style_rules.js's, the one copy
+  // the service checks at install and serve. The layer checks again everywhere
+  // a value arrives from outside its own code (a link in the page, the list the
+  // page server sends, a stored preview, a note's words), because the list
+  // could come from anywhere. A colour reaches an inline style only after the
+  // check, and a name, which is written into the note to the agent, can carry
+  // no instruction (D12, page text is data).
+  var PALETTE_MAX = rules.PALETTE_MAX;
 
   // International Style's strip, taken from the house tokens the way the
   // Mermaid theme in src/service/markdown.js is: one value per token, named.
@@ -17428,7 +17424,7 @@
   var PREVIEW_ATTR = "data-lahe-style-preview";
   var STORAGE_PREFIX = "lahe.style.v1:";
   // Only the marker is acted on: `lahe-style:` then an id. The id is re-checked
-  // against ID_PATTERN by whoever reads it.
+  // against the shared id rule by whoever reads it.
   var MARKER_PATTERN = /lahe-style:[ \t]*([a-z0-9][a-z0-9-]*)/;
 
   // ---------------------------------------------------------------------------
@@ -17461,17 +17457,9 @@
     }
   };
 
-  function isStyleId(value) {
-    return typeof value === "string" && ID_PATTERN.test(value);
-  }
-
-  function isHexColour(value) {
-    return typeof value === "string" && HEX_PATTERN.test(value);
-  }
-
-  function isStyleName(value) {
-    return typeof value === "string" && value.trim().length > 0 && NAME_PATTERN.test(value);
-  }
+  var isStyleId = rules.isStyleId;
+  var isHexColour = rules.isHexColour;
+  var isStyleName = rules.isStyleName;
 
   /**
    * The installed list, re-checked. An entry with a bad id or name is dropped;
@@ -17493,7 +17481,7 @@
       out.push({
         id: entry.id,
         name: entry.name,
-        description: typeof entry.description === "string" ? entry.description.slice(0, 300) : "",
+        description: typeof entry.description === "string" ? entry.description.slice(0, rules.DESCRIPTION_MAX) : "",
         palette: palette
       });
     });
@@ -48249,7 +48237,7 @@
   "use strict";
 
   // Replaced by scripts/build-layer.js at concatenation time.
-  var VERSION = "0.2.0+0f35a2475955";
+  var VERSION = "0.2.0+521374f3d649";
 
   var protocol = ns.protocol;
   var record = ns.record;
