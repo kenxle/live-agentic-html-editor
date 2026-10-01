@@ -235,8 +235,8 @@ test("the panel, a removed style: the removed line, collapsed with a way to dism
     listLoaded: true,
     removed: { id: "textbook", name: "Textbook" }
   });
-  assert.deepEqual(v.notes.map(styleSwitch.noteText), ["Textbook is no longer installed. Back to the document's style."]);
-  assert.deepEqual(v.collapsed, { text: "Textbook is no longer installed. Back to the document's style.", action: "dismiss" });
+  assert.deepEqual(v.notes.map(styleSwitch.noteText), ["Textbook is no longer installed, so the page is back to its own style."]);
+  assert.deepEqual(v.collapsed, { text: "Textbook is no longer installed, so the page is back to its own style.", action: "dismiss" });
 
   const unnamed = styleSwitch.panelView({
     shown: "international",
@@ -245,7 +245,28 @@ test("the panel, a removed style: the removed line, collapsed with a way to dism
     listLoaded: true,
     removed: { id: "textbook", name: null }
   });
-  assert.deepEqual(unnamed.notes[0], [{ code: "textbook" }, { text: " is no longer installed. Back to the document's style." }]);
+  assert.deepEqual(unnamed.notes[0], [{ code: "textbook" }, { text: " is no longer installed, so the page is back to its own style." }]);
+});
+
+test("the panel, a previewed style missing from a loaded list: treated as removed, no Ask, no previewing line (fix round 1)", () => {
+  const v = styleSwitch.panelView({
+    shown: "sample",
+    documentId: "international",
+    list: [],
+    listLoaded: true,
+    knownNames: { sample: "Sample" }
+  });
+  assert.equal(v.ask, null, "nothing to ask the agent for");
+  assert.equal(v.back, false);
+  assert.equal(v.status, "The document uses International Style.");
+  assert.deepEqual(v.rows.filter((r) => r.checked).map((r) => r.id), ["international"]);
+  assert.equal(v.rows.some((r) => r.id === "sample"), false, "no row for a style that is gone");
+  assert.equal(styleSwitch.noteText(v.notes[0]), "Sample is no longer installed, so the page is back to its own style.");
+  assert.deepEqual(v.collapsed, { text: "Sample is no longer installed, so the page is back to its own style.", action: "dismiss" });
+
+  // Before the list has answered there is nothing to judge by.
+  const early = styleSwitch.panelView({ shown: "sample", documentId: "international", list: [], listLoaded: false });
+  assert.equal(early.ask, "Ask the agent to use sample");
 });
 
 test("the panel, before the list arrives: the style shown still has a checked row", () => {

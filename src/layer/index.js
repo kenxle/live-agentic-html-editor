@@ -100,6 +100,12 @@
   // cancelled: every poll re-asks, so it lands as soon as they stop.
   var INTERACTION_BUSY_MS = 10000;
 
+  // How long boot waits for a restored document style preview to load before
+  // it puts the reader back anyway (docs/features/20260930.01_style_switcher).
+  // A page server answers a local stylesheet in milliseconds; this bounds the
+  // case where it never answers at all.
+  var STYLE_RESTORE_WAIT_MS = 1500;
+
   // ---------------------------------------------------------------------------
   // Configuration
   // ---------------------------------------------------------------------------
@@ -310,29 +316,51 @@
           return styleNameOf(id);
         }
       });
-    styleSwitch.restore();
+    var restoredStyle = styleSwitch.restore();
 
     // LAHE's hashless auto-reload leaves one exact, one-shot viewport marker.
     // Consume it before mounting the rail, merging records, or replaying edits,
     // all of which are avoidable layout work. This call only lives on boot, so
     // an SPA/Turbo remount and a bfcache restore never apply numeric scrolling.
-    if (ns.sync.restoreViewportAfterReload(win, reviewId)) {
-      // The restore put the reviewer's block back under their eye. The page is
-      // not finished arriving yet, though: mermaid has not drawn, images with no
-      // dimensions have not reserved their space, and a webfont may still swap.
-      // Each of those moves the layout after the restore, which is the jump the
-      // reviewer sees. So the block is re-asserted across the same window replay
-      // defers a lost verdict over, and the page is held invisible for the first
-      // few hundred milliseconds of it so the correcting does not read as jitter.
-      var landing = ns.sync.lastReloadRestore();
-      if (landing && landing.byBlock) {
-        ns.sync.steadyAfterReload(win, {
-          text: landing.text,
-          offset: landing.offset,
-          settleMs: ns.replay.SETTLE_MS
-        });
+    //
+    // A restored style preview changes the layout once its stylesheet and fonts
+    // land, so the reader is put back after that, not before: the block would
+    // otherwise be placed against the document's own style and then move. The
+    // wait is bounded, so a stylesheet that never answers cannot hold the
+    // reader at the top of the page.
+    if (restoredStyle && restoredStyle.landed && typeof win.setTimeout === "function") {
+      var putBack = false;
+      var putReaderBack = function () {
+        if (putBack) return;
+        putBack = true;
+        restoreReadingPosition();
+      };
+      restoredStyle.landed.then(putReaderBack, putReaderBack);
+      win.setTimeout(putReaderBack, STYLE_RESTORE_WAIT_MS);
+    } else {
+      restoreReadingPosition();
+    }
+
+    function restoreReadingPosition() {
+      if (ns.sync.restoreViewportAfterReload(win, reviewId)) {
+        // The restore put the reviewer's block back under their eye. The page is
+        // not finished arriving yet, though: mermaid has not drawn, images with no
+        // dimensions have not reserved their space, and a webfont may still swap.
+        // Each of those moves the layout after the restore, which is the jump the
+        // reviewer sees. So the block is re-asserted across the same window replay
+        // defers a lost verdict over, and the page is held invisible for the first
+        // few hundred milliseconds of it so the correcting does not read as jitter.
+        var landing = ns.sync.lastReloadRestore();
+        if (landing && landing.byBlock) {
+          ns.sync.steadyAfterReload(win, {
+            text: landing.text,
+            offset: landing.offset,
+            settleMs: ns.replay.SETTLE_MS
+          });
+        }
       }
     }
+
     var store = opts.store || ns.store.createStore();
     var rail =
       opts.rail ||
@@ -1290,12 +1318,15 @@
     // The list is fetched each time the panel opens, never on boot, except to
     // name a preview that came back with the page.
     var styleList = { loaded: false, styles: [] };
+    // Every name this page has seen in a list, kept after a style leaves it,
+    // so a style removed while the page is open is still named by its name.
+    var knownStyleNames = Object.create(null);
 
     function styleNameOf(id) {
       if (id === ns.styleSwitch.HOUSE_ID) return ns.styleSwitch.HOUSE_NAME;
       var styles = styleList ? styleList.styles : [];
       for (var i = 0; i < styles.length; i += 1) if (styles[i].id === id) return styles[i].name;
-      return null;
+      return knownStyleNames ? knownStyleNames[id] || null : null;
     }
 
     function refreshStylePanel() {
@@ -1313,7 +1344,8 @@
           list: styleList.styles,
           listLoaded: styleList.loaded,
           waiting: ns.styleSwitch.isWaiting(scopedStore.read(reviewId), shown),
-          removed: styleSwitch.removed()
+          removed: styleSwitch.removed(),
+          knownNames: knownStyleNames
         })
       );
     }
@@ -1321,9 +1353,37 @@
     function loadStyleList() {
       return styleSwitch.fetchList().then(function (got) {
         styleList = { loaded: true, styles: got.styles };
+        got.styles.forEach(function (entry) {
+          knownStyleNames[entry.id] = entry.name;
+        });
+        // A preview of a style the list no longer has: it was removed while the
+        // page was open. End it the way a failed load ends, which also drops the
+        // stored choice so the next reload does not try it again.
+        var shownId = styleSwitch.shown();
+        if (
+          styleSwitch.isPreviewing() &&
+          shownId !== ns.styleSwitch.HOUSE_ID &&
+          !got.styles.some(function (entry) {
+            return entry.id === shownId;
+          })
+        ) {
+          styleSwitch.dropMissing(knownStyleNames[shownId] || null);
+        }
         refreshStylePanel();
         return got;
       });
+    }
+
+    // ONE request. A press while one for this style is still waiting sends
+    // nothing new. Named, so a spec can prove the guard by calling it.
+    function askForStyle(id) {
+      if (id !== styleSwitch.shown()) return null;
+      if (ns.styleSwitch.isWaiting(scopedStore.read(reviewId), id)) return null;
+      var words = ns.styleSwitch.noteWords(id, styleNameOf(id) || id);
+      if (!words) return null;
+      var asked = comments.mintReadyNote(words, page);
+      refreshStylePanel();
+      return asked;
     }
 
     // A switch has landed: the open boxes follow their passages, and the rail
@@ -1349,17 +1409,7 @@
       dismiss: function () {
         return styleSwitch.dismissRemoved();
       },
-      // ONE request. A press while one for this style is still waiting sends
-      // nothing new.
-      ask: function (id) {
-        if (id !== styleSwitch.shown()) return null;
-        if (ns.styleSwitch.isWaiting(scopedStore.read(reviewId), id)) return null;
-        var words = ns.styleSwitch.noteWords(id, styleNameOf(id) || id);
-        if (!words) return null;
-        var asked = comments.mintReadyNote(words, page);
-        refreshStylePanel();
-        return asked;
-      }
+      ask: askForStyle
     });
     refreshStylePanel();
     if (styleSwitch.isPreviewing()) loadStyleList();
@@ -1902,6 +1952,8 @@
       comments: comments,
       // The document style switch, and a way to fetch its list again.
       styleSwitch: styleSwitch,
+      // The keep request's own handler, the one the panel's button runs.
+      askForStyle: askForStyle,
       styleList: function () {
         return styleList;
       },
