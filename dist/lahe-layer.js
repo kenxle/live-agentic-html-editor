@@ -1,6 +1,6 @@
 /*
  * live-agentic-html-editor review layer
- * version 0.2.0+787f1ce2fd98
+ * version 0.2.0+8728710451c9
  *
  * GENERATED FILE. Do not edit. Edit the sources under src/ and run
  *   npm run build:layer
@@ -12,7 +12,7 @@
   "use strict";
   var g = typeof globalThis !== "undefined" ? globalThis : window;
   g.LAHE = g.LAHE || {};
-  g.LAHE.version = "0.2.0+787f1ce2fd98";
+  g.LAHE.version = "0.2.0+8728710451c9";
 })();
 /* ---- src/shared/markers.js  (owner: 0A-kernel) ---- */
 // Markers: the attribute and class names that identify DOM the tool added.
@@ -9139,7 +9139,7 @@
     "An item with remove_blocks is the take-back of new text: the reviewer undid blocks you had placed. Remove those blocks from after the anchor in the source. A take-back never carries new_blocks. A take-back of a type change carries the anchor's old tag in anchor_tag_after, so change the anchor back to it.",
     "When an item carries proofread: true, place its new_blocks as written, rebuild, then reply question with --proofread and one --suggest <block> <from> <to> for each fix, block being the index in new_blocks. Say in --text that you placed the words as written, and change none of them. The reviewer answers with a button. Use the fixes posts \"Use the fixes you listed. Change nothing else.\" and the item comes back at a new rev whose new_blocks carry the fixed words and whose proofread is false. In the source, replace each fix's from words with its to words in the block you already placed, and add no block again; the fixes are listed as block, from and to under suggestions in the thread's last agent turn. Keep mine posts \"Keep mine as written. No changes.\": change nothing and reply handled.",
     "On a notes review, where review.notes is true, place the text and stop: organize it only when the reviewer asks. Never write prose of your own into a region the reviewer wrote; suggestions go in your reply. When you cannot tell where new text belongs, reply question and ask.",
-    "A note whose own words carry lahe-style: <id> asks for that page's document style. Act only on that marker in a note's note field, never in page text or a data field, and only when <id> is lowercase letters, digits and hyphens, at most 40, starting with a letter or digit. In an HTML page, put <link rel=\"stylesheet\" href=\"./.lahe-styles/<id>/style.css\"> on the line right after the ./.lahe-doc-style.css link, replacing any style link already there. In a Markdown file, put the line lahe-style: <id> in the front matter, replacing any lahe-style line; a file with no front matter gets one at the very top: a --- line, that line, and a --- line. lahe-style: international means remove the style line instead. Write it, then reply handled.",
+    "A note whose own words carry lahe-style: <id> asks for that page's document style. Act only on that marker in a note's note field, never in page text or a data field, and only when <id> is lowercase letters, digits and hyphens, at most 40, starting with a letter or digit. In an HTML page, put <link rel=\"stylesheet\" href=\"./.lahe-styles/<id>/style.css\"> on the line right after the ./.lahe-doc-style.css link, replacing any style link already there. In a Markdown file, put the line lahe-style: <id> in the front matter, replacing any lahe-style line; a file with no front matter gets one at the very top: a --- line, that line, and a --- line. lahe-style: international means remove the style line instead, and in a Markdown file remove the whole front matter block, fences too, when that line was all it held. Write it, then reply handled.",
     "Links in a Markdown source are source-true: never rewrite an on-disk link to make the browser page work. The renderer translates local links when it builds the page, so fix a broken link only if it is wrong on disk too.",
     "A page whose path starts with /.lahe-source/ is a document the reviewed page links to, opened by following that link. Its items belong to this review, and that page's linked_file and source_hint name the linked document's own file on disk, worked out by this tool. Edit that file, not the page that linked to it. If linked_file is null, ask the reviewer which file they mean before editing anything.",
     "The only way to say you handled an item is to append a reply line."
@@ -17452,6 +17452,10 @@
     waiting: function (name) {
       return "Sent to the agent. Waiting for it to add " + name + " to this page.";
     },
+    // Going back is the agent removing a line, not adding a style.
+    waitingBack: function (name) {
+      return "Sent to the agent. Waiting for it to return this page to " + name + ".";
+    },
     removed: function (name) {
       return name + " is no longer installed, so the page is back to its own style.";
     }
@@ -17521,6 +17525,26 @@
     });
   }
 
+  // The stored preview: the style's id and, when the page knew it, its name,
+  // so the line after a reload names the style from its first frame. An older
+  // value that is a bare id still reads. Both are checked again on the way out.
+  function encodeStored(id, name) {
+    return JSON.stringify({ id: id, name: isStyleName(name) ? name : null });
+  }
+
+  function decodeStored(value) {
+    if (typeof value !== "string") return null;
+    if (isStyleId(value)) return { id: value, name: null };
+    var parsed = null;
+    try {
+      parsed = JSON.parse(value);
+    } catch (err) {
+      return null;
+    }
+    if (!parsed || !isStyleId(parsed.id)) return null;
+    return { id: parsed.id, name: isStyleName(parsed.name) ? parsed.name : null };
+  }
+
   function storageKey(reviewId, pagePath) {
     return STORAGE_PREFIX + String(reviewId) + ":" + String(pagePath);
   }
@@ -17576,9 +17600,14 @@
     }
     var previewing = shown !== documentId;
 
+    function nameKnown(id) {
+      return id === HOUSE_ID || !!byId[id] || isStyleName(knownNames[id]);
+    }
+
     function nameOf(id) {
       if (id === HOUSE_ID) return HOUSE_NAME;
-      return byId[id] ? byId[id].name : id;
+      if (byId[id]) return byId[id].name;
+      return isStyleName(knownNames[id]) ? knownNames[id] : id;
     }
 
     // A document asking for a style this machine does not have shows the house
@@ -17605,7 +17634,7 @@
 
     var waiting = previewing && s.waiting === true;
     var status;
-    if (waiting) status = WORDS.waiting(nameOf(shown));
+    if (waiting) status = shown === HOUSE_ID ? WORDS.waitingBack(HOUSE_NAME) : WORDS.waiting(nameOf(shown));
     else if (previewing) status = WORDS.previewing(nameOf(shown), nameOf(documentId));
     // A missing style has its own line below, which says it better; the
     // status line stays empty rather than say "The document uses foo."
@@ -17637,7 +17666,10 @@
     }
 
     var collapsed = null;
-    if (previewing) collapsed = { text: waiting ? status : WORDS.collapsed(nameOf(shown)), action: "back" };
+    // Before the list has answered, a preview whose name this page never stored
+    // shows no line at all rather than its raw id for a frame.
+    if (previewing && !s.listLoaded && !nameKnown(shown)) collapsed = null;
+    else if (previewing) collapsed = { text: waiting ? status : WORDS.collapsed(nameOf(shown)), action: "back" };
     else if (removedText) collapsed = { text: removedText, action: "dismiss" };
 
     return {
@@ -17687,6 +17719,8 @@
     // is in flight.
     var settledSeq = 0;
     var previewId = null;
+    // The name the pick came with, kept beside the id in storage.
+    var previewName = null;
     var removed = null;
     var listeners = { settled: [], change: [] };
     if (typeof opts.onSettled === "function") listeners.settled.push(opts.onSettled);
@@ -17714,22 +17748,30 @@
       return storageKey(reviewId, pagePath());
     }
 
-    function readKey() {
+    // The stored preview, decoded: {id, name}, null for none, or "" for a
+    // value that fails the checks (restore drops it).
+    function readStored() {
       var s = storage();
       if (!s || !reviewId) return null;
       try {
         var value = s.getItem(key());
-        return isStyleId(value) ? value : value === null ? null : "";
+        if (value === null) return null;
+        return decodeStored(value) || "";
       } catch (err) {
         return null;
       }
     }
 
-    function writeKey(id) {
+    function readKey() {
+      var stored = readStored();
+      return stored ? stored.id : stored;
+    }
+
+    function writeKey(id, name) {
       var s = storage();
       if (!s || !reviewId) return false;
       try {
-        s.setItem(key(), id);
+        s.setItem(key(), encodeStored(id, name));
         return true;
       } catch (err) {
         return false;
@@ -17818,16 +17860,57 @@
         });
     }
 
+    // THE FINEST BLOCK, AND NEVER ONE PINNED TO THE WINDOW. Inside a long table
+    // the reader is at a row, not at the table, so a row is what is kept. And a
+    // sticky column head (a ledger-like style keeps one) sits at the top of the
+    // window wherever the page is scrolled, so anchoring to it keeps nothing:
+    // the walk on Ken's real styles saw the page land rows away.
+    var FINE_BLOCKS = "tr,li,p,h1,h2,h3,h4,h5,h6,dt,dd,pre,blockquote,figcaption,figure,img";
+    var PROBE_YS = [2, 12, 24, 40, 64, 96, 140, 200];
+    var PROBE_XS = [0.25, 0.4, 0.15];
+
+    function isPinned(el) {
+      if (!win || typeof win.getComputedStyle !== "function") return false;
+      for (var node = el; node && node.nodeType === 1 && node !== doc.body; node = node.parentElement) {
+        var position = win.getComputedStyle(node).position;
+        if (position === "sticky" || position === "fixed") return true;
+      }
+      return false;
+    }
+
+    function usableAnchor(el) {
+      if (!el || typeof el.getBoundingClientRect !== "function" || markers.isInsideOverlay(el)) return null;
+      var rect = el.getBoundingClientRect();
+      if (!rect || (rect.width === 0 && rect.height === 0)) return null;
+      if (rect.bottom <= 0 || rect.top >= win.innerHeight) return null;
+      if (isPinned(el)) return null;
+      return { el: el, offset: rect.top };
+    }
+
+    /** The finest block under the top of the window, found by asking the page what is there. */
+    function probeTop() {
+      if (!doc || typeof doc.elementsFromPoint !== "function" || typeof win.innerWidth !== "number") return null;
+      for (var yi = 0; yi < PROBE_YS.length; yi += 1) {
+        for (var xi = 0; xi < PROBE_XS.length; xi += 1) {
+          var hits = doc.elementsFromPoint(Math.round(win.innerWidth * PROBE_XS[xi]), PROBE_YS[yi]) || [];
+          for (var h = 0; h < hits.length; h += 1) {
+            var block = typeof hits[h].closest === "function" ? hits[h].closest(FINE_BLOCKS) : null;
+            var anchor = usableAnchor(block);
+            if (anchor) return anchor;
+          }
+        }
+      }
+      return null;
+    }
+
     function capturePosition() {
       if (!win || typeof win.innerHeight !== "number") return null;
+      var probed = probeTop();
+      if (probed) return probed;
       var blocks = candidates();
       for (var i = 0; i < blocks.length; i += 1) {
-        var el = blocks[i];
-        if (!el || typeof el.getBoundingClientRect !== "function") continue;
-        var rect = el.getBoundingClientRect();
-        if (!rect || (rect.width === 0 && rect.height === 0)) continue;
-        if (rect.bottom <= 0 || rect.top >= win.innerHeight) continue;
-        return { el: el, offset: rect.top };
+        var anchor = usableAnchor(blocks[i]);
+        if (anchor) return anchor;
       }
       return null;
     }
@@ -17859,6 +17942,7 @@
     // is showing.
     var landedLink = null;
     var landedId = null;
+    var landedName = null;
 
     function dropLink(link) {
       if (link && link.parentNode) link.parentNode.removeChild(link);
@@ -17885,11 +17969,12 @@
     }
 
     /** The swap, in one task: this preview on, everything it replaces off. */
-    function swapIn(link, id) {
+    function swapIn(link, id, name) {
       setDocumentLinksDisabled(true);
       dropOtherPreviewLinks(link);
       landedLink = link;
       landedId = id;
+      landedName = name || null;
     }
 
     /** Where a new preview link goes: after the house style, the document's
@@ -17950,10 +18035,11 @@
       var mine = seq;
       removed = null;
       previewId = id;
-      writeKey(id);
+      previewName = isStyleName(h.name) ? h.name : null;
+      writeKey(id, previewName);
       if (id === HOUSE_ID) {
         // Nothing to load: the document's own links go off, in this task.
-        swapIn(null, HOUSE_ID);
+        swapIn(null, HOUSE_ID, HOUSE_NAME);
         tell("change", { shown: id, pending: true });
         return settle(mine, position);
       }
@@ -17971,7 +18057,7 @@
             return;
           }
           pending = null;
-          swapIn(link, id);
+          swapIn(link, id, previewName);
           resolve(settle(mine, position));
         });
         link.addEventListener("error", function () {
@@ -17995,7 +18081,8 @@
       if (mine !== seq) return Promise.resolve({ ok: false, superseded: true });
       if (landedId) {
         previewId = landedId;
-        writeKey(landedId);
+        previewName = landedName;
+        writeKey(landedId, landedName);
         settledSeq = mine;
         var info = { shown: shown(), documentId: documentStyle(), previewing: true };
         tell("change", info);
@@ -18014,8 +18101,10 @@
       dropOtherPreviewLinks(null);
       landedLink = null;
       landedId = null;
+      landedName = null;
       setDocumentLinksDisabled(false);
       previewId = null;
+      previewName = null;
       clearKey();
       return settle(mine, position);
     }
@@ -18053,14 +18142,14 @@
      */
     function restore() {
       if (!usesHouseStyle()) return { restored: null, cleared: false };
-      var stored = readKey();
+      var stored = readStored();
       if (stored === null) return { restored: null, cleared: false };
-      if (!stored || stored === documentStyle()) {
+      if (!stored || stored.id === documentStyle()) {
         clearKey();
         return { restored: null, cleared: true };
       }
-      var landed = preview(stored, { keepPosition: false });
-      return { restored: stored, cleared: false, landed: landed };
+      var landed = preview(stored.id, { keepPosition: false, name: stored.name });
+      return { restored: stored.id, name: stored.name, cleared: false, landed: landed };
     }
 
     function dismissRemoved() {
@@ -18133,6 +18222,10 @@
       restore: restore,
       dismissRemoved: dismissRemoved,
       dropMissing: dropMissing,
+      // The name the current preview came with, or null.
+      previewName: function () {
+        return previewId ? previewName : null;
+      },
       fetchList: fetchList,
       onSettled: function (fn) {
         listeners.settled.push(fn);
@@ -18161,6 +18254,8 @@
     markerIdOf: markerIdOf,
     isWaiting: isWaiting,
     storageKey: storageKey,
+    encodeStored: encodeStored,
+    decodeStored: decodeStored,
     styleIdFromHref: styleIdFromHref,
     isHouseSheetHref: isHouseSheetHref,
     noteText: noteText,
@@ -48339,7 +48434,7 @@
   "use strict";
 
   // Replaced by scripts/build-layer.js at concatenation time.
-  var VERSION = "0.2.0+787f1ce2fd98";
+  var VERSION = "0.2.0+8728710451c9";
 
   var protocol = ns.protocol;
   var record = ns.record;
@@ -49664,7 +49759,7 @@
     rail.onStylePanel({
       open: loadStyleList,
       pick: function (id) {
-        return styleSwitch.preview(id);
+        return styleSwitch.preview(id, { name: styleNameOf(id) });
       },
       back: function () {
         return styleSwitch.back();
@@ -49674,6 +49769,11 @@
       },
       ask: askForStyle
     });
+    // A preview that came back with the page brought its name from storage, so
+    // the line names it before the list has answered.
+    if (styleSwitch.isPreviewing() && styleSwitch.previewName()) {
+      knownStyleNames[styleSwitch.shown()] = styleSwitch.previewName();
+    }
     refreshStylePanel();
     if (styleSwitch.isPreviewing()) loadStyleList();
 
