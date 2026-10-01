@@ -1,6 +1,6 @@
 # Progress: Style switcher
 
-**Phase 6, Implement.** The documents are written and reviewed. Two builders are working in parallel: one on installing and serving styles, one on the rail panel. Nothing is waiting on you. Last updated 2026-09-30 19:51.
+**Phase 6, Implement.** The installing-and-serving half is merged and green (2344 unit tests pass), and all six paid styles pass its safety check. It is under security and code review now. The rail builder is still working. Nothing is waiting on you. Last updated 2026-09-30 20:10.
 
 **Docs:** [Crucible](00_crucible_style_switcher.md) · [Brief](01_brief_style_switcher.md) · [Architecture](02_architecture_style_switcher.md) · [Plan](03_plan_style_switcher.md)
 
@@ -12,7 +12,9 @@ Nothing is waiting on you. Ken asked to review the implementation rather than th
 
 | Agent or task | Doing | Started | Branch |
 | --- | --- | --- | --- |
-| Service builder (Opus) | Pull request A: `lahe style add`, the stylesheet check, serving `.lahe-styles`, Markdown style line | 2026-09-30 19:51 | own worktree off `feat/style-switcher` |
+| Security reviewer | The stylesheet check and the serving path, pull request A | 2026-09-30 20:10 | `feat/style-switcher` |
+| Code reviewer | Pull request A | 2026-09-30 20:10 | `feat/style-switcher` |
+| Docs writer (Sonnet) | Task 1.4: the skill, `docs/ongoing/STYLES.md`, the vendor README | 2026-09-30 20:10 | own worktree |
 | Rail builder (Opus) | Pull request B: the Document style panel, preview, and the keep request | 2026-09-30 19:51 | own worktree off `feat/style-switcher` |
 
 ## Phases
@@ -35,12 +37,12 @@ Nothing is waiting on you. Ken asked to review the implementation rather than th
 ### Task index
 
 - Task 0.1, register the new files: done by the orchestrator, 2026-09-30 19:51. Unit gate 2275 pass, 0 fail.
-- Service (Tasks 1.1 to 1.3): dispatched 2026-09-30 19:51.
+- Service (Tasks 1.1 to 1.3): returned and merged 2026-09-30 20:10. 69 new tests, gate:unit 2344 pass, 0 fail. All six paid styles pass the stylesheet check. Detail: [service](progress/phase6_workstream_service.md). Dispatched 2026-09-30 19:51.
 - Rail (Tasks 2.1, 2.2): dispatched 2026-09-30 19:51.
 
 ### Passes
 
-No passes yet.
+- Pass 1, 2026-09-30 20:10: service merged into `feat/style-switcher`; gate:unit 2344 pass, 0 fail.
 
 ### Changes from plan
 
