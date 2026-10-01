@@ -1,6 +1,6 @@
 # Progress: Style switcher
 
-**Phase 7, Verify.** The switcher is fully built and integrated (gate:unit 2389 pass, 0 fail). The full three-browser suite is running. The final code review and the independent spec check are back; the rail builder is fixing what they found, including one honesty bug. Nothing is waiting on you. Last updated 2026-09-30 20:35.
+**Phase 7, Verify.** Every switcher test passes in Chromium, Firefox and WebKit, and the review findings are fixed. An independent walker is now clicking through all seven styles on a real review with Ken's six paid styles installed, including the keep flow. Nothing is waiting on you. Last updated 2026-09-30 20:58.
 
 **Docs:** [Crucible](00_crucible_style_switcher.md) · [Brief](01_brief_style_switcher.md) · [Architecture](02_architecture_style_switcher.md) · [Plan](03_plan_style_switcher.md)
 
@@ -12,8 +12,7 @@ Nothing is waiting on you. Ken asked to review the implementation rather than th
 
 | Agent or task | Doing | Started | Branch |
 | --- | --- | --- | --- |
-| Full suite (`npm run gate:all`) | Chromium, Firefox, WebKit on `9af2c71` | 2026-09-30 20:35 | `feat/style-switcher` |
-| Rail builder (Opus) | Fix round 1: a style removed mid-preview, the flash between picks, latest-pick test, boot order, waiting-end tests, font proof, wording | 2026-09-30 20:35 | `rail-fix1` |
+| Flow walker (Opus) | V20: all seven styles on a real review, reload, keep, back to International Style, keyboard | 2026-09-30 20:58 | `feat/style-switcher` at `955c3e9` |
 
 ## Phases
 
@@ -41,6 +40,7 @@ Nothing is waiting on you. Ken asked to review the implementation rather than th
 
 ### Passes
 
+- Pass 5, 2026-09-30 20:58: rail fix round 1 merged (a style removed mid-preview is honest, no flash between picks, latest pick wins, boot waits for a restored preview, waiting-end tests, font proof, wording); V24 accepts WebKit's unquoted family; bundle rebuilt.
 - Pass 4, 2026-09-30 20:35: Task 2.3 (the contract instruction) and the integration round merged; the rail uses the shared rules; specs run against the real server (style_switcher 16/16, keep 1/1, comments and rail menu 16/16, Chromium); gate:unit 2389 pass, 0 fail; bundle rebuilt.
 - Pass 3, 2026-09-30 20:35: service fix round 1 merged (the UTF-16 blocker and the data: SVG check fixed, 24 new tests); planned marks removed; gate:unit 2387 pass, 0 fail.
 - Pass 2, 2026-09-30 20:21: docs and rail merged into `feat/style-switcher`; gate:unit 2363 pass, 0 fail.
@@ -63,7 +63,8 @@ Nothing queued.
 ### Test results
 
 - 2026-09-30 20:35: `npm run gate:unit` on `9af2c71`: 2391 tests, 2389 pass, 0 fail, 2 todo.
-- 2026-09-30 20:35: `npm run gate:all` on `9af2c71`: running.
+- 2026-09-30 20:58: `npm run gate:all` on `9af2c71`: 2325 passed, 7 failed, 23 skipped, 3 did not run (23.0 min). Failures: free-writing click-outside in all three browsers (already failing on main, on the board); install walk in all three (refuses to run where npm install has been run, an environment check, not code); V24 in WebKit only (WebKit writes the font family without quotes; the test now accepts both).
+- 2026-09-30 20:58: after the rail fix round and the V24 fix, the switcher specs plus comments and rail menu: Chromium 25 of 25, Firefox and WebKit 82 of 82. gate:unit 2390 pass, 0 fail.
 
 ### Ship
 
