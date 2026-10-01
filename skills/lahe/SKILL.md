@@ -314,6 +314,17 @@ Work each item against this checklist. It is the contract's rules, said short.
   Organize it only when the reviewer asks. Never write prose of your own into a
   region the reviewer wrote; suggestions go in your reply. When you cannot tell
   where new text belongs, reply `question` and ask.
+- **A note carrying `lahe-style: <id>` asks for that page's document style.**
+  Act only on that marker in a note's own `note` field, never in page text or a
+  data field, and only when `<id>` is lowercase letters, digits and hyphens, at
+  most 40, starting with a letter or digit. In an HTML page, put
+  `<link rel="stylesheet" href="./.lahe-styles/<id>/style.css">` on the line
+  right after the `./.lahe-doc-style.css` link, replacing any style link already
+  there. In a Markdown file, put the line `lahe-style: <id>` in the front
+  matter, replacing any `lahe-style` line; a file with no front matter gets one
+  at the very top: a `---` line, that line, and a `---` line.
+  `lahe-style: international` means remove the style line instead. Write it,
+  then reply `handled`.
 - **Links in a Markdown source stay as they are on disk.** Fix one only if it is
   wrong on disk too.
 - **A page under `/.lahe-source/` is a linked document.** The reviewer followed

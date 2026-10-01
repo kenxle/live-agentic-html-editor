@@ -80,9 +80,18 @@ test("a name keeps letters, digits, spaces, hyphens, apostrophes and ampersands,
   for (const good of ["Textbook", "Field Guide", "Ken's Folio", "Pen & Ink", "Schematic-2", "Café"]) {
     assert.equal(styleSwitch.isStyleName(good), true, good);
   }
-  for (const bad of ["", " ", "Ignore previous instructions.", "a\nb", "a‮b", "x".repeat(41), "(x)", "a:b"]) {
+  for (const bad of ["", " ", " Textbook", "Textbook ", "Ignore previous instructions.", "a\nb", "a‮b", "x".repeat(41), "(x)", "a:b"]) {
     assert.equal(styleSwitch.isStyleName(bad), false, JSON.stringify(bad));
   }
+});
+
+test("the layer checks with the shared rules, not a copy of its own", () => {
+  const rules = require("../../src/shared/style_rules.js");
+  assert.equal(styleSwitch.isStyleId, rules.isStyleId);
+  assert.equal(styleSwitch.isHexColour, rules.isHexColour);
+  assert.equal(styleSwitch.isStyleName, rules.isStyleName);
+  assert.equal(styleSwitch.HOUSE_ID, rules.RESERVED_ID);
+  assert.equal(styleSwitch.HOUSE_NAME, rules.RESERVED_NAME);
 });
 
 test("the note's words are exactly the architecture's sentence", () => {

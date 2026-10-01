@@ -36,11 +36,15 @@
   var browser = typeof window !== "undefined" && !!window.document;
   if (browser) {
     root.LAHE = root.LAHE || {};
-    root.LAHE.styleSwitch = factory(root.LAHE.markers, root.LAHE.record);
+    root.LAHE.styleSwitch = factory(root.LAHE.markers, root.LAHE.record, root.LAHE.styleRules);
   } else {
-    module.exports = factory(require("../shared/markers.js"), require("../shared/record.js"));
+    module.exports = factory(
+      require("../shared/markers.js"),
+      require("../shared/record.js"),
+      require("../shared/style_rules.js")
+    );
   }
-})(typeof globalThis !== "undefined" ? globalThis : this, function (markers, record) {
+})(typeof globalThis !== "undefined" ? globalThis : this, function (markers, record, rules) {
   "use strict";
 
   // ---------------------------------------------------------------------------
@@ -49,26 +53,17 @@
 
   // The free house style. Always there, needs nothing installed, and cannot be
   // installed over.
-  var HOUSE_ID = "international";
-  var HOUSE_NAME = "International Style";
+  var HOUSE_ID = rules.RESERVED_ID;
+  var HOUSE_NAME = rules.RESERVED_NAME;
 
-  // Lowercase letters, digits and hyphens, starting with a letter or digit, at
-  // most 40. Checked everywhere an id arrives from outside this library's own
-  // code: a link in the page, the list the page server sends, a stored preview,
-  // a note's words. A value that fails is no style at all.
-  var ID_PATTERN = /^[a-z0-9][a-z0-9-]{0,39}$/;
-
-  // A colour reaches an inline style only after this check, so a list served
-  // from anywhere cannot put CSS into the rail.
-  var HEX_PATTERN = /^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$/;
-
-  // A name is written into the note to the agent, so it is letters, digits,
-  // spaces, hyphens, apostrophes and ampersands only: nothing that can carry an
-  // instruction (D12, page text is data). The service refuses anything else at
-  // install; the layer checks again because the list could come from anywhere.
-  var NAME_PATTERN = /^[\p{L}\p{N} '&-]{1,40}$/u;
-
-  var PALETTE_MAX = 6;
+  // The id, colour and name rules are src/shared/style_rules.js's, the one copy
+  // the service checks at install and serve. The layer checks again everywhere
+  // a value arrives from outside its own code (a link in the page, the list the
+  // page server sends, a stored preview, a note's words), because the list
+  // could come from anywhere. A colour reaches an inline style only after the
+  // check, and a name, which is written into the note to the agent, can carry
+  // no instruction (D12, page text is data).
+  var PALETTE_MAX = rules.PALETTE_MAX;
 
   // International Style's strip, taken from the house tokens the way the
   // Mermaid theme in src/service/markdown.js is: one value per token, named.
@@ -91,7 +86,7 @@
   var PREVIEW_ATTR = "data-lahe-style-preview";
   var STORAGE_PREFIX = "lahe.style.v1:";
   // Only the marker is acted on: `lahe-style:` then an id. The id is re-checked
-  // against ID_PATTERN by whoever reads it.
+  // against the shared id rule by whoever reads it.
   var MARKER_PATTERN = /lahe-style:[ \t]*([a-z0-9][a-z0-9-]*)/;
 
   // ---------------------------------------------------------------------------
@@ -124,17 +119,9 @@
     }
   };
 
-  function isStyleId(value) {
-    return typeof value === "string" && ID_PATTERN.test(value);
-  }
-
-  function isHexColour(value) {
-    return typeof value === "string" && HEX_PATTERN.test(value);
-  }
-
-  function isStyleName(value) {
-    return typeof value === "string" && value.trim().length > 0 && NAME_PATTERN.test(value);
-  }
+  var isStyleId = rules.isStyleId;
+  var isHexColour = rules.isHexColour;
+  var isStyleName = rules.isStyleName;
 
   /**
    * The installed list, re-checked. An entry with a bad id or name is dropped;
@@ -156,7 +143,7 @@
       out.push({
         id: entry.id,
         name: entry.name,
-        description: typeof entry.description === "string" ? entry.description.slice(0, 300) : "",
+        description: typeof entry.description === "string" ? entry.description.slice(0, rules.DESCRIPTION_MAX) : "",
         palette: palette
       });
     });

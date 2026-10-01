@@ -76,6 +76,16 @@ From the passing run, in `screens/`:
 - **Shared rules.** `style_switch.js` has its own copies of the id pattern, the hex colour rule and the name rule. The coordinator says these move to `src/shared/style_rules.js`, and the orchestrator will switch them at the merge.
 - **A spec-only hook.** `rail.clickStyleAsk()` presses the hidden primary button, to prove that a second press sends nothing. It works the same way as the existing `clickEnd`.
 
+## Integration round (on `rail-integration`, from `b7796ec`)
+
+- **Shared rules.** `style_switch.js` now takes the id, colour and name rules, and the house id and name, from `src/shared/style_rules.js`. The shared name rule allows the same characters as before, including Unicode letters, up to 40 characters. One difference: a name with a space at either end is now refused. No real style name has one.
+- **Real server.** The stub fallback is gone. The specs install `test/fixtures/styles/sample` and `sample-dark` with `lahe style add`. Only V22 still routes a crafted list.
+  - `style_switcher.spec.js`: 16 of 16 pass.
+  - `style_switcher_keep.spec.js`: 1 of 1 passes. V23 and the Markdown half of V8 now run.
+  - `comments_highlights.spec.js` and `rail_menu.spec.js`: 16 of 16 pass.
+- **Task 2.3.** One contract instruction is added, word for word the same in four places: `review_format.js`, the restated copy in `review_format.test.js` (the count is now 62), `docs/CONTRACTS.md`, and a bullet in `skills/lahe/SKILL.md`. A new unit test checks that the instruction names each required part (V17). `npm run install-skills` has been run. The contract ships inside the bundle, so `dist/` needs a rebuild. That rebuild is the orchestrator's.
+- `npm run gate:unit`: 2391 tests, 2389 pass, 0 fail, 2 todo.
+
 ## To delete at cleanup
 
 - `test-results/` in the worktree, from the spec runs

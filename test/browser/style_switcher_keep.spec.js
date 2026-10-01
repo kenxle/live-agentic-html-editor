@@ -7,11 +7,10 @@
 // agent would, and watch the rebuild reload the page on its own into the kept
 // style with the preview key gone.
 //
-// This needs the service half (pull request A): `lahe style add`, the page
-// server answering `.lahe-styles/` from the installed styles, and the renderer
-// turning `lahe-style: <id>` into the link and marking the house bundle
-// `data-lahe-doc-style`. Before that has merged the tests say so and skip; they
-// are not passed off as run.
+// It runs on the whole feature: `lahe style add`, the page server answering
+// `.lahe-styles/` from the installed styles, and the renderer turning
+// `lahe-style: <id>` into the link and marking the house bundle
+// `data-lahe-doc-style`.
 
 "use strict";
 
@@ -33,9 +32,6 @@ const SOURCE = [
   "The first two weeks feel easy and the third week hurts.",
   ""
 ].join("\n");
-
-const NEEDS_SERVICE =
-  "needs pull request A (lahe style add, the .lahe-styles route and the Markdown style line); re-run after it merges";
 
 function center(rect) {
   return { x: rect.x + rect.width / 2, y: rect.y + rect.height / 2 };
@@ -75,7 +71,6 @@ test.describe("keeping a style on a Markdown page, end to end (V8, V23)", () => 
     page
   }) => {
     world = await world$.makeWorld({ file: "plan.md", text: SOURCE });
-    test.skip(!styles.serviceMerged(world), NEEDS_SERVICE);
     styles.installStyles(world, ["sample"]);
 
     await page.setViewportSize({ width: 1180, height: 860 });

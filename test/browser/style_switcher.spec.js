@@ -6,9 +6,9 @@
 // style_switcher_keep.spec.js.
 //
 // Every page here is served by a real `lahe review` (lahe_world.js), with its
-// own state folder and helper port. Styles reach it through
-// support/style_fixtures.js: by `lahe style add` once the service half is
-// merged, and as files beside the page before that.
+// own state folder and helper port. Styles are installed into that state
+// folder with `lahe style add` (support/style_fixtures.js). Only V22 stands in
+// a crafted list, with Playwright routing, because no real install can serve one.
 //
 // Screenshots: set LAHE_SCREENSHOT_DIR to a folder and the V19 states are
 // written there, light on `sample` and dark on `sample-dark`.
@@ -113,12 +113,12 @@ function looks(page) {
 
 async function openWorld(page, spec) {
   const world = await world$.makeWorld({ file: spec.file || "doc.html", text: spec.text || DOC });
-  const installed = styles.installStyles(world, spec.styles || []);
+  styles.installStyles(world, spec.styles || []);
   await page.setViewportSize({ width: 1180, height: 860 });
   await page.goto(world.open);
   await world$.settled(page);
   await world$.claim(page);
-  return Object.assign(world, { installed });
+  return world;
 }
 
 async function shoot(page, name) {
