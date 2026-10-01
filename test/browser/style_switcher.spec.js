@@ -332,6 +332,20 @@ test.describe("one click restyles the page and leaves the reviewer's work alone 
     const after = await looks(page);
     expect(after.background, "the page's ground changed").not.toBe(before.background);
     expect(after.font, "the page's face changed").not.toBe(before.font);
+    // And the face itself loaded from the style's folder, the way V24 checks a saved file.
+    // check() alone is true for a family nobody declared, so the face has to
+    // be in the document's font set and loaded as well.
+    const face = await page.evaluate(() => {
+      const faces = Array.from(document.fonts).filter((f) => f.family.replace(/"/g, "") === "Sample Face");
+      return {
+        declared: faces.length,
+        loaded: faces.some((f) => f.status === "loaded"),
+        usable: document.fonts.check('16px "Sample Face"')
+      };
+    });
+    expect(face.declared, "the style declares its face").toBeGreaterThan(0);
+    expect(face.loaded, "the face loaded from the style's folder").toBe(true);
+    expect(face.usable).toBe(true);
     expect(nav.count, "no navigation, no reload").toBe(0);
     nav.stop();
 
@@ -391,7 +405,7 @@ test.describe("one click restyles the page and leaves the reviewer's work alone 
     const info = await openPanel(page);
     expect(info.focusedId).toBe("international");
 
-    // Three presses in a row, faster than a stylesheet loads: only the last
+    // Two presses in a row, faster than a stylesheet loads: only the last
     // pick applies.
     await page.keyboard.press("ArrowDown");
     await page.keyboard.press("ArrowDown");
@@ -456,7 +470,7 @@ test.describe("one click restyles the page and leaves the reviewer's work alone 
     expect(back.stored).toBe("sample");
     expect(back.previewLinks).toBe(1);
     expect((await panel(page)).mode, "the collapsed line says so after the reload").toBe("collapsed");
-    expect(Math.abs((await topOf(page, reading)) - top)).toBeLessThanOrEqual(4);
+    expect(Math.abs((await topOf(page, reading)) - top)).toBeLessThanOrEqual(1);
 
     // The second page of the same review: the house style, no preview.
     await page.goto(world.open.replace(/[^/]+$/, "second.html"));
@@ -625,15 +639,228 @@ test.describe("what the document names, and a style that goes away (V15, V16, V2
     });
     let info = await panel(page);
     expect(info.mode).toBe("collapsed");
-    expect([name, "sample"].map((n) => n + " is no longer installed. Back to the document's style.")).toContain(info.status);
+    expect([name, "sample"].map((n) => n + " is no longer installed, so the page is back to its own style.")).toContain(info.status);
     expect(info.back.label).toBe("Close");
-    await shoot(page, "style_removed_light");
+    await shoot(page, "style_removed_after_reload_light");
     await clickControl(page, "back");
     await pollPage(page, () => window.__lahe.stylePanel().mode === "closed", undefined, { message: "Close to dismiss it" });
   });
 });
 
 // --- V22: a list from anywhere reaches the rail as data --------------------------
+
+// --- Fix round 1 -------------------------------------------------------------------
+
+/** A route that holds one stylesheet until released. */
+async function holdSheet(page, id) {
+  let release = null;
+  const released = new Promise((resolve) => {
+    release = resolve;
+  });
+  let requested = false;
+  await page.route("**/.lahe-styles/" + id + "/style.css", async (route) => {
+    requested = true;
+    await released;
+    await route.continue().catch(() => {});
+  });
+  return { release: () => release(), requested: () => requested };
+}
+
+test.describe("fix round 1: removal without a reload, one paint per pick, the latest pick", () => {
+  let world = null;
+  test.afterEach(async ({ page }) => {
+    await page.unrouteAll({ behavior: "ignoreErrors" });
+    world$.closeWorld(world);
+    world = null;
+  });
+
+  test("a style removed during a live preview: reopening the panel ends the preview and says so, with no reload", async ({
+    page
+  }) => {
+    world = await openWorld(page, { styles: ["sample"] });
+    const nav = world$.navCounter(page);
+    await openPanel(page);
+    await clickRow(page, "sample");
+    await showing(page, "sample");
+    await clickControl(page, "close");
+
+    styles.removeStyle(world, "sample");
+    const info = await openPanel(page);
+    await showing(page, "international");
+    const got = await styleInfo(page);
+    expect(got.stored, "the stored preview is cleared").toBe(null);
+    expect(got.previewLinks).toBe(0);
+    const after = await panel(page);
+    expect(after.status).toBe("The document uses International Style.");
+    expect(after.ask.shown, "nothing to ask the agent for").toBe(false);
+    expect(after.notes[0]).toBe("Sample is no longer installed, so the page is back to its own style.");
+    expect(after.rows.map((r) => r.id)).toEqual(["international"]);
+    expect(info.rows.length).toBeGreaterThan(0);
+    expect(nav.count, "no reload").toBe(0);
+    nav.stop();
+    await shoot(page, "style_removed_live_light");
+
+    // Closed, the line stays with its Close button until dismissed.
+    await clickControl(page, "close");
+    await pollPage(page, () => window.__lahe.stylePanel().mode === "collapsed", undefined, { message: "the removed line" });
+    const collapsed = await panel(page);
+    expect(collapsed.status).toBe("Sample is no longer installed, so the page is back to its own style.");
+    expect(collapsed.back.label).toBe("Close");
+    await shoot(page, "style_removed_light");
+  });
+
+  test("the latest pick wins: a held first stylesheet released late changes nothing, and its promise settles", async ({ page }) => {
+    world = await openWorld(page, { styles: ["sample", "sample-dark"] });
+    const held = await holdSheet(page, "sample");
+    await page.evaluate(() => {
+      window.__firstPick = null;
+      window.__lahe.handle.styleSwitch.preview("sample").then((r) => {
+        window.__firstPick = r;
+      });
+    });
+    await pollUntil(() => held.requested(), { message: "the first stylesheet to be asked for" });
+    await page.evaluate(() => window.__lahe.handle.styleSwitch.preview("sample-dark"));
+    await showing(page, "sample-dark");
+    // The first pick's promise settled when it was overtaken, before its link
+    // ever answered.
+    expect(await page.evaluate(() => window.__firstPick)).toEqual({ ok: false, superseded: true });
+
+    held.release();
+    // Let the released response arrive and give it every chance to paint.
+    await page.evaluate(() => document.fonts.ready);
+    await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+    const got = await styleInfo(page);
+    expect(got.shown).toBe("sample-dark");
+    expect(got.previewLinks, "exactly one preview link").toBe(1);
+    expect(got.stored).toBe("sample-dark");
+  });
+
+  test("one paint per pick: while the next stylesheet loads the old preview stays on screen, never the house style", async ({
+    page
+  }) => {
+    world = await openWorld(page, { styles: ["sample", "sample-dark"] });
+    await page.evaluate(() => window.__lahe.handle.styleSwitch.preview("sample"));
+    await showing(page, "sample");
+    const sampleLooks = await looks(page);
+
+    const held = await holdSheet(page, "sample-dark");
+    await page.evaluate(() => {
+      window.__lahe.handle.styleSwitch.preview("sample-dark");
+    });
+    await pollUntil(() => held.requested(), { message: "the next stylesheet to be asked for" });
+    // Held mid-load: the page still wears the old preview, not the house style.
+    expect(await looks(page)).toEqual(sampleLooks);
+    expect((await styleInfo(page)).previewLinks, "the old link stays until the new one loads").toBe(2);
+
+    held.release();
+    await showing(page, "sample-dark");
+    expect((await looks(page)).background).not.toBe(sampleLooks.background);
+    expect((await styleInfo(page)).previewLinks).toBe(1);
+  });
+
+  test("a pick whose stylesheet fails keeps the preview that was on screen", async ({ page }) => {
+    world = await openWorld(page, { styles: ["sample"] });
+    await page.evaluate(() => window.__lahe.handle.styleSwitch.preview("sample"));
+    await showing(page, "sample");
+    const before = await looks(page);
+    const result = await page.evaluate(() => window.__lahe.handle.styleSwitch.preview("not-installed"));
+    expect(result.ok).toBe(false);
+    await showing(page, "sample");
+    const got = await styleInfo(page);
+    expect(got.previewLinks).toBe(1);
+    expect(got.stored).toBe("sample");
+    expect(await looks(page)).toEqual(before);
+  });
+});
+
+test.describe("fix round 1: every way a request stops waiting (V13)", () => {
+  let world = null;
+  test.afterEach(() => {
+    world$.closeWorld(world);
+    world = null;
+  });
+
+  async function askAndWait(page) {
+    const before = (await page.evaluate(() => window.__lahe.items())).length;
+    await clickControl(page, "ask");
+    await pollPage(page, () => window.__lahe.stylePanel().status.indexOf("Sent to the agent.") === 0, undefined, {
+      message: "the waiting line"
+    });
+    const items = await page.evaluate(() => window.__lahe.items());
+    expect(items.length).toBe(before + 1);
+    return items.find((it) => it.state === "ready" && /lahe-style: sample/.test(it.note) && !it.reply);
+  }
+
+  async function askShownAgain(page) {
+    await pollPage(page, () => window.__lahe.stylePanel().ask.shown === true, undefined, {
+      message: "the Ask button to come back"
+    });
+    expect((await panel(page)).status.indexOf("Previewing ")).toBe(0);
+  }
+
+  test("a question, a not handled, a delete and a reword each end waiting; the handler's own guard sends nothing twice", async ({
+    page
+  }) => {
+    world = await openWorld(page, { styles: ["sample"] });
+    await openPanel(page);
+    await clickRow(page, "sample");
+    await showing(page, "sample");
+
+    // A question ends waiting.
+    let asked = await askAndWait(page);
+    await world$.reply(world, await world$.helperHas(world, asked.id, asked.rev), "question", ["--text", "Which pages?"]);
+    await askShownAgain(page);
+
+    // A not handled ends waiting.
+    asked = await askAndWait(page);
+    await world$.reply(world, await world$.helperHas(world, asked.id, asked.rev), "not_handled", ["--reason", "Not today."]);
+    await askShownAgain(page);
+
+    // Deleting the request ends waiting, and Ask comes back.
+    asked = await askAndWait(page);
+    await page.evaluate((id) => window.__lahe.handle.comments.remove(id), asked.id);
+    await askShownAgain(page);
+
+    // Rewording the request so it no longer carries the marker ends waiting.
+    asked = await askAndWait(page);
+    await page.evaluate((id) => {
+      const box = window.__lahe.handle.comments.reopen(id);
+      box.type("Actually, leave the style as it is.");
+      box.commitReword();
+      box.close();
+    }, asked.id);
+    await askShownAgain(page);
+
+    // The guard in the ask handler itself: while one is waiting, a direct call
+    // for the same style mints nothing.
+    asked = await askAndWait(page);
+    const count = (await page.evaluate(() => window.__lahe.items())).length;
+    const second = await page.evaluate(() => window.__lahe.handle.askForStyle("sample"));
+    expect(second).toBe(null);
+    expect((await page.evaluate(() => window.__lahe.items())).length).toBe(count);
+  });
+});
+
+test.describe("fix round 1: a missing style on rendered Markdown (V15)", () => {
+  let world = null;
+  test.afterEach(() => {
+    world$.closeWorld(world);
+    world = null;
+  });
+
+  test("a Markdown file naming a style this machine lacks shows International Style and the panel names it", async ({
+    page
+  }) => {
+    const text = "---\nlahe-style: foo\n---\n# Coming back after a layoff\n\nRunners come back too fast after a layoff.\n";
+    world = await openWorld(page, { file: "plan.md", text: text, styles: ["sample"] });
+    const got = await styleInfo(page);
+    expect(got.usesHouseStyle).toBe(true);
+    expect(got.documentId).toBe("foo");
+    const info = await openPanel(page);
+    expect(info.notes).toContain("This document asks for foo, which is not installed here. Showing International Style.");
+    expect(info.rows.filter((r) => r.checked).map((r) => r.id)).toEqual(["international"]);
+  });
+});
 
 test.describe("the list the layer re-checks (V22, display)", () => {
   let world = null;

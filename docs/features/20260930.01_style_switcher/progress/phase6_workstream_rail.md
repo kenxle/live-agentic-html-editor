@@ -86,6 +86,25 @@ From the passing run, in `screens/`:
 - **Task 2.3.** One contract instruction is added, word for word the same in four places: `review_format.js`, the restated copy in `review_format.test.js` (the count is now 62), `docs/CONTRACTS.md`, and a bullet in `skills/lahe/SKILL.md`. A new unit test checks that the instruction names each required part (V17). `npm run install-skills` has been run. The contract ships inside the bundle, so `dist/` needs a rebuild. That rebuild is the orchestrator's.
 - `npm run gate:unit`: 2391 tests, 2389 pass, 0 fail, 2 todo.
 
+## Fix round 1 (on `rail-fix1`, from `9af2c71`)
+
+Each fix has a test. The new browser tests failed against the bundle from before the fix and pass after it. The one exception is the Markdown missing-style case, which is new coverage and already passed.
+
+1. **A style removed during a live preview.** When the list loads and the previewed style is not in it, the switch ends the preview the way a failed load does: the link goes, the stored choice is cleared, and the removed line shows. `panelView` applies the same rule by itself, so a missing style never shows "Previewing" or the Ask button. A new browser test covers the case with no reload.
+2. **One paint per pick.** A new preview link goes in beside the one on screen. The swap happens in the new link's `load` handler, before the browser paints: the new sheet goes on, and the document's links and the old preview go off. A failed load leaves the old preview on screen. A browser test holds the next stylesheet mid-load and checks the page still wears the old preview, never the house style.
+3. **The latest pick wins, really tested.** The first stylesheet is held with `page.route`. The test picks `sample`, then `sample-dark`, then releases the first. It ends with `shown` = `sample-dark`, one preview link, and stored `sample-dark`. An overtaken pick's promise now settles at once with `{ok: false, superseded: true}`. The keyboard spec's comment now says two presses.
+4. **Boot order.** Boot now waits for a restored preview to load, fail or be overtaken before it restores the reading position. The wait is capped at 1.5 seconds (`STYLE_RESTORE_WAIT_MS`). V11's tolerance is now 1 pixel, and it passes. It also passed at 1 pixel before the fix, so no test proves the wait itself.
+5. **Waiting.** One browser test covers each way a request stops waiting: a question reply, a not handled reply, deleting the note, and rewording it. It then calls the ask handler directly (`handle.askForStyle("sample")`) while a request waits, and checks that no second note is made.
+6. **V10 checks the font.** The test now checks that `Sample Face` is declared, loaded, and passes `document.fonts.check`.
+7. **V15 on rendered Markdown.** A `.md` file with `lahe-style: foo` shows International Style and the missing-style line.
+8. **The removed-style line** now reads "Sample is no longer installed, so the page is back to its own style." It uses the style's name whenever this page ever saw it in a list. If it never did, the open panel shows the id as code. The collapsed line is plain text, so it shows the bare id there, as in `style_removed_after_reload_light.png`. The Close button stays.
+
+Counts:
+- `npm run gate:unit`: 2392 tests, 2390 pass, 0 fail, 2 todo.
+- Chromium: `style_switcher.spec.js`, `style_switcher_keep.spec.js` and `rail_menu.spec.js` together: 27 of 27 pass.
+
+Screenshots: every one is retaken. Two are new: `style_removed_live_light.png` (the open panel after a live removal) and `style_removed_after_reload_light.png` (the reload case). `style_removed_light.png` is now the collapsed line after a live removal.
+
 ## To delete at cleanup
 
 - `test-results/` in the worktree, from the spec runs
