@@ -557,7 +557,7 @@ page to load with the helper down.
   more when it has none; then never again. Only `takeover` and `closed` mean stop.
 - **Your one write surface is your own reply file, append-only.**
 - **A page you write for review gets a `<title>` naming the document, an icon
-  saying which document it is, and one stylesheet.** An emoji icon needs no file:
+  saying which document it is, and a stylesheet.** An emoji icon needs no file:
 
   ```html
   <title>Logo options, round 2</title>
@@ -568,6 +568,12 @@ page to load with the helper down.
   The helper serves `.lahe-doc-style.css` from any directory it serves. Add CSS
   only for what the page needs on top, such as a chart. A page that already has
   its own styles, or its own icon, is left as its author made it.
+
+  A reviewer may have installed another document style. To use one, put
+  `<link rel="stylesheet" href="./.lahe-styles/<id>/style.css">` on the line
+  right after the `.lahe-doc-style.css` link, or put `lahe-style: <id>` in a
+  Markdown file's frontmatter. `lahe style add <folder>` installs a style and
+  `lahe style list` shows the installed ones.
 
   The stylesheet ships ready-made components: stat tiles, callouts, insight panels,
   badges, tables, option cards, image layouts, and more. Build the page from them

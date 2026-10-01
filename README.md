@@ -138,6 +138,7 @@ The rail also shows these as hints, so you do not need this file open to work th
 - [docs/INSTALL.md](docs/INSTALL.md): install details, the CLI wrapper, and dev-server setup.
 - [docs/CLI.md](docs/CLI.md): every command and flag.
 - [docs/ongoing/FREE_WRITING.md](docs/ongoing/FREE_WRITING.md): how writing new paragraphs, headings, and lists works, for the next builder.
+- [docs/ongoing/STYLES.md](docs/ongoing/STYLES.md): how installed document styles work: the folder, the checks, serving, and Markdown.
 - [docs/CONTRACTS.md](docs/CONTRACTS.md): the wire protocol, the record shape, and the review file format.
 - [docs/](docs/): the build history, including the brief, architecture, plan, and reviews.
 
