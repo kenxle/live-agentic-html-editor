@@ -790,6 +790,7 @@
     ".stylepanel__line{display:flex;flex-direction:column;align-items:flex-start;gap:8px}",
     ".stylepanel__status{font-size:12px;color:var(--ink-soft);line-height:1.45;overflow-wrap:anywhere}",
     ".stylepanel[data-shown='collapsed'] .stylepanel__status{color:var(--ink)}",
+    ".stylepanel__status:empty{display:none}",
     ".stylepanel__acts{display:flex;flex-wrap:wrap;align-items:center;gap:8px}",
     ".stylepanel__acts[hidden]{display:none}",
     ".stylepanel .refusal__btn{align-self:auto}",
@@ -6772,6 +6773,13 @@
       openStylePanel: openStylePanel,
       closeStylePanel: closeStylePanel,
       stylePanelInfo: stylePanelInfo,
+      // The primary button, pressed even while it is hidden, for a caller
+      // proving a second press sends nothing (V13).
+      clickStyleAsk: function () {
+        if (!dom || !dom.styleAsk) return null;
+        dom.styleAsk.click();
+        return true;
+      },
       // End review (D10). promptEndReview is what boot calls once it knows what
       // is unfinished; the door on the rail runs the registered "end" action,
       // which is what calls it.

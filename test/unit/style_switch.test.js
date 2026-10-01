@@ -210,6 +210,7 @@ test("the panel, nothing installed: International alone and the add line (V9, R1
 
 test("the panel, a missing style: International checked and the missing line (V15, R12)", () => {
   const v = styleSwitch.panelView({ shown: "foo", documentId: "foo", list: LIST, listLoaded: true });
+  assert.equal(v.status, "", "the missing line says it; the status line does not repeat it");
   assert.deepEqual(v.rows.filter((r) => r.checked).map((r) => r.id), ["international"]);
   assert.deepEqual(v.rows.filter((r) => r.inDocument).map((r) => r.id), []);
   assert.deepEqual(v.notes.map(styleSwitch.noteText), [
@@ -227,6 +228,15 @@ test("the panel, a removed style: the removed line, collapsed with a way to dism
   });
   assert.deepEqual(v.notes.map(styleSwitch.noteText), ["Textbook is no longer installed. Back to the document's style."]);
   assert.deepEqual(v.collapsed, { text: "Textbook is no longer installed. Back to the document's style.", action: "dismiss" });
+
+  const unnamed = styleSwitch.panelView({
+    shown: "international",
+    documentId: "international",
+    list: [],
+    listLoaded: true,
+    removed: { id: "textbook", name: null }
+  });
+  assert.deepEqual(unnamed.notes[0], [{ code: "textbook" }, { text: " is no longer installed. Back to the document's style." }]);
 });
 
 test("the panel, before the list arrives: the style shown still has a checked row", () => {

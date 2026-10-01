@@ -468,6 +468,251 @@ test.describe("one click restyles the page and leaves the reviewer's work alone 
   });
 });
 
+// --- V13 and V14: keeping a style ----------------------------------------------
+
+function itemEvents(world) {
+  const file = path.join(world.reviewDir, "events.jsonl");
+  if (!fs.existsSync(file)) return [];
+  return fs
+    .readFileSync(file, "utf8")
+    .split("\n")
+    .filter((line) => line.trim())
+    .map((line) => JSON.parse(line))
+    .filter((e) => typeof e.event === "string" && e.event.indexOf("item.") === 0);
+}
+
+test.describe("keeping a style is one deliberate request (V13, V14, R6, R8)", () => {
+  let world = null;
+  test.afterEach(() => {
+    world$.closeWorld(world);
+    world = null;
+  });
+
+  test("flipping sends nothing; Ask sends one ready note; waiting; a second press sends nothing; a reply ends it; the agent's line keeps it", async ({
+    page
+  }) => {
+    world = await openWorld(page, { styles: ["sample", "sample-dark"] });
+    await openPanel(page);
+    for (const id of ["sample", "sample-dark", "sample"]) {
+      await clickRow(page, id);
+      await showing(page, id);
+    }
+    await page.evaluate(() => window.__lahe.handle.sync.flush({ force: true }));
+    expect(await page.evaluate(() => window.__lahe.items().length), "flipping makes no item").toBe(0);
+    expect(itemEvents(world), "and posts no event").toEqual([]);
+
+    const name = (await panel(page)).rows.find((r) => r.id === "sample").name;
+    await clickControl(page, "ask");
+    const items = await pollUntil(
+      async () => {
+        const got = await page.evaluate(() => window.__lahe.items());
+        return got.length ? got : null;
+      },
+      { message: "the request to be stored" }
+    );
+    expect(items.length).toBe(1);
+    const asked = items[0];
+    expect(asked.kind).toBe("note");
+    expect(asked.state).toBe("ready");
+    expect(asked.note).toBe("Use the " + name + " style for this page (lahe-style: sample).");
+    // An ordinary item on the Active tab.
+    expect(await page.evaluate(() => window.__lahe.cardIds())).toContain(asked.id);
+    expect(await page.evaluate((it) => window.LAHE.overlay.paneForItem(it), asked)).toBe("active");
+    // The helper has it, marker and all, where an agent reads.
+    const stored = await world$.helperHas(world, asked.id, asked.rev);
+    expect(stored.note).toContain("lahe-style: sample");
+
+    // Waiting, and the button is gone.
+    await pollPage(page, () => window.__lahe.stylePanel().status.indexOf("Sent to the agent.") === 0, undefined, {
+      message: "the waiting line"
+    });
+    let info = await panel(page);
+    expect(info.status).toBe("Sent to the agent. Waiting for it to add " + name + " to this page.");
+    expect(info.ask.shown).toBe(false);
+    await shoot(page, "waiting_light");
+
+    // A second press while one is waiting makes nothing.
+    await page.evaluate(() => window.__lahe.rail.clickStyleAsk());
+    expect((await page.evaluate(() => window.__lahe.items())).length).toBe(1);
+
+    // Any reply ends waiting. Handled, without the line written yet, leaves
+    // the preview and offers the request again.
+    await world$.reply(world, stored, "handled");
+    await pollPage(page, () => window.__lahe.stylePanel().ask.shown === true, undefined, {
+      message: "the reply to end the waiting line"
+    });
+    info = await panel(page);
+    expect(info.status).toBe("Previewing " + name + ". The document uses International Style.");
+
+    // V14: the agent writes the one line into the HTML, after the house style.
+    const source = world$.readSource(world);
+    const kept = source.replace(
+      '<link rel="stylesheet" href="./.lahe-doc-style.css">',
+      '<link rel="stylesheet" href="./.lahe-doc-style.css">\n  <link rel="stylesheet" href="./.lahe-styles/sample/style.css">'
+    );
+    expect(kept).not.toBe(source);
+    await world$.agentWrites(page, world, kept);
+    await showing(page, "sample");
+    const after = await styleInfo(page);
+    expect(after.documentId).toBe("sample");
+    expect(after.previewing).toBe(false);
+    expect(after.stored, "the preview key is cleared").toBe(null);
+    expect(after.previewLinks, "no preview link in the page").toBe(0);
+    expect((await panel(page)).mode).toBe("closed");
+    const info2 = await openPanel(page);
+    expect(info2.rows.find((r) => r.id === "sample").inDocument).toBe(true);
+    expect(info2.rows.find((r) => r.id === "sample").checked).toBe(true);
+  });
+});
+
+// --- V15, V16, V25: what the document names ---------------------------------------
+
+test.describe("what the document names, and a style that goes away (V15, V16, V25, R12)", () => {
+  let world = null;
+  test.afterEach(() => {
+    world$.closeWorld(world);
+    world = null;
+  });
+
+  test("a document naming a style this machine lacks shows International Style and the panel names it", async ({ page }) => {
+    const text = DOC.replace(
+      '<link rel="stylesheet" href="./.lahe-doc-style.css">',
+      '<link rel="stylesheet" href="./.lahe-doc-style.css">\n  <link rel="stylesheet" href="./.lahe-styles/foo/style.css">'
+    );
+    world = await openWorld(page, { text: text, styles: ["sample"] });
+    expect((await styleInfo(page)).documentId).toBe("foo");
+    const info = await openPanel(page);
+    expect(info.notes).toEqual(["This document asks for foo, which is not installed here. Showing International Style."]);
+    expect(info.rows.filter((r) => r.checked).map((r) => r.id)).toEqual(["international"]);
+    expect(info.rows.filter((r) => r.inDocument).length).toBe(0);
+    await shoot(page, "missing_style_light");
+  });
+
+  test("with two style links in the source, the last one is the document's style (V25)", async ({ page }) => {
+    const text = DOC.replace(
+      '<link rel="stylesheet" href="./.lahe-doc-style.css">',
+      '<link rel="stylesheet" href="./.lahe-doc-style.css">\n' +
+        '  <link rel="stylesheet" href="./.lahe-styles/sample-dark/style.css">\n' +
+        '  <link rel="stylesheet" href="./.lahe-styles/sample/style.css">'
+    );
+    world = await openWorld(page, { text: text, styles: ["sample", "sample-dark"] });
+    expect((await styleInfo(page)).documentId).toBe("sample");
+    const info = await openPanel(page);
+    expect(info.rows.filter((r) => r.inDocument).map((r) => r.id)).toEqual(["sample"]);
+    // A preview disables both of the document's links.
+    await clickRow(page, "international");
+    await showing(page, "international");
+    expect((await styleInfo(page)).disabledDocumentLinks).toBe(2);
+  });
+
+  test("a preview whose style was removed clears itself and says so (V16)", async ({ page }) => {
+    world = await openWorld(page, { styles: ["sample"] });
+    await openPanel(page);
+    await clickRow(page, "sample");
+    await showing(page, "sample");
+    await clickControl(page, "close");
+    const name = (await page.evaluate(() => window.__lahe.handle.styleList().styles)).find((s) => s.id === "sample").name;
+
+    styles.removeStyle(world, "sample");
+    await world$.agentWrites(page, world, world$.readSource(world));
+    await pollPage(page, () => !!window.__lahe.style().removed, undefined, { message: "the preview to clear itself" });
+    await showing(page, "international");
+    const got = await styleInfo(page);
+    expect(got.stored).toBe(null);
+    expect(got.previewLinks).toBe(0);
+    await pollPage(page, () => window.__lahe.handle.styleList().loaded === true, undefined, {
+      message: "the list to name the style"
+    });
+    let info = await panel(page);
+    expect(info.mode).toBe("collapsed");
+    expect([name, "sample"].map((n) => n + " is no longer installed. Back to the document's style.")).toContain(info.status);
+    expect(info.back.label).toBe("Close");
+    await shoot(page, "style_removed_light");
+    await clickControl(page, "back");
+    await pollPage(page, () => window.__lahe.stylePanel().mode === "closed", undefined, { message: "Close to dismiss it" });
+  });
+});
+
+// --- V22: a list from anywhere reaches the rail as data --------------------------
+
+test.describe("the list the layer re-checks (V22, display)", () => {
+  let world = null;
+  test.afterEach(() => {
+    world$.closeWorld(world);
+    world = null;
+  });
+
+  test("a bad id or colour is dropped, a name is text, and a 40-character name wraps", async ({ page }) => {
+    world = await openWorld(page, { styles: ["sample"] });
+    const LONG = "Field Notes for Long Weekends and Trails";
+    expect(LONG.length).toBe(40);
+    // A list served from anywhere. The route stands in for a page server that
+    // does not check, which is exactly what the layer must not trust.
+    await page.route("**/.lahe-styles/index.json", (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          styles: [
+            { id: "sample", name: "Sample", palette: ["#fbf3e4", "url(https://example.invalid/x)", "#000;background:red", "#2b2118"] },
+            { id: "../evil", name: "Evil" },
+            { id: "markup", name: "<img src=x onerror=window.__pwned=1>" },
+            { id: "trails", name: LONG, palette: ["#e9efe6", "#24331f", "#6f8f4e", "#c9a96e", "#3a5a78", "#f4f1e8"] }
+          ]
+        })
+      })
+    );
+    const info = await openPanel(page);
+    expect(info.rows.map((r) => r.id)).toEqual(["international", "trails", "sample"]);
+    const sample = info.rows.find((r) => r.id === "sample");
+    expect(sample.palette.length, "only the two real colours reach a swatch").toBe(2);
+    expect(await page.evaluate(() => window.__pwned === undefined)).toBe(true);
+    const trails = info.rows.find((r) => r.id === "trails");
+    expect(trails.name).toBe(LONG);
+    // Wrapped, never clipped: the name's box is taller than one line, and the
+    // strip still fits beside it inside the row.
+    expect(trails.nameRect.height).toBeGreaterThan(20);
+    expect(trails.nameRect.right).toBeLessThanOrEqual(trails.rect.right);
+    await shoot(page, "long_name_light");
+    await page.unrouteAll({ behavior: "ignoreErrors" });
+  });
+});
+
+// --- V26: a house-style page no Lahe page server serves ---------------------------
+
+test.describe("a page that no Lahe page server serves (V26)", () => {
+  let server = null;
+  test.afterEach(async () => {
+    if (server) await server.close();
+    server = null;
+  });
+
+  test("International Style alone and the add line, and a stored preview clears itself", async ({ page }) => {
+    const root = fs.mkdtempSync(path.join(require("node:os").tmpdir(), "lahe-style-plain-"));
+    fs.writeFileSync(path.join(root, "doc.html"), DOC);
+    server = await startStaticServer({ root: root, label: "plain" });
+    const review = "rev-style-plain";
+    await withLayer(page, { review: review, token: "unused", helper: "http://127.0.0.1:9" });
+    await page.addInitScript((key) => {
+      try {
+        localStorage.setItem(key, "sample");
+      } catch (err) {
+        // A page that refuses storage has nothing to restore.
+      }
+    }, "lahe.style.v1:" + review + ":/doc.html");
+    await page.setViewportSize({ width: 1180, height: 860 });
+    await page.goto(server.urlFor("/doc.html"));
+    await pollPage(page, () => !!(window.__lahe && window.__lahe.booted), undefined, { message: "the layer to boot" });
+    await pollPage(page, () => window.__lahe.style().stored === null && window.__lahe.style().settled, undefined, {
+      message: "the stored preview to clear itself"
+    });
+    expect((await styleInfo(page)).previewLinks).toBe(0);
+    const info = await openPanel(page);
+    expect(info.rows.map((r) => r.id)).toEqual(["international"]);
+    expect(info.notes).toContain("Add styles with lahe style add <folder>, or ask your agent to.");
+  });
+});
+
 async function placeCaretAt(page, selector, offset) {
   await page.evaluate(
     ([sel, at]) => {

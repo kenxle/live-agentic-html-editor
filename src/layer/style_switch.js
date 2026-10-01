@@ -273,12 +273,25 @@
     var status;
     if (waiting) status = WORDS.waiting(nameOf(shown));
     else if (previewing) status = WORDS.previewing(nameOf(shown), nameOf(documentId));
+    // A missing style has its own line below, which says it better; the
+    // status line stays empty rather than say "The document uses foo."
+    else if (documentMissing) status = "";
     else status = WORDS.uses(nameOf(documentId));
 
     var notes = [];
     var removed = s.removed && isStyleId(s.removed.id) ? s.removed : null;
-    var removedText = removed ? WORDS.removed(isStyleName(removed.name) ? removed.name : nameOf(removed.id)) : null;
-    if (removedText) notes.push([{ text: removedText }]);
+    var removedName = null;
+    if (removed) removedName = isStyleName(removed.name) ? removed.name : byId[removed.id] ? byId[removed.id].name : null;
+    var removedText = removed ? WORDS.removed(removedName || removed.id) : null;
+    if (removed) {
+      // A style removed before this page could learn its name (a reload, then
+      // a 404) is named by its id, set as code like the missing style's.
+      notes.push(
+        removedName
+          ? [{ text: removedText }]
+          : [{ code: removed.id }, { text: removedText.slice(removed.id.length) }]
+      );
+    }
     if (documentMissing && !previewing) {
       notes.push([
         { text: "This document asks for " },
