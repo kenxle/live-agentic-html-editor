@@ -54,8 +54,7 @@ var LAYER_FILES = [
   {
     path: "src/shared/style_rules.js",
     owner: "Style switcher 1.1",
-    why: "the style id pattern, hex colour rule and name limits, spelled once for the service and the layer. Depends on nothing",
-    planned: true
+    why: "the style id pattern, hex colour rule and name limits, spelled once for the service and the layer. Depends on nothing"
   },
   {
     path: "src/shared/record.js",
@@ -157,8 +156,7 @@ var LAYER_FILES = [
   {
     path: "src/layer/style_switch.js",
     owner: "Style switcher 2.1",
-    why: "the document style preview: detect the house style, apply and clear a preview, keep it per page",
-    planned: true
+    why: "the document style preview: detect the house style, apply and clear a preview, keep it per page"
   },
   {
     path: "src/layer/overlay.js",
