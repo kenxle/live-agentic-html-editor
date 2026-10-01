@@ -777,21 +777,21 @@
     ".stylepanel{display:none;flex-direction:column;gap:9px;margin:10px 10px 0;padding:11px 12px;",
     "border-radius:var(--radius-sm);background:var(--surface);border:1px solid var(--line)}",
     ".stylepanel[data-shown='open'],.stylepanel[data-shown='collapsed']{display:flex}",
-    ".stylepanel[data-shown='collapsed']{padding:8px 10px 8px 12px}",
+    ".stylepanel[data-shown='collapsed']{padding:9px 12px 10px}",
     ".stylepanel[data-shown='collapsed'] .stylepanel__head,",
     ".stylepanel[data-shown='collapsed'] .stylepanel__list,",
     ".stylepanel[data-shown='collapsed'] .stylepanel__notes,",
     ".stylepanel[data-shown='collapsed'] .refusal__btn{display:none}",
     ".stylepanel__head{display:flex;align-items:center;justify-content:space-between;gap:8px}",
     ".stylepanel__title{font-size:12.5px;font-weight:700;color:var(--ink)}",
-    ".stylepanel__line{display:flex;flex-direction:column;gap:8px}",
-    ".stylepanel[data-shown='collapsed'] .stylepanel__line{flex-direction:row;align-items:center;gap:10px}",
-    ".stylepanel__status{font-size:12px;color:var(--ink-soft);line-height:1.45}",
-    ".stylepanel[data-shown='collapsed'] .stylepanel__status{flex:1;min-width:0;",
-    "overflow:hidden;text-overflow:ellipsis;white-space:nowrap}",
+    // A column in both states: the line, then its buttons. The words wrap
+    // rather than clip, because the waiting sentence is the one a reviewer
+    // most needs to read whole, and Back beside it left no room for it.
+    ".stylepanel__line{display:flex;flex-direction:column;align-items:flex-start;gap:8px}",
+    ".stylepanel__status{font-size:12px;color:var(--ink-soft);line-height:1.45;overflow-wrap:anywhere}",
+    ".stylepanel[data-shown='collapsed'] .stylepanel__status{color:var(--ink)}",
     ".stylepanel__acts{display:flex;flex-wrap:wrap;align-items:center;gap:8px}",
     ".stylepanel__acts[hidden]{display:none}",
-    ".stylepanel[data-shown='collapsed'] .stylepanel__acts{flex:none}",
     ".stylepanel .refusal__btn{align-self:auto}",
     // Past eight rows the list scrolls. A name wraps; it is never clipped.
     ".stylepanel__list{display:flex;flex-direction:column;gap:1px;max-height:250px;overflow-y:auto;",

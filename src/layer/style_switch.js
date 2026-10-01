@@ -337,6 +337,9 @@
     // an older number is dropped, so holding an arrow key ends on the last
     // style it passed and nothing in between repaints over it.
     var seq = 0;
+    // The number of the last switch that has landed. Equal to seq when nothing
+    // is in flight.
+    var settledSeq = 0;
     var previewId = null;
     var previewLink = null;
     var removed = null;
@@ -522,6 +525,7 @@
     function settle(mine, position) {
       return fontsReady().then(function () {
         if (mine !== seq) return { ok: false, superseded: true };
+        settledSeq = mine;
         restorePosition(position);
         var info = { shown: shown(), documentId: documentStyle(), previewing: !!previewId };
         tell("settled", info);
@@ -663,6 +667,8 @@
         shown: shown(),
         previewing: !!previewId,
         previewId: previewId,
+        // False while a stylesheet is still on its way.
+        settled: settledSeq === seq,
         stored: readKey(),
         removed: removed,
         previewLinks: stylesheetLinks().filter(isPreviewLink).length,
