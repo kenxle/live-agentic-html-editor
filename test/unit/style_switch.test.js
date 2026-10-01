@@ -235,3 +235,30 @@ test("the panel, before the list arrives: the style shown still has a checked ro
   assert.deepEqual(v.notes, [], "no add line until the list has answered");
   assert.equal(v.status, "Previewing sample. The document uses International Style.");
 });
+
+// comments.mintReadyNote: the keep request is an ordinary ready note, made with
+// no box, through the same write and the same "ready" event markReady uses.
+const commentsModule = require("../../src/layer/comments.js");
+const storeModule = require("../../src/layer/store.js");
+
+test("the keep request is one ready note with the exact words, for this page, and no box (V13)", () => {
+  const PAGE = { origin: "http://127.0.0.1:4000", path: "/doc.html", title: "Doc", seq: 1, source_hint: null };
+  const store = storeModule.createStore();
+  const comments = commentsModule.createComments({ store, reviewId: "rev_style", document: null, page: PAGE });
+  const heard = [];
+  comments.onChange((item, event) => heard.push([item.id, event]));
+
+  const words = styleSwitch.noteWords("sample", "Sample");
+  const item = comments.mintReadyNote(words);
+
+  assert.equal(item.kind, record.KIND.NOTE);
+  assert.equal(item.state, record.STATE.READY);
+  assert.equal(item.note, "Use the Sample style for this page (lahe-style: sample).");
+  assert.equal(item.page_path, "/doc.html");
+  assert.equal(item.page_origin, "http://127.0.0.1:4000");
+  assert.deepEqual(store.read("rev_style").map((i) => i.id), [item.id], "stored once");
+  assert.deepEqual(heard, [[item.id, "ready"]], "one ready event, which is what boot posts");
+  assert.equal(comments.openBoxes().length, 0, "no box opened");
+  assert.equal(styleSwitch.isWaiting(store.read("rev_style"), "sample"), true, "and the rail reads it as waiting");
+  assert.throws(() => comments.mintReadyNote("  "), /words are required/);
+});

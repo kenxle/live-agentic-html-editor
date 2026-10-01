@@ -56,6 +56,7 @@
         replay: require("./replay.js"),
         inject: require("./inject.js"),
         store: require("./store.js"),
+        styleSwitch: require("./style_switch.js"),
         overlay: require("./overlay.js"),
         highlight: require("./highlight.js"),
         comments: require("./comments.js"),
@@ -284,6 +285,33 @@
     if (current) return current;
 
     var reviewId = config.review;
+
+    // THE DOCUMENT STYLE PREVIEW, put back first (docs/features/
+    // 20260930.01_style_switcher). A kept preview survives the agent's rebuild,
+    // and it goes on BEFORE the reading position is restored just below, so the
+    // reader lands where they were in the style they are about to see. A
+    // preview the document now carries (the agent applied it) is dropped here
+    // instead. Everything else about the switch is wired after the rail exists.
+    var styleSwitch =
+      opts.styleSwitch ||
+      ns.styleSwitch.createStyleSwitch({
+        document: doc,
+        window: win,
+        reviewId: reviewId,
+        // The page's identity as records spell it, read at call time. pageNow
+        // is a declaration further down and is hoisted.
+        pagePath: function () {
+          return pageNow().path;
+        },
+        blocks: function () {
+          return ns.sync.blockCandidates(doc);
+        },
+        nameOf: function (id) {
+          return styleNameOf(id);
+        }
+      });
+    styleSwitch.restore();
+
     // LAHE's hashless auto-reload leaves one exact, one-shot viewport marker.
     // Consume it before mounting the rail, merging records, or replaying edits,
     // all of which are avoidable layout work. This call only lives on boot, so
@@ -677,6 +705,8 @@
         // an answered comment kept offering an input that its own write path
         // then refused, which is a control that looks live and does nothing.
         if (tab && typeof tab.refresh === "function") tab.refresh();
+        // Any reply to a style request ends its waiting line.
+        if (typeof refreshStylePanel === "function") refreshStylePanel();
       },
       // R36's reload, the two halves boot owns. Mid-work means an open edit
       // session or a comment box on screen: the reload waits for both, because a
@@ -1252,6 +1282,89 @@
     });
 
     // -------------------------------------------------------------------------
+    // The Document style panel (docs/features/20260930.01_style_switcher)
+    // -------------------------------------------------------------------------
+    //
+    // style_switch.js does the page work and owns the words, overlay.js draws
+    // the panel, comments.js mints the keep request. This is where they meet.
+    // The list is fetched each time the panel opens, never on boot, except to
+    // name a preview that came back with the page.
+    var styleList = { loaded: false, styles: [] };
+
+    function styleNameOf(id) {
+      if (id === ns.styleSwitch.HOUSE_ID) return ns.styleSwitch.HOUSE_NAME;
+      var styles = styleList ? styleList.styles : [];
+      for (var i = 0; i < styles.length; i += 1) if (styles[i].id === id) return styles[i].name;
+      return null;
+    }
+
+    function refreshStylePanel() {
+      if (!rail) return null;
+      if (!styleSwitch.usesHouseStyle()) {
+        rail.setStyleAvailable(false);
+        return null;
+      }
+      var shown = styleSwitch.shown();
+      rail.setStyleAvailable(true);
+      return rail.setStyleView(
+        ns.styleSwitch.panelView({
+          shown: shown,
+          documentId: styleSwitch.documentStyle(),
+          list: styleList.styles,
+          listLoaded: styleList.loaded,
+          waiting: ns.styleSwitch.isWaiting(scopedStore.read(reviewId), shown),
+          removed: styleSwitch.removed()
+        })
+      );
+    }
+
+    function loadStyleList() {
+      return styleSwitch.fetchList().then(function (got) {
+        styleList = { loaded: true, styles: got.styles };
+        refreshStylePanel();
+        return got;
+      });
+    }
+
+    // A switch has landed: the open boxes follow their passages, and the rail
+    // follows the page's ground (a style with a dark ground gets a dark rail).
+    styleSwitch.onSettled(function () {
+      if (comments && typeof comments.replaceOpenBoxes === "function") comments.replaceOpenBoxes();
+      if (rail) rail.refreshScheme();
+    });
+    styleSwitch.onChange(refreshStylePanel);
+    // A note reworded or deleted, or a reply folded in (onReplies, below), can
+    // end the waiting line.
+    comments.onChange(function () {
+      refreshStylePanel();
+    });
+    rail.onStylePanel({
+      open: loadStyleList,
+      pick: function (id) {
+        return styleSwitch.preview(id);
+      },
+      back: function () {
+        return styleSwitch.back();
+      },
+      dismiss: function () {
+        return styleSwitch.dismissRemoved();
+      },
+      // ONE request. A press while one for this style is still waiting sends
+      // nothing new.
+      ask: function (id) {
+        if (id !== styleSwitch.shown()) return null;
+        if (ns.styleSwitch.isWaiting(scopedStore.read(reviewId), id)) return null;
+        var words = ns.styleSwitch.noteWords(id, styleNameOf(id) || id);
+        if (!words) return null;
+        var asked = comments.mintReadyNote(words, page);
+        refreshStylePanel();
+        return asked;
+      }
+    });
+    refreshStylePanel();
+    if (styleSwitch.isPreviewing()) loadStyleList();
+
+    // -------------------------------------------------------------------------
     // Protection, and replay
     // -------------------------------------------------------------------------
     //
@@ -1613,6 +1726,8 @@
         // to have the background the page that left had, and the library wears
         // the PAGE's scheme rather than the OS's.
         rail.refreshScheme();
+        // Nor is it required to use the house style.
+        refreshStylePanel();
       },
       merge: merge,
       onRemount: opts.onRemount || null
@@ -1785,6 +1900,11 @@
       allStore: store,
       rail: rail,
       comments: comments,
+      // The document style switch, and a way to fetch its list again.
+      styleSwitch: styleSwitch,
+      styleList: function () {
+        return styleList;
+      },
       tab: function () {
         return tab;
       },
@@ -1965,6 +2085,14 @@
       // The rail, which is inside a closed shadow root and cannot be reached
       // with a selector.
       rail: handle.rail,
+      // The document style switch: what the page shows, and what the panel
+      // says. Both are closed to a selector for the same reason.
+      style: function () {
+        return handle.styleSwitch.info();
+      },
+      stylePanel: function () {
+        return handle.rail.stylePanelInfo();
+      },
       // Present mode, read or set: a spec (and a reviewer's own console) asks
       // the same way the chord and the menu item do.
       present: handle.present,

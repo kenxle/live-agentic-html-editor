@@ -2043,7 +2043,19 @@
         // close both go through it; this is the same seam for a caller that has
         // neither.
         commitReword: flushReword,
-        close: close
+        close: close,
+        // Put an anchored box back beside its passage. A box is placed only
+        // when it opens, so anything that moves the page's text under it (a
+        // document style switch, style_switch.js) asks for this. A box the
+        // reviewer dragged stays where they put it, and a box with no passage
+        // has nothing to follow.
+        replace: function () {
+          if (placement !== "anchored" || dragPos || !node || !node.isConnected) return false;
+          var range = (highlights && highlights.rangeFor(id)) || (src && src.range) || null;
+          if (!range) return false;
+          positionAt(node, range);
+          return true;
+        }
       };
     }
 
@@ -3103,6 +3115,56 @@
       });
     }
 
+    /**
+     * Re-place every open anchored box beside its passage.
+     *
+     * A document style switch reflows the page with no reload, and a box is
+     * otherwise placed only when it opens, so it would be left beside where
+     * the passage used to be.
+     *
+     * @returns {number} how many boxes moved
+     */
+    function replaceOpenBoxes() {
+      var moved = 0;
+      openBoxes().forEach(function (handle) {
+        if (typeof handle.replace === "function" && handle.replace()) moved += 1;
+      });
+      return moved;
+    }
+
+    /**
+     * A ready note with these exact words, for this page, and no box.
+     *
+     * The keep request of the style switcher (architecture, The request to the
+     * agent): an ordinary note the reviewer asked for with one button, not
+     * typed. It goes through the one write path, and "ready" is the same event
+     * markReady emits, so boot's listener posts it and draws its card exactly
+     * as it does for a note the reviewer sent by hand.
+     *
+     * @param {string} words
+     * @param {Object} [page]  {origin, path, title, seq, source_hint}; the
+     *   surface's page when absent
+     * @returns {Object} the item
+     */
+    function mintReadyNote(words, page) {
+      if (typeof words !== "string" || !words.trim()) throw new Error("comments.mintReadyNote: words are required");
+      var p = page || defaultPage || {};
+      var item = record.newItem({
+        kind: record.KIND.NOTE,
+        state: record.STATE.READY,
+        note: words,
+        page_origin: p.origin,
+        page_path: p.path,
+        page_title: p.title,
+        page_seq: p.seq,
+        source_hint: p.source_hint,
+        region: record.emptyRegion(),
+        context: record.emptyContext()
+      });
+      record.validateItem(item);
+      return persist(item, "ready");
+    }
+
     // Reopening an id that is already open returns the SAME node.
     function boxFor(id) {
       return open[id] || null;
@@ -3376,6 +3438,8 @@
       openBoxes: openBoxes,
       busyBoxes: busyBoxes,
       closeAll: closeAll,
+      replaceOpenBoxes: replaceOpenBoxes,
+      mintReadyNote: mintReadyNote,
       focusedBox: focusedBox,
       commentOnSelection: commentOnSelection,
       commentOnElement: commentOnElement,
