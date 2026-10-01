@@ -52,6 +52,12 @@ var LAYER_FILES = [
     why: "the failure code enum. Depends on nothing"
   },
   {
+    path: "src/shared/style_rules.js",
+    owner: "Style switcher 1.1",
+    why: "the style id pattern, hex colour rule and name limits, spelled once for the service and the layer. Depends on nothing",
+    planned: true
+  },
+  {
     path: "src/shared/record.js",
     owner: "0A-kernel",
     why: "the record shape, page fields, applied-after history. Needs normalize"
