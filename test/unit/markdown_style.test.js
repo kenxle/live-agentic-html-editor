@@ -199,3 +199,18 @@ test("V7: adding the style line to a reviewed source re-renders the artifact wit
   assert.equal(html.indexOf("Document metadata"), -1);
   assert.ok(fs.existsSync(path.join(besideArtifact(first.target), "sample", "style.css")));
 });
+
+test("fix round 1: a copy that cannot be written still renders, and says so once in the helper log", () => {
+  const state = stateWithSample();
+  const artifacts = stateDirModule.ensureReviewArtifactsRoot(state, SESSION);
+  // A symlink where the copy goes: the copy refuses to follow it.
+  fs.symlinkSync(tempDir("lahe-md-style-elsewhere-"), path.join(artifacts, ".lahe-styles"));
+  const doc = source("---\nlahe-style: sample\n---\n# Doc\n");
+  const first = markdown.writeArtifact(state, SESSION, doc);
+  markdown.writeArtifact(state, SESSION, doc);
+  assert.ok(fs.readFileSync(first.target, "utf8").indexOf(LINK) !== -1, "the render still lands");
+  const log = fs.readFileSync(path.join(state, "helper.log"), "utf8");
+  const lines = log.split("\n").filter((line) => line.indexOf("could not copy style sample") !== -1);
+  assert.equal(lines.length, 1, JSON.stringify(lines));
+  assert.match(lines[0], /symlink/);
+});
