@@ -2043,7 +2043,19 @@
         // close both go through it; this is the same seam for a caller that has
         // neither.
         commitReword: flushReword,
-        close: close
+        close: close,
+        // Put an anchored box back beside its passage. A box is placed only
+        // when it opens, so anything that moves the page's text under it (a
+        // document style switch, style_switch.js) asks for this. A box the
+        // reviewer dragged stays where they put it, and a box with no passage
+        // has nothing to follow.
+        replace: function () {
+          if (placement !== "anchored" || dragPos || !node || !node.isConnected) return false;
+          var range = (highlights && highlights.rangeFor(id)) || (src && src.range) || null;
+          if (!range) return false;
+          positionAt(node, range);
+          return true;
+        }
       };
     }
 
@@ -2979,8 +2991,16 @@
       return !!(markers && typeof markers.isToolNode === "function" && markers.isToolNode(node));
     }
 
-    /** The text node and offset a raw index names, or null. */
-    function positionAt(segments, rawIndex) {
+    /**
+     * The text node and offset a raw index names, or null.
+     *
+     * NOT called positionAt: that name is the box placer above, and two
+     * function declarations in one scope means the later one wins. From
+     * 58157dc (2026-08-23) to the style switcher this one did, so every
+     * anchored box was "placed" by a function that only reads segments and
+     * stayed in the corner its CSS gave it.
+     */
+    function segmentAt(segments, rawIndex) {
       for (var i = 0; i < segments.length; i += 1) {
         var segment = segments[i];
         if (rawIndex >= segment.start && rawIndex < segment.start + segment.length) {
@@ -3053,8 +3073,8 @@
 
     /** A live range over `length` characters of a scan, starting at `start`. */
     function rangeOver(scan, start, length) {
-      var first = positionAt(scan.segments, rawIndexOfCollapsed(scan.raw, start));
-      var last = positionAt(scan.segments, rawIndexOfCollapsed(scan.raw, start + length - 1));
+      var first = segmentAt(scan.segments, rawIndexOfCollapsed(scan.raw, start));
+      var last = segmentAt(scan.segments, rawIndexOfCollapsed(scan.raw, start + length - 1));
       if (!first || !last) return null;
       var range = doc.createRange();
       try {
@@ -3101,6 +3121,56 @@
       openBoxes().forEach(function (handle) {
         handle.close();
       });
+    }
+
+    /**
+     * Re-place every open anchored box beside its passage.
+     *
+     * A document style switch reflows the page with no reload, and a box is
+     * otherwise placed only when it opens, so it would be left beside where
+     * the passage used to be.
+     *
+     * @returns {number} how many boxes moved
+     */
+    function replaceOpenBoxes() {
+      var moved = 0;
+      openBoxes().forEach(function (handle) {
+        if (typeof handle.replace === "function" && handle.replace()) moved += 1;
+      });
+      return moved;
+    }
+
+    /**
+     * A ready note with these exact words, for this page, and no box.
+     *
+     * The keep request of the style switcher (architecture, The request to the
+     * agent): an ordinary note the reviewer asked for with one button, not
+     * typed. It goes through the one write path, and "ready" is the same event
+     * markReady emits, so boot's listener posts it and draws its card exactly
+     * as it does for a note the reviewer sent by hand.
+     *
+     * @param {string} words
+     * @param {Object} [page]  {origin, path, title, seq, source_hint}; the
+     *   surface's page when absent
+     * @returns {Object} the item
+     */
+    function mintReadyNote(words, page) {
+      if (typeof words !== "string" || !words.trim()) throw new Error("comments.mintReadyNote: words are required");
+      var p = page || defaultPage || {};
+      var item = record.newItem({
+        kind: record.KIND.NOTE,
+        state: record.STATE.READY,
+        note: words,
+        page_origin: p.origin,
+        page_path: p.path,
+        page_title: p.title,
+        page_seq: p.seq,
+        source_hint: p.source_hint,
+        region: record.emptyRegion(),
+        context: record.emptyContext()
+      });
+      record.validateItem(item);
+      return persist(item, "ready");
     }
 
     // Reopening an id that is already open returns the SAME node.
@@ -3376,6 +3446,8 @@
       openBoxes: openBoxes,
       busyBoxes: busyBoxes,
       closeAll: closeAll,
+      replaceOpenBoxes: replaceOpenBoxes,
+      mintReadyNote: mintReadyNote,
       focusedBox: focusedBox,
       commentOnSelection: commentOnSelection,
       commentOnElement: commentOnElement,
