@@ -841,6 +841,132 @@ test.describe("fix round 1: every way a request stops waiting (V13)", () => {
   });
 });
 
+// --- Fix round 2 ---------------------------------------------------------------------
+
+/**
+ * A made-up style, written by the test into a temporary folder and installed
+ * with the real command: table rows several times taller, the shape of a
+ * ledger-like style that the reading position has to survive.
+ */
+function installTallRows(world) {
+  const dir = path.join(fs.mkdtempSync(path.join(require("node:os").tmpdir(), "lahe-style-tall-")), "tall-rows");
+  fs.mkdirSync(dir, { recursive: true });
+  // A ledger keeps its column heads in view while the rows scroll under them,
+  // so the head row is always at the top of the window and is never where the
+  // reader is.
+  fs.writeFileSync(
+    path.join(dir, "style.css"),
+    "td,th{padding:26px 12px;line-height:1.9}\ntable{border-spacing:0 10px}\n" +
+      "thead th{position:sticky;top:0;background:#ffffff}\n"
+  );
+  fs.writeFileSync(
+    path.join(dir, "metadata.json"),
+    JSON.stringify({ name: "Tall Rows", description: "A made-up style for the reading-position test.", palette: [{ value: "#ffffff" }] })
+  );
+  world.cli(["style", "add", dir]);
+}
+
+function tableDoc(rows) {
+  const body = [];
+  for (let i = 1; i <= rows; i += 1) body.push("    <tr><td id=\"r" + i + "\">Row " + i + " entry</td><td>Week " + i + " miles</td></tr>");
+  return DOC.replace(
+    "<section class=\"sheet\">",
+    "<section class=\"sheet\">\n  <div class=\"sheet-head\"><h2>The log</h2><span class=\"n\">Log</span></div>\n" +
+      "  <table>\n    <thead><tr><th>Entry</th><th>Miles</th></tr></thead>\n    <tbody>\n" +
+      body.join("\n") +
+      "\n    </tbody>\n  </table>\n</section>\n\n<section class=\"sheet\">"
+  );
+}
+
+test.describe("fix round 2: the reading position inside a long table", () => {
+  let world = null;
+  test.afterEach(() => {
+    world$.closeWorld(world);
+    world = null;
+  });
+
+  test("switching between styles that change row heights keeps the row at the top of the window where it was", async ({
+    page
+  }) => {
+    world = await openWorld(page, { text: tableDoc(80), styles: ["sample"] });
+    installTallRows(world);
+    await page.evaluate(() => window.__lahe.handle.styleSwitch.preview("tall-rows"));
+    await showing(page, "tall-rows");
+    // Into the table, with a row part way under the top edge.
+    await page.evaluate(() => {
+      document.querySelector("#r40").scrollIntoView({ block: "start", behavior: "instant" });
+      window.scrollBy({ top: 12, behavior: "instant" });
+    });
+    // The row the reader is at: the first whose bottom is below the top edge.
+    const at = await page.evaluate(() => {
+      const rows = Array.from(document.querySelectorAll("tbody tr"));
+      const row = rows.find((r) => r.getBoundingClientRect().bottom > 0);
+      return { id: row.firstElementChild.id, top: row.getBoundingClientRect().top };
+    });
+
+    await openPanel(page);
+    await clickRow(page, "sample");
+    await showing(page, "sample");
+    const top = await topOf(page, "#" + at.id);
+    expect(Math.abs(top - at.top), "row " + at.id + " stayed where it was").toBeLessThanOrEqual(2);
+  });
+});
+
+test.describe("fix round 2: going back, and the line on reload", () => {
+  let world = null;
+  test.afterEach(() => {
+    world$.closeWorld(world);
+    world = null;
+  });
+
+  test("asking to go back to International says the agent will return the page, not add a style (V13)", async ({ page }) => {
+    const kept = DOC.replace(
+      '<link rel="stylesheet" href="./.lahe-doc-style.css">',
+      '<link rel="stylesheet" href="./.lahe-doc-style.css">\n  <link rel="stylesheet" href="./.lahe-styles/sample/style.css">'
+    );
+    world = await openWorld(page, { text: kept, styles: ["sample"] });
+    await openPanel(page);
+    await clickRow(page, "international");
+    await showing(page, "international");
+    expect((await panel(page)).ask.label).toBe("Ask the agent to use International Style");
+    await clickControl(page, "ask");
+    await pollPage(page, () => window.__lahe.stylePanel().status.indexOf("Sent to the agent.") === 0, undefined, {
+      message: "the waiting line"
+    });
+    expect((await panel(page)).status).toBe("Sent to the agent. Waiting for it to return this page to International Style.");
+    await shoot(page, "waiting_back_light");
+  });
+
+  test("on reload while previewing, the line names the style from the first frame, never by its id", async ({ page }) => {
+    world = await openWorld(page, { styles: ["sample"] });
+    await openPanel(page);
+    await clickRow(page, "sample");
+    await showing(page, "sample");
+    const name = (await panel(page)).rows.find((r) => r.id === "sample").name;
+    // Every status the rail shows from the first frame of the next load.
+    await page.addInitScript(() => {
+      window.__styleLines = [];
+      const watch = () => {
+        const lahe = window.__lahe;
+        if (lahe && lahe.stylePanel) {
+          const info = lahe.stylePanel();
+          if (info.mode !== "closed") window.__styleLines.push(info.status);
+        }
+        requestAnimationFrame(watch);
+      };
+      requestAnimationFrame(watch);
+    });
+    await page.reload();
+    await world$.settled(page);
+    await showing(page, "sample");
+    await pollPage(page, () => window.__lahe.handle.styleList().loaded === true, undefined, { message: "the list" });
+    await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+    const lines = await page.evaluate(() => window.__styleLines);
+    expect(lines.length).toBeGreaterThan(0);
+    expect(lines.every((line) => line === "Previewing " + name), JSON.stringify(Array.from(new Set(lines)))).toBe(true);
+  });
+});
+
 test.describe("fix round 1: a missing style on rendered Markdown (V15)", () => {
   let world = null;
   test.afterEach(() => {

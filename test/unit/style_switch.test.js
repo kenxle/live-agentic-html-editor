@@ -269,6 +269,44 @@ test("the panel, a previewed style missing from a loaded list: treated as remove
   assert.equal(early.ask, "Ask the agent to use sample");
 });
 
+test("fix round 2: waiting to go back to International says the agent returns the page", () => {
+  const v = styleSwitch.panelView({ shown: "international", documentId: "sample", list: LIST, listLoaded: true, waiting: true });
+  assert.equal(v.status, "Sent to the agent. Waiting for it to return this page to International Style.");
+});
+
+test("fix round 2: before the list arrives a preview is named by its stored name, or not shown at all", () => {
+  const named = styleSwitch.panelView({
+    shown: "sample",
+    documentId: "international",
+    list: [],
+    listLoaded: false,
+    knownNames: { sample: "Sample" }
+  });
+  assert.deepEqual(named.collapsed, { text: "Previewing Sample", action: "back" });
+  const unnamed = styleSwitch.panelView({ shown: "sample", documentId: "international", list: [], listLoaded: false });
+  assert.equal(unnamed.collapsed, null, "no line rather than the raw id");
+});
+
+test("fix round 2: the stored preview keeps the style's name beside its id", () => {
+  const values = Object.create(null);
+  const storage = {
+    getItem: (k) => (k in values ? values[k] : null),
+    setItem: (k, v) => {
+      values[k] = String(v);
+    },
+    removeItem: (k) => {
+      delete values[k];
+    }
+  };
+  assert.equal(styleSwitch.encodeStored("sample", "Sample"), '{"id":"sample","name":"Sample"}');
+  assert.deepEqual(styleSwitch.decodeStored('{"id":"sample","name":"Sample"}'), { id: "sample", name: "Sample" });
+  assert.deepEqual(styleSwitch.decodeStored("sample"), { id: "sample", name: null }, "an older bare id still reads");
+  assert.deepEqual(styleSwitch.decodeStored('{"id":"sample","name":"Bad: name"}'), { id: "sample", name: null });
+  assert.equal(styleSwitch.decodeStored('{"id":"../x"}'), null);
+  assert.equal(styleSwitch.decodeStored("not json {"), null);
+  assert.ok(storage);
+});
+
 test("the panel, before the list arrives: the style shown still has a checked row", () => {
   const v = styleSwitch.panelView({ shown: "sample", documentId: "international", list: [], listLoaded: false });
   assert.deepEqual(v.rows.map((r) => [r.id, r.checked]), [["international", false], ["sample", true]]);

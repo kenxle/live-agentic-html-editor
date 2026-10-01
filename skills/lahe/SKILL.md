@@ -323,8 +323,9 @@ Work each item against this checklist. It is the contract's rules, said short.
   there. In a Markdown file, put the line `lahe-style: <id>` in the front
   matter, replacing any `lahe-style` line; a file with no front matter gets one
   at the very top: a `---` line, that line, and a `---` line.
-  `lahe-style: international` means remove the style line instead. Write it,
-  then reply `handled`.
+  `lahe-style: international` means remove the style line instead, and in a
+  Markdown file remove the whole front matter block, fences too, when that line
+  was all it held. Write it, then reply `handled`.
 - **Links in a Markdown source stay as they are on disk.** Fix one only if it is
   wrong on disk too.
 - **A page under `/.lahe-source/` is a linked document.** The reviewer followed

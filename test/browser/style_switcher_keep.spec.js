@@ -121,5 +121,40 @@ test.describe("keeping a style on a Markdown page, end to end (V8, V23)", () => 
     expect(after.previewLinks).toBe(0);
     expect(await page.evaluate(() => getComputedStyle(document.body).backgroundColor), "the kept style shows").toBe(previewed);
     expect(await page.evaluate(() => window.__lahe.stylePanel().mode), "nothing says previewing").toBe("closed");
+
+    // Going back (fix round 2). Preview International, ask for it, and have
+    // the agent do the least it might: take out the one line and leave the
+    // fences. The page comes back in the house style with no empty block and
+    // no rules where the fences were.
+    const back = await openPanel(page);
+    await click(page, back.rows.find((r) => r.id === "international").nameRect);
+    await pollPage(page, () => window.__lahe.style().shown === "international" && window.__lahe.style().settled, undefined, {
+      message: "the International preview"
+    });
+    const askBack = await page.evaluate(() => window.__lahe.stylePanel());
+    expect(askBack.ask.label).toBe("Ask the agent to use International Style");
+    await click(page, askBack.ask.rect);
+    await pollPage(page, () => window.__lahe.stylePanel().status.indexOf("Sent to the agent.") === 0, undefined, {
+      message: "the waiting line"
+    });
+    expect(await page.evaluate(() => window.__lahe.stylePanel().status)).toBe(
+      "Sent to the agent. Waiting for it to return this page to International Style."
+    );
+    const backNote = (await page.evaluate(() => window.__lahe.items())).find((it) => /lahe-style: international/.test(it.note));
+    expect(backNote.note).toBe("Use the International Style for this page (lahe-style: international).");
+    await world$.reply(world, await world$.helperHas(world, backNote.id, backNote.rev), "handled");
+    await world$.agentWrites(page, world, "---\n---\n" + SOURCE);
+    await pollPage(page, () => window.__lahe.style().settled, undefined, { message: "the page after going back" });
+    const home = await page.evaluate(() => window.__lahe.style());
+    expect(home.documentId).toBe("international");
+    expect(home.previewing).toBe(false);
+    expect(home.stored).toBe(null);
+    expect(await page.evaluate(() => getComputedStyle(document.body).backgroundColor)).toBe(house);
+    const leftovers = await page.evaluate(() => ({
+      rules: document.querySelectorAll("body hr").length,
+      metadata: document.body.innerText.indexOf("Document metadata") !== -1,
+      fences: document.body.innerText.indexOf("---") !== -1
+    }));
+    expect(leftovers).toEqual({ rules: 0, metadata: false, fences: false });
   });
 });

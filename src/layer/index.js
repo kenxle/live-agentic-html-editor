@@ -1401,7 +1401,7 @@
     rail.onStylePanel({
       open: loadStyleList,
       pick: function (id) {
-        return styleSwitch.preview(id);
+        return styleSwitch.preview(id, { name: styleNameOf(id) });
       },
       back: function () {
         return styleSwitch.back();
@@ -1411,6 +1411,11 @@
       },
       ask: askForStyle
     });
+    // A preview that came back with the page brought its name from storage, so
+    // the line names it before the list has answered.
+    if (styleSwitch.isPreviewing() && styleSwitch.previewName()) {
+      knownStyleNames[styleSwitch.shown()] = styleSwitch.previewName();
+    }
     refreshStylePanel();
     if (styleSwitch.isPreviewing()) loadStyleList();
 

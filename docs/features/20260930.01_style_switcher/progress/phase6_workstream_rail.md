@@ -105,6 +105,30 @@ Counts:
 
 Screenshots: every one is retaken. Two are new: `style_removed_live_light.png` (the open panel after a live removal) and `style_removed_after_reload_light.png` (the reload case). `style_removed_light.png` is now the collapsed line after a live removal.
 
+## Fix round 2 (on `rail-fix2`, from the flow walk on Ken's real styles)
+
+1. **Going back leaves no empty block.**
+   - `splitFrontmatter` in `src/service/markdown.js` now reads a block with nothing between its fences as frontmatter. A block of only blank lines is no longer shown as "Document metadata". So `---`/`---` left at the top of a file renders nothing.
+   - The contract instruction now also says: in a Markdown file, remove the whole front matter block, fences too, when the style line was all it held. The new words are in all four copies, and the count stays 62. `npm run install-skills` has been run.
+   - Tests: a unit test (four variants of an empty block), the V17 content check, and a going-back leg in the keep spec. In that leg the agent leaves the bare fences, and the page shows no rule, no metadata block and no `---`.
+2. **The reading position in a long table.** The real cause was a sticky column head. A ledger-like style pins the table's head row to the top of the window. That head row was the first visible block, so the kept position followed it and the page landed rows away. The switch now asks the page which elements sit at the top of the window (`elementsFromPoint`). It anchors to the finest block found there: a table row, list item, paragraph or heading. It skips anything sticky or fixed. A browser test with an 80-row table and a made-up "Tall Rows" style with a sticky head failed by 2585 pixels before the fix. It now holds within 2 pixels.
+3. **Going back has its own waiting line:** "Sent to the agent. Waiting for it to return this page to International Style."
+4. **The line on reload.**
+   - The stored preview now keeps the style's name beside its id, as JSON. An older stored value that is a bare id still reads.
+   - A reloaded preview is named from its first frame. If no name was ever stored, no line shows until the list answers.
+   - A browser test records every status line from the first animation frame of the reload. It saw "Previewing sample" before the fix and now sees only "Previewing Sample".
+   - **The house-style flash on reload stays.** The preview link cannot go in earlier than it does. The layer is one script at the end of the body (D1), and putting the preview back is already the first thing boot does. An earlier link would need a script in the page's head, or the page server writing the link in as it serves the page. The architecture rejects the second option: the file on disk would no longer match what the reviewer sees. The roughly 40 ms left is the body being read plus the stylesheet's fetch.
+
+Counts:
+- `npm run gate:unit`: 2396 tests, 2394 pass, 0 fail, 2 todo.
+- Chromium:
+  - `style_switcher.spec.js`: 25 of 25 pass.
+  - `style_switcher_keep.spec.js`: 1 of 1 passes.
+  - `markdown_style_file.spec.js`: 2 of 2 pass.
+  - `rail_menu.spec.js`: 4 of 4 pass.
+
+Screenshots: every one is retaken. `waiting_back_light.png` is new.
+
 ## To delete at cleanup
 
 - `test-results/` in the worktree, from the spec runs

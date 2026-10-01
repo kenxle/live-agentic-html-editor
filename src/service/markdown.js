@@ -147,10 +147,13 @@ function onlyStyleLine(frontmatter, style) {
   });
 }
 
+// A block with nothing between its fences is still frontmatter. Going back to
+// the International Style removes the only line a block held, lahe-style: <id>,
+// and the two fences left behind would otherwise render as two rules.
 function splitFrontmatter(source) {
-  var match = String(source).match(/^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/);
+  var match = String(source).match(/^---\r?\n(?:([\s\S]*?)\r?\n)?---(?:\r?\n|$)/);
   if (!match) return { frontmatter: null, body: String(source) };
-  return { frontmatter: match[1], body: String(source).slice(match[0].length) };
+  return { frontmatter: match[1] || "", body: String(source).slice(match[0].length) };
 }
 
 function assetPrefix(source) {
@@ -398,7 +401,7 @@ function renderPage(source, options) {
   // relative-URL rewrite. A missing style still gets its link: the page server
   // answers it with a 404 and the rail names the missing style.
   var styleLink = styleId ? styles.linkTag(styleId) : "";
-  var metadata = parts.frontmatter === null || onlyStyleLine(parts.frontmatter, style)
+  var metadata = parts.frontmatter === null || parts.frontmatter.trim() === "" || onlyStyleLine(parts.frontmatter, style)
     ? ""
     : "<details class=\"frontmatter\"><summary>Document metadata</summary><pre data-block=\"Frontmatter\"><code>" +
       escapeHtml(parts.frontmatter) + "</code></pre></details>";

@@ -84,6 +84,19 @@ test("V6: a frontmatter block that holds only the style line is not shown as Doc
   }
 });
 
+test("fix round 2: an empty frontmatter block, left by going back to International, renders nothing", () => {
+  // The agent removed the only line, lahe-style: <id>, and left the fences.
+  for (const text of ["---\n---\n# Doc\n\nWords.\n", "---\r\n---\r\n# Doc\r\n", "---\n\n---\n# Doc\n", "---\n   \n\n---\n# Doc\n"]) {
+    const html = markdown.render(source(text));
+    const body = html.slice(html.indexOf("<body"));
+    assert.equal(/<hr\b/.test(body), false, "no rule from the fences: " + JSON.stringify(text));
+    assert.equal(html.indexOf("Document metadata"), -1, "no empty metadata block: " + JSON.stringify(text));
+    assert.equal(body.indexOf("---"), -1, "no fence shown as text: " + JSON.stringify(text));
+    assert.ok(body.indexOf("<h1") !== -1, "the document still renders");
+    assert.equal(html.indexOf(".lahe-styles"), -1, "and no style link");
+  }
+});
+
 test("V6: a frontmatter block with other lines is still shown, and the style still links", () => {
   const html = markdown.render(source("---\ntitle: A doc\nlahe-style: sample\n---\n# Doc\n"));
   assert.ok(html.indexOf(LINK) !== -1);
