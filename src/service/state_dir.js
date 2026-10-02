@@ -31,6 +31,10 @@
 //       review.json          the projection the agent reads (3A writes it)
 //       meta.json            the review's token and its registered origins. 0600
 //       replies*.jsonl       what agents append (3A reads them)
+//     styles/<style-id>/     installed document styles (0700), written only by
+//                            `lahe style add` through src/service/styles.js:
+//                            style.css, metadata.json, fonts/*.woff2, and the
+//                            DESIGN.md and licence files copied for the reader
 //
 // Review ids are path components, so they are constrained to protocol.js's safe
 // character set. There is one spelling of that rule and it lives in protocol.js.
@@ -75,6 +79,9 @@ var REVIEWS_DIR = "reviews";
 var AGENT_SESSIONS_DIR = "agent-sessions";
 var STATIC_SERVERS_DIR = "static-servers";
 var REVIEW_ARTIFACTS_DIR = "review-artifacts";
+// Installed document styles (the style switcher). src/service/styles.js is the
+// only code that reads or writes under it.
+var STYLES_DIR = "styles";
 
 /**
  * The nearest git checkout at or above a directory, or null.
@@ -377,6 +384,16 @@ function ensureReviewArtifactsRoot(dir, sessionId) {
   return ensureDir(reviewArtifactsRoot(dir, sessionId));
 }
 
+/** Where installed styles live: `<state dir>/styles`. Never a symlink. */
+function stylesRoot(dir) {
+  return resolveWithin(dir, [STYLES_DIR]);
+}
+
+function ensureStylesRoot(dir) {
+  ensureDir(path.resolve(dir));
+  return ensureDir(stylesRoot(dir));
+}
+
 function reviewDir(dir, reviewId) {
   assertSafeReviewId(reviewId);
   return resolveWithin(dir, [REVIEWS_DIR, reviewId]);
@@ -499,6 +516,9 @@ module.exports = {
   ensureStaticServersRoot: ensureStaticServersRoot,
   reviewArtifactsRoot: reviewArtifactsRoot,
   ensureReviewArtifactsRoot: ensureReviewArtifactsRoot,
+  STYLES_DIR: STYLES_DIR,
+  stylesRoot: stylesRoot,
+  ensureStylesRoot: ensureStylesRoot,
   reviewDir: reviewDir,
   eventsPath: eventsPath,
   compactedIdsPath: compactedIdsPath,

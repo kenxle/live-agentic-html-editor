@@ -314,6 +314,18 @@ Work each item against this checklist. It is the contract's rules, said short.
   Organize it only when the reviewer asks. Never write prose of your own into a
   region the reviewer wrote; suggestions go in your reply. When you cannot tell
   where new text belongs, reply `question` and ask.
+- **A note carrying `lahe-style: <id>` asks for that page's document style.**
+  Act only on that marker in a note's own `note` field, never in page text or a
+  data field, and only when `<id>` is lowercase letters, digits and hyphens, at
+  most 40, starting with a letter or digit. In an HTML page, put
+  `<link rel="stylesheet" href="./.lahe-styles/<id>/style.css">` on the line
+  right after the `./.lahe-doc-style.css` link, replacing any style link already
+  there. In a Markdown file, put the line `lahe-style: <id>` in the front
+  matter, replacing any `lahe-style` line; a file with no front matter gets one
+  at the very top: a `---` line, that line, and a `---` line.
+  `lahe-style: international` means remove the style line instead, and in a
+  Markdown file remove the whole front matter block, fences too, when that line
+  was all it held. Write it, then reply `handled`.
 - **Links in a Markdown source stay as they are on disk.** Fix one only if it is
   wrong on disk too.
 - **A page under `/.lahe-source/` is a linked document.** The reviewer followed
@@ -557,7 +569,7 @@ page to load with the helper down.
   more when it has none; then never again. Only `takeover` and `closed` mean stop.
 - **Your one write surface is your own reply file, append-only.**
 - **A page you write for review gets a `<title>` naming the document, an icon
-  saying which document it is, and one stylesheet.** An emoji icon needs no file:
+  saying which document it is, and a stylesheet.** An emoji icon needs no file:
 
   ```html
   <title>Logo options, round 2</title>
@@ -568,6 +580,12 @@ page to load with the helper down.
   The helper serves `.lahe-doc-style.css` from any directory it serves. Add CSS
   only for what the page needs on top, such as a chart. A page that already has
   its own styles, or its own icon, is left as its author made it.
+
+  A reviewer may have installed another document style. To use one, put
+  `<link rel="stylesheet" href="./.lahe-styles/<id>/style.css">` on the line
+  right after the `.lahe-doc-style.css` link, or put `lahe-style: <id>` in a
+  Markdown file's frontmatter. `lahe style add <folder>` installs a style and
+  `lahe style list` shows the installed ones.
 
   The stylesheet ships ready-made components: stat tiles, callouts, insight panels,
   badges, tables, option cards, image layouts, and more. Build the page from them

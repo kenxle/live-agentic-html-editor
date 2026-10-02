@@ -85,7 +85,8 @@
       root.LAHE.protocol,
       root.LAHE.gestures,
       root.LAHE.normalize,
-      root.LAHE.blocks
+      root.LAHE.blocks,
+      root.LAHE.styleSwitch
     );
   } else {
     module.exports = factory(
@@ -96,7 +97,8 @@
       require("../shared/protocol.js"),
       require("../shared/gestures.js"),
       require("../shared/normalize.js"),
-      require("./blocks.js")
+      require("./blocks.js"),
+      require("./style_switch.js")
     );
   }
 })(typeof globalThis !== "undefined" ? globalThis : this, function (
@@ -107,7 +109,8 @@
   protocol,
   gestures,
   normalize,
-  blocksModule
+  blocksModule,
+  styleSwitchModule
 ) {
   "use strict";
 
@@ -764,6 +767,56 @@
     "border:1px solid var(--line);border-radius:7px;padding:7px 8px;user-select:text;-webkit-user-select:text}",
     ".late__message[data-shown='true']{display:block}",
 
+    // --- the Document style panel ---------------------------------------------
+    // Under the head and below the overdue banner, on the end-review panel's
+    // surface. Open, it is a title row, the status line with its actions, the
+    // list and its notes. Closed while a preview is active, it collapses to the
+    // status line and Back, which were already on top, so nothing moves. The
+    // buttons are the rail's own: .refusal__btn for the one primary action,
+    // .endpanel__no for Back and Close. Nothing animates.
+    ".stylepanel{display:none;flex-direction:column;gap:9px;margin:10px 10px 0;padding:11px 12px;",
+    "border-radius:var(--radius-sm);background:var(--surface);border:1px solid var(--line)}",
+    ".stylepanel[data-shown='open'],.stylepanel[data-shown='collapsed']{display:flex}",
+    ".stylepanel[data-shown='collapsed']{padding:9px 12px 10px}",
+    ".stylepanel[data-shown='collapsed'] .stylepanel__head,",
+    ".stylepanel[data-shown='collapsed'] .stylepanel__list,",
+    ".stylepanel[data-shown='collapsed'] .stylepanel__notes,",
+    ".stylepanel[data-shown='collapsed'] .refusal__btn{display:none}",
+    ".stylepanel__head{display:flex;align-items:center;justify-content:space-between;gap:8px}",
+    ".stylepanel__title{font-size:12.5px;font-weight:700;color:var(--ink)}",
+    // A column in both states: the line, then its buttons. The words wrap
+    // rather than clip, because the waiting sentence is the one a reviewer
+    // most needs to read whole, and Back beside it left no room for it.
+    ".stylepanel__line{display:flex;flex-direction:column;align-items:flex-start;gap:8px}",
+    ".stylepanel__status{font-size:12px;color:var(--ink-soft);line-height:1.45;overflow-wrap:anywhere}",
+    ".stylepanel[data-shown='collapsed'] .stylepanel__status{color:var(--ink)}",
+    ".stylepanel__status:empty{display:none}",
+    ".stylepanel__acts{display:flex;flex-wrap:wrap;align-items:center;gap:8px}",
+    ".stylepanel__acts[hidden]{display:none}",
+    ".stylepanel .refusal__btn{align-self:auto}",
+    // Past eight rows the list scrolls. A name wraps; it is never clipped.
+    ".stylepanel__list{display:flex;flex-direction:column;gap:1px;max-height:250px;overflow-y:auto;",
+    "margin:0 -6px;padding:1px 6px}",
+    ".stylepanel__row{display:flex;align-items:center;gap:9px;padding:6px 8px;border-radius:7px;",
+    "cursor:pointer;font-size:12.5px;color:var(--ink)}",
+    ".stylepanel__row:hover{background:var(--sunken)}",
+    ".stylepanel__row:has(input:checked){background:var(--accent-wash)}",
+    ".stylepanel__radio{flex:none;margin:0;width:14px;height:14px;accent-color:var(--accent);cursor:pointer}",
+    ".stylepanel__label{flex:1;min-width:0;display:flex;flex-wrap:wrap;align-items:baseline;gap:1px 7px}",
+    ".stylepanel__name{font-weight:550;overflow-wrap:anywhere}",
+    ".stylepanel__row:has(input:checked) .stylepanel__name{font-weight:650}",
+    ".stylepanel__doc{font-size:11px;color:var(--ink-faint)}",
+    ".stylepanel__doc[hidden]{display:none}",
+    // Six 10px squares, right-aligned in a fixed width, so every row's strip
+    // lines up and a style with no palette leaves the space empty.
+    ".stylepanel__strip{flex:none;width:70px;display:flex;justify-content:flex-end;gap:2px}",
+    ".stylepanel__swatch{width:10px;height:10px;border:1px solid var(--line);border-radius:2px}",
+    ".stylepanel__notes{display:flex;flex-direction:column;gap:6px}",
+    ".stylepanel__notes:empty{display:none}",
+    ".stylepanel__note{font-size:11.5px;color:var(--ink-soft);line-height:1.55}",
+    ".stylepanel__note code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11px;",
+    "color:var(--ink)}",
+
     // --- footer -------------------------------------------------------------
     ".foot{border-top:1px solid var(--line-soft);background:var(--paper);",
     "padding:10px 12px 11px;display:flex;align-items:stretch;gap:10px}",
@@ -1179,11 +1232,18 @@
   // tab that is open, because that is the list the reviewer is looking at.
   var FOLD_ALL = { COLLAPSE: "collapse-cards", EXPAND: "expand-cards" };
 
+  // The Document style panel (docs/features/20260930.01_style_switcher). The
+  // menu item exists only on a page that uses the house style, so it is built
+  // hidden and shown by setStyleAvailable. Its words are style_switch.js's.
+  var STYLE_WORDS = styleSwitchModule.WORDS;
+  var DOCUMENT_STYLE = { ACTION: "document-style", LABEL: STYLE_WORDS.TITLE };
+
   var MENU_ITEMS = [
     { action: "copy", label: "Copy review" },
     { action: "export", label: "Export review to file" },
     { action: FOLD_ALL.COLLAPSE, label: "Collapse all cards" },
     { action: FOLD_ALL.EXPAND, label: "Expand all cards" },
+    { action: DOCUMENT_STYLE.ACTION, label: DOCUMENT_STYLE.LABEL },
     { action: PRESENT.ACTION, label: PRESENT.MENU_LABEL }
   ];
 
@@ -1720,6 +1780,14 @@
     // ours while nothing is open.
     var menuOutsideListener = null;
     var menuShadowListener = null;
+    // The Document style panel. Whether the page uses the house style, and what
+    // the panel shows, are STATE: a remount draws them again, the way the
+    // refusal is drawn again. Open is a moment, like the menu: a remount or a
+    // reload closes it, and what stays is the collapsed line, which is state.
+    var styleAvailable = false;
+    var styleView = null;
+    var stylePanelOpen = false;
+    var styleHandlers = {};
 
     // The DOM, all of it, or all nulls when there is no document (Node).
     var dom = null;
@@ -1831,11 +1899,18 @@
         item.setAttribute("role", "menuitem");
         item.setAttribute("data-action", entry.action);
         item.tabIndex = -1;
+        if (entry.action === DOCUMENT_STYLE.ACTION) item.hidden = !styleAvailable;
         item.addEventListener("click", function () {
           // Closed first, so the reviewer's click leaves nothing hanging over
           // the rail while the work runs, and the focus goes back where they
           // left it.
           closeMenu(true);
+          // The panel is the rail's own, like Present: opening it asks boot
+          // for the list through the panel's own seam (onStylePanel).
+          if (entry.action === DOCUMENT_STYLE.ACTION) {
+            openStylePanel();
+            return;
+          }
           // Present is the rail putting ITSELF away, so there is no action for
           // a caller to register and none to forget: the two review-level items
           // beside it are work only boot knows how to do, and this one is not.
@@ -1858,7 +1933,7 @@
       menuBtn.addEventListener("keydown", function (event) {
         if (event.key === "ArrowDown" || event.key === "ArrowUp") {
           event.preventDefault();
-          openMenu(event.key === "ArrowUp" ? menuItems.length - 1 : 0);
+          openMenu(event.key === "ArrowUp" ? -1 : 0);
         }
       });
       menuList.addEventListener("keydown", function (event) {
@@ -1898,6 +1973,65 @@
       late.appendChild(lateNote);
       late.appendChild(lateMessage);
       rail.appendChild(late);
+
+      // THE DOCUMENT STYLE PANEL, under the banner. Built once and drawn from
+      // state by renderStylePanel; its list rows are kept by id and updated in
+      // place, so an arrow key that previews a style never loses the focus it
+      // is moving.
+      var stylePanel = el("div", "stylepanel");
+      stylePanel.setAttribute("role", "group");
+      stylePanel.setAttribute("aria-label", STYLE_WORDS.TITLE);
+      stylePanel.setAttribute("data-shown", "closed");
+      var styleHead = el("div", "stylepanel__head");
+      styleHead.appendChild(el("div", "stylepanel__title", STYLE_WORDS.TITLE));
+      var styleClose = el("button", "endpanel__no", STYLE_WORDS.CLOSE);
+      styleClose.setAttribute("type", "button");
+      styleClose.addEventListener("click", function () {
+        closeStylePanel(true);
+      });
+      styleHead.appendChild(styleClose);
+      var styleLine = el("div", "stylepanel__line");
+      var styleStatus = el("div", "stylepanel__status", "");
+      // Each preview and the waiting state are announced.
+      styleStatus.setAttribute("aria-live", "polite");
+      styleStatus.setAttribute("role", "status");
+      var styleActs = el("div", "stylepanel__acts");
+      var styleAsk = el("button", "refusal__btn", "");
+      styleAsk.setAttribute("type", "button");
+      styleAsk.addEventListener("click", function () {
+        var view = styleView || {};
+        if (view.askId && typeof styleHandlers.ask === "function") styleHandlers.ask(view.askId);
+      });
+      var styleBack = el("button", "endpanel__no", STYLE_WORDS.BACK);
+      styleBack.setAttribute("type", "button");
+      styleBack.addEventListener("click", function () {
+        var collapsedLine = styleView && styleView.collapsed;
+        if (!stylePanelOpen && collapsedLine && collapsedLine.action === "dismiss") {
+          if (typeof styleHandlers.dismiss === "function") styleHandlers.dismiss();
+          return;
+        }
+        if (typeof styleHandlers.back === "function") styleHandlers.back();
+      });
+      styleActs.appendChild(styleAsk);
+      styleActs.appendChild(styleBack);
+      styleLine.appendChild(styleStatus);
+      styleLine.appendChild(styleActs);
+      var styleList = el("div", "stylepanel__list");
+      styleList.setAttribute("role", "radiogroup");
+      styleList.setAttribute("aria-label", STYLE_WORDS.TITLE);
+      var styleNotes = el("div", "stylepanel__notes");
+      stylePanel.appendChild(styleHead);
+      stylePanel.appendChild(styleLine);
+      stylePanel.appendChild(styleList);
+      stylePanel.appendChild(styleNotes);
+      stylePanel.addEventListener("keydown", function (event) {
+        if (event.key === "Escape" && stylePanelOpen) {
+          event.preventDefault();
+          event.stopPropagation();
+          closeStylePanel(true);
+        }
+      });
+      rail.appendChild(stylePanel);
 
       var tabs = el("div", "tabs");
       tabs.setAttribute("role", "tablist");
@@ -2265,6 +2399,15 @@
         menuList: menuList,
         menuItems: menuItems,
         menuWrap: menuWrap,
+        stylePanel: stylePanel,
+        styleClose: styleClose,
+        styleStatus: styleStatus,
+        styleActs: styleActs,
+        styleAsk: styleAsk,
+        styleBack: styleBack,
+        styleList: styleList,
+        styleNotes: styleNotes,
+        styleRows: Object.create(null),
         collapseBtn: collapseBtn,
         pill: pill,
         pillCount: pillCount,
@@ -2286,6 +2429,10 @@
       renderAgent();
       renderTabs();
       renderCollapsed();
+      // A remount closes the panel (open is a moment) and keeps the collapsed
+      // line, which says the page is not in the document's own style.
+      stylePanelOpen = false;
+      renderStylePanel();
       // The surface exists now, so a rail mounted while the reviewer is
       // presenting comes up hidden rather than flashing onto the projector for
       // a frame. Remounts reach this too, which is the case that matters: a
@@ -4823,18 +4970,28 @@
       return menuOpen ? closeMenu(true) : openMenu(0);
     }
 
+    // The items on screen. Document style is hidden on a page that does not
+    // use the house style, and the keys walk past what is not there.
+    function visibleMenuItems() {
+      if (!dom) return [];
+      return dom.menuItems.filter(function (node) {
+        return !node.hidden;
+      });
+    }
+
     function focusMenuItem(index) {
-      if (!dom || !dom.menuItems.length) return -1;
-      var count = dom.menuItems.length;
+      var items = visibleMenuItems();
+      if (!items.length) return -1;
+      var count = items.length;
       var next = ((index % count) + count) % count;
-      dom.menuItems[next].focus();
+      items[next].focus();
       return next;
     }
 
     function focusedMenuIndex() {
       if (!dom) return -1;
       var active = dom.shadow.activeElement;
-      return dom.menuItems.indexOf(active);
+      return visibleMenuItems().indexOf(active);
     }
 
     function onMenuKey(event) {
@@ -4851,7 +5008,7 @@
         focusMenuItem(0);
       } else if (event.key === "End") {
         event.preventDefault();
-        focusMenuItem(dom.menuItems.length - 1);
+        focusMenuItem(-1);
       } else if (event.key === "Tab") {
         closeMenu(false);
       }
@@ -4882,7 +5039,7 @@
         focusedIndex: focusedMenuIndex(),
         rect: { x: rect.x, y: rect.y, width: rect.width, height: rect.height, right: rect.right },
         collapseRect: { x: collapse.x, y: collapse.y, width: collapse.width, height: collapse.height },
-        items: dom.menuItems.map(function (node) {
+        items: visibleMenuItems().map(function (node) {
           var r = node.getBoundingClientRect();
           return {
             action: node.getAttribute("data-action"),
@@ -4890,6 +5047,236 @@
             rect: { x: r.x, y: r.y, width: r.width, height: r.height }
           };
         })
+      };
+    }
+
+    // -------------------------------------------------------------------------
+    // The Document style panel
+    // -------------------------------------------------------------------------
+    //
+    // The rail draws; it decides nothing. What the panel says comes whole from
+    // style_switch.panelView, handed in by boot through setStyleView, and every
+    // press goes back out through onStylePanel's handlers: open (fetch the
+    // list), pick (preview), back, ask (the keep request), dismiss, close.
+
+    function setStyleAvailable(available) {
+      styleAvailable = available === true;
+      if (dom) {
+        dom.menuItems.forEach(function (node) {
+          if (node.getAttribute("data-action") === DOCUMENT_STYLE.ACTION) node.hidden = !styleAvailable;
+        });
+      }
+      if (!styleAvailable) stylePanelOpen = false;
+      renderStylePanel();
+      return styleAvailable;
+    }
+
+    function setStyleView(view) {
+      styleView = view || null;
+      renderStylePanel();
+      return styleView;
+    }
+
+    function onStylePanel(handlers) {
+      styleHandlers = handlers || {};
+      return function () {
+        styleHandlers = {};
+      };
+    }
+
+    function openStylePanel() {
+      if (!dom || !styleAvailable) return false;
+      stylePanelOpen = true;
+      renderStylePanel();
+      if (typeof styleHandlers.open === "function") styleHandlers.open();
+      focusCheckedStyle();
+      return true;
+    }
+
+    function closeStylePanel(returnFocus) {
+      if (!stylePanelOpen) return false;
+      stylePanelOpen = false;
+      renderStylePanel();
+      if (typeof styleHandlers.close === "function") styleHandlers.close();
+      if (returnFocus && dom) dom.menuBtn.focus();
+      return true;
+    }
+
+    /** Opening the panel puts focus on the checked radio. */
+    function focusCheckedStyle() {
+      if (!dom || !stylePanelOpen) return false;
+      var radios = Array.prototype.slice.call(dom.styleList.querySelectorAll("input"));
+      var target =
+        radios.filter(function (input) {
+          return input.checked;
+        })[0] || radios[0];
+      if (!target) return false;
+      target.focus();
+      return true;
+    }
+
+    function stylePanelMode() {
+      if (!dom || !styleAvailable) return "closed";
+      if (stylePanelOpen) return "open";
+      return styleView && styleView.collapsed ? "collapsed" : "closed";
+    }
+
+    function renderStylePanel() {
+      if (!dom || !dom.stylePanel) return;
+      var mode = stylePanelMode();
+      var view = styleView || { status: "", collapsed: null, ask: null, back: false, rows: [], notes: [] };
+      dom.stylePanel.setAttribute("data-shown", mode);
+      var collapsedLine = mode === "collapsed" ? view.collapsed : null;
+      var text = collapsedLine ? collapsedLine.text : view.status || "";
+      // Written only when it changes, so the live region announces a change
+      // and not every repaint.
+      if (dom.styleStatus.textContent !== text) dom.styleStatus.textContent = text;
+      dom.styleAsk.hidden = !view.ask;
+      if (view.ask && dom.styleAsk.textContent !== view.ask) dom.styleAsk.textContent = view.ask;
+      var backShown = collapsedLine ? true : view.back === true;
+      var backLabel = collapsedLine && collapsedLine.action === "dismiss" ? STYLE_WORDS.CLOSE : STYLE_WORDS.BACK;
+      dom.styleBack.hidden = !backShown;
+      if (dom.styleBack.textContent !== backLabel) dom.styleBack.textContent = backLabel;
+      dom.styleActs.hidden = collapsedLine ? false : !view.ask && !backShown;
+      renderStyleRows(view.rows || []);
+      renderStyleNotes(view.notes || []);
+    }
+
+    function swatchesKey(palette) {
+      return (palette || []).join(",");
+    }
+
+    function buildStyleRow(id) {
+      var row = el("label", "stylepanel__row");
+      row.setAttribute("data-style-id", id);
+      var input = el("input", "stylepanel__radio");
+      input.type = "radio";
+      input.name = "lahe-document-style";
+      input.value = id;
+      input.addEventListener("change", function () {
+        if (input.checked && typeof styleHandlers.pick === "function") styleHandlers.pick(id);
+      });
+      var label = el("span", "stylepanel__label");
+      var name = el("span", "stylepanel__name", "");
+      var inDoc = el("span", "stylepanel__doc", STYLE_WORDS.IN_DOCUMENT);
+      label.appendChild(name);
+      label.appendChild(inDoc);
+      var strip = el("span", "stylepanel__strip");
+      strip.setAttribute("aria-hidden", "true");
+      row.appendChild(input);
+      row.appendChild(label);
+      row.appendChild(strip);
+      return { node: row, input: input, name: name, inDoc: inDoc, strip: strip, swatches: null };
+    }
+
+    function renderStyleRows(rows) {
+      var known = dom.styleRows;
+      var wanted = Object.create(null);
+      rows.forEach(function (entry, index) {
+        wanted[entry.id] = true;
+        var row = known[entry.id] || (known[entry.id] = buildStyleRow(entry.id));
+        // Names and descriptions reach the rail as text, never as markup.
+        if (row.name.textContent !== entry.name) row.name.textContent = entry.name;
+        row.node.title = entry.description || "";
+        row.inDoc.hidden = entry.inDocument !== true;
+        if (row.input.checked !== (entry.checked === true)) row.input.checked = entry.checked === true;
+        var key = swatchesKey(entry.palette);
+        if (row.swatches !== key) {
+          while (row.strip.firstChild) row.strip.removeChild(row.strip.firstChild);
+          (entry.palette || []).forEach(function (colour) {
+            // Checked again here, so nothing but a colour ever reaches a style.
+            if (!styleSwitchModule.isHexColour(colour)) return;
+            var swatch = el("span", "stylepanel__swatch");
+            swatch.style.backgroundColor = colour;
+            row.strip.appendChild(swatch);
+          });
+          row.swatches = key;
+        }
+        var at = dom.styleList.children[index] || null;
+        if (at !== row.node) dom.styleList.insertBefore(row.node, at);
+      });
+      Object.keys(known).forEach(function (id) {
+        if (wanted[id]) return;
+        if (known[id].node.parentNode) known[id].node.parentNode.removeChild(known[id].node);
+        delete known[id];
+      });
+    }
+
+    function renderStyleNotes(notes) {
+      var key = JSON.stringify(notes);
+      if (dom.styleNotes.getAttribute("data-key") === key) return;
+      dom.styleNotes.setAttribute("data-key", key);
+      while (dom.styleNotes.firstChild) dom.styleNotes.removeChild(dom.styleNotes.firstChild);
+      notes.forEach(function (parts) {
+        var line = el("div", "stylepanel__note");
+        (parts || []).forEach(function (part) {
+          if (part.kbd) line.appendChild(el("kbd", null, part.kbd));
+          else if (part.code) line.appendChild(el("code", null, part.code));
+          else line.appendChild(doc.createTextNode(String(part.text || "")));
+        });
+        dom.styleNotes.appendChild(line);
+      });
+    }
+
+    function rectOf(node) {
+      if (!node || node.hidden) return null;
+      var r = node.getBoundingClientRect();
+      if (!r.width && !r.height) return null;
+      return { x: r.x, y: r.y, width: r.width, height: r.height, right: r.right, bottom: r.bottom };
+    }
+
+    /**
+     * Self-report for the closed root: what the panel says, where each control
+     * is, and what holds focus. A spec clicks at this geometry and presses real
+     * keys; it cannot reach in.
+     */
+    function stylePanelInfo() {
+      if (!dom || !dom.stylePanel) return { present: false, available: styleAvailable, mode: "closed" };
+      var active = dom.shadow.activeElement;
+      var rows = Array.prototype.slice.call(dom.styleList.children).map(function (node) {
+        var id = node.getAttribute("data-style-id");
+        var row = dom.styleRows[id];
+        return {
+          id: id,
+          name: row.name.textContent,
+          inDocument: !row.inDoc.hidden,
+          checked: row.input.checked,
+          focused: active === row.input,
+          palette: Array.prototype.slice.call(row.strip.children).map(function (swatch) {
+            return swatch.style.backgroundColor;
+          }),
+          rect: rectOf(node),
+          nameRect: rectOf(row.name)
+        };
+      });
+      var lateRect = rectOf(dom.late);
+      return {
+        present: true,
+        available: styleAvailable,
+        mode: stylePanelMode(),
+        open: stylePanelOpen,
+        status: dom.styleStatus.textContent,
+        statusLive: dom.styleStatus.getAttribute("aria-live"),
+        ask: { shown: !dom.styleAsk.hidden && !!rectOf(dom.styleAsk), label: dom.styleAsk.textContent, rect: rectOf(dom.styleAsk) },
+        back: { shown: !dom.styleBack.hidden && !!rectOf(dom.styleBack), label: dom.styleBack.textContent, rect: rectOf(dom.styleBack) },
+        close: { rect: rectOf(dom.styleClose), focused: active === dom.styleClose },
+        rows: rows,
+        notes: Array.prototype.slice.call(dom.styleNotes.children).map(function (line) {
+          return line.textContent;
+        }),
+        focusedId: (function () {
+          var hit = rows.filter(function (r) {
+            return r.focused;
+          })[0];
+          return hit ? hit.id : null;
+        })(),
+        menuButtonFocused: active === dom.menuBtn,
+        rect: rectOf(dom.stylePanel),
+        statusRect: rectOf(dom.styleStatus),
+        listRect: rectOf(dom.styleList),
+        listScrolls: dom.styleList.scrollHeight > dom.styleList.clientHeight + 1,
+        lateRect: lateRect,
+        scheme: dom.host.getAttribute(highlightModule.SCHEME_ATTR)
       };
     }
 
@@ -6378,6 +6765,21 @@
       onAction: onAction,
       menuInfo: menuInfo,
       menuIsOpen: menuIsOpen,
+      // The Document style panel (docs/features/20260930.01_style_switcher).
+      DOCUMENT_STYLE: DOCUMENT_STYLE,
+      setStyleAvailable: setStyleAvailable,
+      setStyleView: setStyleView,
+      onStylePanel: onStylePanel,
+      openStylePanel: openStylePanel,
+      closeStylePanel: closeStylePanel,
+      stylePanelInfo: stylePanelInfo,
+      // The primary button, pressed even while it is hidden, for a caller
+      // proving a second press sends nothing (V13).
+      clickStyleAsk: function () {
+        if (!dom || !dom.styleAsk) return null;
+        dom.styleAsk.click();
+        return true;
+      },
       // End review (D10). promptEndReview is what boot calls once it knows what
       // is unfinished; the door on the rail runs the registered "end" action,
       // which is what calls it.
