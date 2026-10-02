@@ -13,6 +13,7 @@ var scriptLine = require("../shared/script_line.js");
 var markdown = require("./markdown.js");
 var markdownLinks = require("./markdown_links.js");
 var stateDir = require("./state_dir.js");
+var styles = require("./styles.js");
 var tabIcon = require("./tab_icon.js");
 var heal = require("./heal.js");
 var logModule = require("./log.js");
@@ -722,6 +723,12 @@ function createCatalogOps(options) {
   return { reopenForCatalog: reopenForCatalog, closeQuiet: closeQuiet };
 }
 
+// THE RESERVED SEGMENTS COME FIRST. `.lahe-styles` (installed document
+// styles), `.lahe-doc-style.css` and `.lahe-fonts` are answered before any
+// hidden-segment rule could look at them: the request handler answers the
+// first ahead of the disk lookup, and the other two in its packaged-asset
+// fallback. Nothing calls this helper today; if something starts to, it must
+// keep running after those answers, or a page under a mount loses its styles.
 /**
  * Does `candidate`, relative to `base`, cross a dotfile segment?
  *
@@ -1443,6 +1450,44 @@ function runServer(file, sessionId, id, instance, rootInput, dir, logicalRootInp
     res.end(body);
   }
 
+  // INSTALLED STYLES (the style switcher). Any request whose path has a
+  // `.lahe-styles` segment is answered by styles.js from the installed styles,
+  // from any directory, and never from the disk under the served root: a copy
+  // of a style in a reviewed folder, or the one written beside an artifact for
+  // file://, is never served. A refused style is a 404 and one helper-log line
+  // per server per style and reason, naming the reason, so "my style does
+  // not show" can be diagnosed without a line per request burying everything
+  // else. A style that breaks a second way is said again.
+  var saidStyle = Object.create(null);
+  function sayStyleOnce(key, line) {
+    if (saidStyle[key]) return;
+    saidStyle[key] = true;
+    say(line);
+  }
+  function sendStyle(req, res, rest) {
+    var out;
+    try { out = styles.answer(dir, rest); }
+    catch (err) {
+      var why = styles.clean((err && (err.code || err.message)) || String(err));
+      sayStyleOnce("error\u0000" + rest.join("/") + "\u0000" + why,
+        "static server " + id + ": could not answer " + styles.SEGMENT + "/" + styles.clean(rest.join("/")) + ": " + why);
+      out = { status: 404, refused: [] };
+    }
+    (out.refused || []).forEach(function (refusal) {
+      sayStyleOnce(refusal.id + "\u0000" + refusal.reason,
+        "static server " + id + ": refused style " + refusal.id + ": " + refusal.reason);
+    });
+    if (out.status !== 200) return send(res, 404, "not found\n");
+    res.writeHead(200, {
+      "cache-control": "no-store",
+      "content-length": out.body.length,
+      "content-type": out.type,
+      "x-content-type-options": "nosniff"
+    });
+    if (req.method === "HEAD") return res.end();
+    res.end(out.body);
+  }
+
   function say(line) {
     try {
       logModule.createEventLog({ dir: dir }).helperLog(line);
@@ -1482,7 +1527,8 @@ function runServer(file, sessionId, id, instance, rootInput, dir, logicalRootInp
   // One page, and the packaged files it names. Nothing is read off disk but
   // the page itself: the style is built, and the fonts and Mermaid runtime
   // come from the clone, so no path in the request ever reaches the folder
-  // the page sits in.
+  // the page sits in. Installed styles are answered before this is reached,
+  // from the state directory's styles folder, never from the page's folder.
   var pageMode = isPageRoot(root);
   var pageName = path.basename(root);
   function servePage(pathname, req, res) {
@@ -1558,6 +1604,10 @@ function runServer(file, sessionId, id, instance, rootInput, dir, logicalRootInp
     // root is looked at, so a folder that happens to be named for it cannot
     // shadow the one file every injected page depends on.
     if (pathname === LIBRARY_PATH) return sendLibrary(req, res);
+    // Installed styles, the same way and for the same reason: answered before
+    // the disk, in both kinds of server, so nothing on disk can pose as one.
+    var styleRest = styles.reservedRest(pathname);
+    if (styleRest !== null) return sendStyle(req, res, styleRest);
     if (pageMode) return servePage(pathname, req, res);
     var servingRoot = root;
     var relative = pathname.replace(/^\/+/, "");

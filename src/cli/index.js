@@ -38,6 +38,7 @@ var USAGE = [
   "  reply   write one correctly encoded reply line into your reply file",
   "  monitor watch locally for session work, print it, and exit (zero-token no-ops)",
   "  library print the Library's address and attach your session; answer its requests",
+  "  style   install a document style folder for every page on this machine, or list them",
   "",
   "Run `lahe <command> --help` for a command's own options, and `lahe --version` for the version."
 ].join("\n");
@@ -56,7 +57,8 @@ var COMMANDS = {
   status: function () { return require("./commands/status.js"); },
   reply: function () { return require("./commands/reply.js"); },
   monitor: function () { return require("./commands/monitor.js"); },
-  library: function () { return require("./commands/library.js"); }
+  library: function () { return require("./commands/library.js"); },
+  style: function () { return require("./commands/style.js"); }
 };
 
 var COMMAND_NAMES = Object.keys(COMMANDS);

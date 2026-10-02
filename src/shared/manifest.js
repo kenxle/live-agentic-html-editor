@@ -52,6 +52,11 @@ var LAYER_FILES = [
     why: "the failure code enum. Depends on nothing"
   },
   {
+    path: "src/shared/style_rules.js",
+    owner: "Style switcher 1.1",
+    why: "the style id pattern, hex colour rule and name limits, spelled once for the service and the layer. Depends on nothing"
+  },
+  {
     path: "src/shared/record.js",
     owner: "0A-kernel",
     why: "the record shape, page fields, applied-after history. Needs normalize"
@@ -149,6 +154,11 @@ var LAYER_FILES = [
     why: "Custom Highlight API registration plus the one page-level stylesheet (D8's named exception)"
   },
   {
+    path: "src/layer/style_switch.js",
+    owner: "Style switcher 2.1",
+    why: "the document style preview: detect the house style, apply and clear a preview, keep it per page"
+  },
+  {
     path: "src/layer/overlay.js",
     owner: "1B",
     why: "the rail chrome only: tab shell, status line, failure chips, card API. Tab contents live elsewhere"
@@ -232,6 +242,7 @@ var NON_BUNDLE_FILES = [
   { path: "src/service/static_servers.js", owner: "1A", why: "session-owned static HTTP server lifecycle" },
   { path: "src/service/idle_servers.js", owner: "1A", why: "stop a session's page servers when no window is open" },
   { path: "src/service/markdown.js", owner: "1A", why: "deterministic Markdown review artifacts" },
+  { path: "src/service/styles.js", owner: "Style switcher 1.1", why: "installed document styles: the store, the checks, and serving their files" },
   { path: "src/service/tab_icon.js", owner: "1A", why: "the fallback tab icon, and the rule that a page declaring its own keeps it. The Markdown renderer and the static server both need it, so it is spelled once" },
   { path: "src/service/markdown_links.js", owner: "1A", why: "render-time translation of local Markdown links, and the mount path-safety rules that bound it" },
   { path: "src/service/reviews.js", owner: "1A", why: "review creation, per-review token minting, origin registration, the second-window session" },
@@ -295,7 +306,8 @@ var NON_BUNDLE_FILES = [
     path: "src/cli/commands/library.js",
     owner: "Library 1.4",
     why: "lahe library (print the Library URL, attach a session) and lahe library answer"
-  }
+  },
+  { path: "src/cli/commands/style.js", owner: "Style switcher 1.2", why: "lahe style add and lahe style list" }
 ];
 
 // The Library page's own scripts. NOT in the bundle: the helper serves them raw
