@@ -1,6 +1,6 @@
 /*
  * live-agentic-html-editor review layer
- * version 0.2.0+8728710451c9
+ * version 0.2.0+a82d729d7afe
  *
  * GENERATED FILE. Do not edit. Edit the sources under src/ and run
  *   npm run build:layer
@@ -12,7 +12,7 @@
   "use strict";
   var g = typeof globalThis !== "undefined" ? globalThis : window;
   g.LAHE = g.LAHE || {};
-  g.LAHE.version = "0.2.0+8728710451c9";
+  g.LAHE.version = "0.2.0+a82d729d7afe";
 })();
 /* ---- src/shared/markers.js  (owner: 0A-kernel) ---- */
 // Markers: the attribute and class names that identify DOM the tool added.
@@ -315,6 +315,14 @@
   //  - Output is stable under reserialization: tag and attribute names are
   //    lowercased, attributes are sorted by name, b/i are renamed to
   //    strong/em, whitespace is collapsed outside <pre>.
+  //
+  // One caller wants the cleaning without the whitespace folding:
+  // `cleanMarkup(html, { keepWhitespace: true })`. Protection's restore puts the
+  // reviewer's own block back after a repaint destroyed it, and the spaces in it
+  // are characters the reviewer typed. A trailing space folded away there means
+  // their next word runs into the last one, and a leading one trimmed shifts the
+  // caret a character to the right. The option keeps every space and &nbsp; as
+  // written and skips the final trim; everything else above still holds.
   //
   // Attribute sorting is a deliberate trade. It loses the author's attribute
   // order in the markup an agent reads, and it buys a before_html/after_html
@@ -644,10 +652,11 @@
     return text.replace(UNICODE_SPACES, " ").replace(/\s+/g, " ");
   }
 
-  function cleanMarkup(html) {
+  function cleanMarkup(html, options) {
     if (typeof html !== "string") {
       throw new TypeError("cleanMarkup expects a string, got " + typeof html);
     }
+    var keepWhitespace = !!(options && options.keepWhitespace);
 
     var out = [];
     var stack = [];
@@ -658,14 +667,15 @@
 
     function emitText(text) {
       if (dropDepth > 0 || !text) return;
-      var t = text
-        .normalize("NFC")
-        .replace(INVISIBLES, "")
-        .replace(/&nbsp;/gi, " ")
-        .replace(/&#160;/g, " ")
-        .replace(/&#[xX]a0;/g, " ");
+      var t = text.normalize("NFC").replace(INVISIBLES, "");
+      if (!keepWhitespace) {
+        t = t
+          .replace(/&nbsp;/gi, " ")
+          .replace(/&#160;/g, " ")
+          .replace(/&#[xX]a0;/g, " ");
+      }
       t = stripControls(t);
-      out.push(preDepth > 0 ? t : collapseText(t));
+      out.push(preDepth > 0 || keepWhitespace ? t : collapseText(t));
     }
 
     while (i < n) {
@@ -769,7 +779,7 @@
       if (stack[q].action === "keep" && dropDepth === 0) out.push(closeTags(stack[q]));
     }
 
-    return out.join("").trim();
+    return keepWhitespace ? out.join("") : out.join("").trim();
   }
 
   function markupEquals(a, b) {
@@ -15815,7 +15825,13 @@
           }
           // The anchor is the page's own block and may hold what the run
           // allowlist does not (a link, code), so it is cleaned, not rebuilt.
-          if (anchorEl.innerHTML !== first.html) anchorEl.innerHTML = normalize.cleanMarkup(first.html);
+          // Its spaces are kept as the reviewer typed them. Folded, a space
+          // typed at the end of the block a moment before the repaint was gone
+          // when the block came back, and the next word ran into the last one;
+          // a leading space trimmed put the caret a character too far right.
+          if (anchorEl.innerHTML !== first.html) {
+            anchorEl.innerHTML = normalize.cleanMarkup(first.html, { keepWhitespace: true });
+          }
           built.push(anchorEl);
           point = blocks.insertPointAfter(anchorEl);
         }
@@ -48434,7 +48450,7 @@
   "use strict";
 
   // Replaced by scripts/build-layer.js at concatenation time.
-  var VERSION = "0.2.0+8728710451c9";
+  var VERSION = "0.2.0+a82d729d7afe";
 
   var protocol = ns.protocol;
   var record = ns.record;

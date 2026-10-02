@@ -757,7 +757,13 @@
           }
           // The anchor is the page's own block and may hold what the run
           // allowlist does not (a link, code), so it is cleaned, not rebuilt.
-          if (anchorEl.innerHTML !== first.html) anchorEl.innerHTML = normalize.cleanMarkup(first.html);
+          // Its spaces are kept as the reviewer typed them. Folded, a space
+          // typed at the end of the block a moment before the repaint was gone
+          // when the block came back, and the next word ran into the last one;
+          // a leading space trimmed put the caret a character too far right.
+          if (anchorEl.innerHTML !== first.html) {
+            anchorEl.innerHTML = normalize.cleanMarkup(first.html, { keepWhitespace: true });
+          }
           built.push(anchorEl);
           point = blocks.insertPointAfter(anchorEl);
         }

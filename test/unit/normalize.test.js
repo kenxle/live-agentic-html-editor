@@ -512,3 +512,22 @@ test("blockWords agrees: a block typed with -- has the words of the rendered das
   assert.equal(n.blockWords("She said no -- then left"), n.blockWords("She said no &#8212; then left"));
   assert.equal(n.blockWords("<p>a — b</p>"), "a - b");
 });
+
+// A protection restore puts the reviewer's own block back after a repaint
+// destroyed it (src/layer/protect.js, runRestore). The markup is still cleaned
+// on the way back in, but the characters are the reviewer's: a space they have
+// just typed at the end of the block, before the next word, is part of what they
+// wrote. Trimmed or folded, the next keystroke runs into the previous word and
+// the caret offset the snapshot recorded points one character too far.
+test("cleanMarkup with keepWhitespace keeps the reviewer's spaces and still cleans", () => {
+  assert.equal(n.cleanMarkup("Text him ", { keepWhitespace: true }), "Text him ");
+  assert.equal(n.cleanMarkup(" Devon", { keepWhitespace: true }), " Devon");
+  assert.equal(n.cleanMarkup("a&nbsp;&nbsp;b&nbsp;", { keepWhitespace: true }), "a&nbsp;&nbsp;b&nbsp;");
+  assert.equal(
+    n.cleanMarkup('Text <b onclick="x()">him</b> <script>bad()</script>', { keepWhitespace: true }),
+    "Text <strong>him</strong> "
+  );
+  // The default is unchanged: a record's markup key still folds and trims.
+  assert.equal(n.cleanMarkup("Text him "), "Text him");
+  assert.equal(n.cleanMarkup("a&nbsp;&nbsp;b"), "a b");
+});
