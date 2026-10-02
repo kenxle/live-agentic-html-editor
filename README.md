@@ -66,7 +66,7 @@ No matter how many files were used to create the HTML page, Lahe knows how to ed
 
 ## Document styles
 
-Every page an agent writes for review, and every Markdown file Lahe renders, uses a full document style with ready-made components: stat tiles, callouts, tables, step sequences, badges, pull quotes, image layouts, and more. Your agent reaches for them instead of writing bare paragraphs, so a plan or a report reads like a finished page.
+Every page an agent writes for review, and every Markdown file Lahe renders, uses a full document style with ready-made components: stat tiles, callouts, tables, step sequences, badges, pull quotes, image layouts, and more. Your agent reaches for them instead of writing bare paragraphs, so a plan or a report reads like a finished page from the first render, with no styling work.
 
 ![A one-page report in Lahe with the Document style panel open, switching through seven styles: International Style, Field Guide, Folio, Ledger, Poster, Schematic and Textbook](docs/images/style-switcher.gif)
 
