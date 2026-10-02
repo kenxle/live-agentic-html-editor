@@ -49,13 +49,6 @@ take a newer style, copy the personal repo's two files over the vendored ones
 and update `vendor/stclair-doc-style/README.md`; `lahe-markdown.css` is ours and
 is edited here.
 
-The paid Lahe Styles never enter this repo. This repo is public, and the styles
-are sold. Their files live in Ken's private personal repo, and a user installs
-them with `lahe style add <folder>` from wherever they bought them. Tests, fixtures
-and screenshots use the made-up styles in `test/fixtures/styles/`, or show a paid
-style only as a picture. A builder may read a paid style in place to check it, but
-never copies its CSS, fonts or metadata into the repo.
-
 The icon is copied, not loaded. The rail inlines its path data as
 `EXIT_ICON_PATH` in `src/layer/overlay.js`, so the vendored file is provenance:
 it is what the drawing came from, and it exists so the next person can diff it
