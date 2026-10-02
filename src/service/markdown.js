@@ -17,7 +17,6 @@ var marked = markedPackage.marked;
 var links = require("./markdown_links.js");
 var tabIcon = require("./tab_icon.js");
 var stateDir = require("./state_dir.js");
-var styles = require("./styles.js");
 var markers = require("../shared/markers.js");
 
 var MARKDOWN_EXTENSIONS = links.MARKDOWN_EXTENSIONS;
@@ -63,10 +62,6 @@ var MERMAID_INIT = "mermaid.initialize(" +
 // same bundle from any served directory, the way it already does for the
 // Mermaid script.
 var DOC_STYLE_ASSET = ".lahe-doc-style.css";
-// The inlined bundle carries this attribute, so the layer finds the house
-// style the same way on a rendered page (this <style>) and on a page an agent
-// wrote (a link to DOC_STYLE_ASSET).
-var DOC_STYLE_ATTR = "data-lahe-doc-style";
 var DOC_STYLE_DIR = path.join(__dirname, "..", "..", "vendor", "stclair-doc-style");
 // Order matters: tokens first, then the components that read them, then LAHE's
 // layer, which maps marked's bare elements onto those components.
@@ -115,45 +110,10 @@ function escapeHtml(value) {
     .replace(/\"/g, "&quot;");
 }
 
-// THE STYLE LINE (the style switcher). A document carries an installed style
-// in one frontmatter line, `lahe-style: <id>`: exactly that key at the start
-// of the line, optional spaces, an id by the styles.js rule, optional trailing
-// spaces. No quotes, lower case only. The first such line wins. Anything else
-// is no style, and an id is checked here before it reaches a link or a file
-// system call, because a frontmatter value is untrusted page data.
-var STYLE_LINE = /^lahe-style:[ ]*([^ ]*)[ ]*$/;
-
-/**
- * The style a frontmatter block names, or null. `international` is the house
- * style and links nothing, but it is still the style line.
- *
- * @returns {{id: string, line: number} | null} `line` is its index in the block
- */
-function styleFromFrontmatter(frontmatter) {
-  if (typeof frontmatter !== "string") return null;
-  var lines = frontmatter.split(/\r?\n/);
-  for (var i = 0; i < lines.length; i += 1) {
-    var match = STYLE_LINE.exec(lines[i]);
-    if (match && styles.isStyleId(match[1])) return { id: match[1], line: i };
-  }
-  return null;
-}
-
-/** True when the block holds the style line and nothing else but blank lines. */
-function onlyStyleLine(frontmatter, style) {
-  if (!style) return false;
-  return frontmatter.split(/\r?\n/).every(function (line, index) {
-    return index === style.line || line.trim() === "";
-  });
-}
-
-// A block with nothing between its fences is still frontmatter. Going back to
-// the International Style removes the only line a block held, lahe-style: <id>,
-// and the two fences left behind would otherwise render as two rules.
 function splitFrontmatter(source) {
-  var match = String(source).match(/^---\r?\n(?:([\s\S]*?)\r?\n)?---(?:\r?\n|$)/);
+  var match = String(source).match(/^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/);
   if (!match) return { frontmatter: null, body: String(source) };
-  return { frontmatter: match[1] || "", body: String(source).slice(match[0].length) };
+  return { frontmatter: match[1], body: String(source).slice(match[0].length) };
 }
 
 function assetPrefix(source) {
@@ -312,13 +272,7 @@ function readSource(file, noFollow) {
   }
 }
 
-/**
- * The rendered page, and the style its frontmatter names (null for none or
- * for the house style).
- *
- * @returns {{html: string, styleId: string|null}}
- */
-function renderPage(source, options) {
+function render(source, options) {
   var opts = options || {};
   var resolved = path.resolve(source);
   var markdown = readSource(resolved, opts.noFollow === true).replace(/^[\u200B\u200C\u200D\u200E\u200F\uFEFF]/, "");
@@ -394,26 +348,19 @@ function renderPage(source, options) {
     );
   });
   var body = rewriteRelativeUrls(blocks.join("\n"), prefix);
-  var style = styleFromFrontmatter(parts.frontmatter);
-  var styleId = style && style.id !== styles.RESERVED_ID ? style.id : null;
-  // A paid style is written to load after the house style, so its link goes
-  // directly after the inlined bundle, in the head, outside the body's
-  // relative-URL rewrite. A missing style still gets its link: the page server
-  // answers it with a 404 and the rail names the missing style.
-  var styleLink = styleId ? styles.linkTag(styleId) : "";
-  var metadata = parts.frontmatter === null || parts.frontmatter.trim() === "" || onlyStyleLine(parts.frontmatter, style)
+  var metadata = parts.frontmatter === null
     ? ""
     : "<details class=\"frontmatter\"><summary>Document metadata</summary><pre data-block=\"Frontmatter\"><code>" +
       escapeHtml(parts.frontmatter) + "</code></pre></details>";
-  var html = [
+  return [
     "<!doctype html>",
     "<html lang=\"en\"><head><meta charset=\"utf-8\">",
     "<meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">",
     "<title>" + escapeHtml(title) + "</title>",
     tabIcon.LINK,
-    "<style " + DOC_STYLE_ATTR + ">",
+    "<style>",
     styleSheet(),
-    "</style>" + styleLink + "</head><body><main data-container=\"Markdown document\">",
+    "</style></head><body><main data-container=\"Markdown document\">",
     typeof opts.note === "string" ? opts.note : (opts.readOnlyNote ? sourceNote(resolved) : ""),
     metadata,
     body,
@@ -421,26 +368,6 @@ function renderPage(source, options) {
     containsMermaid ? "<script src=\"./" + MERMAID_ASSET + "\"></script><script>" + MERMAID_INIT + "</script>" : "",
     "</body></html>"
   ].join("\n");
-  return { html: html, styleId: styleId };
-}
-
-function render(source, options) {
-  return renderPage(source, options).html;
-}
-
-// One helper-log line per state directory and message for the life of this
-// process. A rebuild re-renders on every source change, and a line per render
-// would bury everything else in helper.log under one unchanging sentence.
-var said = Object.create(null);
-function sayOnce(dir, line) {
-  var key = path.resolve(dir) + "\u0000" + line;
-  if (said[key]) return;
-  said[key] = true;
-  try {
-    require("./log.js").createEventLog({ dir: dir }).helperLog(line);
-  } catch (err) {
-    // Diagnostic only; a render that cannot log still renders.
-  }
 }
 
 function copyFonts(dir) {
@@ -461,8 +388,7 @@ function writeArtifact(dir, sessionId, source, options) {
   var target = artifactPath(dir, sessionId, source);
   var prefix = assetPrefix(source);
   var registry = links.createRegistry({ mounts: keyedMount(prefix, path.resolve(source)) });
-  var page = renderPage(source, { assetPrefix: prefix, links: registry, noFollow: noFollow });
-  var html = page.html;
+  var html = render(source, { assetPrefix: prefix, links: registry, noFollow: noFollow });
   if (html.indexOf("./" + MERMAID_ASSET) !== -1) {
     fs.copyFileSync(MERMAID_SOURCE, path.join(path.dirname(target), MERMAID_ASSET));
   }
@@ -470,20 +396,6 @@ function writeArtifact(dir, sessionId, source, options) {
   // is the type. Copying the faces beside it is what lets the file be opened
   // from disk, or moved somewhere with no helper running, and still look right.
   copyFonts(path.dirname(target));
-  // A kept style travels with the file the same way: its checked stylesheet
-  // and fonts are copied beside the artifact, so a page saved to disk still
-  // shows it (R8). A page server never serves this copy. A style that is not
-  // installed, or fails a rule, is copied as nothing, and a copy that cannot
-  // be written never costs the render.
-  if (page.styleId) {
-    try { styles.copyBeside(dir, page.styleId, path.dirname(target)); }
-    catch (err) {
-      // The served page still shows the installed style; only a copy opened
-      // from disk misses it, so it is said once rather than thrown.
-      sayOnce(dir, "could not copy style " + page.styleId + " beside " + target + ": " +
-        styles.clean((err && err.message) || String(err)));
-    }
-  }
   stateDir.writeAtomic(target, html);
   return {
     target: target,
@@ -501,7 +413,6 @@ module.exports = {
   MERMAID_SOURCE: MERMAID_SOURCE,
   MERMAID_THEME: MERMAID_THEME,
   DOC_STYLE_ASSET: DOC_STYLE_ASSET,
-  DOC_STYLE_ATTR: DOC_STYLE_ATTR,
   DOC_STYLE_SOURCES: DOC_STYLE_SOURCES,
   FONT_ASSET_DIR: FONT_ASSET_DIR,
   FONT_SOURCE_DIR: FONT_SOURCE_DIR,
@@ -511,13 +422,11 @@ module.exports = {
   copyFonts: copyFonts,
   isMarkdown: isMarkdown,
   splitFrontmatter: splitFrontmatter,
-  styleFromFrontmatter: styleFromFrontmatter,
   assetPrefix: assetPrefix,
   rewriteRelativeUrls: rewriteRelativeUrls,
   artifactPath: artifactPath,
   sourceNote: sourceNote,
   missingReviewNote: missingReviewNote,
   render: render,
-  renderPage: renderPage,
   writeArtifact: writeArtifact
 };

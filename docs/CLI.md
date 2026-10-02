@@ -39,8 +39,6 @@ lahe skill; after that a plain sentence works:
 | `lahe session name <id> "<name>"` | The human's name for this session, as the host shows it (Claude Code after `/rename`). The reviewer's rail uses it to say which agent to check, and `session list` prints it after the id. Trimmed, control characters removed, 80 characters at most; `""` clears it |
 | `lahe session name <id> --from-review <review>` | Name the session after that review's document, as the Library shows it. The command reads the name itself, so a page title never passes through a shell. The review must belong to the session. Used when launching an agent from the Library |
 | `lahe review ... --name "<name>"` | Start or add to a session and record its name in one step |
-| `lahe style add <folder>... [--state-dir <path>]` | Install a downloaded document style for every Lahe page on this machine. It checks each folder and copies only `style.css`, `metadata.json`, `fonts/*.woff2`, `DESIGN.md` and licence files into `<state dir>/styles/<id>/`, where the id is the folder's name, lowercased, with spaces and underscores as hyphens. Installing the same id again replaces it. A refused folder exits `1` with the reason and what a style folder needs: a `name` in `metadata.json`, a stylesheet that reaches only its own fonts (`url("./fonts/<file>.woff2")`) and `data:` images, no `@import`, no other `url()`, no backslash escape outside a string, and no symlinks. `international` is the house style's id and cannot be installed |
-| `lahe style list [--state-dir <path>]` | Print each installed style's id, name and version, and any hand-copied folder that breaks the rules with its reason. There is no remove: delete the style's folder from `<state dir>/styles/` |
 | `lahe serve [--port N]` | Run the helper by hand (`add` starts it for you, so this is rarely needed) |
 | `lahe serve --restart` | Replace the helper that is already running, even when a reviewer has a page open on it. Every other command leaves such a helper alone and tells you to run this when they are done |
 
@@ -207,16 +205,3 @@ helper then rejects one by one. Hand-appending still works and is still read:
 if you do it, the whole object goes on one physical line and every newline
 inside `text` or `reason` is the two characters backslash n.
 
-
-**A page uses an installed style through one line.** In an HTML page written
-for review, `<link rel="stylesheet" href="./.lahe-styles/<id>/style.css">` goes
-directly after the `./.lahe-doc-style.css` link. In a Markdown file it is the
-frontmatter line `lahe-style: <id>`, lower case, no quotes; the renderer turns
-it into that same link after the house style, and a frontmatter block that
-holds only this line is not shown on the page. Every Lahe page server answers
-any path with a `.lahe-styles` segment from the installed styles, never from
-the disk, and checks the stylesheet again each time the file changes. A style
-that is not installed falls back to the house style; one that breaks a rule is
-a 404 and one line in `helper.log` naming the style and the reason. A rendered
-Markdown file gets the style's stylesheet and fonts copied beside it, so the
-file opened from disk still shows the style.
