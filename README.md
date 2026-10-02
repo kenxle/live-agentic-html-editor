@@ -78,6 +78,21 @@ Every page an agent writes for review, and every Markdown file Lahe renders, use
 
 The full list of components, with the markup for each, is in [`vendor/stclair-doc-style/COMPONENTS.md`](vendor/stclair-doc-style/COMPONENTS.md).
 
+## The Library
+
+Every review and document on your machine is listed on one page, the Library. Run `lahe library` and open the address it prints. Reviews are grouped by agent session, with the ones that have unanswered comments at the top.
+
+![The Lahe Library: reviews grouped by agent session, each row showing the document's title, its file, how many comments are waiting, and Open and Hand to agent buttons](docs/images/library.jpg)
+
+From a row you can:
+
+- **Open** the document, even if its server has stopped.
+- **Star** it, or **rename** it by clicking its name.
+- **Hand it to an agent**: have your attached agent pick it up, or launch a new one on it.
+- **Search** titles, files, folders and sessions, or narrow the list to one project.
+
+The Library reads only files on disk and talks only to the helper on your machine. A rename or a star is never sent to an agent.
+
 ## Quickstart
 
 Clone it, and hand the rest to your agent:
