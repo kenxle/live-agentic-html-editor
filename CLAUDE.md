@@ -196,6 +196,15 @@ GitHub emails the pusher for every failed or cancelled workflow run, and on
 
 - A stress or bisect workflow never fails the run. Put `continue-on-error: true`
   on the step, write the verdict to the log or an artifact, and read it there.
+- GitHub is not the first place the full suite runs. Before opening a pull
+  request, and before any push to an open one, run `npm run gate` locally on
+  that exact commit and read "0 failed". A builder's narrow spec run is not
+  enough: on 2026-10-01 a PR failed on a spec its builder never ran.
+- Batch pushes to an open pull request. Each push starts a run, and a red run
+  is an email. Progress-page and doc commits wait for the next real push. The
+  style switcher PR alone failed six times in a day this way.
+- Check, then merge, as two steps. Run `gh pr checks <n>`, read "pass", then
+  run `gh pr merge <n>`. Never put both in one command.
 - Never cancel a run by hand, and never push a branch just to trigger a run.
   Bisect arms are `workflow_dispatch` inputs (a ref to check out), not branches.
 - Main gets a push only after the pull request's gate is green.
