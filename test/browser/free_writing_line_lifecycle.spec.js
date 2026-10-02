@@ -239,8 +239,19 @@ test.describe("\"+ Write here\" never outlives its edit", () => {
     world = await openBlog(page);
     await editAt(page, "main p");
     await pointToGapBelow(page, "main p");
-    // A press in the margin, far outside the column, commits as before.
-    await page.mouse.click(4, 400);
+    // A press in the far-left margin, beside the middle of a later paragraph,
+    // commits as before. The y comes from the layout, not a fixed number: a
+    // press in the gap between two blocks (and up to 40px either side of the
+    // column) is the near miss that starts writing there (editing.js
+    // writeInGap), not a click outside. A fixed (4, 400) landed in such a gap
+    // once the vendored style shortened the hero's bottom padding, so it
+    // opened a new block instead of committing. Beside a paragraph's middle
+    // is never a gap, whatever the spacing.
+    const outside = await page.evaluate(() => {
+      const r = document.querySelectorAll("main p")[3].getBoundingClientRect();
+      return { x: 4, y: Math.round(r.top + r.height / 2) };
+    });
+    await page.mouse.click(outside.x, outside.y);
     await pollPage(page, () => window.__lahe.isEditing() === false, undefined, { message: "the click outside to commit" });
     await expectNoLine(page, "after a click outside");
   });
