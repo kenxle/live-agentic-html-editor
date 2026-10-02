@@ -1,0 +1,18 @@
+/*
+  Sample Dark: a made-up Lahe style with a dark page ground, for the test
+  suite. The rail picks light or dark from the page's background, so this is
+  the style a test previews to see the rail follow the page to dark. It names
+  no fonts: the house faces stay.
+*/
+
+:root{
+  --sample-night:#15171c;
+  --sample-chalk:#e9e6de;
+  --sample-sky:#8fb8ff;
+
+  --surface:var(--sample-night);
+  --on-surface:var(--sample-chalk);
+  --on-surface-soft:var(--sample-chalk);
+  --link:var(--sample-sky);
+  color-scheme:dark;
+}

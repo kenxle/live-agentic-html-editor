@@ -87,3 +87,10 @@ of each latin block and copy the files over these. Update the versions above.
 
 `src/service/markdown.js` builds the bundle and names the served basenames;
 `src/service/static_servers.js` holds the fallback.
+
+## Paid styles attach after this base
+
+This style is the base. A paid style does not replace it. It loads after it
+and overrides its tokens, and the reviewer installs it with `lahe style add
+<folder>`. Installed styles live in the state folder, not in this one. How they
+are checked, served and carried by a page is in `docs/ongoing/STYLES.md`.

@@ -297,6 +297,18 @@ test.describe("the reviewer's decision on a collision, on a page that keeps repa
       });
       window.__app.morph.stop();
     });
+    // stop() clears the fixture's timer and nothing else, so a poll the timer
+    // had already sent is still on its way, and it lands as one more morph after
+    // the timer is off. On a slow runner that happened often enough to fail the
+    // count below (nine logged for eight driven): the log was right, the
+    // assumption that stop() leaves nothing in flight was not. So the test waits
+    // for every poll sent to have been applied, then starts the log from empty.
+    await pollPage(page, () => window.__app.counters.feedPolls === window.__app.counters.morphPasses, undefined, {
+      message: "the poll the timer sent before it stopped to land"
+    });
+    await page.evaluate(() => {
+      window.__morphLog = [];
+    });
 
     const DRIVEN = 8;
     for (let i = 0; i < DRIVEN; i += 1) {

@@ -1,0 +1,1248 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+  <meta charset="utf-8" />
+  <meta name="generator" content="pandoc" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
+  <title>Feature Brief: Style switcher</title>
+  <style>
+    /* Default styles provided by pandoc.
+    ** See https://pandoc.org/MANUAL.html#variables-for-html for config info.
+    */
+    html {
+      color: #1a1a1a;
+      background-color: #fdfdfd;
+    }
+    body {
+      margin: 0 auto;
+      max-width: 36em;
+      padding-left: 50px;
+      padding-right: 50px;
+      padding-top: 50px;
+      padding-bottom: 50px;
+      hyphens: auto;
+      overflow-wrap: break-word;
+      text-rendering: optimizeLegibility;
+      font-kerning: normal;
+    }
+    @media (max-width: 600px) {
+      body {
+        font-size: 0.9em;
+        padding: 12px;
+      }
+      h1 {
+        font-size: 1.8em;
+      }
+    }
+    @media print {
+      html {
+        background-color: white;
+      }
+      body {
+        background-color: transparent;
+        color: black;
+        font-size: 12pt;
+      }
+      p, h2, h3 {
+        orphans: 3;
+        widows: 3;
+      }
+      h2, h3, h4 {
+        page-break-after: avoid;
+      }
+    }
+    p {
+      margin: 1em 0;
+    }
+    a {
+      color: #1a1a1a;
+    }
+    a:visited {
+      color: #1a1a1a;
+    }
+    img {
+      max-width: 100%;
+    }
+    svg {
+      height: auto;
+      max-width: 100%;
+    }
+    h1, h2, h3, h4, h5, h6 {
+      margin-top: 1.4em;
+    }
+    h5, h6 {
+      font-size: 1em;
+      font-style: italic;
+    }
+    h6 {
+      font-weight: normal;
+    }
+    ol, ul {
+      padding-left: 1.7em;
+      margin-top: 1em;
+    }
+    li > ol, li > ul {
+      margin-top: 0;
+    }
+    blockquote {
+      margin: 1em 0 1em 1.7em;
+      padding-left: 1em;
+      border-left: 2px solid #e6e6e6;
+      color: #606060;
+    }
+    code {
+      white-space: pre-wrap;
+      font-family: Menlo, Monaco, Consolas, 'Lucida Console', monospace;
+      font-size: 85%;
+      margin: 0;
+      hyphens: manual;
+    }
+    pre {
+      margin: 1em 0;
+      overflow: auto;
+    }
+    pre code {
+      padding: 0;
+      overflow: visible;
+      overflow-wrap: normal;
+    }
+    .sourceCode {
+     background-color: transparent;
+     overflow: visible;
+    }
+    hr {
+      border: none;
+      border-top: 1px solid #1a1a1a;
+      height: 1px;
+      margin: 1em 0;
+    }
+    table {
+      margin: 1em 0;
+      border-collapse: collapse;
+      width: 100%;
+      overflow-x: auto;
+      display: block;
+      font-variant-numeric: lining-nums tabular-nums;
+    }
+    table caption {
+      margin-bottom: 0.75em;
+    }
+    tbody {
+      margin-top: 0.5em;
+      border-top: 1px solid #1a1a1a;
+      border-bottom: 1px solid #1a1a1a;
+    }
+    th {
+      border-top: 1px solid #1a1a1a;
+      padding: 0.25em 0.5em 0.25em 0.5em;
+    }
+    td {
+      padding: 0.125em 0.5em 0.25em 0.5em;
+    }
+    header {
+      margin-bottom: 4em;
+      text-align: center;
+    }
+    #TOC li {
+      list-style: none;
+    }
+    #TOC ul {
+      padding-left: 1.3em;
+    }
+    #TOC > ul {
+      padding-left: 0;
+    }
+    #TOC a:not(:hover) {
+      text-decoration: none;
+    }
+    span.smallcaps{font-variant: small-caps;}
+    div.columns{display: flex; gap: min(4vw, 1.5em);}
+    div.column{flex: auto; overflow-x: auto;}
+    div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+    /* The extra [class] is a hack that increases specificity enough to
+       override a similar rule in reveal.js */
+    ul.task-list[class]{list-style: none;}
+    ul.task-list li input[type="checkbox"] {
+      font-size: inherit;
+      width: 0.8em;
+      margin: 0 0.8em 0.2em -1.6em;
+      vertical-align: middle;
+    }
+    .display.math{display: block; text-align: center; margin: 0.5rem auto;}
+  </style>
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>%F0%9F%94%A8</text></svg>">
+  <!--
+    St. Clair AI document style for forge docs.
+
+    The palette, type and spacing values below are copied from the St. Clair
+    system tokens (live-agentic-html-editor/vendor/stclair-doc-style/
+    system-tokens.css). This header does NOT link LAHE's ./.lahe-doc-style.css
+    bundle, on purpose: that bundle's document.css styles bare elements and a
+    generic .callout (an ink fill with white text) and puts padding on every body
+    child, and all three collide with the forge structure. So the page is
+    self-contained and reads the same whether or not LAHE is serving it.
+
+    The fonts are the one thing taken from LAHE: it serves the three vendored
+    faces at ./.lahe-fonts/<file>.woff2 from every folder. When that fails, each
+    stack falls back to system-ui and a platform monospace.
+
+    House rules this file keeps: no pills, no shadows, no gradients, no all caps
+    labels, no single-side coloured borders. Colour comes from tints and dots.
+  -->
+  <style>
+    @font-face {
+      font-family: "Schibsted Grotesk"; font-style: normal; font-weight: 500 700; font-display: swap;
+      src: url("./.lahe-fonts/schibsted-grotesk-variable.woff2") format("woff2");
+    }
+    @font-face {
+      font-family: "Hanken Grotesk"; font-style: normal; font-weight: 400 600; font-display: swap;
+      src: url("./.lahe-fonts/hanken-grotesk-variable.woff2") format("woff2");
+    }
+    @font-face {
+      font-family: "JetBrains Mono"; font-style: normal; font-weight: 400 500; font-display: swap;
+      src: url("./.lahe-fonts/jetbrains-mono-variable.woff2") format("woff2");
+    }
+
+    :root {
+      color-scheme: light dark;
+
+      /* St. Clair palette (raw names and values from system-tokens.css) */
+      --white: #ffffff;
+      --paper: #f7f7f5;
+      --ink: #1f1e1a;
+      --ink-soft: #55534b;
+      --ink-faint: #6b6860;
+      --rule: #dcdad6;
+      --purple: #46188c;
+      --purple-tint: #f1ebfa;
+      --link: #6d28d9;
+      --cobalt: #0760c7;
+      --cobalt-tint: #e6effc;
+      --sage-fill: #8fb5a0;
+      --sage: #637a63;
+      --sage-tint: #e7f1ed;
+
+      --font-display: "Schibsted Grotesk", "Hanken Grotesk", system-ui, sans-serif;
+      --font-body: "Hanken Grotesk", system-ui, -apple-system, "Helvetica Neue", sans-serif;
+      --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+
+      --r: 4px;
+
+      /* Forge roles. Prefixed --ff- so none of them can collide with a St. Clair
+         token of the same name if the two ever share a page. Dark mode repoints
+         these and nothing else. */
+      --ff-bg: var(--white);
+      --ff-fg: var(--ink);
+      --ff-soft: var(--ink-soft);
+      --ff-faint: var(--ink-faint);
+      --ff-rule: var(--rule);
+      --ff-divider: var(--ink);
+      --ff-link: var(--link);
+      --ff-accent: var(--cobalt);
+      --ff-panel: var(--paper);
+      --ff-code-bg: var(--cobalt-tint);
+      --ff-bullet: var(--sage);
+      --ff-hl-kw: var(--cobalt);
+      --ff-hl-str: var(--sage);
+      --ff-hl-num: var(--purple);
+
+      /* Callouts: a tint, a dot and a label colour each. */
+      --ff-req-bg: var(--cobalt-tint);      --ff-req-dot: var(--cobalt);    --ff-req-label: var(--cobalt);
+      --ff-nongoal-bg: var(--paper);        --ff-nongoal-dot: var(--ink-faint); --ff-nongoal-label: var(--ink-faint);
+      --ff-metric-bg: var(--sage-tint);     --ff-metric-dot: var(--sage);   --ff-metric-label: var(--ink-soft);
+      --ff-question-bg: var(--purple-tint); --ff-question-dot: var(--purple); --ff-question-label: var(--purple);
+      --ff-suggest-bg: var(--white);        --ff-suggest-dot: var(--sage);  --ff-suggest-label: var(--sage);
+      --ff-flag-bg: var(--ink);             --ff-flag-fg: var(--white);     --ff-flag-dot: var(--sage-fill);
+
+      /* Disposition verdicts */
+      --ff-accepted: var(--sage);
+      --ff-rejected: var(--purple);
+      --ff-deferred: var(--cobalt);
+    }
+
+    /* Dark: the St. Clair on-ink values. Body text is full white on ink, as the
+       system decides; tints are the accent mixed into the ink ground. */
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --ff-bg: var(--ink);
+        --ff-fg: var(--white);
+        --ff-soft: #d9d7d1;   /* --ink-soft-ondark */
+        --ff-faint: #b3b0a8;  /* --ink-faint-ondark */
+        --ff-rule: #4a4842;   /* --rule-ondark */
+        --ff-divider: var(--white);
+        --ff-link: var(--sage-fill);
+        --ff-accent: color-mix(in srgb, var(--cobalt) 45%, var(--white));
+        --ff-panel: color-mix(in srgb, var(--white) 6%, var(--ink));
+        --ff-code-bg: color-mix(in srgb, var(--cobalt) 22%, var(--ink));
+        --ff-bullet: var(--sage-fill);
+        --ff-hl-kw: color-mix(in srgb, var(--cobalt) 40%, var(--white));
+        --ff-hl-str: var(--sage-fill);
+        --ff-hl-num: color-mix(in srgb, var(--purple) 30%, var(--white));
+
+        --ff-req-bg: color-mix(in srgb, var(--cobalt) 22%, var(--ink));
+        --ff-req-dot: color-mix(in srgb, var(--cobalt) 45%, var(--white));
+        --ff-req-label: color-mix(in srgb, var(--cobalt) 35%, var(--white));
+        --ff-nongoal-bg: color-mix(in srgb, var(--white) 6%, var(--ink));
+        --ff-nongoal-dot: #b3b0a8; --ff-nongoal-label: #b3b0a8;
+        --ff-metric-bg: color-mix(in srgb, var(--sage) 30%, var(--ink));
+        --ff-metric-dot: var(--sage-fill); --ff-metric-label: var(--sage-fill);
+        --ff-question-bg: color-mix(in srgb, var(--purple) 45%, var(--ink));
+        --ff-question-dot: color-mix(in srgb, var(--purple) 30%, var(--white));
+        --ff-question-label: color-mix(in srgb, var(--purple) 25%, var(--white));
+        --ff-suggest-bg: var(--ink);
+        --ff-suggest-dot: var(--sage-fill); --ff-suggest-label: var(--sage-fill);
+        --ff-flag-bg: var(--paper); --ff-flag-fg: var(--ink); --ff-flag-dot: var(--sage);
+
+        --ff-accepted: var(--sage-fill);
+        --ff-rejected: color-mix(in srgb, var(--purple) 30%, var(--white));
+        --ff-deferred: color-mix(in srgb, var(--cobalt) 40%, var(--white));
+      }
+    }
+
+    /* Pandoc's own default styles load before this block. The rules marked
+       "pandoc" below undo the ones that fight this look: black table rules,
+       a block-level table, auto hyphens, italic h5/h6, and a:visited in
+       near-black, which outranks a plain a rule. */
+    html { scroll-behavior: smooth; -webkit-print-color-adjust: exact; print-color-adjust: exact; background: var(--ff-bg); }
+    * { box-sizing: border-box; }
+
+    body {
+      font-family: var(--font-body);
+      font-size: 17px;
+      line-height: 1.65;
+      color: var(--ff-fg);
+      background: var(--ff-bg);
+      max-width: 880px;
+      margin: 0 auto;
+      padding: 56px 28px 104px;
+      -webkit-font-smoothing: antialiased;
+      text-rendering: optimizeLegibility;
+      hyphens: manual;   /* pandoc */
+    }
+
+    /* Title block (pandoc emits <header id="title-block-header">) */
+    header#title-block-header { padding-bottom: 8px; margin-bottom: 0; text-align: left; }
+    header#title-block-header h1.title {
+      font-family: var(--font-display);
+      font-size: clamp(34px, 4.6vw, 52px);
+      font-weight: 600;
+      margin: 0 0 12px;
+      letter-spacing: -0.012em;
+      line-height: 1.1;
+    }
+    header#title-block-header p.subtitle,
+    header#title-block-header p.author,
+    header#title-block-header p.date {
+      font-size: 20px;
+      line-height: 1.55;
+      color: var(--ff-soft);
+      margin: 0;
+    }
+
+    /* Cross-doc nav (injected by the build before the TOC). A plain line:
+       "Docs  Crucible · Brief · Architecture", the current doc in ink. */
+    .doc-nav {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: baseline;
+      gap: 4px 0;
+      margin: 20px 0 8px;
+      padding: 12px 0;
+      border-top: 1px solid var(--ff-rule);
+      border-bottom: 1px solid var(--ff-rule);
+      font-size: 15px;
+    }
+    .doc-nav .doc-nav-label {
+      font-family: var(--font-display);
+      font-weight: 600;
+      font-size: 14px;
+      color: var(--ff-faint);
+      margin-right: 14px;
+    }
+    .doc-nav a {
+      color: var(--ff-link);
+      text-decoration: underline;
+      text-decoration-thickness: 1px;
+      text-underline-offset: 3px;
+      border: 0;
+      background: none;
+      padding: 0;
+    }
+    .doc-nav a + a::before {
+      content: "\00B7";
+      display: inline-block;
+      color: var(--ff-faint);
+      margin: 0 10px;
+      text-decoration: none;
+    }
+    .doc-nav a:hover { background: none; text-decoration-thickness: 2px; }
+    .doc-nav a:visited { color: var(--ff-link); }
+    .doc-nav a.current, .doc-nav a.current:visited {
+      color: var(--ff-fg);
+      font-weight: 600;
+      text-decoration: none;
+      cursor: default;
+    }
+
+    /* TOC (pandoc emits <nav id="TOC">) */
+    nav#TOC {
+      margin: 28px 0 44px;
+      font-size: 15px;
+      line-height: 1.5;
+    }
+    nav#TOC::before {
+      content: "Contents";
+      display: block;
+      font-family: var(--font-display);
+      font-weight: 600;
+      font-size: 14px;
+      color: var(--ff-faint);
+      padding-bottom: 8px;
+      margin-bottom: 12px;
+      border-bottom: 2px solid var(--ff-divider);
+    }
+    nav#TOC ul { list-style: none; padding-left: 0; margin: 0; }
+    nav#TOC ul ul { padding-left: 18px; margin-top: 4px; }
+    nav#TOC li { margin-bottom: 4px; }
+    nav#TOC li::marker { content: none; }
+    nav#TOC a, nav#TOC a:visited { color: var(--ff-fg); text-decoration: none; border: 0; }
+    nav#TOC a:hover { color: var(--ff-link); text-decoration: underline; background: none; }
+
+    /* Headings: Schibsted at display weight, sentence case. An h2 hangs under a
+       full-width ink rule, the St. Clair section head. */
+    h1, h2, h3, h4, h5, h6 {
+      font-family: var(--font-display);
+      font-weight: 600;
+      line-height: 1.15;
+      letter-spacing: -0.012em;
+      color: var(--ff-fg);
+    }
+    h2 {
+      font-size: clamp(25px, 3vw, 32px);
+      margin: 64px 0 18px;
+      padding-top: 12px;
+      border-top: 2px solid var(--ff-divider);
+    }
+    h3 { font-size: clamp(19px, 2vw, 23px); margin: 40px 0 12px; }
+    h4 { font-size: 18px; margin: 28px 0 8px; }
+    h5, h6 { font-size: 17px; margin: 24px 0 8px; font-style: normal; font-weight: 600; }   /* pandoc */
+    h6 { color: var(--ff-soft); }
+
+    p { margin: 0 0 18px; }
+    p, li, td, dd { overflow-wrap: anywhere; }
+
+    a {
+      color: var(--ff-link);
+      text-decoration: underline;
+      text-decoration-thickness: 1px;
+      text-underline-offset: 3px;
+    }
+    a:visited { color: var(--ff-link); }   /* pandoc */
+    a:hover { text-decoration-thickness: 2px; }
+    :focus-visible { outline: 2px solid var(--ff-link); outline-offset: 3px; border-radius: var(--r); }
+
+    strong { color: inherit; font-weight: 700; }
+
+    ul, ol { margin: 0 0 18px; padding-left: 1.6em; }
+    li { margin: 0 0 8px; line-height: 1.55; }
+    li > p { margin-bottom: 8px; }
+    ul > li::marker { color: var(--ff-bullet); }
+    .callout ul > li::marker { color: var(--ff-dot); }
+    ol > li::marker { color: var(--ff-fg); font-weight: 600; }
+    li > ul, li > ol { margin-top: 8px; }
+
+    /* Callout boxes (from ::: callout-* fenced divs). A tint holding the text,
+       and a label row generated by CSS: a dot in the callout's colour, then the
+       label in the display face. */
+    .callout {
+      border-radius: var(--r);
+      padding: 16px 22px 18px;
+      margin: 18px 0;
+      background: var(--ff-panel);
+      color: var(--ff-fg);
+      line-height: 1.6;
+    }
+    .callout > :first-child { margin-top: 0; }
+    .callout > :last-child { margin-bottom: 0; }
+    .callout::before {
+      display: flex;
+      align-items: center;
+      gap: 9px;
+      font-family: var(--font-display);
+      font-weight: 600;
+      font-size: 14px;
+      line-height: 1.4;
+      margin-bottom: 6px;
+      padding-left: 16px;   /* room for the dot, which ::after draws */
+    }
+    .callout { position: relative; }
+    .callout::after {
+      content: "";
+      position: absolute;
+      left: 22px;
+      top: 23px;
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: var(--ff-dot, var(--ff-faint));
+    }
+    .callout-req      { background: var(--ff-req-bg);      --ff-dot: var(--ff-req-dot); }
+    .callout-req::before      { content: "Requirement";   color: var(--ff-req-label); }
+    .callout-nongoal  { background: var(--ff-nongoal-bg);  --ff-dot: var(--ff-nongoal-dot); border: 1px solid var(--ff-rule); }
+    .callout-nongoal::before  { content: "Non-goals";     color: var(--ff-nongoal-label); }
+    .callout-metric   { background: var(--ff-metric-bg);   --ff-dot: var(--ff-metric-dot); }
+    .callout-metric::before   { content: "Metrics";       color: var(--ff-metric-label); }
+    .callout-question { background: var(--ff-question-bg); --ff-dot: var(--ff-question-dot); }
+    .callout-question::before { content: "Open question"; color: var(--ff-question-label); }
+    .callout-suggest  { background: var(--ff-suggest-bg);  --ff-dot: var(--ff-suggest-dot); border: 1px solid var(--ff-suggest-dot); }
+    .callout-suggest::before  { content: "Suggestion";    color: var(--ff-suggest-label); }
+    .callout-flag     { background: var(--ff-flag-bg);     --ff-dot: var(--ff-flag-dot); color: var(--ff-flag-fg); }
+    .callout-flag::before     { content: "Red flag";      color: var(--ff-flag-fg); }
+    .callout-flag a, .callout-flag strong, .callout-flag code { color: inherit; }
+    .callout-flag code { background: color-mix(in srgb, currentColor 14%, transparent); }
+    /* The nongoal and suggest boxes carry a 1px border, so their dot moves with it. */
+    .callout-nongoal::after, .callout-suggest::after { left: 21px; top: 22px; }
+
+    /* Reviews section: the _reviews.md files are merged into the HTML below this
+       divider (they stay separate files on disk for agents). The build writes
+       the divider with an inline red rule; this repaints it in the house ink. */
+    hr.reviews-divider {
+      border: 0 !important;
+      border-top: 2px solid var(--ff-divider) !important;
+      margin: 88px 0 6px !important;
+      display: block !important;
+    }
+    hr.reviews-divider + * { margin-top: 0; }
+    .reviews-banner {
+      border-top: 1px solid var(--ff-divider);
+      padding: 14px 0 0;
+      margin: 0 0 32px;
+      font-size: 15px;
+      line-height: 1.55;
+      color: var(--ff-soft);
+    }
+    .reviews-banner::before {
+      display: block;
+      content: "Reviews, full prose";
+      font-family: var(--font-display);
+      font-weight: 600;
+      font-size: clamp(25px, 3vw, 32px);
+      line-height: 1.15;
+      letter-spacing: -0.012em;
+      color: var(--ff-fg);
+      margin-bottom: 8px;
+    }
+    /* Jump target for spec -> review-detail links; offset so the heading clears. */
+    .finding-anchor { display: inline-block; scroll-margin-top: 1.5rem; }
+    td a[href^="#"] { font-weight: 600; }
+
+    /* Inline xref deep-dive (from ::: xref fenced div) */
+    .xref {
+      font-size: 15px;
+      background: var(--ff-code-bg);
+      border-radius: var(--r);
+      padding: 10px 16px;
+      margin: 0 0 18px;
+      color: var(--ff-soft);
+      line-height: 1.5;
+    }
+    .xref::before {
+      content: "\21B3  See";
+      font-family: var(--font-display);
+      font-weight: 600;
+      font-size: 14px;
+      color: var(--ff-accent);
+      margin-right: 8px;
+    }
+    .xref > * { display: inline; margin: 0; }
+    .xref a, .xref a:visited { font-weight: 600; color: var(--ff-fg); }
+
+    /* Tables: the St. Clair naked ruled table. A 2px rule under the head,
+       hairlines between rows, no box, no tint, no shadow. The build wraps every
+       table in .table-scroll; the scrolling itself lives in
+       shared-assets/doc_fixes.css. */
+    .table-scroll { margin: 24px 0 32px; }
+    .table-scroll table { margin: 0; }
+    table {
+      border-collapse: collapse;
+      width: 100%;
+      margin: 24px 0 32px;
+      font-size: 15px;
+      line-height: 1.5;
+      background: none;
+      display: table;   /* pandoc sets block; .table-scroll does the scrolling */
+    }
+    tbody { border: 0; }   /* pandoc */
+    th { border-top: 0; }  /* pandoc */
+    thead th {
+      font-family: var(--font-display);
+      font-weight: 600;
+      font-size: 14px;
+      color: var(--ff-faint);
+      text-align: left;
+      padding: 0 16px 10px 0;
+      border-bottom: 2px solid var(--ff-divider);
+      vertical-align: bottom;
+    }
+    tbody td {
+      padding: 12px 16px 12px 0;
+      border-bottom: 1px solid var(--ff-rule);
+      vertical-align: top;
+    }
+    td:last-child, th:last-child { padding-right: 0; }
+    /* A short id column ("RF 12", "T3") stays on one line beside wide prose. */
+    tbody td:first-child { min-width: 3.4em; }
+    tbody tr:nth-child(even) { background: none; }
+    td > :first-child { margin-top: 0; }
+    td > :last-child { margin-bottom: 0; }
+
+    /* Disposition verdicts rendered by the build (Accepted/Rejected/Deferred).
+       A dot and the word, in the verdict's colour. */
+    td .accepted, span.accepted,
+    td .rejected, span.rejected,
+    td .deferred, span.deferred {
+      font-family: var(--font-display);
+      font-weight: 600;
+      white-space: nowrap;
+    }
+    td .accepted::before, span.accepted::before,
+    td .rejected::before, span.rejected::before,
+    td .deferred::before, span.deferred::before {
+      content: "";
+      display: inline-block;
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: currentColor;
+      margin-right: 7px;
+      vertical-align: 0.12em;
+    }
+    td .accepted, span.accepted { color: var(--ff-accepted); }
+    td .rejected, span.rejected { color: var(--ff-rejected); }
+    td .deferred, span.deferred { color: var(--ff-deferred); }
+
+    /* Inline + block code: JetBrains Mono on the cobalt tint, ink text.
+       Ligatures off, so an arrow in code reads as the two characters it is. */
+    code, pre {
+      font-family: var(--font-mono);
+      font-variant-ligatures: none;
+      font-feature-settings: "liga" 0, "calt" 0;
+    }
+    code {
+      font-size: 0.86em;
+      background: var(--ff-code-bg);
+      color: var(--ff-fg);
+      padding: 0.1em 0.35em;
+      border-radius: 3px;
+    }
+    pre {
+      font-size: 14px;
+      background: var(--ff-code-bg);
+      color: var(--ff-fg);
+      padding: 18px 24px;
+      border-radius: var(--r);
+      overflow-x: auto;
+      margin: 0 0 24px;
+      line-height: 1.55;
+      /* Wrap long lines instead of forcing a horizontal scroll (readability). */
+      white-space: pre-wrap;
+      word-break: break-word;
+      overflow-wrap: anywhere;
+    }
+    pre code { background: none; color: inherit; padding: 0; font-size: inherit; }
+    /* A code chip inside a tinted callout would vanish into the tint. */
+    .callout code { background: color-mix(in srgb, currentColor 9%, transparent); }
+
+    /* Highlighted blocks: pandoc wraps them in div.sourceCode and paints its
+       own transparent ground and a green-and-teal palette. Repaint both in the
+       St. Clair accents. */
+    div.sourceCode { margin: 0 0 24px; }
+    div.sourceCode > pre.sourceCode { background: var(--ff-code-bg); margin: 0; }
+    pre.sourceCode code span.kw, pre.sourceCode code span.cf, pre.sourceCode code span.im,
+    pre.sourceCode code span.op, pre.sourceCode code span.bu { color: var(--ff-hl-kw); font-weight: 500; }
+    pre.sourceCode code span.st, pre.sourceCode code span.ch, pre.sourceCode code span.ss,
+    pre.sourceCode code span.vs, pre.sourceCode code span.sc { color: var(--ff-hl-str); }
+    pre.sourceCode code span.dv, pre.sourceCode code span.fl, pre.sourceCode code span.bn,
+    pre.sourceCode code span.cn, pre.sourceCode code span.dt { color: var(--ff-hl-num); }
+    pre.sourceCode code span.co, pre.sourceCode code span.an, pre.sourceCode code span.cv,
+    pre.sourceCode code span.do, pre.sourceCode code span.in { color: var(--ff-soft); font-style: normal; font-weight: 400; }
+    pre.sourceCode code span.fu, pre.sourceCode code span.va, pre.sourceCode code span.at,
+    pre.sourceCode code span.ot { color: inherit; font-weight: 400; }
+
+    /* Mermaid blocks: pandoc renders ```mermaid as <pre class="mermaid">; the
+       Mermaid script replaces the text with SVG. It is a figure, not code: no
+       tint, a hairline frame, centred. Mermaid source must not wrap before the
+       script swaps it for SVG. */
+    pre.mermaid {
+      white-space: pre;
+      background: none;
+      border: 1px solid var(--ff-rule);
+      border-radius: var(--r);
+      padding: 24px;
+      text-align: center;
+      color: var(--ff-fg);
+      font-family: var(--font-body);
+    }
+    pre.mermaid svg { max-width: 100%; height: auto; }
+
+    blockquote {
+      margin: 18px 0;
+      padding: 2px 0 2px 18px;
+      border-left: 3px solid var(--ff-rule);
+      color: var(--ff-soft);
+    }
+    blockquote p:last-child { margin-bottom: 0; }
+
+    hr { border: none; border-top: 1px solid var(--ff-rule); margin: 44px 0; }
+    hr:has(+ h2) { display: none; }
+
+    img { max-width: 100%; height: auto; }
+
+    /* Task-list checkboxes from "- [ ]" lists */
+    ul.task-list { list-style: none; padding-left: 4px; }
+    ul.task-list li input[type="checkbox"] { margin-right: 8px; accent-color: var(--cobalt); }
+
+    @page { size: letter; margin: 0.7in 0.65in; }
+    @media (max-width: 620px) {
+      body { padding: 32px 16px 64px; font-size: 16px; }
+      .callout { padding: 14px 16px 16px; }
+      .callout::after { left: 16px; top: 22px; }
+      table { font-size: 14px; }
+    }
+    @media print {
+      :root { color-scheme: light; }
+      * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+      html, body { background: #fff; color: var(--ink); }
+      body { max-width: 100%; font-size: 11pt; padding: 0; }
+      .doc-nav { display: none; }
+      a { color: var(--ink); }
+      .callout, table, pre, blockquote { break-inside: avoid; }
+      h2, h3 { break-after: avoid; }
+    }
+  </style>
+  <script type="module">
+    import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.esm.min.mjs";
+    const dark = window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches;
+    mermaid.initialize({
+      startOnLoad: false,
+      theme: dark ? "dark" : "neutral",
+      securityLevel: "loose",
+      themeVariables: { fontFamily: '"Hanken Grotesk", system-ui, sans-serif' },
+    });
+    /* Pandoc emits ```mermaid blocks as <pre class="mermaid"><code>…</code></pre> with the
+       diagram source HTML-entity-encoded. Mermaid 10 reads innerHTML, so it sees the literal
+       <code> tag and &quot;/&gt; entities and throws syntax errors. Flatten each block to a
+       single decoded text node first (textContent decodes entities and drops the wrapper),
+       then render. Same fix as the personal-repo report builds (commit d525c50 there). */
+    function renderMermaid() {
+      document.querySelectorAll("pre.mermaid").forEach(function (el) {
+        if (!el.dataset.mflattened) {
+          el.textContent = el.textContent;
+          el.dataset.mflattened = "1";
+        }
+      });
+      mermaid.run({ querySelector: "pre.mermaid" });
+    }
+    if (document.readyState === "loading") {
+      window.addEventListener("DOMContentLoaded", renderMermaid);
+    } else {
+      renderMermaid();
+    }
+  </script>
+
+  <!-- The review comment module and the shared document fixes are injected here
+       at build time from ~/.claude/skills/shared-assets/ (comment_module.html +
+       doc_fixes.css) by shared_assets.resolve_header(). Do not paste a copy back
+       into this file. -->
+  <style>
+  /* Shared document fixes: one source for both document builds.
+
+     Injected at build time alongside comment_module.html, in place of the
+     <!-- SHARED_ASSETS --> placeholder in each pandoc header. Because it lands
+     last in <head>, these rules win over the same-specificity rules earlier in a
+     header without needing !important.
+
+     Keep this file to fixes that are true for every document we build. Anything
+     that depends on a skill's own look (colors, radius, shadow) belongs in that
+     skill's header. */
+
+  /* --- Tables: never spill past the reading column (plan Task 4.3, defect 1) ---
+     Two halves to the fix, and both are needed.
+     1. A wide table scrolls inside its wrapper. Both builds wrap every table in
+        <div class="table-scroll">.
+     2. Long unbroken strings (URLs, tokens, absolute paths) wrap instead of
+        setting a min-content width that forces the table wider than the page.
+        Without this the table is simply wider than the wrapper and the text is
+        cut off at the wrapper edge. */
+  .table-scroll {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    max-width: 100%;
+  }
+  .table-scroll > table { margin: 0; }
+  table { max-width: 100%; }
+  thead th, tbody td { overflow-wrap: anywhere; word-break: break-word; }
+  thead th code, tbody td code,
+  thead th a, tbody td a { overflow-wrap: anywhere; word-break: break-word; }
+
+  /* Print/PDF has no scrollbars, so show the whole table and let it shrink. */
+  @media print {
+    .table-scroll { overflow: visible; }
+  }
+
+  /* --- Charts: never let a chart set the page width (plan Task 4.3, defect 2) ---
+     The label-truncation fix itself is Plotly's automargin, applied in the
+     report header's render script. This is the CSS guard next to it: a chart
+     that computes a wider layout than its column stays inside the column
+     instead of pushing the whole page sideways. */
+  figure.plotly-chart,
+  figure.plotly-chart > div,
+  figure.chart svg,
+  figure.plotly-chart .main-svg { max-width: 100%; }
+
+  </style>
+</head>
+<body>
+<header id="title-block-header">
+<h1 class="title">Feature Brief: Style switcher</h1>
+</header>
+
+<div class="doc-nav"><span class="doc-nav-label">Docs</span><a href="00_crucible_style_switcher.html">Crucible</a><a href="01_brief_style_switcher.html" class="current">Brief</a><a href="02_architecture_style_switcher.html">Architecture</a><a href="03_plan_style_switcher.html">Plan</a><a href="04_progress_style_switcher.md">Progress</a></div>
+<nav id="TOC" role="doc-toc">
+<ul>
+<li><a href="#problem-user-and-context"
+id="toc-problem-user-and-context">Problem, User, and Context</a></li>
+<li><a href="#non-goals" id="toc-non-goals">Non-Goals</a></li>
+<li><a href="#solution-outline" id="toc-solution-outline">Solution
+Outline</a></li>
+<li><a href="#requirements" id="toc-requirements">Requirements</a></li>
+<li><a href="#ux-notes" id="toc-ux-notes">UX Notes</a></li>
+<li><a href="#analytics--logging" id="toc-analytics--logging">Analytics
+/ Logging</a></li>
+<li><a href="#rollout--flags" id="toc-rollout--flags">Rollout /
+Flags</a></li>
+<li><a href="#questions-and-decisions"
+id="toc-questions-and-decisions">Questions and Decisions</a></li>
+<li><a href="#pm-review" id="toc-pm-review">PM Review</a></li>
+<li><a href="#brief-reviews-style-switcher"
+id="toc-brief-reviews-style-switcher">Brief reviews: Style switcher</a>
+<ul>
+<li><a href="#pm-review-round-1" id="toc-pm-review-round-1">PM Review
+(Round 1)</a></li>
+</ul></li>
+</ul>
+</nav>
+<h2 id="problem-user-and-context">Problem, User, and Context</h2>
+<p>A reviewer in Lahe cannot see their document in another style without
+asking the agent to restyle it, one round trip per look. Lahe ships one
+house style (the International Style). Ken has built six paid Lahe
+Styles (Textbook, Folio, Poster, Ledger, Field Guide, Schematic) and the
+store page already promises: "One click and the entire document style
+system changes", and "swap a style into an existing Lahe document in one
+step". Today there is no click and no step.</p>
+<p><strong>Who.</strong> First Ken, who reviews agent-written documents
+in Lahe daily and owns all six styles. Then a Lahe Styles buyer: someone
+who runs a coding agent with Lahe, downloaded a style folder, and wants
+it on their own document now.</p>
+<p><strong>Where.</strong> Desktop browser, the document and the rail
+open beside a terminal running the agent, mid-review. Switching is a
+short aside that must not disturb open comment boxes or an edit in
+progress.</p>
+<p><strong>Outcome.</strong> The reviewer tries every installed style on
+the real document with one click each, keeps the one they want, and the
+document carries that style from then on.</p>
+<p>Prior work: the crucible
+(<code>00_crucible_style_switcher.md</code>), the house style build
+(<code>docs/ongoing/DOC_STYLE_BUILD.md</code>), and the style folders in
+Ken's personal repo (<code>lib/templates/styles/</code>).</p>
+<pre class="mermaid"><code>flowchart LR
+    I[&quot;Install a style folder&lt;br/&gt;(once per machine)&quot;] --&gt; P[&quot;Click a style on the rail&lt;br/&gt;page changes at once&quot;]
+    P --&gt; P
+    P --&gt; K[&quot;Ask the agent to use it&lt;br/&gt;one request&quot;]
+    K --&gt; A[&quot;Agent sets the style&lt;br/&gt;in the document&#39;s source&quot;]
+    A --&gt; D[&quot;Document shows that style&lt;br/&gt;wherever Lahe serves it&quot;]</code></pre>
+<h2 id="non-goals">Non-Goals</h2>
+<div class="callout callout-nongoal">
+<ul>
+<li>Not restyling pages that carry their own CSS. The switcher only acts
+on pages that use the Lahe document style.</li>
+<li>Not a style editor. Nobody tunes colours or fonts from the
+rail.</li>
+<li>Not selling, licensing or checking a purchase. A style on the
+machine is a style the reviewer may use.</li>
+<li>Not shipping any paid style in the Lahe repo.</li>
+<li>Not a dark mode. Every style today is light.</li>
+<li>Not recolouring Mermaid diagrams per style. They keep the house
+palette.</li>
+<li>Not a style for a whole folder review in one action. Each page is
+kept one at a time.</li>
+<li>Not an uninstall command. A style is removed by deleting its
+folder.</li>
+<li>Not adding a runtime dependency. Lahe still runs from a clone with
+nothing installed, and its tests use a made-up style.</li>
+</ul>
+</div>
+<h2 id="solution-outline">Solution Outline</h2>
+<ol type="1">
+<li><strong>Install.</strong> The reviewer (or their agent) runs one
+Lahe command on a downloaded style folder. Lahe copies it into its own
+storage on the machine. The International Style is always there with
+nothing installed.</li>
+<li><strong>Try.</strong> On a page that uses the Lahe document style,
+the rail offers a style control. It lists the International Style and
+every installed style. One click restyles the whole page at once. The
+reviewer can flip through all of them. Nothing goes to the agent.</li>
+<li><strong>Keep.</strong> One more deliberate action, "Ask the agent to
+use" that style, sends the agent one ordinary request on the Active tab.
+The agent adds one line to the document's source. The page reloads in
+that style, and the preview is no longer needed.</li>
+<li><strong>Share.</strong> The document now carries its style. Anywhere
+Lahe serves it, and in a rendered Markdown file saved to disk, it shows
+that style.</li>
+</ol>
+<h2 id="requirements">Requirements</h2>
+<h3 id="trying-a-style">Trying a style</h3>
+<div class="callout callout-req">
+<p><strong>R1. The control appears only where it works.</strong> The
+rail offers the style control on every page that uses the Lahe document
+style, rendered Markdown and agent-written HTML alike. On any other page
+it is absent.</p>
+</div>
+<div class="callout callout-req">
+<p><strong>R2. It lists what is available.</strong> The International
+Style is always first and needs nothing installed. Every installed style
+follows by its own name. The style the page shows now is marked.</p>
+</div>
+<div class="callout callout-req">
+<p><strong>R3. One click restyles the whole page.</strong> No reload, no
+agent, no waiting. Open comment boxes, an edit in progress, highlights
+and anything being typed are untouched.</p>
+</div>
+<div class="callout callout-req">
+<p><strong>R4. A preview survives a reload.</strong> The agent's
+rebuilds reload the page, so a preview holds for that page of that
+review in that browser. It ends when the reviewer picks another style,
+chooses "back to the document's style", or the document itself comes to
+carry the previewed style.</p>
+</div>
+<div class="callout callout-req">
+<p><strong>R5. The rail is honest about a preview.</strong> When the
+page shows a style the document does not carry, the rail says so in
+plain words and offers the way back to the document's own style.</p>
+</div>
+<h3 id="keeping-a-style">Keeping a style</h3>
+<div class="callout callout-req">
+<p><strong>R6. Keeping is one deliberate action.</strong> One button
+("Ask the agent to use Textbook") sends the agent exactly one request,
+shown as an ordinary item on the Active tab. Flipping through previews
+sends nothing. The rail shows the request as waiting until the agent
+answers, and pressing the action again for the same style while one is
+waiting sends nothing new.</p>
+</div>
+<div class="callout callout-req">
+<p><strong>R7. The agent applies it correctly from its instructions
+alone.</strong> The instructions say what to write for an HTML page and
+for a Markdown file, how to replace a style the page already has, and
+how to go back to the International Style.</p>
+</div>
+<div class="callout callout-req">
+<p><strong>R8. A kept style stays with the document.</strong> Once
+applied, the document shows its style wherever Lahe serves it. A
+rendered Markdown file saved to disk carries the style's stylesheet and
+fonts beside it, as it carries the house fonts today, so it still shows
+the style with no Lahe running.</p>
+</div>
+<h3 id="installing-styles">Installing styles</h3>
+<div class="callout callout-req">
+<p><strong>R9. One command installs a style folder.</strong> The
+reviewer or their agent points one Lahe command at a downloaded style
+folder, and the style appears on the rail the next time the control is
+opened. Installing the same style again replaces it. A companion listing
+shows what is installed. Removing a style is deleting its folder by
+hand.</p>
+</div>
+<div class="callout callout-req">
+<p><strong>R10. A bad folder is refused at install, with a
+reason.</strong> A style folder is a name, one stylesheet, and
+optionally its fonts. A stylesheet that pulls anything from the network,
+or reaches for any file other than its own fonts, is refused. The
+message says what is wrong and what a style folder needs.</p>
+</div>
+<div class="callout callout-req">
+<p><strong>R11. No paid styles still shows the control.</strong> With
+nothing installed, the control offers the International Style and one
+line naming the command that adds a style.</p>
+</div>
+<div class="callout callout-req">
+<p><strong>R12. A missing style falls back and says so.</strong> A
+document that names a style this machine does not have shows in the
+International Style, and the rail names the style the document asked
+for.</p>
+</div>
+<h3 id="safety">Safety</h3>
+<div class="callout callout-req">
+<p><strong>R13. A style cannot expose or load anything beyond its own
+stylesheet and fonts.</strong> Installing one makes nothing else on the
+machine readable through Lahe, and a hand-copied folder that breaks the
+install rules is still refused when a page asks for it.</p>
+</div>
+<div class="callout callout-metric">
+<p>With Ken's six styles installed, one of his own documents can be
+shown in all seven styles in seven clicks, with no reload and no agent
+involved. One further action keeps the chosen style, and after the agent
+answers, reloading the page shows the kept style with no preview active.
+The same flow, run on a made-up test style, passes in the automated
+suite.</p>
+</div>
+<h2 id="ux-notes">UX Notes</h2>
+<p>Guidance for the architecture, which may change it without reopening
+the brief:</p>
+<ul>
+<li>The control follows the rail's existing patterns and its own type
+and tokens. No new visual language.</li>
+<li>Each style shows its name and a small strip of its own colours, so a
+reviewer recognises it before clicking.</li>
+<li>The rail keeps its current look under every style. Only the document
+changes.</li>
+<li>Keyboard: the panel is reachable and usable from the keyboard, as
+the head menu is today.</li>
+</ul>
+<h2 id="analytics--logging">Analytics / Logging</h2>
+<p>No analytics: Lahe is a local tool with no telemetry, and this
+feature adds none. Logging is what a person needs to diagnose "my style
+does not show":</p>
+<ul>
+<li>the install command prints what it installed or exactly why it
+refused</li>
+<li>the page server writes one helper-log line, once per server, when it
+refuses a style file request, naming the style and the reason</li>
+</ul>
+<h2 id="rollout--flags">Rollout / Flags</h2>
+<p>No flag. The feature is additive: a page that names no style looks
+exactly as it does today, and nothing changes until a style is installed
+and chosen. The agent instructions change, and they travel together as
+the repo's rules require (the skill, the contract in the review file,
+and the restated copies). An agent on an older contract that receives a
+style request still sees a plain-language note and can ask.</p>
+<h2 id="questions-and-decisions">Questions and Decisions</h2>
+<h3 id="resolved">Resolved</h3>
+<ul>
+<li><strong>Preview or persist? Both, in sequence.</strong> A click
+previews in the browser only. "Use this style" asks the agent to write
+it into the source. Rejected alternatives: preview only (the document
+never changes, so the store's promise is half true), and the helper
+applying a remembered style as it serves the page (the file on disk
+never carries it, so every copy outside Lahe differs). Full reasoning in
+the crucible.</li>
+<li><strong>Per page, not per review.</strong> A style belongs to a
+document, and a folder review can hold documents meant for different
+places. The preview is kept per page in the browser; the kept style
+lives in each page's own source.</li>
+<li><strong>Pages with their own styles are left alone.</strong> A paid
+style is written against the house style's tokens and components, and
+would half-apply over someone else's CSS.</li>
+<li><strong>The request to the agent is an ordinary note, not a new kind
+of item.</strong> The agent already handles notes, and the review file's
+contract says intent lives in a note's words.</li>
+<li><strong>No paid style installed: show the control anyway</strong>,
+with the International Style and a line on adding a style, so the
+feature can be found.</li>
+<li><strong>International Style is the name on the rail</strong> for the
+free house style, matching the store.</li>
+<li><strong>No store link in the tool.</strong> The nothing-installed
+line names the command, not the store. Ken can ask for a link at
+implementation review.</li>
+</ul>
+<h3 id="open">Open</h3>
+<p>None.</p>
+<h2 id="pm-review">PM Review</h2>
+<div class="table-scroll"><table>
+<thead>
+<tr>
+<th>#</th>
+<th>Finding</th>
+<th>Disposition</th>
+<th>Rationale</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><a href="#pm-rf1">RF1</a></td>
+<td>A saved Markdown file cannot show a paid style unless its files
+travel with it</td>
+<td><span class="accepted">Accepted</span></td>
+<td>R8 now says the stylesheet and fonts are carried beside the saved
+file</td>
+</tr>
+<tr>
+<td><a href="#pm-rf2">RF2</a></td>
+<td>Nothing covers the keep action while no agent has answered, or a
+double press</td>
+<td><span class="accepted">Accepted</span></td>
+<td>R6 adds the waiting state and makes a repeat press send nothing</td>
+</tr>
+<tr>
+<td><a href="#pm-rf3">RF3</a></td>
+<td>"Valid style" was never defined</td>
+<td><span class="accepted">Accepted</span></td>
+<td>R10 states a style folder in product terms</td>
+</tr>
+<tr>
+<td><a href="#pm-rf4">RF4</a></td>
+<td>The network rule had no testable point</td>
+<td><span class="accepted">Accepted</span></td>
+<td>R10 refuses at install; R13 also refuses a hand-copied folder when a
+page asks</td>
+</tr>
+<tr>
+<td><a href="#pm-rf5">RF5</a></td>
+<td>No way to discard a preview</td>
+<td><span class="accepted">Accepted</span></td>
+<td>"Back to the document's style" added to R4 and R5</td>
+</tr>
+<tr>
+<td><a href="#pm-rf6">RF6</a></td>
+<td>The agent-instructions and safety requirements read as
+implementation</td>
+<td><span class="accepted">Accepted</span></td>
+<td>Reworded as outcomes (R7, agent applies it from instructions; R13, a
+style reaches only its own files)</td>
+</tr>
+<tr>
+<td><a href="#pm-rf7">RF7</a></td>
+<td>The no-dependencies requirement was a build constraint, and the
+metric only ran on Ken's machine</td>
+<td><span class="accepted">Accepted</span></td>
+<td>Moved to Non-Goals; the metric adds a made-up style run in the
+suite</td>
+</tr>
+<tr>
+<td><a href="#pm-rf8">RF8</a></td>
+<td>"International needs nothing" duplicated the list and
+nothing-installed requirements</td>
+<td><span class="accepted">Accepted</span></td>
+<td>Folded into R2 (the list); fifteen requirements are now
+thirteen</td>
+</tr>
+<tr>
+<td><a href="#pm-rf9">RF9</a></td>
+<td>No way to remove a style</td>
+<td><span class="accepted">Accepted</span></td>
+<td>Non-goal: delete the folder by hand, stated in R9</td>
+</tr>
+<tr>
+<td><a href="#pm-rf10">RF10</a></td>
+<td>"That page" was ambiguous</td>
+<td><span class="accepted">Accepted</span></td>
+<td>R4 says a page of a review in a browser</td>
+</tr>
+<tr>
+<td><a href="#pm-rf11">RF11</a></td>
+<td>UX Notes carried design decisions</td>
+<td><span class="accepted">Accepted</span></td>
+<td>Marked as guidance the architecture may change</td>
+</tr>
+<tr>
+<td><a href="#pm-rf12">RF12</a></td>
+<td>The store-link question should decide itself</td>
+<td><span class="accepted">Accepted</span></td>
+<td>Decided: no link; the line names the command. No open questions
+remain</td>
+</tr>
+<tr>
+<td>DR10</td>
+<td>(Design review of the plan) "Use this style" hid that the agent does
+the work</td>
+<td><span class="accepted">Accepted</span></td>
+<td>R6 now names the button "Ask the agent to use Textbook"</td>
+</tr>
+</tbody>
+</table></div>
+<hr class="reviews-divider" style="margin:4.5rem 0 1.5rem;border:0;border-top:3px solid #b0463b">
+
+<div class="reviews-banner">
+<p>The sections below are the full verbatim persona + human reviews for
+this document. They live in a separate <code>_reviews.md</code> file (so
+agents read the lean spec), merged here for review.</p>
+</div>
+<h1 id="brief-reviews-style-switcher">Brief reviews: Style switcher</h1>
+<p>Requirement numbers below are the draft's. The draft had fifteen; the
+brief now has thirteen, so R11, R14 and R15 here are not the brief's
+current R11 to R13.</p>
+<h2 id="pm-review-round-1">PM Review (Round 1)</h2>
+<p>The brief is close to ready. It has no architecture leaks worth
+blocking on. The findings below are ordered worst first.</p>
+<p><span id="pm-rf1" class="finding-anchor"></span><strong>RF1. important. R8 may not hold for paid styles.</strong> R8
+promises that a kept style still shows in a saved Markdown file "with no
+Lahe running, as the house style does today." The house style is
+inlined, but the paid styles self-host fonts from <code>./fonts/</code>
+(crucible line 35). A saved file would need its CSS and fonts to travel
+with it. Either say what travels, or narrow R8 to "anywhere Lahe serves
+it" plus "a saved file keeps the style line, and the fonts come with it
+or degrade to fallback fonts."</p>
+<p><span id="pm-rf2" class="finding-anchor"></span><strong>RF2. important. Nothing covers the keep action when no agent
+answers.</strong> The crucible lists "keeping depends on an agent being
+there" as a con. R6 and the metric assume an agent replies. Add a
+requirement for what the reviewer sees after "Use this style": the
+request is pending, then applied, and the preview clears. The brief
+should also say what happens if they press it twice.</p>
+<p><span id="pm-rf3" class="finding-anchor"></span><strong>RF3. important. "Valid style" is never defined
+(R10).</strong> R10 says a bad folder is refused with "what a style
+folder needs," but the brief never says what that is. A tester cannot
+write the refusal cases. State the headline contract in product terms: a
+name, a stylesheet, optional fonts, and the stylesheet may not pull
+anything from the network.</p>
+<p><span id="pm-rf4" class="finding-anchor"></span><strong>RF4. important. R14's network rule has no product-level
+test.</strong> "Cannot load anything from the network" could mean
+refusing at install, blocking at serve time, or both. Say which the
+reviewer sees. Install refusal is the testable choice, and it ties into
+RF3.</p>
+<p><span id="pm-rf5" class="finding-anchor"></span><strong>RF5. minor. A reviewer cannot discard a preview.</strong> R5
+says the rail announces a preview. R4 says the preview survives reloads
+until the reviewer picks another style. Nothing lets them return to
+"what the document carries." Add "Reset to the document's own style" to
+R4 or R5. Without it, a reviewer who previewed Poster and changed their
+mind has to click the current style by name.</p>
+<p><span id="pm-rf6" class="finding-anchor"></span><strong>RF6. minor. R7 and R14 lean toward implementation.</strong>
+"Servable" and "reaches an agent that only reads the review file" are
+how-to-build statements. The second is also a repo rule in CLAUDE.md,
+not a user outcome. Reword R7 as "the agent applies the style correctly
+from its instructions alone." Reword R14 as "a style cannot expose or
+load anything beyond its own stylesheet and fonts."</p>
+<p><span id="pm-rf7" class="finding-anchor"></span><strong>RF7. minor. R15 is a build constraint and a test-data rule,
+not a product requirement.</strong> Both halves are already in
+CLAUDE.md. Move them to Non-Goals ("no paid style in the repo" is
+already there) or to the plan. Keep one acceptance line: a made-up style
+passes the same flow as the metric. Right now the metric only works on
+Ken's machine and cannot run in CI.</p>
+<p><span id="pm-rf8" class="finding-anchor"></span><strong>RF8. minor. R11 duplicates R2 and R12.</strong> R2 already
+puts the International Style first, and R12 covers the nothing-installed
+case. Fold R11 into R2. This supports Ken's "keep it small" preference:
+15 requirements can be 13.</p>
+<p><span id="pm-rf9" class="finding-anchor"></span><strong>RF9. minor. No way to remove a style (R9).</strong> Install
+and list exist, but nothing removes a style. A buyer who installs the
+wrong folder will notice. Add a non-goal ("no uninstall command; delete
+the style's folder by hand") or a one-line requirement. The non-goal is
+cheaper and is probably right for now.</p>
+<p><span id="pm-rf10" class="finding-anchor"></span><strong>RF10. minor. The preview's scope in R4 is ambiguous.</strong>
+"That page in that browser" does not say what identifies a page. The
+same file opened in a second tab, or served under a different review,
+should probably behave predictably. One sentence is enough.</p>
+<p><span id="pm-rf11" class="finding-anchor"></span><strong>RF11. taste. UX Notes carry design decisions.</strong>
+"Reached from the head menu, drawn like the end-review panel" and the
+colour strip per row are design choices. They are fine as guidance. Mark
+them as suggestions so the architecture phase can change them without
+reopening the brief.</p>
+<p><span id="pm-rf12" class="finding-anchor"></span><strong>RF12. taste. The open question about the store link should
+decide itself.</strong> Ken waived the gate, and the question is
+low-stakes. R12 says "one line saying how to add a style." Drop the link
+from the brief, keep the line, and let Ken add the link in
+implementation review if he wants it. That removes the only open
+item.</p>
+<p><strong>Not a finding:</strong> the problem statement is honest that
+the evidence is Ken's intent plus a public claim, not buyer pull. The
+scope is right-sized, and the non-goals hold back the likely creep
+(style editing, dark mode, per-style Mermaid colours). The empty PM
+Review table is expected.</p>
+</body>
+</html>
