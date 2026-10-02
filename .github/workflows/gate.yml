@@ -13,6 +13,12 @@ on:
       - "**/*.md"
       - ".claude-commit*"
   pull_request:
+    # Same rule for a pull request: a push of docs only (a progress page, a
+    # README line) proves nothing and every red run is an email to Ken.
+    paths-ignore:
+      - "docs/**"
+      - "**/*.md"
+      - ".claude-commit*"
 
 jobs:
   gate:
