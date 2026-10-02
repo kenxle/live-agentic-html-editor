@@ -1,18 +1,22 @@
 # vendor/heroicons
 
-One icon from [Heroicons](https://github.com/tailwindlabs/heroicons) 2.2.0, MIT
-licensed (see `LICENSE`). `arrow-right-start-on-rectangle.svg` is the file from
-`src/24/outline/`, copied byte for byte.
+Two icons from [Heroicons](https://github.com/tailwindlabs/heroicons) 2.2.0, MIT
+licensed (see `LICENSE`). Each is the file from `src/24/outline/`, copied byte for
+byte:
 
-It lives here because this tool has zero runtime dependencies: a `git clone` has to
-run with no install step, so an icon set cannot be an npm dependency. Only the one
-icon the rail uses is vendored, rather than the whole set, because the rest would be
+- `arrow-right-start-on-rectangle.svg`: the End review door in the rail's footer.
+- `swatch.svg`: the Document style button in the rail's head.
+
+They live here because this tool has zero runtime dependencies: a `git clone` has to
+run with no install step, so an icon set cannot be an npm dependency. Only the icons
+the rail uses are vendored, rather than the whole set, because the rest would be
 dead weight in a repository that ships a built bundle.
 
-The rail draws it from the path data in `src/layer/overlay.js` rather than loading
-this file at runtime. This copy is the provenance: it is what the path was taken
-from, so the next person can diff it against a newer Heroicons release instead of
-guessing whether the drawing was hand-made.
+The rail draws each from the path data in `src/layer/overlay.js` rather than loading
+these files at runtime. These copies are the provenance: they are what the paths were
+taken from, so the next person can diff them against a newer Heroicons release
+instead of guessing whether a drawing was hand-made.
 
-To take a newer version, copy the new file over this one, update the version above,
-and copy its `d` attribute into `EXIT_ICON_PATH` in `src/layer/overlay.js`.
+To take a newer version, copy the new files over these, update the version above,
+and copy each `d` attribute into `src/layer/overlay.js`: the door's into
+`EXIT_ICON_PATH`, the swatch's into `STYLE_ICON_PATH`.

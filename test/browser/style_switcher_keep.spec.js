@@ -38,18 +38,15 @@ function center(rect) {
 }
 
 async function openPanel(page) {
-  const menu = await page.evaluate(() => window.__lahe.rail.menuInfo());
-  await page.mouse.click(center(menu.rect).x, center(menu.rect).y);
-  const open = await pollUntil(
-    async () => {
-      const info = await page.evaluate(() => window.__lahe.rail.menuInfo());
-      return info.open ? info : null;
-    },
-    { message: "the head menu to open" }
-  );
-  const item = open.items.find((i) => i.action === "document-style");
-  expect(item, "a rendered Markdown page offers Document style (V8)").toBeTruthy();
-  await page.mouse.click(center(item.rect).x, center(item.rect).y);
+  const before = await page.evaluate(() => window.__lahe.stylePanel());
+  expect(before.button.shown, "a rendered Markdown page shows the Document style button (V8)").toBe(true);
+  // Opened from closed: a dropdown left open by an earlier step is closed first.
+  if (before.mode === "open") {
+    await page.mouse.click(center(before.button.rect).x, center(before.button.rect).y);
+    await pollPage(page, () => window.__lahe.stylePanel().mode === "closed", undefined, { message: "the dropdown to close" });
+  }
+  await page.mouse.click(center(before.button.rect).x, center(before.button.rect).y);
+  await pollPage(page, () => window.__lahe.stylePanel().mode === "open", undefined, { message: "the dropdown to open" });
   await pollPage(page, () => window.__lahe.handle.styleList().loaded === true, undefined, {
     message: "the style list to answer"
   });

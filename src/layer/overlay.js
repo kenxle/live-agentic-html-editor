@@ -767,29 +767,40 @@
     "border:1px solid var(--line);border-radius:7px;padding:7px 8px;user-select:text;-webkit-user-select:text}",
     ".late__message[data-shown='true']{display:block}",
 
-    // --- the Document style panel ---------------------------------------------
-    // Under the head and below the overdue banner, on the end-review panel's
-    // surface. Open, it is a title row, the status line with its actions, the
-    // list and its notes. Closed while a preview is active, it collapses to the
-    // status line and Back, which were already on top, so nothing moves. The
-    // buttons are the rail's own: .refusal__btn for the one primary action,
-    // .endpanel__no for Back and Close. Nothing animates.
-    ".stylepanel{display:none;flex-direction:column;gap:9px;margin:10px 10px 0;padding:11px 12px;",
-    "border-radius:var(--radius-sm);background:var(--surface);border:1px solid var(--line)}",
-    ".stylepanel[data-shown='open'],.stylepanel[data-shown='collapsed']{display:flex}",
-    ".stylepanel[data-shown='collapsed']{padding:9px 12px 10px}",
-    ".stylepanel[data-shown='collapsed'] .stylepanel__head,",
-    ".stylepanel[data-shown='collapsed'] .stylepanel__list,",
-    ".stylepanel[data-shown='collapsed'] .stylepanel__notes,",
-    ".stylepanel[data-shown='collapsed'] .refusal__btn{display:none}",
+    // --- the Document style button and its dropdown ---------------------------
+    // The button is the head's third icon button, the menu's twin in size and
+    // register: a swatch glyph, because a word does not fit beside "Review"
+    // at the rail's narrowest and a palette is what the control changes.
+    // While a preview is on (or a removed style is still to be read about),
+    // a small dot sits on its corner, ringed in the rail's paper so it reads on
+    // either scheme: accent for a preview, warn for a removed style. It says
+    // the page is not in its own style with the dropdown closed.
+    ".stylewrap{display:flex;flex:none}",
+    ".stylewrap[hidden]{display:none}",
+    ".stylebtn{position:relative}",
+    ".stylebtn svg{width:16px;height:16px;display:block}",
+    ".stylebtn[data-indicator]{color:var(--ink)}",
+    ".stylebtn__dot{display:none;position:absolute;top:3px;right:3px;width:7px;height:7px;",
+    "border-radius:50%;background:var(--accent);box-shadow:0 0 0 2px var(--paper)}",
+    ".stylebtn[data-indicator] .stylebtn__dot{display:block}",
+    ".stylebtn[data-indicator='removed'] .stylebtn__dot{background:var(--warn)}",
+    // The dropdown hangs from the head under the button, on the menu's
+    // surface, and over the panes below it. Open, it is a title row, the status
+    // line with its actions, the list and its notes. The buttons are the rail's
+    // own: .refusal__btn for the one primary action, .endpanel__no for Back and
+    // Close. Nothing animates. Its height is held inside the rail, which clips.
+    ".stylepanel{display:none;position:absolute;top:calc(100% - 4px);right:10px;z-index:4;",
+    "width:min(340px,calc(100% - 20px));max-height:calc(100vh - 110px);overflow-y:auto;",
+    "flex-direction:column;gap:9px;padding:11px 12px;",
+    "border-radius:var(--radius-sm);background:var(--paper);border:1px solid var(--line);box-shadow:var(--shadow)}",
+    ".stylepanel[data-shown='open']{display:flex}",
     ".stylepanel__head{display:flex;align-items:center;justify-content:space-between;gap:8px}",
     ".stylepanel__title{font-size:12.5px;font-weight:700;color:var(--ink)}",
-    // A column in both states: the line, then its buttons. The words wrap
-    // rather than clip, because the waiting sentence is the one a reviewer
-    // most needs to read whole, and Back beside it left no room for it.
+    // A column: the line, then its buttons. The words wrap rather than clip,
+    // because the waiting sentence is the one a reviewer most needs to read
+    // whole, and Back beside it left no room for it.
     ".stylepanel__line{display:flex;flex-direction:column;align-items:flex-start;gap:8px}",
     ".stylepanel__status{font-size:12px;color:var(--ink-soft);line-height:1.45;overflow-wrap:anywhere}",
-    ".stylepanel[data-shown='collapsed'] .stylepanel__status{color:var(--ink)}",
     ".stylepanel__status:empty{display:none}",
     ".stylepanel__acts{display:flex;flex-wrap:wrap;align-items:center;gap:8px}",
     ".stylepanel__acts[hidden]{display:none}",
@@ -1232,20 +1243,38 @@
   // tab that is open, because that is the list the reviewer is looking at.
   var FOLD_ALL = { COLLAPSE: "collapse-cards", EXPAND: "expand-cards" };
 
-  // The Document style panel (docs/features/20260930.01_style_switcher). The
-  // menu item exists only on a page that uses the house style, so it is built
-  // hidden and shown by setStyleAvailable. Its words are style_switch.js's.
+  // The Document style button (docs/features/20260930.01_style_switcher). It
+  // has its own place in the head, beside the menu, and exists only on a page
+  // that uses the house style, so it is built hidden and shown by
+  // setStyleAvailable. Its words are style_switch.js's.
   var STYLE_WORDS = styleSwitchModule.WORDS;
-  var DOCUMENT_STYLE = { ACTION: "document-style", LABEL: STYLE_WORDS.TITLE };
+  var DOCUMENT_STYLE = { LABEL: STYLE_WORDS.TITLE };
 
   var MENU_ITEMS = [
     { action: "copy", label: "Copy review" },
     { action: "export", label: "Export review to file" },
     { action: FOLD_ALL.COLLAPSE, label: "Collapse all cards" },
     { action: FOLD_ALL.EXPAND, label: "Expand all cards" },
-    { action: DOCUMENT_STYLE.ACTION, label: DOCUMENT_STYLE.LABEL },
     { action: PRESENT.ACTION, label: PRESENT.MENU_LABEL }
   ];
+
+  // The style button's glyph: Heroicons 2.2.0 `swatch`, MIT, vendored under
+  // vendor/heroicons beside the exit door, inlined the same way and for the
+  // same reasons (see EXIT_ICON_PATH below). A swatch fan says "colours and
+  // look" at 16 pixels, where a text label would crowd "Review" off the head
+  // of a narrow rail.
+  var STYLE_ICON_PATH =
+    "M4.09835 19.9017C5.56282 21.3661 7.93719 21.3661 9.40165 19.9017L15.8033 13.5M6.75 21C4.67893 21 3 " +
+    "19.3211 3 17.25V4.125C3 3.50368 3.50368 3 4.125 3H9.375C9.99632 3 10.5 3.50368 10.5 4.125V8.1967M6.75 " +
+    "21C8.82107 21 10.5 19.3211 10.5 17.25V8.1967M6.75 21H19.875C20.4963 21 21 20.4963 21 19.875V14.625C21 " +
+    "14.0037 20.4963 13.5 19.875 13.5H15.8033M10.5 8.1967L13.3791 5.31757C13.8185 4.87823 14.5308 4.87823 " +
+    "14.9701 5.31757L18.6824 9.02988C19.1218 9.46922 19.1218 10.1815 18.6824 10.6209L15.8033 13.5M6.75 " +
+    "17.25H6.7575V17.2575H6.75V17.25Z";
+  var STYLE_ICON =
+    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" ' +
+    'stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">' +
+    '<path d="' + STYLE_ICON_PATH + '"/>' +
+    "</svg>";
 
   // ---------------------------------------------------------------------------
   // The way out (D10: a review ends when the reviewer chooses End review)
@@ -1780,14 +1809,18 @@
     // ours while nothing is open.
     var menuOutsideListener = null;
     var menuShadowListener = null;
-    // The Document style panel. Whether the page uses the house style, and what
-    // the panel shows, are STATE: a remount draws them again, the way the
-    // refusal is drawn again. Open is a moment, like the menu: a remount or a
-    // reload closes it, and what stays is the collapsed line, which is state.
+    // The Document style button and its dropdown. Whether the page uses the
+    // house style, and what the dropdown shows, are STATE: a remount draws them
+    // again, the way the refusal is drawn again. Open is a moment, like the
+    // menu: a remount or a reload closes it, and what stays is the dot on the
+    // button, which is state. The two listeners are the menu's pattern: on
+    // while the dropdown is open, off the moment it closes.
     var styleAvailable = false;
     var styleView = null;
     var stylePanelOpen = false;
     var styleHandlers = {};
+    var styleOutsideListener = null;
+    var styleShadowListener = null;
 
     // The DOM, all of it, or all nulls when there is no document (Node).
     var dom = null;
@@ -1817,8 +1850,10 @@
       var mo = mountOptions || {};
       if (mounted) {
         // A remount over a rail that is already up still puts the menu away: a
-        // menu is a moment, and the page under it has just been rebuilt.
+        // menu is a moment, and the page under it has just been rebuilt. So is
+        // the style dropdown.
         closeMenu(false);
+        closeStylePanel(false);
         return { rootId: markers.OVERLAY_ROOT_ID, remounted: false };
       }
       mounted = true;
@@ -1878,6 +1913,73 @@
       head.appendChild(el("span", "review", reviewId || ""));
       head.appendChild(el("span", "spacer"));
 
+      // THE DOCUMENT STYLE BUTTON, and the dropdown that hangs from it. Built
+      // once and drawn from state by renderStylePanel; the list rows are kept
+      // by id and updated in place, so an arrow key that previews a style never
+      // loses the focus it is moving. The dropdown is a group, not a menu: it
+      // holds radios and buttons, and a screen reader walks it as such.
+      var styleWrap = el("div", "stylewrap");
+      styleWrap.hidden = !styleAvailable;
+      var styleBtn = el("button", "iconbtn stylebtn");
+      styleBtn.setAttribute("type", "button");
+      styleBtn.setAttribute("aria-label", STYLE_WORDS.TITLE);
+      styleBtn.setAttribute("aria-expanded", "false");
+      styleBtn.title = STYLE_WORDS.TITLE;
+      styleBtn.innerHTML = STYLE_ICON;
+      var styleDot = el("span", "stylebtn__dot");
+      styleDot.setAttribute("aria-hidden", "true");
+      styleBtn.appendChild(styleDot);
+      styleBtn.addEventListener("click", function () {
+        toggleStylePanel();
+      });
+      var stylePanel = el("div", "stylepanel");
+      stylePanel.setAttribute("role", "group");
+      stylePanel.setAttribute("aria-label", STYLE_WORDS.TITLE);
+      stylePanel.setAttribute("data-shown", "closed");
+      var stylePanelId = "lahe-style-panel";
+      stylePanel.id = stylePanelId;
+      styleBtn.setAttribute("aria-controls", stylePanelId);
+      var styleHead = el("div", "stylepanel__head");
+      styleHead.appendChild(el("div", "stylepanel__title", STYLE_WORDS.TITLE));
+      var styleClose = el("button", "endpanel__no", STYLE_WORDS.CLOSE);
+      styleClose.setAttribute("type", "button");
+      styleClose.addEventListener("click", function () {
+        closeStylePanel(true);
+      });
+      styleHead.appendChild(styleClose);
+      var styleLine = el("div", "stylepanel__line");
+      var styleStatus = el("div", "stylepanel__status", "");
+      // Each preview and the waiting state are announced.
+      styleStatus.setAttribute("aria-live", "polite");
+      styleStatus.setAttribute("role", "status");
+      var styleActs = el("div", "stylepanel__acts");
+      var styleAsk = el("button", "refusal__btn", "");
+      styleAsk.setAttribute("type", "button");
+      styleAsk.addEventListener("click", function () {
+        var view = styleView || {};
+        if (view.askId && typeof styleHandlers.ask === "function") styleHandlers.ask(view.askId);
+      });
+      var styleBack = el("button", "endpanel__no", STYLE_WORDS.BACK);
+      styleBack.setAttribute("type", "button");
+      styleBack.addEventListener("click", function () {
+        if (typeof styleHandlers.back === "function") styleHandlers.back();
+      });
+      styleActs.appendChild(styleAsk);
+      styleActs.appendChild(styleBack);
+      styleLine.appendChild(styleStatus);
+      styleLine.appendChild(styleActs);
+      var styleList = el("div", "stylepanel__list");
+      styleList.setAttribute("role", "radiogroup");
+      styleList.setAttribute("aria-label", STYLE_WORDS.TITLE);
+      var styleNotes = el("div", "stylepanel__notes");
+      stylePanel.appendChild(styleHead);
+      stylePanel.appendChild(styleLine);
+      stylePanel.appendChild(styleList);
+      stylePanel.appendChild(styleNotes);
+      styleWrap.appendChild(styleBtn);
+      styleWrap.appendChild(stylePanel);
+      head.appendChild(styleWrap);
+
       // The review's own actions, behind one quiet control beside the collapse
       // arrow. Nothing here decides what Copy or Export DO: each item runs the
       // same runAction seam the footer's buttons ran, so boot's wiring is
@@ -1899,18 +2001,11 @@
         item.setAttribute("role", "menuitem");
         item.setAttribute("data-action", entry.action);
         item.tabIndex = -1;
-        if (entry.action === DOCUMENT_STYLE.ACTION) item.hidden = !styleAvailable;
         item.addEventListener("click", function () {
           // Closed first, so the reviewer's click leaves nothing hanging over
           // the rail while the work runs, and the focus goes back where they
           // left it.
           closeMenu(true);
-          // The panel is the rail's own, like Present: opening it asks boot
-          // for the list through the panel's own seam (onStylePanel).
-          if (entry.action === DOCUMENT_STYLE.ACTION) {
-            openStylePanel();
-            return;
-          }
           // Present is the rail putting ITSELF away, so there is no action for
           // a caller to register and none to forget: the two review-level items
           // beside it are work only boot knows how to do, and this one is not.
@@ -1973,65 +2068,6 @@
       late.appendChild(lateNote);
       late.appendChild(lateMessage);
       rail.appendChild(late);
-
-      // THE DOCUMENT STYLE PANEL, under the banner. Built once and drawn from
-      // state by renderStylePanel; its list rows are kept by id and updated in
-      // place, so an arrow key that previews a style never loses the focus it
-      // is moving.
-      var stylePanel = el("div", "stylepanel");
-      stylePanel.setAttribute("role", "group");
-      stylePanel.setAttribute("aria-label", STYLE_WORDS.TITLE);
-      stylePanel.setAttribute("data-shown", "closed");
-      var styleHead = el("div", "stylepanel__head");
-      styleHead.appendChild(el("div", "stylepanel__title", STYLE_WORDS.TITLE));
-      var styleClose = el("button", "endpanel__no", STYLE_WORDS.CLOSE);
-      styleClose.setAttribute("type", "button");
-      styleClose.addEventListener("click", function () {
-        closeStylePanel(true);
-      });
-      styleHead.appendChild(styleClose);
-      var styleLine = el("div", "stylepanel__line");
-      var styleStatus = el("div", "stylepanel__status", "");
-      // Each preview and the waiting state are announced.
-      styleStatus.setAttribute("aria-live", "polite");
-      styleStatus.setAttribute("role", "status");
-      var styleActs = el("div", "stylepanel__acts");
-      var styleAsk = el("button", "refusal__btn", "");
-      styleAsk.setAttribute("type", "button");
-      styleAsk.addEventListener("click", function () {
-        var view = styleView || {};
-        if (view.askId && typeof styleHandlers.ask === "function") styleHandlers.ask(view.askId);
-      });
-      var styleBack = el("button", "endpanel__no", STYLE_WORDS.BACK);
-      styleBack.setAttribute("type", "button");
-      styleBack.addEventListener("click", function () {
-        var collapsedLine = styleView && styleView.collapsed;
-        if (!stylePanelOpen && collapsedLine && collapsedLine.action === "dismiss") {
-          if (typeof styleHandlers.dismiss === "function") styleHandlers.dismiss();
-          return;
-        }
-        if (typeof styleHandlers.back === "function") styleHandlers.back();
-      });
-      styleActs.appendChild(styleAsk);
-      styleActs.appendChild(styleBack);
-      styleLine.appendChild(styleStatus);
-      styleLine.appendChild(styleActs);
-      var styleList = el("div", "stylepanel__list");
-      styleList.setAttribute("role", "radiogroup");
-      styleList.setAttribute("aria-label", STYLE_WORDS.TITLE);
-      var styleNotes = el("div", "stylepanel__notes");
-      stylePanel.appendChild(styleHead);
-      stylePanel.appendChild(styleLine);
-      stylePanel.appendChild(styleList);
-      stylePanel.appendChild(styleNotes);
-      stylePanel.addEventListener("keydown", function (event) {
-        if (event.key === "Escape" && stylePanelOpen) {
-          event.preventDefault();
-          event.stopPropagation();
-          closeStylePanel(true);
-        }
-      });
-      rail.appendChild(stylePanel);
 
       var tabs = el("div", "tabs");
       tabs.setAttribute("role", "tablist");
@@ -2399,6 +2435,9 @@
         menuList: menuList,
         menuItems: menuItems,
         menuWrap: menuWrap,
+        styleWrap: styleWrap,
+        styleBtn: styleBtn,
+        styleDot: styleDot,
         stylePanel: stylePanel,
         styleClose: styleClose,
         styleStatus: styleStatus,
@@ -2429,8 +2468,8 @@
       renderAgent();
       renderTabs();
       renderCollapsed();
-      // A remount closes the panel (open is a moment) and keeps the collapsed
-      // line, which says the page is not in the document's own style.
+      // A remount closes the dropdown (open is a moment) and keeps the dot on
+      // the button, which says the page is not in the document's own style.
       stylePanelOpen = false;
       renderStylePanel();
       // The surface exists now, so a rail mounted while the reviewer is
@@ -2515,8 +2554,10 @@
     // dismissed stay dismissed because dismissal is state, not markup.
     function unmount() {
       // Before the dom goes: the document-level listener the open menu installed
-      // belongs to a menu that is about to stop existing.
+      // belongs to a menu that is about to stop existing. The style dropdown's
+      // listeners go the same way.
       closeMenu(false);
+      closeStylePanel(false);
       // An unanswered end-review question goes with the rail that asked it, and
       // whoever awaited it is told, rather than left holding a promise that can
       // never settle now the panel is gone.
@@ -4893,6 +4934,8 @@
 
     function openMenu(index) {
       if (!dom || menuOpen) return menuOpen;
+      // One thing hangs from the head at a time.
+      closeStylePanel(false);
       menuOpen = true;
       dom.menuList.hidden = false;
       dom.menuBtn.setAttribute("aria-expanded", "true");
@@ -4970,8 +5013,7 @@
       return menuOpen ? closeMenu(true) : openMenu(0);
     }
 
-    // The items on screen. Document style is hidden on a page that does not
-    // use the house style, and the keys walk past what is not there.
+    // The items on screen. The keys walk past any item that is hidden.
     function visibleMenuItems() {
       if (!dom) return [];
       return dom.menuItems.filter(function (node) {
@@ -5051,22 +5093,23 @@
     }
 
     // -------------------------------------------------------------------------
-    // The Document style panel
+    // The Document style button and its dropdown
     // -------------------------------------------------------------------------
     //
-    // The rail draws; it decides nothing. What the panel says comes whole from
-    // style_switch.panelView, handed in by boot through setStyleView, and every
-    // press goes back out through onStylePanel's handlers: open (fetch the
-    // list), pick (preview), back, ask (the keep request), dismiss, close.
+    // The rail draws; it decides nothing. What the dropdown says, and what the
+    // button's dot means, come whole from style_switch.panelView, handed in by
+    // boot through setStyleView, and every press goes back out through
+    // onStylePanel's handlers: open (fetch the list), pick (preview), back, ask
+    // (the keep request), dismiss, close.
+    //
+    // The dropdown closes the way the menu does: the button again, Esc, Close,
+    // a click anywhere else (on the page or elsewhere in the rail), the menu
+    // opening, collapsing, presenting, and unmounting. It does NOT close when a
+    // pick lands, so arrows and clicks can walk the list.
 
     function setStyleAvailable(available) {
       styleAvailable = available === true;
-      if (dom) {
-        dom.menuItems.forEach(function (node) {
-          if (node.getAttribute("data-action") === DOCUMENT_STYLE.ACTION) node.hidden = !styleAvailable;
-        });
-      }
-      if (!styleAvailable) stylePanelOpen = false;
+      if (!styleAvailable) closeStylePanel(false);
       renderStylePanel();
       return styleAvailable;
     }
@@ -5086,20 +5129,60 @@
 
     function openStylePanel() {
       if (!dom || !styleAvailable) return false;
+      if (stylePanelOpen) return true;
+      closeMenu(false);
       stylePanelOpen = true;
       renderStylePanel();
+      // The menu's two listeners, for the same reason: the root is closed, so
+      // the document sees a click in the rail as a click on the host, and only
+      // the listener inside the root can tell the dropdown from the rest.
+      styleOutsideListener = function (event) {
+        if (event.type === "keydown") {
+          if (event.key !== "Escape") return;
+          event.preventDefault();
+          event.stopPropagation();
+          closeStylePanel(true);
+          return;
+        }
+        if (fromOurTree(event)) return;
+        closeStylePanel(false);
+      };
+      styleShadowListener = function (event) {
+        if (dom.styleWrap.contains(event.target)) return;
+        closeStylePanel(false);
+      };
+      doc.addEventListener("pointerdown", styleOutsideListener, true);
+      doc.addEventListener("keydown", styleOutsideListener, true);
+      dom.shadow.addEventListener("pointerdown", styleShadowListener, true);
       if (typeof styleHandlers.open === "function") styleHandlers.open();
       focusCheckedStyle();
       return true;
     }
 
     function closeStylePanel(returnFocus) {
+      if (styleOutsideListener) {
+        doc.removeEventListener("pointerdown", styleOutsideListener, true);
+        doc.removeEventListener("keydown", styleOutsideListener, true);
+        styleOutsideListener = null;
+      }
+      if (styleShadowListener) {
+        if (dom) dom.shadow.removeEventListener("pointerdown", styleShadowListener, true);
+        styleShadowListener = null;
+      }
       if (!stylePanelOpen) return false;
       stylePanelOpen = false;
+      // The removed line has been read in the open dropdown, so closing it is
+      // the acknowledgement, and the warn dot goes with it.
+      var shownRemoved = styleView && styleView.indicator && styleView.indicator.state === "removed";
       renderStylePanel();
+      if (shownRemoved && typeof styleHandlers.dismiss === "function") styleHandlers.dismiss();
       if (typeof styleHandlers.close === "function") styleHandlers.close();
-      if (returnFocus && dom) dom.menuBtn.focus();
+      if (returnFocus && dom) dom.styleBtn.focus();
       return true;
+    }
+
+    function toggleStylePanel() {
+      return stylePanelOpen ? closeStylePanel(true) : openStylePanel();
     }
 
     /** Opening the panel puts focus on the checked radio. */
@@ -5117,27 +5200,38 @@
 
     function stylePanelMode() {
       if (!dom || !styleAvailable) return "closed";
-      if (stylePanelOpen) return "open";
-      return styleView && styleView.collapsed ? "collapsed" : "closed";
+      return stylePanelOpen ? "open" : "closed";
+    }
+
+    /** The button's mark: null, or "preview", "waiting" or "removed". */
+    function styleIndicator() {
+      if (!styleAvailable || !styleView || !styleView.indicator) return null;
+      return styleView.indicator;
     }
 
     function renderStylePanel() {
       if (!dom || !dom.stylePanel) return;
       var mode = stylePanelMode();
-      var view = styleView || { status: "", collapsed: null, ask: null, back: false, rows: [], notes: [] };
+      var view = styleView || { status: "", indicator: null, ask: null, back: false, rows: [], notes: [] };
+      dom.styleWrap.hidden = !styleAvailable;
       dom.stylePanel.setAttribute("data-shown", mode);
-      var collapsedLine = mode === "collapsed" ? view.collapsed : null;
-      var text = collapsedLine ? collapsedLine.text : view.status || "";
+      dom.styleBtn.setAttribute("aria-expanded", mode === "open" ? "true" : "false");
+      // The dot, and the hover line that says what it means. The accessible
+      // name stays "Document style"; the hover line is its description.
+      var indicator = styleIndicator();
+      if (indicator) dom.styleBtn.setAttribute("data-indicator", indicator.state);
+      else dom.styleBtn.removeAttribute("data-indicator");
+      var title = indicator && indicator.text ? STYLE_WORDS.TITLE + ": " + indicator.text : STYLE_WORDS.TITLE;
+      if (dom.styleBtn.title !== title) dom.styleBtn.title = title;
+      var text = view.status || "";
       // Written only when it changes, so the live region announces a change
       // and not every repaint.
       if (dom.styleStatus.textContent !== text) dom.styleStatus.textContent = text;
       dom.styleAsk.hidden = !view.ask;
       if (view.ask && dom.styleAsk.textContent !== view.ask) dom.styleAsk.textContent = view.ask;
-      var backShown = collapsedLine ? true : view.back === true;
-      var backLabel = collapsedLine && collapsedLine.action === "dismiss" ? STYLE_WORDS.CLOSE : STYLE_WORDS.BACK;
+      var backShown = view.back === true;
       dom.styleBack.hidden = !backShown;
-      if (dom.styleBack.textContent !== backLabel) dom.styleBack.textContent = backLabel;
-      dom.styleActs.hidden = collapsedLine ? false : !view.ask && !backShown;
+      dom.styleActs.hidden = !view.ask && !backShown;
       renderStyleRows(view.rows || []);
       renderStyleNotes(view.notes || []);
     }
@@ -5250,8 +5344,33 @@
         };
       });
       var lateRect = rectOf(dom.late);
+      var view = doc.defaultView;
+      var btnStyle = view ? view.getComputedStyle(dom.styleBtn) : null;
+      var dotStyle = view ? view.getComputedStyle(dom.styleDot) : null;
+      var indicator = styleIndicator();
       return {
         present: true,
+        // The button in the head, measured from the rail itself so a spec
+        // clicks where it really is.
+        button: {
+          shown: !dom.styleWrap.hidden && !!rectOf(dom.styleBtn),
+          rect: rectOf(dom.styleBtn),
+          label: dom.styleBtn.getAttribute("aria-label"),
+          title: dom.styleBtn.title,
+          expanded: dom.styleBtn.getAttribute("aria-expanded"),
+          controls: dom.styleBtn.getAttribute("aria-controls"),
+          focused: active === dom.styleBtn,
+          outline: btnStyle ? { style: btnStyle.outlineStyle, width: btnStyle.outlineWidth, color: btnStyle.outlineColor } : null,
+          indicator: indicator ? indicator.state : null,
+          dot: {
+            shown: !!dotStyle && dotStyle.display !== "none",
+            colour: dotStyle ? dotStyle.backgroundColor : null,
+            rect: rectOf(dom.styleDot)
+          }
+        },
+        menuItemActions: dom.menuItems.map(function (node) {
+          return node.getAttribute("data-action");
+        }),
         available: styleAvailable,
         mode: stylePanelMode(),
         open: stylePanelOpen,
@@ -5270,7 +5389,8 @@
           })[0];
           return hit ? hit.id : null;
         })(),
-        menuButtonFocused: active === dom.menuBtn,
+        buttonFocused: active === dom.styleBtn,
+        menuOpen: menuOpen,
         rect: rectOf(dom.stylePanel),
         statusRect: rectOf(dom.styleStatus),
         listRect: rectOf(dom.styleList),
@@ -5445,7 +5565,10 @@
       }
       // A menu hanging where the rail used to be is the reviewer's page wearing
       // a fragment of a tool they just put away.
-      if (collapsed) closeMenu(false);
+      if (collapsed) {
+        closeMenu(false);
+        closeStylePanel(false);
+      }
       renderCollapsed();
       collapseHandlers.forEach(function (fn) {
         try {
@@ -5475,7 +5598,10 @@
       presenting = want;
       // A menu hanging over the page while the rail goes invisible is a
       // fragment of a tool the reviewer just put away.
-      if (presenting) closeMenu(false);
+      if (presenting) {
+        closeMenu(false);
+        closeStylePanel(false);
+      }
       if (persist !== false) persistCollapsedPreference();
       renderPresent();
       presentHandlers.forEach(function (fn) {
@@ -6765,13 +6891,15 @@
       onAction: onAction,
       menuInfo: menuInfo,
       menuIsOpen: menuIsOpen,
-      // The Document style panel (docs/features/20260930.01_style_switcher).
+      // The Document style button and its dropdown
+      // (docs/features/20260930.01_style_switcher).
       DOCUMENT_STYLE: DOCUMENT_STYLE,
       setStyleAvailable: setStyleAvailable,
       setStyleView: setStyleView,
       onStylePanel: onStylePanel,
       openStylePanel: openStylePanel,
       closeStylePanel: closeStylePanel,
+      toggleStylePanel: toggleStylePanel,
       stylePanelInfo: stylePanelInfo,
       // The primary button, pressed even while it is hidden, for a caller
       // proving a second press sends nothing (V13).
