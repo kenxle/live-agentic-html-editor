@@ -70,7 +70,7 @@ Every page an agent writes for review, and every Markdown file Lahe renders, use
 
 ![A one-page report in Lahe with the Document style panel open, switching through seven styles: International Style, Field Guide, Folio, Ledger, Poster, Schematic and Textbook](docs/images/style-switcher.gif)
 
-**Switch the whole style from the rail.** Open the rail's menu and choose Document style. One click previews any installed style on the page you are reviewing, fonts and layout included. Like one? "Ask the agent to use it" writes it into the document, so it stays. International Style ships free with Lahe. More styles, the [Lahe Styles](https://www.stclair.ai/lahe-styles.html), install with `lahe style add <folder>`.
+**Switch the whole style from the rail.** Click the swatch button at the top of the rail to open Document style. One click previews any installed style on the page you are reviewing, fonts and layout included. Like one? "Ask the agent to use it" writes it into the document, so it stays. International Style ships free with Lahe. More styles, the [Lahe Styles](https://www.stclair.ai/lahe-styles.html), install with `lahe style add <folder>`.
 
 ![Stat tiles in the free International Style: bordered, tinted, and one large number](docs/images/components-stat-tiles.jpg)
 

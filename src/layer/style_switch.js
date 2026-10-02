@@ -102,7 +102,8 @@
     previewing: function (name, documentName) {
       return "Previewing " + name + ". The document uses " + documentName + ".";
     },
-    collapsed: function (name) {
+    // The style button's hover line while a preview is on.
+    indicator: function (name) {
       return "Previewing " + name;
     },
     uses: function (documentName) {
@@ -239,8 +240,14 @@
   /**
    * @param {{shown: string, documentId: string, list: Array, listLoaded: boolean,
    *          waiting?: boolean, removed?: {id: string, name: string}|null}} state
-   * @returns {{status: string, collapsed: {text: string, action: string}|null,
+   * @returns {{status: string, indicator: {state: string, text: string|null}|null,
    *            ask: string|null, back: boolean, rows: Array, notes: Array}}
+   *
+   * indicator is what the style button shows while its dropdown is closed:
+   * null when the page wears the document's own style, "preview" or "waiting"
+   * while a preview is on, and "removed" until the removed line is dismissed.
+   * Its text is the button's hover line, or null when there is nothing better
+   * to say than the button's name.
    */
   function panelView(state) {
     var s = state || {};
@@ -327,16 +334,18 @@
       notes.push([{ text: "Add styles with " }, { kbd: WORDS.ADD_COMMAND }, { text: ", or ask your agent to." }]);
     }
 
-    var collapsed = null;
-    // Before the list has answered, a preview whose name this page never stored
-    // shows no line at all rather than its raw id for a frame.
-    if (previewing && !s.listLoaded && !nameKnown(shown)) collapsed = null;
-    else if (previewing) collapsed = { text: waiting ? status : WORDS.collapsed(nameOf(shown)), action: "back" };
-    else if (removedText) collapsed = { text: removedText, action: "dismiss" };
+    var indicator = null;
+    // Before the list has answered, a preview whose name this page never
+    // stored still marks the button, but its hover line stays the button's
+    // name rather than show the raw id for a frame.
+    if (previewing && waiting) indicator = { state: "waiting", text: status };
+    else if (previewing) {
+      indicator = { state: "preview", text: !s.listLoaded && !nameKnown(shown) ? null : WORDS.indicator(nameOf(shown)) };
+    } else if (removedText) indicator = { state: "removed", text: removedText };
 
     return {
       status: status,
-      collapsed: collapsed,
+      indicator: indicator,
       ask: previewing && !waiting ? WORDS.ask(nameOf(shown)) : null,
       askId: previewing && !waiting ? shown : null,
       back: previewing,
