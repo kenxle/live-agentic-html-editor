@@ -339,11 +339,17 @@ test.describe("page hotkeys are fenced out of the library's text fields", () => 
     const item = await commitComment(page, "#hk-intro", "a comment to make a card");
 
     // A real button in the rail, focused the way a reviewer's click focuses one.
-    // It is chrome, not a text field, so the fence lets the key through.
+    // It is chrome, not a text field, so the fence lets the key through. The
+    // first button ON SCREEN: the rail builds some buttons hidden (the
+    // Document style button, on a page without the house style), and a hidden
+    // button cannot take focus, so it is not one a reviewer can aim a key at.
     const focusedButton = await page.evaluate(function (id) {
       var node = window.__h.rail.cardNode(id);
       var root = node ? node.getRootNode() : null;
-      var button = root ? root.querySelector("button") : null;
+      var buttons = root ? Array.prototype.slice.call(root.querySelectorAll("button")) : [];
+      var button = buttons.filter(function (b) {
+        return b.getClientRects().length > 0;
+      })[0];
       if (!button) return null;
       button.focus();
       return {
@@ -357,6 +363,76 @@ test.describe("page hotkeys are fenced out of the library's text fields", () => 
     const before = await counters(page);
     await page.keyboard.press("ArrowRight");
     expect(await counters(page)).toEqual({
+      document: before.document + 1,
+      window: before.window + 1
+    });
+  });
+
+  // The Document style button is a rail button like any other: a key aimed at
+  // it, open or closed, reaches the page. Only Esc while the dropdown is open
+  // is the dropdown's own (it closes it), the same rule as the "..." menu.
+  test("a key aimed at the Document style button still reaches the page; Esc closes its dropdown", async ({ page }) => {
+    await page.goto(server.urlFor(FIXTURE));
+    // The button shows only on a page that uses the house style, so this one
+    // links it before the layer boots, the way a page an agent writes does.
+    await page.evaluate(function () {
+      var link = document.createElement("link");
+      link.rel = "stylesheet";
+      link.href = "./.lahe-doc-style.css";
+      document.head.appendChild(link);
+    });
+    await bootLayer(page);
+    await commitComment(page, "#hk-intro", "a comment to make a card");
+
+    const shown = await page.evaluate(function () {
+      return window.__h.rail.stylePanelInfo().button.shown;
+    });
+    expect(shown, "the style button is on screen").toBe(true);
+
+    async function focusStyleButton() {
+      return page.evaluate(function () {
+        var info = window.__h.rail.stylePanelInfo();
+        if (!info.button.shown) return false;
+        var node = window.__h.rail.cardNode(window.__h.rail.cardIds()[0]);
+        var root = node.getRootNode();
+        var button = root.querySelector("button.stylebtn");
+        button.focus();
+        return root.activeElement === button;
+      });
+    }
+
+    // Closed.
+    expect(await focusStyleButton()).toBe(true);
+    let before = await counters(page);
+    await page.keyboard.press("ArrowRight");
+    expect(await counters(page), "closed: the key reaches the page").toEqual({
+      document: before.document + 1,
+      window: before.window + 1
+    });
+
+    // Open, focus back on the button: an arrow still reaches the page.
+    await page.evaluate(function () {
+      window.__h.rail.openStylePanel();
+    });
+    expect(await page.evaluate(() => window.__h.rail.stylePanelInfo().mode)).toBe("open");
+    expect(await focusStyleButton()).toBe(true);
+    before = await counters(page);
+    await page.keyboard.press("ArrowRight");
+    expect(await counters(page), "open: the key reaches the page").toEqual({
+      document: before.document + 1,
+      window: before.window + 1
+    });
+
+    // Esc is the dropdown's: it closes it, and focus stays on the button.
+    await page.keyboard.press("Escape");
+    const closed = await page.evaluate(() => window.__h.rail.stylePanelInfo());
+    expect(closed.mode).toBe("closed");
+    expect(closed.buttonFocused).toBe(true);
+
+    // And with it closed again, the button's keys reach the page.
+    before = await counters(page);
+    await page.keyboard.press("s");
+    expect(await counters(page), "after Esc: the key reaches the page").toEqual({
       document: before.document + 1,
       window: before.window + 1
     });
