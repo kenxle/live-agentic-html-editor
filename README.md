@@ -64,6 +64,20 @@ No matter how many files were used to create the HTML page, Lahe knows how to ed
 - **Your app keeps working normally.** Highlighting a passage does not add anything to your page, so your own buttons, layout, and scripts behave exactly as they did.
 - **Clone and go.** Clone the repo and ask your agent to finish the setup. All the instructions are packaged within.
 
+## Document styles
+
+Every page an agent writes for review, and every Markdown file Lahe renders, uses a full document style with ready-made components: stat tiles, callouts, tables, step sequences, badges, pull quotes, image layouts, and more. Your agent reaches for them instead of writing bare paragraphs, so a plan or a report reads like a finished page.
+
+![A one-page report in Lahe with the Document style panel open, switching through seven styles: International Style, Field Guide, Folio, Ledger, Poster, Schematic and Textbook](docs/images/style-switcher.gif)
+
+**Switch the whole style from the rail.** Open the rail's menu and choose Document style. One click previews any installed style on the page you are reviewing, fonts and layout included. Like one? "Ask the agent to use it" writes it into the document, so it stays. International Style ships free with Lahe. More styles, the [Lahe Styles](https://www.stclair.ai/lahe-styles.html), install with `lahe style add <folder>`.
+
+![Stat tiles in the free International Style: bordered, tinted, and one large number](docs/images/components-stat-tiles.jpg)
+
+![Image cards, two and three across, each showing the same report in a different Lahe Style](docs/images/components-image-cards.jpg)
+
+The full list of components, with the markup for each, is in [`vendor/stclair-doc-style/COMPONENTS.md`](vendor/stclair-doc-style/COMPONENTS.md).
+
 ## Quickstart
 
 Clone it, and hand the rest to your agent:
