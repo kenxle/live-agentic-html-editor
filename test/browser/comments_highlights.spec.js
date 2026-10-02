@@ -197,6 +197,17 @@ test.describe("1D: comments, gestures, and highlights", () => {
     });
     expect(focused).toContain("resets list markers away");
 
+    // The box opens beside its passage, not in the corner. Two functions named
+    // positionAt once sat in one scope, the later one won, and every box stayed
+    // where it was created, at the top left, for over a month.
+    const placed = await page.evaluate(function () {
+      var box = window.__lahe.comments.focusedBox().node.getBoundingClientRect();
+      var passage = document.querySelector("#reset-intro").getBoundingClientRect();
+      return { boxTop: box.top, boxLeft: box.left, passageTop: passage.top, passageBottom: passage.bottom };
+    });
+    expect(placed.boxTop, "the box sits level with or just below its passage").toBeGreaterThanOrEqual(placed.passageTop - 1);
+    expect(placed.boxTop, "the box sits level with or just below its passage").toBeLessThanOrEqual(placed.passageBottom + 40);
+
     await page.keyboard.type("this says the opposite of the heading");
     await page.keyboard.press("ControlOrMeta+Enter");
 
