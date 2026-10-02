@@ -72,6 +72,20 @@ Nothing queued.
 
 ## Log
 
+- 2026-10-02. Polish from Ken's first use ("it should probably just be a button at the top by itself that toggles or opens a dropdown"). Document style is now its own swatch button in the rail's head, left of the "..." menu, and no longer a menu item. A click opens a dropdown under the head with the same contents as the old panel. The button again, Esc, Close, or a click anywhere else closes it. The collapsed status line is gone: while a preview is on, a small accent dot on the button says so, and hovering the button names the style. A style removed under a preview gets a warn dot, and closing the dropdown after reading its line dismisses it. Every switcher spec passes on Chromium with the button, plus new tests for the button itself.
+
+  ![The rail's head with the style button, light](progress/screens/button/head_light.png)
+
+  ![The dropdown open while previewing Sample](progress/screens/button/dropdown_previewing_light.png)
+
+  ![Closed while previewing: the dot on the button](progress/screens/button/closed_previewing_light.png)
+
+  ![The dropdown open while previewing Sample Dark](progress/screens/button/dropdown_previewing_dark.png)
+
+  ![Closed while previewing, dark](progress/screens/button/closed_previewing_dark.png)
+
+  Also in `progress/screens/button/`: `head_dark.png`, `focus_ring_light.png` and `removed_closed_light.png`.
+
 - 2026-09-30 21:20. Flow walk with all six real paid styles passed end to end. It found: going back left an empty frontmatter block (fixed), the reading position drifting in long tables (fixed), the waiting line for going back (fixed), the raw id on reload (fixed), and three style-file problems (Field Guide under the rail; Folio and Ledger mis-laying the opening section), logged on Ken's personal board. Known limit: a reload while previewing shows the house style for about 40 ms.
 - 2026-09-30 20:35. Final code review: no bugs in the layer; two test gaps (latest pick wins, waiting ends on every reply kind) and a one-frame flash of the house style between picks. Independent spec check: all 13 requirements met in code; one honesty gap (a style removed during a live preview still reads as previewing and offers Ask), V20 (the real-styles walk) not done yet, the progress page was stale. All sent to the rail builder as one round; V20 goes to the flow walker.
 

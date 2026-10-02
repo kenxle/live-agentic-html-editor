@@ -176,7 +176,7 @@ const LIST = [
 test("the panel, previewing: the architecture's words, the primary action and Back (V12)", () => {
   const v = styleSwitch.panelView({ shown: "sample", documentId: "international", list: LIST, listLoaded: true });
   assert.equal(v.status, "Previewing Sample. The document uses International Style.");
-  assert.deepEqual(v.collapsed, { text: "Previewing Sample", action: "back" });
+  assert.deepEqual(v.indicator, { state: "preview", text: "Previewing Sample" });
   assert.equal(v.ask, "Ask the agent to use Sample");
   assert.equal(v.back, true);
   assert.equal(styleSwitch.WORDS.BACK, "Back to the document's style");
@@ -196,13 +196,13 @@ test("the panel, waiting: the waiting line and no second button (V13)", () => {
   assert.equal(v.status, "Sent to the agent. Waiting for it to add Sample to this page.");
   assert.equal(v.ask, null);
   assert.equal(v.back, true);
-  assert.equal(v.collapsed.text, "Sent to the agent. Waiting for it to add Sample to this page.");
+  assert.deepEqual(v.indicator, { state: "waiting", text: "Sent to the agent. Waiting for it to add Sample to this page." });
 });
 
-test("the panel, not previewing: nothing collapsed, the document's own row marked", () => {
+test("the panel, not previewing: no indicator, the document's own row marked", () => {
   const v = styleSwitch.panelView({ shown: "sample", documentId: "sample", list: LIST, listLoaded: true });
   assert.equal(v.status, "The document uses Sample.");
-  assert.equal(v.collapsed, null);
+  assert.equal(v.indicator, null);
   assert.equal(v.ask, null);
   assert.equal(v.back, false);
   assert.deepEqual(v.rows.filter((r) => r.inDocument).map((r) => r.id), ["sample"]);
@@ -227,7 +227,7 @@ test("the panel, a missing style: International checked and the missing line (V1
   ]);
 });
 
-test("the panel, a removed style: the removed line, collapsed with a way to dismiss it (V16)", () => {
+test("the panel, a removed style: the removed line, and the button marked until it is dismissed (V16)", () => {
   const v = styleSwitch.panelView({
     shown: "international",
     documentId: "international",
@@ -236,7 +236,7 @@ test("the panel, a removed style: the removed line, collapsed with a way to dism
     removed: { id: "textbook", name: "Textbook" }
   });
   assert.deepEqual(v.notes.map(styleSwitch.noteText), ["Textbook is no longer installed, so the page is back to its own style."]);
-  assert.deepEqual(v.collapsed, { text: "Textbook is no longer installed, so the page is back to its own style.", action: "dismiss" });
+  assert.deepEqual(v.indicator, { state: "removed", text: "Textbook is no longer installed, so the page is back to its own style." });
 
   const unnamed = styleSwitch.panelView({
     shown: "international",
@@ -262,7 +262,7 @@ test("the panel, a previewed style missing from a loaded list: treated as remove
   assert.deepEqual(v.rows.filter((r) => r.checked).map((r) => r.id), ["international"]);
   assert.equal(v.rows.some((r) => r.id === "sample"), false, "no row for a style that is gone");
   assert.equal(styleSwitch.noteText(v.notes[0]), "Sample is no longer installed, so the page is back to its own style.");
-  assert.deepEqual(v.collapsed, { text: "Sample is no longer installed, so the page is back to its own style.", action: "dismiss" });
+  assert.deepEqual(v.indicator, { state: "removed", text: "Sample is no longer installed, so the page is back to its own style." });
 
   // Before the list has answered there is nothing to judge by.
   const early = styleSwitch.panelView({ shown: "sample", documentId: "international", list: [], listLoaded: false });
@@ -274,7 +274,7 @@ test("fix round 2: waiting to go back to International says the agent returns th
   assert.equal(v.status, "Sent to the agent. Waiting for it to return this page to International Style.");
 });
 
-test("fix round 2: before the list arrives a preview is named by its stored name, or not shown at all", () => {
+test("fix round 2: before the list arrives a preview is named by its stored name, or not named at all", () => {
   const named = styleSwitch.panelView({
     shown: "sample",
     documentId: "international",
@@ -282,9 +282,9 @@ test("fix round 2: before the list arrives a preview is named by its stored name
     listLoaded: false,
     knownNames: { sample: "Sample" }
   });
-  assert.deepEqual(named.collapsed, { text: "Previewing Sample", action: "back" });
+  assert.deepEqual(named.indicator, { state: "preview", text: "Previewing Sample" });
   const unnamed = styleSwitch.panelView({ shown: "sample", documentId: "international", list: [], listLoaded: false });
-  assert.equal(unnamed.collapsed, null, "no line rather than the raw id");
+  assert.deepEqual(unnamed.indicator, { state: "preview", text: null }, "the button is marked, but never with the raw id");
 });
 
 test("fix round 2: the stored preview keeps the style's name beside its id", () => {

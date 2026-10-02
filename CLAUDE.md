@@ -27,7 +27,7 @@ Third-party files are vendored under `vendor/` rather than installed:
 
 - `vendor/marked/marked.cjs`: marked 15.0.12, MIT.
 - `vendor/mermaid/mermaid.tiny.js`: `@mermaid-js/tiny` 11.16.1, MIT.
-- `vendor/heroicons/arrow-right-start-on-rectangle.svg`: Heroicons 2.2.0, MIT.
+- `vendor/heroicons/arrow-right-start-on-rectangle.svg` and `swatch.svg`: Heroicons 2.2.0, MIT.
 - `vendor/stclair-doc-style/`: the St. Clair AI document style. `system-tokens.css`
   and `document.css` are copies from the personal repo; `lahe-markdown.css` is
   this repo's own layer over them. `fonts/` holds three latin-subset variable
@@ -56,12 +56,12 @@ and screenshots use the made-up styles in `test/fixtures/styles/`, or show a pai
 style only as a picture. A builder may read a paid style in place to check it, but
 never copies its CSS, fonts or metadata into the repo.
 
-The icon is copied, not loaded. The rail inlines its path data as
-`EXIT_ICON_PATH` in `src/layer/overlay.js`, so the vendored file is provenance:
-it is what the drawing came from, and it exists so the next person can diff it
-against a newer release instead of guessing whether the icon was hand-drawn. To
-take a newer version, copy the new file over it and copy its `d` attribute into
-`EXIT_ICON_PATH`.
+The icons are copied, not loaded. The rail inlines their path data as
+`EXIT_ICON_PATH` and `STYLE_ICON_PATH` in `src/layer/overlay.js`, so the
+vendored files are provenance: they are what the drawings came from, and they
+exist so the next person can diff them against a newer release instead of
+guessing whether an icon was hand-drawn. To take a newer version, copy the new
+file over the old one and copy its `d` attribute into the matching constant.
 
 ## Node version
 

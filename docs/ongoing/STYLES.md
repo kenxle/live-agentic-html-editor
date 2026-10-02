@@ -2,7 +2,7 @@
 
 Read this before touching `src/service/styles.js`, `src/cli/commands/style.js`, the `.lahe-styles` route in `src/service/static_servers.js`, or the style line in `src/service/markdown.js`. The feature folder (`docs/features/20260930.01_style_switcher/`) is the history of why; this page is how it works now. Where the two differ, this page and the code win.
 
-This page covers the installed half of the style switcher: installing a style, serving it, and carrying it on a page. The rail's switcher is not covered here.
+This page covers the installed half of the style switcher: installing a style, serving it, and carrying it on a page. The rail's side is summed up in "The style button in the rail" below. Read `src/layer/style_switch.js` (the rules, the words and the page work) and the Document style section of `src/layer/overlay.js` (the drawing) before changing it.
 
 ## Summary
 
@@ -99,6 +99,18 @@ A style that is not installed falls back to the house style.
 
 When Lahe writes a rendered Markdown file to disk, it copies the style's checked `style.css` and fonts beside it at `.lahe-styles/<id>/`, so the saved file opened from disk still shows the style. The page server never serves that copy. It answers the reserved segment from the installed styles, so a removed or reinstalled style shows as it is now. A missing or refused style is copied as nothing, and a failed copy never fails the render. The copy goes stale after a reinstall until the next render.
 
+## The style button in the rail
+
+The reviewer tries a style from a swatch button in the rail's head, just left of the "..." menu. It is not in that menu.
+
+- **When it shows.** Only on a page that uses the house style: a link to `./.lahe-doc-style.css`, or rendered Markdown. A page with its own CSS gets no button.
+- **What it opens.** A click opens a dropdown that hangs from the head. It holds the status line, "Ask the agent to use ..." and "Back to the document's style", then the style list with each style's palette strip, then any notes (a missing style, a removed style, nothing installed).
+- **How it closes.** Click the button again, press Esc, press Close, or click anywhere else on the page or the rail. Opening the "..." menu closes it too, and so do collapsing the rail and presenting. A pick does not close it, so the reviewer can walk the list with clicks or arrow keys. Esc, Close and the second click put focus back on the button.
+- **The dot.** While a preview is on, a small accent dot sits on the button's corner, so the reviewer knows the page is not in its own style with the dropdown closed. Hovering the button says which style, or the waiting sentence after an Ask. A style removed under a preview gets a warn-coloured dot instead. Its sentence is in the dropdown, and closing the dropdown dismisses it.
+- **For a screen reader.** The button's name is "Document style", it carries `aria-expanded` and `aria-controls`, and the hover line is its description. The status line is a polite live region. Focus goes to the checked style when the dropdown opens.
+
+The words, the dot's state and the hover line come from `panelView` in `src/layer/style_switch.js`. The button and the dropdown are drawn in `src/layer/overlay.js`. A spec reads them through `window.__lahe.stylePanel()`.
+
 ## What is refused and why
 
 - A stylesheet with any reach beyond its own fonts and inline images. CSS can read attribute values with selectors and report them through any fetch: a `url()`, an `@import`, or a remote font's `unicode-range`. The page has a review token on its script line, so none of that may leave the machine.
@@ -117,7 +129,7 @@ These are recorded, not defended against.
 - A page flashes in the document's style for a moment on reload during a preview, because the library loads at the end of the body.
 - Mermaid diagrams keep the house palette under every style.
 - A check-then-open race remains on the serve path. Each folder level is checked with `lstat` before the file is opened, and a folder swapped for a symlink in between could point the open somewhere else. The file itself is opened without following a symlink, checked as a regular file with one link, and its real path must sit inside the styles folder, which narrows it. Winning the race needs write access to the styles folder, which is inside the owner-only (0700) state folder, so anyone who can do it can already change the style's files directly. Accepted, not defended further.
-- A page on a server that is not a Lahe page server (a dev server, `file://`) cannot fetch the list. The panel then shows the house style alone.
+- A page on a server that is not a Lahe page server (a dev server, `file://`) cannot fetch the list. The dropdown then shows the house style alone.
 
 ## Tests
 
@@ -126,4 +138,7 @@ These are recorded, not defended against.
 - `test/unit/static_styles.test.js`: the served shapes and the 404s.
 - `test/unit/markdown_style.test.js`: the frontmatter line, the link, and the copy beside a written file.
 - `test/browser/markdown_style_file.spec.js`: a saved Markdown file shows its style over `file://`.
+- `test/unit/style_switch.test.js`: the dropdown's words and the button's dot, from `panelView`.
+- `test/browser/style_switcher.spec.js`: the button and its dropdown on a real review, and every switcher behaviour. `LAHE_BUTTON_SCREENSHOT_DIR` writes the button's screenshots.
+- `test/browser/style_switcher_keep.spec.js`: keeping a style on a Markdown page, end to end.
 - `test/fixtures/styles/sample/` is a small real style for tests.

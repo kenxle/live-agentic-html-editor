@@ -56,21 +56,18 @@ async function menuItems(page) {
   });
 }
 
-/** Menu, then Document style, with real clicks. Waits for the list to answer. */
+/** A real click on the Document style button in the rail's head. */
+async function clickStyleButton(page) {
+  const info = await panel(page);
+  expect(info.button && info.button.shown, "the head shows the Document style button").toBe(true);
+  await page.mouse.click(center(info.button.rect).x, center(info.button.rect).y);
+}
+
+/** The Document style button, with a real click. Waits for the list to answer. */
 async function openPanel(page) {
-  const menu = await page.evaluate(() => window.__lahe.rail.menuInfo());
-  await page.mouse.click(center(menu.rect).x, center(menu.rect).y);
-  const open = await pollUntil(
-    async () => {
-      const info = await page.evaluate(() => window.__lahe.rail.menuInfo());
-      return info.open ? info : null;
-    },
-    { message: "the head menu to open" }
-  );
-  const item = open.items.find((i) => i.action === "document-style");
-  expect(item, "the menu offers Document style").toBeTruthy();
-  await page.mouse.click(center(item.rect).x, center(item.rect).y);
-  await pollPage(page, () => window.__lahe.stylePanel().mode === "open", undefined, { message: "the panel to open" });
+  expect((await panel(page)).mode, "the dropdown starts closed").toBe("closed");
+  await clickStyleButton(page);
+  await pollPage(page, () => window.__lahe.stylePanel().mode === "open", undefined, { message: "the dropdown to open" });
   await pollPage(page, () => window.__lahe.handle.styleList().loaded === true, undefined, {
     message: "the style list to answer"
   });
@@ -127,6 +124,24 @@ async function shoot(page, name) {
   await page.screenshot({ path: path.join(SHOT_DIR, name + ".png"), animations: "disabled" });
 }
 
+// The button's own shots: the top of the rail, cropped so the head and the
+// dropdown read at full size. Set LAHE_BUTTON_SCREENSHOT_DIR to write them.
+const BUTTON_SHOT_DIR = process.env.LAHE_BUTTON_SCREENSHOT_DIR || null;
+
+async function shootHead(page, name) {
+  if (!BUTTON_SHOT_DIR) return;
+  fs.mkdirSync(BUTTON_SHOT_DIR, { recursive: true });
+  const size = page.viewportSize();
+  const width = 440;
+  // The pointer off the rail, so no hover tint stands in for a state.
+  await page.mouse.move(5, 5);
+  await page.screenshot({
+    path: path.join(BUTTON_SHOT_DIR, name + ".png"),
+    animations: "disabled",
+    clip: { x: size.width - width, y: 0, width: width, height: 600 }
+  });
+}
+
 // --- V8: only where it works ---------------------------------------------------
 
 test.describe("the control appears only where it works (V8, R1)", () => {
@@ -136,14 +151,21 @@ test.describe("the control appears only where it works (V8, R1)", () => {
     world = null;
   });
 
-  test("a house-style HTML page offers Document style, just before Hide for presenting", async ({ page }) => {
+  test("a house-style HTML page shows the Document style button in the head, and the menu no longer lists it", async ({ page }) => {
     world = await openWorld(page, { styles: ["sample"] });
-    const items = await menuItems(page);
-    const actions = items.map((i) => i.action);
-    expect(actions).toContain("document-style");
-    expect(actions.indexOf("document-style")).toBe(actions.indexOf("present") - 1);
-    expect(items.find((i) => i.action === "document-style").label).toBe("Document style");
-    expect((await panel(page)).mode).toBe("closed");
+    const info = await panel(page);
+    expect(info.button.shown).toBe(true);
+    expect(info.button.label).toBe("Document style");
+    expect(info.button.expanded).toBe("false");
+    expect(info.mode).toBe("closed");
+    // In the head's row, just before the menu button.
+    const menu = await page.evaluate(() => window.__lahe.rail.menuInfo());
+    expect(Math.abs(info.button.rect.y - menu.rect.y), "on the head's row").toBeLessThanOrEqual(1);
+    expect(info.button.rect.right, "left of the menu button").toBeLessThanOrEqual(menu.rect.x);
+    expect(info.button.rect.width).toBe(menu.rect.width);
+    const actions = (await menuItems(page)).map((i) => i.action);
+    expect(actions).not.toContain("document-style");
+    expect(info.menuItemActions).not.toContain("document-style");
   });
 
   test("a page with its own CSS has no style control at all", async ({ page }) => {
@@ -152,8 +174,142 @@ test.describe("the control appears only where it works (V8, R1)", () => {
     expect(actions).not.toContain("document-style");
     const info = await panel(page);
     expect(info.available).toBe(false);
+    expect(info.button.shown, "no button in the head").toBe(false);
     expect(info.mode).toBe("closed");
     expect((await styleInfo(page)).usesHouseStyle).toBe(false);
+  });
+});
+
+// --- The button in the head (Ken, 2026-10-02: "just a button at the top") -------
+
+test.describe("the Document style button: toggle, Esc, a click elsewhere, and the dot", () => {
+  let world = null;
+  test.afterEach(() => {
+    world$.closeWorld(world);
+    world = null;
+  });
+
+  test("a click opens the dropdown and a second click closes it; aria-expanded follows; the dot marks a preview", async ({ page }) => {
+    world = await openWorld(page, { styles: ["sample", "sample-dark"] });
+    let info = await panel(page);
+    expect(info.button.expanded).toBe("false");
+    expect(info.button.controls, "the button names the dropdown it opens").toBeTruthy();
+    expect(info.button.indicator, "nothing previewed: no dot").toBe(null);
+    expect(info.button.dot.shown).toBe(false);
+    expect(info.button.title).toBe("Document style");
+    await shootHead(page, "head_light");
+
+    info = await openPanel(page);
+    expect(info.button.expanded).toBe("true");
+    expect(info.focusedId, "focus goes to the checked radio").toBe("international");
+    // The dropdown hangs from the head, below the button, inside the rail.
+    expect(info.rect.y).toBeGreaterThanOrEqual(info.button.rect.bottom);
+    expect(info.rect.right).toBeLessThanOrEqual(page.viewportSize().width);
+
+    await clickStyleButton(page);
+    await pollPage(page, () => window.__lahe.stylePanel().mode === "closed", undefined, { message: "a second click to close it" });
+    info = await panel(page);
+    expect(info.button.expanded).toBe("false");
+    expect(info.buttonFocused, "focus stays on the button").toBe(true);
+
+    // A preview marks the button, open or closed.
+    await openPanel(page);
+    await clickRow(page, "sample");
+    await showing(page, "sample");
+    info = await panel(page);
+    expect(info.mode, "a pick leaves the dropdown open").toBe("open");
+    expect(info.button.indicator).toBe("preview");
+    expect(info.button.dot.shown).toBe(true);
+    await shootHead(page, "dropdown_previewing_light");
+
+    await clickStyleButton(page);
+    await pollPage(page, () => window.__lahe.stylePanel().mode === "closed", undefined, { message: "close" });
+    info = await panel(page);
+    expect(info.button.dot.shown, "closed, the dot still says the page is previewing").toBe(true);
+    expect(info.button.dot.rect, "the dot sits on the button").toBeTruthy();
+    expect(info.button.dot.rect.x).toBeGreaterThanOrEqual(info.button.rect.x);
+    expect(info.button.dot.rect.right).toBeLessThanOrEqual(info.button.rect.right);
+    expect(info.button.title).toMatch(/^Document style: Previewing /);
+    await shootHead(page, "closed_previewing_light");
+  });
+
+  test("Esc closes it and puts a visible focus ring on the button", async ({ page }) => {
+    world = await openWorld(page, { styles: ["sample"] });
+    await openPanel(page);
+    await page.keyboard.press("Escape");
+    await pollPage(page, () => window.__lahe.stylePanel().mode === "closed", undefined, { message: "Esc to close it" });
+    const info = await panel(page);
+    expect(info.button.expanded).toBe("false");
+    expect(info.buttonFocused).toBe(true);
+    expect(info.button.outline.style).toBe("solid");
+    expect(info.button.outline.width).toBe("2px");
+    await shootHead(page, "focus_ring_light");
+  });
+
+  test("a click on the page, or elsewhere in the rail, closes it; a click inside it does not; the menu and it take turns", async ({
+    page
+  }) => {
+    world = await openWorld(page, { styles: ["sample"] });
+
+    // Inside: a row is a pick, and the dropdown stays.
+    await openPanel(page);
+    await clickRow(page, "sample");
+    await showing(page, "sample");
+    expect((await panel(page)).mode).toBe("open");
+
+    // On the page.
+    const para = await page.evaluate(() => {
+      const r = document.querySelector("#s1p2").getBoundingClientRect();
+      return { x: r.x + 20, y: r.y + r.height / 2 };
+    });
+    await page.mouse.click(para.x, para.y);
+    await pollPage(page, () => window.__lahe.stylePanel().mode === "closed", undefined, { message: "a page click to close it" });
+    let info = await panel(page);
+    expect(info.button.expanded).toBe("false");
+    expect((await styleInfo(page)).shown, "closing keeps the preview").toBe("sample");
+
+    // Elsewhere in the rail: the head, left of the button.
+    await openPanel(page);
+    info = await panel(page);
+    await page.mouse.click(info.button.rect.x - 150, center(info.button.rect).y);
+    await pollPage(page, () => window.__lahe.stylePanel().mode === "closed", undefined, { message: "a rail click to close it" });
+
+    // The menu opening closes the dropdown, and the button closes the menu.
+    await openPanel(page);
+    const menu = await page.evaluate(() => window.__lahe.rail.menuInfo());
+    await page.mouse.click(center(menu.rect).x, center(menu.rect).y);
+    await pollPage(page, () => window.__lahe.rail.menuIsOpen() === true, undefined, { message: "the menu to open" });
+    expect((await panel(page)).mode, "one thing hangs from the head at a time").toBe("closed");
+    await openPanel(page);
+    expect(await page.evaluate(() => window.__lahe.rail.menuIsOpen())).toBe(false);
+  });
+
+  test("dark: the head, the dropdown while previewing, and the closed button's dot", async ({ page }) => {
+    // A document that keeps a dark-ground style: the rail is dark and nothing
+    // is previewed.
+    const darkDoc = DOC.replace(
+      '<link rel="stylesheet" href="./.lahe-doc-style.css">',
+      '<link rel="stylesheet" href="./.lahe-doc-style.css">\n  <link rel="stylesheet" href="./.lahe-styles/sample-dark/style.css">'
+    );
+    world = await openWorld(page, { text: darkDoc, styles: ["sample", "sample-dark"] });
+    await pollPage(page, () => window.__lahe.stylePanel().scheme === "dark", undefined, { message: "a dark rail" });
+    let info = await panel(page);
+    expect(info.button.indicator).toBe(null);
+    await shootHead(page, "head_dark");
+    world$.closeWorld(world);
+
+    // A house page previewing the dark style.
+    world = await openWorld(page, { styles: ["sample", "sample-dark"] });
+    await openPanel(page);
+    await clickRow(page, "sample-dark");
+    await showing(page, "sample-dark");
+    await pollPage(page, () => window.__lahe.stylePanel().scheme === "dark", undefined, { message: "the rail to turn dark" });
+    await shootHead(page, "dropdown_previewing_dark");
+    await clickStyleButton(page);
+    await pollPage(page, () => window.__lahe.stylePanel().mode === "closed", undefined, { message: "close" });
+    info = await panel(page);
+    expect(info.button.dot.shown).toBe(true);
+    await shootHead(page, "closed_previewing_dark");
   });
 });
 
@@ -192,7 +348,7 @@ test.describe("the list, and a rail that says what the page shows (V9, V12, R2, 
     await shoot(page, "nothing_installed_light");
   });
 
-  test("previewing: the words, Back, the collapsed line, and the overdue banner above it", async ({ page }) => {
+  test("previewing: the words, Back, the button's dot, and the overdue banner below the head", async ({ page }) => {
     world = await openWorld(page, { styles: ["sample", "sample-dark"] });
     await openPanel(page);
     await clickRow(page, "sample");
@@ -205,21 +361,23 @@ test.describe("the list, and a rail that says what the page shows (V9, V12, R2, 
     expect(info.back.label).toBe("Back to the document's style");
     await shoot(page, "panel_open_previewing_light");
 
-    // Closed while previewing: the panel collapses to its status line and Back.
+    // Closed while previewing: the dropdown goes, and the button's dot and
+    // hover line say the page is not in its own style.
     await clickControl(page, "close");
-    await pollPage(page, () => window.__lahe.stylePanel().mode === "collapsed", undefined, {
-      message: "the panel to collapse to its status line"
+    await pollPage(page, () => window.__lahe.stylePanel().mode === "closed", undefined, {
+      message: "the dropdown to close"
     });
     info = await panel(page);
-    expect(info.status).toBe("Previewing " + name);
-    expect(info.back.shown).toBe(true);
-    expect(info.ask.shown).toBe(false);
-    expect(info.menuButtonFocused, "Close returns focus to the menu button (V18)").toBe(true);
-    await shoot(page, "collapsed_line_light");
+    expect(info.button.indicator).toBe("preview");
+    expect(info.button.dot.shown).toBe(true);
+    expect(info.button.title).toBe("Document style: Previewing " + name);
+    expect(info.button.label, "the accessible name stays the button's name").toBe("Document style");
+    expect(info.buttonFocused, "Close returns focus to the style button (V18)").toBe(true);
 
-    // The overdue banner, when it shows, stays above the status line. The
-    // agent's liveness is set the way rail_agent_liveness.spec.js sets it, and
-    // both are measured in the same turn so the next poll cannot race it.
+    // The overdue banner, when it shows, sits under the head, so the button
+    // and its dot stay above it. The agent's liveness is set the way
+    // rail_agent_liveness.spec.js sets it, and both are measured in the same
+    // turn so the next poll cannot race it.
     const stacked = await page.evaluate((at) => {
       window.__lahe.rail.setAgentLiveness({
         state: "waiting",
@@ -232,16 +390,22 @@ test.describe("the list, and a rail that says what the page shows (V9, V12, R2, 
     }, new Date(Date.now() - 25 * 60 * 1000).toISOString());
     expect(stacked.banner.visible, "the overdue banner is up").toBe(true);
     expect(stacked.panel.lateRect, "the banner has a place on screen").toBeTruthy();
-    expect(stacked.panel.lateRect.bottom).toBeLessThanOrEqual(stacked.panel.rect.y);
+    expect(stacked.panel.button.rect.bottom).toBeLessThanOrEqual(stacked.panel.lateRect.y);
+    expect(stacked.panel.button.dot.shown).toBe(true);
     await shoot(page, "overdue_banner_with_status_light");
 
-    // Back clears the preview and the key.
+    // Back clears the preview and the key, and the dot goes with it.
+    await openPanel(page);
     await clickControl(page, "back");
     await showing(page, "international");
     const after = await styleInfo(page);
     expect(after.stored).toBe(null);
     expect(after.previewLinks).toBe(0);
-    expect((await panel(page)).mode).toBe("closed");
+    info = await panel(page);
+    expect(info.mode, "Back keeps the dropdown open for another pick").toBe("open");
+    expect(info.button.indicator).toBe(null);
+    expect(info.button.dot.shown).toBe(false);
+    expect(info.button.title).toBe("Document style");
   });
 });
 
@@ -400,7 +564,7 @@ test.describe("one click restyles the page and leaves the reviewer's work alone 
     expect(await page.evaluate(() => document.querySelector("#s1p4").textContent)).toBe(typed + " More.");
   });
 
-  test("the keyboard: focus on the checked radio, arrows preview, held arrows end on the last, Esc returns to the menu", async ({ page }) => {
+  test("the keyboard: focus on the checked radio, arrows preview, held arrows end on the last, Esc returns to the button", async ({ page }) => {
     world = await openWorld(page, { styles: ["sample", "sample-dark"] });
     const info = await openPanel(page);
     expect(info.focusedId).toBe("international");
@@ -422,12 +586,20 @@ test.describe("one click restyles the page and leaves the reviewer's work alone 
     await shoot(page, "keyboard_focus_light");
 
     await page.keyboard.press("Escape");
-    await pollPage(page, () => window.__lahe.stylePanel().mode === "collapsed", undefined, {
-      message: "Esc to close the panel to its line"
+    await pollPage(page, () => window.__lahe.stylePanel().mode === "closed", undefined, {
+      message: "Esc to close the dropdown"
     });
-    expect((await panel(page)).menuButtonFocused, "Esc returns focus to the menu button").toBe(true);
+    const closed = await panel(page);
+    expect(closed.buttonFocused, "Esc returns focus to the style button").toBe(true);
+    expect(closed.button.expanded).toBe("false");
+    expect(closed.button.outline.style, "a keyboard focus shows the ring").toBe("solid");
+    expect(closed.button.outline.width).toBe("2px");
     got = await styleInfo(page);
-    expect(got.shown, "closing the panel keeps the preview").toBe("sample");
+    expect(got.shown, "closing the dropdown keeps the preview").toBe("sample");
+    // Enter on the focused button opens it again, focus on the checked radio.
+    await page.keyboard.press("Enter");
+    await pollPage(page, () => window.__lahe.stylePanel().mode === "open", undefined, { message: "Enter to open it" });
+    expect((await panel(page)).focusedId).toBe("sample");
   });
 
   test("the rail follows a dark-ground style to dark, and Back brings it light again (V27)", async ({ page }) => {
@@ -441,8 +613,9 @@ test.describe("one click restyles the page and leaves the reviewer's work alone 
     });
     await shoot(page, "panel_open_previewing_dark");
     await clickControl(page, "close");
-    await pollPage(page, () => window.__lahe.stylePanel().mode === "collapsed", undefined, { message: "collapse" });
-    await shoot(page, "collapsed_line_dark");
+    await pollPage(page, () => window.__lahe.stylePanel().mode === "closed", undefined, { message: "close" });
+    expect((await panel(page)).button.dot.shown, "the dot shows on the dark rail too").toBe(true);
+    await openPanel(page);
     await clickControl(page, "back");
     await showing(page, "international");
     await pollPage(page, () => window.__lahe.stylePanel().scheme === "light", undefined, {
@@ -469,7 +642,9 @@ test.describe("one click restyles the page and leaves the reviewer's work alone 
     const back = await styleInfo(page);
     expect(back.stored).toBe("sample");
     expect(back.previewLinks).toBe(1);
-    expect((await panel(page)).mode, "the collapsed line says so after the reload").toBe("collapsed");
+    const reloaded = await panel(page);
+    expect(reloaded.mode, "a reload closes the dropdown").toBe("closed");
+    expect(reloaded.button.indicator, "and the button's dot says so after the reload").toBe("preview");
     expect(Math.abs((await topOf(page, reading)) - top)).toBeLessThanOrEqual(1);
 
     // The second page of the same review: the house style, no preview.
@@ -573,6 +748,7 @@ test.describe("keeping a style is one deliberate request (V13, V14, R6, R8)", ()
     expect(after.stored, "the preview key is cleared").toBe(null);
     expect(after.previewLinks, "no preview link in the page").toBe(0);
     expect((await panel(page)).mode).toBe("closed");
+    expect((await panel(page)).button.indicator, "the kept style is the document's: no dot").toBe(null);
     const info2 = await openPanel(page);
     expect(info2.rows.find((r) => r.id === "sample").inDocument).toBe(true);
     expect(info2.rows.find((r) => r.id === "sample").checked).toBe(true);
@@ -637,13 +813,23 @@ test.describe("what the document names, and a style that goes away (V15, V16, V2
     await pollPage(page, () => window.__lahe.handle.styleList().loaded === true, undefined, {
       message: "the list to name the style"
     });
+    const removedLines = [name, "sample"].map((n) => n + " is no longer installed, so the page is back to its own style.");
     let info = await panel(page);
-    expect(info.mode).toBe("collapsed");
-    expect([name, "sample"].map((n) => n + " is no longer installed, so the page is back to its own style.")).toContain(info.status);
-    expect(info.back.label).toBe("Close");
-    await shoot(page, "style_removed_after_reload_light");
-    await clickControl(page, "back");
-    await pollPage(page, () => window.__lahe.stylePanel().mode === "closed", undefined, { message: "Close to dismiss it" });
+    expect(info.mode).toBe("closed");
+    // The button carries a warn dot, and its hover line says why.
+    expect(info.button.indicator).toBe("removed");
+    expect(info.button.dot.shown).toBe(true);
+    expect(removedLines.map((line) => "Document style: " + line)).toContain(info.button.title);
+    await shootHead(page, "removed_closed_light");
+    // Opening the dropdown shows the line in full.
+    info = await openPanel(page);
+    expect(removedLines).toContain(info.notes[0]);
+    // Closing it is the acknowledgement: the dot goes.
+    await clickControl(page, "close");
+    await pollPage(page, () => window.__lahe.stylePanel().button.indicator === null, undefined, {
+      message: "closing the dropdown to dismiss the removed line"
+    });
+    expect((await styleInfo(page)).removed).toBe(null);
   });
 });
 
@@ -700,13 +886,12 @@ test.describe("fix round 1: removal without a reload, one paint per pick, the la
     nav.stop();
     await shoot(page, "style_removed_live_light");
 
-    // Closed, the line stays with its Close button until dismissed.
+    // Read in the open dropdown, so closing it dismisses the line: no dot.
     await clickControl(page, "close");
-    await pollPage(page, () => window.__lahe.stylePanel().mode === "collapsed", undefined, { message: "the removed line" });
-    const collapsed = await panel(page);
-    expect(collapsed.status).toBe("Sample is no longer installed, so the page is back to its own style.");
-    expect(collapsed.back.label).toBe("Close");
-    await shoot(page, "style_removed_light");
+    await pollPage(page, () => window.__lahe.stylePanel().mode === "closed", undefined, { message: "the dropdown to close" });
+    await pollPage(page, () => window.__lahe.stylePanel().button.indicator === null, undefined, {
+      message: "the removed line to be dismissed"
+    });
   });
 
   test("the latest pick wins: a held first stylesheet released late changes nothing, and its promise settles", async ({ page }) => {
@@ -943,14 +1128,15 @@ test.describe("fix round 2: going back, and the line on reload", () => {
     await clickRow(page, "sample");
     await showing(page, "sample");
     const name = (await panel(page)).rows.find((r) => r.id === "sample").name;
-    // Every status the rail shows from the first frame of the next load.
+    // Every hover line the marked button carries from the first frame of the
+    // next load.
     await page.addInitScript(() => {
       window.__styleLines = [];
       const watch = () => {
         const lahe = window.__lahe;
         if (lahe && lahe.stylePanel) {
           const info = lahe.stylePanel();
-          if (info.mode !== "closed") window.__styleLines.push(info.status);
+          if (info.button && info.button.indicator) window.__styleLines.push(info.button.title);
         }
         requestAnimationFrame(watch);
       };
@@ -963,7 +1149,10 @@ test.describe("fix round 2: going back, and the line on reload", () => {
     await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
     const lines = await page.evaluate(() => window.__styleLines);
     expect(lines.length).toBeGreaterThan(0);
-    expect(lines.every((line) => line === "Previewing " + name), JSON.stringify(Array.from(new Set(lines)))).toBe(true);
+    expect(
+      lines.every((line) => line === "Document style: Previewing " + name),
+      JSON.stringify(Array.from(new Set(lines)))
+    ).toBe(true);
   });
 });
 
