@@ -234,7 +234,10 @@ test.describe("page hotkeys are fenced out of the library's text fields", () => 
     // card's own note, editable in place; the composer under it; and the page
     // note at the foot of the tab. Each one is in the rail's nested closed root,
     // which is the boundary the first version of this fence could not see past.
-    const activeFields = ["card-note", "composer", "page-note"];
+    // The composer goes first: it is drawn only while the sent comment waits on
+    // the agent, and typing in the card note opens a rewording that takes the
+    // card out of that state until it is committed.
+    const activeFields = ["composer", "card-note", "page-note"];
     for (const which of activeFields) {
       const focused = await focusRailField(page, which, item.id);
       expect(focused, "the " + which + " field takes focus").toBeTruthy();

@@ -419,8 +419,10 @@ test.describe("a real reveal.js deck under review", () => {
     const before = await deckState(page);
 
     // Three fields live in the Active tab while a comment is open, and the
-    // fourth only exists once an agent has answered.
-    for (const which of ["card-note", "composer", "page-note"]) {
+    // fourth only exists once an agent has answered. The composer goes first:
+    // it is drawn only while the sent comment waits on the agent, and typing in
+    // the card note opens a rewording that takes the card out of that state.
+    for (const which of ["composer", "card-note", "page-note"]) {
       const focused = await focusRailField(page, which, item.id);
       expect(focused.focused, "the " + which + " field takes focus").toBe(true);
       for (const key of DECK_KEYS) await page.keyboard.press(key === " " ? "Space" : key);

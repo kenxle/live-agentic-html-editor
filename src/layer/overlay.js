@@ -3400,9 +3400,21 @@
       if (cards[id].attached.indexOf(node) === -1) cards[id].attached.push(node);
       if (!body) return handleFor(id);
       if (node.parentNode === body) return handleFor(id);
-      if (holdsFocus(id)) return null;
+      // Only a node that HOLDS the focus would be blurred by the move. A node
+      // that does not (a question block built a moment ago, while the caret is
+      // still in the card from the follow-up the reviewer just sent) is added
+      // without touching the focused element. Refusing it left the agent's
+      // newest question off the card until something rebuilt the card, so the
+      // reply box sat under the reviewer's message instead of under the agent's.
+      if (holdsFocus(id) && nodeHoldsFocus(node)) return null;
       body.appendChild(node);
       return handleFor(id);
+    }
+
+    function nodeHoldsFocus(node) {
+      if (!dom) return false;
+      var active = dom.shadow.activeElement;
+      return !!active && (node === active || (typeof node.contains === "function" && node.contains(active)));
     }
 
     // Earlier completed rounds belong before the current tab-owned turn.
