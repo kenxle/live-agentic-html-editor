@@ -9,6 +9,7 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
+const childProcess = require("node:child_process");
 
 const installSkills = require("../../scripts/install-skills.js");
 
@@ -54,7 +55,7 @@ const FIXTURE = {
 };
 
 test("the hook command pins both absolute paths and is recognised as ours", () => {
-  assert.equal(OURS, '"/opt/node/bin/node" "/clone/bin/lahe.js" hook stop');
+  assert.equal(OURS, '"/opt/node/bin/node" "/clone/bin/lahe.js" hook stop 2>/dev/null || true');
   assert.equal(installSkills.isOurHook(OURS), true);
   assert.equal(installSkills.isOurHook("lahe hook stop"), true, "a hand-written one is ours to replace");
   assert.equal(installSkills.isOurHook('"/n" "/elsewhere/bin/lahe.js" hook stop'), true, "an older clone path too");
@@ -159,11 +160,50 @@ test("uninstallHook removes it again", () => {
   assert.deepEqual(readSettings(home), FIXTURE);
 });
 
-test("install() puts the skill and the hook in the given home", () => {
+// A stand-in clone root. `.git` is a directory in a main clone and a file in a
+// git worktree, which is the whole test the installer makes.
+function fakeRepo(kind) {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "lahe-hook-repo-"));
+  if (kind === "worktree") fs.writeFileSync(path.join(root, ".git"), "gitdir: /somewhere/.git/worktrees/x\n");
+  else fs.mkdirSync(path.join(root, ".git"));
+  return root;
+}
+
+test("install() puts the skill and the hook in the given home, pointing at the clone", () => {
   const home = tempHome();
-  assert.equal(installSkills.install({ home: home, stdout: () => {}, stderr: () => {} }), 0);
+  const repo = fakeRepo("main");
+  assert.equal(installSkills.install({ home: home, repoRoot: repo, stdout: () => {}, stderr: () => {} }), 0);
   const commands = ourCommands(readSettings(home));
   assert.equal(commands.length, 1);
-  assert.ok(commands[0].indexOf(path.resolve(__dirname, "..", "..", "bin", "lahe.js")) !== -1, "it points at this clone");
+  assert.ok(commands[0].indexOf(path.join(repo, "bin", "lahe.js")) !== -1, "it points at this clone");
   assert.ok(commands[0].indexOf(process.execPath) !== -1, "with the node that ran it");
+});
+
+test("from a git worktree, the hook is not installed and one line says to use the main clone", () => {
+  const home = tempHome();
+  writeSettings(home, FIXTURE);
+  const before = fs.readFileSync(settingsFile(home), "utf8");
+  const out = [];
+  const code = installSkills.install({ home: home, repoRoot: fakeRepo("worktree"), stdout: (t) => out.push(t), stderr: (t) => out.push(t) });
+  assert.equal(code, 0, "the skill part still succeeds");
+  assert.equal(fs.readFileSync(settingsFile(home), "utf8"), before, "settings.json untouched");
+  const hookLines = out.join("").split("\n").filter((line) => /Stop hook/.test(line));
+  assert.equal(hookLines.length, 1);
+  assert.match(hookLines[0], /worktree/);
+  assert.match(hookLines[0], /main clone/);
+  assert.ok(fs.existsSync(path.join(home, ".claude", "skills", "lahe", "SKILL.md")), "the skill is still installed");
+});
+
+test("the installed command is quiet and exits 0 when its entry or its node is gone", () => {
+  const gone = path.join(os.tmpdir(), "lahe-no-such-clone-" + process.pid, "bin", "lahe.js");
+  for (const command of [
+    installSkills.hookCommand({ node: process.execPath, entry: gone }),
+    installSkills.hookCommand({ node: "/no/such/node", entry: gone })
+  ]) {
+    assert.equal(installSkills.isOurHook(command), true, command);
+    const ran = childProcess.spawnSync("/bin/sh", ["-c", command], { input: "{}", encoding: "utf8" });
+    assert.equal(ran.status, 0, command);
+    assert.equal(ran.stdout, "", command);
+    assert.equal(ran.stderr, "", command);
+  }
 });

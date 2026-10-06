@@ -122,17 +122,24 @@ is that hook:
   `transcript_path` Claude Code passes, and counts an id only where it proves
   ownership: a `lahe monitor --session <id>` command (run by the agent, or
   printed by `lahe review`, `lahe library` or the monitor's relaunch line),
-  `lahe library`'s "started for this agent" line, and `lahe session takeover`'s
-  output with the handoff revision it printed. An id the agent only read about,
-  in a `meta.json` or a `session list` row, does not count. It reads the last
-  256 MB of the transcript at most.
+  `lahe library`'s "started for this agent" line (or, with `--json`,
+  `"session_created":true`), and `lahe session takeover`'s output with the
+  handoff revision it printed. An id the agent only read about, in a
+  `meta.json` or a `session list` row, does not count.
+- **It reads 32 MB at most.** The scan reads the transcript from its end and
+  stops after 32 MB. Session ids are printed again on every monitor relaunch, so
+  the recent end is where they are; a session whose last monitor command is
+  further back than that is not seen.
 - **Which of those need a watcher.** The session must exist in the state
   directory (the one a printed `--state-dir` names, else the default), be open
   (not closed, so its monitor would not exit `5`), still be at the handoff
   revision this agent holds (so a monitor would not exit `6`), and own at least
   one review the reviewer has not ended, or no reviews at all. It needs a
-  watcher when no monitor is live by the helper's own rule: a heartbeat fresher
-  than 45 seconds, at this handoff revision, from a pid that still exists.
+  watcher when no monitor heartbeat is at this handoff revision from a pid that
+  still exists. The heartbeat's age is not checked, unlike the rail's 45-second
+  rule: after the machine sleeps, a live monitor has not looped yet, and a block
+  then would start a second one. A default state directory that is refused
+  only drops the default from the search.
 - **What it prints.** For those sessions, one block whose reason names the
   monitor command (one command per state directory, every session in it) and
   says to run it with Bash `run_in_background` and the largest timeout allowed.
@@ -144,17 +151,32 @@ hook to `~/.claude/settings.json` under `hooks.Stop`:
 
 ```json
 { "hooks": [ { "type": "command", "timeout": 10,
-               "command": "\"/abs/path/to/node\" \"/abs/path/to/clone/bin/lahe.js\" hook stop" } ] }
+               "command": "\"/abs/path/to/node\" \"/abs/path/to/clone/bin/lahe.js\" hook stop 2>/dev/null || true" } ] }
 ```
 
-Both paths are absolute, like the `install-cli` wrapper. The installer keeps
+Both paths are absolute, like the `install-cli` wrapper. The `2>/dev/null ||
+true` tail means a clone that moved or a Node that was removed makes the hook a
+silent no-op rather than a hook error on every turn in every project; run the
+installer again from the new place to bring it back. From a git worktree the
+installer skips the hook with one line saying to install from the main clone,
+since a worktree is usually removed when its work lands. The installer keeps
 every other hook and setting, writes the file beside and renames it, writes
 through a symlinked `settings.json`, and leaves a file it cannot parse alone. It
-knows its own entry by the command ending in `lahe hook stop`, so running it
-again changes nothing and running it from a moved clone replaces the old entry.
-To remove the hook, run `node scripts/install-skills.js --remove-hook` from the
-clone. A clone that moves or is deleted leaves the hook pointing at a missing
-file until the installer runs again from the new place.
+knows its own entry by the command ending in `lahe hook stop`, with or without
+the tail, so running it again changes nothing and running it from a moved clone
+replaces the old entry. To remove the hook, run
+`node scripts/install-skills.js --remove-hook` from the clone.
+
+Known limits of the Stop hook:
+
+- The transcript is read as latin1, one byte per character. Every pattern it
+  looks for is ASCII, so ids are found, but a `--state-dir` path with
+  non-ASCII characters in it is not matched.
+- A `--state-dir` written as a Windows path (backslashes, a drive letter) is not
+  matched, and the `2>/dev/null || true` tail assumes a POSIX shell runs the
+  hook command.
+- A heartbeat pid that the OS has reused for another process reads as a live
+  monitor until that process exits.
 
 **The Library** is one page, at the helper's `/catalog`, that lists every review
 on the machine. The reviewer opens and stars documents there directly. Its two

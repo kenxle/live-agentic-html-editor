@@ -8,11 +8,14 @@
 // ~/.claude/settings.json under hooks.Stop:
 //
 //   { "hooks": [ { "type": "command", "timeout": 10,
-//                  "command": "\"/abs/node\" \"/abs/clone/bin/lahe.js\" hook stop" } ] }
+//                  "command": "\"/abs/node\" \"/abs/clone/bin/lahe.js\" hook stop 2>/dev/null || true" } ] }
 //
 // Both paths are absolute, as in install-cli's wrapper, so the hook runs
-// whatever PATH and nvm are doing. The entry is recognised by its command
-// ending in `lahe hook stop` (or `lahe.js" hook stop`), so a second run changes
+// whatever PATH and nvm are doing. The tail makes a moved clone or a removed
+// Node a silent no-op instead of a hook error on every turn. From a git
+// worktree the hook part is skipped with one line, because a worktree is
+// usually removed when its work lands. The entry is recognised by its command
+// ending in `lahe hook stop` (with or without the tail), so a second run changes
 // nothing and a run from a moved clone replaces the old entry rather than adding
 // one. Every other hook and setting is kept, the file is written beside and
 // renamed, a symlinked settings.json is written through rather than replaced,
@@ -85,15 +88,33 @@ function installOne(home, target, source) {
 var ENTRY = path.join(REPO_ROOT, "bin", "lahe.js");
 // Seconds. The hook answers in well under one; this only bounds a wedged disk.
 var HOOK_TIMEOUT_SECONDS = 10;
-var OUR_HOOK = /(^|[\s"'/\\])lahe(\.js)?["']?\s+hook\s+stop\s*$/;
+var OUR_HOOK = /(^|[\s"'/\\])lahe(\.js)?["']?\s+hook\s+stop(\s+2>\s*\/dev\/null\s*\|\|\s*true)?\s*$/;
+// The tail that keeps a missing clone or Node from showing a hook error on
+// every turn in every project. The hook prints nothing on stderr itself, so
+// nothing real is hidden.
+var QUIET_TAIL = " 2>/dev/null || true";
 
 function settingsPath(home) {
   return path.join(home, ".claude", "settings.json");
 }
 
-/** The command line, both paths absolute. */
+/** The command line, both paths absolute, quiet when either is gone. */
 function hookCommand(paths) {
-  return '"' + paths.node + '" "' + paths.entry + '" hook stop';
+  return '"' + paths.node + '" "' + paths.entry + '" hook stop' + QUIET_TAIL;
+}
+
+/**
+ * Is this clone a git worktree? `.git` is a file there and a directory in a
+ * main clone. A worktree is usually removed when its work lands, which would
+ * leave the hook pointing at nothing, so the hook is installed from the main
+ * clone only.
+ */
+function isWorktree(repoRoot) {
+  try {
+    return fs.statSync(path.join(repoRoot, ".git")).isFile();
+  } catch (err) {
+    return false;
+  }
 }
 
 /** Is this hook command one this script wrote (from any clone)? */
@@ -216,7 +237,18 @@ function installHook(options) {
   var home = opts.home || os.homedir();
   var out = opts.stdout || function (text) { process.stdout.write(text); };
   var err = opts.stderr || function (text) { process.stderr.write(text); };
-  var command = hookCommand({ node: opts.node || process.execPath, entry: path.resolve(opts.entry || ENTRY) });
+  var repoRoot = path.resolve(opts.repoRoot || REPO_ROOT);
+  if (!opts.entry && isWorktree(repoRoot)) {
+    out(
+      "lahe install-skills: skipped the Claude Code Stop hook: " + repoRoot +
+        " is a git worktree, so install from the main clone instead\n"
+    );
+    return 0;
+  }
+  var command = hookCommand({
+    node: opts.node || process.execPath,
+    entry: path.resolve(opts.entry || path.join(repoRoot, "bin", "lahe.js"))
+  });
   var result = editSettings(home, function (settings) { return mergeStopHook(settings, command); });
   if (!result.ok) {
     err("lahe install-skills: left " + result.file + " alone, so the Claude Code Stop hook is not installed: " + result.reason + "\n");
@@ -274,6 +306,7 @@ function install(options) {
     var hookOptions = { home: home, stdout: out, stderr: err };
     if (opts.node) hookOptions.node = opts.node;
     if (opts.entry) hookOptions.entry = opts.entry;
+    if (opts.repoRoot) hookOptions.repoRoot = opts.repoRoot;
     if (installHook(hookOptions) !== 0) failed = true;
   }
   return failed ? 1 : 0;
@@ -295,6 +328,7 @@ module.exports = {
   settingsPath: settingsPath,
   hookCommand: hookCommand,
   isOurHook: isOurHook,
+  isWorktree: isWorktree,
   mergeStopHook: mergeStopHook,
   removeStopHook: removeStopHook,
   installHook: installHook,

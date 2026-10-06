@@ -14,7 +14,8 @@
 //   - a `lahe monitor --session <id> ...` command, whether the agent ran it or
 //     lahe printed it (the command block `lahe review`, `lahe library` and
 //     `lahe session takeover` print, and the monitor's own relaunch line)
-//   - `lahe library`'s "session   <id>  (started for this agent)" line
+//   - `lahe library`'s "session   <id>  (started for this agent)" line, and its
+//     --json form with "session_created":true
 //   - `lahe session takeover`'s "agent session <id> taken over explicitly"
 //     output, with the handoff rev it printed
 //
@@ -25,9 +26,9 @@
 // WHICH OF THOSE NEED A WATCHER. Read off the state directory, never guessed:
 // the session exists, is not closed (a monitor that exited 5), is still at the
 // handoff rev this agent holds (a monitor that exited 6 lost it), and still has
-// a review the reviewer has not ended. A watcher is live by the helper's own
-// rule (agent_sessions.livenessFrom): a fresh heartbeat at this rev from a pid
-// that still exists.
+// a review the reviewer has not ended. A watcher is live when its heartbeat is
+// at this rev and its pid still exists, whatever the heartbeat's age (see
+// monitorAlive for why that is wider than the rail's rule).
 //
 // NEVER A TRAP, NEVER A FAILURE. `stop_hook_active` is true when the agent is
 // already continuing because of a Stop hook, and then this prints nothing, so it
@@ -51,8 +52,9 @@ var DEFAULT_MAX_TIMEOUT_MS = 2 * 60 * 60 * 1000;
 
 // How much of a transcript is read, from its end. A long session's transcript
 // runs to tens of megabytes; ids are re-printed on every relaunch, so the recent
-// end is where they are, and reading stops here whatever the size.
-var TRANSCRIPT_CAP_BYTES = 256 * 1024 * 1024;
+// end is where they are, and reading stops here whatever the size. A session
+// whose last monitor command is further back than this is not seen.
+var TRANSCRIPT_CAP_BYTES = 32 * 1024 * 1024;
 var CHUNK_BYTES = 4 * 1024 * 1024;
 // Each chunk also reads this far into the next one, so a match that straddles
 // a chunk boundary is still seen whole. Longer than the longest pattern below.
@@ -69,6 +71,12 @@ var MONITOR_RE = new RegExp(
   "g"
 );
 var LIBRARY_RE = new RegExp("session {3}(" + ID + ") {2}\\(started for this agent\\)", "g");
+// `lahe library --json` when it started the session: session_created true is
+// its "started for this agent". Inside a transcript the quotes are escaped.
+var LIBRARY_JSON_RE = new RegExp(
+  '\\\\*"session\\\\*":\\\\*"(' + ID + ')\\\\*",\\\\*"session_created\\\\*":true',
+  "g"
+);
 var TAKEOVER_RE = new RegExp("agent session (" + ID + ") taken over explicitly[^]{0,600}?handoff +(\\d+)", "g");
 var ID_RE = new RegExp(ID, "g");
 
@@ -139,6 +147,8 @@ function scanTranscript(file, options) {
       }
       LIBRARY_RE.lastIndex = 0;
       while ((match = LIBRARY_RE.exec(text))) claim(match[1]);
+      LIBRARY_JSON_RE.lastIndex = 0;
+      while ((match = LIBRARY_JSON_RE.exec(text))) claim(match[1]);
       TAKEOVER_RE.lastIndex = 0;
       while ((match = TAKEOVER_RE.exec(text))) {
         var taken = claim(match[1]);
@@ -179,10 +189,32 @@ function everyReviewEnded(dir, id) {
     var meta = readJson(path.join(root, names[i], "meta.json"));
     if (!meta || meta.agent_session_id !== id) continue;
     owned += 1;
-    var review = readJson(path.join(root, names[i], "review.json"));
-    if (!review || !review.ended_at) return false;
+    // The projection nests the review's own fields under `review`
+    // (review_format.projectReview).
+    var projection = readJson(path.join(root, names[i], "review.json"));
+    var inner = projection && projection.review && typeof projection.review === "object" ? projection.review : null;
+    if (!inner || !inner.ended_at) return false;
   }
   return owned > 0;
+}
+
+/**
+ * Is a monitor running for this session at this handoff rev?
+ *
+ * WIDER THAN THE RAIL'S RULE ON PURPOSE. The rail also asks that the heartbeat
+ * be fresher than HEARTBEAT_FRESH_MS. Here age is ignored: after the machine
+ * sleeps, a monitor that is alive has simply not looped yet, and blocking then
+ * would start a second monitor beside it. Every deliberate monitor exit removes
+ * its own heartbeat, and a killed one leaves a pid that no longer exists, so a
+ * heartbeat at this rev from a live pid is a running monitor. The cost is a pid
+ * the OS reused for something else, which reads as watching until it exits.
+ */
+function monitorAlive(heartbeat, rev, pidAlive) {
+  if (!heartbeat) return false;
+  var field = protocol.MONITOR.HEARTBEAT_FIELD;
+  if (heartbeat[field.HANDOFF_REV] !== rev) return false;
+  var alive = typeof pidAlive === "function" ? pidAlive : agentSessions.pidAlive;
+  return alive(heartbeat[field.PID]);
 }
 
 /**
@@ -203,14 +235,7 @@ function unwatched(dir, id, claim, opts) {
   // Taken over since this agent last held it: rev 0 is the agent that started
   // it, and a later rev belongs to whoever printed that rev at takeover.
   if (rev === 0 ? false : !claim.takeoverRevs.has(rev)) return null;
-  var liveness = agentSessions.livenessFrom({
-    session: session,
-    monitor: readJson(stateDir.monitorPath(dir, id)),
-    listening: null,
-    nowMs: opts.nowMs,
-    pidAlive: opts.pidAlive
-  });
-  if (liveness[protocol.AGENT_LIVENESS.FIELD.PRESENCE] === protocol.AGENT_LIVENESS.PRESENCE.LISTENING) return null;
+  if (monitorAlive(readJson(stateDir.monitorPath(dir, id)), rev, opts.pidAlive)) return null;
   if (everyReviewEnded(dir, id)) return null;
   return { id: id, stateDir: stateDir.flagFor(dir) };
 }
@@ -282,25 +307,33 @@ function decideStop(payload, args, opts) {
   if (claims.size === 0) return null;
 
   var env = opts.env;
-  var defaultDir = args.stateDir
-    ? stateDir.stateDir({ dir: args.stateDir })
-    : env.LAHE_STATE_DIR
-      ? stateDir.stateDir({ dir: env.LAHE_STATE_DIR })
-      : stateDir.stateDir();
+  // A default directory that is refused (inside a checkout, say) only takes the
+  // default out of the search. Sessions under a printed --state-dir still count.
+  var defaultDir = null;
+  try {
+    defaultDir = args.stateDir
+      ? stateDir.stateDir({ dir: args.stateDir })
+      : env.LAHE_STATE_DIR
+        ? stateDir.stateDir({ dir: env.LAHE_STATE_DIR })
+        : stateDir.stateDir();
+  } catch (err) {
+    defaultDir = null;
+  }
 
   var found = [];
   claims.forEach(function (claim, id) {
     // The directory the agent was told about, then the default one. A session
     // that is in neither is not one this hook can judge, so it is left alone.
-    var dirs = Array.from(claim.stateDirs).concat([defaultDir]);
+    var dirs = Array.from(claim.stateDirs);
+    if (defaultDir) dirs.push(defaultDir);
     for (var i = 0; i < dirs.length; i += 1) {
       var dir;
       try {
         dir = stateDir.stateDir({ dir: dirs[i] });
+        if (!fs.existsSync(stateDir.agentSessionPath(dir, id))) continue;
       } catch (err) {
         continue;
       }
-      if (!fs.existsSync(stateDir.agentSessionPath(dir, id))) continue;
       var entry = unwatched(dir, id, claim, opts);
       if (entry) found.push(entry);
       return;
@@ -345,6 +378,7 @@ module.exports = {
   USAGE: USAGE,
   DEFAULT_MAX_TIMEOUT_MS: DEFAULT_MAX_TIMEOUT_MS,
   TRANSCRIPT_CAP_BYTES: TRANSCRIPT_CAP_BYTES,
+  CHUNK_BYTES: CHUNK_BYTES,
   maxTimeoutMs: maxTimeoutMs,
   scanTranscript: scanTranscript,
   blockReason: blockReason,

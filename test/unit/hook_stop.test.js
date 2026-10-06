@@ -19,6 +19,7 @@ const cli = require("../../src/cli/index.js");
 const protocol = require("../../src/shared/protocol.js");
 const agentSessions = require("../../src/service/agent_sessions.js");
 const stateDirModule = require("../../src/service/state_dir.js");
+const reviewFormat = require("../../src/shared/review_format.js");
 
 const REPO = path.join(__dirname, "..", "..");
 const OURS = "s_0123456789abcdef";
@@ -123,12 +124,45 @@ test("a session with a live monitor is not blocked", async () => {
   assert.equal(result.stdout, "");
 });
 
-test("a heartbeat from a dead pid or long ago does not count as a live monitor", async () => {
+test("a heartbeat from a dead pid, or at another handoff rev, does not count as a live monitor", async () => {
   const w = world();
   w.store.writeMonitor(OURS, { pid: 2147483646, handoff_rev: 0, at: new Date().toISOString() });
   assert.equal(JSON.parse((await runHook(w, input(w))).stdout).decision, "block", "dead pid");
-  w.store.writeMonitor(OURS, { pid: process.pid, handoff_rev: 0, at: new Date(Date.now() - 10 * 60 * 1000).toISOString() });
-  assert.equal(JSON.parse((await runHook(w, input(w))).stdout).decision, "block", "stale heartbeat");
+  w.store.writeMonitor(OURS, { pid: process.pid, handoff_rev: 3, at: new Date().toISOString() });
+  assert.equal(JSON.parse((await runHook(w, input(w))).stdout).decision, "block", "a fenced older rev");
+});
+
+test("after sleep, a stale heartbeat at this rev from a live pid still counts as watching", async () => {
+  // The machine slept: the monitor is alive but has not looped, so its
+  // heartbeat is older than HEARTBEAT_FRESH_MS. Blocking here would start a
+  // second monitor beside the one that is about to wake.
+  const w = world();
+  w.store.writeMonitor(OURS, { pid: process.pid, handoff_rev: 0, at: new Date(Date.now() - 2 * 60 * 1000).toISOString() });
+  assert.equal((await runHook(w, input(w))).stdout, "");
+});
+
+test("lahe library --json's started-for-this-agent output proves ownership", async () => {
+  const json = JSON.stringify({ url: "http://127.0.0.1:4789/catalog", attached: null, helper_started: false, session: OURS, session_created: true });
+  const w = world({ lines: [toolUseLine("lahe library --json"), toolResultLine(json + "\n")] });
+  assert.match(JSON.parse((await runHook(w, input(w))).stdout).reason, new RegExp("--session " + OURS));
+  const attachedOnly = JSON.stringify({ url: "u", attached: null, helper_started: false, session: OURS, session_created: false });
+  const w2 = world({ lines: [toolResultLine(attachedOnly + "\n")] });
+  assert.equal((await runHook(w2, input(w2))).stdout, "", "session_created false is not proof");
+});
+
+test("a refused default state directory does not silence a session under an explicit --state-dir", async () => {
+  const w = world();
+  const printed = agentSessions.commandBlock({ dir: w.dir, session: OURS });
+  fs.writeFileSync(w.transcript, toolResultLine(printed));
+  const out = [];
+  const code = await hook.run(["stop"], {
+    stdin: input(w),
+    stdout: (text) => out.push(text),
+    stderr: () => {},
+    env: { LAHE_STATE_DIR: path.join(REPO, "inside-a-checkout") }
+  });
+  assert.equal(code, 0);
+  assert.match(JSON.parse(out.join("")).reason, new RegExp("--session " + OURS));
 });
 
 test("a closed session is not blocked (the monitor exited 5)", async () => {
@@ -170,9 +204,14 @@ test("a session whose every review the reviewer ended is not blocked", async () 
   const reviewDir = path.join(w.dir, "reviews", review);
   fs.mkdirSync(reviewDir, { recursive: true });
   fs.writeFileSync(path.join(reviewDir, "meta.json"), JSON.stringify({ agent_session_id: OURS }));
-  fs.writeFileSync(path.join(reviewDir, "review.json"), JSON.stringify({ ended_at: null }));
+  // review.json exactly as the helper writes it: the projection nests ended_at
+  // under `review`, and a hand-written top-level field would hide a wrong read.
+  const projected = (endedAt) => reviewFormat.stringifyReview(reviewFormat.projectReview({
+    id: review, items: [], agent_session_id: OURS, started_at: "2026-10-06T11:00:00.000Z", ended_at: endedAt
+  }));
+  fs.writeFileSync(path.join(reviewDir, "review.json"), projected(null));
   assert.equal(JSON.parse((await runHook(w, input(w))).stdout).decision, "block", "a live review still needs watching");
-  fs.writeFileSync(path.join(reviewDir, "review.json"), JSON.stringify({ ended_at: "2026-10-06T12:00:00.000Z" }));
+  fs.writeFileSync(path.join(reviewDir, "review.json"), projected("2026-10-06T12:00:00.000Z"));
   assert.equal((await runHook(w, input(w))).stdout, "");
 });
 
@@ -240,21 +279,30 @@ test("the dispatcher routes `lahe hook`", () => {
   assert.match(cli.USAGE, /\bhook\b/);
 });
 
-test("a large transcript is scanned fast, and the id near its end is found", async () => {
+test("the transcript scan reads the last 32 MB at most, from the end", () => {
+  // Bounded work instead of a wall-clock assertion, which would flake on CI.
+  assert.equal(hook.TRANSCRIPT_CAP_BYTES, 32 * 1024 * 1024);
   const w = world({ lines: [] });
-  const filler = toolResultLine("x".repeat(4000));
+  const filler = toolResultLine("x".repeat(4000)).repeat(16);
   const fd = fs.openSync(w.transcript, "w");
-  const block = filler.repeat(256); // about 1 MB
-  for (let i = 0; i < 48; i += 1) fs.writeSync(fd, block);
-  fs.writeSync(fd, toolResultLine(reviewOutput(OURS)));
+  fs.writeSync(fd, toolUseLine("lahe monitor --session " + OTHER)); // the start, past the cap
+  for (let i = 0; i < 8; i += 1) fs.writeSync(fd, filler);
+  fs.writeSync(fd, toolUseLine("lahe monitor --session " + OURS)); // the end
   fs.closeSync(fd);
-  assert.ok(fs.statSync(w.transcript).size > 48 * 1000 * 1000);
+  const size = fs.statSync(w.transcript).size;
+  const cap = Math.floor(size / 2);
+  assert.deepEqual(Array.from(hook.scanTranscript(w.transcript, { capBytes: cap }).keys()), [OURS], "only the last cap bytes are read");
+  assert.deepEqual(Array.from(hook.scanTranscript(w.transcript, { capBytes: size }).keys()).sort(), [OURS, OTHER].sort());
+});
 
-  const started = process.hrtime.bigint();
-  const result = await runHook(w, input(w));
-  const ms = Number(process.hrtime.bigint() - started) / 1e6;
-  assert.equal(JSON.parse(result.stdout).decision, "block");
-  assert.ok(ms < 300, "scanning took " + ms.toFixed(1) + " ms");
+test("a match that straddles a chunk boundary is still found", () => {
+  const w = world({ lines: [] });
+  const line = toolUseLine("lahe monitor --session " + OURS);
+  const at = line.indexOf(OURS) + 5;
+  const filler = "y".repeat(hook.CHUNK_BYTES - at) + "\n";
+  // The chunk boundary falls inside the id when read from the end.
+  fs.writeFileSync(w.transcript, line + filler);
+  assert.deepEqual(Array.from(hook.scanTranscript(w.transcript).keys()), [OURS]);
 });
 
 test("end to end through bin/lahe.js: stdin in, block JSON out, exit 0", () => {
