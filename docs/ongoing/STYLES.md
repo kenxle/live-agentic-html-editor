@@ -129,6 +129,7 @@ These are recorded, not defended against.
 - A page flashes in the document's style for a moment on reload during a preview, because the library loads at the end of the body.
 - Mermaid diagrams keep the house palette under every style.
 - A check-then-open race remains on the serve path. Each folder level is checked with `lstat` before the file is opened, and a folder swapped for a symlink in between could point the open somewhere else. The file itself is opened without following a symlink, checked as a regular file with one link, and its real path must sit inside the styles folder, which narrows it. Winning the race needs write access to the styles folder, which is inside the owner-only (0700) state folder, so anyone who can do it can already change the style's files directly. Accepted, not defended further.
+- The page does not move for the rail. On a wide window, wide tables, code blocks and images can run under the open rail, under every style including the house style. Making the page narrow itself while the rail is open was proposed and declined: the page keeps its own layout whether the rail is open or closed. A style keeps its prose clear of the rail where it can; wide content is left full width.
 - A page on a server that is not a Lahe page server (a dev server, `file://`) cannot fetch the list. The dropdown then shows the house style alone.
 
 ## Tests
