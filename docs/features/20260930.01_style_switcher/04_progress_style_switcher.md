@@ -1,17 +1,16 @@
 # Progress: Style switcher
 
-**Phase 8, Ship.** The switcher is done and verified, and pull request 23 is open: https://github.com/kenxle/live-agentic-html-editor/pull/23. Two things are waiting on you: try it on a live page, and approve the merge. Last updated 2026-09-30 21:20.
+**Done.** The style switcher is live on main: pull request 26 merged it, and pull request 28 gave it its own button in the rail. You approved it on 2026-10-06. Nothing is waiting on you. Last updated 2026-10-06 19:16.
 
 **Docs:** [Crucible](00_crucible_style_switcher.md) · [Brief](01_brief_style_switcher.md) · [Architecture](02_architecture_style_switcher.md) · [Plan](03_plan_style_switcher.md)
 
 ## Needs your attention
 
-- [ ] **Try the switcher.** Your component proposal is open on a test copy of Lahe with your six styles installed: http://127.0.0.1:65491/component_additions-644232c952a00412.html. Open the rail's menu (the three dots) and choose Document style. It runs on its own helper (port 7837) and state folder, so the shared review server is untouched. Comment on the page; I'm watching it.
-- [ ] **Approve pull request 23** (https://github.com/kenxle/live-agentic-html-editor/pull/23), the switcher. It carries pull request 21 (the component catalog for agents) and the same fix as pull request 22 (comment boxes beside their passage). Main's gate is red on an unrelated free-writing test, so these merge against your rule of a green gate only if you say so.
+Nothing. The switcher is shipped and you approved it.
 
 ## Currently working on
 
-Nothing is running. Next: wait for Ken's comments on the test page and his call on the merge.
+Nothing. The feature is done.
 
 ## Phases
 
@@ -25,8 +24,8 @@ Nothing is running. Next: wait for Ken's comments on the test page and his call 
 | 5 Human review | waived, Ken reviews the implementation | 2026-09-30 19:20 |
 | 6 Implement | done | 2026-09-30 20:35 |
 | 7 Verify | done | 2026-09-30 21:20 |
-| 8 Ship and land | in progress | 2026-09-30 21:20 |
-| 9 Cleanup | not started | 2026-09-30 19:20 |
+| 8 Ship and land | done: merged in PR 26, rail button in PR 28 | 2026-10-06 19:16 |
+| 9 Cleanup | done: worktrees, branches and the test helper removed | 2026-10-06 19:16 |
 
 ## The record
 
