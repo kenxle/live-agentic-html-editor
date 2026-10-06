@@ -147,8 +147,10 @@ see, and the drain command is the truth the moment it lands.
 
 #### Claude Code
 
-Run the printed monitor command with Bash in the background
-(`run_in_background: true`):
+Run the printed monitor command with the Bash tool in the background, with the
+largest timeout the host allows: `run_in_background: true` and `timeout:
+7200000`, or the value of `BASH_MAX_TIMEOUT_MS` when that is larger. A
+background command ends at its timeout, and every timeout is a relaunch.
 
 ```sh
 lahe monitor --session <id>
@@ -157,7 +159,15 @@ lahe monitor --session <id>
 It waits in a small local Node process, so it costs no model turns and no model
 tokens. It exits when work lands (code 0), the session closes (5), or another
 agent takes over (6). On 0, drain to empty and launch the same command again in
-the background. On 5 and 6, stop.
+the background, with the same timeout. On 5 and 6, stop.
+
+**A Stop hook reminds you when the watcher is down.** `npm run install-skills`
+installs `lahe hook stop` as a Claude Code Stop hook. When you try to end a turn
+while a session you started is open and no monitor is running for it, the hook
+blocks the stop once and names the exact monitor command. Run that command in
+the background, and nothing else: no drain, no message to the reviewer. It
+blocks at most once per turn, so if the session really is not yours, or you are
+holding after three kills (below), say so in one line and end the turn.
 
 **A kill is not work.** Claude Code (since 2.1.193) stops idle background
 commands when it thinks memory is low, and a quiet monitor is exactly what it
@@ -861,10 +871,11 @@ Each of these is a rule that a live review paid for.
 9. **Wait with the wake channel for your host.** Tailing `review.json` goes deaf,
    because it is written atomically and a tail follows a deleted inode.
    `events.jsonl` has no session routing.
-10. **On Claude Code, wait with `lahe monitor` in a background Bash call.** A watch
-    with a timeout wakes the model every few minutes on nothing. When Claude
-    Code stops it for low memory, relaunch it and do nothing else; after three
-    such kills in a row with nothing new landing, stop and tell the reviewer.
+10. **On Claude Code, wait with `lahe monitor` in a background Bash call with the
+    largest timeout allowed.** A watch with a short timeout wakes the model every
+    few minutes on nothing. When Claude Code stops it for low memory, relaunch
+    it and do nothing else; after three such kills in a row with nothing new
+    landing, stop and tell the reviewer.
 11. **In Codex, keep the turn pending on the monitor's exec call, with no Codex
     Timer.** A detached terminal task does not guarantee a new Codex turn after the
     current one ends.
