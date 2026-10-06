@@ -1,6 +1,6 @@
 /*
  * live-agentic-html-editor review layer
- * version 0.2.0+e161c7ce3292
+ * version 0.2.0+b4263ec8af79
  *
  * GENERATED FILE. Do not edit. Edit the sources under src/ and run
  *   npm run build:layer
@@ -12,7 +12,7 @@
   "use strict";
   var g = typeof globalThis !== "undefined" ? globalThis : window;
   g.LAHE = g.LAHE || {};
-  g.LAHE.version = "0.2.0+e161c7ce3292";
+  g.LAHE.version = "0.2.0+b4263ec8af79";
 })();
 /* ---- src/shared/markers.js  (owner: 0A-kernel) ---- */
 // Markers: the attribute and class names that identify DOM the tool added.
@@ -21692,9 +21692,21 @@
       if (cards[id].attached.indexOf(node) === -1) cards[id].attached.push(node);
       if (!body) return handleFor(id);
       if (node.parentNode === body) return handleFor(id);
-      if (holdsFocus(id)) return null;
+      // Only a node that HOLDS the focus would be blurred by the move. A node
+      // that does not (a question block built a moment ago, while the caret is
+      // still in the card from the follow-up the reviewer just sent) is added
+      // without touching the focused element. Refusing it left the agent's
+      // newest question off the card until something rebuilt the card, so the
+      // reply box sat under the reviewer's message instead of under the agent's.
+      if (holdsFocus(id) && nodeHoldsFocus(node)) return null;
       body.appendChild(node);
       return handleFor(id);
+    }
+
+    function nodeHoldsFocus(node) {
+      if (!dom) return false;
+      var active = dom.shadow.activeElement;
+      return !!active && (node === active || (typeof node.contains === "function" && node.contains(active)));
     }
 
     // Earlier completed rounds belong before the current tab-owned turn.
@@ -25559,6 +25571,12 @@
     // grows when they click into it, which is the same bargain the note itself
     // makes: the affordance is the surface, not a button beside it.
     ".lahe-rail-add{display:flex;flex-direction:column;gap:6px}",
+    // ONE BOX PER CARD. updateRow hides this box once the agent has answered,
+    // because continuing an answered exchange is the follow-up composer's job.
+    // The display rule above beats the browser's own [hidden] rule, so without
+    // this line the box stayed on screen under the follow-up composer on every
+    // answered card that was not handled (a question, a not-handled reply).
+    ".lahe-rail-add[hidden]{display:none}",
     ".lahe-rail-add textarea{resize:none;width:100%;box-sizing:border-box;",
     "font:inherit;font-size:12.5px;line-height:1.45;color:var(--ink);",
     "background:var(--sunken);border:1px solid var(--line);border-radius:6px;",
@@ -48587,7 +48605,7 @@
   "use strict";
 
   // Replaced by scripts/build-layer.js at concatenation time.
-  var VERSION = "0.2.0+e161c7ce3292";
+  var VERSION = "0.2.0+b4263ec8af79";
 
   var protocol = ns.protocol;
   var record = ns.record;

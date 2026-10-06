@@ -256,6 +256,12 @@
     // grows when they click into it, which is the same bargain the note itself
     // makes: the affordance is the surface, not a button beside it.
     ".lahe-rail-add{display:flex;flex-direction:column;gap:6px}",
+    // ONE BOX PER CARD. updateRow hides this box once the agent has answered,
+    // because continuing an answered exchange is the follow-up composer's job.
+    // The display rule above beats the browser's own [hidden] rule, so without
+    // this line the box stayed on screen under the follow-up composer on every
+    // answered card that was not handled (a question, a not-handled reply).
+    ".lahe-rail-add[hidden]{display:none}",
     ".lahe-rail-add textarea{resize:none;width:100%;box-sizing:border-box;",
     "font:inherit;font-size:12.5px;line-height:1.45;color:var(--ink);",
     "background:var(--sunken);border:1px solid var(--line);border-radius:6px;",
