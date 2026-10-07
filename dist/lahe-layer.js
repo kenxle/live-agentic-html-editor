@@ -1,6 +1,6 @@
 /*
  * live-agentic-html-editor review layer
- * version 0.2.0+d992332e1e6c
+ * version 0.2.0+e0fb02fc48b3
  *
  * GENERATED FILE. Do not edit. Edit the sources under src/ and run
  *   npm run build:layer
@@ -12,7 +12,7 @@
   "use strict";
   var g = typeof globalThis !== "undefined" ? globalThis : window;
   g.LAHE = g.LAHE || {};
-  g.LAHE.version = "0.2.0+d992332e1e6c";
+  g.LAHE.version = "0.2.0+e0fb02fc48b3";
 })();
 /* ---- src/shared/markers.js  (owner: 0A-kernel) ---- */
 // Markers: the attribute and class names that identify DOM the tool added.
@@ -38051,6 +38051,8 @@
 
   var HINT_EDIT_STATE = "Click + Write here to add text. Esc to finish.";
   var INSERT_LINE_LABEL = "+ Write here";
+  var DELETE_BLOCK_LABEL = "Delete block";
+  var DELETE_ITEM_LABEL = "Delete item";
   var PLACEHOLDER = "Start writing";
   var CEILING_WARN = "This edit is getting long. Press Esc to send it. Once the agent places it, you can keep writing.";
   var CEILING_FULL = "This edit is full. Press Esc to send it. Once the agent places it, you can keep writing.";
@@ -38693,6 +38695,26 @@
     function unitOf(node) {
       var units = sessionUnits();
       for (var i = 0; i < units.length; i += 1) if (contains(units[i], node)) return units[i];
+      return null;
+    }
+
+    // What Delete item takes when the caret is at `node`: the nearest list item
+    // around it, when its list holds another item. A lone nested item takes its
+    // nested list with it. Null when the caret is not in a bullet, or that bullet
+    // is the only one in a session block (then the whole block goes).
+    function deletableItemAt(node) {
+      if (!session || !node) return null;
+      var blocks = sessionBlocks();
+      var el = node.nodeType === 1 ? node : node.parentNode;
+      while (el && tagOf(el) !== "li") {
+        if (blocks.indexOf(el) !== -1) return null;
+        el = el.parentNode;
+      }
+      if (!el || !inSession(el)) return null;
+      var list = el.parentNode;
+      if (!list || !LIST_TAGS[tagOf(list)]) return null;
+      if (unitsOf(list).length > 1) return el;
+      if (blocks.indexOf(list) === -1 && tagOf(list.parentNode) === "li") return list;
       return null;
     }
 
@@ -41342,6 +41364,25 @@
         // is empty: a deleted anchor has nowhere for the run to go.
         var range = liveRange();
         var unit = range ? unitOf(range.startContainer) : session.caretUnit;
+        // A bullet with others beside it: only that bullet goes. The list is
+        // one block, so taking the block would take every bullet with it.
+        var item = deletableItemAt(range ? range.startContainer : unit);
+        if (item) {
+          pushHistory();
+          var nested = tagOf(item) !== "li";
+          var above = nested ? item.parentNode : item.previousElementSibling;
+          var below = nested ? null : item.nextElementSibling;
+          structural("delete_item", function () {
+            item.parentNode.removeChild(item);
+          });
+          var tail = above ? textNodes(above).pop() : null;
+          if (tail) setCaret(tail, tail.nodeValue.length);
+          else if (above) setCaret(above, above.childNodes.length);
+          else if (below) setCaret(below, 0);
+          var after = liveRange();
+          session.caretUnit = (after && unitOf(after.startContainer)) || session.caretUnit;
+          return null;
+        }
         var target = unit ? blockOf(unit) : null;
         if (target && target !== session.anchor) {
           pushHistory();
@@ -42712,7 +42753,7 @@
       remove.type = "button";
       remove.className = "lahe-edit-bar__btn";
       remove.setAttribute("data-lahe-command", "delete");
-      remove.textContent = "Delete block";
+      remove.textContent = DELETE_BLOCK_LABEL;
       remove.addEventListener("click", function () {
         deleteBlock(null);
       });
@@ -42772,6 +42813,7 @@
       barNode.setAttribute("data-lahe-edit-state", noBlock ? "none" : "block");
       var hintText = noBlock ? HINT_EDIT_STATE : HINT_FINISH;
       var notice = false;
+      var oneItem = false;
       if (run) {
         var t = typeState();
         barParts.typeBtn.textContent = t.label;
@@ -42794,9 +42836,13 @@
         var range = liveRange();
         var unit = range ? unitOf(range.startContainer) : null;
         var inAnchor = unit && blockOf(unit) === session.anchor;
-        barParts.remove.disabled = !!inAnchor && session.run.length > 0;
+        oneItem = !!deletableItemAt(range ? range.startContainer : null);
+        barParts.remove.disabled = !!inAnchor && session.run.length > 0 && !oneItem;
         updatePlaceholder(unit);
       }
+      // Outside a run session Delete always takes the whole block.
+      var removeLabel = oneItem ? DELETE_ITEM_LABEL : DELETE_BLOCK_LABEL;
+      if (barParts.remove.textContent !== removeLabel) barParts.remove.textContent = removeLabel;
       if (barParts.hint.textContent !== hintText) barParts.hint.textContent = hintText;
       barParts.hint.setAttribute("data-lahe-notice", notice ? "true" : "false");
       barParts.hint.setAttribute("role", notice ? "status" : "presentation");
@@ -48605,7 +48651,7 @@
   "use strict";
 
   // Replaced by scripts/build-layer.js at concatenation time.
-  var VERSION = "0.2.0+d992332e1e6c";
+  var VERSION = "0.2.0+e0fb02fc48b3";
 
   var protocol = ns.protocol;
   var record = ns.record;
