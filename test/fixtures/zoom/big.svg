@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1000" viewBox="0 0 1600 1000">
+<defs><linearGradient id="sky" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#9ec5f0"/><stop offset="1" stop-color="#f4e3c1"/></linearGradient></defs>
+<rect width="1600" height="1000" fill="url(#sky)"/>
+<path d="M0 760 L260 520 L480 690 L760 400 L1040 650 L1300 470 L1600 720 L1600 1000 L0 1000 Z" fill="#4c6a52"/>
+<path d="M0 860 L340 700 L640 820 L980 660 L1320 800 L1600 740 L1600 1000 L0 1000 Z" fill="#2f4a37"/>
+<circle cx="1260" cy="210" r="90" fill="#fff4cf"/>
+<text x="40" y="960" font-family="Arial" font-size="22" fill="#fff">ridge 1</text>
+<text x="235" y="960" font-family="Arial" font-size="22" fill="#fff">ridge 2</text>
+<text x="430" y="960" font-family="Arial" font-size="22" fill="#fff">ridge 3</text>
+<text x="625" y="960" font-family="Arial" font-size="22" fill="#fff">ridge 4</text>
+<text x="820" y="960" font-family="Arial" font-size="22" fill="#fff">ridge 5</text>
+<text x="1015" y="960" font-family="Arial" font-size="22" fill="#fff">ridge 6</text>
+<text x="1210" y="960" font-family="Arial" font-size="22" fill="#fff">ridge 7</text>
+<text x="1405" y="960" font-family="Arial" font-size="22" fill="#fff">ridge 8</text>
+</svg>

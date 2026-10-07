@@ -204,6 +204,11 @@ var LAYER_FILES = [
     why: "per-block edit state into records. Needs selection, anchor, store, overlay"
   },
   {
+    path: "src/layer/zoom.js",
+    owner: "zoom viewer",
+    why: "the magnifier button on graphs and large images, and the full-screen zoom and pan view it opens. Needs listeners, markers and highlight's surface; index.js hands it the editing, pick mode and presenting gates"
+  },
+  {
     path: "src/layer/replay.js",
     owner: "2C",
     why: "the four-branch history-aware compare. Needs everything above it"
