@@ -249,8 +249,13 @@ test("the canonical skill rejects the retired and cross-session workflows", () =
   // from Claude Code on 2026-09-14, so the wait is our own monitor in a
   // background Bash call, relaunched after each drain. The removed option must
   // not be taught anywhere.
-  assert.match(skill, /#### Claude Code\s+Run the printed monitor command with Bash in the background/);
+  assert.match(skill, /#### Claude Code\s+Run the printed monitor command with the Bash tool in the background/);
   assert.match(skill, /`run_in_background: true`/);
+  // With the largest timeout, and the Stop hook that catches a missed relaunch
+  // (re-arm guard, 20261006.02).
+  assert.match(skill, /`timeout:\s+7200000`/);
+  assert.match(skill, /BASH_MAX_TIMEOUT_MS/);
+  assert.match(skill, /A Stop hook reminds you when the watcher is down/);
   assert.match(skill, /On 0, drain to empty and launch the same command again in\s+the background/);
   assert.doesNotMatch(skill, /persistent/);
   // The trap the wake feed exists to avoid, named so nobody re-invents it.

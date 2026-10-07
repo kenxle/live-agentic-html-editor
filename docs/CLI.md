@@ -41,6 +41,7 @@ lahe skill; after that a plain sentence works:
 | `lahe review ... --name "<name>"` | Start or add to a session and record its name in one step |
 | `lahe style add <folder>... [--state-dir <path>]` | Install a downloaded document style for every Lahe page on this machine. It checks each folder and copies only `style.css`, `metadata.json`, `fonts/*.woff2`, `DESIGN.md` and licence files into `<state dir>/styles/<id>/`, where the id is the folder's name, lowercased, with spaces and underscores as hyphens. Installing the same id again replaces it. A refused folder exits `1` with the reason and what a style folder needs: a `name` in `metadata.json`, a stylesheet that reaches only its own fonts (`url("./fonts/<file>.woff2")`) and `data:` images, no `@import`, no other `url()`, no backslash escape outside a string, and no symlinks. `international` is the house style's id and cannot be installed |
 | `lahe style list [--state-dir <path>]` | Print each installed style's id, name and version, and any hand-copied folder that breaks the rules with its reason. There is no remove: delete the style's folder from `<state dir>/styles/` |
+| `lahe hook stop [--state-dir <path>]` | Claude Code's Stop hook, which `npm run install-skills` installs for you; nobody types it. Claude Code runs it when the main agent tries to end its turn and passes the hook's JSON on stdin. If a session this agent started is open and has no live monitor, it prints `{"decision":"block","reason":"..."}` and the reason names the exact `lahe monitor` command to run. Otherwise, when `stop_hook_active` is true, and on any error it prints nothing. It always exits `0`. See "The Stop hook" below |
 | `lahe serve [--port N]` | Run the helper by hand (`add` starts it for you, so this is rarely needed) |
 | `lahe serve --restart` | Replace the helper that is already running, even when a reviewer has a page open on it. Every other command leaves such a helper alone and tells you to run this when they are done |
 
@@ -79,10 +80,14 @@ connected is said once per review, under `liveness` on the same last line.
 The **wake channel** is per host, because hosts differ in what they can do
 without spending model tokens:
 
-- **Claude Code** runs `lahe monitor --session <id>` with Bash in the background.
+- **Claude Code** runs `lahe monitor --session <id>` with Bash in the background,
+  with `timeout` 7200000 or the value of `BASH_MAX_TIMEOUT_MS` when that is larger.
+  A background command ends at its timeout, and Claude Code's default limit is
+  two hours; `BASH_MAX_TIMEOUT_MS` in the `env` block of settings.json raises it.
   It exits when work lands (`0`), the session closes (`5`), or another agent takes
   over (`6`). On `0` the agent drains to empty and launches the same command again
-  in the background. Claude Code can also stop a quiet background command when
+  in the background. A Stop hook catches the relaunch an agent forgets (see "The
+  Stop hook" below). Claude Code can also stop a quiet background command when
   it thinks memory is low, outside those three codes. On such a kill the agent
   only relaunches the monitor: its first poll prints any waiting work, so no
   drain is needed. Setting `CLAUDE_CODE_DISABLE_BG_SHELL_PRESSURE_REAP=1` in the
@@ -107,6 +112,71 @@ replies. Merely reporting that an item arrived is a workflow failure.
 Monitor exit codes tell a host what to do next: `0` work is printed, `4` bad
 usage or a live monitor already holds the session, `5` the session is closed, and
 `6` another agent took it over. On `5` or `6`, stop relaunching.
+
+**The Stop hook** (Claude Code only). Relaunching the monitor after every exit is
+the step agents forget, so on Claude Code the host enforces it. Claude Code runs
+a Stop hook each time the main agent tries to end its turn, and `lahe hook stop`
+is that hook:
+
+- **Which sessions it checks.** It reads the agent's own transcript, from the
+  `transcript_path` Claude Code passes, and counts an id only where it proves
+  ownership: a `lahe monitor --session <id>` command (run by the agent, or
+  printed by `lahe review`, `lahe library` or the monitor's relaunch line),
+  `lahe library`'s "started for this agent" line (or, with `--json`,
+  `"session_created":true`), and `lahe session takeover`'s output with the
+  handoff revision it printed. An id the agent only read about, in a
+  `meta.json` or a `session list` row, does not count.
+- **It reads 32 MB at most.** The scan reads the transcript from its end and
+  stops after 32 MB. Session ids are printed again on every monitor relaunch, so
+  the recent end is where they are; a session whose last monitor command is
+  further back than that is not seen.
+- **Which of those need a watcher.** The session must exist in the state
+  directory (the one a printed `--state-dir` names, else the default), be open
+  (not closed, so its monitor would not exit `5`), still be at the handoff
+  revision this agent holds (so a monitor would not exit `6`), and own at least
+  one review the reviewer has not ended, or no reviews at all. It needs a
+  watcher when no monitor heartbeat is at this handoff revision from a pid that
+  still exists. The heartbeat's age is not checked, unlike the rail's 45-second
+  rule: after the machine sleeps, a live monitor has not looped yet, and a block
+  then would start a second one. A default state directory that is refused
+  only drops the default from the search.
+- **What it prints.** For those sessions, one block whose reason names the
+  monitor command (one command per state directory, every session in it) and
+  says to run it with Bash `run_in_background` and the largest timeout allowed.
+  Nothing when `stop_hook_active` is true, so it blocks at most once per turn.
+  Nothing on any error. It always exits `0`.
+
+`npm run install-skills` (and `npm run install-cli`, which runs it) adds the
+hook to `~/.claude/settings.json` under `hooks.Stop`:
+
+```json
+{ "hooks": [ { "type": "command", "timeout": 10,
+               "command": "\"/abs/path/to/node\" \"/abs/path/to/clone/bin/lahe.js\" hook stop 2>/dev/null || true" } ] }
+```
+
+Both paths are absolute, like the `install-cli` wrapper. The `2>/dev/null ||
+true` tail means a clone that moved or a Node that was removed makes the hook a
+silent no-op rather than a hook error on every turn in every project; run the
+installer again from the new place to bring it back. From a git worktree the
+installer skips the hook with one line saying to install from the main clone,
+since a worktree is usually removed when its work lands. The installer keeps
+every other hook and setting, writes the file beside and renames it, writes
+through a symlinked `settings.json`, and leaves a file it cannot parse alone. It
+knows its own entry by the command ending in `lahe hook stop`, with or without
+the tail, so running it again changes nothing and running it from a moved clone
+replaces the old entry. To remove the hook, run
+`node scripts/install-skills.js --remove-hook` from the clone.
+
+Known limits of the Stop hook:
+
+- The transcript is read as latin1, one byte per character. Every pattern it
+  looks for is ASCII, so ids are found, but a `--state-dir` path with
+  non-ASCII characters in it is not matched.
+- A `--state-dir` written as a Windows path (backslashes, a drive letter) is not
+  matched, and the `2>/dev/null || true` tail assumes a POSIX shell runs the
+  hook command.
+- A heartbeat pid that the OS has reused for another process reads as a live
+  monitor until that process exits.
 
 **The Library** is one page, at the helper's `/catalog`, that lists every review
 on the machine. The reviewer opens and stars documents there directly. Its two

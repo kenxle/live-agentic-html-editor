@@ -39,6 +39,7 @@ var USAGE = [
   "  monitor watch locally for session work, print it, and exit (zero-token no-ops)",
   "  library print the Library's address and attach your session; answer its requests",
   "  style   install a document style folder for every page on this machine, or list them",
+  "  hook    Claude Code's Stop hook: keeps a watcher running on your open sessions (installed for you)",
   "",
   "Run `lahe <command> --help` for a command's own options, and `lahe --version` for the version."
 ].join("\n");
@@ -58,7 +59,8 @@ var COMMANDS = {
   reply: function () { return require("./commands/reply.js"); },
   monitor: function () { return require("./commands/monitor.js"); },
   library: function () { return require("./commands/library.js"); },
-  style: function () { return require("./commands/style.js"); }
+  style: function () { return require("./commands/style.js"); },
+  hook: function () { return require("./commands/hook.js"); }
 };
 
 var COMMAND_NAMES = Object.keys(COMMANDS);
