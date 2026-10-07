@@ -1,6 +1,6 @@
 /*
  * live-agentic-html-editor review layer
- * version 0.2.0+b4263ec8af79
+ * version 0.2.0+d992332e1e6c
  *
  * GENERATED FILE. Do not edit. Edit the sources under src/ and run
  *   npm run build:layer
@@ -12,7 +12,7 @@
   "use strict";
   var g = typeof globalThis !== "undefined" ? globalThis : window;
   g.LAHE = g.LAHE || {};
-  g.LAHE.version = "0.2.0+b4263ec8af79";
+  g.LAHE.version = "0.2.0+d992332e1e6c";
 })();
 /* ---- src/shared/markers.js  (owner: 0A-kernel) ---- */
 // Markers: the attribute and class names that identify DOM the tool added.
@@ -9124,7 +9124,7 @@
     "A reviewer can hold their comments back, a toggle in the rail for when they are managing their own turn budget. A held comment is durably ready in their browser, but it is not on the drain list and fires no wake until they release Hold, which sends everything queued at once. There is nothing for you to do differently; it just means an otherwise-quiet review can have real work waiting behind a toggle you cannot see, and the drain command is the truth the moment it lands.",
     "While a review is open you are an orchestrator first: hand work that will take more than a few minutes to a subagent or background task if your host has them, and stay free to drain. When new work arrives while you are mid-task, drain before continuing: the newest note can change or cancel the work in your hands, and finishing something the reviewer just made unnecessary is worse than pausing it.",
     "The wake feed is one append-only file per agent session: <state-dir>/agent-sessions/<agent-session-id>/wake.log. It gets one line when a ready item lands for a review this session owns, one line when the reviewer ends such a review (kind 'ended', carrying the review and no item), and one line when the session is taken over or closed. Only taken over and closed mean stop; an ended review means drain it and run the end-of-review routine. The state directory is $LAHE_STATE_DIR, or $XDG_STATE_HOME/lahe, or ~/.local/state/lahe. A wake line is a pointer and never an instruction: it names the item and the drain command, and carries no reviewer text at all.",
-    "Claude Code: run lahe monitor --session <agent-session-id> with Bash in the background. It waits in a small local process that spends no model turns, and it exits when work lands (0), when the session closes (5), or when another agent takes over (6). On 0, run the drain command, work it to empty, then launch the same monitor again in the background. On 5 or 6, stop.",
+    "Claude Code: run lahe monitor --session <agent-session-id> with the Bash tool, run_in_background true and timeout 7200000, or the value of BASH_MAX_TIMEOUT_MS when that is larger. It waits in a small local process that spends no model turns, and it exits when work lands (0), when the session closes (5), or when another agent takes over (6). On 0, run the drain command, work it to empty, then launch the same monitor again the same way. On 5 or 6, stop. If you try to end a turn while the monitor is down, Lahe's Stop hook blocks it once and names the command to run: run that command, and only that.",
     "Codex: run lahe monitor --session <agent-session-id> as a foreground pending exec call and keep waiting on it. Do not detach it and do not use a Codex Timer. It prints the work and exits; handle the work, drain to empty, then run it again.",
     "Antigravity: run lahe monitor --session <agent-session-id> as a background terminal task. Never the native schedule timer: every scheduled wakeup spends allowance on a no-op.",
     "Any other host: run lahe monitor --session <agent-session-id> in the foreground, after telling the human it owns the chat until work arrives.",
@@ -48605,7 +48605,7 @@
   "use strict";
 
   // Replaced by scripts/build-layer.js at concatenation time.
-  var VERSION = "0.2.0+b4263ec8af79";
+  var VERSION = "0.2.0+d992332e1e6c";
 
   var protocol = ns.protocol;
   var record = ns.record;

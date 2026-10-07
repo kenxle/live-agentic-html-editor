@@ -304,7 +304,8 @@ function commandBlock(input) {
     "  wake      tail -n 0 -f " + wake + "\n" +
     "            one line per wake. Wait on it with the monitor below, not a tail of your own.\n" +
     "  monitor   " + protocol.monitorCommand(spec.session, flagDir) + "\n" +
-    "            Claude Code: run with Bash in the background and launch it again after each drain.\n" +
+    "            Claude Code: run with Bash in the background, timeout 7200000 (or BASH_MAX_TIMEOUT_MS\n" +
+    "            when larger), and launch it again after each drain.\n" +
     "            Codex: run as a foreground pending exec and keep waiting on it. Antigravity: a\n" +
     "            background terminal task, never the native schedule timer. It prints work and exits.\n" +
     "  drain     " + protocol.drainCommand(spec.session, flagDir) + "\n" +

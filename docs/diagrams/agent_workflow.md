@@ -34,7 +34,7 @@ exact no-op token burn the wake channel exists to prevent.
 ```mermaid
 flowchart TD
     Host{"which host is this?"}
-    Host -->|"Claude Code"| CC["lahe monitor --session id,<br/>run with Bash in the background"]
+    Host -->|"Claude Code"| CC["lahe monitor --session id,<br/>run with Bash in the background,<br/>timeout 7200000 or BASH_MAX_TIMEOUT_MS"]
     Host -->|"Codex"| Cx["lahe monitor --session id,<br/>run as a foreground pending exec,<br/>keep waiting on it"]
     Host -->|"Antigravity"| AG["lahe monitor --session id,<br/>run as a background terminal task"]
     Host -->|"any other host"| Oth["lahe monitor --session id,<br/>run in the foreground"]
@@ -57,6 +57,25 @@ flowchart TD
     NoOp -.->|"avoided by using"| LocalPoll
 ```
 
+On Claude Code the relaunch is not left to the agent's memory. The monitor
+also ends when it hits its timeout or when Claude Code reaps an idle background
+command, and an agent that forgets to start it again leaves the session deaf.
+Lahe's Stop hook catches that at the end of every turn:
+
+```mermaid
+flowchart TD
+    Try["Claude Code agent tries to end its turn"] --> Hook["Claude Code runs lahe hook stop"]
+    Hook --> Active{"stop_hook_active?<br/>(already blocked once this turn)"}
+    Active -->|"yes"| Ends["turn ends normally"]
+    Active -->|"no"| Scan["read the agent's transcript for<br/>sessions it started or took over"]
+    Scan --> Check{"any of them open, still at this agent's<br/>handoff rev, with a review not ended,<br/>and no live monitor heartbeat?"}
+    Check -->|"no"| Ends
+    Check -->|"yes"| Block["block once; the reason names<br/>lahe monitor --session id ..."]
+    Block --> Run["agent runs it with Bash in the background"]
+    Run --> Try
+    Hook -.->|"any error"| Ends
+```
+
 ## Whether one diagram could hold all of this
 
 The spec set a hard condition: the workflow diagram may absorb the wake
@@ -75,8 +94,10 @@ the loop above, and the wake channel below carrying all four required pieces.
 - The main loop never has the agent stop and report that a wake arrived; the
   interrupt is a reason to keep working through drain, not a stopping point.
 - Every host now waits with the same `lahe monitor` process; only how it is
-  run differs. On Claude Code it runs with Bash in the background and is
-  launched again after each drain. A watch that times out on its own looks
+  run differs. On Claude Code it runs with Bash in the background with the
+  largest timeout allowed and is launched again after each drain, and the Stop
+  hook blocks the end of a turn once when that relaunch was missed. A watch
+  that times out on its own looks
   exactly like new work landing, which is the no-op token burn shown in the
   lower diagram.
 - Exit codes 5 and 6 both mean stop, but for different reasons: 5 is the

@@ -307,7 +307,12 @@ var NON_BUNDLE_FILES = [
     owner: "Library 1.4",
     why: "lahe library (print the Library URL, attach a session) and lahe library answer"
   },
-  { path: "src/cli/commands/style.js", owner: "Style switcher 1.2", why: "lahe style add and lahe style list" }
+  { path: "src/cli/commands/style.js", owner: "Style switcher 1.2", why: "lahe style add and lahe style list" },
+  {
+    path: "src/cli/commands/hook.js",
+    owner: "re-arm guard",
+    why: "lahe hook stop: Claude Code's Stop hook, which blocks a turn's end once while a session the agent started has no live monitor"
+  }
 ];
 
 // The Library page's own scripts. NOT in the bundle: the helper serves them raw
