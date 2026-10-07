@@ -25,6 +25,7 @@ const logModule = require("../../src/service/log.js");
 const reviewsModule = require("../../src/service/reviews.js");
 const scriptLine = require("../../src/shared/script_line.js");
 const markdown = require("../../src/service/markdown.js");
+const markdownLinks = require("../../src/service/markdown_links.js");
 
 function tempDir(prefix) {
   return fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), prefix)));
@@ -145,4 +146,43 @@ test("another agent session's review is never used for a root Markdown file", as
   assert.equal(res.body.indexOf("data-lahe-review"), -1);
   assert.equal(res.body.indexOf(f.reviews.get("r_root").token), -1);
   assert.match(res.body, /This document is not under review/);
+});
+
+// On purpose: a root Markdown file that carries the rail is a hub like any
+// reviewed page, so the rail follows its links too. A file nothing links to
+// stays plain; see the security note in the spec.
+test("a root Markdown file passes its rail on to a document it links to outside the root", async (t) => {
+  const home = tempDir("lahe-root-md-home-");
+  const previousHome = process.env.LAHE_HOME_DIR;
+  process.env.LAHE_HOME_DIR = home;
+  t.after(() => {
+    if (previousHome === undefined) delete process.env.LAHE_HOME_DIR;
+    else process.env.LAHE_HOME_DIR = previousHome;
+  });
+  const root = path.join(home, "a");
+  const outside = path.join(home, "b");
+  fs.mkdirSync(root);
+  fs.mkdirSync(outside);
+  const state = path.join(tempDir("lahe-root-md-state-"), "state");
+  const hub = path.join(root, "hub.html");
+  fs.writeFileSync(hub, PAGE);
+  fs.writeFileSync(path.join(root, "notes.md"), "# Notes\n\n- [Plan](../b/plan.md)\n");
+  fs.writeFileSync(path.join(outside, "plan.md"), "# Plan\n\nThe plan words.\n");
+  const log = logModule.createEventLog({ dir: state });
+  const reviews = reviewsModule.createReviews({ dir: state, log: log });
+  reviews.create({ id: "r_root", origins: ["null"], target_path: hub, agent_session_id: SESSION });
+  const server = await staticServers.start({ dir: state, sessionId: SESSION, root: root });
+  t.after(async () => {
+    await staticServers.stopAll(state, SESSION);
+  });
+
+  const notes = await request(server.meta, "/notes.md");
+  assert.equal(scriptLine.reviewAlreadyInFile(notes.body), "r_root");
+  const href = markdownLinks.mountPrefix(outside) + "plan.md";
+  assert.ok(notes.body.indexOf(href) !== -1, "the link is translated to a mounted URL");
+
+  const plan = await request(server.meta, href);
+  assert.equal(plan.status, 200);
+  assert.match(plan.body, /The plan words\./);
+  assert.equal(scriptLine.reviewAlreadyInFile(plan.body), "r_root", "the linked document rides the root review");
 });

@@ -22,6 +22,10 @@ So a `.md` file sitting next to a reviewed page is the one case where the rail d
 
 No design call. It is one branch in `static_servers.js`, reusing `ownReviewUrl`, `findReviewForRequest` and `renderMarkdown`'s `match` option exactly as the neighbouring branches do. The forge builder's `.md` link stays as it is: with this fix, a `.md` link from any reviewed page works.
 
+## Security note
+
+The security review found no defect. It named one widening, which is intended: a root Markdown file that carries the rail is a hub like any reviewed page, so documents it links to (mounted from outside the root) carry the root review's rail too. A file nothing links to stays plain. This follows the rule that the rail follows whatever the reviewer can click to. A test pins it. The D11 residual in the architecture doc and `docs/ongoing/STATIC_SITE_FOLDER.md` now say HTML and Markdown.
+
 ## Tasks
 
 1. Unit tests in `test/unit/linked_docs_rail.test.js` (or a sibling file in its style), written red first.
@@ -36,6 +40,7 @@ No design call. It is one branch in `static_servers.js`, reusing `ownReviewUrl`,
 | Root `.md`, no review backs the root: read-only, no script line | unit | no |
 | Root `.md`, the only root review is `--only`: read-only | unit | no |
 | Another session's review is never used | unit | no |
+| A root `.md` passes its rail to a document it links to outside the root | unit | yes |
 
 ## Acceptance
 
