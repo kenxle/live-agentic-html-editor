@@ -602,6 +602,12 @@ page to load with the helper down.
   rather than bare paragraphs. `vendor/stclair-doc-style/COMPONENTS.md` in the Lahe
   clone lists each one with its markup.
 
+- **Draw diagrams top to bottom.** Write a Mermaid flowchart as
+  `flowchart TD`, never `LR` or `RL`. A wide left-to-right chart shrinks to fit
+  the page column, and its words come out too small to read. The one exception is
+  a single row of three boxes or fewer. When a flow has many steps, split it into
+  smaller diagrams or use a numbered list.
+
 Pointers:
 
 - `docs/CLI.md`
