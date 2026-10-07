@@ -1,6 +1,6 @@
 # Progress: Re-arm guard
 
-**Done.** Claude agents restart their Lahe watcher without having to remember: a Stop hook blocks the end of a turn while one of the agent's reviews has nobody watching. Shipped in https://github.com/kenxle/live-agentic-html-editor/pull/31. The leaked test helpers found along the way are fixed in their own pull request. Nothing is waiting on you. Last updated 2026-10-07 18:52.
+**Done.** Claude agents restart their Lahe watcher without having to remember: a Stop hook blocks the end of a turn while one of the agent's reviews has nobody watching. Shipped in https://github.com/kenxle/live-agentic-html-editor/pull/31. The leaked test helpers found along the way are fixed in PR 35, merged 2026-10-07. Nothing is waiting on you. Last updated 2026-10-07 18:52.
 
 **Docs:** [Decision](00_decision.md) · [Review log](04_progress_rearm_guard_review_log.md) · [Review log, main copy](04_progress_rearm_guard_review_log_main.md)
 
@@ -44,7 +44,7 @@ This ran as a whetstone-size change: a decision page, then build, review, and sh
 **Seen working:** this session's watcher lapsed and the hook blocked the turn with the restart command.
 
 **Found along the way**
-- 1,892 leaked test helpers filled swap and drained the battery. They were stopped on 2026-10-07. The cause is fixed in its own pull request, and `CLAUDE.md` now has "Tests leave nothing running".
+- 1,892 leaked test helpers filled swap and drained the battery. They were stopped on 2026-10-07. The cause is fixed in PR 35: a helper stops itself once nothing uses it or its folder is gone, every test stops what it starts, and the suite fails on survivors. Also `CLAUDE.md` now has "Tests leave nothing running".
 - iTerm2's Claude Code integration was costing battery. Ken uninstalled it.
 
 **Follow-ups** (on docs/BULLETIN.md)
@@ -55,4 +55,5 @@ This ran as a whetstone-size change: a decision page, then build, review, and sh
 
 ## Log
 
+- 2026-10-07 19:27: PR 35 merged after a review fix round (sleep and wake, one failed folder check, a restored folder, separate test runs) and a Linux-only failure fix.
 - 2026-10-07 18:52: Closed out. The guard works in practice. The memory-pressure question was checked against Anthropic's docs and left as Ken's call (off for now). The helper leak was the real battery drain.

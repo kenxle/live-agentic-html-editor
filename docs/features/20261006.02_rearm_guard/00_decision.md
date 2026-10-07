@@ -2,7 +2,7 @@
 
 ## Needs your attention
 
-Nothing. One thing is still in progress: the fix that stops leftover test helpers from piling up again (PR 35). It's being corrected after GitHub's Linux run failed. When it merges, this page is done.
+Nothing. The leftover-helper fix also merged (PR 35), so this page is done.
 
 ## Status: shipped
 
