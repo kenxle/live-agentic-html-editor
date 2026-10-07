@@ -43,3 +43,11 @@ This works the same whether the list is the block you opened or a list you typed
 ## Acceptance
 
 Every row in the table passes. No analytics or flag: this is a fix to existing behavior.
+
+## Built
+
+The bar with the caret in a bullet, from the built layer on the test fixture. The new spec's five tests pass, and so does the existing delete and undo spec.
+
+![Light: the bar reads Delete item](delete-item-light.png)
+
+![Dark: the bar reads Delete item](delete-item-dark.png)

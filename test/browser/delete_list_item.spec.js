@@ -113,4 +113,77 @@ test.describe("Delete block on a bullet", () => {
     });
     expect(await listItems(page)).toEqual(["Fewer meetings", "Longer blocks"]);
   });
+
+  test("a nested sub-bullet goes on its own, and the bullet holding it stays", async ({ page }) => {
+    await fw.openFixture(page, server, "lists.html");
+    await fw.openEdit(page, "#inner-2", 3);
+    await clickDelete(page);
+
+    expect(await page.evaluate(() => document.querySelectorAll("#inner > li").length)).toBe(1);
+    expect(await page.evaluate(() => !!document.getElementById("outer-1"))).toBe(true);
+    expect(await page.evaluate(() => !!document.getElementById("inner-1"))).toBe(true);
+    expect(await page.evaluate(() => !!document.getElementById("outer-2"))).toBe(true);
+  });
+
+  test("a lone sub-bullet takes only its own nested list", async ({ page }) => {
+    await fw.openFixture(page, server, "lists.html");
+    await fw.openEdit(page, "#lone-sub", 3);
+    await clickDelete(page);
+
+    expect(await page.evaluate(() => !!document.getElementById("lone-inner"))).toBe(false);
+    expect(await page.evaluate(() => document.getElementById("lone-outer").textContent.trim())).toBe("Stretch");
+    expect(await page.evaluate(() => !!document.getElementById("lone-other"))).toBe(true);
+  });
+
+  test("after a bullet, a table cell's button says Delete block again", async ({ page }) => {
+    await fw.openFixture(page, server, "lists.html");
+    await fw.openEdit(page, "#outer-2", 2);
+    await pollPage(page, () => window.__lahe.handle.editing.buttonNode("delete").textContent === "Delete item", undefined, {
+      message: "Delete item in a bullet"
+    });
+    await fw.commitByEsc(page);
+
+    await fw.openEdit(page, "#cell", 2);
+    await page.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))));
+    expect(await page.evaluate(() => window.__lahe.handle.editing.buttonNode("delete").textContent)).toBe("Delete block");
+  });
+
+  test("a bullet in a list typed during the session goes on its own", async ({ page }) => {
+    await fw.openFixture(page, server, "blog.html");
+    await fw.openEdit(page, "#p1");
+    await page.keyboard.press("Enter");
+    await page.keyboard.type("- Alpha", { delay: 2 });
+    await page.keyboard.press("Enter");
+    await page.keyboard.type("Beta", { delay: 2 });
+    await page.keyboard.press("Enter");
+    await page.keyboard.type("Gamma", { delay: 2 });
+    await pollPage(page, () => {
+      const ul = window.__lahe.handle.editing.sessionElements().find((el) => el.tagName === "UL");
+      return !!ul && ul.querySelectorAll("li").length === 3;
+    }, undefined, { message: "a typed list of three" });
+
+    await page.evaluate(() => {
+      const ul = window.__lahe.handle.editing.sessionElements().find((el) => el.tagName === "UL");
+      const li = ul.querySelectorAll("li")[1];
+      const r = document.createRange();
+      const walker = document.createTreeWalker(li, NodeFilter.SHOW_TEXT, null);
+      let t = walker.nextNode();
+      while (t && t.data.length < 2) t = walker.nextNode();
+      r.setStart(t, 2);
+      r.collapse(true);
+      const s = window.getSelection();
+      s.removeAllRanges();
+      s.addRange(r);
+    });
+    await clickDelete(page);
+    await fw.commitByEsc(page);
+
+    const items = await page.evaluate(() => window.__lahe.handle.editing.items());
+    expect(items).toHaveLength(1);
+    const blocks = JSON.stringify(items[0].new_blocks);
+    expect(blocks).toContain("Alpha");
+    expect(blocks).toContain("Gamma");
+    expect(blocks).not.toContain("Beta");
+    expect(await page.evaluate(() => !!document.getElementById("p1")), "the paragraph it was typed after stays").toBe(true);
+  });
 });

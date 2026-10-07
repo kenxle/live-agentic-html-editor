@@ -884,10 +884,24 @@
       return null;
     }
 
-    // A list item the caret is in, when its list holds another item.
-    function deletableItem(unit) {
-      if (!unit || tagOf(unit) !== "li" || !LIST_TAGS[tagOf(unit.parentNode)]) return null;
-      return unitsOf(unit.parentNode).length > 1 ? unit : null;
+    // What Delete item takes when the caret is at `node`: the nearest list item
+    // around it, when its list holds another item. A lone nested item takes its
+    // nested list with it. Null when the caret is not in a bullet, or that bullet
+    // is the only one in a session block (then the whole block goes).
+    function deletableItemAt(node) {
+      if (!session || !node) return null;
+      var blocks = sessionBlocks();
+      var el = node.nodeType === 1 ? node : node.parentNode;
+      while (el && tagOf(el) !== "li") {
+        if (blocks.indexOf(el) !== -1) return null;
+        el = el.parentNode;
+      }
+      if (!el || !inSession(el)) return null;
+      var list = el.parentNode;
+      if (!list || !LIST_TAGS[tagOf(list)]) return null;
+      if (unitsOf(list).length > 1) return el;
+      if (blocks.indexOf(list) === -1 && tagOf(list.parentNode) === "li") return list;
+      return null;
     }
 
     function runEntryOf(el) {
@@ -3538,11 +3552,12 @@
         var unit = range ? unitOf(range.startContainer) : session.caretUnit;
         // A bullet with others beside it: only that bullet goes. The list is
         // one block, so taking the block would take every bullet with it.
-        var item = deletableItem(unit);
+        var item = deletableItemAt(range ? range.startContainer : unit);
         if (item) {
           pushHistory();
-          var above = item.previousElementSibling;
-          var below = item.nextElementSibling;
+          var nested = tagOf(item) !== "li";
+          var above = nested ? item.parentNode : item.previousElementSibling;
+          var below = nested ? null : item.nextElementSibling;
           structural("delete_item", function () {
             item.parentNode.removeChild(item);
           });
@@ -3550,7 +3565,8 @@
           if (tail) setCaret(tail, tail.nodeValue.length);
           else if (above) setCaret(above, above.childNodes.length);
           else if (below) setCaret(below, 0);
-          session.caretUnit = above || below;
+          var after = liveRange();
+          session.caretUnit = (after && unitOf(after.startContainer)) || session.caretUnit;
           return null;
         }
         var target = unit ? blockOf(unit) : null;
@@ -4983,6 +4999,7 @@
       barNode.setAttribute("data-lahe-edit-state", noBlock ? "none" : "block");
       var hintText = noBlock ? HINT_EDIT_STATE : HINT_FINISH;
       var notice = false;
+      var oneItem = false;
       if (run) {
         var t = typeState();
         barParts.typeBtn.textContent = t.label;
@@ -5005,12 +5022,13 @@
         var range = liveRange();
         var unit = range ? unitOf(range.startContainer) : null;
         var inAnchor = unit && blockOf(unit) === session.anchor;
-        var oneItem = !!deletableItem(unit);
+        oneItem = !!deletableItemAt(range ? range.startContainer : null);
         barParts.remove.disabled = !!inAnchor && session.run.length > 0 && !oneItem;
-        var removeLabel = oneItem ? DELETE_ITEM_LABEL : DELETE_BLOCK_LABEL;
-        if (barParts.remove.textContent !== removeLabel) barParts.remove.textContent = removeLabel;
         updatePlaceholder(unit);
       }
+      // Outside a run session Delete always takes the whole block.
+      var removeLabel = oneItem ? DELETE_ITEM_LABEL : DELETE_BLOCK_LABEL;
+      if (barParts.remove.textContent !== removeLabel) barParts.remove.textContent = removeLabel;
       if (barParts.hint.textContent !== hintText) barParts.hint.textContent = hintText;
       barParts.hint.setAttribute("data-lahe-notice", notice ? "true" : "false");
       barParts.hint.setAttribute("role", notice ? "status" : "presentation");
