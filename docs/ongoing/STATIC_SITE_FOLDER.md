@@ -22,7 +22,7 @@ This replaces the "which pages get the rail" question in the first draft. Option
 
 ## What changes
 
-- **The static server injects into every HTML file it serves**, not only files recorded as review targets. Everything else the server does stays the same. It stays read-only against the review store.
+- **The static server injects into every HTML file it serves**, not only files recorded as review targets. A Markdown file under the root gets the same: a redirect to its own review's page when that review is live in this session, otherwise the root review's rail. Everything else the server does stays the same. It stays read-only against the review store.
 - **Which review an item lands in.** The script line the server injects names a review id and token. For a page no review recorded, the server uses the newest review on that server (a server is one per folder per agent session, so "newest on this server" is "the review this folder was opened for"). No enrollment, no write. The item's own event carries the page path, and that is all the rail and `review.json` need to group by page.
 - **`lahe review <folder>` for a folder of HTML** starts the static server on that folder, creates one review for it, and prints the folder's index (or the first page) as the open link. It stops falling into the dev-server row when the folder holds HTML and no `--origin` was passed.
 - **Docs:** a new row in the serving table in `AGENTS.md`, the lahe skill, and `docs/CLI.md`. The contract text does not change; it is about replies, not serving.
