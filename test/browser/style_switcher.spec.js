@@ -146,8 +146,8 @@ async function shootHead(page, name) {
 
 test.describe("the control appears only where it works (V8, R1)", () => {
   let world = null;
-  test.afterEach(() => {
-    world$.closeWorld(world);
+  test.afterEach(async () => {
+    await world$.closeWorld(world);
     world = null;
   });
 
@@ -184,8 +184,8 @@ test.describe("the control appears only where it works (V8, R1)", () => {
 
 test.describe("the Document style button: toggle, Esc, a click elsewhere, and the dot", () => {
   let world = null;
-  test.afterEach(() => {
-    world$.closeWorld(world);
+  test.afterEach(async () => {
+    await world$.closeWorld(world);
     world = null;
   });
 
@@ -296,7 +296,7 @@ test.describe("the Document style button: toggle, Esc, a click elsewhere, and th
     let info = await panel(page);
     expect(info.button.indicator).toBe(null);
     await shootHead(page, "head_dark");
-    world$.closeWorld(world);
+    await world$.closeWorld(world);
 
     // A house page previewing the dark style.
     world = await openWorld(page, { styles: ["sample", "sample-dark"] });
@@ -317,8 +317,8 @@ test.describe("the Document style button: toggle, Esc, a click elsewhere, and th
 
 test.describe("the list, and a rail that says what the page shows (V9, V12, R2, R5, R11)", () => {
   let world = null;
-  test.afterEach(() => {
-    world$.closeWorld(world);
+  test.afterEach(async () => {
+    await world$.closeWorld(world);
     world = null;
   });
 
@@ -469,8 +469,8 @@ function readingBlock(page) {
 
 test.describe("one click restyles the page and leaves the reviewer's work alone (V10, V11, V18, V27, R3, R4)", () => {
   let world = null;
-  test.afterEach(() => {
-    world$.closeWorld(world);
+  test.afterEach(async () => {
+    await world$.closeWorld(world);
     world = null;
   });
 
@@ -672,8 +672,8 @@ function itemEvents(world) {
 
 test.describe("keeping a style is one deliberate request (V13, V14, R6, R8)", () => {
   let world = null;
-  test.afterEach(() => {
-    world$.closeWorld(world);
+  test.afterEach(async () => {
+    await world$.closeWorld(world);
     world = null;
   });
 
@@ -759,8 +759,8 @@ test.describe("keeping a style is one deliberate request (V13, V14, R6, R8)", ()
 
 test.describe("what the document names, and a style that goes away (V15, V16, V25, R12)", () => {
   let world = null;
-  test.afterEach(() => {
-    world$.closeWorld(world);
+  test.afterEach(async () => {
+    await world$.closeWorld(world);
     world = null;
   });
 
@@ -856,7 +856,7 @@ test.describe("fix round 1: removal without a reload, one paint per pick, the la
   let world = null;
   test.afterEach(async ({ page }) => {
     await page.unrouteAll({ behavior: "ignoreErrors" });
-    world$.closeWorld(world);
+    await world$.closeWorld(world);
     world = null;
   });
 
@@ -960,8 +960,8 @@ test.describe("fix round 1: removal without a reload, one paint per pick, the la
 
 test.describe("fix round 1: every way a request stops waiting (V13)", () => {
   let world = null;
-  test.afterEach(() => {
-    world$.closeWorld(world);
+  test.afterEach(async () => {
+    await world$.closeWorld(world);
     world = null;
   });
 
@@ -1065,8 +1065,8 @@ function tableDoc(rows) {
 
 test.describe("fix round 2: the reading position inside a long table", () => {
   let world = null;
-  test.afterEach(() => {
-    world$.closeWorld(world);
+  test.afterEach(async () => {
+    await world$.closeWorld(world);
     world = null;
   });
 
@@ -1099,8 +1099,8 @@ test.describe("fix round 2: the reading position inside a long table", () => {
 
 test.describe("fix round 2: going back, and the line on reload", () => {
   let world = null;
-  test.afterEach(() => {
-    world$.closeWorld(world);
+  test.afterEach(async () => {
+    await world$.closeWorld(world);
     world = null;
   });
 
@@ -1158,8 +1158,8 @@ test.describe("fix round 2: going back, and the line on reload", () => {
 
 test.describe("fix round 1: a missing style on rendered Markdown (V15)", () => {
   let world = null;
-  test.afterEach(() => {
-    world$.closeWorld(world);
+  test.afterEach(async () => {
+    await world$.closeWorld(world);
     world = null;
   });
 
@@ -1179,8 +1179,8 @@ test.describe("fix round 1: a missing style on rendered Markdown (V15)", () => {
 
 test.describe("the list the layer re-checks (V22, display)", () => {
   let world = null;
-  test.afterEach(() => {
-    world$.closeWorld(world);
+  test.afterEach(async () => {
+    await world$.closeWorld(world);
     world = null;
   });
 

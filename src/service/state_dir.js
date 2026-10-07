@@ -72,7 +72,16 @@ var FILES = {
   // (`lahe library --session`), so it never shares a writer with catalog.json.
   catalogAttach: "catalog-attach.json",
   // Per session: which Library requests its monitor has already woken it for.
-  catalogDelivered: "catalog-delivered.log"
+  catalogDelivered: "catalog-delivered.log",
+  // The last `lahe session close` left the helper up because a page was open
+  // or the Library had polled. This file asks the helper to stop itself once
+  // that reason is gone (src/service/self_stop.js). Written by the CLI, removed
+  // by the helper.
+  stopWhenQuiet: "stop-when-quiet.json",
+  // A random token, written once per state dir. A helper or page server that
+  // finds it missing or changed knows its directory was removed or replaced
+  // (src/service/self_stop.js).
+  stateId: "state-id"
 };
 
 var REVIEWS_DIR = "reviews";
@@ -248,6 +257,16 @@ function assertSafeReviewId(reviewId) {
 
 function readyPath(dir) {
   return path.join(dir, FILES.ready);
+}
+
+/** The state dir's random token (src/service/self_stop.js). */
+function stateIdPath(dir) {
+  return path.join(dir, FILES.stateId);
+}
+
+/** The ask to stop once quiet, left by a deferred final close. */
+function stopWhenQuietPath(dir) {
+  return path.join(dir, FILES.stopWhenQuiet);
 }
 
 function helperLogPath(dir) {
@@ -497,6 +516,8 @@ module.exports = {
   assertSafeReviewId: assertSafeReviewId,
   resolveWithin: resolveWithin,
   readyPath: readyPath,
+  stopWhenQuietPath: stopWhenQuietPath,
+  stateIdPath: stateIdPath,
   helperLogPath: helperLogPath,
   windowsPath: windowsPath,
   reviewsRoot: reviewsRoot,

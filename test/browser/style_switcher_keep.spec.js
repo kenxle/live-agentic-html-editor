@@ -59,8 +59,8 @@ async function click(page, rect) {
 
 test.describe("keeping a style on a Markdown page, end to end (V8, V23)", () => {
   let world = null;
-  test.afterEach(() => {
-    world$.closeWorld(world);
+  test.afterEach(async () => {
+    await world$.closeWorld(world);
     world = null;
   });
 

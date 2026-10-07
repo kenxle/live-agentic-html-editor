@@ -22,6 +22,7 @@ const path = require("node:path");
 const { execFileSync } = require("node:child_process");
 
 const { test, expect, pollPage, pollUntil } = require("../helpers");
+const { stopTempHelpers } = require("../helpers/temp_helpers.js");
 const protocol = require("../../src/shared/protocol.js");
 
 const REPO_ROOT = path.join(__dirname, "..", "..");
@@ -149,6 +150,8 @@ test.describe("lahe review <folder>: one review, every page carries the rail", (
     } catch (err) {
       // A session that already went down is not a test failure.
     }
+    // The close leaves the helper up while the page is open. Stop it.
+    await stopTempHelpers(world.stateDir);
   });
 
   test("all three pages of the folder come up with the rail, on one review", async ({ page }) => {

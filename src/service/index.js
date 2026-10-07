@@ -52,6 +52,7 @@ var catalogRequests = require("./catalog_requests.js");
 var catalogActions = require("./catalog_actions.js");
 var staticServers = require("./static_servers.js");
 var idleServersModule = require("./idle_servers.js");
+var selfStopModule = require("./self_stop.js");
 
 // Read from package.json rather than restated here, so the version the helper
 // reports cannot drift from the version the repo ships.
@@ -649,7 +650,35 @@ async function serve(options) {
     process.stdout.write("lahe serve listening on http://" + host + ":" + boundPort + "\n");
   }
 
-  return {
+  // The helper stops itself once nothing needs it (self_stop.js): after a
+  // deferred last close once everything is quiet, and at once when its state
+  // directory is gone. The two env knobs are for tests only.
+  var selfStop = selfStopModule.createSelfStop({
+    dir: dir,
+    agentSessions: agentSessions,
+    reviews: reviews,
+    catalog: catalog,
+    now: now,
+    log: log,
+    // service.json names this helper by these two; a state dir that still
+    // does is ours, whatever its token says (a restored backup, a synced copy).
+    owner: { pid: process.pid, started_at: startedAt },
+    graceMs: typeof opts.selfStopGraceMs === "number" ? opts.selfStopGraceMs : envMs("LAHE_SELF_STOP_GRACE_MS"),
+    onStop: function (reason) {
+      if (reason === selfStopModule.REASON.STATE_DIR_GONE) {
+        // Said on stderr, not in helper.log: writing the log would make the
+        // directory again.
+        process.stderr.write("lahe serve: the state directory " + dir + " is gone; stopping\n");
+      }
+      helperHandle.close().then(function () {
+        if (typeof opts.onSelfStop === "function") opts.onSelfStop(reason);
+      });
+    }
+  });
+  selfStop.start(typeof opts.selfStopSweepMs === "number" ? opts.selfStopSweepMs : envMs("LAHE_SELF_STOP_SWEEP_MS"));
+
+  var closing = null;
+  var helperHandle = {
     port: boundPort,
     host: host,
     url: "http://" + host + ":" + boundPort,
@@ -665,9 +694,12 @@ async function serve(options) {
     sweepLibrarySessions: sweepLibrarySessions,
     server: server,
     close: function () {
+      // Once: a self-stop and the caller's own close may both ask.
+      if (closing) return closing;
       if (!opts.schedule) clearInterval(sweepTimer);
       idleServers.stop();
-      return new Promise(function (resolve) {
+      selfStop.stop();
+      closing = new Promise(function (resolve) {
         server.close(function () {
           resolve();
         });
@@ -679,8 +711,12 @@ async function serve(options) {
         // API that ends them, which is why engines.node is >=18.2.0.
         if (typeof server.closeAllConnections === "function") server.closeAllConnections();
       });
-    }
+      return closing;
+    },
+    // The self-stop's own look, run by hand. Tests only.
+    checkSelfStop: function () { return selfStop.check(); }
   };
+  return helperHandle;
 }
 
 /**
@@ -743,7 +779,9 @@ if (require.main === module) {
     stateDir: process.env.LAHE_STATE_DIR,
     reviews: splitList(process.env.LAHE_REVIEWS),
     origins: splitList(process.env.LAHE_ALLOWED_ORIGINS),
-    reviewSessions: reviewSessions
+    reviewSessions: reviewSessions,
+    // Stopped itself (self_stop.js): the listener is already closed.
+    onSelfStop: function () { process.exit(0); }
   })
     .then(function (helper) {
       // Test workers spawn the service with one IPC descriptor. That channel

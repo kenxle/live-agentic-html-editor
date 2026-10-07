@@ -25,6 +25,7 @@ const path = require("node:path");
 const { execFileSync } = require("node:child_process");
 
 const { test, expect, pollPage, pollUntil } = require("../helpers");
+const { stopTempHelpers } = require("../helpers/temp_helpers.js");
 
 const REPO_ROOT = path.join(__dirname, "..", "..");
 const CLI = path.join(REPO_ROOT, "bin", "lahe.js");
@@ -132,6 +133,9 @@ test.describe("a rebuild that drops the line before anyone ever polls still land
     } catch (err) {
       // A session that already went down is not a test failure.
     }
+    // The close leaves the helper up while the page is open. Stop it, and any
+    // page server the close could not reach.
+    await stopTempHelpers(world.stateDir);
   });
 
   test("a fresh load lands the rail, even though the file on disk never carried the line", async ({ page }) => {
@@ -227,6 +231,9 @@ test.describe("the helper is down and the rail still loads, from the server that
       // The helper is already gone; a close that complains about it is not a
       // test failure.
     }
+    // The close leaves the helper up while the page is open. Stop it, and any
+    // page server the close could not reach.
+    await stopTempHelpers(world.stateDir);
   });
 
   test("the library comes off the static server's own route, with no helper and no file beside the page", async ({ page }) => {

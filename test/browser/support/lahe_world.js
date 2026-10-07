@@ -19,6 +19,7 @@ const path = require("node:path");
 const { execFileSync } = require("node:child_process");
 
 const { expect, pollPage, pollUntil } = require("../../helpers");
+const { stopTempHelpers } = require("../../helpers/temp_helpers.js");
 
 const REPO_ROOT = process.env.LAHE_REPO || path.join(__dirname, "..", "..", "..");
 const CLI = path.join(REPO_ROOT, "bin", "lahe.js");
@@ -82,13 +83,19 @@ async function makeWorld(spec) {
   return world;
 }
 
-function closeWorld(world) {
+/**
+ * Close the world's session, then stop its helper and page servers. The close
+ * leaves the helper up while the test's page is still open, so the stop is
+ * what keeps a run from leaking one helper per test. Await it.
+ */
+async function closeWorld(world) {
   if (!world) return;
   try {
     world.cli(["session", "close", world.session]);
   } catch (err) {
     // A session that already went down is not a test failure.
   }
+  await stopTempHelpers(world.stateDir);
 }
 
 function readSource(world) {

@@ -180,8 +180,8 @@ async function heldAfterHandled(world, it) {
 test.describe("brief R14: bold and italic edits survive the rebuild", () => {
   let world = null;
 
-  test.afterEach(() => {
-    closeWorld(world);
+  test.afterEach(async () => {
+    await closeWorld(world);
     world = null;
   });
 

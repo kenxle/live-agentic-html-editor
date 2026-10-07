@@ -121,8 +121,8 @@ async function writeParagraphs(page, count, from) {
 test.describe("writing at the bottom of the page", () => {
   let world;
 
-  test.afterEach(() => {
-    closeWorld(world);
+  test.afterEach(async () => {
+    await closeWorld(world);
     world = null;
   });
 

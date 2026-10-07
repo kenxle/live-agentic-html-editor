@@ -117,6 +117,10 @@ flowchart TD
     Polled -->|"no"| Held{"is a review page<br/>window still open?"}
     Held -->|"yes"| Up
     Held -->|"no"| Stop["helper stops"]
+    Up -.->|"last close only"| Ask["writes stop-when-quiet.json"]
+    Ask --> SelfCheck{"helper, every 15 seconds:<br/>no open session, no open window,<br/>no Library poll for 2 minutes?"}
+    SelfCheck -->|"a session opened"| Cancel["the ask is removed;<br/>the next last close decides"]
+    SelfCheck -->|"yes"| Stop
 
     Timer["helper timer, every 15 seconds:<br/>sweepReopened"] --> Each["each session in catalog.json's<br/>reopened map"]
     Each --> Moved{"taken over since,<br/>or its monitor live?"}
@@ -127,8 +131,15 @@ flowchart TD
     Quiet -->|"yes"| CloseQuiet["closeQuiet: stop its servers,<br/>mark it closed, clear the entry.<br/>The helper stays up"]
 ```
 
-- There is no self-stop timer. The helper stops at the next close that finds
-  everything quiet, or at a restart.
+- A last close that leaves the helper up asks it to stop once quiet
+  (`stop-when-quiet.json`). The helper stops itself after two minutes with no
+  open session, no open review window and no Library poll
+  (`src/service/self_stop.js`). An open session never lets it stop.
+- A new helper clears any old `stop-when-quiet.json`. After a sleep, the two
+  minutes start again from the wake.
+- A helper or page server whose state directory is removed stops within 30
+  seconds (two checks in a row), even with a session open. A restored or synced
+  copy that still names that process keeps it running.
 - The same sweep closes a session that bare `lahe library` started, once it
   owns no reviews and its agent has been quiet for 30 minutes.
 - A session reopened with `lahe session reopen` is not in the `reopened` map,

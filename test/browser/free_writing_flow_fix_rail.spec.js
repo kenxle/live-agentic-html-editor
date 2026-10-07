@@ -130,8 +130,8 @@ async function shootCard(page, testInfo, id, name) {
 
 test.describe("flow walk fixes, replay and rail side", () => {
   let world = null;
-  test.afterEach(() => {
-    closeWorld(world);
+  test.afterEach(async () => {
+    await closeWorld(world);
     world = null;
   });
 

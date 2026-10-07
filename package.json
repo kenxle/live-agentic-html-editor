@@ -35,7 +35,7 @@
     "build:layer": "node scripts/build-layer.js",
     "docs:tests": "node scripts/test_index.js",
     "check:layer": "node scripts/build-layer.js --check",
-    "test:unit": "node --test test/unit/",
+    "test:unit": "node scripts/no_stray_helpers.js node --test test/unit/",
     "test:browser": "playwright test",
     "test:browser:all": "LAHE_ALL_BROWSERS=1 playwright test",
     "gate": "npm run lint && npm run check:layer && npm run test:unit && npm run test:browser",

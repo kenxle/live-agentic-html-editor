@@ -71,12 +71,15 @@ async function makeWorld(name, blocks) {
   w.reviewDir = path.join(stateDir, "reviews", w.review);
   return w;
 }
-function closeWorld(w) {
+async function closeWorld(w) {
   try {
     w.cli(["session", "close", w.session, "--state-dir", w.stateDir]);
   } catch (e) {
     try { w.cli(["session", "close", w.session]); } catch (e2) { /* already down */ }
   }
+  // The close leaves the helper up while the page is open; stop it by its own
+  // state dir's records so the script leaves nothing running.
+  await require(path.join(REPO, "test", "helpers", "temp_helpers.js")).stopTempHelpers(w.stateDir);
 }
 
 async function poll(page, fn, arg, what, timeoutMs = 20000) {
@@ -336,7 +339,7 @@ async function case1(browser, variant) {
     r.error = String(e && e.stack || e);
   } finally {
     await page.close();
-    closeWorld(w);
+    await closeWorld(w);
   }
   r.world = w.root;
   return r;
@@ -397,7 +400,7 @@ async function case2(browser, leave) {
     r.error = String(e && e.stack || e);
   } finally {
     await page.close();
-    closeWorld(w);
+    await closeWorld(w);
   }
   r.world = w.root;
   return r;
@@ -443,7 +446,7 @@ async function case3(browser, agentDoes) {
     r.error = String(e && e.stack || e);
   } finally {
     await page.close();
-    closeWorld(w);
+    await closeWorld(w);
   }
   r.world = w.root;
   return r;

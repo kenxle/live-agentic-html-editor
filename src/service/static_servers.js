@@ -13,6 +13,7 @@ var scriptLine = require("../shared/script_line.js");
 var markdown = require("./markdown.js");
 var markdownLinks = require("./markdown_links.js");
 var stateDir = require("./state_dir.js");
+var selfStop = require("./self_stop.js");
 var styles = require("./styles.js");
 var tabIcon = require("./tab_icon.js");
 var heal = require("./heal.js");
@@ -1776,6 +1777,28 @@ function runServer(file, sessionId, id, instance, rootInput, dir, logicalRootInp
     stateDir.writeAtomic(file, JSON.stringify(meta, null, 2) + "\n");
   }
   function stop() { server.close(function () { process.exit(0); }); }
+  // A page server whose state directory is gone (or replaced) has no helper
+  // left to answer for it, so it stops too (self_stop.js, rule 2). Its own
+  // record is the ownership evidence: a restored or synced copy of the state
+  // dir that still names this server, by pid and instance, keeps it running.
+  // So it only stops when its record no longer names it, and there is no
+  // record of its own left to mark stopped.
+  var dirWatch = selfStop.createDirWatch({
+    dir: dir,
+    stillOurs: function () {
+      return selfStop.namesProcess(file, function (meta) {
+        return !!meta && meta.pid === process.pid && meta.instance === instance;
+      });
+    }
+  });
+  var dirSweepMs = Number(process.env.LAHE_SELF_STOP_SWEEP_MS);
+  var dirTimer = setInterval(function () {
+    if (dirWatch.check()) {
+      clearInterval(dirTimer);
+      stop();
+    }
+  }, Number.isFinite(dirSweepMs) && dirSweepMs > 0 ? dirSweepMs : selfStop.SWEEP_MS);
+  if (typeof dirTimer.unref === "function") dirTimer.unref();
   process.on("SIGHUP", reloadMounts);
   process.on("SIGTERM", stop);
   process.on("SIGINT", stop);
