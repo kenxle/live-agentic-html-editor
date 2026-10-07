@@ -355,6 +355,32 @@ test.describe("zoom viewer: the view", () => {
     expect(await page.evaluate(() => document.getElementById("mermaid-1").outerHTML)).toBe(original);
   });
 
+  test("a link inside the copied SVG does nothing in the viewer", async ({ page }) => {
+    await open(page);
+    const viewer = await openViewerOn(page, "#mermaid-1");
+    expect(viewer.markup, "the copy carries no href").not.toMatch(/href=/);
+    expect(viewer.markup, "the copy carries no inline handler").not.toMatch(/onclick=/);
+    // Bring the linked node ("Plan", the fifth) under the pointer and click it.
+    const at = await page.evaluate(() => window.__lahe.handle.zoom.probeRect("#mermaid-1-n4 rect"));
+    await page.mouse.click(at.x + at.width / 2, at.y + at.height / 2);
+    expect(await page.evaluate(() => location.hash), "the page did not navigate").toBe("");
+    expect(await page.evaluate(() => window.__zoomNodeClicked === true), "the node's handler did not run").toBe(false);
+    expect((await info(page)).viewer.open, "the viewer is still open").toBe(true);
+  });
+
+  test("the edit chord while the viewer is open does nothing, and Esc still closes it", async ({ page }) => {
+    await open(page);
+    await openViewerOn(page, "#big");
+    await page.keyboard.press("ControlOrMeta+Shift+KeyE");
+    const state = await page.evaluate(() => window.__lahe.editState());
+    expect(state.open, "no edit session").toBe(false);
+    expect(state.editState, "no edit state").toBe(false);
+    expect((await info(page)).viewer.open, "the viewer is still open").toBe(true);
+    await page.keyboard.press("Escape");
+    await viewerClosed(page, "Esc to close the viewer after the chord");
+    expect((await page.evaluate(() => window.__lahe.editState())).editState).toBe(false);
+  });
+
   test("the page is not written to by hovering or by the viewer", async ({ page }) => {
     await open(page);
     await page.evaluate((rootId) => {

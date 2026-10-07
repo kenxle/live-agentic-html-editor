@@ -172,6 +172,8 @@
    * for: a wide left-to-right flowchart shrunk to the page width is often under
    * 120 pixels tall. "Every graph drawn as SVG (all Mermaid included)" is the
    * decided rule, so a shrunk svg, or one Mermaid drew, qualifies above MIN_SIDE.
+   * The shrunk half also needs IMG_MIN_LONG on its longer side, the image rule's
+   * floor: a 64px logo drawn from a 512x512 viewBox is shrunk, and is an icon.
    *
    * @param {{width:number,height:number}} shown   its rect on screen
    * @param {{width:number,height:number}|null} own its own size (viewBox), if known
@@ -181,6 +183,7 @@
     if (!shown || shown.width < MIN_SIDE || shown.height < MIN_SIDE) return false;
     if (Math.min(shown.width, shown.height) >= SVG_MIN_SIDE) return true;
     if (mermaid) return true;
+    if (Math.max(shown.width, shown.height) < IMG_MIN_LONG) return false;
     return !!own && (shown.width < own.width - 1 || shown.height < own.height - 1);
   }
 
@@ -240,19 +243,56 @@
     return found;
   }
 
-  /** An svg's own size: its viewBox, else its numeric width and height. */
+  // A width or height attribute in CSS pixels: unitless or "px". Percent, em
+  // and the rest depend on the page, so they say nothing about the svg's size.
+  function pxAttr(svg, name) {
+    var raw = svg.getAttribute(name);
+    var m = raw === null || raw === undefined ? null : String(raw).trim().match(/^(\d+(?:\.\d+)?|\.\d+)(px)?$/i);
+    return m ? Number(m[1]) : 0;
+  }
+
+  /**
+   * An svg's own size, which is what "actual size" shows: its width and height
+   * attributes when both are in px, else its viewBox. The attributes come first
+   * because the viewBox is in user units, not pixels: viewBox="0 0 24 24" with
+   * width="600" is a 600px drawing. `viewBox` says whether it has one to scale
+   * against.
+   */
   function svgOwnSize(svg) {
+    var vb = null;
     try {
-      var vb = svg.viewBox && svg.viewBox.baseVal;
-      if (vb && vb.width > 0 && vb.height > 0) return { width: vb.width, height: vb.height, viewBox: true };
+      var base = svg.viewBox && svg.viewBox.baseVal;
+      if (base && base.width > 0 && base.height > 0) vb = base;
     } catch (e) {
       // An svg without the DOM interface answers from its attributes.
     }
-    var w = parseFloat(svg.getAttribute("width"));
-    var h = parseFloat(svg.getAttribute("height"));
-    var pct = /%/.test(String(svg.getAttribute("width")) + String(svg.getAttribute("height")));
-    if (w > 0 && h > 0 && !pct) return { width: w, height: h, viewBox: false };
+    var w = pxAttr(svg, "width");
+    var h = pxAttr(svg, "height");
+    if (w > 0 && h > 0) return { width: w, height: h, viewBox: !!vb };
+    if (vb) return { width: vb.width, height: vb.height, viewBox: true };
     return null;
+  }
+
+  /**
+   * Take everything that could act out of a copied svg: href and xlink:href
+   * (on <a>, and on <use> and <image>, where a page link is not wanted either)
+   * and every on* handler attribute. The copy is for looking at. A Mermaid
+   * `click` node is an <a href> or an onclick, and in the viewer it would
+   * navigate the reviewed page away or run the page's script.
+   */
+  function inertCopy(root) {
+    var nodes = [root];
+    var all = root.querySelectorAll ? root.querySelectorAll("*") : [];
+    for (var i = 0; i < all.length; i += 1) nodes.push(all[i]);
+    nodes.forEach(function (node) {
+      var names = [];
+      for (var j = 0; j < node.attributes.length; j += 1) names.push(node.attributes[j].name);
+      names.forEach(function (name) {
+        var lower = name.toLowerCase();
+        if (lower === "href" || lower === "xlink:href" || lower.indexOf("on") === 0) node.removeAttribute(name);
+      });
+    });
+    return root;
   }
 
   function isMermaid(svg) {
@@ -648,7 +688,7 @@
       var r = source.getBoundingClientRect();
       var width = own ? own.width : r.width;
       var height = own ? own.height : r.height;
-      var clone = source.cloneNode(true);
+      var clone = inertCopy(source.cloneNode(true));
       // Scaled by its box, so it needs a viewBox to scale against.
       if (!own || !own.viewBox) clone.setAttribute("viewBox", "0 0 " + width + " " + height);
       clone.setAttribute("width", "100%");
@@ -787,31 +827,49 @@
         // A click on the dimmed area closes. A drag that ends there is a pan.
         if (event.type === "pointerup" && !was.moved && was.backdrop && onBackdrop(event.clientX, event.clientY)) close();
       }
+      // A click inside the view never acts on what it lands on. The copy is
+      // already inert (inertCopy); this is the second lock, for anything the
+      // strip did not know about. The toolbar's own buttons still work: their
+      // click handlers run, and a type=button has no default to lose.
+      v.addEventListener(
+        "click",
+        function (event) {
+          if (!dom.bar.contains(event.target)) event.preventDefault();
+        },
+        true
+      );
       v.addEventListener("pointerup", release);
       v.addEventListener("pointercancel", release);
 
-      v.addEventListener("keydown", function (event) {
-        if (!openOn) return;
-        var key = event.key;
-        var handled = true;
-        var step = event.shiftKey ? PAN_STEP * 4 : PAN_STEP;
-        if (key === "Escape") close();
-        else if (key === "+" || key === "=") zoomBy(KEY_ZOOM);
-        else if (key === "-" || key === "_") zoomBy(1 / KEY_ZOOM);
-        else if (key === "0") fit();
-        else if (key === "1") actualSize();
-        // The arrows look the way a map does: Left shows more of the left.
-        else if (key === "ArrowLeft") panBy(step, 0);
-        else if (key === "ArrowRight") panBy(-step, 0);
-        else if (key === "ArrowUp") panBy(0, step);
-        else if (key === "ArrowDown") panBy(0, -step);
-        else if (key === "Tab") trapTab(event);
-        else if (key !== " " && key !== "PageUp" && key !== "PageDown" && key !== "Home" && key !== "End") handled = false;
-        if (!handled) return;
-        // Nothing the viewer used reaches the page: no scroll, no page hotkey.
-        event.preventDefault();
-        event.stopPropagation();
-      });
+    }
+
+    // Every key while the view is open, caught on the WINDOW in the capture
+    // phase. That is the first stop on the way down, ahead of the document-level
+    // capture handlers comments.js and editing.js bind. A listener on the viewer
+    // itself runs after those, so the edit chord pressed over the view started
+    // edit state behind it, and Esc then went to the edit instead of closing.
+    // So no key reaches the page or the layer's chord handlers while it is
+    // open. Tab is handled here too: it walks the toolbar.
+    function onViewerKey(event) {
+      if (!openOn || !dom) return;
+      event.stopPropagation();
+      var key = event.key;
+      var handled = true;
+      var step = event.shiftKey ? PAN_STEP * 4 : PAN_STEP;
+      if (key === "Escape") close();
+      else if (key === "+" || key === "=") zoomBy(KEY_ZOOM);
+      else if (key === "-" || key === "_") zoomBy(1 / KEY_ZOOM);
+      else if (key === "0") fit();
+      else if (key === "1") actualSize();
+      // The arrows look the way a map does: Left shows more of the left.
+      else if (key === "ArrowLeft") panBy(step, 0);
+      else if (key === "ArrowRight") panBy(-step, 0);
+      else if (key === "ArrowUp") panBy(0, step);
+      else if (key === "ArrowDown") panBy(0, -step);
+      else if (key === "Tab") trapTab(event);
+      else if (key !== " " && key !== "PageUp" && key !== "PageDown" && key !== "Home" && key !== "End") handled = false;
+      // The keys the view used do nothing else: no scroll, no default.
+      if (handled) event.preventDefault();
     }
 
     // Focus stays in the dialog: Tab walks the toolbar and wraps.
@@ -837,6 +895,7 @@
       handles.push(registry.on(doc, "pointerout", onPointerOut, { capture: true, passive: true }, group));
       handles.push(registry.on(doc, "focusin", onFocusIn, true, group));
       handles.push(registry.on(doc, "keydown", onKeyDown, true, group));
+      handles.push(registry.on(win, "keydown", onViewerKey, true, group));
       handles.push(registry.on(win, "scroll", onScrollOrResize, { capture: true, passive: true }, group));
       handles.push(registry.on(win, "resize", onScrollOrResize, { passive: true }, group));
     }
@@ -901,6 +960,13 @@
       return out;
     }
 
+    /** Where a node inside the open view's copy is on screen, or null. */
+    function probeRect(selector) {
+      if (!openOn || !dom) return null;
+      var node = dom.content.querySelector(selector);
+      return node ? rectOf(node) : null;
+    }
+
     /** A computed style inside the open view's copy, or null. */
     function probe(selector, property) {
       if (!openOn || !dom) return null;
@@ -919,7 +985,8 @@
       },
       hideButton: hideNow,
       info: info,
-      probe: probe
+      probe: probe,
+      probeRect: probeRect
     };
   }
 
@@ -935,6 +1002,7 @@
     HIDE_DELAY_MS: HIDE_DELAY_MS,
     WORDS: WORDS,
     svgQualifies: svgQualifies,
+    svgOwnSize: svgOwnSize,
     imgQualifies: imgQualifies,
     fitView: fitView,
     zoomAbout: zoomAbout,

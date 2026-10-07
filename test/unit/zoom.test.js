@@ -67,3 +67,34 @@ test("the wheel zooms in on an upward scroll, harder for a pinch, and reads line
   assert.ok(zoom.wheelFactor(-10, 0, true, 800) > zoom.wheelFactor(-10, 0, false, 800));
   assert.equal(zoom.wheelFactor(-3, 1, false, 800), zoom.wheelFactor(-48, 0, false, 800));
 });
+
+test("a small icon drawn from a large viewBox gets no button", () => {
+  // A 64px logo from a 512x512 viewBox is shown smaller than its own size, and
+  // is still an icon: the shrunk rule needs IMG_MIN_LONG on the longer side.
+  assert.equal(zoom.svgQualifies(rect(64, 64), { width: 512, height: 512 }, false), false);
+  assert.equal(zoom.svgQualifies(rect(680, 85), { width: 2400, height: 300 }, false), true);
+});
+
+function fakeSvg(attrs, viewBox) {
+  return {
+    viewBox: viewBox ? { baseVal: viewBox } : undefined,
+    getAttribute: (name) => (Object.prototype.hasOwnProperty.call(attrs, name) ? attrs[name] : null)
+  };
+}
+
+test("an svg's own size is its width and height attributes in px, before its viewBox", () => {
+  const own = zoom.svgOwnSize(fakeSvg({ width: "600", height: "600" }, { width: 24, height: 24 }));
+  assert.equal(own.width, 600);
+  assert.equal(own.height, 600);
+  assert.equal(own.viewBox, true, "it still has a viewBox to scale against");
+  const px = zoom.svgOwnSize(fakeSvg({ width: "320px", height: "200px" }, null));
+  assert.deepEqual([px.width, px.height, px.viewBox], [320, 200, false]);
+});
+
+test("an svg sized in percent or other units falls back to its viewBox", () => {
+  const own = zoom.svgOwnSize(fakeSvg({ width: "100%" }, { width: 2400, height: 300 }));
+  assert.deepEqual([own.width, own.height], [2400, 300]);
+  const em = zoom.svgOwnSize(fakeSvg({ width: "10em", height: "4em" }, { width: 100, height: 40 }));
+  assert.deepEqual([em.width, em.height], [100, 40]);
+  assert.equal(zoom.svgOwnSize(fakeSvg({}, null)), null);
+});
