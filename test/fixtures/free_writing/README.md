@@ -13,6 +13,7 @@ corpus for this feature reads it from here.
 | `empty_notes.html` | `empty_notes.md` rendered by today's `markdown.js`, with the file-name title marker (`markers.FILE_TITLE_ATTR`) added to the hero `h1` by hand. Task 2.11 makes the renderer add it; its test compares the render against this file, ids aside. | New. |
 | `dark.html` | A page with a dark background. Every dark screenshot for this feature is taken on it, because the layer samples its scheme from the page and the Markdown style has no dark mode. | New. |
 | `body_paragraph.html` | Paragraphs that are direct children of `body`, with no container. | New. |
+| `lists.html` | A list with a two-item nested list, a list whose first bullet holds a lone sub-bullet, and a one-cell table. Delete item tests run on it. | New. |
 | `corpus.js` | Two markup corpora: `MALFORMED` (a `p` closed by a `div`, an unclosed `li`, a script body holding `<p>`, template contents, comments) and `ENGINE` (`b`, `i`, nbsp, a trailing `br`, nested `strong` and `em`, entities, uppercase tags). Loads with `require()` and as a page script. | New. |
 | `r14_repro_reference.js` | Reference only, run by nothing. The script that reproduced the three brief R14 cases on a real `lahe review post.md`. `test/browser/free_writing_r14.spec.js` is its runnable port. | The R14 reproduction as re-run on main at 2b6eb96 (`r14_main/repro.js`), cleaned: no home path, no fixed waits, output to the OS temp folder. |
 
