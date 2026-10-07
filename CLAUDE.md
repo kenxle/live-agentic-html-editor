@@ -139,6 +139,34 @@ Browsers install once: `npx playwright install chromium`, plus
 is Chromium only, so the inner loop stays one browser wide; `--project=webkit`
 runs a single lane by name.
 
+## Tests leave nothing running
+
+On 2026-10-07 Ken's Mac had 1,892 Lahe helpers left over from test runs. They
+used about 12 GB of memory, filled swap, and kept kernel_task at 200% CPU while
+his battery drained. Each test started a helper in its own temp state folder,
+the helper is detached on purpose so it outlives the command, and no test ever
+stopped it. So:
+
+- **A test stops every process it starts.** That covers a helper, a page
+  server, a monitor, a browser or anything spawned. Stop it in teardown, even
+  when the test fails: `afterEach`, `afterAll`, or a `finally`. Closing the
+  session is not enough: closing it can leave the helper running.
+- **Stop it by what you own.** Use the pid in your own temp state folder's
+  `service.json`, or the process you spawned. Never kill by name or port
+  pattern, and never touch the real helper (port 7817,
+  `~/.local/state/lahe`).
+- **The suite checks.** After a run, no helper whose state folder is under the
+  temp folder may still be running. A new test that starts processes passes
+  that check before it merges.
+- **A test that leaks is a failing test,** even when its assertions pass.
+- **Background test commands get the same rule.** A dev server, `npx serve`, or
+  a Playwright run you start by hand is stopped when you are done, not left for
+  the OS.
+- **Check before you finish.** A builder runs
+  `ps -axo command | grep -c "[l]ahe.js serve"` before and after its test runs
+  and reports both numbers. Anything above the starting count is a leak to fix
+  before pushing.
+
 ## Running the loop (lessons from 2026-09-16)
 
 Reviews, worktrees, docs for decisions, and tests first all stay. What was
