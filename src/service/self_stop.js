@@ -17,20 +17,29 @@
 //       - no review window is open (reviews.openWindowReviews),
 //       - the Library page has not polled (catalog.seenAt).
 //     The grace counts from the latest of: the ask, this helper's start, the
-//     last sweep that saw a window open, and the last Library poll.
+//     last check that saw a window open, the last Library poll, and the last
+//     wake from sleep. A check that comes far later than the check interval
+//     means the machine slept; an open page has not had its first heartbeat
+//     since, so the grace starts again from that check.
 //     An open session never lets the helper stop. It also takes the ask back:
 //     the session's own close decides again when it comes.
-//  2. Stop when the state directory is gone. The helper reads the dir's
-//     random token (state-id) at start. If that file is missing, or holds a
-//     different token, the directory was removed or replaced, nothing the
-//     helper writes reaches anyone, and it stops at once. A file it briefly
-//     cannot read does not count. A test that removes its temp dir takes its
-//     helper with it.
+//  2. Stop when the state directory is gone. The helper reads the dir's random
+//     token (state-id) at start. It stops when both of these hold:
+//       - the token file is missing on two checks in a row (ENOENT only), or
+//         holds a different token, and
+//       - service.json no longer names this process (its pid and start time).
+//     An unreadable file (EACCES, EIO and the like) never counts. A restored
+//     backup or a synced copy that still names this helper keeps it running.
+//     A removed directory stops the helper even with a session open: nothing
+//     it writes reaches anyone. A test that removes its temp dir takes its
+//     helper with it. Page servers run the same check against their own record.
 //
-// Without the ask, rule 1 does nothing: a helper started by hand, or by a
-// command that has not closed anything yet, keeps running as before.
+// A NEW HELPER CLEARS AN OLD ASK. stop-when-quiet.json belongs to the helper
+// that was running when the close wrote it. A helper starting up removes any
+// it finds, so a hand-started `lahe serve` is never stopped by a close that
+// happened before it existed. Without an ask, rule 1 does nothing.
 //
-// The sweep timer is unref'd, so it never holds a process open by itself.
+// The check timer is unref'd, so it never holds a process open by itself.
 
 "use strict";
 
@@ -41,11 +50,25 @@ var protocol = require("../shared/protocol.js");
 
 var GRACE_MS = protocol.CATALOG.LIBRARY_SEEN_MS;
 var SWEEP_MS = 15 * 1000;
+// A check this many intervals late means the machine slept in between.
+var WAKE_FACTOR = 4;
+// Consecutive checks that must find the token file missing.
+var MISSES_TO_STOP = 2;
 
 var REASON = {
   QUIET: "quiet",
   STATE_DIR_GONE: "state directory gone"
 };
+
+/** {token} when readable, {missing: true} on ENOENT, {unreadable: true} otherwise. */
+function readToken(file) {
+  try {
+    var text = fs.readFileSync(file, "utf8").trim();
+    return text ? { token: text } : { unreadable: true };
+  } catch (err) {
+    return err && err.code === "ENOENT" ? { missing: true } : { unreadable: true };
+  }
+}
 
 /**
  * The state dir's token: a random string in <dir>/state-id, written once by
@@ -70,37 +93,78 @@ function stateToken(dir) {
   } catch (err) {
     if (!err || err.code !== "EEXIST") return null;
   }
-  return readToken(file).token;
+  return readToken(file).token || null;
 }
 
-/** {token} when readable, {missing: true} when the file or dir is not there. */
-function readToken(file) {
+/**
+ * Does this JSON file still name the given process? "yes", "no" (missing, or
+ * names someone else), or "unknown" (unreadable). Used for service.json and
+ * for a page server's own record.
+ */
+function namesProcess(file, matches) {
+  var raw;
   try {
-    var text = fs.readFileSync(file, "utf8").trim();
-    return text ? { token: text } : { missing: true };
+    raw = fs.readFileSync(file, "utf8");
   } catch (err) {
-    return err && (err.code === "ENOENT" || err.code === "ENOTDIR") ? { missing: true } : { unreadable: true };
+    return err && err.code === "ENOENT" ? "no" : "unknown";
+  }
+  try {
+    return matches(JSON.parse(raw)) ? "yes" : "no";
+  } catch (err) {
+    // Mid-write by somebody else: not evidence either way.
+    return "unknown";
   }
 }
 
 /**
- * Is this still the state dir that handed out `token`? False only when the
- * token file is missing or holds a different token. A dir that is briefly
- * unreadable (a permission change, an I/O error) counts as still there.
+ * Watch one state dir for being removed or replaced (rule 2).
+ *
+ * @param {{dir: string, stillOurs: function(): string}} options
+ *   `stillOurs` answers whether the dir still names this process ("yes",
+ *   "no" or "unknown"), from service.json or a page server's record.
+ * @returns {{check: function(): boolean}} check() is true once the dir is gone
  */
-function sameStateDir(dir, token) {
-  if (!token) return true;
-  var now = readToken(stateDir.stateIdPath(dir));
-  if (now.unreadable) return true;
-  return !now.missing && now.token === token;
+function createDirWatch(options) {
+  var dir = options.dir;
+  var stillOurs = options.stillOurs;
+  var token = stateToken(dir);
+  var misses = 0;
+  function check() {
+    if (!token) {
+      token = stateToken(dir);
+      return false;
+    }
+    var now = readToken(stateDir.stateIdPath(dir));
+    if (now.unreadable) return false;
+    if (now.token === token) {
+      misses = 0;
+      return false;
+    }
+    if (now.missing) {
+      misses += 1;
+      if (misses < MISSES_TO_STOP) return false;
+    }
+    // Missing twice, or a different token: gone, unless the dir still names
+    // this process (a restored backup, a synced copy).
+    var ours = stillOurs();
+    if (ours === "no") return true;
+    if (ours === "yes" && now.token) {
+      token = now.token;
+      misses = 0;
+    }
+    return false;
+  }
+  return { check: check };
 }
 
 /**
  * @param {{dir: string, agentSessions: {openSessions: function(): Array},
  *          reviews: {openWindowReviews: function(): string[]},
  *          catalog?: {seenAt: function(): (string|null)},
- *          now?: function(): number, graceMs?: number,
+ *          owner?: {pid: number, started_at: string},
+ *          now?: function(): number, graceMs?: number, sweepMs?: number,
  *          onStop: function(string): void, log?: object}} options
+ *   `owner` is this helper's pid and start time as service.json records them.
  */
 function createSelfStop(options) {
   var opts = options || {};
@@ -109,12 +173,26 @@ function createSelfStop(options) {
   var dir = opts.dir;
   var clock = typeof opts.now === "function" ? opts.now : Date.now;
   var graceMs = typeof opts.graceMs === "number" && opts.graceMs >= 0 ? opts.graceMs : GRACE_MS;
+  var sweepMs = typeof opts.sweepMs === "number" && opts.sweepMs > 0 ? opts.sweepMs : SWEEP_MS;
+  var owner = opts.owner || { pid: process.pid, started_at: null };
   var log = opts.log || null;
   var startedAt = clock();
-  var token = stateToken(dir);
   var lastWindowAt = -Infinity;
+  var lastCheckAt = null;
   var stopped = false;
   var timer = null;
+
+  // An ask left by a close before this helper existed is not about it.
+  withdrawAsk();
+
+  var dirWatch = createDirWatch({
+    dir: dir,
+    stillOurs: function () {
+      return namesProcess(stateDir.readyPath(dir), function (ready) {
+        return !!ready && ready.pid === owner.pid && (!owner.started_at || ready.started_at === owner.started_at);
+      });
+    }
+  });
 
   function say(line) {
     if (log && typeof log.helperLog === "function") {
@@ -150,7 +228,13 @@ function createSelfStop(options) {
   /** One look. Returns the reason it stopped, or null. */
   function check() {
     if (stopped) return null;
-    if (!sameStateDir(dir, token)) return fire(REASON.STATE_DIR_GONE);
+    if (dirWatch.check()) return fire(REASON.STATE_DIR_GONE);
+
+    var at = clock();
+    // Far later than the interval: the machine slept. A page that is still
+    // open has not beaten since, so the grace starts again now.
+    if (lastCheckAt !== null && at - lastCheckAt > WAKE_FACTOR * sweepMs) lastWindowAt = at;
+    lastCheckAt = at;
 
     var asked = askedAt();
     if (asked === null) return null;
@@ -163,7 +247,6 @@ function createSelfStop(options) {
       return null;
     }
 
-    var at = clock();
     if (opts.reviews.openWindowReviews().length > 0) {
       lastWindowAt = at;
       return null;
@@ -184,7 +267,8 @@ function createSelfStop(options) {
 
   function start(intervalMs) {
     if (timer || stopped) return timer;
-    var every = typeof intervalMs === "number" && intervalMs > 0 ? intervalMs : SWEEP_MS;
+    var every = typeof intervalMs === "number" && intervalMs > 0 ? intervalMs : sweepMs;
+    sweepMs = every;
     timer = setInterval(function () {
       try { check(); } catch (err) { say("self-stop check failed: " + (err && err.message ? err.message : String(err))); }
     }, every);
@@ -203,8 +287,11 @@ function createSelfStop(options) {
 module.exports = {
   GRACE_MS: GRACE_MS,
   SWEEP_MS: SWEEP_MS,
+  WAKE_FACTOR: WAKE_FACTOR,
+  MISSES_TO_STOP: MISSES_TO_STOP,
   REASON: REASON,
   stateToken: stateToken,
-  sameStateDir: sameStateDir,
+  namesProcess: namesProcess,
+  createDirWatch: createDirWatch,
   createSelfStop: createSelfStop
 };

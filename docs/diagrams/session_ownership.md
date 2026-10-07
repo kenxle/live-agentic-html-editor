@@ -135,8 +135,11 @@ flowchart TD
   (`stop-when-quiet.json`). The helper stops itself after two minutes with no
   open session, no open review window and no Library poll
   (`src/service/self_stop.js`). An open session never lets it stop.
-- A helper or page server whose state directory is removed stops within 15
-  seconds.
+- A new helper clears any old `stop-when-quiet.json`. After a sleep, the two
+  minutes start again from the wake.
+- A helper or page server whose state directory is removed stops within 30
+  seconds (two checks in a row), even with a session open. A restored or synced
+  copy that still names that process keeps it running.
 - The same sweep closes a session that bare `lahe library` started, once it
   owns no reviews and its agent has been quiet for 30 minutes.
 - A session reopened with `lahe session reopen` is not in the `reopened` map,

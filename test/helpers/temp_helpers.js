@@ -27,8 +27,6 @@ const { execFileSync } = require("node:child_process");
 
 const { pollUntil } = require("./poll.js");
 
-const REPO_ROOT = path.join(__dirname, "..", "..");
-
 function realOr(p) {
   try { return fs.realpathSync(p); } catch (err) { return p; }
 }
@@ -187,57 +185,54 @@ async function stopTempHelpers(stateDir) {
 }
 
 /**
- * Helpers and page servers started from THIS checkout on a state dir under the
- * temp folder. Another checkout's runs are left out, so two worktrees testing
- * at once do not count each other.
+ * A folder for one test run. The run's commands get it as TMPDIR, so every
+ * temp state dir the run makes lives under it, and the survivor check counts
+ * only helpers whose command line names it. Another run in the same checkout,
+ * or a helper somebody started by hand, is never counted or touched.
+ *
+ * @returns {string} the run folder
  */
-function strayHelpers() {
-  const repo = realOr(REPO_ROOT);
-  const markers = [path.join(repo, "bin", "lahe.js"), path.join(repo, "src", "service", "static_servers.js")];
-  const roots = tempRoots();
+function makeRunRoot() {
+  return fs.mkdtempSync(path.join(os.tmpdir(), "lahe-run-"));
+}
+
+/** Helpers and page servers whose command line names this run folder. */
+function strayHelpers(runRoot) {
+  if (!runRoot) throw new Error("strayHelpers needs the run folder");
+  const spellings = Array.from(new Set([path.resolve(runRoot), realOr(runRoot)])).map((r) => r.replace(/\/+$/, ""));
   return processes().filter(
-    (p) =>
-      isHelperCommand(p.command) &&
-      markers.some((m) => p.command.indexOf(m + " ") !== -1) &&
-      roots.some((root) => p.command.indexOf(root + "/") !== -1)
+    (p) => isHelperCommand(p.command) && spellings.some((root) => p.command.indexOf(root + "/") !== -1)
   );
 }
 
-/** The pids strayHelpers() sees now: taken before a run, to compare after it. */
-function snapshotStrayHelpers() {
-  return strayHelpers().map((p) => p.pid);
-}
-
 /**
- * After a whole run: every temp-dir helper from this checkout that was not
- * there before the run. It waits up to `graceMs` for ones still shutting down,
- * then stops what is left through each one's own state dir records
- * (stopTempHelpers), and returns the list, so a failing check leaves nothing
- * running behind it.
+ * After a whole run: every helper still running under this run's folder. It
+ * waits up to `graceMs` for ones still shutting down, then stops what is left
+ * through each one's own state dir records (stopTempHelpers), and returns the
+ * list, so a failing check leaves nothing running behind it.
  *
- * @param {number[]} before the snapshot from before the run
- * @returns {Promise<Array<{pid: number, command: string}>>} the survivors
+ * @param {string} runRoot the folder from makeRunRoot
+ * @returns {Promise<Array<{pid: number, command: string, stopped: boolean}>>}
  */
-async function reapStrayHelpers(before, graceMs) {
-  const known = new Set(before || []);
-  const fresh = () => strayHelpers().filter((p) => !known.has(p.pid));
+async function reapStrayHelpers(runRoot, graceMs) {
+  const left = () => strayHelpers(runRoot);
   try {
-    await pollUntil(() => fresh().length === 0, { timeoutMs: typeof graceMs === "number" ? graceMs : 5000, message: "no stray helpers" });
+    await pollUntil(() => left().length === 0, { timeoutMs: typeof graceMs === "number" ? graceMs : 5000, message: "no stray helpers" });
     return [];
   } catch (err) {
-    const left = fresh();
-    const dirs = new Set(left.map((p) => stateDirOf(p.command)).filter(Boolean));
+    const found = left();
+    const dirs = new Set(found.map((p) => stateDirOf(p.command)).filter(Boolean));
     for (const dir of dirs) {
       try { await stopTempHelpers(dir); } catch (err2) { /* reported below as a survivor */ }
     }
-    return left.map((p) => Object.assign({ stopped: !alive(p.pid) }, p));
+    return found.map((p) => Object.assign({ stopped: !alive(p.pid) }, p));
   }
 }
 
 module.exports = {
   helperPidsFor,
   stopTempHelpers,
+  makeRunRoot,
   strayHelpers,
-  snapshotStrayHelpers,
   reapStrayHelpers
 };

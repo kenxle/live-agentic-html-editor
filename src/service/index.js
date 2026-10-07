@@ -660,6 +660,9 @@ async function serve(options) {
     catalog: catalog,
     now: now,
     log: log,
+    // service.json names this helper by these two; a state dir that still
+    // does is ours, whatever its token says (a restored backup, a synced copy).
+    owner: { pid: process.pid, started_at: startedAt },
     graceMs: typeof opts.selfStopGraceMs === "number" ? opts.selfStopGraceMs : envMs("LAHE_SELF_STOP_GRACE_MS"),
     onStop: function (reason) {
       if (reason === selfStopModule.REASON.STATE_DIR_GONE) {

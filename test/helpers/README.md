@@ -54,9 +54,11 @@ waits until they are gone.
 
 Both suites check for survivors. The unit suite runs under
 `scripts/no_stray_helpers.js`, and the browser suite has a global teardown
-(`test/browser/support/no_stray_helpers.js`). Either fails the run when a
-helper or page server it started on a temp state dir is still running, and
-stops it first.
+(`test/browser/support/no_stray_helpers.js`). Each run gets its own TMPDIR
+folder, so every temp state dir it makes lives under it. The check fails the
+run when a helper or page server whose command line names that folder is
+still running, and stops it first. Another run in the same checkout, or a
+helper started by hand, is never counted.
 
 ---
 

@@ -39,6 +39,9 @@ The shape of ownership and takeover is drawn in
   no open review window and no Library poll for two minutes. A session that
   opens in the meantime keeps it up. See `docs/ongoing/LIBRARY.md`, "Helper
   lifetime".
+- **The state directory was removed.** The helper and its page servers stop
+  within 30 seconds, even with a session open, since nothing they write can
+  reach anyone.
 - **Nobody asked for a handoff.** The tool refuses to attach a page or a review
   to a session that does not own it. Takeover is the one way across, and the
   skill tells agents to run it only when a human asks.

@@ -36,6 +36,8 @@ const { onFreePort } = require("../helpers/free_port.js");
 const { stopTempHelpers } = require("../helpers/temp_helpers.js");
 
 const GRACE = 1000;
+// The helper's own pid and start time, as service.json would name it.
+const OWNER = { pid: process.pid, started_at: "2026-10-07T12:00:00.000Z" };
 
 function tempState() {
   const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "lahe-self-stop-")));
@@ -47,7 +49,7 @@ function tempState() {
 /** A self-stop over fakes, with a clock the test moves by hand. */
 function rig(options) {
   const opts = options || {};
-  const w = tempState();
+  const w = opts.state || tempState();
   const state = {
     at: 1000000,
     sessions: opts.sessions || [],
@@ -62,6 +64,8 @@ function rig(options) {
     catalog: { seenAt: () => (state.seenAt === null ? null : new Date(state.seenAt).toISOString()) },
     now: () => state.at,
     graceMs: GRACE,
+    sweepMs: GRACE,
+    owner: OWNER,
     onStop: (reason) => state.stops.push(reason)
   });
   return Object.assign(w, { state, instance });
@@ -135,19 +139,36 @@ test("an open session never lets the helper stop, and it takes the ask back", ()
   assert.deepEqual(r.state.stops, [], "with the ask gone, the next close decides again");
 });
 
-test("a helper whose state directory was removed stops at once", () => {
+test("a helper whose state directory was removed stops on the second check that misses it, even with a session open", () => {
   const r = rig({ sessions: [{ id: "s_open" }] });
   r.instance.check();
   assert.deepEqual(r.state.stops, []);
   fs.rmSync(r.root, { recursive: true, force: true });
   r.instance.check();
+  assert.deepEqual(r.state.stops, [], "one miss is not enough");
+  r.instance.check();
   assert.deepEqual(r.state.stops, [selfStop.REASON.STATE_DIR_GONE]);
+});
+
+test("one missing check followed by the token back is not a gone state dir", () => {
+  const r = rig();
+  const file = stateDir.stateIdPath(r.dir);
+  const token = fs.readFileSync(file, "utf8");
+  fs.renameSync(file, file + ".aside");
+  r.instance.check();
+  fs.renameSync(file + ".aside", file);
+  r.instance.check();
+  assert.equal(fs.readFileSync(file, "utf8"), token);
+  fs.renameSync(file, file + ".aside");
+  r.instance.check();
+  assert.deepEqual(r.state.stops, [], "the misses were not in a row");
 });
 
 test("a state directory removed and made again is not the helper's any more", () => {
   const r = rig();
   fs.rmSync(r.dir, { recursive: true, force: true });
   fs.mkdirSync(r.dir, { recursive: true });
+  r.instance.check();
   r.instance.check();
   assert.deepEqual(r.state.stops, [selfStop.REASON.STATE_DIR_GONE]);
 });
@@ -162,6 +183,7 @@ test("the same directory emptied out is a replaced state dir, whatever its inode
   for (const name of fs.readdirSync(r.dir)) fs.rmSync(path.join(r.dir, name), { recursive: true, force: true });
   assert.equal(fs.statSync(r.dir).ino, before, "the directory itself never changed");
   r.instance.check();
+  r.instance.check();
   assert.deepEqual(r.state.stops, [selfStop.REASON.STATE_DIR_GONE]);
 });
 
@@ -172,13 +194,57 @@ test("the same directory carrying another helper's token is a replaced state dir
   assert.deepEqual(r.state.stops, [selfStop.REASON.STATE_DIR_GONE]);
 });
 
+test("a replacement copy that still names this helper keeps it running; one that names another does not", () => {
+  const r = rig();
+  // A restored backup or a synced copy: another token, but service.json still
+  // names this very process.
+  fs.writeFileSync(stateDir.readyPath(r.dir), JSON.stringify({ pid: OWNER.pid, started_at: OWNER.started_at, port: 1 }));
+  fs.writeFileSync(stateDir.stateIdPath(r.dir), "the-copy's-token\n");
+  r.instance.check();
+  r.instance.check();
+  assert.deepEqual(r.state.stops, [], "the copy still names this helper");
+  // A different helper's service.json and token: this one is not wanted there.
+  fs.writeFileSync(stateDir.readyPath(r.dir), JSON.stringify({ pid: OWNER.pid, started_at: "2026-10-07T13:00:00.000Z", port: 1 }));
+  fs.writeFileSync(stateDir.stateIdPath(r.dir), "a-third-token\n");
+  r.instance.check();
+  assert.deepEqual(r.state.stops, [selfStop.REASON.STATE_DIR_GONE]);
+});
+
+test("a stop request left by an earlier helper does not stop a new one", () => {
+  const w = tempState();
+  ask(w.dir, 0);
+  const r = rig({ state: w });
+  assert.equal(fs.existsSync(stateDir.stopWhenQuietPath(r.dir)), false, "the new helper cleared it");
+  r.state.at += 100 * GRACE;
+  r.instance.check();
+  assert.deepEqual(r.state.stops, []);
+});
+
+test("a wake from sleep restarts the grace, so an open page gets its first heartbeat in", () => {
+  const r = rig();
+  ask(r.dir, r.state.at);
+  r.state.windows = ["r_open"];
+  r.instance.check();
+  // The lid closes for 30 minutes. The page's holder goes stale meanwhile,
+  // and its first heartbeat after the wake has not landed yet.
+  r.state.windows = [];
+  r.state.at += 30 * 60 * 1000;
+  r.instance.check();
+  assert.deepEqual(r.state.stops, [], "the first check after a wake never stops");
+  r.state.at += GRACE;
+  r.instance.check();
+  assert.deepEqual(r.state.stops, [selfStop.REASON.QUIET], "quiet for a full grace after the wake");
+});
+
 test("a token file it briefly cannot read is not a gone state dir", { skip: process.platform === "win32" || process.getuid() === 0 }, (t) => {
   const r = rig();
   const file = stateDir.stateIdPath(r.dir);
   fs.chmodSync(file, 0o000);
   t.after(() => fs.chmodSync(file, 0o600));
   r.instance.check();
-  assert.deepEqual(r.state.stops, []);
+  r.instance.check();
+  r.instance.check();
+  assert.deepEqual(r.state.stops, [], "EACCES never counts, however many times");
   fs.chmodSync(file, 0o600);
   r.instance.check();
   assert.deepEqual(r.state.stops, [], "readable again and unchanged");

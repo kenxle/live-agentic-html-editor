@@ -1758,12 +1758,23 @@ function runServer(file, sessionId, id, instance, rootInput, dir, logicalRootInp
     stateDir.writeAtomic(file, JSON.stringify(meta, null, 2) + "\n");
   }
   function stop() { server.close(function () { process.exit(0); }); }
-  // A page server whose state directory is gone (or replaced) has no record
-  // and no helper left to answer for it, so it stops too (self_stop.js).
-  var dirToken = selfStop.stateToken(dir);
+  // A page server whose state directory is gone (or replaced) has no helper
+  // left to answer for it, so it stops too (self_stop.js, rule 2). Its own
+  // record is the ownership evidence: a restored or synced copy of the state
+  // dir that still names this server, by pid and instance, keeps it running.
+  // So it only stops when its record no longer names it, and there is no
+  // record of its own left to mark stopped.
+  var dirWatch = selfStop.createDirWatch({
+    dir: dir,
+    stillOurs: function () {
+      return selfStop.namesProcess(file, function (meta) {
+        return !!meta && meta.pid === process.pid && meta.instance === instance;
+      });
+    }
+  });
   var dirSweepMs = Number(process.env.LAHE_SELF_STOP_SWEEP_MS);
   var dirTimer = setInterval(function () {
-    if (!selfStop.sameStateDir(dir, dirToken)) {
+    if (dirWatch.check()) {
       clearInterval(dirTimer);
       stop();
     }

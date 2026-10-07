@@ -2,19 +2,25 @@
 // page server it started on a temp state dir is still running at the end.
 //
 // See test/helpers/temp_helpers.js for why (1,892 leaked helpers on one Mac)
-// and for the rules: only processes started from this checkout, on a state dir
-// under the temp folder, and new since the run began. Survivors are stopped
+// and for the rules: only processes whose command line names this run's own
+// TMPDIR. Survivors are stopped
 // through their own state dir's records before the run is failed, so a red
 // check leaves nothing behind.
 
 "use strict";
 
-const { snapshotStrayHelpers, reapStrayHelpers } = require("../../helpers/temp_helpers.js");
+const { makeRunRoot, reapStrayHelpers } = require("../../helpers/temp_helpers.js");
 
 module.exports = async function globalSetup() {
-  const before = snapshotStrayHelpers();
+  // The run's own temp folder. Workers start after this and inherit the
+  // environment, so every temp state dir the suite makes lives under it, and
+  // only helpers that name it are counted.
+  const runRoot = makeRunRoot();
+  process.env.TMPDIR = runRoot;
+  process.env.TMP = runRoot;
+  process.env.TEMP = runRoot;
   return async function globalTeardown() {
-    const left = await reapStrayHelpers(before);
+    const left = await reapStrayHelpers(runRoot);
     if (left.length) {
       throw new Error(
         left.length + " helper process" + (left.length === 1 ? "" : "es") +

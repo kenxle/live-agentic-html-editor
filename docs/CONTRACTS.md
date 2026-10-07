@@ -1543,12 +1543,22 @@ page window is still held. A close that leaves the helper up writes
 seconds (`src/service/self_stop.js`) and stops itself once it has seen no open
 agent session, no open review window and no Library poll for
 `CATALOG.LIBRARY_SEEN_MS` since the latest of the ask, its own start, the last
-open window and the last Library poll. An open session never lets it stop, and
-removes the file. Separately, a helper or static server whose state directory
-is gone, or replaced by a different directory at the same path, stops at once.
-`LAHE_SELF_STOP_GRACE_MS` and `LAHE_SELF_STOP_SWEEP_MS` shorten both for tests
-only. Review
-history remains on disk. `session reopen` restores the helper and remembered
+open window, the last Library poll and the last wake from sleep. A check that
+comes more than four intervals late counts as a wake. An open session never
+lets it stop, and removes the file. A helper starting up removes any old file,
+so a close from before it existed never stops it.
+
+Separately, every helper and static server reads the state dir's random token,
+`<state>/state-id`, when it starts. It stops within 30 seconds (two 15-second
+checks in a row) once that file is missing (ENOENT only) or holds another
+token, and its own evidence no longer names it: `service.json`'s pid and
+`started_at` for the helper, its own record's pid and instance for a static
+server. This holds even with a session open. An unreadable file never counts,
+and a restored or synced copy of the dir that still names the process keeps it
+running. `LAHE_SELF_STOP_GRACE_MS` and `LAHE_SELF_STOP_SWEEP_MS` shorten both
+for tests only.
+
+Review history remains on disk. `session reopen` restores the helper and remembered
 static servers. A caller-supplied `--origin` and every application dev server
 are externally owned, so LAHE never terminates them.
 

@@ -6,29 +6,32 @@
 // This is the unit suite's survivor check; the browser suite has the same
 // check as a Playwright global teardown (test/browser/support/no_stray_helpers.js).
 // See test/helpers/temp_helpers.js for why and for exactly which processes
-// count. The exit code is the command's own when it failed, 1 when it passed
+// count: only helpers whose command line names this run's own TMPDIR. The exit code is the command's own when it failed, 1 when it passed
 // but left a helper running, and 0 otherwise.
 
 "use strict";
 
 const { spawn } = require("node:child_process");
-const { snapshotStrayHelpers, reapStrayHelpers } = require("../test/helpers/temp_helpers.js");
+const { makeRunRoot, reapStrayHelpers } = require("../test/helpers/temp_helpers.js");
 
 async function main(argv) {
   if (!argv.length) {
     process.stderr.write("usage: node scripts/no_stray_helpers.js <command> [args...]\n");
     return 2;
   }
-  const before = snapshotStrayHelpers();
+  // The run's own temp folder: everything the run starts lives under it, and
+  // only what names it is counted.
+  const runRoot = makeRunRoot();
+  const env = Object.assign({}, process.env, { TMPDIR: runRoot, TMP: runRoot, TEMP: runRoot });
   const code = await new Promise((resolve) => {
-    const child = spawn(argv[0], argv.slice(1), { stdio: "inherit" });
+    const child = spawn(argv[0], argv.slice(1), { stdio: "inherit", env });
     child.on("error", (err) => {
       process.stderr.write("no_stray_helpers: " + err.message + "\n");
       resolve(1);
     });
     child.on("exit", (exitCode, signal) => resolve(signal ? 1 : exitCode));
   });
-  const left = await reapStrayHelpers(before);
+  const left = await reapStrayHelpers(runRoot);
   if (left.length) {
     process.stderr.write(
       "\nno_stray_helpers: " + left.length + " helper process" + (left.length === 1 ? "" : "es") +
