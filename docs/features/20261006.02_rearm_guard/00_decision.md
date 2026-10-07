@@ -1,15 +1,8 @@
 # Re-arm guard: agents keep watching without having to remember
 
-## To close this out
+## Needs your attention
 
-- [x] **Re-arm guard.** Shipped and installed (see Status below).
-- [x] **24-hour background limit.** Set in your Claude Code settings.
-- [x] **Your call: stop the low-memory shutdowns.** Decided 2026-10-07: leave it for now. The setting stays off. Claude Code sometimes stops background commands when the Mac is short on memory, and the watcher is one of them. Adding `CLAUDE_CODE_DISABLE_BG_SHELL_PRESSURE_REAP=1` to your Claude Code settings turns that off for sessions started afterward. Say yes or no on this line. The memory shortage that set it off is fixed (next item), so this matters less than it did.
-  - **What actually stops the watcher, checked against Anthropic's docs.** It is Claude Code itself, not macOS. Claude Code's docs say it "stops your running background tasks when the operating system reports critical memory pressure, provided the session has been idle for at least 30 minutes and no turn or subagent is running" ([interactive mode docs](https://code.claude.com/docs/en/interactive-mode)). The earlier session was right that macOS isn't killing it.
-  - **The trigger misfires, per open bug reports.** Users report the stop firing on machines with plenty of memory: [#90109](https://github.com/anthropics/claude-code/issues/90109) on a Mac, and [#92228](https://github.com/anthropics/claude-code/issues/92228) and [#78674](https://github.com/anthropics/claude-code/issues/78674) on Linux. All three are still open.
-  - **Last night was likely real pressure.** The leak had filled 47 of 48 GB of swap. So this stop was probably justified, but the misfire bugs mean it can also happen on a healthy Mac.
-  - **Recommendation: yes.** The watcher uses about 5 MB, and the setting is Anthropic's documented way to turn this off.
-- [ ] **Leaked test helpers.** Found 2026-10-07: test runs had left 1,892 Lahe helpers running. They filled swap and drove kernel_task's CPU and battery drain. I stopped them. A builder is fixing the cause: the helper stops itself once nothing is using it, and the tests stop what they start. I'll show you the PR before merging. When it merges, this page is done.
+Nothing. One thing is still in progress: the fix that stops leftover test helpers from piling up again (PR 35). It's being corrected after GitHub's Linux run failed. When it merges, this page is done.
 
 ## Status: shipped
 
@@ -19,9 +12,9 @@
   - Ending a review in the rail no longer makes its agent keep restarting a watcher.
   - If Lahe's folder moved or was deleted, the hook used to show an error on every turn. Now it does nothing quietly.
 - **Seen working.** This session's watcher hit its 2-hour limit, and the guard blocked the end of the turn with the exact restart command.
-- **One gap found.** Overnight, Claude Code stopped the watcher because the Mac was low on memory, and it says not to restart a watcher stopped for that reason. The guard still asks for a restart, so the two conflict. Starting Claude Code with `CLAUDE_CODE_DISABLE_BG_SHELL_PRESSURE_REAP=1` stops those shutdowns. That setting is your call.
+- **One gap found.** Overnight, Claude Code stopped the watcher because the Mac was low on memory, and it says not to restart a watcher stopped for that reason. The guard still asks for a restart, so the two conflict. You decided to leave the setting that stops those shutdowns off for now (see the last section).
 
-**Short version.** Agents stopped re-arming because Claude Code took away the one tool that made watching automatic. The fix is to put the guarantee back in Claude Code itself: a small hook that won't let an agent finish its turn while one of its Lahe reviews has nobody watching. One decision is at the end.
+**Short version.** Agents stopped re-arming because Claude Code took away the one tool that made watching automatic. The fix is to put the guarantee back in Claude Code itself: a small hook that won't let an agent finish its turn while one of its Lahe reviews has nobody watching.
 
 ## What broke
 
@@ -75,4 +68,12 @@ flowchart TD
 
 ## The decision
 
-**Build the re-arm guard as described?** And separately: **set `BASH_MAX_TIMEOUT_MS` to 24 hours** in your Claude Code settings, so idle watchers rarely expire? That second one is a setting on your machine, so it's your call.
+Decided 2026-10-06: build the guard, and set `BASH_MAX_TIMEOUT_MS` to 24 hours. Both are done.
+
+## Low-memory shutdowns: decided, left off
+
+- **What actually stops the watcher, checked against Anthropic's docs.** It is Claude Code itself, not macOS. Claude Code's docs say it "stops your running background tasks when the operating system reports critical memory pressure, provided the session has been idle for at least 30 minutes and no turn or subagent is running" ([interactive mode docs](https://code.claude.com/docs/en/interactive-mode)). The earlier session was right that macOS isn't killing it.
+- **The trigger misfires, per open bug reports.** Users report the stop firing on machines with plenty of memory: [#90109](https://github.com/anthropics/claude-code/issues/90109) on a Mac, and [#92228](https://github.com/anthropics/claude-code/issues/92228) and [#78674](https://github.com/anthropics/claude-code/issues/78674) on Linux. All three are still open.
+- **Last night was likely real pressure.** The leak had filled 47 of 48 GB of swap. So this stop was probably justified, but the misfire bugs mean it can also happen on a healthy Mac.
+- **Recommendation: yes.** The watcher uses about 5 MB, and the setting is Anthropic's documented way to turn this off.
+- **Decision 2026-10-07:** leave the setting off for now.
