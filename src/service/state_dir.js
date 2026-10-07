@@ -77,7 +77,11 @@ var FILES = {
   // or the Library had polled. This file asks the helper to stop itself once
   // that reason is gone (src/service/self_stop.js). Written by the CLI, removed
   // by the helper.
-  stopWhenQuiet: "stop-when-quiet.json"
+  stopWhenQuiet: "stop-when-quiet.json",
+  // A random token, written once per state dir. A helper or page server that
+  // finds it missing or changed knows its directory was removed or replaced
+  // (src/service/self_stop.js).
+  stateId: "state-id"
 };
 
 var REVIEWS_DIR = "reviews";
@@ -253,6 +257,11 @@ function assertSafeReviewId(reviewId) {
 
 function readyPath(dir) {
   return path.join(dir, FILES.ready);
+}
+
+/** The state dir's random token (src/service/self_stop.js). */
+function stateIdPath(dir) {
+  return path.join(dir, FILES.stateId);
 }
 
 /** The ask to stop once quiet, left by a deferred final close. */
@@ -508,6 +517,7 @@ module.exports = {
   resolveWithin: resolveWithin,
   readyPath: readyPath,
   stopWhenQuietPath: stopWhenQuietPath,
+  stateIdPath: stateIdPath,
   helperLogPath: helperLogPath,
   windowsPath: windowsPath,
   reviewsRoot: reviewsRoot,

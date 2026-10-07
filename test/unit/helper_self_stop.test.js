@@ -152,6 +152,38 @@ test("a state directory removed and made again is not the helper's any more", ()
   assert.deepEqual(r.state.stops, [selfStop.REASON.STATE_DIR_GONE]);
 });
 
+// Linux can give a directory made again the very inode the removed one had, so
+// the check cannot lean on the filesystem's idea of identity. These two keep
+// the same directory (same inode, same device on every platform) and change
+// only what is in it, which is what a reused inode looks like from inside.
+test("the same directory emptied out is a replaced state dir, whatever its inode", () => {
+  const r = rig();
+  const before = fs.statSync(r.dir).ino;
+  for (const name of fs.readdirSync(r.dir)) fs.rmSync(path.join(r.dir, name), { recursive: true, force: true });
+  assert.equal(fs.statSync(r.dir).ino, before, "the directory itself never changed");
+  r.instance.check();
+  assert.deepEqual(r.state.stops, [selfStop.REASON.STATE_DIR_GONE]);
+});
+
+test("the same directory carrying another helper's token is a replaced state dir", () => {
+  const r = rig();
+  fs.writeFileSync(stateDir.stateIdPath(r.dir), "someone-else\n");
+  r.instance.check();
+  assert.deepEqual(r.state.stops, [selfStop.REASON.STATE_DIR_GONE]);
+});
+
+test("a token file it briefly cannot read is not a gone state dir", { skip: process.platform === "win32" || process.getuid() === 0 }, (t) => {
+  const r = rig();
+  const file = stateDir.stateIdPath(r.dir);
+  fs.chmodSync(file, 0o000);
+  t.after(() => fs.chmodSync(file, 0o600));
+  r.instance.check();
+  assert.deepEqual(r.state.stops, []);
+  fs.chmodSync(file, 0o600);
+  r.instance.check();
+  assert.deepEqual(r.state.stops, [], "readable again and unchanged");
+});
+
 test("in process: serve() with a stop-when-quiet ask closes itself and reports why", async (t) => {
   const w = tempState();
   let reason = null;

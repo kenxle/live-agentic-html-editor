@@ -1760,10 +1760,10 @@ function runServer(file, sessionId, id, instance, rootInput, dir, logicalRootInp
   function stop() { server.close(function () { process.exit(0); }); }
   // A page server whose state directory is gone (or replaced) has no record
   // and no helper left to answer for it, so it stops too (self_stop.js).
-  var dirIdentity = selfStop.identity(dir);
+  var dirToken = selfStop.stateToken(dir);
   var dirSweepMs = Number(process.env.LAHE_SELF_STOP_SWEEP_MS);
   var dirTimer = setInterval(function () {
-    if (selfStop.identity(dir) !== dirIdentity) {
+    if (!selfStop.sameStateDir(dir, dirToken)) {
       clearInterval(dirTimer);
       stop();
     }

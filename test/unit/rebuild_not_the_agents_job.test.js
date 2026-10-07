@@ -58,6 +58,14 @@ function markdownReview(body, options) {
   fs.writeFileSync(source, body);
 
   const rendered = markdown.writeArtifact(dir, SESSION, source);
+  // The source and its render were written before the review began, and the
+  // test says so with explicit mtimes. Left at wall time, they could land in
+  // the same millisecond an item is stamped, a fraction after it (mtimeMs
+  // 1000.4 against a created_at of 1000). On a fast Linux runner the handled
+  // check then read "written since" and retired an item that nothing touched.
+  const before = new Date(Date.now() - 60 * 60 * 1000);
+  fs.utimesSync(source, before, before);
+  fs.utimesSync(rendered.target, before, before);
   const log = logModule.createEventLog({ dir: dir });
   let now = opts.startAt || 1000;
   const reviews = reviewsModule.createReviews({
@@ -507,7 +515,8 @@ function mountOnRail(item, longAgo) {
 }
 
 test("a card the handled check held open never goes late, however long it sits", () => {
-  const longAgo = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+  // Before markdownReview's own file mtimes, which sit an hour back.
+  const longAgo = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString();
   const held = railItem({ id: "itm_held_open", updated_at: longAgo, created_at: longAgo });
   held[record.FIELD.REPLY] = { status: "handled", agent: "claude", at: longAgo };
   held[record.FIELD.HANDLED_NOT_ON_PAGE] = true;
@@ -551,7 +560,8 @@ test("an agent that rewrote the page in its own words is not second-guessed", ()
 test("touchedSince is the gate, and it fails toward leaving the item alone", () => {
   const setup = markdownReview("# Guide\n\n## One\n\nThe first paragraph.\n");
   const meta = rebuildModule.readMeta(setup.dir, "review-md");
-  const longAgo = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+  // Before markdownReview's own file mtimes, which sit an hour back.
+  const longAgo = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString();
 
   // Committed an hour ago, and the files were written since: not ours to grade.
   assert.equal(handledCheck.touchedSince(meta, anEdit({ updated_at: longAgo, created_at: longAgo })), true);
