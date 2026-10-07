@@ -98,3 +98,30 @@ test("an svg sized in percent or other units falls back to its viewBox", () => {
   assert.deepEqual([em.width, em.height], [100, 40]);
   assert.equal(zoom.svgOwnSize(fakeSvg({}, null)), null);
 });
+
+test("the button sits at the top right of the picture's visible part", () => {
+  const S = zoom.BUTTON_SIZE;
+  const I = zoom.BUTTON_INSET;
+  // Wholly on screen, no rail: the picture's own corner.
+  assert.deepEqual(zoom.buttonSpot({ left: 300, top: 200, right: 980, bottom: 300 }, 1280, 800, null), {
+    left: 980 - I - S,
+    top: 200 + I
+  });
+  // The rail open from x 872: the corner moves left of it.
+  assert.deepEqual(zoom.buttonSpot({ left: 128, top: 200, right: 1152, bottom: 600 }, 1280, 800, 872), {
+    left: 872 - I - S,
+    top: 200 + I
+  });
+  // Scrolled so the top is off screen: the corner is at the viewport's top.
+  assert.deepEqual(zoom.buttonSpot({ left: 300, top: -1500, right: 900, bottom: 900 }, 1280, 800, null), {
+    left: 900 - I - S,
+    top: I
+  });
+});
+
+test("no button when no visible part is big enough to hold one", () => {
+  // Under the rail all but 20px.
+  assert.equal(zoom.buttonSpot({ left: 852, top: 200, right: 1200, bottom: 600 }, 1280, 800, 872), null);
+  // Only a sliver showing at the bottom of the window.
+  assert.equal(zoom.buttonSpot({ left: 300, top: 790, right: 900, bottom: 1400 }, 1280, 800, null), null);
+});

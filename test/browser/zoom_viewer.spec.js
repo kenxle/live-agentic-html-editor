@@ -148,6 +148,66 @@ test.describe("zoom viewer: the hover button", () => {
     });
   });
 
+  test("rail open: the button keeps clear of the rail, on the graph's visible part", async ({ page }) => {
+    await open(page);
+    await page.evaluate(() => window.__lahe.rail.collapse(false));
+    const rail = await page.evaluate(() => window.__lahe.rail.geometry().rail);
+    expect(rail, "the rail is open").not.toBeNull();
+    // Over the left half of the graph, which is clear of the rail.
+    await page.evaluate(() => document.querySelector("#mermaid-1").scrollIntoView({ block: "center" }));
+    const svg = await page.locator("#mermaid-1").boundingBox();
+    expect(svg.x + svg.width, "the graph passes under the rail").toBeGreaterThan(rail.left);
+    await page.mouse.move(svg.x + 40, svg.y + svg.height / 2, { steps: 4 });
+    const button = await buttonShownFor(page, "mermaid-1");
+    const b = button.rect;
+    const overlaps = b.x < rail.right && rail.left < b.x + b.width && b.y < rail.bottom && rail.top < b.y + b.height;
+    expect(overlaps, "the button is not on the rail").toBe(false);
+    expect(b.x).toBeGreaterThanOrEqual(svg.x);
+    expect(b.x + b.width).toBeLessThanOrEqual(rail.left);
+    expect(b.y).toBeGreaterThanOrEqual(svg.y);
+    expect(b.y + b.height).toBeLessThanOrEqual(svg.y + svg.height);
+  });
+
+  test("a tall graph scrolled past its top: the button is on screen, on the graph", async ({ page }) => {
+    await open(page);
+    // The middle of the graph in the middle of the window, so its top is far above.
+    await page.evaluate(() => {
+      const r = document.getElementById("tall").getBoundingClientRect();
+      window.scrollBy(0, r.top + r.height / 2 - window.innerHeight / 2);
+    });
+    const svg = await page.locator("#tall").boundingBox();
+    expect(svg.y, "the graph's top is off screen").toBeLessThan(0);
+    await page.mouse.move(svg.x + 100, 400, { steps: 4 });
+    const b = (await buttonShownFor(page, "tall")).rect;
+    const vp = page.viewportSize();
+    expect(b.y).toBeGreaterThanOrEqual(0);
+    expect(b.y + b.height).toBeLessThanOrEqual(vp.height);
+    expect(b.x).toBeGreaterThanOrEqual(svg.x);
+    expect(b.x + b.width).toBeLessThanOrEqual(svg.x + svg.width);
+  });
+
+  test("scrolling while a graph is hovered: the button follows", async ({ page }) => {
+    await open(page);
+    await page.evaluate(() => document.querySelector("#tall").scrollIntoView({ block: "start" }));
+    const svg = await page.locator("#tall").boundingBox();
+    await page.mouse.move(svg.x + 100, svg.y + 200, { steps: 4 });
+    const before = (await buttonShownFor(page, "tall")).rect;
+    // The page moves under a still pointer: down 300, so the graph's top is
+    // above the window and the button has to come down with the visible part.
+    await page.evaluate(() => window.scrollBy(0, 300));
+    await pollPage(
+      page,
+      (y) => {
+        const b = window.__lahe.handle.zoom.info().button;
+        return b.shown && Math.abs(b.rect.y - y) < 1;
+      },
+      before.y,
+      { message: "the button to stay at the top of the visible part after scrolling" }
+    );
+    const top = (await page.locator("#tall").boundingBox()).y;
+    expect(top, "the graph's own top moved off screen").toBeLessThan(0);
+  });
+
   test("a nested svg gets no button of its own: the outer one does", async ({ page }) => {
     await open(page);
     await page.evaluate(() => document.querySelector("#outer").scrollIntoView({ block: "center" }));
@@ -436,15 +496,19 @@ test.describe("zoom viewer: screenshots", () => {
     test("hover button and zoomed viewer, " + scheme, async ({ page }) => {
       await page.setViewportSize({ width: 1280, height: 800 });
       await open(page, scheme === "dark" ? "?dark" : "");
-      await hoverOn(page, "#mermaid-1");
-      const button = await buttonShownFor(page, "mermaid-1");
-      await page.mouse.move(centre(button.rect).x - 120, centre(button.rect).y + 30);
+      // The rail open over the wide graph's right end, so the picture shows the
+      // button kept clear of it.
+      await page.evaluate(() => window.__lahe.rail.collapse(false));
+      await page.evaluate(() => document.querySelector("#mermaid-1").scrollIntoView({ block: "center" }));
+      const svg = await page.locator("#mermaid-1").boundingBox();
+      await page.mouse.move(svg.x + 160, svg.y + svg.height / 2, { steps: 4 });
       await buttonShownFor(page, "mermaid-1");
       await pollPage(page, () => window.__lahe.handle.zoom.info().button.opacity === 1, undefined, {
         message: "the button's fade-in to finish"
       });
       await page.screenshot({ path: path.join(SHOT_DIR, "button_" + scheme + ".png") });
 
+      await page.evaluate(() => window.__lahe.rail.collapse(true));
       const viewer = await openViewerOn(page, "#mermaid-1");
       const at = { x: viewer.contentRect.x + viewer.contentRect.width * 0.35, y: viewer.contentRect.y + viewer.contentRect.height / 2 };
       await page.mouse.move(at.x, at.y);

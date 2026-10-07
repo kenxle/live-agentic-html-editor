@@ -64,10 +64,11 @@ Where the build reads the spec a certain way:
 - **Keyboard.** When focus lands on a page element that holds exactly one qualifying picture, such as a link around an image, the button shows. Tab moves focus to the button, and Shift-Tab goes back. Inside the viewer, Tab cycles through the toolbar.
 - **Keys in the viewer.** Plus and minus zoom, 0 fits, 1 shows actual size, and the arrow keys pan the way a map does. Esc closes. Keys the viewer uses do not reach the page.
 - **Background.** A transparent graph is drawn on the background color it had on the page.
+- **Where the button sits.** It goes at the top right of the picture's visible part, not its own corner. The visible part is the picture cut to the window and, while the rail is open, to the left of the rail. A tall graph scrolled past its top still shows the button on screen, and a wide graph passing under the open rail gets the button left of the rail. If no visible part is big enough to hold the button, there is none. It follows scrolling and resizing, at most once a frame.
 
 Proof: `test/browser/zoom_viewer.spec.js` covers each row of the table above. `test/unit/zoom.test.js` covers the size rules and the zoom arithmetic. The screenshots below come from that spec's screenshot test (`LAHE_ZOOM_SHOTS=1`), and the run that produced them also passed every other test in the file.
 
-Hover button on a wide Mermaid-style graph, light and dark:
+Hover button on a wide Mermaid-style graph with the rail open over its right end, light and dark:
 
 ![Hover button, light page](button_light.png)
 

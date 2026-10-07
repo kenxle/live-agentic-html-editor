@@ -875,6 +875,10 @@
         if (comments.pickMode().active === true) return true;
         if (editing.isEditing()) return true;
         return typeof editing.isInEditState === "function" && editing.isInEditState();
+      },
+      // The button keeps clear of the rail only while the rail is open.
+      railOpen: function () {
+        return !rail.isCollapsed() && !rail.isPresenting();
       }
     });
     zoom.bind();
