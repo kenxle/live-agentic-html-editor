@@ -5,6 +5,10 @@
 - [x] **Re-arm guard.** Shipped and installed (see Status below).
 - [x] **24-hour background limit.** Set in your Claude Code settings.
 - [ ] **Your call: stop the low-memory shutdowns.** Claude Code sometimes stops background commands when the Mac is short on memory, and the watcher is one of them. Adding `CLAUDE_CODE_DISABLE_BG_SHELL_PRESSURE_REAP=1` to your Claude Code settings turns that off for sessions started afterward. Say yes or no on this line. The memory shortage that set it off is fixed (next item), so this matters less than it did.
+  - **What actually stops the watcher, checked against Anthropic's docs.** It is Claude Code itself, not macOS. Claude Code's docs say it "stops your running background tasks when the operating system reports critical memory pressure, provided the session has been idle for at least 30 minutes and no turn or subagent is running" ([interactive mode docs](https://code.claude.com/docs/en/interactive-mode)). The earlier session was right that macOS isn't killing it.
+  - **The trigger misfires, per open bug reports.** Users report the stop firing on machines with plenty of memory: [#90109](https://github.com/anthropics/claude-code/issues/90109) on a Mac, and [#92228](https://github.com/anthropics/claude-code/issues/92228) and [#78674](https://github.com/anthropics/claude-code/issues/78674) on Linux. All three are still open.
+  - **Last night was likely real pressure.** The leak had filled 47 of 48 GB of swap. So this stop was probably justified, but the misfire bugs mean it can also happen on a healthy Mac.
+  - **Recommendation: yes.** The watcher uses about 5 MB, and the setting is Anthropic's documented way to turn this off.
 - [ ] **Leaked test helpers.** Found 2026-10-07: test runs had left 1,892 Lahe helpers running. They filled swap and drove kernel_task's CPU and battery drain. I stopped them. A builder is fixing the cause: the helper stops itself once nothing is using it, and the tests stop what they start. I'll show you the PR before merging. When it merges, this page is done.
 
 ## Status: shipped
