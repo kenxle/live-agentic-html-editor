@@ -1,5 +1,12 @@
 # Re-arm guard: agents keep watching without having to remember
 
+## To close this out
+
+- [x] **Re-arm guard.** Shipped and installed (see Status below).
+- [x] **24-hour background limit.** Set in your Claude Code settings.
+- [ ] **Your call: stop the low-memory shutdowns.** Claude Code sometimes stops background commands when the Mac is short on memory, and the watcher is one of them. Adding `CLAUDE_CODE_DISABLE_BG_SHELL_PRESSURE_REAP=1` to your Claude Code settings turns that off for sessions started afterward. Say yes or no on this line. The memory shortage that set it off is fixed (next item), so this matters less than it did.
+- [ ] **Leaked test helpers.** Found 2026-10-07: test runs had left 1,892 Lahe helpers running. They filled swap and drove kernel_task's CPU and battery drain. I stopped them. A builder is fixing the cause: the helper stops itself once nothing is using it, and the tests stop what they start. I'll show you the PR before merging. When it merges, this page is done.
+
 ## Status: shipped
 
 - **Merged.** The guard is on main in pull request 31. GitHub's run and the full local suite both passed.
