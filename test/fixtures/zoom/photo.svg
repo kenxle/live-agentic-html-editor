@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="480" height="320" viewBox="0 0 480 320">
+<rect width="480" height="320" fill="#e8d6c0"/>
+<circle cx="240" cy="160" r="110" fill="#c0603a"/>
+<text x="240" y="300" text-anchor="middle" font-family="Arial" font-size="20" fill="#3a2a1f">linked photo</text>
+</svg>

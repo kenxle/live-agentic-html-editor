@@ -66,6 +66,7 @@
         conflictToast: require("./conflict_toast.js"),
         sync: require("./sync.js"),
         editing: require("./editing.js"),
+        zoom: require("./zoom.js"),
         protect: require("./protect.js"),
         exporter: require("./export.js")
       }),
@@ -859,6 +860,25 @@
     });
     editing.bind({ page: page });
 
+    // The zoom viewer: a magnifier button on graphs and large images, opening a
+    // full-screen view to zoom and pan (docs/features/20261007.01_zoom_viewer).
+    // It reads the page and draws only in the library's own surface, so it is
+    // bound once for the life of the page and a remount leaves it alone. The
+    // three gates are handed in as one question, so the file knows nothing
+    // about editing, pick mode or presenting: no button while any is on.
+    var zoom = opts.zoom || ns.zoom.createZoom({
+      document: doc,
+      window: win,
+      highlights: comments.highlights,
+      blocked: function () {
+        if (rail.isPresenting()) return true;
+        if (comments.pickMode().active === true) return true;
+        if (editing.isEditing()) return true;
+        return typeof editing.isInEditState === "function" && editing.isInEditState();
+      }
+    });
+    zoom.bind();
+
     // The Edits tab's contents, inside the rail's own Edits pane, the way the
     // Active tab lives inside the Active one. It is created after the edit
     // surface because it subscribes to it: a hand edit becomes a row on the
@@ -913,6 +933,8 @@
 
     function applyPresent(presenting) {
       if (presenting) {
+        zoom.close();
+        zoom.hideButton();
         comments.closeAll();
         comments.unbind();
         editing.teardown();
@@ -1955,6 +1977,8 @@
       allStore: store,
       rail: rail,
       comments: comments,
+      // The zoom viewer. info() and probe() are how a spec reads a closed root.
+      zoom: zoom,
       // The document style switch, and a way to fetch its list again.
       styleSwitch: styleSwitch,
       // The keep request's own handler, the one the panel's button runs.
@@ -2022,6 +2046,7 @@
         pageObserver = null;
         protect.uninstall();
         editing.teardown();
+        zoom.teardown();
         comments.teardown();
         tab.unmount();
         editsTab.unmount();

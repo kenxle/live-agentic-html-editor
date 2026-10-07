@@ -53,3 +53,28 @@ The SVG copy must not carry the page's ids into the viewer in a way that breaks 
 ## Acceptance
 
 Every row passes in Chromium, and `npm run gate` passes on the merged head. Screenshots, light and dark, are in this folder. No analytics and no flag: this is a reviewer convenience with nothing to measure.
+
+## Built
+
+The feature is one new layer module, `src/layer/zoom.js`. It loads after `editing.js` and before `replay.js`. `index.js` boots it right after the editing surface and passes it one "blocked" check that covers editing, pick mode and presenting. The button and the viewer sit in their own closed shadow root inside the library's one surface. The viewer is stacked one level above the rail, so it covers the rail and its pill.
+
+Where the build reads the spec a certain way:
+
+- **Wide graphs.** A wide left-to-right Mermaid chart shrunk to the page width is often under 120 pixels tall. The decided rule says "all Mermaid included", so an svg also qualifies when it is shown smaller than its own viewBox, or when Mermaid drew it. It still needs at least 40 pixels on each side.
+- **Keyboard.** When focus lands on a page element that holds exactly one qualifying picture, such as a link around an image, the button shows. Tab moves focus to the button, and Shift-Tab goes back. Inside the viewer, Tab cycles through the toolbar.
+- **Keys in the viewer.** Plus and minus zoom, 0 fits, 1 shows actual size, and the arrow keys pan the way a map does. Esc closes. Keys the viewer uses do not reach the page.
+- **Background.** A transparent graph is drawn on the background color it had on the page.
+
+Proof: `test/browser/zoom_viewer.spec.js` covers each row of the table above. `test/unit/zoom.test.js` covers the size rules and the zoom arithmetic. The screenshots below come from that spec's screenshot test (`LAHE_ZOOM_SHOTS=1`), and the run that produced them also passed every other test in the file.
+
+Hover button on a wide Mermaid-style graph, light and dark:
+
+![Hover button, light page](button_light.png)
+
+![Hover button, dark page](button_dark.png)
+
+The open viewer zoomed to 164%, light and dark:
+
+![Viewer zoomed in, light page](viewer_light.png)
+
+![Viewer zoomed in, dark page](viewer_dark.png)
