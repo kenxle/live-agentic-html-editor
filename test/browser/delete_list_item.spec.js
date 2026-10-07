@@ -86,4 +86,31 @@ test.describe("Delete block on a bullet", () => {
     expect(items).toHaveLength(1);
     expect(items[0].kind).toBe("delete");
   });
+
+  test("the button says Delete item in a bullet and Delete block in a paragraph", async ({ page }) => {
+    await fw.openFixture(page, server, "blog.html");
+    const label = () => page.evaluate(() => window.__lahe.handle.editing.buttonNode("delete").textContent);
+
+    await fw.openEdit(page, "#list li:nth-child(1)", 2);
+    await pollPage(page, () => window.__lahe.handle.editing.buttonNode("delete").textContent === "Delete item", undefined, {
+      message: "the bar to say Delete item in a bullet"
+    });
+    await fw.commitByEsc(page);
+
+    await fw.openEdit(page, "#p2", 2);
+    expect(await label(), "a paragraph keeps Delete block").toBe("Delete block");
+  });
+
+  test("undo brings the bullet back", async ({ page }) => {
+    await fw.openFixture(page, server, "blog.html");
+    await fw.openEdit(page, "#list li:nth-child(2)", 3);
+    await clickDelete(page);
+    expect(await listItems(page)).toEqual(["Fewer meetings"]);
+
+    await page.keyboard.press("ControlOrMeta+KeyZ");
+    await pollPage(page, () => document.querySelectorAll("#list li").length === 2, undefined, {
+      message: "undo to put the bullet back"
+    });
+    expect(await listItems(page)).toEqual(["Fewer meetings", "Longer blocks"]);
+  });
 });

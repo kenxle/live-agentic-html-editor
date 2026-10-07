@@ -237,6 +237,8 @@
 
   var HINT_EDIT_STATE = "Click + Write here to add text. Esc to finish.";
   var INSERT_LINE_LABEL = "+ Write here";
+  var DELETE_BLOCK_LABEL = "Delete block";
+  var DELETE_ITEM_LABEL = "Delete item";
   var PLACEHOLDER = "Start writing";
   var CEILING_WARN = "This edit is getting long. Press Esc to send it. Once the agent places it, you can keep writing.";
   var CEILING_FULL = "This edit is full. Press Esc to send it. Once the agent places it, you can keep writing.";
@@ -880,6 +882,12 @@
       var units = sessionUnits();
       for (var i = 0; i < units.length; i += 1) if (contains(units[i], node)) return units[i];
       return null;
+    }
+
+    // A list item the caret is in, when its list holds another item.
+    function deletableItem(unit) {
+      if (!unit || tagOf(unit) !== "li" || !LIST_TAGS[tagOf(unit.parentNode)]) return null;
+      return unitsOf(unit.parentNode).length > 1 ? unit : null;
     }
 
     function runEntryOf(el) {
@@ -3528,6 +3536,23 @@
         // is empty: a deleted anchor has nowhere for the run to go.
         var range = liveRange();
         var unit = range ? unitOf(range.startContainer) : session.caretUnit;
+        // A bullet with others beside it: only that bullet goes. The list is
+        // one block, so taking the block would take every bullet with it.
+        var item = deletableItem(unit);
+        if (item) {
+          pushHistory();
+          var above = item.previousElementSibling;
+          var below = item.nextElementSibling;
+          structural("delete_item", function () {
+            item.parentNode.removeChild(item);
+          });
+          var tail = above ? textNodes(above).pop() : null;
+          if (tail) setCaret(tail, tail.nodeValue.length);
+          else if (above) setCaret(above, above.childNodes.length);
+          else if (below) setCaret(below, 0);
+          session.caretUnit = above || below;
+          return null;
+        }
         var target = unit ? blockOf(unit) : null;
         if (target && target !== session.anchor) {
           pushHistory();
@@ -4898,7 +4923,7 @@
       remove.type = "button";
       remove.className = "lahe-edit-bar__btn";
       remove.setAttribute("data-lahe-command", "delete");
-      remove.textContent = "Delete block";
+      remove.textContent = DELETE_BLOCK_LABEL;
       remove.addEventListener("click", function () {
         deleteBlock(null);
       });
@@ -4980,7 +5005,10 @@
         var range = liveRange();
         var unit = range ? unitOf(range.startContainer) : null;
         var inAnchor = unit && blockOf(unit) === session.anchor;
-        barParts.remove.disabled = !!inAnchor && session.run.length > 0;
+        var oneItem = !!deletableItem(unit);
+        barParts.remove.disabled = !!inAnchor && session.run.length > 0 && !oneItem;
+        var removeLabel = oneItem ? DELETE_ITEM_LABEL : DELETE_BLOCK_LABEL;
+        if (barParts.remove.textContent !== removeLabel) barParts.remove.textContent = removeLabel;
         updatePlaceholder(unit);
       }
       if (barParts.hint.textContent !== hintText) barParts.hint.textContent = hintText;

@@ -1,8 +1,8 @@
 # Delete block on a bullet
 
-## Needs your call
+## Decided
 
-- **Should the button say "Delete item" when the caret is in a bullet?** Today it always says "Delete block". After this fix it takes out one bullet, so "Delete block" reads wrong there. My recommendation: yes, change the label to "Delete item" while the caret is in a list item, and back to "Delete block" everywhere else. It is a one-line label swap where the bar already redraws for the caret.
+- **The button says "Delete item" while the caret is in a bullet**, and "Delete block" everywhere else. Ken approved this on the spec.
 
 ## Problem
 
@@ -27,7 +27,7 @@ This works the same whether the list is the block you opened or a list you typed
 ## Tasks
 
 1. Red test: `test/browser/delete_list_item.spec.js`, written and failing today.
-2. Fix `deleteBlock`. Label swap if you say yes above.
+2. Fix `deleteBlock`, and swap the button label to "Delete item" while the caret is in a bullet.
 3. Run the new spec, the existing delete and undo spec (`editing_undo.spec.js`), and `npm run gate:unit`.
 
 | Behavior | Proof | Fails today? |
@@ -36,6 +36,8 @@ This works the same whether the list is the block you opened or a list you typed
 | Commit records an edit, after-text without that bullet | spec test 1 | yes |
 | First bullet: it goes, caret lands in the next bullet | spec test 2 | yes |
 | Only bullet left: whole list goes, recorded as a delete | spec test 3 | no, passes today and must keep passing |
+| Button reads "Delete item" in a bullet, "Delete block" in a paragraph | spec test 4 | yes |
+| Undo inside the session brings the bullet back | spec test 5 | no |
 | Deleting a paragraph is unchanged | `editing_undo.spec.js` | no |
 
 ## Acceptance
