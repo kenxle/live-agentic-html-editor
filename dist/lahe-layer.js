@@ -1,6 +1,6 @@
 /*
  * live-agentic-html-editor review layer
- * version 0.2.0+2967ed4dfcc7
+ * version 0.2.0+8ab15036d2e5
  *
  * GENERATED FILE. Do not edit. Edit the sources under src/ and run
  *   npm run build:layer
@@ -12,7 +12,7 @@
   "use strict";
   var g = typeof globalThis !== "undefined" ? globalThis : window;
   g.LAHE = g.LAHE || {};
-  g.LAHE.version = "0.2.0+2967ed4dfcc7";
+  g.LAHE.version = "0.2.0+8ab15036d2e5";
 })();
 /* ---- src/shared/markers.js  (owner: 0A-kernel) ---- */
 // Markers: the attribute and class names that identify DOM the tool added.
@@ -44015,6 +44015,31 @@
     return Math.max(shown.width, shown.height) >= IMG_MIN_LONG;
   }
 
+  /**
+   * Where the button goes: the top right corner of the picture's VISIBLE part,
+   * which is its rect cut to the window and, when the rail is open, to the left
+   * of the rail. The picture's own corner is the wrong place twice over: on a
+   * tall graph scrolled past its top it is off screen, and on a wide one that
+   * passes under the open rail it lands on the rail (Ken's module map, with the
+   * button inside the rail's note box).
+   *
+   * @param {{left:number,top:number,right:number,bottom:number}} r the picture's rect
+   * @param {number} vw
+   * @param {number} vh
+   * @param {number|null} railLeft the open rail's left edge, or null when it is collapsed
+   * @returns {{left:number,top:number}|null} null when no visible part can hold a button
+   */
+  function buttonSpot(r, vw, vh, railLeft) {
+    var right = Math.min(r.right, vw);
+    if (railLeft !== null && railLeft !== undefined) right = Math.min(right, railLeft);
+    var left = Math.max(r.left, 0);
+    var top = Math.max(r.top, 0);
+    var bottom = Math.min(r.bottom, vh);
+    var need = BUTTON_SIZE + 2 * BUTTON_INSET;
+    if (right - left < need || bottom - top < need) return null;
+    return { left: right - BUTTON_INSET - BUTTON_SIZE, top: top + BUTTON_INSET };
+  }
+
   /** The view that fits w by h into the window with a margin, centred. */
   function fitView(vw, vh, w, h, margin) {
     var m = margin === undefined ? MARGIN : margin;
@@ -44146,6 +44171,7 @@
    * @param {Window}   [opts.window]
    * @param {object}   [opts.highlights]  the library's one surface (highlight.shared)
    * @param {function} [opts.blocked]     true while editing, picking or presenting
+   * @param {function} [opts.railOpen]    true while the rail is open (not collapsed)
    * @param {object}   [opts.listeners]   the listener registry
    */
   function createZoom(options) {
@@ -44155,6 +44181,8 @@
     var highlights = opts.highlights || highlightModule.shared;
     var registry = opts.listeners || listeners.shared;
     var blockedBy = typeof opts.blocked === "function" ? opts.blocked : function () { return false; };
+    // Is the rail open right now? Boot answers from the rail itself.
+    var railOpen = typeof opts.railOpen === "function" ? opts.railOpen : function () { return false; };
 
     var dom = null; // { host, shadow, button, viewer, content, pct, controls }
     var handles = [];
@@ -44302,17 +44330,30 @@
     // The button
     // -------------------------------------------------------------------------
 
+    /**
+     * The open rail's left edge, or null while it is collapsed.
+     *
+     * Read the way comments.js and editing.js keep clear of the rail: the rail
+     * publishes how much of the right edge it takes as a custom property on the
+     * library's one page-level host (highlight.RAIL_ALLOWANCE_PROP), because its
+     * own rect is inside its closed root. That number stays published while the
+     * rail is collapsed, so whether it is open comes from boot (opts.railOpen).
+     */
+    function railLeft() {
+      if (!railOpen()) return null;
+      var host = doc.getElementById(highlightModule.SURFACE_ID);
+      if (!host) return null;
+      var px = parseFloat(win.getComputedStyle(host).getPropertyValue(highlightModule.RAIL_ALLOWANCE_PROP));
+      return isFinite(px) && px > 0 ? win.innerWidth - px : null;
+    }
+
+    /** Put the button on the target's visible part. False when there is none. */
     function placeButton() {
-      if (!dom || !target) return;
-      var r = target.getBoundingClientRect();
-      var vw = win.innerWidth;
-      var vh = win.innerHeight;
-      var left = Math.min(r.right, vw) - BUTTON_INSET - BUTTON_SIZE;
-      var top = Math.max(r.top, 0) + BUTTON_INSET;
-      // Kept on the picture while any of it is on screen.
-      top = Math.min(top, Math.min(r.bottom, vh) - BUTTON_SIZE - BUTTON_INSET);
-      left = Math.max(left, Math.max(r.left, 0) + BUTTON_INSET);
-      dom.button.style.transform = "translate(" + Math.round(left) + "px," + Math.round(top) + "px)";
+      if (!dom || !target) return false;
+      var spot = buttonSpot(target.getBoundingClientRect(), win.innerWidth, win.innerHeight, railLeft());
+      if (!spot) return false;
+      dom.button.style.transform = "translate(" + Math.round(spot.left) + "px," + Math.round(spot.top) + "px)";
+      return true;
     }
 
     function cancelHide() {
@@ -44331,7 +44372,10 @@
       }
       target = next;
       focusOrigin = origin || null;
-      placeButton();
+      if (!placeButton()) {
+        hideNow();
+        return;
+      }
       dom.button.setAttribute("data-shown", "true");
       shown = true;
     }
@@ -44443,9 +44487,17 @@
       dom.button.focus();
     }
 
+    // Scroll and resize move the visible part, so the button follows, once a
+    // frame at most: a scroll fires far more often than the screen repaints.
+    var placeFrame = null;
+
     function onScrollOrResize() {
       lastNode = null;
-      if (shown && !openOn) placeButton();
+      if (!shown || openOn || placeFrame !== null) return;
+      placeFrame = win.requestAnimationFrame(function () {
+        placeFrame = null;
+        if (shown && !openOn && !placeButton()) hideNow();
+      });
     }
 
     // -------------------------------------------------------------------------
@@ -44726,6 +44778,8 @@
     }
 
     function teardown() {
+      if (placeFrame !== null) win.cancelAnimationFrame(placeFrame);
+      placeFrame = null;
       close();
       hideNow();
       unbind();
@@ -44811,6 +44865,9 @@
     SVG_MIN_SIDE: SVG_MIN_SIDE,
     IMG_MIN_LONG: IMG_MIN_LONG,
     MIN_SIDE: MIN_SIDE,
+    BUTTON_SIZE: BUTTON_SIZE,
+    BUTTON_INSET: BUTTON_INSET,
+    buttonSpot: buttonSpot,
     MARGIN: MARGIN,
     MIN_SCALE: MIN_SCALE,
     MAX_SCALE: MAX_SCALE,
@@ -49621,7 +49678,7 @@
   "use strict";
 
   // Replaced by scripts/build-layer.js at concatenation time.
-  var VERSION = "0.2.0+2967ed4dfcc7";
+  var VERSION = "0.2.0+8ab15036d2e5";
 
   var protocol = ns.protocol;
   var record = ns.record;
@@ -50419,6 +50476,10 @@
         if (comments.pickMode().active === true) return true;
         if (editing.isEditing()) return true;
         return typeof editing.isInEditState === "function" && editing.isInEditState();
+      },
+      // The button keeps clear of the rail only while the rail is open.
+      railOpen: function () {
+        return !rail.isCollapsed() && !rail.isPresenting();
       }
     });
     zoom.bind();
