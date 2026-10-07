@@ -35,6 +35,7 @@ const path = require("node:path");
 const { execFileSync } = require("node:child_process");
 
 const { test, expect, pollPage, pollUntil, placeCaret } = require("../helpers");
+const { stopTempHelpers } = require("../helpers/temp_helpers.js");
 
 const REPO_ROOT = path.join(__dirname, "..", "..");
 const CLI = path.join(REPO_ROOT, "bin", "lahe.js");
@@ -146,7 +147,7 @@ async function openReview() {
   };
 }
 
-function closeReview(world) {
+async function closeReview(world) {
   if (!world) return;
   try {
     execFileSync(process.execPath, [CLI, "session", "close", world.session], {
@@ -158,6 +159,8 @@ function closeReview(world) {
   } catch (err) {
     // A session that already went down is not a test failure.
   }
+  // The close leaves the helper up while the page is open. Stop it.
+  await stopTempHelpers(world.stateDir);
 }
 
 /** A build: somebody else's program overwrites the source, and the page reloads. */
@@ -413,7 +416,7 @@ test.describe("the stamp's graceful failures: nothing written, and the reviewer 
   });
 
   test.afterEach(async () => {
-    closeReview(world);
+    await closeReview(world);
     world = null;
   });
 
@@ -626,7 +629,7 @@ test.describe("the stamp's graceful failures: nothing written, and the reviewer 
     // The page cannot work this out on its own: a Markdown review RENDERS to
     // HTML, so the page's own path ends in .html. The helper knows the source
     // and says so on every poll.
-    closeReview(world);
+    await closeReview(world);
     world = await openMarkdownReview();
     const paragraph = "main p:nth-of-type(1)";
 

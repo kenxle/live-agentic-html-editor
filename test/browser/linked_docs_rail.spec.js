@@ -22,6 +22,7 @@ const path = require("node:path");
 const { execFileSync } = require("node:child_process");
 
 const { test, expect, pollPage, pollUntil } = require("../helpers");
+const { stopTempHelpers } = require("../helpers/temp_helpers.js");
 
 const REPO_ROOT = path.join(__dirname, "..", "..");
 const CLI = path.join(REPO_ROOT, "bin", "lahe.js");
@@ -113,6 +114,8 @@ test.describe("a link out of a reviewed Markdown page keeps the rail", () => {
     } catch (err) {
       // A session that already went down is not a test failure.
     }
+    // The close leaves the helper up while the page is open. Stop it.
+    await stopTempHelpers(world.stateDir);
   });
 
   test("a linked document with no review rides the hub's review, and a comment there names its file", async ({ page }) => {

@@ -188,8 +188,8 @@ async function readyEdit(page) {
 test.describe("\"+ Write here\" never outlives its edit", () => {
   let world;
 
-  test.afterEach(() => {
-    closeWorld(world);
+  test.afterEach(async () => {
+    await closeWorld(world);
     world = null;
   });
 

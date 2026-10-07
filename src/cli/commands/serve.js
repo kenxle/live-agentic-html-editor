@@ -168,8 +168,14 @@ async function run(argv) {
   }
 
   var helper;
+  // The helper can stop itself (src/service/self_stop.js). It has closed its
+  // listener by the time this is called, so the command just returns.
+  var selfStopped = null;
+  var onSelfStop = new Promise(function (resolve) { selfStopped = resolve; });
   try {
-    helper = await service.serve(parsed.options);
+    helper = await service.serve(Object.assign({}, parsed.options, {
+      onSelfStop: function () { selfStopped(0); }
+    }));
   } catch (err) {
     if (err && err.code === "EADDRINUSE") {
       var port = parsed.options.port === undefined ? protocol.DEFAULT_PORT : parsed.options.port;
@@ -216,6 +222,7 @@ async function run(argv) {
         resolve(0);
       });
     });
+    onSelfStop.then(resolve);
   });
 }
 

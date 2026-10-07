@@ -129,8 +129,10 @@ async function stopVerifiedHelper(dir) {
  *   - any document window is still held (the same windows.json read the CLI
  *     already makes before replacing a helper).
  *
- * There is no self-stop timer: the helper stops at the next close that finds
- * everything quiet, or at a restart.
+ * When it keeps the helper, the close leaves stop-when-quiet.json behind
+ * (askStopWhenQuiet), and the helper stops itself once there is no open
+ * session, no open review window and no Library poll for two minutes
+ * (src/service/self_stop.js). Before that ask existed, nothing stopped it.
  *
  * @param {string} dir
  * @param {number} nowMs
@@ -152,6 +154,22 @@ async function helperStillWanted(dir, nowMs) {
     return { keep: true, why: "for an open review page" };
   }
   return { keep: false, why: null };
+}
+
+/**
+ * The last close left the helper up: ask it to stop itself once that reason
+ * is gone (src/service/self_stop.js). A failed write only loses the ask; the
+ * close itself stands.
+ */
+function askStopWhenQuiet(dir, nowMs, why) {
+  try {
+    stateDir.writeAtomic(
+      stateDir.stopWhenQuietPath(dir),
+      JSON.stringify({ asked_at: new Date(nowMs).toISOString(), why: why || null }, null, 2) + "\n"
+    );
+  } catch (err) {
+    /* the helper keeps running, as it did before the ask existed */
+  }
 }
 
 /**
@@ -462,8 +480,12 @@ async function run(argv, options) {
       var kept = null;
       if (store.openSessions().length === 0) {
         var wanted = await helperStillWanted(dir, typeof opts.now === "number" ? opts.now : Date.now());
-        if (wanted.keep) kept = wanted.why;
-        else stopped = await stopVerifiedHelper(dir);
+        if (wanted.keep) {
+          kept = wanted.why;
+          askStopWhenQuiet(dir, typeof opts.now === "number" ? opts.now : Date.now(), wanted.why);
+        } else {
+          stopped = await stopVerifiedHelper(dir);
+        }
       }
       out(
         "agent session " + args.id + " closed; review history kept" +

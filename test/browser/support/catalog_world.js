@@ -25,6 +25,7 @@ const { execFileSync } = require("node:child_process");
 
 const protocol = require("../../../src/shared/protocol.js");
 const { freePort, portInUse } = require("../../helpers/free_port.js");
+const { stopTempHelpers } = require("../../helpers/temp_helpers.js");
 
 const REPO_ROOT = path.join(__dirname, "..", "..", "..");
 const CLI = path.join(REPO_ROOT, "bin", "lahe.js");
@@ -156,8 +157,8 @@ async function buildWorld(spec) {
   w.attachedAtStart = printed.attached;
   w.drainRequests();
 
-  /** Every session this world opened, closed; then the helper, by its pid. */
-  w.teardown = function () {
+  /** Every session this world opened, closed; then the helper, by its pid. Await it. */
+  w.teardown = async function () {
     const seen = new Set();
     for (const key of Object.keys(w.docs)) {
       const session = w.docs[key].session;
@@ -170,13 +171,9 @@ async function buildWorld(spec) {
       }
     }
     // The last close leaves the helper up while the Library polled recently
-    // (the R10a lifetime rule this feature added), so it is stopped by its pid.
-    try {
-      const ready = JSON.parse(fs.readFileSync(path.join(w.stateDir, "service.json"), "utf8"));
-      if (ready && Number.isInteger(ready.pid)) process.kill(ready.pid, "SIGTERM");
-    } catch (err) {
-      // No helper left to stop.
-    }
+    // (the R10a lifetime rule this feature added), so it is stopped by the
+    // pids its own state dir records, and waited for.
+    await stopTempHelpers(w.stateDir);
   };
 
   return w;

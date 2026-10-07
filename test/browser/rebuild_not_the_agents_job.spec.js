@@ -29,6 +29,7 @@ const path = require("node:path");
 const { execFileSync } = require("node:child_process");
 
 const { test, expect, pollPage, placeCaret } = require("../helpers");
+const { stopTempHelpers } = require("../helpers/temp_helpers.js");
 
 const REPO_ROOT = path.join(__dirname, "..", "..");
 const CLI = path.join(REPO_ROOT, "bin", "lahe.js");
@@ -105,6 +106,8 @@ test.describe("LAHE rebuilds the page, and a handled claim is checked", () => {
     } catch (err) {
       // A session that already went down is not a test failure.
     }
+    // The close leaves the helper up while the page is open. Stop it.
+    await stopTempHelpers(world.stateDir);
     world = null;
   });
 

@@ -13,6 +13,7 @@ var scriptLine = require("../shared/script_line.js");
 var markdown = require("./markdown.js");
 var markdownLinks = require("./markdown_links.js");
 var stateDir = require("./state_dir.js");
+var selfStop = require("./self_stop.js");
 var styles = require("./styles.js");
 var tabIcon = require("./tab_icon.js");
 var heal = require("./heal.js");
@@ -1757,6 +1758,17 @@ function runServer(file, sessionId, id, instance, rootInput, dir, logicalRootInp
     stateDir.writeAtomic(file, JSON.stringify(meta, null, 2) + "\n");
   }
   function stop() { server.close(function () { process.exit(0); }); }
+  // A page server whose state directory is gone (or replaced) has no record
+  // and no helper left to answer for it, so it stops too (self_stop.js).
+  var dirIdentity = selfStop.identity(dir);
+  var dirSweepMs = Number(process.env.LAHE_SELF_STOP_SWEEP_MS);
+  var dirTimer = setInterval(function () {
+    if (selfStop.identity(dir) !== dirIdentity) {
+      clearInterval(dirTimer);
+      stop();
+    }
+  }, Number.isFinite(dirSweepMs) && dirSweepMs > 0 ? dirSweepMs : selfStop.SWEEP_MS);
+  if (typeof dirTimer.unref === "function") dirTimer.unref();
   process.on("SIGHUP", reloadMounts);
   process.on("SIGTERM", stop);
   process.on("SIGINT", stop);

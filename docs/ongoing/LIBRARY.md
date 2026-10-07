@@ -101,7 +101,9 @@ The flows are "Key Flows" in the architecture doc; the hand-over picture is the 
 
 The pictures are "When the helper stops" in `docs/diagrams/session_ownership.md`.
 
-- The last `lahe session close` does not stop the helper while the Library page has polled in the last 2 minutes (`catalog_seen_at` in health).
+- The last `lahe session close` does not stop the helper while the Library page has polled in the last 2 minutes (`catalog_seen_at` in health), or while a review page is open.
+- That close writes `stop-when-quiet.json`. The helper then stops itself once it has gone 2 minutes with no open session, no open review window and no Library poll. An open session never lets it stop and removes the file. The code is `src/service/self_stop.js`.
+- A helper or page server whose state directory is removed (or replaced) stops within 15 seconds.
 - Sessions an Open reopened are closed again by a 15-second sweep once they are quiet for 30 minutes.
 - A session that bare `lahe library` created closes itself once it owns no reviews and its agent has been quiet for 30 minutes (no live monitor, no lahe command).
 

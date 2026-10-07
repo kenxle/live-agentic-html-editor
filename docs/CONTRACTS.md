@@ -1538,8 +1538,16 @@ bridge for a single Markdown review.
 stops the shared helper only after the final open agent session closes, and
 even then it leaves the helper up when the Library page polled within
 `CATALOG.LIBRARY_SEEN_MS` (read from `health`'s `catalog_seen_at`) or a review
-page window is still held. There is no self-stop timer: the helper stops at the
-next close that finds everything quiet, or at a restart. Review
+page window is still held. A close that leaves the helper up writes
+`<state>/stop-when-quiet.json` (`{asked_at, why}`). The helper checks every 15
+seconds (`src/service/self_stop.js`) and stops itself once it has seen no open
+agent session, no open review window and no Library poll for
+`CATALOG.LIBRARY_SEEN_MS` since the latest of the ask, its own start, the last
+open window and the last Library poll. An open session never lets it stop, and
+removes the file. Separately, a helper or static server whose state directory
+is gone, or replaced by a different directory at the same path, stops at once.
+`LAHE_SELF_STOP_GRACE_MS` and `LAHE_SELF_STOP_SWEEP_MS` shorten both for tests
+only. Review
 history remains on disk. `session reopen` restores the helper and remembered
 static servers. A caller-supplied `--origin` and every application dev server
 are externally owned, so LAHE never terminates them.

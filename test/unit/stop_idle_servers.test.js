@@ -27,6 +27,7 @@ const agentSessionsModule = require("../../src/service/agent_sessions.js");
 const status = require("../../src/cli/commands/status.js");
 const stateDirModule = require("../../src/service/state_dir.js");
 const { pollUntil } = require("../helpers/poll.js");
+const { stopTempHelpers } = require("../helpers/temp_helpers.js");
 
 const REPO_ROOT = path.join(__dirname, "..", "..");
 const BIN = path.join(REPO_ROOT, "bin", "lahe.js");
@@ -84,6 +85,9 @@ function world(t) {
     for (const id of owned) {
       try { await staticServers.stopAll(dir, id); } catch (err) { /* best effort */ }
     }
+    // stopAll gives up on a session with a corrupt record (the stale-lock test
+    // writes one), so every server this dir records is stopped by its pid too.
+    await stopTempHelpers(dir);
   });
 
   async function session(id) {
@@ -324,8 +328,9 @@ test("lahe review restarts a stopped server on its old port, and the page loads"
 
   const first = run(["review", page, "--port", String(helperPort)]);
   const session = /^\s*session\s+(\S+)/m.exec(first)[1];
-  t.after(() => {
+  t.after(async () => {
     try { run(["session", "close", session, "--port", String(helperPort)]); } catch (err) { /* best effort */ }
+    await stopTempHelpers(state);
   });
   const open = /^\s*open\s+(\S+)/m.exec(first)[1];
   const port = Number(new URL(open).port);

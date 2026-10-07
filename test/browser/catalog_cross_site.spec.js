@@ -376,7 +376,7 @@ test.describe("the Library's actions from another origin", () => {
   });
 
   test.afterAll(async () => {
-    if (world) world.teardown();
+    if (world) await world.teardown();
   });
 
   test("from another site (localhost): every action is refused, and the Library still works", async ({ page, context, attackerServer }) => {

@@ -22,6 +22,7 @@ const logModule = require("../../src/service/log.js");
 const reviewsModule = require("../../src/service/reviews.js");
 const catalogRequests = require("../../src/service/catalog_requests.js");
 const library = require("../../src/cli/commands/library.js");
+const { stopTempHelpers } = require("../helpers/temp_helpers.js");
 
 const BIN = path.join(__dirname, "..", "..", "bin", "lahe.js");
 
@@ -87,7 +88,12 @@ test("a legacy row whose file name holds a quote and $(...) reaches lahe review 
   const w = world(doc);
   const cwd = tempDir("lahe-serve-cwd-");
   const port = await freePort();
-  t.after(() => lahe(["session", "close", "s_agent", "--state-dir", w.dir, "--port", String(port)], cwd));
+  // s_other stays open, so this close is never the last one: stop the helper
+  // and the page server by the pids this state dir records.
+  t.after(async () => {
+    await lahe(["session", "close", "s_agent", "--state-dir", w.dir, "--port", String(port)], cwd);
+    await stopTempHelpers(w.dir);
+  });
   const out = await lahe(["library", "serve", w.request.id, "--session", "s_agent", "--state-dir", w.dir, "--port", String(port)], cwd);
   assert.equal(fs.existsSync(path.join(cwd, "pwned")), false, "nothing ran in the caller's folder");
   assert.equal(fs.existsSync(path.join(docs, "pwned")), false, "nothing ran beside the document");
@@ -115,7 +121,12 @@ test("a legacy pickup adopts the review into the agent's session and serves it w
   const w = world(doc);
   const cwd = tempDir("lahe-serve-cwd-");
   const port = await freePort();
-  t.after(() => lahe(["session", "close", "s_agent", "--state-dir", w.dir, "--port", String(port)], cwd));
+  // s_other stays open, so this close is never the last one: stop the helper
+  // and the page server by the pids this state dir records.
+  t.after(async () => {
+    await lahe(["session", "close", "s_agent", "--state-dir", w.dir, "--port", String(port)], cwd);
+    await stopTempHelpers(w.dir);
+  });
   const out = await lahe(["library", "serve", w.request.id, "--session", "s_agent", "--state-dir", w.dir, "--port", String(port)], cwd);
   assert.equal(out.code, 0, out.stderr + out.stdout);
   assert.deepEqual(fs.readdirSync(path.join(w.dir, "reviews")), ["r_legacy"], "no new review");

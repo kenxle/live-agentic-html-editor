@@ -63,6 +63,8 @@ const projects =
       });
 
 module.exports = defineConfig({
+  // The suite fails if a helper it started on a temp state dir outlives it.
+  globalSetup: require.resolve("./test/browser/support/no_stray_helpers.js"),
   testDir: "./test/browser",
   // Ninety seconds, not Playwright's thirty.
   //

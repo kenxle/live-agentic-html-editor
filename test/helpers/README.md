@@ -43,6 +43,21 @@ decide which projects exist, and the worker process does not carry the flag. So
 Firefox and WebKit need their own download once:
 `npx playwright install firefox webkit`.
 
+## Tests leave nothing running
+
+A test that starts a helper (`lahe review`, `lahe write`, `lahe library`,
+`startHelper`) stops it in teardown with `stopTempHelpers(stateDir)` from
+`temp_helpers.js`, after its own `lahe session close`. The close leaves the
+helper up while the test's page is open. `stopTempHelpers` stops only the pids
+that temp state dir's own `service.json` and page server records name, and
+waits until they are gone.
+
+Both suites check for survivors. The unit suite runs under
+`scripts/no_stray_helpers.js`, and the browser suite has a global teardown
+(`test/browser/support/no_stray_helpers.js`). Either fails the run when a
+helper or page server it started on a temp state dir is still running, and
+stops it first.
+
 ---
 
 ## Fixture pages

@@ -165,7 +165,7 @@ test.describe("the Library, end to end, with a stub agent on the real CLI", () =
 
   test.afterAll(async () => {
     if (monitor && monitor.exitCode === null) monitor.kill("SIGTERM");
-    if (world) world.teardown();
+    if (world) await world.teardown();
   });
 
   test("Open a closed review: the document lands in a new tab with its rail, takes a comment, and the stub agent's answer shows", async ({
