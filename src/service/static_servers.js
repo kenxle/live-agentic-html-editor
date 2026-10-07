@@ -1570,6 +1570,20 @@ function runServer(file, sessionId, id, instance, rootInput, dir, logicalRootInp
   // reviewer's private notes would still be read. So in page mode a Host that
   // is not this server's loopback address and port is a 404.
   var startedAt = new Date().toISOString();
+  // The paths a review may have recorded for one request: the resolved path,
+  // its realpath, and (unmounted root only) the same file under the
+  // pre-realpath root. A review's target_path was recorded against that
+  // logical root (see start()'s logicalRoot comment); a mount's directory has
+  // no such second identity to fall back to.
+  function requestFilePaths(candidate, real, servingRoot) {
+    var paths = [candidate];
+    if (real && real !== candidate) paths.push(real);
+    if (servingRoot === root && logicalRoot !== root) {
+      var logicalCandidate = path.resolve(logicalRoot, path.relative(servingRoot, candidate));
+      if (paths.indexOf(logicalCandidate) === -1) paths.push(logicalCandidate);
+    }
+    return paths;
+  }
   var server = http.createServer(function (req, res) {
     // Before anything else, on every path: pages, the reserved library route,
     // the health probe, and a 404 alike.
@@ -1652,17 +1666,22 @@ function runServer(file, sessionId, id, instance, rootInput, dir, logicalRootInp
     if (isMount && (markdown.isMarkdown(candidate) || heal.isStaticPage(candidate)) && real) {
       if (serveLinked(candidate, real, req, res)) return;
     } else if (markdown.isMarkdown(candidate)) {
-      return renderMarkdown(candidate, req, res);
-    } else if (heal.isStaticPage(candidate)) {
-      var filePaths = [candidate];
-      if (real && real !== candidate) filePaths.push(real);
-      // Only for the unmounted root: a review's target_path was recorded
-      // against the pre-realpath root (see start()'s logicalRoot comment), and
-      // a mount's directory has no such second identity to fall back to.
-      if (servingRoot === root && logicalRoot !== root) {
-        var logicalCandidate = path.resolve(logicalRoot, path.relative(servingRoot, candidate));
-        if (filePaths.indexOf(logicalCandidate) === -1) filePaths.push(logicalCandidate);
+      // A Markdown file beside a reviewed page: its own review wins (one live
+      // version of the document), else the review backing this root lends its
+      // rail, else the plain read-only render. Same order serveLinked uses.
+      var ownMd = real ? ownReviewUrl(dir, sessionId, real) : null;
+      if (ownMd) {
+        res.writeHead(302, { "cache-control": "no-store", location: ownMd, "x-content-type-options": "nosniff" });
+        return res.end();
       }
+      var mdMatch = findReviewForRequest(dir, {
+        filePaths: requestFilePaths(candidate, real, servingRoot),
+        sessionId: sessionId,
+        roots: servingRoot === root ? [root, logicalRoot] : []
+      });
+      return renderMarkdown(candidate, req, res, mdMatch ? { match: mdMatch } : undefined);
+    } else if (heal.isStaticPage(candidate)) {
+      var filePaths = requestFilePaths(candidate, real, servingRoot);
       var ownRoot = servingRoot === root;
       var match = findReviewForRequest(dir, {
         filePaths: filePaths,
