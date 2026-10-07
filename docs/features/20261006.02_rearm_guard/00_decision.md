@@ -1,5 +1,15 @@
 # Re-arm guard: agents keep watching without having to remember
 
+## Status: shipped
+
+- **Merged.** The guard is on main in pull request 31. GitHub's run and the full local suite both passed.
+- **Installed on your machine.** Your Claude Code settings run the hook from the main clone. The 24-hour background limit is set too.
+- **Reviewed first.** A separate reviewer found two real problems before merge, and both are fixed:
+  - Ending a review in the rail no longer makes its agent keep restarting a watcher.
+  - If Lahe's folder moved or was deleted, the hook used to show an error on every turn. Now it does nothing quietly.
+- **Seen working.** This session's watcher hit its 2-hour limit, and the guard blocked the end of the turn with the exact restart command.
+- **One gap found.** Overnight, Claude Code stopped the watcher because the Mac was low on memory, and it says not to restart a watcher stopped for that reason. The guard still asks for a restart, so the two conflict. Starting Claude Code with `CLAUDE_CODE_DISABLE_BG_SHELL_PRESSURE_REAP=1` stops those shutdowns. That setting is your call.
+
 **Short version.** Agents stopped re-arming because Claude Code took away the one tool that made watching automatic. The fix is to put the guarantee back in Claude Code itself: a small hook that won't let an agent finish its turn while one of its Lahe reviews has nobody watching. One decision is at the end.
 
 ## What broke
