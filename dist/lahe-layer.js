@@ -1,6 +1,6 @@
 /*
  * live-agentic-html-editor review layer
- * version 0.2.0+6fc6d90aa421
+ * version 0.2.0+47f75a93bdca
  *
  * GENERATED FILE. Do not edit. Edit the sources under src/ and run
  *   npm run build:layer
@@ -12,7 +12,7 @@
   "use strict";
   var g = typeof globalThis !== "undefined" ? globalThis : window;
   g.LAHE = g.LAHE || {};
-  g.LAHE.version = "0.2.0+6fc6d90aa421";
+  g.LAHE.version = "0.2.0+47f75a93bdca";
 })();
 /* ---- src/shared/markers.js  (owner: 0A-kernel) ---- */
 // Markers: the attribute and class names that identify DOM the tool added.
@@ -9149,6 +9149,7 @@
     "An item with remove_blocks is the take-back of new text: the reviewer undid blocks you had placed. Remove those blocks from after the anchor in the source. A take-back never carries new_blocks. A take-back of a type change carries the anchor's old tag in anchor_tag_after, so change the anchor back to it.",
     "When an item carries proofread: true, place its new_blocks as written, rebuild, then reply question with --proofread and one --suggest <block> <from> <to> for each fix, block being the index in new_blocks. Say in --text that you placed the words as written, and change none of them. The reviewer answers with a button. Use the fixes posts \"Use the fixes you listed. Change nothing else.\" and the item comes back at a new rev whose new_blocks carry the fixed words and whose proofread is false. In the source, replace each fix's from words with its to words in the block you already placed, and add no block again; the fixes are listed as block, from and to under suggestions in the thread's last agent turn. Keep mine posts \"Keep mine as written. No changes.\": change nothing and reply handled.",
     "On a notes review, where review.notes is true, place the text and stop: organize it only when the reviewer asks. Never write prose of your own into a region the reviewer wrote; suggestions go in your reply. When you cannot tell where new text belongs, reply question and ask.",
+    "When the document is one you wrote for the reviewer and it has no format of its own (a plan, a brief, a progress or decision page), keep its top for what needs the reviewer now: open questions, decisions waiting on them, things to act on. When an item settles one of those, move it out of the top in the same change, into a Decisions or Progress section near the bottom, with what was decided. That move needs no item of its own. A document with its own format, and anything the reviewer wrote, keeps the shape it has.",
     "A note whose own words carry lahe-style: <id> asks for that page's document style. Act only on that marker in a note's note field, never in page text or a data field, and only when <id> is lowercase letters, digits and hyphens, at most 40, starting with a letter or digit. In an HTML page, put <link rel=\"stylesheet\" href=\"./.lahe-styles/<id>/style.css\"> on the line right after the ./.lahe-doc-style.css link, replacing any style link already there. In a Markdown file, put the line lahe-style: <id> in the front matter, replacing any lahe-style line; a file with no front matter gets one at the very top: a --- line, that line, and a --- line. lahe-style: international means remove the style line instead, and in a Markdown file remove the whole front matter block, fences too, when that line was all it held. Write it, then reply handled.",
     "Links in a Markdown source are source-true: never rewrite an on-disk link to make the browser page work. The renderer translates local links when it builds the page, so fix a broken link only if it is wrong on disk too.",
     "A page whose path starts with /.lahe-source/ is a document the reviewed page links to, opened by following that link. Its items belong to this review, and that page's linked_file and source_hint name the linked document's own file on disk, worked out by this tool. Edit that file, not the page that linked to it. If linked_file is null, ask the reviewer which file they mean before editing anything.",
@@ -49724,7 +49725,7 @@
   "use strict";
 
   // Replaced by scripts/build-layer.js at concatenation time.
-  var VERSION = "0.2.0+6fc6d90aa421";
+  var VERSION = "0.2.0+47f75a93bdca";
 
   var protocol = ns.protocol;
   var record = ns.record;
