@@ -639,6 +639,7 @@
       comments.unbind();
       editing.teardown();
       done.setReadOnly();
+      rail.setPdfEnabled(false);
       rail.showRefusal(info);
     }
 
@@ -654,6 +655,7 @@
         if (tab && typeof tab.ensureNoteBox === "function") tab.ensureNoteBox();
       }
       done.setReadOnly();
+      rail.setPdfEnabled(true);
       rail.hideRefusal();
       // The condition ended, so its chip goes too (clear, not dismiss: dismiss
       // would suppress every future refusal's chip).
@@ -824,6 +826,15 @@
     });
     ns.exporter.configure(exporter);
     rail.onAction("copy", exporter.copyReview);
+    // "Save as PDF" in the PDF button's tray sends the agent the note a
+    // reviewer would type, ready at once, and shows the tab its card lands in
+    // (docs/features/20261008.01_pdf_button). The note box is left alone.
+    rail.onAction(ns.overlay.PDF.ACTION, function () {
+      if (readOnlyActive) return null;
+      var asked = comments.mintReadyNote(ns.overlay.PDF.REQUEST, page);
+      rail.selectTab(ns.overlay.TAB.ACTIVE);
+      return asked;
+    });
     rail.onAction("export", exporter.exportReview);
     // Hold (docs/features/20260917.01_hold_toggle): releasing it flushes the
     // queue immediately, in one pass, past the same gate sync.js's flush()
