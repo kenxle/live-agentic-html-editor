@@ -2727,8 +2727,10 @@
       // Called on every remount, which is the moment the page under the rail was
       // rebuilt. A menu the reviewer opened before a navigation is not something
       // they still want open after it, so it goes away with the page it belonged
-      // to. The BUTTON is chrome and stays; the open menu is a moment.
+      // to. The BUTTON is chrome and stays; the open menu is a moment. The PDF
+      // tray is the same kind of moment.
       closeMenu(false);
+      closePdfTray(false);
       var next = highlights.refreshScheme();
       dom.host.setAttribute(highlightModule.SCHEME_ATTR, next);
       return next;
@@ -5156,31 +5158,6 @@
      * make impossible to fake, so the geometry comes from the rail itself the
      * way the refusal button's does.
      */
-    // The PDF button, as the specs read it from outside the closed root.
-    function pdfInfo() {
-      if (!dom || !dom.pdfBtn) return { present: false };
-      var rect = dom.pdfBtn.getBoundingClientRect();
-      return {
-        present: true,
-        label: dom.pdfBtn.getAttribute("aria-label"),
-        title: dom.pdfBtn.title,
-        disabled: !!dom.pdfBtn.disabled,
-        expanded: dom.pdfBtn.getAttribute("aria-expanded"),
-        open: pdfTrayOpen,
-        rect: { x: rect.x, y: rect.y, width: rect.width, height: rect.height },
-        items: pdfTrayOpen
-          ? [dom.pdfItem].map(function (node) {
-              var r = node.getBoundingClientRect();
-              return {
-                action: node.getAttribute("data-action"),
-                label: (node.textContent || "").trim(),
-                rect: { x: r.x, y: r.y, width: r.width, height: r.height }
-              };
-            })
-          : []
-      };
-    }
-
     function menuInfo() {
       if (!dom || !dom.menuBtn) return { present: false, open: false, items: [] };
       var rect = dom.menuBtn.getBoundingClientRect();
@@ -5207,22 +5184,11 @@
     }
 
     // -------------------------------------------------------------------------
-    // The Document style button and its dropdown
+    // The PDF button and its tray
     // -------------------------------------------------------------------------
-    //
-    // The rail draws; it decides nothing. What the dropdown says, and what the
-    // button's dot means, come whole from style_switch.panelView, handed in by
-    // boot through setStyleView, and every press goes back out through
-    // onStylePanel's handlers: open (fetch the list), pick (preview), back, ask
-    // (the keep request), dismiss, close.
-    //
-    // The dropdown closes the way the menu does: the button again, Esc, Close,
-    // a click anywhere else (on the page or elsewhere in the rail), the menu
-    // opening, collapsing, presenting, and unmounting. It does NOT close when a
-    // pick lands, so arrows and clicks can walk the list.
 
-    // Off while the window cannot write to the review: the box it fills is
-    // closed then, and a click must not open one.
+    // Off while the window cannot write to the review: a note sent from there
+    // would be refused, so the tray does not open and an open one closes.
     function setPdfEnabled(enabled) {
       pdfEnabled = enabled !== false;
       if (!pdfEnabled) closePdfTray(false);
@@ -5243,6 +5209,11 @@
       dom.pdfItem.focus();
       pdfOutsideListener = function (event) {
         if (event.type === "keydown") {
+          // Tab moves focus off the one item, so the tray goes, as the menu does.
+          if (event.key === "Tab") {
+            closePdfTray(false);
+            return;
+          }
           if (event.key !== "Escape") return;
           event.preventDefault();
           event.stopPropagation();
@@ -5280,6 +5251,46 @@
       if (returnFocus) dom.pdfBtn.focus();
       return true;
     }
+
+    // The PDF button, as the specs read it from outside the closed root.
+    function pdfInfo() {
+      if (!dom || !dom.pdfBtn) return { present: false };
+      var rect = dom.pdfBtn.getBoundingClientRect();
+      return {
+        present: true,
+        label: dom.pdfBtn.getAttribute("aria-label"),
+        title: dom.pdfBtn.title,
+        disabled: !!dom.pdfBtn.disabled,
+        expanded: dom.pdfBtn.getAttribute("aria-expanded"),
+        open: pdfTrayOpen,
+        rect: { x: rect.x, y: rect.y, width: rect.width, height: rect.height },
+        items: pdfTrayOpen
+          ? [dom.pdfItem].map(function (node) {
+              var r = node.getBoundingClientRect();
+              return {
+                action: node.getAttribute("data-action"),
+                label: (node.textContent || "").trim(),
+                rect: { x: r.x, y: r.y, width: r.width, height: r.height }
+              };
+            })
+          : []
+      };
+    }
+
+    // -------------------------------------------------------------------------
+    // The Document style button and its dropdown
+    // -------------------------------------------------------------------------
+    //
+    // The rail draws; it decides nothing. What the dropdown says, and what the
+    // button's dot means, come whole from style_switch.panelView, handed in by
+    // boot through setStyleView, and every press goes back out through
+    // onStylePanel's handlers: open (fetch the list), pick (preview), back, ask
+    // (the keep request), dismiss, close.
+    //
+    // The dropdown closes the way the menu does: the button again, Esc, Close,
+    // a click anywhere else (on the page or elsewhere in the rail), the menu
+    // opening, collapsing, presenting, and unmounting. It does NOT close when a
+    // pick lands, so arrows and clicks can walk the list.
 
     function setStyleAvailable(available) {
       styleAvailable = available === true;

@@ -74,6 +74,10 @@ test.describe("the PDF button", () => {
     expect(info.disabled).toBe(false);
     expect(info.open).toBe(false);
 
+    // Start on another tab, so the switch to Active is something to prove.
+    await page.evaluate(() => window.__lahe.rail.selectTab("done"));
+    expect(await page.evaluate(() => window.__lahe.rail.currentTab())).toBe("done");
+
     await clickPdf(page);
     const opened = await pdfInfo(page);
     expect(opened.open, "a click opens the tray").toBe(true);
@@ -89,9 +93,10 @@ test.describe("the PDF button", () => {
     expect(sent.length, "exactly one note").toBe(sentBefore + 1);
     expect(sent[sent.length - 1].state, "ready, on the agent's desk").toBe("ready");
     expect(sent[sent.length - 1].kind).toBe("note");
+    expect(await page.evaluate(() => window.__lahe.rail.currentTab()), "the rail shows the Active tab").toBe("active");
   });
 
-  test("closes on Esc and on a click outside", async ({ page }) => {
+  test("closes on Esc, on a click outside, and on Tab", async ({ page }) => {
     await page.goto(app.urlFor("/?morph=off"));
     await booted(page);
 
@@ -104,6 +109,11 @@ test.describe("the PDF button", () => {
     expect((await pdfInfo(page)).open).toBe(true);
     await page.mouse.click(20, 200);
     expect((await pdfInfo(page)).open, "a click on the page closes it").toBe(false);
+
+    await clickPdf(page);
+    expect((await pdfInfo(page)).open).toBe(true);
+    await page.keyboard.press("Tab");
+    expect((await pdfInfo(page)).open, "Tab closes it, as it closes the menu").toBe(false);
   });
 
   test("leaves words in the note box alone", async ({ page }) => {

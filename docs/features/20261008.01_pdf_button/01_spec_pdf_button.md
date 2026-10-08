@@ -1,5 +1,7 @@
 # PDF button: spec
 
+**Documents:** [Decision](00_decision_pdf_button.md) · **Spec** · [Progress](02_progress_pdf_button.md)
+
 **Summary:** a button in the rail's top bar opens a small tray with one choice, "Save as PDF". Choosing it sends the agent the note "Make a PDF of this page." right away, the same note a reviewer would type. The decision and the options weighed are in `00_decision_pdf_button.md`.
 
 ## Problem, user, and context

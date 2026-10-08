@@ -1,5 +1,7 @@
 # PDF button in the rail
 
+**Documents:** **Decision** · [Spec](01_spec_pdf_button.md) · [Progress](02_progress_pdf_button.md)
+
 **Decided:** the button asks the agent, the same way you do today. It is an icon in the rail's top bar. Clicking it puts "Make a PDF of this page." in the note box at the foot of the rail and puts the cursor there. The reviewer can add to it ("one long page") and send it with Cmd-Enter.
 
 It fills the box rather than sending at once, for two reasons:

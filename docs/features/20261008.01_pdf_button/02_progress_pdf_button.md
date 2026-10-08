@@ -1,6 +1,8 @@
 # PDF button: progress
 
-**Status:** built and tested. The code review and the full gate run next, then the PR.
+**Documents:** [Decision](00_decision_pdf_button.md) · [Spec](01_spec_pdf_button.md) · **Progress**
+
+**Status:** built, reviewed and tested. The PR is open and waiting on Ken's approval.
 
 ## What it looks like
 
@@ -20,12 +22,12 @@ The screenshots come from the same build that passed `test/browser/pdf_button.sp
 
 ## Checks
 
-- `test/browser/pdf_button.spec.js`: 4 passed. It covers the tray, Esc and click-outside, a ready note sent once, the note box left alone, and a read-only window.
-- `npm run gate:unit`: 2469 passed, 0 failed.
+- `test/browser/pdf_button.spec.js`: 4 passed. It covers the tray, Esc, click-outside and Tab, a ready note sent once, the switch to the Active tab, the note box left alone, and a read-only window.
+- `npm run gate` on the final code: lint and the bundle check clean, unit 2469 passed and 0 failed, Chromium 840 passed.
+- Code review (one independent reviewer): nothing serious. Two findings, both fixed: the tray now closes when a Turbo page swap rebuilds the page, and the test now proves the switch to the Active tab. Tab also closes the tray now, as it closes the menu.
 - Leftover helpers: 1 before the test runs and 1 after (the real helper), so no leaks.
 
 ## To delete at cleanup
 
-- `test/browser/tmp_pdf_shots.spec.js` in this worktree: the screenshot script. It is not committed.
 - `docs/features/20261008.01_pdf_button/00_decision_pdf_button.md` in the main checkout: an uncommitted copy. The committed one is on this branch.
 - The `node_modules` symlink in this worktree. It is not committed.
