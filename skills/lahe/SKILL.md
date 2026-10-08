@@ -602,6 +602,16 @@ page to load with the helper down.
   rather than bare paragraphs. `vendor/stclair-doc-style/COMPONENTS.md` in the Lahe
   clone lists each one with its markup.
 
+- **Keep the top of a working document current.** When you wrote the document
+  and it has no format of its own (a plan, a brief, a progress or decision
+  page), the top is for what needs the reader now: open questions, decisions
+  waiting on them, things to act on. When one of those is settled, move it out
+  of the top in the same change, into a "Decisions" or "Progress" section near
+  the bottom, with what was decided. Each time you touch the document, check the
+  top still holds only open items; when nothing is open, say so there in one
+  line. A document with its own format (a spec template, a feature-forge doc)
+  and anything the reviewer wrote keep the shape they have.
+
 - **Draw diagrams top to bottom.** Write a Mermaid flowchart as
   `flowchart TD`, never `LR` or `RL`. A wide left-to-right chart shrinks to fit
   the page column, and its words come out too small to read. The one exception is
