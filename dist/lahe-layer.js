@@ -1,6 +1,6 @@
 /*
  * live-agentic-html-editor review layer
- * version 0.2.0+6fc6d90aa421
+ * version 0.2.0+ed15fc1c35ef
  *
  * GENERATED FILE. Do not edit. Edit the sources under src/ and run
  *   npm run build:layer
@@ -12,7 +12,7 @@
   "use strict";
   var g = typeof globalThis !== "undefined" ? globalThis : window;
   g.LAHE = g.LAHE || {};
-  g.LAHE.version = "0.2.0+6fc6d90aa421";
+  g.LAHE.version = "0.2.0+ed15fc1c35ef";
 })();
 /* ---- src/shared/markers.js  (owner: 0A-kernel) ---- */
 // Markers: the attribute and class names that identify DOM the tool added.
@@ -18819,6 +18819,10 @@
     "display:flex;align-items:center;justify-content:center;font-size:14px}",
     ".iconbtn:hover{background:var(--surface);color:var(--ink)}",
     ".iconbtn[aria-expanded='true']{background:var(--surface);color:var(--ink)}",
+    // The PDF button: the swatch's twin in size, drawn the same way.
+    ".pdfwrap{position:relative;display:flex;flex:none}",
+    ".pdfbtn svg{width:16px;height:16px;display:block}",
+    ".pdfbtn:disabled{opacity:.4;cursor:default;background:none;color:var(--ink-soft)}",
 
     // --- the head's menu ------------------------------------------------------
     // Copy and Export are HERE now, not standing in the footer (D10, revised
@@ -19568,6 +19572,34 @@
     '<path d="' + STYLE_ICON_PATH + '"/>' +
     "</svg>";
 
+  // The PDF button (docs/features/20261008.01_pdf_button). It does not make a
+  // PDF: it opens a small tray whose one item sends the agent the request a
+  // reviewer would type, so a reviewer who never thought to ask for one sees
+  // that they can. What the item DOES is boot's (the runAction seam, like Copy
+  // and Export); the rail draws the button and its tray, and turns the button
+  // off while the window is read-only.
+  var PDF = {
+    ACTION: "pdf",
+    TITLE: "Ask the agent for a PDF",
+    ITEM: "Save as PDF",
+    // The note the agent gets, in the words a reviewer would type themselves.
+    REQUEST: "Make a PDF of this page."
+  };
+
+  // Its glyph: Heroicons 2.2.0 `document-arrow-down`, MIT, vendored under
+  // vendor/heroicons and inlined for the same reasons as the swatch above.
+  var PDF_ICON_PATH =
+    "M19.5 14.25V11.625C19.5 9.76104 17.989 8.25 16.125 8.25H14.625C14.0037 8.25 13.5 7.74632 13.5 " +
+    "7.125V5.625C13.5 3.76104 11.989 2.25 10.125 2.25H8.25M9 14.25L12 17.25M12 17.25L15 14.25M12 " +
+    "17.25L12 11.25M10.5 2.25H5.625C5.00368 2.25 4.5 2.75368 4.5 3.375V20.625C4.5 21.2463 5.00368 " +
+    "21.75 5.625 21.75H18.375C18.9963 21.75 19.5 21.2463 19.5 20.625V11.25C19.5 6.27944 15.4706 " +
+    "2.25 10.5 2.25Z";
+  var PDF_ICON =
+    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" ' +
+    'stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">' +
+    '<path d="' + PDF_ICON_PATH + '"/>' +
+    "</svg>";
+
   // ---------------------------------------------------------------------------
   // The way out (D10: a review ends when the reviewer chooses End review)
   // ---------------------------------------------------------------------------
@@ -20109,6 +20141,10 @@
     // while the dropdown is open, off the moment it closes.
     var styleAvailable = false;
     var styleView = null;
+    var pdfEnabled = true;
+    var pdfTrayOpen = false;
+    var pdfOutsideListener = null;
+    var pdfShadowListener = null;
     var stylePanelOpen = false;
     var styleHandlers = {};
     var styleOutsideListener = null;
@@ -20146,6 +20182,7 @@
         // the style dropdown.
         closeMenu(false);
         closeStylePanel(false);
+        closePdfTray(false);
         return { rootId: markers.OVERLAY_ROOT_ID, remounted: false };
       }
       mounted = true;
@@ -20271,6 +20308,40 @@
       styleWrap.appendChild(styleBtn);
       styleWrap.appendChild(stylePanel);
       head.appendChild(styleWrap);
+
+      // The PDF button and its tray, between the style button and the menu.
+      // Shown on every page: asking for a PDF does not depend on the page's
+      // style. The tray is the menu's twin, with one item.
+      var pdfWrap = el("div", "pdfwrap");
+      var pdfBtn = el("button", "iconbtn pdfbtn");
+      pdfBtn.setAttribute("type", "button");
+      pdfBtn.setAttribute("aria-label", PDF.TITLE);
+      pdfBtn.setAttribute("aria-haspopup", "menu");
+      pdfBtn.setAttribute("aria-expanded", "false");
+      pdfBtn.title = PDF.TITLE;
+      pdfBtn.innerHTML = PDF_ICON;
+      pdfBtn.disabled = !pdfEnabled;
+      var pdfTray = el("div", "menu");
+      pdfTray.setAttribute("role", "menu");
+      pdfTray.setAttribute("aria-label", PDF.TITLE);
+      pdfTray.hidden = true;
+      var pdfItem = el("button", "menuitem", PDF.ITEM);
+      pdfItem.setAttribute("type", "button");
+      pdfItem.setAttribute("role", "menuitem");
+      pdfItem.setAttribute("data-action", PDF.ACTION);
+      pdfItem.addEventListener("click", function () {
+        closePdfTray(true);
+        if (!pdfEnabled) return;
+        runAction(PDF.ACTION);
+      });
+      pdfTray.appendChild(pdfItem);
+      pdfBtn.addEventListener("click", function () {
+        if (pdfTrayOpen) closePdfTray(true);
+        else openPdfTray();
+      });
+      pdfWrap.appendChild(pdfBtn);
+      pdfWrap.appendChild(pdfTray);
+      head.appendChild(pdfWrap);
 
       // The review's own actions, behind one quiet control beside the collapse
       // arrow. Nothing here decides what Copy or Export DO: each item runs the
@@ -20729,6 +20800,10 @@
         menuWrap: menuWrap,
         styleWrap: styleWrap,
         styleBtn: styleBtn,
+        pdfWrap: pdfWrap,
+        pdfBtn: pdfBtn,
+        pdfTray: pdfTray,
+        pdfItem: pdfItem,
         styleDot: styleDot,
         stylePanel: stylePanel,
         styleClose: styleClose,
@@ -20850,6 +20925,7 @@
       // listeners go the same way.
       closeMenu(false);
       closeStylePanel(false);
+      closePdfTray(false);
       // An unanswered end-review question goes with the rail that asked it, and
       // whoever awaited it is told, rather than left holding a promise that can
       // never settle now the panel is gone.
@@ -20943,8 +21019,10 @@
       // Called on every remount, which is the moment the page under the rail was
       // rebuilt. A menu the reviewer opened before a navigation is not something
       // they still want open after it, so it goes away with the page it belonged
-      // to. The BUTTON is chrome and stays; the open menu is a moment.
+      // to. The BUTTON is chrome and stays; the open menu is a moment. The PDF
+      // tray is the same kind of moment.
       closeMenu(false);
+      closePdfTray(false);
       var next = highlights.refreshScheme();
       dom.host.setAttribute(highlightModule.SCHEME_ATTR, next);
       return next;
@@ -23240,6 +23318,7 @@
       if (!dom || menuOpen) return menuOpen;
       // One thing hangs from the head at a time.
       closeStylePanel(false);
+      closePdfTray(false);
       menuOpen = true;
       dom.menuList.hidden = false;
       dom.menuBtn.setAttribute("aria-expanded", "true");
@@ -23397,6 +23476,100 @@
     }
 
     // -------------------------------------------------------------------------
+    // The PDF button and its tray
+    // -------------------------------------------------------------------------
+
+    // Off while the window cannot write to the review: a note sent from there
+    // would be refused, so the tray does not open and an open one closes.
+    function setPdfEnabled(enabled) {
+      pdfEnabled = enabled !== false;
+      if (!pdfEnabled) closePdfTray(false);
+      if (dom && dom.pdfBtn) dom.pdfBtn.disabled = !pdfEnabled;
+      return pdfEnabled;
+    }
+
+    // The menu's open and close, for the one-item tray, with the menu's two
+    // listeners for the same reason (see openMenu): the root is closed.
+    function openPdfTray() {
+      if (!dom || !pdfEnabled || pdfTrayOpen) return pdfTrayOpen;
+      // One thing hangs from the head at a time.
+      closeMenu(false);
+      closeStylePanel(false);
+      pdfTrayOpen = true;
+      dom.pdfTray.hidden = false;
+      dom.pdfBtn.setAttribute("aria-expanded", "true");
+      dom.pdfItem.focus();
+      pdfOutsideListener = function (event) {
+        if (event.type === "keydown") {
+          // Tab moves focus off the one item, so the tray goes, as the menu does.
+          if (event.key === "Tab") {
+            closePdfTray(false);
+            return;
+          }
+          if (event.key !== "Escape") return;
+          event.preventDefault();
+          event.stopPropagation();
+          closePdfTray(true);
+          return;
+        }
+        if (fromOurTree(event)) return;
+        closePdfTray(false);
+      };
+      pdfShadowListener = function (event) {
+        if (dom.pdfWrap.contains(event.target)) return;
+        closePdfTray(false);
+      };
+      doc.addEventListener("pointerdown", pdfOutsideListener, true);
+      doc.addEventListener("keydown", pdfOutsideListener, true);
+      dom.shadow.addEventListener("pointerdown", pdfShadowListener, true);
+      return true;
+    }
+
+    function closePdfTray(returnFocus) {
+      if (pdfOutsideListener) {
+        doc.removeEventListener("pointerdown", pdfOutsideListener, true);
+        doc.removeEventListener("keydown", pdfOutsideListener, true);
+        pdfOutsideListener = null;
+      }
+      if (pdfShadowListener) {
+        if (dom) dom.shadow.removeEventListener("pointerdown", pdfShadowListener, true);
+        pdfShadowListener = null;
+      }
+      if (!pdfTrayOpen) return false;
+      pdfTrayOpen = false;
+      if (!dom) return true;
+      dom.pdfTray.hidden = true;
+      dom.pdfBtn.setAttribute("aria-expanded", "false");
+      if (returnFocus) dom.pdfBtn.focus();
+      return true;
+    }
+
+    // The PDF button, as the specs read it from outside the closed root.
+    function pdfInfo() {
+      if (!dom || !dom.pdfBtn) return { present: false };
+      var rect = dom.pdfBtn.getBoundingClientRect();
+      return {
+        present: true,
+        label: dom.pdfBtn.getAttribute("aria-label"),
+        title: dom.pdfBtn.title,
+        disabled: !!dom.pdfBtn.disabled,
+        expanded: dom.pdfBtn.getAttribute("aria-expanded"),
+        open: pdfTrayOpen,
+        rect: { x: rect.x, y: rect.y, width: rect.width, height: rect.height },
+        items: pdfTrayOpen
+          ? [dom.pdfItem].map(function (node) {
+              var r = node.getBoundingClientRect();
+              return {
+                action: node.getAttribute("data-action"),
+                label: (node.textContent || "").trim(),
+                rect: { x: r.x, y: r.y, width: r.width, height: r.height }
+              };
+            })
+          : []
+      };
+    }
+
+    // -------------------------------------------------------------------------
     // The Document style button and its dropdown
     // -------------------------------------------------------------------------
     //
@@ -23435,6 +23608,7 @@
       if (!dom || !styleAvailable) return false;
       if (stylePanelOpen) return true;
       closeMenu(false);
+      closePdfTray(false);
       stylePanelOpen = true;
       renderStylePanel();
       // The menu's two listeners, for the same reason: the root is closed, so
@@ -23872,6 +24046,7 @@
       if (collapsed) {
         closeMenu(false);
         closeStylePanel(false);
+        closePdfTray(false);
       }
       renderCollapsed();
       collapseHandlers.forEach(function (fn) {
@@ -23905,6 +24080,7 @@
       if (presenting) {
         closeMenu(false);
         closeStylePanel(false);
+        closePdfTray(false);
       }
       if (persist !== false) persistCollapsedPreference();
       renderPresent();
@@ -25199,6 +25375,8 @@
       // (docs/features/20260930.01_style_switcher).
       DOCUMENT_STYLE: DOCUMENT_STYLE,
       setStyleAvailable: setStyleAvailable,
+      setPdfEnabled: setPdfEnabled,
+      pdfInfo: pdfInfo,
       setStyleView: setStyleView,
       onStylePanel: onStylePanel,
       openStylePanel: openStylePanel,
@@ -25254,6 +25432,7 @@
 
   return {
     PRESENT: PRESENT,
+    PDF: PDF,
     // Folding a card to one line: the attributes the rule is written in, the
     // icon both disclosures wear, and the pure line builder.
     FOLD_ALL: FOLD_ALL,
@@ -49724,7 +49903,7 @@
   "use strict";
 
   // Replaced by scripts/build-layer.js at concatenation time.
-  var VERSION = "0.2.0+6fc6d90aa421";
+  var VERSION = "0.2.0+ed15fc1c35ef";
 
   var protocol = ns.protocol;
   var record = ns.record;
@@ -50286,6 +50465,7 @@
       comments.unbind();
       editing.teardown();
       done.setReadOnly();
+      rail.setPdfEnabled(false);
       rail.showRefusal(info);
     }
 
@@ -50301,6 +50481,7 @@
         if (tab && typeof tab.ensureNoteBox === "function") tab.ensureNoteBox();
       }
       done.setReadOnly();
+      rail.setPdfEnabled(true);
       rail.hideRefusal();
       // The condition ended, so its chip goes too (clear, not dismiss: dismiss
       // would suppress every future refusal's chip).
@@ -50471,6 +50652,15 @@
     });
     ns.exporter.configure(exporter);
     rail.onAction("copy", exporter.copyReview);
+    // "Save as PDF" in the PDF button's tray sends the agent the note a
+    // reviewer would type, ready at once, and shows the tab its card lands in
+    // (docs/features/20261008.01_pdf_button). The note box is left alone.
+    rail.onAction(ns.overlay.PDF.ACTION, function () {
+      if (readOnlyActive) return null;
+      var asked = comments.mintReadyNote(ns.overlay.PDF.REQUEST, page);
+      rail.selectTab(ns.overlay.TAB.ACTIVE);
+      return asked;
+    });
     rail.onAction("export", exporter.exportReview);
     // Hold (docs/features/20260917.01_hold_toggle): releasing it flushes the
     // queue immediately, in one pass, past the same gate sync.js's flush()
