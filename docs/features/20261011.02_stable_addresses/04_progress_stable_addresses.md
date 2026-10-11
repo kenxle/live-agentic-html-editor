@@ -1,6 +1,6 @@
 # Progress: Stable addresses
 
-**Phase 6, Implement.** You approved the doc set. Building starts with the CI workflow and the idle-cost baseline, then the core builder. Last updated 2026-10-11 15:02.
+**Phase 6, Implement.** You approved the doc set and asked me to keep going until it is done. The CI workflow PR is open and the core builder is on Step 1. Waiting on you later: approving the old tests to retire, running `lahe install`, and merge approval. Last updated 2026-10-11 15:14.
 
 **Docs:** [Decisions page](../../ongoing/STABLE_ADDRESSES.md) · [Crucible](00_crucible_stable_addresses.html) · [Brief](01_brief_stable_addresses.html) · [Architecture](02_architecture_stable_addresses.html) · [Plan](03_plan_stable_addresses.html) · [Code survey](parts/architecture/recon.md)
 
@@ -12,7 +12,8 @@ None.
 
 | Agent or task | Doing | Started | Branch |
 |---|---|---|---|
-| Orchestrator | Step 0: CI workflow and idle baseline | 2026-10-11 15:02 | `feat/stable-addresses` |
+| Orchestrator | Step 0: hand-run CI workflow in [PR #40](https://github.com/kenxle/live-agentic-html-editor/pull/40) (local gate 844 passed, 0 failed); idle-cost baseline next | 2026-10-11 15:14 | `chore/spike-dispatch-workflow` |
+| Core builder (Opus) | Step 1: name registry, page serving on port 1483, binding, behind `LAHE_PAGES=sites` | 2026-10-11 15:14 | `unit/sa-core` |
 
 ## Phases
 
