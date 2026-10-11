@@ -1214,8 +1214,15 @@ the Library stays on <code>library.lahe.localhost</code> and is never
 served on <code>.lahe</code>. The new page server also reads them to
 tell a page from a file, and would fall back to an older header. This
 one is already handled; it is listed so the trade is complete;</li>
-<li>on a machine where Lahe does not control <code>.lahe</code> lookups,
-someone on the network could take over a name.</li>
+<li>a small leftover risk if the setup later breaks (an OS update
+removes the lookup file, say). <code>.lahe</code> is only used where it
+was set up, and Lahe stops answering <code>.lahe</code> the moment its
+check fails, so Lahe's own pages stay safe. But an old
+<code>.lahe</code> bookmark would then ask the network who
+<code>name.lahe</code> is, and a hostile network (a café's Wi-Fi) could
+answer with its own server. That server would get the browser's storage
+for that name, which holds unsent drafts. <code>.lahe.localhost</code>
+never asks the network.</li>
 </ul>
 <p><code>.lahe.localhost</code> has none of these, needs no setup on any
 system, and its addresses survive an uninstall.</p>
