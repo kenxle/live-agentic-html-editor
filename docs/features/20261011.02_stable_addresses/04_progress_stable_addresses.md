@@ -1,6 +1,6 @@
 # Progress: Stable addresses
 
-**Phase 6, Implement.** You approved the doc set and asked me to keep going until it is done. The CI workflow is merged and the core builder is on Step 1. Waiting on you later: approving the old tests to retire, running `lahe install`, and merge approval. Last updated 2026-10-11 15:14.
+**Phase 6, Implement.** You approved the doc set and asked me to keep going until it is done. Core Step 1 is merged. The core, library, and install builders are working in parallel. Waiting on you later: approving the old tests to retire, running `lahe install`, and merge approval. Last updated 2026-10-11 15:14.
 
 **Docs:** [Decisions page](../../ongoing/STABLE_ADDRESSES.md) · [Crucible](00_crucible_stable_addresses.html) · [Brief](01_brief_stable_addresses.html) · [Architecture](02_architecture_stable_addresses.html) · [Plan](03_plan_stable_addresses.html) · [Code survey](parts/architecture/recon.md)
 
@@ -12,7 +12,9 @@ None.
 
 | Agent or task | Doing | Started | Branch |
 |---|---|---|---|
-| Core builder (Opus) | Step 1: name registry, page serving on port 1483, binding, behind `LAHE_PAGES=sites` | 2026-10-11 15:14 | `unit/sa-core` |
+| Core builder (Opus) | Step 2: helper modules ask the registry; old comments and grouping; Markdown render cache | 2026-10-11 15:58 | `unit/sa-core` |
+| Library builder (Sonnet) | Tasks 4.1, 4.2: Library kinds, Open binds a site, `library.lahe.localhost`, copy without the clipboard API | 2026-10-11 15:58 | `unit/sa-library` |
+| Install builder (Opus) | Tasks 5.1 to 5.3: login item spikes, `lahe install` and `lahe uninstall`, always-on helper | 2026-10-11 15:58 | `unit/sa-install` |
 
 ## Phases
 
@@ -33,18 +35,29 @@ None.
 
 ### Task index
 
-No tasks dispatched yet.
+| Workstream | Tasks | Result | Detail |
+|---|---|---|---|
+| core | Step 1 (1.0 to 1.4) | Merged into `feat/stable-addresses`. Rows V1 to V25, V65, V66, V68, V69 pass. Unit gate 2,517 tests, 0 failed. Browser spec 18 of 18 across three browsers. | [core progress](progress/phase6_workstream_core.md) |
 
 ### Passes
 
-No passes yet.
+| Pass | What merged | Checks on the merge |
+|---|---|---|
+| 1 | core Step 1 | `npm run gate:unit` on the merged branch: 2,517 tests, 0 failed; helpers running before and after: 2 and 2 |
 
 ### Changes from plan
 
-None.
+From core Step 1 (details in the [core progress](progress/phase6_workstream_core.md)):
+
+- `add --served-by-helper` registers the origin `"null"` for the review, because the CLI's own requests carry no Origin. To be checked in the Phase 7 security review.
+- With the switch off, no pages listener opens unless a pages port is named, so the off path stays unchanged and parallel tests do not fight over 1483.
+- The Origin check accepts any review that could answer on the site, not only the one that wins the page now, so a tab opened before a newer review keeps working. Another site's origin is still refused.
+- A clash number goes on the last label (`two.repo.docs.ongoing-2`); a notes page is named for its folder.
 
 ### Follow-ups
 
+- Existing bug found by the core builder: when something holds the helper's port and drops every connection, `lahe review` exits 0 and prints nothing.
+- Two browser tests flaked on CI for PR #41 with unchanged code: `install_walk_3b.spec.js` AC6 and `graceful_failure.spec.js` S7.
 - Mac menu-bar companion app with a Library link (settled as its own follow-up).
 - HTTPS for `.lahe`, so a `.lahe` page counts as secure and `.lahe` could be printed. Lahe would make its own certificate, limited to `.lahe` names, and the computer would trust it once.
 - Test leak: 60 page servers left running from the idle-server tests (state folders named `lahe-idle-state-*`), found 2026-10-11.
@@ -78,6 +91,7 @@ Not shipped yet.
 
 ## Log
 
+- 2026-10-11 15:58: Core Step 1 merged (unit gate 0 failed). Core continues to Step 2; library (4.1, 4.2) and install (5.1 to 5.3) builders dispatched. PR #41 gate had two flaky browser failures on unchanged code; rerunning the failed job.
 - 2026-10-11 15:31: The spike workflow from #40 had a YAML error, so GitHub recorded a failed run on each of three branch pushes (you may have three failure emails; sorry). Fix is [PR #41](https://github.com/kenxle/live-agentic-html-editor/pull/41). Task 1.0 browser check on macOS: Chromium, Firefox, and WebKit all load `live-agentic-html-editor.docs.ongoing.lahe.localhost` and treat it as secure. Linux and Windows run once #41 merges.
 - 2026-10-11 15:29: PR #40 merged (hand-run spike workflow, CI gate passed). Step 0 done. Main merged into `feat/stable-addresses`.
 - 2026-10-11 15:21: Idle-cost baseline measured: 51 separate page server processes in 5 minutes, about 21 running at once, about 740 MB with the helpers. PR 0 (hand-run CI workflow) open as #40; local gate 0 failed.
