@@ -97,9 +97,17 @@ http://<name>.lahe.localhost:1483/<path under the folder>
 - **Names are made by the CLI only.** `lahe review` and `lahe write` ask the
   helper to bind the review to its site (`site.bind`, with a secret from the
   state folder). Visiting an address never makes a name.
+- **One page, every spelling.** With the port-80 forward a page also answers
+  with no port, and with `.lahe` names at `<name>.lahe`. Comments and
+  review.json treat every spelling as the same page (`record.pageIdentityKey`).
+- **The state folder is never served,** even from a site whose folder holds
+  it: any file whose real path is inside it is a 404.
+- **A name Lahe does not know, or a file that is gone,** gets a page that says
+  so, with an "Open the Library" link to `library.lahe.localhost`.
 
 The registry is `sites.json` plus its append-only `sites.log` in the state
-folder, written only by the helper. `lahe status` prints each review's address,
+folder, written only by the helper. Each change goes to the log first, so on
+start the helper replays any log entry `sites.json` is missing. `lahe status` prints each review's address,
 and the pages port and why addresses print the way they do.
 
 ## Use case 1: one HTML file that is the document
