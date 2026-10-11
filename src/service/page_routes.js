@@ -115,7 +115,8 @@ function injectForMatch(dir, match, target, html, aliases) {
     token: match.token,
     helper: helperOrigin,
     fallback: helperOrigin + protocol.route("library.get").path,
-    notes: stateDir.isNotesReview(dir, match.review),
+    // pickReview carries the notes flag from the meta.json it already read.
+    notes: typeof match.notes === "boolean" ? match.notes : stateDir.isNotesReview(dir, match.review),
     aliases: Array.isArray(aliases) && aliases.length ? aliases : undefined
   });
   return scriptLine.placeScriptLine(html, tag).html;
@@ -205,18 +206,39 @@ function servedRootsOf(meta) {
   }).filter(Boolean);
 }
 
+// Parsed meta.json files, per state folder, by review id, with the file's
+// time and size when it was read. A page load stats each file and reads only
+// one that changed. Not the helper's in-memory reviews: `lahe add` writes
+// meta.json from its own process (a reused review gains a page there), so the
+// helper's copy can be behind, and the file is the answer.
+var metaCache = new Map();
+
 function readReviews(dir) {
   var root;
   try { root = stateDir.reviewsRoot(dir); } catch (err) { return []; }
   var entries;
   try { entries = fs.readdirSync(root, { withFileTypes: true }); } catch (err) { return []; }
+  var key = dirKey(dir);
+  var before = metaCache.get(key) || new Map();
+  var kept = new Map();
   var out = [];
   entries.forEach(function (entry) {
     if (!entry.isDirectory() || !protocol.isSafeId(entry.name)) return;
-    var meta = readJson(stateDir.metaPath(dir, entry.name));
+    var file = stateDir.metaPath(dir, entry.name);
+    var stat;
+    try { stat = fs.statSync(file); } catch (err) { return; }
+    var held = before.get(entry.name);
+    var meta;
+    if (held && held.mtimeMs === stat.mtimeMs && held.size === stat.size && held.ino === stat.ino) {
+      meta = held.meta;
+    } else {
+      meta = readJson(file);
+    }
+    kept.set(entry.name, { mtimeMs: stat.mtimeMs, size: stat.size, ino: stat.ino, meta: meta });
     if (!meta || typeof meta.token !== "string") return;
     out.push({ id: entry.name, meta: meta });
   });
+  metaCache.set(key, kept);
   return out;
 }
 
@@ -236,7 +258,7 @@ function readReviews(dir) {
  * @param {string} dir the state folder
  * @param {object} site the registry entry
  * @param {{filePaths: string[], realFile: string|null, mounted: boolean}} request
- * @returns {{review: string, token: string, displaced: string|null}|null}
+ * @returns {{review: string, token: string, notes: boolean}|null}
  */
 function pickReview(dir, site, request) {
   var filePaths = request.filePaths || [];
@@ -249,7 +271,7 @@ function pickReview(dir, site, request) {
   var linking = null;
   readReviews(dir).forEach(function (entry) {
     var meta = entry.meta;
-    var candidate = { review: entry.id, token: meta.token, at: stampOf(meta) };
+    var candidate = { review: entry.id, token: meta.token, at: stampOf(meta), notes: meta.notes === true };
     var only = meta.only_recorded_pages === true;
     if (!request.mounted && recordsFile(recordedFiles(meta), filePaths, realFile)) {
       if (newer(candidate, recorded)) recorded = candidate;
@@ -264,7 +286,7 @@ function pickReview(dir, site, request) {
   });
   var best = recorded || backing || linking;
   if (!best) return null;
-  return { review: best.review, token: best.token, displaced: recorded && backing ? backing.review : null };
+  return { review: best.review, token: best.token, notes: best.notes };
 }
 
 /**
@@ -572,7 +594,19 @@ function validPort(value) {
 }
 
 /** Every old page-server record in the state folder: [{root, ports, at}]. */
+/**
+ * The page servers from before stable addresses, as {root, ports, at}. Nothing
+ * writes these records any more, so a running helper reads them once, on the
+ * first page that asks, and keeps them on its registry entry.
+ */
 function oldServerRecords(dir) {
+  var entry = activeFor(dir);
+  if (!entry) return readOldServerRecords(dir);
+  if (!entry.oldRecords) entry.oldRecords = readOldServerRecords(dir);
+  return entry.oldRecords;
+}
+
+function readOldServerRecords(dir) {
   return staticServers.allRecords(dir).map(function (entry) {
     var meta = entry.meta;
     var ports = (Array.isArray(meta.ports) ? meta.ports : []).concat([meta.port]).filter(validPort);
