@@ -495,3 +495,31 @@ test("a failed install takes back what root set up, through the marker-guarded r
   assert.doesNotMatch(d.err(), /Nothing is left installed/);
   assert.equal(fs.existsSync(loginItem.installPath(w.dir)), false);
 });
+
+// V59, proved by loading a page rather than by the printed sentence: after
+// uninstall removes the .lahe setup, a site's .lahe.localhost address still
+// loads whenever the helper runs. In process, in this test's temp folder; no
+// real login item, no real /etc file.
+test("V59: after uninstall, a .lahe.localhost address loads a page again once the helper runs", async (t) => {
+  const { writeFile, raw } = require("../helpers/sites_world.js");
+  const w = await world(t);
+  const port = await freePort();
+  const paths = rootPaths(w);
+  const fake = withSudo(w, port, { paths });
+  assert.equal(await installCommand.run(["--state-dir", w.dir, "--port", String(port), "--lahe-names"],
+    deps(w, { runner: fake.runner, rootPaths: paths })), 0);
+  const d = deps(w, { runner: fake.runner, rootPaths: paths });
+  assert.equal(await installCommand.uninstall.run(["--state-dir", w.dir], d), 0, d.err());
+  assert.ok(fake.sudo.some((call) => call.args[2] === loginItem.ROOT_SCRIPTS.removeResolver), "the .lahe setup was removed");
+  assert.equal(fs.existsSync(loginItem.installPath(w.dir)), false);
+
+  // The helper as `lahe review` starts it after an uninstall: on demand, same state folder.
+  const helper = await service.serve({ port, stateDir: w.dir, quiet: true, pagesPort: 0, sitesHome: w.home });
+  t.after(() => helper.close());
+  const folder = path.join(w.home, "ws", "repo", "docs");
+  writeFile(folder, "plan.html", "<!doctype html><title>Plan</title><p>Still here after uninstall.</p>");
+  const bound = helper.sites.bind({ root: folder, mode: "folder", entry: "plan.html" });
+  const res = await raw(helper.pagesPort, { path: "/plan.html", headers: { host: bound.name + ".lahe.localhost:" + helper.pagesPort } });
+  assert.equal(res.status, 200, res.text.slice(0, 200));
+  assert.match(res.text, /Still here after uninstall\./);
+});
