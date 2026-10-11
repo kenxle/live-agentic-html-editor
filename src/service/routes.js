@@ -384,7 +384,9 @@ var HANDLERS = {
       body: {
         events: events,
         seq: deps.log.currentSeq(request.review),
-        target_mtime: deps.reviews.targetMtime(request.review, request.query.page_path || null),
+        // The page's own origin rides along: on a stable address it is what
+        // names the site, and so the file, the page was served from.
+        target_mtime: deps.reviews.targetMtime(request.review, request.query.page_path || null, request.origin || null),
         // CAN THE SOURCE BEHIND THIS PAGE HOLD A data-lahe-id AT ALL? The
         // browser cannot work this out: a Markdown review renders to HTML, so
         // the page's own path says .html while the file an agent edits is .md

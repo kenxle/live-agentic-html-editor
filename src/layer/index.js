@@ -129,7 +129,7 @@
       from = tag ? "selector" : null;
     }
     if (!tag) return { review: null, token: null, helper: null, frames: null, start: null, notes: null, from: null };
-    return {
+    var config = {
       review: tag.getAttribute(attr.REVIEW) || null,
       token: tag.getAttribute(attr.TOKEN) || null,
       helper: tag.getAttribute(attr.HELPER) || null,
@@ -141,6 +141,25 @@
       notes: tag.getAttribute(attr.NOTES) || null,
       from: from
     };
+    // Only a tag on a stable address carries aliases, so only then is the
+    // key there at all.
+    if (tag.getAttribute(attr.ALIASES)) config.aliases = parseAliases(tag.getAttribute(attr.ALIASES));
+    return config;
+  }
+
+  /**
+   * The old origins of this page's stable address (protocol.SCRIPT_ATTR.ALIASES),
+   * or []. Only plain loopback origins, at most protocol.ALIAS_MAX: the helper
+   * writes nothing else, so anything else was not the helper's.
+   */
+  function parseAliases(value) {
+    if (!value) return [];
+    var list;
+    try { list = JSON.parse(value); } catch (err) { return []; }
+    if (!Array.isArray(list) || list.length > protocol.ALIAS_MAX) return [];
+    return list.filter(function (alias) {
+      return typeof alias === "string" && /^http:\/\/(127\.0\.0\.1|localhost):\d{1,5}$/.test(alias);
+    });
   }
 
   /** Explicit options win over the tag; the tag is the default, not the law. */
@@ -156,6 +175,7 @@
       // True only on a notes review (design call 2). Editing reads it to open
       // an empty page for typing; every other empty page stays in reading.
       notes: opts.notes !== undefined ? opts.notes === true : fromTag.notes === protocol.NOTES_ON,
+      aliases: Array.isArray(opts.aliases) ? opts.aliases : fromTag.aliases || [],
       from: opts.review ? "options" : fromTag.from
     };
   }
@@ -385,7 +405,7 @@
     function pageNow() {
       return record.pageFrom(
         { origin: win.location.origin, pathname: win.location.pathname, href: win.location.href, title: doc.title },
-        { seq: 1 }
+        { seq: 1, aliases: config.aliases }
       );
     }
 

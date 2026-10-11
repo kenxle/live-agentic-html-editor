@@ -465,6 +465,13 @@
     if (pageKey(item) === pageKeyFor(page)) return true;
     var itemOrigin = String(item[FIELD.PAGE_ORIGIN]);
     var pageOrigin = String(page.origin);
+    // A STABLE ADDRESS'S OLD ORIGINS. A record made when this page was served
+    // on a random port is this page's when its origin is one of the aliases
+    // the helper put on the script tag and its path is this path.
+    if (Array.isArray(page.aliases) && page.aliases.indexOf(itemOrigin) !== -1 &&
+        String(item[FIELD.PAGE_PATH]) === String(page.path)) {
+      return true;
+    }
     if (itemOrigin !== FILE_ORIGIN && pageOrigin !== FILE_ORIGIN) return false;
     var a = segmentsOf(item[FIELD.PAGE_PATH]);
     var b = segmentsOf(page.path);
@@ -502,7 +509,10 @@
       path: path,
       title: typeof l.title === "string" ? l.title : null,
       seq: typeof opts.seq === "number" ? opts.seq : null,
-      source_hint: opts.source_hint || null
+      source_hint: opts.source_hint || null,
+      // The old origins this page also answers for (stable addresses). Only
+      // ever what the helper wrote on the script tag.
+      aliases: Array.isArray(opts.aliases) ? opts.aliases.slice() : []
     };
   }
 

@@ -821,6 +821,10 @@ async function serve(options) {
     boundPagesPort = pagesServer.address().port;
     await listenOn("pages", boundPagesPort, "::1", false);
   }
+  // The helper modules that map a page to a file (the healer, the reload
+  // check, rebuild, the handled check, the projection) ask the registry from
+  // here on, for this state folder only, and only with the switch on.
+  if (pagesOn && boundPagesPort !== null) pageRoutesModule.activate(dir, { sites: sites, pagesPort: boundPagesPort });
 
   // The reopened-session sweep (architecture, Helper lifetime). One run at a
   // time: a slow close must not overlap the next tick. unref'd, so it never
@@ -924,6 +928,7 @@ async function serve(options) {
       if (!opts.schedule) clearInterval(sweepTimer);
       idleServers.stop();
       selfStop.stop();
+      pageRoutesModule.deactivate(dir);
       closing = closeListeners();
       return closing;
     },

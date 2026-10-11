@@ -1332,8 +1332,33 @@
     // A `lahe write` notes review (free writing, design call 2). The layer
     // reads it at boot, before the helper has answered anything, so an empty
     // notes page can open for typing and no other empty page does.
-    NOTES: "data-lahe-notes"
+    NOTES: "data-lahe-notes",
+    // Stable addresses: the old page-server origins of this page's site, as a
+    // JSON array. The layer reads a record made on one of them as made on this
+    // page, so a review's old comments show at its new address. Written only by
+    // the helper, from its own records (page_routes.aliasesFor).
+    ALIASES: "data-lahe-aliases"
   };
+
+  // At most this many aliases on one tag, and only plain loopback origins.
+  var ALIAS_MAX = 16;
+  var ALIAS_ORIGIN = /^http:\/\/(127\.0\.0\.1|localhost):\d{1,5}$/;
+
+  /** The aliases as an attribute value: JSON, escaped for a double-quoted attribute. */
+  function aliasesAttribute(aliases) {
+    if (!Array.isArray(aliases)) throw new Error("scriptTag: aliases must be a list");
+    if (aliases.length > ALIAS_MAX) throw new Error("scriptTag: at most " + ALIAS_MAX + " aliases");
+    aliases.forEach(function (alias) {
+      if (typeof alias !== "string" || !ALIAS_ORIGIN.test(alias)) {
+        throw new Error("scriptTag: an alias must be a loopback http origin, not " + JSON.stringify(alias));
+      }
+    });
+    return JSON.stringify(aliases)
+      .replace(/&/g, "&amp;")
+      .replace(/"/g, "&quot;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;");
+  }
 
   // The one value each of the two opt-ins takes. Anything else is ignored, so a
   // typo fails to the safe default rather than to a guess.
@@ -1375,6 +1400,7 @@
       '        ' + SCRIPT_ATTR.HELPER + '="' + (o.helper || DEFAULT_HELPER_ORIGIN) + '"\n' +
       fallback +
       (o.notes === true ? '        ' + SCRIPT_ATTR.NOTES + '="' + NOTES_ON + '"\n' : "") +
+      (o.aliases !== undefined ? '        ' + SCRIPT_ATTR.ALIASES + '="' + aliasesAttribute(o.aliases) + '"\n' : "") +
       '        defer><\/script>'
     );
   }
@@ -1940,6 +1966,7 @@
     splitCompleteLines: splitCompleteLines,
 
     SCRIPT_ATTR: SCRIPT_ATTR,
+    ALIAS_MAX: ALIAS_MAX,
     FRAMES_ALLOW: FRAMES_ALLOW,
     START_HIDDEN: START_HIDDEN,
     NOTES_ON: NOTES_ON,

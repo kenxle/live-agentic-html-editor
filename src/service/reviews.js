@@ -55,6 +55,7 @@ var stateDir = require("./state_dir.js");
 var healModule = require("./heal.js");
 var rebuildModule = require("./rebuild.js");
 var staticServersModule = require("./static_servers.js");
+var pageRoutesModule = require("./page_routes.js");
 var reviewFormatModule = require("../shared/review_format.js");
 
 // The owner of a review from before agent sessions existed.
@@ -933,9 +934,29 @@ function createReviews(options) {
    * @returns {string|null} null when the request cannot be mapped uniquely, the
    *   file is gone, or the stat failed for any reason at all
    */
-  function targetMtime(reviewId, pagePath) {
+  function targetMtime(reviewId, pagePath, pageOrigin) {
     var review = get(reviewId);
     if (!review) return null;
+    // A PAGE ON A STABLE ADDRESS names its own file: the registry maps its
+    // origin and path the way the server did when it served it, so a sibling
+    // page or a Markdown source reloads on its own file. The re-render still
+    // runs first, so the artifact an older address reads stays current too.
+    // STAT ONLY: a site's page gets its script line in the response.
+    if (pageRoutesModule.activeFor(dir)) {
+      if (reviewFormatModule.isLinkedPage(pagePath)) {
+        var siteLinked = pageRoutesModule.linkedFileForPage(dir, review.id, pagePath);
+        return siteLinked ? healer.consider({ path: siteLinked }) : null;
+      }
+      var siteFile = pageRoutesModule.fileForPage(dir, pageOrigin, pagePath);
+      if (siteFile) {
+        try {
+          rebuilder.refresh(review);
+        } catch (error) {
+          log.helperLog("review " + review.id + ": the re-render trigger threw and was ignored: " + error.message);
+        }
+        return healer.consider({ path: siteFile });
+      }
+    }
     // A LINKED DOCUMENT RELOADS ON ITS OWN FILE (spec 20260922.02, requirement
     // 7). A page under a /.lahe-source/ mount rides the review of the page that
     // linked to it, and targetForPage below would map it to that review's own
@@ -1027,6 +1048,8 @@ function createReviews(options) {
    */
   function servedByStaticServer(review, target) {
     try {
+      // With the switch on, a site serves it; with it off, a page server does.
+      if (pageRoutesModule.activeFor(dir)) return pageRoutesModule.servesFile(dir, target);
       return staticServersModule.servesPath(dir, review.agent_session_id, target);
     } catch (error) {
       return false;
