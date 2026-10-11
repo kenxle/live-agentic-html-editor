@@ -64,6 +64,8 @@ From core Step 1 (details in the [core progress](progress/phase6_workstream_core
 
 ### Cleanup queue
 
+- `../lahe-worktrees/sa-spike` worktree, local branch `spike/localhost-names`, and the same branch on GitHub: the browser check is done.
+- `../lahe-worktrees/sa-ci-dispatch` now holds the local branch `fix/spike-workflow-yaml`; PR #41 is merged.
 - `../lahe-worktrees/sa-ci-dispatch` worktree and its local branch `chore/spike-dispatch-workflow`: PR #40 is merged.
 - `.github/workflows/spike.yml` on main: temporary, remove before this feature's last PR merges.
 - `docs/features/20261011.02_stable_addresses/02_architecture_stable_addresses_reviews_security.html`: stale build output from before the review files were combined.
@@ -85,12 +87,23 @@ From core Step 1 (details in the [core progress](progress/phase6_workstream_core
 
 The page servers belong to about 13 agent sessions. They keep restarting: each lives about two minutes, stops, and a new one starts. Task 5.4 compares the always-on helper against these numbers.
 
+**Task 1.0 browser check, all systems.** A page at `live-agentic-html-editor.docs.ongoing.lahe.localhost:<port>` loads with no setup and counts as a secure page in every case:
+
+| System | Chromium | Firefox | WebKit |
+|---|---|---|---|
+| macOS (this Mac) | loads, secure | loads, secure | loads, secure |
+| Linux (GitHub `ubuntu-latest`) | loads, secure | loads, secure | loads, secure |
+| Windows (GitHub `windows-latest`) | loads, secure | loads, secure | loads, secure |
+
+Script: `scripts/spike_localhost_names.js` on branch `spike/localhost-names`. Linux and Windows run: [run 38170515824](https://github.com/kenxle/live-agentic-html-editor/actions/runs/38170515824).
+
 ### Ship
 
 Not shipped yet.
 
 ## Log
 
+- 2026-10-11 16:07: PR #41 merged (workflow file fixed, gate green on rerun). Task 1.0 browser check passed on Linux and Windows too: all three browsers load dotted `.lahe.localhost` names as secure pages.
 - 2026-10-11 15:58: Core Step 1 merged (unit gate 0 failed). Core continues to Step 2; library (4.1, 4.2) and install (5.1 to 5.3) builders dispatched. PR #41 gate had two flaky browser failures on unchanged code; rerunning the failed job.
 - 2026-10-11 15:31: The spike workflow from #40 had a YAML error, so GitHub recorded a failed run on each of three branch pushes (you may have three failure emails; sorry). Fix is [PR #41](https://github.com/kenxle/live-agentic-html-editor/pull/41). Task 1.0 browser check on macOS: Chromium, Firefox, and WebKit all load `live-agentic-html-editor.docs.ongoing.lahe.localhost` and treat it as secure. Linux and Windows run once #41 merges.
 - 2026-10-11 15:29: PR #40 merged (hand-run spike workflow, CI gate passed). Step 0 done. Main merged into `feat/stable-addresses`.
