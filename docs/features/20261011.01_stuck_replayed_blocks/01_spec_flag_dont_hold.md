@@ -2,7 +2,7 @@
 
 ## Needs your call
 
-Nothing open. Building.
+Nothing open. Merged as PR #38 on 2026-10-11. To get it on your machine: bring main into the checkout the `lahe` command runs from, then `npm run install-skills` and `lahe serve --restart`.
 
 ## Decided
 
