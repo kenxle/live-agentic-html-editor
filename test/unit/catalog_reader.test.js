@@ -11,12 +11,13 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
-const http = require("node:http");
 const path = require("node:path");
 
 const protocol = require("../../src/shared/protocol.js");
 const catalogReader = require("../../src/service/catalog_reader.js");
 const staticServers = require("../../src/service/static_servers.js");
+const sitesModule = require("../../src/service/sites.js");
+const catalogSites = require("../../src/service/catalog_sites.js");
 const fixture = require("../fixtures/catalog_state.js");
 
 const LIST_FIXTURE = path.join(__dirname, "..", "fixtures", "catalog_list.json");
@@ -49,8 +50,42 @@ function fixtureRequests(nowMs) {
   });
 }
 
+/**
+ * The fixture's state folder gets a site registry: the beta project's specs
+ * folder has been named, the way `lahe review` or an earlier Open names one.
+ * The pages port is a fixed number, so every address in the committed list
+ * is the same on every run.
+ */
+function nameBetaSpecs(installed) {
+  fs.writeFileSync(path.join(installed.dir, "sites.json"), JSON.stringify({
+    version: 1,
+    sites: {
+      "projects.beta.specs": {
+        root: path.join(installed.home, "projects/beta/specs"),
+        entry: "spec.html",
+        mode: "folder",
+        mounts: {},
+        linked_files: {},
+        main_checkout: null,
+        worktree_root: null,
+        created_at: "2026-09-01T00:00:00.000Z"
+      }
+    }
+  }));
+}
+
+function pagesFor(installed) {
+  return catalogSites.createCatalogSites({
+    dir: installed.dir,
+    sites: sitesModule.createSites({ dir: installed.dir, reader: true }),
+    reviews: {},
+    port: () => 1483
+  });
+}
+
 function setup(overrides) {
   const installed = fixture.install();
+  nameBetaSpecs(installed);
   const reads = [];
   const requests = fixtureRequests(installed.nowMs);
   const options = Object.assign(
@@ -62,7 +97,7 @@ function setup(overrides) {
         return fs.readFileSync(file, encoding);
       },
       pidAlive: () => true,
-      probe: async (meta) => meta.id === "ss_beta",
+      pages: pagesFor(installed),
       attachment: () => ({ session: "s_index", name: "document index", at: new Date(installed.nowMs - 5 * MINUTE).toISOString(), watching: true }),
       requestFor: (reviewId) => requests[reviewId] || null
     },
@@ -290,16 +325,17 @@ test("cache: a change with the same modified time and a new size is seen", async
 
 // --- openable and kind -------------------------------------------------------------
 
-test("openable is yes exactly when static_servers.coveragePath covers the file for a recorded server, mounts included", async () => {
-  // The coverage rule lives once, in static_servers.js; servesPath is that rule
-  // plus "running right now" (tested there). Open restarts stopped servers, so
-  // the reader asks the rule alone, and every row whose document is on disk
-  // must agree with it.
+test("openable is yes exactly when an old page server's record covers the file, mounts included", async () => {
+  // Nothing is restarted now; the old record is the evidence that the helper
+  // may bind a site over the folder (catalog_sites.js). The coverage rule lives
+  // once, in static_servers.js, and every row whose document is on disk must
+  // agree with it.
   const { reader, installed } = setup();
   const list = await reader.list(installed.nowMs);
   let compared = 0;
   rows(list).forEach((r) => {
-    if (r.unreadable || r.session_id === "legacy") return;
+    // Its record is the one that cannot be read at all: it vouches for nothing.
+    if (r.unreadable || r.session_id === "legacy" || r.id === "r_ssbroken") return;
     const d = reader.describeReview(r.id, installed.nowMs);
     if (!d.path || !fs.existsSync(d.path)) return;
     const meta = JSON.parse(fs.readFileSync(path.join(installed.dir, "reviews", r.id, "meta.json"), "utf8"));
@@ -351,21 +387,28 @@ test("describeReview gives the display name, the document's path, and a checked 
   assert.equal(reader.describeReview("r_nope", installed.nowMs), null);
 });
 
-test("describeReview also names what Open needs: the covering server, the URL path on it, the served file, who is watching, and last", async () => {
+test("describeReview also names what Open needs: the site it binds, the served file, who is watching, and last", async () => {
   const { reader, installed } = setup();
   const brief = reader.describeReview("r_brief", installed.nowMs);
   assert.equal(brief.session, "s_coach");
   assert.equal(brief.openable, "yes");
-  assert.equal(brief.server, "ss_alphadocs");
-  assert.equal(brief.url_path, "/brief.html");
+  const docs = fs.realpathSync(path.join(installed.home, "projects/alpha/docs"));
+  assert.deepEqual(
+    { mode: brief.site.mode, root: brief.site.root, file: brief.site.file, url_path: brief.site.url_path, name: brief.site.name, address: brief.site.address, worktree: brief.site.worktree },
+    { mode: "folder", root: docs, file: path.join(docs, "brief.html"), url_path: "/brief.html", name: null, address: null, worktree: false },
+    "no site is named for it yet, so Open will name one"
+  );
   assert.equal(brief.served_path, path.join(installed.home, "projects/alpha/docs/brief.html"));
   assert.deepEqual(brief.watching, { session: "s_coach", name: "coach activity", state: "listening", last_active: new Date(installed.nowMs - 10 * 1000).toISOString() });
   assert.equal(brief.last, "2026-09-28T15:40:00.000Z");
+  assert.equal("server" in brief, false, "no page server is named any more");
+  const spec = reader.describeReview("r_spec", installed.nowMs);
+  assert.equal(spec.site.name, "projects.beta.specs", "a named site shows its name and address");
+  assert.equal(spec.site.address, "http://projects.beta.specs.lahe.localhost:1483/spec.html");
   const mounted = reader.describeReview("r_mounted", installed.nowMs);
-  assert.match(mounted.url_path, /^\/\.lahe-source\/[a-f0-9]+\/figure\.html$/);
+  assert.match(mounted.site.url_path, /figure\.html$/);
   const dev = reader.describeReview("r_dev", installed.nowMs);
-  assert.equal(dev.server, null);
-  assert.equal(dev.url_path, null);
+  assert.equal(dev.site, null);
   assert.equal(dev.watching, null);
 });
 
@@ -390,7 +433,7 @@ test("a worktree candidate that is hidden, symlinked out of its repository, or n
     meta.target_path = target;
     meta.target_paths = [target];
     fs.writeFileSync(metaFile, JSON.stringify(meta, null, 2) + "\n");
-    const reader = catalogReader.createReader({ dir: installed.dir, home: installed.home, pidAlive: () => true, probe: async () => false });
+    const reader = catalogReader.createReader({ dir: installed.dir, home: installed.home, pidAlive: () => true });
     assert.equal(reader.describeReview("r_wt_gone", installed.nowMs).candidate, null, label);
     const list = await reader.list(installed.nowMs);
     assert.equal(row(list, "r_wt_gone").openable, "missing", label + ": a failed candidate is not a main-repo copy");
@@ -409,7 +452,7 @@ test("a worktree candidate owned by another user is null, and the row is missing
   // file itself is untouched: it still exists, under the repository, a page.
   process.getuid = () => realGetuid.call(process) + 1;
   try {
-    const reader = catalogReader.createReader({ dir: installed.dir, home: installed.home, pidAlive: () => true, probe: async () => false });
+    const reader = catalogReader.createReader({ dir: installed.dir, home: installed.home, pidAlive: () => true });
     assert.equal(reader.describeReview("r_wt_gone", installed.nowMs).candidate, null);
     const list = await reader.list(installed.nowMs);
     assert.equal(row(list, "r_wt_gone").openable, "missing");
@@ -418,57 +461,11 @@ test("a worktree candidate owned by another user is null, and the row is missing
   }
   // The same fixture with the real owner has a candidate, so the null above is
   // the owner check and nothing else.
-  const reader = catalogReader.createReader({ dir: installed.dir, home: installed.home, pidAlive: () => true, probe: async () => false });
+  const reader = catalogReader.createReader({ dir: installed.dir, home: installed.home, pidAlive: () => true });
   assert.equal(reader.describeReview("r_wt_gone", installed.nowMs).candidate, path.join(installed.home, "projects/alpha/docs/brief.html"));
 });
 
 // --- probes ------------------------------------------------------------------
-
-test("served_url is set only when the recorded server answers its exact-identity probe; stopped records are skipped and a probe is not repeated within one POLL_MS", async (t) => {
-  const hits = [];
-  let identity = null;
-  const server = http.createServer((req, res) => {
-    hits.push(req.url);
-    if (!identity || req.url !== "/.lahe-static-health/" + identity.id + "/" + identity.instance) {
-      res.writeHead(404);
-      return res.end();
-    }
-    res.writeHead(200, { "content-type": "application/json" });
-    res.end(JSON.stringify(identity));
-  });
-  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
-  t.after(() => server.close());
-  const port = server.address().port;
-
-  const installed = fixture.install();
-  const serversDir = path.join(installed.dir, "agent-sessions", "s_coach", "static-servers");
-  const retarget = (name) => {
-    const file = path.join(serversDir, name + ".json");
-    const meta = JSON.parse(fs.readFileSync(file, "utf8"));
-    meta.port = port;
-    fs.writeFileSync(file, JSON.stringify(meta, null, 2) + "\n");
-    return meta;
-  };
-  const beta = retarget("ss_beta");
-  retarget("ss_alphadocs"); // stopped: must never be probed
-  identity = { id: beta.id, instance: beta.instance, started_at: beta.started_at, pid: beta.pid };
-
-  const reader = catalogReader.createReader({ dir: installed.dir, home: installed.home, pidAlive: () => true });
-  const first = await reader.list(installed.nowMs);
-  assert.equal(row(first, "r_spec").served_url, "http://127.0.0.1:" + port + "/spec.html");
-  assert.equal(row(first, "r_brief").served_url, null, "a stopped record is not probed");
-  assert.equal(hits.length, 1);
-  assert.ok(hits.every((url) => url.indexOf("ss_alphadocs") === -1));
-
-  await reader.list(installed.nowMs + protocol.CATALOG.POLL_MS - 1);
-  assert.equal(hits.length, 1, "cached for one POLL_MS");
-  await reader.list(installed.nowMs + protocol.CATALOG.POLL_MS);
-  assert.equal(hits.length, 2, "probed again at POLL_MS");
-
-  identity = Object.assign({}, identity, { pid: identity.pid + 1 });
-  const wrong = await reader.list(installed.nowMs + 2 * protocol.CATALOG.POLL_MS);
-  assert.equal(row(wrong, "r_spec").served_url, null, "a server with another identity is not this review's");
-});
 
 // --- watching and attached ------------------------------------------------------
 
@@ -501,7 +498,7 @@ function queueReader(installed) {
   const catalogRequests = require("../../src/service/catalog_requests.js");
   const queue = catalogRequests.createQueue({ dir: installed.dir, pidAlive: () => true, log: () => {} });
   return catalogReader.createReader(Object.assign({
-    dir: installed.dir, home: installed.home, pidAlive: () => true, probe: async () => false
+    dir: installed.dir, home: installed.home, pidAlive: () => true
   }, catalogReader.queueInputs(queue)));
 }
 
@@ -571,7 +568,6 @@ test("wired to 1.4's real queue: attached comes from readAttached and each row's
     dir: installed.dir,
     home: installed.home,
     pidAlive: () => true,
-    probe: async () => false,
     attachment: queue.readAttached,
     requestFor: queue.requestFor
   });
@@ -611,7 +607,7 @@ test("one list call reads catalog-requests.jsonl once, not once per row, and eve
   const spec = queue.append({ action: "launch", review: "r_spec", session: "s_coach", for: "s_index" }, now - 2 * MINUTE);
   // Wired exactly as src/service/index.js wires the helper's reader.
   const reader = catalogReader.createReader(Object.assign({
-    dir: installed.dir, home: installed.home, pidAlive: () => true, probe: async () => false
+    dir: installed.dir, home: installed.home, pidAlive: () => true
   }, catalogReader.queueInputs(queue)));
   queueReads = 0;
   const list = await reader.list(now);
@@ -631,7 +627,7 @@ test("attached.watching is the queue's own answer when the attach carries one, s
   const queue = catalogRequests.createQueue({ dir: installed.dir, pidAlive: () => true, log: () => {} });
   assert.equal(queue.readAttached(installed.nowMs).watching, false);
   const reader = catalogReader.createReader({
-    dir: installed.dir, home: installed.home, pidAlive: () => true, probe: async () => false,
+    dir: installed.dir, home: installed.home, pidAlive: () => true,
     attachment: queue.readAttached, requestFor: queue.requestFor
   });
   assert.deepEqual((await reader.list(installed.nowMs)).attached, { session: "s_index", name: "document index", watching: false, closed: true });
@@ -653,11 +649,13 @@ test("attached.closed is true when the attached session has closed_at, and false
 
 // --- corrupt files ---------------------------------------------------------------
 
-test("a corrupt review.json, meta.json, session.json or ss_*.json marks only its own row unreadable", async () => {
+test("a corrupt review.json, meta.json or session.json marks only its own row unreadable; a corrupt old server record marks nothing", async () => {
   const { reader, installed } = setup();
   const list = await reader.list(installed.nowMs);
   const unreadable = rows(list).filter((r) => r.unreadable).map((r) => r.id).sort();
-  assert.deepEqual(unreadable, ["r_badmeta", "r_badreview", "r_badsession", "r_ssbroken"]);
+  assert.deepEqual(unreadable, ["r_badmeta", "r_badreview", "r_badsession"]);
+  assert.equal(row(list, "r_ssbroken").unreadable, false, "its page server record is retired and vouches for nothing, but nothing is wrong with the review");
+  assert.equal(row(list, "r_ssbroken").openable, "via-agent", "so nothing vouches for serving it");
   assert.equal(row(list, "r_badmeta").session_id, "s_old3", "placed by its review.json");
   assert.equal(row(list, "r_brief").unreadable, false);
 });
@@ -733,46 +731,6 @@ test("the committed list fixture covers every row kind and state the page draws"
 
 // --- fix round (phase 7) -----------------------------------------------------
 
-test("CX1: with every server answering, out of order, each row's served_url is its own server's port and path", async () => {
-  // Every probe answers true, and later probes answer first, so a callback
-  // that closed over a shared `row` or `cover` would write one row's URL onto
-  // another.
-  const installed = fixture.install();
-  // Every record running, so several rows are probed in the one list.
-  const sessionsRoot = path.join(installed.dir, "agent-sessions");
-  fs.readdirSync(sessionsRoot).forEach((sessionId) => {
-    const serversDir = path.join(sessionsRoot, sessionId, "static-servers");
-    if (!fs.existsSync(serversDir)) return;
-    fs.readdirSync(serversDir).forEach((name) => {
-      const file = path.join(serversDir, name);
-      let meta;
-      try { meta = JSON.parse(fs.readFileSync(file, "utf8")); } catch (err) { return; }
-      if (!meta || typeof meta !== "object") return;
-      meta.stopped_at = null;
-      fs.writeFileSync(file, JSON.stringify(meta, null, 2) + "\n");
-    });
-  });
-  const waits = [];
-  const probe = (meta) => new Promise((resolve) => { waits.push(() => resolve(true)); });
-  const reader = catalogReader.createReader({ dir: installed.dir, home: installed.home, pidAlive: () => true, probe });
-  const pending = reader.list(installed.nowMs);
-  await new Promise((resolve) => setImmediate(resolve));
-  assert.ok(waits.length >= 2, "at least two rows are probed, got " + waits.length);
-  waits.slice().reverse().forEach((go) => go());
-  const list = await pending;
-  let served = 0;
-  rows(list).forEach((r) => {
-    if (!r.served_url) return;
-    served += 1;
-    const d = reader.describeReview(r.id, installed.nowMs);
-    const record = staticServers.list(installed.dir, r.session_id).find((m) => m.id === d.server);
-    assert.equal(r.served_url, "http://127.0.0.1:" + record.port + d.url_path, r.id);
-  });
-  const openableYes = rows(list).filter((r) => r.openable === "yes").length;
-  assert.equal(served, openableYes, "every openable row got a URL");
-  assert.ok(served >= 2, "several rows served, got " + served);
-});
-
 test("CR5: origin events an Open's swap appends do not move a review's last; the newest other event's time is its last", async () => {
   const { reader, installed } = setup();
   const log = path.join(installed.dir, "reviews", "r_spec", "events.jsonl");
@@ -797,7 +755,7 @@ test("an expired request's reason reaches the list, so the page can word attach_
   queue.append({ action: "launch", review: "r_brief", session: "s_coach", for: "s_index" }, now - 2 * MINUTE);
   catalogRequests.writeAttach(installed.dir, "s_coach", now - MINUTE);
   const reader = catalogReader.createReader(Object.assign({
-    dir: installed.dir, home: installed.home, pidAlive: () => true, probe: async () => false
+    dir: installed.dir, home: installed.home, pidAlive: () => true
   }, catalogReader.queueInputs(queue)));
   const list = await reader.list(now);
   assert.equal(row(list, "r_brief").request.state, "expired");

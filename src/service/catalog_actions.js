@@ -1,29 +1,27 @@
 // The Library's actions: what catalog.list, open, star and request do once the
-// check block has passed them, and the reopened-session sweep.
+// check block has passed them, and the sweep of the Library's own idle sessions.
 //
 // Owner: LAHE Library 2.1. Architecture: docs/features/20260922.02_lahe_library/
-// 02_architecture_lahe_library.md, "Key Flows" (Open, Star, Launch), "Helper
-// lifetime (R10a)" and "The log line".
+// 02_architecture_lahe_library.md, "Key Flows" (Star, Launch), "Helper
+// lifetime (R10a)" and "The log line"; stable addresses, "The Library", for Open.
 //
 // WIRING, NOT NEW RULES. Every rule here already has one home, and this module
 // only joins them:
 //
 //   the list, and what a review is            catalog_reader (1.1)
-//   stars and the reopened map                catalog_store (1.1)
+//   a review's site, its address, binding it  catalog_sites (stable addresses 4.1)
+//   stars and names                           catalog_store (1.1)
 //   the request queue and the attached agent  catalog_requests (1.4)
-//   restarting one server, closing quietly    static_servers.createCatalogOps (1.3)
 //   is a monitor live                         agent_sessions.livenessFrom
 //
-// OPEN SERVES NOTHING NEW. It restarts the recorded server that already covers
-// the review's recorded file (describeReview's `server`), and builds the URL
-// from that server's own origin and the path the coverage rule gave. Nothing
-// in the request body names a file, a root or a URL; extra fields are never
-// read. A review no recorded server covers is the agent's to re-serve.
-//
-// WITH THE PAGES SWITCH ON (stable addresses) Open binds a site in the
-// registry instead of restarting a server, and the same rule holds: it names a
-// root only when something a page cannot write has already served it
-// (catalog_sites.js). The reopened-session step below is then never reached.
+// OPEN BINDS A SITE AND SERVES NOTHING NEW. The helper serves every page, so
+// Open restarts nothing and reopens no session: it names the document's site in
+// the registry if it has none, stamps the review as re-served unless a newer
+// review in another open session holds the page's rail, and returns the
+// address. Nothing in the request body names a file, a root or a URL; extra
+// fields are never read. A root is named only when something a page cannot write
+// has already served it (catalog_sites.js, vouched()). A review nothing vouches
+// for is the agent's to re-serve.
 //
 // EVERY CLOCK IS `now`. Each function takes the time as an argument, and the
 // helper passes its own clock, so tests drive expiry, the sweep and the log
@@ -45,9 +43,8 @@ var fs = require("node:fs");
 var protocol = require("../shared/protocol.js");
 var stateDir = require("./state_dir.js");
 var agentSessions = require("./agent_sessions.js");
-var reviewsModule = require("./reviews.js");
 var catalogRequests = require("./catalog_requests.js");
-var staticServers = require("./static_servers.js");
+var catalogSites = require("./catalog_sites.js");
 
 var C = protocol.CATALOG;
 var DAY_MS = 24 * 60 * 60 * 1000;
@@ -72,62 +69,37 @@ function badRequest(detail) {
 }
 
 /**
- * @param {{dir: string, reader: object, queue: object, store: object, ops: object,
- *          sessions: object, log: function(string, number), pidAlive?: function,
- *          uid?: number|null, pages?: object}} options
- *   `reader` is catalog_reader.createReader, wired to `queue`. `ops` is
- *   static_servers.createCatalogOps. `log(line, nowMs)` writes one helper log
- *   line stamped at `nowMs`. `uid` is the user a recorded file must belong to
- *   (the current one by default; tests pass another to prove the refusal,
- *   since chown needs root). `statFile` is fs.statSync unless a test passes
- *   one that reports a chosen owner per path. `pages` is
- *   catalog_sites.createCatalogSites when the helper serves pages itself
- *   (stable addresses); Open then binds a site instead of restarting a server.
+ * @param {{dir: string, reader: object, queue: object, store: object,
+ *          sessions: object, log: function(string, number), pages?: object,
+ *          pidAlive?: function, uid?: number|null, statFile?: function}} options
+ *   `reader` is catalog_reader.createReader, wired to `queue`. `pages` is
+ *   catalog_sites.createCatalogSites, over the helper's registry (the default
+ *   is a read-only one, which cannot name a site). `log(line,
+ *   nowMs)` writes one helper log line stamped at `nowMs`. `uid` is the user a
+ *   file Open binds a site over must belong to (the current one by default;
+ *   tests pass another to prove the refusal, since chown needs root).
+ *   `statFile` is fs.statSync unless a test passes one that reports a chosen
+ *   owner per path.
  */
 function createCatalogActions(options) {
   var opts = options || {};
-  ["dir", "reader", "queue", "store", "ops", "sessions", "log"].forEach(function (key) {
+  ["dir", "reader", "queue", "store", "sessions", "log"].forEach(function (key) {
     if (!opts[key]) throw new Error("catalog_actions.createCatalogActions: " + key + " is required");
   });
   var dir = opts.dir;
   var reader = opts.reader;
   var queue = opts.queue;
   var store = opts.store;
-  var ops = opts.ops;
   var sessions = opts.sessions;
   var log = opts.log;
   var pidAlive = typeof opts.pidAlive === "function" ? opts.pidAlive : agentSessions.pidAlive;
   var uid = typeof opts.uid === "number" ? opts.uid : typeof process.getuid === "function" ? process.getuid() : null;
   var statFile = typeof opts.statFile === "function" ? opts.statFile : fs.statSync;
-  var siteTools = opts.pages || null;
+  var siteTools = opts.pages || catalogSites.readOnly(dir);
 
   // -------------------------------------------------------------------------
   // Shared steps
   // -------------------------------------------------------------------------
-
-  // ONE OPEN AT A TIME PER SERVER RECORD (fix round CR1). Two Opens on a
-  // closed session would each see the record stopped and each spawn a server:
-  // one is orphaned, and the second origin swap drops the first tab's origin.
-  // So the restart step runs in a chain per "<session> <server>", and the
-  // second Open finds the first one's server already up. `openingSessions`
-  // counts the Opens in flight per session, so the sweep never closes a
-  // session an Open is part way through bringing back.
-  var openChains = Object.create(null);
-  var openingSessions = Object.create(null);
-
-  function oneAtATime(sessionId, serverId, fn) {
-    var key = sessionId + " " + serverId;
-    var prior = openChains[key] || Promise.resolve();
-    openingSessions[sessionId] = (openingSessions[sessionId] || 0) + 1;
-    var run = prior.then(fn);
-    var tail = run.then(function () {}, function () {});
-    openChains[key] = tail;
-    return run.finally(function () {
-      if (openChains[key] === tail) delete openChains[key];
-      openingSessions[sessionId] -= 1;
-      if (openingSessions[sessionId] <= 0) delete openingSessions[sessionId];
-    });
-  }
 
   /** One `catalog` line, in the format protocol.js spells. */
   function logAction(action, described, nowMs) {
@@ -183,30 +155,7 @@ function createCatalogActions(options) {
   }
 
   /**
-   * Is every recorded file of this review, and the root of the server record
-   * Open would restart, on disk and owned by the current user? The restarted
-   * server serves everything under that root, so the root is checked too. A
-   * record with no root, or a file that is not on disk, is not openable: there
-   * is nothing to check it against.
-   */
-  function ownedByUser(described) {
-    if (typeof described.server_root !== "string" || !described.server_root) return false;
-    var files = [described.served_path, described.path, described.server_root].filter(function (file, i, all) {
-      return typeof file === "string" && file && all.indexOf(file) === i;
-    });
-    return files.every(function (file) {
-      var stat;
-      try {
-        stat = statFile(file);
-      } catch (err) {
-        return false;
-      }
-      return uid === null || stat.uid === uid;
-    });
-  }
-
-  /**
-   * Stable addresses: is every file Open would bind a site over on disk and
+   * Is every file Open would bind a site over on disk and
    * owned by the current user? The site serves everything under its root, so
    * the root is checked with the document.
    */
@@ -322,8 +271,8 @@ function createCatalogActions(options) {
   /**
    * catalog.open, body {review, handoff, confirmed}.
    *
-   * @returns {Promise<object>} body {url, request_id, not_asked}; `url` is null
-   *   for a via-agent row, whose Open is the pick-up itself.
+   * @returns {Promise<object>} body {url, request_id, not_asked, held_by}; `url`
+   *   is null for a via-agent row, whose Open is the pick-up itself.
    */
   async function open(body, nowMs) {
     var found = describe(body, nowMs);
@@ -334,66 +283,20 @@ function createCatalogActions(options) {
 
     if (d.openable === "missing") return fail("PROTO_NOT_OPENABLE", "missing");
 
-    if (d.openable !== "yes" || !(siteTools ? d.site : d.server && d.url_path)) {
-      // No recorded server covers it. Only an agent can re-serve it, and only
+    if (d.openable !== "yes" || !d.site) {
+      // Nothing vouches for serving it. Only an agent can re-serve it, and only
       // when the reviewer asked for the hand-over.
-      if (!handoff) return fail("PROTO_NOT_OPENABLE", "via-agent: no recorded server serves this review");
+      if (!handoff) return fail("PROTO_NOT_OPENABLE", "via-agent: nothing the helper served vouches for this review's document");
       var viaAgent = liveAgent(nowMs);
       if (!viaAgent) return fail("PROTO_NO_AGENT");
       if (watchedByAnother(d, viaAgent) && !confirmed) return fail("PROTO_CONFIRM_NEEDED");
       var queuedVia = enqueue(ACTION.PICKUP, d, viaAgent, nowMs);
       if (!queuedVia.ok) return fail(queuedVia.code, queuedVia.detail);
       logAction(protocol.CATALOG_LOG.ACTION.OPEN, d, nowMs);
-      return { status: 200, body: { url: null, request_id: queuedVia.request.id, not_asked: null } };
+      return { status: 200, body: { url: null, request_id: queuedVia.request.id, not_asked: null, held_by: null } };
     }
 
-    if (siteTools) return openSite(d, handoff, confirmed, nowMs);
-
-    if (!ownedByUser(d)) return fail("PROTO_NOT_OPENABLE", "not owned by the current user, or not on disk");
-
-    // The confirm step comes before anything starts: a refused hand-over must
-    // not have restarted a server behind the reviewer's back.
-    var agent = handoff ? liveAgent(nowMs) : null;
-    if (handoff && agent && watchedByAnother(d, agent) && !confirmed) return fail("PROTO_CONFIRM_NEEDED");
-
-    var restart = await oneAtATime(d.session, d.server, async function () {
-      var before = sessions.read(d.session);
-      var wasClosed = !!(before && before.closed_at);
-      if (wasClosed) {
-        // The Library is about to reopen it, so the sweep may close it again
-        // once it goes quiet. A session that was already open is somebody
-        // else's. RECORDED FIRST: a reopen the sweep cannot see is a session
-        // left open for good, so a catalog.json that cannot take the record
-        // refuses the Open before anything is reopened or started.
-        var saved = store.setReopened(d.session, { at: iso(nowMs), handoff_rev: agentSessions.handoffRev(before) });
-        if (!saved.ok) {
-          log("Library Open of review " + d.review + " refused: session " + d.session +
-            " is closed and its reopen could not be recorded: " + saved.code, nowMs);
-          return { ok: false, outcome: fail(saved.code || "PROTO_CATALOG_UNREADABLE") };
-        }
-      }
-      var restarted;
-      try {
-        // Starts the server before it reopens the session, so a failed start
-        // leaves the session closed.
-        restarted = await ops.reopenForCatalog(d.session, d.server, d.review);
-      } catch (err) {
-        // Only a start that threw left nothing behind. A later throw was
-        // undone inside the ops (the server it started stopped, the session
-        // closed again); the record stays so the sweep closes the session if
-        // that undo did not (adversary fixes).
-        if (wasClosed && err && err.stage === staticServers.REOPEN_STAGE.START) store.clearReopened(d.session);
-        log("Library Open of review " + d.review + " could not restart its server: " + err.message, nowMs);
-        return { ok: false, outcome: fail("PROTO_NOT_OPENABLE", "the recorded server could not be restarted") };
-      }
-      return { ok: true, value: restarted };
-    });
-    if (!restart.ok) return restart.outcome;
-    var reopened = restart.value;
-
-    var handed = handOver(d, handoff, agent, nowMs);
-    logAction(protocol.CATALOG_LOG.ACTION.OPEN, d, nowMs);
-    return { status: 200, body: { url: reopened.origin + d.url_path, request_id: handed.requestId, not_asked: handed.notAsked } };
+    return openSite(d, handoff, confirmed, nowMs);
   }
 
   /** catalog.star, body {review, starred}. */
@@ -490,7 +393,7 @@ function createCatalogActions(options) {
   }
 
   // -------------------------------------------------------------------------
-  // The reopened-session sweep
+  // The Library's own idle sessions
   // -------------------------------------------------------------------------
 
   /** The reviews a session owns, read off their meta.json files. */
@@ -527,74 +430,6 @@ function createCatalogActions(options) {
       pidAlive: pidAlive
     });
     return liveness[protocol.AGENT_LIVENESS.FIELD.LISTENING] === true;
-  }
-
-  /**
-   * Close each Library-reopened session once it has been quiet for
-   * REOPENED_AUTOCLOSE_MS: nothing since the reopen, and no window of any of
-   * its reviews held in that time. Left alone:
-   *
-   *   - a session reopened with `lahe session reopen` (it is not in the map)
-   *   - a session taken over since (its handoff_rev moved past the recorded
-   *     one); its entry is dropped, since it is an agent's now
-   *   - a session whose monitor is live, or that an Open is bringing back
-   *
-   * A closed session's entry is cleared, whoever closed it.
-   *
-   * @returns {Promise<{closed: string[], kept: string[], cleared: string[]}>}
-   */
-  async function sweepReopened(nowMs) {
-    var out = { closed: [], kept: [], cleared: [] };
-    var read = store.read();
-    if (!read.ok) return out;
-    var holders = reviewsModule.readLiveHolders(dir, C.REOPENED_AUTOCLOSE_MS, nowMs);
-    var ids = Object.keys(read.data.reopened);
-    for (var i = 0; i < ids.length; i += 1) {
-      var sessionId = ids[i];
-      var entry = read.data.reopened[sessionId] || {};
-      var session = null;
-      try {
-        session = sessions.read(sessionId);
-      } catch (err) {
-        session = null;
-      }
-      if (!session || session.closed_at) {
-        store.clearReopened(sessionId);
-        out.cleared.push(sessionId);
-        continue;
-      }
-      if (agentSessions.handoffRev(session) > (Number.isInteger(entry.handoff_rev) ? entry.handoff_rev : 0)) {
-        store.clearReopened(sessionId);
-        out.cleared.push(sessionId);
-        continue;
-      }
-      if (openingSessions[sessionId] || monitorLive(sessionId, session, nowMs)) {
-        // An Open part way through bringing it back is activity too.
-        out.kept.push(sessionId);
-        continue;
-      }
-      var reopenedAt = Date.parse(entry.at);
-      var quietSince = Number.isNaN(reopenedAt) ? 0 : reopenedAt;
-      var owned = reviewsOf(sessionId);
-      holders.forEach(function (holder) {
-        if (owned.indexOf(holder.review) !== -1) quietSince = Math.max(quietSince, nowMs - holder.quiet_ms);
-      });
-      if (nowMs - quietSince < C.REOPENED_AUTOCLOSE_MS) {
-        out.kept.push(sessionId);
-        continue;
-      }
-      try {
-        await ops.closeQuiet(sessionId);
-      } catch (err) {
-        log("Library sweep could not close reopened session " + sessionId + ": " + err.message, nowMs);
-        out.kept.push(sessionId);
-        continue;
-      }
-      store.clearReopened(sessionId);
-      log("Library sweep closed session " + sessionId + ", quiet since the Library reopened it", nowMs);
-      out.closed.push(sessionId);
-    }
-    return out;
   }
 
   /**
@@ -639,7 +474,7 @@ function createCatalogActions(options) {
         continue;
       }
       try {
-        await ops.closeQuiet(sessionId);
+        sessions.close(sessionId);
       } catch (err) {
         log("Library sweep could not close idle Library session " + sessionId + ": " + err.message, nowMs);
         out.kept.push(sessionId);
@@ -657,7 +492,6 @@ function createCatalogActions(options) {
     star: star,
     rename: rename,
     request: request,
-    sweepReopened: sweepReopened,
     sweepLibrarySessions: sweepLibrarySessions
   };
 }

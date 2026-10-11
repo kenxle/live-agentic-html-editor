@@ -1,6 +1,7 @@
-// `lahe library` with stable addresses on (Task 4.2): it prints the Library's
-// own stable address when the running helper serves pages, and the 127.0.0.1
-// address it always printed when it does not.
+// `lahe library` prints the Library's own address (stable addresses, Tasks 4.2
+// and 4.3): its name, at the port the helper has proved, as service.json
+// reports it. 80 once the port-80 forward is checked, else the pages port. The
+// same port `lahe review` prints for a page (src/service/addresses.js).
 //
 // The helper runs on free ports and a temp state folder (never 7817 or 1483),
 // and is stopped by the pids its own state folder records.
@@ -28,41 +29,29 @@ async function run(argv) {
   return { code, stdout: stdout.join(""), stderr: stderr.join("") };
 }
 
-/** Start a helper on a free port with the pages switch set the way the test says. */
-async function startHelperWith(t, dir, env) {
-  const prior = {};
-  Object.keys(env).forEach((key) => {
-    prior[key] = process.env[key];
-    if (env[key] === null) delete process.env[key];
-    else process.env[key] = env[key];
-  });
-  t.after(() => {
-    Object.keys(prior).forEach((key) => {
-      if (prior[key] === undefined) delete process.env[key];
-      else process.env[key] = prior[key];
-    });
-  });
-  t.after(async () => { await sessionCommand.stopVerifiedHelper(dir); });
-  return onFreePort((p) => sessionCommand.startHelper(dir, p));
-}
-
 function tempDir() {
   return fs.mkdtempSync(path.join(os.tmpdir(), "lahe-library-sites-"));
 }
 
-test("lahe library prints the Library's stable address when the helper serves pages, and that address loads", async (t) => {
+test("lahe library prints the Library's address at the pages port, and that address loads", async (t) => {
   const dir = tempDir();
   agentSessions.createStore({ dir }).create({ id: "s_agent", name: "document index" });
-  const { port } = await startHelperWith(t, dir, { LAHE_PAGES: "sites", LAHE_PAGES_PORT: "0" });
+  const prior = process.env.LAHE_PAGES_PORT;
+  process.env.LAHE_PAGES_PORT = "0";
+  t.after(() => {
+    if (prior === undefined) delete process.env.LAHE_PAGES_PORT;
+    else process.env.LAHE_PAGES_PORT = prior;
+  });
+  t.after(async () => { await sessionCommand.stopVerifiedHelper(dir); });
+  const { port } = await onFreePort((p) => sessionCommand.startHelper(dir, p));
   const ready = JSON.parse(fs.readFileSync(stateDir.readyPath(dir), "utf8"));
-  assert.equal(ready.pages.mode, "sites");
   const pagesPort = ready.pages.port;
   assert.ok(Number.isInteger(pagesPort) && pagesPort !== port && pagesPort !== 1483);
+  assert.equal(ready.pages.printed_port, pagesPort, "no forward is set up here, so the pages port is the printed one");
 
   const out = await run(["--session", "s_agent", "--state-dir", dir, "--port", String(port), "--json"]);
   assert.equal(out.code, protocol.CLI_EXIT.OK, out.stderr);
-  const printed = JSON.parse(out.stdout.trim());
-  assert.equal(printed.url, "http://library.lahe.localhost:" + pagesPort + protocol.CATALOG_PAGE_PATH);
+  assert.equal(JSON.parse(out.stdout.trim()).url, "http://library.lahe.localhost:" + pagesPort + protocol.CATALOG_PAGE_PATH);
 
   const text = await run(["--session", "s_agent", "--state-dir", dir, "--port", String(port)]);
   assert.match(text.stdout, new RegExp("Library\\s+http://library\\.lahe\\.localhost:" + pagesPort + "/catalog"));
@@ -75,11 +64,23 @@ test("lahe library prints the Library's stable address when the helper serves pa
   assert.equal(page.status, 200, "the printed address is one the helper answers");
 });
 
-test("lahe library keeps printing the 127.0.0.1 address when the helper does not serve pages", async (t) => {
-  const dir = tempDir();
-  agentSessions.createStore({ dir }).create({ id: "s_agent", name: "document index" });
-  const { port } = await startHelperWith(t, dir, { LAHE_PAGES: null, LAHE_PAGES_PORT: null });
-  const out = await run(["--session", "s_agent", "--state-dir", dir, "--port", String(port), "--json"]);
-  assert.equal(out.code, protocol.CLI_EXIT.OK, out.stderr);
-  assert.equal(JSON.parse(out.stdout.trim()).url, "http://127.0.0.1:" + port + protocol.CATALOG_PAGE_PATH);
+test("the Library's printed address uses the port the helper has proved: 80 once the forward is checked, else the pages port", () => {
+  const ready = (pages) => ({ port: 7817, pages });
+  assert.equal(
+    library.libraryUrl(ready({ port: 1483, printed_port: 80 })),
+    "http://library.lahe.localhost/catalog",
+    "the forward is proved: no port"
+  );
+  assert.equal(library.libraryUrl(ready({ port: 1483, printed_port: 1483 })), "http://library.lahe.localhost:1483/catalog");
+  assert.equal(
+    library.libraryUrl(ready({ port: 51234, printed_port: 51234, port_free: { on: true, verified: false, reason: "not checked yet" } })),
+    "http://library.lahe.localhost:51234/catalog",
+    "installed but not yet proved: the pages port"
+  );
+  assert.equal(library.libraryUrl(ready({ port: 1483 })), "http://library.lahe.localhost:1483/catalog", "a report with no printed port falls back to the pages port");
+});
+
+test("a helper that reports no pages block is reached at its loopback address", () => {
+  assert.equal(library.libraryUrl({ port: 7817 }), "http://127.0.0.1:7817/catalog");
+  assert.equal(library.libraryUrl({ port: 7817, pages: {} }), "http://127.0.0.1:7817/catalog");
 });

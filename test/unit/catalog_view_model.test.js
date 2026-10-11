@@ -1546,6 +1546,7 @@ test("the address check accepts a Lahe site and nothing else", () => {
 
 test("a row with a stable address links to it, in words a person can read", () => {
   const list = freshList();
+  assert.equal(row(build(list, okState()), "r_spec").address.text, "projects.beta.specs.lahe.localhost:1483/spec.html", "the fixture's named site");
   reviewIn(list, "r_spec").address = "http://docs.ongoing.lahe.localhost:1483/spec%20one.html";
   const r = row(build(list, okState()), "r_spec");
   assert.deepEqual(r.address, {
@@ -1554,15 +1555,15 @@ test("a row with a stable address links to it, in words a person can read", () =
   });
 });
 
-test("a row has no address link with the switch off, or when the address is not a Lahe site", () => {
+test("a row has no address link before its site is named, or when the address is not a Lahe site", () => {
   const list = freshList();
-  assert.equal(row(build(list, okState()), "r_spec").address, null);
-  reviewIn(list, "r_spec").address = null;
-  assert.equal(row(build(list, okState()), "r_spec").address, null);
-  reviewIn(list, "r_spec").address = "http://evil.test/x.html";
-  assert.equal(row(build(list, okState()), "r_spec").address, null, "the helper's word is still checked before it becomes a link");
-  reviewIn(list, "r_spec").address = "javascript:alert(1)";
-  assert.equal(row(build(list, okState()), "r_spec").address, null);
+  assert.equal(row(build(list, okState()), "r_brief").address, null);
+  reviewIn(list, "r_brief").address = null;
+  assert.equal(row(build(list, okState()), "r_brief").address, null);
+  reviewIn(list, "r_brief").address = "http://evil.test/x.html";
+  assert.equal(row(build(list, okState()), "r_brief").address, null, "the helper's word is still checked before it becomes a link");
+  reviewIn(list, "r_brief").address = "javascript:alert(1)";
+  assert.equal(row(build(list, okState()), "r_brief").address, null);
 });
 
 test("Open that left a newer review's rail alone says which review holds it", () => {

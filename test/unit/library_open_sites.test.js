@@ -20,6 +20,7 @@ const catalogRequests = require("../../src/service/catalog_requests.js");
 const stateDirModule = require("../../src/service/state_dir.js");
 const staticServers = require("../../src/service/static_servers.js");
 const markdown = require("../../src/service/markdown.js");
+const { writeOldServerRecord } = require("../helpers/old_server_record.js");
 const { sitesWorld, raw, writeFile, getPage } = require("../helpers/sites_world.js");
 
 const PAGE_HTML = "<!doctype html><html><head><title>A page</title></head><body><p>words</p></body></html>";
@@ -85,18 +86,8 @@ function docs(w, rel) {
   return path.join(w.home, "ws", "repo", rel || "docs");
 }
 
-/**
- * What an old review had: the record of the page server that served its
- * folder. Written by the CLI, never by a page, so it vouches for its root.
- */
 function oldServer(w, session, root, mounts) {
-  const recordDir = stateDirModule.staticServersRoot(w.state, session);
-  fs.mkdirSync(recordDir, { recursive: true });
-  const id = "ss_" + path.basename(root).replace(/[^A-Za-z0-9]/g, "");
-  fs.writeFileSync(path.join(recordDir, id + ".json"), JSON.stringify({
-    schema: staticServers.SCHEMA, id, session_id: session, root, port: 1, host: "127.0.0.1",
-    started_at: "2026-10-01T00:00:00.000Z", stopped_at: "2026-10-02T00:00:00.000Z", mounts: mounts || {}
-  }));
+  writeOldServerRecord(w.state, session, root, { mounts });
 }
 
 /** The rendered copy of a Markdown source, which only the CLI writes into the state folder. */
