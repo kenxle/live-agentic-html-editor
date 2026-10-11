@@ -26,10 +26,8 @@ const stateDir = require("../../src/service/state_dir.js");
 const logModule = require("../../src/service/log.js");
 const reviewsModule = require("../../src/service/reviews.js");
 const agentSessions = require("../../src/service/agent_sessions.js");
-const staticServers = require("../../src/service/static_servers.js");
+const { writeOldServerRecord } = require("../helpers/old_server_record.js");
 const sessionCommand = require("../../src/cli/commands/session.js");
-const catalogStore = require("../../src/service/catalog_store.js");
-const { pollUntil } = require("../helpers/poll.js");
 const { onFreePort } = require("../helpers/free_port.js");
 
 const C = protocol.CATALOG;
@@ -146,7 +144,7 @@ test("with no Library poll and no held window, the last close stops the helper a
 
 test("R10a: Open a closed review with no agent, close the last agent's own session, and the document still answers and takes a comment", async (t) => {
   const w = await started(t);
-  // A document from an earlier session, closed, with its server stopped.
+  // A document from an earlier session, closed.
   const site = path.join(tempDir(), "site");
   fs.mkdirSync(site);
   const page = path.join(site, "doc.html");
@@ -154,15 +152,20 @@ test("R10a: Open a closed review with no agent, close the last agent's own sessi
   w.store.create({ id: "s_old" });
   const log = logModule.createEventLog({ dir: w.dir });
   reviewsModule.createReviews({ dir: w.dir, log }).create({ id: "r_old", agent_session_id: "s_old", target_path: page });
-  await staticServers.start({ dir: w.dir, sessionId: "s_old", root: site });
-  t.after(async () => { await staticServers.stopAll(w.dir, "s_old").catch(() => {}); });
-  await staticServers.stopAll(w.dir, "s_old");
+  // The old page server that served the folder left its record, which vouches
+  // for it; the session is closed.
+  writeOldServerRecord(w.dir, "s_old", fs.realpathSync(site));
   w.store.close("s_old");
 
-  // No agent is attached: Open still opens.
+  // No agent is attached: Open still opens, and reopens nothing.
   const opened = await libraryCall(w.port, "catalog.open", { review: "r_old", handoff: true });
   assert.equal(opened.status, 200, opened.text);
   assert.equal(opened.json.not_asked, "no_agent");
+  assert.ok(w.store.read("s_old").closed_at, "the session stays closed");
+
+  // The Library page that opened it is still open, so it polls (every 15
+  // seconds); Open itself reopens no session to hold the helper up.
+  assert.equal((await libraryCall(w.port, "catalog.list")).status, 200);
 
   // The agent that started the helper closes its own session.
   const closed = await close(w.dir, "s_last", Date.now());
@@ -170,9 +173,11 @@ test("R10a: Open a closed review with no agent, close the last agent's own sessi
   assert.doesNotMatch(closed.stdout, /shared helper stopped/);
   assert.ok(await health(w.port), "LAHE keeps serving after the last agent session closes");
 
-  // The opened document still answers, with its rail's helper behind it.
+  // The opened document answers at its stable address, with its rail's helper behind it.
   const url = new URL(opened.json.url);
-  const doc = await raw(Number(url.port), { path: url.pathname, headers: { host: url.host } });
+  const pagesPort = JSON.parse(fs.readFileSync(stateDir.readyPath(w.dir), "utf8")).pages.port;
+  assert.equal(url.port, String(pagesPort));
+  const doc = await raw(pagesPort, { path: url.pathname, headers: { host: url.host } });
   assert.equal(doc.status, 200);
   assert.match(doc.text, /still here/);
 
@@ -201,45 +206,4 @@ test("R10a: Open a closed review with no agent, close the last agent's own sessi
   assert.equal(posted.status, 200, posted.text);
   const onDisk = fs.readFileSync(stateDir.eventsPath(w.dir, "r_old"), "utf8");
   assert.match(onDisk, /ev_after_close/);
-});
-
-test("R10a, the Library's own rule: once the sweep closes the reopened session, a fresh Library poll alone keeps the helper up through the last close", async (t) => {
-  const w = await started(t);
-  const site = path.join(tempDir(), "site");
-  fs.mkdirSync(site);
-  fs.writeFileSync(path.join(site, "doc.html"), "<!doctype html><title>Synthetic doc</title><p>still here</p>");
-  w.store.create({ id: "s_old" });
-  const log = logModule.createEventLog({ dir: w.dir });
-  reviewsModule.createReviews({ dir: w.dir, log }).create({ id: "r_old", agent_session_id: "s_old", target_path: path.join(site, "doc.html") });
-  await staticServers.start({ dir: w.dir, sessionId: "s_old", root: site });
-  t.after(async () => { await staticServers.stopAll(w.dir, "s_old").catch(() => {}); });
-  await staticServers.stopAll(w.dir, "s_old");
-  w.store.close("s_old");
-
-  const opened = await libraryCall(w.port, "catalog.open", { review: "r_old", handoff: true });
-  assert.equal(opened.status, 200, opened.text);
-  assert.equal(w.store.read("s_old").closed_at, null, "Open reopened the session");
-
-  // Age the reopen past REOPENED_AUTOCLOSE_MS rather than waiting it out, then
-  // let the helper's own sweep (every POLL_MS, on its real clock) close it.
-  const store = catalogStore.createCatalogStore({ dir: w.dir });
-  const entry = store.read().data.reopened.s_old;
-  assert.ok(entry, "the Library recorded the reopen");
-  store.setReopened("s_old", {
-    at: new Date(Date.now() - C.REOPENED_AUTOCLOSE_MS - 60 * 1000).toISOString(),
-    handoff_rev: entry.handoff_rev
-  });
-  await pollUntil(() => !!w.store.read("s_old").closed_at, {
-    timeoutMs: C.POLL_MS * 3,
-    message: "the helper's sweep to close the quiet reopened session"
-  });
-
-  // Now s_last is the only open session, and nothing but the Library holds the
-  // helper: no reopened session, no held document window.
-  assert.equal(fs.existsSync(stateDir.windowsPath(w.dir)) && /r_old/.test(fs.readFileSync(stateDir.windowsPath(w.dir), "utf8")), false);
-  assert.equal((await libraryCall(w.port, "catalog.list")).status, 200);
-  const closed = await close(w.dir, "s_last", Date.now());
-  assert.equal(closed.code, protocol.CLI_EXIT.OK, closed.stderr);
-  assert.match(closed.stdout, /shared helper left running: the Library page polled it/);
-  assert.ok(await health(w.port), "health still answers");
 });

@@ -5,11 +5,13 @@
 //
 //   { "schema": 1,
 //     "stars":    { "<review-id>": "<when it was starred>" },
-//     "reopened": { "<session-id>": { "at": "<when>", "handoff_rev": <n> } },
 //     "names":    { "<review-id>": "<the reviewer's own name for it>" },
 //     "session_names": { "<session-id>": "<the reviewer's own name for it>" } }
 //
-// `names` came later; a file without it reads as no names. A name is the
+// `names` came later; a file without it reads as no names. A file written
+// before stable addresses may also carry a `reopened` map, which Open once kept
+// for a sweep that closed the sessions it had reopened. Open reopens nothing
+// now: the key is ignored on read and is gone from the next write. A name is the
 // reviewer's display text for the Library only. It is never put in a drain
 // entry, a hand-off message, or anything an agent reads.
 //
@@ -44,7 +46,7 @@ function catalogPath(dir) {
 }
 
 function empty() {
-  return { schema: SCHEMA, stars: {}, reopened: {}, names: {}, session_names: {} };
+  return { schema: SCHEMA, stars: {}, names: {}, session_names: {} };
 }
 
 function isPlainObject(value) {
@@ -54,13 +56,12 @@ function isPlainObject(value) {
 /** The parsed file, or null when its shape is not the one this module writes. */
 function validate(parsed) {
   if (!isPlainObject(parsed) || parsed.schema !== SCHEMA) return null;
-  if (!isPlainObject(parsed.stars) || !isPlainObject(parsed.reopened)) return null;
+  if (!isPlainObject(parsed.stars)) return null;
   if (parsed.names !== undefined && !isPlainObject(parsed.names)) return null;
   if (parsed.session_names !== undefined && !isPlainObject(parsed.session_names)) return null;
   return {
     schema: SCHEMA,
     stars: Object.assign({}, parsed.stars),
-    reopened: Object.assign({}, parsed.reopened),
     names: Object.assign({}, parsed.names || {}),
     session_names: Object.assign({}, parsed.session_names || {})
   };
@@ -151,31 +152,11 @@ function createCatalogStore(options) {
     return out;
   }
 
-  function setReopened(sessionId, entry) {
-    assertSafe("session", sessionId);
-    var e = entry || {};
-    return update(function (data) {
-      data.reopened[sessionId] = {
-        at: String(e.at),
-        handoff_rev: Number.isInteger(e.handoff_rev) && e.handoff_rev >= 0 ? e.handoff_rev : 0
-      };
-    });
-  }
-
-  function clearReopened(sessionId) {
-    assertSafe("session", sessionId);
-    return update(function (data) {
-      delete data.reopened[sessionId];
-    });
-  }
-
   return {
     read: read,
     setStar: setStar,
     setName: setName,
-    setSessionName: setSessionName,
-    setReopened: setReopened,
-    clearReopened: clearReopened
+    setSessionName: setSessionName
   };
 }
 

@@ -179,9 +179,8 @@ function createCatalogState() {
   return {
     token: crypto.randomBytes(32).toString("hex"),
     port: null,
-    // The pages port, set by serve() once it is bound and only with the pages
-    // switch on. Until then, and with the switch off, library.lahe.localhost
-    // fails the Host check, so the Library keeps its two loopback Hosts.
+    // The pages port, set by serve() once it is bound. Until then
+    // library.lahe.localhost fails the Host check.
     pagesPort: null,
     /** Task 2.1's list handler calls this on an authenticated list. */
     markSeen: function (now) {
@@ -249,8 +248,7 @@ function catalogHostAllowed(host, hostLower, port, catalog) {
  *
  * - Host is exactly 127.0.0.1:<port> or localhost:<port> at the helper's actual
  *   port, on every catalog route, or library.lahe.localhost:<pages port> (or
- *   with no port, through the port 80 forward) when the pages switch is on
- *   (stable addresses). The page carries the token, so
+ *   with no port, through the port 80 forward). The page carries the token, so
  *   a DNS-rebound name must not be able to load it, and no other name, a
  *   document's included, ever matches.
  * - Sec-Fetch-Site is set by the browser, never by a script. The API routes take

@@ -133,8 +133,8 @@ test("V34: after the old idle wait with no window open, the page still loads", a
   w.helper.reviews.create({ target_path: page, agent_session_id: session, origins: ["null"] });
   const bound = w.helper.sites.bind({ root: fs.realpathSync(folder), mode: "folder", entry: "page.html" });
   assert.ok(!Object.keys(require.cache).some((file) => /idle_servers\.js$/.test(file)), "the idle sweep is not even loaded");
-  // The Library's own sweeps, run an hour on: they close no page.
-  await w.helper.sweepReopened(Date.now() + 60 * 60 * 1000);
+  // The Library's own sweep, run an hour on: it closes no page. (The reopened-
+  // session sweep it once ran beside it is gone with Open's reopen.)
   await w.helper.sweepLibrarySessions(Date.now() + 60 * 60 * 1000);
   const res = await getPage(w, bound.name, "/page.html");
   assert.equal(res.status, 200);

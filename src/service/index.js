@@ -189,7 +189,7 @@ function pagesPortFrom(opts) {
  *          origins?: string[], quiet?: boolean, now?: function(): number,
  *          pidAlive?: function, uid?: number, schedule?: function}} [options]
  *   `now`, `pidAlive`, `uid` and `schedule` are for tests of the Library: the
- *   clock every Library action and the reopened-session sweep read, the
+ *   clock every Library action and the sweep of its own sessions read, the
  *   liveness seam for monitor pids, the user a file Open restarts must belong
  *   to, and a stand-in for setInterval that runs the sweep's timer.
  * @returns {Promise<object>} a handle with port, url, close, and the pieces the
@@ -308,10 +308,9 @@ async function serve(options) {
   // store and the same registry:
   //
   //   the queue       the helper's own, the one that records an expired line
+  //   the site tools  the Library's side of the site registry: a row's address,
+  //                   and Open binding a site and stamping the review
   //   the reader      joined with the queue's attach and per-review requests
-  //   the ops         reopenForCatalog and closeQuiet over this helper's
-  //                   in-memory review registry, which is why only the helper
-  //                   can swap a restarted server's origins
   var now = typeof opts.now === "function" ? opts.now : function () { return Date.now(); };
   var catalogQueue = catalogRequests.createQueue({
     dir: dir,
@@ -319,13 +318,13 @@ async function serve(options) {
     pidAlive: opts.pidAlive,
     log: function (line) { log.helperLog(line); }
   });
-  // With pages served by the helper, the Library reads a row's address from
-  // the registry and Open binds a site instead of restarting a page server.
+  // The Library reads a row's address from the registry, with the port an
+  // address prints with (80 once the forward is proved), and Open binds a site.
   var catalogSiteTools = catalogSites.createCatalogSites({
     dir: dir,
     sites: sites,
     reviews: reviews,
-    port: function () { return boundPagesPort; },
+    port: function () { return addresses ? addresses.printedPort() : boundPagesPort; },
     log: function (line) { log.helperLog(line); }
   });
   var catalogReaderInstance = catalogReader.createReader(Object.assign({
@@ -333,24 +332,11 @@ async function serve(options) {
     pidAlive: opts.pidAlive,
     pages: catalogSiteTools
   }, catalogReader.queueInputs(catalogQueue)));
-  // Page servers are retired, so the Library's old restart path has nothing to
-  // restart: Open binds a site (catalogSiteTools). What the Library's sweep of
-  // its own quiet sessions still needs is a plain session close.
-  var catalogOps = {
-    reopenForCatalog: function () {
-      return Promise.reject(new Error("page servers are retired; Open binds a site instead"));
-    },
-    closeQuiet: function (sessionId) {
-      agentSessions.close(sessionId);
-      return Promise.resolve({ stopped: 0 });
-    }
-  };
   var catalogActionsInstance = catalogActions.createCatalogActions({
     dir: dir,
     reader: catalogReaderInstance,
     queue: catalogQueue,
     store: catalogStore.createCatalogStore({ dir: dir }),
-    ops: catalogOps,
     sessions: agentSessions,
     pages: catalogSiteTools,
     pidAlive: opts.pidAlive,
@@ -883,13 +869,10 @@ async function serve(options) {
     log.helperLog("could not check for leftover page servers: " + err.message);
   });
 
-  // The reopened-session sweep (architecture, Helper lifetime). One run at a
-  // time: a slow close must not overlap the next tick. unref'd, so it never
-  // holds a process open on its own.
+  // The sweep of the Library's own idle sessions (architecture, Helper
+  // lifetime). One run at a time: a slow close must not overlap the next tick.
+  // unref'd, so it never holds a process open on its own.
   var sweeping = false;
-  function sweepReopened(atMs) {
-    return catalogActionsInstance.sweepReopened(typeof atMs === "number" ? atMs : now());
-  }
   function sweepLibrarySessions(atMs) {
     return catalogActionsInstance.sweepLibrarySessions(typeof atMs === "number" ? atMs : now());
   }
@@ -899,8 +882,7 @@ async function serve(options) {
   var sweepTimer = schedule(function () {
     if (sweeping) return Promise.resolve();
     sweeping = true;
-    return sweepReopened()
-      .then(function () { return sweepLibrarySessions(); })
+    return sweepLibrarySessions()
       .catch(function (err) {
         log.helperLog("Library sweep failed: " + err.message);
       })
@@ -987,7 +969,6 @@ async function serve(options) {
     catalog: catalog,
     // The sweep, run by hand: the helper runs it every POLL_MS on its own, and
     // tests drive it with the time they choose.
-    sweepReopened: sweepReopened,
     sweepLibrarySessions: sweepLibrarySessions,
     server: server,
     // Stable addresses: the bound pages port, the

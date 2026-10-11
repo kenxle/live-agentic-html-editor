@@ -63,7 +63,8 @@
               "source": "docs/brief.html"
             }
           ],
-          "folded_from": []
+          "folded_from": [],
+          "address": null
         },
         {
           "id": "r_spec",
@@ -80,7 +81,7 @@
           "total": 1,
           "counts_as_of": "2026-09-26T16:00:00.000Z",
           "ended": false,
-          "served_url": "http://127.0.0.1:54011/spec.html",
+          "served_url": "http://projects.beta.specs.lahe.localhost:1483/spec.html",
           "openable": "yes",
           "kind": "static",
           "starred": false,
@@ -103,7 +104,8 @@
               "source": "specs/spec.html"
             }
           ],
-          "folded_from": []
+          "folded_from": [],
+          "address": "http://projects.beta.specs.lahe.localhost:1483/spec.html"
         },
         {
           "id": "r_notes",
@@ -143,7 +145,8 @@
               "source": "docs/notes.md"
             }
           ],
-          "folded_from": []
+          "folded_from": [],
+          "address": null
         },
         {
           "id": "r_mounted",
@@ -168,7 +171,8 @@
           "unreadable": false,
           "request": null,
           "pages": [],
-          "folded_from": []
+          "folded_from": [],
+          "address": null
         },
         {
           "id": "r_deleted",
@@ -199,7 +203,8 @@
               "source": "docs/deleted.html"
             }
           ],
-          "folded_from": []
+          "folded_from": [],
+          "address": null
         }
       ]
     },
@@ -244,7 +249,8 @@
               "source": null
             }
           ],
-          "folded_from": []
+          "folded_from": [],
+          "address": null
         }
       ]
     },
@@ -281,7 +287,8 @@
           "unreadable": true,
           "request": null,
           "pages": [],
-          "folded_from": []
+          "folded_from": [],
+          "address": null
         }
       ]
     },
@@ -315,10 +322,11 @@
           "kind": "static",
           "starred": false,
           "custom_name": null,
-          "unreadable": true,
+          "unreadable": false,
           "request": null,
           "pages": [],
-          "folded_from": []
+          "folded_from": [],
+          "address": null
         }
       ]
     },
@@ -362,7 +370,8 @@
           "unreadable": false,
           "request": null,
           "pages": [],
-          "folded_from": []
+          "folded_from": [],
+          "address": null
         },
         {
           "id": "r_wt_vanished",
@@ -387,7 +396,8 @@
           "unreadable": false,
           "request": null,
           "pages": [],
-          "folded_from": []
+          "folded_from": [],
+          "address": null
         },
         {
           "id": "r_wt_gone",
@@ -427,7 +437,8 @@
               "source": "docs/brief.html"
             }
           ],
-          "folded_from": []
+          "folded_from": [],
+          "address": null
         },
         {
           "id": "r_old4",
@@ -458,7 +469,8 @@
               "source": "old-pages/p4.html"
             }
           ],
-          "folded_from": []
+          "folded_from": [],
+          "address": null
         },
         {
           "id": "r_old2",
@@ -492,7 +504,8 @@
           "folded_from": [
             "r_old1",
             "r_old3"
-          ]
+          ],
+          "address": null
         },
         {
           "id": "r_other",
@@ -517,7 +530,8 @@
           "unreadable": false,
           "request": null,
           "pages": [],
-          "folded_from": []
+          "folded_from": [],
+          "address": null
         },
         {
           "id": "r_oldfolder",
@@ -542,7 +556,8 @@
           "unreadable": false,
           "request": null,
           "pages": [],
-          "folded_from": []
+          "folded_from": [],
+          "address": null
         }
       ]
     },
@@ -591,7 +606,8 @@
               "source": "~/loose/stale.html"
             }
           ],
-          "folded_from": []
+          "folded_from": [],
+          "address": null
         },
         {
           "id": "r_big",
@@ -622,7 +638,8 @@
               "source": "~/loose/big.html"
             }
           ],
-          "folded_from": []
+          "folded_from": [],
+          "address": null
         },
         {
           "id": "r_shared",
@@ -653,7 +670,8 @@
               "source": "~/loose/shared.html"
             }
           ],
-          "folded_from": []
+          "folded_from": [],
+          "address": null
         },
         {
           "id": "r_badreview",
@@ -678,7 +696,8 @@
           "unreadable": true,
           "request": null,
           "pages": [],
-          "folded_from": []
+          "folded_from": [],
+          "address": null
         },
         {
           "id": "r_badmeta",
@@ -703,7 +722,8 @@
           "unreadable": true,
           "request": null,
           "pages": [],
-          "folded_from": []
+          "folded_from": [],
+          "address": null
         },
         {
           "id": "r_notitle",
@@ -728,7 +748,8 @@
           "unreadable": false,
           "request": null,
           "pages": [],
-          "folded_from": []
+          "folded_from": [],
+          "address": null
         },
         {
           "id": "r_s3page",
@@ -753,7 +774,8 @@
           "unreadable": false,
           "request": null,
           "pages": [],
-          "folded_from": []
+          "folded_from": [],
+          "address": null
         }
       ]
     },
@@ -796,7 +818,8 @@
               "source": null
             }
           ],
-          "folded_from": []
+          "folded_from": [],
+          "address": null
         }
       ]
     }

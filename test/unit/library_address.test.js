@@ -3,8 +3,7 @@
 // The Library answers at library.lahe.localhost:<pages port> as well as at
 // 127.0.0.1:<port>/catalog, with today's checks: its own token, same-origin,
 // an exact Origin on a POST. A document's Host, a made-up Host and the short
-// `.lahe` ending never reach it. With the switch off, nothing changes: the
-// Library's Host stays 127.0.0.1 and localhost.
+// `.lahe` ending never reach it. 127.0.0.1 and localhost keep reaching it.
 
 "use strict";
 
@@ -136,18 +135,6 @@ test("V43: the API port does not answer to the library name; 127.0.0.1 and local
     const res = await raw(api, { path: PAGE.path, headers: pageHeaders(host) });
     assert.equal(res.status, 200, host);
   }
-});
-
-test("V43: with the switch off the Library keeps its two loopback Hosts and nothing else", async (t) => {
-  const w = await sitesWorld(t, { pages: null, pagesPort: null });
-  const api = w.helper.port;
-  for (const host of ["library.lahe.localhost:" + api, "library.lahe.localhost"]) {
-    const res = await raw(api, { path: PAGE.path, headers: pageHeaders(host) });
-    assert.equal(res.status, 400, host);
-    assert.equal(tokenFromPage(res.text), null, host);
-  }
-  const ok = await raw(api, { path: PAGE.path, headers: pageHeaders("127.0.0.1:" + api) });
-  assert.equal(ok.status, 200);
 });
 
 // Port-free addresses (lahe-names, Task 6.0): through the port 80 forward the

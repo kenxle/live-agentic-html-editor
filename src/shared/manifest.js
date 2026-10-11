@@ -282,7 +282,7 @@ var NON_BUNDLE_FILES = [
   {
     path: "src/service/catalog_store.js",
     owner: "Library 1.1",
-    why: "the only reader and writer of catalog.json (stars, row and session names, and the reopened map). Never overwrites a corrupt file"
+    why: "the only reader and writer of catalog.json (stars, row and session names). Never overwrites a corrupt file"
   },
   {
     path: "src/service/catalog_requests.js",
@@ -292,7 +292,7 @@ var NON_BUNDLE_FILES = [
   {
     path: "src/service/catalog_actions.js",
     owner: "Library 2.1",
-    why: "what list, open, star and request do after the checks, and the reopened-session sweep: joins the reader, store, queue and static-server restart"
+    why: "what list, open, star and request do after the checks, and the sweep of the Library's own idle sessions: joins the reader, store, queue and site tools"
   },
   {
     path: "src/service/catalog_sites.js",

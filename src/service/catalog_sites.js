@@ -2,7 +2,7 @@
 // served from, what its address is, and how Open binds it.
 //
 // Architecture: docs/features/20261011.02_stable_addresses/02_architecture_stable_addresses.md,
-// "The Library". With the pages switch on, Open no longer restarts a page
+// "The Library". Open no longer restarts a page
 // server. It finds or names the review's site in the registry (sites.js),
 // stamps the review as re-served unless a newer open review holds the rail,
 // and returns the address. The reader asks this module the same questions to
@@ -251,4 +251,18 @@ function createCatalogSites(options) {
   };
 }
 
-module.exports = { PAGE_EXTENSIONS: PAGE_EXTENSIONS, createCatalogSites: createCatalogSites };
+/**
+ * The site tools over a registry this process only reads, with no pages port,
+ * so no address and no way to name a site. What the CLI's own readers (the
+ * drain, `lahe session name`) need: kinds and paths.
+ */
+function readOnly(dir) {
+  return createCatalogSites({
+    dir: dir,
+    sites: sitesModule.createSites({ dir: dir, reader: true }),
+    reviews: {},
+    port: function () { return null; }
+  });
+}
+
+module.exports = { PAGE_EXTENSIONS: PAGE_EXTENSIONS, createCatalogSites: createCatalogSites, readOnly: readOnly };

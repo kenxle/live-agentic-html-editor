@@ -60,7 +60,7 @@ flowchart TD
   a record back; the store is the truth and the page is only a view of it.
 - The Library page talks only to the helper, with its own token. It can list,
   open, star, rename, and queue a request. It cannot post to a review or name
-  a file to serve: Open binds the site of a document the review already had. How it works
+  a file to serve: Open binds the site of a document the helper already served, and only if nothing else holds the page's rail. How it works
   now is `docs/ongoing/LIBRARY.md`.
 - The request queue is how the page reaches an agent. Only the helper appends
   requests, and only `lahe library answer` appends answers. The agent sees a

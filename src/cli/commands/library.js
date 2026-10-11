@@ -169,15 +169,16 @@ function readReady(dir) {
 }
 
 /**
- * Where the Library is. With the helper serving pages itself (stable
- * addresses) it is the Library's own name on the pages port; otherwise the
- * helper's loopback address, as it always was. The helper answers at both.
+ * Where the Library is: its own name, at the port the helper has proved (80
+ * once the port-80 forward is checked, else the pages port), as service.json
+ * reports it, the way `lahe review` prints a page. A helper that reports no
+ * pages block (one started before stable addresses) is reached at its loopback
+ * address. The helper answers at both.
  */
 function libraryUrl(ready) {
   var pages = ready.pages;
-  if (pages && pages.mode === protocol.PAGES.MODE_SITES && Number.isInteger(pages.port)) {
-    return protocol.siteOrigin(protocol.PAGES.LIBRARY_NAME, pages.port) + protocol.CATALOG_PAGE_PATH;
-  }
+  var port = pages && Number.isInteger(pages.printed_port) ? pages.printed_port : pages && pages.port;
+  if (Number.isInteger(port)) return protocol.siteOrigin(protocol.PAGES.LIBRARY_NAME, port) + protocol.CATALOG_PAGE_PATH;
   return "http://" + protocol.DEFAULT_HOST + ":" + ready.port + protocol.CATALOG_PAGE_PATH;
 }
 
@@ -432,4 +433,4 @@ async function run(argv, options) {
   return runLibrary(args, opts, out, err);
 }
 
-module.exports = { USAGE: USAGE, parse: parse, run: run };
+module.exports = { USAGE: USAGE, parse: parse, run: run, libraryUrl: libraryUrl };

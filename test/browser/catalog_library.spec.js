@@ -143,7 +143,7 @@ test.describe("the Library, end to end, with a stub agent on the real CLI", () =
       ]
     });
     expect(world.docs.watched2.session).toBe(world.docs.watched.session);
-    expect(world.libraryUrl).toBe(world.helperOrigin + protocol.CATALOG_PAGE_PATH);
+    expect(world.libraryUrl, "the Library's own stable address").toMatch(/^http:\/\/library\.lahe\.localhost:\d+\/catalog$/);
     expect(world.attachedAtStart.session).toBe(world.agent.session);
     expect(world.drainRequests()).toEqual([]);
 
@@ -185,8 +185,8 @@ test.describe("the Library, end to end, with a stub agent on the real CLI", () =
     refreshStubAgent();
     await row(page, world.docs.closed.review).locator('[data-act="open"]').click();
     const tab = await tabPromise;
-    await pollUntil(() => /^http:\/\/127\.0\.0\.1:\d+\/brief\.html$/.test(tab.url()), {
-      message: "the new tab to land on the reopened document",
+    await pollUntil(() => /^http:\/\/[a-z0-9.-]+\.lahe\.localhost:\d+\/brief\.html$/.test(tab.url()), {
+      message: "the new tab to land on the document's stable address",
       describe: () => ({ url: tab.url() })
     });
     expect(await tab.evaluate(() => window.opener)).toBeNull();
@@ -196,8 +196,9 @@ test.describe("the Library, end to end, with a stub agent on the real CLI", () =
     });
     await expect(tab.locator("h1")).toHaveText("Closed Brief");
 
-    // The session is open again, and its server answers on the tab's port.
-    expect(world.sessionClosed(world.docs.closed.session), "Open reopened the closed session").toBe(false);
+    // Open reopens nothing: the session is still closed, and the helper serves
+    // the page at its stable address.
+    expect(world.sessionClosed(world.docs.closed.session), "Open reopened nothing").toBe(true);
 
     // A comment from the opened tab reaches the helper's log for that review.
     await commentOn(tab, "#p", "Is this still the plan?");
