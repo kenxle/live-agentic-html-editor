@@ -446,7 +446,9 @@
       // the alias.
       var itOrigin = it[record.FIELD.PAGE_ORIGIN];
       var aliased = Object.prototype.hasOwnProperty.call(table, itOrigin) ? table[itOrigin] : null;
-      var key = aliased ? record.pageKeyFor({ origin: aliased, path: it[record.FIELD.PAGE_PATH] }) : record.pageKey(it);
+      // Grouped by identity, so every spelling of one stable address
+      // (with the pages port, port-free, .lahe) is one group.
+      var key = aliased ? record.pageIdentityKeyFor({ origin: aliased, path: it[record.FIELD.PAGE_PATH] }) : record.pageIdentityKey(it);
       var group = byKey[key] || null;
       if (!group) {
         // No exact match: this may still be another visit of a document

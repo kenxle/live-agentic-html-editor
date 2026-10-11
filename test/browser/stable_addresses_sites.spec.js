@@ -51,7 +51,6 @@ test.beforeEach(async () => {
     port: 0,
     stateDir: state,
     quiet: true,
-    pages: "sites",
     pagesPort: 0,
     sitesHome: home
   });
@@ -193,6 +192,24 @@ test("V20: a gone worktree file shows the main checkout's copy read-only, with t
   expect(await page.evaluate(() => !!window.__lahe)).toBe(false);
 });
 
+test("Open the Library on the unknown-name and file-gone pages opens the Library in one click", async ({ page }) => {
+  const folder = path.join(world.home, "ws", "repo", "docs");
+  const file = writeFile(folder, "page.html", "<!doctype html><title>x</title><p>x</p>");
+  const site = bind(file, folder, "page.html");
+  for (const start of ["http://no-such.docs.lahe.localhost:" + world.helper.pagesPort + "/brief.md", site.origin + "/old-brief.html"]) {
+    await page.goto(start);
+    const [library] = await Promise.all([
+      page.waitForResponse((res) => res.url().endsWith("/catalog")),
+      page.getByRole("link", { name: "Open the Library" }).click()
+    ]);
+    expect(library.status(), "the Library page answered " + start + "'s link").toBe(200);
+    expect(library.url()).toBe("http://library.lahe.localhost:" + world.helper.pagesPort + "/catalog");
+    expect((await library.request().allHeaders())["sec-fetch-site"]).toBe("same-site");
+    await expect(page.locator("#lahe-catalog-main .lib-section").first()).toBeVisible();
+    await expect(page.locator('meta[name="lahe-catalog-token"]')).toHaveCount(1);
+  }
+});
+
 test("the unknown-name and file-gone pages read plainly, in light and dark", async ({ page }) => {
   const folder = path.join(world.home, "ws", "repo", "docs");
   const file = writeFile(folder, "page.html", "<!doctype html><title>x</title><p>x</p>");
@@ -203,7 +220,7 @@ test("the unknown-name and file-gone pages read plainly, in light and dark", asy
     const unknown = await page.goto("http://no-such.docs.lahe.localhost:" + world.helper.pagesPort + "/brief.md");
     expect(unknown.status()).toBe(404);
     await expect(page.locator("h1")).toHaveText("No document by that name");
-    await expect(page.getByRole("link", { name: "Open the Library" })).toHaveAttribute("href", "http://127.0.0.1:" + world.helper.port + "/catalog");
+    await expect(page.getByRole("link", { name: "Open the Library" })).toHaveAttribute("href", "http://library.lahe.localhost:" + world.helper.pagesPort + "/catalog");
     const ground = await page.evaluate(() => getComputedStyle(document.body).backgroundColor);
     expect(ground).toBe(scheme === "dark" ? "rgb(31, 30, 26)" : "rgb(255, 255, 255)");
     await page.evaluate(() => document.fonts.ready);

@@ -653,7 +653,7 @@ function createReviews(options) {
     var review = get(reviewId);
     if (!review) throw new Error("removeOrigin: no review named " + JSON.stringify(reviewId));
     var value = String(origin);
-    if (!/^http:\/\/(127\.0\.0\.1|localhost):\d{1,5}$/.test(value)) {
+    if (!protocol.isLoopbackPortOrigin(value)) {
       throw new Error("removeOrigin: only a loopback http origin is ever removed, not " + JSON.stringify(value));
     }
     var at = review.origins.indexOf(value);
@@ -736,6 +736,20 @@ function createReviews(options) {
     if (!review) throw new Error("stampServed: no review named " + JSON.stringify(reviewId));
     review.served_at = typeof at === "string" ? at : new Date(clock()).toISOString();
     persist(review);
+    return review;
+  }
+
+  /**
+   * The helper serves this review's pages now: stamp it as served, so it is
+   * the review that answers on its page, and drop the page-server origins it
+   * carried, so an old port is no longer a credential. site.bind and the
+   * Library's Open both do this.
+   */
+  function stampServedByHelper(reviewId, at) {
+    var review = stampServed(reviewId, at);
+    review.origins.filter(protocol.isLoopbackPortOrigin).forEach(function (origin) {
+      removeOrigin(reviewId, origin);
+    });
     return review;
   }
 
@@ -1545,6 +1559,7 @@ function createReviews(options) {
     isolate: isolate,
     isNotes: isNotes,
     stampServed: stampServed,
+    stampServedByHelper: stampServedByHelper,
     touch: touch,
     lastSeenAt: lastSeenAt,
     targetMtime: targetMtime,

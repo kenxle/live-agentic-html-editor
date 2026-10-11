@@ -29,8 +29,8 @@ function writeFile(base, rel, text) {
 
 /**
  * @param {object} t the node:test context, for teardown
- * @param {{pages?: string|null, helper?: object}} [options] `pages` is the
- *   switch value ("sites" by default; null leaves it off)
+ * @param {{pagesPort?: number, helper?: object}} [options] `helper` is
+ *   merged into the serve() options
  */
 async function sitesWorld(t, options) {
   const opts = options || {};
@@ -42,7 +42,6 @@ async function sitesWorld(t, options) {
     port: 0,
     stateDir: state,
     quiet: true,
-    pages: opts.pages === undefined ? "sites" : opts.pages,
     pagesPort: opts.pagesPort === undefined ? 0 : opts.pagesPort,
     sitesHome: home
   }, opts.helper || {});

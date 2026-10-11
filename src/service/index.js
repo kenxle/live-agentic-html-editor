@@ -177,6 +177,9 @@ function readBody(req, limit) {
  */
 function pagesPortFrom(opts) {
   if (typeof opts.pagesPort === "number") return opts.pagesPort;
+  // A helper asked for a free API port is a test's: it takes a free pages
+  // port too, so a test run without LAHE_PAGES_PORT=0 never binds 1483.
+  if (opts.port === 0) return 0;
   var fromEnv = process.env[protocol.PAGES.PORT_ENV];
   if (fromEnv !== undefined && fromEnv !== "" && Number.isInteger(Number(fromEnv))) return Number(fromEnv);
   return protocol.PAGES.PORT;
@@ -236,7 +239,12 @@ async function serve(options) {
   });
   sites.load();
   sitesModule.ensureCliSecret(dir);
-  var pageRoutes = pageRoutesModule.createPageRoutes({ dir: dir, sites: sites, log: log });
+  var pageRoutes = pageRoutesModule.createPageRoutes({
+    dir: dir,
+    sites: sites,
+    log: log,
+    printedPort: function () { return addresses ? addresses.printedPort() : boundPagesPort; }
+  });
   // Filled in once the pages listener is bound.
   var boundPagesPort = null;
 
@@ -411,12 +419,15 @@ async function serve(options) {
 
   // One line per refusal, naming the Host and the port it came in on and
   // nothing about the page asked for.
+  // One line per distinct Host, capped: any web page can send random Hosts.
+  var refusedHosts = pageRoutesModule.createNoteOnce(log, "further refused Hosts are not logged until the helper restarts");
+
   function refuseHost(req, res, host, listener) {
     var requestId = crypto.randomBytes(8).toString("hex");
-    log.helperLog(
-      "refused Host " + JSON.stringify(String(host === undefined ? "none" : host).slice(0, 200)) +
-        " on the " + listener + " port [request " + requestId + "]"
-    );
+    var shown = JSON.stringify(String(host === undefined ? "none" : host).slice(0, 200));
+    refusedHosts.say(listener + "\u0000" + shown,
+      "refused Host " + shown + " on the " + listener + " port: check " + protocol.CHECK.HOST +
+        " failed [request " + requestId + "]");
     var body = protocol.errorBody("PROTO_BAD_HOST", null, requestId, protocol.CHECK.HOST);
     if (routes.isCatalogPath(req.url)) {
       respondCatalogJson(res, protocol.statusFor("PROTO_BAD_HOST"), body, requestId);
@@ -863,6 +874,7 @@ async function serve(options) {
   pageRoutesModule.activate(dir, {
     sites: sites,
     pagesPort: boundPagesPort,
+    printedPort: function () { return addresses ? addresses.printedPort() : boundPagesPort; },
     laheNames: function () { return !!addresses && addresses.laheNamesVerified(); }
   });
 
@@ -1094,5 +1106,6 @@ module.exports = {
   loadLibrary: loadLibrary,
   MAX_BODY_BYTES: MAX_BODY_BYTES,
   serve: serve,
+  pagesPortFrom: pagesPortFrom,
   probeHealth: probeHealth
 };

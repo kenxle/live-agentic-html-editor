@@ -253,7 +253,10 @@ function catalogHostAllowed(host, hostLower, port, catalog) {
  *   document's included, ever matches.
  * - Sec-Fetch-Site is set by the browser, never by a script. The API routes take
  *   exactly same-origin: a document under review on another loopback port sends
- *   same-site and is refused. A missing value is refused.
+ *   same-site and is refused. A missing value is refused. The Library page
+ *   alone (navigate_same_site) also takes same-site when the request is a
+ *   top-level navigation, Sec-Fetch-Mode navigate and Sec-Fetch-Dest document:
+ *   the "Open the Library" link on a document's not-found page.
  * - The client header must be CLIENT_CATALOG, which the per-review routes do not
  *   accept, and the token is compared in full.
  * - Origin on a POST must equal "http://" + the request's own Host.
@@ -277,7 +280,13 @@ function checkCatalogRequest(request, catalog) {
   }
 
   var site = headerOf(headers, protocol.HEADER.SEC_FETCH_SITE);
-  if (typeof site !== "string" || (checks.sec_fetch_site || []).indexOf(site) === -1) {
+  var siteOk = typeof site === "string" && (checks.sec_fetch_site || []).indexOf(site) !== -1;
+  if (!siteOk && checks.navigate_same_site && site === "same-site" &&
+      headerOf(headers, protocol.HEADER.SEC_FETCH_MODE) === "navigate" &&
+      headerOf(headers, protocol.HEADER.SEC_FETCH_DEST) === "document") {
+    siteOk = true;
+  }
+  if (!siteOk) {
     return refusal(protocol.CHECK.SEC_FETCH_SITE, site ? String(site) : "none", r.name);
   }
 

@@ -810,10 +810,6 @@ var CATALOG_HANDLERS = {
 // Origin header, the CLI client header, JSON, and the CLI secret. The root is
 // taken from the request, never from meta.json, and is realpathed here.
 
-// A loopback origin with a port: what a page server registered. Binding drops
-// these from the review, so an old port is no longer a credential.
-var OLD_PORT_ORIGIN = /^http:\/\/(127\.0\.0\.1|localhost):\d{1,5}$/;
-
 function badSiteRequest(detail) {
   return { status: 400, error: { code: "PROTO_BAD_REQUEST", detail: detail } };
 }
@@ -849,10 +845,7 @@ var SITE_HANDLERS = {
         return typeof file === "string" && path.isAbsolute(file);
       }));
     }
-    deps.reviews.stampServed(review.id, new Date(deps.now()).toISOString());
-    review.origins.filter(function (origin) { return OLD_PORT_ORIGIN.test(origin); }).forEach(function (origin) {
-      deps.reviews.removeOrigin(review.id, origin);
-    });
+    deps.reviews.stampServedByHelper(review.id, new Date(deps.now()).toISOString());
     // The port the helper has proved: 80 once the port-80 forward is checked,
     // otherwise the pages port (src/service/addresses.js).
     var port = typeof deps.printedPort === "function" ? deps.printedPort()

@@ -20,6 +20,7 @@
 "use strict";
 
 var fs = require("node:fs");
+var stream = require("node:stream");
 var path = require("node:path");
 
 var protocol = require("../shared/protocol.js");
@@ -57,8 +58,10 @@ function readJson(file) {
   try { return JSON.parse(fs.readFileSync(file, "utf8")); } catch (err) { return null; }
 }
 
+// .native, as site.bind and the Library make roots: it returns the case on
+// disk, so two spellings of one folder on a case-insensitive disk compare equal.
 function realOrNull(target) {
-  try { return fs.realpathSync(target); } catch (err) { return null; }
+  try { return fs.realpathSync.native(target); } catch (err) { return null; }
 }
 
 function within(candidate, base) {
@@ -115,7 +118,8 @@ function injectForMatch(dir, match, target, html, aliases) {
     token: match.token,
     helper: helperOrigin,
     fallback: helperOrigin + protocol.route("library.get").path,
-    notes: stateDir.isNotesReview(dir, match.review),
+    // pickReview carries the notes flag from the meta.json it already read.
+    notes: typeof match.notes === "boolean" ? match.notes : stateDir.isNotesReview(dir, match.review),
     aliases: Array.isArray(aliases) && aliases.length ? aliases : undefined
   });
   return scriptLine.placeScriptLine(html, tag).html;
@@ -205,18 +209,39 @@ function servedRootsOf(meta) {
   }).filter(Boolean);
 }
 
+// Parsed meta.json files, per state folder, by review id, with the file's
+// time and size when it was read. A page load stats each file and reads only
+// one that changed. Not the helper's in-memory reviews: `lahe add` writes
+// meta.json from its own process (a reused review gains a page there), so the
+// helper's copy can be behind, and the file is the answer.
+var metaCache = new Map();
+
 function readReviews(dir) {
   var root;
   try { root = stateDir.reviewsRoot(dir); } catch (err) { return []; }
   var entries;
   try { entries = fs.readdirSync(root, { withFileTypes: true }); } catch (err) { return []; }
+  var key = dirKey(dir);
+  var before = metaCache.get(key) || new Map();
+  var kept = new Map();
   var out = [];
   entries.forEach(function (entry) {
     if (!entry.isDirectory() || !protocol.isSafeId(entry.name)) return;
-    var meta = readJson(stateDir.metaPath(dir, entry.name));
+    var file = stateDir.metaPath(dir, entry.name);
+    var stat;
+    try { stat = fs.statSync(file); } catch (err) { return; }
+    var held = before.get(entry.name);
+    var meta;
+    if (held && held.mtimeMs === stat.mtimeMs && held.size === stat.size && held.ino === stat.ino) {
+      meta = held.meta;
+    } else {
+      meta = readJson(file);
+    }
+    kept.set(entry.name, { mtimeMs: stat.mtimeMs, size: stat.size, ino: stat.ino, meta: meta });
     if (!meta || typeof meta.token !== "string") return;
     out.push({ id: entry.name, meta: meta });
   });
+  metaCache.set(key, kept);
   return out;
 }
 
@@ -236,7 +261,7 @@ function readReviews(dir) {
  * @param {string} dir the state folder
  * @param {object} site the registry entry
  * @param {{filePaths: string[], realFile: string|null, mounted: boolean}} request
- * @returns {{review: string, token: string, displaced: string|null}|null}
+ * @returns {{review: string, token: string, notes: boolean}|null}
  */
 function pickReview(dir, site, request) {
   var filePaths = request.filePaths || [];
@@ -249,7 +274,7 @@ function pickReview(dir, site, request) {
   var linking = null;
   readReviews(dir).forEach(function (entry) {
     var meta = entry.meta;
-    var candidate = { review: entry.id, token: meta.token, at: stampOf(meta) };
+    var candidate = { review: entry.id, token: meta.token, at: stampOf(meta), notes: meta.notes === true };
     var only = meta.only_recorded_pages === true;
     if (!request.mounted && recordsFile(recordedFiles(meta), filePaths, realFile)) {
       if (newer(candidate, recorded)) recorded = candidate;
@@ -264,7 +289,7 @@ function pickReview(dir, site, request) {
   });
   var best = recorded || backing || linking;
   if (!best) return null;
-  return { review: best.review, token: best.token, displaced: recorded && backing ? backing.review : null };
+  return { review: best.review, token: best.token, notes: best.notes };
 }
 
 /**
@@ -572,7 +597,19 @@ function validPort(value) {
 }
 
 /** Every old page-server record in the state folder: [{root, ports, at}]. */
+/**
+ * The page servers from before stable addresses, as {root, ports, at}. Nothing
+ * writes these records any more, so a running helper reads them once, on the
+ * first page that asks, and keeps them on its registry entry.
+ */
 function oldServerRecords(dir) {
+  var entry = activeFor(dir);
+  if (!entry) return readOldServerRecords(dir);
+  if (!entry.oldRecords) entry.oldRecords = readOldServerRecords(dir);
+  return entry.oldRecords;
+}
+
+function readOldServerRecords(dir) {
   return staticServers.allRecords(dir).map(function (entry) {
     var meta = entry.meta;
     var ports = (Array.isArray(meta.ports) ? meta.ports : []).concat([meta.port]).filter(validPort);
@@ -608,7 +645,10 @@ function aliasMap(dir) {
   var out = {};
   if (!entry) return out;
   entry.sites.list().forEach(function (item) {
-    var origin = protocol.siteOrigin(item.name, entry.pagesPort);
+    // The printed spelling, so a group review.json shows reads like the
+    // address the reviewer has. Any spelling is the same page (record.samePage).
+    var port = typeof entry.printedPort === "function" ? entry.printedPort() : entry.pagesPort;
+    var origin = protocol.siteOrigin(item.name, typeof port === "number" ? port : entry.pagesPort);
     aliasesFor(dir, item.site).forEach(function (alias) {
       if (!Object.prototype.hasOwnProperty.call(out, alias)) out[alias] = origin;
     });
@@ -642,26 +682,38 @@ function statusPage(title, paragraphs) {
   ].join("\n");
 }
 
-function libraryLink(helperOrigin) {
-  var href = helperOrigin + protocol.route("catalog.page").path;
+/**
+ * The Library's address as a document page links to it: library.lahe.localhost
+ * at the printed port, or with no port through the port-80 forward. From a
+ * <name>.lahe.localhost page that click is same-site, which the Library page
+ * accepts as a top-level navigation; 127.0.0.1 would be cross-site and refused.
+ *
+ * @param {number} printedPort
+ */
+function libraryAddress(printedPort) {
+  return "http://" + protocol.PAGES.LIBRARY_NAME + "." + protocol.PAGES.SUFFIX +
+    (printedPort === 80 ? "" : ":" + printedPort) + protocol.route("catalog.page").path;
+}
+
+function libraryLink(href) {
   return "<p><a href=\"" + escapeHtml(href) + "\">Open the Library</a> to find the document you meant.</p>";
 }
 
 /** R14: a name Lahe does not know. */
-function unknownNamePage(name, helperOrigin) {
+function unknownNamePage(name, libraryHref) {
   return statusPage("No document by that name", [
     "<p class=\"lede\">Lahe has no document at <code>" + escapeHtml(name + "." + protocol.PAGES.SUFFIX) +
       "</code>. The address may be mistyped, or it may come from another computer or another state folder.</p>",
-    libraryLink(helperOrigin)
+    libraryLink(libraryHref)
   ]);
 }
 
 /** R14: a file that is gone, with no main-checkout copy to show instead. */
-function gonePage(file, helperOrigin) {
+function gonePage(file, libraryHref) {
   return statusPage("This file is gone", [
     "<p class=\"lede\">Lahe served <code>" + escapeHtml(file) +
       "</code> at this address, and it is not on disk any more. It may have been moved, renamed, or deleted.</p>",
-    libraryLink(helperOrigin)
+    libraryLink(libraryHref)
   ]);
 }
 
@@ -676,6 +728,40 @@ function movedNote(goneFile, shownFile) {
 // The request handler
 // ---------------------------------------------------------------------------
 
+/** How many distinct notes one helper logs of a kind before it stops. */
+var LOG_NOTE_CAP = 256;
+
+/**
+ * Logs a line once per key, for at most LOG_NOTE_CAP keys. Any web page can
+ * make the browser ask for random names or send random Host headers, so an
+ * unbounded "once per key" set would let a page grow the helper's memory and
+ * helper.log without end. Past the cap it logs `fullLine` once and stops.
+ *
+ * @param {{helperLog: function}|null} log
+ * @param {string} fullLine
+ * @returns {{say: function(string, string): void}}
+ */
+function createNoteOnce(log, fullLine) {
+  var said = new Set();
+  var full = false;
+  function write(line) {
+    if (!log) return;
+    try { log.helperLog(line); } catch (err) { /* diagnostic only */ }
+  }
+  return {
+    say: function (key, line) {
+      if (said.has(key) || full) return;
+      if (said.size >= LOG_NOTE_CAP) {
+        full = true;
+        write(fullLine);
+        return;
+      }
+      said.add(key);
+      write(line);
+    }
+  };
+}
+
 /**
  * @param {{dir: string, sites: object, log?: object}} options `sites` is the
  *   helper's registry (sites.createSites)
@@ -685,12 +771,29 @@ function createPageRoutes(options) {
   var dir = opts.dir;
   var sites = opts.sites;
   var log = opts.log || null;
-  var said = Object.create(null);
+  // THE STATE FOLDER IS NEVER SERVED. rootProblem refuses a root inside it,
+  // but a root above it would reach it: the CLI secret, every review's token
+  // in meta.json, every event log. Any file whose path or real path is inside
+  // the state folder is a 404, whatever site or link led there.
+  var stateDirs = [path.resolve(dir)];
+  var realState = realOrNull(dir);
+  if (realState && stateDirs.indexOf(realState) === -1) stateDirs.push(realState);
+  function inStateDir(file) {
+    return stateDirs.some(function (state) { return within(file, state); });
+  }
+
+  var printedPort = typeof opts.printedPort === "function" ? opts.printedPort : function () { return null; };
+
+  /** The Library link on the not-found pages; the API port's Library when no pages port is known. */
+  function libraryHref() {
+    var port = printedPort();
+    return typeof port === "number" ? libraryAddress(port) : currentHelperOrigin(dir) + protocol.route("catalog.page").path;
+  }
+
+  var notes = createNoteOnce(log, "pages: further notes of this kind are not logged until the helper restarts");
 
   function sayOnce(key, line) {
-    if (said[key] || !log) return;
-    said[key] = true;
-    try { log.helperLog(line); } catch (err) { /* diagnostic only */ }
+    notes.say(key, line);
   }
 
   function headers(type, length) {
@@ -722,7 +825,8 @@ function createPageRoutes(options) {
   function streamFile(req, res, file, size) {
     res.writeHead(200, headers(MIME[path.extname(file).toLowerCase()] || "application/octet-stream", size));
     if (req.method === "HEAD") return res.end();
-    fs.createReadStream(file).on("error", function () { res.destroy(); }).pipe(res);
+    // pipeline, not pipe: an aborted transfer closes the file too.
+    stream.pipeline(fs.createReadStream(file), res, function () { /* an aborted or failed transfer is already closed */ });
   }
 
   function streamPackaged(req, res, file) {
@@ -861,6 +965,7 @@ function createPageRoutes(options) {
   function serveGone(req, res, ctx, candidate) {
     var site = ctx.site;
     var copy = mainCheckoutCopy(site, candidate);
+    if (copy && inStateDir(copy)) return notFound(req, res);
     if (copy) {
       sayOnce("moved\u0000" + candidate, "pages: " + candidate + " is gone with its worktree; showing " + copy + " read-only");
       if (markdown.isMarkdown(copy)) {
@@ -881,7 +986,7 @@ function createPageRoutes(options) {
     }
     if (!isPage(candidate)) return notFound(req, res);
     sayOnce("gone\u0000" + candidate, "pages: " + candidate + " is gone; served the file-is-gone page");
-    sendHtml(req, res, 410, gonePage(candidate, currentHelperOrigin(dir)));
+    sendHtml(req, res, 410, gonePage(candidate, libraryHref()));
   }
 
   /**
@@ -900,7 +1005,7 @@ function createPageRoutes(options) {
       // looks like every other Lahe page. Nothing else does.
       if (decoded !== null && servePackaged(req, res, decoded)) return;
       sayOnce("unknown\u0000" + name, "pages: no document by the name " + name);
-      return sendHtml(req, res, 404, unknownNamePage(name, currentHelperOrigin(dir)));
+      return sendHtml(req, res, 404, unknownNamePage(name, libraryHref()));
     }
     if (req.method !== "GET" && req.method !== "HEAD") return sendText(req, res, 405, "method not allowed\n");
     if (rawPath.charAt(0) !== "/") return sendText(req, res, 400, "bad request\n");
@@ -911,7 +1016,7 @@ function createPageRoutes(options) {
     if (!where) return notFound(req, res);
     var ctx = { name: name, site: site };
     var candidate = where.page ? site.root : candidateOf(where, decoded);
-    if (!candidate) return notFound(req, res);
+    if (!candidate || inStateDir(candidate)) return notFound(req, res);
     var stat;
     try { stat = fs.statSync(candidate); } catch (err) {
       if (where.mounted) return notFound(req, res);
@@ -919,7 +1024,7 @@ function createPageRoutes(options) {
     }
     var real = realOrNull(candidate);
     var realBase = realOrNull(where.base);
-    if (!real || !realBase || !within(real, realBase) || !stat.isFile()) return notFound(req, res);
+    if (!real || !realBase || !within(real, realBase) || !stat.isFile() || inStateDir(real)) return notFound(req, res);
     if (markdown.isMarkdown(candidate)) {
       return serveMarkdown(req, res, ctx, candidate, real, urlDirOf(where.prefix, where.base, candidate), { mounted: where.mounted });
     }
@@ -941,6 +1046,7 @@ module.exports = {
   newer: newer,
   pickReview: pickReview,
   reviewAnswersOnSite: reviewAnswersOnSite,
+  libraryAddress: libraryAddress,
   unknownNamePage: unknownNamePage,
   gonePage: gonePage,
   activate: activate,
@@ -953,5 +1059,7 @@ module.exports = {
   recordLinkedFor: recordLinkedFor,
   aliasesFor: aliasesFor,
   aliasMap: aliasMap,
-  createPageRoutes: createPageRoutes
+  createPageRoutes: createPageRoutes,
+  createNoteOnce: createNoteOnce,
+  LOG_NOTE_CAP: LOG_NOTE_CAP
 };

@@ -41,3 +41,15 @@ test("removeOrigin refuses anything but a plain loopback http origin", () => {
   });
   assert.deepEqual(reviews.get("r_guard").origins, held);
 });
+
+// site.bind and the Library's Open both stamp a review as served by the helper
+// and drop its old page-server origins. One function does both now, with the
+// one spelling of "an old page-server origin" (protocol.isLoopbackPortOrigin).
+test("stampServedByHelper stamps the review and drops only its old page-server origins", () => {
+  const state = path.join(tempDir("lahe-served-by-helper-"), "state");
+  const reviews = reviewsModule.createReviews({ dir: state, log: logModule.createEventLog({ dir: state }) });
+  reviews.create({ id: "r_served", origins: ["http://127.0.0.1:40001", "http://localhost:40002", "null", "https://localhost:4443", "http://localhost:3000"] });
+  const review = reviews.stampServedByHelper("r_served", "2026-10-11T12:00:00.000Z");
+  assert.equal(review.served_at, "2026-10-11T12:00:00.000Z");
+  assert.deepEqual(reviews.get("r_served").origins, ["null", "https://localhost:4443"]);
+});

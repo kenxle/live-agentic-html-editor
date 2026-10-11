@@ -166,6 +166,8 @@
     // tell their own page apart from a document on another loopback port,
     // which sends "same-site" (see CATALOG_ROUTES).
     SEC_FETCH_SITE: "sec-fetch-site",
+    SEC_FETCH_MODE: "sec-fetch-mode",
+    SEC_FETCH_DEST: "sec-fetch-dest",
     // The CLI secret (stable addresses): read from an owner-only file in the
     // state folder and sent only by the CLI on site.bind. A page can never read
     // it, so a page holding a review token still cannot name a file to serve.
@@ -386,7 +388,12 @@
       path: CATALOG_PAGE_PATH,
       auth: AUTH.CATALOG_TOKEN,
       mutating: false,
-      checks: { sec_fetch_site: ["none", "same-origin"], token: false, json_body: false, origin: null },
+      // navigate_same_site: a top-level navigation (Sec-Fetch-Mode navigate,
+      // Sec-Fetch-Dest document) may also come from same-site, so the "Open
+      // the Library" link on a <name>.lahe.localhost page works in one click.
+      // The page sends X-Frame-Options DENY and frame-ancestors 'none', so a
+      // same-site page can open it but never frame it or read it.
+      checks: { sec_fetch_site: ["none", "same-origin"], navigate_same_site: true, token: false, json_body: false, origin: null },
       why: "the Library page itself, with the Library token in its meta tag",
       response: "text/html"
     },
@@ -546,9 +553,11 @@
       return { family: HOST_FAMILY.PAGE, name: short[1] };
     }
     var name = match[1];
+    // The port first, for the Library too: it answers at the pages port or
+    // with no port, never at another.
+    if (match[2] !== undefined && Number(match[2]) !== opts.pagesPort) return { family: HOST_FAMILY.BAD };
     if (name === PAGES.LIBRARY_NAME) return { family: HOST_FAMILY.LIBRARY, name: name };
     if (!isSiteName(name)) return { family: HOST_FAMILY.BAD };
-    if (match[2] !== undefined && Number(match[2]) !== opts.pagesPort) return { family: HOST_FAMILY.BAD };
     return { family: HOST_FAMILY.PAGE, name: name };
   }
 
@@ -850,8 +859,6 @@
     // purpose: that window only withholds an accusation on the rail, while
     // this one decides whether a person is told another agent has the session.
     WORKING_MS: 2 * 60 * 1000,
-    // A quiet Library-reopened session closes.
-    REOPENED_AUTOCLOSE_MS: 30 * 60 * 1000,
     // A session bare `lahe library` started closes once it owns no reviews and
     // its agent has been quiet this long (no live monitor, no lahe command).
     LIBRARY_SESSION_IDLE_MS: 30 * 60 * 1000,
@@ -1354,16 +1361,24 @@
     ALIASES: "data-lahe-aliases"
   };
 
+  // A plain loopback http origin with a port: what a page server registered
+  // before stable addresses. The one spelling of it: a script tag's aliases
+  // are these, and binding a review to a site drops these from it.
+  var LOOPBACK_PORT_ORIGIN = /^http:\/\/(127\.0\.0\.1|localhost):\d{1,5}$/;
+
+  function isLoopbackPortOrigin(value) {
+    return typeof value === "string" && LOOPBACK_PORT_ORIGIN.test(value);
+  }
+
   // At most this many aliases on one tag, and only plain loopback origins.
   var ALIAS_MAX = 16;
-  var ALIAS_ORIGIN = /^http:\/\/(127\.0\.0\.1|localhost):\d{1,5}$/;
 
   /** The aliases as an attribute value: JSON, escaped for a double-quoted attribute. */
   function aliasesAttribute(aliases) {
     if (!Array.isArray(aliases)) throw new Error("scriptTag: aliases must be a list");
     if (aliases.length > ALIAS_MAX) throw new Error("scriptTag: at most " + ALIAS_MAX + " aliases");
     aliases.forEach(function (alias) {
-      if (typeof alias !== "string" || !ALIAS_ORIGIN.test(alias)) {
+      if (!isLoopbackPortOrigin(alias)) {
         throw new Error("scriptTag: an alias must be a loopback http origin, not " + JSON.stringify(alias));
       }
     });
@@ -1981,6 +1996,7 @@
 
     SCRIPT_ATTR: SCRIPT_ATTR,
     ALIAS_MAX: ALIAS_MAX,
+    isLoopbackPortOrigin: isLoopbackPortOrigin,
     FRAMES_ALLOW: FRAMES_ALLOW,
     START_HIDDEN: START_HIDDEN,
     NOTES_ON: NOTES_ON,

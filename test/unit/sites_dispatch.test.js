@@ -99,7 +99,9 @@ test("V8: a page Host with no port is accepted by the grammar", () => {
   assert.deepEqual(out, { family: "page", name: "a.b" });
   assert.equal(protocol.classifyHost("a.b.lahe.localhost:1483", { pagesPort: 1483 }).family, "page");
   assert.equal(protocol.classifyHost("a.b.lahe.localhost:7817", { pagesPort: 1483 }).family, "bad");
-  assert.equal(protocol.classifyHost("library.lahe.localhost:7817", { pagesPort: 1483 }).family, "library");
+  // The port is checked before the Library's name: the Library answers at the
+  // pages port or with no port, never at another.
+  assert.equal(protocol.classifyHost("library.lahe.localhost:7817", { pagesPort: 1483 }).family, "bad");
 });
 
 // --- V9: dispatch order -----------------------------------------------------
@@ -199,4 +201,11 @@ test("with the switch on, service.json reports the mode, the port and the printe
   assert.equal(ready.pages.mode, "sites");
   assert.equal(ready.pages.port, w.helper.pagesPort);
   assert.equal(ready.pages.printed_ending, "lahe.localhost");
+});
+
+test("library.lahe.localhost at a port that is not the pages port is a bad Host, not the Library", () => {
+  const protocol = require("../../src/shared/protocol.js");
+  assert.equal(protocol.classifyHost("library.lahe.localhost:9999", { pagesPort: 1483 }).family, protocol.HOST_FAMILY.BAD);
+  assert.equal(protocol.classifyHost("library.lahe.localhost:1483", { pagesPort: 1483 }).family, protocol.HOST_FAMILY.LIBRARY);
+  assert.equal(protocol.classifyHost("library.lahe.localhost", { pagesPort: 1483 }).family, protocol.HOST_FAMILY.LIBRARY);
 });

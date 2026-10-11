@@ -274,11 +274,14 @@ async function run(argv, mode) {
     process.stderr.write("lahe review: " + err.message + "\n");
     return 1;
   }
-  var code = await add.run(list);
+  var used = {};
+  var code = await add.run(list, used);
   var bound = null;
   if (code === 0 && site) {
     try {
-      var owner = recordedReviewFor(dir, sessionId, target);
+      // The review add made or reused: `--review` or a script line on the
+      // page can pick one that is not the session's newest.
+      var owner = used.review || recordedReviewFor(dir, sessionId, target);
       if (!owner) throw new Error("the review add just made is not on disk");
       bound = await bindSite(dir, opts.port, owner, site);
     } catch (err) {
@@ -289,7 +292,14 @@ async function run(argv, mode) {
   if (code !== 0 && createdSession) {
     store.close(sessionId);
     if (store.openSessions().length === 0) {
-      try { await require("./session.js").stopVerifiedHelper(dir); } catch (err) { /* the original add failure remains primary */ }
+      // The same question `session close` asks: an always-on or installed
+      // helper serves every page and stays up, as does one a page or the
+      // Library is still using.
+      try {
+        var sessionCommand = require("./session.js");
+        var wanted = await sessionCommand.helperStillWanted(dir, Date.now());
+        if (!wanted.keep) await sessionCommand.stopVerifiedHelper(dir);
+      } catch (err) { /* the original add failure remains primary */ }
     }
   }
   if (code === 0) {

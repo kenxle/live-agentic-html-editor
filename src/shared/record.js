@@ -383,6 +383,31 @@
     return String(page.origin) + "|" + String(page.path);
   }
 
+  // ONE PAGE, EVERY SPELLING OF ITS STABLE ADDRESS. A stable address answers
+  // at <name>.lahe.localhost:<pages port>, at <name>.lahe.localhost through the
+  // port-80 forward, and at <name>.lahe when .lahe names work. The name is the
+  // page; the port and the suffix are only how the browser got there. Every
+  // comparison of page identity goes through this, while pageKey keeps the
+  // origin as recorded, for display and for review.json.
+  var SITE_ORIGIN = /^http:\/\/([a-z0-9][a-z0-9.-]*?)\.lahe(?:\.localhost)?(?::\d{1,5})?$/;
+
+  function identityOrigin(origin) {
+    var text = String(origin);
+    var match = SITE_ORIGIN.exec(text);
+    return match ? "lahe-site:" + match[1] : text;
+  }
+
+  // The key two records share exactly when they were made on the same page.
+  function pageIdentityKey(item) {
+    if (!item || typeof item !== "object") throw new TypeError("pageIdentityKey expects an item");
+    return identityOrigin(item[FIELD.PAGE_ORIGIN]) + "|" + String(item[FIELD.PAGE_PATH]);
+  }
+
+  function pageIdentityKeyFor(page) {
+    if (!page || typeof page !== "object") throw new TypeError("pageIdentityKeyFor expects a page");
+    return identityOrigin(page.origin) + "|" + String(page.path);
+  }
+
   // ---------------------------------------------------------------------------
   // Does this record belong to the page in front of us?
   // ---------------------------------------------------------------------------
@@ -462,7 +487,7 @@
   function samePage(item, page) {
     if (!item || typeof item !== "object") throw new TypeError("samePage expects an item");
     if (!page || typeof page !== "object") throw new TypeError("samePage expects a page");
-    if (pageKey(item) === pageKeyFor(page)) return true;
+    if (pageIdentityKey(item) === pageIdentityKeyFor(page)) return true;
     var itemOrigin = String(item[FIELD.PAGE_ORIGIN]);
     var pageOrigin = String(page.origin);
     // A STABLE ADDRESS'S OLD ORIGINS. A record made when this page was served
@@ -2270,6 +2295,9 @@
     pageFrom: pageFrom,
     pageKey: pageKey,
     pageKeyFor: pageKeyFor,
+    identityOrigin: identityOrigin,
+    pageIdentityKey: pageIdentityKey,
+    pageIdentityKeyFor: pageIdentityKeyFor,
     STAMP_SOURCE_EXTENSIONS: STAMP_SOURCE_EXTENSIONS,
     sourceCanCarryStamp: sourceCanCarryStamp,
     pageCanCarryStamp: pageCanCarryStamp,

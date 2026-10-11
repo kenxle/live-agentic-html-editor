@@ -19,7 +19,6 @@
 
 "use strict";
 
-var crypto = require("node:crypto");
 var fs = require("node:fs");
 var http = require("node:http");
 var path = require("node:path");
@@ -31,18 +30,8 @@ var SCHEMA = 1;
 var HOST = protocol.DEFAULT_HOST;
 var HEALTH_PREFIX = "/.lahe-static-health/";
 
-// Why an old record says its server stopped. The first two are what page
-// servers wrote; RETIRED_REASON is what stopLeftovers writes.
-var IDLE_REASON = "no window open";
-var CLOSED_REASON = "session closed";
+// What stopLeftovers writes on an old record as the reason its server stopped.
 var RETIRED_REASON = "page servers are retired: the helper serves this page";
-
-// The Library's error stages, still named by catalog_actions.js.
-var REOPEN_STAGE = { START: "start", AFTER_START: "after_start" };
-
-function serverId(root) {
-  return "ss_" + crypto.createHash("sha256").update(path.resolve(root)).digest("hex").slice(0, 16);
-}
 
 function healthPath(meta) {
   return HEALTH_PREFIX + meta.id + "/" + meta.instance;
@@ -78,23 +67,6 @@ async function isExactServer(meta) {
     health.started_at === meta.started_at &&
     health.pid === meta.pid
   );
-}
-
-function list(dir, sessionId) {
-  var root = stateDir.staticServersRoot(dir, sessionId);
-  if (!fs.existsSync(root)) return [];
-  return fs.readdirSync(root)
-    .filter(function (name) { return /^ss_[A-Za-z0-9_-]+\.json$/.test(name); })
-    .map(function (name) {
-      var meta = readJson(path.join(root, name));
-      if (
-        !meta || meta.schema !== SCHEMA || meta.session_id !== sessionId ||
-        !protocol.isSafeId(meta.id) || typeof meta.root !== "string"
-      ) {
-        throw new Error("static server metadata is corrupt: " + path.join(root, name));
-      }
-      return meta;
-    });
 }
 
 /**
@@ -265,13 +237,8 @@ function coveragePath(meta, filePath) {
 
 module.exports = {
   SCHEMA: SCHEMA,
-  IDLE_REASON: IDLE_REASON,
-  CLOSED_REASON: CLOSED_REASON,
   RETIRED_REASON: RETIRED_REASON,
-  REOPEN_STAGE: REOPEN_STAGE,
-  serverId: serverId,
   isExactServer: isExactServer,
-  list: list,
   allRecords: allRecords,
   stopLeftovers: stopLeftovers,
   coveragePath: coveragePath,

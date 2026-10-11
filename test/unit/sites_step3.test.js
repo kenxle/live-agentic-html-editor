@@ -1,11 +1,13 @@
 // Stable addresses, Step 3: page servers retired, the helper serves every page
 // (Tasks 3.1 and 3.2).
 //
-// Plan rows: V34 (the old idle wait stops nothing), V35 (leftover page
+// Plan rows: V35 (leftover page
 // servers are stopped on start, only when their probe proves who they are),
 // V36 (nothing spawns a page server), V37 (lahe review names a taken pages
 // port), V71 (the log lines). Every process a test starts is stopped in
-// teardown, even when it fails.
+// teardown, even when it fails. V34 (the old idle wait stops nothing) could
+// not fail once the idle sweep was gone; it is in
+// test/retired/unit/sites_step3_v34.retired.test.js.
 
 "use strict";
 
@@ -121,24 +123,6 @@ test("V36: no code path spawns a page server", () => {
   ["start", "runServer", "restartAll", "stopAll", "registerMount", "createCatalogOps"].forEach((name) => {
     assert.equal(staticServers[name], undefined, name + " is gone");
   });
-});
-
-// --- V34 ------------------------------------------------------------------------
-
-test("V34: after the old idle wait with no window open, the page still loads", async (t) => {
-  const w = await sitesWorld(t, { helper: { idleGraceMs: 1, idleSweepMs: 1, now: () => Date.now() + 60 * 60 * 1000 } });
-  const folder = path.join(w.home, "ws", "repo", "docs");
-  const page = writeFile(folder, "page.html", PAGE);
-  const session = agentSessions.createStore({ dir: w.state }).create({ name: "idle" }).id;
-  w.helper.reviews.create({ target_path: page, agent_session_id: session, origins: ["null"] });
-  const bound = w.helper.sites.bind({ root: fs.realpathSync(folder), mode: "folder", entry: "page.html" });
-  assert.ok(!Object.keys(require.cache).some((file) => /idle_servers\.js$/.test(file)), "the idle sweep is not even loaded");
-  // The Library's own sweep, run an hour on: it closes no page. (The reopened-
-  // session sweep it once ran beside it is gone with Open's reopen.)
-  await w.helper.sweepLibrarySessions(Date.now() + 60 * 60 * 1000);
-  const res = await getPage(w, bound.name, "/page.html");
-  assert.equal(res.status, 200);
-  assert.match(res.text, /still here/);
 });
 
 // --- V71 ------------------------------------------------------------------------
