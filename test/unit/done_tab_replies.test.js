@@ -1076,14 +1076,17 @@ test("the page check's stamp reopen is marked a tool round, on the record", () =
   assert.match(reopened.note, /data-lahe-id stamp did not reach the source/, "the agent still gets asked");
 });
 
-test("a revert reopen is the reviewer's business, so it is not a tool round", () => {
+// The page check no longer reopens over the reviewer's own words (spec
+// 20261011.01), so its only reopen is the stamp round above. A reopen that
+// names no tool is the reviewer's own, and it is theirs to see.
+test("a reopen that names no tool is the reviewer's business, so it is not a tool round", () => {
   const { store, rail, done } = setup();
   const item = store.write(REVIEW, readyItem());
   rail.upsertCard(item);
   done.applyReplies([foldEvent(item)]);
-  const reopened = done.reopen(item.id, { note: record.PAGE_CHECK_NOTE, pageCheck: true });
+  const reopened = done.reopen(item.id, { note: "Put my wording back." });
 
-  assert.equal(record.toolRoundOf(reopened), null, "their own words went missing: that is theirs to know");
+  assert.equal(record.toolRoundOf(reopened), null, "the reviewer's own reopen is theirs to know");
   assert.equal(rail.getCard(item.id).pane, overlay.TAB.ACTIVE);
   assert.equal(rail.getCard(item.id).state, record.STATE.READY);
 });

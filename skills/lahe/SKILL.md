@@ -356,8 +356,8 @@ grep -n "the new wording" path/to/built/page.html
 # 4. only now write the reply
 ```
 
-Their page reloads onto your change by itself and re-applies their outstanding
-comments and edits. It waits while they are mid-edit, and an edit to one page
+Their page reloads onto your change by itself and re-applies the edits still
+waiting for your first answer. Once you answer, the page shows your file. It waits while they are mid-edit, and an edit to one page
 never reloads another. When the page is one LAHE rendered from Markdown, the
 re-render is LAHE's job too: edit the `.md` and the page follows.
 
@@ -806,12 +806,14 @@ lahe library answer <request> --session <your-session-id> --status done --text "
 Never pick up or launch without a request, never take a session no request
 named, and never close a session for one.
 
-### A handled edit that comes back
+### After you answer, the page is your file
 
-If the page loses a change you made, the item returns to `ready` with a note from
-the tool and you are woken for it. Redo it. Before a sweep, check it leaves your
-handled edits in place. A reviewer who presses undo is different: that arrives as
-a new item with a `reverts` field.
+Once you answer an item `handled` or `not_handled`, the reviewer's page shows the
+source as you left it. A handled edit that a later change reshapes or drops does
+not come back to you on its own, and a refused edit is not drawn onto their page.
+If the reviewer wants it again, they edit or comment again, and that arrives as a
+new item. So before a sweep, check it leaves your handled edits in place. A
+reviewer who presses undo arrives as a new item with a `reverts` field.
 
 ### A page inside an iframe
 

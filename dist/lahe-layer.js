@@ -1,6 +1,6 @@
 /*
  * live-agentic-html-editor review layer
- * version 0.2.0+0dc25dcbc3a1
+ * version 0.2.0+f2155cd9fb87
  *
  * GENERATED FILE. Do not edit. Edit the sources under src/ and run
  *   npm run build:layer
@@ -12,7 +12,7 @@
   "use strict";
   var g = typeof globalThis !== "undefined" ? globalThis : window;
   g.LAHE = g.LAHE || {};
-  g.LAHE.version = "0.2.0+0dc25dcbc3a1";
+  g.LAHE.version = "0.2.0+f2155cd9fb87";
 })();
 /* ---- src/shared/markers.js  (owner: 0A-kernel) ---- */
 // Markers: the attribute and class names that identify DOM the tool added.
@@ -3527,8 +3527,9 @@
   // agent's own file is unchanged: review.json still carries the round and its
   // note, because the agent is who the round is for.
   //
-  // The revert and formatting reopens are NOT tool rounds. Those are about the
-  // reviewer's own words going missing from the page, which is theirs to know.
+  // The stamp round is the page check's only reopen (since 2026-10-11, spec
+  // docs/features/20261011.01_stuck_replayed_blocks), so every page-check
+  // reopen is a tool round.
   var TOOL_ROUND = {
     // The check asked for an id the agent did not carry into the source (S7).
     PAGE_CHECK_STAMP: "page_check_stamp"
@@ -3560,8 +3561,9 @@
    * The page check appends its sentence to the note, because the record shape
    * has no other field that reaches the agent. That is right for review.json
    * and wrong for the card: Ken's screenshot on 2026-09-15 was this sentence,
-   * on his own card, above the agent's "handled". The revert and formatting
-   * sentences are NOT stripped: those rounds are the reviewer's business.
+   * on his own card, above the agent's "handled". A sentence an older check
+   * wrote about the reviewer's own words is not stripped: those rounds were
+   * the reviewer's business.
    *
    * @returns {string|null} null when nothing of the reviewer's is left
    */
@@ -3602,64 +3604,32 @@
   // The page check's sentence, and keeping one copy of it
   // ---------------------------------------------------------------------------
   //
-  // The sentence a page-check reopen carries. Tool-generated, and it says so in
-  // its own first words, because the record shape has no field that could carry
-  // "this text is not the reviewer's". It names no page content: the item
-  // already carries the before and after text, and repeating page text into the
-  // note would push page content into the intent channel (D12).
-  var PAGE_CHECK_NOTE =
-    "Reopened by the page check: this handled change is no longer on the page and the original text is back. " +
-    "Reapply it, or reply not_handled saying why.";
-
-  // The check's other sentence. The words of the edit are on the page and the
-  // bold or italic the reviewer applied with them is not, which is a different
-  // situation and needs different words: nothing has to be reapplied, the
-  // formatting has to be carried. It is the 2026-09-11 case, where an agent
-  // working from a Markdown source applied the after text alone and replied
-  // handled three times over.
-  var PAGE_CHECK_FORMAT_NOTE =
-    "Reopened by the page check: the words landed but the bold or italic in this edit did not. " +
-    "Carry the formatting into the source, or reply not_handled saying why.";
-
-  // The check's third sentence. The words of the edit are on the page and the
-  // element they are on carries no data-lahe-id, so the agent edited the source
-  // without carrying the stamp into it. Nothing has to be reapplied and nothing
-  // is wrong with the rendering: the id is what lets the next build be found
-  // with certainty instead of guessed at, and it is missing (S7).
+  // The sentence the page check's stamp round carries. Tool-generated, and it
+  // says so in its own first words, because the record shape has no field that
+  // could carry "this text is not the reviewer's". It names no page content:
+  // repeating page text into the note would push page content into the intent
+  // channel (D12).
+  //
+  // The words of the edit are on the page and the element they are on carries
+  // no data-lahe-id, so the agent edited the source without carrying the stamp
+  // into it. Nothing has to be reapplied and nothing is wrong with the
+  // rendering: the id is what lets the next build be found with certainty
+  // instead of guessed at, and it is missing (S7).
   var PAGE_CHECK_STAMP_NOTE =
     "Reopened by the page check: the change landed but the data-lahe-id stamp did not reach the source. " +
     "Write the stamp onto that element so the next build reproduces it, or reply not_handled saying why.";
 
-  // Every sentence the page check writes. collapsePageCheckNote reads this
-  // list, so a new one is collapsed the day it is added.
-  // The check's fourth sentence, for a run record: a new block landed one to
-  // one with the page but carries a different tag from the one in new_blocks
-  // (docs/features/20260928.01_free_writing, The page check on a run).
-  var PAGE_CHECK_TAG_NOTE =
-    "Reopened by the page check: a block landed with a different tag from the one in new_blocks or anchor_tag_after. " +
-    "Give it that tag in the source, or reply not_handled saying why.";
+  // A sentence the page check no longer writes. Until 2026-10-11 the check also
+  // reopened a handled change whose words had gone from the page, and on
+  // 2026-09-10 a loop appended this sentence thirteen times to one note. Stored
+  // records may still carry those copies, so collapsePageCheckNote still reads
+  // it. Nothing writes it.
+  var LEGACY_PAGE_CHECK_NOTE =
+    "Reopened by the page check: this handled change is no longer on the page and the original text is back. " +
+    "Reapply it, or reply not_handled saying why.";
 
-  // The fifth, for a take-back of placed blocks: the reviewer undid a sitting,
-  // and blocks its remove_blocks lists are still on the page after the anchor.
-  var PAGE_CHECK_TAKEBACK_NOTE =
-    "Reopened by the page check: blocks this take-back lists in remove_blocks are still on the page after the anchor. " +
-    "Remove them from the source, or reply not_handled saying why.";
-
-  // The sixth, for a run record: a block the reviewer wrote is not on the page
-  // after the anchor. Nothing was "undone" and no original text came back: the
-  // block is new words, and they are missing or have words added (flow walk).
-  var PAGE_CHECK_RUN_NOTE =
-    "Reopened by the page check: a block in new_blocks is not on the page as written. " +
-    "Put it in the source as written, or reply not_handled saying why.";
-
-  var PAGE_CHECK_NOTES = [
-    PAGE_CHECK_NOTE,
-    PAGE_CHECK_FORMAT_NOTE,
-    PAGE_CHECK_STAMP_NOTE,
-    PAGE_CHECK_TAG_NOTE,
-    PAGE_CHECK_TAKEBACK_NOTE,
-    PAGE_CHECK_RUN_NOTE
-  ];
+  // Every sentence collapsePageCheckNote collapses.
+  var PAGE_CHECK_NOTES = [PAGE_CHECK_STAMP_NOTE, LEGACY_PAGE_CHECK_NOTE];
 
   /**
    * The carried note with `sentence` on the end, AT MOST ONCE.
@@ -3890,6 +3860,24 @@
   // kept and reopenable (R38), not outstanding.
   function isOutstanding(item) {
     return item[FIELD.STATE] === STATE.READY || item[FIELD.STATE] === STATE.NOT_HANDLED;
+  }
+
+  // Replayed onto the page: waiting for the agent's answer. The page differs
+  // from the file only while an edit is waiting, so this is ready alone.
+  //
+  //   not_handled  the agent answered no. The page shows the file, and the
+  //                reviewer's words stay on the card with the reason. Writing
+  //                them back after every repaint is how a refused card kept old
+  //                lines inside a table the agent built on request (spec
+  //                docs/features/20261011.01_stuck_replayed_blocks).
+  //   a tool round the page check asking the agent for a data-lahe-id. The
+  //                reviewer's card still reads handled (displayState), so the
+  //                page shows the file the same way.
+  //
+  // The rail's open count is a different question and keeps isOutstanding.
+  function isReplayable(item) {
+    if (!item || item[FIELD.STATE] !== STATE.READY) return false;
+    return !toolRoundOf(item);
   }
 
   // ---------------------------------------------------------------------------
@@ -4413,9 +4401,9 @@
   //
   // WHY THE HANDLED RECORD IS KEPT. It is the record that a fix landed (R38),
   // and it is the only place the applied wording is written down. It also stops
-  // the page check reopening it: replay.revertedHandledEditIds skips an item
-  // that another record reverts, so the reviewer's deliberate take-back is not
-  // read as the page having lost an applied fix.
+  // the page check asking about it: replay.pageCheckIds skips an item that
+  // another record reverts, since the take-back asks the agent for the
+  // opposite.
 
   var REVERT_EDIT = "Undo: the reviewer took this change back. Remove it from the source, so the passage reads as it did before.";
   var REVERT_DELETE = "Undo: the reviewer put this block back. Restore it in the source; it should not have been deleted.";
@@ -5132,12 +5120,8 @@
     ACCEPTED_PAGE_TEXTS_MAX: ACCEPTED_PAGE_TEXTS_MAX,
     acceptedPageTexts: acceptedPageTexts,
     acceptPageText: acceptPageText,
-    PAGE_CHECK_NOTE: PAGE_CHECK_NOTE,
-    PAGE_CHECK_RUN_NOTE: PAGE_CHECK_RUN_NOTE,
-    PAGE_CHECK_FORMAT_NOTE: PAGE_CHECK_FORMAT_NOTE,
+    LEGACY_PAGE_CHECK_NOTE: LEGACY_PAGE_CHECK_NOTE,
     PAGE_CHECK_STAMP_NOTE: PAGE_CHECK_STAMP_NOTE,
-    PAGE_CHECK_TAG_NOTE: PAGE_CHECK_TAG_NOTE,
-    PAGE_CHECK_TAKEBACK_NOTE: PAGE_CHECK_TAKEBACK_NOTE,
     PLACEMENT: PLACEMENT,
     PLACEMENTS: PLACEMENTS,
     RUN_FIELDS: RUN_FIELDS,
@@ -5198,6 +5182,7 @@
     isReady: isReady,
     isUnansweredReady: isUnansweredReady,
     isOutstanding: isOutstanding,
+    isReplayable: isReplayable,
     comparisonMode: comparisonMode,
     normalizedBefore: normalizedBefore,
     normalizedAfter: normalizedAfter
@@ -10588,11 +10573,6 @@
       ];
     }
 
-    // A run record the page check reopened for a wrong tag.
-    function runWithTagNote() {
-      return worked({ note: record.PAGE_CHECK_TAG_NOTE });
-    }
-
     // Today's shape of "Enter after a heading": the new paragraph nested in
     // the heading's own after_html, and no new_blocks. Replay keeps today's
     // path for it.
@@ -10644,7 +10624,6 @@
       runItem: runItem,
       runFixtures: runFixtures,
       forgedRuns: forgedRuns,
-      runWithTagNote: runWithTagNote,
       oldShapeNested: oldShapeNested,
       proofreadQuestion: proofreadQuestion
     };
@@ -27628,9 +27607,9 @@
       // Reopening did not go away with the button. Sending from the field ends
       // the handled state (continueItem sets READY and posts item.ready), so
       // R38's handled -> ready transition is still here, now always carrying
-      // the reason it happened. The automatic reopen keeps its own path:
-      // index.js calls reopen() with a note when a handled hand edit is undone
-      // on the page.
+      // the reason it happened. The page check's stamp round keeps its own
+      // path: index.js calls reopen() with a note when the agent did not carry
+      // a data-lahe-id into an HTML source.
       return row;
     }
 
@@ -28013,11 +27992,11 @@
      * the log disagreeing.
      *
      * `options.note` adds one tool-generated sentence to the carried note, and
-     * `options.notice` replaces the line the card shows. Both exist for the
-     * revert check (replay.isRevertedHandledEdit), which reopens an item the
-     * reviewer is not looking at and therefore has to say why on the card. The
-     * button in this file passes neither, so the reviewer's own reopen is
-     * unchanged: same rev bump, same event, same rail behavior.
+     * `options.notice` replaces the line the card shows. The page check's
+     * stamp round passes the note (replay.pageCheckReasonFor), and Keep mine
+     * on a refused card's clash passes a notice. The button in this file
+     * passes neither, so the reviewer's own reopen is unchanged: same rev
+     * bump, same event, same rail behavior.
      *
      * TWO THINGS THE CHECK'S REOPEN DOES THAT THE BUTTON DOES NOT, both from
      * the loop of 2026-09-10 (see record.js, "The page check's stamp"):
@@ -39464,7 +39443,7 @@
       var items = store.read(reviewId);
       for (var i = 0; i < items.length; i += 1) {
         var item = items[i];
-        if (!record.isRunRecord(item) || isPlaced(item)) continue;
+        if (!record.isRunRecord(item) || releasedBlock(item)) continue;
         var anchorEl = elementFor(item);
         if (!anchorEl) continue;
         var found = blocks.runElementsFor(item, doc, anchorEl);
@@ -40689,9 +40668,9 @@
         // state later says nothing about whether this is a first commit.
         wasCommitted: !!existing && isCommittedEdit(existing),
         // The state a rewording is withdrawn FROM, and restored TO when the
-        // wording matches again: ready, or not_handled (the agent said no and
-        // the reviewer is rewording it). Null for any other state, which
-        // typing leaves alone.
+        // wording matches again: ready only. Null for any other state, which
+        // typing leaves alone. A refused record never gets here: itemFor
+        // skips it, so typing in its passage opens a new card.
         withdrawFrom: existing && withdrawable(existing) ? existing[record.FIELD.STATE] : null,
         opened: existing
           ? { text: existing[record.FIELD.AFTER], html: existing[record.FIELD.AFTER_HTML] }
@@ -41059,12 +41038,10 @@
     // agent could read half-typed text as an instruction. A handled edit is
     // never reopened here (itemFor skips it).
     //
-    // A NOT_HANDLED EDIT IS REWORDED THE SAME WAY. It used to keep its state,
-    // so every pause posted it within the debounce and the helper rewrote
-    // review.json with the half-typed words each time (code review finding 5,
-    // spec 20260922.01). Now it withdraws to draft on the first changing
-    // keystroke, obeys the draft floor after that, and goes back to
-    // not_handled, same revision, reply kept, when the wording matches again.
+    // A NOT_HANDLED EDIT IS NEVER TYPED INTO. It is not on the page (replay
+    // skips a refused record), so typing in that passage opens a new card and
+    // the refused one keeps the words the agent answered (itemFor skips it;
+    // spec 20261011.01, requirement 1).
     function captureTyping() {
       if (!session) return null;
       if (isRun()) return captureRunTyping();
@@ -41181,11 +41158,13 @@
       return next;
     }
 
-    // The states a rewording takes an edit out of: the ones in front of
-    // someone. Handled is not here: a handled edit is never reopened by typing.
+    // The state a rewording takes an edit out of: the one in front of the
+    // agent. Handled is not here: a handled edit is never reopened by typing.
+    // Nor is not_handled: a refused edit is not on the page (replay skips it),
+    // so typing in that passage is a new card and never reaches this record
+    // (itemFor, releasedBlock).
     function withdrawable(item) {
-      var state = item[record.FIELD.STATE];
-      return state === record.STATE.READY || state === record.STATE.NOT_HANDLED;
+      return item[record.FIELD.STATE] === record.STATE.READY;
     }
 
     // Was this edit ever committed? Not "is it a draft right now": a committed
@@ -41345,9 +41324,8 @@
         // Reworded back to the page's own original words. That is not an edit
         // against the page, and it has always been left as captured rather
         // than committed; the one thing new is that the typing withdrew it, so
-        // it goes back to the state it opened in (ready, or not_handled with
-        // the agent's reason still on it) rather than stranding a draft
-        // nobody will see.
+        // it goes back to ready, the state it opened in, rather than
+        // stranding a draft nobody will see.
         if (open.withdrawFrom && record.isDraft(item)) {
           var restored = Object.assign({}, item);
           restored[record.FIELD.STATE] = open.withdrawFrom;
@@ -42302,20 +42280,33 @@
       for (i = 0; i < itemForElement.length; i += 1) {
         if (itemForElement[i].el === el) {
           var got = store.readItem(reviewId, itemForElement[i].id);
-          if (got && !isPlaced(got)) return got;
+          if (got && !releasedBlock(got)) return got;
         }
       }
       var items = store.read(reviewId);
       for (i = 0; i < items.length; i += 1) {
         var item = items[i];
         if (!isEditKind(item)) continue;
-        if (isPlaced(item)) continue;
+        if (releasedBlock(item)) continue;
         if (elementFor(item) === el) return item;
       }
       // A run block belongs to the record whose run it is (plan Task 2.1:
       // itemFor maps any run block back through blocks.runElementsFor).
       var holding = runRecordHolding(el);
       return holding ? holding.item : null;
+    }
+
+    /**
+     * Has this record let go of its block? Then the block is the page's own,
+     * and typing in it is a new card. Placed (below), or refused: a refused
+     * record is not on the page, so the passage there is the file's, and
+     * typing into it must never overwrite the refused card's words (spec
+     * docs/features/20261011.01_stuck_replayed_blocks, requirement 1).
+     */
+    function releasedBlock(item) {
+      if (!item) return false;
+      if (item[record.FIELD.STATE] === record.STATE.NOT_HANDLED) return true;
+      return isPlaced(item);
     }
 
     /**
@@ -42772,7 +42763,10 @@
     function openEmptyPage() {
       if (!notesReview || !doc || !doc.body || !reviewId || session || hasContent()) return null;
       var outstanding = store.read(reviewId).some(function (item) {
-        return item[record.FIELD.PLACEMENT] === record.PLACEMENT.START_OF_CONTAINER && record.isOutstanding(item);
+        // Replayable, not outstanding: a run the agent refused is not on the
+        // page, so a notes page whose only run was refused is empty and
+        // opens ready to type.
+        return item[record.FIELD.PLACEMENT] === record.PLACEMENT.START_OF_CONTAINER && record.isReplayable(item);
       });
       if (outstanding) return null;
       return openAtStart(containerOfPage());
@@ -45392,6 +45386,9 @@
     document: null,
     editing: null,
     persist: null,
+    // Puts a refused card back in front of the agent (Keep mine on a refused
+    // card's clash). index.js wires it to the Done tab's reopen.
+    reopen: null,
     hooks: null,
     pointing: null,
     highlights: null,
@@ -46370,106 +46367,58 @@
   }
 
   // ---------------------------------------------------------------------------
-  // The revert check: a handled hand edit whose change is gone again
+  // The page check: one stamp round, and nothing else
   // ---------------------------------------------------------------------------
   //
-  // The case this exists for. The reviewer hand-edits a line, the agent carries
-  // the edit into the source and replies handled, and the item moves to Done.
-  // Later the agent runs a doc-wide change for some other item and its sweep
-  // takes the hand-edited line back out. The reviewer's decision is undone and
-  // nothing says so: the item is in Done, so nobody is looking at it, and the
-  // page just quietly reads the way it did before they touched it.
+  // After the agent answers handled, the page is the file. The check used to
+  // reopen a handled card when its words, blocks, tag, bold or italic, or a
+  // take-back were no longer on the page, and replay then wrote the reviewer's
+  // old words back. On a page the reviewer had asked the agent to reshape (loose
+  // lines turned into a table), that wrote stray lines into the table and the
+  // page and the file never agreed again. So none of those reopen anything now:
+  // the reviewer sees the page as it is and edits or comments again, as in any
+  // document (spec docs/features/20261011.01_stuck_replayed_blocks).
   //
-  // The check runs once per page load, after the settling window closes, and it
-  // reopens the item so the change becomes ready work again. It reopens any one
-  // item ONCE: an agent that answers handled again while the page still reads
-  // the same way is telling the check the rendering is intended, not inviting
-  // another round. See the stamp rule below and record.js. The wake feed already
-  // wakes on a reopen, so the agent is told without the reviewer having to
-  // notice anything.
+  // What stays is the stamp round. The words landed and the data-lahe-id the
+  // reviewer's page wrote onto the element did not reach an HTML source. That
+  // is between the tool and the agent: the round is a tool round
+  // (record.TOOL_ROUND), the rail draws nothing for it, and replay does not
+  // write it (record.isReplayable), so nothing new lands on the page.
   //
-  // BOTH HALVES ARE REQUIRED, and that is the whole design.
-  //
-  //   after gone       on its own is a legitimate rewrite. The passage was
-  //                    rewritten for a reason nobody here can see, and calling
-  //                    that a revert would reopen items every time a document
-  //                    moves on.
-  //   before back      is the signature of a straight revert: not only is the
-  //                    reviewer's wording missing, the exact words they replaced
-  //                    are sitting there again.
-  //
-  // Scope. In practice this is the `edit` kind. `format_only` records carry the
-  // same text in `before` and `after` by construction (their difference is in
-  // the markup), so the two halves can never both hold, and a `delete` has no
-  // `after` text to go missing. Both fall out through the text requirements
-  // below rather than through a kind list, so nothing has to be kept in sync.
-  //
-  // Whitespace-insensitive, via normalize's own key: a rebuild that rewraps a
-  // paragraph has not reverted anything, and a substring compare on raw text
-  // would say it had.
+  // It reopens any one item ONCE. An agent that answers handled again while the
+  // page still reads the same way is telling the check the rendering is
+  // intended, not inviting another round (record.answeredPageCheckReopen).
 
-  // The sentence the reopened item carries. Authored in record.js beside the
-  // rest of the tool-generated note text; named here too because this is where
-  // it is used and where every test looks for it.
-  var REVERTED_EDIT_NOTE = record.PAGE_CHECK_NOTE;
-
-  // The check's other sentence: the words landed and the bold or italic did
-  // not. Authored in record.js beside the first one, for the same reason.
-  var FORMATTING_LOST_NOTE = record.PAGE_CHECK_FORMAT_NOTE;
-
-  // And the third: the words landed and the id did not. Same reason again.
+  // The stamp round's sentence. Authored in record.js beside the rest of the
+  // tool-generated note text.
   var STAMP_LOST_NOTE = record.PAGE_CHECK_STAMP_NOTE;
 
-  // And the fourth, for a run record: a block landed one to one with a
-  // different tag from the one in new_blocks.
-  var TAG_WRONG_NOTE = record.PAGE_CHECK_TAG_NOTE;
-  var TAKEBACK_NOTE = record.PAGE_CHECK_TAKEBACK_NOTE;
-  var RUN_MISSING_NOTE = record.PAGE_CHECK_RUN_NOTE;
-
-  // The backstop, independent of the stamp rule below. Two checks that both look
-  // at the same item cannot reopen it twice inside this window, whatever they
-  // each believe about the record. Sixty seconds because the loop that caused
-  // this ran roughly three times a minute, and a genuine revert is a thing a
-  // build did minutes or hours ago, so nothing honest is lost by waiting.
+  // The backstop, independent of the stamp rule. The check cannot reopen one
+  // item twice inside this window, whatever it believes about the record.
+  // Sixty seconds because the loop that caused this ran roughly three times a
+  // minute.
   var CHECK_REOPEN_COOLDOWN_MS = 60000;
 
-  /**
-   * Has this handled hand edit been reverted on the page?
-   *
-   * Pure: a record and the page's current text in, a boolean out. `options.now`
-   * is the clock, in milliseconds, so the cooldown can be tested without waiting
-   * a minute.
-   *
-   * TWO THINGS HOLD IT BACK, and they answer different questions.
-   *
-   *   the stamp rule    has the agent already answered the revision this check
-   *                     itself created? Then the reply in hand is the agent
-   *                     saying "this is how it renders now", and reopening again
-   *                     is the loop. See record.answeredPageCheckReopen.
-   *   the cooldown      did any check reopen this item in the last minute? Then
-   *                     not again, whatever the record says.
-   *
-   * @param {Object} item the record
-   * @param {string} pageText the reviewed page's current text, the library's own
-   *                 chrome excluded (see pageTextOf)
-   * @param {Object} [options] {now}
-   * @returns {boolean}
-   */
-  function isRevertedHandledEdit(item, pageText, options) {
-    return pageCheckReasonFor(item, pageText, options) !== null;
-  }
-
-  // The three things the check can find, and the sentence each one carries. A
-  // caller that only wants a yes or no asks isRevertedHandledEdit; one that has
-  // to write the note asks pageCheckNoteFor.
-  // MISSING is a run's own: a block the reviewer wrote is not on the page.
-  // REVERTED stays for text that went back to what it was before the edit.
-  var CHECK_REASON = { REVERTED: "reverted", MISSING: "missing", FORMATTING: "formatting", STAMP: "stamp", TAG: "tag", TAKEBACK: "takeback" };
+  // What the check can find. One reason left, kept as a name so a caller reads
+  // what it got rather than a bare boolean.
+  var CHECK_REASON = { STAMP: "stamp" };
 
   /**
    * Why the page check would reopen this item, or null.
    *
-   * @returns {string|null} CHECK_REASON.REVERTED, CHECK_REASON.FORMATTING, or null
+   * Pure: a record, the page's current text, and the sweep's options in.
+   *
+   * TWO THINGS HOLD IT BACK, and they answer different questions.
+   *
+   *   the stamp rule    has the agent already answered the revision this check
+   *                     itself created? See record.answeredPageCheckReopen.
+   *   the cooldown      did the check reopen this item in the last minute?
+   *
+   * @param {Object} item the record
+   * @param {string} pageText the reviewed page's current text, the library's
+   *   own chrome excluded (see pageTextOf)
+   * @param {Object} [options] {stamps, stampCarriable, now} from pageCheckOptions
+   * @returns {string|null} CHECK_REASON.STAMP, or null
    */
   function pageCheckReasonFor(item, pageText, options) {
     if (!item || typeof pageText !== "string") return null;
@@ -46477,90 +46426,35 @@
     if (item[record.FIELD.STATE] !== record.STATE.HANDLED) return null;
     if (record.answeredPageCheckReopen(item)) return null;
     if (withinCheckCooldown(item, options)) return null;
-
-    // A free-writing record is read block by block (runCheckReason).
-    if (isRunChecked(item)) {
-      var runReason = runCheckReason(item, options);
-      if (runReason) return runReason;
-      return stampMissingFromPage(item, options) ? CHECK_REASON.STAMP : null;
-    }
-    // A take-back of a type change carries the old tag (design call 4). Its
-    // words are checked the old way below; its tag is checked here.
-    if (takeBackTagWrong(item, options)) return CHECK_REASON.TAG;
-    // A take-back of placed blocks is held while a listed block is still there.
-    if (takeBackBlocksRemain(item, options)) return CHECK_REASON.TAKEBACK;
-
-    var after = item[record.FIELD.AFTER];
-    var before = item[record.FIELD.BEFORE];
-    if (typeof after !== "string" || typeof before !== "string") return null;
-
-    var afterKey = normalize.normalizeText(after);
-    var beforeKey = normalize.normalizeText(before);
-    // An edit whose after text was never page text (a delete, an empty region)
-    // has nothing to go missing.
-    if (!afterKey) return null;
-
-    var pageKey = normalize.normalizeText(pageText);
-    if (!pageKey) return null;
-    if (pageKey.indexOf(afterKey) === -1) {
-      // The revert half. An edit whose before and after read the same cannot be
-      // both gone and back, which is why this test lives here and not above:
-      // a format-only change is exactly that edit, and its formatting half is
-      // still worth asking about.
-      if (!beforeKey || beforeKey === afterKey) return null;
-      return pageKey.indexOf(beforeKey) !== -1 ? CHECK_REASON.REVERTED : null;
-    }
-    // The reviewer's words ARE on the page. Their bold and italic may not be,
-    // and a handled change that is only half on the page is still not on the
-    // page. Compared and ignored: exactly what formattingLost compares and
-    // ignores, over the whole document's markup rather than one block's.
-    if (formattingMissingFromPage(item, options)) return CHECK_REASON.FORMATTING;
-    // The words landed and the ID DID NOT. See stampMissingFromPage.
+    // Only when the words landed. A record whose words are gone was reshaped
+    // or dropped, and asking the agent for an id on an element that is not
+    // there is noise.
+    if (!wordsOnPage(item, pageText)) return null;
     return stampMissingFromPage(item, options) ? CHECK_REASON.STAMP : null;
   }
 
-  /** The sentence a page-check reopen of this item should carry, or null. */
-  function pageCheckNoteFor(item, pageText, options) {
-    var reason = pageCheckReasonFor(item, pageText, options);
-    if (reason === CHECK_REASON.REVERTED) return REVERTED_EDIT_NOTE;
-    if (reason === CHECK_REASON.MISSING) return RUN_MISSING_NOTE;
-    if (reason === CHECK_REASON.FORMATTING) return FORMATTING_LOST_NOTE;
-    if (reason === CHECK_REASON.STAMP) return STAMP_LOST_NOTE;
-    if (reason === CHECK_REASON.TAG) return TAG_WRONG_NOTE;
-    if (reason === CHECK_REASON.TAKEBACK) return TAKEBACK_NOTE;
-    return null;
-  }
-
-  // What the rail says on the card when a check reopens an item, one line per
-  // sentence. It lives beside the sentences rather than in the caller, so a
-  // fourth reason cannot ship with the wrong notice on it.
-  var CHECK_NOTICES = {};
-  CHECK_NOTICES[REVERTED_EDIT_NOTE] = "This change was undone on the page. The item is open again.";
-  CHECK_NOTICES[FORMATTING_LOST_NOTE] =
-    "The bold or italic in this change is not on the page. The item is open again.";
-  CHECK_NOTICES[STAMP_LOST_NOTE] = "The id for this element is not in the source. The item is open again.";
-  CHECK_NOTICES[TAKEBACK_NOTE] = "Some of the blocks you took back are still on the page. The item is open again.";
-  CHECK_NOTICES[TAG_WRONG_NOTE] = "A block in this change is on the page as a different type. The item is open again.";
-  CHECK_NOTICES[RUN_MISSING_NOTE] = "A block you wrote is not on the page as you wrote it. The item is open again.";
-
-  /** The rail's line for a page-check note, defaulting to the revert one. */
-  function pageCheckNoticeFor(note) {
-    return CHECK_NOTICES[note] || CHECK_NOTICES[REVERTED_EDIT_NOTE];
-  }
-
   /**
-   * Is this reopen an exchange the REVIEWER is part of, or one they are not?
-   *
-   * The revert and formatting sentences are about the reviewer's own words
-   * going missing from the page, so their card says so. The stamp sentence is
-   * about an attribute the reviewer never typed and cannot act on: it is the
-   * tool talking to the agent, and the rail draws none of it (record.TOOL_ROUND,
-   * and Ken on 2026-09-15: "This should not be showing up in my chat rail").
-   *
-   * @returns {string|null} the tool round's name, or null for a reviewer round
+   * Are this record's words on the page? Text only, whitespace folded, the
+   * same key the record's text was captured with. A run is read block by
+   * block, so a section label the page puts between two blocks is not a
+   * reason to say they are gone.
    */
-  function pageCheckToolFor(note) {
-    return note === STAMP_LOST_NOTE ? record.TOOL_ROUND.PAGE_CHECK_STAMP : null;
+  function wordsOnPage(item, pageText) {
+    var pageKey = normalize.normalizeText(pageText);
+    if (!pageKey) return false;
+    var blocks = record.isRunRecord(item) ? runList(item, RUN_FIELD.NEW_BLOCKS) : [];
+    if (blocks.length) {
+      return blocks.every(function (block) {
+        var key = exactWords(block && block.html);
+        return !key || pageKey.indexOf(key) !== -1;
+      });
+    }
+    var after = item[record.FIELD.AFTER];
+    var afterKey = typeof after === "string" ? normalize.normalizeText(after) : "";
+    // An edit whose after text was never page text (a delete, an empty region)
+    // has no element left to carry an id.
+    if (!afterKey) return false;
+    return pageKey.indexOf(afterKey) !== -1;
   }
 
   /**
@@ -46622,22 +46516,7 @@
     return !Object.prototype.hasOwnProperty.call(stamps, stamp);
   }
 
-  // Is the emphasis this edit asks for absent from the whole page's markup?
-  // The caller passes the document's markup as `options.pageHtml`
-  // (pageCheckOptions reads it off the body once per sweep).
-  function formattingMissingFromPage(item, options) {
-    var opts = options || {};
-    var html = typeof opts.pageHtml === "string" ? opts.pageHtml : null;
-    // Nothing to read is not evidence of anything: a check that guessed would
-    // reopen every handled edit on the page.
-    if (html === null) return false;
-    if (isRunChecked(item)) return runCheckReason(item, opts) === CHECK_REASON.FORMATTING;
-    if (item[record.FIELD.KIND] !== record.KIND.EDIT) return false;
-    if (!markupSaysAfter(item)) return false;
-    return missingEmphasis(item[record.FIELD.AFTER_HTML], html);
-  }
-
-  /** Did a check reopen this item less than CHECK_REOPEN_COOLDOWN_MS ago? */
+  /** Did the check reopen this item less than CHECK_REOPEN_COOLDOWN_MS ago? */
   function withinCheckCooldown(item, options) {
     var stamp = record.pageCheckReopen(item);
     if (!stamp || typeof stamp.at !== "string") return false;
@@ -46649,34 +46528,19 @@
   }
 
   /**
-   * The ids of every item in `items` the check says was reverted BY THE PAGE.
+   * The ids of every item in `items` the check would open a stamp round for.
    *
-   * The one thing the single-item check cannot see, and the reason this takes
-   * the whole list: A REVIEWER'S OWN UNDO LOOKS IDENTICAL TO PAGE DRIFT. Both
-   * leave the reviewer's wording gone and the text it replaced back. The
-   * difference is not on the page at all, it is in the log: an undo of a handled
-   * edit mints a revert record naming the item it took back (record.revertOf),
-   * and drift mints nothing.
-   *
-   * So an item another record reverts is skipped. Reopening it would tell the
-   * agent to reapply the exact change the reviewer had just deliberately taken
-   * back, while the revert record sitting beside it asks for the opposite. The
-   * drift check itself is untouched and still does its job for the case it was
-   * built for: a rebuild that quietly dropped an applied fix, where nobody asked
-   * for anything.
+   * An item another record takes back (record.takenBackIds) is skipped: the
+   * reviewer pressed undo on it, and the take-back asks the agent for the
+   * opposite of the change this round would ask about.
    */
-  function revertedHandledEditIds(items, pageText, options) {
+  function pageCheckIds(items, pageText, options) {
     var list = Array.isArray(items) ? items : [];
     var takenBack = record.takenBackIds(list);
-    var opts = options || {};
-    // The run check reads the other records: a block a later record took over
-    // is that record's now (record.handedOverBlocks). Kept on the caller's
-    // options, so the note it asks for next (pageCheckNoteFor) reads the same.
-    if (!Array.isArray(opts.items)) opts.items = list;
     var out = [];
     for (var i = 0; i < list.length; i += 1) {
       if (takenBack[list[i][record.FIELD.ID]]) continue;
-      if (isRevertedHandledEdit(list[i], pageText, opts)) out.push(list[i][record.FIELD.ID]);
+      if (pageCheckReasonFor(list[i], pageText, options) !== null) out.push(list[i][record.FIELD.ID]);
     }
     return out;
   }
@@ -46702,19 +46566,14 @@
   }
 
   /**
-   * The page-check options for a whole sweep: the document's markup, read once.
-   *
-   * The tool's own chrome goes out of it the way it goes out of pageTextOf: the
-   * rail lives in a closed shadow root, and cleanMarkup drops any chrome node
-   * that ever lands in the light DOM on the way through emphasisRuns.
+   * The page-check options for a whole sweep: the ids on the document, read
+   * once, and the helper's answer about whether the source can carry one.
    */
   function pageCheckOptions(root, options) {
     var opts = options || {};
-    var out = { pageHtml: root && typeof root.innerHTML === "string" ? root.innerHTML : null };
-    // Every id the document carries, read once for the whole sweep the way the
-    // markup is. A document that cannot be queried hands back null, which
+    // A document that cannot be queried hands back null, which
     // stampMissingFromPage reads as "no evidence" rather than as "missing".
-    out.stamps = stampsOn(root);
+    var out = { stamps: stampsOn(root) };
     if (typeof opts.stampCarriable === "boolean") out.stampCarriable = opts.stampCarriable;
     if (typeof opts.now === "number") out.now = opts.now;
     return out;
@@ -46992,6 +46851,25 @@
     var ctx = contextFor(null);
     var flagged = conflicts[id];
     if (!flagged) return { resolved: false, choice: choice, reason: "no conflict is flagged on " + String(id) };
+
+    // KEEP MINE ON A REFUSED CARD. The agent answered no while the clash was
+    // still on the card. A refused card is not written onto the page, so a
+    // one-shot write here would be gone at the next repaint. The press is the
+    // reviewer putting the card back in front of the agent: it goes to ready at
+    // a new revision, the page state it answered is remembered, and the
+    // ordinary replay writes it from then on.
+    var refusedItem = choice === "keep_mine" ? itemWithId(ctx, id) : null;
+    if (refusedItem && refusedItem[record.FIELD.STATE] === record.STATE.NOT_HANDLED) {
+      if (typeof ctx.reopen !== "function") {
+        return { resolved: false, choice: choice, reason: "no way to send the card back to the agent" };
+      }
+      if (typeof flagged.theirs === "string") record.acceptPageText(refusedItem, flagged.theirs);
+      persistItem(ctx, refusedItem);
+      ctx.reopen(id);
+      forceClearConflict(ctx, id);
+      notify(ctx, "onResolved", id);
+      return { resolved: true, choice: choice, reason: null };
+    }
 
     // A held run: both answers place it (see resolveRunConflict).
     if (flagged.run) {
@@ -47758,10 +47636,26 @@
   }
 
   /**
+   * What a refused record lets go of. Only what it holds: an ordinary pass
+   * calls this for every refused record, so a record with nothing to drop
+   * touches neither the card nor storage.
+   */
+  function releaseRefused(ctx, item) {
+    var id = item[record.FIELD.ID];
+    if (conflicts[id]) {
+      forceClearConflict(ctx, id);
+      notify(ctx, "onResolved", id);
+    }
+    var region = item[record.FIELD.REGION];
+    if (region && region.lost) clearLost(ctx, item);
+  }
+
+  /**
    * Applies one committed record.
    *
    * The contract, in the order it is enforced:
-   *  - a record that is not outstanding is not replayed at all
+   *  - a record that is not outstanding is not replayed at all, and neither
+   *    is one the agent already answered no to (record.isReplayable)
    *  - a region the reviewer is in right now is skipped, never written
    *  - an anchor that does not bind uniquely is surfaced as lost: nothing is
    *    written, nothing is moved, and the record says so
@@ -47781,6 +47675,15 @@
 
     if (!record.isOutstanding(item)) {
       return { wrote: false, branch: null, lost: false, reason: "not outstanding", item: item, element: null };
+    }
+    // Outstanding but answered: the agent refused it, or the page check opened
+    // a round with the agent the reviewer is not part of. Either way the page
+    // shows the file (record.isReplayable). A refused card also lets go of any
+    // conflict or lost stamp it carried from when it was waiting, so neither
+    // stands stale on the card or in review.json.
+    if (!record.isReplayable(item)) {
+      if (item[record.FIELD.STATE] === record.STATE.NOT_HANDLED) releaseRefused(ctx, item);
+      return { wrote: false, branch: null, lost: false, reason: "not replayed", item: item, element: null };
     }
 
     // A free-writing record (an anchor plus a run, a tag change, or a
@@ -49009,120 +48912,8 @@
   }
 
   // ---------------------------------------------------------------------------
-  // The page check on a run
+  // An earlier revision's block, for placeRun's presence table
   // ---------------------------------------------------------------------------
-  //
-  // Architecture "The page check on a run". Today's check looks for the whole
-  // after as one string, and the "Section N" label between a header and its
-  // paragraph would reopen a correct run. So a run is read block by block, with
-  // the string twin of replay's walk (normalize.leafBlocks) and the same
-  // matcher, starting after the anchor:
-  //
-  //   a missing block        reopens with today's "undone" note
-  //   a wrong tag, one to one  reopens with the tag note
-  //   lost bold or italic    reopens with the formatting note
-  //
-  // In that order, when more than one holds. A block of five or more words the
-  // page shows whole somewhere else is not missing: replay would not add it
-  // again either. Pure: a record and the page's markup in, a reason out.
-  function runCheckReason(item, options) {
-    var html = options && typeof options.pageHtml === "string" ? options.pageHtml : null;
-    if (html === null) return null;
-    var F = record.FIELD;
-    var leaves = normalize.leafBlocks(html);
-    var list = runList(item, RUN_FIELD.NEW_BLOCKS);
-    // Blocks a later record of the reviewer's took over (flow walk, Fail 2):
-    // their words are that record's now. The run is read twice, once as it
-    // was placed and once with the later versions in place, and the reading
-    // that finds more of it counts. A taken-over block is never judged.
-    var handed = record.handedOverBlocks(item, options && options.items);
-    var later = list.map(function (b, index) {
-      var h = handed[index];
-      if (!h || typeof h.html !== "string") return b;
-      return { tag: h.tag || b.tag, html: h.html };
-    });
-    var anchorHtml = typeof item[RUN_FIELD.ANCHOR_AFTER_HTML] === "string" ? item[RUN_FIELD.ANCHOR_AFTER_HTML] : "";
-    var anchorWords = normalize.blockWords(anchorHtml);
-    var anchorKeys = [anchorWords];
-    if (handed.anchor && typeof handed.anchor.html === "string") anchorKeys.push(normalize.blockWords(handed.anchor.html));
-    var starts = [];
-    var anchored = true;
-    if (isContainerPlacement(item)) {
-      starts.push(-1);
-      anchored = false;
-    } else {
-      leaves.forEach(function (leaf, i) {
-        if (leaf.words && anchorKeys.indexOf(leaf.words) !== -1) starts.push(i);
-      });
-    }
-    if (!starts.length) {
-      var beforeWords = normalize.blockWords(item[F.BEFORE_HTML] || item[F.BEFORE] || "");
-      var beforeBack = !handed.anchor && beforeWords && beforeWords !== anchorWords && leaves.some(function (l) {
-        return l.words === beforeWords;
-      });
-      if (beforeBack) return CHECK_REASON.REVERTED;
-      if (!list.length) return null;
-      anchored = false;
-      leaves.forEach(function (leaf, i) {
-        var hit = list.concat(later).some(function (b) {
-          return normalize.blockWords(b.html) === leaf.words;
-        });
-        if (hit) starts.push(i - 1);
-      });
-      if (!starts.length) return handed.anchor ? null : CHECK_REASON.MISSING;
-    }
-    var best = null;
-    var readings = later === list || !Object.keys(handed).length ? [list] : [list, later];
-    starts.forEach(function (start) {
-      readings.forEach(function (reading) {
-        var matched = normalize.matchRun(reading, leaves.slice(start + 1));
-        var present = matched.filter(function (m) {
-          return m.status !== "missing";
-        }).length;
-        if (!best || present > best.present) best = { start: start, matched: matched, present: present, reading: reading };
-      });
-    });
-    var missing = false;
-    var tag = false;
-    var formatting = false;
-    var anchorLeaf = anchored && best.start >= 0 && !handed.anchor ? leaves[best.start] : null;
-    if (anchorLeaf) {
-      var tagAfter = item[RUN_FIELD.ANCHOR_TAG_AFTER];
-      if (tagAfter && anchorLeaf.tag !== tagAfter) tag = true;
-      // format_only too: a sitting that retags and bolds the anchor is one.
-      var kind = item[F.KIND];
-      if ((kind === record.KIND.EDIT || kind === record.KIND.FORMAT_ONLY) && missingEmphasis(anchorHtml, anchorLeaf.html)) formatting = true;
-    }
-    best.matched.forEach(function (m) {
-      if (handed[m.index]) return;
-      var block = list[m.index];
-      if (m.status === "missing") {
-        var words = normalize.blockWords(block.html);
-        var elsewhere =
-          wordCount(block.html) >= normalize.SHORT_BLOCK_WORDS &&
-          leaves.some(function (l) {
-            return l.words === words;
-          });
-        if (!elsewhere) missing = true;
-        return;
-      }
-      if (m.status !== "whole") return;
-      var leaf = leaves[best.start + 1 + m.leaves[0]];
-      // The fold reads "well--known" and "well-known" as one. A leaf that shows
-      // an earlier revision's block exactly, and not this one, is that earlier
-      // revision: the punctuation fix is not on the page.
-      if (showsEarlierRevision(item, m.index, leaf.html)) {
-        missing = true;
-        return;
-      }
-      if (leaf.tag !== block.tag) tag = true;
-      if (missingEmphasis(block.html, leaf.html)) formatting = true;
-    });
-    if (missing) return CHECK_REASON.MISSING;
-    if (tag) return CHECK_REASON.TAG;
-    if (formatting) return CHECK_REASON.FORMATTING;
-    return null;
-  }
 
   // A block's words without the typography fold, entities resolved.
   function exactWords(html) {
@@ -49156,87 +48947,6 @@
     if (page === exactWords(current.html)) return false;
     return foldedPriorBlocks(item, index).some(function (prior) {
       return exactWords(prior.html) === page;
-    });
-  }
-
-  // Which records the run check reads: a run, a tag change, or a reworded
-  // anchor. A take-back keeps today's check, a tag-only one included: it has
-  // no anchor_after_html, so the run check would find no anchor and read the
-  // restored words as the before coming back.
-  function isRunChecked(item) {
-    return record.hasRunFields(item) && !isTakeBack(item) && !record.isRevert(item);
-  }
-
-  /**
-   * A handled take-back of placed blocks (adversary review 3), the page's side.
-   * The same rule as the helper's takeBackVerdictFor in
-   * src/service/handled_check.js: the take-back's after is the anchor's old
-   * words, which stay on the page whether or not the blocks came out, so the
-   * words prove nothing. What proves the work is an absence. Where the anchor is
-   * found, the leaves after it (as many as the take-back lists, plus the walk's
-   * slack) must hold none of the listed blocks. Where it is not found, a listed
-   * block of at least SHORT_BLOCK_WORDS words still on the page holds the item;
-   * a shorter one is too likely to be the page's own words to count.
-   */
-  function takeBackBlocksRemain(item, options) {
-    if (!isTakeBack(item) || !record.isRevert(item)) return false;
-    var html = options && typeof options.pageHtml === "string" ? options.pageHtml : null;
-    if (html === null) return false;
-    var F = record.FIELD;
-    var removed = runList(item, RUN_FIELD.REMOVE_BLOCKS)
-      .map(function (b) {
-        return normalize.blockWords(b && b.html);
-      })
-      .filter(Boolean);
-    if (!removed.length) return false;
-    var words = normalize.leafBlocks(html).map(function (leaf) {
-      return leaf.words;
-    });
-    if (!words.length) return false;
-    var container = isContainerPlacement(item);
-    var anchorWords = container ? null : normalize.blockWords(item[F.AFTER_HTML] || item[F.AFTER] || "");
-    var span = removed.length + normalize.RUN_WALK_SLACK;
-    var starts = [];
-    if (container) starts.push(-1);
-    else if (anchorWords) {
-      words.forEach(function (w, i) {
-        if (w === anchorWords) starts.push(i);
-      });
-    }
-    if (!starts.length) {
-      return removed.some(function (r) {
-        return r.split(" ").length >= normalize.SHORT_BLOCK_WORDS && words.indexOf(r) !== -1;
-      });
-    }
-    return starts.some(function (start) {
-      var window = words.slice(start + 1, start + 1 + span);
-      return removed.some(function (r) {
-        return window.indexOf(r) !== -1;
-      });
-    });
-  }
-
-  /**
-   * Is a handled take-back's anchor on the page with the wrong tag? The
-   * take-back names the old tag in anchor_tag_after. The anchor is the leaf
-   * whose words are the take-back's after (the words the undo restored); when
-   * no leaf shows them, today's check says what is wrong, not this one.
-   */
-  function takeBackTagWrong(item, options) {
-    if (!record.isRevert(item)) return false;
-    var tag = item[RUN_FIELD.ANCHOR_TAG_AFTER];
-    if (typeof tag !== "string" || !tag) return false;
-    var html = options && typeof options.pageHtml === "string" ? options.pageHtml : null;
-    if (html === null) return false;
-    var F = record.FIELD;
-    var words = normalize.blockWords(typeof item[F.AFTER_HTML] === "string" ? item[F.AFTER_HTML] : item[F.AFTER] || "");
-    if (!words) return false;
-    var hits = normalize.leafBlocks(html).filter(function (leaf) {
-      return leaf.words === words;
-    });
-    if (!hits.length) return false;
-    return !hits.some(function (leaf) {
-      return leaf.tag === tag;
     });
   }
 
@@ -49413,24 +49123,14 @@
     runPass: runPass,
     compare: compare,
     applyRecord: applyRecord,
-    REVERTED_EDIT_NOTE: REVERTED_EDIT_NOTE,
-    FORMATTING_LOST_NOTE: FORMATTING_LOST_NOTE,
     STAMP_LOST_NOTE: STAMP_LOST_NOTE,
-    TAG_WRONG_NOTE: TAG_WRONG_NOTE,
-    TAKEBACK_NOTE: TAKEBACK_NOTE,
-    CHECK_NOTICES: CHECK_NOTICES,
     TAKE_THEIRS_RUN_LABEL: TAKE_THEIRS_RUN_LABEL,
     runAnchorView: runAnchorView,
     runConflictLine: runConflictLine,
-    runCheckReason: runCheckReason,
     CHECK_REOPEN_COOLDOWN_MS: CHECK_REOPEN_COOLDOWN_MS,
-    isRevertedHandledEdit: isRevertedHandledEdit,
     pageCheckReasonFor: pageCheckReasonFor,
-    pageCheckNoteFor: pageCheckNoteFor,
-    pageCheckNoticeFor: pageCheckNoticeFor,
-    pageCheckToolFor: pageCheckToolFor,
     PAGE_CHECK_REASON: CHECK_REASON,
-    revertedHandledEditIds: revertedHandledEditIds,
+    pageCheckIds: pageCheckIds,
     pageTextOf: pageTextOf,
     pageCheckOptions: pageCheckOptions,
     uniqueness: uniqueness
@@ -49904,7 +49604,7 @@
   "use strict";
 
   // Replaced by scripts/build-layer.js at concatenation time.
-  var VERSION = "0.2.0+0dc25dcbc3a1";
+  var VERSION = "0.2.0+f2155cd9fb87";
 
   var protocol = ns.protocol;
   var record = ns.record;
@@ -50401,11 +50101,14 @@
           // The Edits row reads the record too: after "Use the fixes" its block
           // list has to show the fixed words.
           if (editsTab && typeof editsTab.refresh === "function") editsTab.refresh();
-          // "Use the fixes" is the reviewer's reword of a placed run at a new
-          // revision, and the page has to show the fixed words: replay's
-          // branch three rewrites the placed blocks in place. Only a run
-          // record; every other continuation leaves the page as it is.
-          if (next && ns.record.isRunRecord(next)) {
+          // A continuation that leaves the record waiting for the agent has
+          // to reach the page now, and replay reads the items CACHE, so the
+          // cache is refreshed first. Two cases need it: "Use the fixes" on a
+          // placed run (branch three rewrites the blocks in place), and a
+          // refused card the reviewer sends back (a reply, or Keep mine on its
+          // clash). Replay skips a refused card, so without this its words
+          // stay off the page until the next reload (spec 20261011.01).
+          if (next && ns.record.isReplayable(next)) {
             refreshItems();
             ns.replay.schedule(ns.replay.REASON.REPLY, { immediate: true });
           }
@@ -51346,6 +51049,12 @@
       // For one thing only: the conflict card's "take the page's" button, which
       // retires a record and writes nothing. See replay's `context`.
       editing: editing,
+      // Keep mine on a refused card's clash: the card goes back to ready
+      // through the Done tab's own reopen, the same path a reviewer's reply
+      // takes. `done` is read when pressed, since a remount replaces it.
+      reopen: function (id) {
+        return done.reopen(id, { notice: "Your version is back in front of the agent." });
+      },
       onPass: function () {
         conflictToasts.sync();
       },
@@ -51717,30 +51426,29 @@
     }
 
     /**
-     * The revert check, run ONCE per page load.
+     * The page check, run ONCE per page load: the stamp round, and nothing
+     * else.
      *
-     * A handled hand edit whose change is gone from the page while the text it
-     * replaced is back has been reverted, and the reviewer's decision was undone
-     * without anyone saying so. Reopening it puts it back in front of the agent
-     * through the same path the reviewer's own Reopen issue button uses, and the
-     * wake feed already wakes on a reopen.
+     * After the agent answers handled, the page is the file. A handled card
+     * whose words, blocks, tag, bold or italic are no longer on the page is
+     * left alone: the reviewer sees the page as it is and edits or comments
+     * again, as in any document (spec
+     * docs/features/20261011.01_stuck_replayed_blocks). What stays is the
+     * request for a data-lahe-id the agent did not carry into an HTML source.
+     * It is a tool round: the rail draws nothing for it, and replay writes
+     * nothing for it (record.isReplayable).
      *
-     * ONCE PER ITEM PER LOAD, and never a loop.
+     * ONCE PER ITEM PER LOAD, and never a loop. On 2026-09-10 the check and
+     * an agent answered each other thirteen times in thirty six minutes. Three
+     * things hold it now:
      *
-     * The check and the agent can answer each other. On 2026-09-10 they did:
-     * the reviewer's edit was applied in a shape the check could not see, so the
-     * check reopened, the agent replied handled, the check read the same page
-     * and reopened again, thirteen times in thirty six minutes. Three things
-     * hold it now, and the first two are the ones that matter:
-     *
-     *   the stamp   the record remembers which revision the check created, so a
-     *               handled reply answering that revision is the agent saying
-     *               "this is how it renders now" and is left alone
-     *               (record.answeredPageCheckReopen)
-     *   the cooldown  no item is reopened by a check twice inside a minute
-     *               (replay.CHECK_REOPEN_COOLDOWN_MS)
-     *   this set    and no item is reopened by a check twice in one page load,
-     *               however many times this function is called
+     *   the stamp     the record remembers which revision the check created,
+     *                 so a handled reply answering that revision is left alone
+     *                 (record.answeredPageCheckReopen)
+     *   the cooldown  no item is reopened by the check twice inside a minute
+     *                 (replay.CHECK_REOPEN_COOLDOWN_MS)
+     *   this set      and no item is reopened twice in one page load,
+     *                 however many times this function is called
      */
     var checkReopened = {};
     // Set by the settle pass; the first stamp_carriable answer runs the page
@@ -51752,56 +51460,30 @@
       var body = doc && doc.body;
       if (!body) return [];
       var pageText = ns.replay.pageTextOf(body);
-      // The page's markup goes in beside its text: a handled edit whose words
-      // landed and whose bold or italic did not is also a change that is not on
-      // the page, and text alone cannot see that (2026-09-11).
-      // Plus the helper's answer about the SOURCE. A Markdown review renders to
-      // HTML, so the page cannot tell on its own that its source has nowhere to
-      // put a data-lahe-id, and a check that assumed it could reopened every
-      // handled edit of every Markdown review once (2026-09-14).
+      // The helper's answer about the SOURCE. A Markdown review renders to
+      // HTML, so the page cannot tell on its own that its source has nowhere
+      // to put a data-lahe-id, and a check that assumed it could reopened
+      // every handled edit of every Markdown review once (2026-09-14).
       var options = ns.replay.pageCheckOptions(body, {
         stampCarriable: typeof sync.stampCarriable === "function" ? sync.stampCarriable() : null
       });
       var items = refreshItems();
-      var ids = ns.replay.revertedHandledEditIds(items, pageText, options).filter(function (id) {
+      var ids = ns.replay.pageCheckIds(items, pageText, options).filter(function (id) {
         return !checkReopened[id];
       });
       counters.revertChecks += 1;
       ids.forEach(function (id) {
         checkReopened[id] = true;
-        var item = null;
-        for (var i = 0; i < items.length; i += 1) {
-          if (items[i][ns.record.FIELD.ID] === id) item = items[i];
-        }
-        // Which of the check's sentences this item gets, and the line the card
-        // shows with it. Both come from replay, so a new reason arrives here
-        // already carrying its own words rather than needing a branch added.
-        var note = ns.replay.pageCheckNoteFor(item, pageText, options) || ns.replay.REVERTED_EDIT_NOTE;
-        // A TOOL ROUND draws nothing on the rail: the stamp request is between
-        // the tool and the agent, about an attribute the reviewer never typed.
-        // replay decides which reopens are which, beside the sentences.
-        var tool = ns.replay.pageCheckToolFor(note);
         done.reopen(id, {
-          note: note,
-          notice: tool ? null : ns.replay.pageCheckNoticeFor(note),
-          tool: tool,
+          note: ns.replay.STAMP_LOST_NOTE,
+          notice: null,
+          tool: ns.record.TOOL_ROUND.PAGE_CHECK_STAMP,
           pageCheck: true
         });
         counters.revertReopens += 1;
       });
-      // A reopened item is outstanding again, so its region gets compared
-      // again. That is what puts the reviewer's bold or italic back on a page
-      // whose rebuild dropped it: replay writes the record's markup, and an
-      // item is only replayed while it is outstanding.
-      //
-      // The refresh is the load-bearing half. Replay reads the `items` CACHE,
-      // and this function filled that cache before the reopens, so a pass
-      // scheduled without it reads every reopened item as still handled and
-      // skips it ("not outstanding").
-      if (ids.length) {
-        refreshItems();
-        ns.replay.schedule(ns.replay.REASON.REPLY, { immediate: true });
-      }
+      // No replay pass is scheduled: a stamp round writes nothing on the page.
+      if (ids.length) refreshItems();
       return ids;
     }
 

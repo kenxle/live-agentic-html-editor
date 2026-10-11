@@ -574,7 +574,7 @@ names the test that proves it, so this table and the gate cannot drift apart.
 | S4 | no id, and the words are on the page twice | unit `anchor_cases.test.js`: "S4: no id on the page and the words twice over refuses, exactly as before". Browser `graceful_failure.spec.js`: "S4: no id and the words twice over refuses, exactly as it did before ids existed" |
 | S5 | no id, the words once, and the tie-breakers disagree | unit `anchor_cases.test.js`: "S5: the words moved to a different tag under a different parent, and the write still lands" and "S5: the words twice over refuse, however loudly the tie-breakers point at one of them" |
 | S6 | the reviewer is mid-edit in the block when the rebuild lands | browser `graceful_failure.spec.js`: "S6: a rebuild under an open edit waits, and then collides rather than overwriting" |
-| S7 | the agent replied handled and the id never reached the source | unit `reverted_edit.test.js`: the seven tests beginning "S7:". Browser `graceful_failure.spec.js`: "S7: handled, and the id never reached the source: reopened once, and once only" |
+| S7 | the agent replied handled and the id never reached the source | unit `reverted_edit.test.js`: the tests beginning "S7:". Browser `graceful_failure.spec.js`: "S7: handled, and the id never reached the source: reopened once, and once only" |
 | S8 | a probable place (the point ladder's guess) | unit `anchor_cases.test.js`: "S8: every shape that produces a guess produces a refusal from the write ladder" and "S8: a guess is not shaped like a verdict, so no caller can read one as the other" |
 
 | S7 (Markdown) | the source has nowhere to put an attribute | unit `reverted_edit.test.js`: "S7: a Markdown source is never asked for a stamp it cannot hold" and the two beside it. Browser `graceful_failure.spec.js`: "S7: a Markdown source is never asked for an id it cannot hold" |
@@ -599,6 +599,13 @@ else:
 - `review.json` says `region.stamp_carriable: false` per item, and the contract
   tells the agent to skip the stamp and use `region.where` and `region.ordinal`;
 - the page check never mentions the stamp, so nothing is reopened for it.
+
+Since spec 20261011.01 the stamp round is the page check's only reopen. It runs
+only when the record's words are on the page, so there is an element to carry
+the id. It is a tool round the rail never draws, and replay never writes it
+(`record.isReplayable`), so nothing new lands on the reviewer's page. A
+handled edit whose words, tag or emphasis the page lost is no longer reopened
+at all.
 
 The page cannot decide this on its own, because a Markdown review renders to
 HTML and its page path ends in `.html`. The helper knows the source, and answers

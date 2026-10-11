@@ -434,10 +434,9 @@ test.describe("the reviewer's words land on the page once", () => {
 
     const edit = await appendParagraphs(page, [TWO, THREE]);
 
-    // The agent polished the reviewer's last sentence. That is a real
-    // difference, and the page check reopens the item for it. What must never
-    // happen is the write: all three paragraphs into the first block, leaving
-    // the page saying the middle one twice.
+    // The agent polished the reviewer's last sentence. What must never happen
+    // is a write of all three paragraphs into the first block, leaving the
+    // page saying the middle one twice.
     rebuild([ORIGINAL, TWO, THREE + " Right away."]);
     reply(edit.id, edit.rev);
     await reloadAndSettle(page);
@@ -456,10 +455,12 @@ test.describe("the reviewer's words land on the page once", () => {
     expect(edit.after).toBe([ORIGINAL + ADDED, TWO, THREE].join("\n\n"));
     expect(edit.afterHtml, "the record's markup carries the formatting").toContain("<strong>Runners</strong>");
 
-    // The agent carried the two new paragraphs into the source and not the
-    // change to the first, so the page is missing that paragraph alone.
+    // The agent has carried the two new paragraphs into the source and not
+    // yet the change to the first, so the page is missing that paragraph
+    // alone. The edit is still waiting for the agent's answer, so replay
+    // writes it (once the agent answers, the page is the file: spec
+    // 20261011.01).
     rebuild([LINKED_ORIGINAL, TWO, THREE]);
-    reply(edit.id, edit.rev);
     await reloadAndSettle(page);
     await reloadAndSettle(page);
 

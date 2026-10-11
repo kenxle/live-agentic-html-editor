@@ -140,11 +140,8 @@ test("an archived proofread turn keeps its fixes, so review.json can carry them"
   assert.equal(r2.agent.suggestions, undefined);
 });
 
-// --- CL 16: the tag note names both fields --------------------------------
-
-test("the page check's tag note names new_blocks or anchor_tag_after", () => {
-  assert.ok(record.PAGE_CHECK_TAG_NOTE.indexOf("new_blocks or anchor_tag_after") !== -1, record.PAGE_CHECK_TAG_NOTE);
-});
+// --- CL 16: the tag note named both fields. The page check no longer writes
+// a tag note at all (spec 20261011.01); run_record.test.js pins that.
 
 // --- the literal NUL in record.js (adversary cleanup note) ----------------
 

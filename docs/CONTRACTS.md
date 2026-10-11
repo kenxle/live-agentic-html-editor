@@ -1685,8 +1685,8 @@ model they belonged to. Added by this rework: `ANCHOR_LOST`, `REPLAY_NEITHER_MAT
 Added by free writing: the helper's run refusals (`RUN_BLOCK_REFUSED`, `RUN_OVER_CEILING`,
 `RUN_PLACEMENT_REFUSED`, `RUN_TAKEBACK_CARRIES_RUN`), the card codes `REPLAY_RUN_WRONG_TAG`,
 `REPLAY_RUN_PLACED_ELSEWHERE` (for the reviewer only; never in `review.json`) and `RUN_EVENT_REFUSED`,
-and `SUGGESTION_NOT_FOUND`. The page check's run sentence is `record.PAGE_CHECK_TAG_NOTE`, which names
-`new_blocks or anchor_tag_after`. `HELPER_CONTRACT_OLDER` is the layer's own version check: sync reads
+and `SUGGESTION_NOT_FOUND`. The page check writes no run sentence: since spec 20261011.01 its only
+round is the stamp (`record.PAGE_CHECK_STAMP_NOTE`). `HELPER_CONTRACT_OLDER` is the layer's own version check: sync reads
 health at start, and a helper reporting an older `service_contract` puts the page read-only with
 this chip, before anything is posted. `RUN_EVENT_REFUSED` is kept in browser storage per item
 (`store.markRefused`), so a reload still says "Not sent" until the helper accepts a later event.

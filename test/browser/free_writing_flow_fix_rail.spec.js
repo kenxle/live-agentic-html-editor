@@ -366,7 +366,10 @@ test.describe("flow walk fixes, replay and rail side", () => {
     await shootCard(page, testInfo, ref.id, "item4-block-clash");
   });
 
-  test("a placed block a later rebuild drops reopens with the run's own lines, never undone or reapply", async ({ page }, testInfo) => {
+  // Spec 20261011.01, requirement 2: after the agent answers, the page is the
+  // file. A rebuild that drops a placed block is not reopened, nothing is
+  // written back, and nothing new shows on the card.
+  test("a placed block a later rebuild drops stays handled, and the page shows the file", async ({ page }, testInfo) => {
     world = await makeWorld({ file: "doc.md", text: DOC_MD });
     await page.goto(world.open);
     await booted(page);
@@ -380,25 +383,27 @@ test.describe("flow walk fixes, replay and rail side", () => {
     await agentRound(page, world, ref);
     await heldHandled(page, ref.id);
     await reviewerReloads(page);
+    const handledRev = (await state(page, ref.id)).rev;
     expect(await state(page, ref.id)).toMatchObject({ state: "handled" });
 
     // A later rebuild loses the second block.
     const dropped = readSource(world).replace("Nobody misses the old way at all.\n\n", "");
     expect(dropped).not.toBe(readSource(world));
     await agentWrites(page, world, dropped);
-    await pollPage(page, (id) => window.__lahe.itemById(id).state === "ready", ref.id, {
-      message: "the page check to reopen the run",
-      timeoutMs: 20000
-    });
+
+    expect(await page.evaluate(() => window.__lahe.counters.revertReopens), "the page check reopened nothing").toBe(0);
     const after = await state(page, ref.id);
-    expect(after.note).toContain("Reopened by the page check: a block in new_blocks is not on the page as written.");
-    expect(after.note).not.toMatch(/original text is back|Reapply/);
+    expect(after.state, "the card stays handled").toBe("handled");
+    expect(after.rev, "at the revision the agent answered").toBe(handledRev);
+    expect(after.note || "", "with nothing added to it").not.toMatch(/Reopened by the page check/);
+    expect(await world_.countOnPage(page, "Nobody misses the old way at all."), "the page shows the file").toBe(0);
+    expect(await world_.countOnPage(page, "Friday ships feel calmer."), "and the block the file kept").toBe(1);
     const notice = await page.evaluate((id) => {
       const n = window.__lahe.rail.cardNode(id).querySelector(".card__notice");
       return n ? n.textContent : "";
     }, ref.id);
-    expect(notice).toBe("A block you wrote is not on the page as you wrote it. The item is open again.");
-    await shootCard(page, testInfo, ref.id, "item4-run-reopened");
+    expect(notice, "no notice on the card").toBe("");
+    await shootCard(page, testInfo, ref.id, "item4-run-stays-handled");
   });
 
   test("opening a block draws no struck-through draft card until something changes", async ({ page }) => {

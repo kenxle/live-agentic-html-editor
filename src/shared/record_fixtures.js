@@ -468,11 +468,6 @@
       ];
     }
 
-    // A run record the page check reopened for a wrong tag.
-    function runWithTagNote() {
-      return worked({ note: record.PAGE_CHECK_TAG_NOTE });
-    }
-
     // Today's shape of "Enter after a heading": the new paragraph nested in
     // the heading's own after_html, and no new_blocks. Replay keeps today's
     // path for it.
@@ -524,7 +519,6 @@
       runItem: runItem,
       runFixtures: runFixtures,
       forgedRuns: forgedRuns,
-      runWithTagNote: runWithTagNote,
       oldShapeNested: oldShapeNested,
       proofreadQuestion: proofreadQuestion
     };

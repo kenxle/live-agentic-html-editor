@@ -1,10 +1,11 @@
-// A handled hand edit that gets reverted reopens itself on the next page load.
+// A handled hand edit stays handled when a later build takes it back out.
 //
-// The incident this comes from. The reviewer hand-edited a line, the agent
-// carried the edit into the source and replied handled, and the item moved to
-// Done. Two hours later a doc-wide sweep for a different item took the
-// hand-edited line back out. The reviewer's recorded decision was undone and
-// nothing said so.
+// Spec docs/features/20261011.01_stuck_replayed_blocks/01_spec_flag_dont_hold.md,
+// requirement 2. After the agent answers handled, the page is the file. The
+// check used to reopen an edit whose words had gone and whose original text
+// was back, and replay then wrote the reviewer's words back onto the page. If
+// the reviewer wants the change again, they edit or comment again, as in any
+// document. Nothing is reopened, nothing is written, and nobody is woken.
 //
 // Nothing here is simulated: it is the real `lahe review` walk, so the session,
 // the helper, the static server, the injected script line, the reply file and
@@ -12,14 +13,12 @@
 // appended JSON line, and the "sweep" is a rewrite of the source file, which is
 // what a sweep actually is.
 //
-// Both directions are asserted, because the check is only useful if it can tell
-// them apart:
+// Three shapes, all left alone:
 //
-//   revert     the after text is gone and the before text is back, so the item
-//              becomes ready work again
-//   rewrite    the after text is gone and the before text is NOT back, so the
-//              passage moved on for a reason nobody here can see, and the item
-//              stays handled
+//   revert     the after text is gone and the before text is back
+//   rewrite    the after text is gone and the before text is not back
+//   its way    the agent rendered the edit as two blocks, so the after is not
+//              on the page as one block and the before is (the 2026-09-10 loop)
 
 "use strict";
 
@@ -38,17 +37,13 @@ const CLI = path.join(REPO_ROOT, "bin", "lahe.js");
 // One walk, one helper, one session. Serial because the whole file is one story.
 test.describe.configure({ mode: "serial" });
 
-// The sentence a page-check reopen carries, restated so the browser test asserts
-// the reviewer's own copy of it rather than importing the layer.
-const REOPEN_SENTENCE =
-  "Reopened by the page check: this handled change is no longer on the page and the original text is back. " +
-  "Reapply it, or reply not_handled saying why.";
-
 const P_BEFORE = "The trainer writes the plan every week.";
 const P_AFTER = "The trainer writes the plan each week.";
 const Q_BEFORE = "Runners come back too fast after a layoff.";
 const Q_AFTER = "Runners come back too fast after a break.";
 // Neither the before text nor the after text: the passage genuinely moved on.
+// The reviewer's later edit of the same block, refused and sent back.
+const Q_AGAIN = "Runners come back too fast after a long break.";
 const Q_REWRITTEN = "Coming back from time off is where most training plans fall apart.";
 // The third block is the loop's block. The reviewer retypes it as one thing and
 // the agent renders it as another, which is what made the check and the agent
@@ -98,7 +93,7 @@ function labelled(output, label) {
   return match ? match[1] : null;
 }
 
-test.describe("a handled hand edit that was reverted reopens itself", () => {
+test.describe("a handled hand edit that a build took back out stays handled", () => {
   let world = null;
 
   test.beforeAll(async () => {
@@ -321,18 +316,13 @@ test.describe("a handled hand edit that was reverted reopens itself", () => {
     return made;
   }
 
-  test("a sweep that puts the original text back reopens the item, with a note saying why", async ({ page }) => {
+  test("a sweep that puts the original text back leaves the item handled and the page showing the file", async ({ page }) => {
     await page.goto(world.open);
     await booted(page);
 
     const made = await handledEdit(page, "p", P_AFTER, P_AFTER, Q_BEFORE);
-
-    // The page now shows the reviewer's wording and the item is finished. The
-    // check has to leave it alone: this is the state every handled edit is in.
     await checkRan(page);
-    expect((await itemState(page, made.id)).state, "a handled edit still on the page stays handled").toBe(
-      "handled"
-    );
+    expect((await itemState(page, made.id)).state, "a handled edit still on the page stays handled").toBe("handled");
 
     const before = wakeLines().length;
 
@@ -344,39 +334,16 @@ test.describe("a handled hand edit that was reverted reopens itself", () => {
       timeoutMs: 20000
     });
     await booted(page);
+    await checkRan(page);
 
-    await pollPage(
-      page,
-      (id) => {
-        const found = window.__lahe.items().find((item) => item.id === id);
-        return !!found && found.state === "ready";
-      },
-      made.id,
-      { message: "the revert check to reopen the item on this load", timeoutMs: 20000 }
-    );
-    const reopened = await itemState(page, made.id);
-
-    expect(reopened.note, "the reopened item carries the tool-generated sentence").toContain(
-      "Reopened by the page check:"
-    );
-    expect(reopened.note, "and it says what to do about it").toContain("Reapply it, or reply not_handled saying why.");
-    expect(reopened.rev, "the reopen bumped the rev, like a reviewer's own reopen").toBeGreaterThan(made.rev);
-
-    // The card is back out of Done.
-    const doneRows = await page.evaluate(() => window.__lahe.handle.doneTab().rowCount());
-    expect(doneRows, "the Done pane no longer holds the reopened card").toBe(0);
-
-    // And the agent was woken, through the feed that already wakes on a reopen.
-    const lines = await pollUntil(
-      () => {
-        const all = wakeLines();
-        return all.length > before ? all : null;
-      },
-      { message: "a wake line for the reopened item", timeoutMs: 20000 }
-    );
-    const work = lines.filter((line) => line.kind === "work" && line.item === made.id);
-    expect(work.length, "the wake feed named the reopened item").toBeGreaterThan(0);
-    expect(work[work.length - 1].drain, "the wake line points at the drain command").toContain(world.session);
+    expect(await page.evaluate(() => window.__lahe.counters.revertReopens), "the check reopened nothing").toBe(0);
+    const after = await itemState(page, made.id);
+    expect(after.state, "the card stays handled").toBe("handled");
+    expect(after.rev, "and no reopen bumped its rev").toBe(made.rev);
+    expect(String(after.note || ""), "and nothing was added to it").not.toContain("Reopened by the page check");
+    expect(await page.evaluate(() => document.querySelector("#p").textContent), "the page shows the file").toBe(P_BEFORE);
+    expect(await page.evaluate(() => window.__lahe.handle.doneTab().rowCount()), "the card is still in Done").toBe(1);
+    expect(wakeLines().length, "and nobody was woken").toBe(before);
   });
 
   test("a rebuild that genuinely rewrites the passage does not reopen anything", async ({ page }) => {
@@ -406,7 +373,7 @@ test.describe("a handled hand edit that was reverted reopens itself", () => {
   });
 
   // -------------------------------------------------------------------------
-  // The loop, and the one thing that ends it
+  // The 2026-09-10 shape
   // -------------------------------------------------------------------------
   //
   // On 2026-09-10 (review rbbe2de599404) the check and the agent answered each
@@ -414,14 +381,11 @@ test.describe("a handled hand edit that was reverted reopens itself", () => {
   // added a sentence; the agent rendered it as a separate item, which was a
   // legitimate reading and the one the reviewer had meant. The record's after
   // text was then nowhere on the page as one block while its before text was
-  // still there, so both halves of the check held on a page nobody had
-  // reverted. Thirteen reopens, thirteen wakes, and thirteen copies of the same
-  // sentence stacked up in one note.
-  test("a page check reopen happens once, and the agent's next handled reply ends it", async ({ page }) => {
+  // still there. Now the agent's rendering simply stands.
+  test("an edit the agent rendered its own way stays handled, with nothing written back", async ({ page }) => {
     await page.goto(world.open);
     await booted(page);
 
-    // The reviewer retypes the block as one paragraph with the sentence added.
     await handEdit(page, "r", R_AFTER);
     await pollPage(
       page,
@@ -455,65 +419,68 @@ test.describe("a handled hand edit that was reverted reopens itself", () => {
       { message: "the agent's reply to fold and move the item to Done", timeoutMs: 20000 }
     );
 
-    // Reload. The check sees after-gone and before-back, and reopens ONCE.
     const wakesBefore = wakeLines().length;
     await page.reload();
     await booted(page);
-    await pollPage(
-      page,
-      (id) => {
-        const found = window.__lahe.items().find((item) => item.id === id);
-        return !!found && found.state === "ready";
-      },
-      made.id,
-      { message: "the page check to reopen the item on this load", timeoutMs: 20000 }
-    );
-    const reopened = await page.evaluate((id) => {
-      const found = window.__lahe.items().find((item) => item.id === id);
-      return { rev: found.rev, note: found.note, stamp: found.region.check_reopen };
-    }, made.id);
-    expect(reopened.note.split(REOPEN_SENTENCE).length - 1, "one copy of the sentence, not two").toBe(1);
-    expect(reopened.stamp, "the reopen stamped the record").toBeTruthy();
-    expect(reopened.stamp.rev, "and the stamp names the revision the check created").toBe(reopened.rev);
-    expect(await page.evaluate(() => window.__lahe.counters.revertReopens), "one reopen on this load").toBe(1);
-
-    // The agent answers handled again without changing the page, which is it
-    // saying the rendering is intended. In the incident this is where the loop
-    // turned over. It has to end here.
-    await helperHasRev(made.id, reopened.rev);
-    reply(made.id, reopened.rev);
-    await pollPage(
-      page,
-      (id) => {
-        const found = window.__lahe.items().find((item) => item.id === id);
-        return !!found && found.state === "handled";
-      },
-      made.id,
-      { message: "the second handled reply to fold", timeoutMs: 20000 }
-    );
-
-    // Another reload, same page. The check runs and reopens NOTHING. Both
-    // guards cover this window, the stamp and the one-a-minute cooldown; the
-    // unit suite is where they are pulled apart and asserted separately.
-    await page.reload();
-    await booted(page);
     await checkRan(page);
-    expect(
-      await page.evaluate(() => window.__lahe.counters.revertReopens),
-      "the check reopened nothing on the second load"
-    ).toBe(0);
-    const settled = await page.evaluate((id) => {
-      const found = window.__lahe.items().find((item) => item.id === id);
-      return { state: found.state, rev: found.rev, note: found.note };
-    }, made.id);
-    expect(settled.state, "the item stays handled").toBe("handled");
-    expect(settled.rev, "and no second reopen bumped the rev again").toBe(reopened.rev);
-    expect(settled.note.split(REOPEN_SENTENCE).length - 1, "still one copy of the sentence").toBe(1);
 
-    // The agent was woken once for the reopen, and not again for a second one.
+    expect(await page.evaluate(() => window.__lahe.counters.revertReopens), "the check reopened nothing").toBe(0);
+    const settled = await itemState(page, made.id);
+    expect(settled.state, "the item stays handled").toBe("handled");
+    expect(settled.rev, "at the revision the agent answered").toBe(made.rev);
+    const shown = await page.evaluate(() => ({ r: document.querySelector("#r").textContent, extra: document.querySelector("#extra").textContent }));
+    expect(shown, "the page shows the agent's rendering, with nothing written back").toEqual({ r: R_BEFORE, extra: R_AS_APPLIED });
     const work = wakeLines()
       .slice(wakesBefore)
       .filter((line) => line.kind === "work" && line.item === made.id);
-    expect(work.length, "one wake for the one reopen").toBe(1);
+    expect(work.length, "nobody was woken").toBe(0);
+  });
+  // Code review, fix round: a refused edit is not on the page, so when the
+  // reviewer sends it back from the card the page has to draw it again at once,
+  // not on the next reload.
+  test("a refused edit the reviewer sends back from its card is drawn on the page with no reload", async ({ page }) => {
+    rebuild(P_BEFORE, Q_BEFORE, R_BEFORE, null);
+    await page.goto(world.open);
+    await booted(page);
+    await pollPage(page, (text) => document.querySelector("#q").textContent === text, Q_BEFORE, {
+      message: "the page to come back on the original wording",
+      timeoutMs: 20000
+    });
+
+    await handEdit(page, "q", Q_AGAIN);
+    await pollPage(
+      page,
+      (text) => !!window.__lahe.items().find((item) => item.kind === "edit" && item.after === text && item.state === "ready"),
+      Q_AGAIN,
+      { message: "the hand edit on #q to land as a ready record" }
+    );
+    const made = await page.evaluate((text) => {
+      const found = window.__lahe.items().find((item) => item.kind === "edit" && item.after === text && item.state === "ready");
+      return { id: found.id, rev: found.rev };
+    }, Q_AGAIN);
+
+    // The agent says no, and changes nothing in the source.
+    await helperHasRev(made.id, made.rev);
+    fs.appendFileSync(
+      path.join(world.reviewDir, "replies.jsonl"),
+      JSON.stringify({ item: made.id, rev: made.rev, status: "not_handled", agent: "tester", reason: "the plan says layoff on purpose" }) + "\n"
+    );
+    await pollPage(page, (id) => (window.__lahe.items().find((item) => item.id === id) || {}).state === "not_handled", made.id, {
+      message: "the refusal to fold",
+      timeoutMs: 20000
+    });
+    await page.reload();
+    await booted(page);
+    await checkRan(page);
+    expect(await page.evaluate(() => document.querySelector("#q").textContent), "a refused edit is not on the page").toBe(Q_BEFORE);
+
+    // The reviewer answers from the card. No reload after this.
+    await claim(page);
+    const sent = await page.evaluate((id) => window.__lahe.handle.doneTab().followUp(id, "Please make this change anyway."), made.id);
+    expect(sent.state, "the answer puts it back in front of the agent").toBe("ready");
+    await pollPage(page, (text) => document.querySelector("#q").textContent === text, Q_AGAIN, {
+      message: "replay to draw the edit again without a reload",
+      timeoutMs: 10000
+    });
   });
 });

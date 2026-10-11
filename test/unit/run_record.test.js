@@ -34,11 +34,13 @@ test("the four refusal codes and the three card codes are failure codes", () => 
     "The helper refused this edit, so the agent has not seen it. Your words are still on this page.");
 });
 
-test("the page check's tag note is pinned and is one of its notes", () => {
-  assert.equal(record.PAGE_CHECK_TAG_NOTE,
-    "Reopened by the page check: a block landed with a different tag from the one in new_blocks or anchor_tag_after. " +
-    "Give it that tag in the source, or reply not_handled saying why.");
-  assert.ok(record.PAGE_CHECK_NOTES.indexOf(record.PAGE_CHECK_TAG_NOTE) !== -1);
+test("the page check writes no sentence about a run: its only round is the stamp", () => {
+  // Spec 20261011.01: a handled run whose blocks were reshaped is left alone,
+  // so the tag, missing-block and take-back sentences are gone.
+  assert.equal(record.PAGE_CHECK_TAG_NOTE, undefined);
+  assert.equal(record.PAGE_CHECK_RUN_NOTE, undefined);
+  assert.equal(record.PAGE_CHECK_TAKEBACK_NOTE, undefined);
+  assert.deepEqual(record.PAGE_CHECK_NOTES, [record.PAGE_CHECK_STAMP_NOTE, record.LEGACY_PAGE_CHECK_NOTE]);
 });
 
 test("the new fields are data", () => {
@@ -231,8 +233,3 @@ test("the old-shape fixture has nested blocks in after_html and no new_blocks", 
   assert.ok(old.after_html.indexOf("<p>") !== -1);
 });
 
-test("the note fixture carries the page check's tag note", () => {
-  const withNote = fx().runWithTagNote();
-  assert.ok(withNote.note.indexOf(record.PAGE_CHECK_TAG_NOTE) !== -1);
-  assert.equal(record.isRunRecord(withNote), true);
-});

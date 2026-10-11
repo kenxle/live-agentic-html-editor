@@ -1,11 +1,12 @@
 // The page check on a run, and the first two R14 cases as run records
 // (free-writing plan Task 2.7).
 //
-// The check reads a handled run block by block off the real page, with the
-// string twin of replay's walk. The R14 cases: a line written after a header
-// shows once, below the sheet-head; and the lone paragraph whose bold the
-// agent left out comes back once, with its bold, whether it is the first new
-// paragraph or a later one.
+// Since spec docs/features/20261011.01_stuck_replayed_blocks the page check
+// leaves a handled run alone, whatever the page did to its blocks: after the
+// agent answers, the page is the file. The R14 cases: a line written after a
+// header shows once, below the sheet-head; and while a run waits for the agent,
+// replay puts its bold paragraph in once, with its bold, whether it is the
+// first new paragraph or a later one.
 
 "use strict";
 
@@ -72,19 +73,15 @@ test("a handled run with an h2 on the Markdown render is not reopened", async ({
   expect(await page.evaluate((i) => window.__check(i), item)).toBe(null);
 });
 
-test("a handled run whose paragraph lost its bold is reopened with the formatting note", async ({ page }) => {
+// Each of these used to reopen the run (formatting, tag, missing). None does.
+test("a handled run whose paragraph lost its bold is not reopened", async ({ page }) => {
   await mdPage(page);
   const item = handled(headerRun([{ tag: "p", html: "Its <strong>first</strong> line zqxcanary" }]));
   await placeAfterHead(page, "<p>Its first line zqxcanary</p>");
-  expect(await page.evaluate((i) => window.__check(i), item)).toBe("formatting");
-  const note = await page.evaluate(
-    (i) => window.LAHE.replay.pageCheckNoteFor(i, window.LAHE.replay.pageTextOf(document.body), window.LAHE.replay.pageCheckOptions(document.body, {})),
-    item
-  );
-  expect(note).toBe(record.PAGE_CHECK_FORMAT_NOTE);
+  expect(await page.evaluate((i) => window.__check(i), item)).toBe(null);
 });
 
-test("a header placed as a paragraph is reopened with the tag note, not the formatting note", async ({ page }) => {
+test("a handled run whose header was placed as a paragraph is not reopened", async ({ page }) => {
   await mdPage(page);
   const item = handled(
     headerRun([
@@ -93,15 +90,10 @@ test("a header placed as a paragraph is reopened with the tag note, not the form
     ])
   );
   await placeAfterHead(page, "<p>A new section zqxcanary</p><p>Its first line zqxcanary</p>");
-  expect(await page.evaluate((i) => window.__check(i), item)).toBe("tag");
-  const note = await page.evaluate(
-    (i) => window.LAHE.replay.pageCheckNoteFor(i, window.LAHE.replay.pageTextOf(document.body), window.LAHE.replay.pageCheckOptions(document.body, {})),
-    item
-  );
-  expect(note).toBe(record.PAGE_CHECK_TAG_NOTE);
+  expect(await page.evaluate((i) => window.__check(i), item)).toBe(null);
 });
 
-test("a missing block is reopened as missing, never as undone", async ({ page }) => {
+test("a handled run with a block missing is not reopened", async ({ page }) => {
   await mdPage(page);
   const item = handled(
     headerRun([
@@ -110,7 +102,7 @@ test("a missing block is reopened as missing, never as undone", async ({ page })
     ])
   );
   await placeAfterHead(page, "<p>The placed one zqxcanary</p>");
-  expect(await page.evaluate((i) => window.__check(i), item)).toBe("missing");
+  expect(await page.evaluate((i) => window.__check(i), item)).toBe(null);
 });
 
 test.describe("R14, as run records", () => {
@@ -136,7 +128,7 @@ test.describe("R14, as run records", () => {
   });
 
   for (const which of ["first", "second"]) {
-    test("the lone paragraph: the agent left out the bold one when it was the " + which + "; it reopens and comes back once, bold", async ({ page }) => {
+    test("the lone paragraph, left out when it was the " + which + ": handled, it stays handled; waiting, it comes back once, bold", async ({ page }) => {
       await openReplayPage(page, server, "free_writing/md_render.html");
       await page.evaluate(() => document.querySelector(".hero p").setAttribute("data-lahe-id", "s-lede"));
       const ONE = "One paragraph with <strong>bold</strong> words zqxcanary";
@@ -150,8 +142,8 @@ test.describe("R14, as run records", () => {
       const kept = which === "first" ? TWO : ONE;
       const left = which === "first" ? ONE : TWO;
       await page.evaluate((markup) => document.querySelector(".hero p").insertAdjacentHTML("afterend", "<p>" + markup + "</p>"), kept);
-      expect(await page.evaluate((i) => window.__check(i), item)).toBe("missing");
-      // Reopened, so it is outstanding again, and replay puts it back.
+      expect(await page.evaluate((i) => window.__check(i), item), "handled: the page is the file").toBe(null);
+      // While the run still waits for the agent, replay puts it back.
       item.state = record.STATE.READY;
       await setItems(page, [item]);
       await page.evaluate(() => window.__pass());

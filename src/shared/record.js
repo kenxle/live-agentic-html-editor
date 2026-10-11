@@ -688,8 +688,9 @@
   // agent's own file is unchanged: review.json still carries the round and its
   // note, because the agent is who the round is for.
   //
-  // The revert and formatting reopens are NOT tool rounds. Those are about the
-  // reviewer's own words going missing from the page, which is theirs to know.
+  // The stamp round is the page check's only reopen (since 2026-10-11, spec
+  // docs/features/20261011.01_stuck_replayed_blocks), so every page-check
+  // reopen is a tool round.
   var TOOL_ROUND = {
     // The check asked for an id the agent did not carry into the source (S7).
     PAGE_CHECK_STAMP: "page_check_stamp"
@@ -721,8 +722,9 @@
    * The page check appends its sentence to the note, because the record shape
    * has no other field that reaches the agent. That is right for review.json
    * and wrong for the card: Ken's screenshot on 2026-09-15 was this sentence,
-   * on his own card, above the agent's "handled". The revert and formatting
-   * sentences are NOT stripped: those rounds are the reviewer's business.
+   * on his own card, above the agent's "handled". A sentence an older check
+   * wrote about the reviewer's own words is not stripped: those rounds were
+   * the reviewer's business.
    *
    * @returns {string|null} null when nothing of the reviewer's is left
    */
@@ -763,64 +765,32 @@
   // The page check's sentence, and keeping one copy of it
   // ---------------------------------------------------------------------------
   //
-  // The sentence a page-check reopen carries. Tool-generated, and it says so in
-  // its own first words, because the record shape has no field that could carry
-  // "this text is not the reviewer's". It names no page content: the item
-  // already carries the before and after text, and repeating page text into the
-  // note would push page content into the intent channel (D12).
-  var PAGE_CHECK_NOTE =
-    "Reopened by the page check: this handled change is no longer on the page and the original text is back. " +
-    "Reapply it, or reply not_handled saying why.";
-
-  // The check's other sentence. The words of the edit are on the page and the
-  // bold or italic the reviewer applied with them is not, which is a different
-  // situation and needs different words: nothing has to be reapplied, the
-  // formatting has to be carried. It is the 2026-09-11 case, where an agent
-  // working from a Markdown source applied the after text alone and replied
-  // handled three times over.
-  var PAGE_CHECK_FORMAT_NOTE =
-    "Reopened by the page check: the words landed but the bold or italic in this edit did not. " +
-    "Carry the formatting into the source, or reply not_handled saying why.";
-
-  // The check's third sentence. The words of the edit are on the page and the
-  // element they are on carries no data-lahe-id, so the agent edited the source
-  // without carrying the stamp into it. Nothing has to be reapplied and nothing
-  // is wrong with the rendering: the id is what lets the next build be found
-  // with certainty instead of guessed at, and it is missing (S7).
+  // The sentence the page check's stamp round carries. Tool-generated, and it
+  // says so in its own first words, because the record shape has no field that
+  // could carry "this text is not the reviewer's". It names no page content:
+  // repeating page text into the note would push page content into the intent
+  // channel (D12).
+  //
+  // The words of the edit are on the page and the element they are on carries
+  // no data-lahe-id, so the agent edited the source without carrying the stamp
+  // into it. Nothing has to be reapplied and nothing is wrong with the
+  // rendering: the id is what lets the next build be found with certainty
+  // instead of guessed at, and it is missing (S7).
   var PAGE_CHECK_STAMP_NOTE =
     "Reopened by the page check: the change landed but the data-lahe-id stamp did not reach the source. " +
     "Write the stamp onto that element so the next build reproduces it, or reply not_handled saying why.";
 
-  // Every sentence the page check writes. collapsePageCheckNote reads this
-  // list, so a new one is collapsed the day it is added.
-  // The check's fourth sentence, for a run record: a new block landed one to
-  // one with the page but carries a different tag from the one in new_blocks
-  // (docs/features/20260928.01_free_writing, The page check on a run).
-  var PAGE_CHECK_TAG_NOTE =
-    "Reopened by the page check: a block landed with a different tag from the one in new_blocks or anchor_tag_after. " +
-    "Give it that tag in the source, or reply not_handled saying why.";
+  // A sentence the page check no longer writes. Until 2026-10-11 the check also
+  // reopened a handled change whose words had gone from the page, and on
+  // 2026-09-10 a loop appended this sentence thirteen times to one note. Stored
+  // records may still carry those copies, so collapsePageCheckNote still reads
+  // it. Nothing writes it.
+  var LEGACY_PAGE_CHECK_NOTE =
+    "Reopened by the page check: this handled change is no longer on the page and the original text is back. " +
+    "Reapply it, or reply not_handled saying why.";
 
-  // The fifth, for a take-back of placed blocks: the reviewer undid a sitting,
-  // and blocks its remove_blocks lists are still on the page after the anchor.
-  var PAGE_CHECK_TAKEBACK_NOTE =
-    "Reopened by the page check: blocks this take-back lists in remove_blocks are still on the page after the anchor. " +
-    "Remove them from the source, or reply not_handled saying why.";
-
-  // The sixth, for a run record: a block the reviewer wrote is not on the page
-  // after the anchor. Nothing was "undone" and no original text came back: the
-  // block is new words, and they are missing or have words added (flow walk).
-  var PAGE_CHECK_RUN_NOTE =
-    "Reopened by the page check: a block in new_blocks is not on the page as written. " +
-    "Put it in the source as written, or reply not_handled saying why.";
-
-  var PAGE_CHECK_NOTES = [
-    PAGE_CHECK_NOTE,
-    PAGE_CHECK_FORMAT_NOTE,
-    PAGE_CHECK_STAMP_NOTE,
-    PAGE_CHECK_TAG_NOTE,
-    PAGE_CHECK_TAKEBACK_NOTE,
-    PAGE_CHECK_RUN_NOTE
-  ];
+  // Every sentence collapsePageCheckNote collapses.
+  var PAGE_CHECK_NOTES = [PAGE_CHECK_STAMP_NOTE, LEGACY_PAGE_CHECK_NOTE];
 
   /**
    * The carried note with `sentence` on the end, AT MOST ONCE.
@@ -1051,6 +1021,24 @@
   // kept and reopenable (R38), not outstanding.
   function isOutstanding(item) {
     return item[FIELD.STATE] === STATE.READY || item[FIELD.STATE] === STATE.NOT_HANDLED;
+  }
+
+  // Replayed onto the page: waiting for the agent's answer. The page differs
+  // from the file only while an edit is waiting, so this is ready alone.
+  //
+  //   not_handled  the agent answered no. The page shows the file, and the
+  //                reviewer's words stay on the card with the reason. Writing
+  //                them back after every repaint is how a refused card kept old
+  //                lines inside a table the agent built on request (spec
+  //                docs/features/20261011.01_stuck_replayed_blocks).
+  //   a tool round the page check asking the agent for a data-lahe-id. The
+  //                reviewer's card still reads handled (displayState), so the
+  //                page shows the file the same way.
+  //
+  // The rail's open count is a different question and keeps isOutstanding.
+  function isReplayable(item) {
+    if (!item || item[FIELD.STATE] !== STATE.READY) return false;
+    return !toolRoundOf(item);
   }
 
   // ---------------------------------------------------------------------------
@@ -1574,9 +1562,9 @@
   //
   // WHY THE HANDLED RECORD IS KEPT. It is the record that a fix landed (R38),
   // and it is the only place the applied wording is written down. It also stops
-  // the page check reopening it: replay.revertedHandledEditIds skips an item
-  // that another record reverts, so the reviewer's deliberate take-back is not
-  // read as the page having lost an applied fix.
+  // the page check asking about it: replay.pageCheckIds skips an item that
+  // another record reverts, since the take-back asks the agent for the
+  // opposite.
 
   var REVERT_EDIT = "Undo: the reviewer took this change back. Remove it from the source, so the passage reads as it did before.";
   var REVERT_DELETE = "Undo: the reviewer put this block back. Restore it in the source; it should not have been deleted.";
@@ -2293,12 +2281,8 @@
     ACCEPTED_PAGE_TEXTS_MAX: ACCEPTED_PAGE_TEXTS_MAX,
     acceptedPageTexts: acceptedPageTexts,
     acceptPageText: acceptPageText,
-    PAGE_CHECK_NOTE: PAGE_CHECK_NOTE,
-    PAGE_CHECK_RUN_NOTE: PAGE_CHECK_RUN_NOTE,
-    PAGE_CHECK_FORMAT_NOTE: PAGE_CHECK_FORMAT_NOTE,
+    LEGACY_PAGE_CHECK_NOTE: LEGACY_PAGE_CHECK_NOTE,
     PAGE_CHECK_STAMP_NOTE: PAGE_CHECK_STAMP_NOTE,
-    PAGE_CHECK_TAG_NOTE: PAGE_CHECK_TAG_NOTE,
-    PAGE_CHECK_TAKEBACK_NOTE: PAGE_CHECK_TAKEBACK_NOTE,
     PLACEMENT: PLACEMENT,
     PLACEMENTS: PLACEMENTS,
     RUN_FIELDS: RUN_FIELDS,
@@ -2359,6 +2343,7 @@
     isReady: isReady,
     isUnansweredReady: isUnansweredReady,
     isOutstanding: isOutstanding,
+    isReplayable: isReplayable,
     comparisonMode: comparisonMode,
     normalizedBefore: normalizedBefore,
     normalizedAfter: normalizedAfter

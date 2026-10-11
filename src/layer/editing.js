@@ -1470,7 +1470,7 @@
       var items = store.read(reviewId);
       for (var i = 0; i < items.length; i += 1) {
         var item = items[i];
-        if (!record.isRunRecord(item) || isPlaced(item)) continue;
+        if (!record.isRunRecord(item) || releasedBlock(item)) continue;
         var anchorEl = elementFor(item);
         if (!anchorEl) continue;
         var found = blocks.runElementsFor(item, doc, anchorEl);
@@ -2695,9 +2695,9 @@
         // state later says nothing about whether this is a first commit.
         wasCommitted: !!existing && isCommittedEdit(existing),
         // The state a rewording is withdrawn FROM, and restored TO when the
-        // wording matches again: ready, or not_handled (the agent said no and
-        // the reviewer is rewording it). Null for any other state, which
-        // typing leaves alone.
+        // wording matches again: ready only. Null for any other state, which
+        // typing leaves alone. A refused record never gets here: itemFor
+        // skips it, so typing in its passage opens a new card.
         withdrawFrom: existing && withdrawable(existing) ? existing[record.FIELD.STATE] : null,
         opened: existing
           ? { text: existing[record.FIELD.AFTER], html: existing[record.FIELD.AFTER_HTML] }
@@ -3065,12 +3065,10 @@
     // agent could read half-typed text as an instruction. A handled edit is
     // never reopened here (itemFor skips it).
     //
-    // A NOT_HANDLED EDIT IS REWORDED THE SAME WAY. It used to keep its state,
-    // so every pause posted it within the debounce and the helper rewrote
-    // review.json with the half-typed words each time (code review finding 5,
-    // spec 20260922.01). Now it withdraws to draft on the first changing
-    // keystroke, obeys the draft floor after that, and goes back to
-    // not_handled, same revision, reply kept, when the wording matches again.
+    // A NOT_HANDLED EDIT IS NEVER TYPED INTO. It is not on the page (replay
+    // skips a refused record), so typing in that passage opens a new card and
+    // the refused one keeps the words the agent answered (itemFor skips it;
+    // spec 20261011.01, requirement 1).
     function captureTyping() {
       if (!session) return null;
       if (isRun()) return captureRunTyping();
@@ -3187,11 +3185,13 @@
       return next;
     }
 
-    // The states a rewording takes an edit out of: the ones in front of
-    // someone. Handled is not here: a handled edit is never reopened by typing.
+    // The state a rewording takes an edit out of: the one in front of the
+    // agent. Handled is not here: a handled edit is never reopened by typing.
+    // Nor is not_handled: a refused edit is not on the page (replay skips it),
+    // so typing in that passage is a new card and never reaches this record
+    // (itemFor, releasedBlock).
     function withdrawable(item) {
-      var state = item[record.FIELD.STATE];
-      return state === record.STATE.READY || state === record.STATE.NOT_HANDLED;
+      return item[record.FIELD.STATE] === record.STATE.READY;
     }
 
     // Was this edit ever committed? Not "is it a draft right now": a committed
@@ -3351,9 +3351,8 @@
         // Reworded back to the page's own original words. That is not an edit
         // against the page, and it has always been left as captured rather
         // than committed; the one thing new is that the typing withdrew it, so
-        // it goes back to the state it opened in (ready, or not_handled with
-        // the agent's reason still on it) rather than stranding a draft
-        // nobody will see.
+        // it goes back to ready, the state it opened in, rather than
+        // stranding a draft nobody will see.
         if (open.withdrawFrom && record.isDraft(item)) {
           var restored = Object.assign({}, item);
           restored[record.FIELD.STATE] = open.withdrawFrom;
@@ -4308,20 +4307,33 @@
       for (i = 0; i < itemForElement.length; i += 1) {
         if (itemForElement[i].el === el) {
           var got = store.readItem(reviewId, itemForElement[i].id);
-          if (got && !isPlaced(got)) return got;
+          if (got && !releasedBlock(got)) return got;
         }
       }
       var items = store.read(reviewId);
       for (i = 0; i < items.length; i += 1) {
         var item = items[i];
         if (!isEditKind(item)) continue;
-        if (isPlaced(item)) continue;
+        if (releasedBlock(item)) continue;
         if (elementFor(item) === el) return item;
       }
       // A run block belongs to the record whose run it is (plan Task 2.1:
       // itemFor maps any run block back through blocks.runElementsFor).
       var holding = runRecordHolding(el);
       return holding ? holding.item : null;
+    }
+
+    /**
+     * Has this record let go of its block? Then the block is the page's own,
+     * and typing in it is a new card. Placed (below), or refused: a refused
+     * record is not on the page, so the passage there is the file's, and
+     * typing into it must never overwrite the refused card's words (spec
+     * docs/features/20261011.01_stuck_replayed_blocks, requirement 1).
+     */
+    function releasedBlock(item) {
+      if (!item) return false;
+      if (item[record.FIELD.STATE] === record.STATE.NOT_HANDLED) return true;
+      return isPlaced(item);
     }
 
     /**
@@ -4778,7 +4790,10 @@
     function openEmptyPage() {
       if (!notesReview || !doc || !doc.body || !reviewId || session || hasContent()) return null;
       var outstanding = store.read(reviewId).some(function (item) {
-        return item[record.FIELD.PLACEMENT] === record.PLACEMENT.START_OF_CONTAINER && record.isOutstanding(item);
+        // Replayable, not outstanding: a run the agent refused is not on the
+        // page, so a notes page whose only run was refused is empty and
+        // opens ready to type.
+        return item[record.FIELD.PLACEMENT] === record.PLACEMENT.START_OF_CONTAINER && record.isReplayable(item);
       });
       if (outstanding) return null;
       return openAtStart(containerOfPage());
