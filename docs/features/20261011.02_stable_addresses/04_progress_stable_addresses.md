@@ -1,12 +1,17 @@
 # Progress: Stable addresses
 
-**Phase 6, Implement.** You approved the doc set and asked me to keep going until it is done. Core Step 1 is merged. The core, library, and install builders are working in parallel. Waiting on you later: approving the old tests to retire, running `lahe install`, and merge approval. Last updated 2026-10-11 15:14.
+**Phase 6, Implement.** Core Steps 1 and 2 are merged. Two decisions wait on you below; work continues on everything else. Last updated 2026-10-11 16:20.
 
 **Docs:** [Decisions page](../../ongoing/STABLE_ADDRESSES.md) · [Crucible](00_crucible_stable_addresses.html) · [Brief](01_brief_stable_addresses.html) · [Architecture](02_architecture_stable_addresses.html) · [Plan](03_plan_stable_addresses.html) · [Code survey](parts/architecture/recon.md)
 
 ## Needs your attention
 
-None.
+- [ ] **Old comments at the new address: show them (A), or say they exist (B)?** Every document you open after this ships gets its new address once. Comments you made at its old random-port address do not appear on the rail there. The rail only reads this browser's storage, and the browser keeps storage separately for each address. The comments are not lost: they are in `review.json`, grouped under the new address, and agents still see and answer them.
+  - **A, show them.** When a page opens, the rail asks the helper for this page's stored comments and adds any it does not have, using the existing merge rules, so you see your old cards and threads. This needs a new read route and changes in four rail files, with tests for duplicates, a withdrawn draft coming back, and comments from other pages or reviews.
+  - **B, say so.** The rail shows one line, like "3 earlier comments from this page's old address are with your agent." You cannot read them on the page.
+
+  I recommend **A**: the point of this feature is opening an old document and finding your work there, and B leaves every existing document looking empty the first time. Details: "V31 options" in the [core progress](progress/phase6_workstream_core.md).
+- [ ] **Approve retiring old tests.** 11 test files test behavior this feature removes: page servers that stop when idle, restarting page servers, remembering old ports, and the sweep that closes reopened sessions. 2 files go whole and 9 in part. 26 more get rewritten for the new behavior. Until you approve, the retired tests are moved to `test/retired/` (not deleted) so the suite stays green; they are deleted in one batch at cleanup only with your OK. List: "Task 3.0: test retirement list" in the [core progress](progress/phase6_workstream_core.md).
 
 ## Currently working on
 
