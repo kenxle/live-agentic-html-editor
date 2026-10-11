@@ -10,6 +10,8 @@ var stateDir = require("../../service/state_dir.js");
 var sessions = require("../../service/agent_sessions.js");
 var staticServers = require("../../service/static_servers.js");
 var markdown = require("../../service/markdown.js");
+var sitesModule = require("../../service/sites.js");
+var service = require("../../service/index.js");
 var add = require("./add.js");
 
 var USAGE = [
@@ -240,7 +242,12 @@ async function run(argv, mode) {
   var rendered = null;
   var served = null;
   var openPage = null;
+  var site = null;
   var target = originalTarget;
+  // STABLE ADDRESSES: the running helper's switch decides, never this
+  // process's environment, unless no helper is up yet; then the helper `add`
+  // is about to start inherits this environment and the two agree.
+  var sitesMode = await helperServesSites(dir, opts.port);
   try {
     if (notesMode && !markdownTarget) throw new Error("lahe write serves a Markdown file only");
     if (markdownTarget) {
@@ -251,9 +258,20 @@ async function run(argv, mode) {
       list.push("--source", originalTarget);
       target = rendered.target;
     }
-    var started = notesMode
-      ? await startNotesServer(dir, sessionId, rendered, list)
-      : await startFolderServer(dir, sessionId, target, rendered, opts);
+    var started = null;
+    if (sitesMode) {
+      site = planSite(target, originalTarget, rendered, opts, notesMode);
+      if (site) {
+        if (notesMode) markNotes(dir, sessionId, rendered, list);
+        openPage = site.entry;
+        served = site.served;
+        list.push("--served-by-helper");
+      }
+    } else {
+      started = notesMode
+        ? await startNotesServer(dir, sessionId, rendered, list)
+        : await startFolderServer(dir, sessionId, target, rendered, opts);
+    }
     if (started) {
       staticServer = started.server;
       openPage = started.openPage;
@@ -271,6 +289,17 @@ async function run(argv, mode) {
     return 1;
   }
   var code = await add.run(list);
+  var bound = null;
+  if (code === 0 && site) {
+    try {
+      var owner = recordedReviewFor(dir, sessionId, target);
+      if (!owner) throw new Error("the review add just made is not on disk");
+      bound = await bindSite(dir, opts.port, owner, site);
+    } catch (err) {
+      process.stderr.write("lahe review: " + err.message + "\n");
+      code = 1;
+    }
+  }
   if (code !== 0) {
     if (staticServer && staticServer.started) {
       try { await staticServers.stopOne(dir, sessionId, staticServer.meta); } catch (err) { /* the add failure remains primary */ }
@@ -296,6 +325,10 @@ async function run(argv, mode) {
     }
   }
   if (code === 0) {
+    if (bound) {
+      process.stdout.write("\n  open      " + bound.url + "\n");
+      printSiteScope(notesMode ? "notes" : served, site, opts, notesFolder);
+    }
     if (staticServer) {
       // The link below is about to be handed to the reviewer. The helper's idle
       // sweep gives a server two minutes from this stamp before it stops it, so
@@ -326,7 +359,7 @@ async function run(argv, mode) {
       );
     }
     process.stdout.write(
-      (staticServer ? "" : "\n") + sessions.commandBlock({ dir: dir, session: sessionId })
+      (staticServer || bound ? "" : "\n") + sessions.commandBlock({ dir: dir, session: sessionId })
     );
   }
   return code;
@@ -380,6 +413,126 @@ async function startFolderServer(dir, sessionId, target, rendered, opts) {
     }
   }
   return { server: server, openPage: openPage, served: served };
+}
+
+// ---------------------------------------------------------------------------
+// Stable addresses: the helper serves the page itself
+// ---------------------------------------------------------------------------
+
+/**
+ * Does the helper serve pages itself (LAHE_PAGES=sites)? The running helper
+ * says so in service.json; a helper that is not running yet will inherit this
+ * process's environment when `add` starts it.
+ */
+async function helperServesSites(dir, port) {
+  var helperPort = typeof port === "number" ? port : protocol.DEFAULT_PORT;
+  var alive = await service.probeHealth(protocol.DEFAULT_HOST, helperPort);
+  if (!alive) return protocol.pagesSwitchOn(process.env);
+  var ready = null;
+  try { ready = JSON.parse(fs.readFileSync(stateDir.readyPath(dir), "utf8")); } catch (err) { ready = null; }
+  if (!ready || ready.started_at !== alive.started_at) return false;
+  return !!ready.pages && ready.pages.mode === protocol.PAGES.MODE_SITES;
+}
+
+/**
+ * The site a target is served as, decided the way a page server's root was:
+ * a single page by its own folder, a folder by itself, a Markdown file by its
+ * source folder (with the mounts its links need), a notes page by itself.
+ * Null when somebody else serves these pages (servedKind).
+ */
+function planSite(target, originalTarget, rendered, opts, notesMode) {
+  if (notesMode) {
+    return { root: originalTarget, mode: "page-only", entry: path.basename(originalTarget), served: "page" };
+  }
+  var served = servedKind(target, opts);
+  if (!served) return null;
+  if (rendered) {
+    var mounts = {};
+    rendered.linkMounts.forEach(function (mount) { mounts[mount.prefix] = mount.dir; });
+    return {
+      root: path.dirname(originalTarget),
+      mode: "folder",
+      entry: path.basename(originalTarget),
+      mounts: mounts,
+      linked: rendered.linked || [],
+      served: "file"
+    };
+  }
+  if (served === "folder") {
+    var entry = add.folderEntryPage(target);
+    if (!entry) throw new Error("there are no pages in " + target + " to open");
+    return { root: target, mode: "folder", entry: entry, served: "folder" };
+  }
+  return { root: path.dirname(target), mode: "folder", entry: path.basename(target), served: "file" };
+}
+
+/** A notes review is minted as one, and never reuses an ordinary review. */
+function markNotes(dir, sessionId, rendered, list) {
+  var existing = recordedReviewFor(dir, sessionId, rendered.target);
+  if (existing && !stateDir.isNotesReview(dir, existing) && list.indexOf("--new") === -1) list.push("--new");
+  if (list.indexOf("--notes") === -1) list.push("--notes");
+}
+
+/**
+ * Ask the helper to bind `reviewId` to its site. The helper is the registry's
+ * only writer; this sends the CLI secret it wrote into the state folder.
+ *
+ * @returns {Promise<{name: string, url: string, origin: string}>}
+ */
+async function bindSite(dir, port, reviewId, site) {
+  var secret = sitesModule.readCliSecret(dir);
+  if (!secret) throw new Error("the helper has not written its CLI secret into " + dir + "; is it serving pages (" + protocol.PAGES.SWITCH_ENV + "=" + protocol.PAGES.SWITCH_ON + ")?");
+  var helperPort = typeof port === "number" ? port : protocol.DEFAULT_PORT;
+  var headers = {};
+  headers[protocol.HEADER.CLIENT] = protocol.CLIENT_CLI;
+  headers[protocol.HEADER.CONTENT_TYPE] = protocol.JSON_CONTENT_TYPE;
+  headers[protocol.HEADER.CLI_SECRET] = secret;
+  var body = {
+    review: reviewId,
+    root: site.root,
+    mode: site.mode,
+    entry: site.entry,
+    mounts: site.mounts || {},
+    linked: site.linked || []
+  };
+  var res = await fetch("http://" + protocol.DEFAULT_HOST + ":" + helperPort + protocol.route("site.bind").path, {
+    method: "POST",
+    headers: headers,
+    body: JSON.stringify(body)
+  });
+  var answer = null;
+  try { answer = await res.json(); } catch (err) { answer = null; }
+  if (res.status !== 200 || !answer || typeof answer.url !== "string") {
+    var why = answer && answer.error ? (answer.error.detail || answer.error.message) : "status " + res.status;
+    throw new Error("the helper did not give this page an address: " + why);
+  }
+  return answer;
+}
+
+/** What the address covers, the stable-address counterpart of printScope. */
+function printSiteScope(kind, site, opts, notesFolder) {
+  if (kind === "notes") {
+    process.stdout.write(
+      "  scope     this page only. Nothing else in its folder is served at this address\n" +
+        (notesFolder ? "  notes in  " + notesFolder + "\n" : "")
+    );
+    return;
+  }
+  process.stdout.write(
+    "  root      " + site.root +
+      (kind === "folder"
+        ? "  (every page in it is this one review; links between them keep the rail)"
+        : "  (the page's own folder, which is everything this address can serve)") +
+      "\n"
+  );
+  if (opts.only) {
+    process.stdout.write("  scope     only this page. Other pages under that root are served without the rail\n");
+  } else if (kind === "file") {
+    process.stdout.write(
+      "  scope     the rail follows links onto any page under that root.\n" +
+        "            Rerun with --only to keep this review to the one page.\n"
+    );
+  }
 }
 
 /**
