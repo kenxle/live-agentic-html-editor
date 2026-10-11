@@ -180,3 +180,62 @@ test("a label that could leave its folder is refused", () => {
   assert.throws(() => loginItem.describe(Object.assign({ system: "macos", home: "/h", uid: 501, label: "../x" }, SPACED)), /not a login item label/);
   assert.throws(() => loginItem.startCommands({ system: "linux", label: "a b" }), /not a login item label/);
 });
+
+// --- the two admin steps on macOS (lahe-names workstream) ---------------------
+//
+// V56 and V74. Nothing here runs sudo, writes /etc, or loads a pf rule: the
+// tests read the text and the command the install would hand to sudo.
+
+test("V56: the resolver file is fixed text with the Lahe marker and an integer port", () => {
+  const text = loginItem.resolverText(7853);
+  assert.equal(
+    text,
+    "# lahe-managed: .lahe names, written by `lahe install --lahe-names`. `lahe uninstall` removes it.\n" +
+      "nameserver 127.0.0.1\nport 7853\n"
+  );
+  assert.ok(loginItem.hasMarker(text));
+  assert.throws(() => loginItem.resolverText("7853\nnameserver 8.8.8.8"), /port/);
+  assert.throws(() => loginItem.resolverText(70000), /port/);
+});
+
+test("V74: the forward rule is fixed text with the marker, and covers only loopback port 80", () => {
+  const text = loginItem.forwardRuleText(1483);
+  assert.ok(loginItem.hasMarker(text));
+  const rules = text.split("\n").filter((line) => line && line[0] !== "#");
+  assert.deepEqual(rules, [
+    "rdr pass on lo0 inet proto tcp from any to 127.0.0.1 port 80 -> 127.0.0.1 port 1483",
+    "rdr pass on lo0 inet6 proto tcp from any to ::1 port 80 -> ::1 port 1483"
+  ]);
+  assert.throws(() => loginItem.forwardRuleText("1483 -> 1.2.3.4"), /port/);
+});
+
+test("V74: the boot item that reloads the forward is fixed text with the marker, run at load", () => {
+  const plist = loginItem.forwardDaemonText();
+  assert.ok(loginItem.hasMarker(plist));
+  assert.match(plist, /<string>lahe-port80<\/string>/);
+  assert.match(plist, /<key>RunAtLoad<\/key>\s*<true\/>/);
+  assert.match(plist, /\/sbin\/pfctl -a com\.apple\/lahe -f \/etc\/pf\.anchors\/lahe/);
+});
+
+test("V56 and V74: each admin step is one sudo call of a fixed script, with the files' folder as an argument", () => {
+  const install = loginItem.rootCommand("installResolver", "/tmp/lahe-root-x y");
+  assert.equal(install[0], "sudo");
+  assert.deepEqual(install.slice(1, 3), ["/bin/sh", "-c"]);
+  assert.equal(install[3], loginItem.ROOT_SCRIPTS.installResolver, "the script is the constant, nothing spliced in");
+  assert.deepEqual(install.slice(4), ["lahe", "/tmp/lahe-root-x y"]);
+  for (const [name, script] of Object.entries(loginItem.ROOT_SCRIPTS)) {
+    assert.ok(script.indexOf("/tmp") === -1, name + " names no temp path");
+    assert.ok(!/\$\{|`|\$\(/.test(script), name + " has no substitution beyond \"$1\"");
+  }
+  assert.throws(() => loginItem.rootCommand("nope", "/x"), /no root script/);
+});
+
+test("V59 and V74: the removal scripts delete a file only when it carries the marker", () => {
+  const { removeResolver, removeForward } = loginItem.ROOT_SCRIPTS;
+  assert.match(removeResolver, /grep -qF '# lahe-managed' \/etc\/resolver\/lahe && rm -f \/etc\/resolver\/lahe/);
+  assert.match(removeForward, /grep -qF '# lahe-managed' \/etc\/pf\.anchors\/lahe/);
+  assert.match(removeForward, /grep -qF '# lahe-managed' \/Library\/LaunchDaemons\/lahe-port80\.plist/);
+  assert.equal((removeForward.match(/rm -f/g) || []).length, 2);
+  assert.ok(/grep -qF '# lahe-managed' \/etc\/resolver\/lahe/.test(loginItem.ROOT_SCRIPTS.installResolver),
+    "install will not overwrite a resolver file Lahe did not write");
+});

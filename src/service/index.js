@@ -55,6 +55,7 @@ var staticServers = require("./static_servers.js");
 var idleServersModule = require("./idle_servers.js");
 var selfStopModule = require("./self_stop.js");
 var loginItemModule = require("./login_item.js");
+var addressesModule = require("./addresses.js");
 var sitesModule = require("./sites.js");
 var pageRoutesModule = require("./page_routes.js");
 
@@ -218,6 +219,10 @@ async function serve(options) {
   var alwaysOn = opts.alwaysOn === true;
   var stateId = selfStopModule.stateToken(dir);
   var installed = loginItemModule.installedFor(dir, port);
+  // The two address options install may have set up (port-free, .lahe),
+  // each used only once proved (addresses.js). Made once the pages listener
+  // is bound; null until then and with no pages listener.
+  var addresses = null;
 
   var log = logModule.createEventLog({ dir: dir });
   var reviews = reviewsModule.createReviews({ dir: dir, log: log });
@@ -378,7 +383,11 @@ async function serve(options) {
     pagesPort: function () { return boundPagesPort; },
     now: now,
     version: VERSION,
-    startedAt: startedAt
+    startedAt: startedAt,
+    // The port a printed address carries (80 once the forward is proved), and
+    // whether .lahe Hosts are answered. Both from addresses.js.
+    printedPort: function () { return addresses ? addresses.printedPort() : boundPagesPort; },
+    laheNamesVerified: function () { return !!addresses && addresses.laheNamesVerified(); }
   };
 
   // 3A's projector: it folds every review's reply files on protocol.REPLY_POLL's
@@ -398,7 +407,10 @@ async function serve(options) {
   function dispatch(listener) {
     return function (req, res) {
       var host = req.headers[protocol.HEADER.HOST];
-      var family = protocol.classifyHost(host, { pagesPort: boundPagesPort });
+      var family = protocol.classifyHost(host, {
+        pagesPort: boundPagesPort,
+        laheNames: !!addresses && addresses.laheNamesVerified()
+      });
       if (family.family === protocol.HOST_FAMILY.API ||
           (family.family === protocol.HOST_FAMILY.LIBRARY && routes.isCatalogPath(req.url))) {
         handle(req, res).catch(function (err) {
@@ -482,8 +494,10 @@ async function serve(options) {
       mode: pagesOn ? protocol.PAGES.MODE_SITES : protocol.PAGES.MODE_SERVERS,
       port: boundPagesPort,
       printed_ending: protocol.PAGES.PRINTED_ENDING,
-      port_free: { on: false, verified: false, reason: "not set up" },
-      lahe_names: { on: false, verified: false, reason: "not set up" }
+      port_free: addresses ? addresses.report().port_free : { on: false, verified: false, reason: "not set up" },
+      lahe_names: addresses ? addresses.report().lahe_names : { on: false, verified: false, reason: "not set up" },
+      // The port `lahe review` prints: 80 once the forward is proved.
+      printed_port: addresses ? addresses.printedPort() : boundPagesPort
     };
   }
 
@@ -850,6 +864,14 @@ async function serve(options) {
     // library.lahe.localhost answers at this port, with the switch on.
     if (pagesOn) catalog.pagesPort = boundPagesPort;
     await listenOn("pages", boundPagesPort, "::1", false);
+    addresses = addressesModule.createAddresses(Object.assign({
+      installed: installed,
+      pagesPort: boundPagesPort,
+      pagesServers: listeners.filter(function (entry) { return entry.kind === "pages"; }).map(function (entry) { return entry.server; }),
+      log: function (line) { log.helperLog(line); },
+      onChange: function () { reviews.writeReadyFile(readyDetails()); }
+    }, opts.addresses || {}));
+    await addresses.start();
   }
   // The helper modules that map a page to a file (the healer, the reload
   // check, rebuild, the handled check, the projection) ask the registry from
@@ -885,15 +907,18 @@ async function serve(options) {
 
   // The readiness file goes out AFTER the listener is bound. A readiness file
   // that arrives before the socket is a lie, and the durability tests race it.
-  reviews.writeReadyFile({
-    port: boundPort,
-    started_at: startedAt,
-    pages: pagesReport(),
-    always_on: alwaysOn,
-    install: installed && alwaysOn
-      ? { system: installed.system, label: installed.label, login_item: installed.login_item || null }
-      : null
-  });
+  function readyDetails() {
+    return {
+      port: boundPort,
+      started_at: startedAt,
+      pages: pagesReport(),
+      always_on: alwaysOn,
+      install: installed && alwaysOn
+        ? { system: installed.system, label: installed.label, login_item: installed.login_item || null }
+        : null
+    };
+  }
+  reviews.writeReadyFile(readyDetails());
   log.helperLog(
     "serving on http://" + host + ":" + boundPort + ", state directory " + dir + ", reviews " + (reviews.list().join(", ") || "none")
   );
@@ -975,9 +1000,11 @@ async function serve(options) {
       idleServers.stop();
       selfStop.stop();
       pageRoutesModule.deactivate(dir);
-      closing = closeListeners();
+      closing = Promise.all([closeListeners(), addresses ? addresses.close() : null]).then(function () {});
       return closing;
     },
+    // The address options' proofs (addresses.js), for tests to run by hand.
+    addresses: function () { return addresses; },
     // The self-stop's own look, run by hand. Tests only.
     checkSelfStop: function () { return selfStop.check(); }
   };

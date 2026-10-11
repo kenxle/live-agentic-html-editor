@@ -27,6 +27,7 @@ var fs = require("node:fs");
 var os = require("node:os");
 var path = require("node:path");
 var childProcess = require("node:child_process");
+var net = require("node:net");
 
 var protocol = require("../../shared/protocol.js");
 var stateDirModule = require("../../service/state_dir.js");
@@ -39,13 +40,19 @@ var CLONE = path.join(__dirname, "..", "..", "..");
 var ENTRY = path.join(CLONE, "bin", "lahe.js");
 
 var USAGE = [
-  "usage: lahe install [--port <n>] [--state-dir <path>]",
+  "usage: lahe install [--port-80] [--lahe-names] [--port <n>] [--state-dir <path>]",
   "       lahe uninstall [--port <n>] [--state-dir <path>]",
   "",
   "  install    start the helper at login and restart it if it stops, so a document's address",
   "             keeps working after a session closes, after idle time, and after a reboot.",
   "             Run it yourself in a terminal; an agent asks you to type `! lahe install`.",
   "  uninstall  remove that. `lahe review` goes back to starting the helper on demand.",
+  "",
+  "  --port-80     macOS: forward this computer's own port 80 to the pages port, so addresses",
+  "                print without :" + protocol.PAGES.PORT + ". One admin password. Skipped when something holds port 80.",
+  "  --lahe-names  macOS: let every page also answer at <name>.lahe. One admin password.",
+  "                On Linux and Windows both are steps you do by hand: see docs/INSTALL.md.",
+  "                A later `lahe install` keeps whichever of these is already set up.",
   "",
   "  --port       the helper's port. Default " + protocol.DEFAULT_PORT + ".",
   "  --state-dir  the state folder the login item pins. Default $LAHE_STATE_DIR, then",
@@ -62,6 +69,10 @@ function parse(argv) {
       if (!Number.isInteger(out.port) || out.port < 1 || out.port > 65535) return { error: "--port takes a port number" };
     } else if (list[i] === "--state-dir" && list[i + 1] !== undefined) {
       out.stateDir = list[(i += 1)];
+    } else if (list[i] === "--port-80") {
+      out.port80 = true;
+    } else if (list[i] === "--lahe-names") {
+      out.laheNames = true;
     } else {
       return { error: "unknown or incomplete option " + JSON.stringify(list[i]) };
     }
@@ -127,7 +138,13 @@ function environment(argv, given, name) {
     node: d.node || process.execPath,
     runner: d.runner,
     users: d.users,
-    waitMs: d.waitMs
+    waitMs: d.waitMs,
+    portHolder: d.portHolder || defaultPortHolder,
+    rootPaths: d.rootPaths || {
+      resolver: loginItem.RESOLVER_PATH,
+      rule: loginItem.FORWARD_RULE_PATH,
+      daemon: loginItem.FORWARD_DAEMON_PATH
+    }
   };
   var args = parse(argv);
   if (args.help) {
@@ -161,6 +178,15 @@ function environment(argv, given, name) {
     return { done: 1 };
   }
   env.port = args.port;
+  env.port80 = args.port80 === true;
+  env.laheNames = args.laheNames === true;
+  if ((env.port80 || env.laheNames) && env.system !== "macos") {
+    env.err(
+      "lahe " + name + ": --port-80 and --lahe-names set things up on macOS only. On " + env.platform +
+        " they are steps you do by hand: see docs/INSTALL.md. Nothing was changed.\n"
+    );
+    return { done: 1 };
+  }
   // The label an earlier install recorded, so a reinstall or an uninstall
   // finds the same item.
   env.record = loginItem.readInstall(env.dir);
@@ -220,6 +246,117 @@ async function removeItem(env, item) {
 }
 
 // ---------------------------------------------------------------------------
+// The macOS admin steps: --port-80 and --lahe-names
+// ---------------------------------------------------------------------------
+
+/** "<command> (pid N)" for whatever listens on loopback port 80, or null. */
+function defaultPortHolder() {
+  return new Promise(function (resolve) {
+    var socket = net.connect({ host: "127.0.0.1", port: 80 });
+    socket.setTimeout(1000);
+    socket.once("connect", function () {
+      socket.destroy();
+      var name = "a program";
+      try {
+        var out = childProcess.execFileSync("lsof", ["-nP", "-iTCP:80", "-sTCP:LISTEN", "-Fpc"], { encoding: "utf8" });
+        var pid = /^p(\d+)$/m.exec(out);
+        var command = /^c(.+)$/m.exec(out);
+        if (command) name = command[1] + (pid ? " (pid " + pid[1] + ")" : "");
+      } catch (err) { /* another account's program: lsof cannot name it */ }
+      resolve(name);
+    });
+    socket.once("error", function () { resolve(null); });
+    socket.once("timeout", function () { socket.destroy(); resolve(null); });
+  });
+}
+
+/** Write the step's files into a fresh private folder, and run its one sudo call. */
+async function rootStep(env, script, files) {
+  var folder = fs.mkdtempSync(path.join(os.tmpdir(), "lahe-root-"));
+  Object.keys(files).forEach(function (name) {
+    fs.writeFileSync(path.join(folder, name), files[name], { mode: 0o644 });
+  });
+  env.out("lahe install: your admin password sets this up (one sudo call).\n");
+  return loginItem.runCommands([loginItem.rootCommand(script, folder)], env.runner);
+}
+
+/**
+ * The two options, as install.json records them. A flag runs its step; with
+ * no flag, what an earlier install set up is kept as it was.
+ */
+async function adminSteps(env) {
+  var before = env.record || {};
+  var out = {
+    port_80: before.port_80 === true,
+    forward_rule: before.port_80 === true ? before.forward_rule || loginItem.FORWARD_RULE_PATH : null,
+    port_80_reason: before.port_80_reason || null,
+    lahe_names: before.lahe_names === true,
+    resolver: before.lahe_names === true ? before.resolver || loginItem.RESOLVER_PATH : null,
+    name_server_port: before.lahe_names === true ? before.name_server_port || loginItem.NAME_SERVER_PORT : null
+  };
+  if (env.port80) {
+    // With Lahe's own forward in place, port 80 answers because it reaches the
+    // helper; that is not another program holding it.
+    var holder = before.port_80 === true ? null : await env.portHolder();
+    if (holder) {
+      out.port_80 = false;
+      out.forward_rule = null;
+      out.port_80_reason = "port 80 is held by " + holder;
+      env.out(
+        "lahe install: port-free addresses skipped: " + out.port_80_reason + ". Addresses keep :" + protocol.PAGES.PORT + ".\n"
+      );
+    } else {
+      var files = {};
+      files[loginItem.ROOT_FILES.rule] = loginItem.forwardRuleText(protocol.PAGES.PORT);
+      files[loginItem.ROOT_FILES.daemon] = loginItem.forwardDaemonText();
+      var forward = await rootStep(env, "installForward", files);
+      out.port_80 = forward.ok;
+      out.forward_rule = forward.ok ? loginItem.FORWARD_RULE_PATH : null;
+      out.port_80_reason = forward.ok ? null : "the admin step failed";
+      if (forward.ok) env.out("lahe install: port 80 forwards to " + protocol.PAGES.PORT + " on this computer, reloaded at boot.\n");
+      else env.err("lahe install: port-free addresses were not set up (" + forward.failed + ").\n");
+    }
+  }
+  if (env.laheNames) {
+    var names = {};
+    names[loginItem.ROOT_FILES.resolver] = loginItem.resolverText(loginItem.NAME_SERVER_PORT);
+    var resolver = await rootStep(env, "installResolver", names);
+    out.lahe_names = resolver.ok;
+    out.resolver = resolver.ok ? loginItem.RESOLVER_PATH : null;
+    out.name_server_port = resolver.ok ? loginItem.NAME_SERVER_PORT : null;
+    if (resolver.ok) env.out("lahe install: .lahe lookups on this Mac go to the helper's name server.\n");
+    else env.err("lahe install: .lahe was not set up (" + resolver.failed + ").\n");
+  }
+  return out;
+}
+
+function readOrNull(file) {
+  try { return fs.readFileSync(file, "utf8"); } catch (err) { return null; }
+}
+
+/** Remove the admin steps' files that carry Lahe's marker; say which were left. */
+async function removeAdminSteps(env) {
+  var p = env.rootPaths;
+  var resolver = readOrNull(p.resolver);
+  var forwardFiles = [p.rule, p.daemon].map(function (file) { return { file: file, text: readOrNull(file) }; });
+  var leftAlone = [{ file: p.resolver, text: resolver }].concat(forwardFiles).filter(function (f) {
+    return f.text !== null && !loginItem.hasMarker(f.text);
+  });
+  var steps = [];
+  if (resolver !== null && loginItem.hasMarker(resolver)) steps.push("removeResolver");
+  if (forwardFiles.some(function (f) { return f.text !== null && loginItem.hasMarker(f.text); })) steps.push("removeForward");
+  leftAlone.forEach(function (f) {
+    env.out("lahe uninstall: " + f.file + " was not written by Lahe; left alone.\n");
+  });
+  for (var i = 0; i < steps.length; i += 1) {
+    env.out("lahe uninstall: your admin password removes Lahe's " + (steps[i] === "removeResolver" ? ".lahe setup" : "port 80 forward") + ".\n");
+    var done = await loginItem.runCommands([loginItem.rootCommand(steps[i])], env.runner);
+    if (!done.ok) env.err("lahe uninstall: that admin step failed (" + done.failed + ").\n");
+  }
+  if (steps.length > 0) env.out("  .lahe.localhost addresses keep working whenever the helper runs.\n");
+}
+
+// ---------------------------------------------------------------------------
 // lahe install
 // ---------------------------------------------------------------------------
 
@@ -263,6 +400,10 @@ async function run(argv, deps) {
     return 1;
   }
 
+  // The admin steps before the login item loads, so the helper it starts
+  // already finds them in install.json.
+  var admin = env.system === "macos" ? await adminSteps(env) : null;
+
   var record = {
     system: env.system,
     label: item.label,
@@ -272,10 +413,13 @@ async function run(argv, deps) {
     entry: ENTRY,
     port: env.port,
     state_dir: env.dir,
-    lahe_names: false,
-    resolver: null,
-    port_80: false,
-    forward_rule: null,
+    pages_port: protocol.PAGES.PORT,
+    lahe_names: admin ? admin.lahe_names : false,
+    resolver: admin ? admin.resolver : null,
+    name_server_port: admin ? admin.name_server_port : null,
+    port_80: admin ? admin.port_80 : false,
+    forward_rule: admin ? admin.forward_rule : null,
+    port_80_reason: admin ? admin.port_80_reason : null,
     installed_at: new Date().toISOString()
   };
   // install.json first: the helper reads it as it starts, to say in
@@ -323,6 +467,7 @@ async function runUninstall(argv, deps) {
   var record = env.record;
   var item = env.item;
 
+  if (env.system === "macos") await removeAdminSteps(env);
   if (!record && !fs.existsSync(item.path)) {
     env.out("lahe uninstall: nothing to uninstall for " + env.dir + ".\n");
     return protocol.CLI_EXIT.OK;

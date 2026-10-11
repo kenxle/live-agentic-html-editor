@@ -149,3 +149,26 @@ test("V43: with the switch off the Library keeps its two loopback Hosts and noth
   const ok = await raw(api, { path: PAGE.path, headers: pageHeaders("127.0.0.1:" + api) });
   assert.equal(ok.status, 200);
 });
+
+// Port-free addresses (lahe-names, Task 6.0): through the port 80 forward the
+// browser sends the Host with no port. The Library answers that too, with the
+// same checks; `library.lahe` stays refused with or without a port.
+test("the Library answers at library.lahe.localhost with no port, as the port 80 forward delivers it", async (t) => {
+  const w = await sitesWorld(t);
+  const port = w.helper.pagesPort;
+  const host = "library.lahe.localhost";
+  const token = await libraryToken(port, host);
+  const list = await raw(port, { method: LIST.method, path: LIST.path, headers: apiHeaders(host, token) });
+  assert.equal(list.status, 200, list.text);
+  const wrongOrigin = await raw(port, {
+    method: STAR.method,
+    path: STAR.path,
+    headers: apiHeaders(host, token, { origin: "http://library.lahe.localhost:" + port }),
+    body: JSON.stringify({ review: "none", starred: true })
+  });
+  assert.equal(wrongOrigin.json.error.check, protocol.CHECK.ORIGIN, "the Origin still has to be the page's own");
+  for (const refused of ["library.lahe", "library.lahe.localhost."]) {
+    const res = await raw(port, { path: PAGE.path, headers: pageHeaders(refused) });
+    assert.notEqual(res.status, 200, refused);
+  }
+});
