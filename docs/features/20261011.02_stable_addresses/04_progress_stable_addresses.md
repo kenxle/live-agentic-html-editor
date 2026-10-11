@@ -12,7 +12,7 @@ None.
 
 | Agent or task | Doing | Started | Branch |
 |---|---|---|---|
-| Core builder (Opus) | Step 2: helper modules ask the registry; old comments and grouping; Markdown render cache | 2026-10-11 15:58 | `unit/sa-core` |
+| Core builder (Opus) | Task 3.0 test retirement list, and options for showing old comments at the new address | 2026-10-11 16:17 | `unit/sa-core` |
 | Library builder (Sonnet) | Tasks 4.1, 4.2: Library kinds, Open binds a site, `library.lahe.localhost`, copy without the clipboard API | 2026-10-11 15:58 | `unit/sa-library` |
 | Install builder (Opus) | Tasks 5.1 to 5.3: login item spikes, `lahe install` and `lahe uninstall`, always-on helper | 2026-10-11 15:58 | `unit/sa-install` |
 
@@ -37,12 +37,14 @@ None.
 
 | Workstream | Tasks | Result | Detail |
 |---|---|---|---|
+| core | Step 2 (2.1, 2.2) | Merged. Rows V26 to V30, V32, V70 pass. V31 (old comments in the rail) is half done and waits on your decision. Unit gate 2,540 tests, 0 failed. Browser spec 9 of 9 across three browsers. Also fixed an existing rail bug in `sync.js` (the "no agent" line could stay stale). | [core progress](progress/phase6_workstream_core.md) |
 | core | Step 1 (1.0 to 1.4) | Merged into `feat/stable-addresses`. Rows V1 to V25, V65, V66, V68, V69 pass. Unit gate 2,517 tests, 0 failed. Browser spec 18 of 18 across three browsers. | [core progress](progress/phase6_workstream_core.md) |
 
 ### Passes
 
 | Pass | What merged | Checks on the merge |
 |---|---|---|
+| 2 | core Step 2 | `npm run gate:unit`: 2,540 tests, 0 failed; helpers before and after: 2 and 2 |
 | 1 | core Step 1 | `npm run gate:unit` on the merged branch: 2,517 tests, 0 failed; helpers running before and after: 2 and 2 |
 
 ### Changes from plan
@@ -103,6 +105,7 @@ Not shipped yet.
 
 ## Log
 
+- 2026-10-11 16:17: Core Step 2 merged. One row is blocked: old comments made at a random-port address do not show in the rail at the new address, because the rail only reads this browser's storage, which is kept per address. The comments are safe in `review.json`. Options are being written up for you.
 - 2026-10-11 16:07: PR #41 merged (workflow file fixed, gate green on rerun). Task 1.0 browser check passed on Linux and Windows too: all three browsers load dotted `.lahe.localhost` names as secure pages.
 - 2026-10-11 15:58: Core Step 1 merged (unit gate 0 failed). Core continues to Step 2; library (4.1, 4.2) and install (5.1 to 5.3) builders dispatched. PR #41 gate had two flaky browser failures on unchanged code; rerunning the failed job.
 - 2026-10-11 15:31: The spike workflow from #40 had a YAML error, so GitHub recorded a failed run on each of three branch pushes (you may have three failure emails; sorry). Fix is [PR #41](https://github.com/kenxle/live-agentic-html-editor/pull/41). Task 1.0 browser check on macOS: Chromium, Firefox, and WebKit all load `live-agentic-html-editor.docs.ongoing.lahe.localhost` and treat it as secure. Linux and Windows run once #41 merges.
