@@ -48,24 +48,19 @@ I'd start with the login item and add the menu-bar app later if you want to see 
 
 Separately, either one could later ship as a single file that runs without Node installed. That is a packaging choice, open at any time, and only worth it if Lahe goes to people without Node.
 
-## Why each document gets its own port today
+## Why each document gets its own address today
 
-The browser walls pages off from each other by address. Two pages with the same host name and port share one walled garden: they share saved drafts, and a script on one can read the other. Different port, or different host name, means a different garden.
+**Short answer: it is not about agents.** Lahe's software already keeps agents apart and handles handoffs. Ports play no part in that.
 
-Each document's page carries a key (its review token) that lets it post comments to that one review. Lahe gives each document its own garden so a page can only use its own key. That matters because pages can carry scripts Lahe did not write, like a chart library loaded from the web, or a whole site an agent is building. If two documents shared a garden, one page's script could read the other's key and post to it.
+The separate addresses protect documents from each other inside your browser:
 
-So the separate gardens are the point. Separate ports are just how Lahe gets them today. A host name can do the same job.
+- A page can contain code from elsewhere, like a chart tool pulled from the internet.
+- Your browser lets code on a page read anything else at the same address.
+- So if two documents shared an address, code in one could read the other, and send comments to it as if they came from you.
 
-### Could Lahe's own software do this instead?
+Lahe cannot stop that itself, because that code runs in your browser, not in Lahe. Only the browser can, and the browser decides by address.
 
-Partly. Two different things are being kept apart, and only one of them needs the browser:
-
-- **Agents from each other.** This already lives in Lahe's software: sessions, owners, and takeover. It does not depend on ports, and stable addresses do not change it.
-- **Pages from each other, inside the browser.** This is the part that needs the address. Once two pages share an address, any script on one page can do anything Lahe's own code on that page can do, including reading its key. Lahe cannot police scripts inside your browser. The address (host name plus port) is the one wall the browser itself enforces, so it is the only tool for this job.
-
-Drafts could be kept apart in software, by labeling each one with its document. Keys cannot.
-
-How much this matters for you is a fair question. Your documents are written by your own agents, so the risk is a script Lahe did not write, like a chart library from the web, or a site an agent is building. Low, but real. The good news is that option D keeps the wall at almost no cost: one port, and Lahe makes up the host names, so you never deal with them.
+For you, the risk is low. Option D keeps the protection anyway, and you would never see the difference.
 
 ## The options
 
