@@ -225,11 +225,22 @@ async function stopOurHelper(env) {
   return sessionCommand.stopVerifiedHelper(env.dir);
 }
 
+function readyNames(dir, live) {
+  try {
+    var ready = JSON.parse(fs.readFileSync(stateDirModule.readyPath(dir), "utf8"));
+    return typeof ready.pid === "number" && ready.started_at === live.started_at;
+  } catch (err) {
+    return false;
+  }
+}
+
 async function waitForInstalledHelper(env) {
   var deadline = Date.now() + (typeof env.waitMs === "number" ? env.waitMs : 20000);
   for (;;) {
     var live = await service.probeHealth(protocol.DEFAULT_HOST, env.port);
-    if (live && live.always_on === true && !selfStop.stateFolderMismatch(env.dir, live)) return true;
+    // Up, and done starting: service.json names this same helper, so a later
+    // command can stop it by its pid.
+    if (live && live.always_on === true && !selfStop.stateFolderMismatch(env.dir, live) && readyNames(env.dir, live)) return true;
     if (Date.now() >= deadline) return false;
     await new Promise(function (resolve) { setTimeout(resolve, 100); });
   }

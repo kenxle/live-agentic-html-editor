@@ -372,11 +372,13 @@ test("a later plain install keeps the options already set, with no new sudo call
   const port = await freePort();
   const fake = withSudo(w, port);
   const paths = rootPaths(w);
-  assert.equal(await installCommand.run(["--state-dir", w.dir, "--port", String(port), "--lahe-names", "--port-80"],
-    deps(w, { runner: fake.runner, portHolder: () => null, rootPaths: paths })), 0);
+  const first = deps(w, { runner: fake.runner, portHolder: () => null, rootPaths: paths });
+  assert.equal(await installCommand.run(["--state-dir", w.dir, "--port", String(port), "--lahe-names", "--port-80"], first), 0,
+    first.out() + first.err());
   assert.equal(fake.sudo.length, 2, "one sudo call per option");
-  assert.equal(await installCommand.run(["--state-dir", w.dir, "--port", String(port)],
-    deps(w, { runner: fake.runner, portHolder: () => null, rootPaths: paths })), 0);
+  const second = deps(w, { runner: fake.runner, portHolder: () => null, rootPaths: paths });
+  assert.equal(await installCommand.run(["--state-dir", w.dir, "--port", String(port)], second), 0,
+    second.out() + second.err());
   assert.equal(fake.sudo.length, 2);
   const record = loginItem.readInstall(w.dir);
   assert.equal(record.lahe_names, true);

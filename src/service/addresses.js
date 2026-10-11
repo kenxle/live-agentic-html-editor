@@ -85,6 +85,7 @@ function createAddresses(options) {
   var seenPaths = new Set();
   var timer = null;
   var watched = [];
+  var closed = false;
 
   function say(line) {
     if (typeof opts.log === "function") {
@@ -155,8 +156,11 @@ function createAddresses(options) {
   }
 
   async function verifyNow() {
+    if (closed) return report();
     var changed = (await checkForward()) | (await checkNames());
-    if (changed && typeof opts.onChange === "function") {
+    // A check that finishes after close says nothing: a stopped helper must
+    // not write service.json again.
+    if (changed && !closed && typeof opts.onChange === "function") {
       try { opts.onChange(report()); } catch (err) { /* the report stands */ }
     }
     return report();
@@ -166,31 +170,41 @@ function createAddresses(options) {
     return { port_free: Object.assign({}, state.port_free), lahe_names: Object.assign({}, state.lahe_names) };
   }
 
-  async function start() {
-    if (namesOn) {
-      var candidate = nameServerModule.createNameServer({
-        port: installed.name_server_port,
-        onQuery: function (name) { seenNames.add(name); },
-        log: say
-      });
-      try {
-        await candidate.start();
-        server = candidate;
-      } catch (err) {
-        serverError = "the name server could not answer on port " + installed.name_server_port + " (" + (err.code || err.message) + ")";
-        await candidate.close();
-      }
-    }
-    await verifyNow();
-    if (intervalMs > 0 && (forwardOn || namesOn)) {
-      timer = setInterval(function () {
-        verifyNow().catch(function (err) { say("address check failed: " + err.message); });
-      }, intervalMs);
-      if (typeof timer.unref === "function") timer.unref();
+  /** Bind the name server, when install.json records the resolver. Quick. */
+  async function listen() {
+    if (!namesOn || server) return;
+    var candidate = nameServerModule.createNameServer({
+      port: installed.name_server_port,
+      onQuery: function (name) { seenNames.add(name); },
+      log: say
+    });
+    try {
+      await candidate.start();
+      server = candidate;
+    } catch (err) {
+      serverError = "the name server could not answer on port " + installed.name_server_port + " (" + (err.code || err.message) + ")";
+      await candidate.close();
     }
   }
 
+  /** Check again every interval, from now on. */
+  function schedule() {
+    if (timer || !(intervalMs > 0) || !(forwardOn || namesOn)) return;
+    timer = setInterval(function () {
+      verifyNow().catch(function (err) { say("address check failed: " + err.message); });
+    }, intervalMs);
+    if (typeof timer.unref === "function") timer.unref();
+  }
+
+  /** Everything, waiting for the first checks. The helper does not wait (see index.js). */
+  async function start() {
+    await listen();
+    await verifyNow();
+    schedule();
+  }
+
   async function close() {
+    closed = true;
     if (timer) clearInterval(timer);
     timer = null;
     watched.forEach(function (s) { s.removeListener("request", onRequest); });
@@ -201,6 +215,8 @@ function createAddresses(options) {
 
   return {
     start: start,
+    listen: listen,
+    schedule: schedule,
     verifyNow: verifyNow,
     report: report,
     close: close,

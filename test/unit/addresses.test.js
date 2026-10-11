@@ -273,6 +273,7 @@ const protocol = require("../../src/shared/protocol.js");
 const service = require("../../src/service/index.js");
 const stateDir = require("../../src/service/state_dir.js");
 const loginItem = require("../../src/service/login_item.js");
+const { pollUntil } = require("../helpers/poll.js");
 
 function tempState() {
   const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "lahe-addresses-")));
@@ -296,6 +297,9 @@ test("V55, V57 in the helper: the name server starts from install.json, and serv
   });
   t.after(() => helper.close());
   assert.equal(helper.addresses().nameServerPort(), udp);
+  // The check runs after the helper is ready, and rewrites service.json when
+  // it lands.
+  await pollUntil(() => pagesBlock(dir).lahe_names.verified === true, { timeoutMs: 5000, message: ".lahe to be proved" });
   assert.deepEqual(pagesBlock(dir).lahe_names, { on: true, verified: true, reason: null });
   assert.match(fs.readFileSync(stateDir.helperLogPath(dir), "utf8"), /\.lahe names: verified/);
 });
@@ -311,7 +315,7 @@ test("V76 in the helper: service.json prints port 80 once the forward is proved,
     addresses: { forwardPort: forward.port, intervalMs: 0 }
   });
   t.after(() => helper.close());
-  assert.equal(pagesBlock(dir).printed_port, 80);
+  await pollUntil(() => pagesBlock(dir).printed_port === 80, { timeoutMs: 5000, message: "the forward to be proved" });
   assert.equal(pagesBlock(dir).port_free.verified, true);
   await forward.close();
   await helper.addresses().verifyNow();
@@ -328,4 +332,37 @@ test("a helper with no install prints the pages port and has both options off", 
   assert.equal(pages.printed_port, helper.pagesPort);
   assert.deepEqual(pages.port_free, { on: false, verified: false, reason: "not set up" });
   assert.deepEqual(pages.lahe_names, { on: false, verified: false, reason: "not set up" });
+});
+
+// The helper is ready, and says so in service.json, before a slow address
+// check finishes. A CLI that waits for /health and then reads service.json (to
+// stop the helper by its pid, say) must never find /health up with no
+// service.json: under load, `lahe install` did, and refused its own helper as
+// "not this state folder's helper".
+test("service.json is written as soon as the helper answers, before a slow .lahe check finishes", async (t) => {
+  const dir = tempState();
+  const port = await freePort();
+  const udp = await freeUdpPort();
+  loginItem.writeInstall(dir, installed({ port, lahe_names: true, resolver: "/etc/resolver/lahe", name_server_port: udp }));
+  let release;
+  const held = new Promise((resolve) => { release = resolve; });
+  // The system resolver, slow: it answers only when the test lets it.
+  const lookup = (name) => held.then(() => resolverTo(udp)(name));
+  const starting = service.serve({
+    port, stateDir: dir, quiet: true, alwaysOn: true, pages: protocol.PAGES.SWITCH_ON, pagesPort: 0,
+    addresses: { lookup, intervalMs: 0 }
+  });
+  t.after(async () => { release(); (await starting).close(); });
+  await pollUntil(() => fs.existsSync(stateDir.readyPath(dir)), {
+    timeoutMs: 2000,
+    message: "service.json while the .lahe check is still waiting on the resolver"
+  });
+  assert.equal(pagesBlock(dir).lahe_names.verified, false, "not proved yet");
+  const helper = await starting;
+  assert.equal(helper.addresses().nameServerPort(), udp, "the name server is already up");
+  release();
+  await pollUntil(() => pagesBlock(dir).lahe_names.verified === true, {
+    timeoutMs: 5000,
+    message: "service.json to say .lahe is proved once the check finishes"
+  });
 });
