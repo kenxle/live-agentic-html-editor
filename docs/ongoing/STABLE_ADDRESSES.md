@@ -8,7 +8,7 @@ The fix that works: the helper starts when you log in and stays up, and it keeps
 
 Stable addresses were the last option on [the Library ideas page](DOCUMENT_INDEX_IDEAS.md), which we skipped then. It is a real feature (serving, sessions, and security all change), so it would go through feature-forge.
 
-**Needs your answer:** the three questions at the bottom.
+**Needs your answer:** the four questions at the bottom.
 
 ## Why your old links fail today
 
@@ -34,8 +34,18 @@ So "persistent port" is really "something always answering at the document's add
 - **One open door per document, if each keeps its own port.** With option A below, the helper keeps a door (port) open for every document: 682 doors. macOS limits a program started at login to 256 by default, so the limit would need raising. Option D below avoids this: one door for every document.
 - **Port clashes with your other tools.** With option A, each document reserves a port, and any of them can clash with another tool; then that document moves, as it does today. With option D, only the one shared port can clash, and Lahe would pick it once, away from common dev-server ports.
 - **Small security change: pages answer all the time.** Each page holds the key for posting comments to its review. Any program running on your Mac could load the page, take the key, and post fake comments to that review. Today that is only possible while the document is being served. With stable addresses it is possible whenever the helper runs. Websites you visit still cannot do it; Lahe already blocks them. And a program on your Mac can already read Lahe's files directly, so this adds little real risk. It is a note for the security review, not a reason to hold back.
-- **Who owns the server changes.** Today the agent session owns its page servers. With stable addresses the helper owns the address, and sessions only own the review. That touches the session docs, the diagrams, and several tests.
+- **Who owns the server changes.** Today each agent session owns the servers for its pages, and they stop when the session closes. With stable addresses, one always-on Lahe server owns every address, apart from any agent. Sessions only own their reviews. That touches the session docs, the diagrams, and several tests.
 - **A link to a deleted file** would open a helper page saying the file is gone, with a link to the Library. Better than "can't connect", but not the document.
+
+## How the always-on server would run
+
+Your note suggested making it a separate thing, like its own program or a Mac app. That fits: the always-on server is separate from agents either way. Three ways to run it, simplest first:
+
+- **A login item Lahe installs.** `npm run install-cli` would also tell macOS to start the server at login and restart it if it stops. No new code to build, and nothing visible on screen.
+- **A small Mac app.** The same server, wrapped as an app with a menu-bar icon: it shows it is running, links to the Library, and has a Quit button. The server stays the existing Node code, but the icon needs a small piece of native Mac code, built once and shipped with Lahe. That bends the "runs from a git clone" rule a little, so it would be optional.
+- **A single self-contained program.** Node can be bundled into one file that runs with no Node installed. Bigger to ship, and it has to be rebuilt on every change. Only worth it if Lahe goes to people without Node.
+
+I'd start with the login item and add the menu-bar app later if you want to see it running.
 
 ## Why each document gets its own port today
 
@@ -87,4 +97,5 @@ While checking this, I found 63 page-server processes left running from test run
 
 1. Are you OK with the Lahe helper starting at login and staying up? Leaning yes, from your note on the cons.
 2. Option D (one port, a host name per document) or option A (a port per document)? I recommend D. With D, every document can keep a working address at no extra cost.
-3. Ready for this to become a feature-forge feature, starting with the brief?
+3. Login item first, or go straight to a menu-bar app?
+4. Ready for this to become a feature-forge feature, starting with the brief?
