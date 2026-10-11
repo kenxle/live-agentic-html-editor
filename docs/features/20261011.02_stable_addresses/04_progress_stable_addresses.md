@@ -17,7 +17,7 @@
 
 | Agent or task | Doing | Started | Branch |
 |---|---|---|---|
-| Core builder (Opus) | Task 3.0 test retirement list, and options for showing old comments at the new address | 2026-10-11 16:17 | `unit/sa-core` |
+| Core builder (Opus) | Step 3: sites become the default, page servers removed, status and logging, skill, contract, and serving docs (old-comments row parked for your decision) | 2026-10-11 16:21 | `unit/sa-core` |
 | Library builder (Sonnet) | Tasks 4.1, 4.2: Library kinds, Open binds a site, `library.lahe.localhost`, copy without the clipboard API | 2026-10-11 15:58 | `unit/sa-library` |
 | Install builder (Opus) | Tasks 5.1 to 5.3: login item spikes, `lahe install` and `lahe uninstall`, always-on helper | 2026-10-11 15:58 | `unit/sa-install` |
 
@@ -110,6 +110,7 @@ Not shipped yet.
 
 ## Log
 
+- 2026-10-11 16:21: Task 3.0 done: 11 test files to retire (2 whole, 9 in part), 26 to rewrite. Core builder moved on to Step 3.
 - 2026-10-11 16:17: Core Step 2 merged. One row is blocked: old comments made at a random-port address do not show in the rail at the new address, because the rail only reads this browser's storage, which is kept per address. The comments are safe in `review.json`. Options are being written up for you.
 - 2026-10-11 16:07: PR #41 merged (workflow file fixed, gate green on rerun). Task 1.0 browser check passed on Linux and Windows too: all three browsers load dotted `.lahe.localhost` names as secure pages.
 - 2026-10-11 15:58: Core Step 1 merged (unit gate 0 failed). Core continues to Step 2; library (4.1, 4.2) and install (5.1 to 5.3) builders dispatched. PR #41 gate had two flaky browser failures on unchanged code; rerunning the failed job.
