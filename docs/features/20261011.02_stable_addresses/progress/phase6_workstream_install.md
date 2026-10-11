@@ -295,3 +295,47 @@ Runs, each `LAHE_PAGES_PORT=0 node --test`:
 | `spawned_helper_env` | 1 of 1 |
 
 No `lahe-worktrees` helper was left after them.
+
+# Fix round 2 (security review and spec check)
+
+Each item has a test. The disk rule held: single files only, free space checked before each run (1.9 GB every time).
+
+| Item | Fix | Test |
+|---|---|---|
+| S1: `state_id` readable by any website | `/health` includes `state_id` only for a request with no Origin, which is the CLI. The CLI's state-folder check is unchanged. | `always_on.test.js` "S1": a page Origin and `null` get no id; the CLI gets it (failed first) |
+| S6: check seams honored in production | `LAHE_FORWARD_CHECK_PORT` and `LAHE_NAME_CHECK_SERVER` count only for a helper whose state folder is under the temp folder. A real helper ignores them and logs a line saying so. `LAHE_PAGES_PORT` is unchanged. | `addresses.test.js` "S6" (failed first) |
+| S4: multi-account wording | Install and `docs/INSTALL.md` say another account can open the pages, read and write every review, and reach the agent | `install_command.test.js`, the multi-user test (failed first) |
+| Docs | `INSTALL.md` no longer describes per-page static servers (the review paragraph, the restart paragraph, the static-file paragraph, session close). The `CLI.md` install row says `--lahe-names` is refused on Windows. | add_command docs test and `stable_addresses_docs.test.js` pass |
+| V51 | Rewritten against a page the helper serves: the real `lahe review` on a temp state folder with a fixed pages port, then the stale helper is replaced through the fake login item under that page | `always_on_stale_replace.spec.js`, Chromium, 1 of 1 |
+| V59 | Proved by loading a `.lahe.localhost` page after uninstall, in process, in a temp folder | `install_command.test.js` "V59: after uninstall" |
+| V46, V47 | `scripts/spike_login_item.js --commands` drives the real `lahe install` and `lahe uninstall` (a new `label` option gives a unique label) | Ran once on this Mac: install and start in 0.2s, restart in 10.4s, uninstall ok, pass |
+
+The V59 load test passed on its first run. The behavior already worked, so the test proves it rather than catching a defect.
+
+For CI, on the merged commit:
+
+```
+gh workflow run spike.yml -f ref=<merged commit> -f command="node scripts/spike_login_item.js --ci --commands" -f browsers=none
+```
+
+# Task 5.4: the two idle limits, set before measuring
+
+Measured against the baseline on the main progress page:
+
+- Page servers: about 21 running, average 611 MB.
+- Two helper processes: about 137 MB together, about 69 MB each.
+- Helper idle wakeups: 107 per minute.
+
+| State | Memory (RSS of the always-on helper) | Wakeups per minute |
+|---|---|---|
+| Nothing open | at most 100 MB | at most 120 |
+| About 20 pages open | at most 250 MB | at most 400 |
+
+Why these numbers:
+
+- **Memory, nothing open.** Today one helper is about 69 MB. The always-on helper also holds the name registry, the name server when `.lahe` is on, and the Markdown render cache. 100 MB leaves about 30 MB for those, and no more.
+- **Wakeups, nothing open.** Today's helper wakes 107 times a minute. The always-on helper adds two checks every five minutes, and no page server sweep. 120 allows for noise, not a new timer.
+- **Memory, about 20 pages open.** Today the same load costs about 680 MB: about 611 MB of page servers plus about 69 MB of helper. One process serving all 20 pages from the render cache should stay well under half of that. 250 MB is the line.
+- **Wakeups, about 20 pages open.** The baseline did not measure page-server wakeups, so this limit starts from the helper's own 107. It adds about 15 per page per minute, one request every four seconds from each open tab, and rounds to 400. Above that, the pages are polling more than the design expects.
+
+A measurement over either limit is a finding to fix before PR 3 ships, not a limit to raise.
