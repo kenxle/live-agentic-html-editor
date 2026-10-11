@@ -1118,7 +1118,12 @@ unlikely; deal with it then.</li>
 ships with this feature. The menu-bar companion app, with its Library
 link, is a follow-up.</li>
 <li><strong>Is an install step acceptable?</strong> Yes. It is for setup
-only; no outside packages.</li>
+only; no outside packages. <code>lahe install</code> is Lahe's own
+command, run with Node from the clone. It writes the login item file,
+and with <code>.lahe</code> turned on, one resolver file. Nothing is
+downloaded and npm is not needed, so the GitHub-only path (clone, then
+run) keeps working. Publishing Lahe to the npm registry would be a
+separate choice, not part of this feature.</li>
 <li><strong>Core platform rule:</strong> the core is a plain server that
 runs on Mac, Linux, and Windows. Mac-only pieces are companions on
 top.</li>
