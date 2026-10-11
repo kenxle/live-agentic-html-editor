@@ -29,6 +29,7 @@ No matter how many files were used to create the HTML page, Lahe knows how to ed
 - **Ask questions and get threaded answers.** Ask a question and the answer arrives on the same card, no need to go back to the chat window. An exchange from ten minutes ago is threaded and easy to find, not lost in the neverending scroll of the chat window.
 - **Drafted until sent.** A half-typed thought is private to your browser until you hit Cmd-Enter.
 - **Hotkeys for speed.** Comment, edit, and send without reaching for the mouse.
+- **Save as PDF.** A button in the rail asks your agent to turn the page into a PDF, in one click.
 
 - **Hand-made edits are protected.** If a doc-wide change would clobber your carefully crafted text, it stops at text you placed by hand and asks. If an edit gets reverted anyway, the item reopens itself.
 

@@ -2,7 +2,9 @@
 
 **Documents:** [Decision](00_decision_pdf_button.md) · [Spec](01_spec_pdf_button.md) · **Progress**
 
-**Status:** merged to main in [PR 36](https://github.com/kenxle/live-agentic-html-editor/pull/36) on 2026-10-11. The button shows up in your reviews once the main checkout is on main and the helper is restarted with `lahe serve --restart`.
+**Review logs:** [progress](02_progress_pdf_button_review_log.md) · [spec](02_progress_pdf_button_review_log_spec.md) · [decision](02_progress_pdf_button_review_log_decision.md)
+
+**Status:** done. Merged to main in [PR 36](https://github.com/kenxle/live-agentic-html-editor/pull/36) on 2026-10-11, and the helper was restarted on it, so the button is live in every review. Nothing is waiting on you. Closed 2026-10-11 09:44 EDT.
 
 ## What it looks like
 
@@ -29,8 +31,17 @@ The screenshots come from the same build that passed `test/browser/pdf_button.sp
 - Code review (one independent reviewer): nothing serious. Two findings, both fixed: the tray now closes when a Turbo page swap rebuilds the page, and the test now proves the switch to the Active tab. Tab also closes the tray now, as it closes the menu.
 - Leftover helpers: 1 before the test runs and 1 after (the real helper), so no leaks.
 
-## To delete at cleanup
+## Follow-ups
 
-- `docs/features/20261008.01_pdf_button/00_decision_pdf_button.md` in the main checkout: an uncommitted copy. The committed one is on this branch.
-- The `node_modules` symlink in this worktree. It is not committed.
-- `.claude-pr202610081400.md` in this worktree: the PR body. It is not committed.
+Two bugs found along the way went to `docs/BULLETIN.md`:
+
+- `LAHE-gate-rewrites-doc-screenshots`: the browser suite saves over three screenshots in other features' docs, and one slipped into this PR before it was put back.
+- `LAHE-serve-restart-foreground`: `lahe serve --restart` keeps the new helper inside the command that started it.
+
+## Cleanup
+
+Done. The stray decision copy in the main checkout, the `pdf-button` worktree with its `node_modules` link and PR-body file, and the preview helper are all gone.
+
+## Log
+
+- **2026-10-11 09:44 EDT.** Shipped the PDF button (PR 36). The first design filled the note box and waited for Cmd-Enter. Ken found that confusing, so the button now opens a tray whose "Save as PDF" sends the note at once. A live preview ran on its own helper, since `lahe review` needs `--port` to reach a helper that is not on 7817. Ken's click on it reached the agent, which made the PDF.
