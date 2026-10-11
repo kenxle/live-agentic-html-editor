@@ -300,6 +300,7 @@ var NON_BUNDLE_FILES = [
 
   { path: "src/cli/index.js", owner: "1A", why: "the command dispatcher: serve, add, status, reply" },
   { path: "src/cli/commands/serve.js", owner: "1A", why: "serve" },
+  { path: "src/cli/commands/install.js", owner: "stable-addresses install", why: "lahe install and lahe uninstall: the login item and install.json" },
   { path: "src/cli/commands/review.js", owner: "1A", why: "session-owning public review entrypoint" },
   { path: "src/cli/commands/session.js", owner: "1A", why: "agent-session close, reopen, and helper lifetime" },
   { path: "src/cli/commands/add.js", owner: "3B", why: "add" },
