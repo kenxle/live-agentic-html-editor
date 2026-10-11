@@ -4,7 +4,7 @@
 
 Tasks 5.1, 5.2 and 5.3 are built, green, and committed on `unit/sa-install`. `lahe install` writes a login item that starts the helper at login and restarts it if it stops. `lahe uninstall` removes it. Installed, the helper runs with `--always-on` and does not stop itself when quiet. The CLI asks the login item for a helper and never spawns one beside it. A stale helper is replaced at a quiet moment, even with a page open. Without `lahe install`, nothing changes for a clone.
 
-- `npm run gate:unit`: 2555 tests, 2553 pass, 0 fail, 2 todo (both were already there).
+- `npm run gate:unit`: 2557 tests, 2555 pass, 0 fail, 2 todo (both were already there).
 - Browser spec [always_on_stale_replace.spec.js](../../../../test/browser/always_on_stale_replace.spec.js): 1 test, green in Chromium.
 - macOS spike: pass. Linux and Windows: the script is ready for the dispatch workflow (command below).
 - Leak check (`ps -axo command | grep -c "[l]ahe.js serve"`): 2 before my first test, 2 after my last spec run. Both are Ken's own helpers from the main checkout. The count read 4 to 5 at moments in between because the core and library builders were running their suites; none of those processes named this worktree. Helpers from this worktree: 0 before, 0 after.
