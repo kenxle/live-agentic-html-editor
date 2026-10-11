@@ -1587,9 +1587,8 @@ the helper's own port, and no trailing dot.</li>
 <code>a.docs.ongoing.lahe.localhost</code> sits under
 <code>docs.ongoing.lahe.localhost</code>. Each full name is still its
 own origin, so storage and scripts stay walled off. The one thing parent
-domains share is cookies, and Lahe sets none; page responses also drop
-any <code>Set-Cookie</code> a served file could not send anyway, since
-Lahe serves files, not apps.</li>
+domains share is cookies. Lahe sets none and reads none, so a cookie a
+page sets on a parent domain reaches no Lahe data.</li>
 <li><strong>DNS rebinding.</strong> Browsers do not resolve
 <code>*.localhost</code> through DNS, so <code>.lahe.localhost</code>
 cannot be rebound. <code>.lahe</code> is answered only after the helper
