@@ -57,7 +57,19 @@ None.
 
 ### Test results
 
-No test run yet.
+**PR 0 local gate** (`npm run gate`, run alone, on `chore/spike-dispatch-workflow`): 844 passed, 0 failed, 6 skipped, 8.8 minutes. Helpers running before and after: 2 and 2.
+
+**Idle-cost baseline (Task 0.2), today's design, on this Mac, 2026-10-11 15:21.** Five minutes of sampling every 10 seconds by [measure_idle_baseline.py](progress/measure_idle_baseline.py); raw samples in [baseline_idle_cost.json](progress/baseline_idle_cost.json). Nothing was done to the processes measured.
+
+| Measure | Value |
+|---|---|
+| Page servers running at once | 16 to 27, average 21.4 |
+| Separate page server processes seen in 5 minutes | 51 |
+| Memory of page servers | average 611 MB, peak 866.5 MB |
+| Memory of page servers plus helper processes | average 739.9 MB |
+| Helper idle wakeups (`top`, one 60-second interval) | 107 |
+
+The page servers belong to about 13 agent sessions. They keep restarting: each lives about two minutes, stops, and a new one starts. Task 5.4 compares the always-on helper against these numbers.
 
 ### Ship
 
@@ -65,6 +77,7 @@ Not shipped yet.
 
 ## Log
 
+- 2026-10-11 15:21: Idle-cost baseline measured: 51 separate page server processes in 5 minutes, about 21 running at once, about 740 MB with the helpers. PR 0 (hand-run CI workflow) open as #40; local gate 0 failed.
 - 2026-10-11 15:02: Ken approved the doc set: the login gap accepted, and the hand-run CI workflow approved on condition it costs nothing (standard GitHub machines are free for this public repo). Phase 5 done.
 - 2026-10-11 14:52: Ken finished the brief. Settled in review: names are the folder plus two parents joined by dots (`live-agentic-html-editor.docs.ongoing`), one name per folder; pages on port 1483 with the API staying on 7817; `lahe review` prints `.lahe.localhost`; `lahe install --port-80` drops the port on macOS; `.lahe` is an option on all three systems, by command on macOS and written steps elsewhere; no npm package. Architecture and plan updated to match. HTTPS for `.lahe` added as a follow-up.
 - 2026-10-11 12:56: Plan review returned 22 findings (2 blockers: main would have been broken between pull requests). All accepted: the Library's new Open ships with the first PR behind the switch, the page lookups ask both old and new until the switch flips, and nine verification rows were added. Doc set served for your review.
