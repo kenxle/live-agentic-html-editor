@@ -42,6 +42,8 @@ const P_AFTER = "The trainer writes the plan each week.";
 const Q_BEFORE = "Runners come back too fast after a layoff.";
 const Q_AFTER = "Runners come back too fast after a break.";
 // Neither the before text nor the after text: the passage genuinely moved on.
+// The reviewer's later edit of the same block, refused and sent back.
+const Q_AGAIN = "Runners come back too fast after a long break.";
 const Q_REWRITTEN = "Coming back from time off is where most training plans fall apart.";
 // The third block is the loop's block. The reviewer retypes it as one thing and
 // the agent renders it as another, which is what made the check and the agent
@@ -432,5 +434,53 @@ test.describe("a handled hand edit that a build took back out stays handled", ()
       .slice(wakesBefore)
       .filter((line) => line.kind === "work" && line.item === made.id);
     expect(work.length, "nobody was woken").toBe(0);
+  });
+  // Code review, fix round: a refused edit is not on the page, so when the
+  // reviewer sends it back from the card the page has to draw it again at once,
+  // not on the next reload.
+  test("a refused edit the reviewer sends back from its card is drawn on the page with no reload", async ({ page }) => {
+    rebuild(P_BEFORE, Q_BEFORE, R_BEFORE, null);
+    await page.goto(world.open);
+    await booted(page);
+    await pollPage(page, (text) => document.querySelector("#q").textContent === text, Q_BEFORE, {
+      message: "the page to come back on the original wording",
+      timeoutMs: 20000
+    });
+
+    await handEdit(page, "q", Q_AGAIN);
+    await pollPage(
+      page,
+      (text) => !!window.__lahe.items().find((item) => item.kind === "edit" && item.after === text && item.state === "ready"),
+      Q_AGAIN,
+      { message: "the hand edit on #q to land as a ready record" }
+    );
+    const made = await page.evaluate((text) => {
+      const found = window.__lahe.items().find((item) => item.kind === "edit" && item.after === text && item.state === "ready");
+      return { id: found.id, rev: found.rev };
+    }, Q_AGAIN);
+
+    // The agent says no, and changes nothing in the source.
+    await helperHasRev(made.id, made.rev);
+    fs.appendFileSync(
+      path.join(world.reviewDir, "replies.jsonl"),
+      JSON.stringify({ item: made.id, rev: made.rev, status: "not_handled", agent: "tester", reason: "the plan says layoff on purpose" }) + "\n"
+    );
+    await pollPage(page, (id) => (window.__lahe.items().find((item) => item.id === id) || {}).state === "not_handled", made.id, {
+      message: "the refusal to fold",
+      timeoutMs: 20000
+    });
+    await page.reload();
+    await booted(page);
+    await checkRan(page);
+    expect(await page.evaluate(() => document.querySelector("#q").textContent), "a refused edit is not on the page").toBe(Q_BEFORE);
+
+    // The reviewer answers from the card. No reload after this.
+    await claim(page);
+    const sent = await page.evaluate((id) => window.__lahe.handle.doneTab().followUp(id, "Please make this change anyway."), made.id);
+    expect(sent.state, "the answer puts it back in front of the agent").toBe("ready");
+    await pollPage(page, (text) => document.querySelector("#q").textContent === text, Q_AGAIN, {
+      message: "replay to draw the edit again without a reload",
+      timeoutMs: 10000
+    });
   });
 });

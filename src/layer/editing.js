@@ -2695,9 +2695,9 @@
         // state later says nothing about whether this is a first commit.
         wasCommitted: !!existing && isCommittedEdit(existing),
         // The state a rewording is withdrawn FROM, and restored TO when the
-        // wording matches again: ready, or not_handled (the agent said no and
-        // the reviewer is rewording it). Null for any other state, which
-        // typing leaves alone.
+        // wording matches again: ready only. Null for any other state, which
+        // typing leaves alone. A refused record never gets here: itemFor
+        // skips it, so typing in its passage opens a new card.
         withdrawFrom: existing && withdrawable(existing) ? existing[record.FIELD.STATE] : null,
         opened: existing
           ? { text: existing[record.FIELD.AFTER], html: existing[record.FIELD.AFTER_HTML] }
@@ -3351,9 +3351,8 @@
         // Reworded back to the page's own original words. That is not an edit
         // against the page, and it has always been left as captured rather
         // than committed; the one thing new is that the typing withdrew it, so
-        // it goes back to the state it opened in (ready, or not_handled with
-        // the agent's reason still on it) rather than stranding a draft
-        // nobody will see.
+        // it goes back to ready, the state it opened in, rather than
+        // stranding a draft nobody will see.
         if (open.withdrawFrom && record.isDraft(item)) {
           var restored = Object.assign({}, item);
           restored[record.FIELD.STATE] = open.withdrawFrom;

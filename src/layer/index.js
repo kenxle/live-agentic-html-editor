@@ -574,11 +574,14 @@
           // The Edits row reads the record too: after "Use the fixes" its block
           // list has to show the fixed words.
           if (editsTab && typeof editsTab.refresh === "function") editsTab.refresh();
-          // "Use the fixes" is the reviewer's reword of a placed run at a new
-          // revision, and the page has to show the fixed words: replay's
-          // branch three rewrites the placed blocks in place. Only a run
-          // record; every other continuation leaves the page as it is.
-          if (next && ns.record.isRunRecord(next)) {
+          // A continuation that leaves the record waiting for the agent has
+          // to reach the page now, and replay reads the items CACHE, so the
+          // cache is refreshed first. Two cases need it: "Use the fixes" on a
+          // placed run (branch three rewrites the blocks in place), and a
+          // refused card the reviewer sends back (a reply, or Keep mine on its
+          // clash). Replay skips a refused card, so without this its words
+          // stay off the page until the next reload (spec 20261011.01).
+          if (next && ns.record.isReplayable(next)) {
             refreshItems();
             ns.replay.schedule(ns.replay.REASON.REPLY, { immediate: true });
           }

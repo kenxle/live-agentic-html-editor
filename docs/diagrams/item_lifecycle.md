@@ -15,9 +15,9 @@ stateDiagram-v2
     ready --> handled : agent, naming the CURRENT revision, says it made the change
     ready --> not_handled : agent, naming the CURRENT revision, says it did not, with a reason
 
-    not_handled --> ready : reviewer answers or rewords it, back to the agent
-    not_handled --> draft : reviewer starts rewording a refused edit (first changing keystroke)
-    draft --> not_handled : reviewer types the refused wording back (revision and reason unchanged)
+    not_handled --> ready : reviewer answers it from the card, back to the agent
+    not_handled --> draft : an older page's withdrawal, still honored (today's page never sends one)
+    draft --> not_handled : an older page typing the refused wording back, still honored
     handled --> ready : reviewer reopens it (the fix did not land)
 ```
 
