@@ -1,3 +1,8 @@
+// RETIRED by stable addresses Step 3 (docs/features/20261011.02_stable_addresses).
+// Moved here from test/unit/static_servers.test.js with git mv. Nothing runs it: test:unit reads
+// test/unit/ and Playwright reads test/browser/. Ken approves deleting it at cleanup.
+// Why: Page-server processes are removed. The page rule, injection, library route and mount tests are carried over to test/unit/page_routes_carried.test.js; the lifecycle, hidden-file and session-filter tests are retired (V6, V14, V21, V26 cover sites).
+//
 "use strict";
 
 const test = require("node:test");

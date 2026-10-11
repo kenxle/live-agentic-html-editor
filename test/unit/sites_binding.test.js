@@ -273,18 +273,6 @@ test("V24: a site origin passes the preflight only when it is a registered site"
   assert.equal((await preflight("http://no.such.lahe.localhost:" + w.helper.pagesPort)).status, 403);
 });
 
-test("V24: with the switch off, a site origin is never accepted", async (t) => {
-  const w = await sitesWorld(t, { pages: null, pagesPort: null });
-  const folder = path.join(w.home, "ws", "repo", "docs");
-  const page = writeFile(folder, "page.html", PAGE);
-  const review = w.helper.reviews.create({ target_path: page, agent_session_id: "s1" });
-  w.helper.sites.bind({ root: folder, mode: "folder", entry: "page.html" });
-  const res = await readReview(w, review.id, review.token, "http://repo.docs.lahe.localhost:1483");
-  assert.equal(res.status, 403);
-});
-
-// --- the page the bind printed loads with that review's rail ----------------------
-
 test("the address site.bind returns serves the page with the bound review's rail", async (t) => {
   const w = await boundWorld(t);
   const review = w.helper.reviews.create({ target_path: w.page, agent_session_id: "s1" });

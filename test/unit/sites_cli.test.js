@@ -256,18 +256,6 @@ test("the same file reviewed again prints the same address", async (t) => {
   assert.equal(first, second);
 });
 
-test("with the switch off, lahe review still starts a page server on a loopback port", async (t) => {
-  const w = await cliWorld(t, { pages: false });
-  const file = writeFile(w.home, "ws/repo/docs/page.html", PAGE);
-  const out = review(w, [file]);
-  assert.equal(out.code, 0, out.stderr);
-  assert.match(openUrl(out), /^http:\/\/127\.0\.0\.1:\d+\/page\.html$/);
-  assert.equal(pageServerRecords(w), 1);
-  assert.equal(fs.existsSync(path.join(w.state, "sites.json")), false);
-});
-
-// --- V6: the single writer ------------------------------------------------------
-
 test("V6: review, write and status with the helper stopped leave sites.json and sites.log unchanged", async (t) => {
   const w = await cliWorld(t);
   const file = writeFile(w.home, "ws/repo/docs/page.html", PAGE);

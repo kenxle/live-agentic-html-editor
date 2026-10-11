@@ -193,14 +193,6 @@ test("V68: the helper listens on 127.0.0.1 and ::1 only, never on all addresses"
 
 // --- the switch -------------------------------------------------------------
 
-test("with the switch off, no pages listener opens and service.json says so", async (t) => {
-  const w = await sitesWorld(t, { pages: null, pagesPort: null });
-  assert.equal(w.helper.pagesPort, null);
-  const ready = JSON.parse(fs.readFileSync(path.join(w.state, "service.json"), "utf8"));
-  assert.equal(ready.pages.mode, "servers");
-  assert.equal(ready.pages.port, null);
-});
-
 test("with the switch on, service.json reports the mode, the port and the printed ending", async (t) => {
   const w = await sitesWorld(t);
   const ready = JSON.parse(fs.readFileSync(path.join(w.state, "service.json"), "utf8"));

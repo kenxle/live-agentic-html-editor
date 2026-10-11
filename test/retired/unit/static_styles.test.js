@@ -1,3 +1,8 @@
+// RETIRED by stable addresses Step 3 (docs/features/20261011.02_stable_addresses).
+// Moved here from test/unit/static_styles.test.js with git mv. Nothing runs it: test:unit reads
+// test/unit/ and Playwright reads test/browser/. Ken approves deleting it at cleanup.
+// Why: Written against page servers. The same nine style cases run against a site in test/unit/sites_styles.test.js.
+//
 // The page servers answer the reserved `.lahe-styles` segment from the
 // installed styles only, from any directory, in both kinds of page server,
 // before they look at the disk.

@@ -1,3 +1,8 @@
+// RETIRED by stable addresses Step 3 (docs/features/20261011.02_stable_addresses).
+// Moved here from test/unit/static_restart.test.js with git mv. Nothing runs it: test:unit reads
+// test/unit/ and Playwright reads test/browser/. Ken approves deleting it at cleanup.
+// Why: Port reuse, port history, origin swap, Open's restart and the page-server Host check are removed (V7, V8, V25 cover sites). Its two reviews.removeOrigin tests live on in test/unit/reviews_remove_origin.test.js.
+//
 // Library Task 1.3: restarting one recorded static server, keeping its port
 // history, swapping its stale loopback origins for the new ones, and the Host
 // check on every static server.

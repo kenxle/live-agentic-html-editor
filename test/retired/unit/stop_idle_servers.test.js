@@ -1,3 +1,8 @@
+// RETIRED by stable addresses Step 3 (docs/features/20261011.02_stable_addresses).
+// Moved here from test/unit/stop_idle_servers.test.js with git mv. Nothing runs it: test:unit reads
+// test/unit/ and Playwright reads test/browser/. Ken approves deleting it at cleanup.
+// Why: The idle sweep, idle restart on the old port, and page-server start locks are removed. V34 replaces them.
+//
 // Page servers nobody is looking at stop, and come back when asked.
 //
 // Spec: docs/features/20260928.05_stop_idle_servers/01_spec_stop_idle_servers.md.
