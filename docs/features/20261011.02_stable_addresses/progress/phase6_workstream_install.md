@@ -261,4 +261,10 @@ Proof: two full `npm run gate:unit` runs in a row. Each run: 2590 tests, 2534 pa
 
 **Proof.** Two full `npm run gate:unit` runs: 2576 tests, 0 failed, both times. `ps -axo pid,command | grep "[l]ahe.js serve" | grep -c lahe-worktrees` was 0 after each.
 
-**Follow-up.** In the install tests, the helper the fake service manager starts reads the real `install.json` values. With `--lahe-names` recorded, that means it binds UDP port 7853, looks up a random `.lahe` name through the real system resolver, and sends one request to port 80. It changes nothing, but it is not a free port. A small fix: let the tests record a free port for the name server.
+**Follow-up, done.** The install tests used to record port 7853, and their helpers sent a request to the real port 80 and asked the system resolver about `.lahe`. Now:
+- Each test records a free UDP port for the name server.
+- The helpers it starts get two test seams, read only from the environment:
+  - `LAHE_FORWARD_CHECK_PORT` sends the forward check to a listener the test owns, instead of port 80.
+  - `LAHE_NAME_CHECK_SERVER` asks the helper's own name server directly, instead of the system resolver.
+- No unit test binds 7853, sends to port 80, or does a real `.lahe` lookup, so none needs a network.
+- Proof: two full `npm run gate:unit` runs, 2577 tests, 0 failed, and no `lahe-worktrees` helper left after either.
