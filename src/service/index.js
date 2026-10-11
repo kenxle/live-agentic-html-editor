@@ -236,7 +236,12 @@ async function serve(options) {
   });
   sites.load();
   sitesModule.ensureCliSecret(dir);
-  var pageRoutes = pageRoutesModule.createPageRoutes({ dir: dir, sites: sites, log: log });
+  var pageRoutes = pageRoutesModule.createPageRoutes({
+    dir: dir,
+    sites: sites,
+    log: log,
+    printedPort: function () { return addresses ? addresses.printedPort() : boundPagesPort; }
+  });
   // Filled in once the pages listener is bound.
   var boundPagesPort = null;
 

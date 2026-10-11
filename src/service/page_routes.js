@@ -642,26 +642,38 @@ function statusPage(title, paragraphs) {
   ].join("\n");
 }
 
-function libraryLink(helperOrigin) {
-  var href = helperOrigin + protocol.route("catalog.page").path;
+/**
+ * The Library's address as a document page links to it: library.lahe.localhost
+ * at the printed port, or with no port through the port-80 forward. From a
+ * <name>.lahe.localhost page that click is same-site, which the Library page
+ * accepts as a top-level navigation; 127.0.0.1 would be cross-site and refused.
+ *
+ * @param {number} printedPort
+ */
+function libraryAddress(printedPort) {
+  return "http://" + protocol.PAGES.LIBRARY_NAME + "." + protocol.PAGES.SUFFIX +
+    (printedPort === 80 ? "" : ":" + printedPort) + protocol.route("catalog.page").path;
+}
+
+function libraryLink(href) {
   return "<p><a href=\"" + escapeHtml(href) + "\">Open the Library</a> to find the document you meant.</p>";
 }
 
 /** R14: a name Lahe does not know. */
-function unknownNamePage(name, helperOrigin) {
+function unknownNamePage(name, libraryHref) {
   return statusPage("No document by that name", [
     "<p class=\"lede\">Lahe has no document at <code>" + escapeHtml(name + "." + protocol.PAGES.SUFFIX) +
       "</code>. The address may be mistyped, or it may come from another computer or another state folder.</p>",
-    libraryLink(helperOrigin)
+    libraryLink(libraryHref)
   ]);
 }
 
 /** R14: a file that is gone, with no main-checkout copy to show instead. */
-function gonePage(file, helperOrigin) {
+function gonePage(file, libraryHref) {
   return statusPage("This file is gone", [
     "<p class=\"lede\">Lahe served <code>" + escapeHtml(file) +
       "</code> at this address, and it is not on disk any more. It may have been moved, renamed, or deleted.</p>",
-    libraryLink(helperOrigin)
+    libraryLink(libraryHref)
   ]);
 }
 
@@ -719,6 +731,14 @@ function createPageRoutes(options) {
   var dir = opts.dir;
   var sites = opts.sites;
   var log = opts.log || null;
+  var printedPort = typeof opts.printedPort === "function" ? opts.printedPort : function () { return null; };
+
+  /** The Library link on the not-found pages; the API port's Library when no pages port is known. */
+  function libraryHref() {
+    var port = printedPort();
+    return typeof port === "number" ? libraryAddress(port) : currentHelperOrigin(dir) + protocol.route("catalog.page").path;
+  }
+
   var notes = createNoteOnce(log, "pages: further notes of this kind are not logged until the helper restarts");
 
   function sayOnce(key, line) {
@@ -913,7 +933,7 @@ function createPageRoutes(options) {
     }
     if (!isPage(candidate)) return notFound(req, res);
     sayOnce("gone\u0000" + candidate, "pages: " + candidate + " is gone; served the file-is-gone page");
-    sendHtml(req, res, 410, gonePage(candidate, currentHelperOrigin(dir)));
+    sendHtml(req, res, 410, gonePage(candidate, libraryHref()));
   }
 
   /**
@@ -932,7 +952,7 @@ function createPageRoutes(options) {
       // looks like every other Lahe page. Nothing else does.
       if (decoded !== null && servePackaged(req, res, decoded)) return;
       sayOnce("unknown\u0000" + name, "pages: no document by the name " + name);
-      return sendHtml(req, res, 404, unknownNamePage(name, currentHelperOrigin(dir)));
+      return sendHtml(req, res, 404, unknownNamePage(name, libraryHref()));
     }
     if (req.method !== "GET" && req.method !== "HEAD") return sendText(req, res, 405, "method not allowed\n");
     if (rawPath.charAt(0) !== "/") return sendText(req, res, 400, "bad request\n");
@@ -973,6 +993,7 @@ module.exports = {
   newer: newer,
   pickReview: pickReview,
   reviewAnswersOnSite: reviewAnswersOnSite,
+  libraryAddress: libraryAddress,
   unknownNamePage: unknownNamePage,
   gonePage: gonePage,
   activate: activate,

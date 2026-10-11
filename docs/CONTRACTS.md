@@ -1064,10 +1064,15 @@ helper's one `auth.check` call site). The page is loaded by navigation and its a
 
 | Route | Method | Host | `Sec-Fetch-Site` | Client header `catalog` + token | JSON body | Origin |
 |---|---|---|---|---|---|---|
-| `catalog.page` | GET | helper's own | `none` or `same-origin` | not required | no | not read |
+| `catalog.page` | GET | helper's own | `none` or `same-origin`; also `same-site` on a top-level navigation (`Sec-Fetch-Mode: navigate` and `Sec-Fetch-Dest: document`) | not required | no | not read |
 | `catalog.asset` | GET | helper's own | `none` or `same-origin` | not required | no | not read |
 | `catalog.list` | GET | helper's own | exactly `same-origin` | required | no | not read |
 | `catalog.open`, `catalog.star`, `catalog.rename`, `catalog.request` | POST | helper's own | exactly `same-origin` | required | required | exactly `http://` + the request's Host |
+
+The page's `same-site` navigation is for the "Open the Library" link on a document's not-found and
+file-gone pages. That link goes to `library.lahe.localhost` at the printed port, so the click is
+same-site. A same-site page can open the Library this way but cannot frame it (`X-Frame-Options: DENY`
+and `frame-ancestors 'none'`), and a fetch or a frame is not a navigation to a document, so it is refused.
 
 The checks run in this order, each refusing with the same code its per-review namesake uses, and each
 refusal logs the name of the check that failed:

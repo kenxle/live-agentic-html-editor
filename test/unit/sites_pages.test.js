@@ -192,7 +192,9 @@ test("V18: an unknown name shows the no-document page with a Library link", asyn
   assert.equal(res.status, 404);
   assert.match(res.text, /No document by that name/);
   assert.match(res.text, /no\.such\.site\.lahe\.localhost/);
-  assert.match(res.text, new RegExp('href="http://127\\.0\\.0\\.1:' + w.helper.port + '/catalog"'));
+  // library.lahe.localhost at the pages port: a same-site click the Library
+  // page accepts. 127.0.0.1 was cross-site, and the Library refused it.
+  assert.ok(res.text.includes('href="http://library.lahe.localhost:' + w.helper.pagesPort + '/catalog"'));
 });
 
 test("V19: a gone file shows the file-is-gone page naming the path", async (t) => {
@@ -201,6 +203,7 @@ test("V19: a gone file shows the file-is-gone page naming the path", async (t) =
   assert.equal(res.status, 410);
   assert.match(res.text, /This file is gone/);
   assert.ok(res.text.includes(path.join(w.folder, "gone.html")));
+  assert.ok(res.text.includes('href="http://library.lahe.localhost:' + w.helper.pagesPort + '/catalog"'));
   assert.match(res.text, /\/catalog"/);
   // A missing asset is a plain 404, not the page.
   assert.equal((await getPage(w, w.name, "/missing.png")).status, 404);

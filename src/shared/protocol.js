@@ -166,6 +166,8 @@
     // tell their own page apart from a document on another loopback port,
     // which sends "same-site" (see CATALOG_ROUTES).
     SEC_FETCH_SITE: "sec-fetch-site",
+    SEC_FETCH_MODE: "sec-fetch-mode",
+    SEC_FETCH_DEST: "sec-fetch-dest",
     // The CLI secret (stable addresses): read from an owner-only file in the
     // state folder and sent only by the CLI on site.bind. A page can never read
     // it, so a page holding a review token still cannot name a file to serve.
@@ -386,7 +388,12 @@
       path: CATALOG_PAGE_PATH,
       auth: AUTH.CATALOG_TOKEN,
       mutating: false,
-      checks: { sec_fetch_site: ["none", "same-origin"], token: false, json_body: false, origin: null },
+      // navigate_same_site: a top-level navigation (Sec-Fetch-Mode navigate,
+      // Sec-Fetch-Dest document) may also come from same-site, so the "Open
+      // the Library" link on a <name>.lahe.localhost page works in one click.
+      // The page sends X-Frame-Options DENY and frame-ancestors 'none', so a
+      // same-site page can open it but never frame it or read it.
+      checks: { sec_fetch_site: ["none", "same-origin"], navigate_same_site: true, token: false, json_body: false, origin: null },
       why: "the Library page itself, with the Library token in its meta tag",
       response: "text/html"
     },
