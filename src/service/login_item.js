@@ -466,10 +466,10 @@ var ROOT_SCRIPTS = {
   ].join("\n")
 };
 
-/** The one sudo call for an admin step: a constant script, the temp folder as $1. */
+/** The one sudo call for an admin step: a constant script, and the temp folder as $1 when it installs files. */
 function rootCommand(name, folder) {
   if (!Object.prototype.hasOwnProperty.call(ROOT_SCRIPTS, name)) throw new Error("no root script " + JSON.stringify(name));
-  return ["sudo", "/bin/sh", "-c", ROOT_SCRIPTS[name], "lahe", String(folder)];
+  return ["sudo", "/bin/sh", "-c", ROOT_SCRIPTS[name], "lahe"].concat(folder ? [String(folder)] : []);
 }
 
 // ---------------------------------------------------------------------------
