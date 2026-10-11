@@ -411,12 +411,15 @@ async function serve(options) {
 
   // One line per refusal, naming the Host and the port it came in on and
   // nothing about the page asked for.
+  // One line per distinct Host, capped: any web page can send random Hosts.
+  var refusedHosts = pageRoutesModule.createNoteOnce(log, "further refused Hosts are not logged until the helper restarts");
+
   function refuseHost(req, res, host, listener) {
     var requestId = crypto.randomBytes(8).toString("hex");
-    log.helperLog(
-      "refused Host " + JSON.stringify(String(host === undefined ? "none" : host).slice(0, 200)) +
-        " on the " + listener + " port [request " + requestId + "]"
-    );
+    var shown = JSON.stringify(String(host === undefined ? "none" : host).slice(0, 200));
+    refusedHosts.say(listener + "\u0000" + shown,
+      "refused Host " + shown + " on the " + listener + " port: check " + protocol.CHECK.HOST +
+        " failed [request " + requestId + "]");
     var body = protocol.errorBody("PROTO_BAD_HOST", null, requestId, protocol.CHECK.HOST);
     if (routes.isCatalogPath(req.url)) {
       respondCatalogJson(res, protocol.statusFor("PROTO_BAD_HOST"), body, requestId);

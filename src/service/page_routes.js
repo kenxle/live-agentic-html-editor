@@ -676,6 +676,40 @@ function movedNote(goneFile, shownFile) {
 // The request handler
 // ---------------------------------------------------------------------------
 
+/** How many distinct notes one helper logs of a kind before it stops. */
+var LOG_NOTE_CAP = 256;
+
+/**
+ * Logs a line once per key, for at most LOG_NOTE_CAP keys. Any web page can
+ * make the browser ask for random names or send random Host headers, so an
+ * unbounded "once per key" set would let a page grow the helper's memory and
+ * helper.log without end. Past the cap it logs `fullLine` once and stops.
+ *
+ * @param {{helperLog: function}|null} log
+ * @param {string} fullLine
+ * @returns {{say: function(string, string): void}}
+ */
+function createNoteOnce(log, fullLine) {
+  var said = new Set();
+  var full = false;
+  function write(line) {
+    if (!log) return;
+    try { log.helperLog(line); } catch (err) { /* diagnostic only */ }
+  }
+  return {
+    say: function (key, line) {
+      if (said.has(key) || full) return;
+      if (said.size >= LOG_NOTE_CAP) {
+        full = true;
+        write(fullLine);
+        return;
+      }
+      said.add(key);
+      write(line);
+    }
+  };
+}
+
 /**
  * @param {{dir: string, sites: object, log?: object}} options `sites` is the
  *   helper's registry (sites.createSites)
@@ -685,12 +719,10 @@ function createPageRoutes(options) {
   var dir = opts.dir;
   var sites = opts.sites;
   var log = opts.log || null;
-  var said = Object.create(null);
+  var notes = createNoteOnce(log, "pages: further notes of this kind are not logged until the helper restarts");
 
   function sayOnce(key, line) {
-    if (said[key] || !log) return;
-    said[key] = true;
-    try { log.helperLog(line); } catch (err) { /* diagnostic only */ }
+    notes.say(key, line);
   }
 
   function headers(type, length) {
@@ -953,5 +985,7 @@ module.exports = {
   recordLinkedFor: recordLinkedFor,
   aliasesFor: aliasesFor,
   aliasMap: aliasMap,
-  createPageRoutes: createPageRoutes
+  createPageRoutes: createPageRoutes,
+  createNoteOnce: createNoteOnce,
+  LOG_NOTE_CAP: LOG_NOTE_CAP
 };
