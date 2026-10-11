@@ -178,6 +178,39 @@ function askStopWhenQuiet(dir, nowMs, why) {
 }
 
 /**
+ * Is the running helper older than its code, and if so, may it go now?
+ *
+ * SOMEBODY IS REVIEWING ON IT. Being older than the code on disk is a reason to
+ * replace the helper, not a reason to interrupt a person who is mid-sentence in
+ * a comment box. The stale helper keeps serving them and the caller says so;
+ * `lahe serve --restart` (`force`) is how a human overrules it.
+ *
+ * INSTALLED, the code is the clone the login item runs, and an open window does
+ * not hold the helper back: an always-on helper serves every page all the time,
+ * so some window is nearly always open, and the layer rides out a restart. It
+ * waits only for a quiet moment with no review writes.
+ *
+ * @param {string} dir
+ * @param {object} live the running helper's /health
+ * @param {object|null} installed install.json for this port, or null
+ * @param {{force?: boolean, now?: number, quietMs?: number, quietMaxMs?: number}} [options]
+ * @returns {Promise<{stale: boolean, keep: string|null}>} `keep` is the sentence
+ *   saying why a stale helper was left running
+ */
+async function staleDecision(dir, live, installed, options) {
+  var opts = options || {};
+  var roots = installed && installed.clone ? { roots: loginItem.sourceRoots(installed) } : undefined;
+  if (!sourceStamp.helperPredatesSource(live.started_at, roots).stale) return { stale: false, keep: null };
+  if (opts.force) return { stale: true, keep: null };
+  if (installed) {
+    var quiet = await loginItem.waitForQuiet(dir, { quietMs: opts.quietMs, maxMs: opts.quietMaxMs });
+    return { stale: true, keep: quiet ? null : BUSY_SENTENCE };
+  }
+  var holders = reviewsModule.readLiveHolders(dir, reviewsModule.LIVE_WINDOW_MS, opts.now);
+  return { stale: true, keep: holders.length > 0 ? reviewsModule.liveReviewerSentence(holders) : null };
+}
+
+/**
  * Make sure a helper this clone can talk to is running, and leave a current one
  * exactly where it is.
  *
@@ -222,28 +255,10 @@ async function startHelper(dir, port, options) {
       );
     }
     if (verdict === protocol.CONTRACT_VERDICT.CURRENT) {
-      var roots = installed && installed.clone ? { roots: loginItem.sourceRoots(installed) } : undefined;
-      stale = sourceStamp.helperPredatesSource(live.started_at, roots).stale;
+      var decision = await staleDecision(dir, live, installed, opts);
+      stale = decision.stale;
       if (!stale) return { started: false, stale: false, keptForReviewer: null };
-      // SOMEBODY IS REVIEWING ON IT. Being older than the code on disk is a
-      // reason to replace the helper, not a reason to interrupt a person who is
-      // mid-sentence in a comment box. The stale helper keeps serving them and
-      // the caller says so; `lahe serve --restart` is how a human overrules it.
-      // An always-on helper serves every page all the time, so a window is
-      // nearly always open: it waits only for a moment with no writes.
-      if (!opts.force && installed) {
-        var quiet = await loginItem.waitForQuiet(dir, { quietMs: opts.quietMs, maxMs: opts.quietMaxMs });
-        if (!quiet) return { started: false, stale: true, keptForReviewer: BUSY_SENTENCE };
-      } else if (!opts.force) {
-        var holders = reviewsModule.readLiveHolders(dir, reviewsModule.LIVE_WINDOW_MS, opts.now);
-        if (holders.length > 0) {
-          return {
-            started: false,
-            stale: true,
-            keptForReviewer: reviewsModule.liveReviewerSentence(holders)
-          };
-        }
-      }
+      if (decision.keep) return { started: false, stale: true, keptForReviewer: decision.keep };
     }
     if (!(await stopVerifiedHelper(dir))) {
       throw new Error("refusing to replace an older helper whose process identity cannot be verified");
@@ -570,5 +585,6 @@ module.exports = {
   stopVerifiedHelper: stopVerifiedHelper,
   helperStillWanted: helperStillWanted,
   startHelper: startHelper,
+  staleDecision: staleDecision,
   run: run
 };

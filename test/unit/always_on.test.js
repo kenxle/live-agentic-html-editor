@@ -277,3 +277,40 @@ test("waitForQuiet: true once no review's log was written for the quiet window, 
   fs.utimesSync(events, past, past);
   assert.equal(await loginItem.waitForQuiet(w.dir, { quietMs: 60000, maxMs: 0 }), true);
 });
+
+// --- the same rules in `lahe add` --------------------------------------------
+
+const addCommand = require("../../src/cli/commands/add.js");
+
+test("V50: lahe add's own start asks the login item when installed, and spawns nothing", async (t) => {
+  const w = tempState();
+  t.after(() => stopTempHelpers(w.dir));
+  const port = await freePort();
+  install(w.dir, port);
+  const item = fakeLoginItem(w.dir, port);
+  const health = await addCommand.startHelper(protocol.DEFAULT_HOST, port, w.dir, { runner: item.runner });
+  assert.equal(health.always_on, true);
+  assert.equal(item.calls.length, 1);
+  assert.equal(helperProcessesFor(w.dir).length, 1);
+});
+
+test("V52: lahe add against a helper with another state folder says so", async (t) => {
+  const a = tempState();
+  const b = tempState();
+  const { result: helper } = await onFreePort((port) => service.serve({ port, stateDir: a.dir, quiet: true }));
+  t.after(() => helper.close());
+  t.after(() => stopTempHelpers(b.dir));
+  const page = path.join(b.root, "page.html");
+  fs.writeFileSync(page, "<!doctype html><title>t</title><p>hi</p>\n");
+  // Async, never spawnSync: the helper is in this process and must answer.
+  const result = await new Promise((resolve) => {
+    childProcess.execFile(
+      process.execPath,
+      [BIN, "add", page, "--port", String(helper.port), "--state-dir", b.dir],
+      { encoding: "utf8", timeout: 60000 },
+      (err, stdout, stderr) => resolve({ status: err ? err.code : 0, stderr })
+    );
+  });
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /uses a different state folder than /);
+});

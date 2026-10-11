@@ -86,6 +86,9 @@ var staticServersModule = require("../../service/static_servers.js");
 var sourceStamp = require("../../service/source_stamp.js");
 var service = require("../../service/index.js");
 var catalogRequests = require("../../service/catalog_requests.js");
+var loginItem = require("../../service/login_item.js");
+var selfStop = require("../../service/self_stop.js");
+var sessionCommand = require("./session.js");
 
 var REPO_ROOT = path.join(__dirname, "..", "..", "..");
 var BIN = path.join(REPO_ROOT, "bin", "lahe.js");
@@ -665,7 +668,19 @@ async function stopHelper(ready, host, port, live) {
   );
 }
 
-async function startHelper(host, port, dir) {
+/**
+ * Start the helper, or, when `lahe install` set up a login item for this port,
+ * ask the login item to and never spawn one beside it.
+ *
+ * @param {{runner?: function}} [options] the login item's command runner (tests)
+ */
+async function startHelper(host, port, dir, options) {
+  var isUp = function () { return service.probeHealth(host, port); };
+  var installed = loginItem.installedFor(dir, port);
+  if (installed) {
+    await loginItem.startThroughItem(installed, isUp, { runner: options && options.runner });
+    return isUp();
+  }
   var child = childProcess.spawn(
     process.execPath,
     [BIN, "serve", "--port", String(port), "--state-dir", dir],
@@ -673,9 +688,7 @@ async function startHelper(host, port, dir) {
   );
   child.unref();
   return pollFor(
-    function () {
-      return service.probeHealth(host, port);
-    },
+    isUp,
     15000,
     "the helper to answer on " + host + ":" + port + ". Run `lahe serve` yourself to see why it did not start"
   );
@@ -1097,6 +1110,10 @@ async function run(argv) {
 
   var ready = readReadyFile(dir);
   var alive = await service.probeHealth(host, port);
+  if (selfStop.stateFolderMismatch(dir, alive)) {
+    process.stderr.write("lahe add: " + selfStop.differentFolderSentence(host, port, dir) + ".\n");
+    return EXIT.FAILED;
+  }
 
   // --- make the helper hold this review --------------------------------------
   //
@@ -1153,14 +1170,14 @@ async function run(argv) {
       restartReason =
         "the verified helper uses older service contract " + liveContract +
         "; this clone requires " + protocol.SERVICE_CONTRACT;
-    } else if (sourceStamp.helperPredatesSource(alive.started_at).stale) {
-      // SOMEBODY IS REVIEWING ON IT. Older than the code on disk is worth a
-      // restart; it is not worth throwing a reviewer out of a comment box they
-      // are typing in. See the same fork in `lahe session`.
-      var openPages = reviewsModule.readLiveHolders(dir, reviewsModule.LIVE_WINDOW_MS);
-      if (openPages.length > 0) {
-        keptForReviewer = reviewsModule.liveReviewerSentence(openPages);
-      } else {
+    } else {
+      // Older than the code on disk: replaced, unless a reviewer is on it (or,
+      // installed, unless it is busy taking their changes). The same decision
+      // as `lahe session` (session.js staleDecision).
+      var decision = await sessionCommand.staleDecision(dir, alive, loginItem.installedFor(dir, port));
+      if (decision.keep) {
+        keptForReviewer = decision.keep;
+      } else if (decision.stale) {
         restartReason = sourceStamp.REASON;
         staleRestart = true;
       }
@@ -1581,6 +1598,7 @@ module.exports = {
   removeScriptLine: removeScriptLine,
   reviewAlreadyInFile: reviewAlreadyInFile,
   classify: classify,
+  startHelper: startHelper,
   folderPages: folderPages,
   folderEntryPage: folderEntryPage,
   run: run
