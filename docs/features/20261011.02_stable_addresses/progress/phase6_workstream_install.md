@@ -6,19 +6,17 @@ Tasks 5.1, 5.2 and 5.3 are built, green, and committed on `unit/sa-install`. `la
 
 - `npm run gate:unit`: 2557 tests, 2555 pass, 0 fail, 2 todo (both were already there).
 - Browser spec [always_on_stale_replace.spec.js](../../../../test/browser/always_on_stale_replace.spec.js): 1 test, green in Chromium.
-- macOS spike: pass. Linux and Windows: the script is ready for the dispatch workflow (command below).
+- Spikes: pass on macOS, Linux and Windows.
 - Leak check (`ps -axo command | grep -c "[l]ahe.js serve"`): 2 before my first test, 2 after my last spec run. Both are Ken's own helpers from the main checkout. The count read 4 to 5 at moments in between because the core and library builders were running their suites; none of those processes named this worktree. Helpers from this worktree: 0 before, 0 after.
 - `launchctl list | grep -c lahe`: 0 before the macOS spike, 0 after.
 
 ## Needs action
 
-- **Run the Linux and Windows spike** (Task 5.1). The branch has to be on GitHub first. Then:
+- The Linux and Windows spike ran (dispatch run 38172224261) and passed. The command, for a rerun:
 
   ```
   gh workflow run spike.yml -f ref=unit/sa-install -f command="node scripts/spike_login_item.js --ci" -f browsers=none
   ```
-
-  Each system's log ends with `SPIKE RESULT: pass` or `fail`, after lines for START, RESTART, START ON REQUEST and UNINSTALL. Send the log back to the install builder.
 - **One line in `lahe status`, which is core's file** (V72, "status says to reinstall when the recorded Node is gone"). The check is built and tested: `loginItem.reinstallReason(loginItem.readInstall(dir))` returns the sentence, or null. It reads `install.json`, not `service.json`, because a helper whose Node is gone cannot run to write anything. Core's Task 3.2 prints it. I did not edit `status.js`.
 - **Two small edits in core's files**, flagged for the merge:
   - `src/service/reviews.js` `writeReadyFile`: carries `always_on` and `install` into `service.json` (pass-through only).
@@ -29,8 +27,8 @@ Tasks 5.1, 5.2 and 5.3 are built, green, and committed on `unit/sa-install`. `la
 | System | Verdict |
 |---|---|
 | macOS (this Mac) | **Pass.** Install (bootstrap) to first answer: 0.3s. Killed with SIGKILL, launchd started it again in 10.3s. Stopped and asked to start (`launchctl kickstart`): 10.6s, because launchd waits 10 seconds between starts of one job. Uninstall (`bootout`) stopped the helper, and launchd no longer knew the label. |
-| Linux | Not run yet. Script ready; see Needs action. |
-| Windows | Not run yet. Script ready; see Needs action. |
+| Linux | **Pass** (dispatch run 38172224261). Start 0.3s, restart after a kill 2.5s, start on request 0.3s, uninstall ok. |
+| Windows | **Pass** (same run). Start 0.3s, restart after a kill 61.0s, start on request 0.3s, uninstall ok. The once-a-minute trigger did the restart, so restart-on-failure alone would not have held. |
 
 What the hand runs on this Mac also showed:
 
@@ -62,8 +60,8 @@ The script is [spike_login_item.js](../../../../scripts/spike_login_item.js). It
 | Row | Test |
 |---|---|
 | V45 install macOS | macOS spike above (pass). Login after reboot: Ken, by hand |
-| V46 install Linux | `scripts/spike_login_item.js --ci` in the dispatch workflow (pending) |
-| V47 install Windows | same (pending) |
+| V46 install Linux | `scripts/spike_login_item.js --ci` in the dispatch workflow, run 38172224261: pass |
+| V47 install Windows | same run: pass |
 | V48 install hygiene | [install_command.test.js](../../../../test/unit/install_command.test.js): no terminal refused; root refused; more than one user warned; the plist carries the port and the state folder |
 | V49 always-on | [always_on.test.js](../../../../test/unit/always_on.test.js): no self-stop when quiet with an injected clock; still stops when the state folder is removed; `--always-on` parsed; `/health` and `service.json` say so |
 | V50 no double spawn | always_on.test.js: `startHelper` (session and add) asks the login item and spawns nothing; a failed login item spawns nothing and says why |
