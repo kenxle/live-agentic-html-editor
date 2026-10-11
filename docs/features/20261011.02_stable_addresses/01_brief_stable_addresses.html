@@ -990,7 +990,10 @@ one port: the helper's own port, 7817 unless the install picks another.
 It is kept away from common dev-server ports. If something else holds
 that port when the server starts, <code>lahe review</code>,
 <code>lahe status</code>, and the log say so plainly, naming the port,
-rather than moving documents to random ports.</p>
+rather than moving documents to random ports. The optional setup can
+also drop the port from the address, so it reads
+<code>folder.lahe/file</code>; the address with the port keeps
+working.</p>
 </div>
 <div class="callout callout-req">
 <p><strong>R6. <code>.lahe.localhost</code> works everywhere;

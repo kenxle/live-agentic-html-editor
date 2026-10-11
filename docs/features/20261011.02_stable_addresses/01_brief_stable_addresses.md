@@ -81,7 +81,7 @@ flowchart LR
 :::
 
 ::: callout-req
-**R5. One port for every document.** All documents share one port: the helper's own port, 7817 unless the install picks another. It is kept away from common dev-server ports. If something else holds that port when the server starts, `lahe review`, `lahe status`, and the log say so plainly, naming the port, rather than moving documents to random ports.
+**R5. One port for every document.** All documents share one port: the helper's own port, 7817 unless the install picks another. It is kept away from common dev-server ports. If something else holds that port when the server starts, `lahe review`, `lahe status`, and the log say so plainly, naming the port, rather than moving documents to random ports. The optional setup can also drop the port from the address, so it reads `folder.lahe/file`; the address with the port keeps working.
 :::
 
 ::: callout-req
