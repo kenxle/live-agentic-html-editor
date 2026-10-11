@@ -1,6 +1,6 @@
-### Chosen: the helper serves pages, one name per file, one port
+### Chosen: the helper serves pages, one name per site, one port, `.lahe.localhost` printed
 
-The rest of this leaf records what was weighed against it.
+A site is what one page server serves today: a folder, or one notes page. The rest of this leaf records what was weighed against it.
 
 ### A port per document, held open forever
 
@@ -10,9 +10,18 @@ Keeps today's origin model exactly. Rejected: 682 reviews already exceed the 256
 
 Shortest change. Rejected: every document would share one origin with every other and with the Library, so one page's JavaScript could read every token and drive the Library. Settled by Ken.
 
-### One name per folder instead of per file
+### One name per file, rooted at the file's folder, with redirects between pages
 
-Matches today's isolation unit (a page server serves a folder), so relative links between pages stay same-origin with no redirect. Rejected: the brief defines the unit as one file, the name would be a folder name (`docs`, `ongoing`) that says little in a tab, and two documents in one folder would keep sharing tokens and drafts. The per-file choice costs a redirect between pages, which only top-level navigations take.
+The first draft of this architecture. Each file was its own origin, which isolates more than today. Rejected after the architecture and security reviews:
+
+- It changed what an item's page path means, and four helper modules map that path to the file an agent edits. A comment on one page would have been reported against another.
+- Markdown links and images go through mounts that a file-folder root broke.
+- Folder sites that load `../` files broke.
+- Ken's rail rules (a page lends its rail to its folder, linked docs ride along, `--only` opts out) had no place.
+- Each file added two origins to its review, which overflows the 16-origin cap after about seven pages.
+- The navigation-only redirect relied on request headers that a plain `.lahe` page never gets.
+
+Per-site isolation is the same unit as today, so nothing gets weaker. The name says the folder and the path says the file.
 
 ### Name from the review id (`ra192291dfb29.lahe`)
 
@@ -29,6 +38,10 @@ Keeps page serving out of the API process. Rejected for now: two always-on proce
 ### Pages call the API same-origin (`name.lahe:7817/lahe/v1/...`)
 
 Removes CORS preflights. Rejected for this feature: it changes every layer call and the D11 check order, for no user-visible gain. Pages keep calling `127.0.0.1:<port>` as today. Worth revisiting if Chrome's local-network rules ever treat a `.lahe` page as less local than loopback.
+
+### `.lahe` as the printed ending
+
+Ken's choice on the decisions page. Kept as a macOS opt-in alias, and not printed by default, after review found five costs of a non-secure address: the "Not secure" label, no clipboard API, no Web Locks (the duplicate-tab guard), no Fetch Metadata headers (the Library's checks), and DNS rebinding wherever Lahe does not own `.lahe` lookups. `.lahe.localhost` has none of them and needs no setup on any system. Ken confirms at the review gate.
 
 ### Local HTTPS for `.lahe`
 
