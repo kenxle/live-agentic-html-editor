@@ -14,7 +14,6 @@
 
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const childProcess = require("node:child_process");
 const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
@@ -26,7 +25,7 @@ const loginItem = require("../../src/service/login_item.js");
 const installCommand = require("../../src/cli/commands/install.js");
 const { freePort } = require("../helpers/free_port.js");
 const { pollUntil } = require("../helpers/poll.js");
-const { stopTempHelpers } = require("../helpers/temp_helpers.js");
+const { trackSpawned } = require("../helpers/spawned.js");
 
 const BIN = path.join(__dirname, "..", "..", "bin", "lahe.js");
 
@@ -35,8 +34,10 @@ function world(t) {
   const home = path.join(root, "home dir");
   const dir = path.join(root, "state dir");
   fs.mkdirSync(home, { recursive: true });
-  t.after(() => stopTempHelpers(dir));
-  return { root, home, dir };
+  // Every helper the fake service manager or a test starts is tracked by pid,
+  // so teardown stops one that was still starting when the test ended.
+  const spawned = trackSpawned(t, dir);
+  return { root, home, dir, spawned };
 }
 
 function readyPid(dir) {
@@ -62,12 +63,7 @@ function fakeManager(w, port) {
       return { status: 0, output: "" };
     }
     if (args.some((a) => startWords.indexOf(a) !== -1) && !(await service.probeHealth(protocol.DEFAULT_HOST, port))) {
-      const child = childProcess.spawn(
-        process.execPath,
-        [BIN, "serve", "--always-on", "--port", String(port), "--state-dir", w.dir],
-        { detached: true, stdio: "ignore" }
-      );
-      child.unref();
+      w.spawned.spawn([BIN, "serve", "--always-on", "--port", String(port), "--state-dir", w.dir]);
     }
     return { status: 0, output: "" };
   };
@@ -174,11 +170,7 @@ test("V72: installing again replaces the login item rather than adding a second"
 test("install replaces a helper the CLI started on demand, so the login item can take the port", async (t) => {
   const w = world(t);
   const port = await freePort();
-  const plain = childProcess.spawn(process.execPath, [BIN, "serve", "--port", String(port), "--state-dir", w.dir], {
-    detached: true,
-    stdio: "ignore"
-  });
-  plain.unref();
+  w.spawned.spawn([BIN, "serve", "--port", String(port), "--state-dir", w.dir]);
   await pollUntil(() => service.probeHealth(protocol.DEFAULT_HOST, port), { timeoutMs: 10000, message: "the plain helper" });
   const d = deps(w, { runner: fakeManager(w, port).runner });
   assert.equal(await installCommand.run(["--state-dir", w.dir, "--port", String(port)], d), 0, d.err());
