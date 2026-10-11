@@ -913,8 +913,10 @@ the session) and when the server stops (it does not, once
 installed).</li>
 <li>Not a change of address when a Library row is renamed. The address
 comes from the file name and stays put.</li>
-<li>Not new outside packages. The zero-runtime-dependency rule holds;
-the install step is for setup only.</li>
+<li>Not new outside packages. The zero-runtime-dependency rule holds:
+Lahe runs from a plain copy of the repo, with nothing to download and
+nothing that breaks offline. The install step only sets up the login
+item and names.</li>
 </ul>
 </div>
 <h2 id="solution-outline">Solution Outline</h2>
