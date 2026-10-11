@@ -46,6 +46,15 @@ async function sitesWorld(t, options) {
     pagesPort: opts.pagesPort === undefined ? 0 : opts.pagesPort,
     sitesHome: home
   }, opts.helper || {});
+  // Markdown links outside the home folder render inert, and the home folder
+  // is LAHE_HOME_DIR when it is set: point it at this world's home for the
+  // test, and put it back after.
+  const priorHome = process.env.LAHE_HOME_DIR;
+  process.env.LAHE_HOME_DIR = home;
+  t.after(() => {
+    if (priorHome === undefined) delete process.env.LAHE_HOME_DIR;
+    else process.env.LAHE_HOME_DIR = priorHome;
+  });
   const helper = await service.serve(serveOptions);
   t.after(() => helper.close());
   return { root, home, state, helper };
