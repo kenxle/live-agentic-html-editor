@@ -249,6 +249,7 @@ var NON_BUNDLE_FILES = [
   { path: "src/service/sites.js", owner: "stable-addresses", why: "the name registry: one name per served folder or notes page, single writer, rebuilt from its log" },
   { path: "src/service/page_routes.js", owner: "stable-addresses", why: "serve a site's pages from the helper: path safety, the page rule, injection, Markdown, mounts, unknown and gone pages" },
   { path: "src/service/self_stop.js", owner: "1A", why: "the helper stops itself after a deferred last close once nothing needs it, or when its state dir is gone" },
+  { path: "src/service/login_item.js", owner: "stable-addresses install", why: "the login item per system (launchd, systemd --user, Task Scheduler) and install.json" },
   { path: "src/service/markdown.js", owner: "1A", why: "deterministic Markdown review artifacts" },
   { path: "src/service/styles.js", owner: "Style switcher 1.1", why: "installed document styles: the store, the checks, and serving their files" },
   { path: "src/service/tab_icon.js", owner: "1A", why: "the fallback tab icon, and the rule that a page declaring its own keeps it. The Markdown renderer and the static server both need it, so it is spelled once" },
