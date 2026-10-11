@@ -1,6 +1,6 @@
 # Progress: Stable addresses
 
-**Phase 2, Brief.** The crucible and brief are written; the PM reviewer is reading the brief while the architecture starts. Nothing is waiting on you until the full set is ready. Last updated 2026-10-11 12:27.
+**Phase 3, Architecture.** The brief is reviewed and updated; the architecture is written and two reviewers (security, architecture) are reading it. Nothing is waiting on you until the full set is ready. Last updated 2026-10-11 12:35.
 
 **Docs:** [Decisions page](../../ongoing/STABLE_ADDRESSES.md) · [Crucible](00_crucible_stable_addresses.md) · [Brief](01_brief_stable_addresses.md) · [Architecture](02_architecture_stable_addresses.md) · [Plan](03_plan_stable_addresses.md)
 
@@ -12,8 +12,8 @@ Nothing is waiting on you.
 
 | Agent or task | Doing | Started | Branch |
 |---|---|---|---|
-| Recon agent (Sonnet) | Mapping today's page servers, origins, tokens, and lifecycle for the architecture | 2026-10-11 12:25 | `feat/stable-addresses` |
-| PM reviewer | Reviewing the brief | 2026-10-11 12:27 | `feat/stable-addresses` |
+| Security reviewer | Reviewing the architecture | 2026-10-11 12:35 | `feat/stable-addresses` |
+| Architecture reviewer | Reviewing the architecture | 2026-10-11 12:35 | `feat/stable-addresses` |
 
 ## Phases
 
@@ -21,8 +21,8 @@ Nothing is waiting on you.
 |---|---|---|
 | 0 Setup | done | 2026-10-11 |
 | 1 Crucible | done | 2026-10-11 |
-| 2 Brief | in progress | 2026-10-11 |
-| 3 Architecture | not started | 2026-10-11 |
+| 2 Brief | done | 2026-10-11 |
+| 3 Architecture | in progress | 2026-10-11 |
 | 4 Plan | not started | 2026-10-11 |
 | 5 Human review | not started | 2026-10-11 |
 | 6 Implement | not started | 2026-10-11 |
@@ -63,5 +63,7 @@ Not shipped yet.
 
 ## Log
 
+- 2026-10-11 12:35: Architecture written. Security and architecture reviews dispatched.
+- 2026-10-11 12:35: PM review returned 12 findings (1 blocker: switching between `.lahe` and `.lahe.localhost` would kill addresses). All accepted into the brief. Recon found four blockers the architecture handles, including one worth your eye: a plain `.lahe` address is "Not secure" to the browser (see the architecture's failure modes).
 - 2026-10-11 12:27: Crucible and brief written from the decisions page. PM review dispatched.
 - 2026-10-11 12:24: Feature started. Ken settled all four questions on the decisions page and asked for the full doc set without stopping.
