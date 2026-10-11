@@ -433,11 +433,70 @@ Library-owned wording not touched: `docs/ongoing/LIBRARY.md`, the Library row of
   - `gate` and `gate:all` (V64).
 - **V31 is parked** until Ken picks option A or B.
 
+## Fix round: code review findings
+
+### Summary
+
+Every finding is fixed except one part of finding 9 (see below), each with a test that failed first. Fourteen commits on `unit/sa-core`, on top of `feat/stable-addresses` at ebc5fce. The disk rule held: no whole suite ran, only single files, and free space stayed between 1.7 and 2.0 GB.
+
+### Each finding, and the test that proves it
+
+| Finding | Fixed | Test |
+| --- | --- | --- |
+| 1. A failed `lahe review` on a fresh session stopped an always-on helper | yes: asks `helperStillWanted`, as `session close` does | `test/unit/review_failure_always_on.test.js` |
+| 4. Unknown names and refused Hosts grew memory and `helper.log` without limit | yes: one capped note logger (256 keys, then one line saying so); a repeated refused Host logs once | `test/unit/pages_log_cap.test.js` |
+| 5. The Library link on the not-found pages was dead (cross-site click) | yes: links to `library.lahe.localhost` at the printed port; the Library page alone takes a same-site top-level navigation | `test/unit/library_link_navigation.test.js`, and the click in `test/browser/stable_addresses_sites.spec.js` ("Open the Library ... in one click") |
+| 6. A site above the state folder served it | yes: any file whose path or real path is in the state folder is a 404 | `test/unit/sites_state_dir_hidden.test.js` |
+| 7. One page, two origins with the port-80 forward | yes: `record.pageIdentityKey` keys a page by its site name; `samePage` and `pageGroups` use it | `test/unit/page_identity_forms.test.js` |
+| 9. Every page load read every `meta.json` and every old record | partly: old records are read once; a `meta.json` is read again only when its file changed | `test/unit/page_load_reads.test.js` |
+| 10. In-process `serve({port: 0})` bound 1483; V34 could not fail | yes: `pagesPortFrom` returns 0 for API port 0; V34 moved to `test/retired/unit/sites_step3_v34.retired.test.js` with a header saying why | `test/unit/pages_port_choice.test.js` |
+| Busy pages port named the API port | yes | `test/unit/serve_pages_port_taken.test.js` |
+| `recordedReviewFor` could bind the wrong review | yes: `add.run` reports the review it used, and `lahe review` binds that one | `test/unit/review_binds_used_review.test.js` |
+| `sites.load()` ignored the log past a good `sites.json` | yes: replays the log over it | `test/unit/sites_log_replay.test.js` |
+| `.pipe()` left the file open on an aborted transfer | yes: `stream.pipeline` | `test/unit/pages_stream_abort.test.js` |
+| Two kinds of real path | yes: `.native` everywhere in `page_routes` and `sites` | `test/unit/realpath_one_kind.test.js` |
+| `classifyHost` named the Library before checking the port | yes | the new case in `test/unit/sites_dispatch.test.js` |
+| Refusal log wording broke the harness spec | yes: the line names `check host failed` again | `test/browser/harness_second_origin.spec.js` passes (5 of 5) |
+| Dead code | yes, except `idle_servers.js` stays in the manifest (lint lists every file under `src/`) | lint passes |
+
+### What the Library page now accepts (for the security review)
+
+- `catalog.page` (GET `/catalog`) only: `Sec-Fetch-Site` of `none` or `same-origin` as before, and now also `same-site` when the request also carries `Sec-Fetch-Mode: navigate` and `Sec-Fetch-Dest: document`. That is a top-level navigation: a link click, or a page setting `location`.
+- Every other Library route (`catalog.asset`, `catalog.list`, and the POSTs) is unchanged: exactly `same-origin` (the asset route keeps `none` too).
+- The Host check is unchanged: `library.lahe.localhost` at the pages port, or with no port through the forward, or `127.0.0.1` and `localhost` at the API port.
+- The page still sends `X-Frame-Options: DENY` and `frame-ancestors 'none'`, so a same-site page can open the Library but cannot frame it. A navigation replaces the page that started it, so that page never sees the token.
+- One limit: a page at `<name>.lahe` (the `.lahe` names) is a different site from `library.lahe.localhost`, so its click is still cross-site and refused. Only the `.lahe.localhost` spellings get the one-click link.
+
+### Finding 9: why not the in-memory reviews
+
+`lahe add` writes `meta.json` from its own process. A reused review gains a page there (its `target_paths`), and the running helper's in-memory copy is not told. Picking from memory would answer a newly added page with the wrong review. So the file stays the answer, read again only when its time, size or inode changed. A page load now does one `readdir` and one `stat` per review, and no reads. The notes flag rides on the pick, so the script tag needs no extra read.
+
+### Files changed
+
+- `src/cli/commands/review.js`, `src/cli/commands/add.js` (the `used` out-parameter only), `src/cli/commands/serve.js` (the pages-port message only), `src/cli/commands/status.js`
+- `src/service/page_routes.js`, `src/service/index.js`, `src/service/auth.js` (the catalog Sec-Fetch check only), `src/service/sites.js`, `src/service/static_servers.js`, `src/service/reviews.js`, `src/service/routes.js`, `src/service/catalog_sites.js` (the stamp helper only)
+- `src/shared/protocol.js`, `src/shared/record.js`, `src/shared/review_format.js`, `src/shared/manifest.js`
+- `docs/CONTRACTS.md`, `docs/ongoing/SERVING_ARCHITECTURES.md`
+- Tests: eleven new unit files named above; `sites_pages`, `sites_dispatch`, `sites_step3`, `sites_mappers`, `sites_cli`, `reviews_remove_origin`, `test/helpers/sites_world.js`, and the specs `stable_addresses_sites` and `stable_addresses_mappers`
+
+### Single-file runs
+
+Unit, each `LAHE_PAGES_PORT=0 node --test <file>`: review_failure_always_on 2/2, pages_log_cap 2/2, library_link_navigation 6/6, sites_state_dir_hidden 1/1, page_identity_forms 4/4, page_load_reads 2/2, pages_port_choice 3/3, serve_pages_port_taken 1/1, review_binds_used_review 1/1, sites_log_replay 2/2, realpath_one_kind 2/2, pages_stream_abort 1/1, reviews_remove_origin 3/3, sites_pages 17/17, sites_dispatch 15/15, sites_step3 5/5, sites_binding 17/17, sites_registry 19/19, sites_mappers 17/17, sites_linked_docs 15/15, sites_styles 9/9, sites_lahe_names 7/7, sites_cli 7/7, page_routes_carried 10/10, page_scope 21/21, review_format 56/56, protocol_wire 41/41, catalog_auth 13/13, library_address 6/6, library_open_sites 17/17, launch_folder 6/6, status_catalog 18/18, no_arbitrary_sleeps 4/4. Lint passes.
+
+Browser, Chromium, one spec at a time: stable_addresses_sites 7/7, stable_addresses_mappers 3/3, harness_second_origin 5/5. The click test fails with the auth change taken out.
+
+Not run: the whole unit suite and the whole browser suite (the disk rule). The orchestrator's checkpoint run covers them.
+
+### Leaks
+
+`lahe.js serve` count: 2 before and 2 after (Ken's two helpers). Four old page servers from this worktree were still running from a Step 2-era `sites_mappers` run at 16:00 (state folders `lahe-mappers-*` in the temp folder). I stopped them by pid. Nothing from `sa-core` is running now.
+
 ## Cleanup needed
 
 - `test/browser/tmp_spike_lahe_localhost.spec.js`: the Task 1.0 spike, committed for the Linux run. Remove once Linux has been checked.
 - `test-results/`: Playwright's output folder from the spec runs (gitignored).
 - Everything under `test/retired/` (see the Step 3 list), once Ken approves.
-- `src/service/idle_servers.js`: no longer loaded; take it out of `src/shared/manifest.js` in the same change.
+- `src/service/idle_servers.js`: nothing requires it; take its entry out of `src/shared/manifest.js` in the same change (lint needs the entry while the file exists).
+- `test/retired/unit/sites_step3_v34.retired.test.js`: V34, retired in the fix round.
 - `docs/features/20260922.02_linked_docs_rail/linked_page_rail.png` and `docs/features/20260923.01_rebuild_not_the_agents_job/card_not_on_page.png`: rewritten in the working tree by spec runs (not committed). Put them back with `git checkout`.
-- `.claude-commit202610111600-core`, `...1630-core`, `...1645-core`, `...1700-core`, `...1730-core`, `...1800-core`, `...1815-core`, `...1900-core`, `...1930-core`, `...1931-core`, the Step 3 ones (`...2100-core` onward), and the one this page's commit adds, in the worktree root: commit message scratch files (gitignored).
+- `.claude-commit202610111600-core`, `...1630-core`, `...1645-core`, `...1700-core`, `...1730-core`, `...1800-core`, `...1815-core`, `...1900-core`, `...1930-core`, `...1931-core`, the Step 3 ones (`...2100-core` onward), the fix-round ones (`...202610120100-core` to `...202610120320-core`), and the one this page's commit adds, in the worktree root: commit message scratch files (gitignored).
