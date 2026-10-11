@@ -1,12 +1,12 @@
 # Progress: Stable addresses
 
-**Phase 6, Implement.** Every workstream is merged. Paused: your disk is full from test temp folders (first item below). Last updated 2026-10-11 17:41.
+**Phase 7, Verify, paused on disk space.** Every workstream and both review fix rounds are merged on `feat/stable-addresses`. What is left: clear the disk (first item below), then the full test suite in all three browsers, the idle measurement on a preview of your real documents, and a browser walkthrough. Your other decisions are below. Last updated 2026-10-11 18:37.
 
 **Docs:** [Decisions page](../../ongoing/STABLE_ADDRESSES.md) · [Crucible](00_crucible_stable_addresses.html) · [Brief](01_brief_stable_addresses.html) · [Architecture](02_architecture_stable_addresses.html) · [Plan](03_plan_stable_addresses.html) · [Code survey](parts/architecture/recon.md)
 
 ## Needs your attention
 
-- [ ] **Urgent: your disk is full (1.5 GB free of 926 GB).** Test runs leave their temp folders behind: every unit run creates a `lahe-run-*` folder of about 600 MB and nothing removes it. That is how the test wrapper on main already works (`scripts/no_stray_helpers.js`), and today four builders ran the suite many times, so your temp folder grew to 39 GB. I have stopped all test runs. Your rules say I do not delete, so this one is yours. To clear the Lahe test folders older than ten minutes, type this in the Claude prompt:
+- [ ] **Urgent: your disk is full (887 MB free of 926 GB, and falling).** Test runs leave their temp folders behind: every unit run creates a `lahe-run-*` folder of about 600 MB and nothing removes it. That is how the test wrapper on main already works (`scripts/no_stray_helpers.js`), and today four builders ran the suite many times, so your temp folder grew to 39 GB. I have stopped all test runs. Your rules say I do not delete, so this one is yours. To clear the Lahe test folders older than ten minutes, type this in the Claude prompt:
 
   `! find "$TMPDIR" -maxdepth 1 -name 'lahe-*' -mmin +10 -exec rm -rf {} +`
 
@@ -29,7 +29,7 @@
 
 | Agent or task | Doing | Started | Branch |
 |---|---|---|---|
-| Library builder (Sonnet) | The Library's Open gives a file the same address `lahe review` does | 2026-10-11 18:35 | `unit/sa-library` |
+| Orchestrator | Holding: no test runs or previews until the disk is cleared | 2026-10-11 18:37 | `feat/stable-addresses` |
 
 ## Phases
 
@@ -180,6 +180,7 @@ Not shipped yet.
 
 ## Log
 
+- 2026-10-11 18:37: Library fix merged (Open gives one address per file). Free disk fell to 887 MB, so all test runs and previews are on hold. What is left after the disk is cleared: full `gate` and `gate:all`, the idle measurement against the limits (at most 100 MB and 120 wakeups a minute with nothing open; at most 250 MB and 400 with about 20 pages open), a preview on your real documents, and a browser walkthrough.
 - 2026-10-11 18:35: Core fix round 2 merged: hidden folders cannot be mounted, the helper refuses to start if another program holds its IPv6 address, the worktree fallback checks git's own link, one address per file for `lahe review`, docs and skill current. The Library's Open gets the same one-address rule next.
 - 2026-10-11 18:31: Install fix round 2 merged. The real `lahe install` and `lahe uninstall` commands pass on Linux and Windows on the merged branch.
 - 2026-10-11 18:23: Security review: no blocker; six findings (a website could read a permanent machine id from `/health`; a Markdown link could mount a hidden folder like `~/.ssh`; another program could take the IPv6 half of the pages port; the stated risk for other local accounts was too mild; a folder's `.git` file could pick the worktree fallback; test settings worked in normal use). Independent spec check: most requirements met; light-when-idle not yet measured; one file could get two addresses; stale docs; some tests weaker than their rows; five changes from the docs need your OK. All sent to the core and install builders as fix round 2.
