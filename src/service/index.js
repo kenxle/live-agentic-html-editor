@@ -871,6 +871,7 @@ async function serve(options) {
   pageRoutesModule.activate(dir, {
     sites: sites,
     pagesPort: boundPagesPort,
+    printedPort: function () { return addresses ? addresses.printedPort() : boundPagesPort; },
     laheNames: function () { return !!addresses && addresses.laheNamesVerified(); }
   });
 

@@ -608,7 +608,10 @@ function aliasMap(dir) {
   var out = {};
   if (!entry) return out;
   entry.sites.list().forEach(function (item) {
-    var origin = protocol.siteOrigin(item.name, entry.pagesPort);
+    // The printed spelling, so a group review.json shows reads like the
+    // address the reviewer has. Any spelling is the same page (record.samePage).
+    var port = typeof entry.printedPort === "function" ? entry.printedPort() : entry.pagesPort;
+    var origin = protocol.siteOrigin(item.name, typeof port === "number" ? port : entry.pagesPort);
     aliasesFor(dir, item.site).forEach(function (alias) {
       if (!Object.prototype.hasOwnProperty.call(out, alias)) out[alias] = origin;
     });
