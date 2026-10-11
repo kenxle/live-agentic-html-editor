@@ -98,5 +98,5 @@ While checking this, I found 63 page-server processes left running from test run
 
 1. Are you OK with the Lahe helper starting at login and staying up? Leaning yes, from your note on the cons.
 2. Option D (one port, a host name per document) or option A (a port per document)? I recommend D. With D, every document can keep a working address at no extra cost.
-3. Login item first, or go straight to a menu-bar app?
+3. Login item first, or go straight to a menu-bar app? Leaning login item, from your note.
 4. Ready for this to become a feature-forge feature, starting with the brief?
