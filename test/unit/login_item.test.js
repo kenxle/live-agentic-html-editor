@@ -168,3 +168,8 @@ test("installedFor answers only for the port the record names", () => {
   assert.deepEqual(loginItem.installedFor(home, 47817), record);
   assert.equal(loginItem.installedFor(home, 47818), null);
 });
+
+test("a label that could leave its folder is refused", () => {
+  assert.throws(() => loginItem.describe(Object.assign({ system: "macos", home: "/h", uid: 501, label: "../x" }, SPACED)), /not a login item label/);
+  assert.throws(() => loginItem.startCommands({ system: "linux", label: "a b" }), /not a login item label/);
+});

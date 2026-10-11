@@ -201,6 +201,13 @@ function taskXml(user, args, startBoundary) {
   ].join("\n");
 }
 
+/** A label is a file name and a service name: letters, digits, dot, dash, underscore. */
+function checkedLabel(label) {
+  var text = String(label || "");
+  if (!/^[A-Za-z0-9_-][A-Za-z0-9._-]*$/.test(text)) throw new Error("not a login item label: " + JSON.stringify(text));
+  return text;
+}
+
 /**
  * Everything about one login item, computed and not yet written: its file,
  * the file's contents, and the service-manager commands for it.
@@ -212,7 +219,7 @@ function taskXml(user, args, startBoundary) {
  *            load: string[][], start: string[][], unload: string[][]}}
  */
 function describe(spec) {
-  var label = spec.label || LABEL;
+  var label = checkedLabel(spec.label || LABEL);
   var args = helperArgs(spec);
   if (spec.system === "macos") {
     var domain = "gui/" + spec.uid;
@@ -269,8 +276,7 @@ function describe(spec) {
  * @param {{system: string, label: string, uid?: number}} record
  */
 function startCommands(record) {
-  var label = String(record.label || "");
-  if (!/^[A-Za-z0-9._-]+$/.test(label)) throw new Error("install.json names an odd login item label: " + JSON.stringify(label));
+  var label = checkedLabel(record.label);
   if (record.system === "macos") {
     var uid = typeof record.uid === "number" ? record.uid : process.getuid();
     return [["launchctl", "kickstart", "gui/" + uid + "/" + label]];
