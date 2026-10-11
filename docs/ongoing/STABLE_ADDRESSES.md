@@ -113,7 +113,11 @@ Separate addresses stop all of it with one rule the browser already follows. Opt
 - **A name does not change port clashes.** A port belongs to the computer, not to a name. If another tool is on the port, no name gets Lahe onto it. Option D already cuts clashes down to the one shared port.
 - **`.local` is a poor fit on a Mac.** macOS uses `.local` for finding devices on your network, so lookups are slow, and the name only works after an admin edit to a system file. That file cannot say "every name ending in `.lahe.local`", so each document would need its own line.
 - **`.localhost` gives the same look with no setup.** `stable-addresses.lahe.localhost` works today on your Mac, in every browser. I checked.
-- **A shorter name like `docname.lahe`** is possible, but costs more than it looks. Your Mac does not know `.lahe`, so Lahe would need a one-time admin setup plus a small name server of its own. Browsers also treat an unknown ending like `.lahe` as a search when you type it, and `.lahe` could one day become a real internet ending. Browsers promise that anything ending in `.localhost` stays on your computer, which also makes it safer. So I'd keep `.lahe.localhost`.
+- **A shorter name like `docname.lahe`** is doable. The catch is the hosts file (`/etc/hosts`): it has no "anything ending in `.lahe`" line, so every new document would need its own line, and every edit asks for your admin password. Two ways around that:
+  - a one-time admin step that tells your Mac to ask Lahe about any `.lahe` name, plus a tiny name server inside Lahe that always answers "this computer". One password, ever, then every document just works.
+  - or Lahe adds hosts lines in batches, asking for the password each time new documents appear. Simpler to build, more annoying to live with.
+
+  `.lahe` becoming a real internet ending is unlikely, and we can deal with it then. Clicking a link from history works either way; only typing `docname.lahe` by hand may get treated as a search, so type it with `http://` in front.
 - **Dropping the port from the address** (so it reads `http://stable-addresses.lahe.localhost/`) needs port 80. macOS refused that for a normal program when I tried. It would take a one-time admin setting at install. Possible, but optional.
 
 ### A. Each document keeps its own port, and the helper answers on it
