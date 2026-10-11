@@ -879,9 +879,12 @@ test.describe("free writing seams", () => {
     });
   }
 
-  // The plan asks, for both sources, that the item be "reopened or flagged,
-  // never quietly handled". In Markdown it is: after pasted as paragraphs
-  // loses the heading and the list, and the page check reopens it. In HTML the
+  // The plan asked, for both sources, that the item be "reopened or flagged,
+  // never quietly handled". Spec 20261011.01 changed that for the page check:
+  // after the agent answers, the page is the file, so a Markdown agent that
+  // pastes after as paragraphs (losing the heading and the list) is no longer
+  // reopened for the wrong tag. Every block's words still show exactly once,
+  // and the card stays handled with nothing added. In HTML the
   // old agent applies after_html as the anchor's content, and after_html now
   // carries every block with its tag, so the browser's parse gives the right
   // page (the p closes at the h2). The architecture ("Rollout and old agents")
@@ -923,8 +926,8 @@ test.describe("free writing seams", () => {
       const reopened = seen.json.state === "ready" || (seen.page && seen.page.state === "ready");
       const flagged = seen.json.handled_not_on_page === true || seen.badges.length > 0;
       if (kind === "md") {
-        expect(reopened || flagged, "reopened or flagged: " + JSON.stringify(seen)).toBe(true);
-        expect(seen.page.note, "the page check names the wrong tag").toContain("different tag");
+        expect(seen.page.state, "the page is the file: the card stays handled " + JSON.stringify(seen)).toBe("handled");
+        expect(String(seen.page.note || ""), "and the page check adds nothing to it").not.toContain("Reopened by the page check");
       } else if (!(reopened || flagged)) {
         await expectWorkedExampleOnce(page, scope);
       }
