@@ -362,6 +362,117 @@ async function startThroughItem(record, isUp, options) {
 }
 
 // ---------------------------------------------------------------------------
+// The two admin steps on macOS: port-free addresses and `.lahe`
+// ---------------------------------------------------------------------------
+//
+// `lahe install --port-80` and `lahe install --lahe-names` each make one
+// `sudo` call. The files are written first, as the user, into a fresh private
+// temp folder; the root step copies them into place with `install`. The root
+// script is a constant: no path, port, or name is spliced into it. Its one
+// argument is that temp folder, read as "$1". Every file carries MARKER, and
+// both the install and the removal scripts leave alone a file without it.
+//
+// The forward is a pf rule in the com.apple/lahe anchor. macOS's own
+// /etc/pf.conf already has `rdr-anchor "com.apple/*"`, so no system file is
+// edited. A launchd daemon loads the anchor again at every boot.
+
+var MARKER = "# lahe-managed";
+var RESOLVER_PATH = "/etc/resolver/lahe";
+var FORWARD_RULE_PATH = "/etc/pf.anchors/lahe";
+var FORWARD_DAEMON_LABEL = "lahe-port80";
+var FORWARD_DAEMON_PATH = "/Library/LaunchDaemons/" + FORWARD_DAEMON_LABEL + ".plist";
+var NAME_SERVER_PORT = 7853;
+var ROOT_FILES = { resolver: "lahe.resolver", rule: "lahe.anchor", daemon: FORWARD_DAEMON_LABEL + ".plist" };
+
+function hasMarker(text) {
+  return typeof text === "string" && text.indexOf(MARKER) !== -1;
+}
+
+function checkedPort(port) {
+  if (typeof port !== "number" || !Number.isInteger(port) || port < 1 || port > 65535) {
+    throw new Error("not a port number: " + JSON.stringify(port));
+  }
+  return port;
+}
+
+/** /etc/resolver/lahe: send `.lahe` lookups to the helper's name server. */
+function resolverText(port) {
+  return MARKER + ": .lahe names, written by `lahe install --lahe-names`. `lahe uninstall` removes it.\n" +
+    "nameserver 127.0.0.1\n" +
+    "port " + checkedPort(port) + "\n";
+}
+
+/** The pf anchor: loopback port 80 to the pages port, for IPv4 and IPv6. */
+function forwardRuleText(pagesPort) {
+  var to = checkedPort(pagesPort);
+  return MARKER + ": port-free addresses, written by `lahe install --port-80`. `lahe uninstall` removes it.\n" +
+    "rdr pass on lo0 inet proto tcp from any to 127.0.0.1 port 80 -> 127.0.0.1 port " + to + "\n" +
+    "rdr pass on lo0 inet6 proto tcp from any to ::1 port 80 -> ::1 port " + to + "\n";
+}
+
+/** The boot item that turns pf on and loads the anchor at every start. */
+function forwardDaemonText() {
+  return [
+    '<?xml version="1.0" encoding="UTF-8"?>',
+    '<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">',
+    "<!-- " + MARKER + ": reloads the port-free forward at boot, written by `lahe install --port-80`. -->",
+    '<plist version="1.0">',
+    "<dict>",
+    "  <key>Label</key>",
+    "  <string>" + FORWARD_DAEMON_LABEL + "</string>",
+    "  <key>ProgramArguments</key>",
+    "  <array>",
+    "    <string>/bin/sh</string>",
+    "    <string>-c</string>",
+    "    <string>/sbin/pfctl -E 2&gt;/dev/null; /sbin/pfctl -a com.apple/lahe -f " + FORWARD_RULE_PATH + "</string>",
+    "  </array>",
+    "  <key>RunAtLoad</key>",
+    "  <true/>",
+    "</dict>",
+    "</plist>",
+    ""
+  ].join("\n");
+}
+
+function notOurs(file) {
+  return "if [ -e " + file + " ] && ! grep -qF '" + MARKER + "' " + file + "; then echo \"" + file +
+    " was not written by Lahe; leaving it\" >&2; exit 3; fi";
+}
+
+var ROOT_SCRIPTS = {
+  installResolver: [
+    "set -e",
+    notOurs(RESOLVER_PATH),
+    "/bin/mkdir -p /etc/resolver",
+    "/usr/bin/install -m 0644 -o root -g wheel \"$1/" + ROOT_FILES.resolver + "\" " + RESOLVER_PATH
+  ].join("\n"),
+  removeResolver: [
+    "if [ -f " + RESOLVER_PATH + " ]; then grep -qF '" + MARKER + "' " + RESOLVER_PATH + " && rm -f " + RESOLVER_PATH + " || true; fi"
+  ].join("\n"),
+  installForward: [
+    "set -e",
+    notOurs(FORWARD_RULE_PATH),
+    notOurs(FORWARD_DAEMON_PATH),
+    "/usr/bin/install -m 0644 -o root -g wheel \"$1/" + ROOT_FILES.rule + "\" " + FORWARD_RULE_PATH,
+    "/usr/bin/install -m 0644 -o root -g wheel \"$1/" + ROOT_FILES.daemon + "\" " + FORWARD_DAEMON_PATH,
+    "/bin/launchctl bootout system/" + FORWARD_DAEMON_LABEL + " 2>/dev/null || true",
+    "/bin/launchctl bootstrap system " + FORWARD_DAEMON_PATH
+  ].join("\n"),
+  removeForward: [
+    "if [ -f " + FORWARD_DAEMON_PATH + " ] && grep -qF '" + MARKER + "' " + FORWARD_DAEMON_PATH +
+      "; then /bin/launchctl bootout system/" + FORWARD_DAEMON_LABEL + " 2>/dev/null || true; rm -f " + FORWARD_DAEMON_PATH + "; fi",
+    "if [ -f " + FORWARD_RULE_PATH + " ] && grep -qF '" + MARKER + "' " + FORWARD_RULE_PATH +
+      "; then /sbin/pfctl -a com.apple/lahe -F all 2>/dev/null || true; rm -f " + FORWARD_RULE_PATH + "; fi"
+  ].join("\n")
+};
+
+/** The one sudo call for an admin step: a constant script, the temp folder as $1. */
+function rootCommand(name, folder) {
+  if (!Object.prototype.hasOwnProperty.call(ROOT_SCRIPTS, name)) throw new Error("no root script " + JSON.stringify(name));
+  return ["sudo", "/bin/sh", "-c", ROOT_SCRIPTS[name], "lahe", String(folder)];
+}
+
+// ---------------------------------------------------------------------------
 // install.json
 // ---------------------------------------------------------------------------
 
@@ -469,6 +580,18 @@ async function waitForQuiet(dir, options) {
 }
 
 module.exports = {
+  MARKER: MARKER,
+  RESOLVER_PATH: RESOLVER_PATH,
+  FORWARD_RULE_PATH: FORWARD_RULE_PATH,
+  FORWARD_DAEMON_PATH: FORWARD_DAEMON_PATH,
+  NAME_SERVER_PORT: NAME_SERVER_PORT,
+  ROOT_FILES: ROOT_FILES,
+  ROOT_SCRIPTS: ROOT_SCRIPTS,
+  hasMarker: hasMarker,
+  resolverText: resolverText,
+  forwardRuleText: forwardRuleText,
+  forwardDaemonText: forwardDaemonText,
+  rootCommand: rootCommand,
   QUIET_MS: QUIET_MS,
   QUIET_MAX_MS: QUIET_MAX_MS,
   LABEL: LABEL,
