@@ -97,7 +97,7 @@ flowchart LR
 :::
 
 ::: callout-req
-**R8a. Links between pages keep working.** A link from one Lahe page to another file Lahe serves opens that file at its own stable address. Images, styles, and scripts a page loads by relative path keep loading, as they do today.
+**R8a. Links between pages keep working.** A link from one Lahe page to another file opens that file, with the rail it gets today. Images, styles, and scripts a page loads by relative path keep loading, as they do today.
 :::
 
 ::: callout-req

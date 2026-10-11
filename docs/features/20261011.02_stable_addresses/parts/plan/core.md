@@ -1,41 +1,50 @@
 ### Workstream: core (Steps 1 to 3)
 
-**Outcome:** the helper serves every page Lahe serves itself, at `<name>.lahe.localhost:<port>/<path>`, with today's paths, today's rail rules, and no per-session page-server process. Behind the `LAHE_PAGES=sites` switch until Task 3.1 makes it the default.
+**Outcome:** the helper serves every page Lahe serves itself, at `<name>.lahe.localhost:<port>/<path>`, with today's paths and rail rules, and no per-session page-server process.
 
-**Reads first:** the architecture (Summary, Data / State Changes, Key Flows "Serving a request", "Which review answers on a page", "Binding"), [recon](../architecture/recon.md) sections 1, 2, 5, 9, `docs/ongoing/SERVING_ARCHITECTURES.md`, `docs/ongoing/STATIC_SITE_FOLDER.md`, `docs/ongoing/FREE_WRITING.md` (notes pages), `docs/CONTRACTS.md` (D11 checks), `docs/diagrams/module_map.md`. Not the alternatives leaf, not the review files, unless weighing a deviation.
+**Reads first:** the architecture's Summary, Data / State Changes, and Key Flows ("Serving a request", "Which review answers on a page", "Binding"); [recon](../architecture/recon.md) sections 1, 2, 5, 9; `docs/ongoing/SERVING_ARCHITECTURES.md`, `STATIC_SITE_FOLDER.md`, `FREE_WRITING.md` (notes pages); `docs/CONTRACTS.md` (D11 checks); `docs/diagrams/module_map.md`.
 
-**Authority:** the architecture. A deviation goes under Changes from plan on the progress page, with a one-line question to the orchestrator first.
+#### Step 1: Named sites behind the switch (PR 1)
 
-#### Step 1: Named sites behind a switch
+**The switch.** `LAHE_PAGES=sites` is read by the helper at start and reported in `service.json`. The CLI follows the running helper's value, never its own environment. Live for everyone in PR 1, because each is harmless with no names granted: Host dispatch, the `::1` listener, the `site.bind` route. Behind the switch: `lahe review` and `lahe write` binding instead of starting page servers, and every registry-backed lookup.
 
-**Task 1.0: Spike, `*.lahe.localhost` in the three Playwright lanes.** Prove that Chromium, Firefox, and WebKit in this repo's Playwright setup load `http://x.lahe.localhost:<port>/` from a helper bound to `127.0.0.1` and `::1`, locally on macOS and in CI (Linux). Record the result and any launch flag needed in `progress/phase6_workstream_core.md`. Acceptance: one throwaway spec passes in all three lanes, or the gap is reported before Task 1.4.
+**Task 1.0: Spike: `*.lahe.localhost` in the three Playwright lanes.** Locally on macOS with `npm run gate:all`'s three lanes, and on Linux through the dispatch workflow from Task 0.1. Record any launch flag needed. Acceptance: a throwaway spec loads a page in all three lanes, or the gap is reported before Task 1.4.
 
-**Task 1.1: The registry (`src/service/sites.js`).** Name rule, clash rule, reserved names, `realpathSync.native` roots, modes, mounts, worktree recording from the `.git` file, `sites.json` plus the append-only `sites.log`, rebuild from the log, read-only mode when neither reads. Single writer: only the helper process calls the writing functions. Acceptance: unit rows V1 to V6.
+**Task 1.1: The registry, `src/service/sites.js`.** As the architecture's Data section defines it. Acceptance: V1 to V6.
 
-**Task 1.2: Host dispatch and listeners (`index.js`, `protocol.js`).** Host dispatch runs before `OPTIONS` and catalog matching. Grammar per the security notes. Second listener on `::1`, failure logged. `PAGES` constants and Host rules live in `src/shared/protocol.js`. Acceptance: V7 to V10.
+**Task 1.2: Host dispatch and listeners.** In `index.js`, with rules and constants in `src/shared/protocol.js`. Acceptance: V7 to V10, V68.
 
-**Task 1.3: Page serving (`src/service/page_routes.js`).** Move the serving half of `static_servers.js`: path safety, hidden-file refusal, `page-only` mode, injection (with `data-lahe-aliases`), Markdown render from source with a file-time cache, site-scoped mounts, reserved files, `Cross-Origin-Resource-Policy`, the unknown-name and file-gone pages, the read-only worktree copy. The review rule per request, without the session filter. Acceptance: V11 to V20.
+**Task 1.3: Page serving, `src/service/page_routes.js`.** The serving half of `static_servers.js` moves here, plus everything the architecture's "Serving a request" flow adds. Acceptance: V11 to V20, V69.
 
-**Task 1.4: Binding and the CLI order.** `site.bind` route with the CLI secret file, refusal of any `Origin`, root from the request. `add --served-by-helper`. `lahe review`, `lahe write` use the new order when `LAHE_PAGES=sites`. Old loopback origins removed at bind. The Origin check for page requests reads the registry. Acceptance: V21 to V25.
+**Task 1.4: Binding and the CLI order.** `site.bind`, the CLI secret, `add --served-by-helper`, and the new order in `lahe review` and `lahe write`. Old loopback origins are removed at bind. The Origin check for page requests reads the registry. Acceptance: V21 to V25, V65, V66.
 
-**Step test:** with `LAHE_PAGES=sites`, `lahe review` on an HTML file, a Markdown file with an image and a link outside its folder, a folder, and `lahe write` each print a `.lahe.localhost` address. Each page loads with its rail, and a comment round-trips to `review.json`.
+**Step test:** with the switch on, `lahe review` on an HTML file, on a Markdown file with an image and a link outside its folder, on a folder, and `lahe write`, each print a `.lahe.localhost` address. Each page loads with its rail, and a comment reaches `review.json`. With the switch off, `npm run gate:unit` is unchanged from main.
 
-#### Step 2: Every helper module asks the registry
+#### Step 2: Helper modules ask the registry, when the switch says so (PR 1)
 
-**Task 2.1: Page-to-file mappers.** `reviews.js` (`servesPath`, healing stand-down, `pageUnderFolder`, `targetForPage`), `heal.js`, `rebuild.js`, `handled_check.js`, `projection.js`, `markdown.js`, `markdown_links.js`, linked files. Each reads sites instead of page-server records. Acceptance: V26 to V30.
+**Task 2.1: Page-to-file mappers.** `reviews.js` (`servesPath`, healing stand-down, `pageUnderFolder`, `targetForPage`), `heal.js`, `rebuild.js`, `handled_check.js`, `projection.js`, `markdown.js`, `markdown_links.js`, and linked files. Each asks the registry when the switch is on and page-server records when it is off. Task 3.1 removes the off branch. Acceptance: V26 to V30, each run with the switch on and off.
 
-**Task 2.2: Old comments and grouping.** Aliases computed from old page-server records at serve time. `samePage` in `src/shared/record.js` and grouping in `src/shared/review_format.js` accept them. Acceptance: V31, V32.
+**Task 2.2: Old comments and grouping.** Aliases computed from old records at serve time, used by `samePage` in `src/shared/record.js` and by grouping in `src/shared/review_format.js`. Acceptance: V31, V32, V70.
 
-**Step test:** the same reviews as Step 1, plus a review created before the switch, reopened under the switch: its old comments show, an agent reply reloads the page, a handled check reads the right file, and no served HTML file on disk changes after a poll.
+**Step test:** a review created on a random port, opened with the switch on: its old comments show, an agent reply reloads the page, the handled check reads the right file, and no served HTML file changes on disk after a poll.
 
-#### Step 3: Make it the default, retire page servers
+#### Step 3: Default on, page servers retired (PR 2)
 
-**Task 3.1: Flip the switch.** Sites become the only path for HTML, Markdown, folders, and notes. Page-server spawning, the idle sweep, the session-close stop, port history, origin swaps, and the `SIGHUP` mount reload are removed. Old records stay readable. Every helper start stops leftover page-server processes named in old records. `lahe session close` stops only the session. Remove `LAHE_PAGES`. Acceptance: V33 to V36, V63, V64.
+**Task 3.0: Test retirement list.** Before any code in this step, list every existing test file that tests removed behavior: idle stop, page-server restart, port history, origin swap, `SIGHUP` mounts, the reopened-session sweep. Mark each one rewrite or retire, with one line of reason, in `progress/phase6_workstream_core.md`. The orchestrator puts the retire list in front of Ken for one batch approval before PR 2's gate. Builders delete nothing.
 
-**Task 3.2: `lahe status` and printed lines.** Status shows the port, the printed ending and why, and the site name for each review. No line mentions an idle-stopped port. Acceptance: V37.
+**Task 3.1: Flip and remove.** Sites become the only path. Page-server spawning, the idle sweep, the session-close stop, port history, origin swaps, the `SIGHUP` reload, and the switch's off branches are removed. Old records stay readable. Every helper start stops leftover page servers, after confirming each is the recorded process through its health probe and instance id. Acceptance: V33 to V36, V63, V64, V67.
 
-**Task 3.3: Skill, contract, and serving docs.** `skills/lahe/SKILL.md`, the contract in `src/shared/review_format.js` and its two restated copies (`test/unit/review_format.test.js`, `docs/CONTRACTS.md`), `docs/CLI.md`, `docs/ongoing/SERVING_ARCHITECTURES.md`, `STATIC_SITE_FOLDER.md`, `FREE_WRITING.md`, `SESSION_OWNERSHIP.md`, `docs/diagrams/system_overview.md`, `session_ownership.md`, `review_round_trip.md`, `module_map.md`, `src/shared/manifest.js`, and the D11 residual line. Then `npm run install-skills`. Acceptance: V38.
+**Task 3.2: `lahe status` and logging.** Status shows the port, the printed ending and why, each review's site, a taken port, and the install state that install writes to `service.json`. The log records the lines the brief's Logging section lists. Acceptance: V37, V71.
 
-**Step test:** full `npm run gate` alone, 0 failed. The leak check counts no `static_servers.js --serve` process left by any test.
+**Task 3.3: Skill, contract, and serving docs.** These all change in PR 2, using the printed ending Ken chose at the review gate:
 
-**Don't touch:** `src/service/catalog_*.js`, `src/layer/catalog/`, `src/cli/commands/install.js`, `src/service/login_item.js`, `src/service/name_server.js`.
+- `skills/lahe/SKILL.md`, then `npm run install-skills`
+- the contract in `src/shared/review_format.js`, plus its copies in `test/unit/review_format.test.js` and `docs/CONTRACTS.md`
+- `docs/CLI.md`
+- `docs/ongoing/SERVING_ARCHITECTURES.md`, `STATIC_SITE_FOLDER.md`, `FREE_WRITING.md`, `SESSION_OWNERSHIP.md`
+- the four diagrams the architecture lists
+- the new D11 residual line
+
+Acceptance: V38.
+
+**Step test:** the orchestrator runs `npm run gate`, alone, on the integrated branch and reads 0 failed.

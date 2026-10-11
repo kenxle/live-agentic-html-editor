@@ -811,6 +811,10 @@
 <nav id="TOC" role="doc-toc">
 <ul>
 <li><a href="#summary" id="toc-summary">Summary</a></li>
+<li><a href="#step-0-orchestrator-setup"
+id="toc-step-0-orchestrator-setup">Step 0: Orchestrator setup</a></li>
+<li><a href="#every-builders-contract"
+id="toc-every-builders-contract">Every builder's contract</a></li>
 <li><a href="#steps" id="toc-steps">Steps</a></li>
 <li><a href="#workstreams-and-prs"
 id="toc-workstreams-and-prs">Workstreams and PRs</a></li>
@@ -818,273 +822,316 @@ id="toc-workstreams-and-prs">Workstreams and PRs</a></li>
 <li><a href="#acceptance-criteria"
 id="toc-acceptance-criteria">Acceptance Criteria</a></li>
 <li><a href="#plan-review" id="toc-plan-review">Plan Review</a></li>
+<li><a href="#plan-review-stable-addresses"
+id="toc-plan-review-stable-addresses">Plan review: Stable addresses</a>
+<ul>
+<li><a href="#summary-1" id="toc-summary-1">Summary</a></li>
+<li><a href="#findings" id="toc-findings">Findings</a></li>
+<li><a href="#what-holds-up" id="toc-what-holds-up">What holds
+up</a></li>
+</ul></li>
 </ul>
 </nav>
 <h2 id="summary">Summary</h2>
-<p>Four workstreams, five pull requests. <strong>core</strong> moves
-page serving into the helper behind a switch, rewires every helper
-module to the new name registry, then makes it the default and retires
-per-session page servers. <strong>library</strong> points the Library at
-stable addresses. <strong>install</strong> adds the login item and
-always-on behavior on three systems. <strong>lahe-names</strong> adds
-the optional <code>.lahe</code> ending on macOS. Docs, the skill, and
-the contract change in the same pull request as the behavior they
-describe.</p>
+<p>Four workstreams and five pull requests:</p>
+<ul>
+<li><strong>core</strong> moves page serving into the helper behind a
+switch, has every helper module ask the new name registry, then makes it
+the default and retires per-session page servers.</li>
+<li><strong>library</strong> points the Library at stable addresses,
+alongside core, behind the same switch.</li>
+<li><strong>install</strong> adds the login item and always-on behavior
+on three systems.</li>
+<li><strong>lahe-names</strong> adds the optional <code>.lahe</code>
+ending on macOS.</li>
+</ul>
+<p>Docs, the skill, and the contract change in the same pull request as
+the behavior they describe. Builders work on branches off one
+integration branch (<code>feat/stable-addresses</code>). "Merged" in
+this plan means merged into that branch, and a PR is cut from it once
+its steps are green.</p>
 <pre class="mermaid"><code>flowchart LR
-    S1[&quot;core: Step 1&lt;br/&gt;named sites, behind a switch&quot;] --&gt; S2[&quot;core: Step 2&lt;br/&gt;modules ask the registry&quot;]
-    S2 --&gt; S3[&quot;core: Step 3&lt;br/&gt;default on, page servers retired&quot;]
-    S1 --&gt; S5[&quot;install: Step 5&lt;br/&gt;login item, always-on&quot;]
-    S3 --&gt; S4[&quot;library: Step 4&quot;]
-    S5 --&gt; S6[&quot;lahe-names: Step 6&quot;]
-    S3 --&gt; S6</code></pre>
+    P0[&quot;PR 0: dispatch-only&lt;br/&gt;CI workflow on main&quot;] --&gt; S1
+    S1[&quot;core Step 1&lt;br/&gt;named sites, switch off&quot;] --&gt; S2[&quot;core Step 2&lt;br/&gt;modules ask the registry&quot;]
+    S1 --&gt; L1[&quot;library 4.1, 4.2&lt;br/&gt;behind the switch&quot;]
+    S1 --&gt; I[&quot;install Step 5&quot;]
+    S2 --&gt; PR1([&quot;PR 1&quot;])
+    L1 --&gt; PR1
+    PR1 --&gt; S3[&quot;core Step 3, library 4.3&lt;br/&gt;switch removed&quot;]
+    S3 --&gt; PR2([&quot;PR 2&quot;])
+    I --&gt; PR3([&quot;PR 3, after PR 2&quot;])
+    PR2 --&gt; PR3
+    PR3 --&gt; N[&quot;lahe-names Step 6&quot;] --&gt; PR4([&quot;PR 4&quot;])</code></pre>
+<h2 id="step-0-orchestrator-setup">Step 0: Orchestrator setup</h2>
+<p><strong>Task 0.1: A dispatch-only CI workflow, landed on main as its
+own small PR.</strong> The workflow runs a named ref on Linux and
+Windows. Each step has <code>continue-on-error</code>, and the verdict
+goes to the log. It never runs on push, so it never sends Ken a failure
+email. It exists for the spikes in Tasks 1.0 and 5.1, and is removed in
+cleanup.</p>
+<p><strong>Task 0.2: The idle-cost baseline.</strong> Before PR 2 lands,
+measure today's helper plus page servers, as Task 5.4 describes.</p>
+<h2 id="every-builders-contract">Every builder's contract</h2>
+<p>Each workstream leaf below is a builder's packet, together with this
+block, the brief's Requirements, and the verification rows its tasks
+name.</p>
+<ul>
+<li><strong>Never delete a file.</strong> No <code>rm</code>, no
+<code>git clean</code>. List anything to remove under "To delete at
+cleanup" in your progress file.</li>
+<li><strong>Tests:</strong> run <code>npm run gate:unit</code>. You may
+also run one named browser spec with
+<code>npx playwright test test/browser/&lt;file&gt;</code>. Never run
+the whole browser suite; the orchestrator does that once per
+checkpoint.</li>
+<li><strong>Leaks:</strong> run
+<code>ps -axo command | grep -c "[l]ahe.js serve"</code> before and
+after your test runs, and report both numbers. Every helper, listener,
+name server, and login item a test starts is stopped in teardown. Tests
+use free ports and a temp state folder, never 7817 or the real state
+folder. They never touch the real login item or
+<code>/etc/resolver</code>.</li>
+<li><strong>Do not commit <code>dist/</code>.</strong> Put a local
+rebuild back with <code>git checkout -- dist/lahe-layer.js</code>.</li>
+<li><strong>Manifest:</strong> add each new <code>src/</code> file to
+<code>src/shared/manifest.js</code> in the same commit.</li>
+<li><strong>Screenshots:</strong> a change anyone can see (the Library,
+the unknown-name and file-gone pages) gets light and dark screenshots
+from the test run, on your progress file.</li>
+<li><strong>Hand back:</strong> your branch;
+<code>progress/phase6_workstream_&lt;name&gt;.md</code> with what you
+built, the rows that pass, the leak counts, and any deviation; and a
+self-review against the engineering principles.</li>
+<li><strong>Stop and ask</strong> in one line when you hit a limit, or
+when the architecture does not fit the code. Do not document around
+it.</li>
+</ul>
 <h2 id="steps">Steps</h2>
 <h3 id="workstream-core-steps-1-to-3">Workstream: core (Steps 1 to
 3)</h3>
 <p><strong>Outcome:</strong> the helper serves every page Lahe serves
 itself, at
 <code>&lt;name&gt;.lahe.localhost:&lt;port&gt;/&lt;path&gt;</code>, with
-today's paths, today's rail rules, and no per-session page-server
-process. Behind the <code>LAHE_PAGES=sites</code> switch until Task 3.1
-makes it the default.</p>
-<p><strong>Reads first:</strong> the architecture (Summary, Data / State
-Changes, Key Flows "Serving a request", "Which review answers on a
-page", "Binding"), <a href="../architecture/recon.md">recon</a> sections
-1, 2, 5, 9, <code>docs/ongoing/SERVING_ARCHITECTURES.md</code>,
-<code>docs/ongoing/STATIC_SITE_FOLDER.md</code>,
-<code>docs/ongoing/FREE_WRITING.md</code> (notes pages),
-<code>docs/CONTRACTS.md</code> (D11 checks),
-<code>docs/diagrams/module_map.md</code>. Not the alternatives leaf, not
-the review files, unless weighing a deviation.</p>
-<p><strong>Authority:</strong> the architecture. A deviation goes under
-Changes from plan on the progress page, with a one-line question to the
-orchestrator first.</p>
-<h4 id="step-1-named-sites-behind-a-switch">Step 1: Named sites behind a
-switch</h4>
-<p><strong>Task 1.0: Spike, <code>*.lahe.localhost</code> in the three
-Playwright lanes.</strong> Prove that Chromium, Firefox, and WebKit in
-this repo's Playwright setup load
-<code>http://x.lahe.localhost:&lt;port&gt;/</code> from a helper bound
-to <code>127.0.0.1</code> and <code>::1</code>, locally on macOS and in
-CI (Linux). Record the result and any launch flag needed in
-<code>progress/phase6_workstream_core.md</code>. Acceptance: one
-throwaway spec passes in all three lanes, or the gap is reported before
-Task 1.4.</p>
-<p><strong>Task 1.1: The registry
-(<code>src/service/sites.js</code>).</strong> Name rule, clash rule,
-reserved names, <code>realpathSync.native</code> roots, modes, mounts,
-worktree recording from the <code>.git</code> file,
-<code>sites.json</code> plus the append-only <code>sites.log</code>,
-rebuild from the log, read-only mode when neither reads. Single writer:
-only the helper process calls the writing functions. Acceptance: unit
-rows V1 to V6.</p>
-<p><strong>Task 1.2: Host dispatch and listeners (<code>index.js</code>,
-<code>protocol.js</code>).</strong> Host dispatch runs before
-<code>OPTIONS</code> and catalog matching. Grammar per the security
-notes. Second listener on <code>::1</code>, failure logged.
-<code>PAGES</code> constants and Host rules live in
-<code>src/shared/protocol.js</code>. Acceptance: V7 to V10.</p>
-<p><strong>Task 1.3: Page serving
-(<code>src/service/page_routes.js</code>).</strong> Move the serving
-half of <code>static_servers.js</code>: path safety, hidden-file
-refusal, <code>page-only</code> mode, injection (with
-<code>data-lahe-aliases</code>), Markdown render from source with a
-file-time cache, site-scoped mounts, reserved files,
-<code>Cross-Origin-Resource-Policy</code>, the unknown-name and
-file-gone pages, the read-only worktree copy. The review rule per
-request, without the session filter. Acceptance: V11 to V20.</p>
+today's paths and rail rules, and no per-session page-server
+process.</p>
+<p><strong>Reads first:</strong> the architecture's Summary, Data /
+State Changes, and Key Flows ("Serving a request", "Which review answers
+on a page", "Binding"); <a href="../architecture/recon.md">recon</a>
+sections 1, 2, 5, 9; <code>docs/ongoing/SERVING_ARCHITECTURES.md</code>,
+<code>STATIC_SITE_FOLDER.md</code>, <code>FREE_WRITING.md</code> (notes
+pages); <code>docs/CONTRACTS.md</code> (D11 checks);
+<code>docs/diagrams/module_map.md</code>.</p>
+<h4 id="step-1-named-sites-behind-the-switch-pr-1">Step 1: Named sites
+behind the switch (PR 1)</h4>
+<p><strong>The switch.</strong> <code>LAHE_PAGES=sites</code> is read by
+the helper at start and reported in <code>service.json</code>. The CLI
+follows the running helper's value, never its own environment. Live for
+everyone in PR 1, because each is harmless with no names granted: Host
+dispatch, the <code>::1</code> listener, the <code>site.bind</code>
+route. Behind the switch: <code>lahe review</code> and
+<code>lahe write</code> binding instead of starting page servers, and
+every registry-backed lookup.</p>
+<p><strong>Task 1.0: Spike: <code>*.lahe.localhost</code> in the three
+Playwright lanes.</strong> Locally on macOS with
+<code>npm run gate:all</code>'s three lanes, and on Linux through the
+dispatch workflow from Task 0.1. Record any launch flag needed.
+Acceptance: a throwaway spec loads a page in all three lanes, or the gap
+is reported before Task 1.4.</p>
+<p><strong>Task 1.1: The registry,
+<code>src/service/sites.js</code>.</strong> As the architecture's Data
+section defines it. Acceptance: V1 to V6.</p>
+<p><strong>Task 1.2: Host dispatch and listeners.</strong> In
+<code>index.js</code>, with rules and constants in
+<code>src/shared/protocol.js</code>. Acceptance: V7 to V10, V68.</p>
+<p><strong>Task 1.3: Page serving,
+<code>src/service/page_routes.js</code>.</strong> The serving half of
+<code>static_servers.js</code> moves here, plus everything the
+architecture's "Serving a request" flow adds. Acceptance: V11 to V20,
+V69.</p>
 <p><strong>Task 1.4: Binding and the CLI order.</strong>
-<code>site.bind</code> route with the CLI secret file, refusal of any
-<code>Origin</code>, root from the request.
-<code>add --served-by-helper</code>. <code>lahe review</code>,
-<code>lahe write</code> use the new order when
-<code>LAHE_PAGES=sites</code>. Old loopback origins removed at bind. The
-Origin check for page requests reads the registry. Acceptance: V21 to
-V25.</p>
-<p><strong>Step test:</strong> with <code>LAHE_PAGES=sites</code>,
-<code>lahe review</code> on an HTML file, a Markdown file with an image
-and a link outside its folder, a folder, and <code>lahe write</code>
-each print a <code>.lahe.localhost</code> address. Each page loads with
-its rail, and a comment round-trips to <code>review.json</code>.</p>
-<h4 id="step-2-every-helper-module-asks-the-registry">Step 2: Every
-helper module asks the registry</h4>
+<code>site.bind</code>, the CLI secret,
+<code>add --served-by-helper</code>, and the new order in
+<code>lahe review</code> and <code>lahe write</code>. Old loopback
+origins are removed at bind. The Origin check for page requests reads
+the registry. Acceptance: V21 to V25, V65, V66.</p>
+<p><strong>Step test:</strong> with the switch on,
+<code>lahe review</code> on an HTML file, on a Markdown file with an
+image and a link outside its folder, on a folder, and
+<code>lahe write</code>, each print a <code>.lahe.localhost</code>
+address. Each page loads with its rail, and a comment reaches
+<code>review.json</code>. With the switch off,
+<code>npm run gate:unit</code> is unchanged from main.</p>
+<h4
+id="step-2-helper-modules-ask-the-registry-when-the-switch-says-so-pr-1">Step
+2: Helper modules ask the registry, when the switch says so (PR 1)</h4>
 <p><strong>Task 2.1: Page-to-file mappers.</strong>
 <code>reviews.js</code> (<code>servesPath</code>, healing stand-down,
 <code>pageUnderFolder</code>, <code>targetForPage</code>),
 <code>heal.js</code>, <code>rebuild.js</code>,
 <code>handled_check.js</code>, <code>projection.js</code>,
-<code>markdown.js</code>, <code>markdown_links.js</code>, linked files.
-Each reads sites instead of page-server records. Acceptance: V26 to
-V30.</p>
+<code>markdown.js</code>, <code>markdown_links.js</code>, and linked
+files. Each asks the registry when the switch is on and page-server
+records when it is off. Task 3.1 removes the off branch. Acceptance: V26
+to V30, each run with the switch on and off.</p>
 <p><strong>Task 2.2: Old comments and grouping.</strong> Aliases
-computed from old page-server records at serve time.
-<code>samePage</code> in <code>src/shared/record.js</code> and grouping
-in <code>src/shared/review_format.js</code> accept them. Acceptance:
-V31, V32.</p>
-<p><strong>Step test:</strong> the same reviews as Step 1, plus a review
-created before the switch, reopened under the switch: its old comments
-show, an agent reply reloads the page, a handled check reads the right
-file, and no served HTML file on disk changes after a poll.</p>
-<h4 id="step-3-make-it-the-default-retire-page-servers">Step 3: Make it
-the default, retire page servers</h4>
-<p><strong>Task 3.1: Flip the switch.</strong> Sites become the only
-path for HTML, Markdown, folders, and notes. Page-server spawning, the
-idle sweep, the session-close stop, port history, origin swaps, and the
-<code>SIGHUP</code> mount reload are removed. Old records stay readable.
-Every helper start stops leftover page-server processes named in old
-records. <code>lahe session close</code> stops only the session. Remove
-<code>LAHE_PAGES</code>. Acceptance: V33 to V36, V63, V64.</p>
-<p><strong>Task 3.2: <code>lahe status</code> and printed
-lines.</strong> Status shows the port, the printed ending and why, and
-the site name for each review. No line mentions an idle-stopped port.
-Acceptance: V37.</p>
-<p><strong>Task 3.3: Skill, contract, and serving docs.</strong>
-<code>skills/lahe/SKILL.md</code>, the contract in
-<code>src/shared/review_format.js</code> and its two restated copies
-(<code>test/unit/review_format.test.js</code>,
-<code>docs/CONTRACTS.md</code>), <code>docs/CLI.md</code>,
-<code>docs/ongoing/SERVING_ARCHITECTURES.md</code>,
+computed from old records at serve time, used by <code>samePage</code>
+in <code>src/shared/record.js</code> and by grouping in
+<code>src/shared/review_format.js</code>. Acceptance: V31, V32, V70.</p>
+<p><strong>Step test:</strong> a review created on a random port, opened
+with the switch on: its old comments show, an agent reply reloads the
+page, the handled check reads the right file, and no served HTML file
+changes on disk after a poll.</p>
+<h4 id="step-3-default-on-page-servers-retired-pr-2">Step 3: Default on,
+page servers retired (PR 2)</h4>
+<p><strong>Task 3.0: Test retirement list.</strong> Before any code in
+this step, list every existing test file that tests removed behavior:
+idle stop, page-server restart, port history, origin swap,
+<code>SIGHUP</code> mounts, the reopened-session sweep. Mark each one
+rewrite or retire, with one line of reason, in
+<code>progress/phase6_workstream_core.md</code>. The orchestrator puts
+the retire list in front of Ken for one batch approval before PR 2's
+gate. Builders delete nothing.</p>
+<p><strong>Task 3.1: Flip and remove.</strong> Sites become the only
+path. Page-server spawning, the idle sweep, the session-close stop, port
+history, origin swaps, the <code>SIGHUP</code> reload, and the switch's
+off branches are removed. Old records stay readable. Every helper start
+stops leftover page servers, after confirming each is the recorded
+process through its health probe and instance id. Acceptance: V33 to
+V36, V63, V64, V67.</p>
+<p><strong>Task 3.2: <code>lahe status</code> and logging.</strong>
+Status shows the port, the printed ending and why, each review's site, a
+taken port, and the install state that install writes to
+<code>service.json</code>. The log records the lines the brief's Logging
+section lists. Acceptance: V37, V71.</p>
+<p><strong>Task 3.3: Skill, contract, and serving docs.</strong> These
+all change in PR 2, using the printed ending Ken chose at the review
+gate:</p>
+<ul>
+<li><code>skills/lahe/SKILL.md</code>, then
+<code>npm run install-skills</code></li>
+<li>the contract in <code>src/shared/review_format.js</code>, plus its
+copies in <code>test/unit/review_format.test.js</code> and
+<code>docs/CONTRACTS.md</code></li>
+<li><code>docs/CLI.md</code></li>
+<li><code>docs/ongoing/SERVING_ARCHITECTURES.md</code>,
 <code>STATIC_SITE_FOLDER.md</code>, <code>FREE_WRITING.md</code>,
-<code>SESSION_OWNERSHIP.md</code>,
-<code>docs/diagrams/system_overview.md</code>,
-<code>session_ownership.md</code>, <code>review_round_trip.md</code>,
-<code>module_map.md</code>, <code>src/shared/manifest.js</code>, and the
-D11 residual line. Then <code>npm run install-skills</code>. Acceptance:
-V38.</p>
-<p><strong>Step test:</strong> full <code>npm run gate</code> alone, 0
-failed. The leak check counts no <code>static_servers.js --serve</code>
-process left by any test.</p>
-<p><strong>Don't touch:</strong> <code>src/service/catalog_*.js</code>,
-<code>src/layer/catalog/</code>,
-<code>src/cli/commands/install.js</code>,
-<code>src/service/login_item.js</code>,
-<code>src/service/name_server.js</code>.</p>
+<code>SESSION_OWNERSHIP.md</code></li>
+<li>the four diagrams the architecture lists</li>
+<li>the new D11 residual line</li>
+</ul>
+<p>Acceptance: V38.</p>
+<p><strong>Step test:</strong> the orchestrator runs
+<code>npm run gate</code>, alone, on the integrated branch and reads 0
+failed.</p>
 <h3 id="workstream-library-step-4">Workstream: library (Step 4)</h3>
 <p><strong>Outcome:</strong> the Library lists stable addresses, Open
 binds instead of restarting a process, and the Library answers at
 <code>library.lahe.localhost</code>.</p>
 <p><strong>Reads first:</strong> the architecture's "The Library"
-section and Security notes, <code>docs/ongoing/LIBRARY.md</code>,
+section and Security notes; <code>docs/ongoing/LIBRARY.md</code>;
 <code>docs/diagrams/session_ownership.md</code> (hand-over from the
-Library), the <code>sites.js</code> interface as merged in Step 1.</p>
-<p><strong>Authority:</strong> the architecture. Depends on core Step 3
-being merged.</p>
-<p><strong>Task 4.1: Kinds and Open.</strong> Redefine
-<code>openable</code>, <code>worktree</code>, <code>via-agent</code>,
-<code>legacy</code> per the architecture's table in
-<code>catalog_reader.js</code>. Open binds through
-<code>sites.js</code>, stamps the row's review as re-served unless a
-newer review in an open session holds the file, and returns the stable
-address. Remove the restart, the session reopen, the rollback, and the
-reopened-session sweep. Acceptance: V39 to V42.</p>
-<p><strong>Task 4.2: The Library's own address and copy.</strong>
-Catalog routes accept <code>library.lahe.localhost:&lt;port&gt;</code>
-with today's same-origin and token checks. Rows link to stable
-addresses. The Library page's copy works without the clipboard API.
+Library); the exported functions of <code>sites.js</code> on the
+integration branch.</p>
+<p><strong>Starts</strong> when core Step 1 is merged into the
+integration branch. Lands inside PR 1 (Tasks 4.1 and 4.2, behind the
+switch) and PR 2 (Task 4.3 and the off branch removed), so Open is never
+broken on main.</p>
+<p><strong>Task 4.1: Kinds and Open.</strong> With the switch on, the
+kinds follow the architecture's table, and Open binds through
+<code>sites.js</code>. Open returns the stable address, and does not
+move a rail that a newer open review holds. With the switch off, Open
+restarts page servers, as today. Acceptance: V39 to V42, each with the
+switch on.</p>
+<p><strong>Task 4.2: The Library's address and copy.</strong> Catalog
+routes accept <code>library.lahe.localhost:&lt;port&gt;</code>, with
+today's checks. Rows link to stable addresses. Copy works without the
+clipboard API, using one shared copy function that Task 6.3 reuses.
 Acceptance: V43, V44.</p>
-<p><strong>Task 4.3: Docs.</strong> <code>docs/ongoing/LIBRARY.md</code>
-and the Library parts of <code>docs/diagrams/system_overview.md</code>
-and <code>session_ownership.md</code>. Acceptance: V38 (Library
-part).</p>
-<p><strong>Step test:</strong> the browser walk opens the Library at
-<code>library.lahe.localhost</code>, opens an old review and a worktree
-row, and lands on stable addresses.</p>
-<p><strong>Don't touch:</strong> <code>src/service/page_routes.js</code>
-and <code>sites.js</code> beyond calling their exported functions;
-install files.</p>
+<p><strong>Task 4.3: Docs, in PR 2.</strong>
+<code>docs/ongoing/LIBRARY.md</code>, and the Library parts of the two
+diagrams. Remove the Library's off branch and the reopened-session
+sweep. Acceptance: V38 (Library part).</p>
 <h3 id="workstream-install-step-5">Workstream: install (Step 5)</h3>
 <p><strong>Outcome:</strong> <code>lahe install</code> makes the helper
 start at login and restart if it stops, on macOS, Linux, and Windows.
-Installed, the helper never stops itself, the CLI never spawns a second
-copy, and a stale helper is replaced at a quiet moment.</p>
+Installed, the helper does not stop itself, the CLI does not spawn a
+second copy, and a stale helper is replaced at a quiet moment.</p>
 <p><strong>Reads first:</strong> the architecture's "Always-on lifetime"
-and "Login item per system" sections, Security notes (install hygiene),
-<code>scripts/install-cli.js</code>,
-<code>src/service/self_stop.js</code>, <code>startHelper</code> in
-<code>src/cli/commands/session.js</code> and its copy in
-<code>add.js</code>, <code>docs/INSTALL.md</code>.</p>
-<p><strong>Authority:</strong> the architecture. The spikes in Task 5.1
-may change a mechanism; report before building on a changed one.</p>
-<p><strong>Task 5.1: Spikes, one per system.</strong> For macOS
-(<code>launchd</code> agent with <code>KeepAlive</code>, the Background
-Items notice), Linux (<code>systemd --user</code> unit), and Windows
-(Task Scheduler XML with restart on failure and a hidden window), prove
-install, start at login, restart after a kill, and uninstall on a
-throwaway state folder and port. macOS is run on this Mac. Linux and
-Windows run in CI jobs that never fail the run
-(<code>continue-on-error</code>, verdict in the log), per CLAUDE.md's CI
-rule. Acceptance: a written verdict per system in
+and "Login item per system" sections and the install lines of Security
+notes; <code>scripts/install-cli.js</code>;
+<code>src/service/self_stop.js</code>; <code>startHelper</code> in
+<code>src/cli/commands/session.js</code> and the four calls to it in
+<code>add.js</code>; <code>docs/INSTALL.md</code>.</p>
+<p><strong>Starts</strong> when core Step 1 is merged into the
+integration branch. Lands as PR 3, after PR 2.</p>
+<p><strong>Task 5.1: Spikes, one per system.</strong></p>
+<ul>
+<li>macOS, on this Mac: install, start, kill, restart, and uninstall, on
+a throwaway state folder and port. The spike's login item gets a unique
+label and is removed in the spike's own teardown. A login item that
+keeps restarting is stopped by <code>launchctl bootout</code> before the
+spike ends.</li>
+<li>Linux and Windows: the same steps, through the dispatch workflow
+from Task 0.1.</li>
+</ul>
+<p>CI cannot log in, so "starts at login" is proven by the service
+manager's start command, plus Ken's reboot on this Mac (V45). A written
+verdict per system goes in
 <code>progress/phase6_workstream_install.md</code>.</p>
 <p><strong>Task 5.2: <code>lahe install</code> and
 <code>lahe uninstall</code>.</strong>
 <code>src/cli/commands/install.js</code>,
-<code>src/service/login_item.js</code>, <code>install.json</code> with
-the resolved state folder and port, the login item passing
-<code>--always-on --port --state-dir</code>. Refuses without a terminal
-and when run as root. Warns on a computer with more than one interactive
-user. Registered in <code>src/cli/index.js</code>. Acceptance: V45 to
-V48.</p>
+<code>src/service/login_item.js</code>, and <code>install.json</code>,
+registered in <code>src/cli/index.js</code>. Acceptance: V45 to V48,
+V72.</p>
 <p><strong>Task 5.3: Always-on behavior.</strong>
-<code>--always-on</code> turns self-stop rule 1 off and keeps rule 2.
-<code>/health</code> reports a state-folder id. When
-<code>install.json</code> exists, both <code>startHelper</code> copies
-ask the login item instead of spawning, and compare source stamps
-against the clone the login item names. A stale helper is replaced at a
-quiet outbox moment with windows open. Acceptance: V49 to V52.</p>
+<code>--always-on</code> in <code>serve.js</code>, the state-folder id
+in <code>/health</code>, and <code>startHelper</code> asking the login
+item instead of spawning. A stale helper is replaced at a quiet moment.
+Install writes its state into <code>service.json</code> for core's
+status lines to print. Acceptance: V49 to V52.</p>
 <p><strong>Task 5.4: Idle cost (brief requirement 11, light when
-idle).</strong> Before building, write the two limits in
-<code>progress/phase6_workstream_install.md</code>: memory and wakeups
-per minute with nothing open, and with Ken's usual tab count (read from
-his browser) overnight. Measure today's helper plus page servers, then
-the always-on helper, with the existing
-<code>scripts/measure_idle_requests.js</code> style. Raise
+idle).</strong> The orchestrator measures the baseline before PR 2
+lands: memory and wakeups per minute for today's helper plus page
+servers, with nothing open and with Ken's usual tab count overnight.
+This task writes the two limits first, then measures the always-on
+helper after PR 2 and PR 3 are on the integration branch. Raise
 <code>NumberOfFiles</code> in the plist only if the measurement calls
 for it. Acceptance: V53.</p>
 <p><strong>Task 5.5: Docs.</strong> <code>docs/INSTALL.md</code>,
-<code>README.md</code>, <code>docs/CLI.md</code> (install, uninstall),
-and the always-on lines in <code>SESSION_OWNERSHIP.md</code>.
+<code>README.md</code>, the install section of <code>docs/CLI.md</code>,
+and the always-on lines of <code>SESSION_OWNERSHIP.md</code>.
 Acceptance: V38 (install part).</p>
-<p><strong>Don't touch:</strong> <code>page_routes.js</code>,
-<code>sites.js</code>, catalog files. <code>session.js</code> only in
-<code>startHelper</code>; core owns session close.</p>
 <h3 id="workstream-lahe-names-step-6">Workstream: lahe-names (Step
 6)</h3>
 <p><strong>Outcome:</strong> on macOS,
 <code>lahe install --lahe-names</code> makes every site also answer at
-<code>&lt;name&gt;.lahe</code>, and only after the helper has proved its
-own name server answers <code>.lahe</code> lookups. What
-<code>lahe review</code> prints follows Ken's answer to the open
-question on the printed ending.</p>
+<code>&lt;name&gt;.lahe</code>, but only after the helper has proved its
+own name server answers <code>.lahe</code> lookups.</p>
 <p><strong>Reads first:</strong> the architecture's "<code>.lahe</code>
-on macOS (opt-in)" section, Security notes (DNS rebinding, name server),
-the brief's questions leaf (the printed-ending question and Ken's
-answer).</p>
-<p><strong>Authority:</strong> the architecture, plus Ken's answer at
-the review gate. Depends on install Step 5.</p>
-<p><strong>Task 6.1: The name server
-(<code>src/service/name_server.js</code>).</strong> Loopback UDP on the
-port from <code>install.json</code>. Answers <code>A 127.0.0.1</code>
-and <code>AAAA ::1</code> for names under <code>.lahe</code>,
-<code>REFUSED</code> otherwise, drops malformed packets without
-throwing. Started only when <code>install.json</code> records the
-resolver. Acceptance: V54, V55.</p>
+on macOS (opt-in)" section and Security notes on DNS rebinding; Ken's
+answer to the brief's question on the printed ending.</p>
+<p><strong>Starts</strong> after PR 3. Lands as PR 4.</p>
+<p><strong>Task 6.1: The name server,
+<code>src/service/name_server.js</code>.</strong> Acceptance: V54,
+V55.</p>
 <p><strong>Task 6.2: Resolver setup and verification.</strong>
-<code>--lahe-names</code> writes <code>/etc/resolver/lahe</code> with
-fixed content and a Lahe marker in one <code>sudo</code> call, no shell
-interpolation. The helper verifies at start and every 5 minutes with a
-fresh random name it must see itself. Page routes accept
-<code>.lahe</code> Hosts only while verified. Uninstall removes the file
-only when it carries the marker. Acceptance: V56 to V59.</p>
-<p><strong>Task 6.3: Only if Ken chooses <code>.lahe</code> as the
-printed ending.</strong> Copy fallback in
-<code>src/layer/export.js</code> and <code>overlay.js</code> (the
-Library's ships in Task 4.2 either way), a local-storage lease when Web
-Locks is missing in <code>src/layer/store.js</code>, and page-type
-detection from <code>Accept</code> when Fetch Metadata is missing.
-Acceptance: V60 to V62. If Ken keeps <code>.lahe.localhost</code>
-printed, this task is dropped and the rows are marked not
-applicable.</p>
-<p><strong>Don't touch:</strong> catalog files; <code>sites.js</code>
-beyond its exports.</p>
+Acceptance: V56 to V59, plus V73 on Ken's Mac.</p>
+<p><strong>Task 6.3: Only if Ken chose <code>.lahe</code> as the printed
+ending.</strong> Fallbacks for a non-secure page:</p>
+<ul>
+<li>copy, reusing Task 4.2's function in <code>export.js</code> and
+<code>overlay.js</code>;</li>
+<li>a local-storage lease in <code>store.js</code> when Web Locks is
+missing;</li>
+<li>page-type detection from <code>Accept</code>.</li>
+</ul>
+<p>Tests reach a non-secure origin through a Chromium host-resolver
+rule, Chromium only. If Ken chose <code>.lahe</code> printed, Task 3.3
+already wrote that ending into the skill and contract, so this task
+touches no docs. If Ken keeps <code>.lahe.localhost</code>, this task is
+dropped, and V60 to V62 are marked not applicable. Acceptance: V60 to
+V62.</p>
 <h2 id="workstreams-and-prs">Workstreams and PRs</h2>
 <div class="table-scroll"><table>
 <thead>
@@ -1105,29 +1152,21 @@ beyond its exports.</p>
 <td>one builder, Opus</td>
 <td>itself across Steps 1 to 3</td>
 <td><code>sites.js</code>, <code>page_routes.js</code>,
-<code>index.js</code>, <code>routes.js</code>, <code>auth.js</code>
-(non-catalog), <code>protocol.js</code>, <code>record.js</code>,
+<code>index.js</code> (all but <code>/health</code>),
+<code>routes.js</code>, <code>auth.js</code> (non-catalog),
+<code>protocol.js</code>, <code>record.js</code>,
 <code>review_format.js</code>, <code>reviews.js</code>,
 <code>heal.js</code>, <code>rebuild.js</code>,
 <code>handled_check.js</code>, <code>projection.js</code>,
 <code>markdown*.js</code>, <code>static_servers.js</code>,
 <code>idle_servers.js</code>, <code>commands/review.js</code>,
-<code>add.js</code> (served-by-helper), <code>write.js</code>,
-<code>status.js</code>, <code>session.js</code> (close)</td>
+<code>add.js</code> (the served-by-helper mode), <code>write.js</code>,
+<code>status.js</code>, <code>session.js</code> (close),
+<code>src/layer/index.js</code>, <code>docs/CLI.md</code> (review,
+write, status, session sections), <code>SESSION_OWNERSHIP.md</code>
+(except always-on lines)</td>
 <td>none</td>
-<td>PR 1 (Steps 1 and 2, switch off by default), PR 2 (Step 3)</td>
-</tr>
-<tr>
-<td>install</td>
-<td>5.1 to 5.5</td>
-<td>one builder, Opus</td>
-<td>none</td>
-<td><code>commands/install.js</code>, <code>login_item.js</code>,
-<code>self_stop.js</code>, <code>startHelper</code> in
-<code>session.js</code> and <code>add.js</code>,
-<code>scripts/install-cli.js</code>, <code>docs/INSTALL.md</code></td>
-<td>core Step 1 merged</td>
-<td>PR 3</td>
+<td>PR 1, PR 2</td>
 </tr>
 <tr>
 <td>library</td>
@@ -1135,10 +1174,25 @@ beyond its exports.</p>
 <td>one builder, Sonnet</td>
 <td>none</td>
 <td><code>catalog_*.js</code>, <code>src/layer/catalog/</code>,
-<code>auth.js</code> (catalog part),
+<code>auth.js</code> (catalog part), <code>commands/library.js</code>,
 <code>docs/ongoing/LIBRARY.md</code></td>
-<td>core Step 3 merged</td>
-<td>PR 4</td>
+<td>core Step 1</td>
+<td>PR 1, PR 2</td>
+</tr>
+<tr>
+<td>install</td>
+<td>5.1 to 5.5</td>
+<td>one builder, Opus</td>
+<td>none</td>
+<td><code>commands/install.js</code>, <code>commands/serve.js</code>,
+<code>login_item.js</code>, <code>self_stop.js</code>,
+<code>/health</code> in <code>index.js</code>, <code>startHelper</code>
+in <code>session.js</code> and its four calls in <code>add.js</code>,
+<code>scripts/install-cli.js</code>, <code>docs/INSTALL.md</code>,
+<code>README.md</code>, <code>docs/CLI.md</code> (install section), the
+always-on lines of <code>SESSION_OWNERSHIP.md</code></td>
+<td>core Step 1</td>
+<td>PR 3</td>
 </tr>
 <tr>
 <td>lahe-names</td>
@@ -1148,8 +1202,8 @@ beyond its exports.</p>
 <td><code>name_server.js</code>, resolver parts of
 <code>login_item.js</code> and <code>install.js</code>, layer fallbacks
 (6.3 only)</td>
-<td>install, core Step 3</td>
-<td>PR 5</td>
+<td>PR 3</td>
+<td>PR 4</td>
 </tr>
 </tbody>
 </table></div>
@@ -1158,24 +1212,26 @@ beyond its exports.</p>
 model for all three of its steps. The install builder continues into
 lahe-names because both touch <code>install.json</code>, the installer,
 and macOS system setup.</p></li>
-<li><p><strong>Token plan:</strong> core and install run in parallel
-after core Step 1 lands, because they share no files except two separate
-functions in <code>session.js</code>, which the orchestrator merges.
-Library waits for core Step 3. Packets name only the architecture
-sections and docs listed under each workstream's "Reads first".</p></li>
+<li><p><strong>Token plan:</strong> core, library, and install run in
+parallel once core Step 1 is merged into the integration branch. They
+share files only where the table splits them by function. The
+orchestrator merges in this order: core, then library, then install.
+Packets name only the architecture sections and docs in each leaf's
+"Reads first".</p></li>
 <li><p><strong>Packet sources:</strong> each workstream leaf above is
 its packet, plus the brief's Requirements section and the verification
 rows it names.</p></li>
 <li><p><strong>PRs:</strong> each leaves the app working.</p>
 <ul>
-<li>PR 1 ships the registry and the new serving behind
-<code>LAHE_PAGES=sites</code>, off by default.</li>
-<li>PR 2 turns it on and removes the old path, with the skill and
-contract changes.</li>
-<li>PR 3 adds install; without running <code>lahe install</code>,
+<li>PR 0 is the dispatch-only workflow.</li>
+<li>PR 1 ships the registry, the new serving, and the Library's new
+Open, behind <code>LAHE_PAGES=sites</code>, off by default.</li>
+<li>PR 2 turns it on, removes the old path, and changes the skill and
+contract, using the ending Ken chose at the review gate. Its retired
+tests have Ken's batch approval first.</li>
+<li>PR 3 adds install. Without running <code>lahe install</code>,
 nothing changes for a clone.</li>
-<li>PR 4 is the Library.</li>
-<li>PR 5 adds the <code>.lahe</code> option.</li>
+<li>PR 4 adds the <code>.lahe</code> option.</li>
 </ul>
 <p>Each PR runs <code>npm run gate</code> locally, alone, and reads 0
 failed before it is pushed. <code>dist/lahe-layer.js</code> is rebuilt
@@ -1238,8 +1294,9 @@ from its <code>.git</code> file</td>
 <tr>
 <td>V6</td>
 <td>Single writer</td>
-<td>Only the helper writes <code>sites.json</code>; a CLI write attempt
-is not possible through any export</td>
+<td><code>review</code>, <code>write</code>, and <code>status</code> run
+with the helper stopped leave <code>sites.json</code> and
+<code>sites.log</code> unchanged</td>
 <td>U</td>
 </tr>
 <tr>
@@ -1294,7 +1351,8 @@ file outside its folder opens through the site's mount</td>
 <tr>
 <td>V14</td>
 <td>R4 hidden files</td>
-<td>Dot segments and dotfiles return 404 under every site</td>
+<td>Dotfiles, raw dot segments, and percent-encoded ones
+(<code>%2e%2e</code>, <code>%2f</code>) return 404 under every site</td>
 <td>U</td>
 </tr>
 <tr>
@@ -1307,9 +1365,8 @@ reserved files, and 404s a sibling file</td>
 <tr>
 <td>V16</td>
 <td>R4 isolation</td>
-<td>A page on site A cannot read a page or token from site B
-(cross-origin fetch fails); same-folder pages share an origin as
-today</td>
+<td>A page on site A cannot fetch a page or token from site B, while the
+same fetch from a page on site B succeeds</td>
 <td>B</td>
 </tr>
 <tr>
@@ -1344,7 +1401,7 @@ the moved note and no script tag</td>
 <td>Rail rule</td>
 <td>The rail follows today's rules without the session filter: exact
 file, then folder review, then linking review; <code>--only</code> opts
-out</td>
+out; ties broken by an injected clock</td>
 <td>U</td>
 </tr>
 <tr>
@@ -1430,7 +1487,8 @@ one page together</td>
 <tr>
 <td>V34</td>
 <td>R1 idle</td>
-<td>After the old idle grace with no window, the page still loads</td>
+<td>After the old idle grace with no window (injected clock), the page
+still loads</td>
 <td>U</td>
 </tr>
 <tr>
@@ -1451,16 +1509,17 @@ check finds none</td>
 <td>V37</td>
 <td>R5, R6 status</td>
 <td><code>lahe status</code> prints the port, the printed ending and
-why, and each review's site; a taken port is named</td>
+why, and each review's site; <code>lahe review</code> and
+<code>lahe status</code> name a taken port</td>
 <td>U</td>
 </tr>
 <tr>
 <td>V38</td>
 <td>R12 docs</td>
 <td>The skill, contract and its copies, CLI doc, ongoing docs, diagrams,
-and manifest describe sites and the always-on server; a grep finds no
-"random port" or per-session page-server wording</td>
-<td>M</td>
+and manifest describe sites and the always-on server; a scripted grep
+finds no "random port" or per-session page-server wording</td>
+<td>U</td>
 </tr>
 <tr>
 <td>V39</td>
@@ -1493,7 +1552,8 @@ table</td>
 <td>V43</td>
 <td>R15 Library address</td>
 <td>The Library loads at <code>library.lahe.localhost</code> with
-today's checks; a document Host never reaches it</td>
+today's checks; a document Host and <code>library.lahe</code> never
+reach it</td>
 <td>B</td>
 </tr>
 <tr>
@@ -1511,13 +1571,15 @@ today's checks; a document Host never reaches it</td>
 <tr>
 <td>V46</td>
 <td>R7 install Linux</td>
-<td>Same on Linux, CI job that never fails the run</td>
+<td>Install, start through the service manager, kill, restart,
+uninstall, in the dispatch workflow. Login itself is not proven in
+CI</td>
 <td>M</td>
 </tr>
 <tr>
 <td>V47</td>
 <td>R7 install Windows</td>
-<td>Same on Windows, CI job that never fails the run</td>
+<td>Same on Windows. Login itself is not proven in CI</td>
 <td>M</td>
 </tr>
 <tr>
@@ -1530,8 +1592,8 @@ login item carries port and state folder</td>
 <tr>
 <td>V49</td>
 <td>Always-on</td>
-<td><code>--always-on</code> does not self-stop when quiet, and still
-stops when the state folder is removed</td>
+<td><code>--always-on</code> does not self-stop when quiet (injected
+clock), and still stops when the state folder is removed</td>
 <td>U</td>
 </tr>
 <tr>
@@ -1636,6 +1698,70 @@ tab reloads</td>
 <code>gate:all</code></td>
 <td>B</td>
 </tr>
+<tr>
+<td>V65</td>
+<td>R3 same file, same address</td>
+<td>Two reviews of one file, in two sessions, print the same
+address</td>
+<td>U</td>
+</tr>
+<tr>
+<td>V66</td>
+<td>Bind target</td>
+<td><code>site.bind</code> refuses the filesystem root, the state
+folder, any folder inside it, and a root that is not a folder</td>
+<td>U</td>
+</tr>
+<tr>
+<td>V67</td>
+<td>R1, R7 clone mode</td>
+<td>Without the install, after the helper stops and
+<code>lahe review</code> starts it again, the old address loads</td>
+<td>B</td>
+</tr>
+<tr>
+<td>V68</td>
+<td>Listen addresses</td>
+<td>The helper listens on <code>127.0.0.1</code> and <code>::1</code>
+only, never on all addresses</td>
+<td>U</td>
+</tr>
+<tr>
+<td>V69</td>
+<td>Unknown and gone pages</td>
+<td>The name and path shown on these pages are escaped</td>
+<td>U</td>
+</tr>
+<tr>
+<td>V70</td>
+<td>Aliases</td>
+<td><code>data-lahe-aliases</code> is escaped JSON, holds at most 16
+entries, and comes only from the helper's records</td>
+<td>U</td>
+</tr>
+<tr>
+<td>V71</td>
+<td>Logging</td>
+<td>The log records the port, ending and why, install state, each new
+name, and each refused Host without page content</td>
+<td>U</td>
+</tr>
+<tr>
+<td>V72</td>
+<td>Install details</td>
+<td>Paths with spaces are quoted in each login item, and
+<code>lahe status</code> says to reinstall when the recorded Node is
+gone</td>
+<td>U</td>
+</tr>
+<tr>
+<td>V73</td>
+<td><code>.lahe</code> for real</td>
+<td>On Ken's Mac with the resolver installed: a <code>.lahe</code> page
+loads in Chrome, Firefox, and Safari; a stopped name server turns
+<code>.lahe</code> off and status says why</td>
+<td>M</td>
+</tr>
 </tbody>
 </table></div>
 </div>
@@ -1680,19 +1806,19 @@ interaction patterns across every surface it touches.</label></li>
 <p><strong>This feature:</strong></p>
 <ul class="task-list">
 <li><label><input type="checkbox" />Old addresses keep working (brief
-requirement 1): V33, V34, plus V45 after a reboot on this
+requirement 1): V33, V34, V67, plus V45 after a reboot on this
 Mac.</label></li>
 <li><label><input type="checkbox" />Pages load with no agent
 (requirement 2): V11.</label></li>
 <li><label><input type="checkbox" />Addresses name the folder and file
-(requirement 3): V1 to V3, and the walk reads every printed
+(requirement 3): V1 to V3, V65, and the walk reads every printed
 address.</label></li>
 <li><label><input type="checkbox" />Documents stay walled off
 (requirement 4): V14 to V17.</label></li>
 <li><label><input type="checkbox" />One port (requirement 5): V7,
 V37.</label></li>
 <li><label><input type="checkbox" />Endings (requirement 6): V37, V54 to
-V59, and Ken's answer on the printed ending applied.</label></li>
+V59, V73, and Ken's answer on the printed ending applied.</label></li>
 <li><label><input type="checkbox" />Starts at login on three systems
 (requirement 7): V45 to V52.</label></li>
 <li><label><input type="checkbox" />Existing documents get addresses,
@@ -1701,7 +1827,8 @@ V39.</label></li>
 <li><label><input type="checkbox" />Drafts come back (requirement 9):
 V63.</label></li>
 <li><label><input type="checkbox" />Only this computer, and only Lahe's
-names (requirement 10): V7 to V9, V22 to V24.</label></li>
+names (requirement 10): V7 to V9, V22 to V24, V66, V68 to
+V70.</label></li>
 <li><label><input type="checkbox" />Light when idle (requirement 11):
 V53.</label></li>
 <li><label><input type="checkbox" />Agents are told (requirement 12):
@@ -1719,6 +1846,891 @@ page-to-file mapping: V26 to V30, V32.</label></li>
 </ul>
 </div>
 <h2 id="plan-review">Plan Review</h2>
-<p>Not yet run.</p>
+<p>Full prose: <a href="03_plan_stable_addresses_reviews.md">plan
+review</a>.</p>
+<div class="table-scroll"><table>
+<thead>
+<tr>
+<th>#</th>
+<th>Finding</th>
+<th>Disposition</th>
+<th>Rationale</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>PR1</td>
+<td>Library Open broken on main between PRs</td>
+<td><span class="accepted">Accepted</span></td>
+<td>Library's new Open ships in PR 1 behind the switch; PR 2 flips
+both</td>
+</tr>
+<tr>
+<td>PR2</td>
+<td>Mappers switched while the switch was off</td>
+<td><span class="accepted">Accepted</span></td>
+<td>Mappers ask both, chosen by the switch, until Task 3.1</td>
+</tr>
+<tr>
+<td>PR3</td>
+<td>Shared files had no owner; merge points unclear</td>
+<td><span class="accepted">Accepted</span></td>
+<td>Ownership split by function; integration branch; merge order core,
+library, install</td>
+</tr>
+<tr>
+<td>PR4</td>
+<td>23 tests of removed behavior</td>
+<td><span class="accepted">Accepted</span></td>
+<td>Task 3.0 lists rewrite or retire; Ken approves the deletions in one
+batch before PR 2</td>
+</tr>
+<tr>
+<td>PR5</td>
+<td>Manifest only updated at the end</td>
+<td><span class="accepted">Accepted</span></td>
+<td>Every builder adds new files to the manifest in the same commit</td>
+</tr>
+<tr>
+<td>PR6</td>
+<td>Switch scope unclear</td>
+<td><span class="accepted">Accepted</span></td>
+<td>Core leaf says what is live and what is switched; the CLI follows
+the running helper</td>
+</tr>
+<tr>
+<td>PR7</td>
+<td>Ending answer after the skill ships</td>
+<td><span class="accepted">Accepted</span></td>
+<td>Ken answers at the review gate, before PR 2 writes the skill and
+contract</td>
+</tr>
+<tr>
+<td>PR8</td>
+<td>Security fixes without rows</td>
+<td><span class="accepted">Accepted</span></td>
+<td>V66, V68 to V70, V72, V73; V43 covers <code>library.lahe</code></td>
+</tr>
+<tr>
+<td>PR9</td>
+<td>Headline promises without rows</td>
+<td><span class="accepted">Accepted</span></td>
+<td>V65, V67; V37 covers <code>lahe review</code> naming a taken
+port</td>
+</tr>
+<tr>
+<td>PR10</td>
+<td>CI cannot prove login on Linux and Windows</td>
+<td><span class="accepted">Accepted</span></td>
+<td>Rows reworded; Ken accepts the gap at the gate</td>
+</tr>
+<tr>
+<td>PR11</td>
+<td>Spikes had no allowed CI path</td>
+<td><span class="accepted">Accepted</span></td>
+<td>PR 0: a dispatch-only workflow that never fails or emails</td>
+</tr>
+<tr>
+<td>PR12</td>
+<td>New leak paths</td>
+<td><span class="accepted">Accepted</span></td>
+<td>Leak rules in every builder's contract; spike teardown spelled
+out</td>
+</tr>
+<tr>
+<td>PR13</td>
+<td>Stopping old pids could kill a stranger</td>
+<td><span class="accepted">Accepted</span></td>
+<td>Health probe and instance id checked before any stop</td>
+</tr>
+<tr>
+<td>PR14</td>
+<td><code>.lahe</code> verification only stubbed</td>
+<td><span class="accepted">Accepted</span></td>
+<td>V73 on Ken's Mac</td>
+</tr>
+<tr>
+<td>PR15</td>
+<td>Linked-file wording</td>
+<td><span class="accepted">Accepted</span></td>
+<td>Brief requirement 8a reworded to "opens that file, with the rail it
+gets today"</td>
+</tr>
+<tr>
+<td>PR16</td>
+<td>Idle baseline timing</td>
+<td><span class="accepted">Accepted</span></td>
+<td>Task 0.2 before PR 2; after-state once PR 2 and PR 3 are merged</td>
+</tr>
+<tr>
+<td>PR17</td>
+<td>Leaves missing contract parts</td>
+<td><span class="accepted">Accepted</span></td>
+<td>"Every builder's contract" block</td>
+</tr>
+<tr>
+<td>PR18</td>
+<td>Test construction</td>
+<td><span class="accepted">Accepted</span></td>
+<td>Positive control, encoded dot segments, injected clocks,
+behavior-based V6, scripted V38</td>
+</tr>
+<tr>
+<td>PR19</td>
+<td>Logging and reinstall rows</td>
+<td><span class="accepted">Accepted</span></td>
+<td>V71, V72</td>
+</tr>
+<tr>
+<td>PR20</td>
+<td>Non-secure test origin</td>
+<td><span class="accepted">Accepted</span></td>
+<td>Chromium host-resolver rule; one shared copy function</td>
+</tr>
+<tr>
+<td>PR21</td>
+<td>Builder running the full suite</td>
+<td><span class="accepted">Accepted</span></td>
+<td>The orchestrator runs it</td>
+</tr>
+<tr>
+<td>PR22</td>
+<td>Leaves restating the architecture</td>
+<td><span class="accepted">Accepted</span></td>
+<td>Leaves point to sections and keep acceptance rows</td>
+</tr>
+</tbody>
+</table></div>
+<hr class="reviews-divider" style="margin:4.5rem 0 1.5rem;border:0;border-top:3px solid #b0463b">
+
+<div class="reviews-banner">
+<p>The sections below are the full verbatim persona + human reviews for
+this document. They live in a separate <code>_reviews.md</code> file (so
+agents read the lean spec), merged here for review.</p>
+</div>
+<h1 id="plan-review-stable-addresses">Plan review: Stable addresses</h1>
+<p>Reviewer: review-plan (orchestration and test plan). Reviewed:
+<code>03_plan_stable_addresses.md</code> and its four leaves, against
+the brief, the architecture, the combined architecture review file,
+CLAUDE.md, and the code on <code>feat/stable-addresses</code> at
+<code>1665e7f</code>.</p>
+<h2 id="summary-1">Summary</h2>
+<p>Two blockers, both about the app being broken on main between pull
+requests:</p>
+<ul>
+<li>PR 2 retires page-server spawning, but the Library's Open still
+restarts page servers until PR 4. Library Open is broken on main in
+between, and the V36 row (no code spawns a page server) cannot pass in
+PR 2.</li>
+<li>Task 2.1 rewires the page-to-file mappers to read sites in PR 1,
+while the switch is off. The default path still uses page servers, so
+the healer, reload, and handled checks lose their roots on main.</li>
+</ul>
+<p>The rest is important but fixable in the plan text: shared files with
+no named owner, a test retirement step that collides with the no-delete
+rule, CI spikes that the CI rules do not allow as written, several
+accepted security findings with no verification row, and the
+printed-ending decision landing too late for PR 2's contract text.</p>
+<div class="table-scroll"><table>
+<thead>
+<tr>
+<th>#</th>
+<th>Severity</th>
+<th>Area</th>
+<th>One line</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>PR1</td>
+<td>blocker</td>
+<td>orchestration</td>
+<td>Library Open breaks between PR 2 and PR 4</td>
+</tr>
+<tr>
+<td>PR2</td>
+<td>blocker</td>
+<td>orchestration</td>
+<td>Step 2 mappers switch to sites while the switch is off</td>
+</tr>
+<tr>
+<td>PR3</td>
+<td>important</td>
+<td>orchestration</td>
+<td>Shared files have no owner or merge plan; install's start point does
+not exist</td>
+</tr>
+<tr>
+<td>PR4</td>
+<td>important</td>
+<td>orchestration</td>
+<td>23 existing test files test removed behavior; no task retires them
+under the no-delete rule</td>
+</tr>
+<tr>
+<td>PR5</td>
+<td>important</td>
+<td>orchestration</td>
+<td>Manifest lint fails PR 1 and PR 3 as written</td>
+</tr>
+<tr>
+<td>PR6</td>
+<td>important</td>
+<td>orchestration</td>
+<td>"Behind a switch" does not say which PR 1 parts are live, or how CLI
+and helper agree on it</td>
+</tr>
+<tr>
+<td>PR7</td>
+<td>important</td>
+<td>orchestration</td>
+<td>Printed-ending decision lands after PR 2 ships the contract</td>
+</tr>
+<tr>
+<td>PR8</td>
+<td>important</td>
+<td>test plan</td>
+<td>Accepted security findings with no verification row</td>
+</tr>
+<tr>
+<td>PR9</td>
+<td>important</td>
+<td>test plan</td>
+<td>Headline promises with no row: same file gives same address; clone
+mode keeps the address</td>
+</tr>
+<tr>
+<td>PR10</td>
+<td>important</td>
+<td>test plan</td>
+<td>V46 and V47 cannot prove "starts at login" on Linux and Windows</td>
+</tr>
+<tr>
+<td>PR11</td>
+<td>important</td>
+<td>orchestration</td>
+<td>CI spikes (Tasks 1.0 and 5.1) need workflows the CI rules do not
+allow as written</td>
+</tr>
+<tr>
+<td>PR12</td>
+<td>important</td>
+<td>test plan</td>
+<td>Leak risks new to this feature: launchd respawn, always-on helpers,
+two listeners, stale-replace stub</td>
+</tr>
+<tr>
+<td>PR13</td>
+<td>important</td>
+<td>test plan</td>
+<td>V35 can signal an unrelated process that reused a recorded pid</td>
+</tr>
+<tr>
+<td>PR14</td>
+<td>important</td>
+<td>test plan</td>
+<td><code>.lahe</code> verification is only ever proven against a
+stub</td>
+</tr>
+<tr>
+<td>PR15</td>
+<td>important</td>
+<td>test plan</td>
+<td>R8a criterion maps to V13, which proves different behavior</td>
+</tr>
+<tr>
+<td>PR16</td>
+<td>important</td>
+<td>orchestration</td>
+<td>Idle-cost baseline and limits are measured at the wrong time</td>
+</tr>
+<tr>
+<td>PR17</td>
+<td>important</td>
+<td>orchestration</td>
+<td>Workstream leaves are not complete dispatch contracts</td>
+</tr>
+<tr>
+<td>PR18</td>
+<td>minor</td>
+<td>test plan</td>
+<td>Test construction: positive controls, encoded paths, clocks, vague
+rows</td>
+</tr>
+<tr>
+<td>PR19</td>
+<td>minor</td>
+<td>test plan</td>
+<td>Brief logging and rollout lines have no row</td>
+</tr>
+<tr>
+<td>PR20</td>
+<td>minor</td>
+<td>orchestration</td>
+<td>Task 6.3 needs a stated way to get a non-secure origin in tests</td>
+</tr>
+<tr>
+<td>PR21</td>
+<td>minor</td>
+<td>orchestration</td>
+<td>Step 3 step test has the builder running the full browser suite</td>
+</tr>
+<tr>
+<td>PR22</td>
+<td>minor</td>
+<td>orchestration</td>
+<td>Leaves restate architecture detail that will drift</td>
+</tr>
+</tbody>
+</table></div>
+<h2 id="findings">Findings</h2>
+<h3 id="pr1-library-open-breaks-between-pr-2-and-pr-4">PR1. Library Open
+breaks between PR 2 and PR 4</h3>
+<pre><code>severity   blocker
+kind       defect
+area       orchestration
+where      Workstreams and PRs table; core Task 3.1; library Task 4.1; V36</code></pre>
+<ul>
+<li><strong>what</strong> PR 2 removes page-server spawning, but
+<code>src/service/catalog_actions.js</code> still opens a row by calling
+<code>staticServers.createCatalogOps</code> and
+<code>ops.reopenForCatalog</code> (lines 45, 248 to 298) until the
+library workstream lands in PR 4.</li>
+<li><strong>why</strong> Between PR 2 and PR 4, main either has a
+Library Open that fails on every row, or it still spawns page servers,
+which makes V36 (no code path spawns
+<code>static_servers.js --serve</code>) fail in PR 2. The unit tests
+<code>catalog_open_rollback</code>, <code>catalog_lifetime</code>,
+<code>catalog_open_owner</code>, and
+<code>library_session_autoclose</code> also exercise the old Open and
+will go red in PR 2. Core's "Don't touch" list forbids it from fixing
+them.</li>
+<li><strong>fix</strong> Start library after PR 1, not PR 2.
+<code>site.bind</code> exists in PR 1, so the library builder can build
+"Open binds" behind the same switch, in parallel with core Step 3, and
+land before PR 2. PR 2 then flips both and removes the old Open
+together. This also shortens the critical path. If that is not wanted,
+merge Task 4.1 into PR 2 and say so.</li>
+</ul>
+<h3 id="pr2-step-2-mappers-switch-to-sites-while-the-switch-is-off">PR2.
+Step 2 mappers switch to sites while the switch is off</h3>
+<pre><code>severity   blocker
+kind       defect
+area       orchestration
+where      core Task 2.1 and 2.2; PR 1 (&quot;Steps 1 and 2, switch off by default&quot;)</code></pre>
+<ul>
+<li><strong>what</strong> Task 2.1 says each mapper
+(<code>servesPath</code>, healing stand-down,
+<code>pageUnderFolder</code>, <code>targetForPage</code>,
+<code>heal.js</code>, <code>rebuild.js</code>,
+<code>handled_check.js</code>, <code>projection.js</code>,
+<code>markdown*.js</code>) "reads sites instead of page-server records",
+and that ships in PR 1 with the switch off.</li>
+<li><strong>why</strong> With the switch off, pages are still served by
+page servers, so a mapper that only reads sites finds no root. The
+architecture's AR5 names the result: the healer writes tokens into
+served files. Reload, handled checks, and linked documents also stop
+matching. Main is broken after PR 1 for every user.</li>
+<li><strong>fix</strong> In Task 2.1, say the mappers ask both, chosen
+by the switch, until Task 3.1 removes the page-server branch. Give PR 1
+a row that runs V26 to V30 with the switch off as well as on. Or move
+Step 2 into PR 2, where the switch flips, and keep PR 1 to Step 1.</li>
+</ul>
+<h3
+id="pr3-shared-files-have-no-owner-or-merge-plan-installs-start-point-does-not-exist">PR3.
+Shared files have no owner or merge plan; install's start point does not
+exist</h3>
+<pre><code>severity   important
+kind       defect
+area       orchestration
+where      Workstreams and PRs table, &quot;Owns&quot; and &quot;Depends on&quot;; Token plan bullet</code></pre>
+<ul>
+<li><strong>what</strong> The token plan says core and install "share no
+files except two separate functions in <code>session.js</code>". The
+table and the code show more overlap, and some files have no owner.</li>
+<li><strong>why</strong> Two builders edit the same file with no named
+canonical version, and the orchestrator finds out at merge.
+Specifically:
+<ul>
+<li><code>add.js</code>: core owns <code>--served-by-helper</code>
+inside <code>run()</code>; install owns <code>startHelper</code>, which
+<code>run()</code> calls at four places (lines 1158, 1284, 1328,
+1342).</li>
+<li><code>src/service/index.js</code>: core owns it, but install's Task
+5.3 adds the state-folder id to <code>/health</code> and
+<code>always_on</code> to <code>service.json</code>.</li>
+<li><code>src/cli/commands/serve.js</code>: needs
+<code>--always-on</code>; no workstream owns it.</li>
+<li><code>status.js</code>: core owns it; the architecture says status
+reports install state and the state folder, which is install's
+work.</li>
+<li><code>docs/CLI.md</code> and
+<code>docs/ongoing/SESSION_OWNERSHIP.md</code>: edited by core 3.3 and
+install 5.5.</li>
+<li><code>src/shared/manifest.js</code>: see PR5.</li>
+<li><code>src/layer/index.js</code> (reads aliases, Task 2.2) and
+<code>src/cli/commands/library.js</code> (named in the architecture): no
+owner.</li>
+<li>lahe-names Task 6.2 changes Host dispatch in
+<code>page_routes.js</code> and <code>protocol.js</code>, which core
+owns; it is sequential, so safe, but the table should say lahe-names may
+edit them.</li>
+<li>Install "depends on core Step 1 merged", but Step 1 has no PR of its
+own; PR 1 is Steps 1 and 2. And nothing in install needs sites, so the
+dependency is not real.</li>
+</ul></li>
+<li><strong>fix</strong> Give each shared file one owner and name the
+other workstream's edit as a named function or section it adds. Start
+install at once, in parallel with core from the beginning, since it
+needs nothing from Step 1. State the merge order: PR 2 before PR 3, with
+install rebased on PR 2, so V51 (stale helper replaced with a window
+open) runs against the real serving model. Give <code>serve.js</code> to
+install, <code>library.js</code> and <code>src/layer/index.js</code> to
+core.</li>
+</ul>
+<h3
+id="pr4-23-existing-test-files-test-removed-behavior-no-task-retires-them">PR4.
+23 existing test files test removed behavior; no task retires them</h3>
+<pre><code>severity   important
+kind       risk
+area       orchestration
+where      core Task 3.1; CLAUDE.md &quot;Never remove files while work is running&quot;</code></pre>
+<ul>
+<li><strong>what</strong> 20 unit files and 3 browser specs name
+<code>static_servers</code>, <code>idle_servers</code>, or the Library
+restart functions (a grep for those names under <code>test/</code>) (for
+example <code>static_servers.test.js</code>,
+<code>static_restart.test.js</code>,
+<code>stop_idle_servers.test.js</code> and <code>.spec.js</code>,
+<code>catalog_open_rollback.test.js</code>,
+<code>serve_time_inject.spec.js</code>). No task says what happens to
+them.</li>
+<li><strong>why</strong> PR 2 cannot read "0 failed" while they assert
+retired behavior. Builders may not delete files, and emptying a test out
+breaks "no stubbed tests". The likely outcome is a builder stalled on a
+deletion prompt, which is the incident the CLAUDE.md rule exists
+for.</li>
+<li><strong>fix</strong> Add a task to Step 3: list each affected test
+file and decide, per file, rewrite against sites or retire. Retired
+files go on the progress page's cleanup queue, and the plan names that
+Ken approves those deletions as one batch before PR 2 runs its gate.
+Until then, the orchestrator excludes them from the run by an explicit
+list in the test command, written on the progress page, not by editing
+them.</li>
+</ul>
+<h3 id="pr5-manifest-lint-fails-pr-1-and-pr-3-as-written">PR5. Manifest
+lint fails PR 1 and PR 3 as written</h3>
+<pre><code>severity   important
+kind       defect
+area       orchestration
+where      core Task 3.3 (`src/shared/manifest.js`); install Task 5.2; lahe-names Task 6.1</code></pre>
+<ul>
+<li><strong>what</strong> The manifest update is listed only in Task
+3.3. <code>npm run lint</code> fails when any file under
+<code>src/</code> is missing from
+<code>src/shared/manifest.js</code>.</li>
+<li><strong>why</strong> PR 1 adds <code>sites.js</code> and
+<code>page_routes.js</code>, PR 3 adds <code>install.js</code> and
+<code>login_item.js</code>, PR 5 adds <code>name_server.js</code>. Each
+fails lint at its own gate.</li>
+<li><strong>fix</strong> Each task that adds a file adds its manifest
+line in the same commit. Make <code>manifest.js</code> an
+orchestrator-merged file, like <code>dist/</code>.</li>
+</ul>
+<h3 id="pr6-behind-a-switch-does-not-say-which-pr-1-parts-are-live">PR6.
+"Behind a switch" does not say which PR 1 parts are live</h3>
+<pre><code>severity   important
+kind       risk
+area       orchestration
+where      core Step 1, Tasks 1.2 and 1.4; PR 1</code></pre>
+<ul>
+<li><strong>what</strong> The plan says PR 1 is "off by default", but
+Host dispatch, the <code>::1</code> listener,
+<code>Cross-Origin-Resource-Policy</code>, and the refusal of unknown
+Hosts with 400 all sit in <code>index.js</code> and are not described as
+conditional. <code>LAHE_PAGES</code> is also an environment variable
+read by separate processes.</li>
+<li><strong>why</strong> If Host dispatch is live in PR 1, it changes
+behavior for everyone (a Host the API accepted yesterday may be
+refused). If it is conditional, the CLI and an already running helper
+can disagree: a CLI with <code>LAHE_PAGES=sites</code> calls
+<code>site.bind</code> on a helper started without it.</li>
+<li><strong>fix</strong> List what is live in PR 1 and what waits for
+the switch. Have the helper always answer <code>site.bind</code> and
+Host dispatch (harmless when nothing is bound), and let the switch
+change only what the CLI does. Then the helper never needs the variable,
+and a mismatch cannot happen. Add a row: with the switch off, the
+existing suite passes unchanged.</li>
+</ul>
+<h3
+id="pr7-the-printed-ending-decision-lands-after-pr-2-ships-the-contract">PR7.
+The printed-ending decision lands after PR 2 ships the contract</h3>
+<pre><code>severity   important
+kind       risk
+area       orchestration
+where      lahe-names Task 6.3; core Tasks 3.2 and 3.3; brief Q1</code></pre>
+<ul>
+<li><strong>what</strong> Ken's answer on the printed ending is taken
+"at the review gate", and only lahe-names reads it. Core 3.2 (status
+prints the ending and why) and 3.3 (skill, contract, and copies) ship in
+PR 2 without referring to it.</li>
+<li><strong>why</strong> If Ken picks <code>.lahe</code>, PR 5 changes
+what <code>lahe review</code> prints and why, so the skill, the contract
+in <code>review_format.js</code>,
+<code>test/unit/review_format.test.js</code>, and
+<code>docs/CONTRACTS.md</code> all change again. PR 5's leaf lists none
+of them, which breaks the skill-and-contract travel rule.</li>
+<li><strong>fix</strong> Make Q1 a precondition of dispatch, answered at
+the plan gate. If the answer is <code>.lahe</code>, add the contract
+copies, <code>docs/CLI.md</code>, and a dist rebuild to Task 6.3, and a
+V38 part for PR 5.</li>
+</ul>
+<h3 id="pr8-accepted-security-findings-with-no-verification-row">PR8.
+Accepted security findings with no verification row</h3>
+<pre><code>severity   important
+kind       defect
+area       test plan
+where      Test List; architecture Security Review SR1, SR2, SR5, SR11, SR12, SR13</code></pre>
+<ul>
+<li><strong>what</strong> These accepted fixes asked for a test and have
+no row:
+<ul>
+<li>SR1: a walk in real Safari, Chrome, and Firefox on macOS showing
+<code>x.lahe.localhost</code> reaches loopback with no network DNS
+query. Playwright's WebKit is not Safari.</li>
+<li>SR2: <code>site.bind</code> checks the target on the helper side
+(real path, regular file, owned by this user, no hidden segment, not
+inside the state folder); a <code>review.write</code> with
+<code>target_path</code> cannot widen what may be bound. V22 covers only
+the secret and <code>Origin</code>.</li>
+<li>SR5: the Library refuses a request without
+<code>Sec-Fetch-Site</code> on every Host, and is never served on
+<code>library.lahe</code>.</li>
+<li>SR11: the 404 and 410 pages HTML-escape the name and path; the
+helper listens on exactly <code>127.0.0.1</code> and <code>::1</code>,
+never <code>::</code> or <code>0.0.0.0</code>.</li>
+<li>SR12: the Windows task command uses a tested quoting helper, and
+clone paths with quotes are refused.</li>
+<li>SR13: <code>data-lahe-aliases</code> is JSON-escaped and capped at
+16.</li>
+</ul></li>
+<li><strong>why</strong> Each is a security property a refactor can
+quietly drop. Without a row, nothing fails when it does.</li>
+<li><strong>fix</strong> Add a U row for each of SR2, SR5, SR11, SR12,
+SR13, and an M row for SR1 on this Mac, run by the orchestrator with the
+evidence on the progress page.</li>
+</ul>
+<h3 id="pr9-headline-promises-with-no-row">PR9. Headline promises with
+no row</h3>
+<pre><code>severity   important
+kind       defect
+area       test plan
+where      Test List; acceptance criteria for R3, R7, R1</code></pre>
+<ul>
+<li><strong>what</strong> Missing rows for:
+<ul>
+<li>R3 (same file, same address): serving the same file again, in a
+second review and through a second path spelling (a symlink,
+<code>/var</code> against <code>/private/var</code>, a different letter
+case on macOS), gives the same name. V1 to V3 test the name rule, not
+reuse.</li>
+<li>R7 (a clone without install): <code>lahe review</code> starts the
+helper, the helper stops, the next <code>lahe review</code> starts it
+again, and the first address loads again. PR 3's claim "without
+<code>lahe install</code>, nothing changes for a clone" rests on
+this.</li>
+<li>R1 (works after the server restarts): V63 restarts the helper only
+for drafts; no row checks the page itself after a restart in clone
+mode.</li>
+<li>R5 (a taken port): V37 covers <code>lahe status</code>; the brief
+also names <code>lahe review</code> and the log.</li>
+<li>R8 (Library rows link to stable addresses) and R14 (the gone-file
+page links to the Library): stated in tasks, not in rows.</li>
+</ul></li>
+<li><strong>fix</strong> Add these rows, and point the acceptance
+criteria for R3, R7, and R1 at them.</li>
+</ul>
+<h3
+id="pr10-v46-and-v47-cannot-prove-starts-at-login-on-linux-and-windows">PR10.
+V46 and V47 cannot prove "starts at login" on Linux and Windows</h3>
+<pre><code>severity   important
+kind       challenge
+area       test plan
+where      V46, V47; acceptance &quot;Starts at login on three systems&quot;</code></pre>
+<ul>
+<li><strong>what</strong> A GitHub runner has no interactive login, and
+<code>systemctl --user</code> usually has no user session there. The
+rows also "never fail the run", so their verdict lives in a log.</li>
+<li><strong>why</strong> The acceptance criterion for R7 says three
+systems start at login. The planned evidence can show "registers, starts
+on request, restarts after a kill, unregisters" at best. Implement has
+no evaluator to renegotiate this, so it will be reported done on weaker
+proof.</li>
+<li><strong>fix</strong> Reword V46 and V47 to what CI can prove, name
+who reads the log and records the verdict on the progress page, and
+either name a Linux and a Windows machine for a login check or put
+"login start unverified on Linux and Windows" in front of Ken as a
+decision at the plan gate.</li>
+</ul>
+<h3
+id="pr11-ci-spikes-need-workflows-the-ci-rules-do-not-allow-as-written">PR11.
+CI spikes need workflows the CI rules do not allow as written</h3>
+<pre><code>severity   important
+kind       risk
+area       orchestration
+where      core Task 1.0 (&quot;locally on macOS and in CI (Linux)&quot;); install Task 5.1; V46, V47</code></pre>
+<ul>
+<li><strong>what</strong> <code>gate.yml</code> runs only on pull
+requests and pushes to main, on Ubuntu, with Chromium only. A
+<code>workflow_dispatch</code> workflow must exist on the default branch
+before it can be dispatched, and CLAUDE.md forbids pushing a branch just
+to trigger a run.</li>
+<li><strong>why</strong> As written, a builder will either push a branch
+to get a run, add a push-triggered workflow, or skip the CI half. Each
+of the first two can email Ken on red.</li>
+<li><strong>fix</strong> Name the mechanism: one temporary
+<code>workflow_dispatch</code> workflow landed on main by the
+orchestrator, with <code>continue-on-error: true</code>, a ref input,
+all three Playwright lanes for Task 1.0, and Ubuntu and Windows jobs for
+Task 5.1. Name who removes it, and when, under the cleanup queue.</li>
+</ul>
+<h3 id="pr12-leak-risks-new-to-this-feature">PR12. Leak risks new to
+this feature</h3>
+<pre><code>severity   important
+kind       risk
+area       test plan
+where      Test List callout; Tasks 5.1, 5.3; V10, V48, V49, V51, V54</code></pre>
+<ul>
+<li><strong>what</strong> The table's callout says every process is
+stopped, but four new ways to leak are not addressed:
+<ul>
+<li>The macOS spike in Task 5.1 loads a real <code>launchd</code> agent
+with <code>KeepAlive</code> on Ken's Mac. If uninstall is skipped or
+fails, <code>launchd</code> restarts the helper forever, and once the
+temp state folder is gone, self-stop rule 2 plus <code>KeepAlive</code>
+is a restart loop.</li>
+<li><code>--always-on</code> turns off self-stop rule 1, so any test
+helper started with it never stops on its own.</li>
+<li>The helper now has two listeners. If shutdown closes only the
+<code>127.0.0.1</code> one, the process stays alive.</li>
+<li>V51 restarts a stale helper "through the login item". In a test
+there is none, so something stands in and spawns a helper the test does
+not own by pid.</li>
+<li>V54 and V55: a name-server test on a fixed port collides across
+parallel workers (AR18).</li>
+</ul></li>
+<li><strong>why</strong> The 2026-10-07 incident (1,892 leaked helpers)
+came from exactly this kind of "the process outlives the test" gap.</li>
+<li><strong>fix</strong> Add to the rows: V48 renders the plist, unit,
+and task XML and never loads them. Task 5.1 runs uninstall in a
+<code>finally</code> and checks <code>launchctl list</code> for the
+label before and after, with both outputs on the progress page. Add a U
+row: stopping a helper closes both listeners and the process exits. V51
+names its stand-in login item and stops what it spawns by the pid in
+<code>service.json</code>. V54 uses a port from
+<code>free_port.js</code>.</li>
+</ul>
+<h3 id="pr13-v35-can-signal-an-unrelated-process">PR13. V35 can signal
+an unrelated process</h3>
+<pre><code>severity   important
+kind       defect
+area       test plan
+where      V35; core Task 3.1 (&quot;stops leftover page-server processes named in old records&quot;)</code></pre>
+<ul>
+<li><strong>what</strong> Old records hold pids from days ago. Pids are
+reused.</li>
+<li><strong>why</strong> On Ken's real helper, "every start stops
+processes named in old records" can kill whatever process now has that
+pid.</li>
+<li><strong>fix</strong> Extend V35: a recorded pid whose command line
+is not <code>static_servers.js --serve</code> for that state folder is
+not signalled. The test spawns a harmless process, writes its pid into
+an old record, and checks it is still alive after a helper start, then
+stops it in teardown.</li>
+</ul>
+<h3 id="pr14-lahe-verification-is-only-proven-against-a-stub">PR14.
+<code>.lahe</code> verification is only proven against a stub</h3>
+<pre><code>severity   important
+kind       risk
+area       test plan
+where      V56 to V59; lahe-names Task 6.2</code></pre>
+<ul>
+<li><strong>what</strong> V57 and V58 are unit tests. A unit test cannot
+write <code>/etc/resolver/lahe</code>, so the system resolver is
+stubbed, which is the seam under test.</li>
+<li><strong>why</strong> The real chain (macOS resolver, our name
+server, a browser loading <code>name.lahe</code>) is never run before PR
+5 merges.</li>
+<li><strong>fix</strong> Add an M row on this Mac: run
+<code>--lahe-names</code>, load <code>name.lahe</code> in Safari and
+Chrome, stop the name server, wait for the next check (or trigger it),
+and see <code>.lahe</code> refused and <code>.lahe.localhost</code>
+printed. Then uninstall and see the resolver file removed.</li>
+</ul>
+<h3
+id="pr15-r8a-criterion-maps-to-v13-which-proves-different-behavior">PR15.
+R8a criterion maps to V13, which proves different behavior</h3>
+<pre><code>severity   important
+kind       challenge
+area       test plan
+where      V13; acceptance &quot;Existing documents get addresses, and links keep working&quot;</code></pre>
+<ul>
+<li><strong>what</strong> R8a says a link to another file Lahe serves
+"opens that file at its own stable address". The architecture serves a
+link outside the folder through the linking site's
+<code>/.lahe-source/&lt;hash&gt;/</code> mount, and V13 tests that.</li>
+<li><strong>why</strong> The criterion as worded cannot be met by the
+planned work, and Implement does not stop to renegotiate. A flow walker
+reading R8a will fail it, or a builder will try to add redirects the
+architecture removed.</li>
+<li><strong>fix</strong> Settle it at the plan gate: either reword the
+R8a criterion to "opens through the linking page's site" or add the
+work. This review does not take a side on the design.</li>
+</ul>
+<h3
+id="pr16-idle-cost-baseline-and-limits-are-measured-at-the-wrong-time">PR16.
+Idle-cost baseline and limits are measured at the wrong time</h3>
+<pre><code>severity   important
+kind       defect
+area       orchestration
+where      install Task 5.4; V53; brief R11</code></pre>
+<ul>
+<li><strong>what</strong> R11 says limits are set before building, and
+the baseline is "today's helper plus page servers". Task 5.4 sits in the
+install workstream, which starts after core work begins. It measures
+"the always-on helper" without saying the helper must already serve
+pages.</li>
+<li><strong>why</strong> Once PR 2 lands, today's baseline no longer
+exists on main. Measured before PR 2, the always-on helper is not doing
+the work R11 is about.</li>
+<li><strong>fix</strong> Move the limits and the baseline measurement to
+the first orchestrator step, at the current main commit, recorded by
+commit hash. Measure the after state once PR 2 and PR 3 are both merged.
+Ask Ken for his usual tab count rather than reading his browser.</li>
+</ul>
+<h3
+id="pr17-workstream-leaves-are-not-complete-dispatch-contracts">PR17.
+Workstream leaves are not complete dispatch contracts</h3>
+<pre><code>severity   important
+kind       defect
+area       orchestration
+where      parts/plan/core.md, install.md, library.md, lahe_names.md</code></pre>
+<ul>
+<li><strong>what</strong> Each leaf has an outcome, reads, authority,
+and "don't touch". None has the quality bar, completion, or escalation
+lines the feature-forge packet asks for.</li>
+<li><strong>why</strong> Builders will not know to return what the
+orchestrator needs, and CLAUDE.md rules that bit before will be missed
+again.</li>
+<li><strong>fix</strong> Add to each leaf:
+<ul>
+<li>the no-deletion rule near the top;</li>
+<li><code>gate:unit</code> plus one named spec, never the full
+suite;</li>
+<li>the before and after
+<code>ps -axo command | grep -c "[l]ahe.js serve"</code> counts;</li>
+<li>no <code>dist/</code> commits;</li>
+<li>screenshots in light and dark for the unknown-name page, the
+gone-file page, the read-only worktree note, and the Library rows;</li>
+<li>what to hand back: branch, commits, rows proven, leak counts, open
+questions;</li>
+<li>when to stop and ask: for example, a spike that changes a mechanism,
+or any change outside the owned files.</li>
+</ul></li>
+</ul>
+<h3 id="pr18-test-construction">PR18. Test construction</h3>
+<pre><code>severity   minor
+kind       risk
+area       test plan
+where      V6, V14, V16, V21, V34, V38, V49</code></pre>
+<ul>
+<li>V16: a cross-origin fetch that fails also passes when the host does
+not resolve. Add a positive control: the same fetch from a same-site
+page succeeds.</li>
+<li>V14: browsers normalize <code>..</code> before sending, so a browser
+cannot test this. The unit test sends raw and percent-encoded dot
+segments (<code>%2e%2e</code>, <code>%2f</code>).</li>
+<li>V21 and V40: "newest" ties within one millisecond. Inject the
+clock.</li>
+<li>V34 and V49: the idle grace is minutes long. Inject the clock
+instead of waiting.</li>
+<li>V6: "not possible through any export" restates the code. Test the
+behavior: run <code>review</code>, <code>write</code>, and
+<code>status</code> against a temp state folder with the helper stopped,
+and assert <code>sites.json</code> and <code>sites.log</code> are
+unchanged.</li>
+<li>V38: the grep for "random port" can be a scripted unit test rather
+than M.</li>
+</ul>
+<h3 id="pr19-brief-logging-and-rollout-lines-have-no-row">PR19. Brief
+logging and rollout lines have no row</h3>
+<pre><code>severity   minor
+kind       defect
+area       test plan
+where      brief &quot;Analytics / Logging&quot; and &quot;Rollout / Flags&quot;</code></pre>
+<ul>
+<li>The log records the port, the ending and why, install state, each
+new name, and each refused Host without page content. No row.</li>
+<li>"Removing that Node means running install again, and
+<code>lahe status</code> says so." No row and no owner.</li>
+<li><strong>fix</strong> One U row each, owned by core (log) and install
+(status).</li>
+</ul>
+<h3
+id="pr20-task-63-needs-a-stated-way-to-get-a-non-secure-origin-in-tests">PR20.
+Task 6.3 needs a stated way to get a non-secure origin in tests</h3>
+<pre><code>severity   minor
+kind       risk
+area       test plan
+where      V60, V61, V62</code></pre>
+<ul>
+<li><strong>what</strong> The browser rows need
+<code>http://name.lahe</code> to resolve in Playwright, with no resolver
+on CI.</li>
+<li><strong>fix</strong> Name the method AR8 suggested (a Chromium
+host-resolver rule), and say V60 and V61 run in Chromium only, or how
+Firefox and WebKit get the same. Have the copy fallback in Task 4.2 and
+Task 6.3 share one function so it is written once.</li>
+</ul>
+<h3
+id="pr21-step-3-step-test-has-the-builder-running-the-full-browser-suite">PR21.
+Step 3 step test has the builder running the full browser suite</h3>
+<pre><code>severity   minor
+kind       defect
+area       orchestration
+where      core Step 3 &quot;Step test&quot;</code></pre>
+<ul>
+<li>CLAUDE.md gives the full browser suite to the orchestrator once per
+checkpoint. Say the orchestrator runs it on the integrated branch.</li>
+</ul>
+<h3 id="pr22-leaves-restate-architecture-detail">PR22. Leaves restate
+architecture detail</h3>
+<pre><code>severity   minor
+kind       taste
+area       orchestration
+where      Tasks 1.1, 1.3, 4.1, 6.1, 6.2</code></pre>
+<ul>
+<li>Lists such as "Answers <code>A 127.0.0.1</code> and
+<code>AAAA ::1</code>... every 5 minutes" and the full contents of page
+serving repeat the architecture. If the architecture changes in a fix
+round, the leaf carries the old version. Point to the section and keep
+only the acceptance rows.</li>
+<li>The architecture links
+<code>02_architecture_stable_addresses_reviews_architect.md</code> and
+<code>..._security.md</code>, which no longer exist in the folder; the
+combined file is
+<code>02_architecture_stable_addresses_reviews.md</code>. Builders
+following "Reads first" will hit dead links.</li>
+</ul>
+<h2 id="what-holds-up">What holds up</h2>
+<ul>
+<li>The verification table is concrete enough to become failing tests
+for most rows, and the failure modes in the architecture are mostly
+covered.</li>
+<li>The single core builder across Steps 1 to 3 is the right call; the
+serving model is one coupled change.</li>
+<li>Docs travel with the behavior they describe in each PR, and
+<code>dist/</code> is the orchestrator's.</li>
+</ul>
 </body>
 </html>
