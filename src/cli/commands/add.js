@@ -1167,6 +1167,15 @@ async function run(argv) {
       );
       return EXIT.FAILED;
     }
+    var fromOtherClone = verdict === protocol.CONTRACT_VERDICT.OLDER
+      ? sessionCommand.otherCloneSentence(loginItem.installedFor(dir, port))
+      : null;
+    if (fromOtherClone) {
+      // A restart would run the login item's older clone again; see
+      // session.js otherCloneSentence.
+      process.stderr.write("lahe add: " + fromOtherClone + ".\n");
+      return EXIT.FAILED;
+    }
     if (verdict === protocol.CONTRACT_VERDICT.OLDER) {
       restartReason =
         "the verified helper uses older service contract " + liveContract +

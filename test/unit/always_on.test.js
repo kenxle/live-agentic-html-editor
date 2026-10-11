@@ -366,3 +366,57 @@ test("installed: lahe serve by hand does not start a second helper beside the lo
   assert.match(out.join(""), /login item lahe-test-\d+ runs the helper on this port/);
   assert.equal(await service.probeHealth(protocol.DEFAULT_HOST, port), null);
 });
+
+// Review finding 8: installed, the login item runs the clone it was installed
+// from. A CLI from another clone that finds the helper's contract older must
+// not restart it: the restart runs that same older clone, every open page
+// drops for up to 20 seconds, and nothing gets newer.
+const http = require("node:http");
+
+/** A stand-in helper that answers /health with an older service contract. */
+async function olderHelper(t) {
+  const server = http.createServer((req, res) => {
+    res.writeHead(200, { "content-type": "application/json" });
+    res.end(JSON.stringify({ ok: true, service_contract: protocol.SERVICE_CONTRACT - 1, started_at: "2026-10-01T00:00:00.000Z" }));
+  });
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+  t.after(() => new Promise((resolve) => { server.closeAllConnections(); server.close(() => resolve()); }));
+  return server.address().port;
+}
+
+test("installed from another clone: an older contract is reported, not restarted through the login item", async (t) => {
+  const w = tempState();
+  const port = await olderHelper(t);
+  const otherClone = path.join(w.root, "other-clone");
+  fs.mkdirSync(otherClone);
+  install(w.dir, port, { clone: otherClone });
+  const calls = [];
+  await assert.rejects(
+    sessionCommand.startHelper(w.dir, port, { runner: (c, a) => { calls.push([c].concat(a)); return { status: 0, output: "" }; } }),
+    (err) => {
+      assert.ok(err.message.indexOf("the login item runs " + otherClone) !== -1, err.message);
+      assert.match(err.message, /[Rr]un `lahe install` from this clone/);
+      return true;
+    }
+  );
+  assert.equal(calls.length, 0, "the login item was not asked to restart anything");
+  assert.ok(await service.probeHealth(protocol.DEFAULT_HOST, port), "the running helper was left alone");
+});
+
+test("installed from another clone: lahe add says the same, and stops nothing", async (t) => {
+  const w = tempState();
+  const port = await olderHelper(t);
+  const otherClone = path.join(w.root, "other-clone");
+  fs.mkdirSync(otherClone);
+  install(w.dir, port, { clone: otherClone });
+  const page = path.join(w.root, "page.html");
+  fs.writeFileSync(page, "<!doctype html><title>t</title><p>hi</p>\n");
+  const result = await new Promise((resolve) => {
+    childProcess.execFile(process.execPath, [BIN, "add", page, "--port", String(port), "--state-dir", w.dir],
+      { encoding: "utf8", timeout: 60000, env: Object.assign({}, process.env, { LAHE_PAGES_PORT: process.env.LAHE_PAGES_PORT || "0" }) },
+      (err, stdout, stderr) => resolve({ status: err ? err.code : 0, stderr }));
+  });
+  assert.notEqual(result.status, 0);
+  assert.ok(result.stderr.indexOf("the login item runs " + otherClone) !== -1, result.stderr);
+  assert.ok(await service.probeHealth(protocol.DEFAULT_HOST, port), "the running helper was left alone");
+});

@@ -183,6 +183,27 @@ function askStopWhenQuiet(dir, nowMs, why) {
   }
 }
 
+function realOrSame(p) {
+  try { return fs.realpathSync(p); } catch (err) { return path.resolve(p); }
+}
+
+/**
+ * Installed from another clone: the sentence to say instead of restarting.
+ *
+ * The login item runs the clone it was installed from. Restarting it because
+ * THIS clone needs a newer service contract only runs that same older clone
+ * again, after dropping every open page for the restart. So a CLI from another
+ * clone says so and leaves the helper alone. Null when the login item runs
+ * this clone, or when nothing is installed.
+ */
+function otherCloneSentence(installed) {
+  if (!installed || !installed.clone) return null;
+  var here = path.join(__dirname, "..", "..", "..");
+  if (realOrSame(installed.clone) === realOrSame(here)) return null;
+  return "the login item runs " + installed.clone + ", whose helper is older than this clone needs. " +
+    "Run `lahe install` from this clone (" + realOrSame(here) + ") to have the login item run it instead";
+}
+
 /**
  * Is the running helper older than its code, and if so, may it go now?
  *
@@ -259,6 +280,9 @@ async function startHelper(dir, port, options) {
         "the running helper uses newer service contract " + liveContract +
         "; update this clone before changing the session"
       );
+    }
+    if (verdict === protocol.CONTRACT_VERDICT.OLDER && otherCloneSentence(installed)) {
+      throw new Error(otherCloneSentence(installed));
     }
     if (verdict === protocol.CONTRACT_VERDICT.CURRENT) {
       var decision = await staleDecision(dir, live, installed, opts);
@@ -593,5 +617,6 @@ module.exports = {
   helperStillWanted: helperStillWanted,
   startHelper: startHelper,
   staleDecision: staleDecision,
+  otherCloneSentence: otherCloneSentence,
   run: run
 };
