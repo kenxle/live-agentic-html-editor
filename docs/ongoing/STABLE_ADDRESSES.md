@@ -49,12 +49,19 @@ So the separate gardens are the point. Separate ports are just how Lahe gets the
 
 ### D. One port, a host name per document (recommended)
 
-- Each document gets an address like `http://ra192291dfb29.localhost:7820/STABLE_ADDRESSES.html`. The first part is the document's review id, so it never changes.
+- Each document gets an address like `http://ra192291dfb29.lahe.localhost:7820/STABLE_ADDRESSES.html`. The first part is the document's review id, so it never changes.
 - Every document uses the same port. The helper keeps one door open and reads the host name to know which document you asked for.
 - Each host name is its own garden, so documents stay walled off from each other, exactly as with separate ports.
 - No port clashes after the first, no 256 limit, and nothing to reserve per document.
 - I checked: your Mac already sends any `something.localhost` name to this computer, for every browser. The helper would need to listen on the newer loopback address (`::1`) as well as `127.0.0.1`, because that name is tried there first.
 - The address is longer. You would mostly reach it from history or a bookmark, so that matters less.
+
+### What about a name like `lahe.local`?
+
+- **A name does not change port clashes.** A port belongs to the computer, not to a name. If another tool is on the port, no name gets Lahe onto it. Option D already cuts clashes down to the one shared port.
+- **`.local` is a poor fit on a Mac.** macOS uses `.local` for finding devices on your network, so lookups are slow, and the name only works after an admin edit to a system file. That file cannot say "every name ending in `.lahe.local`", so each document would need its own line.
+- **`.localhost` gives the same look with no setup.** `ra192291dfb29.lahe.localhost` works today on your Mac, in every browser. I checked.
+- **Dropping the port from the address** (so it reads `http://ra192291dfb29.lahe.localhost/`) needs port 80. macOS refused that for a normal program when I tried. It would take a one-time admin setting at install. Possible, but optional.
 
 ### A. Each document keeps its own port, and the helper answers on it
 
