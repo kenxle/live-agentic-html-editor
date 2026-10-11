@@ -11,14 +11,13 @@
   - **B, say so.** The rail shows one line, like "3 earlier comments from this page's old address are with your agent." You cannot read them on the page.
 
   I recommend **A**: the point of this feature is opening an old document and finding your work there, and B leaves every existing document looking empty the first time. Details: "V31 options" in the [core progress](progress/phase6_workstream_core.md).
-- [ ] **Approve retiring old tests.** 11 test files test behavior this feature removes: page servers that stop when idle, restarting page servers, remembering old ports, and the sweep that closes reopened sessions. 2 files go whole and 9 in part. 26 more get rewritten for the new behavior. Until you approve, the retired tests are moved to `test/retired/` (not deleted) so the suite stays green; they are deleted in one batch at cleanup only with your OK. List: "Task 3.0: test retirement list" in the [core progress](progress/phase6_workstream_core.md).
+- [ ] **Approve retiring old tests.** 11 test files test behavior this feature removes: page servers that stop when idle, restarting page servers, remembering old ports, and the sweep that closes reopened sessions. 2 files go whole and 9 in part. 26 more get rewritten for the new behavior. Until you approve, the retired tests are moved to `test/retired/` (not deleted) so the suite stays green; they are deleted in one batch at cleanup only with your OK. Lists: "Task 3.0: test retirement list" and the Step 3 moved-test list in the [core progress](progress/phase6_workstream_core.md), and the "Task 4.3" section of the [library progress](progress/phase6_workstream_library.md) (18 Library tests).
 
 ## Currently working on
 
 | Agent or task | Doing | Started | Branch |
 |---|---|---|---|
-| Library builder (Sonnet) | Task 4.3: remove the Library's old path and the reopened-session sweep, rewrite its 54 tests for the new behavior, Library docs | 2026-10-11 17:00 | `unit/sa-library` |
-| Install builder (Opus) | Fix a test that leaves a helper running under load | 2026-10-11 17:00 | `unit/sa-install` |
+| Install builder (Opus) | Fix one install test that fails only under the full suite's load | 2026-10-11 17:17 | `unit/sa-install` |
 
 ## Phases
 
@@ -41,6 +40,7 @@
 
 | Workstream | Tasks | Result | Detail |
 |---|---|---|---|
+| library | 4.3 | Merged. The Library's old path, the reopened-session sweep, and their store fields are gone; `lahe library` prints the proved port; `LIBRARY.md`, both diagrams, and the Library part of `CONTRACTS.md` updated. The 54 failing tests are rewritten or moved to `test/retired/` (18 tests). | [library progress](progress/phase6_workstream_library.md) |
 | core | Step 3 (3.1 to 3.3) | Merged. Sites are the default; per-session page servers, the idle sweep, port history, origin swaps, and the `SIGHUP` reload are gone. `lahe status` shows the port, ending, install state, and both options. Skill, contract, CLI, serving docs, and four diagrams updated. Rows V33 to V38, V63, V67, V71 pass. 54 Library tests still test removed behavior; the library builder is on them. | [core progress](progress/phase6_workstream_core.md) |
 | install | 5.5 docs | Merged. `docs/INSTALL.md` (install, uninstall, both options, written Linux and Windows steps marked untested), README, CLI install rows, one always-on line in `SESSION_OWNERSHIP.md`, and your [manual checks](progress/phase6_workstream_install.md). Found a core defect (session close stops an always-on helper), sent to the core builder. Unit gate 2,654 tests, 0 failed. | [install progress](progress/phase6_workstream_install.md) |
 | lahe-names | 6.0 to 6.2 | Merged. `lahe install --port-80` and `--lahe-names` (macOS), the name server, and both self-checks. Rows V54 to V56, V58, V59, V74 pass; V57 and V76 wait on three core changes (sent to the core builder) that make them visible; V73 and V75 are your manual checks. No test ran `sudo` or touched system files. Unit gate 2,652 tests, 0 failed. | [install progress](progress/phase6_workstream_install.md) |
@@ -53,6 +53,8 @@
 
 | Pass | What merged | Checks on the merge |
 |---|---|---|
+| 9 | library 4.3 | `npm run gate:unit`: 2,575 tests, 1 failed (an install test that fails only under load; passes alone; assigned). Helpers before and after: 2 and 2 |
+| 8 | install leak fix | Tests now stop every helper they start, even one still starting at teardown |
 | 7 | core Step 3 | `npm run gate:unit`: 2,590 tests, 54 failed (all Library tests of removed behavior, assigned). One leaked always-on test helper from `install_command.test.js` found and stopped by pid; fix assigned |
 | 6 | install 5.5 docs | `npm run gate:unit`: 2,654 tests, 0 failed |
 | 5 | lahe-names 6.0 to 6.2 | `npm run gate:unit`: 2,652 tests, 0 failed; helpers before and after: 2 and 2 |
@@ -98,6 +100,8 @@ From core Step 1 (details in the [core progress](progress/phase6_workstream_core
 
 ### Follow-ups
 
+- Two small leftovers for the fix round: `CATALOG.REOPENED_AUTOCLOSE_MS` in `protocol.js` is no longer read, and `launchRoot` in `status.js` still checks a field that no longer exists.
+- Since Step 3 a helper defaults to pages port 1483. `npm run gate:unit` sets `LAHE_PAGES_PORT=0`; a single test file run with plain `node --test` needs it too.
 - The `::1` half of the port-80 forward is installed but not checked separately; only the IPv4 path is verified.
 - Turning pf on at boot (`pfctl -E`) is not undone by uninstall. Apple's own rules keep running as for any pf user; no Lahe rule is left behind.
 - Existing bug found by the core builder: when something holds the helper's port and drops every connection, `lahe review` exits 0 and prints nothing.
@@ -157,6 +161,7 @@ Not shipped yet.
 
 ## Log
 
+- 2026-10-11 17:17: Library 4.3 merged. Every workstream is now merged. Unit gate: 2,575 tests, 1 failed, an install test that only fails under load, sent to the install builder. Full browser suite next, once that is fixed.
 - 2026-10-11 17:00: Core Step 3 merged: stable addresses are now the default. 54 Library tests of removed behavior went to the library builder (Task 4.3). A test leak in `install_command.test.js` went to the install builder.
 - 2026-10-11 16:48: Install docs merged. Install builder found that closing the last session stops an always-on helper; fix sent to the core builder.
 - 2026-10-11 16:41: Port-free addresses and the `.lahe` name server merged (macOS options, each behind its own self-check). Three small core changes to make them visible sent to the core builder. Install builder on docs (5.5).
