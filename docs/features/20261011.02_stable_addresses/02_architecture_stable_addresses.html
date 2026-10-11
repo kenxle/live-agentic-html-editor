@@ -1129,7 +1129,7 @@ class="sourceCode json"><code class="sourceCode json"><span id="cb1-1"><a href="
 <ul>
 <li><strong>What Ken sees:</strong> the name says the folder, and the
 path says the file:
-<code>http://docs_features_20261011-02-stable-addresses.lahe.localhost:1483/01_brief_stable_addresses.md</code>,
+<code>http://docs.features.20261011-02-stable-addresses.lahe.localhost:1483/01_brief_stable_addresses.md</code>,
 or
 <code>http://ongoing.lahe.localhost:1483/STABLE_ADDRESSES.md</code>.</li>
 <li><strong>A site is a root plus a mode.</strong> <code>folder</code>
@@ -1149,9 +1149,9 @@ the site and served only under that site.</li>
 answer on any page of the site, by the rule below.</li>
 <li><strong>Name rule.</strong> Take the root folder and its two
 parents, in path order, stopping below the home folder. Lowercase each,
-turn each run of other characters (underscores included) into one dash,
-join them with underscores where the <code>/</code> was, trim, and keep
-it to one DNS label of at most 63 characters by dropping from the
+turn each run of other characters into one dash, and join them with dots
+where the <code>/</code> was. Each folder becomes one DNS label of at
+most 63 characters; a name longer than 150 characters drops the
 outermost parent first. A name with nothing left becomes
 <code>doc</code>. Refuse anything starting <code>xn--</code> or with
 <code>--</code> in positions 3 and 4. A name that clashes with a
@@ -1580,8 +1580,16 @@ walled off, now says so).</li>
 <code>OPTIONS</code> handling and catalog matching. Each route family
 answers a closed set of Hosts: API on loopback; Library on loopback and
 <code>library.lahe.localhost</code>; pages on registered names only. The
-grammar is one lowercase label of letters, digits, dashes, and
-underscores, the helper's own port, and no trailing dot.</li>
+grammar is one to four lowercase labels of letters, digits, and dashes,
+matched as a whole registered name (never a suffix or a parent of one),
+the helper's own port, and no trailing dot.</li>
+<li><strong>Dotted names share parent domains.</strong>
+<code>a.docs.ongoing.lahe.localhost</code> sits under
+<code>docs.ongoing.lahe.localhost</code>. Each full name is still its
+own origin, so storage and scripts stay walled off. The one thing parent
+domains share is cookies, and Lahe sets none; page responses also drop
+any <code>Set-Cookie</code> a served file could not send anyway, since
+Lahe serves files, not apps.</li>
 <li><strong>DNS rebinding.</strong> Browsers do not resolve
 <code>*.localhost</code> through DNS, so <code>.lahe.localhost</code>
 cannot be rebound. <code>.lahe</code> is answered only after the helper

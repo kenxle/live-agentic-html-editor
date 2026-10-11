@@ -83,14 +83,14 @@ The one verification table. U is a unit test under `test/unit/`; B is a Playwrig
 
 | Row | Requirement or failure | Behavior to prove | Kind |
 |---|---|---|---|
-| V1 | R3 name rule | The folder and two parents become one lowercase label in path order, dashes inside a folder name and underscores between folders, never including the home folder, at most 63 characters with the outermost parent dropped first; empty becomes `doc`; `xn--` and `--` at positions 3 and 4 are refused | U |
+| V1 | R3 name rule | The folder and two parents become lowercase labels in path order, dashes inside a folder name and dots between folders, never including the home folder, at most 63 characters with the outermost parent dropped first; empty becomes `doc`; `xn--` and `--` at positions 3 and 4 are refused | U |
 | V2 | R3 clash | A second folder with the same name takes one more parent, then a number; a name is not reused | U |
 | V3 | R3 reserved | `library`, `lahe`, `www`, `api` are never granted | U |
 | V4 | Registry loss | A corrupt `sites.json` rebuilds from `sites.log` with the same names; with neither readable, no new name is minted | U |
 | V5 | R13 worktree record | Binding inside a sibling worktree records `main_checkout` from its `.git` file | U |
 | V6 | Single writer | `review`, `write`, and `status` run with the helper stopped leave `sites.json` and `sites.log` unchanged | U |
 | V7 | R10 Host closed set | API answers loopback Hosts only; pages answer registered names only; anything else is 400 | U |
-| V8 | R10 grammar | Trailing dot, nested label, wrong port, uppercase are refused | U |
+| V8 | R10 grammar | Trailing dot, more than four labels, an unregistered parent or child of a registered name, wrong port, uppercase are refused | U |
 | V9 | Dispatch order | A document Host never gets a CORS preflight answer or a catalog route | U |
 | V10 | `::1` | The helper serves on `::1`; a failed `::1` bind logs and keeps serving | U |
 | V11 | R1, R2 | A bound HTML page loads at `name.lahe.localhost:<port>/<file>` with its rail, and with no agent attached shows "No agent watching" | B |

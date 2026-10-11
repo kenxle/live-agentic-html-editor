@@ -8,7 +8,7 @@
 
 **The switch.** `LAHE_PAGES=sites` is read by the helper at start and reported in `service.json`. The CLI follows the running helper's value, never its own environment. Live for everyone in PR 1, because each is harmless with no names granted: Host dispatch, the `::1` listener, the `site.bind` route. Behind the switch: `lahe review` and `lahe write` binding instead of starting page servers, and every registry-backed lookup.
 
-**Task 1.0: Spike: `*.lahe.localhost` in the three Playwright lanes.** Locally on macOS with `npm run gate:all`'s three lanes, and on Linux through the dispatch workflow from Task 0.1. Also check that a host name with underscores (`a_b_c.lahe.localhost`) loads in all three lanes; if any browser refuses it, report before Task 1.1, and the separator falls back to dots. Record any launch flag needed. Acceptance: a throwaway spec loads a page in all three lanes, or the gap is reported before Task 1.4.
+**Task 1.0: Spike: `*.lahe.localhost` in the three Playwright lanes.** Locally on macOS with `npm run gate:all`'s three lanes, and on Linux through the dispatch workflow from Task 0.1. Also check that a three-part name (`a.b.c.lahe.localhost`) loads in all three lanes. Record any launch flag needed. Acceptance: a throwaway spec loads a page in all three lanes, or the gap is reported before Task 1.4.
 
 **Task 1.1: The registry, `src/service/sites.js`.** As the architecture's Data section defines it. Acceptance: V1 to V6.
 

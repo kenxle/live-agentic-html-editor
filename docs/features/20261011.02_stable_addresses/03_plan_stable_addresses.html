@@ -934,12 +934,10 @@ every registry-backed lookup.</p>
 <p><strong>Task 1.0: Spike: <code>*.lahe.localhost</code> in the three
 Playwright lanes.</strong> Locally on macOS with
 <code>npm run gate:all</code>'s three lanes, and on Linux through the
-dispatch workflow from Task 0.1. Also check that a host name with
-underscores (<code>a_b_c.lahe.localhost</code>) loads in all three
-lanes; if any browser refuses it, report before Task 1.1, and the
-separator falls back to dots. Record any launch flag needed. Acceptance:
-a throwaway spec loads a page in all three lanes, or the gap is reported
-before Task 1.4.</p>
+dispatch workflow from Task 0.1. Also check that a three-part name
+(<code>a.b.c.lahe.localhost</code>) loads in all three lanes. Record any
+launch flag needed. Acceptance: a throwaway spec loads a page in all
+three lanes, or the gap is reported before Task 1.4.</p>
 <p><strong>Task 1.1: The registry,
 <code>src/service/sites.js</code>.</strong> As the architecture's Data
 section defines it. Acceptance: V1 to V6.</p>
@@ -1272,11 +1270,11 @@ teardown, and the leak check passes.</p>
 <tr>
 <td>V1</td>
 <td>R3 name rule</td>
-<td>The folder and two parents become one lowercase label in path order,
-dashes inside a folder name and underscores between folders, never
-including the home folder, at most 63 characters with the outermost
-parent dropped first; empty becomes <code>doc</code>; <code>xn--</code>
-and <code>--</code> at positions 3 and 4 are refused</td>
+<td>The folder and two parents become lowercase labels in path order,
+dashes inside a folder name and dots between folders, never including
+the home folder, at most 63 characters with the outermost parent dropped
+first; empty becomes <code>doc</code>; <code>xn--</code> and
+<code>--</code> at positions 3 and 4 are refused</td>
 <td>U</td>
 </tr>
 <tr>
@@ -1326,7 +1324,8 @@ anything else is 400</td>
 <tr>
 <td>V8</td>
 <td>R10 grammar</td>
-<td>Trailing dot, nested label, wrong port, uppercase are refused</td>
+<td>Trailing dot, more than four labels, an unregistered parent or child
+of a registered name, wrong port, uppercase are refused</td>
 <td>U</td>
 </tr>
 <tr>
