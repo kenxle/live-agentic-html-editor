@@ -1517,3 +1517,86 @@ test("round 2: the older section's heading is a heading, and 'Search reaches all
   assert.doesNotMatch(older.heading, /Search/);
   assert.equal(older.subtitle, "Search reaches all of them.");
 });
+
+// ---------------------------------------------------------------------------
+// Stable addresses (Task 4.1 and 4.2)
+// ---------------------------------------------------------------------------
+
+test("the address check accepts a Lahe site and nothing else", () => {
+  assert.equal(vm.isLaheSiteUrl("http://docs.ongoing.lahe.localhost:1483/a.md"), true);
+  assert.equal(vm.isLaheSiteUrl("http://one.lahe.localhost/a.html"), true);
+  assert.equal(vm.isLaheSiteUrl("http://one.two.three.four.lahe.localhost:1483/"), true);
+  for (const bad of [
+    "http://lahe.localhost:1483/a.md",
+    "http://evil.test:1483/a.md",
+    "http://one.lahe.localhost.evil.test/a.md",
+    "http://one.lahe.localhost@evil.test/a.md",
+    "http://user:pw@one.lahe.localhost/a.md",
+    "http://one.two.three.four.five.lahe.localhost/a.md",
+    "http://xn--a.lahe.localhost/a.md",
+    "https://one.lahe.localhost/a.md",
+    "javascript:alert(1)",
+    "/relative",
+    null,
+    ""
+  ]) {
+    assert.equal(vm.isLaheSiteUrl(bad), false, String(bad));
+  }
+});
+
+test("a row with a stable address links to it, in words a person can read", () => {
+  const list = freshList();
+  reviewIn(list, "r_spec").address = "http://docs.ongoing.lahe.localhost:1483/spec%20one.html";
+  const r = row(build(list, okState()), "r_spec");
+  assert.deepEqual(r.address, {
+    href: "http://docs.ongoing.lahe.localhost:1483/spec%20one.html",
+    text: "docs.ongoing.lahe.localhost:1483/spec one.html"
+  });
+});
+
+test("a row has no address link with the switch off, or when the address is not a Lahe site", () => {
+  const list = freshList();
+  assert.equal(row(build(list, okState()), "r_spec").address, null);
+  reviewIn(list, "r_spec").address = null;
+  assert.equal(row(build(list, okState()), "r_spec").address, null);
+  reviewIn(list, "r_spec").address = "http://evil.test/x.html";
+  assert.equal(row(build(list, okState()), "r_spec").address, null, "the helper's word is still checked before it becomes a link");
+  reviewIn(list, "r_spec").address = "javascript:alert(1)";
+  assert.equal(row(build(list, okState()), "r_spec").address, null);
+});
+
+test("Open that left a newer review's rail alone says which review holds it", () => {
+  const list = freshList();
+  let state = vm.beginOpen(okState(), list, "r_mounted", { handoff: false });
+  state = vm.afterOpen(state, list, "r_mounted", {
+    ok: true,
+    body: { url: "http://x.lahe.localhost:1483/f.html", request_id: null, not_asked: null, held_by: { review: "r_newer", name: "Figure v2" } }
+  }, NOW);
+  const note = row(build(list, state), "r_mounted").note;
+  assert.equal(note.text, 'Opened. "Figure v2" is a newer review in another open session and keeps this page\'s rail. Open did not move it.');
+  assert.equal(note.tone, "info");
+});
+
+test("Open with no one holding the rail says nothing extra", () => {
+  const list = freshList();
+  let state = vm.beginOpen(okState(), list, "r_mounted", { handoff: false });
+  state = vm.afterOpen(state, list, "r_mounted", {
+    ok: true,
+    body: { url: "http://x.lahe.localhost:1483/f.html", request_id: null, not_asked: null, held_by: null }
+  }, NOW);
+  assert.equal(row(build(list, state), "r_mounted").note, null);
+});
+
+test("a worktree row Open can open says it shows the main copy read-only; one that needs an agent keeps the old words", () => {
+  const list = freshList();
+  const wt = list.sessions.reduce((found, s) => found || s.reviews.filter((r) => r.kind === "worktree")[0], null);
+  assert.ok(wt, "the fixture has a worktree row");
+  assert.equal(wt.openable, "via-agent");
+  const old = row(build(list, okState()), wt.id);
+  assert.ok(old.notices.some((n) => /An agent will open the main repository's copy/.test(n.text)));
+  wt.openable = "yes";
+  const now = row(build(list, okState()), wt.id);
+  assert.ok(now.notices.some((n) => n.text === "The worktree is gone. Open shows the main repository's copy, read-only, which may differ from what you reviewed."));
+  assert.ok(!now.notices.some((n) => /An agent will open/.test(n.text)));
+  assert.equal(now.buttons.open.enabled, true);
+});

@@ -292,6 +292,11 @@ var NON_BUNDLE_FILES = [
     why: "what list, open, star and request do after the checks, and the reopened-session sweep: joins the reader, store, queue and static-server restart"
   },
   {
+    path: "src/service/catalog_sites.js",
+    owner: "stable addresses 4.1",
+    why: "the Library's side of the site registry: which site a review's document is served from, its address, and how Open names the site and stamps the review"
+  },
+  {
     path: "src/service/catalog_page.js",
     owner: "Library 1.2 and 2.2",
     why: "the Library page's HTML template, with the token in its meta tag"
@@ -331,6 +336,11 @@ var CATALOG_PAGE = [
     path: "src/layer/catalog/view_model.js",
     owner: "Library 2.2",
     why: "a pure module, no DOM: a list response and the page's state into sections, rows and button states"
+  },
+  {
+    path: "src/layer/copy_text.js",
+    owner: "stable addresses 4.2",
+    why: "the one copy function: the clipboard API, else a hidden field and the browser's copy command. Loaded raw by the Library page; the rail can call it once it joins the bundle list"
   },
   {
     path: "src/layer/catalog/page.js",

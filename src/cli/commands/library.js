@@ -168,6 +168,19 @@ function readReady(dir) {
   }
 }
 
+/**
+ * Where the Library is. With the helper serving pages itself (stable
+ * addresses) it is the Library's own name on the pages port; otherwise the
+ * helper's loopback address, as it always was. The helper answers at both.
+ */
+function libraryUrl(ready) {
+  var pages = ready.pages;
+  if (pages && pages.mode === protocol.PAGES.MODE_SITES && Number.isInteger(pages.port)) {
+    return protocol.siteOrigin(protocol.PAGES.LIBRARY_NAME, pages.port) + protocol.CATALOG_PAGE_PATH;
+  }
+  return "http://" + protocol.DEFAULT_HOST + ":" + ready.port + protocol.CATALOG_PAGE_PATH;
+}
+
 function attachedLine(attached) {
   if (!attached) return "no agent. Run lahe library to attach one";
   var who = attached.name ? attached.name + " (" + attached.session + ")" : attached.session;
@@ -236,7 +249,7 @@ async function runLibrary(args, opts, out, err) {
   }
 
   catalogRequests.writeAttach(dir, sessionId, nowMs);
-  var url = "http://" + protocol.DEFAULT_HOST + ":" + ready.port + protocol.CATALOG_PAGE_PATH;
+  var url = libraryUrl(ready);
   var attached = catalogRequests.createQueue({ dir: dir }).readAttached(nowMs);
 
   if (args.json) {

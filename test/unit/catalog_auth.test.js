@@ -453,6 +453,11 @@ test("the page has no CORS header, carries the script, frame, referrer and no-st
     assert.equal(res.text.split(token).length - 1, 1, "the token appears once, in the meta tag");
     assert.ok(res.text.indexOf(ASSET.path + "page.js") !== -1, "the page loads page.js from catalog.asset");
     assert.ok(res.text.indexOf(ASSET.path + "protocol.js") !== -1, "the page loads protocol.js from catalog.asset");
+    assert.ok(
+      res.text.indexOf(ASSET.path + "copy_text.js") !== -1 &&
+        res.text.indexOf(ASSET.path + "copy_text.js") < res.text.indexOf(ASSET.path + "page.js"),
+      "the shared copy function loads before the page script that calls it"
+    );
   } finally {
     await helper.close();
   }
@@ -467,7 +472,7 @@ test("catalog.asset serves each allowlisted file with its content type, and noth
     // The allowlist is the architecture's, exactly.
     assert.deepEqual(
       names.slice().sort(),
-      ["page.js", "protocol.js", "view_model.js", markdown.DOC_STYLE_ASSET]
+      ["page.js", "protocol.js", "view_model.js", "copy_text.js", markdown.DOC_STYLE_ASSET]
         .concat(markdown.FONT_ASSETS.map((f) => markdown.FONT_ASSET_DIR + "/" + f))
         .sort()
     );
@@ -475,6 +480,7 @@ test("catalog.asset serves each allowlisted file with its content type, and noth
       "protocol.js": /^application\/javascript/,
       "page.js": /^application\/javascript/,
       "view_model.js": /^application\/javascript/,
+      "copy_text.js": /^application\/javascript/,
       [markdown.DOC_STYLE_ASSET]: /^text\/css/
     };
     markdown.FONT_ASSETS.forEach((f) => (expectType[markdown.FONT_ASSET_DIR + "/" + f] = /^font\/woff2$/));
