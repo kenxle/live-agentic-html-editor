@@ -2,7 +2,7 @@
 
 Live pages repaint themselves: dev servers hot-reload, frameworks rewrite parts of the page, and the agent's own landed changes arrive as a refresh. After any repaint, a single pass walks every committed record and compares its stored history against what the page says now. This one compare (`src/layer/replay.js`, function `compare`) is the whole mechanism that lets a reviewer keep editing live while an agent edits the source underneath them, without either one clobbering the other.
 
-The compare runs per record, not per page: each record answers for its own region, in one of four ways.
+The compare runs per record, not per page: each record answers for its own region, in one of four ways. Only a record still waiting for the agent's answer (`ready`, `record.isReplayable`) is compared. A record the agent refused is skipped, and drops any conflict or lost stamp it carried; after the agent answers, the page is the file (`docs/features/20261011.01_stuck_replayed_blocks`).
 
 ```mermaid
 flowchart TD
@@ -17,6 +17,7 @@ flowchart TD
 
   Conflict --> Card["conflict card shows BOTH<br/>versions in full: the<br/>reviewer's and the page's"]
   Card --> Choice{"reviewer picks"}
+  Choice -- "keep mine, on a card<br/>the agent refused meanwhile" --> Back["the card goes back to ready<br/>for the agent; replay writes it<br/>from then on"]
   Choice -- "keep mine" --> KeepMine["write the pieces the page<br/>is missing; remembered as accepted,<br/>so the next pass reads it as a normal<br/>reapply, not a repeat conflict"]
   KeepMine --> Partial{"did every paragraph<br/>of the reviewer's version<br/>reach the page?"}
   Partial -- "yes" --> Done["the clash is answered"]
@@ -95,4 +96,4 @@ The presence table, as `placeRun` applies it:
 - **A tag change lands on a block.** The anchor is resolved with its new tag as the tie-breaker's hint, and the tag is written onto the block holding the anchor's words, never onto an inline element. A take-back names the old tag in `anchor_tag_after`, and the tag leg turns the anchor back.
 - **The run notes clear.** Each `placeRun` clears the wrong-tag and placed-elsewhere notes and sets them again from what it finds. A wrong tag replay swapped itself stays noted while replay's own element is on the page.
 - **One page walk per `placeRun`**, kept in step with what it writes.
-- **The page check reads a handled run block by block** (`runCheckReason`) from the page's markup with the string twin of the walk: a missing block reopens as undone, a wrong tag with the tag note, lost bold or italic with the formatting note, in that order. A take-back keeps the whole-text check, plus a tag check when it names the old tag.
+- **The page check does not reopen a handled run.** A block the page later drops, retags or strips of bold or italic stays as the page shows it, and nothing is written back. Its one round is the stamp round, when every block's words are on the page and the `data-lahe-id` did not reach an HTML source; replay never writes that round.

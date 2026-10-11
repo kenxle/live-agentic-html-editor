@@ -64,9 +64,9 @@ The path is `applyRun` and `placeRun` in `src/layer/replay.js`. The picture is t
 
 There are two checks, and they do different jobs.
 
-- **The page check** runs in the browser once per load on a handled item (`pageCheckReasonFor`, `runCheckReason` in `replay.js`). For a run it reads the anchor and each block on its own. A missing block reopens the item as undone. A wrong tag and lost bold or italic each have their own note. The "Section N" label between blocks never counts against it.
-- **The helper's check** runs when the agent replies handled (`src/service/handled_check.js`). It matches by words, because the helper cannot find a region in a built page. For a run it finds the first block's leaf page-wide and matches the rest in order. It does not test tags; the page check does that after the agent's write.
-- Because an unchanged anchor makes the whole sitting look like "only added words", the helper judges a run only when nothing in the review was written. An agent that places one run and says handled on two is not caught by the helper. The page check catches the skipped one on the next load.
+- **The page check** runs in the browser once per load on a handled item (`pageCheckReasonFor` in `replay.js`). It no longer reopens a run over its blocks: after the agent answers, the page is the file, so a missing block, a wrong tag or lost bold or italic is left as the page shows it, and the reviewer edits again if they want it back. The one thing it still asks for is a `data-lahe-id` the agent did not carry into an HTML source, once all the run's words are on the page. See [the spec](../features/20261011.01_stuck_replayed_blocks/01_spec_flag_dont_hold.md).
+- **The helper's check** runs when the agent replies handled (`src/service/handled_check.js`). It matches by words, because the helper cannot find a region in a built page. For a run it finds the first block's leaf page-wide and matches the rest in order. It does not test tags, and nothing else does once the agent has answered.
+- Because an unchanged anchor makes the whole sitting look like "only added words", the helper judges a run only when nothing in the review was written. An agent that places one run and says handled on two is not caught by the helper. The reviewer sees the skipped one missing from the page and writes it again.
 - Format-only edits (bold or italic added to existing words) are checked the same way: each span whose formatting changed must sit inside a `strong`/`b` or `em`/`i` in the built page.
 
 ## `lahe write` and its one-page server
@@ -112,7 +112,7 @@ There are two checks, and they do different jobs.
 | Session, block types, Enter, paste, undo, the bar menu | `src/layer/editing.js` |
 | DOM block rules: leaf walk, insert point, host, tag swap, a record's run | `src/layer/blocks.js` |
 | Protection of the anchor and run | `src/layer/protect.js` |
-| Placing a run, the page check, the conflict card | `src/layer/replay.js` |
+| Placing a run, the page check's stamp round, the conflict card | `src/layer/replay.js` |
 | Empty-container rung, tag tie-breaker | `src/layer/anchor.js` |
 | `cleanBlock`, run matcher, `run_words` | `src/shared/normalize.js` |
 | Run fields, validation, ceilings, take-back | `src/shared/record.js` |
