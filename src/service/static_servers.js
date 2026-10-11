@@ -9,7 +9,6 @@ var http = require("node:http");
 var path = require("node:path");
 
 var protocol = require("../shared/protocol.js");
-var scriptLine = require("../shared/script_line.js");
 var markdown = require("./markdown.js");
 var markdownLinks = require("./markdown_links.js");
 var stateDir = require("./state_dir.js");
@@ -18,6 +17,7 @@ var styles = require("./styles.js");
 var tabIcon = require("./tab_icon.js");
 var heal = require("./heal.js");
 var logModule = require("./log.js");
+var pageRoutes = require("./page_routes.js");
 
 var SCHEMA = 1;
 var HOST = protocol.DEFAULT_HOST;
@@ -39,7 +39,7 @@ var MOUNT_ROOT = "/.lahe-source/";
 //
 // The prefix follows HEALTH_PREFIX and the /.lahe-source/ mounts: a dotted,
 // tool-named path segment no ordinary document folder has.
-var LIBRARY_PREFIX = "/.lahe-library/";
+// LIBRARY_PATH below is page_routes.js's, so both kinds of server name it the same.
 
 // Why a server was stopped, as its record says it. IDLE_REASON is the helper's
 // sweep (src/service/idle_servers.js): no browser window was open on any of
@@ -129,23 +129,10 @@ async function withServerLock(file, task) {
     }
   }
 }
-var LIBRARY_PATH = LIBRARY_PREFIX + heal.BUNDLE_BASENAME;
+var LIBRARY_PATH = pageRoutes.LIBRARY_PATH;
 
-var MIME = {
-  ".css": "text/css; charset=utf-8",
-  ".gif": "image/gif",
-  ".html": "text/html; charset=utf-8",
-  ".jpeg": "image/jpeg",
-  ".jpg": "image/jpeg",
-  ".js": "text/javascript; charset=utf-8",
-  ".json": "application/json; charset=utf-8",
-  ".mjs": "text/javascript; charset=utf-8",
-  ".png": "image/png",
-  ".svg": "image/svg+xml",
-  ".txt": "text/plain; charset=utf-8",
-  ".webp": "image/webp",
-  ".woff2": "font/woff2"
-};
+// One MIME table for both kinds of server (src/service/page_routes.js).
+var MIME = pageRoutes.MIME;
 
 function delay(ms) {
   return new Promise(function (resolve) { setTimeout(resolve, ms); });
@@ -786,24 +773,8 @@ function send(res, status, body, type) {
 // straight off disk: this server is a separate process from the helper that
 // holds reviews in memory, so disk is the only thing they share.
 
-/**
- * The folder a review of `target` is served out of: the folder itself for a
- * folder review, the page's own folder for a single page. Null when the target
- * is not on disk any more.
- *
- * This is the same choice `lahe review` makes when it starts the server (see
- * servedKind in src/cli/commands/review.js), which is the point: it is how a
- * review recorded on disk is matched back to the server that serves it.
- */
-function servedFrom(target) {
-  if (typeof target !== "string" || !target) return null;
-  try {
-    if (fs.statSync(target).isDirectory()) return target;
-  } catch (err) {
-    return null;
-  }
-  return path.dirname(target);
-}
+// servedFrom and newer are page_routes.js's; the rule is the same for both.
+var servedFrom = pageRoutes.servedFrom;
 
 /**
  * Is this review's own served folder the folder this server is rooted at?
@@ -831,13 +802,7 @@ function backsServer(target, roots) {
   return !!from && roots.indexOf(from) !== -1;
 }
 
-/** Newer wins; the id breaks a tie, so two reviews minted in one millisecond
- * still pick the same way on every request. */
-function newer(candidate, best) {
-  if (!best) return true;
-  if (candidate.at !== best.at) return candidate.at > best.at;
-  return candidate.review > best.review;
-}
+var newer = pageRoutes.newer;
 
 /**
  * The review a page this server is about to serve belongs to, or null.
@@ -931,64 +896,8 @@ function findReviewForRequest(dir, options) {
   };
 }
 
-/** The helper's own origin, read fresh off service.json so a custom `--port` is honored. */
-function currentHelperOrigin(dir) {
-  var ready = readJson(stateDir.readyPath(dir));
-  var port = ready && typeof ready.port === "number" ? ready.port : protocol.DEFAULT_PORT;
-  return "http://" + protocol.DEFAULT_HOST + ":" + port;
-}
-
-/**
- * `html`, with `match`'s script tag put back if it is missing, or `null` when
- * nothing needs to change (the tag is already this review's, or a DIFFERENT
- * review's tag is present and is left alone on purpose, exactly as heal.js
- * does).
- *
- * @param {string} dir the state directory
- * @param {{review: string, token: string}} match the review this file targets
- * @param {string} target the path named in the log line for the foreign-tag case
- * @param {string} html the file's current bytes
- * @returns {string|null}
- */
-function injectForMatch(dir, match, target, html) {
-  var carried = scriptLine.reviewAlreadyInFile(html);
-  if (carried === match.review) return null;
-  if (carried) {
-    try {
-      logModule.createEventLog({ dir: dir }).helperLog(
-        "review " + match.review + ": not injecting at serve time into " + target +
-          ", it carries review " + carried + " now, so it was re-attached somewhere else on purpose"
-      );
-    } catch (err) {
-      // Diagnostic only; a page that cannot log must still be served.
-    }
-    return null;
-  }
-  var helperOrigin = currentHelperOrigin(dir);
-  // THE LIBRARY COMES FROM THIS SERVER, and the helper is the fallback.
-  //
-  // That is the reverse of what `add` writes into a file, on purpose. `add`'s
-  // line has to resolve from wherever a page opened from disk sits, so it names
-  // the helper absolutely and falls back to a sibling copy. This line is only
-  // ever produced by this server, so a root-absolute path resolves back here
-  // whatever host name the reviewer typed, and here is the process that just
-  // answered the request: it cannot be down. The helper is a separate process
-  // and often is down, which is exactly why it is the fallback and not the src.
-  //
-  // Nothing relative to the page is named, so no copy of the bundle has to be
-  // written into the reviewer's folder for this line to work.
-  var tag = protocol.scriptTag({
-    src: LIBRARY_PATH,
-    review: match.review,
-    token: match.token,
-    helper: helperOrigin,
-    fallback: helperOrigin + protocol.route("library.get").path,
-    // The notes flag rides the tag, so the layer knows at boot that an empty
-    // page here opens for typing (free writing, design call 2).
-    notes: stateDir.isNotesReview(dir, match.review)
-  });
-  return scriptLine.placeScriptLine(html, tag).html;
-}
+// The script tag, built the same way for both kinds of server.
+var injectForMatch = pageRoutes.injectForMatch;
 
 /**
  * Is one of this session's static servers serving `filePath` right now?
@@ -1285,14 +1194,7 @@ function linkedFileForPage(dir, sessionId, reviewId, pagePath) {
   return found;
 }
 
-/** `html` with a visible note placed just inside <body>, or at the top. */
-function placeNote(html, note) {
-  var text = String(html);
-  var body = text.match(/<body\b[^>]*>/i);
-  if (!body) return note + text;
-  var at = body.index + body[0].length;
-  return text.slice(0, at) + note + text.slice(at);
-}
+var placeNote = pageRoutes.placeNote;
 
 
 function runServer(file, sessionId, id, instance, rootInput, dir, logicalRootInput, preferredPortInput) {

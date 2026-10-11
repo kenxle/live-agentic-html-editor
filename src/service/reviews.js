@@ -286,7 +286,10 @@ function createReviews(options) {
           agent_session_id: typeof parsed.agent_session_id === "string" ? parsed.agent_session_id : "legacy",
           only_recorded_pages: parsed.only_recorded_pages === true,
           notes: parsed.notes === true,
-          created_at: parsed.created_at || new Date().toISOString()
+          created_at: parsed.created_at || new Date().toISOString(),
+          // When site.bind last stamped it: "newest" for the page rule is the
+          // later of this and created_at (src/service/page_routes.js).
+          served_at: typeof parsed.served_at === "string" ? parsed.served_at : null
         };
       } else {
         loud("review " + entry.name + " has a " + stateDir.FILES.meta + " with no usable token");
@@ -443,7 +446,8 @@ function createReviews(options) {
       agent_session_id: typeof parsed.agent_session_id === "string" ? parsed.agent_session_id : "legacy",
       only_recorded_pages: parsed.only_recorded_pages === true,
       notes: parsed.notes === true,
-      created_at: parsed.created_at || new Date().toISOString()
+      created_at: parsed.created_at || new Date().toISOString(),
+      served_at: typeof parsed.served_at === "string" ? parsed.served_at : null
     };
     log.helperLog("review " + reviewId + " learned from disk without a restart");
     // The readiness file is how every CLI command on the machine finds a
@@ -722,6 +726,19 @@ function createReviews(options) {
    *
    * @returns {boolean}
    */
+  /**
+   * Stamp a review as re-served (stable addresses): `lahe review`, `lahe
+   * write` and the Library's Open each do it through site.bind, so the most
+   * recent explicit act decides which review a page's rail belongs to.
+   */
+  function stampServed(reviewId, at) {
+    var review = get(reviewId);
+    if (!review) throw new Error("stampServed: no review named " + JSON.stringify(reviewId));
+    review.served_at = typeof at === "string" ? at : new Date(clock()).toISOString();
+    persist(review);
+    return review;
+  }
+
   function isNotes(reviewId) {
     var review = get(reviewId);
     return !!review && review.notes === true;
@@ -1093,7 +1110,7 @@ function createReviews(options) {
 
   function writeReadyFile(details) {
     var d = details || {};
-    lastReadyDetails = { port: d.port, started_at: d.started_at || new Date().toISOString() };
+    lastReadyDetails = { port: d.port, started_at: d.started_at || new Date().toISOString(), pages: d.pages || null };
     var payload = {
       port: lastReadyDetails.port,
       pid: process.pid,
@@ -1102,6 +1119,9 @@ function createReviews(options) {
       service_contract: protocol.SERVICE_CONTRACT,
       reviews: {}
     };
+    // Stable addresses: the switch, the pages port and the printed ending, so
+    // the CLI follows the running helper rather than its own environment.
+    if (lastReadyDetails.pages) payload.pages = lastReadyDetails.pages;
     Object.keys(reviews).forEach(function (id) {
       payload.reviews[id] = {
         token: reviews[id].token,
@@ -1500,6 +1520,7 @@ function createReviews(options) {
     recordPaths: recordPaths,
     isolate: isolate,
     isNotes: isNotes,
+    stampServed: stampServed,
     touch: touch,
     lastSeenAt: lastSeenAt,
     targetMtime: targetMtime,

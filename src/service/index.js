@@ -53,6 +53,8 @@ var catalogActions = require("./catalog_actions.js");
 var staticServers = require("./static_servers.js");
 var idleServersModule = require("./idle_servers.js");
 var selfStopModule = require("./self_stop.js");
+var sitesModule = require("./sites.js");
+var pageRoutesModule = require("./page_routes.js");
 
 // Read from package.json rather than restated here, so the version the helper
 // reports cannot drift from the version the repo ships.
@@ -166,6 +168,21 @@ function readBody(req, limit) {
 }
 
 /**
+ * The port the pages listener asks for, or null for no pages listener.
+ *
+ * An explicit option wins (tests pass 0 for any free port, or null for none),
+ * then LAHE_PAGES_PORT, then PAGES.PORT when the switch is on. With the switch
+ * off and nothing named, there is no pages listener at all.
+ */
+function pagesPortFrom(opts, pagesOn) {
+  if (opts.pagesPort === null) return null;
+  if (typeof opts.pagesPort === "number") return opts.pagesPort;
+  var fromEnv = process.env[protocol.PAGES.PORT_ENV];
+  if (fromEnv !== undefined && fromEnv !== "" && Number.isInteger(Number(fromEnv))) return Number(fromEnv);
+  return pagesOn ? protocol.PAGES.PORT : null;
+}
+
+/**
  * Start the helper.
  *
  * @param {{port?: number, host?: string, stateDir?: string, reviews?: string[],
@@ -195,6 +212,41 @@ async function serve(options) {
   var log = logModule.createEventLog({ dir: dir });
   var reviews = reviewsModule.createReviews({ dir: dir, log: log });
   reviews.loadFromDisk();
+
+  // STABLE ADDRESSES (docs/features/20261011.02_stable_addresses). The switch
+  // is read once, here, and reported in service.json; the CLI follows what a
+  // running helper reports. With it off there is no pages listener unless a
+  // test names a pages port, and no registry lookup answers a request. The
+  // registry itself, Host dispatch, the ::1 listener and site.bind are live
+  // either way: each is harmless while no name is granted.
+  var pagesOn = opts.pages !== undefined ? opts.pages === protocol.PAGES.SWITCH_ON : protocol.pagesSwitchOn(process.env);
+  var pagesPortWanted = pagesPortFrom(opts, pagesOn);
+  var sites = sitesModule.createSites({
+    dir: dir,
+    home: opts.sitesHome,
+    log: function (line) { log.helperLog(line); }
+  });
+  sites.load();
+  if (pagesOn) sitesModule.ensureCliSecret(dir);
+  var pageRoutes = pageRoutesModule.createPageRoutes({ dir: dir, sites: sites, log: log });
+  // Filled in once the pages listener is bound.
+  var boundPagesPort = null;
+
+  /** A page's request to the API: is its site origin good for this review? */
+  function siteOriginAllowed(reviewId, origin) {
+    if (!pagesOn || boundPagesPort === null) return false;
+    var name = protocol.siteNameFromOrigin(origin, boundPagesPort);
+    var site = name ? sites.get(name) : null;
+    var review = site ? reviews.get(reviewId) : null;
+    return !!review && pageRoutesModule.reviewAnswersOnSite(site, review);
+  }
+
+  /** The preflight's question for a site origin: is it a registered site? */
+  function siteOriginKnown(origin) {
+    if (!pagesOn || boundPagesPort === null) return false;
+    var name = protocol.siteNameFromOrigin(origin, boundPagesPort);
+    return !!name && !!sites.get(name);
+  }
   // The window sessions the LAST helper was holding. A helper is replaced
   // whenever the code on disk is newer than the running process, and without
   // this every replacement threw the reviewer's open page out of its own review
@@ -204,7 +256,13 @@ async function serve(options) {
   // life only. Its port is filled in once the listener is bound, and until then
   // every catalog request fails the Host check.
   var catalog = authModule.createCatalogState();
-  var auth = authModule.createAuth({ log: log, reviews: reviews, catalog: catalog });
+  var auth = authModule.createAuth({
+    log: log,
+    reviews: reviews,
+    catalog: catalog,
+    cliSecret: function () { return sitesModule.readCliSecret(dir); },
+    siteOriginAllowed: siteOriginAllowed
+  });
   // Created here rather than down with the rest of `deps` (below) because the
   // review-creation loop right after this needs it too: a review named on the
   // command line can also name the agent session that owns it (opts.reviewSessions,
@@ -293,6 +351,8 @@ async function serve(options) {
     catalog: catalog,
     catalogActions: catalogActionsInstance,
     catalogQueue: catalogQueue,
+    sites: sites,
+    pagesPort: function () { return boundPagesPort; },
     now: now,
     version: VERSION,
     startedAt: startedAt
@@ -305,12 +365,104 @@ async function serve(options) {
   projection.startWatching(deps);
   idleServers.start(typeof opts.idleSweepMs === "number" ? opts.idleSweepMs : envMs("LAHE_IDLE_SWEEP_MS"));
 
-  var server = http.createServer(function (req, res) {
-    handle(req, res).catch(function (err) {
-      log.helperLog("unhandled error serving " + req.method + " " + req.url + ": " + err.message);
-      respond(res, 500, protocol.errorBody("PROTO_BAD_REQUEST", err.message, null, null), null);
+  // HOST DISPATCH COMES FIRST, on every listener, before the preflight and
+  // before any route is matched. Each family answers a closed set of Hosts:
+  //
+  //   api      loopback names, on either port: today's handling, unchanged
+  //   library  library.lahe.localhost: the Library's routes only
+  //   page     a registered name, on the pages port only, with the switch on
+  //   anything else is a 400, and a page name on the API port is too
+  function dispatch(listener) {
+    return function (req, res) {
+      var host = req.headers[protocol.HEADER.HOST];
+      var family = protocol.classifyHost(host, { pagesPort: boundPagesPort });
+      if (family.family === protocol.HOST_FAMILY.API ||
+          (family.family === protocol.HOST_FAMILY.LIBRARY && routes.isCatalogPath(req.url))) {
+        handle(req, res).catch(function (err) {
+          log.helperLog("unhandled error serving " + req.method + " " + req.url + ": " + err.message);
+          respond(res, 500, protocol.errorBody("PROTO_BAD_REQUEST", err.message, null, null), null);
+        });
+        return;
+      }
+      if (family.family === protocol.HOST_FAMILY.PAGE && listener === "pages" && pagesOn) {
+        try {
+          pageRoutes.handle(req, res, family.name);
+        } catch (err) {
+          log.helperLog("unhandled error serving a page of " + family.name + ": " + err.message);
+          if (!res.headersSent) res.writeHead(500, { "content-type": "text/plain; charset=utf-8", "cache-control": "no-store" });
+          res.end("could not serve this page\n");
+        }
+        return;
+      }
+      refuseHost(req, res, host, listener);
+    };
+  }
+
+  // One line per refusal, naming the Host and the port it came in on and
+  // nothing about the page asked for.
+  function refuseHost(req, res, host, listener) {
+    var requestId = crypto.randomBytes(8).toString("hex");
+    log.helperLog(
+      "refused Host " + JSON.stringify(String(host === undefined ? "none" : host).slice(0, 200)) +
+        " on the " + listener + " port [request " + requestId + "]"
+    );
+    var body = protocol.errorBody("PROTO_BAD_HOST", null, requestId, protocol.CHECK.HOST);
+    if (routes.isCatalogPath(req.url)) {
+      respondCatalogJson(res, protocol.statusFor("PROTO_BAD_HOST"), body, requestId);
+      return;
+    }
+    respond(res, protocol.statusFor("PROTO_BAD_HOST"), body, null, requestId);
+  }
+
+  var listeners = [];
+
+  /**
+   * One listener. `required` listeners reject on failure; the ::1 twins log
+   * and resolve null, so a machine with no IPv6 loopback keeps serving.
+   */
+  function listenOn(kind, listenPort, listenHost, required) {
+    var created = http.createServer(dispatch(kind));
+    return new Promise(function (resolve, reject) {
+      created.once("error", function (err) {
+        if (required) return reject(err);
+        log.helperLog(
+          "could not listen on " + (listenHost.indexOf(":") !== -1 ? "[" + listenHost + "]" : listenHost) + ":" +
+            listenPort + " for the " + kind + " port (" + (err && err.code ? err.code : String(err)) + "); still serving on 127.0.0.1"
+        );
+        resolve(null);
+      });
+      created.listen(listenPort, listenHost, function () {
+        listeners.push({ kind: kind, server: created });
+        resolve(created);
+      });
     });
-  });
+  }
+
+  function closeListeners() {
+    return Promise.all(listeners.map(function (entry) {
+      return new Promise(function (resolve) {
+        entry.server.close(function () { resolve(); });
+        // server.close() stops accepting and then waits for every open
+        // connection to end on its own. The library polls on keep-alive
+        // connections, so a page left open holds the socket and close() never
+        // calls back: SIGTERM hung, `add`'s restart fallback timed out after ten
+        // seconds, and the unit suite flaked on teardown. Node 18.2+ has the one
+        // API that ends them, which is why engines.node is >=18.2.0.
+        if (typeof entry.server.closeAllConnections === "function") entry.server.closeAllConnections();
+      });
+    })).then(function () {});
+  }
+
+  /** What service.json says about pages, for the CLI to follow. */
+  function pagesReport() {
+    return {
+      mode: pagesOn ? protocol.PAGES.MODE_SITES : protocol.PAGES.MODE_SERVERS,
+      port: boundPagesPort,
+      printed_ending: protocol.PAGES.PRINTED_ENDING,
+      port_free: { on: false, verified: false, reason: "not set up" },
+      lahe_names: { on: false, verified: false, reason: "not set up" }
+    };
+  }
 
   function respond(res, status, body, origin, requestId) {
     var headers = {
@@ -370,6 +522,7 @@ async function serve(options) {
   /** Every origin any review has registered, for the preflight answer. */
   function anyReviewRegistered(origin) {
     if (!origin) return false;
+    if (siteOriginKnown(origin)) return true;
     var config = reviews.config();
     return Object.keys(config.reviews).some(function (id) {
       return config.reviews[id].origins.indexOf(origin) !== -1;
@@ -422,6 +575,13 @@ async function serve(options) {
         Vary: "Origin"
       });
       res.end();
+      return;
+    }
+
+    // site.bind: the CLI secret and no Origin, checked by the one call site.
+    var siteRoute = routes.matchSiteRoute(req.method, url.pathname);
+    if (siteRoute) {
+      await handleSite(req, res, siteRoute, url, requestId);
       return;
     }
 
@@ -538,6 +698,43 @@ async function serve(options) {
     respond(res, (outcome && outcome.status) || 200, outcome ? outcome.body : null, checked.origin, requestId);
   }
 
+  // One site.bind request. Its response carries no CORS header: no page may
+  // read it, and the check block refuses any request with an Origin anyway.
+  async function handleSite(req, res, route, url, requestId) {
+    var body = null;
+    try {
+      var rawBody = await readBody(req, MAX_BODY_BYTES);
+      body = rawBody ? JSON.parse(rawBody) : null;
+    } catch (err) {
+      body = null;
+    }
+    var checked = auth.check({
+      routeName: route.name,
+      headers: req.headers,
+      review: null,
+      method: req.method,
+      path: url.pathname,
+      requestId: requestId
+    });
+    if (!checked.ok) {
+      respond(res, checked.status, protocol.errorBody(checked.code, null, requestId, checked.check), null, requestId);
+      return;
+    }
+    var outcome;
+    try {
+      outcome = await routes.handlerFor(route.name)({ routeName: route.name, body: body, requestId: requestId }, deps);
+    } catch (err) {
+      log.helperLog("route " + route.name + " failed: " + err.message + " [request " + requestId + "]");
+      respond(res, 500, protocol.errorBody("PROTO_BAD_REQUEST", err.message, requestId, null), null, requestId);
+      return;
+    }
+    if (outcome && outcome.error) {
+      respond(res, outcome.status || protocol.statusFor(outcome.error.code), protocol.errorBody(outcome.error.code, outcome.error.detail, requestId, null), null, requestId);
+      return;
+    }
+    respond(res, (outcome && outcome.status) || 200, outcome ? outcome.body : null, null, requestId);
+  }
+
   // One catalog request: body, the one auth.check call site's catalog branch,
   // then the handler. Every response goes out through respondCatalog, so no
   // path here can send a CORS header or leave off the page's policies.
@@ -602,16 +799,28 @@ async function serve(options) {
     respondCatalogJson(res, (outcome && outcome.status) || 200, outcome ? outcome.body : null, requestId);
   }
 
-  await new Promise(function (resolve, reject) {
-    server.once("error", reject);
-    server.listen(port, host, function () {
-      server.removeListener("error", reject);
-      resolve();
-    });
-  });
-
+  // LISTENERS. The API on 127.0.0.1 (or the host asked for) and, for the
+  // default host, on ::1 at the same port: a browser tries ::1 first for a
+  // .localhost name. A ::1 that cannot be bound is a log line, never an exit.
+  var server = await listenOn("api", port, host, true);
   var boundPort = server.address().port;
   catalog.port = boundPort;
+  if (host === protocol.DEFAULT_HOST) await listenOn("api", boundPort, "::1", false);
+  if (pagesPortWanted !== null) {
+    var pagesServer;
+    try {
+      pagesServer = await listenOn("pages", pagesPortWanted, protocol.DEFAULT_HOST, true);
+    } catch (err) {
+      await closeListeners();
+      var why = err && err.code === "EADDRINUSE"
+        ? "the pages port " + pagesPortWanted + " is taken by another program"
+        : "could not listen for pages on port " + pagesPortWanted + ": " + (err && err.message);
+      log.helperLog(why);
+      throw new Error(why);
+    }
+    boundPagesPort = pagesServer.address().port;
+    await listenOn("pages", boundPagesPort, "::1", false);
+  }
 
   // The reopened-session sweep (architecture, Helper lifetime). One run at a
   // time: a slow close must not overlap the next tick. unref'd, so it never
@@ -642,9 +851,15 @@ async function serve(options) {
 
   // The readiness file goes out AFTER the listener is bound. A readiness file
   // that arrives before the socket is a lie, and the durability tests race it.
-  reviews.writeReadyFile({ port: boundPort, started_at: startedAt });
+  reviews.writeReadyFile({ port: boundPort, started_at: startedAt, pages: pagesReport() });
   log.helperLog(
     "serving on http://" + host + ":" + boundPort + ", state directory " + dir + ", reviews " + (reviews.list().join(", ") || "none")
+  );
+  log.helperLog(
+    pagesOn
+      ? "pages on port " + boundPagesPort + ", printed as <name>." + protocol.PAGES.PRINTED_ENDING +
+          " (" + protocol.PAGES.SWITCH_ENV + "=" + protocol.PAGES.SWITCH_ON + ")"
+      : "pages served by per-session page servers (" + protocol.PAGES.SWITCH_ENV + " is not " + protocol.PAGES.SWITCH_ON + ")"
   );
   if (!opts.quiet) {
     process.stdout.write("lahe serve listening on http://" + host + ":" + boundPort + "\n");
@@ -693,24 +908,23 @@ async function serve(options) {
     sweepReopened: sweepReopened,
     sweepLibrarySessions: sweepLibrarySessions,
     server: server,
+    // Stable addresses: the bound pages port (null with the switch off), the
+    // registry, and every listener's address.
+    pagesPort: boundPagesPort,
+    sites: sites,
+    listeners: function () {
+      return listeners.map(function (entry) {
+        var a = entry.server.address();
+        return { kind: entry.kind, address: a.address, port: a.port };
+      });
+    },
     close: function () {
       // Once: a self-stop and the caller's own close may both ask.
       if (closing) return closing;
       if (!opts.schedule) clearInterval(sweepTimer);
       idleServers.stop();
       selfStop.stop();
-      closing = new Promise(function (resolve) {
-        server.close(function () {
-          resolve();
-        });
-        // server.close() stops accepting and then waits for every open
-        // connection to end on its own. The library polls on keep-alive
-        // connections, so a page left open holds the socket and close() never
-        // calls back: SIGTERM hung, `add`'s restart fallback timed out after ten
-        // seconds, and the unit suite flaked on teardown. Node 18.2+ has the one
-        // API that ends them, which is why engines.node is >=18.2.0.
-        if (typeof server.closeAllConnections === "function") server.closeAllConnections();
-      });
+      closing = closeListeners();
       return closing;
     },
     // The self-stop's own look, run by hand. Tests only.
