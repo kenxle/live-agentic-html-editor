@@ -70,7 +70,8 @@ function raw(port, options) {
         port: port,
         method: opts.method || "GET",
         path: opts.path || "/",
-        headers: opts.headers || {},
+        // A header given as undefined is left off, so a test can drop one.
+        headers: Object.fromEntries(Object.entries(opts.headers || {}).filter((e) => e[1] !== undefined)),
         setHost: false
       },
       (res) => {
