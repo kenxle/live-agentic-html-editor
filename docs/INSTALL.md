@@ -188,6 +188,203 @@ Do not fork these instructions by agent: Claude, Codex, and Gemini use the same
 CLI and file protocol after discovery, and the repository copy under `skills/` is
 the one source of truth for the skill.
 
+## Keeping addresses working: `lahe install`
+
+Every document Lahe serves has a stable address. The name is the document's
+folder plus its two parent folders, joined by dots, and the path is the file:
+
+```
+http://docs.features.20261011-02-stable-addresses.lahe.localhost:1483/01_brief.md
+```
+
+The address stays the same for as long as the folder exists. Without an
+install, it works whenever the helper is running: `lahe review` starts the
+helper, and the helper stops itself once nothing needs it. `lahe install` keeps
+the helper running all the time, so an old address loads after a session
+closes, after idle time, and after a reboot, with nobody running a command
+first.
+
+```sh
+lahe install                 # Windows: node bin/lahe.js install
+```
+
+Run it yourself, in a terminal. It refuses to run without a terminal, so an
+agent asks you to type `! lahe install`. It also refuses to run as root.
+
+**What it sets up, per system.** A login item that starts the helper when you
+log in and starts it again if it stops:
+
+| System | Login item | Back after a crash |
+|---|---|---|
+| macOS | `~/Library/LaunchAgents/lahe-helper.plist`, run by launchd | about 10 seconds (launchd waits 10 seconds between starts) |
+| Linux | `~/.config/systemd/user/lahe-helper.service`, run by `systemd --user` | about 2 seconds |
+| Windows | a Task Scheduler task named `lahe-helper`, at logon and once a minute | up to about a minute |
+
+On Linux without a user systemd, install says so and changes nothing; Lahe
+keeps starting the helper on demand. On Windows the task runs Node with no
+window. We have not yet checked by hand on a Windows desktop that no window
+flashes at logon.
+
+**What it pins.** The login item names the Node that ran the install, this
+clone, the helper's port (7817) and your state folder, all as full paths. A
+login item does not read your shell's settings, so nothing is looked up at
+login. If you remove that Node or move the clone, run `lahe install` again.
+`lahe status` says so when it happens. `install.json` in the state folder
+records what was set up.
+
+**What changes once installed.**
+
+- The helper runs with `--always-on` and does not stop itself when quiet. It
+  still stops if its state folder is removed, and the login item starts it
+  again into a fresh one.
+- Lahe commands ask the login item for a helper instead of starting their own.
+- When this clone's code is newer than the running helper, the next Lahe
+  command replaces the helper. It waits up to ten seconds for a quiet moment,
+  when no comment has been written for two seconds. If none comes, it leaves
+  the helper running and the next command tries again. An open page
+  reconnects on its own.
+- `lahe serve` by hand refuses, because the login item owns the port.
+  `lahe serve --restart` restarts the helper through the login item.
+
+**Other accounts on this computer.** An always-on helper can be reached by
+other accounts on the same computer, though not by websites. Install warns when
+more than one account exists, and goes on.
+
+**Taking it out.**
+
+```sh
+lahe uninstall               # Windows: node bin/lahe.js uninstall
+```
+
+This removes the login item and `install.json`, and stops the helper. On macOS
+it also removes the port 80 forward and the `.lahe` setup, if Lahe made them.
+After that, `lahe review` starts the helper on demand, as before. Addresses do
+not change: they work whenever the helper is running.
+
+## Optional: no port, and the short `.lahe` ending
+
+Two more options, each separate, each asking for an admin password once. Lahe
+uses neither until it has proved it works on this computer. It checks at start
+and every five minutes. Until a check passes, addresses keep `:1483` and the
+`.lahe.localhost` ending. `lahe status` shows whether each option is on,
+whether its check passed, and why not if it did not.
+
+- **No port** (`--port-80`) forwards this computer's own port 80 to 1483, so an
+  address prints as `http://<name>.lahe.localhost/<file>`. The check: the
+  helper sends itself a request with a fresh random path through port 80, and
+  passes only when that request arrives at its own pages port. The forward
+  covers this computer only, never traffic from the network.
+- **`.lahe`** (`--lahe-names`) makes every page also answer at
+  `http://<name>.lahe:1483/<file>`, or `http://<name>.lahe/<file>` with the
+  port 80 forward as well. Lookups for names ending in `.lahe` go to a
+  small name server inside the helper, on `127.0.0.1` port 7853. It answers
+  `127.0.0.1` or `::1` for names under `.lahe`, and refuses everything else.
+  The check: the helper looks up a fresh random `.lahe` name through the
+  system, and passes only when its own name server saw that exact lookup. A
+  page asked for at a `.lahe` address before the check passes is refused.
+
+`lahe review` keeps printing the `.lahe.localhost` ending. `.lahe` is a shorter
+alias you can type. A browser with its own secure DNS setting turned on may not
+ask the system about `.lahe`. There `.lahe` fails and `.lahe.localhost` still
+works. A `.lahe` address also shows "Not secure", and a few features fall
+back: copy uses an older method, and the guard against two tabs of one
+document acting at once is off. `.lahe.localhost` has none of these limits.
+The Library is never served at `library.lahe`.
+
+### macOS
+
+```sh
+lahe install --port-80
+lahe install --lahe-names
+```
+
+Each is one `sudo` call. The files carry a `# lahe-managed` line, and Lahe
+never overwrites or removes a file without it.
+
+- `--port-80` writes `/etc/pf.anchors/lahe` (forwards port 80 to 1483 for
+  `127.0.0.1` and `::1`) and `/Library/LaunchDaemons/lahe-port80.plist`, which
+  loads that rule at every boot and turns the macOS firewall's packet filter
+  (pf) on. It does not edit `/etc/pf.conf`. If something already listens on
+  port 80, install skips this step and names the program.
+- `--lahe-names` writes `/etc/resolver/lahe`, which sends `.lahe` lookups to
+  `127.0.0.1` port 7853.
+
+A later plain `lahe install` keeps whichever is set up. `lahe uninstall`
+removes both, one admin password each. It leaves pf turned on, with only
+Apple's own rules in it.
+
+### Linux (written steps, untested)
+
+Run `lahe install` with the option first, so the helper knows to check it, then
+do the steps. **We have not run these steps on Linux.** Each one is checked by
+the helper, so a step that does not work leaves addresses with `:1483` and
+`.lahe.localhost`, and `lahe status` says which check failed.
+
+**No port.** Install records it, then you add a redirect from loopback port 80
+to 1483 to the firewall:
+
+```sh
+lahe install --port-80
+sudo iptables  -t nat -A OUTPUT -o lo -p tcp -d 127.0.0.1 --dport 80 -j REDIRECT --to-ports 1483
+sudo ip6tables -t nat -A OUTPUT -o lo -p tcp -d ::1       --dport 80 -j REDIRECT --to-ports 1483
+```
+
+These rules last until the next reboot. Keeping them past a reboot depends on
+the distribution: on Debian and Ubuntu, the `iptables-persistent` package
+saves them with `sudo netfilter-persistent save`. Untested. To undo, run the
+same two commands with `-D` in place of `-A`.
+
+The architecture planned a different route for Linux: let ordinary programs use
+port 80, and have the helper listen there itself. The helper does not listen on
+port 80 yet, so the redirect is the route that works with it today.
+
+**`.lahe`.** This needs `systemd-resolved` (check with `resolvectl status`),
+version 246 or later for the `:7853` form. Without it, stop here: `.lahe` is not
+available on that machine.
+
+```sh
+lahe install --lahe-names
+sudo mkdir -p /etc/systemd/resolved.conf.d
+printf '# lahe-managed: remove this file to undo.\n[Resolve]\nDNS=127.0.0.1:7853\nDomains=~lahe\n' \
+  | sudo tee /etc/systemd/resolved.conf.d/lahe.conf
+sudo systemctl restart systemd-resolved
+resolvectl query anything.lahe      # should answer 127.0.0.1
+resolvectl query example.com        # ordinary lookups must still work
+```
+
+Untested on Linux. On some setups, ordinary lookups may also be offered to
+Lahe's name server first. It refuses them, and `systemd-resolved` should move
+on to your usual server. If ordinary lookups get slower or fail, undo it:
+`sudo rm /etc/systemd/resolved.conf.d/lahe.conf`, then restart
+`systemd-resolved`.
+
+`lahe uninstall` removes the login item and reminds you which of these steps to
+undo by hand.
+
+### Windows (written steps, untested)
+
+**No port.** In an administrator PowerShell, after recording it:
+
+```powershell
+node bin/lahe.js install --port-80
+netstat -ano | findstr ":80 "        # if anything is listening on port 80, stop here
+netsh interface portproxy add v4tov4 listenaddress=127.0.0.1 listenport=80 connectaddress=127.0.0.1 connectport=1483
+netsh interface portproxy add v6tov6 listenaddress=::1 listenport=80 connectaddress=::1 connectport=1483
+```
+
+Untested on Windows. The forward lasts across restarts and needs Windows'
+IP Helper service, which runs by default. To undo it:
+`netsh interface portproxy delete v4tov4 listenaddress=127.0.0.1 listenport=80`,
+and the same with `v6tov6` and `::1`.
+
+The architecture planned for the helper to listen on port 80 itself on Windows.
+It does not do that yet, so the forward above is the route that works today.
+
+**`.lahe` is not available on Windows yet.** Windows can send one name ending
+to a chosen name server, but only on port 53, and Lahe's name server answers on
+port 7853. `node bin/lahe.js install --lahe-names` says so and changes nothing.
+`.lahe.localhost` addresses work on Windows with no setup.
+
 ## Your settings file
 
 Some steps in a review use details about you, such as where your voice
@@ -245,7 +442,7 @@ with `lahe add path/to/page.html --remove` before the page ships.
 
 ## Removing it
 
-Three separate things, because they come apart:
+Four separate things, because they come apart:
 
 **Take the library out of a page.**
 
@@ -266,6 +463,9 @@ printed by `lahe review`. It stops the shared helper when no other agent session
 is open and stops this session's static review servers, while retaining every
 review and reply. `session reopen` starts that infrastructure again. Application
 dev servers are never stopped by LAHE.
+
+**Stop starting the helper at login.** Run `lahe uninstall`. See "Keeping
+addresses working" above.
 
 **Forget the reviews.** Delete the state directory (`$LAHE_STATE_DIR`, or
 `$XDG_STATE_HOME/lahe`, or `~/.local/state/lahe`). It holds every review's

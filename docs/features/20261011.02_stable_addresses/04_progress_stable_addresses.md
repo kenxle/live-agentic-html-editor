@@ -17,7 +17,6 @@
 
 | Agent or task | Doing | Started | Branch |
 |---|---|---|---|
-| Install builder (Opus) | Task 5.5: install guide (including written Linux and Windows steps), README, CLI install section, and your manual checks | 2026-10-11 16:41 | `unit/sa-install` |
 | Core builder (Opus) | Step 3: sites become the default, page servers removed, status and logging, skill, contract, and serving docs (old-comments row parked for your decision) | 2026-10-11 16:21 | `unit/sa-core` |
 
 ## Phases
@@ -41,6 +40,7 @@
 
 | Workstream | Tasks | Result | Detail |
 |---|---|---|---|
+| install | 5.5 docs | Merged. `docs/INSTALL.md` (install, uninstall, both options, written Linux and Windows steps marked untested), README, CLI install rows, one always-on line in `SESSION_OWNERSHIP.md`, and your [manual checks](progress/phase6_workstream_install.md). Found a core defect (session close stops an always-on helper), sent to the core builder. Unit gate 2,654 tests, 0 failed. | [install progress](progress/phase6_workstream_install.md) |
 | lahe-names | 6.0 to 6.2 | Merged. `lahe install --port-80` and `--lahe-names` (macOS), the name server, and both self-checks. Rows V54 to V56, V58, V59, V74 pass; V57 and V76 wait on three core changes (sent to the core builder) that make them visible; V73 and V75 are your manual checks. No test ran `sudo` or touched system files. Unit gate 2,652 tests, 0 failed. | [install progress](progress/phase6_workstream_install.md) |
 | install | 5.1 to 5.3 | Merged. Rows V45 to V52 and V72 pass, except two parts: V45's real login after a reboot needs you at this Mac, and V72's status line is core's (sent to it). macOS spike: install, restart after a kill (launchd waits 10 seconds), start on request, and uninstall all work; no login item left behind. Unit gate 2,618 tests, 0 failed. | [install progress](progress/phase6_workstream_install.md) |
 | library | 4.1, 4.2 | Merged. Rows V39 to V44 pass. Unit gate 2,578 tests, 0 failed. Browser spec 5 of 5 across three browsers; the three new specs pass together on the merged branch (14 passed). Screenshots: [light](progress/screenshots/library_stable_addresses_light.png), [dark](progress/screenshots/library_stable_addresses_dark.png). | [library progress](progress/phase6_workstream_library.md) |
@@ -51,6 +51,7 @@
 
 | Pass | What merged | Checks on the merge |
 |---|---|---|
+| 6 | install 5.5 docs | `npm run gate:unit`: 2,654 tests, 0 failed |
 | 5 | lahe-names 6.0 to 6.2 | `npm run gate:unit`: 2,652 tests, 0 failed; helpers before and after: 2 and 2 |
 | 4 | install 5.1 to 5.3 | `npm run gate:unit`: 2,618 tests, 0 failed; three new browser specs in Chromium: 12 passed, 1 skipped (screenshot-only); helpers before and after: 2 and 2 |
 | 3 | library 4.1, 4.2 | `npm run gate:unit`: 2,578 tests, 0 failed; the three new browser specs in Chromium: 14 passed, 1 skipped (screenshot-only); helpers before and after: 2 and 2 |
@@ -58,6 +59,12 @@
 | 1 | core Step 1 | `npm run gate:unit` on the merged branch: 2,517 tests, 0 failed; helpers running before and after: 2 and 2 |
 
 ### Changes from plan
+
+From install 5.5:
+
+- Port-free on Linux uses an `iptables` redirect, and on Windows a `netsh portproxy` forward, rather than the helper listening on port 80 itself.
+- `.lahe` is not offered on Windows: Windows sends a name ending only to a name server on port 53, and Lahe's listens on 7853.
+- On Linux and Windows, `--port-80` and `--lahe-names` record the option as a hand step and the helper checks it, so the written steps take effect.
 
 From install 5.1 to 5.3 (details in the [install progress](progress/phase6_workstream_install.md)):
 
@@ -141,6 +148,7 @@ Not shipped yet.
 
 ## Log
 
+- 2026-10-11 16:48: Install docs merged. Install builder found that closing the last session stops an always-on helper; fix sent to the core builder.
 - 2026-10-11 16:41: Port-free addresses and the `.lahe` name server merged (macOS options, each behind its own self-check). Three small core changes to make them visible sent to the core builder. Install builder on docs (5.5).
 - 2026-10-11 16:28: Login item check passed on Linux and Windows (install, restart after a kill, start on request, uninstall). Windows restart takes up to a minute. Install builder moved on to port-free addresses and the `.lahe` name server (6.0 to 6.2).
 - 2026-10-11 16:27: Install 5.1 to 5.3 merged cleanly. `lahe install` and `lahe uninstall` work on this Mac in a throwaway test. Linux and Windows login item check started on GitHub.
