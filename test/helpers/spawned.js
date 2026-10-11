@@ -40,6 +40,18 @@ async function stopPid(pid) {
 }
 
 /**
+ * The environment for a spawned helper: the run's, then the test's, and
+ * LAHE_PAGES_PORT=0 unless one of them names a port. A test file run on its
+ * own (outside gate:unit, which sets it for the whole run) must not bind the
+ * real pages port 1483.
+ */
+function spawnEnv(base, extra) {
+  const env = Object.assign({}, base || {}, extra || {});
+  if (env.LAHE_PAGES_PORT === undefined || env.LAHE_PAGES_PORT === "") env.LAHE_PAGES_PORT = "0";
+  return env;
+}
+
+/**
  * @param {object} t the node:test context
  * @param {string} stateDir the temp state folder the helpers use
  * @returns {{spawn: function(string[], object=): object, pids: number[]}}
@@ -56,7 +68,7 @@ function trackSpawned(t, stateDir) {
       const child = childProcess.spawn(process.execPath, args, {
         detached: true,
         stdio: "ignore",
-        env: Object.assign({}, process.env, env || {})
+        env: spawnEnv(process.env, env)
       });
       pids.push(child.pid);
       child.unref();
@@ -65,4 +77,4 @@ function trackSpawned(t, stateDir) {
   };
 }
 
-module.exports = { trackSpawned };
+module.exports = { trackSpawned, spawnEnv };

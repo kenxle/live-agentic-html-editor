@@ -268,3 +268,30 @@ Proof: two full `npm run gate:unit` runs in a row. Each run: 2590 tests, 2534 pa
   - `LAHE_NAME_CHECK_SERVER` asks the helper's own name server directly, instead of the system resolver.
 - No unit test binds 7853, sends to port 80, or does a real `.lahe` lookup, so none needs a network.
 - Proof: two full `npm run gate:unit` runs, 2577 tests, 0 failed, and no `lahe-worktrees` helper left after either.
+
+# Code review fix round (install and lahe-names findings)
+
+Each finding has a test that failed first. The proofs are single-file runs only, because the disk was full.
+
+| Finding | Fix | Test |
+|---|---|---|
+| 2: root installed user-writable files | Root builds each file from constants inside its own script, takes only a port number, refuses anything else, and writes in root-owned folders | `login_item.test.js`: one port argument; the text root prints equals Lahe's byte for byte; non-numbers refused |
+| 3: unbounded arrival sets | Each check holds one expected value; checks run one at a time | `addresses.test.js`: a 200-request, 200-query flood holds nothing and proves nothing |
+| 8: restart from another clone | Installed from another clone with an older contract: say which clone the login item runs; do not restart | `always_on.test.js`: `lahe session` and `lahe add` both report and leave the helper alone |
+| sudo timeout | No time limit on the sudo call | `login_item.test.js` |
+| failed install left root files | Removes them through the marker-guarded path, says what was left, names a held pages port | `install_command.test.js` |
+| `--` in the plist XML comment | Comment reworded; `plutil -lint` OK on a generated file | `login_item.test.js` |
+| spawned helpers could bind 1483 | `spawnEnv` defaults `LAHE_PAGES_PORT=0` | `spawned_helper_env.test.js` |
+
+Runs, each `LAHE_PAGES_PORT=0 node --test`:
+
+| File | Passed |
+|---|---|
+| `install_command` | 22 of 22 |
+| `always_on` | 19 of 19 |
+| `login_item` | 21 of 21 |
+| `addresses` | 17 of 17 |
+| `name_server` | 6 of 6 |
+| `spawned_helper_env` | 1 of 1 |
+
+No `lahe-worktrees` helper was left after them.

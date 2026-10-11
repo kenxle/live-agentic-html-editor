@@ -381,3 +381,31 @@ test("the test seams take only a port, and a name server on 127.0.0.1", async (t
   assert.deepEqual(await lookup("check-1.lahe"), { address: "127.0.0.1", family: 4 });
   assert.deepEqual(seen, ["check-1.lahe"]);
 });
+
+// Review finding 3: the arrival listeners stored every check-shaped request
+// and query they saw, so anyone able to reach the pages port or the name
+// server could grow the always-on helper's memory without end.
+test("a flood of check-shaped requests and queries holds nothing, and a stale one never counts as proof", async (t) => {
+  const pages = await pagesServer(t);
+  const pagesPort = pages.address().port;
+  const udp = await freeUdpPort();
+  const a = addressesModule.createAddresses({
+    installed: installed({ lahe_names: true, resolver: "/etc/resolver/lahe", name_server_port: udp }),
+    pagesPort,
+    pagesServers: [pages],
+    lookup: async () => ({ address: "127.0.0.1", family: 4 }),
+    intervalMs: 0
+  });
+  t.after(() => a.close());
+  await a.start();
+  for (let i = 0; i < 200; i += 1) {
+    await new Promise((resolve) => {
+      http.get({ host: "127.0.0.1", port: pagesPort, path: addressesModule.FORWARD_PATH + "flood" + i }, (res) => { res.resume(); res.on("end", resolve); })
+        .on("error", resolve);
+    });
+    await resolverTo(udp)("flood" + i + ".lahe");
+  }
+  assert.equal(a.heldCount(), 0, "nothing an outsider sends is kept");
+  await a.verifyNow();
+  assert.equal(a.laheNamesVerified(), false, "queries sent before the check do not prove it");
+});
