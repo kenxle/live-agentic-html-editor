@@ -2,7 +2,7 @@
 
 **Documents:** [Decision](00_decision_pdf_button.md) · [Spec](01_spec_pdf_button.md) · **Progress**
 
-**Status:** built, reviewed and tested. The PR is open and waiting on Ken's approval.
+**Status:** built, reviewed and tested. The PR is open and waiting on Ken's approval: [PR 36](https://github.com/kenxle/live-agentic-html-editor/pull/36).
 
 ## What it looks like
 
@@ -31,3 +31,4 @@ The screenshots come from the same build that passed `test/browser/pdf_button.sp
 
 - `docs/features/20261008.01_pdf_button/00_decision_pdf_button.md` in the main checkout: an uncommitted copy. The committed one is on this branch.
 - The `node_modules` symlink in this worktree. It is not committed.
+- `.claude-pr202610081400.md` in this worktree: the PR body. It is not committed.
