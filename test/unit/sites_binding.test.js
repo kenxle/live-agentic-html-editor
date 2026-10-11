@@ -256,6 +256,28 @@ test("V24: a page request's Origin is accepted only from the site the rule maps 
   assert.equal((await readReview(w, mine.id, mine.token, a.json.origin.replace(/:\d+$/, ":1"))).status, 403);
 });
 
+// The recorded deviation from the plan's wording (progress, "Changes from
+// plan"): the Origin check accepts any review that COULD answer on the site,
+// not only the one the rule picks now, so a tab opened before a newer review
+// took the page keeps working. Another site's review is still refused.
+test("V24: a site's Origin is accepted for a review the rule would not pick now, if that review could answer on the site", async (t) => {
+  const w = await boundWorld(t);
+  const otherFolder = path.join(w.home, "ws", "elsewhere", "docs");
+  const otherPage = writeFile(otherFolder, "y.html", PAGE);
+  const older = w.helper.reviews.create({ target_path: w.page, agent_session_id: "s1" });
+  const newer = w.helper.reviews.create({ target_path: w.page, agent_session_id: "s2" });
+  const stranger = w.helper.reviews.create({ target_path: otherPage, agent_session_id: "s3" });
+  const a = await bindRequest(w, { review: newer.id, root: w.folder, mode: "folder", entry: "page.html" });
+  const name = /^http:\/\/(.+)\.lahe\.localhost:\d+$/.exec(a.json.origin)[1];
+  // The rule picks the newer review for this page.
+  const page = await getPage(w, name, "/page.html");
+  assert.match(page.text, new RegExp('data-lahe-review="' + newer.id + '"'));
+  // The older review still answers from site A's origin: it recorded a file there.
+  assert.equal((await readReview(w, older.id, older.token, a.json.origin)).status, 200);
+  // A review that recorded nothing on site A is refused from site A's origin.
+  assert.equal((await readReview(w, stranger.id, stranger.token, a.json.origin)).status, 403);
+});
+
 test("V24: a site origin passes the preflight only when it is a registered site", async (t) => {
   const w = await boundWorld(t);
   const review = w.helper.reviews.create({ target_path: w.page, agent_session_id: "s1" });
