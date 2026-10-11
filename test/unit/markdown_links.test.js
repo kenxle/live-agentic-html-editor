@@ -98,7 +98,11 @@ test("a local link the mount rules refuse renders inert instead of pointing at a
   });
 });
 
-test("a link to a hidden location is translated like any other", () => {
+// Security review S2: a hidden folder below home (~/.ssh, ~/.config) is never
+// mounted, because a mount serves every file in its folder for as long as the
+// site lives. A relative link into a hidden folder of the document's own
+// folder is still noted; the page server refuses hidden segments itself.
+test("a link into a hidden folder below home is inert and mounts nothing", () => {
   withHome((home) => {
     const source = path.join(home, "docs");
     write(path.join(source, "guide.md"), "# Guide\n");
@@ -108,10 +112,10 @@ test("a link to a hidden location is translated like any other", () => {
     const registry = links.createRegistry({});
 
     const hidden = links.classify(hiddenFile, source, registry);
-    assert.equal(hidden.kind, "translate");
-    assert.equal(hidden.url, links.mountPrefix(fs.realpathSync(path.dirname(hiddenFile))) + ".todo.md");
-    assert.equal(registry.added.length, 1, "the hidden folder is mounted like any other");
-    assert.ok(registry.linked.indexOf(fs.realpathSync(hiddenFile)) !== -1);
+    assert.equal(hidden.kind, "inert");
+    assert.equal(hidden.reason, "hidden");
+    assert.equal(registry.added.length, 0, "the hidden folder is not mounted");
+    assert.equal(registry.linked.indexOf(fs.realpathSync(hiddenFile)), -1);
 
     const relative = links.classify(".drafts/plan.md", source, registry);
     assert.equal(relative.kind, "relative");

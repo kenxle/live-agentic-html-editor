@@ -357,6 +357,8 @@ function locate(site, decoded, rawPath) {
     var mount = /^(\/\.lahe-source\/[a-f0-9]+\/)(.*)$/.exec(decoded);
     var mountDir = mount && site.mounts ? site.mounts[mount[1]] : null;
     if (typeof mountDir !== "string" || hasHiddenSegment(mount[2])) return null;
+    // A mount saved before hidden folders were refused serves nothing.
+    if (!markdownLinks.mountableDir(mountDir)) return null;
     return { base: mountDir, prefix: mount[1], relative: mount[2], mounted: true, page: false };
   }
   if (hasHiddenSegment(decoded)) return null;

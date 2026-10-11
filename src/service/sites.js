@@ -198,6 +198,8 @@ function cleanMounts(mounts) {
   Object.keys(mounts).forEach(function (prefix) {
     var dirPath = mounts[prefix];
     if (!MOUNT_PREFIX.test(prefix) || typeof dirPath !== "string" || !path.isAbsolute(dirPath)) return;
+    // Never a hidden folder, or one outside home (markdownLinks.mountableDir).
+    if (!markdownLinks.mountableDir(dirPath)) return;
     out[prefix] = dirPath;
   });
   return out;
@@ -462,6 +464,7 @@ module.exports = {
   candidates: candidates,
   nameFor: nameFor,
   rootProblem: rootProblem,
+  cleanMounts: cleanMounts,
   worktreeOf: worktreeOf,
   ensureCliSecret: ensureCliSecret,
   readCliSecret: readCliSecret,
