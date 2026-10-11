@@ -209,7 +209,14 @@ function parseArgs(argv) {
     // and serves the bundle from its own reserved route
     // (src/service/static_servers.js). `review` only ever sets this flag in the
     // same block where it starts that server, so the two facts arrive together.
-    underReview: false
+    underReview: false,
+    // Internal only, like --under-review, which it implies: `lahe review` on
+    // stable addresses (docs/features/20261011.02_stable_addresses). The helper
+    // serves the page itself and binds it to a site after this command, so no
+    // loopback origin is registered: only "null", which is what this CLI
+    // presents on its own requests. A page's site origin is checked against
+    // the registry instead of the review's list.
+    servedByHelper: false
   };
   var index = 0;
 
@@ -235,6 +242,9 @@ function parseArgs(argv) {
       if (name === "--help" || name === "-h") return { ok: false, help: true, message: USAGE };
       if (name === "--under-review") {
         options.underReview = true;
+      } else if (name === "--served-by-helper") {
+        options.underReview = true;
+        options.servedByHelper = true;
       } else if (name === "--new") {
         options.isNew = true;
       } else if (name === "--adopt") {
@@ -978,7 +988,11 @@ async function run(argv) {
   var namedOrigins = withLoopbackTwins(options.origins);
   var origins;
   var originNote;
-  if (kind === "static") {
+  if (options.servedByHelper) {
+    origins = [FILE_ORIGIN];
+    originNote =
+      FILE_ORIGIN + " (what this command presents; the page's own address is checked against the helper's site registry)";
+  } else if (kind === "static") {
     origins = [FILE_ORIGIN].concat(namedOrigins);
     originNote =
       origins.join(", ") +
@@ -1429,10 +1443,19 @@ async function run(argv) {
       say("  so no review id and no token land in your folder and no page has to be enrolled by hand.");
     } else {
       say("  Nothing was written into " + path.basename(target) + ". The script line goes into the response,");
-      say("  put there by the server this review already owns, so no review id and no token land in your folder.");
+      say(
+        options.servedByHelper
+          ? "  put there by the helper, which serves this page itself, so no review id and no token land in your folder."
+          : "  put there by the server this review already owns, so no review id and no token land in your folder."
+      );
     }
-    say("  That same server publishes the library at " + staticServersModule.LIBRARY_PATH + ", so no copy of it");
-    say("  sits beside the page either, and the page still opens with the helper down.");
+    if (options.servedByHelper) {
+      say("  The helper publishes the library at " + staticServersModule.LIBRARY_PATH + " on the page's own address,");
+      say("  so no copy of it sits beside the page either.");
+    } else {
+      say("  That same server publishes the library at " + staticServersModule.LIBRARY_PATH + ", so no copy of it");
+      say("  sits beside the page either, and the page still opens with the helper down.");
+    }
     if (carried) {
       say();
       say("  This page still carries a script line on disk from an earlier run. It was left exactly as it is.");

@@ -18,6 +18,8 @@
 "use strict";
 
 var crypto = require("node:crypto");
+var fs = require("node:fs");
+var path = require("node:path");
 
 var protocol = require("../shared/protocol.js");
 var record = require("../shared/record.js");
@@ -814,6 +816,72 @@ var CATALOG_HANDLERS = {
   }
 };
 
+// ---------------------------------------------------------------------------
+// Stable addresses: binding a review to a site
+// ---------------------------------------------------------------------------
+//
+// Every request here has passed auth.checkSiteRequest: a loopback Host, no
+// Origin header, the CLI client header, JSON, and the CLI secret. The root is
+// taken from the request, never from meta.json, and is realpathed here.
+
+// A loopback origin with a port: what a page server registered. Binding drops
+// these from the review, so an old port is no longer a credential.
+var OLD_PORT_ORIGIN = /^http:\/\/(127\.0\.0\.1|localhost):\d{1,5}$/;
+
+function badSiteRequest(detail) {
+  return { status: 400, error: { code: "PROTO_BAD_REQUEST", detail: detail } };
+}
+
+function encodeEntry(entry) {
+  return String(entry || "").split("/").filter(function (s) { return s.length > 0; }).map(encodeURIComponent).join("/");
+}
+
+var SITE_HANDLERS = {
+  "site.bind": function (request, deps) {
+    if (!deps.sites) throw missingDependency("site.bind", "sites");
+    var body = request.body || {};
+    if (!protocol.isSafeId(body.review)) return badSiteRequest("review must be a review id");
+    if (typeof body.root !== "string" || !path.isAbsolute(body.root)) return badSiteRequest("root must be an absolute path");
+    if (body.mode !== "folder" && body.mode !== "page-only") return badSiteRequest("mode must be folder or page-only");
+    if (body.entry !== undefined && (typeof body.entry !== "string" || body.entry.split("/").some(function (s) { return s.charAt(0) === "."; }))) {
+      return badSiteRequest("entry must be a plain path under the root");
+    }
+    deps.reviews.ensureKnown(body.review);
+    var review = deps.reviews.get(body.review);
+    if (!review) return { status: 404, error: { code: "PROTO_UNKNOWN_REVIEW", detail: body.review } };
+    var root;
+    try { root = fs.realpathSync.native(body.root); }
+    catch (err) { return badSiteRequest("the root is not there: " + body.root); }
+    var bound;
+    try {
+      bound = deps.sites.bind({ root: root, mode: body.mode, entry: body.entry, mounts: body.mounts });
+    } catch (err) {
+      return badSiteRequest(err.message);
+    }
+    if (Array.isArray(body.linked)) {
+      deps.sites.addLinked(bound.name, review.id, body.linked.filter(function (file) {
+        return typeof file === "string" && path.isAbsolute(file);
+      }));
+    }
+    deps.reviews.stampServed(review.id, new Date(deps.now()).toISOString());
+    review.origins.filter(function (origin) { return OLD_PORT_ORIGIN.test(origin); }).forEach(function (origin) {
+      deps.reviews.removeOrigin(review.id, origin);
+    });
+    var port = typeof deps.pagesPort === "function" ? deps.pagesPort() : null;
+    var origin = typeof port === "number" ? protocol.siteOrigin(bound.name, port) : null;
+    deps.log.helperLog("site " + bound.name + (bound.created ? " granted" : " bound") + " for review " + review.id + ": " + root);
+    return {
+      status: 200,
+      body: {
+        name: bound.name,
+        origin: origin,
+        url: origin ? origin + "/" + encodeEntry(bound.site.entry) : null,
+        printed_ending: protocol.PAGES.PRINTED_ENDING
+      }
+    };
+  }
+};
+
 // Every route on the wire has a handler, checked at LOAD rather than at request
 // time. A route with no handler is a 500 in front of a reviewer otherwise.
 protocol.ROUTES.forEach(function (r) {
@@ -826,6 +894,21 @@ protocol.CATALOG_ROUTES.forEach(function (r) {
     throw new Error("src/service/routes.js has no handler for catalog route " + r.name);
   }
 });
+
+protocol.SITE_ROUTES.forEach(function (r) {
+  if (typeof SITE_HANDLERS[r.name] !== "function") {
+    throw new Error("src/service/routes.js has no handler for site route " + r.name);
+  }
+});
+
+/** Match a method and a pathname to a site route, or null. */
+function matchSiteRoute(method, pathname) {
+  for (var i = 0; i < protocol.SITE_ROUTES.length; i += 1) {
+    var r = protocol.SITE_ROUTES[i];
+    if (r.path === pathname && r.method === String(method).toUpperCase()) return r;
+  }
+  return null;
+}
 
 /** Match a method and a pathname to a route on the wire, or null. */
 function matchRoute(method, pathname) {
@@ -873,13 +956,16 @@ function isCatalogPath(rawPath) {
 function handlerFor(name) {
   if (Object.prototype.hasOwnProperty.call(HANDLERS, name)) return HANDLERS[name];
   if (Object.prototype.hasOwnProperty.call(CATALOG_HANDLERS, name)) return CATALOG_HANDLERS[name];
+  if (Object.prototype.hasOwnProperty.call(SITE_HANDLERS, name)) return SITE_HANDLERS[name];
   throw new Error("unknown route: " + String(name));
 }
 
 module.exports = {
   HANDLERS: HANDLERS,
   CATALOG_HANDLERS: CATALOG_HANDLERS,
+  SITE_HANDLERS: SITE_HANDLERS,
   handlerFor: handlerFor,
+  matchSiteRoute: matchSiteRoute,
   matchRoute: matchRoute,
   matchCatalogRoute: matchCatalogRoute,
   isCatalogPath: isCatalogPath

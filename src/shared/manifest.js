@@ -246,6 +246,8 @@ var NON_BUNDLE_FILES = [
   { path: "src/service/watchers.js", owner: "1A", why: "asks the machine whether anything holds a session's wake feed open" },
   { path: "src/service/static_servers.js", owner: "1A", why: "session-owned static HTTP server lifecycle" },
   { path: "src/service/idle_servers.js", owner: "1A", why: "stop a session's page servers when no window is open" },
+  { path: "src/service/sites.js", owner: "stable-addresses", why: "the name registry: one name per served folder or notes page, single writer, rebuilt from its log" },
+  { path: "src/service/page_routes.js", owner: "stable-addresses", why: "serve a site's pages from the helper: path safety, the page rule, injection, Markdown, mounts, unknown and gone pages" },
   { path: "src/service/self_stop.js", owner: "1A", why: "the helper stops itself after a deferred last close once nothing needs it, or when its state dir is gone" },
   { path: "src/service/markdown.js", owner: "1A", why: "deterministic Markdown review artifacts" },
   { path: "src/service/styles.js", owner: "Style switcher 1.1", why: "installed document styles: the store, the checks, and serving their files" },

@@ -62,6 +62,13 @@ function createAuth(options) {
       return refused(req, catalogResult);
     }
 
+    // site.bind (stable addresses): the CLI secret, never a page.
+    if (protocol.route(req.routeName).auth === protocol.AUTH.CLI_SECRET) {
+      var siteResult = checkSiteRequest(req, typeof opts.cliSecret === "function" ? opts.cliSecret() : null);
+      if (siteResult.ok) return siteResult;
+      return refused(req, siteResult);
+    }
+
     // A review this helper does not hold may still be one `add` minted on disk a
     // moment ago, after the helper started. Look for it once before the check
     // block refuses it, so a second review does not cost a restart of a helper
@@ -77,6 +84,16 @@ function createAuth(options) {
     );
 
     if (result.ok) return result;
+    // A PAGE ON A STABLE ADDRESS. Its origin is a site's name, which no review
+    // lists: the registry decides instead, and only for the review the site's
+    // page rule could hand that page (src/service/page_routes.js). Every other
+    // check above has already passed by the time the origin is the one left.
+    if (result.check === protocol.CHECK.ORIGIN && typeof opts.siteOriginAllowed === "function") {
+      var origin = headerOf(req.headers, protocol.HEADER.ORIGIN);
+      if (typeof origin === "string" && opts.siteOriginAllowed(req.review, origin)) {
+        return { ok: true, review: req.review, origin: origin };
+      }
+    }
     return refused(req, result);
   }
 
@@ -279,7 +296,47 @@ function checkCatalogRequest(request, catalog) {
   return { ok: true, review: null, origin: null };
 }
 
+/**
+ * site.bind's check block (stable addresses). Order: Host, Origin, client
+ * header, content type, the CLI secret.
+ *
+ * - Host is a loopback name, as for every API route.
+ * - ANY Origin header is refused. A browser sends one on every cross-origin
+ *   fetch and on every POST, so a page can never reach this route, whatever
+ *   token it holds. The CLI sends none.
+ * - The client header is CLIENT_CLI.
+ * - The secret is read from the state folder's owner-only file, so only a
+ *   process that can read that folder can name a folder to serve.
+ *
+ * The secret never enters a log line or a detail.
+ *
+ * @param {{routeName: string, headers: object}} request
+ * @param {string|null} secret
+ */
+function checkSiteRequest(request, secret) {
+  var req = request || {};
+  var r = protocol.route(req.routeName);
+  var headers = req.headers || {};
+  var host = headerOf(headers, protocol.HEADER.HOST);
+  if (!protocol.hostAllowed(host)) return refusal(protocol.CHECK.HOST, String(host), r.name);
+  var origin = headerOf(headers, protocol.HEADER.ORIGIN);
+  if (origin !== null && origin !== undefined) {
+    return refusal(protocol.CHECK.ORIGIN, String(origin).slice(0, 200), r.name);
+  }
+  if (headerOf(headers, protocol.HEADER.CLIENT) !== protocol.CLIENT_CLI) {
+    return refusal(protocol.CHECK.CUSTOM_HEADER, null, r.name);
+  }
+  var ct = String(headerOf(headers, protocol.HEADER.CONTENT_TYPE) || "").split(";")[0].trim().toLowerCase();
+  if (ct !== protocol.JSON_CONTENT_TYPE) return refusal(protocol.CHECK.CONTENT_TYPE, ct || "none", r.name);
+  var presented = headerOf(headers, protocol.HEADER.CLI_SECRET);
+  if (typeof secret !== "string" || !secret || typeof presented !== "string" || !sameToken(presented, secret)) {
+    return refusal(protocol.CHECK.TOKEN, null, r.name);
+  }
+  return { ok: true, review: null, origin: null };
+}
+
 module.exports = {
+  checkSiteRequest: checkSiteRequest,
   createAuth: createAuth,
   createCatalogState: createCatalogState,
   checkCatalogRequest: checkCatalogRequest
