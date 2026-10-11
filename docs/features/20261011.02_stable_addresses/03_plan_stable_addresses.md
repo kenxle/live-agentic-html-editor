@@ -83,8 +83,8 @@ The one verification table. U is a unit test under `test/unit/`; B is a Playwrig
 
 | Row | Requirement or failure | Behavior to prove | Kind |
 |---|---|---|---|
-| V1 | R3 name rule | Folder names become lowercase dashed names; empty becomes `doc`; `xn--` and `--` at positions 3 and 4 are refused | U |
-| V2 | R3 clash | A second folder with the same name takes its parent's name, then a number; a name is not reused | U |
+| V1 | R3 name rule | The folder and two parents become one lowercase dashed label in path order, never including the home folder, at most 63 characters with the outermost parent dropped first; empty becomes `doc`; `xn--` and `--` at positions 3 and 4 are refused | U |
+| V2 | R3 clash | A second folder with the same name takes one more parent, then a number; a name is not reused | U |
 | V3 | R3 reserved | `library`, `lahe`, `www`, `api` are never granted | U |
 | V4 | Registry loss | A corrupt `sites.json` rebuilds from `sites.log` with the same names; with neither readable, no new name is minted | U |
 | V5 | R13 worktree record | Binding inside a sibling worktree records `main_checkout` from its `.git` file | U |

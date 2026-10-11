@@ -68,11 +68,11 @@ What stays: review records, tokens, the per-request checks (D11 in the original 
 }
 ```
 
-- **What Ken sees:** the name says the folder, and the path says the file: `http://20261011-02-stable-addresses.lahe.localhost:7817/01_brief_stable_addresses.md`, or `http://ongoing.lahe.localhost:7817/STABLE_ADDRESSES.md`.
+- **What Ken sees:** the name says the folder, and the path says the file: `http://docs-features-20261011-02-stable-addresses.lahe.localhost:7817/01_brief_stable_addresses.md`, or `http://ongoing.lahe.localhost:7817/STABLE_ADDRESSES.md`.
 - **A site is a root plus a mode.** `folder` serves the root's tree, as a page server does today. `page-only` (a `lahe write` notes page) serves the one file plus Lahe's reserved files, and 404s everything else. Roots use `fs.realpathSync.native`.
 - **For Markdown, the root is the source folder.** `/<file>.md` renders on request from the source, with the render cached by file time. `rebuild.js`, the reload check, and the handled check read the same render. The state folder's artifact copy is no longer the served page. Links outside the source folder use `/.lahe-source/<hash>/` mounts, stored on the site and served only under that site.
 - **`entry`** is the page `lahe review` prints. It is not a binding: any review may answer on any page of the site, by the rule below.
-- **Name rule.** Take the root folder's name. Lowercase it, turn each run of other characters into one dash, trim, and cut to 50 characters. A name with nothing left becomes `doc`. Refuse anything starting `xn--` or with `--` in positions 3 and 4. A name that clashes with a different root takes its parent's name (`notes-personal`), then a number. Reserved: `library`, `lahe`, `www`, `api`. A name is not reused for another root.
+- **Name rule.** Take the root folder and its two parents, in path order, stopping below the home folder. Lowercase each, turn each run of other characters into one dash, join with dashes, trim, and keep it to one DNS label of at most 63 characters by dropping from the outermost parent first. A name with nothing left becomes `doc`. Refuse anything starting `xn--` or with `--` in positions 3 and 4. A name that clashes with a different root takes one more parent, then a number. Reserved: `library`, `lahe`, `www`, `api`. A name is not reused for another root.
 - **Worktrees.** At bind time, while the worktree exists, the helper reads its `.git` file to record `main_checkout` and `worktree_root`. The `.claude/worktrees/` pattern is the fallback for old entries.
 
 **`<state>/install.json`** (new, written by `lahe install`): system, login item path, Node path, clone path, port, resolved state folder, `lahe_names` (on or off), resolver path.

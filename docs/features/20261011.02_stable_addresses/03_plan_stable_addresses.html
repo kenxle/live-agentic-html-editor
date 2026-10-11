@@ -1267,15 +1267,17 @@ teardown, and the leak check passes.</p>
 <tr>
 <td>V1</td>
 <td>R3 name rule</td>
-<td>Folder names become lowercase dashed names; empty becomes
-<code>doc</code>; <code>xn--</code> and <code>--</code> at positions 3
-and 4 are refused</td>
+<td>The folder and two parents become one lowercase dashed label in path
+order, never including the home folder, at most 63 characters with the
+outermost parent dropped first; empty becomes <code>doc</code>;
+<code>xn--</code> and <code>--</code> at positions 3 and 4 are
+refused</td>
 <td>U</td>
 </tr>
 <tr>
 <td>V2</td>
 <td>R3 clash</td>
-<td>A second folder with the same name takes its parent's name, then a
+<td>A second folder with the same name takes one more parent, then a
 number; a name is not reused</td>
 <td>U</td>
 </tr>

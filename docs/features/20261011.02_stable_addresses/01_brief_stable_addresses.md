@@ -2,7 +2,7 @@
 
 ## Summary
 
-Every document Lahe serves gets an address that keeps working, like `http://20261011-02-stable-addresses.lahe.localhost:7817/01_brief_stable_addresses.md`. A tab left open overnight, a history entry, or a bookmark loads the page, with no agent running. The address names the folder and the file, so a tab says what it is. One always-on Lahe server, started at login, answers for every document on one port. Each folder's name is its own browser origin, so documents stay walled off from each other as they are today.
+Every document Lahe serves gets an address that keeps working, like `http://docs-features-20261011-02-stable-addresses.lahe.localhost:7817/01_brief_stable_addresses.md`. A tab left open overnight, a history entry, or a bookmark loads the page, with no agent running. The address names the folder and the file, so a tab says what it is. One always-on Lahe server, started at login, answers for every document on one port. Each folder's name is its own browser origin, so documents stay walled off from each other as they are today.
 
 ## Problem, User, and Context
 
@@ -55,7 +55,7 @@ The user is Ken today, on a Mac laptop. Lahe is public, and other people run it 
 
 ```mermaid
 flowchart LR
-    Tab["tab, history, or bookmark<br/>ongoing.lahe.localhost:7817/STABLE_ADDRESSES.md"] --> Server["always-on Lahe server<br/>(started at login)"]
+    Tab["tab, history, or bookmark<br/>live-agentic-html-editor-docs-ongoing.lahe.localhost:7817/STABLE_ADDRESSES.md"] --> Server["always-on Lahe server<br/>(started at login)"]
     Server --> Which{"which folder is this name,<br/>which file is this path?"}
     Which --> Doc["serve that document's page,<br/>with its own review key"]
     Doc --> Store[("comments wait in the store")]
@@ -73,7 +73,7 @@ flowchart LR
 :::
 
 ::: callout-req
-**R3. The address names the folder and the file.** The folder's name, in lowercase words joined by dashes, comes first: `20261011.02_stable_addresses` becomes `20261011-02-stable-addresses`. The file's path in that folder comes after the port, as it does today. Two different folders with the same name get a short tag from their parent folder, like `notes-personal`. A folder keeps its name once it has one. Serving the same file again, in any review, gives the same address.
+**R3. The address names the folder and the file.** The name is the folder plus its two parent folders, in path order, as lowercase words joined by dashes. `live-agentic-html-editor/docs/ongoing` becomes `live-agentic-html-editor-docs-ongoing`, and `docs/features/20261011.02_stable_addresses` becomes `docs-features-20261011-02-stable-addresses`. Ken reuses the same folder layout in many repos, so a folder's own name alone would clash all the time. The home folder and anything above it are never part of a name. The file's path in that folder comes after the name, as it does today. If two folders still end up with the same name, the second takes one more parent folder, then a number. A folder keeps its name once it has one. Serving the same file again, in any review, gives the same address.
 :::
 
 ::: callout-req
@@ -130,7 +130,7 @@ flowchart LR
 
 ## UX Notes
 
-- The address bar is the UI. A name Ken can read at a glance matters more than a short one: `ongoing.lahe.localhost:7817/STABLE_ADDRESSES.md` beats `127.0.0.1:56055/STABLE_ADDRESSES-bd14d360685f150a.html`.
+- The address bar is the UI. A name Ken can read at a glance matters more than a short one: `live-agentic-html-editor-docs-ongoing.lahe.localhost:7817/STABLE_ADDRESSES.md` beats `127.0.0.1:56055/STABLE_ADDRESSES-bd14d360685f150a.html`.
 - The fallback is not an error. A `.lahe.localhost` address works the same way; it is only longer.
 - Typing an address by hand: `.lahe.localhost` addresses work typed as they are. A `.lahe` address typed without `http://` may make the browser search instead. Links from history and bookmarks work either way.
 

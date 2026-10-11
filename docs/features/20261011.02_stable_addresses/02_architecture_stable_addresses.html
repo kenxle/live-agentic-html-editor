@@ -1127,7 +1127,7 @@ class="sourceCode json"><code class="sourceCode json"><span id="cb1-1"><a href="
 <ul>
 <li><strong>What Ken sees:</strong> the name says the folder, and the
 path says the file:
-<code>http://20261011-02-stable-addresses.lahe.localhost:7817/01_brief_stable_addresses.md</code>,
+<code>http://docs-features-20261011-02-stable-addresses.lahe.localhost:7817/01_brief_stable_addresses.md</code>,
 or
 <code>http://ongoing.lahe.localhost:7817/STABLE_ADDRESSES.md</code>.</li>
 <li><strong>A site is a root plus a mode.</strong> <code>folder</code>
@@ -1145,12 +1145,14 @@ the site and served only under that site.</li>
 <li><strong><code>entry</code></strong> is the page
 <code>lahe review</code> prints. It is not a binding: any review may
 answer on any page of the site, by the rule below.</li>
-<li><strong>Name rule.</strong> Take the root folder's name. Lowercase
-it, turn each run of other characters into one dash, trim, and cut to 50
-characters. A name with nothing left becomes <code>doc</code>. Refuse
-anything starting <code>xn--</code> or with <code>--</code> in positions
-3 and 4. A name that clashes with a different root takes its parent's
-name (<code>notes-personal</code>), then a number. Reserved:
+<li><strong>Name rule.</strong> Take the root folder and its two
+parents, in path order, stopping below the home folder. Lowercase each,
+turn each run of other characters into one dash, join with dashes, trim,
+and keep it to one DNS label of at most 63 characters by dropping from
+the outermost parent first. A name with nothing left becomes
+<code>doc</code>. Refuse anything starting <code>xn--</code> or with
+<code>--</code> in positions 3 and 4. A name that clashes with a
+different root takes one more parent, then a number. Reserved:
 <code>library</code>, <code>lahe</code>, <code>www</code>,
 <code>api</code>. A name is not reused for another root.</li>
 <li><strong>Worktrees.</strong> At bind time, while the worktree exists,
