@@ -177,6 +177,9 @@ function readBody(req, limit) {
  */
 function pagesPortFrom(opts) {
   if (typeof opts.pagesPort === "number") return opts.pagesPort;
+  // A helper asked for a free API port is a test's: it takes a free pages
+  // port too, so a test run without LAHE_PAGES_PORT=0 never binds 1483.
+  if (opts.port === 0) return 0;
   var fromEnv = process.env[protocol.PAGES.PORT_ENV];
   if (fromEnv !== undefined && fromEnv !== "" && Number.isInteger(Number(fromEnv))) return Number(fromEnv);
   return protocol.PAGES.PORT;
@@ -1103,5 +1106,6 @@ module.exports = {
   loadLibrary: loadLibrary,
   MAX_BODY_BYTES: MAX_BODY_BYTES,
   serve: serve,
+  pagesPortFrom: pagesPortFrom,
   probeHealth: probeHealth
 };
