@@ -82,18 +82,28 @@ Architecture review (one reviewer, on the flag version). Accepted: refused cards
 
 ## Progress
 
-Done and pushed:
+Built and pushed. Waiting on the code review and the checkpoint gate (task 6).
 
-- **A refused card is no longer written onto the page.** Replay now only writes cards still waiting for the agent. A refused card also drops any stale conflict or "lost" mark. Keep mine on a refused card's clash sends it back to the agent. Typing in a refused card's passage starts a new card. New unit tests in `test/unit/refused_not_replayed.test.js`; the refused-reword tests in `test/unit/reword_not_handled_floor.test.js` were rewritten for the new rule.
-- **The page check only asks for the missing `data-lahe-id` now.** It no longer reopens a handled card when its words, blocks, tag, bold or italic, or take-back are gone. The old reasons, their sentences and notices, and the run block check were removed with their tests. The stamp round needs the words on the page and is never written by replay.
-- **Tests rewritten for the new behavior:** unit `reverted_edit`, `replay_run`, `flow_fix_g2`, `run_record`, `fix_round_f3_record`, `done_tab_replies`; browser `reverted_edit`, `formatting_survives`, `cp2_mid` (plus a new test: a refused edit is not written back after a repaint and typing there starts a new card), `replay_run_check`, `free_writing_flow_fix_rail`, `free_writing_seams`, `no_duplicate_text`.
-- `npm run gate:unit` passes. The named browser specs I ran all pass.
+- **A refused card is no longer written onto the page.** Replay now only writes cards still waiting for the agent. A refused card also drops any stale conflict or "lost" mark. Keep mine on a refused card's clash sends it back to the agent. Typing in a refused card's passage starts a new card. A notes page whose only run was refused opens ready to type.
+- **The page check only asks for a missing `data-lahe-id` now.** It no longer reopens a handled card when its words, blocks, tag, bold or italic, or take-back are gone. The old reasons, their sentences and notices, and the run block check were removed with their tests. The stamp round needs the words on the page, and replay never writes it.
+- **Skill:** "A handled edit that comes back" is now "After you answer, the page is your file", and the line about re-applying outstanding comments says only waiting edits are re-applied. The contract needed no change: it only mentions the stamp round. `SERVICE_CONTRACT` is unchanged.
+- **Living docs:** item lifecycle, replay branches, free writing, fingerprinting, and one line in CONTRACTS.md.
+- **New tests:** `test/unit/refused_not_replayed.test.js`; `test/browser/restructured_run_stays.spec.js` (the hackathon case, handled and refused; it fails on the code before this branch and passes now); a refused-edit test in `test/browser/cp2_mid.spec.js`.
+- **Tests rewritten for the new behavior:** unit `reverted_edit`, `replay_run`, `flow_fix_g2`, `run_record`, `fix_round_f3_record`, `done_tab_replies`, `reword_not_handled_floor`; browser `reverted_edit`, `formatting_survives`, `cp2_mid`, `replay_run_check`, `free_writing_flow_fix_rail`, `free_writing_seams`, `no_duplicate_text`.
+- `npm run gate:unit` passes (2438). Every named browser spec I ran passes.
 
-Still to do: the hackathon browser spec with screenshots, the skill text, and the living docs.
+The hackathon case after the fix: the lines are table rows only, and the old card is in Done, handled, with nothing added.
 
-One trade-off to know: an old-contract agent on a Markdown page that pastes a heading as a paragraph is no longer reopened for the wrong tag (`free_writing_seams`). That follows from requirement 2.
+![Light](hackathon_table_light.png)
+
+![Dark](hackathon_table_dark.png)
+
+**One trade-off you should know about.** An old-contract agent on a Markdown page that pastes a heading as a plain paragraph is no longer reopened for the wrong tag. The page just shows what the agent wrote (`free_writing_seams`). That follows from requirement 2 (no reopen for a wrong tag).
+
+**Not done on purpose:** `npm run install-skills`. Installing now would tell your live agents about the new rule while the helper still runs the old layer. Run it after merge with `lahe serve --restart`, as the Rollout line says.
 
 ## To delete at cleanup
 
 - `node_modules` in the worktree root: a symlink to the main clone's `node_modules`, made so Playwright runs here.
 - `test-results/` from the browser runs.
+- A detached git worktree of the pre-branch code at the session scratchpad (`.../scratchpad/oldcode`), used once to show the hackathon spec fails on the old code. Remove with `git worktree remove` (its `node_modules` symlink and rebuilt `dist/` go with it).
