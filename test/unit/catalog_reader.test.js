@@ -340,8 +340,9 @@ test("openable is yes exactly when an old page server's record covers the file, 
     if (!d.path || !fs.existsSync(d.path)) return;
     const meta = JSON.parse(fs.readFileSync(path.join(installed.dir, "reviews", r.id, "meta.json"), "utf8"));
     const covered = staticServers
-      .list(installed.dir, r.session_id)
-      .some((record) => staticServers.coveragePath(record, meta.target_path) !== null);
+      .allRecords(installed.dir)
+      .filter((entry) => entry.meta.session_id === r.session_id)
+      .some((entry) => staticServers.coveragePath(entry.meta, meta.target_path) !== null);
     assert.equal(r.openable === "yes", covered, r.id + ": openable " + r.openable + ", covered " + covered);
     compared += 1;
   });

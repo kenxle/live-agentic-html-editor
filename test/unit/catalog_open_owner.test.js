@@ -36,7 +36,7 @@ function world(owners, overrides) {
     queue: { readAttached: () => null, append: () => ({ ok: false }) },
     store: {},
     pages: {
-      bindPlan: (plan) => { bound.push(plan.root); return { name: "n", site: {} }; },
+      bindPlan: (plan) => { bound.push(plan.root); return { name: "n", site: {}, urlPath: "/page.html" }; },
       addressOf: (name, urlPath) => "http://" + name + ".lahe.localhost:1" + urlPath,
       railHolder: () => null,
       stamp: () => {}

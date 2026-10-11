@@ -235,7 +235,7 @@ function createCatalogActions(options) {
         log("Library Open of review " + d.review + " could not name its site: " + err.message, nowMs);
         return fail("PROTO_NOT_OPENABLE", "the document could not be given an address: " + err.message);
       }
-      url = siteTools.addressOf(bound.name, d.site.url_path);
+      url = siteTools.addressOf(bound.name, bound.urlPath);
       var holder = siteTools.railHolder(bound.site, d.site.file);
       if (holder && holder !== d.review) {
         var other = reader.describeReview(holder, nowMs);

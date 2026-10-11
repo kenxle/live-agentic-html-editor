@@ -493,6 +493,7 @@ function createSites(options) {
     readOnly: function () { ensureLoaded(); return readOnly; },
     get: get,
     byRoot: byRoot,
+    deepestFolderSite: deepestFolderSite,
     bind: bind,
     addMounts: addMounts,
     addLinked: addLinked,

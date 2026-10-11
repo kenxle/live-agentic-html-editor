@@ -63,6 +63,7 @@ The flows are "Key Flows" in the architecture doc; the hand-over picture is the 
 
 - **Open** names the document's site and opens its stable address in a new tab. It restarts nothing and reopens no session. A review in a closed session opens as it is, and the session stays closed.
   - It stamps the review as re-served, so it is the one whose rail the page shows. It does not when a review in another open session already holds the page: Open goes to the address and the row says which review holds the rail (`held_by`).
+  - Same file, same address: a file reviewed on its own is bound the way `lahe review` binds it, into the deepest registered folder site that already holds it, at its path there (`sites.deepestFolderSite`). A folder review names its own folder.
   - It never serves a path the helper did not serve before. A review's recorded paths are page text, so Open names a site only for a root that something a page cannot write has already served: a site in the registry, an old page server's record, or, for Markdown, the rendered copy the CLI wrote into the state folder (`catalog_sites.js`, `vouched`).
   - With an attached agent it also queues a pick-up.
   - A row nothing vouches for (legacy, dev server, a file Lahe cannot serve) is `via-agent`: Open queues a pick-up and the agent re-serves it.
