@@ -858,6 +858,7 @@ async function serve(options) {
   // (src/service/addresses.js). Each one proves itself before it is used.
   addresses = addressesModule.createAddresses(Object.assign({
     installed: installed,
+    stateDir: dir,
     pagesPort: boundPagesPort,
     pagesServers: listeners.filter(function (entry) { return entry.kind === "pages"; }).map(function (entry) { return entry.server; }),
     log: function (line) { log.helperLog(line); },
