@@ -22,7 +22,8 @@
 
 | Agent or task | Doing | Started | Branch |
 |---|---|---|---|
-| Install builder (Opus) | Fix one install test that fails only under the full suite's load | 2026-10-11 17:17 | `unit/sa-install` |
+| Core builder (Opus) | Code review fixes: failed `lahe review` stopping the always-on helper, memory and log growth from web pages, the dead Library link, state folder exposure, one page with two origins, page-load disk scans, tests reaching port 1483, smaller items | 2026-10-11 17:55 | `unit/sa-core` |
+| Install builder (Opus) | Code review fixes: root installing files a user process could swap, forward-check memory growth, restart loop against an older clone, sudo timeout, smaller items | 2026-10-11 17:55 | `unit/sa-install` |
 
 ## Phases
 
@@ -35,7 +36,7 @@
 | 4 Plan | done | 2026-10-11 |
 | 5 Human review | done | 2026-10-11 |
 | 6 Implement | in progress | 2026-10-11 |
-| 7 Verify | not started | 2026-10-11 |
+| 7 Verify | in progress | 2026-10-11 |
 | 8 Ship and land | not started | 2026-10-11 |
 | 9 Cleanup | not started | 2026-10-11 |
 
@@ -166,6 +167,7 @@ Not shipped yet.
 
 ## Log
 
+- 2026-10-11 17:55: Phase 7 code review (whole merged diff, read only) found 10 important issues and a set of smaller ones; none is a design change. Most serious: a failed `lahe review` can stop the always-on helper; the `--port-80`/`--lahe-names` root step reads files another program of yours could swap first; any web page can grow the helper's memory and log. All sent to the core and install builders as one fix round. They run single test files only, and stop if free disk drops under 1 GB.
 - 2026-10-11 17:41: First full gate on the merged branch: unit 2,577 passed, 0 failed; browser 861 passed, 2 failed, 7 skipped. One failure is a log-wording change in Host refusals (to fix); the other hit "no space left on device". Disk is full from test temp folders; all test runs paused until it is cleared.
 - 2026-10-11 17:17: Library 4.3 merged. Every workstream is now merged. Unit gate: 2,575 tests, 1 failed, an install test that only fails under load, sent to the install builder. Full browser suite next, once that is fixed.
 - 2026-10-11 17:00: Core Step 3 merged: stable addresses are now the default. 54 Library tests of removed behavior went to the library builder (Task 4.3). A test leak in `install_command.test.js` went to the install builder.
