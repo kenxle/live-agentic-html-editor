@@ -146,6 +146,13 @@ async function helperStillWanted(dir, nowMs) {
   var ready = readReady(dir);
   if (ready && typeof ready.port === "number") {
     var live = await service.probeHealth(protocol.DEFAULT_HOST, ready.port);
+    // AN ALWAYS-ON HELPER STAYS UP THROUGH EVERY CLOSE. It serves every page
+    // at its stable address, so stopping it would take every page down until
+    // the login item restarted it. Said by the helper itself, or by the
+    // install recorded for this port.
+    if ((live && live.always_on === true) || loginItem.installedFor(dir, ready.port)) {
+      return { keep: true, why: "it is always on", always: true };
+    }
     var seen = live ? Date.parse(live[protocol.HEALTH_FIELD.CATALOG_SEEN_AT]) : NaN;
     if (!Number.isNaN(seen) && nowMs - seen < protocol.CATALOG.LIBRARY_SEEN_MS) {
       return {
@@ -520,7 +527,8 @@ async function run(argv, options) {
         var wanted = await helperStillWanted(dir, typeof opts.now === "number" ? opts.now : Date.now());
         if (wanted.keep) {
           kept = wanted.why;
-          askStopWhenQuiet(dir, typeof opts.now === "number" ? opts.now : Date.now(), wanted.why);
+          // An always-on helper is never asked to stop once quiet either.
+          if (!wanted.always) askStopWhenQuiet(dir, typeof opts.now === "number" ? opts.now : Date.now(), wanted.why);
         } else {
           stopped = await stopVerifiedHelper(dir);
         }
