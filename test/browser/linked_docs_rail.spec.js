@@ -173,12 +173,17 @@ test.describe("a link out of a reviewed Markdown page keeps the rail", () => {
     await page.screenshot({ path: path.join(SPEC_FOLDER, "linked_page_rail.png") });
   });
 
-  test("a linked document with its own review opens that review's page", async ({ page }) => {
+  // Stable addresses: there are no redirects between pages. The link opens the
+  // document where it points, on the hub's address, and the page carries the
+  // rail of the review that linked to it; a comment there names the document's
+  // own file in review.json. Its own review answers at its own address.
+  test("a linked document with its own review opens where the link points, with the hub's rail", async ({ page }) => {
     await page.goto(world.open);
     await booted(page);
     await page.click("text=A spec with its own review");
-    await page.waitForURL(/owned-[a-f0-9]+\.html$/);
+    await page.waitForURL(/\/\.lahe-source\/[a-f0-9]+\/[^/]+$/);
     await booted(page);
-    expect(await page.evaluate(() => window.__lahe.review), "its own review, not the hub's").toBe(world.ownedReview);
+    expect(new URL(page.url()).origin, "the same address as the hub").toBe(new URL(world.open).origin);
+    expect(await page.evaluate(() => window.__lahe.review), "the linking review's rail").toBe(world.hubReview);
   });
 });

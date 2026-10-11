@@ -6,7 +6,6 @@ const path = require("node:path");
 
 const { test, expect, startStaticServer } = require("../helpers");
 const markdown = require("../../src/service/markdown.js");
-const staticServers = require("../../src/service/static_servers.js");
 
 test("a fenced Mermaid flowchart renders as a diagram in generated Markdown HTML", async ({ page }) => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "lahe-markdown-browser-"));
@@ -187,9 +186,12 @@ test("an agent-authored page gets the document style from the helper", async ({ 
     "</head><body><main><h1>Three options</h1><p>Pick one.</p></main></body></html>"
   ].join("\n"));
 
-  const started = await staticServers.start({ dir: state, sessionId: "s_doc_style", root });
+  // The helper serves the page at its stable address, as `lahe review` would.
+  const service = require("../../src/service/index.js");
+  const helper = await service.serve({ port: 0, stateDir: state, quiet: true, pagesPort: 0 });
   try {
-    const origin = "http://" + started.meta.host + ":" + started.meta.port;
+    const bound = helper.sites.bind({ root: fs.realpathSync(root), mode: "folder", entry: "page.html" });
+    const origin = "http://" + bound.name + ".lahe.localhost:" + helper.pagesPort;
 
     const css = await page.request.get(origin + "/.lahe-doc-style.css");
     expect(css.status()).toBe(200);
@@ -204,6 +206,6 @@ test("an agent-authored page gets the document style from the helper", async ({ 
     await page.evaluate(() => document.fonts.ready);
     await expect(page.locator("h1")).toHaveCSS("font-family", /^"?Schibsted Grotesk"?/);
   } finally {
-    await staticServers.stopAll(state, "s_doc_style");
+    await helper.close();
   }
 });
