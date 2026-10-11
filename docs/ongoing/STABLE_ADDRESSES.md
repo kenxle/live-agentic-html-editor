@@ -39,13 +39,14 @@ So "persistent port" is really "something always answering at the document's add
 
 ## How the always-on server would run
 
-Your note suggested making it a separate thing, like its own program or a Mac app. That fits: the always-on server is separate from agents either way. Three ways to run it, simplest first:
+Your note suggested making it a separate thing, like its own program or a Mac app. That fits: the always-on server is separate from agents either way. Two ways to run it, simplest first:
 
 - **A login item Lahe installs.** `npm run install-cli` would also tell macOS to start the server at login and restart it if it stops. No new code to build, and nothing visible on screen.
 - **A small Mac app.** The same server, wrapped as an app with a menu-bar icon: it shows it is running, links to the Library, and has a Quit button. The server stays the existing Node code, but the icon needs a small piece of native Mac code, built once and shipped with Lahe. That bends the "runs from a git clone" rule a little, so it would be optional.
-- **A single self-contained program.** Node can be bundled into one file that runs with no Node installed. Bigger to ship, and it has to be rebuilt on every change. Only worth it if Lahe goes to people without Node.
 
 I'd start with the login item and add the menu-bar app later if you want to see it running.
+
+Separately, either one could later ship as a single file that runs without Node installed. That is a packaging choice, open at any time, and only worth it if Lahe goes to people without Node.
 
 ## Why each document gets its own port today
 
