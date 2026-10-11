@@ -420,7 +420,7 @@ async function serve(options) {
   // One line per refusal, naming the Host and the port it came in on and
   // nothing about the page asked for.
   // One line per distinct Host, capped: any web page can send random Hosts.
-  var refusedHosts = pageRoutesModule.createNoteOnce(log, "further refused Hosts are not logged until the helper restarts");
+  var refusedHosts = logModule.createNoteOnce(log, "further refused Hosts are not logged until the helper restarts");
 
   function refuseHost(req, res, host, listener) {
     var requestId = crypto.randomBytes(8).toString("hex");
