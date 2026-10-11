@@ -56,6 +56,17 @@ Each document's page carries a key (its review token) that lets it post comments
 
 So the separate gardens are the point. Separate ports are just how Lahe gets them today. A host name can do the same job.
 
+### Could Lahe's own software do this instead?
+
+Partly. Two different things are being kept apart, and only one of them needs the browser:
+
+- **Agents from each other.** This already lives in Lahe's software: sessions, owners, and takeover. It does not depend on ports, and stable addresses do not change it.
+- **Pages from each other, inside the browser.** This is the part that needs the address. Once two pages share an address, any script on one page can do anything Lahe's own code on that page can do, including reading its key. Lahe cannot police scripts inside your browser. The address (host name plus port) is the one wall the browser itself enforces, so it is the only tool for this job.
+
+Drafts could be kept apart in software, by labeling each one with its document. Keys cannot.
+
+How much this matters for you is a fair question. Your documents are written by your own agents, so the risk is a script Lahe did not write, like a chart library from the web, or a site an agent is building. Low, but real. The good news is that option D keeps the wall at almost no cost: one port, and Lahe makes up the host names, so you never deal with them.
+
 ## The options
 
 ### D. One port, a host name per document (recommended)
