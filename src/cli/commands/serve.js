@@ -22,13 +22,17 @@ var sourceStamp = require("../../service/source_stamp.js");
 var stateDirModule = require("../../service/state_dir.js");
 var reviewsModule = require("../../service/reviews.js");
 var sessionCommand = require("./session.js");
+var loginItem = require("../../service/login_item.js");
 
 var USAGE = [
-  "usage: lahe serve [--restart] [--port <n>] [--state-dir <path>] [--review <id>] [--origin <origin>]",
+  "usage: lahe serve [--restart] [--always-on] [--port <n>] [--state-dir <path>] [--review <id>] [--origin <origin>]",
   "",
   "  --restart    replace a helper that is already answering on the port, even when somebody has a",
   "               review page open on it. This is the deliberate override: every other command leaves",
   "               a helper with a live reviewer alone and tells you to run this when they are done.",
+  "",
+  "  --always-on  never stop when quiet. The login item `lahe install` writes runs the helper this way;",
+  "               it still stops if its state directory is removed.",
   "",
   "  --port       the port to bind on 127.0.0.1. Default " + protocol.DEFAULT_PORT + ", which is fixed on",
   "               purpose: the page has the port in its script tag and no way to learn a new one.",
@@ -72,6 +76,8 @@ function parseArgs(argv) {
       }
       if (name === "--restart") {
         options.restart = true;
+      } else if (name === "--always-on") {
+        options.alwaysOn = true;
       } else if (name === "--port") {
         var port = Number(takeValue("--port", inline));
         if (!Number.isInteger(port) || port < 0 || port > 65535) {
@@ -147,15 +153,60 @@ async function replaceRunningHelper(options) {
   return true;
 }
 
+function installedHere(options) {
+  var dir;
+  try {
+    dir = options.stateDir ? stateDirModule.stateDir({ dir: options.stateDir }) : stateDirModule.stateDir();
+  } catch (err) {
+    return null;
+  }
+  return loginItem.installedFor(dir, options.port === undefined ? protocol.DEFAULT_PORT : options.port);
+}
+
+async function serveInstalled(options, installed, deps) {
+  var out = deps.stdout || function (text) { process.stdout.write(text); };
+  var err = deps.stderr || function (text) { process.stderr.write(text); };
+  var port = installed.port;
+  if (!options.restart) {
+    err(
+      "lahe serve: the login item " + installed.label + " runs the helper on this port (lahe install).\n" +
+        "  `lahe serve --restart` restarts it through the login item; `lahe uninstall` goes back to serving by hand.\n"
+    );
+    return 1;
+  }
+  var stopped = await replaceRunningHelper(options);
+  if (stopped !== true) return stopped;
+  try {
+    await loginItem.startThroughItem(installed, function () {
+      return service.probeHealth(protocol.DEFAULT_HOST, port);
+    }, { runner: deps.runner });
+  } catch (error) {
+    err("lahe serve: " + error.message + "\n");
+    return 1;
+  }
+  out("lahe serve: restarted through the login item " + installed.label + " on " + protocol.DEFAULT_HOST + ":" + port + ".\n");
+  return 0;
+}
+
 /**
  * @param {string[]} argv the arguments after the command name
+ * @param {{runner?: function, stdout?: function, stderr?: function}} [deps]
+ *   the login item's command runner and output, for tests
  * @returns {Promise<number>} the process exit code
  */
-async function run(argv) {
+async function run(argv, deps) {
   var parsed = parseArgs(argv);
   if (!parsed.ok) {
     process[parsed.help ? "stdout" : "stderr"].write(parsed.message + "\n");
     return parsed.help ? protocol.CLI_EXIT.OK : protocol.CLI_EXIT.BAD_USAGE;
+  }
+
+  // INSTALLED (lahe install): the login item owns this port. A helper bound by
+  // hand beside it would hold the port while the service manager's restarts
+  // fail on it, so serve by hand refuses, and --restart goes through the item.
+  if (!parsed.options.alwaysOn) {
+    var installed = installedHere(parsed.options);
+    if (installed) return serveInstalled(parsed.options, installed, deps || {});
   }
 
   // --restart is the one path that replaces a helper a reviewer is using. It

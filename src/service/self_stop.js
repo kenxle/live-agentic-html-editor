@@ -34,6 +34,11 @@
 //     it writes reaches anyone. A test that removes its temp dir takes its
 //     helper with it. Page servers run the same check against their own record.
 //
+// ALWAYS ON. The helper a login item runs (`lahe serve --always-on`, written
+// by `lahe install`) never stops itself under rule 1: its whole job is to be
+// there when an old address is opened. Rule 2 still holds. The login item
+// starts it again, into a fresh state folder.
+//
 // A NEW HELPER CLEARS AN OLD ASK. stop-when-quiet.json belongs to the helper
 // that was running when the close wrote it. A helper starting up removes any
 // it finds, so a hand-started `lahe serve` is never stopped by a close that
@@ -163,7 +168,7 @@ function createDirWatch(options) {
  *          catalog?: {seenAt: function(): (string|null)},
  *          owner?: {pid: number, started_at: string},
  *          now?: function(): number, graceMs?: number, sweepMs?: number,
- *          onStop: function(string): void, log?: object}} options
+ *          alwaysOn?: boolean, onStop: function(string): void, log?: object}} options
  *   `owner` is this helper's pid and start time as service.json records them.
  */
 function createSelfStop(options) {
@@ -175,6 +180,7 @@ function createSelfStop(options) {
   var graceMs = typeof opts.graceMs === "number" && opts.graceMs >= 0 ? opts.graceMs : GRACE_MS;
   var sweepMs = typeof opts.sweepMs === "number" && opts.sweepMs > 0 ? opts.sweepMs : SWEEP_MS;
   var owner = opts.owner || { pid: process.pid, started_at: null };
+  var alwaysOn = opts.alwaysOn === true;
   var log = opts.log || null;
   var startedAt = clock();
   var lastWindowAt = -Infinity;
@@ -229,6 +235,7 @@ function createSelfStop(options) {
   function check() {
     if (stopped) return null;
     if (dirWatch.check()) return fire(REASON.STATE_DIR_GONE);
+    if (alwaysOn) return null;
 
     var at = clock();
     // Far later than the interval: the machine slept. A page that is still
@@ -284,6 +291,23 @@ function createSelfStop(options) {
   return { check: check, start: start, stop: stop };
 }
 
+/**
+ * Does the helper that answered /health keep a different state folder than
+ * this one? Its /health carries its folder's token (state-id); a CLI pointed
+ * at another folder would otherwise fail on the port with no reason given.
+ * A helper too old to report a token is not judged.
+ */
+function stateFolderMismatch(dir, live) {
+  if (!live || typeof live.state_id !== "string" || !live.state_id) return false;
+  return live.state_id !== stateToken(dir);
+}
+
+/** What a CLI says when the helper on its port keeps another state folder. */
+function differentFolderSentence(host, port, dir) {
+  return "the helper on " + host + ":" + port + " uses a different state folder than " + dir +
+    ". Point this command at that helper's folder (--state-dir, or LAHE_STATE_DIR), or use another --port";
+}
+
 module.exports = {
   GRACE_MS: GRACE_MS,
   SWEEP_MS: SWEEP_MS,
@@ -291,6 +315,8 @@ module.exports = {
   MISSES_TO_STOP: MISSES_TO_STOP,
   REASON: REASON,
   stateToken: stateToken,
+  stateFolderMismatch: stateFolderMismatch,
+  differentFolderSentence: differentFolderSentence,
   namesProcess: namesProcess,
   createDirWatch: createDirWatch,
   createSelfStop: createSelfStop
