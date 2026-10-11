@@ -4,7 +4,8 @@
 // Fail 2: once the agent placed a run, a later record of the reviewer's on one
 // of its blocks takes that block over (record.handedOverBlocks). The page check
 // on the placed run then reads the block's new words as the later record's,
-// not as its own going missing.
+// not as its own going missing. Since spec 20261011.01 the page check does not
+// reopen a handled run at all; replay still reads the takeover (laterRun).
 
 "use strict";
 
@@ -93,40 +94,32 @@ test("a take-back, an older record and a comment take nothing over", () => {
   assert.deepEqual(record.handedOverBlocks(placed, list), {});
 });
 
-test("a placed list with a third item from a later record is not read as undone", () => {
+// Since spec 20261011.01 the page check reopens no handled run over its own
+// blocks, so the later record no longer has to be read to keep it quiet. These
+// pin that a handled run stays handled in every one of these shapes.
+test("a placed list with a third item from a later record is not reopened", () => {
   const f = fx();
   const placed = placedRun(f);
   const later = laterListEdit(f);
   const page = pageWith("<ol><li>First item</li><li>Second item</li><li>Third item</li></ol>", "<p>A paragraph after the list.</p>");
-  // Without the other records the check cannot know, and says undone.
-  assert.equal(check(placed, page), "missing");
+  assert.equal(check(placed, page), null, "with or without the later record");
   assert.equal(check(placed, page, [placed, later]), null);
 });
 
-test("the placed run still passes before the later record reaches the page", () => {
-  const f = fx();
-  const placed = placedRun(f);
-  const later = laterListEdit(f);
-  const page = pageWith("<ol><li>First item</li><li>Second item</li></ol>");
-  assert.equal(check(placed, page, [placed, later]), null);
-});
-
-test("a block the later record did not take is still checked: a missing paragraph reopens", () => {
+test("a handled run with a paragraph missing from the page is not reopened", () => {
   const f = fx();
   const placed = placedRun(f);
   const later = laterListEdit(f);
   const page = "<main>" + HEAD + "<p>What changed</p><h2>Plan for the week</h2><ol><li>First item</li><li>Second item</li><li>Third item</li></ol></main>";
-  assert.equal(check(placed, page, [placed, later]), "missing");
+  assert.equal(check(placed, page, [placed, later]), null, "the page shows the file, and the card stays handled");
 });
 
-test("revertedHandledEditIds hands the list to the run check", () => {
+test("pageCheckIds lists nothing for a handled run whatever the page did to it", () => {
   const f = fx();
   const placed = placedRun(f);
   const later = laterListEdit(f);
   const page = pageWith("<ol><li>First item</li><li>Second item</li><li>Third item</li></ol>", "<p>A paragraph after the list.</p>");
-  const options = { pageHtml: page };
-  assert.deepEqual(replay.revertedHandledEditIds([placed, later], page.replace(/<[^>]+>/g, " "), options), []);
-  assert.equal(replay.pageCheckNoteFor(placed, page.replace(/<[^>]+>/g, " "), options), null);
+  assert.deepEqual(replay.pageCheckIds([placed, later], page.replace(/<[^>]+>/g, " "), {}), []);
 });
 
 test("a later record that rewords the run's own reworded anchor takes the anchor over", () => {
@@ -147,8 +140,8 @@ test("a later record that rewords the run's own reworded anchor takes the anchor
   });
   assert.equal(record.handedOverBlocks(placed, [placed, later]).anchor.id, later.id);
   const page = "<main>" + HEAD + "<p>What changed today</p><p>Two things today.</p></main>";
-  // Without the later record, the heading's "What changed" reads as the old words back.
-  assert.equal(check(placed, page), "reverted");
+  // The old words back on the page are no reason to reopen it either.
+  assert.equal(check(placed, page), null);
   assert.equal(check(placed, page, [placed, later]), null);
 });
 

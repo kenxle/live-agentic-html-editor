@@ -1896,30 +1896,29 @@
     }
 
     /**
-     * The revert check, run ONCE per page load.
+     * The page check, run ONCE per page load: the stamp round, and nothing
+     * else.
      *
-     * A handled hand edit whose change is gone from the page while the text it
-     * replaced is back has been reverted, and the reviewer's decision was undone
-     * without anyone saying so. Reopening it puts it back in front of the agent
-     * through the same path the reviewer's own Reopen issue button uses, and the
-     * wake feed already wakes on a reopen.
+     * After the agent answers handled, the page is the file. A handled card
+     * whose words, blocks, tag, bold or italic are no longer on the page is
+     * left alone: the reviewer sees the page as it is and edits or comments
+     * again, as in any document (spec
+     * docs/features/20261011.01_stuck_replayed_blocks). What stays is the
+     * request for a data-lahe-id the agent did not carry into an HTML source.
+     * It is a tool round: the rail draws nothing for it, and replay writes
+     * nothing for it (record.isReplayable).
      *
-     * ONCE PER ITEM PER LOAD, and never a loop.
+     * ONCE PER ITEM PER LOAD, and never a loop. On 2026-09-10 the check and
+     * an agent answered each other thirteen times in thirty six minutes. Three
+     * things hold it now:
      *
-     * The check and the agent can answer each other. On 2026-09-10 they did:
-     * the reviewer's edit was applied in a shape the check could not see, so the
-     * check reopened, the agent replied handled, the check read the same page
-     * and reopened again, thirteen times in thirty six minutes. Three things
-     * hold it now, and the first two are the ones that matter:
-     *
-     *   the stamp   the record remembers which revision the check created, so a
-     *               handled reply answering that revision is the agent saying
-     *               "this is how it renders now" and is left alone
-     *               (record.answeredPageCheckReopen)
-     *   the cooldown  no item is reopened by a check twice inside a minute
-     *               (replay.CHECK_REOPEN_COOLDOWN_MS)
-     *   this set    and no item is reopened by a check twice in one page load,
-     *               however many times this function is called
+     *   the stamp     the record remembers which revision the check created,
+     *                 so a handled reply answering that revision is left alone
+     *                 (record.answeredPageCheckReopen)
+     *   the cooldown  no item is reopened by the check twice inside a minute
+     *                 (replay.CHECK_REOPEN_COOLDOWN_MS)
+     *   this set      and no item is reopened twice in one page load,
+     *                 however many times this function is called
      */
     var checkReopened = {};
     // Set by the settle pass; the first stamp_carriable answer runs the page
@@ -1931,56 +1930,30 @@
       var body = doc && doc.body;
       if (!body) return [];
       var pageText = ns.replay.pageTextOf(body);
-      // The page's markup goes in beside its text: a handled edit whose words
-      // landed and whose bold or italic did not is also a change that is not on
-      // the page, and text alone cannot see that (2026-09-11).
-      // Plus the helper's answer about the SOURCE. A Markdown review renders to
-      // HTML, so the page cannot tell on its own that its source has nowhere to
-      // put a data-lahe-id, and a check that assumed it could reopened every
-      // handled edit of every Markdown review once (2026-09-14).
+      // The helper's answer about the SOURCE. A Markdown review renders to
+      // HTML, so the page cannot tell on its own that its source has nowhere
+      // to put a data-lahe-id, and a check that assumed it could reopened
+      // every handled edit of every Markdown review once (2026-09-14).
       var options = ns.replay.pageCheckOptions(body, {
         stampCarriable: typeof sync.stampCarriable === "function" ? sync.stampCarriable() : null
       });
       var items = refreshItems();
-      var ids = ns.replay.revertedHandledEditIds(items, pageText, options).filter(function (id) {
+      var ids = ns.replay.pageCheckIds(items, pageText, options).filter(function (id) {
         return !checkReopened[id];
       });
       counters.revertChecks += 1;
       ids.forEach(function (id) {
         checkReopened[id] = true;
-        var item = null;
-        for (var i = 0; i < items.length; i += 1) {
-          if (items[i][ns.record.FIELD.ID] === id) item = items[i];
-        }
-        // Which of the check's sentences this item gets, and the line the card
-        // shows with it. Both come from replay, so a new reason arrives here
-        // already carrying its own words rather than needing a branch added.
-        var note = ns.replay.pageCheckNoteFor(item, pageText, options) || ns.replay.REVERTED_EDIT_NOTE;
-        // A TOOL ROUND draws nothing on the rail: the stamp request is between
-        // the tool and the agent, about an attribute the reviewer never typed.
-        // replay decides which reopens are which, beside the sentences.
-        var tool = ns.replay.pageCheckToolFor(note);
         done.reopen(id, {
-          note: note,
-          notice: tool ? null : ns.replay.pageCheckNoticeFor(note),
-          tool: tool,
+          note: ns.replay.STAMP_LOST_NOTE,
+          notice: null,
+          tool: ns.record.TOOL_ROUND.PAGE_CHECK_STAMP,
           pageCheck: true
         });
         counters.revertReopens += 1;
       });
-      // A reopened item is outstanding again, so its region gets compared
-      // again. That is what puts the reviewer's bold or italic back on a page
-      // whose rebuild dropped it: replay writes the record's markup, and an
-      // item is only replayed while it is outstanding.
-      //
-      // The refresh is the load-bearing half. Replay reads the `items` CACHE,
-      // and this function filled that cache before the reopens, so a pass
-      // scheduled without it reads every reopened item as still handled and
-      // skips it ("not outstanding").
-      if (ids.length) {
-        refreshItems();
-        ns.replay.schedule(ns.replay.REASON.REPLY, { immediate: true });
-      }
+      // No replay pass is scheduled: a stamp round writes nothing on the page.
+      if (ids.length) refreshItems();
       return ids;
     }
 

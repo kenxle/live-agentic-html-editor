@@ -1,7 +1,7 @@
 // Replay of a run record: the pure halves (free-writing plan Tasks 2.5 to 2.7).
 //
-// The anchor view the compare reads, the page check on a run read block by
-// block from the page's markup, and the card's words. The DOM halves (the
+// The anchor view the compare reads, the page check leaving a handled run
+// alone, and the card's words. The DOM halves (the
 // insert path, the tag swap, the held run) are in the browser specs
 // replay_run_anchor, replay_run_insert and replay_run_check.
 
@@ -87,145 +87,11 @@ const WORKED_PAGE =
   "<ul><li>scrolling</li><li>re-asking zqxcanary</li></ul>" +
   "</section></main>";
 
-test("a handled run placed right, with a section label between blocks, is not reopened", () => {
-  const item = handled(named("worked example"));
-  assert.equal(check(item, WORKED_PAGE), null);
-});
+// Spec docs/features/20261011.01_stuck_replayed_blocks, requirement 2: after the
+// agent answers handled, the page is the file. Every shape below used to reopen
+// the run (missing, tag, formatting, undone, take-back). Now none of them does:
+// the card stays handled, nothing is written, and nothing new is shown.
 
-test("a handled run whose paragraph lost its bold is reopened with the formatting note", () => {
-  const item = handled(named("worked example"));
-  const page = WORKED_PAGE.replace("<strong>every</strong>", "every");
-  assert.equal(check(item, page), replay.PAGE_CHECK_REASON.FORMATTING);
-  assert.equal(replay.pageCheckNoteFor(item, page, { pageHtml: page }), record.PAGE_CHECK_FORMAT_NOTE);
-});
-
-test("a header placed as a paragraph is reopened with the tag note, not the formatting note", () => {
-  const item = handled(named("worked example"));
-  const page = WORKED_PAGE.replace("<h2>What the chat window cost me zqxcanary</h2>", "<p>What the chat window cost me zqxcanary</p>").replace(
-    "<strong>every</strong>",
-    "every"
-  );
-  assert.equal(check(item, page), replay.PAGE_CHECK_REASON.TAG);
-  assert.equal(replay.pageCheckNoteFor(item, page, { pageHtml: page }), record.PAGE_CHECK_TAG_NOTE);
-});
-
-test("a missing block reopens as missing, with the run's own note", () => {
-  const item = handled(named("worked example"));
-  const page = WORKED_PAGE.replace("<ul><li>scrolling</li><li>re-asking zqxcanary</li></ul>", "");
-  assert.equal(check(item, page), replay.PAGE_CHECK_REASON.MISSING);
-  assert.equal(replay.pageCheckNoteFor(item, page, { pageHtml: page }), record.PAGE_CHECK_RUN_NOTE);
-});
-
-test("a block of five or more words the page shows elsewhere is not missing", () => {
-  const item = handled(named("worked example"));
-  const page = WORKED_PAGE.replace("<h2>What the chat window cost me zqxcanary</h2>", "") + "<p>x</p><p>y</p><p>z</p><h2>What the chat window cost me zqxcanary</h2>";
-  assert.equal(check(item, page), null);
-});
-
-test("the anchor's before back on the page, and not its after, reopens as undone", () => {
-  const item = handled(named("tag change with new words"));
-  assert.equal(check(item, "<main><p>Old words zqxcanary</p></main>"), replay.PAGE_CHECK_REASON.REVERTED);
-});
-
-test("a tag-only change the page did not take reopens with the tag note", () => {
-  const item = handled(named("tag-only change"));
-  assert.equal(check(item, "<main><p>Plain words zqxcanary</p></main>"), replay.PAGE_CHECK_REASON.TAG);
-  assert.equal(check(item, "<main><h2>Plain words zqxcanary</h2></main>"), null);
-});
-
-test("a start_of_container run is checked from the container's start", () => {
-  const item = handled(named("start of container"));
-  assert.equal(check(item, "<main><h2>Notes zqxcanary</h2><p>First thought zqxcanary</p></main>"), null);
-  assert.equal(check(item, "<main><h2>Notes zqxcanary</h2></main>"), replay.PAGE_CHECK_REASON.MISSING);
-});
-
-test("an outstanding run is not checked", () => {
-  assert.equal(check(named("worked example"), "<main></main>"), null);
-});
-
-test("an old record keeps today's check: the whole after as one string", () => {
-  const old = handled(fx().oldShapeNested());
-  assert.equal(check(old, "<main><h2>Intro</h2><p>A new line</p></main>"), null);
-});
-
-// ---------------------------------------------------------------------------
-// What the card says
-// ---------------------------------------------------------------------------
-
-test("a run's missing block has its own lines: never undone, never reapply", () => {
-  const notice = replay.pageCheckNoticeFor(record.PAGE_CHECK_RUN_NOTE);
-  assert.equal(notice, "A block you wrote is not on the page as you wrote it. The item is open again.");
-  assert.doesNotMatch(notice, /undone/);
-  assert.doesNotMatch(record.PAGE_CHECK_RUN_NOTE, /original text is back|Reapply/);
-  assert.ok(record.PAGE_CHECK_NOTES.indexOf(record.PAGE_CHECK_RUN_NOTE) !== -1, "collapsed like every page-check sentence");
-});
-
-test("the held run's line says where the blocks are once they are on the page", () => {
-  assert.equal(
-    replay.runConflictLine(named("worked example"), true),
-    "Your 3 new blocks are on the page after this paragraph. Either answer keeps them."
-  );
-  assert.equal(
-    replay.runConflictLine(named("special characters"), true),
-    "Your 1 new block is on the page after this paragraph. Either answer keeps it."
-  );
-});
-
-test("the rail has a line for the tag note", () => {
-  assert.equal(
-    replay.pageCheckNoticeFor(record.PAGE_CHECK_TAG_NOTE),
-    "A block in this change is on the page as a different type. The item is open again."
-  );
-});
-
-test("the held run's line counts the blocks and names the anchor's type", () => {
-  assert.equal(
-    replay.runConflictLine(named("worked example")),
-    "Your 3 new blocks after this paragraph are waiting on this choice. Either answer keeps them."
-  );
-  assert.equal(
-    replay.runConflictLine(named("special characters")),
-    "Your 1 new block after this paragraph is waiting on this choice. Either answer keeps it."
-  );
-  assert.equal(replay.TAKE_THEIRS_RUN_LABEL, "Take the page's, keep my new text");
-});
-
-test("a block typed with -- and rendered with a dash is not missing", () => {
-  const item = handled(named("worked example"));
-  item.new_blocks = item.new_blocks.map((b) => (b.tag === "p" ? Object.assign({}, b, { html: b.html.replace("every</strong> time", "every</strong> time -- then") }) : b));
-  const page = WORKED_PAGE.replace("every</strong> time", "every</strong> time — then");
-  assert.equal(check(item, page), null);
-});
-
-test("a handled block the agent added words to reopens as missing", () => {
-  const item = handled(named("worked example"));
-  const page = WORKED_PAGE.replace("time zqxcanary</p>", "time zqxcanary. The agent added this sentence.</p>");
-  assert.equal(check(item, page), replay.PAGE_CHECK_REASON.MISSING);
-});
-
-// ---------------------------------------------------------------------------
-// Fix round (reviews_impl/FIX_ROUND.md, group F2)
-// ---------------------------------------------------------------------------
-
-// Code lead finding 19: a sitting that retags and bolds the anchor is
-// format_only, and its bold was never checked.
-test("a format_only anchor whose bold the page lost reopens with the formatting note", () => {
-  const item = handled(
-    fx().runItem({
-      kind: record.KIND.FORMAT_ONLY,
-      before: "Plain words zqxcanary",
-      before_html: "Plain words zqxcanary",
-      anchor_after_html: "Plain <strong>words</strong> zqxcanary",
-      anchor_tag_after: "h2",
-      new_blocks: []
-    })
-  );
-  assert.equal(check(item, "<main><h2>Plain words zqxcanary</h2></main>"), replay.PAGE_CHECK_REASON.FORMATTING);
-  assert.equal(check(item, "<main><h2>Plain <strong>words</strong> zqxcanary</h2></main>"), null);
-});
-
-// Code lead finding 18: a proofread fix of "well--known" to "well-known" folds
-// to the same words, so the page showing the earlier revision was never seen.
 function punctuationFix() {
   const f = fx();
   const first = f.runItem({ new_blocks: [{ tag: "p", html: "A well--known fact about builds zqxcanary" }] });
@@ -236,19 +102,6 @@ function punctuationFix() {
   return later;
 }
 
-test("a handled punctuation fix whose earlier revision is back on the page reopens as missing", () => {
-  const item = handled(punctuationFix());
-  assert.equal(check(item, "<main><p>What changed</p><p>A well--known fact about builds zqxcanary</p></main>"), replay.PAGE_CHECK_REASON.MISSING);
-  assert.equal(check(item, "<main><p>What changed</p><p>A well-known fact about builds zqxcanary</p></main>"), null);
-});
-
-test("a punctuation fix rendered with a typographic dash is not reopened", () => {
-  // The render draws "-" as it is, and "--" in the earlier revision as a dash:
-  // the page shows neither revision exactly, and the fold says it is present.
-  const item = handled(punctuationFix());
-  assert.equal(check(item, "<main><p>What changed</p><p>A well‑known fact about builds zqxcanary</p></main>"), null);
-});
-
 // Design call 4 (CR 3, CL 2): a take-back carries the old tag in
 // anchor_tag_after, and the page check acts on it.
 function tagOnlyTakeBack() {
@@ -258,25 +111,6 @@ function tagOnlyTakeBack() {
   back.region = orig.region;
   return handled(back);
 }
-
-test("a handled take-back of a tag change is not reopened when the anchor is back to its old tag", () => {
-  assert.equal(check(tagOnlyTakeBack(), "<main><p>Plain words zqxcanary</p></main>"), null);
-});
-
-test("a handled take-back of a tag change reopens with the tag note while the page keeps the new tag", () => {
-  const back = tagOnlyTakeBack();
-  const page = "<main><h2>Plain words zqxcanary</h2></main>";
-  assert.equal(check(back, page), replay.PAGE_CHECK_REASON.TAG);
-  assert.equal(replay.pageCheckNoteFor(back, page, { pageHtml: page }), record.PAGE_CHECK_TAG_NOTE);
-});
-
-test("a handled take-back of a retagged run checks the anchor's old tag too", () => {
-  const orig = fx().runItem({ anchor_tag_after: "h3" });
-  const back = handled(record.revertOf(orig));
-  back.anchor_tag_after = "p";
-  assert.equal(check(back, "<main><p>What changed</p></main>"), null);
-  assert.equal(check(back, "<main><h3>What changed</h3></main>"), replay.PAGE_CHECK_REASON.TAG);
-});
 
 // The page's side of a take-back of placed blocks (adversary review 3): the
 // same rule as the helper's takeBackVerdictFor. The anchor's old words stay on
@@ -292,21 +126,95 @@ function pageWith(anchor, blocks) {
   return "<main><h2>" + anchor + "</h2>" + blocks.map((b) => "<" + b.tag + ">" + b.html + "</" + b.tag + ">").join("") + "</main>";
 }
 
-test("a handled take-back is reopened while a listed block is still after the anchor", () => {
-  const { back, blocks } = blockTakeBack();
-  const page = pageWith("What changed", blocks);
-  assert.equal(check(back, page), replay.PAGE_CHECK_REASON.TAKEBACK);
-  assert.equal(replay.pageCheckNoteFor(back, page, { pageHtml: page }), record.PAGE_CHECK_TAKEBACK_NOTE);
+const FORMAT_ONLY_ANCHOR = () =>
+  handled(
+    fx().runItem({
+      kind: record.KIND.FORMAT_ONLY,
+      before: "Plain words zqxcanary",
+      before_html: "Plain words zqxcanary",
+      anchor_after_html: "Plain <strong>words</strong> zqxcanary",
+      anchor_tag_after: "h2",
+      new_blocks: []
+    })
+  );
+
+const NO_LONGER_REOPENED = [
+  ["a paragraph that lost its bold", () => handled(named("worked example")), () => WORKED_PAGE.replace("<strong>every</strong>", "every")],
+  [
+    "a header placed as a paragraph",
+    () => handled(named("worked example")),
+    () => WORKED_PAGE.replace("<h2>What the chat window cost me zqxcanary</h2>", "<p>What the chat window cost me zqxcanary</p>")
+  ],
+  ["a missing block", () => handled(named("worked example")), () => WORKED_PAGE.replace("<ul><li>scrolling</li><li>re-asking zqxcanary</li></ul>", "")],
+  [
+    "a block the agent added words to",
+    () => handled(named("worked example")),
+    () => WORKED_PAGE.replace("time zqxcanary</p>", "time zqxcanary. The agent added this sentence.</p>")
+  ],
+  ["the anchor's before back on the page", () => handled(named("tag change with new words")), () => "<main><p>Old words zqxcanary</p></main>"],
+  ["a tag-only change the page did not take", () => handled(named("tag-only change")), () => "<main><p>Plain words zqxcanary</p></main>"],
+  ["a start_of_container run with its block gone", () => handled(named("start of container")), () => "<main><h2>Notes zqxcanary</h2></main>"],
+  ["a format_only anchor whose bold the page lost", FORMAT_ONLY_ANCHOR, () => "<main><h2>Plain words zqxcanary</h2></main>"],
+  [
+    "a punctuation fix whose earlier revision is back",
+    () => handled(punctuationFix()),
+    () => "<main><p>What changed</p><p>A well--known fact about builds zqxcanary</p></main>"
+  ],
+  ["a take-back of a tag change whose page keeps the new tag", tagOnlyTakeBack, () => "<main><h2>Plain words zqxcanary</h2></main>"],
+  ["a take-back whose listed blocks are still after the anchor", () => blockTakeBack().back, () => pageWith("What changed", blockTakeBack().blocks)],
+  ["the lines turned into a table on request", () => handled(named("worked example")), () =>
+    "<main>" + HEAD + "<table><tr><td>What the chat window cost me zqxcanary</td></tr><tr><td>I lost my place every time zqxcanary</td></tr></table></main>"]
+];
+
+for (const [label, itemOf, pageOf] of NO_LONGER_REOPENED) {
+  test("a handled run is not reopened for " + label, () => {
+    const item = itemOf();
+    const page = pageOf();
+    assert.equal(check(item, page), null);
+    assert.deepEqual(replay.pageCheckIds([item], page.replace(/<[^>]+>/g, " "), { pageHtml: page }), []);
+  });
+}
+
+test("a handled run whose blocks landed and whose id did not still opens the stamp round", () => {
+  const item = handled(named("worked example"));
+  item.region = Object.assign({}, item.region, { ref: Object.assign({}, (item.region && item.region.ref) || {}, { stamp: "e-run1" }) });
+  const text = WORKED_PAGE.replace(/<[^>]+>/g, " ");
+  assert.equal(replay.pageCheckReasonFor(item, text, { stamps: {}, stampCarriable: true }), replay.PAGE_CHECK_REASON.STAMP);
+  assert.equal(replay.pageCheckReasonFor(item, text, { stamps: { "e-run1": true }, stampCarriable: true }), null);
+  // A block gone from the page: no element left to ask about, so no round.
+  const gone = WORKED_PAGE.replace("<ul><li>scrolling</li><li>re-asking zqxcanary</li></ul>", "").replace(/<[^>]+>/g, " ");
+  assert.equal(replay.pageCheckReasonFor(item, gone, { stamps: {}, stampCarriable: true }), null);
 });
 
-test("a handled take-back is held while only one of its blocks is gone", () => {
-  const { back, blocks } = blockTakeBack();
-  assert.equal(check(back, pageWith("What changed", blocks.slice(1))), replay.PAGE_CHECK_REASON.TAKEBACK);
+test("an outstanding run is not checked", () => {
+  assert.equal(check(named("worked example"), "<main></main>"), null);
 });
 
-test("a handled take-back is not reopened once every listed block is gone", () => {
-  const { back } = blockTakeBack();
-  assert.equal(check(back, "<main><h2>What changed</h2><p>Something else entirely, well past the anchor</p></main>"), null);
+// ---------------------------------------------------------------------------
+// What the card says
+// ---------------------------------------------------------------------------
+
+test("the held run's line says where the blocks are once they are on the page", () => {
+  assert.equal(
+    replay.runConflictLine(named("worked example"), true),
+    "Your 3 new blocks are on the page after this paragraph. Either answer keeps them."
+  );
+  assert.equal(
+    replay.runConflictLine(named("special characters"), true),
+    "Your 1 new block is on the page after this paragraph. Either answer keeps it."
+  );
+});
+
+test("the held run's line counts the blocks and names the anchor's type", () => {
+  assert.equal(
+    replay.runConflictLine(named("worked example")),
+    "Your 3 new blocks after this paragraph are waiting on this choice. Either answer keeps them."
+  );
+  assert.equal(
+    replay.runConflictLine(named("special characters")),
+    "Your 1 new block after this paragraph is waiting on this choice. Either answer keeps it."
+  );
+  assert.equal(replay.TAKE_THEIRS_RUN_LABEL, "Take the page's, keep my new text");
 });
 
 // Fix round F5 (CL 20): the one shared copy of "the first few words".

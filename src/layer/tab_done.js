@@ -1203,9 +1203,9 @@
       // Reopening did not go away with the button. Sending from the field ends
       // the handled state (continueItem sets READY and posts item.ready), so
       // R38's handled -> ready transition is still here, now always carrying
-      // the reason it happened. The automatic reopen keeps its own path:
-      // index.js calls reopen() with a note when a handled hand edit is undone
-      // on the page.
+      // the reason it happened. The page check's stamp round keeps its own
+      // path: index.js calls reopen() with a note when the agent did not carry
+      // a data-lahe-id into an HTML source.
       return row;
     }
 
@@ -1588,11 +1588,11 @@
      * the log disagreeing.
      *
      * `options.note` adds one tool-generated sentence to the carried note, and
-     * `options.notice` replaces the line the card shows. Both exist for the
-     * revert check (replay.isRevertedHandledEdit), which reopens an item the
-     * reviewer is not looking at and therefore has to say why on the card. The
-     * button in this file passes neither, so the reviewer's own reopen is
-     * unchanged: same rev bump, same event, same rail behavior.
+     * `options.notice` replaces the line the card shows. The page check's
+     * stamp round passes the note (replay.pageCheckReasonFor), and Keep mine
+     * on a refused card's clash passes a notice. The button in this file
+     * passes neither, so the reviewer's own reopen is unchanged: same rev
+     * bump, same event, same rail behavior.
      *
      * TWO THINGS THE CHECK'S REOPEN DOES THAT THE BUTTON DOES NOT, both from
      * the loop of 2026-09-10 (see record.js, "The page check's stamp"):
