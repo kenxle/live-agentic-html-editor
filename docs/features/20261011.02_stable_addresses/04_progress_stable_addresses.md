@@ -1,6 +1,6 @@
 # Progress: Stable addresses
 
-**Phase 6, Implement.** Core Steps 1 and 2 are merged. Two decisions wait on you below; work continues on everything else. Last updated 2026-10-11 16:20.
+**Phase 6, Implement.** All core, install, and lahe-names work is merged; stable addresses are the default on the feature branch. The library builder is finishing the Library cleanup. Two decisions wait on you below. Last updated 2026-10-11 17:00.
 
 **Docs:** [Decisions page](../../ongoing/STABLE_ADDRESSES.md) · [Crucible](00_crucible_stable_addresses.html) · [Brief](01_brief_stable_addresses.html) · [Architecture](02_architecture_stable_addresses.html) · [Plan](03_plan_stable_addresses.html) · [Code survey](parts/architecture/recon.md)
 
@@ -17,7 +17,8 @@
 
 | Agent or task | Doing | Started | Branch |
 |---|---|---|---|
-| Core builder (Opus) | Step 3: sites become the default, page servers removed, status and logging, skill, contract, and serving docs (old-comments row parked for your decision) | 2026-10-11 16:21 | `unit/sa-core` |
+| Library builder (Sonnet) | Task 4.3: remove the Library's old path and the reopened-session sweep, rewrite its 54 tests for the new behavior, Library docs | 2026-10-11 17:00 | `unit/sa-library` |
+| Install builder (Opus) | Fix a test that leaves a helper running under load | 2026-10-11 17:00 | `unit/sa-install` |
 
 ## Phases
 
@@ -40,6 +41,7 @@
 
 | Workstream | Tasks | Result | Detail |
 |---|---|---|---|
+| core | Step 3 (3.1 to 3.3) | Merged. Sites are the default; per-session page servers, the idle sweep, port history, origin swaps, and the `SIGHUP` reload are gone. `lahe status` shows the port, ending, install state, and both options. Skill, contract, CLI, serving docs, and four diagrams updated. Rows V33 to V38, V63, V67, V71 pass. 54 Library tests still test removed behavior; the library builder is on them. | [core progress](progress/phase6_workstream_core.md) |
 | install | 5.5 docs | Merged. `docs/INSTALL.md` (install, uninstall, both options, written Linux and Windows steps marked untested), README, CLI install rows, one always-on line in `SESSION_OWNERSHIP.md`, and your [manual checks](progress/phase6_workstream_install.md). Found a core defect (session close stops an always-on helper), sent to the core builder. Unit gate 2,654 tests, 0 failed. | [install progress](progress/phase6_workstream_install.md) |
 | lahe-names | 6.0 to 6.2 | Merged. `lahe install --port-80` and `--lahe-names` (macOS), the name server, and both self-checks. Rows V54 to V56, V58, V59, V74 pass; V57 and V76 wait on three core changes (sent to the core builder) that make them visible; V73 and V75 are your manual checks. No test ran `sudo` or touched system files. Unit gate 2,652 tests, 0 failed. | [install progress](progress/phase6_workstream_install.md) |
 | install | 5.1 to 5.3 | Merged. Rows V45 to V52 and V72 pass, except two parts: V45's real login after a reboot needs you at this Mac, and V72's status line is core's (sent to it). macOS spike: install, restart after a kill (launchd waits 10 seconds), start on request, and uninstall all work; no login item left behind. Unit gate 2,618 tests, 0 failed. | [install progress](progress/phase6_workstream_install.md) |
@@ -51,6 +53,7 @@
 
 | Pass | What merged | Checks on the merge |
 |---|---|---|
+| 7 | core Step 3 | `npm run gate:unit`: 2,590 tests, 54 failed (all Library tests of removed behavior, assigned). One leaked always-on test helper from `install_command.test.js` found and stopped by pid; fix assigned |
 | 6 | install 5.5 docs | `npm run gate:unit`: 2,654 tests, 0 failed |
 | 5 | lahe-names 6.0 to 6.2 | `npm run gate:unit`: 2,652 tests, 0 failed; helpers before and after: 2 and 2 |
 | 4 | install 5.1 to 5.3 | `npm run gate:unit`: 2,618 tests, 0 failed; three new browser specs in Chromium: 12 passed, 1 skipped (screenshot-only); helpers before and after: 2 and 2 |
@@ -59,6 +62,12 @@
 | 1 | core Step 1 | `npm run gate:unit` on the merged branch: 2,517 tests, 0 failed; helpers running before and after: 2 and 2 |
 
 ### Changes from plan
+
+From core Step 3:
+
+- A linked document opens on the hub page's address with the hub's rail, even when it has its own review, because there are no redirects between sites.
+- The helper-down tests of `serve_time_inject` are retired, not rewritten: with no page server, nothing serves a page while the helper is down.
+- The contract gains one sentence about the stable address.
 
 From install 5.5:
 
@@ -148,6 +157,7 @@ Not shipped yet.
 
 ## Log
 
+- 2026-10-11 17:00: Core Step 3 merged: stable addresses are now the default. 54 Library tests of removed behavior went to the library builder (Task 4.3). A test leak in `install_command.test.js` went to the install builder.
 - 2026-10-11 16:48: Install docs merged. Install builder found that closing the last session stops an always-on helper; fix sent to the core builder.
 - 2026-10-11 16:41: Port-free addresses and the `.lahe` name server merged (macOS options, each behind its own self-check). Three small core changes to make them visible sent to the core builder. Install builder on docs (5.5).
 - 2026-10-11 16:28: Login item check passed on Linux and Windows (install, restart after a kill, start on request, uninstall). Windows restart takes up to a minute. Install builder moved on to port-free addresses and the `.lahe` name server (6.0 to 6.2).
