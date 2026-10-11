@@ -868,8 +868,9 @@ its steps are green.</p>
 own small PR.</strong> The workflow runs a named ref on Linux and
 Windows. Each step has <code>continue-on-error</code>, and the verdict
 goes to the log. It never runs on push, so it never sends Ken a failure
-email. It exists for the spikes in Tasks 1.0 and 5.1, and is removed in
-cleanup.</p>
+email. It uses only GitHub's standard hosted machines, which are free
+for a public repo, so it costs nothing. It exists for the spikes in
+Tasks 1.0 and 5.1, and is removed in cleanup.</p>
 <p><strong>Task 0.2: The idle-cost baseline.</strong> Before PR 2 lands,
 measure today's helper plus page servers, as Task 5.4 describes.</p>
 <h2 id="every-builders-contract">Every builder's contract</h2>

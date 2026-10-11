@@ -28,7 +28,7 @@ flowchart LR
 
 ## Step 0: Orchestrator setup
 
-**Task 0.1: A dispatch-only CI workflow, landed on main as its own small PR.** The workflow runs a named ref on Linux and Windows. Each step has `continue-on-error`, and the verdict goes to the log. It never runs on push, so it never sends Ken a failure email. It exists for the spikes in Tasks 1.0 and 5.1, and is removed in cleanup.
+**Task 0.1: A dispatch-only CI workflow, landed on main as its own small PR.** The workflow runs a named ref on Linux and Windows. Each step has `continue-on-error`, and the verdict goes to the log. It never runs on push, so it never sends Ken a failure email. It uses only GitHub's standard hosted machines, which are free for a public repo, so it costs nothing. It exists for the spikes in Tasks 1.0 and 5.1, and is removed in cleanup.
 
 **Task 0.2: The idle-cost baseline.** Before PR 2 lands, measure today's helper plus page servers, as Task 5.4 describes.
 

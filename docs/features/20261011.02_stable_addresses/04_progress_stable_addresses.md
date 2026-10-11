@@ -1,18 +1,18 @@
 # Progress: Stable addresses
 
-**Phase 5, Human review.** The full doc set is written and reviewed by four agents, and is ready for you. One thing needs your answer before any code. Last updated 2026-10-11 14:52.
+**Phase 6, Implement.** You approved the doc set. Building starts with the CI workflow and the idle-cost baseline, then the core builder. Last updated 2026-10-11 15:02.
 
 **Docs:** [Decisions page](../../ongoing/STABLE_ADDRESSES.md) · [Crucible](00_crucible_stable_addresses.html) · [Brief](01_brief_stable_addresses.html) · [Architecture](02_architecture_stable_addresses.html) · [Plan](03_plan_stable_addresses.html) · [Code survey](parts/architecture/recon.md)
 
 ## Needs your attention
 
-- [ ] **Approve a hand-run test workflow on GitHub.** We have no Linux or Windows machine, so the plan borrows GitHub's for two checks: that `.lahe.localhost` names load in browsers there, and that `lahe install` sets up the login item there. The workflow is one small file on main. It runs only when the orchestrator starts it by hand (GitHub only allows hand-started workflows that live on main), never on a push. Every step is set so a failure is written to the log instead of failing the run, so it never emails you. It is removed at cleanup.
+None.
 
 ## Currently working on
 
 | Agent or task | Doing | Started | Branch |
 |---|---|---|---|
-| Orchestrator | Waiting on your review of the doc set | 2026-10-11 12:56 | `feat/stable-addresses` |
+| Orchestrator | Step 0: CI workflow and idle baseline | 2026-10-11 15:02 | `feat/stable-addresses` |
 
 ## Phases
 
@@ -23,8 +23,8 @@
 | 2 Brief | done | 2026-10-11 |
 | 3 Architecture | done | 2026-10-11 |
 | 4 Plan | done | 2026-10-11 |
-| 5 Human review | in progress | 2026-10-11 |
-| 6 Implement | not started | 2026-10-11 |
+| 5 Human review | done | 2026-10-11 |
+| 6 Implement | in progress | 2026-10-11 |
 | 7 Verify | not started | 2026-10-11 |
 | 8 Ship and land | not started | 2026-10-11 |
 | 9 Cleanup | not started | 2026-10-11 |
@@ -64,6 +64,7 @@ Not shipped yet.
 
 ## Log
 
+- 2026-10-11 15:02: Ken approved the doc set: the login gap accepted, and the hand-run CI workflow approved on condition it costs nothing (standard GitHub machines are free for this public repo). Phase 5 done.
 - 2026-10-11 14:52: Ken finished the brief. Settled in review: names are the folder plus two parents joined by dots (`live-agentic-html-editor.docs.ongoing`), one name per folder; pages on port 1483 with the API staying on 7817; `lahe review` prints `.lahe.localhost`; `lahe install --port-80` drops the port on macOS; `.lahe` is an option on all three systems, by command on macOS and written steps elsewhere; no npm package. Architecture and plan updated to match. HTTPS for `.lahe` added as a follow-up.
 - 2026-10-11 12:56: Plan review returned 22 findings (2 blockers: main would have been broken between pull requests). All accepted: the Library's new Open ships with the first PR behind the switch, the page lookups ask both old and new until the switch flips, and nine verification rows were added. Doc set served for your review.
 - 2026-10-11 12:48: Plan written: four workstreams, five PRs, 64 verification rows. Plan review dispatched.
