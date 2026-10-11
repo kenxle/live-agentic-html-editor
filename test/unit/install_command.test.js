@@ -334,15 +334,35 @@ test("V74: --port-80 is skipped, naming the holder, when something listens on po
   assert.match(record.port_80_reason, /httpd \(pid 412\)/);
 });
 
-test("the admin options are macOS only; elsewhere install points to the written steps and does nothing", async (t) => {
+test("on Linux, both options are steps done by hand: install records them so the helper checks them, and runs no sudo", async (t) => {
   const w = world(t);
   const port = await freePort();
   const fake = withSudo(w, port);
   const d = deps(w, { platform: "linux", runner: fake.runner });
-  assert.notEqual(await installCommand.run(["--state-dir", w.dir, "--port", String(port), "--lahe-names"], d), 0);
-  assert.match(d.err(), /docs\/INSTALL\.md/);
+  assert.equal(await installCommand.run(["--state-dir", w.dir, "--port", String(port), "--lahe-names", "--port-80"], d), 0, d.err());
   assert.equal(fake.sudo.length, 0);
-  assert.equal(fake.calls.length, 0);
+  const record = loginItem.readInstall(w.dir);
+  assert.equal(record.lahe_names, true);
+  assert.equal(record.resolver, loginItem.LINUX_RESOLVER_PATH);
+  assert.equal(record.name_server_port, loginItem.NAME_SERVER_PORT);
+  assert.equal(record.port_80, true);
+  assert.equal(record.by_hand, true);
+  assert.match(d.out(), /by hand/);
+  assert.match(d.out(), /docs\/INSTALL\.md/);
+});
+
+test("on Windows, --port-80 is a step done by hand, and --lahe-names is refused for now", async (t) => {
+  const w = world(t);
+  const port = await freePort();
+  const fake = withSudo(w, port);
+  const refused = deps(w, { platform: "win32", uid: null, runner: fake.runner });
+  assert.notEqual(await installCommand.run(["--state-dir", w.dir, "--port", String(port), "--lahe-names"], refused), 0);
+  assert.match(refused.err(), /port 53/);
+  assert.equal(fake.calls.length, 0, "nothing was changed");
+  const d = deps(w, { platform: "win32", uid: null, runner: fake.runner });
+  assert.equal(await installCommand.run(["--state-dir", w.dir, "--port", String(port), "--port-80"], d), 0, d.err());
+  assert.equal(loginItem.readInstall(w.dir).port_80, true);
+  assert.equal(fake.sudo.length, 0);
 });
 
 test("a refused sudo leaves the option off and says so; the login item still installs", async (t) => {
@@ -401,4 +421,16 @@ test("--port-80 again, with Lahe's forward already in place, is not mistaken for
   assert.equal(await installCommand.run(["--state-dir", w.dir, "--port", String(port), "--port-80"], d), 0, d.err());
   assert.equal(fake.sudo.length, 2);
   assert.equal(loginItem.readInstall(w.dir).port_80, true);
+});
+
+test("uninstall after hand steps says which steps to undo by hand", async (t) => {
+  const w = world(t);
+  const port = await freePort();
+  const fake = withSudo(w, port);
+  assert.equal(await installCommand.run(["--state-dir", w.dir, "--port", String(port), "--port-80"],
+    deps(w, { platform: "linux", runner: fake.runner })), 0);
+  const d = deps(w, { platform: "linux", runner: fake.runner });
+  assert.equal(await installCommand.uninstall.run(["--state-dir", w.dir], d), 0, d.err());
+  assert.match(d.out(), /undo the port 80 forward by hand/);
+  assert.equal(fake.sudo.length, 0);
 });

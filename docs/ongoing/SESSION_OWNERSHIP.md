@@ -42,6 +42,14 @@ The shape of ownership and takeover is drawn in
 - **The state directory was removed.** The helper and its page servers stop
   within 30 seconds, even with a session open, since nothing they write can
   reach anyone.
+- **Lahe is installed (`lahe install`).** A login item runs the helper with
+  `--always-on`, so it never stops itself for being quiet, and closing the
+  last session leaves it running. It still stops if the state directory is
+  removed; the login item then starts it again into a fresh one. A crashed
+  helper is back in about 10 seconds on macOS, 2 on Linux, and up to a minute
+  on Windows. No command starts a second helper beside it: each asks the login
+  item. A helper older than the clone the login item runs is replaced at a
+  quiet moment, even with a page open, and the page reconnects on its own.
 - **Nobody asked for a handoff.** The tool refuses to attach a page or a review
   to a session that does not own it. Takeover is the one way across, and the
   skill tells agents to run it only when a human asks.

@@ -51,7 +51,8 @@ var USAGE = [
   "  --port-80     macOS: forward this computer's own port 80 to the pages port, so addresses",
   "                print without :" + protocol.PAGES.PORT + ". One admin password. Skipped when something holds port 80.",
   "  --lahe-names  macOS: let every page also answer at <name>.lahe. One admin password.",
-  "                On Linux and Windows both are steps you do by hand: see docs/INSTALL.md.",
+  "                On Linux and Windows these record a step you do by hand (docs/INSTALL.md), and the",
+  "                helper checks it. .lahe is not available on Windows yet.",
   "                A later `lahe install` keeps whichever of these is already set up.",
   "",
   "  --port       the helper's port. Default " + protocol.DEFAULT_PORT + ".",
@@ -180,10 +181,11 @@ function environment(argv, given, name) {
   env.port = args.port;
   env.port80 = args.port80 === true;
   env.laheNames = args.laheNames === true;
-  if ((env.port80 || env.laheNames) && env.system !== "macos") {
+  if (env.laheNames && env.system === "windows") {
     env.err(
-      "lahe " + name + ": --port-80 and --lahe-names set things up on macOS only. On " + env.platform +
-        " they are steps you do by hand: see docs/INSTALL.md. Nothing was changed.\n"
+      "lahe " + name + ": .lahe is not available on Windows yet. Windows sends a name ending to a name server\n" +
+        "  only on port 53, and Lahe's name server answers on port " + loginItem.NAME_SERVER_PORT + ". Nothing was changed.\n" +
+        "  <name>.lahe.localhost addresses work on Windows with no setup.\n"
     );
     return { done: 1 };
   }
@@ -330,6 +332,36 @@ async function adminSteps(env) {
   return out;
 }
 
+/**
+ * Linux and Windows: the options are steps a person does by hand
+ * (docs/INSTALL.md). Install records them, so the helper starts its name
+ * server and runs the same checks it runs on macOS, and runs no sudo itself.
+ * A step not done yet simply fails the check, and addresses keep :1483 and
+ * .lahe.localhost.
+ */
+function handSteps(env) {
+  var before = env.record || {};
+  var port80 = env.port80 || before.port_80 === true;
+  var names = env.laheNames || before.lahe_names === true;
+  if (env.port80 || env.laheNames) {
+    env.out(
+      "lahe install: on " + (env.system === "linux" ? "Linux" : "Windows") + " " +
+        [env.port80 ? "the port 80 forward" : null, env.laheNames ? ".lahe" : null].filter(Boolean).join(" and ") +
+        " is set up by hand: follow docs/INSTALL.md. The helper checks it at start and every five minutes,\n" +
+        "  and uses it only once the check passes.\n"
+    );
+  }
+  return {
+    by_hand: port80 || names,
+    port_80: port80,
+    forward_rule: null,
+    port_80_reason: null,
+    lahe_names: names,
+    resolver: names ? loginItem.LINUX_RESOLVER_PATH : null,
+    name_server_port: names ? loginItem.NAME_SERVER_PORT : null
+  };
+}
+
 function readOrNull(file) {
   try { return fs.readFileSync(file, "utf8"); } catch (err) { return null; }
 }
@@ -402,7 +434,7 @@ async function run(argv, deps) {
 
   // The admin steps before the login item loads, so the helper it starts
   // already finds them in install.json.
-  var admin = env.system === "macos" ? await adminSteps(env) : null;
+  var admin = env.system === "macos" ? await adminSteps(env) : handSteps(env);
 
   var record = {
     system: env.system,
@@ -420,6 +452,7 @@ async function run(argv, deps) {
     port_80: admin ? admin.port_80 : false,
     forward_rule: admin ? admin.forward_rule : null,
     port_80_reason: admin ? admin.port_80_reason : null,
+    by_hand: admin ? admin.by_hand === true : false,
     installed_at: new Date().toISOString()
   };
   // install.json first: the helper reads it as it starts, to say in
@@ -468,6 +501,10 @@ async function runUninstall(argv, deps) {
   var item = env.item;
 
   if (env.system === "macos") await removeAdminSteps(env);
+  if (record && record.by_hand) {
+    var undo = [record.port_80 ? "the port 80 forward" : null, record.lahe_names ? "the .lahe setup" : null].filter(Boolean);
+    if (undo.length) env.out("lahe uninstall: undo " + undo.join(" and ") + " by hand, as docs/INSTALL.md describes.\n");
+  }
   if (!record && !fs.existsSync(item.path)) {
     env.out("lahe uninstall: nothing to uninstall for " + env.dir + ".\n");
     return protocol.CLI_EXIT.OK;
