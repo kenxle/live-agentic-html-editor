@@ -83,8 +83,9 @@ lahe review path/to/page.html
 token, registers the page's origin, and **starts the helper if it is not already
 running**. It prints what it did and the one URL to open.
 
-**It writes nothing into your page's folder.** The static server puts the script
-line into the page as it serves it, and publishes the library on its own route,
+**It writes nothing into your page's folder.** The helper serves the page at its
+stable address, puts the script line into it as it serves it, and publishes the
+library on its own route,
 so your file stays byte-identical and there is no `lahe-layer.js` sitting beside
 it. That matters because a page's folder is usually a git checkout, and a script
 line plus a bundle committed together will load the review rail on a deployed
@@ -97,12 +98,12 @@ A helper can outlive a repository update when reviews remain open. Every
 contract, and whether it started before this clone's code last changed. Either
 one restarts a verified older helper onto the installed code, and the output
 says it happened. Nothing is lost by it: review history stays on disk, the page's
-own static server is not touched, and an open page reconnects by itself. An older
-clone refuses to replace a newer helper.
+address does not change, and an open page reconnects by itself. An older clone
+refuses to replace a newer helper.
 
-For a static file, that one command also starts or reuses a read-only Node
-server rooted at the page's folder and registers its exact origin. Open the URL
-on the printed `open` line:
+For a static file, that one command also gives the page's folder its stable
+address, `http://<folder and two parents>.lahe.localhost:1483/<file>`, served by
+the helper itself. Open the URL on the printed `open` line:
 
 ```sh
 lahe review path/to/page.html
@@ -247,8 +248,10 @@ records what was set up.
   `lahe serve --restart` restarts the helper through the login item.
 
 **Other accounts on this computer.** An always-on helper can be reached by
-other accounts on the same computer, though not by websites. Install warns when
-more than one account exists, and goes on.
+other accounts on the same computer, though not by websites. Each page carries
+its review's key, so another account can open the pages and read and write
+every review, and what it writes reaches your agent. Install warns when more
+than one account exists, and goes on.
 
 **Taking it out.**
 
@@ -459,10 +462,10 @@ whenever you like. (Older reviews may also have left one in an `assets/` or
 `public/` directory.)
 
 **Close the agent session.** Run the exact `lahe session close <id>` command
-printed by `lahe review`. It stops the shared helper when no other agent session
-is open and stops this session's static review servers, while retaining every
-review and reply. `session reopen` starts that infrastructure again. Application
-dev servers are never stopped by LAHE.
+printed by `lahe review`. It closes only the session and keeps every review and
+reply. The session's pages stay at their addresses. Without the install, the
+helper stops once no session is open and nothing needs it; with it, the helper
+keeps running. Application dev servers are never stopped by LAHE.
 
 **Stop starting the helper at login.** Run `lahe uninstall`. See "Keeping
 addresses working" above.
