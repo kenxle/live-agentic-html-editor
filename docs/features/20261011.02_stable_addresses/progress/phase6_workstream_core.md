@@ -260,8 +260,184 @@ Step 3 removes the per-session page servers. That takes away idle stop, page-ser
 
 **Either way:** an old Markdown review's page path was the rendered file (`/<name>-<hash>.html`), not `/doc.md`. Bringing those over needs a path alias as well as an origin alias, and the helper can compute it from the review's own source.
 
+## Step 3: page servers retired, the helper serves every page
+
+### Summary
+
+Step 3 (Tasks 3.1, 3.2 and 3.3) is built and committed on `unit/sa-core`. The integration branch's library, install and lahe-names work is merged in. The switch is gone. The helper always serves pages on 1483 (or `LAHE_PAGES_PORT`), and no code starts a page server. `lahe status` reports the pages port, the ending, each option's state and each review's address. The skill, contract, CLI doc, serving docs and diagrams describe stable addresses.
+
+- **Unit gate:** `npm run gate:unit` runs 2590 tests: 2533 pass, 2 todo, 55 fail.
+  - 54 failures are in the library builder's catalog and Library test files. They test the Library's restart-and-reopen Open, its rollback, the reopened-session sweep, and the switch-off Library. The list is below, test by test.
+  - The 55th was a sleep in a debug file I had moved into `test/retired`. It is fixed in the last commit, so the next run should show 54.
+  - No other failure.
+- **Browser specs,** each run on its own in Chromium: `stable_addresses_lifetime` (3 tests), `stable_addresses_sites` (6), `stable_addresses_mappers` (3), `serve_time_inject` (1), `markdown_render` (5), `linked_docs_rail` (2), `static_site_folder` (4), `rebuild_not_the_agents_job` (2), `free_writing_r14` (7), `style_switcher_keep` (1). All green. `stable_addresses_lifetime` is also green in Firefox and WebKit.
+- **Mutation checks:** every new test was checked against a change that removes the behavior it names, and failed. The names tests and the always-on close test were also seen failing before the fix.
+- **Leak check:** 2 before, 2 after, both Ken's own helpers from the main checkout.
+  - Twice in a full unit run, the install builder's `install_command.test.js` left one always-on helper running. It is the `lahe-install-…/state dir` one. Its fake service manager can start a helper that finishes starting after teardown has looked.
+  - I stopped both by their pid, from my own run.
+  - Run alone, the file is clean. I did not change that test.
+
+### What changed
+
+- **One serving model** ([index.js](../../../../src/service/index.js), [protocol.js](../../../../src/shared/protocol.js)). There is no `LAHE_PAGES` switch. The pages listener always opens. Test runners set `LAHE_PAGES_PORT=0` (in `scripts/no_stray_helpers.js` and `playwright.config.js`) so parallel tests never fight over 1483. A test that restarts a helper and reloads an old address names a fixed free port itself.
+- **Page servers retired** ([static_servers.js](../../../../src/service/static_servers.js)):
+  - Nothing spawns one any more. The file now only reads old records, for aliases, the Library and leftovers.
+  - Every helper start stops a leftover page-server process, but only after its health probe proves it is the recorded process, and marks the record retired.
+  - The idle sweep is no longer loaded; [idle_servers.js](../../../../src/service/idle_servers.js) is listed for deletion.
+  - Session close and reopen no longer stop or restart anything.
+  - The switch-off branches in the healer, reload check, rebuild, handled check and projection are removed.
+  - The Library's old restart path is replaced in `index.js` by one that refuses. With the site tools always present, the Library's Open binds a site instead.
+- **`lahe review`** ([review.js](../../../../src/cli/commands/review.js)) always binds a site. With no helper running and the pages port held by another program, it says so, naming the port, and stops.
+- **`lahe status`** ([status.js](../../../../src/cli/commands/status.js)) now prints these lines:
+  - the pages port, the ending and why;
+  - whether addresses carry the port, and why;
+  - the port-80 forward's and the `.lahe` option's on, checked and reason line;
+  - whether a login item runs the helper;
+  - the reinstall sentence when the recorded Node is gone;
+  - each review's `address`.
+
+  It reads the registry read-only and never writes it. The drain's Library reader now gets the site tools, and the launch folder comes from the site root, so "Launch a new agent" keeps the project folder for a review the helper serves.
+- **`.lahe` and the port-free address** ([protocol.js](../../../../src/shared/protocol.js), [page_routes.js](../../../../src/service/page_routes.js), [routes.js](../../../../src/service/routes.js)):
+  - The Host check answers `<name>.lahe` only once the helper has proved its own name server answers `.lahe` lookups here. The Origin check accepts it on the same condition. `library.lahe` is never accepted.
+  - A port-free `<name>.lahe.localhost` origin is always accepted: it is the port-80 forward.
+  - `site.bind` prints the port the helper has proved: 80 once the forward is checked, otherwise 1483.
+- **Session close on an always-on helper** ([session.js](../../../../src/cli/commands/session.js)). The last close no longer stops an installed or always-on helper, and no longer asks it to stop once quiet. A session reopen that left a stale helper running no longer says it was "for an open review page".
+- **Logging:** one start line gives the port, the ending and why, and the port-free state. The install workstream logs the install state; each new name and each refused Host were already logged in Step 1.
+- **Contract:** the service contract goes to 16, so a CLI replaces a helper that cannot serve pages.
+
+### Rows that pass, and the test that proves each
+
+| Row | Test |
+|---|---|
+| V33 after session close the page loads | [stable_addresses_lifetime.spec.js](../../../../test/browser/stable_addresses_lifetime.spec.js), "V33:" (three lanes) |
+| V34 the old idle wait stops nothing | [sites_step3.test.js](../../../../test/unit/sites_step3.test.js), "V34:" |
+| V35 leftovers stopped on start, only when proved | sites_step3.test.js, two "V35:" tests |
+| V36 nothing spawns a page server | sites_step3.test.js, "V36:" |
+| V37 status names the port, ending, options and site; review and status name a taken port | [status_command.test.js](../../../../test/unit/status_command.test.js), the "V37:" tests and the address test; sites_step3.test.js, "V37:" for `lahe review` |
+| V38 docs | [stable_addresses_docs.test.js](../../../../test/unit/stable_addresses_docs.test.js) |
+| V63 drafts come back | stable_addresses_lifetime.spec.js, "V63:" (three lanes) |
+| V64 three lanes | Not proved here. It is the orchestrator's `gate:all`. The specs it names passed in all three lanes here. |
+| V67 clone mode | stable_addresses_lifetime.spec.js, "V67:" (three lanes) |
+| V71 logging | sites_step3.test.js, "V71:" |
+| `.lahe` and the forward (coordinator's three changes) | [sites_lahe_names.test.js](../../../../test/unit/sites_lahe_names.test.js) |
+| Always-on close | [session_close_always_on.test.js](../../../../test/unit/session_close_always_on.test.js) |
+
+### Moved to `test/retired` (not run; Ken approves deleting)
+
+Whole files, moved with `git mv`, each with a header naming why:
+- `unit/stop_idle_servers.test.js`
+- `unit/static_restart.test.js` (its two `removeOrigin` tests live on in `test/unit/reviews_remove_origin.test.js`)
+- `unit/static_servers.test.js` (the behaviors that stay are carried over in `test/unit/page_routes_carried.test.js`)
+- `unit/linked_docs_rail.test.js` and `unit/root_markdown_rail.test.js` (carried over in `test/unit/sites_linked_docs.test.js`)
+- `unit/static_styles.test.js` (carried over in `test/unit/sites_styles.test.js`)
+- `browser/stop_idle_servers.spec.js`
+
+Tests cut out of files that stay, into new files beside them:
+- `unit/heal_script_line.retired.test.js` (2 tests)
+- `unit/write_command.retired.test.js` (3)
+- `unit/helper_self_stop.retired.test.js` (1)
+- `unit/helper_freshness.retired.test.js` (1)
+- `unit/sites_switch_off.retired.test.js`, `unit/sites_dispatch_switch_off.retired.test.js`, `unit/sites_binding_switch_off.retired.test.js`, `unit/sites_mappers_switch_off.retired.test.js` (1 each). The switch-off runs of V26, V27, V28 and V30 went with them.
+- `browser/serve_time_inject.retired.spec.js`, the helper-down block. Task 3.0 marked it "rewrite", but there is no second process left to stay up without the helper. V11 and `sites_pages` cover the library coming from the page's own address.
+- `browser/tmp_debug_rebuild.spec.js`, a debug probe I committed into `test/browser` by mistake and then moved here, emptied.
+
+Nothing in `test/retired` runs: `test:unit` reads `test/unit/`, Playwright reads `test/browser/`, and lint only checks syntax.
+
+### The library builder's tests the change breaks
+
+These fail because the Library's restart-and-reopen Open, its rollback, the reopened-session sweep and the switch-off Library are gone. I did not edit them.
+
+#### test/unit/catalog_auth.test.js (4)
+- catalog.list, open, star and request pass the checks with the Library token and reach their handlers
+- the POSTs refuse text/plain, a missing Origin, Origin null, another port, and localhost against a 127.0.0.1 Host
+- the token changes across a helper restart and is written nowhere: no state file, not the helper log, not health, not catalog.list
+- a refused catalog.list does not update catalog_seen_at
+#### test/unit/catalog_lifetime.test.js (2)
+- R10a: Open a closed review with no agent, close the last agent's own session, and the document still answers and takes a comment
+- R10a, the Library's own rule: once the sweep closes the reopened session, a fresh Library poll alone keeps the helper up through the last close
+#### test/unit/catalog_open_rollback.test.js (3)
+- an Open whose origin step throws after the server started leaves the session closed and no ss_ server running
+- with the same failure, a session the rollback could not close keeps its reopened record for the sweep
+- a start that throws still clears the reopened record, and the session stays closed
+#### test/unit/catalog_routes.test.js (41)
+- Open on a closed review reopens its session, restarts its server, and returns a loopback URL that serves the page
+- Open on a served review starts nothing and returns the live URL
+- Open refuses a review with no recorded server, a missing one, and an unknown one, with PROTO_NOT_OPENABLE
+- Open ignores extra path, root and url fields in its body
+- Open with target_path rewritten outside the recorded root refuses, and the outside file's bytes appear in no response
+- Open refuses a recorded file not owned by the current user
+- Open queues a pick-up with handoff, a live attached agent, and no one watching
+- "Just open it to read" leaves the queue empty
+- an unconfirmed hand-over on a watched session gets PROTO_CONFIRM_NEEDED; a confirmed one is queued
+- with the queue full, Open still opens, with not_asked queue_full
+- with a dead attached agent, Open opens with not_asked no_agent and request returns PROTO_NO_AGENT
+- with no attach at all, Open still opens and says no agent was asked
+- Open on a via-agent review with handoff and a live agent queues the pick-up and returns no URL
+- catalog.request with extra title, text, path and url fields stores none of them
+- catalog.list carries attached and each review's request, and marks the Library seen
+- Star survives a helper restart; with a corrupt catalog.json it is refused and the file is left as it was
+- Open, Star, Pick up and Launch through the real routes each write one catalog log line in the protocol.js format
+- sweepReopened closes a Library-reopened session at 30:00 and not at 29:59, then clears its entry
+- sweepReopened leaves alone a session reopened with lahe session reopen
+- sweepReopened leaves alone a session taken over since the Library reopened it
+- sweepReopened leaves alone a session whose monitor is live
+- sweepReopened counts a held window of the session's reviews as not quiet
+- the helper runs the sweep on its own timer every POLL_MS, at its own clock
+- a week of Library actions through the real routes writes the catalog lines committed as test/fixtures/catalog_log.txt
+- CX2: an Open whose server cannot restart leaves a closed session closed and records no reopen
+- CR4: with catalog.json corrupt, an Open that would reopen a closed session is refused and reopens nothing
+- CR4: with catalog.json corrupt, Open on an already open session still opens
+- CR1: two concurrent Opens on a closed session start one server, answer on its recorded port, and keep its origin
+- CL2: an agent whose monitor exited to work a batch still counts as watching, so a hand-over asks first
+- phase 8: an agent that ran a lahe command more than WORKING_MS ago, with no live monitor, does not block Open or Pick this up
+- phase 8: Open on a session whose agent is away hands over without a confirm step
+- catalog.request refuses a missing review with PROTO_NOT_OPENABLE, as Open does, and queues nothing
+- walk: Open on a closed folder review with no index.html opens the entry page lahe review opens, not a not-found root
+- walk: Open on a closed folder review opens the page its comments are on
+- walk: when the attached agent already owns the document's session, Open and Pick this up queue nothing
+- walk: right after the agent answers a pick-up, its session card still names it as watching
+- walk: a folder review's recorded page that climbs out, is hidden, or is not a page falls back to the entry page
+- rename: the list carries the reviewer's name beside the original, and an empty name clears it
+- rename: a name that is not a string is refused, and a corrupt catalog.json is left as it was
+- rename: the reviewer's name never reaches the drain or a hand-off message
+- rename a session: the list carries its new name beside the original, and it never reaches the drain
+#### test/unit/library_command.test.js (2)
+- lahe library starts the helper, attaches the session, and prints the helper's own /catalog URL
+- lahe library with nobody attached mints a session with no reviews, attaches it, and prints its commands
+#### test/unit/library_command_sites.test.js (1)
+- lahe library keeps printing the 127.0.0.1 address when the helper does not serve pages
+
+#### test/unit/library_address.test.js (1)
+- V43: with the switch off the Library keeps its two loopback Hosts and nothing else
+
+Unchanged and now green, because of the launch-folder fix in `status.js`: `launch_folder.test.js` (4 tests) and `library_trusted_paths.test.js` (1).
+
+Library-owned wording not touched: `docs/ongoing/LIBRARY.md`, the Library row of `docs/CLI.md`, the `kind` rows in `docs/CONTRACTS.md`, and the "switch on" comments in `auth.js` (catalog part), `catalog_sites.js` and `catalog_reader.js`.
+
+### Changes from plan
+
+- **The registry lookup table stays in `page_routes.js`.** It is how the helper modules find the registry for a state folder; Step 2 said Task 3.1 would remove it. Only the switch-off branches went.
+- **`static_servers.js` still exists,** as a reader of old records. `idle_servers.js` is unused and listed for deletion; deleting files is cleanup's.
+- **The helper-down test of `serve_time_inject` is retired, not rewritten.** The reason is in the moved-test list above.
+- **A linked document opens on the hub's address with the hub's rail,** even when it has its own review. Before, the page redirected to that review's page; there are no redirects now.
+- **The rebuild walk waits for its first poll before the agent writes.** The test edited the Markdown before the page's first poll landed, and only passed before because the old artifact kept changing.
+- **The contract gains one sentence** about the stable address. Its two copies change with it, and the service contract goes to 16.
+
+### Follow-ups
+
+- **Library builder:** rewrite the tests above to the site-based Open (Task 4.3), and the library-owned wording listed above.
+- **Install builder:** the always-on helper that `install_command.test.js` can leave behind under load.
+- **Orchestrator:**
+  - `npm run install-skills` after the merge;
+  - the `dist/` rebuild;
+  - `gate` and `gate:all` (V64).
+- **V31 is parked** until Ken picks option A or B.
+
 ## Cleanup needed
 
 - `test/browser/tmp_spike_lahe_localhost.spec.js`: the Task 1.0 spike, committed for the Linux run. Remove once Linux has been checked.
 - `test-results/`: Playwright's output folder from the spec runs (gitignored).
-- `.claude-commit202610111600-core`, `...1630-core`, `...1645-core`, `...1700-core`, `...1730-core`, `...1800-core`, `...1815-core`, `...1900-core`, `...1930-core`, `...1931-core`, and the one this page's commit adds, in the worktree root: commit message scratch files (gitignored).
+- Everything under `test/retired/` (see the Step 3 list), once Ken approves.
+- `src/service/idle_servers.js`: no longer loaded; take it out of `src/shared/manifest.js` in the same change.
+- `docs/features/20260922.02_linked_docs_rail/linked_page_rail.png` and `docs/features/20260923.01_rebuild_not_the_agents_job/card_not_on_page.png`: rewritten in the working tree by spec runs (not committed). Put them back with `git checkout`.
+- `.claude-commit202610111600-core`, `...1630-core`, `...1645-core`, `...1700-core`, `...1730-core`, `...1800-core`, `...1815-core`, `...1900-core`, `...1930-core`, `...1931-core`, the Step 3 ones (`...2100-core` onward), and the one this page's commit adds, in the worktree root: commit message scratch files (gitignored).
