@@ -292,6 +292,11 @@ var NON_BUNDLE_FILES = [
     why: "what list, open, star and request do after the checks, and the reopened-session sweep: joins the reader, store, queue and static-server restart"
   },
   {
+    path: "src/service/catalog_sites.js",
+    owner: "stable addresses 4.1",
+    why: "the Library's side of the site registry: which site a review's document is served from, its address, and how Open names the site and stamps the review"
+  },
+  {
     path: "src/service/catalog_page.js",
     owner: "Library 1.2 and 2.2",
     why: "the Library page's HTML template, with the token in its meta tag"

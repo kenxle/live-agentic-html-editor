@@ -69,13 +69,15 @@ function badRequest(detail) {
 /**
  * @param {{dir: string, reader: object, queue: object, store: object, ops: object,
  *          sessions: object, log: function(string, number), pidAlive?: function,
- *          uid?: number|null}} options
+ *          uid?: number|null, pages?: object}} options
  *   `reader` is catalog_reader.createReader, wired to `queue`. `ops` is
  *   static_servers.createCatalogOps. `log(line, nowMs)` writes one helper log
  *   line stamped at `nowMs`. `uid` is the user a recorded file must belong to
  *   (the current one by default; tests pass another to prove the refusal,
  *   since chown needs root). `statFile` is fs.statSync unless a test passes
- *   one that reports a chosen owner per path.
+ *   one that reports a chosen owner per path. `pages` is
+ *   catalog_sites.createCatalogSites when the helper serves pages itself
+ *   (stable addresses); Open then binds a site instead of restarting a server.
  */
 function createCatalogActions(options) {
   var opts = options || {};
@@ -92,6 +94,7 @@ function createCatalogActions(options) {
   var pidAlive = typeof opts.pidAlive === "function" ? opts.pidAlive : agentSessions.pidAlive;
   var uid = typeof opts.uid === "number" ? opts.uid : typeof process.getuid === "function" ? process.getuid() : null;
   var statFile = typeof opts.statFile === "function" ? opts.statFile : fs.statSync;
+  var siteTools = opts.pages || null;
 
   // -------------------------------------------------------------------------
   // Shared steps
@@ -197,6 +200,107 @@ function createCatalogActions(options) {
     });
   }
 
+  /**
+   * Stable addresses: is every file Open would bind a site over on disk and
+   * owned by the current user? The site serves everything under its root, so
+   * the root is checked with the document.
+   */
+  function siteOwnedByUser(described) {
+    var files = [described.path, described.served_path, described.site.root, described.site.file].filter(function (file, i, all) {
+      return typeof file === "string" && file && all.indexOf(file) === i;
+    });
+    return files.every(function (file) {
+      var stat;
+      try {
+        stat = statFile(file);
+      } catch (err) {
+        return false;
+      }
+      return uid === null || stat.uid === uid;
+    });
+  }
+
+  /** Is this agent session open? A session the store cannot read is not. */
+  function sessionOpen(sessionId) {
+    try {
+      var record = sessions.read(sessionId);
+      return !!record && !record.closed_at;
+    } catch (err) {
+      return false;
+    }
+  }
+
+  /**
+   * The hand-over half of an Open that opened: queue a pick-up for the
+   * attached agent when the reviewer asked for one, and say why none was
+   * asked when none was.
+   */
+  function handOver(d, handoff, agent, nowMs) {
+    var requestId = null;
+    var notAsked = null;
+    if (handoff) {
+      if (!agent) {
+        notAsked = NOT_ASKED.NO_AGENT;
+      } else if (!alreadyTheirs(d, agent)) {
+        var queued = enqueue(ACTION.PICKUP, d, agent, nowMs);
+        if (queued.ok) requestId = queued.request.id;
+        else if (queued.code === "PROTO_QUEUE_FULL") notAsked = NOT_ASKED.QUEUE_FULL;
+        else if (queued.code === "PROTO_REQUEST_PENDING") notAsked = NOT_ASKED.REQUEST_PENDING;
+        else notAsked = NOT_ASKED.NO_AGENT;
+      }
+      // else the attached agent already owns or watches it: nothing to ask.
+    }
+    return { requestId: requestId, notAsked: notAsked };
+  }
+
+  /**
+   * catalog.open for a row the helper can serve itself (stable addresses).
+   * Nothing is restarted and no session is reopened: Open names the
+   * document's site if it has none, and returns the address.
+   *
+   * THE RAIL. Stamping the review as re-served is what makes it the one that
+   * answers on its page, so it moves the rail. Open therefore does not stamp
+   * when another open session's review already holds the page: it goes to the
+   * address and says who holds it. A holder in a closed session, or in this
+   * row's own session, is not a reason to keep a reviewer from the review
+   * they chose.
+   */
+  async function openSite(d, handoff, confirmed, nowMs) {
+    if (!d.site.worktree && !siteOwnedByUser(d)) return fail("PROTO_NOT_OPENABLE", "not owned by the current user, or not on disk");
+    // The confirm step comes before anything is named or stamped.
+    var agent = handoff ? liveAgent(nowMs) : null;
+    if (handoff && agent && watchedByAnother(d, agent) && !confirmed) return fail("PROTO_CONFIRM_NEEDED");
+
+    var url = d.site.address;
+    var heldBy = null;
+    if (!d.site.worktree) {
+      var bound;
+      try {
+        bound = siteTools.bindPlan(d.site);
+      } catch (err) {
+        log("Library Open of review " + d.review + " could not name its site: " + err.message, nowMs);
+        return fail("PROTO_NOT_OPENABLE", "the document could not be given an address: " + err.message);
+      }
+      url = siteTools.addressOf(bound.name, d.site.url_path);
+      var holder = siteTools.railHolder(bound.site, d.site.file);
+      if (holder && holder !== d.review) {
+        var other = reader.describeReview(holder, nowMs);
+        if (other && other.session !== d.session && sessionOpen(other.session)) {
+          heldBy = { review: holder, name: other.display_name || holder };
+        }
+      }
+      if (!heldBy) siteTools.stamp(d.review, nowMs);
+    }
+    if (!url) return fail("PROTO_NOT_OPENABLE", "the helper is not serving pages");
+
+    var handed = handOver(d, handoff, agent, nowMs);
+    logAction(protocol.CATALOG_LOG.ACTION.OPEN, d, nowMs);
+    return {
+      status: 200,
+      body: { url: url, request_id: handed.requestId, not_asked: handed.notAsked, held_by: heldBy }
+    };
+  }
+
   // -------------------------------------------------------------------------
   // The routes
   // -------------------------------------------------------------------------
@@ -225,7 +329,7 @@ function createCatalogActions(options) {
 
     if (d.openable === "missing") return fail("PROTO_NOT_OPENABLE", "missing");
 
-    if (d.openable !== "yes" || !d.server || !d.url_path) {
+    if (d.openable !== "yes" || !(siteTools ? d.site : d.server && d.url_path)) {
       // No recorded server covers it. Only an agent can re-serve it, and only
       // when the reviewer asked for the hand-over.
       if (!handoff) return fail("PROTO_NOT_OPENABLE", "via-agent: no recorded server serves this review");
@@ -237,6 +341,8 @@ function createCatalogActions(options) {
       logAction(protocol.CATALOG_LOG.ACTION.OPEN, d, nowMs);
       return { status: 200, body: { url: null, request_id: queuedVia.request.id, not_asked: null } };
     }
+
+    if (siteTools) return openSite(d, handoff, confirmed, nowMs);
 
     if (!ownedByUser(d)) return fail("PROTO_NOT_OPENABLE", "not owned by the current user, or not on disk");
 
@@ -280,22 +386,9 @@ function createCatalogActions(options) {
     if (!restart.ok) return restart.outcome;
     var reopened = restart.value;
 
-    var requestId = null;
-    var notAsked = null;
-    if (handoff) {
-      if (!agent) {
-        notAsked = NOT_ASKED.NO_AGENT;
-      } else if (!alreadyTheirs(d, agent)) {
-        var queued = enqueue(ACTION.PICKUP, d, agent, nowMs);
-        if (queued.ok) requestId = queued.request.id;
-        else if (queued.code === "PROTO_QUEUE_FULL") notAsked = NOT_ASKED.QUEUE_FULL;
-        else if (queued.code === "PROTO_REQUEST_PENDING") notAsked = NOT_ASKED.REQUEST_PENDING;
-        else notAsked = NOT_ASKED.NO_AGENT;
-      }
-      // else the attached agent already owns or watches it: nothing to ask.
-    }
+    var handed = handOver(d, handoff, agent, nowMs);
     logAction(protocol.CATALOG_LOG.ACTION.OPEN, d, nowMs);
-    return { status: 200, body: { url: reopened.origin + d.url_path, request_id: requestId, not_asked: notAsked } };
+    return { status: 200, body: { url: reopened.origin + d.url_path, request_id: handed.requestId, not_asked: handed.notAsked } };
   }
 
   /** catalog.star, body {review, starred}. */

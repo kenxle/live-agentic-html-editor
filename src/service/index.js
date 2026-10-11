@@ -50,6 +50,7 @@ var catalogReader = require("./catalog_reader.js");
 var catalogStore = require("./catalog_store.js");
 var catalogRequests = require("./catalog_requests.js");
 var catalogActions = require("./catalog_actions.js");
+var catalogSites = require("./catalog_sites.js");
 var staticServers = require("./static_servers.js");
 var idleServersModule = require("./idle_servers.js");
 var selfStopModule = require("./self_stop.js");
@@ -311,9 +312,21 @@ async function serve(options) {
     pidAlive: opts.pidAlive,
     log: function (line) { log.helperLog(line); }
   });
+  // With pages served by the helper, the Library reads a row's address from
+  // the registry and Open binds a site instead of restarting a page server.
+  var catalogSiteTools = pagesOn
+    ? catalogSites.createCatalogSites({
+        dir: dir,
+        sites: sites,
+        reviews: reviews,
+        port: function () { return boundPagesPort; },
+        log: function (line) { log.helperLog(line); }
+      })
+    : null;
   var catalogReaderInstance = catalogReader.createReader(Object.assign({
     dir: dir,
-    pidAlive: opts.pidAlive
+    pidAlive: opts.pidAlive,
+    pages: catalogSiteTools
   }, catalogReader.queueInputs(catalogQueue)));
   var catalogOps = staticServers.createCatalogOps({ dir: dir, reviews: reviews, sessions: agentSessions });
   var catalogActionsInstance = catalogActions.createCatalogActions({
@@ -323,6 +336,7 @@ async function serve(options) {
     store: catalogStore.createCatalogStore({ dir: dir }),
     ops: catalogOps,
     sessions: agentSessions,
+    pages: catalogSiteTools,
     pidAlive: opts.pidAlive,
     uid: opts.uid,
     log: function (line, atMs) { log.helperLog(line, atMs); }

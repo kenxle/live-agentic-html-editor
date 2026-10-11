@@ -113,6 +113,10 @@ function hasHiddenSegment(rel) {
  *   `readFile` defaults to fs.readFileSync; tests pass a counting one.
  *   `probe(meta)` resolves true when the recorded server is really that server;
  *   it defaults to static_servers.isExactServer.
+ *   `pages` is catalog_sites.createCatalogSites when the helper serves pages
+ *   itself (stable addresses). Then a row is openable when Lahe can serve its
+ *   document, not when a page server covers it, and a row shows the address
+ *   its site already has. Null (the default) keeps every rule as it was.
  */
 function createReader(options) {
   var opts = options || {};
@@ -122,6 +126,7 @@ function createReader(options) {
   var readFile = typeof opts.readFile === "function" ? opts.readFile : fs.readFileSync;
   var pidAlive = typeof opts.pidAlive === "function" ? opts.pidAlive : agentSessions.pidAlive;
   var probe = typeof opts.probe === "function" ? opts.probe : staticServers.isExactServer;
+  var siteTools = opts.pages || null;
   var attachment = typeof opts.attachment === "function" ? opts.attachment : function () { return null; };
   var requestFor = typeof opts.requestFor === "function" ? opts.requestFor : function () { return null; };
   // `requestsAt(now)` returns a `(reviewId) => request` lookup built from one
@@ -809,6 +814,9 @@ function createReader(options) {
     info.servedPath = meta && typeof meta.target_path === "string" && meta.target_path ? meta.target_path : null;
     var source = meta && typeof meta.source_path === "string" && meta.source_path ? meta.source_path : null;
     info.docPath = source || info.servedPath;
+    // What stable addresses need to pick the review's site (catalog_sites.js).
+    info.sourcePath = source;
+    info.notes = !!meta && meta.notes === true;
     info.origins = meta && Array.isArray(meta.origins)
       ? meta.origins.filter(function (o) { return typeof o === "string" && /^https?:\/\//.test(o); })
       : [];
@@ -858,7 +866,106 @@ function createReader(options) {
       .sort();
   }
 
+  /**
+   * A row's kind and whether Open can open it, with the helper serving pages
+   * itself. The kinds follow the architecture's table:
+   *
+   *   openable   kind static, openable yes: the file is on disk and Lahe can
+   *              serve it (a page, a Markdown file, or a folder of pages)
+   *   worktree   kind worktree, openable yes: the worktree is gone and its
+   *              site recorded the main checkout, which has the page
+   *   via-agent  openable via-agent: a dev-server review, or a file Lahe
+   *              cannot serve. Kind worktree with via-agent is the old rule
+   *              for a worktree the registry never saw
+   *   legacy     kind legacy: a `lahe add` script-line review
+   *
+   * `site` is what Open binds and what the row's address comes from. It is
+   * read without naming anything.
+   */
+  function placePagesRow(info, sessionState, servers) {
+    var kind;
+    var devOrigin = null;
+    if (info.sessionId === LEGACY) kind = "legacy";
+    else if ((devOrigin = devServerOrigin(info, servers))) kind = "dev-server";
+    else kind = "static";
+    var openable;
+    var candidate = null;
+    var site = null;
+    if (!info.docPath) {
+      openable = info.unreadable ? "missing" : "via-agent";
+    } else if (exists(info.docPath)) {
+      openable = "via-agent";
+      if (kind === "static") {
+        var plan = siteTools.planOf({
+          sourcePath: info.sourcePath,
+          servedPath: info.servedPath,
+          notes: info.notes,
+          landing: function (folder) { return landingFile(info, folder); }
+        });
+        if (plan) {
+          var found = siteTools.siteFor(plan);
+          var urlPath = siteTools.urlPathOf(plan);
+          site = {
+            mode: plan.mode,
+            root: plan.root,
+            file: plan.file,
+            url_path: urlPath,
+            name: found ? found.name : null,
+            address: found ? siteTools.addressOf(found.name, urlPath) : null,
+            worktree: false
+          };
+          openable = "yes";
+        }
+      }
+    } else {
+      var gone = kind === "static" ? siteTools.worktreeSiteFor(info.docPath) : null;
+      if (gone) {
+        kind = "worktree";
+        openable = "yes";
+        site = { mode: null, root: null, file: null, url_path: gone.urlPath, name: gone.name, address: siteTools.addressOf(gone.name, gone.urlPath), worktree: true };
+      } else {
+        // The rule for a worktree the registry never saw: a server record a
+        // page cannot write vouches that the root is in a worktree.
+        var covering = info.servedPath && info.sessionId !== LEGACY ? coveringRecord(servers.records, info.servedPath) : null;
+        var inWorktree = covering && typeof covering.meta.root === "string" && WORKTREE.test(covering.meta.root) &&
+          staticServers.coveragePath(covering.meta, info.docPath) !== null;
+        candidate = inWorktree ? worktreeCandidate(info.docPath) : null;
+        if (candidate) {
+          kind = "worktree";
+          openable = "via-agent";
+        } else {
+          openable = "missing";
+        }
+      }
+    }
+    return {
+      info: info,
+      kind: kind,
+      origin: kind === "dev-server" ? devOrigin : null,
+      openable: openable,
+      candidate: candidate,
+      covering: null,
+      site: site,
+      unreadable: info.unreadable || sessionState === "bad"
+    };
+  }
+
+  /**
+   * The page a folder review opens on: the page its comments are on, else the
+   * folder's entry page. The same choice openPathOf makes for a page server.
+   */
+  function landingFile(info, folder) {
+    var summaryPages = info.summary && Array.isArray(info.summary.pages) ? info.summary.pages : [];
+    for (var i = 0; i < summaryPages.length; i += 1) {
+      var file = pageFileIn(folder, summaryPages[i] && summaryPages[i].path);
+      if (file) return file;
+    }
+    var entry = staticServers.folderEntryPage(folder);
+    return entry ? path.join(folder, entry) : null;
+  }
+
   function placeRow(info, sessionState, servers) {
+    if (siteTools) return placePagesRow(info, sessionState, servers);
     var docOnDisk = exists(info.docPath);
     var covering = info.servedPath && info.sessionId !== LEGACY ? coveringRecord(servers.records, info.servedPath) : null;
     if (covering) covering = { meta: covering.meta, urlPath: openPathOf(info, covering) };
@@ -1103,6 +1210,15 @@ function createReader(options) {
   }
 
   /**
+   * What names the root pages are served under: the covering page-server
+   * record, or with the helper serving pages itself, the row's site.
+   */
+  function rootRecordOf(placed) {
+    if (placed.covering) return placed.covering.meta;
+    return placed.site && typeof placed.site.root === "string" ? { root: placed.site.root } : null;
+  }
+
+  /**
    * Where a page really lives, as the row's path line says it: from the
    * project root. A page behind a .lahe-source mount maps through the
    * server's mounts; the rendered page of a Markdown review is its .md. Never
@@ -1120,12 +1236,12 @@ function createReader(options) {
     var name = clean.split("/").pop();
     // The review's own page: its file by name, or the server root's "/" when
     // the server is rooted at the page's folder.
-    var meta0 = placed.covering ? placed.covering.meta : null;
+    var meta0 = rootRecordOf(placed);
     var ownByRoot = clean === "/" && meta0 && info.metaServedPath && path.dirname(info.metaServedPath) === meta0.root;
     if (info.metaServedPath && (name === path.basename(info.metaServedPath) || ownByRoot)) {
       return shownPath(info.docPath || info.metaServedPath);
     }
-    var meta = placed.covering ? placed.covering.meta : null;
+    var meta = rootRecordOf(placed);
     var mounts = meta && meta.mounts && typeof meta.mounts === "object" ? meta.mounts : {};
     var prefixes = Object.keys(mounts);
     for (var i = 0; i < prefixes.length; i += 1) {
@@ -1174,7 +1290,7 @@ function createReader(options) {
       });
     });
     if (stalest !== null) asOf = stalest;
-    return {
+    var out = {
       id: info.id,
       title: row.title,
       display_name: row.displayName,
@@ -1205,6 +1321,10 @@ function createReader(options) {
       pages: pages,
       folded_from: row.parts.slice(1).map(function (p) { return p.info.id; }).sort()
     };
+    // Only with the helper serving pages: the site's address, once it has one.
+    // The key is absent otherwise, so the switch-off list is what it was.
+    if (siteTools) out.address = lead.site && lead.site.address ? lead.site.address : null;
+    return out;
   }
 
   /**
@@ -1222,6 +1342,14 @@ function createReader(options) {
       s.rows.forEach(function (row) {
         var cover = row.lead.covering;
         row.served = null;
+        // With pages served by the helper, a named site is being served: the
+        // address is known without a probe, and a worktree row's address shows
+        // the read-only copy, which is not "being served now".
+        if (siteTools) {
+          var named = row.lead.site;
+          if (named && named.address && !named.worktree) row.served = named.address;
+          return;
+        }
         if (row.lead.openable !== "yes" || !cover || cover.meta.stopped_at) return;
         jobs.push(probeOnce(cover.meta, nowMs).then(function (ok) {
           if (ok) row.served = "http://" + protocol.DEFAULT_HOST + ":" + cover.meta.port + cover.urlPath;
@@ -1310,6 +1438,8 @@ function createReader(options) {
             openable: part.openable,
             candidate: part.candidate,
             origin: part.origin,
+            // With the helper serving pages: where Open binds. Null otherwise.
+            site: part.site || null,
             server: part.covering ? part.covering.meta.id : null,
             server_root: part.covering && typeof part.covering.meta.root === "string" ? part.covering.meta.root : null,
             url_path: part.covering ? part.covering.urlPath : null,
