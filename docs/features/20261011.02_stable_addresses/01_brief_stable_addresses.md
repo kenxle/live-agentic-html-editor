@@ -2,7 +2,7 @@
 
 ## Summary
 
-Every document Lahe serves gets an address that keeps working, like `http://docs-features-20261011-02-stable-addresses.lahe.localhost:7817/01_brief_stable_addresses.md`. A tab left open overnight, a history entry, or a bookmark loads the page, with no agent running. The address names the folder and the file, so a tab says what it is. One always-on Lahe server, started at login, answers for every document on one port. Each folder's name is its own browser origin, so documents stay walled off from each other as they are today.
+Every document Lahe serves gets an address that keeps working, like `http://docs-features-20261011-02-stable-addresses.lahe.localhost:1483/01_brief_stable_addresses.md`. A tab left open overnight, a history entry, or a bookmark loads the page, with no agent running. The address names the folder and the file, so a tab says what it is. One always-on Lahe server, started at login, answers for every document on one port. Each folder's name is its own browser origin, so documents stay walled off from each other as they are today.
 
 ## Problem, User, and Context
 
@@ -55,7 +55,7 @@ The user is Ken today, on a Mac laptop. Lahe is public, and other people run it 
 
 ```mermaid
 flowchart LR
-    Tab["tab, history, or bookmark<br/>live-agentic-html-editor-docs-ongoing.lahe.localhost:7817/STABLE_ADDRESSES.md"] --> Server["always-on Lahe server<br/>(started at login)"]
+    Tab["tab, history, or bookmark<br/>live-agentic-html-editor-docs-ongoing.lahe.localhost:1483/STABLE_ADDRESSES.md"] --> Server["always-on Lahe server<br/>(started at login)"]
     Server --> Which{"which folder is this name,<br/>which file is this path?"}
     Which --> Doc["serve that document's page,<br/>with its own review key"]
     Doc --> Store[("comments wait in the store")]
@@ -81,7 +81,7 @@ flowchart LR
 :::
 
 ::: callout-req
-**R5. One port for every document.** All documents share one port: the helper's own port, 7817 unless the install picks another. It is kept away from common dev-server ports. If something else holds that port when the server starts, `lahe review`, `lahe status`, and the log say so plainly, naming the port, rather than moving documents to random ports. The optional setup can also drop the port from the address, so it reads `folder.lahe/file`; the address with the port keeps working.
+**R5. One port for every document.** All documents share one port, 1483, chosen because it reads like "lahe". It is registered only to an old license server that almost nothing runs, and it is kept away from common dev-server ports. The helper's own port, 7817, keeps answering the API and the script lines already written into pages. If something else holds that port when the server starts, `lahe review`, `lahe status`, and the log say so plainly, naming the port, rather than moving documents to random ports. The optional setup can also drop the port from the address, so it reads `folder.lahe/file`; the address with the port keeps working.
 :::
 
 ::: callout-req
@@ -130,7 +130,7 @@ flowchart LR
 
 ## UX Notes
 
-- The address bar is the UI. A name Ken can read at a glance matters more than a short one: `live-agentic-html-editor-docs-ongoing.lahe.localhost:7817/STABLE_ADDRESSES.md` beats `127.0.0.1:56055/STABLE_ADDRESSES-bd14d360685f150a.html`.
+- The address bar is the UI. A name Ken can read at a glance matters more than a short one: `live-agentic-html-editor-docs-ongoing.lahe.localhost:1483/STABLE_ADDRESSES.md` beats `127.0.0.1:56055/STABLE_ADDRESSES-bd14d360685f150a.html`.
 - The fallback is not an error. A `.lahe.localhost` address works the same way; it is only longer.
 - Typing an address by hand: `.lahe.localhost` addresses work typed as they are. A `.lahe` address typed without `http://` may make the browser search instead. Links from history and bookmarks work either way.
 

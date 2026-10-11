@@ -838,7 +838,7 @@ id="toc-smaller-notes-no-finding">Smaller notes, no finding</a></li>
 </nav>
 <h2 id="summary">Summary</h2>
 <p>Every document Lahe serves gets an address that keeps working, like
-<code>http://docs-features-20261011-02-stable-addresses.lahe.localhost:7817/01_brief_stable_addresses.md</code>.
+<code>http://docs-features-20261011-02-stable-addresses.lahe.localhost:1483/01_brief_stable_addresses.md</code>.
 A tab left open overnight, a history entry, or a bookmark loads the
 page, with no agent running. The address names the folder and the file,
 so a tab says what it is. One always-on Lahe server, started at login,
@@ -947,7 +947,7 @@ agent waits in the store, as it does after the Library's Open
 today.</li>
 </ol>
 <pre class="mermaid"><code>flowchart LR
-    Tab[&quot;tab, history, or bookmark&lt;br/&gt;live-agentic-html-editor-docs-ongoing.lahe.localhost:7817/STABLE_ADDRESSES.md&quot;] --&gt; Server[&quot;always-on Lahe server&lt;br/&gt;(started at login)&quot;]
+    Tab[&quot;tab, history, or bookmark&lt;br/&gt;live-agentic-html-editor-docs-ongoing.lahe.localhost:1483/STABLE_ADDRESSES.md&quot;] --&gt; Server[&quot;always-on Lahe server&lt;br/&gt;(started at login)&quot;]
     Server --&gt; Which{&quot;which folder is this name,&lt;br/&gt;which file is this path?&quot;}
     Which --&gt; Doc[&quot;serve that document&#39;s page,&lt;br/&gt;with its own review key&quot;]
     Doc --&gt; Store[(&quot;comments wait in the store&quot;)]
@@ -992,12 +992,14 @@ served.</p>
 </div>
 <div class="callout callout-req">
 <p><strong>R5. One port for every document.</strong> All documents share
-one port: the helper's own port, 7817 unless the install picks another.
-It is kept away from common dev-server ports. If something else holds
-that port when the server starts, <code>lahe review</code>,
-<code>lahe status</code>, and the log say so plainly, naming the port,
-rather than moving documents to random ports. The optional setup can
-also drop the port from the address, so it reads
+one port, 1483, chosen because it reads like "lahe". It is registered
+only to an old license server that almost nothing runs, and it is kept
+away from common dev-server ports. The helper's own port, 7817, keeps
+answering the API and the script lines already written into pages. If
+something else holds that port when the server starts,
+<code>lahe review</code>, <code>lahe status</code>, and the log say so
+plainly, naming the port, rather than moving documents to random ports.
+The optional setup can also drop the port from the address, so it reads
 <code>folder.lahe/file</code>; the address with the port keeps
 working.</p>
 </div>
@@ -1086,7 +1088,7 @@ the name <code>library</code>.</p>
 <ul>
 <li>The address bar is the UI. A name Ken can read at a glance matters
 more than a short one:
-<code>live-agentic-html-editor-docs-ongoing.lahe.localhost:7817/STABLE_ADDRESSES.md</code>
+<code>live-agentic-html-editor-docs-ongoing.lahe.localhost:1483/STABLE_ADDRESSES.md</code>
 beats
 <code>127.0.0.1:56055/STABLE_ADDRESSES-bd14d360685f150a.html</code>.</li>
 <li>The fallback is not an error. A <code>.lahe.localhost</code> address
@@ -1170,10 +1172,14 @@ approved it on 2026-10-11 once it was clear the forward only covers this
 computer's own port 80, never web traffic. The setup command adds a
 port-80 forward on macOS, with the admin password, in the same step as
 <code>.lahe</code>. Linux and Windows get written steps in the install
-guide. If port 80 is taken, Lahe keeps <code>:7817</code>.
-<code>:7817</code> addresses keep working in every case. A port-free
+guide. If port 80 is taken, Lahe keeps <code>:1483</code>.
+<code>:1483</code> addresses keep working in every case. A port-free
 address still shows "Not secure" under <code>.lahe</code>; HTTPS to
 remove that is a follow-up.</p></li>
+<li><p><strong>Which port pages use:</strong> 1483, because it reads
+like "lahe". It is registered only to the AFS License Manager, an old
+program almost nothing runs, and nothing on Ken's Mac listens on it. The
+API keeps 7817.</p></li>
 <li><p><strong>How long a document keeps its name after its file is
 gone:</strong> forever. Names are small, and keeping them means an old
 bookmark still says what it was.</p></li>

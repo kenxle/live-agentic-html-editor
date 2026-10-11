@@ -157,7 +157,7 @@ The one verification table. U is a unit test under `test/unit/`; B is a Playwrig
 | V72 | Install details | Paths with spaces are quoted in each login item, and `lahe status` says to reinstall when the recorded Node is gone | U |
 | V73 | `.lahe` for real | On Ken's Mac with the resolver installed: a `.lahe` page loads in Chrome, Firefox, and Safari; a stopped name server turns `.lahe` off and status says why | M |
 | V74 | Port forward | The forward rule is fixed text with a Lahe marker, covers only loopback port 80, is skipped when port 80 is held, and uninstall removes only a marked rule | U |
-| V75 | Port-free for real | On Ken's Mac after install: `http://<name>.lahe/<file>` and `http://<name>.lahe.localhost/<file>` load with no port, a `:7817` address still loads, and a reboot keeps the forward | M |
+| V75 | Port-free for real | On Ken's Mac after install: `http://<name>.lahe/<file>` and `http://<name>.lahe.localhost/<file>` load with no port, a `:1483` address still loads, and a reboot keeps the forward | M |
 :::
 
 ## Acceptance Criteria

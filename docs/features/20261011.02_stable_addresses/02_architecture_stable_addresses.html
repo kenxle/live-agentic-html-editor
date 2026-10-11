@@ -927,7 +927,9 @@ needed</a></li>
 </nav>
 <h2 id="summary">Summary</h2>
 <p>The helper becomes the always-on Lahe server and serves every page
-itself, on its own port (7817 by default). It routes by the Host header.
+itself. Pages answer on port 1483, which reads like "lahe". The API
+stays on 7817, so script lines already written into pages keep working.
+Both listeners are in the same process and use the same Host routing.
 <code>127.0.0.1</code> and <code>localhost</code> reach the API, as they
 do today. <code>library.lahe.localhost</code> reaches the Library.
 <code>&lt;name&gt;.lahe.localhost</code> reaches one named site. A site
@@ -1127,9 +1129,9 @@ class="sourceCode json"><code class="sourceCode json"><span id="cb1-1"><a href="
 <ul>
 <li><strong>What Ken sees:</strong> the name says the folder, and the
 path says the file:
-<code>http://docs-features-20261011-02-stable-addresses.lahe.localhost:7817/01_brief_stable_addresses.md</code>,
+<code>http://docs-features-20261011-02-stable-addresses.lahe.localhost:1483/01_brief_stable_addresses.md</code>,
 or
-<code>http://ongoing.lahe.localhost:7817/STABLE_ADDRESSES.md</code>.</li>
+<code>http://ongoing.lahe.localhost:1483/STABLE_ADDRESSES.md</code>.</li>
 <li><strong>A site is a root plus a mode.</strong> <code>folder</code>
 serves the root's tree, as a page server does today.
 <code>page-only</code> (a <code>lahe write</code> notes page) serves the
@@ -1184,7 +1186,7 @@ cap and the <code>service.json</code> rewrites are untouched.</p>
 <h2 id="key-flows">Key Flows</h2>
 <h3 id="serving-a-request">Serving a request</h3>
 <pre class="mermaid"><code>flowchart TD
-    Req[&quot;request on port 7817&lt;br/&gt;(127.0.0.1 or ::1)&quot;] --&gt; Host{&quot;Host header,&lt;br/&gt;checked before anything else&quot;}
+    Req[&quot;request on port 1483 or 7817&lt;br/&gt;(127.0.0.1 or ::1)&quot;] --&gt; Host{&quot;Host header,&lt;br/&gt;checked before anything else&quot;}
     Host --&gt;|&quot;127.0.0.1 / localhost / [::1]&quot;| Api[&quot;API, library script, health,&lt;br/&gt;and the Library at /catalog:&lt;br/&gt;today&#39;s checks, unchanged&quot;]
     Host --&gt;|&quot;library.lahe.localhost&quot;| Cat[&quot;the Library: exact Host,&lt;br/&gt;same-origin, Library token&quot;]
     Host --&gt;|&quot;name.lahe.localhost&lt;br/&gt;(or name.lahe when verified)&quot;| Known{&quot;name in the registry?&quot;}
@@ -1410,9 +1412,11 @@ admin step</td>
 </tr>
 </tbody>
 </table></div>
-<p>If port 80 is taken, the helper keeps <code>:7817</code>, and
-<code>lahe status</code> names what holds 80. <code>:7817</code>
-addresses keep working in every case.</p>
+<p>The forward sends port 80 to 1483. If port 80 is taken, the helper
+keeps <code>:1483</code>, and <code>lahe status</code> names what holds
+80. <code>:1483</code> addresses keep working in every case. Page names
+answer only on 1483 (and 80 through the forward), so each document has
+one origin; on 7817 a page name is refused.</p>
 <h2 id="alternatives-considered">Alternatives Considered</h2>
 <h3
 id="chosen-the-helper-serves-pages-one-name-per-site-one-port-lahelocalhost-printed">Chosen:

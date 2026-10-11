@@ -12,7 +12,7 @@
 
 **Task 1.1: The registry, `src/service/sites.js`.** As the architecture's Data section defines it. Acceptance: V1 to V6.
 
-**Task 1.2: Host dispatch and listeners.** In `index.js`, with rules and constants in `src/shared/protocol.js`. Acceptance: V7 to V10, V68.
+**Task 1.2: Host dispatch and listeners.** A second listener on port 1483 for pages, beside 7817 for the API, both on `127.0.0.1` and `::1`. Page names are refused on 7817. In `index.js`, with rules and constants in `src/shared/protocol.js`. Acceptance: V7 to V10, V68.
 
 **Task 1.3: Page serving, `src/service/page_routes.js`.** The serving half of `static_servers.js` moves here, plus everything the architecture's "Serving a request" flow adds. Acceptance: V11 to V20, V69.
 

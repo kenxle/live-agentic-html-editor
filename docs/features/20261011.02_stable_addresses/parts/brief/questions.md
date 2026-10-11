@@ -17,7 +17,8 @@ Chosen by the brief, for Ken to overrule in review:
 - **The name is per folder, not per file.** The architecture review showed per-file names break Markdown images and links, folder sites, the rail rules, and how comments are tied to files. The folder is today's isolation unit, so nothing gets weaker. The address still reads as folder plus file.
 - **Other accounts on the same computer** can reach pages whenever the server runs. Recorded as a known limit; `lahe install` warns on a computer with more than one user.
 
-- **Drop the port from the address?** Yes. Ken approved it on 2026-10-11 once it was clear the forward only covers this computer's own port 80, never web traffic. The setup command adds a port-80 forward on macOS, with the admin password, in the same step as `.lahe`. Linux and Windows get written steps in the install guide. If port 80 is taken, Lahe keeps `:7817`. `:7817` addresses keep working in every case. A port-free address still shows "Not secure" under `.lahe`; HTTPS to remove that is a follow-up.
+- **Drop the port from the address?** Yes. Ken approved it on 2026-10-11 once it was clear the forward only covers this computer's own port 80, never web traffic. The setup command adds a port-80 forward on macOS, with the admin password, in the same step as `.lahe`. Linux and Windows get written steps in the install guide. If port 80 is taken, Lahe keeps `:1483`. `:1483` addresses keep working in every case. A port-free address still shows "Not secure" under `.lahe`; HTTPS to remove that is a follow-up.
+- **Which port pages use:** 1483, because it reads like "lahe". It is registered only to the AFS License Manager, an old program almost nothing runs, and nothing on Ken's Mac listens on it. The API keeps 7817.
 - **How long a document keeps its name after its file is gone:** forever. Names are small, and keeping them means an old bookmark still says what it was.
 
 ### Open

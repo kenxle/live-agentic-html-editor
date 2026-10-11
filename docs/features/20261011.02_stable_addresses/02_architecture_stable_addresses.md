@@ -2,7 +2,7 @@
 
 ## Summary
 
-The helper becomes the always-on Lahe server and serves every page itself, on its own port (7817 by default). It routes by the Host header. `127.0.0.1` and `localhost` reach the API, as they do today. `library.lahe.localhost` reaches the Library. `<name>.lahe.localhost` reaches one named site. A site is what one page server serves today: one folder, or one notes page. Paths under a site are the same paths a page server uses today. Only the origin changes, from `127.0.0.1:<random port>` to `<name>.lahe.localhost:7817`. A name registry, written only by the helper, maps each name to its site. The review that answers on a page is chosen per request, by today's rule without the session filter. Per-session page-server processes are retired. An install command adds a login item on macOS, Linux, and Windows, and in that mode the helper does not stop itself. On macOS, the short `.lahe` ending is an opt-in alias that the helper answers only once it has proved it owns `.lahe` lookups on that machine.
+The helper becomes the always-on Lahe server and serves every page itself. Pages answer on port 1483, which reads like "lahe". The API stays on 7817, so script lines already written into pages keep working. Both listeners are in the same process and use the same Host routing. `127.0.0.1` and `localhost` reach the API, as they do today. `library.lahe.localhost` reaches the Library. `<name>.lahe.localhost` reaches one named site. A site is what one page server serves today: one folder, or one notes page. Paths under a site are the same paths a page server uses today. Only the origin changes, from `127.0.0.1:<random port>` to `<name>.lahe.localhost:7817`. A name registry, written only by the helper, maps each name to its site. The review that answers on a page is chosen per request, by today's rule without the session filter. Per-session page-server processes are retired. An install command adds a login item on macOS, Linux, and Windows, and in that mode the helper does not stop itself. On macOS, the short `.lahe` ending is an opt-in alias that the helper answers only once it has proved it owns `.lahe` lookups on that machine.
 
 ::: callout-question
 **One decision changed in review, and it is Ken's to confirm.** Ken chose `.lahe` as the printed ending. Both reviews found that a plain `http://name.lahe` page is not a "secure context" to the browser. That brings five costs:
@@ -68,7 +68,7 @@ What stays: review records, tokens, the per-request checks (D11 in the original 
 }
 ```
 
-- **What Ken sees:** the name says the folder, and the path says the file: `http://docs-features-20261011-02-stable-addresses.lahe.localhost:7817/01_brief_stable_addresses.md`, or `http://ongoing.lahe.localhost:7817/STABLE_ADDRESSES.md`.
+- **What Ken sees:** the name says the folder, and the path says the file: `http://docs-features-20261011-02-stable-addresses.lahe.localhost:1483/01_brief_stable_addresses.md`, or `http://ongoing.lahe.localhost:1483/STABLE_ADDRESSES.md`.
 - **A site is a root plus a mode.** `folder` serves the root's tree, as a page server does today. `page-only` (a `lahe write` notes page) serves the one file plus Lahe's reserved files, and 404s everything else. Roots use `fs.realpathSync.native`.
 - **For Markdown, the root is the source folder.** `/<file>.md` renders on request from the source, with the render cached by file time. `rebuild.js`, the reload check, and the handled check read the same render. The state folder's artifact copy is no longer the served page. Links outside the source folder use `/.lahe-source/<hash>/` mounts, stored on the site and served only under that site.
 - **`entry`** is the page `lahe review` prints. It is not a binding: any review may answer on any page of the site, by the rule below.
@@ -91,7 +91,7 @@ What stays: review records, tokens, the per-request checks (D11 in the original 
 
 ```mermaid
 flowchart TD
-    Req["request on port 7817<br/>(127.0.0.1 or ::1)"] --> Host{"Host header,<br/>checked before anything else"}
+    Req["request on port 1483 or 7817<br/>(127.0.0.1 or ::1)"] --> Host{"Host header,<br/>checked before anything else"}
     Host -->|"127.0.0.1 / localhost / [::1]"| Api["API, library script, health,<br/>and the Library at /catalog:<br/>today's checks, unchanged"]
     Host -->|"library.lahe.localhost"| Cat["the Library: exact Host,<br/>same-origin, Library token"]
     Host -->|"name.lahe.localhost<br/>(or name.lahe when verified)"| Known{"name in the registry?"}
@@ -203,7 +203,7 @@ flowchart TD
 | Linux | a `systemd-resolved` drop-in that sends `~lahe` to the helper's name server, where `systemd-resolved` runs. Other setups: the guide says so and stops | a one-time setting that lets normal programs use port 80, then the helper also listens on 80 |
 | Windows | a name-resolution rule for `.lahe`. It cannot name a port, so the name server must also answer on port 53; the spike checks this | the helper also listens on 80 when nothing else holds it; usually no admin step |
 
-If port 80 is taken, the helper keeps `:7817`, and `lahe status` names what holds 80. `:7817` addresses keep working in every case.
+The forward sends port 80 to 1483. If port 80 is taken, the helper keeps `:1483`, and `lahe status` names what holds 80. `:1483` addresses keep working in every case. Page names answer only on 1483 (and 80 through the forward), so each document has one origin; on 7817 a page name is refused.
 
 ## Alternatives Considered
 
