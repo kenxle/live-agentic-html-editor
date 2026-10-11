@@ -1,11 +1,16 @@
 # Progress: Stable addresses
 
-**Phase 6, Implement.** All core, install, and lahe-names work is merged; stable addresses are the default on the feature branch. The library builder is finishing the Library cleanup. Two decisions wait on you below. Last updated 2026-10-11 17:00.
+**Phase 6, Implement.** Every workstream is merged. Paused: your disk is full from test temp folders (first item below). Last updated 2026-10-11 17:41.
 
 **Docs:** [Decisions page](../../ongoing/STABLE_ADDRESSES.md) · [Crucible](00_crucible_stable_addresses.html) · [Brief](01_brief_stable_addresses.html) · [Architecture](02_architecture_stable_addresses.html) · [Plan](03_plan_stable_addresses.html) · [Code survey](parts/architecture/recon.md)
 
 ## Needs your attention
 
+- [ ] **Urgent: your disk is full (1.5 GB free of 926 GB).** Test runs leave their temp folders behind: every unit run creates a `lahe-run-*` folder of about 600 MB and nothing removes it. That is how the test wrapper on main already works (`scripts/no_stray_helpers.js`), and today four builders ran the suite many times, so your temp folder grew to 39 GB. I have stopped all test runs. Your rules say I do not delete, so this one is yours. To clear the Lahe test folders older than ten minutes, type this in the Claude prompt:
+
+  `! find "$TMPDIR" -maxdepth 1 -name 'lahe-*' -mmin +10 -exec rm -rf {} +`
+
+  It touches only test folders in your temp folder, never `~/.local/state/lahe`. I recommend a small fix so this stops happening: the wrapper removes its own `lahe-run-*` folder when the run ends. Say yes and I will make it a separate small change.
 - [ ] **Old comments at the new address: show them (A), or say they exist (B)?** Every document you open after this ships gets its new address once. Comments you made at its old random-port address do not appear on the rail there. The rail only reads this browser's storage, and the browser keeps storage separately for each address. The comments are not lost: they are in `review.json`, grouped under the new address, and agents still see and answer them.
   - **A, show them.** When a page opens, the rail asks the helper for this page's stored comments and adds any it does not have, using the existing merge rules, so you see your old cards and threads. This needs a new read route and changes in four rail files, with tests for duplicates, a withdrawn draft coming back, and comments from other pages or reviews.
   - **B, say so.** The rail shows one line, like "3 earlier comments from this page's old address are with your agent." You cannot read them on the page.
@@ -161,6 +166,7 @@ Not shipped yet.
 
 ## Log
 
+- 2026-10-11 17:41: First full gate on the merged branch: unit 2,577 passed, 0 failed; browser 861 passed, 2 failed, 7 skipped. One failure is a log-wording change in Host refusals (to fix); the other hit "no space left on device". Disk is full from test temp folders; all test runs paused until it is cleared.
 - 2026-10-11 17:17: Library 4.3 merged. Every workstream is now merged. Unit gate: 2,575 tests, 1 failed, an install test that only fails under load, sent to the install builder. Full browser suite next, once that is fixed.
 - 2026-10-11 17:00: Core Step 3 merged: stable addresses are now the default. 54 Library tests of removed behavior went to the library builder (Task 4.3). A test leak in `install_command.test.js` went to the install builder.
 - 2026-10-11 16:48: Install docs merged. Install builder found that closing the last session stops an always-on helper; fix sent to the core builder.
