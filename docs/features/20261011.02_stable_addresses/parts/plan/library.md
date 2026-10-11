@@ -8,6 +8,6 @@
 
 **Task 4.1: Kinds and Open.** With the switch on, the kinds follow the architecture's table, and Open binds through `sites.js`. Open returns the stable address, and does not move a rail that a newer open review holds. With the switch off, Open restarts page servers, as today. Acceptance: V39 to V42, each with the switch on.
 
-**Task 4.2: The Library's address and copy.** Catalog routes accept `library.lahe.localhost:<port>`, with today's checks. Rows link to stable addresses. Copy works without the clipboard API, using one shared copy function that Task 6.3 reuses. Acceptance: V43, V44.
+**Task 4.2: The Library's address and copy.** Catalog routes accept `library.lahe.localhost:<port>`, with today's checks. Rows link to stable addresses. Copy works without the clipboard API. Acceptance: V43, V44.
 
 **Task 4.3: Docs, in PR 2.** `docs/ongoing/LIBRARY.md`, and the Library parts of the two diagrams. Remove the Library's off branch and the reopened-session sweep. Acceptance: V38 (Library part).

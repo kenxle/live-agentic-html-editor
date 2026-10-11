@@ -62,7 +62,7 @@ Each workstream leaf below is a builder's packet, together with this block, the 
 | core | 1.0 to 3.3 | one builder, Opus | itself across Steps 1 to 3 | `sites.js`, `page_routes.js`, `index.js` (all but `/health`), `routes.js`, `auth.js` (non-catalog), `protocol.js`, `record.js`, `review_format.js`, `reviews.js`, `heal.js`, `rebuild.js`, `handled_check.js`, `projection.js`, `markdown*.js`, `static_servers.js`, `idle_servers.js`, `commands/review.js`, `add.js` (the served-by-helper mode), `write.js`, `status.js`, `session.js` (close), `src/layer/index.js`, `docs/CLI.md` (review, write, status, session sections), `SESSION_OWNERSHIP.md` (except always-on lines) | none | PR 1, PR 2 |
 | library | 4.1 to 4.3 | one builder, Sonnet | none | `catalog_*.js`, `src/layer/catalog/`, `auth.js` (catalog part), `commands/library.js`, `docs/ongoing/LIBRARY.md` | core Step 1 | PR 1, PR 2 |
 | install | 5.1 to 5.5 | one builder, Opus | none | `commands/install.js`, `commands/serve.js`, `login_item.js`, `self_stop.js`, `/health` in `index.js`, `startHelper` in `session.js` and its four calls in `add.js`, `scripts/install-cli.js`, `docs/INSTALL.md`, `README.md`, `docs/CLI.md` (install section), the always-on lines of `SESSION_OWNERSHIP.md` | core Step 1 | PR 3 |
-| lahe-names | 6.0 to 6.2 (6.3 dropped) | the install builder, continued | install | `name_server.js`, port-forward and resolver parts of `login_item.js` and `install.js`, the Linux and Windows steps in `docs/INSTALL.md` | PR 3 | PR 4 |
+| lahe-names | 6.0 to 6.2 | the install builder, continued | install | `name_server.js`, port-forward and resolver parts of `login_item.js` and `install.js`, the Linux and Windows steps in `docs/INSTALL.md` | PR 3 | PR 4 |
 
 - **Agent reuse:** the core builder holds the serving model for all three of its steps. The install builder continues into lahe-names because both touch `install.json`, the installer, and macOS system setup.
 - **Token plan:** core, library, and install run in parallel once core Step 1 is merged into the integration branch. They share files only where the table splits them by function. The orchestrator merges in this order: core, then library, then install. Packets name only the architecture sections and docs in each leaf's "Reads first".
@@ -70,7 +70,7 @@ Each workstream leaf below is a builder's packet, together with this block, the 
 - **PRs:** each leaves the app working.
   - PR 0 is the dispatch-only workflow.
   - PR 1 ships the registry, the new serving, and the Library's new Open, behind `LAHE_PAGES=sites`, off by default.
-  - PR 2 turns it on, removes the old path, and changes the skill and contract, printing `.lahe.localhost`, as Ken decided at the review gate. Its retired tests have Ken's batch approval first.
+  - PR 2 turns it on, removes the old path, and changes the skill and contract, which print `.lahe.localhost`. Its retired tests have Ken's batch approval first.
   - PR 3 adds install. Without running `lahe install`, nothing changes for a clone.
   - PR 4 adds port-free addresses and the `.lahe` option.
 
@@ -142,9 +142,6 @@ The one verification table. U is a unit test under `test/unit/`; B is a Playwrig
 | V57 | Verification | `.lahe` Hosts are refused until a fresh random query is seen by our own name server | U |
 | V58 | Squatter | Another process answering `.lahe` fails verification | U |
 | V59 | Uninstall | Removes the resolver only when it carries the marker; `.lahe.localhost` addresses keep working | U |
-| V60 | 6.3 copy | Copy review works on a non-secure origin (not applicable: `.lahe.localhost` is printed) | B |
-| V61 | 6.3 tab guard | Two tabs of one page on a non-secure origin do not both hold the window (not applicable: `.lahe.localhost` is printed) | B |
-| V62 | 6.3 page type | Page detection works with no Fetch Metadata headers (not applicable: `.lahe.localhost` is printed) | U |
 | V63 | R9 drafts | An unsent draft on a page is there after the helper restarts and the tab reloads | B |
 | V64 | Browsers | V11, V13, V16, and V43 pass in Chromium, Firefox, and WebKit on `gate:all` | B |
 | V65 | R3 same file, same address | Two reviews of one file, in two sessions, print the same address | U |
@@ -213,7 +210,7 @@ Full prose: [plan review](03_plan_stable_addresses_reviews.md).
 | PR4 | 23 tests of removed behavior | Accepted | Task 3.0 lists rewrite or retire; Ken approves the deletions in one batch before PR 2 |
 | PR5 | Manifest only updated at the end | Accepted | Every builder adds new files to the manifest in the same commit |
 | PR6 | Switch scope unclear | Accepted | Core leaf says what is live and what is switched; the CLI follows the running helper |
-| PR7 | Ending answer after the skill ships | Accepted | Ken answers at the review gate, before PR 2 writes the skill and contract |
+| PR7 | Ending answer after the skill ships | Accepted | Ending settled before PR 2 writes the skill and contract |
 | PR8 | Security fixes without rows | Accepted | V66, V68 to V70, V72, V73; V43 covers `library.lahe` |
 | PR9 | Headline promises without rows | Accepted | V65, V67; V37 covers `lahe review` naming a taken port |
 | PR10 | CI cannot prove login on Linux and Windows | Accepted | Rows reworded; Ken accepts the gap at the gate |

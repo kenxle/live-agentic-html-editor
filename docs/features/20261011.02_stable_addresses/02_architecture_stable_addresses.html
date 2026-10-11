@@ -936,33 +936,18 @@ do today. <code>library.lahe.localhost</code> reaches the Library.
 is what one page server serves today: one folder, or one notes page.
 Paths under a site are the same paths a page server uses today. Only the
 origin changes, from <code>127.0.0.1:&lt;random port&gt;</code> to
-<code>&lt;name&gt;.lahe.localhost:7817</code>. A name registry, written
-only by the helper, maps each name to its site. The review that answers
-on a page is chosen per request, by today's rule without the session
-filter. Per-session page-server processes are retired. An install
-command adds a login item on macOS, Linux, and Windows, and in that mode
-the helper does not stop itself. On macOS, the short <code>.lahe</code>
-ending is an opt-in alias that the helper answers only once it has
-proved it owns <code>.lahe</code> lookups on that machine.</p>
-<div class="callout callout-question">
-<p><strong>One decision changed in review, and Ken confirmed
-it.</strong> Ken first chose <code>.lahe</code> as the printed ending.
-Both reviews found that a plain <code>http://name.lahe</code> page is
-not a "secure context" to the browser. That brings five costs:</p>
-<ul>
-<li>the address bar says "Not secure";</li>
-<li>copy buttons lose the clipboard API;</li>
-<li>the duplicate-tab guard (Web Locks) turns off;</li>
-<li>the browser stops sending the request headers the Library's checks
-and the redirect rule rely on;</li>
-<li>on any machine where Lahe does not own <code>.lahe</code> lookups, a
-hostile network could take over a name (DNS rebinding).</li>
-</ul>
-<p><code>.lahe.localhost</code> has none of these. Ken agreed:
-<code>lahe review</code> prints <code>.lahe.localhost</code>, and
-<code>.lahe</code> is an opt-in, guarded alias. HTTPS for
-<code>.lahe</code> is a follow-up.</p>
-</div>
+<code>&lt;name&gt;.lahe.localhost:1483</code>, or
+<code>&lt;name&gt;.lahe.localhost</code> with the optional port-80
+forward. A name registry, written only by the helper, maps each name to
+its site. The review that answers on a page is chosen per request, by
+today's rule without the session filter. Per-session page-server
+processes are retired. An install command adds a login item on macOS,
+Linux, and Windows, and in that mode the helper does not stop itself.
+<code>lahe review</code> prints <code>.lahe.localhost</code>, which
+browsers treat as secure. The short <code>.lahe</code> ending is an
+opt-in alias, set up by command on macOS and by written steps on Linux
+and Windows, that the helper answers only once it has proved it owns
+<code>.lahe</code> lookups on that machine.</p>
 <h2 id="analysis-of-existing-structure">Analysis of Existing
 Structure</h2>
 <p>Full survey with file and line citations: <a
@@ -1412,7 +1397,7 @@ written down.</p>
 <code>lahe install --lahe-names</code></td>
 <td>a loopback port forward from 80 to 1483, for <code>127.0.0.1</code>
 and <code>::1</code>, loaded at boot, done by
-<code>lahe install --port-80</code>. Approved by Ken</td>
+<code>lahe install --port-80</code></td>
 </tr>
 <tr>
 <td>Linux</td>
@@ -1713,8 +1698,7 @@ registry</td>
 <td>AR8</td>
 <td><code>.lahe</code> loses Web Locks</td>
 <td><span class="accepted">Accepted</span></td>
-<td><code>.lahe.localhost</code> printed (Ken agreed); no lock fallback
-built</td>
+<td><code>.lahe.localhost</code> printed; no lock fallback built</td>
 </tr>
 <tr>
 <td>AR9</td>
@@ -1748,7 +1732,7 @@ state-folder id in <code>/health</code></td>
 <td>Uninstall breaks <code>.lahe</code> addresses</td>
 <td><span class="accepted">Accepted</span></td>
 <td><code>.lahe</code> is an opt-in alias; <code>.lahe.localhost</code>
-addresses survive uninstall. Ken confirms</td>
+addresses survive uninstall</td>
 </tr>
 <tr>
 <td>AR14</td>
@@ -1838,7 +1822,7 @@ review</a>.</p>
 <td><code>.lahe</code> answered where Lahe does not own lookups</td>
 <td><span class="accepted">Accepted</span></td>
 <td><code>.lahe</code> only after verifying our own name server; opt-in;
-Ken confirms the ending</td>
+<code>.lahe.localhost</code> printed</td>
 </tr>
 <tr>
 <td>SR2</td>

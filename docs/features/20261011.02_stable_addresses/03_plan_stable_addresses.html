@@ -1008,8 +1008,7 @@ taken port, and the install state that install writes to
 <code>service.json</code>. The log records the lines the brief's Logging
 section lists. Acceptance: V37, V71.</p>
 <p><strong>Task 3.3: Skill, contract, and serving docs.</strong> These
-all change in PR 2, printing <code>.lahe.localhost</code>, as Ken
-decided at the review gate:</p>
+all change in PR 2, and print <code>.lahe.localhost</code>:</p>
 <ul>
 <li><code>skills/lahe/SKILL.md</code>, then
 <code>npm run install-skills</code></li>
@@ -1049,8 +1048,7 @@ switch on.</p>
 <p><strong>Task 4.2: The Library's address and copy.</strong> Catalog
 routes accept <code>library.lahe.localhost:&lt;port&gt;</code>, with
 today's checks. Rows link to stable addresses. Copy works without the
-clipboard API, using one shared copy function that Task 6.3 reuses.
-Acceptance: V43, V44.</p>
+clipboard API. Acceptance: V43, V44.</p>
 <p><strong>Task 4.3: Docs, in PR 2.</strong>
 <code>docs/ongoing/LIBRARY.md</code>, and the Library parts of the two
 diagrams. Remove the Library's off branch and the reopened-session
@@ -1128,8 +1126,8 @@ alias.</p>
 V55.</p>
 <p><strong>Task 6.2: Resolver setup and verification.</strong>
 Acceptance: V56 to V59, plus V73 on Ken's Mac.</p>
-<p><strong>Task 6.0: Port-free addresses on macOS, first.</strong> Ken
-uses this whatever the ending, so it lands before the name server.
+<p><strong>Task 6.0: Port-free addresses on macOS, first.</strong> It
+matters whatever the ending, so it lands before the name server.
 <code>lahe install --port-80</code> loads a loopback forward from port
 80 to 1483, for <code>127.0.0.1</code> and <code>::1</code>, and reloads
 it at boot. It is skipped, with a status line naming the holder, when
@@ -1137,22 +1135,6 @@ something already listens on port 80. The helper verifies the forward
 before <code>lahe review</code> prints an address without a port.
 <code>lahe uninstall</code> removes only the forward it added.
 Acceptance: V74, V75, V76.</p>
-<p><strong>Task 6.3: Dropped.</strong> Ken chose to print
-<code>.lahe.localhost</code>. Kept here for the record: Fallbacks for a
-non-secure page:</p>
-<ul>
-<li>copy, reusing Task 4.2's function in <code>export.js</code> and
-<code>overlay.js</code>;</li>
-<li>a local-storage lease in <code>store.js</code> when Web Locks is
-missing;</li>
-<li>page-type detection from <code>Accept</code>.</li>
-</ul>
-<p>Tests reach a non-secure origin through a Chromium host-resolver
-rule, Chromium only. If Ken chose <code>.lahe</code> printed, Task 3.3
-already wrote that ending into the skill and contract, so this task
-touches no docs. If Ken keeps <code>.lahe.localhost</code>, this task is
-dropped, and V60 to V62 are marked not applicable. Acceptance: V60 to
-V62.</p>
 <h2 id="workstreams-and-prs">Workstreams and PRs</h2>
 <div class="table-scroll"><table>
 <thead>
@@ -1217,7 +1199,7 @@ always-on lines of <code>SESSION_OWNERSHIP.md</code></td>
 </tr>
 <tr>
 <td>lahe-names</td>
-<td>6.0 to 6.2 (6.3 dropped)</td>
+<td>6.0 to 6.2</td>
 <td>the install builder, continued</td>
 <td>install</td>
 <td><code>name_server.js</code>, port-forward and resolver parts of
@@ -1248,8 +1230,8 @@ rows it names.</p></li>
 <li>PR 1 ships the registry, the new serving, and the Library's new
 Open, behind <code>LAHE_PAGES=sites</code>, off by default.</li>
 <li>PR 2 turns it on, removes the old path, and changes the skill and
-contract, printing <code>.lahe.localhost</code>, as Ken decided at the
-review gate. Its retired tests have Ken's batch approval first.</li>
+contract, which print <code>.lahe.localhost</code>. Its retired tests
+have Ken's batch approval first.</li>
 <li>PR 3 adds install. Without running <code>lahe install</code>,
 nothing changes for a clone.</li>
 <li>PR 4 adds port-free addresses and the <code>.lahe</code>
@@ -1690,27 +1672,6 @@ seen by our own name server</td>
 <td>U</td>
 </tr>
 <tr>
-<td>V60</td>
-<td>6.3 copy</td>
-<td>Copy review works on a non-secure origin (not applicable:
-<code>.lahe.localhost</code> is printed)</td>
-<td>B</td>
-</tr>
-<tr>
-<td>V61</td>
-<td>6.3 tab guard</td>
-<td>Two tabs of one page on a non-secure origin do not both hold the
-window (not applicable: <code>.lahe.localhost</code> is printed)</td>
-<td>B</td>
-</tr>
-<tr>
-<td>V62</td>
-<td>6.3 page type</td>
-<td>Page detection works with no Fetch Metadata headers (not applicable:
-<code>.lahe.localhost</code> is printed)</td>
-<td>U</td>
-</tr>
-<tr>
 <td>V63</td>
 <td>R9 drafts</td>
 <td>An unsent draft on a page is there after the helper restarts and the
@@ -1954,8 +1915,7 @@ the running helper</td>
 <td>PR7</td>
 <td>Ending answer after the skill ships</td>
 <td><span class="accepted">Accepted</span></td>
-<td>Ken answers at the review gate, before PR 2 writes the skill and
-contract</td>
+<td>Ending settled before PR 2 writes the skill and contract</td>
 </tr>
 <tr>
 <td>PR8</td>

@@ -2,19 +2,7 @@
 
 ## Summary
 
-The helper becomes the always-on Lahe server and serves every page itself. Pages answer on port 1483, which reads like "lahe". The API stays on 7817, so script lines already written into pages keep working. Both listeners are in the same process and use the same Host routing. `127.0.0.1` and `localhost` reach the API, as they do today. `library.lahe.localhost` reaches the Library. `<name>.lahe.localhost` reaches one named site. A site is what one page server serves today: one folder, or one notes page. Paths under a site are the same paths a page server uses today. Only the origin changes, from `127.0.0.1:<random port>` to `<name>.lahe.localhost:7817`. A name registry, written only by the helper, maps each name to its site. The review that answers on a page is chosen per request, by today's rule without the session filter. Per-session page-server processes are retired. An install command adds a login item on macOS, Linux, and Windows, and in that mode the helper does not stop itself. On macOS, the short `.lahe` ending is an opt-in alias that the helper answers only once it has proved it owns `.lahe` lookups on that machine.
-
-::: callout-question
-**One decision changed in review, and Ken confirmed it.** Ken first chose `.lahe` as the printed ending. Both reviews found that a plain `http://name.lahe` page is not a "secure context" to the browser. That brings five costs:
-
-- the address bar says "Not secure";
-- copy buttons lose the clipboard API;
-- the duplicate-tab guard (Web Locks) turns off;
-- the browser stops sending the request headers the Library's checks and the redirect rule rely on;
-- on any machine where Lahe does not own `.lahe` lookups, a hostile network could take over a name (DNS rebinding).
-
-`.lahe.localhost` has none of these. Ken agreed: `lahe review` prints `.lahe.localhost`, and `.lahe` is an opt-in, guarded alias. HTTPS for `.lahe` is a follow-up.
-:::
+The helper becomes the always-on Lahe server and serves every page itself. Pages answer on port 1483, which reads like "lahe". The API stays on 7817, so script lines already written into pages keep working. Both listeners are in the same process and use the same Host routing. `127.0.0.1` and `localhost` reach the API, as they do today. `library.lahe.localhost` reaches the Library. `<name>.lahe.localhost` reaches one named site. A site is what one page server serves today: one folder, or one notes page. Paths under a site are the same paths a page server uses today. Only the origin changes, from `127.0.0.1:<random port>` to `<name>.lahe.localhost:1483`, or `<name>.lahe.localhost` with the optional port-80 forward. A name registry, written only by the helper, maps each name to its site. The review that answers on a page is chosen per request, by today's rule without the session filter. Per-session page-server processes are retired. An install command adds a login item on macOS, Linux, and Windows, and in that mode the helper does not stop itself. `lahe review` prints `.lahe.localhost`, which browsers treat as secure. The short `.lahe` ending is an opt-in alias, set up by command on macOS and by written steps on Linux and Windows, that the helper answers only once it has proved it owns `.lahe` lookups on that machine.
 
 ## Analysis of Existing Structure
 
@@ -206,7 +194,7 @@ Two separate options, each one admin step. `lahe install --port-80` adds the por
 
 | System | `.lahe` lookups | Port-free address |
 |---|---|---|
-| macOS | `/etc/resolver/lahe`, done by `lahe install --lahe-names` | a loopback port forward from 80 to 1483, for `127.0.0.1` and `::1`, loaded at boot, done by `lahe install --port-80`. Approved by Ken |
+| macOS | `/etc/resolver/lahe`, done by `lahe install --lahe-names` | a loopback port forward from 80 to 1483, for `127.0.0.1` and `::1`, loaded at boot, done by `lahe install --port-80` |
 | Linux | a `systemd-resolved` drop-in that sends `~lahe` to the helper's name server, where `systemd-resolved` runs. Other setups: the guide says so and stops | a one-time setting that lets normal programs use port 80, then the helper also listens on 80 |
 | Windows | a name-resolution rule for `.lahe`. It cannot name a port, so the name server must also answer on port 53; the spike checks this | the helper also listens on 80 when nothing else holds it; usually no admin step |
 
@@ -272,12 +260,12 @@ Full prose: [architect review](02_architecture_stable_addresses_reviews.md).
 | AR5 | Healer would write tokens into served files | Accepted | `servesPath` asks the registry |
 | AR6 | `lahe review` order undefined | Accepted | `add --served-by-helper`, then `site.bind` |
 | AR7 | Notes pages would serve their folder | Accepted | `page-only` mode |
-| AR8 | `.lahe` loses Web Locks | Accepted | `.lahe.localhost` printed (Ken agreed); no lock fallback built |
+| AR8 | `.lahe` loses Web Locks | Accepted | `.lahe.localhost` printed; no lock fallback built |
 | AR9 | Stale helper never replaced; CLI double spawn | Accepted | Replace at a quiet moment; installed CLI never spawns; compare against the login item's clone |
 | AR10 | Login item does not pin the state folder | Accepted | `--state-dir` and `--port` in the login item; state-folder id in `/health` |
 | AR11 | Aliases missed `review.json` grouping | Accepted | Aliases are origins only, used by the rail and by `review_format` |
 | AR12 | Worktree mapping misses sibling worktrees | Accepted | Read the `.git` file at bind time |
-| AR13 | Uninstall breaks `.lahe` addresses | Accepted | `.lahe` is an opt-in alias; `.lahe.localhost` addresses survive uninstall. Ken confirms |
+| AR13 | Uninstall breaks `.lahe` addresses | Accepted | `.lahe` is an opt-in alias; `.lahe.localhost` addresses survive uninstall |
 | AR14 | Library Open steals the rail; kinds undefined | Accepted | Library section above |
 | AR15 | Registry loss can repoint a bookmark | Accepted | Grants log; no new names minted on an unreadable registry |
 | AR16 | Redirect on `navigate` catches iframes | Accepted, moot | No redirects between pages in this design |
@@ -296,7 +284,7 @@ Full prose: [security review](02_architecture_stable_addresses_reviews.md).
 
 | # | Finding | Disposition | Rationale |
 |---|---------|-------------|-----------|
-| SR1 | `.lahe` answered where Lahe does not own lookups | Accepted | `.lahe` only after verifying our own name server; opt-in; Ken confirms the ending |
+| SR1 | `.lahe` answered where Lahe does not own lookups | Accepted | `.lahe` only after verifying our own name server; opt-in; `.lahe.localhost` printed |
 | SR2 | `address.bind` reachable from pages | Accepted | CLI secret, no Origin, root from the request |
 | SR3 | Per-file origins did not wall files off | Accepted | Per-site isolation stated plainly; hidden files refused |
 | SR4 | Other local users can read pages | Accepted as a residual | Recorded under D11; install warns on multi-user machines |
