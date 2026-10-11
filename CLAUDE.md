@@ -126,7 +126,7 @@ behaviour (the rail, replay, protection) may run one named spec file with
 builder is running its spec and no other browser run is open. Two runs at once
 fail each other: tests the change never touched miss their timing limits or time
 out. A failure seen during overlap is rerun alone before anyone calls it real or
-a flake. See `docs/lessons/proposed/two-test-runs-at-once-fail-each-other.md`.
+a flake.
 
 `check:layer` fails when the committed bundle `dist/lahe-layer.js` is stale.
 **Builders never commit `dist/`**: it is generated, and four parallel branches
