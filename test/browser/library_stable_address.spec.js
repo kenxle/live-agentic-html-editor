@@ -23,6 +23,7 @@ const { test, expect } = require("@playwright/test");
 
 const service = require("../../src/service/index.js");
 const agentSessions = require("../../src/service/agent_sessions.js");
+const markdown = require("../../src/service/markdown.js");
 
 const SHOT_DIR = process.env.LAHE_SCREENSHOT_DIR || null;
 const PAGE_HTML = (title) =>
@@ -86,7 +87,10 @@ function scene() {
   const home = writeFile(mockups, "library.html", PAGE_HTML("Library mockup"));
   const pages = writeFile(mockups, "unknown_name.html", PAGE_HTML("Unknown name page"));
   const md = writeFile(ongoing, "LIBRARY.md", "# The Library\n\nHow the Library works now.\n");
-  const artifact = writeFile(world.state, "artifacts/library.html", PAGE_HTML("The Library"));
+  // The rendered copy the CLI wrote when it first reviewed the Markdown, which
+  // is what vouches for the folder Open will serve.
+  const artifactPath = markdown.artifactPath(world.state, "s_notes", md);
+  const artifact = writeFile(path.dirname(artifactPath), path.basename(artifactPath), PAGE_HTML("The Library"));
   const txt = writeFile(path.join(repo, "notes"), "scratch.txt", "not a page");
   const a = review("s_build", home);
   const b = review("s_build", pages);
@@ -150,9 +154,10 @@ test("V40: Open on an older row leaves a newer open review's rail alone, and the
   const file = writeFile(repo, "shared.html", PAGE_HTML("Shared page"));
   world.store.create({ id: "s_old", name: "older session" });
   world.store.create({ id: "s_new", name: "newer session" });
-  const older = review("s_old", file);
-  await new Promise((resolve) => setTimeout(resolve, 10));
-  const newer = review("s_new", file);
+  // The newer review is created second and its id sorts after, so it is the
+  // newer even within one millisecond.
+  const older = review("s_old", file, { id: "r-a-older" });
+  const newer = review("s_new", file, { id: "r-b-newer" });
   world.helper.sites.bind({ root: fs.realpathSync(repo), mode: "folder", entry: "shared.html" });
 
   await page.goto(libraryUrl());

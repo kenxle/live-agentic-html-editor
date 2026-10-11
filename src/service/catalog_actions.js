@@ -20,6 +20,11 @@
 // in the request body names a file, a root or a URL; extra fields are never
 // read. A review no recorded server covers is the agent's to re-serve.
 //
+// WITH THE PAGES SWITCH ON (stable addresses) Open binds a site in the
+// registry instead of restarting a server, and the same rule holds: it names a
+// root only when something a page cannot write has already served it
+// (catalog_sites.js). The reopened-session step below is then never reached.
+//
 // EVERY CLOCK IS `now`. Each function takes the time as an argument, and the
 // helper passes its own clock, so tests drive expiry, the sweep and the log
 // line's age without sleeping.

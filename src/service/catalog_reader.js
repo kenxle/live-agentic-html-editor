@@ -900,6 +900,8 @@ function createReader(options) {
           sourcePath: info.sourcePath,
           servedPath: info.servedPath,
           notes: info.notes,
+          sessionId: info.sessionId,
+          records: servers.records,
           landing: function (folder) { return landingFile(info, folder); }
         });
         if (plan) {

@@ -19,10 +19,10 @@ const agentSessions = require("../../src/service/agent_sessions.js");
 const catalogRequests = require("../../src/service/catalog_requests.js");
 const stateDirModule = require("../../src/service/state_dir.js");
 const staticServers = require("../../src/service/static_servers.js");
+const markdown = require("../../src/service/markdown.js");
 const { sitesWorld, raw, writeFile, getPage } = require("../helpers/sites_world.js");
 
 const PAGE_HTML = "<!doctype html><html><head><title>A page</title></head><body><p>words</p></body></html>";
-const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 function tokenFromPage(html) {
   const m = new RegExp('<meta name="' + protocol.CATALOG_TOKEN_META + '" content="([^"]*)"').exec(html);
@@ -85,6 +85,25 @@ function docs(w, rel) {
   return path.join(w.home, "ws", "repo", rel || "docs");
 }
 
+/**
+ * What an old review had: the record of the page server that served its
+ * folder. Written by the CLI, never by a page, so it vouches for its root.
+ */
+function oldServer(w, session, root, mounts) {
+  const recordDir = stateDirModule.staticServersRoot(w.state, session);
+  fs.mkdirSync(recordDir, { recursive: true });
+  const id = "ss_" + path.basename(root).replace(/[^A-Za-z0-9]/g, "");
+  fs.writeFileSync(path.join(recordDir, id + ".json"), JSON.stringify({
+    schema: staticServers.SCHEMA, id, session_id: session, root, port: 1, host: "127.0.0.1",
+    started_at: "2026-10-01T00:00:00.000Z", stopped_at: "2026-10-02T00:00:00.000Z", mounts: mounts || {}
+  }));
+}
+
+/** The rendered copy of a Markdown source, which only the CLI writes into the state folder. */
+function renderedCopy(w, session, source) {
+  return writeFile(path.dirname(markdown.artifactPath(w.state, session, source)), path.basename(markdown.artifactPath(w.state, session, source)), PAGE_HTML);
+}
+
 // --- V41: the kinds ------------------------------------------------------------
 
 test("V41: a page on disk is openable, and its row gets an address once its site is named", async (t) => {
@@ -92,6 +111,7 @@ test("V41: a page on disk is openable, and its row gets an address once its site
   const folder = docs(w);
   const file = writeFile(folder, "page.html", PAGE_HTML);
   openSession(w, "s_a");
+  oldServer(w, "s_a", fs.realpathSync(folder));
   const review = makeReview(w, { agent_session_id: "s_a", target_path: file });
   const lib = await libraryOf(w);
 
@@ -111,15 +131,15 @@ test("V41: a page on disk is openable, and its row gets an address once its site
 
 test("V41: a Markdown review opens its source folder, a notes review its one page, a folder review a page in it", async (t) => {
   const w = await sitesWorld(t);
-  const state = path.join(w.state, "artifacts");
   const md = writeFile(docs(w, "notes"), "plan.md", "# Plan\n");
   const note = writeFile(docs(w, "journal"), "today.md", "# Today\n");
   const site = docs(w, "site");
   writeFile(site, "index.html", PAGE_HTML);
   writeFile(site, "b.html", PAGE_HTML);
   openSession(w, "s_a");
-  const mdReview = makeReview(w, { agent_session_id: "s_a", target_path: writeFile(state, "plan.html", PAGE_HTML), source_path: md });
-  const noteReview = makeReview(w, { agent_session_id: "s_a", target_path: writeFile(state, "today.html", PAGE_HTML), source_path: note, notes: true });
+  oldServer(w, "s_a", fs.realpathSync(site));
+  const mdReview = makeReview(w, { agent_session_id: "s_a", target_path: renderedCopy(w, "s_a", md), source_path: md });
+  const noteReview = makeReview(w, { agent_session_id: "s_a", target_path: renderedCopy(w, "s_a", note), source_path: note, notes: true });
   const folderReview = makeReview(w, { agent_session_id: "s_a", target_path: site });
   const lib = await libraryOf(w);
 
@@ -236,6 +256,59 @@ test("V41: a gone worktree the registry never saw keeps the old rule: a worktree
   assert.equal((await lib.open(review.id)).json.error.code, "PROTO_NOT_OPENABLE");
 });
 
+// --- Open serves nothing new ---------------------------------------------------
+
+test("a review of a site the CLI bound is openable with no old server record", async (t) => {
+  const w = await sitesWorld(t);
+  const folder = docs(w);
+  const file = writeFile(folder, "page.html", PAGE_HTML);
+  const bound = w.helper.sites.bind({ root: fs.realpathSync(folder), mode: "folder", entry: "page.html" });
+  openSession(w, "s_a");
+  const review = makeReview(w, { agent_session_id: "s_a", target_path: file });
+  const lib = await libraryOf(w);
+  assert.equal((await lib.row(review.id)).openable, "yes");
+  assert.equal((await lib.open(review.id)).json.url, "http://" + bound.name + ".lahe.localhost:" + w.helper.pagesPort + "/page.html");
+});
+
+test("Open serves nothing new: a path a page wrote into its review, that nothing ever served, is not openable and names nothing", async (t) => {
+  const w = await sitesWorld(t);
+  // A folder with a page in it that no CLI, page server or registry ever served.
+  const secret = path.join(w.home, ".ssh-like", "keys");
+  const page = writeFile(secret, "innocent.html", PAGE_HTML);
+  const md = writeFile(path.join(w.home, "private"), "diary.md", "# Diary\n");
+  const notes = writeFile(path.join(w.home, "private"), "journal.md", "# Journal\n");
+  const folder = path.join(w.home, "private-folder");
+  writeFile(folder, "index.html", PAGE_HTML);
+  openSession(w, "s_a");
+  const reviews = [
+    makeReview(w, { agent_session_id: "s_a", target_path: page }),
+    makeReview(w, { agent_session_id: "s_a", target_path: writeFile(w.state, "fake/diary.html", PAGE_HTML), source_path: md }),
+    makeReview(w, { agent_session_id: "s_a", target_path: writeFile(w.state, "fake/diary2.html", PAGE_HTML), source_path: notes, notes: true }),
+    makeReview(w, { agent_session_id: "s_a", target_path: folder })
+  ];
+  const lib = await libraryOf(w);
+  for (const r of reviews) {
+    const row = await lib.row(r.id);
+    assert.equal(row.openable, "via-agent", r.id);
+    assert.equal(row.address, null, r.id);
+    const res = await lib.open(r.id);
+    assert.equal(res.json.error && res.json.error.code, "PROTO_NOT_OPENABLE", r.id + ": " + res.text);
+    assert.equal(w.helper.reviews.get(r.id).served_at || null, null, r.id);
+  }
+  assert.equal(w.helper.sites.list().length, 0, "no site was named for any of them");
+});
+
+test("a root nested inside a folder an old page server served is vouched for", async (t) => {
+  const w = await sitesWorld(t);
+  const outer = docs(w, "outer");
+  const file = writeFile(path.join(outer, "inner"), "page.html", PAGE_HTML);
+  openSession(w, "s_a");
+  oldServer(w, "s_a", fs.realpathSync(outer));
+  const review = makeReview(w, { agent_session_id: "s_a", target_path: file });
+  const lib = await libraryOf(w);
+  assert.equal((await lib.row(review.id)).openable, "yes");
+});
+
 // --- V39: Open binds ------------------------------------------------------------
 
 test("V39: Open on an old row names its site, stamps the review, and returns the stable address", async (t) => {
@@ -243,6 +316,7 @@ test("V39: Open on an old row names its site, stamps the review, and returns the
   const folder = docs(w);
   const file = writeFile(folder, "page.html", PAGE_HTML);
   openSession(w, "s_a");
+  oldServer(w, "s_a", fs.realpathSync(folder));
   const review = makeReview(w, {
     agent_session_id: "s_a",
     target_path: file,
@@ -287,6 +361,7 @@ test("V39: a hand-over still goes to the attached agent, after the address is ma
   const w = await sitesWorld(t);
   const file = writeFile(docs(w), "page.html", PAGE_HTML);
   openSession(w, "s_a");
+  oldServer(w, "s_a", fs.realpathSync(docs(w)));
   const store = sessions(w);
   store.create({ id: "s_agent", name: "library agent" });
   const review = makeReview(w, { agent_session_id: "s_a", target_path: file });
@@ -310,6 +385,7 @@ test("V39: a refused hand-over (another agent is watching) names no site", async
   const file = writeFile(docs(w), "page.html", PAGE_HTML);
   const store = sessions(w);
   openSession(w, "s_a");
+  oldServer(w, "s_a", fs.realpathSync(docs(w)));
   store.create({ id: "s_agent", name: "library agent" });
   const review = makeReview(w, { agent_session_id: "s_a", target_path: file });
   const now = Date.now();
@@ -325,20 +401,24 @@ test("V39: a refused hand-over (another agent is watching) names no site", async
 
 // --- V40: a newer open review keeps its rail ------------------------------------
 
-async function twoReviews(w, newerSession, olderSession) {
+// The newer review is created second, and its id sorts after the older one's, so
+// it is the newer on a tie in the same millisecond too (no sleeping to order them).
+// The helper's clock runs a minute ahead, so an Open stamps later than both.
+const AHEAD = { helper: { now: () => Date.now() + 60 * 1000 } };
+
+function twoReviews(w, newerSession, olderSession) {
   const file = writeFile(docs(w), "page.html", PAGE_HTML);
-  const older = makeReview(w, { agent_session_id: olderSession, target_path: file });
-  await sleep(8);
-  const newer = makeReview(w, { agent_session_id: newerSession, target_path: file });
+  const older = makeReview(w, { id: "r-a-older", agent_session_id: olderSession, target_path: file });
+  const newer = makeReview(w, { id: "r-b-newer", agent_session_id: newerSession, target_path: file });
   w.helper.sites.bind({ root: fs.realpathSync(docs(w)), mode: "folder", entry: "page.html" });
   return { older, newer, name: w.helper.sites.list()[0].name };
 }
 
 test("V40: Open on an older row does not move a rail a newer review in another open session holds, and says which review holds it", async (t) => {
-  const w = await sitesWorld(t);
+  const w = await sitesWorld(t, AHEAD);
   openSession(w, "s_old");
   openSession(w, "s_new");
-  const { older, newer, name } = await twoReviews(w, "s_new", "s_old");
+  const { older, newer, name } = twoReviews(w, "s_new", "s_old");
   const lib = await libraryOf(w);
 
   const before = await getPage(w, name, "/page.html");
@@ -354,10 +434,10 @@ test("V40: Open on an older row does not move a rail a newer review in another o
 });
 
 test("V40 control: the same Open does move the rail when the newer review's session is closed", async (t) => {
-  const w = await sitesWorld(t);
+  const w = await sitesWorld(t, AHEAD);
   openSession(w, "s_old");
   openSession(w, "s_new");
-  const { older, newer, name } = await twoReviews(w, "s_new", "s_old");
+  const { older, newer, name } = twoReviews(w, "s_new", "s_old");
   sessions(w).close("s_new");
   const lib = await libraryOf(w);
   const res = await lib.open(older.id);
@@ -368,9 +448,9 @@ test("V40 control: the same Open does move the rail when the newer review's sess
 });
 
 test("V40 control: the same Open moves the rail when the newer review is in the row's own session", async (t) => {
-  const w = await sitesWorld(t);
+  const w = await sitesWorld(t, AHEAD);
   openSession(w, "s_one");
-  const { older, name } = await twoReviews(w, "s_one", "s_one");
+  const { older, name } = twoReviews(w, "s_one", "s_one");
   const lib = await libraryOf(w);
   const res = await lib.open(older.id);
   assert.equal(res.json.held_by, null);
@@ -383,6 +463,7 @@ test("V42: Open on a review of a closed session restarts no process and reopens 
   const w = await sitesWorld(t);
   const file = writeFile(docs(w), "page.html", PAGE_HTML);
   openSession(w, "s_done");
+  oldServer(w, "s_done", fs.realpathSync(docs(w)));
   const review = makeReview(w, { agent_session_id: "s_done", target_path: file });
   sessions(w).close("s_done");
   const lib = await libraryOf(w);
@@ -393,6 +474,7 @@ test("V42: Open on a review of a closed session restarts no process and reopens 
   const catalog = fs.existsSync(catalogFile) ? JSON.parse(fs.readFileSync(catalogFile, "utf8")) : {};
   assert.deepEqual(catalog.reopened || {}, {}, "no reopened-session record");
   const servers = path.join(w.state, "agent-sessions", "s_done", "static-servers");
-  assert.equal(fs.existsSync(servers) ? fs.readdirSync(servers).length : 0, 0, "no page server was recorded or started");
+  assert.deepEqual(fs.readdirSync(servers), ["ss_docs.json"], "no page server was recorded or started: only the old record is there, untouched");
+  assert.ok(JSON.parse(fs.readFileSync(path.join(servers, "ss_docs.json"), "utf8")).stopped_at, "and it is still stopped");
   assert.match(res.json.url, /\.lahe\.localhost:\d+\/page\.html$/);
 });

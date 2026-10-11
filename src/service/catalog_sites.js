@@ -15,6 +15,14 @@
 // keys a site by its root and mode, so the same document gets the same name
 // whichever of the two asks first.
 //
+// OPEN SERVES NOTHING NEW. A review's recorded paths are page text: a page
+// with the review's token can write any path into meta.json (review.write). So
+// a plan is made only for a root something a page cannot write has already
+// served (see vouched()): a site in the registry, an old page server's record,
+// or, for Markdown, the rendered copy in the state folder that only the CLI
+// writes. A review nothing vouches for is via-agent, as a review whose server
+// record was lost always was, and Open names nothing for it.
+//
 // Node-only.
 
 "use strict";
@@ -81,15 +89,55 @@ function createCatalogSites(options) {
   var log = typeof opts.log === "function" ? opts.log : function () {};
 
   /**
+   * Has something a page cannot write already served this plan's root?
+   *
+   * @param {{mode: string, root: string, file: string}} plan real paths
+   * @param {{sessionId: string, sourcePath: string|null, records: object[]}} evidence
+   */
+  function vouched(plan, evidence) {
+    if (plan.mode === MODE.PAGE_ONLY) {
+      if (sites.byRoot(plan.root, MODE.PAGE_ONLY)) return true;
+    } else if (sites.list().some(function (entry) {
+      return entry.site.mode === MODE.FOLDER && within(plan.root, entry.site.root);
+    })) {
+      return true;
+    }
+    // Markdown: the CLI rendered this very source in this session, which only
+    // it can do (the state folder is not served and a page cannot write it).
+    if (evidence.sourcePath && markdown.isMarkdown(evidence.sourcePath) && evidence.sessionId &&
+        fs.existsSync(markdown.artifactPath(dir, evidence.sessionId, evidence.sourcePath))) {
+      return true;
+    }
+    // An old page server of this session served the root, or a folder that
+    // holds it. Its record is written by the CLI.
+    return plan.mode === MODE.FOLDER && (evidence.records || []).some(function (meta) {
+      var served = [meta.root, meta.logical_root].concat(Object.keys(meta.mounts || {}).map(function (k) { return meta.mounts[k]; }));
+      return served.some(function (folder) {
+        if (typeof folder !== "string" || !folder) return false;
+        var real = realOrNull(folder);
+        return (real && within(plan.root, real)) || within(plan.root, folder);
+      });
+    });
+  }
+
+  /**
    * The site a review's document would be served from, or null when Lahe
-   * cannot serve it. Reads the disk; writes nothing.
+   * cannot serve it or nothing vouches for its root. Reads the disk; writes
+   * nothing.
    *
    * @param {{sourcePath: string|null, servedPath: string|null, notes: boolean,
+   *          sessionId: string, records: object[],
    *          landing: function(string): string|null}} input `landing(folder)`
-   *   names the page a folder review opens on
+   *   names the page a folder review opens on; `records` are the session's
+   *   old page-server records
    * @returns {{mode: string, root: string, file: string}|null} real paths
    */
   function planOf(input) {
+    var plan = candidatePlan(input);
+    return plan && vouched(plan, input) ? plan : null;
+  }
+
+  function candidatePlan(input) {
     var source = input.sourcePath ? realOrNull(input.sourcePath) : null;
     var sourceStat = source ? statOrNull(source) : null;
     if (input.notes && sourceStat && sourceStat.isFile()) return { mode: MODE.PAGE_ONLY, root: source, file: source };
