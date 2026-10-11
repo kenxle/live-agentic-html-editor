@@ -60,11 +60,11 @@ Separately, either one could later ship as a single file that runs without Node 
 
 The separate addresses protect documents from each other inside your browser:
 
-- A page can contain code from elsewhere, like a chart tool pulled from the internet.
-- Your browser lets code on a page read anything else at the same address.
-- So if two documents shared an address, code in one could read the other, and send comments to it as if they came from you.
+- A page can run JavaScript, including scripts loaded from elsewhere, like a chart tool pulled from the internet.
+- Your browser lets JavaScript on a page read anything else at the same address.
+- So if two documents shared an address, JavaScript in one could read the other, and send comments to it as if they came from you.
 
-Lahe cannot stop that itself, because that code runs in your browser, not in Lahe. Only the browser can, and the browser decides by address.
+Lahe cannot stop that itself, because that JavaScript runs in your browser, not in Lahe. Only the browser can, and the browser decides by address.
 
 Your own pages never try to do this. The protection is for the rare bad page, which is what the security review assumed:
 
@@ -80,10 +80,10 @@ This is what could happen if every document shared one address (option B). With 
 
 ```mermaid
 flowchart TD
-    A["1. You open a bad page with Lahe<br/>(sent to you, or saved from the web)"] --> B["2. Hidden code on that page runs<br/>in your browser"]
+    A["1. You open a bad page with Lahe<br/>(sent to you, or saved from the web)"] --> B["2. JavaScript on that page runs in your browser:<br/>its own script tags, or a script it loads from the web"]
     B --> C{"3. Is your other document<br/>at the same address?"}
     C -->|"no: separate addresses"| Stop["The browser blocks it.<br/>Nothing more happens."]
-    C -->|"yes: one shared address"| D["4. The code opens your other document<br/>in the background and reads it,<br/>including its comment key"]
+    C -->|"yes: one shared address"| D["4. The JavaScript fetches your other document<br/>in the background and reads it,<br/>including its comment key"]
     D --> E["5. It reads your unsent drafts<br/>for every document"]
     D --> F["6. It posts a comment to that document,<br/>using the key, as if you wrote it"]
     F --> G["7. Your agent on that document reads the comment<br/>and may act on it: edit files, run commands"]
