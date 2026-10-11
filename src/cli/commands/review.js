@@ -289,7 +289,14 @@ async function run(argv, mode) {
   if (code !== 0 && createdSession) {
     store.close(sessionId);
     if (store.openSessions().length === 0) {
-      try { await require("./session.js").stopVerifiedHelper(dir); } catch (err) { /* the original add failure remains primary */ }
+      // The same question `session close` asks: an always-on or installed
+      // helper serves every page and stays up, as does one a page or the
+      // Library is still using.
+      try {
+        var sessionCommand = require("./session.js");
+        var wanted = await sessionCommand.helperStillWanted(dir, Date.now());
+        if (!wanted.keep) await sessionCommand.stopVerifiedHelper(dir);
+      } catch (err) { /* the original add failure remains primary */ }
     }
   }
   if (code === 0) {
