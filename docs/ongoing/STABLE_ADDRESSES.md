@@ -60,7 +60,13 @@ The separate addresses protect documents from each other inside your browser:
 
 Lahe cannot stop that itself, because that code runs in your browser, not in Lahe. Only the browser can, and the browser decides by address.
 
-For you, the risk is low. Option D keeps the protection anyway, and you would never see the difference.
+Your own pages never try to do this. The protection is for the rare bad page, which is what the security review assumed:
+
+- someone sends you a page and you open it with Lahe;
+- an agent saves a page from the web to review;
+- a chart tool a page pulls from the internet gets hacked.
+
+For you, the risk is low. Lahe is public, though, and other people use it in other ways. Option D keeps the protection, and you would never see the difference.
 
 ## The options
 
