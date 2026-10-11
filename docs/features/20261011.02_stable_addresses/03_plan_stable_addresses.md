@@ -7,7 +7,7 @@ Four workstreams and five pull requests:
 - **core** moves page serving into the helper behind a switch, has every helper module ask the new name registry, then makes it the default and retires per-session page servers.
 - **library** points the Library at stable addresses, alongside core, behind the same switch.
 - **install** adds the login item and always-on behavior on three systems.
-- **lahe-names** adds the optional `.lahe` ending on macOS.
+- **lahe-names** adds port-free addresses and the optional `.lahe` ending on macOS, with written steps for Linux and Windows.
 
 Docs, the skill, and the contract change in the same pull request as the behavior they describe. Builders work on branches off one integration branch (`feat/stable-addresses`). "Merged" in this plan means merged into that branch, and a PR is cut from it once its steps are green.
 
@@ -62,7 +62,7 @@ Each workstream leaf below is a builder's packet, together with this block, the 
 | core | 1.0 to 3.3 | one builder, Opus | itself across Steps 1 to 3 | `sites.js`, `page_routes.js`, `index.js` (all but `/health`), `routes.js`, `auth.js` (non-catalog), `protocol.js`, `record.js`, `review_format.js`, `reviews.js`, `heal.js`, `rebuild.js`, `handled_check.js`, `projection.js`, `markdown*.js`, `static_servers.js`, `idle_servers.js`, `commands/review.js`, `add.js` (the served-by-helper mode), `write.js`, `status.js`, `session.js` (close), `src/layer/index.js`, `docs/CLI.md` (review, write, status, session sections), `SESSION_OWNERSHIP.md` (except always-on lines) | none | PR 1, PR 2 |
 | library | 4.1 to 4.3 | one builder, Sonnet | none | `catalog_*.js`, `src/layer/catalog/`, `auth.js` (catalog part), `commands/library.js`, `docs/ongoing/LIBRARY.md` | core Step 1 | PR 1, PR 2 |
 | install | 5.1 to 5.5 | one builder, Opus | none | `commands/install.js`, `commands/serve.js`, `login_item.js`, `self_stop.js`, `/health` in `index.js`, `startHelper` in `session.js` and its four calls in `add.js`, `scripts/install-cli.js`, `docs/INSTALL.md`, `README.md`, `docs/CLI.md` (install section), the always-on lines of `SESSION_OWNERSHIP.md` | core Step 1 | PR 3 |
-| lahe-names | 6.1 to 6.3 | the install builder, continued | install | `name_server.js`, resolver parts of `login_item.js` and `install.js`, layer fallbacks (6.3 only) | PR 3 | PR 4 |
+| lahe-names | 6.0 to 6.2 (6.3 dropped) | the install builder, continued | install | `name_server.js`, port-forward and resolver parts of `login_item.js` and `install.js`, the Linux and Windows steps in `docs/INSTALL.md` | PR 3 | PR 4 |
 
 - **Agent reuse:** the core builder holds the serving model for all three of its steps. The install builder continues into lahe-names because both touch `install.json`, the installer, and macOS system setup.
 - **Token plan:** core, library, and install run in parallel once core Step 1 is merged into the integration branch. They share files only where the table splits them by function. The orchestrator merges in this order: core, then library, then install. Packets name only the architecture sections and docs in each leaf's "Reads first".
@@ -70,9 +70,9 @@ Each workstream leaf below is a builder's packet, together with this block, the 
 - **PRs:** each leaves the app working.
   - PR 0 is the dispatch-only workflow.
   - PR 1 ships the registry, the new serving, and the Library's new Open, behind `LAHE_PAGES=sites`, off by default.
-  - PR 2 turns it on, removes the old path, and changes the skill and contract, using the ending Ken chose at the review gate. Its retired tests have Ken's batch approval first.
+  - PR 2 turns it on, removes the old path, and changes the skill and contract, printing `.lahe.localhost`, as Ken decided at the review gate. Its retired tests have Ken's batch approval first.
   - PR 3 adds install. Without running `lahe install`, nothing changes for a clone.
-  - PR 4 adds the `.lahe` option.
+  - PR 4 adds port-free addresses and the `.lahe` option.
 
   Each PR runs `npm run gate` locally, alone, and reads 0 failed before it is pushed. `dist/lahe-layer.js` is rebuilt and committed by the orchestrator once per PR, not by builders.
 
@@ -119,7 +119,7 @@ The one verification table. U is a unit test under `test/unit/`; B is a Playwrig
 | V34 | R1 idle | After the old idle grace with no window (injected clock), the page still loads | U |
 | V35 | Leftovers | Every helper start stops page-server processes named in old records | U |
 | V36 | Retired paths | No code path spawns `static_servers.js --serve`; the leak check finds none | U |
-| V37 | R5, R6 status | `lahe status` prints the port, the printed ending and why, and each review's site; `lahe review` and `lahe status` name a taken port | U |
+| V37 | R5, R6 status | `lahe status` prints the port, the printed ending and why, whether addresses print without a port and why, and each review's site; `lahe review` and `lahe status` name a taken port | U |
 | V38 | R12 docs | The skill, contract and its copies, CLI doc, ongoing docs, diagrams, and manifest describe sites and the always-on server; a scripted grep finds no "random port" or per-session page-server wording | U |
 | V39 | R8 Open | Open on an old row binds and opens its stable address | B |
 | V40 | Open and the live rail | Open on an older row whose file a newer open review holds does not move the rail, and says which review holds it | U |
@@ -158,6 +158,7 @@ The one verification table. U is a unit test under `test/unit/`; B is a Playwrig
 | V73 | `.lahe` for real | On Ken's Mac with the resolver installed: a `.lahe` page loads in Chrome, Firefox, and Safari; a stopped name server turns `.lahe` off and status says why | M |
 | V74 | Port forward | The forward rule is fixed text with a Lahe marker, covers only loopback port 80, is skipped when port 80 is held, and uninstall removes only a marked rule | U |
 | V75 | Port-free for real | On Ken's Mac after install: `http://<name>.lahe/<file>` and `http://<name>.lahe.localhost/<file>` load with no port, a `:1483` address still loads, and a reboot keeps the forward | M |
+| V76 | Port-free check | `lahe review` prints `:1483` until the helper sees its own random request arrive through port 80, and again after the forward is removed | U |
 :::
 
 ## Acceptance Criteria
@@ -186,7 +187,7 @@ The one verification table. U is a unit test under `test/unit/`; B is a Playwrig
 - [ ] Addresses name the folder and file (requirement 3): V1 to V3, V65, and the walk reads every printed address.
 - [ ] Documents stay walled off (requirement 4): V14 to V17.
 - [ ] One port (requirement 5): V7, V37.
-- [ ] Endings (requirement 6): V37, V54 to V59, V73 to V75, with `.lahe.localhost` printed.
+- [ ] Endings (requirement 6): V37, V54 to V59, V73 to V76, with `.lahe.localhost` printed.
 - [ ] Starts at login on three systems (requirement 7): V45 to V52.
 - [ ] Existing documents get addresses, and links keep working (requirements 8 and 8a): V12, V13, V29, V31, V39.
 - [ ] Drafts come back (requirement 9): V63.

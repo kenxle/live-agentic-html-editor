@@ -43,7 +43,7 @@ What stays: review records, tokens, the per-request checks (D11 in the original 
 | `src/service/static_servers.js`, `idle_servers.js`, `self_stop.js` | Spawning retired. Old records stay readable for aliases and the one-time migration. Leftover processes stopped on every start. Self-stop off in always-on mode. |
 | `src/service/catalog_*.js`, `src/layer/catalog/page.js` | Kinds redefined; Open binds instead of restarting; rows link to stable addresses; copy fallback. |
 | `src/cli/index.js`, `commands/review.js`, `add.js`, `write.js`, `library.js`, `status.js`, `session.js` | New order for `lahe review`; status reports port, ending, install, and state folder; session close stops only the session; the CLI does not spawn a helper when installed. |
-| `src/layer/index.js`, `export.js`, `overlay.js`, `store.js` | Read aliases; copy fallback; a lock fallback only if `.lahe` is printed. |
+| `src/layer/index.js`, `export.js`, `overlay.js`, `store.js` | Read aliases; copy fallback. |
 | `src/shared/manifest.js` | The four new files. |
 | Docs | `skills/lahe/SKILL.md`, the contract in `review_format.js` and its copies, `docs/CLI.md`, `docs/CONTRACTS.md`, `docs/INSTALL.md`, `README.md`, `docs/ongoing/SERVING_ARCHITECTURES.md`, `STATIC_SITE_FOLDER.md`, `FREE_WRITING.md`, `LIBRARY.md`, `SESSION_OWNERSHIP.md`, and `docs/diagrams/` (`system_overview`, `session_ownership`, `review_round_trip`, `module_map`). |
 
@@ -68,18 +68,18 @@ What stays: review records, tokens, the per-request checks (D11 in the original 
 }
 ```
 
-- **What Ken sees:** the name says the folder, and the path says the file: `http://docs.features.20261011-02-stable-addresses.lahe.localhost:1483/01_brief_stable_addresses.md`, or `http://ongoing.lahe.localhost:1483/STABLE_ADDRESSES.md`.
+- **What Ken sees:** the name says the folder, and the path says the file: `http://docs.features.20261011-02-stable-addresses.lahe.localhost:1483/01_brief_stable_addresses.md`, or `http://live-agentic-html-editor.docs.ongoing.lahe.localhost:1483/STABLE_ADDRESSES.md`. With the port-80 forward set up and verified, the same addresses print without `:1483`.
 - **A site is a root plus a mode.** `folder` serves the root's tree, as a page server does today. `page-only` (a `lahe write` notes page) serves the one file plus Lahe's reserved files, and 404s everything else. Roots use `fs.realpathSync.native`.
 - **For Markdown, the root is the source folder.** `/<file>.md` renders on request from the source, with the render cached by file time. `rebuild.js`, the reload check, and the handled check read the same render. The state folder's artifact copy is no longer the served page. Links outside the source folder use `/.lahe-source/<hash>/` mounts, stored on the site and served only under that site.
 - **`entry`** is the page `lahe review` prints. It is not a binding: any review may answer on any page of the site, by the rule below.
 - **Name rule.** Take the root folder and its two parents, in path order, stopping below the home folder. Lowercase each, turn each run of other characters into one dash, and join them with dots where the `/` was. Each folder becomes one DNS label of at most 63 characters; a name longer than 150 characters drops the outermost parent first. A name with nothing left becomes `doc`. Refuse anything starting `xn--` or with `--` in positions 3 and 4. A name that clashes with a different root takes one more parent, then a number. Reserved: `library`, `lahe`, `www`, `api`. A name is not reused for another root.
 - **Worktrees.** At bind time, while the worktree exists, the helper reads its `.git` file to record `main_checkout` and `worktree_root`. The `.claude/worktrees/` pattern is the fallback for old entries.
 
-**`<state>/install.json`** (new, written by `lahe install`): system, login item path, Node path, clone path, port, resolved state folder, `lahe_names` (on or off), resolver path.
+**`<state>/install.json`** (new, written by `lahe install`): system, login item path, Node path, clone path, API port, page port, resolved state folder, `lahe_names` (on or off), resolver path, `port_80` (on or off), forward rule path.
 
 **`<state>/cli-secret`** (new, mode 0600): a random secret the CLI sends on `site.bind`. Pages cannot read it.
 
-**`service.json` gains** `pages: { port, printed_ending, lahe_names: { on, verified, reason } }`, `always_on`, and a state-folder id that `/health` also reports.
+**`service.json` gains** `pages: { port, printed_ending, port_free: { on, verified, reason }, lahe_names: { on, verified, reason } }`, `always_on`, and a state-folder id that `/health` also reports.
 
 **Script tag gains** `data-lahe-aliases`: the old origins of this site's root, read from old page-server records, escaped as JSON and capped at 16 entries. Same paths, so an alias is only an origin.
 
@@ -185,7 +185,14 @@ flowchart TD
 
 `lahe install` refuses to run without a terminal and refuses to run as root. An agent tells the human to run it with `! lahe install`.
 
-### `.lahe` on macOS (opt-in)
+### Port-free addresses and `.lahe` on macOS (opt-in)
+
+Two separate options, each one admin step. `lahe install --port-80` adds the port forward; `lahe install --lahe-names` adds `.lahe`. Either can be on without the other.
+
+- `lahe install --port-80` loads a loopback forward from port 80 to 1483, for `127.0.0.1` and `::1`, with one `sudo` call, and reloads it at boot. The rule is fixed text with a Lahe marker. It is skipped, with a status line naming the holder, when something already listens on port 80.
+- **Verification before printing without a port:** at start and every 5 minutes, the helper sends itself a request with a fresh random value through port 80 and accepts only when it sees that value arrive. Until then, `lahe review` prints `:1483`.
+- `lahe uninstall` removes the forward only if it carries the marker. `:1483` addresses keep working throughout.
+
 
 - `lahe install --lahe-names` writes `/etc/resolver/lahe` with one `sudo` call. The file content is fixed text plus the port number, with no shell interpolation, and it carries a Lahe marker.
 - The helper's name server answers on `127.0.0.1` at the recorded port: `A 127.0.0.1` and `AAAA ::1` for names under `.lahe`, `REFUSED` for anything else. Malformed packets are dropped.
@@ -199,7 +206,7 @@ flowchart TD
 
 | System | `.lahe` lookups | Port-free address |
 |---|---|---|
-| macOS | `/etc/resolver/lahe`, done by `lahe install --lahe-names` | a loopback port forward from 80 to Lahe's port, for `127.0.0.1` and `::1`, loaded at boot, done by `lahe install --lahe-names`. Approved by Ken |
+| macOS | `/etc/resolver/lahe`, done by `lahe install --lahe-names` | a loopback port forward from 80 to 1483, for `127.0.0.1` and `::1`, loaded at boot, done by `lahe install --port-80`. Approved by Ken |
 | Linux | a `systemd-resolved` drop-in that sends `~lahe` to the helper's name server, where `systemd-resolved` runs. Other setups: the guide says so and stops | a one-time setting that lets normal programs use port 80, then the helper also listens on 80 |
 | Windows | a name-resolution rule for `.lahe`. It cannot name a port, so the name server must also answer on port 53; the spike checks this | the helper also listens on 80 when nothing else holds it; usually no admin step |
 
@@ -233,7 +240,7 @@ The forward sends port 80 to 1483. If port 80 is taken, the helper keeps `:1483`
 ## Security & Privacy Notes
 
 - **Isolation is per site,** the same unit as today's page server, now without the per-session split. Two files in one folder share an origin, as they do today (brief requirement 4, documents stay walled off, now says so).
-- **Host dispatch comes first.** It runs before `OPTIONS` handling and catalog matching. Each route family answers a closed set of Hosts: API on loopback; Library on loopback and `library.lahe.localhost`; pages on registered names only. The grammar is one to four lowercase labels of letters, digits, and dashes, matched as a whole registered name (never a suffix or a parent of one), the helper's own port, and no trailing dot.
+- **Host dispatch comes first.** It runs before `OPTIONS` handling and catalog matching. Each route family answers a closed set of Hosts: API on loopback; Library on loopback and `library.lahe.localhost`; pages on registered names only. The grammar is one to four lowercase labels of letters, digits, and dashes, matched as a whole registered name (never a suffix or a parent of one), port 1483 or no port (the forward), and no trailing dot. A page's Origin may carry either form; both map to the same site.
 - **Dotted names share parent domains.** `a.docs.ongoing.lahe.localhost` sits under `docs.ongoing.lahe.localhost`. Each full name is still its own origin, so storage and scripts stay walled off. The one thing parent domains share is cookies. Lahe sets none and reads none, so a cookie a page sets on a parent domain reaches no Lahe data.
 - **DNS rebinding.** Browsers do not resolve `*.localhost` through DNS, so `.lahe.localhost` cannot be rebound. `.lahe` is answered only after the helper proves its own name server answers `.lahe` lookups on this machine. Everywhere else, a foreign Host is refused, as today.
 - **Binding is CLI-only.** It needs the CLI secret from a 0600 file, and refuses any request carrying `Origin`. A page holding a review token cannot name a file or move a rail.
@@ -265,7 +272,7 @@ Full prose: [architect review](02_architecture_stable_addresses_reviews.md).
 | AR5 | Healer would write tokens into served files | Accepted | `servesPath` asks the registry |
 | AR6 | `lahe review` order undefined | Accepted | `add --served-by-helper`, then `site.bind` |
 | AR7 | Notes pages would serve their folder | Accepted | `page-only` mode |
-| AR8 | `.lahe` loses Web Locks | Accepted | Lock fallback only if `.lahe` is printed; `.lahe.localhost` recommended |
+| AR8 | `.lahe` loses Web Locks | Accepted | `.lahe.localhost` printed (Ken agreed); no lock fallback built |
 | AR9 | Stale helper never replaced; CLI double spawn | Accepted | Replace at a quiet moment; installed CLI never spawns; compare against the login item's clone |
 | AR10 | Login item does not pin the state folder | Accepted | `--state-dir` and `--port` in the login item; state-folder id in `/health` |
 | AR11 | Aliases missed `review.json` grouping | Accepted | Aliases are origins only, used by the rail and by `review_format` |
@@ -293,7 +300,7 @@ Full prose: [security review](02_architecture_stable_addresses_reviews.md).
 | SR2 | `address.bind` reachable from pages | Accepted | CLI secret, no Origin, root from the request |
 | SR3 | Per-file origins did not wall files off | Accepted | Per-site isolation stated plainly; hidden files refused |
 | SR4 | Other local users can read pages | Accepted as a residual | Recorded under D11; install warns on multi-user machines |
-| SR5 | No Fetch Metadata on `http://*.lahe` | Accepted | Library never on `.lahe`; no redirects; `Accept` fallback if `.lahe` is printed |
+| SR5 | No Fetch Metadata on `http://*.lahe` | Accepted | Library never on `.lahe`; no redirects; `.lahe.localhost` printed |
 | SR6 | Port squatting on the name server | Accepted | Verification by a fresh random query the helper must see |
 | SR7 | GET minted names and origins | Accepted | GET never writes |
 | SR8 | No `Cross-Origin-Resource-Policy` | Accepted | Header on every page response |

@@ -1,12 +1,11 @@
 # Progress: Stable addresses
 
-**Phase 5, Human review.** The full doc set is written and reviewed by four agents, and is ready for you. Two things need your answer before any code. Last updated 2026-10-11 14:48.
+**Phase 5, Human review.** The full doc set is written and reviewed by four agents, and is ready for you. One thing needs your answer before any code. Last updated 2026-10-11 14:52.
 
 **Docs:** [Decisions page](../../ongoing/STABLE_ADDRESSES.md) · [Crucible](00_crucible_stable_addresses.html) · [Brief](01_brief_stable_addresses.html) · [Architecture](02_architecture_stable_addresses.html) · [Plan](03_plan_stable_addresses.html) · [Code survey](parts/architecture/recon.md)
 
 ## Needs your attention
 
-- [ ] **One name per folder, not per file.** The architecture review showed per-file names would break Markdown images and links, folder sites, your rail rules, and which file a comment points at. Addresses now read as folder plus file: `live-agentic-html-editor.docs.ongoing.lahe.localhost:1483/STABLE_ADDRESSES.md`. Isolation stays the same as today. Approve, or say what to change.
 - [ ] **Approve the plan's two process items:** a small dispatch-only CI workflow on main (it never runs on push and never emails you), and accepting that CI cannot prove "starts at login" on Linux and Windows. Your reboot of this Mac proves it on macOS.
 
 ## Currently working on
@@ -65,6 +64,7 @@ Not shipped yet.
 
 ## Log
 
+- 2026-10-11 14:52: Ken finished the brief. Settled in review: names are the folder plus two parents joined by dots (`live-agentic-html-editor.docs.ongoing`), one name per folder; pages on port 1483 with the API staying on 7817; `lahe review` prints `.lahe.localhost`; `lahe install --port-80` drops the port on macOS; `.lahe` is an option on all three systems, by command on macOS and written steps elsewhere; no npm package. Architecture and plan updated to match. HTTPS for `.lahe` added as a follow-up.
 - 2026-10-11 12:56: Plan review returned 22 findings (2 blockers: main would have been broken between pull requests). All accepted: the Library's new Open ships with the first PR behind the switch, the page lookups ask both old and new until the switch flips, and nine verification rows were added. Doc set served for your review.
 - 2026-10-11 12:48: Plan written: four workstreams, five PRs, 64 verification rows. Plan review dispatched.
 - 2026-10-11 12:48: Architecture and security reviews returned 5 blockers between them. Architecture reworked: a name per folder (today's isolation unit) so paths, Markdown links, and rail rules keep working; binding is CLI-only; `.lahe` becomes a guarded Mac option with `.lahe.localhost` recommended as the printed ending, which reverses your earlier choice and is queued for your decision.

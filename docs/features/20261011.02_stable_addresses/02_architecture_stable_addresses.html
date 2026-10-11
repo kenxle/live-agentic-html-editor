@@ -1081,8 +1081,7 @@ does not spawn a helper when installed.</td>
 <tr>
 <td><code>src/layer/index.js</code>, <code>export.js</code>,
 <code>overlay.js</code>, <code>store.js</code></td>
-<td>Read aliases; copy fallback; a lock fallback only if
-<code>.lahe</code> is printed.</td>
+<td>Read aliases; copy fallback.</td>
 </tr>
 <tr>
 <td><code>src/shared/manifest.js</code></td>
@@ -1130,7 +1129,9 @@ class="sourceCode json"><code class="sourceCode json"><span id="cb1-1"><a href="
 path says the file:
 <code>http://docs.features.20261011-02-stable-addresses.lahe.localhost:1483/01_brief_stable_addresses.md</code>,
 or
-<code>http://ongoing.lahe.localhost:1483/STABLE_ADDRESSES.md</code>.</li>
+<code>http://live-agentic-html-editor.docs.ongoing.lahe.localhost:1483/STABLE_ADDRESSES.md</code>.
+With the port-80 forward set up and verified, the same addresses print
+without <code>:1483</code>.</li>
 <li><strong>A site is a root plus a mode.</strong> <code>folder</code>
 serves the root's tree, as a page server does today.
 <code>page-only</code> (a <code>lahe write</code> notes page) serves the
@@ -1165,13 +1166,14 @@ entries.</li>
 </ul>
 <p><strong><code>&lt;state&gt;/install.json</code></strong> (new,
 written by <code>lahe install</code>): system, login item path, Node
-path, clone path, port, resolved state folder, <code>lahe_names</code>
-(on or off), resolver path.</p>
+path, clone path, API port, page port, resolved state folder,
+<code>lahe_names</code> (on or off), resolver path, <code>port_80</code>
+(on or off), forward rule path.</p>
 <p><strong><code>&lt;state&gt;/cli-secret</code></strong> (new, mode
 0600): a random secret the CLI sends on <code>site.bind</code>. Pages
 cannot read it.</p>
 <p><strong><code>service.json</code> gains</strong>
-<code>pages: { port, printed_ending, lahe_names: { on, verified, reason } }</code>,
+<code>pages: { port, printed_ending, port_free: { on, verified, reason }, lahe_names: { on, verified, reason } }</code>,
 <code>always_on</code>, and a state-folder id that <code>/health</code>
 also reports.</p>
 <p><strong>Script tag gains</strong> <code>data-lahe-aliases</code>: the
@@ -1346,27 +1348,46 @@ mode</td>
 <p><code>lahe install</code> refuses to run without a terminal and
 refuses to run as root. An agent tells the human to run it with
 <code>! lahe install</code>.</p>
-<h3 id="lahe-on-macos-opt-in"><code>.lahe</code> on macOS (opt-in)</h3>
+<h3 id="port-free-addresses-and-lahe-on-macos-opt-in">Port-free
+addresses and <code>.lahe</code> on macOS (opt-in)</h3>
+<p>Two separate options, each one admin step.
+<code>lahe install --port-80</code> adds the port forward;
+<code>lahe install --lahe-names</code> adds <code>.lahe</code>. Either
+can be on without the other.</p>
 <ul>
-<li><code>lahe install --lahe-names</code> writes
+<li><p><code>lahe install --port-80</code> loads a loopback forward from
+port 80 to 1483, for <code>127.0.0.1</code> and <code>::1</code>, with
+one <code>sudo</code> call, and reloads it at boot. The rule is fixed
+text with a Lahe marker. It is skipped, with a status line naming the
+holder, when something already listens on port 80.</p></li>
+<li><p><strong>Verification before printing without a port:</strong> at
+start and every 5 minutes, the helper sends itself a request with a
+fresh random value through port 80 and accepts only when it sees that
+value arrive. Until then, <code>lahe review</code> prints
+<code>:1483</code>.</p></li>
+<li><p><code>lahe uninstall</code> removes the forward only if it
+carries the marker. <code>:1483</code> addresses keep working
+throughout.</p></li>
+<li><p><code>lahe install --lahe-names</code> writes
 <code>/etc/resolver/lahe</code> with one <code>sudo</code> call. The
 file content is fixed text plus the port number, with no shell
-interpolation, and it carries a Lahe marker.</li>
-<li>The helper's name server answers on <code>127.0.0.1</code> at the
+interpolation, and it carries a Lahe marker.</p></li>
+<li><p>The helper's name server answers on <code>127.0.0.1</code> at the
 recorded port: <code>A 127.0.0.1</code> and <code>AAAA ::1</code> for
 names under <code>.lahe</code>, <code>REFUSED</code> for anything else.
-Malformed packets are dropped.</li>
-<li><strong>Verification before answering:</strong> at start and every 5
-minutes, the helper asks the system resolver for a fresh random name
-under <code>.lahe</code>. It accepts only when its own name server saw
-that exact query. Until then, page routes refuse <code>.lahe</code>
+Malformed packets are dropped.</p></li>
+<li><p><strong>Verification before answering:</strong> at start and
+every 5 minutes, the helper asks the system resolver for a fresh random
+name under <code>.lahe</code>. It accepts only when its own name server
+saw that exact query. Until then, page routes refuse <code>.lahe</code>
 Hosts, and <code>lahe review</code> prints
-<code>.lahe.localhost</code>.</li>
-<li><code>lahe uninstall</code> removes the resolver file only if it
+<code>.lahe.localhost</code>.</p></li>
+<li><p><code>lahe uninstall</code> removes the resolver file only if it
 carries the marker. After that, <code>.lahe</code> addresses stop
-resolving. The <code>.lahe.localhost</code> addresses keep working.</li>
-<li>The Library is never served on <code>library.lahe</code>, only on
-loopback and <code>library.lahe.localhost</code>.</li>
+resolving. The <code>.lahe.localhost</code> addresses keep
+working.</p></li>
+<li><p>The Library is never served on <code>library.lahe</code>, only on
+loopback and <code>library.lahe.localhost</code>.</p></li>
 </ul>
 <h3
 id="lahe-and-a-port-free-address-on-linux-and-windows-written-steps"><code>.lahe</code>
@@ -1389,9 +1410,9 @@ written down.</p>
 <td>macOS</td>
 <td><code>/etc/resolver/lahe</code>, done by
 <code>lahe install --lahe-names</code></td>
-<td>a loopback port forward from 80 to Lahe's port, for
-<code>127.0.0.1</code> and <code>::1</code>, loaded at boot, done by
-<code>lahe install --lahe-names</code>. Approved by Ken</td>
+<td>a loopback port forward from 80 to 1483, for <code>127.0.0.1</code>
+and <code>::1</code>, loaded at boot, done by
+<code>lahe install --port-80</code>. Approved by Ken</td>
 </tr>
 <tr>
 <td>Linux</td>
@@ -1488,13 +1509,14 @@ if Chrome's local-network rules ever treat a <code>.lahe</code> page as
 less local than loopback.</p>
 <h3 id="lahe-as-the-printed-ending"><code>.lahe</code> as the printed
 ending</h3>
-<p>Ken's choice on the decisions page. Kept as a macOS opt-in alias, and
-not printed by default, after review found five costs of a non-secure
-address: the "Not secure" label, no clipboard API, no Web Locks (the
-duplicate-tab guard), no Fetch Metadata headers (the Library's checks),
-and DNS rebinding wherever Lahe does not own <code>.lahe</code> lookups.
+<p>Ken's first choice on the decisions page. Kept as an opt-in alias
+(set up by command on macOS, by written steps on Linux and Windows), and
+not printed, after review found five costs of a non-secure address: the
+"Not secure" label, no clipboard API, no Web Locks (the duplicate-tab
+guard), no Fetch Metadata headers (the Library's checks), and DNS
+rebinding wherever Lahe does not own <code>.lahe</code> lookups.
 <code>.lahe.localhost</code> has none of them and needs no setup on any
-system. Ken confirms at the review gate.</p>
+system. Ken agreed at the review gate.</p>
 <h3 id="local-https-for-lahe">Local HTTPS for <code>.lahe</code></h3>
 <p>Makes <code>.lahe</code> a secure context: no "Not secure" label, the
 clipboard API works. Rejected for this feature: it needs a local
@@ -1502,7 +1524,8 @@ certificate authority trusted by every browser on every system (the
 <code>mkcert</code> approach), which is an admin step per browser on
 some systems, a new private key to protect, and a renewal story.
 <code>.lahe.localhost</code> already gets a secure context for free.
-Kept as a follow-up if the label bothers Ken.</p>
+Kept as a follow-up; once it lands, printing <code>.lahe</code> can be
+asked again.</p>
 <h3
 id="socket-activation-launchd-or-systemd-starts-the-helper-on-first-connection">Socket
 activation (launchd or systemd starts the helper on first
@@ -1583,7 +1606,8 @@ answers a closed set of Hosts: API on loopback; Library on loopback and
 <code>library.lahe.localhost</code>; pages on registered names only. The
 grammar is one to four lowercase labels of letters, digits, and dashes,
 matched as a whole registered name (never a suffix or a parent of one),
-the helper's own port, and no trailing dot.</li>
+port 1483 or no port (the forward), and no trailing dot. A page's Origin
+may carry either form; both map to the same site.</li>
 <li><strong>Dotted names share parent domains.</strong>
 <code>a.docs.ongoing.lahe.localhost</code> sits under
 <code>docs.ongoing.lahe.localhost</code>. Each full name is still its
@@ -1689,8 +1713,8 @@ registry</td>
 <td>AR8</td>
 <td><code>.lahe</code> loses Web Locks</td>
 <td><span class="accepted">Accepted</span></td>
-<td>Lock fallback only if <code>.lahe</code> is printed;
-<code>.lahe.localhost</code> recommended</td>
+<td><code>.lahe.localhost</code> printed (Ken agreed); no lock fallback
+built</td>
 </tr>
 <tr>
 <td>AR9</td>
@@ -1839,7 +1863,7 @@ Ken confirms the ending</td>
 <td>No Fetch Metadata on <code>http://*.lahe</code></td>
 <td><span class="accepted">Accepted</span></td>
 <td>Library never on <code>.lahe</code>; no redirects;
-<code>Accept</code> fallback if <code>.lahe</code> is printed</td>
+<code>.lahe.localhost</code> printed</td>
 </tr>
 <tr>
 <td>SR6</td>

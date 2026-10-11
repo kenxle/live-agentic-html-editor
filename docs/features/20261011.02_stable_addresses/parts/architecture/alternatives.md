@@ -41,11 +41,11 @@ Removes CORS preflights. Rejected for this feature: it changes every layer call 
 
 ### `.lahe` as the printed ending
 
-Ken's choice on the decisions page. Kept as a macOS opt-in alias, and not printed by default, after review found five costs of a non-secure address: the "Not secure" label, no clipboard API, no Web Locks (the duplicate-tab guard), no Fetch Metadata headers (the Library's checks), and DNS rebinding wherever Lahe does not own `.lahe` lookups. `.lahe.localhost` has none of them and needs no setup on any system. Ken confirms at the review gate.
+Ken's first choice on the decisions page. Kept as an opt-in alias (set up by command on macOS, by written steps on Linux and Windows), and not printed, after review found five costs of a non-secure address: the "Not secure" label, no clipboard API, no Web Locks (the duplicate-tab guard), no Fetch Metadata headers (the Library's checks), and DNS rebinding wherever Lahe does not own `.lahe` lookups. `.lahe.localhost` has none of them and needs no setup on any system. Ken agreed at the review gate.
 
 ### Local HTTPS for `.lahe`
 
-Makes `.lahe` a secure context: no "Not secure" label, the clipboard API works. Rejected for this feature: it needs a local certificate authority trusted by every browser on every system (the `mkcert` approach), which is an admin step per browser on some systems, a new private key to protect, and a renewal story. `.lahe.localhost` already gets a secure context for free. Kept as a follow-up if the label bothers Ken.
+Makes `.lahe` a secure context: no "Not secure" label, the clipboard API works. Rejected for this feature: it needs a local certificate authority trusted by every browser on every system (the `mkcert` approach), which is an admin step per browser on some systems, a new private key to protect, and a renewal story. `.lahe.localhost` already gets a secure context for free. Kept as a follow-up; once it lands, printing `.lahe` can be asked again.
 
 ### Socket activation (launchd or systemd starts the helper on first connection)
 

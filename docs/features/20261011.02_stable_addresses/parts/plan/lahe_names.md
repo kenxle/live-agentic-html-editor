@@ -1,8 +1,8 @@
 ### Workstream: lahe-names (Step 6)
 
-**Outcome:** on macOS, `lahe install --lahe-names` makes every site also answer at `<name>.lahe`, but only after the helper has proved its own name server answers `.lahe` lookups.
+**Outcome:** on macOS, `lahe install --port-80` makes addresses print without a port, and `lahe install --lahe-names` makes every site also answer at `<name>.lahe`. Each takes effect only after the helper proves it works. Linux and Windows get written steps for both in `docs/INSTALL.md`.
 
-**Reads first:** the architecture's "`.lahe` on macOS (opt-in)" section and Security notes on DNS rebinding; the brief's resolved decision: `.lahe.localhost` is printed, and `.lahe` is an alias.
+**Reads first:** the architecture's "Port-free addresses and `.lahe` on macOS (opt-in)" and "written steps" sections and Security notes on DNS rebinding; the brief's resolved decision: `.lahe.localhost` is printed, and `.lahe` is an alias.
 
 **Starts** after PR 3. Lands as PR 4.
 
@@ -10,7 +10,7 @@
 
 **Task 6.2: Resolver setup and verification.** Acceptance: V56 to V59, plus V73 on Ken's Mac.
 
-**Task 6.2b: Port-free addresses on macOS.** `lahe install --lahe-names` also loads a loopback forward from port 80 to the helper's port, for `127.0.0.1` and `::1`, in the same admin step, and reloads it at boot. It is skipped, with a status line naming the holder, when something already listens on port 80. `lahe uninstall` removes only the forward it added. Acceptance: V74, V75.
+**Task 6.0: Port-free addresses on macOS, first.** Ken uses this whatever the ending, so it lands before the name server. `lahe install --port-80` loads a loopback forward from port 80 to 1483, for `127.0.0.1` and `::1`, and reloads it at boot. It is skipped, with a status line naming the holder, when something already listens on port 80. The helper verifies the forward before `lahe review` prints an address without a port. `lahe uninstall` removes only the forward it added. Acceptance: V74, V75, V76.
 
 **Task 6.3: Dropped.** Ken chose to print `.lahe.localhost`. Kept here for the record: Fallbacks for a non-secure page:
 
