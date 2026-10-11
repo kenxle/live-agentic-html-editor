@@ -65,4 +65,8 @@ jobs:
 
       - name: verdict
         shell: bash
-        run: echo "SPIKE VERDICT on ${{ matrix.os }}: ${{ steps.spike.outcome }}"
+        env:
+          SPIKE_OS: ${{ matrix.os }}
+          SPIKE_OUTCOME: ${{ steps.spike.outcome }}
+        run: |
+          echo "SPIKE VERDICT on $SPIKE_OS: $SPIKE_OUTCOME"
