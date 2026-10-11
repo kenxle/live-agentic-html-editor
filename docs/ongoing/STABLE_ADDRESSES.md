@@ -1,5 +1,9 @@
 # Stable addresses for documents
 
+::: callout-note
+The decisions below were refined in the brief's review. Two changed: `lahe review` prints `.lahe.localhost`, not `.lahe`, and a name is the folder plus two parents (`live-agentic-html-editor.docs.ongoing`). The current list is in the [brief's resolved questions](../features/20261011.02_stable_addresses/parts/brief/questions.md), on the `feat/stable-addresses` branch.
+:::
+
 ## Summary
 
 **Yes, documents should have addresses that keep working.** But a fixed port number alone would not fix what you are seeing. Lahe already tries to reuse a document's old port. Your history links fail mostly because nothing is running at that address anymore, not because the number changed.
