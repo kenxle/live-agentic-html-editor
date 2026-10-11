@@ -152,7 +152,7 @@ While checking this, I found 63 page-server processes left running from test run
 
 ## Questions for you
 
-1. Are you OK with the Lahe helper starting at login and staying up? Leaning yes, from your note on the cons.
+1. ~~Are you OK with the Lahe helper starting at login and staying up?~~ Settled: yes.
 2. ~~Option D or option A?~~ Settled: option D. Still open: the default `docname.lahe.localhost`, with the short `docname.lahe` as an optional extra, or `.lahe` from the start?
 3. Login item first, or go straight to a menu-bar app? From your notes: the login item sounds reasonable, and you like the app for one-click access to the Library. One path: ship the login item with this feature, then the menu-bar app as its own follow-up.
 4. Ready for this to become a feature-forge feature, starting with the brief?
