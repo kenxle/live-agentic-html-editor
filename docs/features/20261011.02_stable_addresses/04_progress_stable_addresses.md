@@ -18,7 +18,6 @@
 | Agent or task | Doing | Started | Branch |
 |---|---|---|---|
 | Core builder (Opus) | Step 3: sites become the default, page servers removed, status and logging, skill, contract, and serving docs (old-comments row parked for your decision) | 2026-10-11 16:21 | `unit/sa-core` |
-| Library builder (Sonnet) | Tasks 4.1, 4.2: Library kinds, Open binds a site, `library.lahe.localhost`, copy without the clipboard API | 2026-10-11 15:58 | `unit/sa-library` |
 | Install builder (Opus) | Tasks 5.1 to 5.3: login item spikes, `lahe install` and `lahe uninstall`, always-on helper | 2026-10-11 15:58 | `unit/sa-install` |
 
 ## Phases
@@ -42,6 +41,7 @@
 
 | Workstream | Tasks | Result | Detail |
 |---|---|---|---|
+| library | 4.1, 4.2 | Merged. Rows V39 to V44 pass. Unit gate 2,578 tests, 0 failed. Browser spec 5 of 5 across three browsers; the three new specs pass together on the merged branch (14 passed). Screenshots: [light](progress/screenshots/library_stable_addresses_light.png), [dark](progress/screenshots/library_stable_addresses_dark.png). | [library progress](progress/phase6_workstream_library.md) |
 | core | Step 2 (2.1, 2.2) | Merged. Rows V26 to V30, V32, V70 pass. V31 (old comments in the rail) is half done and waits on your decision. Unit gate 2,540 tests, 0 failed. Browser spec 9 of 9 across three browsers. Also fixed an existing rail bug in `sync.js` (the "no agent" line could stay stale). | [core progress](progress/phase6_workstream_core.md) |
 | core | Step 1 (1.0 to 1.4) | Merged into `feat/stable-addresses`. Rows V1 to V25, V65, V66, V68, V69 pass. Unit gate 2,517 tests, 0 failed. Browser spec 18 of 18 across three browsers. | [core progress](progress/phase6_workstream_core.md) |
 
@@ -49,10 +49,17 @@
 
 | Pass | What merged | Checks on the merge |
 |---|---|---|
+| 3 | library 4.1, 4.2 | `npm run gate:unit`: 2,578 tests, 0 failed; the three new browser specs in Chromium: 14 passed, 1 skipped (screenshot-only); helpers before and after: 2 and 2 |
 | 2 | core Step 2 | `npm run gate:unit`: 2,540 tests, 0 failed; helpers before and after: 2 and 2 |
 | 1 | core Step 1 | `npm run gate:unit` on the merged branch: 2,517 tests, 0 failed; helpers running before and after: 2 and 2 |
 
 ### Changes from plan
+
+From library 4.1 and 4.2 (details in the [library progress](progress/phase6_workstream_library.md)):
+
+- Open binds a site only for a root that something a page cannot write has already served: a registered site, an old page server's record, or the Markdown copy the CLI wrote. A review's own recorded paths are page-writable, so they are never used to bind. Other rows stay "ask an agent".
+- The Library answers at `library.lahe.localhost` on the pages port only.
+- The shared copy function is `src/layer/copy_text.js`, served raw to the Library page.
 
 From core Step 1 (details in the [core progress](progress/phase6_workstream_core.md)):
 
@@ -110,6 +117,7 @@ Not shipped yet.
 
 ## Log
 
+- 2026-10-11 16:22: Library 4.1 and 4.2 merged cleanly. The Library shows stable addresses and Open binds a site, behind the switch.
 - 2026-10-11 16:21: Task 3.0 done: 11 test files to retire (2 whole, 9 in part), 26 to rewrite. Core builder moved on to Step 3.
 - 2026-10-11 16:17: Core Step 2 merged. One row is blocked: old comments made at a random-port address do not show in the rail at the new address, because the rail only reads this browser's storage, which is kept per address. The comments are safe in `review.json`. Options are being written up for you.
 - 2026-10-11 16:07: PR #41 merged (workflow file fixed, gate green on rerun). Task 1.0 browser check passed on Linux and Windows too: all three browsers load dotted `.lahe.localhost` names as secure pages.
