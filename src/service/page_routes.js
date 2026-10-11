@@ -734,7 +734,14 @@ function createPageRoutes(options) {
   function sendStyle(req, res, rest) {
     var out;
     try { out = styles.answer(dir, rest); }
-    catch (err) { out = { status: 404, refused: [] }; }
+    catch (err) {
+      // A 404 to the page, and one log line per style path and cause, so
+      // "my style does not show" can be traced without a line per request.
+      var why = styles.clean((err && (err.code || err.message)) || String(err));
+      sayOnce("style-error\u0000" + rest.join("/") + "\u0000" + why,
+        "pages: could not answer " + styles.SEGMENT + "/" + styles.clean(rest.join("/")) + ": " + why);
+      out = { status: 404, refused: [] };
+    }
     (out.refused || []).forEach(function (refusal) {
       sayOnce("style\u0000" + refusal.id + "\u0000" + refusal.reason, "pages: refused style " + refusal.id + ": " + refusal.reason);
     });

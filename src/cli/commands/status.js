@@ -717,13 +717,24 @@ function readerDescriber(dir, nowMs) {
 
 /**
  * Where the launch folder is looked for, from records a page cannot write:
- * a static row's covering server record root, a worktree row's candidate
+ * a static row's site root (or, before stable addresses, its covering server
+ * record root), a worktree row's candidate
  * (itself derived from that root), a legacy row's document only when it holds
  * the review's own script line. meta.json's source_path and target_path are
  * page text (review.write records them), so they never name the folder.
  */
 function launchRoot(described) {
-  if (described.kind === "static") return described.server_root || null;
+  if (described.kind === "static") {
+    if (described.server_root) return described.server_root;
+    // Served by the helper: the site's root, which the registry or an old
+    // page-server record vouched for (catalog_sites.planOf). A notes site's
+    // root is its one page, so the folder is the one it sits in.
+    var site = described.site;
+    if (site && !site.worktree && typeof site.root === "string" && site.root) {
+      return site.mode === "page-only" ? path.dirname(site.root) : site.root;
+    }
+    return null;
+  }
   if (described.kind === "worktree") return described.candidate || null;
   if (described.kind === "legacy") return described.verified_path || null;
   return null;

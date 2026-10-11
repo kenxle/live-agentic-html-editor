@@ -208,7 +208,7 @@ test("the printed folder is the real path when the parent is reached through a s
   assert.ok(fs.existsSync(path.join(realFolder, "n.md")));
 });
 
-test("the one-page server 404s a sibling file, a dotfile sibling, and another review's rendered page", async (t) => {
+test("a notes address 404s a sibling file, a dotfile sibling, and another review's page", async (t) => {
   const r = await rig(t);
   const folder = tempDir("lahe-write-onepage-");
   fs.writeFileSync(path.join(folder, "sibling.html"), "<p>not for you</p>");
@@ -225,7 +225,9 @@ test("the one-page server 404s a sibling file, a dotfile sibling, and another re
   const otherPage = openUrl(other.stdout).pathname;
 
   assert.equal((await get(url.href)).status, 200);
-  for (const p of ["/sibling.html", "/other.md", "/.env", otherPage, "/", "/index.html", "/../notes.md"]) {
+  // Raw dot segments are proved at the server (sites_pages.test.js, V14): a
+  // client like this one folds "/../notes.md" into "/notes.md" before sending.
+  for (const p of ["/sibling.html", "/other.md", "/.env", otherPage, "/", "/index.html"]) {
     assert.equal((await get(url.origin + p)).status, 404, p + " is a 404");
   }
   assert.equal((await get(url.origin + "/" + markdown.DOC_STYLE_ASSET)).status, 200, "the style the page names");
@@ -234,7 +236,7 @@ test("the one-page server 404s a sibling file, a dotfile sibling, and another re
   }
 });
 
-test("with --session, write starts its own server beside the session's Markdown server", async (t) => {
+test("with --session, write gets its own notes address beside the session's Markdown address", async (t) => {
   const r = await rig(t);
   const folder = tempDir("lahe-write-session-");
   fs.writeFileSync(path.join(folder, "doc.md"), "# Doc\n\nWords.\n");
@@ -243,14 +245,14 @@ test("with --session, write starts its own server beside the session's Markdown 
   assert.equal(first.code, 0, first.stdout + first.stderr);
   const sessionId = first.stdout.match(/^\s*session\s+(s_[a-f0-9]+)/m)[1];
   const reviewServer = openUrl(first.stdout);
-  assert.equal((await get(reviewServer.href)).status, 200, "the session's Markdown review has a live server");
+  assert.equal((await get(reviewServer.href)).status, 200, "the session's Markdown review has a live address");
 
   const out = r.run("write", [path.join(folder, "notes.md"), "--session", sessionId]);
   assert.equal(out.code, 0, out.stdout + out.stderr);
   assert.match(out.stdout, new RegExp("session\\s+" + sessionId));
   const url = openUrl(out.stdout);
-  assert.notEqual(url.origin, reviewServer.origin, "its own server, never the session's folder server");
-  assert.match(out.stdout, /started for this agent session/);
+  assert.notEqual(url.origin, reviewServer.origin, "its own address, never the folder's");
+  assert.match(out.stdout, /scope\s+this page only/);
   assert.equal((await get(url.href)).status, 200);
   assert.equal((await get(url.origin + "/sibling.html")).status, 404);
   assert.equal((await get(url.origin + reviewServer.pathname)).status, 404, "the other review's page");
@@ -280,21 +282,8 @@ test("write.js exists, so the manifest no longer lists it as planned", () => {
 
 // --- Fix round F3 -----------------------------------------------------------
 
-function getWithHost(url, host) {
-  return new Promise(function (resolve, reject) {
-    const u = new URL(url);
-    http
-      .request({ host: u.hostname, port: u.port, path: u.pathname, method: "GET", headers: { host: host } }, function (res) {
-        res.resume();
-        res.on("end", () => resolve({ status: res.statusCode }));
-      })
-      .on("error", reject)
-      .end();
-  });
-}
-
 // Adversary review 5 / design call 7.
-test("lahe review on a notes file keeps the one-page server: .env beside it is a 404", async (t) => {
+test("lahe review on a notes file keeps the notes address: .env beside it is a 404", async (t) => {
   const r = await rig(t);
   const folder = tempDir("lahe-write-review-");
   const file = path.join(folder, "notes.md");
@@ -317,9 +306,6 @@ test("lahe review on a notes file keeps the one-page server: .env beside it is a
   assert.equal(projected(r.state, reviewIdOf(again.stdout)).review.notes, true);
 });
 
-// Security review 6. Every static server now answers a foreign Host with 400
-// on every path, before routing (static_servers.js hostIsOwn, the Library's
-// DNS-rebinding guard), and the one-page server shares that check.
 test("lahe write refuses a file with more than one hard link", async (t) => {
   const r = await rig(t);
   const folder = tempDir("lahe-write-hardlink-");
