@@ -249,6 +249,58 @@ test("V41: a gone worktree the registry never saw keeps the old rule: a worktree
   assert.equal((await lib.open(review.id)).json.error.code, "PROTO_NOT_OPENABLE");
 });
 
+// --- Same file, same address ----------------------------------------------------
+
+test("a file under a registered folder site, opened from the Library, gets that site's address, and no second site is named", async (t) => {
+  const w = await sitesWorld(t);
+  const outer = docs(w, "outer");
+  writeFile(outer, "index.html", PAGE_HTML);
+  const file = writeFile(path.join(outer, "sub"), "p.html", PAGE_HTML);
+  const bound = w.helper.sites.bind({ root: fs.realpathSync(outer), mode: "folder", entry: "index.html" });
+  const address = "http://" + bound.name + ".lahe.localhost:" + w.helper.pagesPort + "/sub/p.html";
+  openSession(w, "s_a");
+  const review = makeReview(w, { agent_session_id: "s_a", target_path: file });
+  const lib = await libraryOf(w);
+  assert.equal((await lib.row(review.id)).address, address, "the row already shows the folder site's address");
+  const res = await lib.open(review.id);
+  assert.equal(res.status, 200, res.text);
+  assert.equal(res.json.url, address);
+  assert.equal(w.helper.sites.list().length, 1, "no second site for the same file");
+  assert.equal(w.helper.sites.list()[0].site.entry, "index.html", "the folder site's own landing page is unchanged");
+  assert.match((await getPage(w, bound.name, "/sub/p.html")).text, new RegExp('data-lahe-review="' + review.id + '"'));
+});
+
+test("a file whose own folder already has a site keeps that address after the outer folder is named", async (t) => {
+  const w = await sitesWorld(t);
+  const outer = docs(w, "outer");
+  writeFile(outer, "index.html", PAGE_HTML);
+  const file = writeFile(path.join(outer, "sub"), "p.html", PAGE_HTML);
+  const inner = w.helper.sites.bind({ root: fs.realpathSync(path.join(outer, "sub")), mode: "folder", entry: "p.html", containing: true });
+  w.helper.sites.bind({ root: fs.realpathSync(outer), mode: "folder", entry: "index.html" });
+  openSession(w, "s_a");
+  const review = makeReview(w, { agent_session_id: "s_a", target_path: file });
+  const lib = await libraryOf(w);
+  const res = await lib.open(review.id);
+  assert.equal(res.json.url, "http://" + inner.name + ".lahe.localhost:" + w.helper.pagesPort + "/p.html");
+  assert.equal(w.helper.sites.list().length, 2);
+});
+
+test("a folder review is never folded into an outer site: it names its own folder", async (t) => {
+  const w = await sitesWorld(t);
+  const outer = docs(w, "outer");
+  writeFile(outer, "index.html", PAGE_HTML);
+  const inner = path.join(outer, "sub");
+  writeFile(inner, "index.html", PAGE_HTML);
+  w.helper.sites.bind({ root: fs.realpathSync(outer), mode: "folder", entry: "index.html" });
+  openSession(w, "s_a");
+  const review = makeReview(w, { agent_session_id: "s_a", target_path: inner });
+  const lib = await libraryOf(w);
+  const res = await lib.open(review.id);
+  assert.equal(res.status, 200, res.text);
+  assert.equal(w.helper.sites.list().length, 2);
+  assert.equal(w.helper.sites.byRoot(fs.realpathSync(inner), "folder").site.entry, "index.html");
+});
+
 // --- Open serves nothing new ---------------------------------------------------
 
 test("a review of a site the CLI bound is openable with no old server record", async (t) => {

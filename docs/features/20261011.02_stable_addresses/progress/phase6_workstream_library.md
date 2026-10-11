@@ -146,3 +146,7 @@ Merged `feat/stable-addresses` (core Step 3, then the install leak fix) and fini
 - `test-results/` (Playwright output, gitignored) and `.claude-commit...-library` scratch files, as before.
 - A scratch copy of `286c120` for the baseline check, under the session scratchpad (not in the repo).
 - The 18 moved tests above, for Ken's approval.
+
+### Same file, same address (spec check)
+
+Open now binds a file reviewed on its own the way `lahe review` does: into the deepest registered folder site that already holds it, at its path there, using core's `sites.deepestFolderSite` (exported from `sites.js`, one line) and `bind` with `containing`. A row's address follows the same rule, so it shows the outer site's address before Open. A folder review still names its own folder. Tests in [library_open_sites.test.js](../../../../test/unit/library_open_sites.test.js): "a file under a registered folder site, opened from the Library, gets that site's address, and no second site is named" (failed first, on the file's own-folder address), plus the file-first order and the folder-review control. The merge also removed `staticServers.list`, so `catalog_reader.test.js` reads records with `allRecords`. Verified: the unit files named above (285 pass, 0 fail) and `library_stable_address.spec.js` in Chromium (5 pass). I stopped there, because free disk fell under 1 GB (888 MB); the full `gate:unit` and the other three Library specs were not rerun after this change.

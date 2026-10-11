@@ -887,7 +887,7 @@ function createReader(options) {
         });
         if (plan) {
           var found = siteTools.siteFor(plan);
-          var urlPath = siteTools.urlPathOf(plan);
+          var urlPath = siteTools.urlPathOf(plan, found);
           // Where `.lahe-source` mounts lead, to list a linked page by its real
           // path: the old page server's, and the site's own once it has any.
           site = {
@@ -895,6 +895,7 @@ function createReader(options) {
             mode: plan.mode,
             root: plan.root,
             file: plan.file,
+            contained: plan.contained === true,
             url_path: urlPath,
             name: found ? found.name : null,
             address: found ? siteTools.addressOf(found.name, urlPath) : null,

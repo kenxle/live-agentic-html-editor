@@ -127,7 +127,9 @@ function createCatalogSites(options) {
    *          landing: function(string): string|null}} input `landing(folder)`
    *   names the page a folder review opens on; `records` are the session's
    *   old page-server records
-   * @returns {{mode: string, root: string, file: string}|null} real paths
+   * @returns {{mode: string, root: string, file: string, contained: boolean}|null} real
+   *   paths. `contained` is a file reviewed on its own, which `lahe review` binds
+   *   into a folder site that already holds it (a folder review never is)
    */
   function planOf(input) {
     var plan = candidatePlan(input);
@@ -139,7 +141,7 @@ function createCatalogSites(options) {
     var sourceStat = source ? statOrNull(source) : null;
     if (input.notes && sourceStat && sourceStat.isFile()) return { mode: MODE.PAGE_ONLY, root: source, file: source };
     if (sourceStat && sourceStat.isFile() && markdown.isMarkdown(source)) {
-      return { mode: MODE.FOLDER, root: path.dirname(source), file: source };
+      return { mode: MODE.FOLDER, root: path.dirname(source), file: source, contained: true };
     }
     var served = input.servedPath ? realOrNull(input.servedPath) : null;
     var stat = served ? statOrNull(served) : null;
@@ -150,17 +152,24 @@ function createCatalogSites(options) {
       if (!landingReal || !within(landingReal, served)) return null;
       return { mode: MODE.FOLDER, root: served, file: landingReal };
     }
-    if (stat.isFile() && isPageFile(served)) return { mode: MODE.FOLDER, root: path.dirname(served), file: served };
+    if (stat.isFile() && isPageFile(served)) return { mode: MODE.FOLDER, root: path.dirname(served), file: served, contained: true };
     return null;
   }
 
-  /** The URL path of a plan's page on its site. */
-  function urlPathOf(plan) {
-    return plan.mode === MODE.PAGE_ONLY ? "/" + encodeURIComponent(path.basename(plan.root)) : urlPathUnder(plan.root, plan.file);
+  /**
+   * The URL path of a plan's page on its site. SAME FILE, SAME ADDRESS: a file
+   * reviewed on its own lives at its path under the deepest folder site that
+   * holds it, which may be an outer folder (`found` is that site), the same
+   * rule `lahe review` binds by (sites.js, bind with `containing`).
+   */
+  function urlPathOf(plan, found) {
+    if (plan.mode === MODE.PAGE_ONLY) return "/" + encodeURIComponent(path.basename(plan.root));
+    return urlPathUnder(found ? found.site.root : plan.root, plan.file);
   }
 
   /** The site already named for a plan, or null. Never names one. */
   function siteFor(plan) {
+    if (plan.contained && plan.mode === MODE.FOLDER) return sites.deepestFolderSite(plan.file);
     return sites.byRoot(plan.root, plan.mode);
   }
 
@@ -208,18 +217,20 @@ function createCatalogSites(options) {
 
   /**
    * Find or name the site for a plan. An existing site keeps its entry page:
-   * the entry is what `lahe review` printed, and Open must not rewrite it.
+   * the entry is what `lahe review` printed, and Open must not rewrite it. A
+   * file reviewed on its own is bound the way `lahe review` binds it
+   * (`containing`), so it never gets a second address.
    *
-   * @returns {{name: string, site: object, created: boolean}}
+   * @returns {{name: string, site: object, created: boolean, urlPath: string}}
    * @throws when the registry refuses the root
    */
   function bindPlan(plan) {
     var found = siteFor(plan);
-    if (found) return { name: found.name, site: found.site, created: false };
+    if (found) return { name: found.name, site: found.site, created: false, urlPath: urlPathOf(plan, found) };
     var entry = plan.mode === MODE.PAGE_ONLY ? path.basename(plan.root) : path.relative(plan.root, plan.file).split(path.sep).join("/");
-    var bound = sites.bind({ root: plan.root, mode: plan.mode, entry: entry });
+    var bound = sites.bind({ root: plan.root, mode: plan.mode, entry: entry, containing: plan.contained === true });
     log("Library named site " + bound.name + " for a document it was asked to open");
-    return bound;
+    return { name: bound.name, site: bound.site, created: bound.created, urlPath: urlPathOf(plan, bound) };
   }
 
   /**
