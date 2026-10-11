@@ -731,6 +731,17 @@ function createPageRoutes(options) {
   var dir = opts.dir;
   var sites = opts.sites;
   var log = opts.log || null;
+  // THE STATE FOLDER IS NEVER SERVED. rootProblem refuses a root inside it,
+  // but a root above it would reach it: the CLI secret, every review's token
+  // in meta.json, every event log. Any file whose path or real path is inside
+  // the state folder is a 404, whatever site or link led there.
+  var stateDirs = [path.resolve(dir)];
+  var realState = realOrNull(dir);
+  if (realState && stateDirs.indexOf(realState) === -1) stateDirs.push(realState);
+  function inStateDir(file) {
+    return stateDirs.some(function (state) { return within(file, state); });
+  }
+
   var printedPort = typeof opts.printedPort === "function" ? opts.printedPort : function () { return null; };
 
   /** The Library link on the not-found pages; the API port's Library when no pages port is known. */
@@ -913,6 +924,7 @@ function createPageRoutes(options) {
   function serveGone(req, res, ctx, candidate) {
     var site = ctx.site;
     var copy = mainCheckoutCopy(site, candidate);
+    if (copy && inStateDir(copy)) return notFound(req, res);
     if (copy) {
       sayOnce("moved\u0000" + candidate, "pages: " + candidate + " is gone with its worktree; showing " + copy + " read-only");
       if (markdown.isMarkdown(copy)) {
@@ -963,7 +975,7 @@ function createPageRoutes(options) {
     if (!where) return notFound(req, res);
     var ctx = { name: name, site: site };
     var candidate = where.page ? site.root : candidateOf(where, decoded);
-    if (!candidate) return notFound(req, res);
+    if (!candidate || inStateDir(candidate)) return notFound(req, res);
     var stat;
     try { stat = fs.statSync(candidate); } catch (err) {
       if (where.mounted) return notFound(req, res);
@@ -971,7 +983,7 @@ function createPageRoutes(options) {
     }
     var real = realOrNull(candidate);
     var realBase = realOrNull(where.base);
-    if (!real || !realBase || !within(real, realBase) || !stat.isFile()) return notFound(req, res);
+    if (!real || !realBase || !within(real, realBase) || !stat.isFile() || inStateDir(real)) return notFound(req, res);
     if (markdown.isMarkdown(candidate)) {
       return serveMarkdown(req, res, ctx, candidate, real, urlDirOf(where.prefix, where.base, candidate), { mounted: where.mounted });
     }
