@@ -274,3 +274,8 @@ test("V59 and V74: the removal scripts delete a file only when it carries the ma
   assert.ok(/grep -qF '# lahe-managed' \/etc\/resolver\/lahe/.test(loginItem.ROOT_SCRIPTS.installResolver),
     "install will not overwrite a resolver file Lahe did not write");
 });
+
+test("a sudo call waits for the password as long as it takes; other commands keep their time limit", () => {
+  assert.equal(loginItem.runnerTimeoutMs("sudo"), 0, "no limit: a slow password is not a failure");
+  assert.equal(loginItem.runnerTimeoutMs("launchctl"), 30000);
+});

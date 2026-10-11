@@ -321,8 +321,18 @@ async function runCommands(commands, runner) {
   return { ok: true, failed: null };
 }
 
+/**
+ * How long a command may run. sudo has no limit: it waits for a person to type
+ * a password, and a slow typist is not a failed admin step.
+ */
+function runnerTimeoutMs(command) {
+  return command === "sudo" ? 0 : 30000;
+}
+
 function defaultRunner(command, args) {
-  var result = childProcess.spawnSync(command, args, { encoding: "utf8", windowsHide: true, timeout: 30000 });
+  var options = { encoding: "utf8", windowsHide: true };
+  if (runnerTimeoutMs(command) > 0) options.timeout = runnerTimeoutMs(command);
+  var result = childProcess.spawnSync(command, args, options);
   if (result.error) return { status: -1, output: result.error.message };
   return { status: result.status, output: (result.stdout || "") + (result.stderr || "") };
 }
@@ -668,6 +678,7 @@ module.exports = {
   writeItem: writeItem,
   runCommands: runCommands,
   defaultRunner: defaultRunner,
+  runnerTimeoutMs: runnerTimeoutMs,
   installPath: installPath,
   readInstall: readInstall,
   writeInstall: writeInstall,
