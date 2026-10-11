@@ -15,6 +15,8 @@ var sourceStamp = require("../../service/source_stamp.js");
 var reviewsModule = require("../../service/reviews.js");
 var staticServers = require("../../service/static_servers.js");
 var catalogReader = require("../../service/catalog_reader.js");
+var loginItem = require("../../service/login_item.js");
+var selfStop = require("../../service/self_stop.js");
 
 var statusCommand = require("./status.js");
 var projection = require("../../service/projection.js");
@@ -40,6 +42,9 @@ var USAGE = [
   "",
   "  --json    with list: one JSON object per session, then one summary line"
 ].join("\n");
+
+var BUSY_SENTENCE =
+  "the helper was busy taking a reviewer's changes, so it was left running; the next lahe command replaces it";
 
 function delay(ms) {
   return new Promise(function (resolve) { setTimeout(resolve, ms); });
@@ -199,8 +204,15 @@ function askStopWhenQuiet(dir, nowMs, why) {
 async function startHelper(dir, port, options) {
   var opts = options || {};
   var stale = false;
+  // INSTALLED (lahe install): a login item runs the helper. This never spawns
+  // one; it asks the login item, judges staleness by the clone the login item
+  // runs, and lets an open window wait only for a quiet moment.
+  var installed = loginItem.installedFor(dir, port);
   var live = await service.probeHealth(protocol.DEFAULT_HOST, port);
   if (live) {
+    if (selfStop.stateFolderMismatch(dir, live)) {
+      throw new Error(selfStop.differentFolderSentence(protocol.DEFAULT_HOST, port, dir));
+    }
     var liveContract = Number.isInteger(live.service_contract) ? live.service_contract : 0;
     var verdict = protocol.helperContractVerdict(live);
     if (verdict === protocol.CONTRACT_VERDICT.NEWER) {
@@ -210,13 +222,19 @@ async function startHelper(dir, port, options) {
       );
     }
     if (verdict === protocol.CONTRACT_VERDICT.CURRENT) {
-      stale = sourceStamp.helperPredatesSource(live.started_at).stale;
+      var roots = installed && installed.clone ? { roots: loginItem.sourceRoots(installed) } : undefined;
+      stale = sourceStamp.helperPredatesSource(live.started_at, roots).stale;
       if (!stale) return { started: false, stale: false, keptForReviewer: null };
       // SOMEBODY IS REVIEWING ON IT. Being older than the code on disk is a
       // reason to replace the helper, not a reason to interrupt a person who is
       // mid-sentence in a comment box. The stale helper keeps serving them and
       // the caller says so; `lahe serve --restart` is how a human overrules it.
-      if (!opts.force) {
+      // An always-on helper serves every page all the time, so a window is
+      // nearly always open: it waits only for a moment with no writes.
+      if (!opts.force && installed) {
+        var quiet = await loginItem.waitForQuiet(dir, { quietMs: opts.quietMs, maxMs: opts.quietMaxMs });
+        if (!quiet) return { started: false, stale: true, keptForReviewer: BUSY_SENTENCE };
+      } else if (!opts.force) {
         var holders = reviewsModule.readLiveHolders(dir, reviewsModule.LIVE_WINDOW_MS, opts.now);
         if (holders.length > 0) {
           return {
@@ -231,12 +249,17 @@ async function startHelper(dir, port, options) {
       throw new Error("refusing to replace an older helper whose process identity cannot be verified");
     }
   }
+  var isUp = function () { return service.probeHealth(protocol.DEFAULT_HOST, port); };
+  if (installed) {
+    await loginItem.startThroughItem(installed, isUp, { runner: opts.runner, waitMs: opts.waitMs });
+    return { started: true, stale: stale, keptForReviewer: null };
+  }
   var child = childProcess.spawn(process.execPath, [BIN, "serve", "--port", String(port), "--state-dir", dir], {
     detached: true,
     stdio: "ignore"
   });
   child.unref();
-  var started = await waitFor(function () { return service.probeHealth(protocol.DEFAULT_HOST, port); }, 10000);
+  var started = await waitFor(isUp, 10000);
   if (!started) throw new Error("the helper did not start within 10 seconds");
   return { started: true, stale: stale, keptForReviewer: null };
 }

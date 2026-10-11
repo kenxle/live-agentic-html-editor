@@ -53,6 +53,7 @@ var catalogActions = require("./catalog_actions.js");
 var staticServers = require("./static_servers.js");
 var idleServersModule = require("./idle_servers.js");
 var selfStopModule = require("./self_stop.js");
+var loginItemModule = require("./login_item.js");
 var sitesModule = require("./sites.js");
 var pageRoutesModule = require("./page_routes.js");
 
@@ -208,6 +209,14 @@ async function serve(options) {
   var startedAt = new Date().toISOString();
 
   stateDirModule.ensureDir(dir);
+
+  // Stable addresses, install: a login item runs the helper with --always-on,
+  // and then it never stops itself when quiet (self_stop.js). /health reports
+  // that, and the state folder's id, so a CLI pointed at another folder can say
+  // so instead of failing on the port.
+  var alwaysOn = opts.alwaysOn === true;
+  var stateId = selfStopModule.stateToken(dir);
+  var installed = loginItemModule.installedFor(dir, port);
 
   var log = logModule.createEventLog({ dir: dir });
   var reviews = reviewsModule.createReviews({ dir: dir, log: log });
@@ -680,6 +689,11 @@ async function serve(options) {
       return;
     }
 
+    if (route.name === "health" && outcome && outcome.body) {
+      outcome.body.always_on = alwaysOn;
+      outcome.body.state_id = stateId;
+    }
+
     if (outcome && outcome.raw) {
       respondRaw(res, outcome.status || 200, outcome.raw, requestId);
       return;
@@ -851,7 +865,15 @@ async function serve(options) {
 
   // The readiness file goes out AFTER the listener is bound. A readiness file
   // that arrives before the socket is a lie, and the durability tests race it.
-  reviews.writeReadyFile({ port: boundPort, started_at: startedAt, pages: pagesReport() });
+  reviews.writeReadyFile({
+    port: boundPort,
+    started_at: startedAt,
+    pages: pagesReport(),
+    always_on: alwaysOn,
+    install: installed && alwaysOn
+      ? { system: installed.system, label: installed.label, login_item: installed.login_item || null }
+      : null
+  });
   log.helperLog(
     "serving on http://" + host + ":" + boundPort + ", state directory " + dir + ", reviews " + (reviews.list().join(", ") || "none")
   );
@@ -878,6 +900,7 @@ async function serve(options) {
     // service.json names this helper by these two; a state dir that still
     // does is ours, whatever its token says (a restored backup, a synced copy).
     owner: { pid: process.pid, started_at: startedAt },
+    alwaysOn: alwaysOn,
     graceMs: typeof opts.selfStopGraceMs === "number" ? opts.selfStopGraceMs : envMs("LAHE_SELF_STOP_GRACE_MS"),
     onStop: function (reason) {
       if (reason === selfStopModule.REASON.STATE_DIR_GONE) {

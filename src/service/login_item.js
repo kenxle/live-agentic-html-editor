@@ -223,7 +223,7 @@ function describe(spec) {
       path: plistPath,
       contents: plist(label, args, path.join(spec.stateDir, LOG_FILE)),
       load: [["launchctl", "bootstrap", domain, plistPath]],
-      start: [["launchctl", "kickstart", domain + "/" + label]],
+      start: startCommands({ system: "macos", label: label, uid: spec.uid }),
       unload: [["launchctl", "bootout", domain + "/" + label]]
     };
   }
@@ -236,7 +236,7 @@ function describe(spec) {
       path: path.join(configHome, "systemd", "user", unit),
       contents: systemdUnit(args),
       load: [["systemctl", "--user", "daemon-reload"], ["systemctl", "--user", "enable", "--now", unit]],
-      start: [["systemctl", "--user", "start", unit]],
+      start: startCommands({ system: "linux", label: label }),
       unload: [["systemctl", "--user", "disable", "--now", unit]]
     };
   }
@@ -253,13 +253,31 @@ function describe(spec) {
       path: xmlPath,
       contents: taskXml(spec.user, args, boundary),
       load: [["schtasks", "/Create", "/TN", label, "/XML", xmlPath, "/F"], ["schtasks", "/Run", "/TN", label]],
-      start: [["schtasks", "/Run", "/TN", label]],
+      start: startCommands({ system: "windows", label: label }),
       // /End stops the task's own process; the CLI then stops the verified
       // helper by its pid, because ending conhost need not end node.
       unload: [["schtasks", "/End", "/TN", label], ["schtasks", "/Delete", "/TN", label, "/F"]]
     };
   }
   throw new Error("no login item for system " + JSON.stringify(spec.system));
+}
+
+/**
+ * The commands that ask an installed login item to start the helper. Built
+ * from the record's system and label, never read from the record as commands.
+ *
+ * @param {{system: string, label: string, uid?: number}} record
+ */
+function startCommands(record) {
+  var label = String(record.label || "");
+  if (!/^[A-Za-z0-9._-]+$/.test(label)) throw new Error("install.json names an odd login item label: " + JSON.stringify(label));
+  if (record.system === "macos") {
+    var uid = typeof record.uid === "number" ? record.uid : process.getuid();
+    return [["launchctl", "kickstart", "gui/" + uid + "/" + label]];
+  }
+  if (record.system === "linux") return [["systemctl", "--user", "start", label + ".service"]];
+  if (record.system === "windows") return [["schtasks", "/Run", "/TN", label]];
+  throw new Error("install.json names no system this clone knows: " + JSON.stringify(record.system));
 }
 
 /** Write the item's file. Windows wants its task XML in UTF-16 with a BOM. */
@@ -296,6 +314,40 @@ function defaultRunner(command, args) {
   var result = childProcess.spawnSync(command, args, { encoding: "utf8", windowsHide: true, timeout: 30000 });
   if (result.error) return { status: -1, output: result.error.message };
   return { status: result.status, output: (result.stdout || "") + (result.stderr || "") };
+}
+
+// launchd will not start a job again within ten seconds of its last start, so
+// a restart soon after a start waits out that throttle.
+var START_WAIT_MS = 20000;
+
+/**
+ * Ask the installed login item to start the helper, and wait for it to answer.
+ * The CLI never spawns its own helper when installed: a second copy would hold
+ * the port, and the service manager's own restart would then loop on it.
+ *
+ * @param {object} record install.json
+ * @param {function(): Promise<boolean>} isUp whether the helper answers
+ * @param {{runner?: function, waitMs?: number}} [options]
+ */
+async function startThroughItem(record, isUp, options) {
+  var opts = options || {};
+  var waitMs = typeof opts.waitMs === "number" ? opts.waitMs : START_WAIT_MS;
+  var ran = await runCommands(startCommands(record), opts.runner);
+  var deadline = Date.now() + waitMs;
+  for (;;) {
+    if (await isUp()) return;
+    if (Date.now() >= deadline) break;
+    await new Promise(function (resolve) { setTimeout(resolve, 100); });
+  }
+  var reason = reinstallReason(record);
+  throw new Error(
+    "the login item " + record.label + " did not start the helper on 127.0.0.1:" + record.port +
+      " within " + Math.round(waitMs / 1000) + " seconds" +
+      (ran.failed ? " (" + ran.failed + ")" : "") +
+      (reason ? "; " + reason : "") +
+      (record.state_dir ? ". Its log is " + path.join(record.state_dir, LOG_FILE) : "") +
+      ". `lahe uninstall` goes back to starting the helper on demand."
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -346,7 +398,68 @@ function reinstallReason(record) {
   return null;
 }
 
+/**
+ * The code an installed helper runs: the clone the login item names. A CLI in
+ * another clone (a worktree, say) must judge staleness by that clone, or it
+ * would bounce the helper on every command and the restart would still run
+ * the old code.
+ */
+function sourceRoots(record) {
+  return [path.join(record.clone, "src"), path.join(record.clone, "vendor")];
+}
+
+// ---------------------------------------------------------------------------
+// A quiet moment
+// ---------------------------------------------------------------------------
+//
+// An always-on helper that is older than its code is replaced even with review
+// windows open: the address and the port do not change, and the layer already
+// rides out a helper restart (test/browser/helper_restart_holds.spec.js). It
+// waits for a moment when no review is being written to, so a comment is not
+// in flight while the helper goes. A comment that is still lands anyway, from
+// the page's outbox on reconnect; the wait only makes that rare.
+
+var QUIET_MS = 2000;
+var QUIET_MAX_MS = 10000;
+
+function newestReviewWriteMs(dir) {
+  var root = path.join(dir, "reviews");
+  var names;
+  try { names = fs.readdirSync(root); } catch (err) { return null; }
+  var newest = null;
+  names.forEach(function (name) {
+    try {
+      var at = fs.statSync(path.join(root, name, "events.jsonl")).mtimeMs;
+      if (newest === null || at > newest) newest = at;
+    } catch (err) { /* a review with no log yet */ }
+  });
+  return newest;
+}
+
+/**
+ * Wait until no review's log has been written for `quietMs`, for at most
+ * `maxMs`. True when the moment came.
+ *
+ * @param {string} dir the state folder
+ * @param {{quietMs?: number, maxMs?: number}} [options]
+ * @returns {Promise<boolean>}
+ */
+async function waitForQuiet(dir, options) {
+  var opts = options || {};
+  var quietMs = typeof opts.quietMs === "number" ? opts.quietMs : QUIET_MS;
+  var maxMs = typeof opts.maxMs === "number" ? opts.maxMs : QUIET_MAX_MS;
+  var deadline = Date.now() + maxMs;
+  for (;;) {
+    var newest = newestReviewWriteMs(dir);
+    if (newest === null || Date.now() - newest >= quietMs) return true;
+    if (Date.now() >= deadline) return false;
+    await new Promise(function (resolve) { setTimeout(resolve, 100); });
+  }
+}
+
 module.exports = {
+  QUIET_MS: QUIET_MS,
+  QUIET_MAX_MS: QUIET_MAX_MS,
   LABEL: LABEL,
   INSTALL_FILE: INSTALL_FILE,
   LOG_FILE: LOG_FILE,
@@ -355,6 +468,10 @@ module.exports = {
   windowsQuote: windowsQuote,
   systemdQuote: systemdQuote,
   describe: describe,
+  startCommands: startCommands,
+  startThroughItem: startThroughItem,
+  sourceRoots: sourceRoots,
+  waitForQuiet: waitForQuiet,
   writeItem: writeItem,
   runCommands: runCommands,
   defaultRunner: defaultRunner,

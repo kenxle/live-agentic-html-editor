@@ -24,11 +24,14 @@ var reviewsModule = require("../../service/reviews.js");
 var sessionCommand = require("./session.js");
 
 var USAGE = [
-  "usage: lahe serve [--restart] [--port <n>] [--state-dir <path>] [--review <id>] [--origin <origin>]",
+  "usage: lahe serve [--restart] [--always-on] [--port <n>] [--state-dir <path>] [--review <id>] [--origin <origin>]",
   "",
   "  --restart    replace a helper that is already answering on the port, even when somebody has a",
   "               review page open on it. This is the deliberate override: every other command leaves",
   "               a helper with a live reviewer alone and tells you to run this when they are done.",
+  "",
+  "  --always-on  never stop when quiet. The login item `lahe install` writes runs the helper this way;",
+  "               it still stops if its state directory is removed.",
   "",
   "  --port       the port to bind on 127.0.0.1. Default " + protocol.DEFAULT_PORT + ", which is fixed on",
   "               purpose: the page has the port in its script tag and no way to learn a new one.",
@@ -72,6 +75,8 @@ function parseArgs(argv) {
       }
       if (name === "--restart") {
         options.restart = true;
+      } else if (name === "--always-on") {
+        options.alwaysOn = true;
       } else if (name === "--port") {
         var port = Number(takeValue("--port", inline));
         if (!Number.isInteger(port) || port < 0 || port > 65535) {
