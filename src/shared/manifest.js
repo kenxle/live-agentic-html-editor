@@ -338,6 +338,11 @@ var CATALOG_PAGE = [
     why: "a pure module, no DOM: a list response and the page's state into sections, rows and button states"
   },
   {
+    path: "src/layer/copy_text.js",
+    owner: "stable addresses 4.2",
+    why: "the one copy function: the clipboard API, else a hidden field and the browser's copy command. Loaded raw by the Library page; the rail can call it once it joins the bundle list"
+  },
+  {
     path: "src/layer/catalog/page.js",
     owner: "Library 2.2",
     why: "the Library page script: token from the meta tag, the poll, rendering with textContent, Open's tab sequence"
