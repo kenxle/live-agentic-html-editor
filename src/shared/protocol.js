@@ -162,7 +162,11 @@
     // Set by the browser, never by a script. The Library's routes read it to
     // tell their own page apart from a document on another loopback port,
     // which sends "same-site" (see CATALOG_ROUTES).
-    SEC_FETCH_SITE: "sec-fetch-site"
+    SEC_FETCH_SITE: "sec-fetch-site",
+    // The CLI secret (stable addresses): read from an owner-only file in the
+    // state folder and sent only by the CLI on site.bind. A page can never read
+    // it, so a page holding a review token still cannot name a file to serve.
+    CLI_SECRET: "x-lahe-cli-secret"
   };
 
   var CLIENT_LAYER = "layer";
@@ -192,7 +196,11 @@
     // (restart recorded servers only), star, and queue a request. It cannot
     // post to a review, read comment text, or name a file to serve. Which
     // checks each catalog route runs is the per-route table in CATALOG_ROUTES.
-    CATALOG_TOKEN: "catalog_token"
+    CATALOG_TOKEN: "catalog_token",
+    // The CLI secret (stable addresses). Only site.bind takes it, and that
+    // route also refuses any request carrying an Origin header, so only a
+    // process that can read the state folder's owner-only file can bind.
+    CLI_SECRET: "cli_secret"
   };
 
   // Review ids and agent names are path components, so they are constrained to
@@ -453,8 +461,123 @@
   // forbids an inline script, so a meta tag is where the token can live.
   var CATALOG_TOKEN_META = "lahe-catalog-token";
 
+  // ---------------------------------------------------------------------------
+  // Stable addresses: pages served by the helper itself
+  // ---------------------------------------------------------------------------
+  //
+  // Architecture: docs/features/20261011.02_stable_addresses. A SITE is one
+  // folder (or one notes page) the helper serves at
+  // http://<name>.lahe.localhost:<PAGES.PORT>/<path>. Names are made only by
+  // site.bind, which only the CLI can call.
+  //
+  // THE SWITCH. LAHE_PAGES=sites, read by the helper at start and reported in
+  // service.json; the CLI follows the running helper's value. Host dispatch,
+  // the ::1 listener and site.bind are live either way, because each is
+  // harmless while no name is granted.
+  var PAGES = {
+    PORT: 1483,
+    SWITCH_ENV: "LAHE_PAGES",
+    SWITCH_ON: "sites",
+    // Tests (and a person who needs another port) set this; 0 means any.
+    PORT_ENV: "LAHE_PAGES_PORT",
+    SUFFIX: "lahe.localhost",
+    PRINTED_ENDING: "lahe.localhost",
+    LIBRARY_NAME: "library",
+    MAX_LABELS: 4,
+    LABEL_MAX: 63,
+    NAME_MAX: 150,
+    RESERVED_NAMES: ["library", "lahe", "www", "api"],
+    MODE_SITES: "sites",
+    MODE_SERVERS: "servers",
+    // Every page response carries this, so another website cannot embed it.
+    CORP: "same-origin"
+  };
+
+  function pagesSwitchOn(env) {
+    return !!env && env[PAGES.SWITCH_ENV] === PAGES.SWITCH_ON;
+  }
+
+  /** One DNS label as Lahe makes them: lowercase letters, digits, single dashes. */
+  function isSiteLabel(value) {
+    if (typeof value !== "string" || !value || value.length > PAGES.LABEL_MAX) return false;
+    if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(value)) return false;
+    if (value.slice(0, 4) === "xn--" || value.slice(2, 4) === "--") return false;
+    return true;
+  }
+
+  /** One to four labels, joined by dots, at most NAME_MAX characters. */
+  function isSiteName(value) {
+    if (typeof value !== "string" || !value || value.length > PAGES.NAME_MAX) return false;
+    var labels = value.split(".");
+    if (labels.length > PAGES.MAX_LABELS) return false;
+    return labels.every(isSiteLabel);
+  }
+
+  var HOST_FAMILY = { API: "api", LIBRARY: "library", PAGE: "page", BAD: "bad" };
+  var SITE_HOST = /^([a-z0-9.-]+)\.lahe\.localhost(?::(\d{1,5}))?$/;
+
+  /**
+   * Which route family a Host header belongs to. Checked before anything else
+   * in a request, on both listeners.
+   *
+   *   api      a loopback name (127.0.0.1, localhost, [::1]), as today
+   *   library  library.lahe.localhost
+   *   page     <name>.lahe.localhost with one to four labels, at the pages
+   *            port or with no port. Whether the name is REGISTERED is the
+   *            registry's question, asked after this.
+   *   bad      anything else: a trailing dot, uppercase, too many labels, a
+   *            wrong port, a foreign name
+   *
+   * @param {string} hostHeader
+   * @param {{pagesPort?: number}} [options]
+   * @returns {{family: string, name?: string}}
+   */
+  function classifyHost(hostHeader, options) {
+    var opts = options || {};
+    if (typeof hostHeader !== "string" || !hostHeader) return { family: HOST_FAMILY.BAD };
+    if (hostAllowed(hostHeader)) return { family: HOST_FAMILY.API };
+    var match = SITE_HOST.exec(hostHeader);
+    if (!match) return { family: HOST_FAMILY.BAD };
+    var name = match[1];
+    if (name === PAGES.LIBRARY_NAME) return { family: HOST_FAMILY.LIBRARY, name: name };
+    if (!isSiteName(name)) return { family: HOST_FAMILY.BAD };
+    if (match[2] !== undefined && Number(match[2]) !== opts.pagesPort) return { family: HOST_FAMILY.BAD };
+    return { family: HOST_FAMILY.PAGE, name: name };
+  }
+
+  /** The origin a site's pages have: http://<name>.lahe.localhost:<port>. */
+  function siteOrigin(name, port) {
+    return "http://" + name + "." + PAGES.SUFFIX + (port === 80 ? "" : ":" + port);
+  }
+
+  /** The site name an Origin header names at this pages port, or null. */
+  function siteNameFromOrigin(origin, pagesPort) {
+    if (typeof origin !== "string") return null;
+    var match = /^http:\/\/([a-z0-9.-]+)\.lahe\.localhost(?::(\d{1,5}))?$/.exec(origin);
+    if (!match || !isSiteName(match[1])) return null;
+    var port = match[2] === undefined ? 80 : Number(match[2]);
+    return port === pagesPort ? match[1] : null;
+  }
+
+  var SITE_ROUTES = [
+    {
+      name: "site.bind",
+      method: "POST",
+      path: BASE + "/site/bind",
+      auth: AUTH.CLI_SECRET,
+      mutating: true,
+      why:
+        "lahe review and lahe write bind a review to a site: find or make the site's name for a root the CLI names, " +
+        "record its mounts and linked files, stamp the review as re-served, and drop the review's old loopback " +
+        "origins. CLI-only: the CLI secret, and any request carrying an Origin header is refused, so a page " +
+        "holding a review token can neither name a file nor move a rail",
+      request: "{review, root, mode: \"folder\"|\"page-only\", entry, mounts?: {prefix: dir}, linked?: [file]}",
+      response: "{name, origin, url, printed_ending}"
+    }
+  ];
+
   function route(name) {
-    var lists = [ROUTES, CATALOG_ROUTES];
+    var lists = [ROUTES, CATALOG_ROUTES, SITE_ROUTES];
     for (var l = 0; l < lists.length; l += 1) {
       for (var i = 0; i < lists[l].length; i += 1) {
         if (lists[l][i].name === name) return lists[l][i];
@@ -1823,6 +1946,16 @@
     SCRIPT_SELECTOR: SCRIPT_SELECTOR,
     SCRIPT_FALLBACK_ONERROR: SCRIPT_FALLBACK_ONERROR,
     scriptTag: scriptTag,
+
+    PAGES: PAGES,
+    pagesSwitchOn: pagesSwitchOn,
+    isSiteLabel: isSiteLabel,
+    isSiteName: isSiteName,
+    HOST_FAMILY: HOST_FAMILY,
+    classifyHost: classifyHost,
+    siteOrigin: siteOrigin,
+    siteNameFromOrigin: siteNameFromOrigin,
+    SITE_ROUTES: SITE_ROUTES,
 
     CLI_EXIT: CLI_EXIT,
 
