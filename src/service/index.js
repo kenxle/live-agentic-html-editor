@@ -443,6 +443,9 @@ async function serve(options) {
   // EADDRINUSE above all, means another program holds [::1] at this port, and
   // a browser that tries ::1 first would load that program at a Lahe address.
   var NO_IPV6 = ["EADDRNOTAVAIL", "EAFNOSUPPORT"];
+  // "::1". In-process tests name an address this machine does not have, to
+  // see the no-IPv6 path; nothing outside serve()'s options sets it.
+  var ipv6Loopback = typeof opts.ipv6Loopback === "string" ? opts.ipv6Loopback : "::1";
 
   /**
    * One listener. `required` listeners reject on failure. The ::1 twins log
@@ -855,7 +858,7 @@ async function serve(options) {
   catalog.port = boundPort;
   if (host === protocol.DEFAULT_HOST) {
     try {
-      await listenOn("api", boundPort, "::1", false);
+      await listenOn("api", boundPort, ipv6Loopback, false);
     } catch (err) {
       await closeListeners();
       log.helperLog(err.message);
@@ -877,7 +880,7 @@ async function serve(options) {
   // library.lahe.localhost answers at this port.
   catalog.pagesPort = boundPagesPort;
   try {
-    await listenOn("pages", boundPagesPort, "::1", false);
+    await listenOn("pages", boundPagesPort, ipv6Loopback, false);
   } catch (err) {
     await closeListeners();
     log.helperLog(err.message);

@@ -162,27 +162,20 @@ test("V10: the helper serves on ::1 too", async (t) => {
   assert.match(page.text, /hello page/);
 });
 
-test("V10: a failed ::1 bind is a log line and the helper keeps serving", async (t) => {
-  if (!(await ipv6Available())) return t.skip("this machine has no IPv6 loopback");
-  // Hold ::1 on a port, then ask the helper for that same port.
-  const holder = net.createServer();
-  await new Promise((r) => holder.listen(0, "::1", r));
-  t.after(() => new Promise((r) => holder.close(() => r())));
-  const port = holder.address().port;
+// V10, changed by security review S3: a ::1 that another program holds stops
+// the start (test/unit/ipv6_twin_taken.test.js). A machine with no IPv6
+// loopback still logs a line and serves on 127.0.0.1. 2001:db8::1 is a
+// documentation address no machine has, so binding it fails as a missing
+// IPv6 loopback does (EADDRNOTAVAIL).
+test("V10: no IPv6 loopback is a log line and the helper keeps serving", async (t) => {
   const dir = path.join(tempRoot(), "state");
-  let helper;
-  try {
-    helper = await service.serve({ port, stateDir: dir, quiet: true });
-  } catch (err) {
-    // 127.0.0.1 on that port was taken by someone else: nothing to prove here.
-    if (err && err.code === "EADDRINUSE") return t.skip("127.0.0.1:" + port + " was taken");
-    throw err;
-  }
+  const helper = await service.serve({ port: 0, pagesPort: 0, stateDir: dir, quiet: true, ipv6Loopback: "2001:db8::1" });
   t.after(() => helper.close());
-  const res = await raw(port, { path: HEALTH, headers: { host: "127.0.0.1:" + port } });
+  const res = await raw(helper.port, { path: HEALTH, headers: { host: "127.0.0.1:" + helper.port } });
   assert.equal(res.status, 200);
   const log = fs.readFileSync(path.join(dir, "helper.log"), "utf8");
-  assert.match(log, /could not listen on \[::1\]:\d+/);
+  assert.match(log, /could not listen on \[2001:db8::1\]:\d+ for the api port \(EADDRNOTAVAIL\)/);
+  assert.match(log, /could not listen on \[2001:db8::1\]:\d+ for the pages port \(EADDRNOTAVAIL\)/);
 });
 
 test("V68: the helper listens on 127.0.0.1 and ::1 only, never on all addresses", async (t) => {
