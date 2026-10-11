@@ -1040,8 +1040,8 @@ own credential instead, the **Library token** (`AUTH.CATALOG_TOKEN`). The amendm
   file, not the helper log, not `health`, not `catalog.list`. The served page is the only place it
   exists. A helper restart mints a new one, so an open Library page is refused with
   `PROTO_UNAUTHORIZED` and asks for a reload.
-- It can list reviews, open one (restart a server the review already recorded, never a new path), star
-  one, and queue a request for the attached agent. It cannot post to a review, read comment text, or
+- It can list reviews, open one (name the site for a folder something the page cannot write already
+  served, never a new path), star one, and queue a request for the attached agent. It cannot post to a review, read comment text, or
   name a file to serve.
 - The per-review routes do not accept it, and it does not accept a review token. The Library's client
   value, `catalog` (`protocol.CLIENT_CATALOG`), is deliberately not in `protocol.CLIENTS`, so a request
@@ -1113,13 +1113,13 @@ with no file bytes. An allowlisted file not on disk yet is a 404 too.
 | Code | Status | When |
 |---|---|---|
 | `PROTO_CROSS_SITE` | 403 | The `Sec-Fetch-Site` check fails, or a preflight names a catalog path |
-| `PROTO_NOT_OPENABLE` | 409 | Open on a missing row or one with no recorded server, or a request on a missing row; carries a `reason` |
+| `PROTO_NOT_OPENABLE` | 409 | Open on a missing row or one nothing vouches for serving, or a request on a missing row; carries a `reason` |
 | `PROTO_REQUEST_PENDING` | 409 | The review already has a pending request |
 | `PROTO_QUEUE_FULL` | 429 | `CATALOG.QUEUE_CAP` pending requests reached |
 | `PROTO_NO_AGENT` | 409 | No attached agent, or its monitor is dead |
 | `PROTO_CONFIRM_NEEDED` | 409 | A hand-over on a watched session without `confirmed` |
 | `PROTO_NO_LAUNCH` | 409 | A launch on a legacy or worktree row, which has no session a new agent could take over (adversary fixes) |
-| `PROTO_CATALOG_UNREADABLE` | 500 | `catalog.json` is corrupt: a Star, or an Open that would reopen a closed session |
+| `PROTO_CATALOG_UNREADABLE` | 500 | `catalog.json` is corrupt: a Star or a rename |
 
 **What the API routes answer** (`src/service/catalog_actions.js`). Nothing in a body names a file, a
 root or a URL, and fields a route does not list are never read.
@@ -1127,27 +1127,32 @@ root or a URL, and fields a route does not list are never read.
 | Route | Body | Answer |
 |---|---|---|
 | `catalog.list` | none | the list response (architecture, "The list response"), plus `notice` and `state_dir` (the state directory when it is not the default, else null, for the hand-off message's takeover command). Marks `catalog_seen_at` |
-| `catalog.open` | `{review, handoff, confirmed}` | `{url, request_id, not_asked}` |
+| `catalog.open` | `{review, handoff, confirmed}` | `{url, request_id, not_asked, held_by}` |
 | `catalog.star` | `{review, starred}`, `starred` a boolean | `{review, starred}`. On a folded row every review in the fold is starred or unstarred |
 | `catalog.rename` | `{review, name}` or `{session, name}` (one, never both), `name` a string; empty clears | `{review, name}` or `{session, name}` (the name kept, or null). A session name is stored in `catalog.json` `session_names`, by the same rule, and listed as the session's `custom_name`; a pre-session card cannot be renamed. Stored in `catalog.json` `names`, cut to 80 characters with control and invisible characters removed (the session-name rule). Every review in a fold takes it. The list carries it as `custom_name` beside the unchanged `display_name`. It is the reviewer's display text only: it never enters `describeReview`, a drain entry, a request, or a hand-off message |
 | `catalog.request` | `{review, action, confirmed}`, `action` `pickup` or `launch` | `{request_id}` |
 
-- **Open restarts only the recorded server that covers the review's recorded file**
-  (`static_servers.coveragePath`, the rule `servesPath` uses too) and answers with that server's own
-  loopback origin plus the file's path on it. A served review starts nothing. A review whose session was
-  closed is recorded in `catalog.json`'s `reopened` map for the sweep first, then its server is started,
-  then the session is reopened. So a server that cannot restart leaves the session closed, and a
-  `catalog.json` that cannot take the record refuses the Open with `PROTO_CATALOG_UNREADABLE` before
-  anything is reopened. Open on a session that is already open does not write `catalog.json`.
-  Only a start that threw clears the `reopened` record. A later step that throws (the origin swap)
-  is undone by the helper: it stops the server it started and closes the session it reopened. The
-  record stays, so the sweep clears it, or closes the session if that undo failed.
-- **`PROTO_NOT_OPENABLE` carries its reason in `error.detail`:** `missing`, `via-agent` (no recorded
-  server covers it and no hand-over was asked), `unknown review`, `not owned by the current user, or
-  not on disk`, or `the recorded server could not be restarted`.
-- **The owner check** covers the reviewed file, the served file, and the root of the server record
-  Open would restart, since that server serves everything under its root. Each must be on disk and
-  owned by the current user; a record with no root is refused.
+- **Open binds a site and answers with its stable address.** It restarts nothing and reopens no session.
+  It names the document's site in the registry if it has none (`catalog_sites.bindPlan`), stamps the
+  review as re-served so it is the one that answers on its page, drops the review's old
+  `127.0.0.1:<port>` origins, and answers with the address, `url`, at the port addresses print with
+  (80 once the forward is proved). An existing site keeps its entry page. A review in a closed session
+  opens as it is; the session stays closed.
+- **Open serves nothing new.** A review's recorded paths are page text: a page holding the review's
+  token can write any path into `meta.json`. So a site is named only for a root that something a page
+  cannot write has already served: a site in the registry, the record of an old page server of the
+  review's session (its root or a mount), or, for Markdown, the rendered copy the CLI wrote into the
+  state folder. A review nothing vouches for is `via-agent`.
+- **A newer review keeps its rail.** When the review that answers on the page belongs to another
+  session that is still open, Open goes to the address without stamping and answers
+  `held_by: {review, name}`; the row says so. A holder in a closed session, or in the row's own
+  session, does not hold. `held_by` is null otherwise.
+- **`PROTO_NOT_OPENABLE` carries its reason in `error.detail`:** `missing`, `via-agent` (nothing the
+  helper served vouches for the document, and no hand-over was asked), `unknown review`,
+  `not owned by the current user, or not on disk`, or `the document could not be given an address`.
+- **The owner check** covers the reviewed file, the served file, and the root of the site Open would
+  name, since a site serves everything under its root. Each must be on disk and owned by the current
+  user. A gone worktree's read-only copy binds nothing and is not checked.
 - **A folder review opens on a page, never the bare root:** the page its comments are on when that is a
   page in the folder, else the page `lahe review <folder>` opens. `served_url` in the list is the same page.
 - **Nothing is asked of an agent that already has the document.** When the attached agent owns the
@@ -1159,7 +1164,7 @@ root or a URL, and fields a route does not list are never read.
   `request_pending`. It is null when a request was queued, when none was asked for, and when the
   attached agent is already the one watching.
 - **The confirm step comes first.** A hand-over (Open with `handoff`, or a request) on a session another
-  agent is watching, without `confirmed`, is `PROTO_CONFIRM_NEEDED`, and nothing is restarted or queued.
+  agent is watching, without `confirmed`, is `PROTO_CONFIRM_NEEDED`, and nothing is named, stamped or queued.
   "Watching" here is the list's `watching`: that agent's `presence` is `listening` or `working`. An agent
   that is `away` (listed under `away`, with its `last_active`) does not need a confirm.
 - **A session's agent in `catalog.list`:** `watching` is `{session, name, state, last_active}` with
@@ -1169,21 +1174,11 @@ root or a URL, and fields a route does not list are never read.
 - **One `catalog` line per Open, Star, unstar, Pick up and Launch** in the helper log, in the format
   `protocol.catalogLogLine` spells, stamped with the helper's clock. A refused action writes none.
 
-**The reopened-session sweep.** Every `CATALOG.POLL_MS` the helper closes (quietly: its servers stop,
-the helper stays) each session the Library reopened once nothing has happened in it for
-`CATALOG.REOPENED_AUTOCLOSE_MS`: not the reopen itself, and no held window of any of its reviews. It
-leaves alone a session reopened with `lahe session reopen` (not in the map), one taken over since (its
-`handoff_rev` moved; the entry is dropped), one whose monitor is live, and one an Open is part way
-through bringing back.
-
-**The Library-session sweep.** On the same timer the helper closes (quietly) each session bare `lahe library`
+**The Library-session sweep.** Every `CATALOG.POLL_MS` the helper closes (quietly) each session bare `lahe library`
 started, marked `created_by: "library"` in session.json by the CLI, once it owns no reviews and its agent
 has been quiet for `CATALOG.LIBRARY_SESSION_IDLE_MS`: no live monitor heartbeat and no lahe command since
 that long ago, counted from the later of the session's start and its last command. A session that owns a
 review, or was taken over (`handoff_rev` past 0), is left alone.
-
-**One Open at a time per server record.** The helper runs Open's restart step in a chain per session
-and server, so two Opens of a closed session start one server, and both answer on its recorded port.
 
 **Residual risk, stated.** The Library token is readable by any script running on the Library page
 itself. That page runs only the helper's own scripts under `script-src 'self'` and renders page-derived
@@ -1283,11 +1278,14 @@ The one read path, and the one keep-up loop. Before it, every agent hand-rolled 
     takes review <review> into your session, with its old comments; drain it for any still waiting."
     (`protocol.CATALOG_LEGACY_NOTE`). `moves_with` is the other reviews the document's session owns. `origin` is a
     `dev-server` row's origin, else null.
-  - **`kind`:** `legacy` for a review with no session; `static` when a recorded static server covers
-    it; `dev-server` only when the review has a registered origin no static server record of its
-    session serves, on a target LAHE would not serve itself (a folder, a non-page file, or none); and
-    otherwise `static` with the row marked unreadable, since its server record was lost. It used to be
-    `dev-server` whenever no record covered it, which stranded a static review whose record was lost.
+  - **`kind`:** `legacy` for a review with no session; `dev-server` only when the review has a
+    registered origin no old page server record of its session serves, on a target LAHE would not serve
+    itself (a folder, a non-page file, or none) and no such record covers it; `worktree` for a document
+    whose worktree is gone; and otherwise `static`. `openable` says whether Open can open it: `yes` when
+    the file is on disk, Lahe can serve it (HTML or Markdown, or a folder of pages) and something a page
+    cannot write vouches for its root, or when a gone worktree's site recorded its main checkout, which
+    still has the page; `via-agent` when nothing vouches; `missing` when neither the file nor a copy is
+    there.
   - `title`, `path`, `candidate`, `folder` and `handoff` are page text, classed as data in
     `PROJECTED_FIELD_CLASS` (`catalog_requests[].title` and so on) and fenced like every other data
     field. `title` is the Library's display name for the row, so it is never null for a real row.

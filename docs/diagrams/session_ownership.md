@@ -103,8 +103,8 @@ flowchart TD
 ## When the helper stops
 
 The Library has to outlive every agent session, so the last close no longer
-always stops the helper. Sessions the Library reopened are closed again when
-they go quiet.
+always stops the helper. Open reopens no session, so there is nothing for the
+Library to close again; it only closes the sessions bare `lahe library` made.
 
 ```mermaid
 flowchart TD
@@ -120,13 +120,12 @@ flowchart TD
     SelfCheck -->|"a session opened"| Cancel["the ask is removed;<br/>the next last close decides"]
     SelfCheck -->|"yes"| Stop
 
-    Timer["helper timer, every 15 seconds:<br/>sweepReopened"] --> Each["each session in catalog.json's<br/>reopened map"]
-    Each --> Moved{"taken over since,<br/>or its monitor live?"}
-    Moved -->|"taken over"| Drop["drop its entry, leave it open"]
-    Moved -->|"monitor live"| Leave["leave it open"]
-    Moved -->|"neither"| Quiet{"30 minutes since the reopen<br/>and since any window of its<br/>reviews was last held?"}
+    Timer["helper timer, every 15 seconds:<br/>sweepLibrarySessions"] --> Each["each open session bare<br/>lahe library started"]
+    Each --> Owns{"owns a review, taken over,<br/>or its monitor live?"}
+    Owns -->|"yes"| Leave["leave it open"]
+    Owns -->|"no"| Quiet{"30 minutes with no<br/>lahe command from its agent?"}
     Quiet -->|"no"| Leave
-    Quiet -->|"yes"| CloseQuiet["closeQuiet: mark it closed,<br/>clear the entry.<br/>The helper stays up"]
+    Quiet -->|"yes"| CloseQuiet["mark it closed.<br/>The helper stays up"]
 ```
 
 - A last close that leaves the helper up asks it to stop once quiet
@@ -138,7 +137,10 @@ flowchart TD
 - A helper whose state directory is removed stops within 30
   seconds (two checks in a row), even with a session open. A restored or synced
   copy that still names that process keeps it running.
-- The same sweep closes a session that bare `lahe library` started, once it
-  owns no reviews and its agent has been quiet for 30 minutes.
-- A session reopened with `lahe session reopen` is not in the `reopened` map,
-  so the sweep never closes it.
+- The sweep closes a session that bare `lahe library` started, once it
+  owns no reviews and its agent has been quiet for 30 minutes. A session
+  reopened with `lahe session reopen` was not started that way, so the sweep
+  never closes it.
+- Open from the Library names the document's site and opens its address. It
+  does not reopen a closed session or start anything, so a review of a closed
+  session opens as it is.
