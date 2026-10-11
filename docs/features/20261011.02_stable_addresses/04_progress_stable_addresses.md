@@ -1,6 +1,6 @@
 # Progress: Stable addresses
 
-**Phase 6, Implement.** You approved the doc set and asked me to keep going until it is done. The CI workflow PR is open and the core builder is on Step 1. Waiting on you later: approving the old tests to retire, running `lahe install`, and merge approval. Last updated 2026-10-11 15:14.
+**Phase 6, Implement.** You approved the doc set and asked me to keep going until it is done. The CI workflow is merged and the core builder is on Step 1. Waiting on you later: approving the old tests to retire, running `lahe install`, and merge approval. Last updated 2026-10-11 15:14.
 
 **Docs:** [Decisions page](../../ongoing/STABLE_ADDRESSES.md) · [Crucible](00_crucible_stable_addresses.html) · [Brief](01_brief_stable_addresses.html) · [Architecture](02_architecture_stable_addresses.html) · [Plan](03_plan_stable_addresses.html) · [Code survey](parts/architecture/recon.md)
 
@@ -12,7 +12,6 @@ None.
 
 | Agent or task | Doing | Started | Branch |
 |---|---|---|---|
-| Orchestrator | Step 0: hand-run CI workflow in [PR #40](https://github.com/kenxle/live-agentic-html-editor/pull/40) (local gate 844 passed, 0 failed); idle-cost baseline next | 2026-10-11 15:14 | `chore/spike-dispatch-workflow` |
 | Core builder (Opus) | Step 1: name registry, page serving on port 1483, binding, behind `LAHE_PAGES=sites` | 2026-10-11 15:14 | `unit/sa-core` |
 
 ## Phases
@@ -52,6 +51,8 @@ None.
 
 ### Cleanup queue
 
+- `../lahe-worktrees/sa-ci-dispatch` worktree and its local branch `chore/spike-dispatch-workflow`: PR #40 is merged.
+- `.github/workflows/spike.yml` on main: temporary, remove before this feature's last PR merges.
 - `docs/features/20261011.02_stable_addresses/02_architecture_stable_addresses_reviews_security.html`: stale build output from before the review files were combined.
 - `docs/features/20261011.02_stable_addresses/parts/reviews/`: the two original review files, now copied into `02_architecture_stable_addresses_reviews.md`.
 
@@ -77,6 +78,7 @@ Not shipped yet.
 
 ## Log
 
+- 2026-10-11 15:29: PR #40 merged (hand-run spike workflow, CI gate passed). Step 0 done. Main merged into `feat/stable-addresses`.
 - 2026-10-11 15:21: Idle-cost baseline measured: 51 separate page server processes in 5 minutes, about 21 running at once, about 740 MB with the helpers. PR 0 (hand-run CI workflow) open as #40; local gate 0 failed.
 - 2026-10-11 15:02: Ken approved the doc set: the login gap accepted, and the hand-run CI workflow approved on condition it costs nothing (standard GitHub machines are free for this public repo). Phase 5 done.
 - 2026-10-11 14:52: Ken finished the brief. Settled in review: names are the folder plus two parents joined by dots (`live-agentic-html-editor.docs.ongoing`), one name per folder; pages on port 1483 with the API staying on 7817; `lahe review` prints `.lahe.localhost`; `lahe install --port-80` drops the port on macOS; `.lahe` is an option on all three systems, by command on macOS and written steps elsewhere; no npm package. Architecture and plan updated to match. HTTPS for `.lahe` added as a follow-up.
