@@ -366,3 +366,18 @@ test("service.json is written as soon as the helper answers, before a slow .lahe
     message: "service.json to say .lahe is proved once the check finishes"
   });
 });
+
+test("the test seams take only a port, and a name server on 127.0.0.1", async (t) => {
+  assert.deepEqual(addressesModule.envSeams({}), {});
+  assert.equal(addressesModule.envSeams({ LAHE_FORWARD_CHECK_PORT: "5123" }).forwardPort, 5123);
+  assert.equal(addressesModule.envSeams({ LAHE_FORWARD_CHECK_PORT: "80; rm" }).forwardPort, undefined);
+  assert.equal(addressesModule.envSeams({ LAHE_NAME_CHECK_SERVER: "8.8.8.8:53" }).lookup, undefined);
+  // The direct lookup reaches a name server the test owns.
+  const seen = [];
+  const server = nameServer.createNameServer({ port: 0, onQuery: (name) => seen.push(name) });
+  await server.start();
+  t.after(() => server.close());
+  const { lookup } = addressesModule.envSeams({ LAHE_NAME_CHECK_SERVER: "127.0.0.1:" + server.port() });
+  assert.deepEqual(await lookup("check-1.lahe"), { address: "127.0.0.1", family: 4 });
+  assert.deepEqual(seen, ["check-1.lahe"]);
+});

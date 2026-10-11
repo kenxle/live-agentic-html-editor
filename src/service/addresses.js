@@ -27,6 +27,7 @@
 "use strict";
 
 var crypto = require("node:crypto");
+var dgram = require("node:dgram");
 var dns = require("node:dns");
 var http = require("node:http");
 
@@ -37,6 +38,50 @@ var CHECK_EVERY_MS = 5 * 60 * 1000;
 var CHECK_TIMEOUT_MS = 3000;
 var FORWARD_PATH = "/.lahe-forward-check/";
 var NOT_SET_UP = "not set up";
+
+/**
+ * Test seams, for a helper a test starts as its own process. Unit tests never
+ * send a request to the real port 80 or ask the system resolver about `.lahe`:
+ *
+ *   LAHE_FORWARD_CHECK_PORT  the port the forward check sends to, in place of 80
+ *   LAHE_NAME_CHECK_SERVER   127.0.0.1:<port>: ask that name server directly,
+ *                            in place of the system resolver
+ */
+function envSeams(env) {
+  var out = {};
+  var forward = Number(env.LAHE_FORWARD_CHECK_PORT);
+  if (Number.isInteger(forward) && forward > 0 && forward < 65536) out.forwardPort = forward;
+  var direct = /^127\.0\.0\.1:(\d{1,5})$/.exec(String(env.LAHE_NAME_CHECK_SERVER || ""));
+  if (direct) out.lookup = directLookup(Number(direct[1]));
+  return out;
+}
+
+/** A lookup that sends one A query straight to a name server on 127.0.0.1. */
+function directLookup(port) {
+  return function (name) {
+    return new Promise(function (resolve, reject) {
+      var labels = String(name).split(".");
+      var header = Buffer.alloc(12);
+      header.writeUInt16BE(crypto.randomBytes(2).readUInt16BE(0), 0);
+      header.writeUInt16BE(0x0100, 2);
+      header.writeUInt16BE(1, 4);
+      var parts = [header];
+      labels.forEach(function (label) { parts.push(Buffer.from([label.length]), Buffer.from(label, "latin1")); });
+      parts.push(Buffer.from([0, 0, 1, 0, 1]));
+      var socket = dgram.createSocket("udp4");
+      var timer = setTimeout(function () { finish(new Error("no answer from 127.0.0.1:" + port)); }, CHECK_TIMEOUT_MS);
+      function finish(err) {
+        clearTimeout(timer);
+        try { socket.close(); } catch (e) { /* already closed */ }
+        if (err) reject(err);
+        else resolve({ address: "127.0.0.1", family: 4 });
+      }
+      socket.once("error", finish);
+      socket.once("message", function () { finish(null); });
+      socket.send(Buffer.concat(parts), port, "127.0.0.1");
+    });
+  };
+}
 
 /** The origin `lahe review` prints for a site, given the helper's report. */
 function printedOrigin(name, pagesPort, report) {
@@ -71,8 +116,9 @@ function createAddresses(options) {
   var installed = opts.installed || {};
   var forwardOn = installed.port_80 === true;
   var namesOn = installed.lahe_names === true && !!installed.resolver;
-  var forwardPort = typeof opts.forwardPort === "number" ? opts.forwardPort : 80;
-  var lookup = opts.lookup || function (name) { return dns.promises.lookup(name, { family: 4 }); };
+  var seams = envSeams(process.env);
+  var forwardPort = typeof opts.forwardPort === "number" ? opts.forwardPort : seams.forwardPort || 80;
+  var lookup = opts.lookup || seams.lookup || function (name) { return dns.promises.lookup(name, { family: 4 }); };
   var intervalMs = typeof opts.intervalMs === "number" ? opts.intervalMs : CHECK_EVERY_MS;
 
   var state = {
@@ -230,5 +276,6 @@ module.exports = {
   CHECK_EVERY_MS: CHECK_EVERY_MS,
   FORWARD_PATH: FORWARD_PATH,
   printedOrigin: printedOrigin,
+  envSeams: envSeams,
   createAddresses: createAddresses
 };
