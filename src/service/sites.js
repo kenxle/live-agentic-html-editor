@@ -266,6 +266,7 @@ function createSites(options) {
           Object.keys(parsed.sites).forEach(function (name) {
             if (isEntry(parsed.sites[name])) table[name] = parsed.sites[name];
           });
+          replayLog();
           return api;
         }
       } catch (err) {
@@ -287,6 +288,25 @@ function createSites(options) {
     readOnly = true;
     say("sites: neither " + JSON_FILE + " nor " + LOG_FILE + " can be read; no new name will be made until one can");
     return api;
+  }
+
+  /**
+   * Every change is appended to sites.log first and written to sites.json
+   * second, so a crash between the two leaves the log ahead. Each log line
+   * holds the whole entry, so its last line for a name is that name's newest
+   * state: anything the log has that sites.json lacks is taken from the log.
+   */
+  function replayLog() {
+    var fromLog = readLog();
+    if (!fromLog) return;
+    var caught = Object.keys(fromLog).filter(function (name) {
+      return JSON.stringify(table[name]) !== JSON.stringify(fromLog[name]);
+    });
+    if (!caught.length) return;
+    caught.forEach(function (name) { table[name] = fromLog[name]; });
+    if (reader) return;
+    say("sites: " + caught.length + " name(s) were in " + LOG_FILE + " but not yet in " + JSON_FILE + "; " + JSON_FILE + " is written again");
+    writeJson();
   }
 
   function ensureLoaded() {
