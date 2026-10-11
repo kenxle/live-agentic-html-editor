@@ -915,8 +915,9 @@ installed).</li>
 comes from the file name and stays put.</li>
 <li>Not new outside packages. The zero-runtime-dependency rule holds:
 Lahe runs from a plain copy of the repo, with nothing to download and
-nothing that breaks offline. The install step only sets up the login
-item and names.</li>
+nothing that breaks offline. Lahe ships from GitHub only, so there is no
+npm package to keep in step with the repo. The install step only sets up
+the login item and names.</li>
 </ul>
 </div>
 <h2 id="solution-outline">Solution Outline</h2>
@@ -1122,8 +1123,8 @@ only; no outside packages. <code>lahe install</code> is Lahe's own
 command, run with Node from the clone. It writes the login item file,
 and with <code>.lahe</code> turned on, one resolver file. Nothing is
 downloaded and npm is not needed, so the GitHub-only path (clone, then
-run) keeps working. Publishing Lahe to the npm registry would be a
-separate choice, not part of this feature.</li>
+run) keeps working. Lahe is not published to the npm registry, so there
+is no second release to keep in step with GitHub.</li>
 <li><strong>Core platform rule:</strong> the core is a plain server that
 runs on Mac, Linux, and Windows. Mac-only pieces are companions on
 top.</li>

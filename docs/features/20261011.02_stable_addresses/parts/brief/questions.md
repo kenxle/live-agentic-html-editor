@@ -6,7 +6,7 @@ Settled by Ken on [the decisions page](../../ongoing/STABLE_ADDRESSES.md), 2026-
 - **A port per document, or one port with a name per document?** One port, a name per document. Each name is its own browser origin, which also answers the worry about one page reading another.
 - **`.lahe` or `.lahe.localhost`?** `.lahe` from the start, with `.lahe.localhost` as the fallback. `.lahe` becoming a real internet ending is unlikely; deal with it then.
 - **Login item, or a Mac menu-bar app?** The login item ships with this feature. The menu-bar companion app, with its Library link, is a follow-up.
-- **Is an install step acceptable?** Yes. It is for setup only; no outside packages. `lahe install` is Lahe's own command, run with Node from the clone. It writes the login item file, and with `.lahe` turned on, one resolver file. Nothing is downloaded and npm is not needed, so the GitHub-only path (clone, then run) keeps working. Publishing Lahe to the npm registry would be a separate choice, not part of this feature.
+- **Is an install step acceptable?** Yes. It is for setup only; no outside packages. `lahe install` is Lahe's own command, run with Node from the clone. It writes the login item file, and with `.lahe` turned on, one resolver file. Nothing is downloaded and npm is not needed, so the GitHub-only path (clone, then run) keeps working. Lahe is not published to the npm registry, so there is no second release to keep in step with GitHub.
 - **Core platform rule:** the core is a plain server that runs on Mac, Linux, and Windows. Mac-only pieces are companions on top.
 - **Deleted files:** not a concern for this feature. A plain "file is gone" page is enough.
 

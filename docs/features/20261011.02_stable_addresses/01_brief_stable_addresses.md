@@ -42,7 +42,7 @@ The user is Ken today, on a Mac laptop. Lahe is public, and other people run it 
 - Not a single-file build of Lahe that runs without Node. That stays open for later.
 - Not a change to how agents run a review: `lahe review`, the monitor, draining, replying, and takeover work as they do now. What changes underneath is who keeps pages served (the always-on server, not the session) and when the server stops (it does not, once installed).
 - Not a change of address when a Library row is renamed. The address comes from the file name and stays put.
-- Not new outside packages. The zero-runtime-dependency rule holds: Lahe runs from a plain copy of the repo, with nothing to download and nothing that breaks offline. The install step only sets up the login item and names.
+- Not new outside packages. The zero-runtime-dependency rule holds: Lahe runs from a plain copy of the repo, with nothing to download and nothing that breaks offline. Lahe ships from GitHub only, so there is no npm package to keep in step with the repo. The install step only sets up the login item and names.
 :::
 
 ## Solution Outline
