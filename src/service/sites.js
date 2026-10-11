@@ -66,7 +66,7 @@ function labelFor(folder) {
 
 function homeOf(options) {
   var home = options && options.home ? options.home : markdownLinks.homeRoot();
-  try { return fs.realpathSync(home); } catch (err) { return path.resolve(home); }
+  try { return fs.realpathSync.native(home); } catch (err) { return path.resolve(home); }
 }
 
 /**
@@ -123,7 +123,7 @@ function rootProblem(root, mode, dir) {
   if (typeof root !== "string" || !path.isAbsolute(root)) return "the root must be an absolute path";
   if (path.parse(root).root === root) return "the filesystem root is never served";
   var state;
-  try { state = fs.realpathSync(dir); } catch (err) { state = path.resolve(dir); }
+  try { state = fs.realpathSync.native(dir); } catch (err) { state = path.resolve(dir); }
   if (root === state || root.indexOf(state + path.sep) === 0) return "the state folder is never served";
   var stat;
   try { stat = fs.statSync(root); } catch (err) { return "the root is not there: " + root; }

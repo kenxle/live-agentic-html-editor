@@ -20,6 +20,7 @@
 "use strict";
 
 var fs = require("node:fs");
+var stream = require("node:stream");
 var path = require("node:path");
 
 var protocol = require("../shared/protocol.js");
@@ -57,8 +58,10 @@ function readJson(file) {
   try { return JSON.parse(fs.readFileSync(file, "utf8")); } catch (err) { return null; }
 }
 
+// .native, as site.bind and the Library make roots: it returns the case on
+// disk, so two spellings of one folder on a case-insensitive disk compare equal.
 function realOrNull(target) {
-  try { return fs.realpathSync(target); } catch (err) { return null; }
+  try { return fs.realpathSync.native(target); } catch (err) { return null; }
 }
 
 function within(candidate, base) {
@@ -822,7 +825,8 @@ function createPageRoutes(options) {
   function streamFile(req, res, file, size) {
     res.writeHead(200, headers(MIME[path.extname(file).toLowerCase()] || "application/octet-stream", size));
     if (req.method === "HEAD") return res.end();
-    fs.createReadStream(file).on("error", function () { res.destroy(); }).pipe(res);
+    // pipeline, not pipe: an aborted transfer closes the file too.
+    stream.pipeline(fs.createReadStream(file), res, function () { /* an aborted or failed transfer is already closed */ });
   }
 
   function streamPackaged(req, res, file) {
