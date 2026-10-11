@@ -103,7 +103,7 @@ The hackathon case after the fix: the lines are table rows only, and the old car
 - A refused edit the reviewer sends back from its card (a reply, or Keep mine on its clash) is now drawn on the page at once. Before the fix it only came back on the next reload. New browser test in `test/browser/reverted_edit.spec.js`: "a refused edit the reviewer sends back from its card is drawn on the page with no reload". It failed before the fix and passes after.
 - Stale comments in `editing.js` and the withdrawal lines in `merge_on_load.md` and `item_lifecycle.md` now say only a ready edit is withdrawn by typing.
 
-**One trade-off you should know about.** An old-contract agent on a Markdown page that pastes a heading as a plain paragraph is no longer reopened for the wrong tag. The page just shows what the agent wrote (`free_writing_seams`). That follows from requirement 2 (no reopen for a wrong tag).
+**One trade-off.** Say you type a new line and make it a heading. If the agent puts it in the file as a plain paragraph instead, the tool used to send the card back to the agent. Now it doesn't: the page shows the plain paragraph, the way a normal document would. To fix it, make the line a heading again on the page, and that goes to the agent as a new card.
 
 **Not done on purpose:** `npm run install-skills`. Installing now would tell your live agents about the new rule while the helper still runs the old layer. Run it after merge with `lahe serve --restart`, as the Rollout line says.
 
