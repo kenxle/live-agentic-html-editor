@@ -249,6 +249,7 @@ var NON_BUNDLE_FILES = [
   { path: "src/service/sites.js", owner: "stable-addresses", why: "the name registry: one name per served folder or notes page, single writer, rebuilt from its log" },
   { path: "src/service/page_routes.js", owner: "stable-addresses", why: "serve a site's pages from the helper: path safety, the page rule, injection, Markdown, mounts, unknown and gone pages" },
   { path: "src/service/self_stop.js", owner: "1A", why: "the helper stops itself after a deferred last close once nothing needs it, or when its state dir is gone" },
+  { path: "src/service/name_server.js", owner: "stable-addresses lahe-names", why: "the .lahe name server: loopback answers for names under .lahe, REFUSED for the rest, malformed packets dropped" },
   { path: "src/service/login_item.js", owner: "stable-addresses install", why: "the login item per system (launchd, systemd --user, Task Scheduler) and install.json" },
   { path: "src/service/markdown.js", owner: "1A", why: "deterministic Markdown review artifacts" },
   { path: "src/service/styles.js", owner: "Style switcher 1.1", why: "installed document styles: the store, the checks, and serving their files" },
