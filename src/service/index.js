@@ -189,7 +189,7 @@ function pagesPortFrom(opts) {
  *          origins?: string[], quiet?: boolean, now?: function(): number,
  *          pidAlive?: function, uid?: number, schedule?: function}} [options]
  *   `now`, `pidAlive`, `uid` and `schedule` are for tests of the Library: the
- *   clock every Library action and the reopened-session sweep read, the
+ *   clock every Library action and the sweep of its own sessions read, the
  *   liveness seam for monitor pids, the user a file Open restarts must belong
  *   to, and a stand-in for setInterval that runs the sweep's timer.
  * @returns {Promise<object>} a handle with port, url, close, and the pieces the

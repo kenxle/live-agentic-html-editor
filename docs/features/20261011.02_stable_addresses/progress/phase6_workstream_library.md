@@ -91,3 +91,58 @@ Two rows show their address as a link under the path. The dark link color is the
 - `test-results/` in the worktree: Playwright's output from the spec runs (gitignored).
 - `.claude-commit202610111602-library`, `.claude-commit202610111640-library`, `.claude-commit202610111730-library`, `.claude-commit202610111830-library` in the worktree root: commit message scratch files (gitignored).
 - `/tmp/sa-lib-baseline.txt`, `/tmp/sa-lib-gate2.txt`, `/tmp/sa-lib-gate3.txt`, `/tmp/sa-lib-gate4.txt`: gate output (OS-managed, nothing to do).
+
+## Task 4.3: the off branch is gone
+
+Merged `feat/stable-addresses` (core Step 3, then the install leak fix) and finished Task 4.3 on `unit/sa-library`. The 54 failing tests in the Library's files are green or moved, and the Library has one path.
+
+- `npm run gate:unit`: 2575 tests, 2572 pass, 1 fail, 2 todo. The one failure is [install_command.test.js](../../../../test/unit/install_command.test.js), "a later plain install keeps the options already set, with no new sudo call". It is not from this work: it fails the same way on `286c120`, the tip of `feat/stable-addresses`, extracted into a scratch folder and run there.
+- Browser, each on its own in Chromium: `library_stable_address.spec.js` (5 pass, 1 skipped), `catalog_page.spec.js` (29 pass, 1 skipped), `catalog_library.spec.js` (3 pass), `catalog_cross_site.spec.js` (2 pass).
+- Leak check: 2 before, 2 after. Both are Ken's own. Single test files were run with `LAHE_PAGES_PORT=0`.
+
+### What was removed
+
+- **The reader's off branch** ([catalog_reader.js](../../../../src/service/catalog_reader.js)): the page-server placement, `openPathOf` (so `landingFile` has no duplicate any more), the identity probe and its cache, and `server`, `server_root` and `url_path` on `describeReview`. A reader made with no site tools gets a read-only registry (`catalog_sites.readOnly`), so the CLI's own readers still work and show kinds and paths with no address.
+- **The actions' restart path** ([catalog_actions.js](../../../../src/service/catalog_actions.js)): the restart and reopen step, the one-Open-at-a-time chain, the old owner check, `sweepReopened`, and the `ops` dependency. The sweep of the Library's own idle sessions closes sessions through the session store. `index.js` lost its `catalogOps` stub and the reopened sweep from the timer.
+- **`setReopened` and `clearReopened`** ([catalog_store.js](../../../../src/service/catalog_store.js)). An old `catalog.json` with a `reopened` map still reads, the key is ignored, and the next write drops it.
+
+### Rows by file
+
+| File | What happened |
+|---|---|
+| [catalog_routes.test.js](../../../../test/unit/catalog_routes.test.js) (44) | The world writes an old server record instead of starting a page server. 10 tests moved. The Open tests, the "walk" tests and the timer test are rewritten: Open returns the stable address, which the page serves, and nothing is restarted. The timer test now checks the Library's own idle-session sweep. |
+| [catalog_auth.test.js](../../../../test/unit/catalog_auth.test.js) (4) | Setup writes the old record. |
+| catalog_open_rollback.test.js (3) | Whole file moved. |
+| [catalog_lifetime.test.js](../../../../test/unit/catalog_lifetime.test.js) (2) | The R10a Open test is rewritten (a closed session stays closed, and the Library's own poll is what keeps the helper up). The sweep one moved. |
+| [library_command.test.js](../../../../test/unit/library_command.test.js) (2), [library_command_sites.test.js](../../../../test/unit/library_command_sites.test.js) (1) | They expect the Library's address at the port the helper reports. New tests cover 80 once the forward is proved, the pages port before that, and no pages block. |
+| [library_address.test.js](../../../../test/unit/library_address.test.js) (1) | The switch-off test moved. |
+| Beyond the 54 | [catalog_reader.test.js](../../../../test/unit/catalog_reader.test.js) (7: the fixture gets a site registry, two probe tests moved, the others rewritten), [catalog_kind_rule.test.js](../../../../test/unit/catalog_kind_rule.test.js), [catalog_store.test.js](../../../../test/unit/catalog_store.test.js), [catalog_open_owner.test.js](../../../../test/unit/catalog_open_owner.test.js), [catalog_view_model.test.js](../../../../test/unit/catalog_view_model.test.js), [library_session_autoclose.test.js](../../../../test/unit/library_session_autoclose.test.js), [catalog_library.spec.js](../../../../test/browser/catalog_library.spec.js) and one line of core's [sites_step3.test.js](../../../../test/unit/sites_step3.test.js) (V34 called the removed `sweepReopened`). They failed only through my removals or the new fixture. The list fixture `test/fixtures/catalog_list.json` is regenerated: every row has an `address` key, `r_spec` links to its named site, and `r_ssbroken` is no longer unreadable. |
+
+### Moved, not deleted (18 tests, in `test/retired/unit/`, for Ken to approve deleting)
+
+- `catalog_routes.retired.test.js`, 10 tests plus the helpers they used: Open reopens a closed session and restarts its server; `sweepReopened` (five tests); CX2; CR4 with a corrupt catalog; CR1 (two tests: concurrent Opens start one server, and the sweep leaves a session an Open is bringing back).
+- `catalog_open_rollback.test.js`, the whole file, 3 tests: an Open that fails after its server started, and the reopened record.
+- `catalog_lifetime.retired.test.js`, 1: the Library's rule once the sweep closes the reopened session.
+- `catalog_store.retired.test.js`, 1: the reopened map.
+- `catalog_reader.retired.test.js`, 2: the `served_url` probe, and the out-of-order probes (CX1).
+- `library_address.retired.test.js`, 1: the switch-off Library.
+
+### Other changes in this task
+
+- **Open vouches through old records.** I kept the reader's use of old page-server records, because the three anchors that keep Open from serving a path a page wrote are the registry, an old record, and the rendered Markdown copy. Core said records stay readable until the migration; when they go, the second anchor goes with them and the registry's grants are the evidence.
+- **Addresses print with the port the helper proved.** The Library's rows and Open's answer use `addresses.printedPort()`, the same as `lahe review`. `lahe library` prints the Library's address with `pages.printed_port` from `service.json` (80 once the forward is checked, else the pages port), with a test. `libraryUrl` is exported for that test.
+- **Mounts survive.** A row's page list still maps a `.lahe-source` mount to its real path, from the old record's mounts and the site's own.
+- **Docs.** [LIBRARY.md](../../../../docs/ongoing/LIBRARY.md), the Library parts of [CONTRACTS.md](../../../../docs/CONTRACTS.md) (Open, the owner check, the kinds, the error table; the sweep and race paragraphs are gone), and both diagrams (the reopened sweep subgraph in `session_ownership.md` is now the Library-session sweep; core's lines are kept). The manifest's two descriptions changed.
+
+### Deviations and follow-ups
+
+- **CONTRACTS.md is not in the plan's 4.3 list,** but its Library section described the removed Open and the core docs test reads the file, so I updated it.
+- **`protocol.js` still has `CATALOG.REOPENED_AUTOCLOSE_MS`,** which nothing reads now. It is core's file; remove it with the next protocol change. A comment in `reviews.js` still names `createCatalogOps`.
+- **`status.js` still has `if (described.server_root)`** in `launchRoot`. It is always undefined now, so the site branch below it runs. Core can drop the line.
+- **The install test failure above** is for the install owner.
+
+### Cleanup needed (this task)
+
+- `test-results/` (Playwright output, gitignored) and `.claude-commit...-library` scratch files, as before.
+- A scratch copy of `286c120` for the baseline check, under the session scratchpad (not in the repo).
+- The 18 moved tests above, for Ken's approval.
