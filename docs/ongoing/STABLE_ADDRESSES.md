@@ -23,7 +23,8 @@ So "persistent port" is really "something always answering at the document's add
 
 ## Pros of stable addresses
 
-- Browser history, bookmarks, and "reopen closed tabs" work. You stay in the browser.
+- Dead tabs stop happening. A tab left open overnight just reloads, and so do browser history, bookmarks, and "reopen closed tabs". You stay in the browser.
+- You can tell what a tab is from its address, if the address uses the document's name (see option D).
 - Unsent drafts come back. The browser keeps drafts per address, and the port is part of the address. When a port changes, drafts saved under the old one are invisible on the new one.
 - Links an agent pasted into chat or into another document keep working.
 - Fewer trips to the Library, and fewer "find me that doc" requests to an agent.
@@ -35,7 +36,6 @@ So "persistent port" is really "something always answering at the document's add
 - **Port clashes with your other tools.** With option A, each document reserves a port, and any of them can clash with another tool; then that document moves, as it does today. With option D, only the one shared port can clash, and Lahe would pick it once, away from common dev-server ports.
 - **Small security change: pages answer all the time.** Each page holds the key for posting comments to its review. Any program running on your Mac could load the page, take the key, and post fake comments to that review. Today that is only possible while the document is being served. With stable addresses it is possible whenever the helper runs. Websites you visit still cannot do it; Lahe already blocks them. And a program on your Mac can already read Lahe's files directly, so this adds little real risk. It is a note for the security review, not a reason to hold back.
 - **Who owns the server changes.** Today each agent session owns the servers for its pages, and they stop when the session closes. With stable addresses, one always-on Lahe server owns every address, apart from any agent. Sessions only own their reviews. That touches the session docs, the diagrams, and several tests.
-- **A link to a deleted file** would open a helper page saying the file is gone, with a link to the Library. Better than "can't connect", but not the document.
 
 ## How the always-on server would run
 
@@ -59,7 +59,8 @@ So the separate gardens are the point. Separate ports are just how Lahe gets the
 
 ### D. One port, a host name per document (recommended)
 
-- Each document gets an address like `http://ra192291dfb29.lahe.localhost:7820/STABLE_ADDRESSES.html`. The first part is the document's review id, so it never changes.
+- Each document gets an address built from its name, like `http://stable-addresses.lahe.localhost:7820/`. You can read what a tab is from the address alone. The name is fixed the first time the document is served, so it never changes after that.
+- Two documents with the same name get a short tag to tell them apart, like `brief-personal.lahe.localhost`.
 - Every document uses the same port. The helper keeps one door open and reads the host name to know which document you asked for.
 - Each host name is its own garden, so documents stay walled off from each other, exactly as with separate ports.
 - No port clashes after the first, no 256 limit, and nothing to reserve per document.
@@ -70,8 +71,8 @@ So the separate gardens are the point. Separate ports are just how Lahe gets the
 
 - **A name does not change port clashes.** A port belongs to the computer, not to a name. If another tool is on the port, no name gets Lahe onto it. Option D already cuts clashes down to the one shared port.
 - **`.local` is a poor fit on a Mac.** macOS uses `.local` for finding devices on your network, so lookups are slow, and the name only works after an admin edit to a system file. That file cannot say "every name ending in `.lahe.local`", so each document would need its own line.
-- **`.localhost` gives the same look with no setup.** `ra192291dfb29.lahe.localhost` works today on your Mac, in every browser. I checked.
-- **Dropping the port from the address** (so it reads `http://ra192291dfb29.lahe.localhost/`) needs port 80. macOS refused that for a normal program when I tried. It would take a one-time admin setting at install. Possible, but optional.
+- **`.localhost` gives the same look with no setup.** `stable-addresses.lahe.localhost` works today on your Mac, in every browser. I checked.
+- **Dropping the port from the address** (so it reads `http://stable-addresses.lahe.localhost/`) needs port 80. macOS refused that for a normal program when I tried. It would take a one-time admin setting at install. Possible, but optional.
 
 ### A. Each document keeps its own port, and the helper answers on it
 
