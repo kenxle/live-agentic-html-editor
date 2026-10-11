@@ -855,9 +855,10 @@ that, nothing answers at the address. The browser shows its own "can't
 connect" page, and Lahe never sees the request.</p>
 <p>So Ken cannot use browser history or bookmarks to get back to a
 document. He routes through the Library or asks an agent, and he reads
-bare <code>127.0.0.1:56055</code> addresses trying to work out what a
-dead tab was. In his words: "it's the constant dead tabs that i run into
-and have to try and decipher what they are by the url."</p>
+bare <code>127.0.0.1:56055/[file]_[stamp]</code> addresses trying to
+work out what a dead tab was. In his words: "it's the constant dead tabs
+that i run into and have to try and decipher what they are by the
+url."</p>
 <pre class="mermaid"><code>flowchart TD
     Tab[&quot;Ken clicks an old Lahe tab&lt;br/&gt;or a history entry&quot;] --&gt; Up{&quot;is that document&#39;s&lt;br/&gt;server running?&quot;}
     Up --&gt;|&quot;usually not&quot;| Dead[&quot;browser: can&#39;t connect&lt;br/&gt;address says only 127.0.0.1:56055&quot;]

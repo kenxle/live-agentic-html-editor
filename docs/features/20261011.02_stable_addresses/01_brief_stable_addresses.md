@@ -8,7 +8,7 @@ Every document Lahe serves gets an address that keeps working, like `http://2026
 
 Ken reads nearly every plan, brief, and report through Lahe, and keeps many Lahe tabs open across days. Today those tabs die. Each document is served by a small server that an agent session owns. The server stops two minutes after its last window closes, or when the session closes, and the helper itself stops once nothing is open. After that, nothing answers at the address. The browser shows its own "can't connect" page, and Lahe never sees the request.
 
-So Ken cannot use browser history or bookmarks to get back to a document. He routes through the Library or asks an agent, and he reads bare `127.0.0.1:56055` addresses trying to work out what a dead tab was. In his words: "it's the constant dead tabs that i run into and have to try and decipher what they are by the url."
+So Ken cannot use browser history or bookmarks to get back to a document. He routes through the Library or asks an agent, and he reads bare `127.0.0.1:56055/[file]_[stamp]` addresses trying to work out what a dead tab was. In his words: "it's the constant dead tabs that i run into and have to try and decipher what they are by the url."
 
 ```mermaid
 flowchart TD
