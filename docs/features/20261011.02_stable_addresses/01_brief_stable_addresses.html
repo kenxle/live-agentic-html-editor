@@ -1203,10 +1203,17 @@ comments to an agent when no helper is running), the copy button on the
 hand-off message for a new agent, the Library's copy of that message,
 and "Copy the command" on a page whose review is missing. Browsers only
 give the modern clipboard to secure pages;</li>
-<li>the guard against two tabs of one document both acting turns
-off;</li>
-<li>the browser stops sending headers the Library's safety checks rely
-on;</li>
+<li>the two-tab guard turns off. Today, when the same review is open in
+two tabs, only one tab can send comments and edits, and the other is
+read-only, so the two cannot overwrite each other. The guard uses a
+browser lock that only secure pages get. Without a backup, both tabs
+could act;</li>
+<li>the browser stops sending the headers that say which site a request
+came from. The Library refuses any request without them, which is why
+the Library stays on <code>library.lahe.localhost</code> and is never
+served on <code>.lahe</code>. The new page server also reads them to
+tell a page from a file, and would fall back to an older header. This
+one is already handled; it is listed so the trade is complete;</li>
 <li>on a machine where Lahe does not control <code>.lahe</code> lookups,
 someone on the network could take over a name.</li>
 </ul>

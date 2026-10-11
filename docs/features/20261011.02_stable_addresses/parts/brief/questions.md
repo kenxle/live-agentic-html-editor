@@ -28,8 +28,8 @@ Chosen by the brief, for Ken to overrule in review:
 
 - the address bar shows "Not secure";
 - Lahe's copy buttons stop working unless they switch to an older copy method. These are the rail's "copy my feedback" button (for pasting comments to an agent when no helper is running), the copy button on the hand-off message for a new agent, the Library's copy of that message, and "Copy the command" on a page whose review is missing. Browsers only give the modern clipboard to secure pages;
-- the guard against two tabs of one document both acting turns off;
-- the browser stops sending headers the Library's safety checks rely on;
+- the two-tab guard turns off. Today, when the same review is open in two tabs, only one tab can send comments and edits, and the other is read-only, so the two cannot overwrite each other. The guard uses a browser lock that only secure pages get. Without a backup, both tabs could act;
+- the browser stops sending the headers that say which site a request came from. The Library refuses any request without them, which is why the Library stays on `library.lahe.localhost` and is never served on `.lahe`. The new page server also reads them to tell a page from a file, and would fall back to an older header. This one is already handled; it is listed so the trade is complete;
 - on a machine where Lahe does not control `.lahe` lookups, someone on the network could take over a name.
 
 `.lahe.localhost` has none of these, needs no setup on any system, and its addresses survive an uninstall.
