@@ -1,12 +1,11 @@
 # Progress: Stable addresses
 
-**Phase 5, Human review.** The full doc set is written and reviewed by four agents, and is ready for you. Three things need your answer before any code. Last updated 2026-10-11 12:56.
+**Phase 5, Human review.** The full doc set is written and reviewed by four agents, and is ready for you. Two things need your answer before any code. Last updated 2026-10-11 14:48.
 
 **Docs:** [Decisions page](../../ongoing/STABLE_ADDRESSES.md) · [Crucible](00_crucible_stable_addresses.html) · [Brief](01_brief_stable_addresses.html) · [Architecture](02_architecture_stable_addresses.html) · [Plan](03_plan_stable_addresses.html) · [Code survey](parts/architecture/recon.md)
 
 ## Needs your attention
 
-- [ ] **Which ending should `lahe review` print?** You chose `.lahe`. The fix for one page reading another still holds with either ending: it came from giving each document its own name, and every name is its own origin under both. Both architecture reviews found that a plain `http://name.lahe` page counts as "not secure" to the browser. The address bar says "Not secure", Lahe's copy buttons and the two-tab guard need backups, and if the setup ever breaks, an old `.lahe` bookmark could reach a hostile network's server instead of Lahe. `.lahe.localhost` has none of these and needs no setup. I recommend printing `.lahe.localhost`, and keeping `.lahe` as a Mac option that answers the same names. Details: the open question in the [brief](01_brief_stable_addresses.html). The skill and contract wait on this answer.
 - [ ] **One name per folder, not per file.** The architecture review showed per-file names would break Markdown images and links, folder sites, your rail rules, and which file a comment points at. Addresses now read as folder plus file: `live-agentic-html-editor.docs.ongoing.lahe.localhost:1483/STABLE_ADDRESSES.md`. Isolation stays the same as today. Approve, or say what to change.
 - [ ] **Approve the plan's two process items:** a small dispatch-only CI workflow on main (it never runs on push and never emails you), and accepting that CI cannot prove "starts at login" on Linux and Windows. Your reboot of this Mac proves it on macOS.
 
@@ -48,6 +47,7 @@ None.
 ### Follow-ups
 
 - Mac menu-bar companion app with a Library link (settled as its own follow-up).
+- HTTPS for `.lahe`, so a `.lahe` page counts as secure and `.lahe` could be printed. Lahe would make its own certificate, limited to `.lahe` names, and the computer would trust it once.
 - Test leak: 60 page servers left running from the idle-server tests (state folders named `lahe-idle-state-*`), found 2026-10-11.
 
 ### Cleanup queue

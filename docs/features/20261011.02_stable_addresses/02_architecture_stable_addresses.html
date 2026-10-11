@@ -945,8 +945,8 @@ the helper does not stop itself. On macOS, the short <code>.lahe</code>
 ending is an opt-in alias that the helper answers only once it has
 proved it owns <code>.lahe</code> lookups on that machine.</p>
 <div class="callout callout-question">
-<p><strong>One decision changed in review, and it is Ken's to
-confirm.</strong> Ken chose <code>.lahe</code> as the printed ending.
+<p><strong>One decision changed in review, and Ken confirmed
+it.</strong> Ken first chose <code>.lahe</code> as the printed ending.
 Both reviews found that a plain <code>http://name.lahe</code> page is
 not a "secure context" to the browser. That brings five costs:</p>
 <ul>
@@ -958,11 +958,10 @@ and the redirect rule rely on;</li>
 <li>on any machine where Lahe does not own <code>.lahe</code> lookups, a
 hostile network could take over a name (DNS rebinding).</li>
 </ul>
-<p><code>.lahe.localhost</code> has none of these. This architecture
-prints <code>.lahe.localhost</code> by default, and offers
-<code>.lahe</code> on macOS as an opt-in, guarded alias. If Ken still
-wants <code>.lahe</code> printed, the plan adds the fallbacks listed
-under Failure Modes. See the brief's questions leaf.</p>
+<p><code>.lahe.localhost</code> has none of these. Ken agreed:
+<code>lahe review</code> prints <code>.lahe.localhost</code>, and
+<code>.lahe</code> is an opt-in, guarded alias. HTTPS for
+<code>.lahe</code> is a follow-up.</p>
 </div>
 <h2 id="analysis-of-existing-structure">Analysis of Existing
 Structure</h2>
@@ -1537,8 +1536,8 @@ Hosts are refused, and <code>.lahe.localhost</code> is printed.</p></li>
 <li><p><strong>A browser skips the system resolver</strong> (custom
 secure DNS). <code>.lahe</code> fails in that browser;
 <code>.lahe.localhost</code> works.</p></li>
-<li><p><strong>If Ken keeps <code>.lahe</code> as the printed
-ending:</strong></p>
+<li><p><strong>Someone types a <code>.lahe</code> address by
+hand.</strong> The page works, without the secure-only features:</p>
 <ul>
 <li>copy falls back to a hidden text field and the browser's copy
 command;</li>
@@ -1547,8 +1546,10 @@ command;</li>
 Metadata headers are missing;</li>
 <li>the "Not secure" label stays.</li>
 </ul>
-<p>With <code>.lahe.localhost</code> printed, none of this is needed.
-The copy fallback ships either way for the Library page.</p></li>
+<p>The copy fallback ships for the Library page anyway, so copy works
+there too. The tab-guard lease and the <code>Accept</code> fallback are
+not built; a typed <code>.lahe</code> page lets both tabs act, as
+today's code does without a lock.</p></li>
 <li><p><strong>Old comments.</strong> Same path, old origin: the alias
 list makes them match, in the rail and in
 <code>review.json</code>.</p></li>

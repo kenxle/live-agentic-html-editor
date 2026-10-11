@@ -36,7 +36,7 @@
 
 **Task 3.2: `lahe status` and logging.** Status shows the port, the printed ending and why, each review's site, a taken port, and the install state that install writes to `service.json`. The log records the lines the brief's Logging section lists. Acceptance: V37, V71.
 
-**Task 3.3: Skill, contract, and serving docs.** These all change in PR 2, using the printed ending Ken chose at the review gate:
+**Task 3.3: Skill, contract, and serving docs.** These all change in PR 2, printing `.lahe.localhost`, as Ken decided at the review gate:
 
 - `skills/lahe/SKILL.md`, then `npm run install-skills`
 - the contract in `src/shared/review_format.js`, plus its copies in `test/unit/review_format.test.js` and `docs/CONTRACTS.md`

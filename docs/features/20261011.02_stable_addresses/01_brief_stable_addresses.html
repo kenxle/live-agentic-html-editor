@@ -938,8 +938,9 @@ already sends <code>.localhost</code> names to this computer, with no
 setup. An optional setup step, run once with an admin password, also
 makes the shorter <code>.lahe</code> ending work. On a Mac the setup
 command does it; on Linux and Windows the install guide gives the steps
-by hand. Which ending <code>lahe review</code> prints is the open
-decision in the questions below.</li>
+by hand. <code>lahe review</code> prints <code>.lahe.localhost</code>,
+because a plain <code>.lahe</code> page is not secure to the browser;
+see the resolved questions below.</li>
 <li><strong>Agents keep working the same way.</strong>
 <code>lahe review</code> prints the stable address. Sessions, the
 monitor, and takeover are unchanged. A comment left on a page with no
@@ -1168,6 +1169,15 @@ address still reads as folder plus file.</p></li>
 pages whenever the server runs. Recorded as a known limit;
 <code>lahe install</code> warns on a computer with more than one
 user.</p></li>
+<li><p><strong>Which ending does <code>lahe review</code>
+print?</strong> <code>.lahe.localhost</code>. Ken weighed the costs of a
+plain <code>http://name.lahe</code> page (the "Not secure" label, the
+copy buttons and two-tab guard needing backups, and a leftover risk to
+drafts if the setup ever breaks) and judged them big enough not to print
+<code>.lahe</code>. <code>.lahe</code> stays as a guarded option that
+answers the same names, for typing by hand. Making <code>.lahe</code>
+pages secure with HTTPS is a follow-up; after it lands, printing
+<code>.lahe</code> can be asked again.</p></li>
 <li><p><strong>Drop the port from the address?</strong> Yes. Ken
 approved it on 2026-10-11 once it was clear the forward only covers this
 computer's own port 80, never web traffic. The setup command adds a
@@ -1186,52 +1196,7 @@ gone:</strong> forever. Names are small, and keeping them means an old
 bookmark still says what it was.</p></li>
 </ul>
 <h3 id="open">Open</h3>
-<div class="callout callout-question">
-<p><span id="questions-and-decisions-q1" class="finding-anchor"></span><strong>Q1. Which ending does <code>lahe review</code> print:
-<code>.lahe.localhost</code> or <code>.lahe</code>?</strong> Ken chose
-<code>.lahe</code>. The fix for one page reading another holds with
-either ending: it came from a name per document, and each name is its
-own browser origin under both endings. The question is only which ending
-costs less. Both architecture reviews found that a plain
-<code>http://name.lahe</code> address is not "secure" to the browser,
-and that costs five things:</p>
-<ul>
-<li>the address bar shows "Not secure";</li>
-<li>Lahe's copy buttons stop working unless they switch to an older copy
-method. These are the rail's "copy my feedback" button (for pasting
-comments to an agent when no helper is running), the copy button on the
-hand-off message for a new agent, the Library's copy of that message,
-and "Copy the command" on a page whose review is missing. Browsers only
-give the modern clipboard to secure pages;</li>
-<li>the two-tab guard turns off. Today, when the same review is open in
-two tabs, only one tab can send comments and edits, and the other is
-read-only, so the two cannot overwrite each other. The guard uses a
-browser lock that only secure pages get. Without a backup, both tabs
-could act;</li>
-<li>the browser stops sending the headers that say which site a request
-came from. The Library refuses any request without them, which is why
-the Library stays on <code>library.lahe.localhost</code> and is never
-served on <code>.lahe</code>. The new page server also reads them to
-tell a page from a file, and would fall back to an older header. This
-one is already handled; it is listed so the trade is complete;</li>
-<li>a small leftover risk if the setup later breaks (an OS update
-removes the lookup file, say). <code>.lahe</code> is only used where it
-was set up, and Lahe stops answering <code>.lahe</code> the moment its
-check fails, so Lahe's own pages stay safe. But an old
-<code>.lahe</code> bookmark would then ask the network who
-<code>name.lahe</code> is, and a hostile network (a café's Wi-Fi) could
-answer with its own server. That server would get the browser's storage
-for that name, which holds unsent drafts. <code>.lahe.localhost</code>
-never asks the network.</li>
-</ul>
-<p><code>.lahe.localhost</code> has none of these, needs no setup on any
-system, and its addresses survive an uninstall.</p>
-<p><strong>Recommendation:</strong> print <code>.lahe.localhost</code>.
-Keep <code>.lahe</code> as an option that answers the same names, for
-typing by hand. If Ken still wants <code>.lahe</code> printed, the plan
-adds the copy, tab-guard, and header fallbacks (task 6.3), and the "Not
-secure" label stays.</p>
-</div>
+<p>None.</p>
 <h2 id="pm-review">PM Review</h2>
 <p>Full prose in <a href="01_brief_stable_addresses_reviews.md">the
 reviews file</a>.</p>

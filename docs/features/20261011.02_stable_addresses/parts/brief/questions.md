@@ -17,22 +17,11 @@ Chosen by the brief, for Ken to overrule in review:
 - **The name is per folder, not per file.** The architecture review showed per-file names break Markdown images and links, folder sites, the rail rules, and how comments are tied to files. The folder is today's isolation unit, so nothing gets weaker. The address still reads as folder plus file.
 - **Other accounts on the same computer** can reach pages whenever the server runs. Recorded as a known limit; `lahe install` warns on a computer with more than one user.
 
+- **Which ending does `lahe review` print?** `.lahe.localhost`. Ken weighed the costs of a plain `http://name.lahe` page (the "Not secure" label, the copy buttons and two-tab guard needing backups, and a leftover risk to drafts if the setup ever breaks) and judged them big enough not to print `.lahe`. `.lahe` stays as a guarded option that answers the same names, for typing by hand. Making `.lahe` pages secure with HTTPS is a follow-up; after it lands, printing `.lahe` can be asked again.
 - **Drop the port from the address?** Yes. Ken approved it on 2026-10-11 once it was clear the forward only covers this computer's own port 80, never web traffic. The setup command adds a port-80 forward on macOS, with the admin password, in the same step as `.lahe`. Linux and Windows get written steps in the install guide. If port 80 is taken, Lahe keeps `:1483`. `:1483` addresses keep working in every case. A port-free address still shows "Not secure" under `.lahe`; HTTPS to remove that is a follow-up.
 - **Which port pages use:** 1483, because it reads like "lahe". It is registered only to the AFS License Manager, an old program almost nothing runs, and nothing on Ken's Mac listens on it. The API keeps 7817.
 - **How long a document keeps its name after its file is gone:** forever. Names are small, and keeping them means an old bookmark still says what it was.
 
 ### Open
 
-::: callout-question
-**Q1. Which ending does `lahe review` print: `.lahe.localhost` or `.lahe`?** Ken chose `.lahe`. The fix for one page reading another holds with either ending: it came from a name per document, and each name is its own browser origin under both endings. The question is only which ending costs less. Both architecture reviews found that a plain `http://name.lahe` address is not "secure" to the browser, and that costs five things:
-
-- the address bar shows "Not secure";
-- Lahe's copy buttons stop working unless they switch to an older copy method. These are the rail's "copy my feedback" button (for pasting comments to an agent when no helper is running), the copy button on the hand-off message for a new agent, the Library's copy of that message, and "Copy the command" on a page whose review is missing. Browsers only give the modern clipboard to secure pages;
-- the two-tab guard turns off. Today, when the same review is open in two tabs, only one tab can send comments and edits, and the other is read-only, so the two cannot overwrite each other. The guard uses a browser lock that only secure pages get. Without a backup, both tabs could act;
-- the browser stops sending the headers that say which site a request came from. The Library refuses any request without them, which is why the Library stays on `library.lahe.localhost` and is never served on `.lahe`. The new page server also reads them to tell a page from a file, and would fall back to an older header. This one is already handled; it is listed so the trade is complete;
-- a small leftover risk if the setup later breaks (an OS update removes the lookup file, say). `.lahe` is only used where it was set up, and Lahe stops answering `.lahe` the moment its check fails, so Lahe's own pages stay safe. But an old `.lahe` bookmark would then ask the network who `name.lahe` is, and a hostile network (a café's Wi-Fi) could answer with its own server. That server would get the browser's storage for that name, which holds unsent drafts. `.lahe.localhost` never asks the network.
-
-`.lahe.localhost` has none of these, needs no setup on any system, and its addresses survive an uninstall.
-
-**Recommendation:** print `.lahe.localhost`. Keep `.lahe` as an option that answers the same names, for typing by hand. If Ken still wants `.lahe` printed, the plan adds the copy, tab-guard, and header fallbacks (task 6.3), and the "Not secure" label stays.
-:::
+None.

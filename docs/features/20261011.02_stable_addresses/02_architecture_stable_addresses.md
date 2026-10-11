@@ -5,7 +5,7 @@
 The helper becomes the always-on Lahe server and serves every page itself. Pages answer on port 1483, which reads like "lahe". The API stays on 7817, so script lines already written into pages keep working. Both listeners are in the same process and use the same Host routing. `127.0.0.1` and `localhost` reach the API, as they do today. `library.lahe.localhost` reaches the Library. `<name>.lahe.localhost` reaches one named site. A site is what one page server serves today: one folder, or one notes page. Paths under a site are the same paths a page server uses today. Only the origin changes, from `127.0.0.1:<random port>` to `<name>.lahe.localhost:7817`. A name registry, written only by the helper, maps each name to its site. The review that answers on a page is chosen per request, by today's rule without the session filter. Per-session page-server processes are retired. An install command adds a login item on macOS, Linux, and Windows, and in that mode the helper does not stop itself. On macOS, the short `.lahe` ending is an opt-in alias that the helper answers only once it has proved it owns `.lahe` lookups on that machine.
 
 ::: callout-question
-**One decision changed in review, and it is Ken's to confirm.** Ken chose `.lahe` as the printed ending. Both reviews found that a plain `http://name.lahe` page is not a "secure context" to the browser. That brings five costs:
+**One decision changed in review, and Ken confirmed it.** Ken first chose `.lahe` as the printed ending. Both reviews found that a plain `http://name.lahe` page is not a "secure context" to the browser. That brings five costs:
 
 - the address bar says "Not secure";
 - copy buttons lose the clipboard API;
@@ -13,7 +13,7 @@ The helper becomes the always-on Lahe server and serves every page itself. Pages
 - the browser stops sending the request headers the Library's checks and the redirect rule rely on;
 - on any machine where Lahe does not own `.lahe` lookups, a hostile network could take over a name (DNS rebinding).
 
-`.lahe.localhost` has none of these. This architecture prints `.lahe.localhost` by default, and offers `.lahe` on macOS as an opt-in, guarded alias. If Ken still wants `.lahe` printed, the plan adds the fallbacks listed under Failure Modes. See the brief's questions leaf.
+`.lahe.localhost` has none of these. Ken agreed: `lahe review` prints `.lahe.localhost`, and `.lahe` is an opt-in, guarded alias. HTTPS for `.lahe` is a follow-up.
 :::
 
 ## Analysis of Existing Structure
@@ -215,13 +215,13 @@ The forward sends port 80 to 1483. If port 80 is taken, the helper keeps `:1483`
 - **No IPv6 loopback.** A failed `::1` bind is a log line, not an exit.
 - **The name server port is taken, or another process answers `.lahe`.** Verification fails, `.lahe` Hosts are refused, and `.lahe.localhost` is printed.
 - **A browser skips the system resolver** (custom secure DNS). `.lahe` fails in that browser; `.lahe.localhost` works.
-- **If Ken keeps `.lahe` as the printed ending:**
+- **Someone types a `.lahe` address by hand.** The page works, without the secure-only features:
   - copy falls back to a hidden text field and the browser's copy command;
   - the duplicate-tab guard falls back to a lease in local storage;
   - page-type detection uses `Accept: text/html` when Fetch Metadata headers are missing;
   - the "Not secure" label stays.
 
-  With `.lahe.localhost` printed, none of this is needed. The copy fallback ships either way for the Library page.
+  The copy fallback ships for the Library page anyway, so copy works there too. The tab-guard lease and the `Accept` fallback are not built; a typed `.lahe` page lets both tabs act, as today's code does without a lock.
 - **Old comments.** Same path, old origin: the alias list makes them match, in the rail and in `review.json`.
 - **Old open tabs on random ports.** Dead. Leftover page servers are stopped.
 - **Two reviews of one file in two sessions.** One name. The rail goes to the most recent explicit act, by the rule above.

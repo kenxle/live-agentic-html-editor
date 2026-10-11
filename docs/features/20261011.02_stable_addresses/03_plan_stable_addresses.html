@@ -1007,8 +1007,8 @@ taken port, and the install state that install writes to
 <code>service.json</code>. The log records the lines the brief's Logging
 section lists. Acceptance: V37, V71.</p>
 <p><strong>Task 3.3: Skill, contract, and serving docs.</strong> These
-all change in PR 2, using the printed ending Ken chose at the review
-gate:</p>
+all change in PR 2, printing <code>.lahe.localhost</code>, as Ken
+decided at the review gate:</p>
 <ul>
 <li><code>skills/lahe/SKILL.md</code>, then
 <code>npm run install-skills</code></li>
@@ -1115,8 +1115,9 @@ part).</p>
 <code>&lt;name&gt;.lahe</code>, but only after the helper has proved its
 own name server answers <code>.lahe</code> lookups.</p>
 <p><strong>Reads first:</strong> the architecture's "<code>.lahe</code>
-on macOS (opt-in)" section and Security notes on DNS rebinding; Ken's
-answer to the brief's question on the printed ending.</p>
+on macOS (opt-in)" section and Security notes on DNS rebinding; the
+brief's resolved decision: <code>.lahe.localhost</code> is printed, and
+<code>.lahe</code> is an alias.</p>
 <p><strong>Starts</strong> after PR 3. Lands as PR 4.</p>
 <p><strong>Task 6.1: The name server,
 <code>src/service/name_server.js</code>.</strong> Acceptance: V54,
@@ -1130,8 +1131,9 @@ from port 80 to the helper's port, for <code>127.0.0.1</code> and
 skipped, with a status line naming the holder, when something already
 listens on port 80. <code>lahe uninstall</code> removes only the forward
 it added. Acceptance: V74, V75.</p>
-<p><strong>Task 6.3: Only if Ken chose <code>.lahe</code> as the printed
-ending.</strong> Fallbacks for a non-secure page:</p>
+<p><strong>Task 6.3: Dropped.</strong> Ken chose to print
+<code>.lahe.localhost</code>. Kept here for the record: Fallbacks for a
+non-secure page:</p>
 <ul>
 <li>copy, reusing Task 4.2's function in <code>export.js</code> and
 <code>overlay.js</code>;</li>
@@ -1682,22 +1684,22 @@ seen by our own name server</td>
 <tr>
 <td>V60</td>
 <td>6.3 copy</td>
-<td>Copy review works on a non-secure origin (only if <code>.lahe</code>
-is printed)</td>
+<td>Copy review works on a non-secure origin (not applicable:
+<code>.lahe.localhost</code> is printed)</td>
 <td>B</td>
 </tr>
 <tr>
 <td>V61</td>
 <td>6.3 tab guard</td>
 <td>Two tabs of one page on a non-secure origin do not both hold the
-window (only if <code>.lahe</code> is printed)</td>
+window (not applicable: <code>.lahe.localhost</code> is printed)</td>
 <td>B</td>
 </tr>
 <tr>
 <td>V62</td>
 <td>6.3 page type</td>
-<td>Page detection works with no Fetch Metadata headers (only if
-<code>.lahe</code> is printed)</td>
+<td>Page detection works with no Fetch Metadata headers (not applicable:
+<code>.lahe.localhost</code> is printed)</td>
 <td>U</td>
 </tr>
 <tr>
@@ -1852,8 +1854,7 @@ address.</label></li>
 <li><label><input type="checkbox" />One port (requirement 5): V7,
 V37.</label></li>
 <li><label><input type="checkbox" />Endings (requirement 6): V37, V54 to
-V59, V73 to V75, and Ken's answer on the printed ending
-applied.</label></li>
+V59, V73 to V75, with <code>.lahe.localhost</code> printed.</label></li>
 <li><label><input type="checkbox" />Starts at login on three systems
 (requirement 7): V45 to V52.</label></li>
 <li><label><input type="checkbox" />Existing documents get addresses,

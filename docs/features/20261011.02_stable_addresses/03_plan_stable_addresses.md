@@ -142,9 +142,9 @@ The one verification table. U is a unit test under `test/unit/`; B is a Playwrig
 | V57 | Verification | `.lahe` Hosts are refused until a fresh random query is seen by our own name server | U |
 | V58 | Squatter | Another process answering `.lahe` fails verification | U |
 | V59 | Uninstall | Removes the resolver only when it carries the marker; `.lahe.localhost` addresses keep working | U |
-| V60 | 6.3 copy | Copy review works on a non-secure origin (only if `.lahe` is printed) | B |
-| V61 | 6.3 tab guard | Two tabs of one page on a non-secure origin do not both hold the window (only if `.lahe` is printed) | B |
-| V62 | 6.3 page type | Page detection works with no Fetch Metadata headers (only if `.lahe` is printed) | U |
+| V60 | 6.3 copy | Copy review works on a non-secure origin (not applicable: `.lahe.localhost` is printed) | B |
+| V61 | 6.3 tab guard | Two tabs of one page on a non-secure origin do not both hold the window (not applicable: `.lahe.localhost` is printed) | B |
+| V62 | 6.3 page type | Page detection works with no Fetch Metadata headers (not applicable: `.lahe.localhost` is printed) | U |
 | V63 | R9 drafts | An unsent draft on a page is there after the helper restarts and the tab reloads | B |
 | V64 | Browsers | V11, V13, V16, and V43 pass in Chromium, Firefox, and WebKit on `gate:all` | B |
 | V65 | R3 same file, same address | Two reviews of one file, in two sessions, print the same address | U |
@@ -186,7 +186,7 @@ The one verification table. U is a unit test under `test/unit/`; B is a Playwrig
 - [ ] Addresses name the folder and file (requirement 3): V1 to V3, V65, and the walk reads every printed address.
 - [ ] Documents stay walled off (requirement 4): V14 to V17.
 - [ ] One port (requirement 5): V7, V37.
-- [ ] Endings (requirement 6): V37, V54 to V59, V73 to V75, and Ken's answer on the printed ending applied.
+- [ ] Endings (requirement 6): V37, V54 to V59, V73 to V75, with `.lahe.localhost` printed.
 - [ ] Starts at login on three systems (requirement 7): V45 to V52.
 - [ ] Existing documents get addresses, and links keep working (requirements 8 and 8a): V12, V13, V29, V31, V39.
 - [ ] Drafts come back (requirement 9): V63.
