@@ -182,6 +182,9 @@ test("V48: more than one user on the machine is warned about, and install goes o
   assert.equal(code, 0, d.err());
   assert.match(d.out() + d.err(), /2 people have accounts on this computer/);
   assert.match(d.out() + d.err(), /other accounts can reach/);
+  // Security review S4: say the whole of it. The review token is on the page.
+  assert.match(d.out() + d.err(), /read and write every review/);
+  assert.match(d.out() + d.err(), /reaches your agent/);
 });
 
 test("V72: installing again replaces the login item rather than adding a second", async (t) => {

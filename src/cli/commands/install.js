@@ -437,7 +437,9 @@ async function run(argv, deps) {
   if (users.length > 1) {
     env.out(
       "lahe install: note, " + users.length + " people have accounts on this computer. With the helper always on,\n" +
-        "  other accounts can reach its pages on this computer. Websites cannot.\n"
+        "  other accounts can reach its pages on this computer. Each page carries its review's key, so another\n" +
+        "  account can open the pages and read and write every review, and what it writes reaches your agent.\n" +
+        "  Websites cannot do this.\n"
     );
   }
 
