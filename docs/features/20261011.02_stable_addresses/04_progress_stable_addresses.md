@@ -16,11 +16,12 @@
   - **B, say so.** The rail shows one line, like "3 earlier comments from this page's old address are with your agent." You cannot read them on the page.
 
   I recommend **A**: the point of this feature is opening an old document and finding your work there, and B leaves every existing document looking empty the first time. Details: "V31 options" in the [core progress](progress/phase6_workstream_core.md).
-- [ ] **Approve or reverse five changes from what the docs said.** Building turned up these. Each has my recommendation; say "all fine", or name the ones to change.
+- [ ] **Approve or reverse six changes from what the docs said.** Building turned up these. Each has my recommendation; say "all fine", or name the ones to change.
   - **Windows does not get `.lahe`.** Windows only sends a name ending to a name server on port 53, and taking port 53 needs admin rights and clashes with Windows' own DNS. Windows still gets `.lahe.localhost` and the port-free address. *Recommend: accept.*
   - **A linked document opens with the linking page's rail, even when it has its own review.** Before, each folder had its own server, so following a link could land on the linked file's own review. Now one address serves the folder, so the page you came from keeps its rail. The linked file's own review still works when you open that file with `lahe review`. *Recommend: accept.*
   - **A tab stays connected when a newer review takes over its page.** The helper accepts a page's requests from any review that could answer on that site, not only the newest, so a tab opened earlier keeps working. A page from another site is still refused. *Recommend: accept.*
   - **One click from a "no document by that name" page opens the Library.** The Library page now accepts a link from a `.lahe.localhost` page. The security review checked it: the linking page cannot read the Library, frame it, or press its buttons. *Recommend: accept.*
+  - **Links into hidden folders no longer open.** A Markdown link to a file inside a hidden folder in your home folder (for example `~/.config/notes/x.md`) now shows as plain text. Before, Lahe would serve that whole hidden folder, which is how a document could reach `~/.ssh`. *Recommend: accept.*
   - **One pull request instead of five.** The plan split the work into five PRs with an on/off switch between them. The switch is already removed, so splitting now would mean rebuilding it just to tear it down. *Recommend: one PR, with the commits grouped by step.*
 - [ ] **Approve retiring old tests.** 11 test files test behavior this feature removes: page servers that stop when idle, restarting page servers, remembering old ports, and the sweep that closes reopened sessions. 2 files go whole and 9 in part. 26 more get rewritten for the new behavior. Until you approve, the retired tests are moved to `test/retired/` (not deleted) so the suite stays green; they are deleted in one batch at cleanup only with your OK. Lists: "Task 3.0: test retirement list" and the Step 3 moved-test list in the [core progress](progress/phase6_workstream_core.md), and the "Task 4.3" section of the [library progress](progress/phase6_workstream_library.md) (18 Library tests).
 
@@ -28,8 +29,7 @@
 
 | Agent or task | Doing | Started | Branch |
 |---|---|---|---|
-| Security reviewer (Opus) | Reads the merged code; re-checks the security fixes and the widened Library link | 2026-10-11 18:14 | `feat/stable-addresses` |
-| Spec checker (Opus) | Checks the merged code against every requirement, test row, and doc | 2026-10-11 18:14 | `feat/stable-addresses` |
+| Library builder (Sonnet) | The Library's Open gives a file the same address `lahe review` does | 2026-10-11 18:35 | `unit/sa-library` |
 
 ## Phases
 
@@ -180,6 +180,7 @@ Not shipped yet.
 
 ## Log
 
+- 2026-10-11 18:35: Core fix round 2 merged: hidden folders cannot be mounted, the helper refuses to start if another program holds its IPv6 address, the worktree fallback checks git's own link, one address per file for `lahe review`, docs and skill current. The Library's Open gets the same one-address rule next.
 - 2026-10-11 18:31: Install fix round 2 merged. The real `lahe install` and `lahe uninstall` commands pass on Linux and Windows on the merged branch.
 - 2026-10-11 18:23: Security review: no blocker; six findings (a website could read a permanent machine id from `/health`; a Markdown link could mount a hidden folder like `~/.ssh`; another program could take the IPv6 half of the pages port; the stated risk for other local accounts was too mild; a folder's `.git` file could pick the worktree fallback; test settings worked in normal use). Independent spec check: most requirements met; light-when-idle not yet measured; one file could get two addresses; stale docs; some tests weaker than their rows; five changes from the docs need your OK. All sent to the core and install builders as fix round 2.
 - 2026-10-11 18:14: Code review fixes merged from both builders, each with a test that failed first (single test files only, because of the disk). One Library change to note: a link on a `.lahe.localhost` page can now open the Library page; the Library still cannot be framed, and its other routes are unchanged. Security review and an independent spec check started (read only). The full suite waits on disk space.
