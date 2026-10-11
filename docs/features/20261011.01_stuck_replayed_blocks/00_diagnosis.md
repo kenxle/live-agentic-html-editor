@@ -86,6 +86,19 @@ The folder-tree cards followed the same path at 12:27 to 12:28. Five cards in th
 
 The [bulletin row from 2026-10-08](../../BULLETIN.md) (LAHE-replayed-new-blocks-after-restructure) is the same bug. Its guess, "the layer replays handled new_blocks", is slightly off. Handled cards are not replayed. The page check reopens them first, and *then* they are replayed.
 
+## Is this a fingerprinting problem?
+
+Partly. [Fingerprinting](../../ongoing/FINGERPRINTING.md) answers "which element on the page is this card about?" Here that answer mostly worked. What failed is a different question: "is this card done?"
+
+The two kinds of stuck card in the hackathon review show the difference:
+
+- **"Competitors" was found.** The page check found the word "Competitors" right after its anchor, now as a table cell. Identity worked. The check reopened the card anyway, because the cell's tag (`td`) is not the tag you typed (`p`). The strict part is the done-check, not the fingerprint.
+- **The folder lines were not found, and could not be.** "---- ongoing" became "│ ├── ongoing/". The words themselves changed. In a Markdown source the agent can't carry a `data-lahe-id` stamp (`stamp_carriable` is false), so words are the only identity. When the agent rewrites the words on purpose, no fingerprint can follow them with certainty.
+
+So what's lost is not the work we put into identity. What's missing is a rule that uses it the right way round.
+
+The fingerprinting doc's main rule is "two jobs, opposite temperaments". A **write** must be certain or do nothing. A **point** gives the best honest answer. The page check breaks that rule. It asks for a certain, word-for-word match before it accepts a card as done, and when it doesn't get one, it causes a write (reopen, then replay). A false "missing" is the dangerous mistake here, so the check should lean the other way: if the block is *probably* still there, leave the card alone. That is option G below.
+
 ## Ways to fix it
 
 Each option says what you would notice and what it costs.
@@ -141,6 +154,15 @@ On a refused or reopened card, a button that says the page is right. It retires 
 - Size: small to medium.
 - Good alongside any other option, as the manual way out.
 
+### G. The page check uses the pointing ladder, not the write ladder
+
+Before reopening a handled card, the page check asks the looser question the highlight already asks: is there a *probable* match for this block near its anchor? Same words with a different tag, or the words inside a bigger block, count as present. Only a block with no probable match anywhere reopens the card.
+
+- What you notice: "Competitors" as a table cell no longer reopens its card. A rebuild that really drops your paragraph still does.
+- Cost: the folder-tree case changed the words too much for any match, so G alone does not catch it. It also loosens the tag and formatting checks, which caught real misses before (an agent that dropped your bold).
+- Size: medium. The pointing ladder exists already; the check would call it.
+- Fixes: the "found it, but in a different shape" half of the problem, using the fingerprinting work as it was meant to be used.
+
 ### How they compare
 
 | Option | Stops stray lines | Stops false reopens | Changes a design rule | Size |
@@ -151,6 +173,7 @@ On a refused or reopened card, a button that says the page is right. It retires 
 | D. reopen flags only | yes | no, but harmless | yes | medium |
 | E. agent says superseded | when agents use it | no | contract change | medium |
 | F. Keep the page button | by hand | no | no | small to medium |
+| G. check uses the pointing ladder | when a probable match exists | when a probable match exists | no, applies an existing rule | medium |
 
 ## Related
 
