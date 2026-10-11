@@ -180,6 +180,86 @@ A second, smaller gap: an old Markdown review's page path was the rendered file 
 - **V31 decision:** should the layer fill its store from the helper when a page opens? And how should old Markdown page paths map to the new ones?
 - **Full browser run:** the liveness fix changes when the rail repaints its agent line. The orchestrator's full browser run is where that gets proven against every other spec.
 
+## Task 3.0: test retirement list
+
+### Summary
+
+Step 3 removes the per-session page servers. That takes away idle stop, page-server restart, port history, origin swap, `SIGHUP` mounts, the reopened-session sweep, and the session-close stop. The list below is every existing test of that behavior, file by file. Nothing has been deleted.
+
+- **Retire: 11 files.** They test behavior that no longer exists, and a stable-address test covers what it was for.
+  - Retired whole: [stop_idle_servers.test.js](../../../../test/unit/stop_idle_servers.test.js) and [stop_idle_servers.spec.js](../../../../test/browser/stop_idle_servers.spec.js).
+  - Retired in part (9): `static_restart`, `static_servers`, `linked_docs_rail`, `root_markdown_rail`, `heal_script_line`, `write_command`, `helper_self_stop`, `catalog_routes`, `catalog_open_rollback`. Eight of these also appear under rewrite, split test by test below.
+- **Rewrite: 26 files** (18 unit, 8 browser, the two shared worlds included). They test something that stays (the page rule, styles, linked documents, status, the Library) but reach it through a page server or a `127.0.0.1` page address.
+- **Browser setup:** every spec that runs `lahe review` needs a free pages port set (`LAHE_PAGES_PORT`). Otherwise parallel workers fight over 1483. That change goes in the two shared worlds and four specs, and is counted under rewrite.
+- **Library builder's files:** the catalog and Library files are the library builder's (Task 4.3). They are listed so Ken sees the whole batch, and marked "library".
+
+### Unit tests
+
+| File | Tests affected | Verdict | Why |
+|---|---|---|---|
+| `stop_idle_servers.test.js` | all 19 | retire | The idle sweep, idle restart on the old port, and page-server start locks are removed. V34 (the page still loads after the old idle wait) replaces them. |
+| `static_restart.test.js` | 13 of 15: Host check per server (2), old port and port history (2), helper restart with the old origin (1), `reopenForCatalog` (5), `closeQuiet`, `restartAll`, another server's port | retire | Port reuse, port history, origin swap and Open's restart are removed. Sites are covered by V7, V8 and V25. |
+| `static_restart.test.js` | 2: "an origin removed and then registered again is held after a rebuild", "removeOrigin refuses anything but a plain loopback http origin" | rewrite (move) | `reviews.removeOrigin` stays, because `site.bind` uses it (V25). Move both into a reviews test file. |
+| `static_servers.test.js` | 7: reusable and stoppable; corrupt metadata; two sessions with independent leases; one session in two roots; injection after `restartAll`; `coveragePath`; `servesPath` | retire | Page-server process lifecycle and records. Covered for sites by V6, V26 and the page tests. |
+| `static_servers.test.js` | 5: hidden file under the root; hidden file at a mount root; hidden subfolder in a mount; symlink to a hidden file in a mount; another agent session never answers | retire | Sites refuse dotfiles in every spelling (V14). The rule no longer filters by session (V21). |
+| `static_servers.test.js` | 15: stripped tag served with the tag; one tag, not two; tab icon; library route; library plus fallback; folder review line; sibling carries the rail; `--only`; newest review rooted here wins; a page keeps its own review; an unbacked server says so once; a mount page is not an unbacked server; a symlink out of a mount is refused; a normal linked file; stylesheet and fonts under a mount | rewrite | The same behavior lives in `page_routes.js`. Point each at a site. |
+| `static_styles.test.js` | all 9 | rewrite | Installed styles are still answered at `.lahe-styles` and never from disk. Run the same cases against a site. |
+| `linked_docs_rail.test.js` | 4: a later review registering a mount keeps links; a restarted server keeps links; two "redirects to its own review" | retire | `registerMount`, restarts and the redirect between pages are all removed (AR16: no redirects). |
+| `linked_docs_rail.test.js` | 9: recorded against the file; two hubs, newest answers; another session; linked Markdown page; linked page; a path the mount table cannot vouch for; the helper; a non-page is never named; encoded mount prefix | rewrite | The site's `linked_files` and `page_routes.linkedFileForPage` replace page-server records. The session case becomes "no session filter". |
+| `root_markdown_rail.test.js` | 2: redirect to its own review; passes the rail to a linked document | 1 retire, 1 rewrite | No redirects. The rail passing to a linked document stays (V29). |
+| `heal_script_line.test.js` | 3: "not healed while a live server serves it", "stops being served, the healer takes over", "heal reported through review.read" | 2 retire, 1 rewrite | A site does not stop serving, and V26 covers the stand-down. The report test only needs a site in place of a server. |
+| `write_command.test.js` | 3: one-page server restarted as the idle sweep does; `.env` beside a notes file is a 404; a one-page server answers its own address only | 1 retire, 2 rewrite | The idle restart is gone. The notes rules stay, on a page-only site (V15, V7). |
+| `status_command.test.js` | 4: `servedVia`; injected or unserved; mechanism with a live server; limited to its page | rewrite | `lahe status` reports each review's site (Task 3.2). |
+| `helper_self_stop.test.js` | 1: "a page server exits when its state directory is removed" | retire | There are no page-server processes. |
+| `session_commands.test.js` | 1: "review re-entry infers its session, and the final close stops the helper" | rewrite | The close no longer stops page servers. The session inference and the helper stop stay. |
+| `markdown_review.test.js`, `markdown_linked_docs.test.js`, `review_command.test.js` | 1, 1, and 3 | rewrite | They fetch or count the printed `open` URL. That URL becomes `<name>.lahe.localhost`, which Node's own lookup does not resolve, so they fetch with the Host header. |
+| `catalog_routes.test.js` (library) | 6: `sweepReopened` (5), "the sweep leaves alone a session an Open is bringing back" | retire | The reopened-session sweep is removed. |
+| `catalog_routes.test.js` (library) | 11: Open reopens and restarts; Open on a served review; log lines; the sweep timer; a week of actions; CX2; CR4; CR1 (2); two folder-review walks | rewrite | Open binds and stamps a site and returns its address (V39 to V42). |
+| `catalog_open_rollback.test.js` (library) | 2 of 3 | retire | Open's restart rollback is removed. |
+| `catalog_lifetime.test.js` (library) | 2: R10a | rewrite | The scenario stays. Open no longer reopens a session or starts a server. |
+| `catalog_reader.test.js`, `catalog_kind_rule.test.js` (library) | 3 and 1 | rewrite | "Openable" and the kinds come from the registry now (V41), not from page-server records. |
+| `status_catalog.test.js` (library), `launch_folder.test.js` (library) | 1 and 1 | rewrite | They read a page-server record for the folder; read the site instead. |
+
+### Browser specs
+
+| File | Tests affected | Verdict | Why |
+|---|---|---|---|
+| `stop_idle_servers.spec.js` | all 2 | retire | Idle stop and coming back on the old port are removed. V33 and V34 replace them. |
+| `serve_time_inject.spec.js` | 2 | rewrite | Test 1 (the rail lands from the response) stays. Test 2 relies on a page server outliving the helper; with the helper serving pages, rewrite it to "the library comes from the site's own route". |
+| `markdown_render.spec.js` | 1: "an agent-authored page gets the document style from the helper" | rewrite | It starts a page server directly. Bind a site instead. |
+| `static_site_folder.spec.js`, `linked_docs_rail.spec.js`, `rebuild_not_the_agents_job.spec.js` | setup | rewrite | They run `lahe review` with their own environment. Give them a free pages port. In `linked_docs_rail.spec.js`, "a linked document with its own review opens that review's page" relied on the redirect; it becomes "opens on the linking site with the rail the rule gives". |
+| `support/lahe_world.js`, `support/catalog_world.js` | setup (8 and 2 specs use them) | rewrite | Same free pages port. The Library worlds also stop expecting a reopened session. |
+| `catalog_library.spec.js` (library) | 1: "Open reopened the closed session" | rewrite | Open binds and stamps a site instead. |
+
+`test/helpers/temp_helpers.js` and both stray-helper checks keep their page-server pid handling. Leftover page servers are still stopped at every start (V35).
+
+## V31 options
+
+**The problem:** the rail is filled only from this browser's storage, and storage belongs to one origin. Comments made at `127.0.0.1:<old port>` sit in that origin's storage. The helper holds them too, in the review's log, but the layer never reads items back from the helper. Aliases make them match once present; nothing brings them over.
+
+**Option A: fill the rail from the helper on page load.**
+
+- **Files:**
+  - `src/shared/protocol.js` and `src/service/routes.js`: a read of this review's raw records for one page. `review.read` returns the projection, which drops the anchor fields a card needs, so it is not enough on its own.
+  - `src/layer/sync.js`: the call.
+  - `src/layer/index.js`: run the merge at boot, before the first `merge()`.
+  - `src/layer/store.js`: write an adopted record as already acknowledged.
+  - `src/shared/merge.js` is reused unchanged.
+- **The merge rule** (`src/shared/merge.js`, [merge on load](../../../diagrams/merge_on_load.md)): an id the browser does not hold comes in from the store whole. That is `ONLY_STORE`, so the store wins on content and lifecycle together. An id the browser holds is merged by revision, as today: the browser wins on content until acknowledged, and the store wins on lifecycle for the revision it names. Nothing changes for a page that already has its items.
+- **What could go wrong:**
+  - Duplicates: merging by id prevents them. An adopted record must not enter the outbox, or it would be posted back as new.
+  - A withdrawn draft coming back: the read must return only records the helper holds as not withdrawn. A record that is a draft in the store but absent in this browser stays out.
+  - Records from another page: the read is per page (origin or alias, plus path), and the layer's `samePage` filter still applies.
+  - Cross-review leakage: the read is per review, behind the same token, Origin and registry checks as every review route.
+  - Token exposure: no new credential. The page already holds the token that reads `review.json`.
+- **Tests:**
+  - A unit test of the adopt step: store-only items arrive; a newer browser revision wins; a withdrawn draft stays out; other pages and other reviews never arrive; nothing reaches the outbox.
+  - A browser test: a comment made at an old address appears as a card at the new one, appears once after a reload, and posts nothing back.
+
+**Option B, cheaper: say so, do not show.** The rail shows one line, for example: "3 earlier comments from this page's old address are with your agent." The count comes from `review.read` and is filtered by alias and path. The comments themselves stay where they are; `review.json` already groups them under the new address (V32), so the agent sees and answers them. No storage write, no merge, no new route.
+
+**Either way:** an old Markdown review's page path was the rendered file (`/<name>-<hash>.html`), not `/doc.md`. Bringing those over needs a path alias as well as an origin alias, and the helper can compute it from the review's own source.
+
 ## Cleanup needed
 
 - `test/browser/tmp_spike_lahe_localhost.spec.js`: the Task 1.0 spike, committed for the Linux run. Remove once Linux has been checked.
