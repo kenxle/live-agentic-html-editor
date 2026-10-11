@@ -94,10 +94,10 @@ test("Windows: the task runs at logon, hidden, with each argument quoted by the 
     node: "C:\\Program Files\\nodejs\\node.exe",
     entry: "C:\\Users\\Jo Smith\\lahe clone\\bin\\lahe.js",
     port: 47817,
-    stateDir: 'C:\\Users\\Jo Smith\\state "x"\\'
+    stateDir: "C:\\Users\\Jo Smith\\state dir\\"
   });
   // The XML is only the import source, so it sits in the state folder.
-  assert.equal(item.path, path.join('C:\\Users\\Jo Smith\\state "x"\\', "login-item.xml"));
+  assert.equal(item.path, path.join("C:\\Users\\Jo Smith\\state dir\\", "login-item.xml"));
   assert.match(item.contents, /<LogonTrigger>/);
   assert.match(item.contents, /<UserId>JO-PC\\Jo Smith<\/UserId>/);
   assert.match(item.contents, /<Command>conhost\.exe<\/Command>/);
@@ -105,12 +105,19 @@ test("Windows: the task runs at logon, hidden, with each argument quoted by the 
   assert.equal(
     args,
     "--headless &quot;C:\\Program Files\\nodejs\\node.exe&quot; &quot;C:\\Users\\Jo Smith\\lahe clone\\bin\\lahe.js&quot; " +
-      "serve --always-on --port 47817 --state-dir &quot;C:\\Users\\Jo Smith\\state \\&quot;x\\&quot;\\\\&quot;"
+      "serve --always-on --port 47817 --state-dir &quot;C:\\Users\\Jo Smith\\state dir\\\\&quot;"
   );
   assert.match(item.contents, /<RestartOnFailure>/);
   assert.match(item.contents, /<MultipleInstancesPolicy>IgnoreNew<\/MultipleInstancesPolicy>/);
   assert.deepEqual(item.start, [["schtasks", "/Run", "/TN", "lahe-helper"]]);
   assert.deepEqual(item.load[0], ["schtasks", "/Create", "/TN", "lahe-helper", "/XML", item.path, "/F"]);
+});
+
+test("Windows: a path with a quote character is refused rather than quoted into a task", () => {
+  assert.throws(
+    () => loginItem.describe(Object.assign({}, SPACED, { system: "windows", home: "C:\\h", user: "u", stateDir: 'C:\\a"b' })),
+    /quote character/
+  );
 });
 
 test("Windows argument quoting leaves plain words bare and doubles backslashes only before a quote", () => {

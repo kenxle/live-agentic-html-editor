@@ -165,7 +165,17 @@ function environment(argv, given, name) {
   // finds the same item.
   env.record = loginItem.readInstall(env.dir);
   var label = env.record && env.record.system === env.system ? env.record.label : undefined;
-  env.item = loginItem.describe({
+  try {
+    env.item = describeItem(env, label);
+  } catch (error) {
+    env.err("lahe " + name + ": " + error.message + "\n");
+    return { done: 1 };
+  }
+  return { env: env };
+}
+
+function describeItem(env, label) {
+  return loginItem.describe({
     system: env.system,
     label: label,
     home: env.home,
@@ -177,7 +187,6 @@ function environment(argv, given, name) {
     port: env.port,
     stateDir: env.dir
   });
-  return { env: env };
 }
 
 /** Stop the helper on the port if it is this folder's; false when it is not ours. */

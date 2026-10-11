@@ -314,3 +314,18 @@ test("V52: lahe add against a helper with another state folder says so", async (
   assert.notEqual(result.status, 0);
   assert.match(result.stderr, /uses a different state folder than /);
 });
+
+test("the helper log says once per start whether a login item runs it", async (t) => {
+  const w = tempState();
+  const port = await freePort();
+  install(w.dir, port);
+  const helper = await service.serve({ port, stateDir: w.dir, quiet: true, alwaysOn: true });
+  t.after(() => helper.close());
+  const logged = fs.readFileSync(stateDir.helperLogPath(w.dir), "utf8");
+  assert.match(logged, /login item lahe-test-\d+ \(\w+\) runs this helper; it does not stop when quiet/);
+
+  const plain = tempState();
+  const other = await onFreePort((p) => service.serve({ port: p, stateDir: plain.dir, quiet: true }));
+  t.after(() => other.result.close());
+  assert.match(fs.readFileSync(stateDir.helperLogPath(plain.dir), "utf8"), /no login item: started on demand/);
+});

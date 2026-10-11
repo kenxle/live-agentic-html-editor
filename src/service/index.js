@@ -883,6 +883,13 @@ async function serve(options) {
           " (" + protocol.PAGES.SWITCH_ENV + "=" + protocol.PAGES.SWITCH_ON + ")"
       : "pages served by per-session page servers (" + protocol.PAGES.SWITCH_ENV + " is not " + protocol.PAGES.SWITCH_ON + ")"
   );
+  log.helperLog(
+    installed && alwaysOn
+      ? "login item " + installed.label + " (" + installed.system + ") runs this helper; it does not stop when quiet"
+      : alwaysOn
+        ? "always on, with no install.json for this port"
+        : "no login item: started on demand, and stops itself when nothing needs it"
+  );
   if (!opts.quiet) {
     process.stdout.write("lahe serve listening on http://" + host + ":" + boundPort + "\n");
   }

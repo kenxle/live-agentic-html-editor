@@ -248,6 +248,11 @@ function describe(spec) {
     };
   }
   if (spec.system === "windows") {
+    // Windows paths cannot hold a quote, so one here is not a path: refuse it
+    // rather than trust the quoting with it (security review SR12).
+    args.forEach(function (arg) {
+      if (String(arg).indexOf('"') !== -1) throw new Error("refusing a path with a quote character: " + arg);
+    });
     var xmlPath = path.join(spec.stateDir, WINDOWS_XML_FILE);
     // Local time, no zone: the form Task Scheduler writes itself.
     var at = (spec.now || new Date());
