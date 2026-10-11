@@ -22,7 +22,7 @@ Chosen by the brief, for Ken to overrule in review:
 ### Open
 
 ::: callout-question
-**Q1. Which ending does `lahe review` print: `.lahe.localhost` or `.lahe`?** Ken chose `.lahe`. Both architecture reviews found that a plain `http://name.lahe` address is not "secure" to the browser, and that costs five things:
+**Q1. Which ending does `lahe review` print: `.lahe.localhost` or `.lahe`?** Ken chose `.lahe`. The fix for one page reading another holds with either ending: it came from a name per document, and each name is its own browser origin under both endings. The question is only which ending costs less. Both architecture reviews found that a plain `http://name.lahe` address is not "secure" to the browser, and that costs five things:
 
 - the address bar shows "Not secure";
 - copy buttons lose the clipboard and need an older copy method;

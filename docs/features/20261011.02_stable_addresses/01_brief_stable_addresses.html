@@ -1146,7 +1146,10 @@ bookmark still says what it was.</p></li>
 <div class="callout callout-question">
 <p><span id="questions-and-decisions-q1" class="finding-anchor"></span><strong>Q1. Which ending does <code>lahe review</code> print:
 <code>.lahe.localhost</code> or <code>.lahe</code>?</strong> Ken chose
-<code>.lahe</code>. Both architecture reviews found that a plain
+<code>.lahe</code>. The fix for one page reading another holds with
+either ending: it came from a name per document, and each name is its
+own browser origin under both endings. The question is only which ending
+costs less. Both architecture reviews found that a plain
 <code>http://name.lahe</code> address is not "secure" to the browser,
 and that costs five things:</p>
 <ul>
