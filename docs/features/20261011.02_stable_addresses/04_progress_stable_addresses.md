@@ -17,8 +17,8 @@
 
 | Agent or task | Doing | Started | Branch |
 |---|---|---|---|
+| Install builder (Opus) | Tasks 6.0 to 6.2: `lahe install --port-80` and `--lahe-names`, the name server, and their checks | 2026-10-11 16:28 | `unit/sa-install` |
 | Core builder (Opus) | Step 3: sites become the default, page servers removed, status and logging, skill, contract, and serving docs (old-comments row parked for your decision) | 2026-10-11 16:21 | `unit/sa-core` |
-| Orchestrator | Linux and Windows login item check on GitHub | 2026-10-11 16:27 | `feat/stable-addresses` |
 
 ## Phases
 
@@ -121,12 +121,23 @@ The page servers belong to about 13 agent sessions. They keep restarting: each l
 
 Script: `scripts/spike_localhost_names.js` on branch `spike/localhost-names`. Linux and Windows run: [run 38170515824](https://github.com/kenxle/live-agentic-html-editor/actions/runs/38170515824).
 
+**Task 5.1 login item check, all systems.** Script `scripts/spike_login_item.js`. macOS by the install builder on this Mac; Linux and Windows in [run 38172224261](https://github.com/kenxle/live-agentic-html-editor/actions/runs/38172224261).
+
+| System | Install starts the helper | Restart after a kill | Start on request | Uninstall |
+|---|---|---|---|---|
+| macOS (launchd) | 0.3 s | 10.3 s | 10.6 s | clean |
+| Linux (systemd user) | 0.3 s | 2.5 s | 0.3 s | clean |
+| Windows (Task Scheduler) | 0.3 s | 61.0 s | 0.3 s | clean |
+
+Windows restarts through the once-a-minute trigger, so a crashed helper there can be down for up to about a minute. "Starts at login" itself is proven on this Mac by your reboot (row V45).
+
 ### Ship
 
 Not shipped yet.
 
 ## Log
 
+- 2026-10-11 16:28: Login item check passed on Linux and Windows (install, restart after a kill, start on request, uninstall). Windows restart takes up to a minute. Install builder moved on to port-free addresses and the `.lahe` name server (6.0 to 6.2).
 - 2026-10-11 16:27: Install 5.1 to 5.3 merged cleanly. `lahe install` and `lahe uninstall` work on this Mac in a throwaway test. Linux and Windows login item check started on GitHub.
 - 2026-10-11 16:22: Library 4.1 and 4.2 merged cleanly. The Library shows stable addresses and Open binds a site, behind the switch.
 - 2026-10-11 16:21: Task 3.0 done: 11 test files to retire (2 whole, 9 in part), 26 to rewrite. Core builder moved on to Step 3.
