@@ -382,6 +382,9 @@ var FORWARD_RULE_PATH = "/etc/pf.anchors/lahe";
 var FORWARD_DAEMON_LABEL = "lahe-port80";
 var FORWARD_DAEMON_PATH = "/Library/LaunchDaemons/" + FORWARD_DAEMON_LABEL + ".plist";
 var NAME_SERVER_PORT = 7853;
+// Linux, by hand (docs/INSTALL.md): the systemd-resolved drop-in that sends
+// .lahe lookups to the name server.
+var LINUX_RESOLVER_PATH = "/etc/systemd/resolved.conf.d/lahe.conf";
 var ROOT_FILES = { resolver: "lahe.resolver", rule: "lahe.anchor", daemon: FORWARD_DAEMON_LABEL + ".plist" };
 
 function hasMarker(text) {
@@ -585,6 +588,7 @@ module.exports = {
   FORWARD_RULE_PATH: FORWARD_RULE_PATH,
   FORWARD_DAEMON_PATH: FORWARD_DAEMON_PATH,
   NAME_SERVER_PORT: NAME_SERVER_PORT,
+  LINUX_RESOLVER_PATH: LINUX_RESOLVER_PATH,
   ROOT_FILES: ROOT_FILES,
   ROOT_SCRIPTS: ROOT_SCRIPTS,
   hasMarker: hasMarker,
