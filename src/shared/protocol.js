@@ -553,9 +553,11 @@
       return { family: HOST_FAMILY.PAGE, name: short[1] };
     }
     var name = match[1];
+    // The port first, for the Library too: it answers at the pages port or
+    // with no port, never at another.
+    if (match[2] !== undefined && Number(match[2]) !== opts.pagesPort) return { family: HOST_FAMILY.BAD };
     if (name === PAGES.LIBRARY_NAME) return { family: HOST_FAMILY.LIBRARY, name: name };
     if (!isSiteName(name)) return { family: HOST_FAMILY.BAD };
-    if (match[2] !== undefined && Number(match[2]) !== opts.pagesPort) return { family: HOST_FAMILY.BAD };
     return { family: HOST_FAMILY.PAGE, name: name };
   }
 
