@@ -138,9 +138,28 @@ function rootProblem(root, mode, dir) {
 // ---------------------------------------------------------------------------
 
 /**
+ * Does git's own back-link agree? A worktree's admin folder in the main
+ * checkout holds a `gitdir` file naming the worktree's `.git` file. The `.git`
+ * file is folder content anyone can write, so without this check a folder
+ * could name any path as its "main checkout" and the read-only fallback would
+ * serve files from it.
+ */
+function linksBack(adminDir, gitFile) {
+  var text;
+  try { text = fs.readFileSync(path.join(adminDir, "gitdir"), "utf8").trim(); } catch (err) { return false; }
+  if (!text) return false;
+  var named = path.resolve(adminDir, text);
+  var a;
+  var b;
+  try { a = fs.realpathSync.native(named); b = fs.realpathSync.native(gitFile); } catch (err) { return false; }
+  return a === b;
+}
+
+/**
  * The worktree a root sits in and that worktree's main checkout, read from the
- * worktree's `.git` file while it still exists. A plain checkout (a `.git`
- * folder) or no checkout at all records nothing.
+ * worktree's `.git` file while it still exists, and only when the main
+ * checkout's back-link names the same `.git` file (linksBack). A plain
+ * checkout (a `.git` folder) or no checkout at all records nothing.
  */
 function worktreeOf(root) {
   var current = path.resolve(root);
@@ -153,8 +172,9 @@ function worktreeOf(root) {
       var text = "";
       try { text = fs.readFileSync(gitPath, "utf8"); } catch (err) { text = ""; }
       var gitdir = /^gitdir:\s*(.+?)\s*$/m.exec(text);
-      var main = gitdir ? /^(.*)[\\/]\.git[\\/]worktrees[\\/][^\\/]+[\\/]?$/.exec(path.resolve(current, gitdir[1])) : null;
-      if (!main) return { main_checkout: null, worktree_root: null };
+      var adminDir = gitdir ? path.resolve(current, gitdir[1]) : null;
+      var main = adminDir ? /^(.*)[\\/]\.git[\\/]worktrees[\\/][^\\/]+[\\/]?$/.exec(adminDir) : null;
+      if (!main || !linksBack(adminDir, gitPath)) return { main_checkout: null, worktree_root: null };
       return { main_checkout: main[1], worktree_root: current };
     }
     var parent = path.dirname(current);

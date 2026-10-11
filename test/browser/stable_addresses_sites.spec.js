@@ -177,6 +177,8 @@ test("V20: a gone worktree file shows the main checkout's copy read-only, with t
   writeFile(main, "docs/page.html", "<!doctype html><title>Main copy</title><h1>From the main checkout</h1>");
   const worktree = path.join(world.home, "ws", "repo-wt", "feature");
   writeFile(worktree, ".git", "gitdir: " + path.join(main, ".git", "worktrees", "feature") + "\n");
+  // git's back-link, which the registry checks before it trusts the .git file.
+  writeFile(main, ".git/worktrees/feature/gitdir", path.join(worktree, ".git") + "\n");
   const docs = path.join(worktree, "docs");
   const file = writeFile(docs, "page.html", "<!doctype html><title>Worktree copy</title><h1>From the worktree</h1>");
   const site = bind(file, docs, "page.html");

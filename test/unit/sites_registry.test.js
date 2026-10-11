@@ -213,12 +213,36 @@ test("V5: binding inside a sibling worktree records main_checkout from its .git 
   mkdirs(main, ".git/worktrees/feature");
   const worktree = mkdirs(w.home, "ws/repo-worktrees/feature");
   fs.writeFileSync(path.join(worktree, ".git"), "gitdir: " + path.join(main, ".git", "worktrees", "feature") + "\n");
+  // git's back-link from the main checkout to the worktree.
+  fs.writeFileSync(path.join(main, ".git", "worktrees", "feature", "gitdir"), path.join(worktree, ".git") + "\n");
   const root = mkdirs(worktree, "docs/ongoing");
   const reg = registry(w);
   reg.load();
   const bound = reg.bind({ root, mode: "folder", entry: "a.md" });
   assert.equal(bound.site.main_checkout, main);
   assert.equal(bound.site.worktree_root, worktree);
+});
+
+// Security review S5: the .git file is folder content, so it alone cannot
+// name the main checkout the read-only fallback reads from. git's back-link
+// in the main checkout has to point at this worktree too.
+test("V5: a .git file whose main checkout does not link back records no main_checkout", () => {
+  const w = world();
+  const main = mkdirs(w.home, "ws/victim");
+  mkdirs(main, ".git/worktrees/feature");
+  const other = mkdirs(w.home, "ws/somewhere-else");
+  fs.writeFileSync(path.join(main, ".git", "worktrees", "feature", "gitdir"), path.join(other, ".git") + "\n");
+  const forged = mkdirs(w.home, "ws/forged");
+  fs.writeFileSync(path.join(forged, ".git"), "gitdir: " + path.join(main, ".git", "worktrees", "feature") + "\n");
+  const noBackLink = mkdirs(w.home, "ws/no-back-link");
+  fs.writeFileSync(path.join(noBackLink, ".git"), "gitdir: " + path.join(w.home, "ws", "nowhere", ".git", "worktrees", "x") + "\n");
+  const reg = registry(w);
+  reg.load();
+  for (const root of [mkdirs(forged, "docs"), mkdirs(noBackLink, "docs")]) {
+    const bound = reg.bind({ root, mode: "folder", entry: "a.md" });
+    assert.equal(bound.site.main_checkout, null, root);
+    assert.equal(bound.site.worktree_root, null, root);
+  }
 });
 
 test("V5: an ordinary checkout records no main_checkout", () => {
