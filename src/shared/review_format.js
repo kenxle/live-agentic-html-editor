@@ -432,11 +432,20 @@
     return !!(hint && hint.known === true && hint.path);
   }
 
-  function pageGroups(items) {
+  // STABLE ADDRESSES: a page's old origins (`origin_aliases`, old origin to
+  // site origin, computed by the helper from its own records) group with the
+  // page's new origin, and the group shows the new one, which is the address
+  // that works. Without aliases nothing here changes.
+  function pageGroups(items, aliases) {
     var byKey = {};
     var order = [];
+    var table = aliases && typeof aliases === "object" ? aliases : {};
     items.forEach(function (it, index) {
-      var key = record.pageKey(it);
+      // The item keeps its own origin; only the group it joins is chosen by
+      // the alias.
+      var itOrigin = it[record.FIELD.PAGE_ORIGIN];
+      var aliased = Object.prototype.hasOwnProperty.call(table, itOrigin) ? table[itOrigin] : null;
+      var key = aliased ? record.pageKeyFor({ origin: aliased, path: it[record.FIELD.PAGE_PATH] }) : record.pageKey(it);
       var group = byKey[key] || null;
       if (!group) {
         // No exact match: this may still be another visit of a document
@@ -453,7 +462,7 @@
       if (!group) {
         group = {
           key: key,
-          origin: it[record.FIELD.PAGE_ORIGIN],
+          origin: aliased || itOrigin,
           path: it[record.FIELD.PAGE_PATH],
           title: it[record.FIELD.PAGE_TITLE] || null,
           first_seq: typeof it[record.FIELD.PAGE_SEQ] === "number" ? it[record.FIELD.PAGE_SEQ] : null,
@@ -476,7 +485,7 @@
         // matches it (samePage's rule 3 fires whenever either side is file://,
         // so the served pathname on the group is still a valid comparison).
         if (group.origin === record.FILE_ORIGIN && it[record.FIELD.PAGE_ORIGIN] !== record.FILE_ORIGIN) {
-          group.origin = it[record.FIELD.PAGE_ORIGIN];
+          group.origin = aliased || it[record.FIELD.PAGE_ORIGIN];
           group.path = it[record.FIELD.PAGE_PATH];
         }
       }
@@ -801,7 +810,7 @@
 
   function projectReview(review) {
     requireReview(review);
-    var groups = pageGroups(review.items);
+    var groups = pageGroups(review.items, review.origin_aliases);
     return {
       schema: SCHEMA,
       contract: CONTRACT.slice(),
@@ -915,7 +924,7 @@
     );
     out.push("");
 
-    pageGroups(review.items).forEach(function (g) {
+    pageGroups(review.items, review.origin_aliases).forEach(function (g) {
       out.push("Page: " + (g.title ? g.title + " " : "") + g.path + " (" + g.origin + ")");
       out.push(sourceHintSentence(g.hint));
       out.push("");

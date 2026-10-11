@@ -2378,6 +2378,9 @@
       var f = protocol.AGENT_LIVENESS.FIELD;
       return [
         value[f.STATE],
+        // Whether anything holds the feed: its first answer is often "cannot
+        // tell", and the rail has to hear when it becomes yes or no.
+        value[f.LISTENING],
         value[f.MONITOR_AT],
         value[f.ACTIVITY_AT],
         value[f.UNANSWERED],

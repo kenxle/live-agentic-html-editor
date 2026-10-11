@@ -73,6 +73,7 @@ var rebuildModule = require("./rebuild.js");
 var markdown = require("./markdown.js");
 var markdownLinks = require("./markdown_links.js");
 var staticServers = require("./static_servers.js");
+var pageRoutes = require("./page_routes.js");
 var reviewFormat = require("../shared/review_format.js");
 
 // THE RENDERER ESCAPES THE REVIEWER'S PUNCTUATION. marked writes an apostrophe
@@ -542,7 +543,15 @@ function checkable(item) {
  * on. A folder review records the folder, so the item's own page_path is what
  * picks the file inside it.
  */
-function pageFilesFor(meta, item) {
+function pageFilesFor(meta, item, dir) {
+  // ON A STABLE ADDRESS the item names its page by origin and path, and the
+  // registry maps those to the file exactly as the server did when it served
+  // it. That is the right file for any page the review's rail reached,
+  // including a sibling a single-page review lent its rail to.
+  var siteFile = item && dir
+    ? pageRoutes.fileForPage(dir, item[record.FIELD.PAGE_ORIGIN], item[record.FIELD.PAGE_PATH])
+    : null;
+  if (siteFile) return [siteFile];
   var targets = Array.isArray(meta.target_paths) ? meta.target_paths.slice() : [];
   if (typeof meta.target_path === "string" && meta.target_path && targets.indexOf(meta.target_path) === -1) {
     targets.push(meta.target_path);
@@ -609,11 +618,11 @@ function pageFilesFor(meta, item) {
  *
  * @returns {boolean} true when something was written since, or cannot be told
  */
-function touchedSince(meta, item) {
+function touchedSince(meta, item, dir) {
   var at = item && (item[record.FIELD.UPDATED_AT] || item[record.FIELD.CREATED_AT]);
   var committedAt = typeof at === "string" ? Date.parse(at) : NaN;
   if (!Number.isFinite(committedAt)) return true;
-  var files = pageFilesFor(meta, item);
+  var files = pageFilesFor(meta, item, dir);
   if (typeof meta.source_path === "string" && meta.source_path) files.push(meta.source_path);
   for (var i = 0; i < files.length; i += 1) {
     var stat;
@@ -677,20 +686,29 @@ function createHandledCheck(options) {
     // gate (nothing written) and the item's own passage (its before, still on
     // the page exactly once).
     var pages = [];
-    pageFilesFor(meta, item).forEach(function (file) {
+    pageFilesFor(meta, item, dir).forEach(function (file) {
+      // A Markdown page on a site is read as the render the reviewer was
+      // shown, from the same cache the server answers from.
+      var rendered = markdown.isMarkdown(file) ? pageRoutes.renderForFile(dir, file) : null;
+      if (rendered !== null) {
+        pages.push(rendered);
+        return;
+      }
       try {
         pages.push(fs.readFileSync(file, "utf8"));
       } catch (error) {
         // An unreadable file is not evidence either way.
       }
     });
-    return verdictFor(pages, item, !touchedSince(meta, item));
+    return verdictFor(pages, item, !touchedSince(meta, item, dir));
   }
 
   function linkedPageShows(meta, reviewId, item, pagePath) {
     var file = null;
     try {
-      file = staticServers.linkedFileForPage(dir, meta.agent_session_id, reviewId, pagePath);
+      file = pageRoutes.activeFor(dir)
+        ? pageRoutes.linkedFileForPage(dir, reviewId, pagePath)
+        : staticServers.linkedFileForPage(dir, meta.agent_session_id, reviewId, pagePath);
     } catch (error) {
       file = null;
     }

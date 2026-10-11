@@ -112,8 +112,76 @@ The house document style has no dark mode, so these two pages add a small dark p
 - **A bug that was already there:** when the helper's port is held by a process that accepts each connection and closes it at once, `lahe review` exits 0 and prints nothing. The health probe's fetch seems to leave nothing for Node to wait on. Found while building V6. This step does not change it.
 - **One conditional skip:** the two V10 tests skip themselves on a machine with no IPv6 loopback. They run on this Mac.
 
+## Step 2: helper modules ask the registry
+
+### Summary
+
+Step 2 (Tasks 2.1 and 2.2) is built and committed on `unit/sa-core`, on top of the merged tip `a2cfde5`. With the switch on, the helper modules map a page to its file through the registry. That covers the healer, the reload check, rebuild, the handled check, and the projection. With the switch off, they read page-server records as before. One row is blocked: V31, old comments showing in the rail. See "Blocked" below.
+
+- `npm run gate:unit`: 2540 tests, 2538 pass, 0 fail, 2 todo. Step 1 ended at 2517; the 23 new tests are this step's.
+- New browser spec [stable_addresses_mappers.spec.js](../../../../test/browser/stable_addresses_mappers.spec.js): 3 tests, green in Chromium, Firefox and WebKit (9 runs). The Step 1 spec is still green.
+- Leak check: 2 before, 2 after, from this work. Both are Ken's own helpers from the main checkout. A third process seen at the end belongs to the library builder's worktree (`sa-library`), not this one.
+- Each new behavior was checked against a change that removes it, and the test that covers it failed. Two first versions of the tests passed against such a change, because a second safeguard covered the same case. Each now has a test that tells the two apart.
+
+### What was built
+
+- **One mapping, owned by [page_routes.js](../../../../src/service/page_routes.js).** `serve()` turns on the registry for its state folder only when the switch is on, and turns it off on close. The helper modules ask it to:
+  - turn a page's origin and path into its file (`fileForPage`), with the same rules the server applies to a request;
+  - find a linked document's file (`linkedFileForPage`);
+  - say whether a file is served by a site, so the healer leaves it alone (`servesFile`).
+- **Reload check** ([reviews.js](../../../../src/service/reviews.js), [routes.js](../../../../src/service/routes.js)). The reply poll now carries the page's origin. A page on a site reloads on its own file. That includes a sibling page a single-page review lends its rail to, which used to follow the reviewed page's file.
+- **Healer.** A file a site serves is never written to, even when the poll comes from an old address.
+- **Handled check** ([handled_check.js](../../../../src/service/handled_check.js)). A claim is checked against the file the item was made on, found from its origin and path. A Markdown page is read as its render.
+- **The Markdown render cache.** Markdown is rendered once per version of its source, keyed by file size and time, plus the settings the render depends on. The server, rebuild, the reload check and the handled check all read it. Rebuild ([rebuild.js](../../../../src/service/rebuild.js)) also adds new link mounts and linked files to the site. It keeps the state-folder copy current for old addresses.
+- **Aliases** ([protocol.js](../../../../src/shared/protocol.js), [record.js](../../../../src/shared/record.js), [review_format.js](../../../../src/shared/review_format.js), [projection.js](../../../../src/service/projection.js), [src/layer/index.js](../../../../src/layer/index.js)):
+  - The helper works out a site's old origins from its own page-server records. That means `127.0.0.1` and `localhost` at each old port, newest first, at most 16.
+  - The script tag carries them as escaped JSON in `data-lahe-aliases`.
+  - The layer reads them, and `samePage` treats a record made on an old origin at the same path as this page's.
+  - `review.json` groups old and new origins of one page under the new address. Each item keeps its own origin.
+
+### Rows that pass, and the test that proves each
+
+| Row | Test |
+|---|---|
+| V26 healer, switch on and off | [sites_mappers.test.js](../../../../test/unit/sites_mappers.test.js), two "V26 (switch on/off)" tests, plus "V26 (switch on): a poll from an old address" |
+| V27 reload, switch on and off | sites_mappers.test.js, two "V27 (switch ...)" tests and the sibling-page test; stable_addresses_mappers.spec.js, "V27:" |
+| V28 handled check, switch on and off | sites_mappers.test.js, two "V28 (switch ...)" tests and "a single-page review lending its rail" |
+| V29 linked docs | stable_addresses_mappers.spec.js, "V29:"; sites_mappers.test.js, "V29 (unit half, switch on)"; Step 1's V13 browser test |
+| V30 rebuild, switch on and off | sites_mappers.test.js, two "V30 (switch ...)" tests, and "the Markdown render is cached by file time and shared" |
+| V32 grouping | sites_mappers.test.js, "V32:"; the step test checks it end to end in review.json |
+| V70 aliases | sites_mappers.test.js, four "V70:" tests |
+| V31 old comments | **Blocked.** Only the unit half passes: sites_mappers.test.js, "V31 (unit half)". |
+
+The step test, in stable_addresses_mappers.spec.js, opens a review created on a random port at its stable address. It checks five things:
+
+- The script tag carries the old address.
+- `review.json` groups the old comment with the new address.
+- No served HTML file changes on disk after several polls.
+- An agent's edit reloads the page.
+- The handled check reads the right file.
+
+### Blocked: old comments in the rail (V31)
+
+The architecture says the alias list makes old comments match "in the rail and in review.json". The review.json half works. The rail half does not fit the code. The layer never reads items back from the helper: its rail is filled only from this browser's storage, which belongs to one origin. A new address starts with empty storage, so the old comments are not there to match.
+
+Making them show needs a new behavior: the layer fills its store from `review.read` when a page opens. The architecture does not cover that. It needs a decision before anyone builds it.
+
+A second, smaller gap: an old Markdown review's page path was the rendered file in the state folder (`/<name>-<hash>.html`). The new path is the source (`/doc.md`). So an origin alias alone cannot match those items, even in `review.json`. HTML pages and folders keep their paths and are not affected.
+
+### Changes from plan
+
+- **A layer bug fixed in `src/layer/sync.js`.** No workstream owns this file. The rail heard a change in agent liveness only when certain fields changed, and `listening` was not one of them. The helper's first answer is often "cannot tell", so the later "no agent" never reached the rail. That made Step 1's V11 browser test fail on a busy machine. The fix adds that one field, with a test in `quiet_tab_polling.test.js`.
+- **The registry is a table keyed by state folder** in `page_routes.js`. The plan threads the switch through each module; this has each module ask the table instead. Task 3.1 removes the table along with the switch-off branches.
+- **Rebuild still writes the state-folder copy with the switch on.** Old addresses and the off branch read it. The site's page comes from the shared cache.
+- **`record.pageFrom` always has an `aliases` list,** empty when there are none. The layer's config only has the key when the tag carries aliases, so existing config tests are unchanged.
+
+### Follow-ups
+
+- **V31 decision:** should the layer fill its store from the helper when a page opens? And how should old Markdown page paths map to the new ones?
+- **Full browser run:** the liveness fix changes when the rail repaints its agent line. The orchestrator's full browser run is where that gets proven against every other spec.
+
 ## Cleanup needed
 
 - `test/browser/tmp_spike_lahe_localhost.spec.js`: the Task 1.0 spike, committed for the Linux run. Remove once Linux has been checked.
 - `test-results/`: Playwright's output folder from the spec runs (gitignored).
-- `.claude-commit202610111600-core`, `...1630-core`, `...1645-core`, `...1700-core`, `...1730-core`, `...1800-core` in the worktree root: commit message scratch files (gitignored).
+- `.claude-commit202610111600-core`, `...1630-core`, `...1645-core`, `...1700-core`, `...1730-core`, `...1800-core`, `...1815-core`, `...1900-core`, `...1930-core`, `...1931-core`, and the one this page's commit adds, in the worktree root: commit message scratch files (gitignored).

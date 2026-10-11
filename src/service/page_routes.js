@@ -93,7 +93,7 @@ function currentHelperOrigin(dir) {
  * A root-absolute path resolves back to whatever served the page, which cannot
  * be down: it just answered. Nothing is written into the reviewer's folder.
  */
-function injectForMatch(dir, match, target, html) {
+function injectForMatch(dir, match, target, html, aliases) {
   var carried = scriptLine.reviewAlreadyInFile(html);
   if (carried === match.review) return null;
   if (carried) {
@@ -114,7 +114,8 @@ function injectForMatch(dir, match, target, html) {
     token: match.token,
     helper: helperOrigin,
     fallback: helperOrigin + protocol.route("library.get").path,
-    notes: stateDir.isNotesReview(dir, match.review)
+    notes: stateDir.isNotesReview(dir, match.review),
+    aliases: Array.isArray(aliases) && aliases.length ? aliases : undefined
   });
   return scriptLine.placeScriptLine(html, tag).html;
 }
@@ -292,6 +293,344 @@ function reviewAnswersOnSite(site, review) {
 }
 
 // ---------------------------------------------------------------------------
+// One path rule: what a request path names under a site
+// ---------------------------------------------------------------------------
+
+/**
+ * The decoded path a raw request path names, or null when the serving rules
+ * refuse it: a raw "." or ".." segment, an encoded slash or backslash, a bad
+ * escape, a NUL or a backslash after decoding. Hidden segments are judged by
+ * the caller, because Lahe's own reserved files are dot-named.
+ */
+function decodePath(rawPath) {
+  if (typeof rawPath !== "string" || rawPath.charAt(0) !== "/") return null;
+  if (/%2f|%5c/i.test(rawPath)) return null;
+  if (rawPath.split("/").some(function (s) { return s === "." || s === ".."; })) return null;
+  var decoded;
+  try { decoded = decodeURIComponent(rawPath); } catch (err) { return null; }
+  if (decoded.indexOf("\0") !== -1 || decoded.indexOf("\\") !== -1) return null;
+  return decoded;
+}
+
+function hasHiddenSegment(relative) {
+  return relative.split("/").some(function (s) { return s.charAt(0) === "."; });
+}
+
+/**
+ * Where a decoded path lands under a site: the folder it is read from, the URL
+ * prefix that folder is served at, the path under it, and whether it is a
+ * mount. Null when the site serves nothing there. A notes site answers only
+ * its one page. `rawPath` is the path as the browser sent it, for the one
+ * rule that reads it: a mount is served under its literal prefix only.
+ *
+ * @returns {{base: string, prefix: string, relative: string, mounted: boolean, page: boolean}|null}
+ */
+function locate(site, decoded, rawPath) {
+  if (decoded.indexOf(MOUNT_ROOT) === 0) {
+    if (site.mode !== "folder" || String(rawPath).indexOf(MOUNT_ROOT) !== 0) return null;
+    var mount = /^(\/\.lahe-source\/[a-f0-9]+\/)(.*)$/.exec(decoded);
+    var mountDir = mount && site.mounts ? site.mounts[mount[1]] : null;
+    if (typeof mountDir !== "string" || hasHiddenSegment(mount[2])) return null;
+    return { base: mountDir, prefix: mount[1], relative: mount[2], mounted: true, page: false };
+  }
+  if (hasHiddenSegment(decoded)) return null;
+  if (site.mode === "page-only") {
+    if (decoded !== "/" + path.basename(site.root)) return null;
+    return { base: path.dirname(site.root), prefix: "/", relative: path.basename(site.root), mounted: false, page: true };
+  }
+  var relative = decoded.split("/").filter(function (s) { return s.length > 0; }).join("/");
+  return { base: site.root, prefix: "/", relative: relative, mounted: false, page: false };
+}
+
+/** The file a located path names: a folder, or a trailing slash, is its index. */
+function candidateOf(where, decoded) {
+  var candidate = path.resolve(where.base, where.relative || "index.html");
+  if (!within(candidate, where.base)) return null;
+  if (decoded.charAt(decoded.length - 1) === "/" && where.relative) candidate = path.join(candidate, "index.html");
+  try { if (fs.statSync(candidate).isDirectory()) candidate = path.join(candidate, "index.html"); } catch (err) { /* not there */ }
+  return candidate;
+}
+
+// ---------------------------------------------------------------------------
+// The registry, for the helper modules that map a page to a file
+// ---------------------------------------------------------------------------
+//
+// THE SWITCH, AS THE HELPER MODULES SEE IT. serve() activates the registry
+// for its state folder when LAHE_PAGES=sites, and deactivates it on close.
+// The healer, the reload check, rebuild, the handled check and the projection
+// each ask here first; with nothing active they read page-server records as
+// before. Task 3.1 removes that second branch, and this table with it.
+
+var active = Object.create(null);
+
+function dirKey(dir) {
+  return realOrNull(dir) || path.resolve(dir);
+}
+
+/** @param {{sites: object, pagesPort: number}} entry */
+function activate(dir, entry) {
+  active[dirKey(dir)] = entry;
+}
+
+function deactivate(dir) {
+  delete active[dirKey(dir)];
+}
+
+/** The active registry for a state folder, or null with the switch off. */
+function activeFor(dir) {
+  if (typeof dir !== "string" || !dir) return null;
+  return active[dirKey(dir)] || null;
+}
+
+/** The site an existing file is served under, or null. Mounts count. */
+function siteForFile(sites, file) {
+  var real = realOrNull(file) || path.resolve(file);
+  var found = null;
+  sites.list().some(function (entry) {
+    var site = entry.site;
+    var covered = site.mode === "page-only"
+      ? real === site.root
+      : within(real, site.root) || Object.keys(site.mounts || {}).some(function (prefix) {
+        return within(real, site.mounts[prefix]);
+      });
+    if (covered) found = entry;
+    return covered;
+  });
+  return found;
+}
+
+/**
+ * Is this file served by a site right now? The healer asks before it writes a
+ * script line into a file: a served page gets its line in the response.
+ */
+function servesFile(dir, file) {
+  var entry = activeFor(dir);
+  return !!entry && typeof file === "string" && !!siteForFile(entry.sites, file);
+}
+
+/**
+ * The file a page on a site is, from its origin and path, or null. The same
+ * rules the server applies to the request, so the helper names exactly the
+ * file the browser was shown. The file may be gone; the caller stats it.
+ */
+function fileForPage(dir, origin, pagePath) {
+  var entry = activeFor(dir);
+  if (!entry) return null;
+  var name = protocol.siteNameFromOrigin(origin, entry.pagesPort);
+  var site = name ? entry.sites.get(name) : null;
+  var decoded = site ? decodePath(String(pagePath || "")) : null;
+  var where = decoded !== null ? locate(site, decoded, pagePath) : null;
+  if (!where) return null;
+  if (where.page) return site.root;
+  var candidate = candidateOf(where, decoded);
+  if (!candidate) return null;
+  var real = realOrNull(candidate);
+  if (!real) return candidate;
+  var realBase = realOrNull(where.base);
+  return realBase && within(real, realBase) ? real : null;
+}
+
+/**
+ * The real file a linked page names, for an item made on it by `reviewId`, or
+ * null: a page under one of a site's mounts that this review linked to.
+ */
+function linkedFileForPage(dir, reviewId, pagePath) {
+  var entry = activeFor(dir);
+  if (!entry || typeof pagePath !== "string" || pagePath.indexOf(MOUNT_ROOT) !== 0) return null;
+  var decoded = decodePath(pagePath);
+  if (decoded === null) return null;
+  var found = null;
+  entry.sites.list().some(function (item) {
+    var where = locate(item.site, decoded, pagePath);
+    if (!where || !where.mounted) return false;
+    var candidate = candidateOf(where, decoded);
+    var real = candidate ? realOrNull(candidate) : null;
+    var base = realOrNull(where.base);
+    if (!real || !base || !within(real, base) || !markdownLinks.isPage(real)) return false;
+    var ids = item.site.linked_files && item.site.linked_files[real];
+    if (!Array.isArray(ids) || ids.indexOf(reviewId) === -1) return false;
+    found = real;
+    return true;
+  });
+  return found;
+}
+
+// ---------------------------------------------------------------------------
+// The Markdown render, cached by file time
+// ---------------------------------------------------------------------------
+//
+// ONE RENDER PER VERSION OF A SOURCE. The page a site serves, the reload
+// check, rebuild and the handled check all read this, so the words an agent is
+// judged against are the words the reviewer was shown. The key is the file's
+// size and modification time plus everything else the render depends on.
+
+var RENDER_CACHE_MAX = 64;
+var renderCache = new Map();
+
+/**
+ * @param {string} file the Markdown source
+ * @param {{assetPrefix: string, mounts: object, noFollow: boolean, note: string|null}} options
+ *   `note` null is the read-only note; "" is none (a page under review)
+ * @returns {{html: string, added: object[], linked: string[]}}
+ */
+function renderMarkdown(file, options) {
+  var stat = fs.statSync(file);
+  var mounts = options.mounts || {};
+  var key = [file, stat.mtimeMs, stat.size, options.assetPrefix, options.noFollow ? 1 : 0,
+    options.note === null ? "\u0001readonly" : options.note, JSON.stringify(mounts)].join("\u0000");
+  var hit = renderCache.get(key);
+  if (hit) {
+    renderCache.delete(key);
+    renderCache.set(key, hit);
+    return hit;
+  }
+  var registry = markdownLinks.createRegistry({
+    mounts: mounts,
+    consumed: Object.keys(mounts),
+    cap: options.noFollow ? 0 : undefined
+  });
+  var renderOptions = { assetPrefix: options.assetPrefix, links: registry, noFollow: !!options.noFollow };
+  if (options.note === null) renderOptions.readOnlyNote = true;
+  else renderOptions.note = options.note;
+  var out = { html: markdown.render(file, renderOptions), added: registry.added.slice(), linked: registry.linked.slice() };
+  renderCache.set(key, out);
+  if (renderCache.size > RENDER_CACHE_MAX) renderCache.delete(renderCache.keys().next().value);
+  return out;
+}
+
+/** The URL folder a file sits in under `base`, served at `prefix`. */
+function urlDirOf(prefix, base, file) {
+  var rel = path.relative(base, path.dirname(file));
+  var segments = rel ? rel.split(path.sep).map(encodeURIComponent) : [];
+  return prefix + segments.map(function (s) { return s + "/"; }).join("");
+}
+
+/**
+ * Render a Markdown page of a site as it is served under review, and fold the
+ * mounts its links need into the site. Shared by the server and by rebuild.
+ */
+function renderSitePage(sites, name, site, file, base, prefix) {
+  var out = renderMarkdown(file, {
+    assetPrefix: urlDirOf(prefix, base, file),
+    mounts: site.mounts || {},
+    noFollow: site.mode === "page-only",
+    note: ""
+  });
+  if (out.added.length) {
+    var added = {};
+    out.added.forEach(function (entry) { added[entry.prefix] = entry.dir; });
+    sites.addMounts(name, added);
+  }
+  return out;
+}
+
+/**
+ * The page a Markdown source is shown as on its site, or null when no active
+ * site serves it under its root. What rebuild and the handled check read.
+ */
+function renderForFile(dir, file) {
+  var entry = activeFor(dir);
+  var found = entry && markdown.isMarkdown(file) ? siteForFile(entry.sites, file) : null;
+  if (!found) return null;
+  var real = realOrNull(file);
+  if (!real) return null;
+  var site = found.site;
+  var base = site.mode === "page-only" ? path.dirname(site.root) : site.root;
+  if (!within(real, base)) return null;
+  try {
+    return renderSitePage(entry.sites, found.name, site, real, base, "/").html;
+  } catch (err) {
+    return null;
+  }
+}
+
+/**
+ * Record on its site that `reviewId`'s render of `file` links to `linked`.
+ * Rebuild calls this after a re-render, so a link an agent just added carries
+ * the rail the moment the reviewer follows it.
+ */
+function recordLinkedFor(dir, file, reviewId, linked) {
+  var entry = activeFor(dir);
+  var found = entry && linked && linked.length ? siteForFile(entry.sites, file) : null;
+  if (found) entry.sites.addLinked(found.name, reviewId, linked);
+}
+
+// ---------------------------------------------------------------------------
+// Aliases: the old page-server origins of a site's root
+// ---------------------------------------------------------------------------
+//
+// A review created on a random port has comments whose page origin is
+// http://127.0.0.1:<port>. The path is the same under the site, so an old
+// origin is all an alias is. Computed by the helper, from its own page-server
+// records, never from anything a page sends. At most ALIAS_MAX, newest first.
+
+var ALIAS_MAX = 16;
+
+function validPort(value) {
+  return typeof value === "number" && Number.isInteger(value) && value > 0 && value < 65536;
+}
+
+/** Every old page-server record in the state folder: [{root, ports}]. */
+function oldServerRecords(dir) {
+  var out = [];
+  var sessionsRoot;
+  try { sessionsRoot = stateDir.agentSessionsRoot(dir); } catch (err) { return out; }
+  var sessions;
+  try { sessions = fs.readdirSync(sessionsRoot); } catch (err) { return out; }
+  sessions.forEach(function (session) {
+    if (!protocol.isSafeId(session)) return;
+    var folder;
+    try { folder = stateDir.staticServersRoot(dir, session); } catch (err) { return; }
+    var names;
+    try { names = fs.readdirSync(folder); } catch (err) { return; }
+    names.forEach(function (fileName) {
+      if (!/^ss_[A-Za-z0-9_-]+\.json$/.test(fileName)) return;
+      var meta = readJson(path.join(folder, fileName));
+      if (!meta || typeof meta.root !== "string") return;
+      var ports = (Array.isArray(meta.ports) ? meta.ports : []).concat([meta.port]).filter(validPort);
+      out.push({ root: realOrNull(meta.root) || meta.root, ports: ports, at: String(meta.started_at || "") });
+    });
+  });
+  return out;
+}
+
+/** The old origins of this site's root, newest port first, at most ALIAS_MAX. */
+function aliasesFor(dir, site) {
+  if (!site) return [];
+  var ports = [];
+  oldServerRecords(dir)
+    .filter(function (rec) { return rec.root === site.root; })
+    .sort(function (a, b) { return a.at < b.at ? -1 : a.at > b.at ? 1 : 0; })
+    .forEach(function (rec) {
+      rec.ports.forEach(function (port) {
+        var at = ports.indexOf(port);
+        if (at !== -1) ports.splice(at, 1);
+        ports.push(port);
+      });
+    });
+  var out = [];
+  ports.reverse().forEach(function (port) {
+    if (out.length + 2 > ALIAS_MAX) return;
+    out.push("http://" + protocol.DEFAULT_HOST + ":" + port, "http://localhost:" + port);
+  });
+  return out;
+}
+
+/** {old origin: site origin} for every active site, for review.json grouping. */
+function aliasMap(dir) {
+  var entry = activeFor(dir);
+  var out = {};
+  if (!entry) return out;
+  entry.sites.list().forEach(function (item) {
+    var origin = protocol.siteOrigin(item.name, entry.pagesPort);
+    aliasesFor(dir, item.site).forEach(function (alias) {
+      if (!Object.prototype.hasOwnProperty.call(out, alias)) out[alias] = origin;
+    });
+  });
+  return out;
+}
+
+// ---------------------------------------------------------------------------
 // The pages Lahe writes itself: an unknown name, a file that is gone
 // ---------------------------------------------------------------------------
 
@@ -457,21 +796,22 @@ function createPageRoutes(options) {
     return real && real !== candidate ? [candidate, real] : [candidate];
   }
 
-  function serveHtmlPage(req, res, site, candidate, real, mounted) {
+  function serveHtmlPage(req, res, ctx, candidate, real, mounted) {
     var html;
     try { html = fs.readFileSync(candidate, "utf8"); } catch (err) { return notFound(req, res); }
-    var match = pickReview(dir, site, { filePaths: filePathsFor(candidate, real), realFile: real, mounted: mounted });
+    var match = pickReview(dir, ctx.site, { filePaths: filePathsFor(candidate, real), realFile: real, mounted: mounted });
     if (match) {
-      var injected = injectForMatch(dir, match, candidate, html);
+      var injected = injectForMatch(dir, match, candidate, html, aliasesFor(dir, ctx.site));
       if (injected !== null) html = injected;
     }
     sendHtml(req, res, 200, tabIcon.ensure(html));
   }
 
   /**
-   * A Markdown page, rendered from its source on request. Relative links stay
-   * under the page's own folder on this site; links out of it become mounts
-   * stored on this site, the way a page server stored them on its record.
+   * A Markdown page, rendered from its source through the shared cache.
+   * Relative links stay under the page's own folder on this site; links out of
+   * it become mounts stored on this site, the way a page server stored them on
+   * its record.
    */
   function serveMarkdown(req, res, ctx, candidate, real, urlDir, extra) {
     var site = ctx.site;
@@ -479,37 +819,29 @@ function createPageRoutes(options) {
     var match = extra && extra.readOnly
       ? null
       : pickReview(dir, site, { filePaths: filePathsFor(candidate, real), realFile: real, mounted: mounted });
-    var pageOnly = site.mode === "page-only";
-    var registry = markdownLinks.createRegistry({
-      mounts: site.mounts || {},
-      consumed: Object.keys(site.mounts || {}),
-      cap: pageOnly ? 0 : undefined
-    });
-    var renderOptions = { assetPrefix: urlDir, links: registry, noFollow: pageOnly };
-    if (extra && typeof extra.note === "string") renderOptions.note = extra.note;
-    else if (match) renderOptions.note = "";
-    else renderOptions.readOnlyNote = true;
-    var html;
-    try { html = markdown.render(candidate, renderOptions); }
-    catch (err) { return sendText(req, res, 500, "could not render " + path.basename(candidate) + "\n"); }
-    if (registry.added.length) {
+    var out;
+    try {
+      out = renderMarkdown(candidate, {
+        assetPrefix: urlDir,
+        mounts: site.mounts || {},
+        noFollow: site.mode === "page-only",
+        note: extra && typeof extra.note === "string" ? extra.note : (match ? "" : null)
+      });
+    } catch (err) {
+      return sendText(req, res, 500, "could not render " + path.basename(candidate) + "\n");
+    }
+    if (out.added.length) {
       var added = {};
-      registry.added.forEach(function (entry) { added[entry.prefix] = entry.dir; });
+      out.added.forEach(function (entry) { added[entry.prefix] = entry.dir; });
       sites.addMounts(ctx.name, added);
     }
+    var html = out.html;
     if (match) {
-      if (registry.linked.length) sites.addLinked(ctx.name, match.review, registry.linked);
-      var injected = injectForMatch(dir, match, candidate, html);
+      if (out.linked.length) sites.addLinked(ctx.name, match.review, out.linked);
+      var injected = injectForMatch(dir, match, candidate, html, aliasesFor(dir, site));
       if (injected !== null) html = injected;
     }
     sendHtml(req, res, 200, html);
-  }
-
-  /** The URL folder a file sits in under `base`, served at `prefix`. */
-  function urlDirOf(prefix, base, file) {
-    var rel = path.relative(base, path.dirname(file));
-    var segments = rel ? rel.split(path.sep).map(encodeURIComponent) : [];
-    return prefix + segments.map(function (s) { return s + "/"; }).join("");
   }
 
   function isPage(file) {
@@ -559,31 +891,6 @@ function createPageRoutes(options) {
     sendHtml(req, res, 410, gonePage(candidate, currentHelperOrigin(dir)));
   }
 
-  /** A file under `base` (the site root or a mount), by its decoded relative path. */
-  function serveUnder(req, res, ctx, base, prefix, relative, mounted) {
-    var candidate = path.resolve(base, relative || "index.html");
-    if (!within(candidate, base)) return notFound(req, res);
-    var stat;
-    try {
-      stat = fs.statSync(candidate);
-      if (stat.isDirectory()) {
-        candidate = path.join(candidate, "index.html");
-        stat = fs.statSync(candidate);
-      }
-    } catch (err) {
-      if (mounted) return notFound(req, res);
-      return serveGone(req, res, ctx, candidate);
-    }
-    var real = realOrNull(candidate);
-    var realBase = realOrNull(base);
-    if (!real || !realBase || !within(real, realBase) || !stat.isFile()) return notFound(req, res);
-    if (markdown.isMarkdown(candidate)) {
-      return serveMarkdown(req, res, ctx, candidate, real, urlDirOf(prefix, base, candidate), { mounted: mounted });
-    }
-    if (heal.isStaticPage(candidate)) return serveHtmlPage(req, res, ctx.site, candidate, real, mounted);
-    streamFile(req, res, candidate, stat.size);
-  }
-
   /**
    * Answer one request whose Host named the site `name`.
    *
@@ -593,48 +900,38 @@ function createPageRoutes(options) {
    */
   function handle(req, res, name) {
     var site = sites.get(name);
+    var rawPath = String(req.url || "").split("?")[0].split("#")[0];
+    var decoded = decodePath(rawPath);
     if (!site) {
       // Lahe's own fonts and style still answer, so the page that says so
       // looks like every other Lahe page. Nothing else does.
-      var asked = null;
-      try { asked = decodeURIComponent(String(req.url || "").split("?")[0]); } catch (err) { asked = null; }
-      if (asked && asked.indexOf("..") === -1 && servePackaged(req, res, asked)) return;
+      if (decoded !== null && servePackaged(req, res, decoded)) return;
       sayOnce("unknown\u0000" + name, "pages: no document by the name " + name);
       return sendHtml(req, res, 404, unknownNamePage(name, currentHelperOrigin(dir)));
     }
     if (req.method !== "GET" && req.method !== "HEAD") return sendText(req, res, 405, "method not allowed\n");
-    var rawPath = String(req.url || "").split("?")[0].split("#")[0];
     if (rawPath.charAt(0) !== "/") return sendText(req, res, 400, "bad request\n");
-    // HIDDEN FILES AND DOT SEGMENTS, in every spelling. A raw "." or ".."
-    // segment, an encoded slash or backslash (which would make one after
-    // decoding), and after decoding any segment that starts with a dot.
-    if (/%2f|%5c/i.test(rawPath)) return notFound(req, res);
-    if (rawPath.split("/").some(function (s) { return s === "." || s === ".."; })) return notFound(req, res);
-    var decoded;
-    try { decoded = decodeURIComponent(rawPath); } catch (err) { return sendText(req, res, 400, "bad request\n"); }
-    if (decoded.indexOf("\0") !== -1 || decoded.indexOf("\\") !== -1) return notFound(req, res);
+    // HIDDEN FILES AND DOT SEGMENTS, in every spelling (decodePath, locate).
+    if (decoded === null) return notFound(req, res);
     if (servePackaged(req, res, decoded)) return;
+    var where = locate(site, decoded, rawPath);
+    if (!where) return notFound(req, res);
     var ctx = { name: name, site: site };
-    if (decoded.indexOf(MOUNT_ROOT) === 0) {
-      // ONE SPELLING FOR A MOUNT: the literal prefix, or the helper's own
-      // mapping from page path to file could not agree with the browser's.
-      if (site.mode !== "folder" || rawPath.indexOf(MOUNT_ROOT) !== 0) return notFound(req, res);
-      var mount = /^(\/\.lahe-source\/[a-f0-9]+\/)(.*)$/.exec(decoded);
-      var mountDir = mount && site.mounts ? site.mounts[mount[1]] : null;
-      if (typeof mountDir !== "string") return notFound(req, res);
-      if (mount[2].split("/").some(function (s) { return s.charAt(0) === "."; })) return notFound(req, res);
-      return serveUnder(req, res, ctx, mountDir, mount[1], mount[2], true);
+    var candidate = where.page ? site.root : candidateOf(where, decoded);
+    if (!candidate) return notFound(req, res);
+    var stat;
+    try { stat = fs.statSync(candidate); } catch (err) {
+      if (where.mounted) return notFound(req, res);
+      return serveGone(req, res, ctx, candidate);
     }
-    var segments = decoded.split("/").filter(function (s) { return s.length > 0; });
-    if (segments.some(function (s) { return s.charAt(0) === "."; })) return notFound(req, res);
-    if (site.mode === "page-only") {
-      if (decoded !== "/" + path.basename(site.root)) return notFound(req, res);
-      if (!fs.existsSync(site.root)) return serveGone(req, res, ctx, site.root);
-      var realRoot = realOrNull(site.root);
-      if (markdown.isMarkdown(site.root)) return serveMarkdown(req, res, ctx, site.root, realRoot, "/");
-      return serveHtmlPage(req, res, site, site.root, realRoot, false);
+    var real = realOrNull(candidate);
+    var realBase = realOrNull(where.base);
+    if (!real || !realBase || !within(real, realBase) || !stat.isFile()) return notFound(req, res);
+    if (markdown.isMarkdown(candidate)) {
+      return serveMarkdown(req, res, ctx, candidate, real, urlDirOf(where.prefix, where.base, candidate), { mounted: where.mounted });
     }
-    serveUnder(req, res, ctx, site.root, "/", segments.join("/"), false);
+    if (heal.isStaticPage(candidate)) return serveHtmlPage(req, res, ctx, candidate, real, where.mounted);
+    streamFile(req, res, candidate, stat.size);
   }
 
   return { handle: handle };
@@ -653,5 +950,15 @@ module.exports = {
   reviewAnswersOnSite: reviewAnswersOnSite,
   unknownNamePage: unknownNamePage,
   gonePage: gonePage,
+  activate: activate,
+  deactivate: deactivate,
+  activeFor: activeFor,
+  servesFile: servesFile,
+  fileForPage: fileForPage,
+  linkedFileForPage: linkedFileForPage,
+  renderForFile: renderForFile,
+  recordLinkedFor: recordLinkedFor,
+  aliasesFor: aliasesFor,
+  aliasMap: aliasMap,
   createPageRoutes: createPageRoutes
 };

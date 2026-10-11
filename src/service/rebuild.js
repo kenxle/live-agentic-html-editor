@@ -53,6 +53,7 @@ var path = require("node:path");
 var markdown = require("./markdown.js");
 var stateDir = require("./state_dir.js");
 var staticServers = require("./static_servers.js");
+var pageRoutes = require("./page_routes.js");
 
 // Several callers can ask inside one tick (the poll's mtime stat, and a reply
 // fold judging a handled claim against the page). They share one answer for
@@ -297,8 +298,17 @@ function createRebuilder(options) {
       );
       return { rendered: false, reason: "render-failed" };
     }
-    mergeMounts(dir, pair.session, pair.target, result.linkMounts, log);
-    recordLinked(dir, pair.session, pair.target, id, result.linked, log);
+    if (pageRoutes.activeFor(dir)) {
+      // STABLE ADDRESSES: the page is the site's render of the source, from
+      // the shared cache. Rendering it here warms that cache and puts any new
+      // link mounts on the site; the links it records give a linked document
+      // this review's rail. The artifact above stays current for old addresses.
+      pageRoutes.renderForFile(dir, pair.source);
+      if (id) pageRoutes.recordLinkedFor(dir, pair.source, id, result.linked);
+    } else {
+      mergeMounts(dir, pair.session, pair.target, result.linkMounts, log);
+      recordLinked(dir, pair.session, pair.target, id, result.linked, log);
+    }
     if (id) {
       lastRenderAt[id] = new Date(clock()).toISOString();
       delete toldAbout[String(id) + "\u001fsource-missing"];
