@@ -1,0 +1,68 @@
+name: spike
+
+# Hand-run only. Lets a feature check behavior on Linux and Windows, which no
+# one here has a machine for: browsers loading *.lahe.localhost names, and
+# `lahe install` setting up the login item. It never runs on a push or a pull
+# request, and every step continues on error, so a failed check is a line in
+# the log rather than a red run that emails the pusher. Standard GitHub-hosted
+# runners only: free for a public repo.
+#
+# Start it with:
+#   gh workflow run spike.yml -f ref=<branch or sha> -f command="<command>"
+# and read the verdict in the run's log.
+#
+# Temporary: added for docs/features/20261011.02_stable_addresses, removed at
+# that feature's cleanup.
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: "Branch, tag, or commit to check out"
+        required: true
+      command:
+        description: "Command to run from the repo root"
+        required: true
+        default: "npm run gate:unit"
+      browsers:
+        description: "Playwright browsers to install (space separated, or none)"
+        required: false
+        default: "chromium"
+
+jobs:
+  spike:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - run: npm ci
+        continue-on-error: true
+
+      - if: ${{ inputs.browsers != 'none' }}
+        shell: bash
+        env:
+          SPIKE_BROWSERS: ${{ inputs.browsers }}
+        run: npx playwright install --with-deps $SPIKE_BROWSERS
+        continue-on-error: true
+
+      - name: spike command
+        id: spike
+        shell: bash
+        env:
+          SPIKE_COMMAND: ${{ inputs.command }}
+        run: bash -c "$SPIKE_COMMAND"
+        continue-on-error: true
+
+      - name: verdict
+        shell: bash
+        run: echo "SPIKE VERDICT on ${{ matrix.os }}: ${{ steps.spike.outcome }}"
