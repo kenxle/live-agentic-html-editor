@@ -153,6 +153,7 @@ While checking this, I found 63 page-server processes left running from test run
 ## Questions for you
 
 1. ~~Are you OK with the Lahe helper starting at login and staying up?~~ Settled: yes.
-2. ~~Option D or option A?~~ Settled: option D. Still open: the default `docname.lahe.localhost`, with the short `docname.lahe` as an optional extra, or `.lahe` from the start?
+2. ~~Option D or option A?~~ Settled: option D, with `docname.lahe` addresses from the start. If the one-time setup has not been done, or fails, Lahe falls back to `docname.lahe.localhost`.
+   - You said this probably means moving to an install step, and that is fine. One note: the install step is needed for the setup (the `.lahe` name lookup and start at login), not for new packages. The tiny name server can be built from what Node already ships, so the "no outside packages" rule can still hold. A `lahe install` command that asks for your password once would do it.
 3. Login item first, or go straight to a menu-bar app? From your notes: the login item sounds reasonable, and you like the app for one-click access to the Library. One path: ship the login item with this feature, then the menu-bar app as its own follow-up.
 4. Ready for this to become a feature-forge feature, starting with the brief?
