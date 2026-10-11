@@ -127,8 +127,13 @@ function createAddresses(options) {
   };
   var server = null;
   var serverError = null;
-  var seenNames = new Set();
-  var seenPaths = new Set();
+  // The one value each check waits for, set just before it sends and cleared
+  // after. An arrival counts only when it equals that value; nothing else
+  // anyone sends is kept, so the helper's memory does not grow with traffic.
+  var expectedPath = null;
+  var pathArrived = false;
+  var expectedName = null;
+  var nameArrived = false;
   var timer = null;
   var watched = [];
   var closed = false;
@@ -149,7 +154,7 @@ function createAddresses(options) {
 
   // Every pages listener reports the forward checks that reach it.
   function onRequest(req) {
-    if (typeof req.url === "string" && req.url.indexOf(FORWARD_PATH) === 0) seenPaths.add(req.url);
+    if (expectedPath !== null && req.url === expectedPath) pathArrived = true;
   }
   (opts.pagesServers || []).forEach(function (s) {
     if (s && typeof s.prependListener === "function") {
@@ -172,9 +177,12 @@ function createAddresses(options) {
   async function checkForward() {
     if (!forwardOn) return false;
     var pathName = FORWARD_PATH + fresh();
+    expectedPath = pathName;
+    pathArrived = false;
     await sendThroughForward("127.0.0.1", pathName);
-    var ok = seenPaths.has(pathName);
-    seenPaths.clear();
+    var ok = pathArrived;
+    expectedPath = null;
+    pathArrived = false;
     return set("port_free", ok, ok ? null : "port 80 does not reach the pages port " + opts.pagesPort + "; addresses keep :" + opts.pagesPort);
   }
 
@@ -184,14 +192,17 @@ function createAddresses(options) {
       return set("lahe_names", false, serverError || "the name server is not running");
     }
     var name = "check-" + fresh() + "." + nameServerModule.ENDING;
+    expectedName = name;
+    nameArrived = false;
     var answered = null;
     try {
       answered = await withTimeout(Promise.resolve(lookup(name)), CHECK_TIMEOUT_MS);
     } catch (err) {
       answered = null;
     }
-    var ok = seenNames.has(name);
-    seenNames.clear();
+    var ok = nameArrived;
+    expectedName = null;
+    nameArrived = false;
     var reason = null;
     if (!ok) {
       reason = answered
@@ -201,7 +212,17 @@ function createAddresses(options) {
     return set("lahe_names", ok, reason);
   }
 
-  async function verifyNow() {
+  // One check at a time: each holds a single expected value, and a second
+  // run would overwrite the first one's.
+  var running = null;
+  function verifyNow() {
+    if (!running) {
+      running = runChecks().finally(function () { running = null; });
+    }
+    return running;
+  }
+
+  async function runChecks() {
     if (closed) return report();
     var changed = (await checkForward()) | (await checkNames());
     // A check that finishes after close says nothing: a stopped helper must
@@ -221,7 +242,7 @@ function createAddresses(options) {
     if (!namesOn || server) return;
     var candidate = nameServerModule.createNameServer({
       port: installed.name_server_port,
-      onQuery: function (name) { seenNames.add(name); },
+      onQuery: function (name) { if (expectedName !== null && name === expectedName) nameArrived = true; },
       log: say
     });
     try {
@@ -267,6 +288,8 @@ function createAddresses(options) {
     report: report,
     close: close,
     nameServerPort: function () { return server ? server.port() : null; },
+    // How many arrival values are held, for a test to bound. Tests only.
+    heldCount: function () { return (expectedPath !== null ? 1 : 0) + (expectedName !== null ? 1 : 0); },
     laheNamesVerified: function () { return state.lahe_names.verified; },
     printedPort: function () { return state.port_free.verified ? 80 : opts.pagesPort; }
   };
