@@ -438,15 +438,32 @@ async function serve(options) {
 
   var listeners = [];
 
+  // A ::1 twin that fails for one of these reasons means the machine has no
+  // IPv6 loopback: the helper serves on 127.0.0.1 alone. Any other failure,
+  // EADDRINUSE above all, means another program holds [::1] at this port, and
+  // a browser that tries ::1 first would load that program at a Lahe address.
+  var NO_IPV6 = ["EADDRNOTAVAIL", "EAFNOSUPPORT"];
+
   /**
-   * One listener. `required` listeners reject on failure; the ::1 twins log
-   * and resolve null, so a machine with no IPv6 loopback keeps serving.
+   * One listener. `required` listeners reject on failure. The ::1 twins log
+   * and resolve null when the machine has no IPv6 loopback, and reject on any
+   * other failure.
    */
   function listenOn(kind, listenPort, listenHost, required) {
     var created = http.createServer(dispatch(kind));
     return new Promise(function (resolve, reject) {
       created.once("error", function (err) {
         if (required) return reject(err);
+        if (NO_IPV6.indexOf(err && err.code) === -1) {
+          var taken = new Error(
+            "[" + listenHost + "]:" + listenPort + " (the " + kind + " port on IPv6) is taken by another program" +
+              (err && err.code && err.code !== "EADDRINUSE" ? " (" + err.code + ")" : "") +
+              ", so the helper did not start: a browser that tries ::1 first would reach that program"
+          );
+          taken.code = "LAHE_IPV6_TAKEN";
+          if (kind === "pages") taken.pagesPort = listenPort;
+          return reject(taken);
+        }
         log.helperLog(
           "could not listen on " + (listenHost.indexOf(":") !== -1 ? "[" + listenHost + "]" : listenHost) + ":" +
             listenPort + " for the " + kind + " port (" + (err && err.code ? err.code : String(err)) + "); still serving on 127.0.0.1"
@@ -831,11 +848,20 @@ async function serve(options) {
 
   // LISTENERS. The API on 127.0.0.1 (or the host asked for) and, for the
   // default host, on ::1 at the same port: a browser tries ::1 first for a
-  // .localhost name. A ::1 that cannot be bound is a log line, never an exit.
+  // .localhost name. No IPv6 loopback is a log line; a ::1 that another
+  // program holds stops the start (listenOn).
   var server = await listenOn("api", port, host, true);
   var boundPort = server.address().port;
   catalog.port = boundPort;
-  if (host === protocol.DEFAULT_HOST) await listenOn("api", boundPort, "::1", false);
+  if (host === protocol.DEFAULT_HOST) {
+    try {
+      await listenOn("api", boundPort, "::1", false);
+    } catch (err) {
+      await closeListeners();
+      log.helperLog(err.message);
+      throw err;
+    }
+  }
   var pagesServer;
   try {
     pagesServer = await listenOn("pages", pagesPortWanted, protocol.DEFAULT_HOST, true);
@@ -850,7 +876,13 @@ async function serve(options) {
   boundPagesPort = pagesServer.address().port;
   // library.lahe.localhost answers at this port.
   catalog.pagesPort = boundPagesPort;
-  await listenOn("pages", boundPagesPort, "::1", false);
+  try {
+    await listenOn("pages", boundPagesPort, "::1", false);
+  } catch (err) {
+    await closeListeners();
+    log.helperLog(err.message);
+    throw err;
+  }
   // The two optional checks: the port-80 forward and the .lahe names
   // (src/service/addresses.js). Each one proves itself before it is used.
   addresses = addressesModule.createAddresses(Object.assign({
