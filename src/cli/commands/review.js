@@ -146,9 +146,9 @@ function recordedReviewFor(dir, sessionId, target) {
  * @param {string[]} argv
  * @param {{notes?: boolean, notesFolder?: string}} [mode] `lahe write` runs
  *   this with notes: true (src/cli/commands/write.js), after its own path
- *   checks. The page then gets its own one-page server (static_servers.js),
- *   no asset mount and no link mounts, and the review is minted as a notes
- *   review. `notesFolder` is the real parent path it prints.
+ *   checks. The page then gets its own notes site (a page-only site in
+ *   src/service/sites.js, served by the helper), no asset mount and no link
+ *   mounts, and the review is minted as a notes review. `notesFolder` is the real parent path it prints.
  */
 async function run(argv, mode) {
   var notesMode = !!(mode && mode.notes);

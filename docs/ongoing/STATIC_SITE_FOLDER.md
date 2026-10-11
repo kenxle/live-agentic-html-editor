@@ -57,15 +57,16 @@ folders, served under `/.lahe-source/<hash>/` mounts. Spec:
 - Only recorded link targets get the rail, never their neighbours. An `--only`
   review keeps its links read-only.
 - A notes page from `lahe write` is outside all of this. Its own address serves that page and nothing else, so no folder, link, or mount rule applies (`docs/ongoing/FREE_WRITING.md`).
-- Hidden (dot-prefixed) files get no special handling. The served folder and a
-  linked folder serve them like any other file, and a link to one translates
-  like any other link. What bounds a request is containment: a path, or a
-  symlink, that resolves outside the served folder or the mount is refused.
-- If the linking review is gone, which should not happen, the page says so and
-  shows the `lahe review` command that would open one. Nothing is created.
+- Hidden (dot-prefixed) files and folders are refused. A request whose path
+  has a segment starting with a dot, in any spelling, is a 404, and a Markdown
+  link into a hidden folder below home renders inert and mounts nothing. A
+  path, or a symlink, that resolves outside the served folder or the mount is
+  refused too, and so is anything inside the state folder.
+- If no review answers for a page, the helper serves it without the rail. Nothing
+  is created.
 - The helper, not the page, names the file an item was made on: review.json's
   `linked_file`, the reload stat, and the handled check all use the same mount
-  lookup (`static_servers.linkedFileForPage`).
+  lookup (`page_routes.linkedFileForPage`).
 
 ## Before building
 

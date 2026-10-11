@@ -30,6 +30,11 @@ const FILES = [
   "docs/diagrams/session_ownership.md",
   "docs/diagrams/review_round_trip.md",
   "docs/diagrams/module_map.md",
+  "docs/diagrams/README.md",
+  "docs/ongoing/LIBRARY.md",
+  "docs/ongoing/STYLES.md",
+  "docs/INSTALL.md",
+  "README.md",
   "src/shared/manifest.js"
 ];
 
@@ -45,7 +50,12 @@ const STALE = [
   /stops? (its|the|every|a session's) (static|page) servers?/i,
   /on its old port/i,
   /idle[- ]stop/i,
-  /one-page server/i
+  /one-page server/i,
+  /stopping the servers/i,
+  /helper is (often|usually) down/i,
+  /static review server injects/i,
+  /\.lahe-styles` route in `src\/service\/static_servers/i,
+  /loopback page server/i
 ];
 
 test("V38: no doc an agent reads still describes per-session page servers or random ports", () => {
@@ -69,5 +79,23 @@ test("V38: the skill, the contract and the CLI doc name the stable address", () 
   for (const [name, text] of [["skill", skill], ["contract", contract], ["CLI doc", cli]]) {
     assert.match(text, /<name>\.lahe\.localhost:1483/, name);
     assert.match(text, /after\s+(the|this)\s+session\s+closes/, name);
+  }
+});
+
+// The docs agree on the rule: every place an agent or a reader learns the
+// address form also says it may print with no port (the port-80 forward), and
+// names the name rule the same way, including a file inside a reviewed folder.
+test("V38: the docs agree on the name rule and on 1483 or no port", () => {
+  const read = (rel) => fs.readFileSync(path.join(REPO_ROOT, rel), "utf8");
+  const sources = [
+    ["skill", read("skills/lahe/SKILL.md")],
+    ["contract", require("../../src/shared/review_format.js").CONTRACT.join("\n")],
+    ["contract copy in CONTRACTS.md", read("docs/CONTRACTS.md")],
+    ["CLI doc", read("docs/CLI.md")]
+  ];
+  for (const [name, text] of sources) {
+    assert.match(text, /no `?:1483`?\s+(when|once)\s+the\s+port-80\s+forward\s+is\s+set\s+up/, name + " says the address may have no port");
+    assert.match(text, /two\s+parent\s+folders/, name + " states the name rule");
+    assert.match(text, /folder\s+that\s+already\s+(holds|has\s+an\s+address)/, name + " says a file in a reviewed folder takes that folder's name");
   }
 });
