@@ -844,9 +844,11 @@ function classify(targetPath) {
 
 /**
  * @param {string[]} argv the arguments after the command name
+ * @param {{review?: string}} [used] filled with the id of the review this run
+ *   made or reused, so `lahe review` binds that one and not a guess
  * @returns {Promise<number>} the process exit code
  */
-async function run(argv) {
+async function run(argv, used) {
   var parsed = parseArgs(argv);
   if (!parsed.ok) {
     process[parsed.help ? "stdout" : "stderr"].write(parsed.message + "\n");
@@ -1417,6 +1419,7 @@ async function run(argv) {
     notes: options.notes === true
   });
 
+  if (used && typeof used === "object") used.review = review.id;
   say("lahe add: " + target);
   say();
   say("  review    " + review.id + (reuseId ? "  (" + reuseWhy + ")" : "  (minted just now)"));
