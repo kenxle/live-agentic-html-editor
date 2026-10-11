@@ -50,7 +50,8 @@ None.
 
 ### Cleanup queue
 
-Nothing queued.
+- `docs/features/20261011.02_stable_addresses/02_architecture_stable_addresses_reviews_security.html`: stale build output from before the review files were combined.
+- `docs/features/20261011.02_stable_addresses/parts/reviews/`: the two original review files, now copied into `02_architecture_stable_addresses_reviews.md`.
 
 ### Test results
 

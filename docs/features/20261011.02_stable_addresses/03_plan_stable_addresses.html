@@ -1,0 +1,1724 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+  <meta charset="utf-8" />
+  <meta name="generator" content="pandoc" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
+  <title>Plan: Stable addresses</title>
+  <style>
+    /* Default styles provided by pandoc.
+    ** See https://pandoc.org/MANUAL.html#variables-for-html for config info.
+    */
+    html {
+      color: #1a1a1a;
+      background-color: #fdfdfd;
+    }
+    body {
+      margin: 0 auto;
+      max-width: 36em;
+      padding-left: 50px;
+      padding-right: 50px;
+      padding-top: 50px;
+      padding-bottom: 50px;
+      hyphens: auto;
+      overflow-wrap: break-word;
+      text-rendering: optimizeLegibility;
+      font-kerning: normal;
+    }
+    @media (max-width: 600px) {
+      body {
+        font-size: 0.9em;
+        padding: 12px;
+      }
+      h1 {
+        font-size: 1.8em;
+      }
+    }
+    @media print {
+      html {
+        background-color: white;
+      }
+      body {
+        background-color: transparent;
+        color: black;
+        font-size: 12pt;
+      }
+      p, h2, h3 {
+        orphans: 3;
+        widows: 3;
+      }
+      h2, h3, h4 {
+        page-break-after: avoid;
+      }
+    }
+    p {
+      margin: 1em 0;
+    }
+    a {
+      color: #1a1a1a;
+    }
+    a:visited {
+      color: #1a1a1a;
+    }
+    img {
+      max-width: 100%;
+    }
+    svg {
+      height: auto;
+      max-width: 100%;
+    }
+    h1, h2, h3, h4, h5, h6 {
+      margin-top: 1.4em;
+    }
+    h5, h6 {
+      font-size: 1em;
+      font-style: italic;
+    }
+    h6 {
+      font-weight: normal;
+    }
+    ol, ul {
+      padding-left: 1.7em;
+      margin-top: 1em;
+    }
+    li > ol, li > ul {
+      margin-top: 0;
+    }
+    blockquote {
+      margin: 1em 0 1em 1.7em;
+      padding-left: 1em;
+      border-left: 2px solid #e6e6e6;
+      color: #606060;
+    }
+    code {
+      white-space: pre-wrap;
+      font-family: Menlo, Monaco, Consolas, 'Lucida Console', monospace;
+      font-size: 85%;
+      margin: 0;
+      hyphens: manual;
+    }
+    pre {
+      margin: 1em 0;
+      overflow: auto;
+    }
+    pre code {
+      padding: 0;
+      overflow: visible;
+      overflow-wrap: normal;
+    }
+    .sourceCode {
+     background-color: transparent;
+     overflow: visible;
+    }
+    hr {
+      border: none;
+      border-top: 1px solid #1a1a1a;
+      height: 1px;
+      margin: 1em 0;
+    }
+    table {
+      margin: 1em 0;
+      border-collapse: collapse;
+      width: 100%;
+      overflow-x: auto;
+      display: block;
+      font-variant-numeric: lining-nums tabular-nums;
+    }
+    table caption {
+      margin-bottom: 0.75em;
+    }
+    tbody {
+      margin-top: 0.5em;
+      border-top: 1px solid #1a1a1a;
+      border-bottom: 1px solid #1a1a1a;
+    }
+    th {
+      border-top: 1px solid #1a1a1a;
+      padding: 0.25em 0.5em 0.25em 0.5em;
+    }
+    td {
+      padding: 0.125em 0.5em 0.25em 0.5em;
+    }
+    header {
+      margin-bottom: 4em;
+      text-align: center;
+    }
+    #TOC li {
+      list-style: none;
+    }
+    #TOC ul {
+      padding-left: 1.3em;
+    }
+    #TOC > ul {
+      padding-left: 0;
+    }
+    #TOC a:not(:hover) {
+      text-decoration: none;
+    }
+    span.smallcaps{font-variant: small-caps;}
+    div.columns{display: flex; gap: min(4vw, 1.5em);}
+    div.column{flex: auto; overflow-x: auto;}
+    div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+    /* The extra [class] is a hack that increases specificity enough to
+       override a similar rule in reveal.js */
+    ul.task-list[class]{list-style: none;}
+    ul.task-list li input[type="checkbox"] {
+      font-size: inherit;
+      width: 0.8em;
+      margin: 0 0.8em 0.2em -1.6em;
+      vertical-align: middle;
+    }
+    .display.math{display: block; text-align: center; margin: 0.5rem auto;}
+  </style>
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>%F0%9F%94%A8</text></svg>">
+  <!--
+    St. Clair AI document style for forge docs.
+
+    The palette, type and spacing values below are copied from the St. Clair
+    system tokens (live-agentic-html-editor/vendor/stclair-doc-style/
+    system-tokens.css). This header does NOT link LAHE's ./.lahe-doc-style.css
+    bundle, on purpose: that bundle's document.css styles bare elements and a
+    generic .callout (an ink fill with white text) and puts padding on every body
+    child, and all three collide with the forge structure. So the page is
+    self-contained and reads the same whether or not LAHE is serving it.
+
+    The fonts are the one thing taken from LAHE: it serves the three vendored
+    faces at ./.lahe-fonts/<file>.woff2 from every folder. When that fails, each
+    stack falls back to system-ui and a platform monospace.
+
+    House rules this file keeps: no pills, no shadows, no gradients, no all caps
+    labels, no single-side coloured borders. Colour comes from tints and dots.
+  -->
+  <style>
+    @font-face {
+      font-family: "Schibsted Grotesk"; font-style: normal; font-weight: 500 700; font-display: swap;
+      src: url("./.lahe-fonts/schibsted-grotesk-variable.woff2") format("woff2");
+    }
+    @font-face {
+      font-family: "Hanken Grotesk"; font-style: normal; font-weight: 400 600; font-display: swap;
+      src: url("./.lahe-fonts/hanken-grotesk-variable.woff2") format("woff2");
+    }
+    @font-face {
+      font-family: "JetBrains Mono"; font-style: normal; font-weight: 400 500; font-display: swap;
+      src: url("./.lahe-fonts/jetbrains-mono-variable.woff2") format("woff2");
+    }
+
+    :root {
+      color-scheme: light dark;
+
+      /* St. Clair palette (raw names and values from system-tokens.css) */
+      --white: #ffffff;
+      --paper: #f7f7f5;
+      --ink: #1f1e1a;
+      --ink-soft: #55534b;
+      --ink-faint: #6b6860;
+      --rule: #dcdad6;
+      --purple: #46188c;
+      --purple-tint: #f1ebfa;
+      --link: #6d28d9;
+      --cobalt: #0760c7;
+      --cobalt-tint: #e6effc;
+      --sage-fill: #8fb5a0;
+      --sage: #637a63;
+      --sage-tint: #e7f1ed;
+
+      --font-display: "Schibsted Grotesk", "Hanken Grotesk", system-ui, sans-serif;
+      --font-body: "Hanken Grotesk", system-ui, -apple-system, "Helvetica Neue", sans-serif;
+      --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+
+      --r: 4px;
+
+      /* Forge roles. Prefixed --ff- so none of them can collide with a St. Clair
+         token of the same name if the two ever share a page. Dark mode repoints
+         these and nothing else. */
+      --ff-bg: var(--white);
+      --ff-fg: var(--ink);
+      --ff-soft: var(--ink-soft);
+      --ff-faint: var(--ink-faint);
+      --ff-rule: var(--rule);
+      --ff-divider: var(--ink);
+      --ff-link: var(--link);
+      --ff-accent: var(--cobalt);
+      --ff-panel: var(--paper);
+      --ff-code-bg: var(--cobalt-tint);
+      --ff-bullet: var(--sage);
+      --ff-hl-kw: var(--cobalt);
+      --ff-hl-str: var(--sage);
+      --ff-hl-num: var(--purple);
+
+      /* Callouts: a tint, a dot and a label colour each. */
+      --ff-req-bg: var(--cobalt-tint);      --ff-req-dot: var(--cobalt);    --ff-req-label: var(--cobalt);
+      --ff-nongoal-bg: var(--paper);        --ff-nongoal-dot: var(--ink-faint); --ff-nongoal-label: var(--ink-faint);
+      --ff-metric-bg: var(--sage-tint);     --ff-metric-dot: var(--sage);   --ff-metric-label: var(--ink-soft);
+      --ff-question-bg: var(--purple-tint); --ff-question-dot: var(--purple); --ff-question-label: var(--purple);
+      --ff-suggest-bg: var(--white);        --ff-suggest-dot: var(--sage);  --ff-suggest-label: var(--sage);
+      --ff-flag-bg: var(--ink);             --ff-flag-fg: var(--white);     --ff-flag-dot: var(--sage-fill);
+
+      /* Disposition verdicts */
+      --ff-accepted: var(--sage);
+      --ff-rejected: var(--purple);
+      --ff-deferred: var(--cobalt);
+    }
+
+    /* Dark: the St. Clair on-ink values. Body text is full white on ink, as the
+       system decides; tints are the accent mixed into the ink ground. */
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --ff-bg: var(--ink);
+        --ff-fg: var(--white);
+        --ff-soft: #d9d7d1;   /* --ink-soft-ondark */
+        --ff-faint: #b3b0a8;  /* --ink-faint-ondark */
+        --ff-rule: #4a4842;   /* --rule-ondark */
+        --ff-divider: var(--white);
+        --ff-link: var(--sage-fill);
+        --ff-accent: color-mix(in srgb, var(--cobalt) 45%, var(--white));
+        --ff-panel: color-mix(in srgb, var(--white) 6%, var(--ink));
+        --ff-code-bg: color-mix(in srgb, var(--cobalt) 22%, var(--ink));
+        --ff-bullet: var(--sage-fill);
+        --ff-hl-kw: color-mix(in srgb, var(--cobalt) 40%, var(--white));
+        --ff-hl-str: var(--sage-fill);
+        --ff-hl-num: color-mix(in srgb, var(--purple) 30%, var(--white));
+
+        --ff-req-bg: color-mix(in srgb, var(--cobalt) 22%, var(--ink));
+        --ff-req-dot: color-mix(in srgb, var(--cobalt) 45%, var(--white));
+        --ff-req-label: color-mix(in srgb, var(--cobalt) 35%, var(--white));
+        --ff-nongoal-bg: color-mix(in srgb, var(--white) 6%, var(--ink));
+        --ff-nongoal-dot: #b3b0a8; --ff-nongoal-label: #b3b0a8;
+        --ff-metric-bg: color-mix(in srgb, var(--sage) 30%, var(--ink));
+        --ff-metric-dot: var(--sage-fill); --ff-metric-label: var(--sage-fill);
+        --ff-question-bg: color-mix(in srgb, var(--purple) 45%, var(--ink));
+        --ff-question-dot: color-mix(in srgb, var(--purple) 30%, var(--white));
+        --ff-question-label: color-mix(in srgb, var(--purple) 25%, var(--white));
+        --ff-suggest-bg: var(--ink);
+        --ff-suggest-dot: var(--sage-fill); --ff-suggest-label: var(--sage-fill);
+        --ff-flag-bg: var(--paper); --ff-flag-fg: var(--ink); --ff-flag-dot: var(--sage);
+
+        --ff-accepted: var(--sage-fill);
+        --ff-rejected: color-mix(in srgb, var(--purple) 30%, var(--white));
+        --ff-deferred: color-mix(in srgb, var(--cobalt) 40%, var(--white));
+      }
+    }
+
+    /* Pandoc's own default styles load before this block. The rules marked
+       "pandoc" below undo the ones that fight this look: black table rules,
+       a block-level table, auto hyphens, italic h5/h6, and a:visited in
+       near-black, which outranks a plain a rule. */
+    html { scroll-behavior: smooth; -webkit-print-color-adjust: exact; print-color-adjust: exact; background: var(--ff-bg); }
+    * { box-sizing: border-box; }
+
+    body {
+      font-family: var(--font-body);
+      font-size: 17px;
+      line-height: 1.65;
+      color: var(--ff-fg);
+      background: var(--ff-bg);
+      max-width: 880px;
+      margin: 0 auto;
+      padding: 56px 28px 104px;
+      -webkit-font-smoothing: antialiased;
+      text-rendering: optimizeLegibility;
+      hyphens: manual;   /* pandoc */
+    }
+
+    /* Title block (pandoc emits <header id="title-block-header">) */
+    header#title-block-header { padding-bottom: 8px; margin-bottom: 0; text-align: left; }
+    header#title-block-header h1.title {
+      font-family: var(--font-display);
+      font-size: clamp(34px, 4.6vw, 52px);
+      font-weight: 600;
+      margin: 0 0 12px;
+      letter-spacing: -0.012em;
+      line-height: 1.1;
+    }
+    header#title-block-header p.subtitle,
+    header#title-block-header p.author,
+    header#title-block-header p.date {
+      font-size: 20px;
+      line-height: 1.55;
+      color: var(--ff-soft);
+      margin: 0;
+    }
+
+    /* Cross-doc nav (injected by the build before the TOC). A plain line:
+       "Docs  Crucible · Brief · Architecture", the current doc in ink. */
+    .doc-nav {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: baseline;
+      gap: 4px 0;
+      margin: 20px 0 8px;
+      padding: 12px 0;
+      border-top: 1px solid var(--ff-rule);
+      border-bottom: 1px solid var(--ff-rule);
+      font-size: 15px;
+    }
+    .doc-nav .doc-nav-label {
+      font-family: var(--font-display);
+      font-weight: 600;
+      font-size: 14px;
+      color: var(--ff-faint);
+      margin-right: 14px;
+    }
+    .doc-nav a {
+      color: var(--ff-link);
+      text-decoration: underline;
+      text-decoration-thickness: 1px;
+      text-underline-offset: 3px;
+      border: 0;
+      background: none;
+      padding: 0;
+    }
+    .doc-nav a + a::before {
+      content: "\00B7";
+      display: inline-block;
+      color: var(--ff-faint);
+      margin: 0 10px;
+      text-decoration: none;
+    }
+    .doc-nav a:hover { background: none; text-decoration-thickness: 2px; }
+    .doc-nav a:visited { color: var(--ff-link); }
+    .doc-nav a.current, .doc-nav a.current:visited {
+      color: var(--ff-fg);
+      font-weight: 600;
+      text-decoration: none;
+      cursor: default;
+    }
+
+    /* TOC (pandoc emits <nav id="TOC">) */
+    nav#TOC {
+      margin: 28px 0 44px;
+      font-size: 15px;
+      line-height: 1.5;
+    }
+    nav#TOC::before {
+      content: "Contents";
+      display: block;
+      font-family: var(--font-display);
+      font-weight: 600;
+      font-size: 14px;
+      color: var(--ff-faint);
+      padding-bottom: 8px;
+      margin-bottom: 12px;
+      border-bottom: 2px solid var(--ff-divider);
+    }
+    nav#TOC ul { list-style: none; padding-left: 0; margin: 0; }
+    nav#TOC ul ul { padding-left: 18px; margin-top: 4px; }
+    nav#TOC li { margin-bottom: 4px; }
+    nav#TOC li::marker { content: none; }
+    nav#TOC a, nav#TOC a:visited { color: var(--ff-fg); text-decoration: none; border: 0; }
+    nav#TOC a:hover { color: var(--ff-link); text-decoration: underline; background: none; }
+
+    /* Headings: Schibsted at display weight, sentence case. An h2 hangs under a
+       full-width ink rule, the St. Clair section head. */
+    h1, h2, h3, h4, h5, h6 {
+      font-family: var(--font-display);
+      font-weight: 600;
+      line-height: 1.15;
+      letter-spacing: -0.012em;
+      color: var(--ff-fg);
+    }
+    h2 {
+      font-size: clamp(25px, 3vw, 32px);
+      margin: 64px 0 18px;
+      padding-top: 12px;
+      border-top: 2px solid var(--ff-divider);
+    }
+    h3 { font-size: clamp(19px, 2vw, 23px); margin: 40px 0 12px; }
+    h4 { font-size: 18px; margin: 28px 0 8px; }
+    h5, h6 { font-size: 17px; margin: 24px 0 8px; font-style: normal; font-weight: 600; }   /* pandoc */
+    h6 { color: var(--ff-soft); }
+
+    p { margin: 0 0 18px; }
+    p, li, td, dd { overflow-wrap: anywhere; }
+
+    a {
+      color: var(--ff-link);
+      text-decoration: underline;
+      text-decoration-thickness: 1px;
+      text-underline-offset: 3px;
+    }
+    a:visited { color: var(--ff-link); }   /* pandoc */
+    a:hover { text-decoration-thickness: 2px; }
+    :focus-visible { outline: 2px solid var(--ff-link); outline-offset: 3px; border-radius: var(--r); }
+
+    strong { color: inherit; font-weight: 700; }
+
+    ul, ol { margin: 0 0 18px; padding-left: 1.6em; }
+    li { margin: 0 0 8px; line-height: 1.55; }
+    li > p { margin-bottom: 8px; }
+    ul > li::marker { color: var(--ff-bullet); }
+    .callout ul > li::marker { color: var(--ff-dot); }
+    ol > li::marker { color: var(--ff-fg); font-weight: 600; }
+    li > ul, li > ol { margin-top: 8px; }
+
+    /* Callout boxes (from ::: callout-* fenced divs). A tint holding the text,
+       and a label row generated by CSS: a dot in the callout's colour, then the
+       label in the display face. */
+    .callout {
+      border-radius: var(--r);
+      padding: 16px 22px 18px;
+      margin: 18px 0;
+      background: var(--ff-panel);
+      color: var(--ff-fg);
+      line-height: 1.6;
+    }
+    .callout > :first-child { margin-top: 0; }
+    .callout > :last-child { margin-bottom: 0; }
+    .callout::before {
+      display: flex;
+      align-items: center;
+      gap: 9px;
+      font-family: var(--font-display);
+      font-weight: 600;
+      font-size: 14px;
+      line-height: 1.4;
+      margin-bottom: 6px;
+      padding-left: 16px;   /* room for the dot, which ::after draws */
+    }
+    .callout { position: relative; }
+    .callout::after {
+      content: "";
+      position: absolute;
+      left: 22px;
+      top: 23px;
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: var(--ff-dot, var(--ff-faint));
+    }
+    .callout-req      { background: var(--ff-req-bg);      --ff-dot: var(--ff-req-dot); }
+    .callout-req::before      { content: "Requirement";   color: var(--ff-req-label); }
+    .callout-nongoal  { background: var(--ff-nongoal-bg);  --ff-dot: var(--ff-nongoal-dot); border: 1px solid var(--ff-rule); }
+    .callout-nongoal::before  { content: "Non-goals";     color: var(--ff-nongoal-label); }
+    .callout-metric   { background: var(--ff-metric-bg);   --ff-dot: var(--ff-metric-dot); }
+    .callout-metric::before   { content: "Metrics";       color: var(--ff-metric-label); }
+    .callout-question { background: var(--ff-question-bg); --ff-dot: var(--ff-question-dot); }
+    .callout-question::before { content: "Open question"; color: var(--ff-question-label); }
+    .callout-suggest  { background: var(--ff-suggest-bg);  --ff-dot: var(--ff-suggest-dot); border: 1px solid var(--ff-suggest-dot); }
+    .callout-suggest::before  { content: "Suggestion";    color: var(--ff-suggest-label); }
+    .callout-flag     { background: var(--ff-flag-bg);     --ff-dot: var(--ff-flag-dot); color: var(--ff-flag-fg); }
+    .callout-flag::before     { content: "Red flag";      color: var(--ff-flag-fg); }
+    .callout-flag a, .callout-flag strong, .callout-flag code { color: inherit; }
+    .callout-flag code { background: color-mix(in srgb, currentColor 14%, transparent); }
+    /* The nongoal and suggest boxes carry a 1px border, so their dot moves with it. */
+    .callout-nongoal::after, .callout-suggest::after { left: 21px; top: 22px; }
+
+    /* Reviews section: the _reviews.md files are merged into the HTML below this
+       divider (they stay separate files on disk for agents). The build writes
+       the divider with an inline red rule; this repaints it in the house ink. */
+    hr.reviews-divider {
+      border: 0 !important;
+      border-top: 2px solid var(--ff-divider) !important;
+      margin: 88px 0 6px !important;
+      display: block !important;
+    }
+    hr.reviews-divider + * { margin-top: 0; }
+    .reviews-banner {
+      border-top: 1px solid var(--ff-divider);
+      padding: 14px 0 0;
+      margin: 0 0 32px;
+      font-size: 15px;
+      line-height: 1.55;
+      color: var(--ff-soft);
+    }
+    .reviews-banner::before {
+      display: block;
+      content: "Reviews, full prose";
+      font-family: var(--font-display);
+      font-weight: 600;
+      font-size: clamp(25px, 3vw, 32px);
+      line-height: 1.15;
+      letter-spacing: -0.012em;
+      color: var(--ff-fg);
+      margin-bottom: 8px;
+    }
+    /* Jump target for spec -> review-detail links; offset so the heading clears. */
+    .finding-anchor { display: inline-block; scroll-margin-top: 1.5rem; }
+    td a[href^="#"] { font-weight: 600; }
+
+    /* Inline xref deep-dive (from ::: xref fenced div) */
+    .xref {
+      font-size: 15px;
+      background: var(--ff-code-bg);
+      border-radius: var(--r);
+      padding: 10px 16px;
+      margin: 0 0 18px;
+      color: var(--ff-soft);
+      line-height: 1.5;
+    }
+    .xref::before {
+      content: "\21B3  See";
+      font-family: var(--font-display);
+      font-weight: 600;
+      font-size: 14px;
+      color: var(--ff-accent);
+      margin-right: 8px;
+    }
+    .xref > * { display: inline; margin: 0; }
+    .xref a, .xref a:visited { font-weight: 600; color: var(--ff-fg); }
+
+    /* Tables: the St. Clair naked ruled table. A 2px rule under the head,
+       hairlines between rows, no box, no tint, no shadow. The build wraps every
+       table in .table-scroll; the scrolling itself lives in
+       shared-assets/doc_fixes.css. */
+    .table-scroll { margin: 24px 0 32px; }
+    .table-scroll table { margin: 0; }
+    table {
+      border-collapse: collapse;
+      width: 100%;
+      margin: 24px 0 32px;
+      font-size: 15px;
+      line-height: 1.5;
+      background: none;
+      display: table;   /* pandoc sets block; .table-scroll does the scrolling */
+    }
+    tbody { border: 0; }   /* pandoc */
+    th { border-top: 0; }  /* pandoc */
+    thead th {
+      font-family: var(--font-display);
+      font-weight: 600;
+      font-size: 14px;
+      color: var(--ff-faint);
+      text-align: left;
+      padding: 0 16px 10px 0;
+      border-bottom: 2px solid var(--ff-divider);
+      vertical-align: bottom;
+    }
+    tbody td {
+      padding: 12px 16px 12px 0;
+      border-bottom: 1px solid var(--ff-rule);
+      vertical-align: top;
+    }
+    td:last-child, th:last-child { padding-right: 0; }
+    /* A short id column ("RF 12", "T3") stays on one line beside wide prose. */
+    tbody td:first-child { min-width: 3.4em; }
+    tbody tr:nth-child(even) { background: none; }
+    td > :first-child { margin-top: 0; }
+    td > :last-child { margin-bottom: 0; }
+
+    /* Disposition verdicts rendered by the build (Accepted/Rejected/Deferred).
+       A dot and the word, in the verdict's colour. */
+    td .accepted, span.accepted,
+    td .rejected, span.rejected,
+    td .deferred, span.deferred {
+      font-family: var(--font-display);
+      font-weight: 600;
+      white-space: nowrap;
+    }
+    td .accepted::before, span.accepted::before,
+    td .rejected::before, span.rejected::before,
+    td .deferred::before, span.deferred::before {
+      content: "";
+      display: inline-block;
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: currentColor;
+      margin-right: 7px;
+      vertical-align: 0.12em;
+    }
+    td .accepted, span.accepted { color: var(--ff-accepted); }
+    td .rejected, span.rejected { color: var(--ff-rejected); }
+    td .deferred, span.deferred { color: var(--ff-deferred); }
+
+    /* Inline + block code: JetBrains Mono on the cobalt tint, ink text.
+       Ligatures off, so an arrow in code reads as the two characters it is. */
+    code, pre {
+      font-family: var(--font-mono);
+      font-variant-ligatures: none;
+      font-feature-settings: "liga" 0, "calt" 0;
+    }
+    code {
+      font-size: 0.86em;
+      background: var(--ff-code-bg);
+      color: var(--ff-fg);
+      padding: 0.1em 0.35em;
+      border-radius: 3px;
+    }
+    pre {
+      font-size: 14px;
+      background: var(--ff-code-bg);
+      color: var(--ff-fg);
+      padding: 18px 24px;
+      border-radius: var(--r);
+      overflow-x: auto;
+      margin: 0 0 24px;
+      line-height: 1.55;
+      /* Wrap long lines instead of forcing a horizontal scroll (readability). */
+      white-space: pre-wrap;
+      word-break: break-word;
+      overflow-wrap: anywhere;
+    }
+    pre code { background: none; color: inherit; padding: 0; font-size: inherit; }
+    /* A code chip inside a tinted callout would vanish into the tint. */
+    .callout code { background: color-mix(in srgb, currentColor 9%, transparent); }
+
+    /* Highlighted blocks: pandoc wraps them in div.sourceCode and paints its
+       own transparent ground and a green-and-teal palette. Repaint both in the
+       St. Clair accents. */
+    div.sourceCode { margin: 0 0 24px; }
+    div.sourceCode > pre.sourceCode { background: var(--ff-code-bg); margin: 0; }
+    pre.sourceCode code span.kw, pre.sourceCode code span.cf, pre.sourceCode code span.im,
+    pre.sourceCode code span.op, pre.sourceCode code span.bu { color: var(--ff-hl-kw); font-weight: 500; }
+    pre.sourceCode code span.st, pre.sourceCode code span.ch, pre.sourceCode code span.ss,
+    pre.sourceCode code span.vs, pre.sourceCode code span.sc { color: var(--ff-hl-str); }
+    pre.sourceCode code span.dv, pre.sourceCode code span.fl, pre.sourceCode code span.bn,
+    pre.sourceCode code span.cn, pre.sourceCode code span.dt { color: var(--ff-hl-num); }
+    pre.sourceCode code span.co, pre.sourceCode code span.an, pre.sourceCode code span.cv,
+    pre.sourceCode code span.do, pre.sourceCode code span.in { color: var(--ff-soft); font-style: normal; font-weight: 400; }
+    pre.sourceCode code span.fu, pre.sourceCode code span.va, pre.sourceCode code span.at,
+    pre.sourceCode code span.ot { color: inherit; font-weight: 400; }
+
+    /* Mermaid blocks: pandoc renders ```mermaid as <pre class="mermaid">; the
+       Mermaid script replaces the text with SVG. It is a figure, not code: no
+       tint, a hairline frame, centred. Mermaid source must not wrap before the
+       script swaps it for SVG. */
+    pre.mermaid {
+      white-space: pre;
+      background: none;
+      border: 1px solid var(--ff-rule);
+      border-radius: var(--r);
+      padding: 24px;
+      text-align: center;
+      color: var(--ff-fg);
+      font-family: var(--font-body);
+    }
+    pre.mermaid svg { max-width: 100%; height: auto; }
+
+    blockquote {
+      margin: 18px 0;
+      padding: 2px 0 2px 18px;
+      border-left: 3px solid var(--ff-rule);
+      color: var(--ff-soft);
+    }
+    blockquote p:last-child { margin-bottom: 0; }
+
+    hr { border: none; border-top: 1px solid var(--ff-rule); margin: 44px 0; }
+    hr:has(+ h2) { display: none; }
+
+    img { max-width: 100%; height: auto; }
+
+    /* Task-list checkboxes from "- [ ]" lists */
+    ul.task-list { list-style: none; padding-left: 4px; }
+    ul.task-list li input[type="checkbox"] { margin-right: 8px; accent-color: var(--cobalt); }
+
+    @page { size: letter; margin: 0.7in 0.65in; }
+    @media (max-width: 620px) {
+      body { padding: 32px 16px 64px; font-size: 16px; }
+      .callout { padding: 14px 16px 16px; }
+      .callout::after { left: 16px; top: 22px; }
+      table { font-size: 14px; }
+    }
+    @media print {
+      :root { color-scheme: light; }
+      * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+      html, body { background: #fff; color: var(--ink); }
+      body { max-width: 100%; font-size: 11pt; padding: 0; }
+      .doc-nav { display: none; }
+      a { color: var(--ink); }
+      .callout, table, pre, blockquote { break-inside: avoid; }
+      h2, h3 { break-after: avoid; }
+    }
+  </style>
+  <script type="module">
+    import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.esm.min.mjs";
+    const dark = window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches;
+    mermaid.initialize({
+      startOnLoad: false,
+      theme: dark ? "dark" : "neutral",
+      securityLevel: "loose",
+      themeVariables: { fontFamily: '"Hanken Grotesk", system-ui, sans-serif' },
+    });
+    /* Pandoc emits ```mermaid blocks as <pre class="mermaid"><code>…</code></pre> with the
+       diagram source HTML-entity-encoded. Mermaid 10 reads innerHTML, so it sees the literal
+       <code> tag and &quot;/&gt; entities and throws syntax errors. Flatten each block to a
+       single decoded text node first (textContent decodes entities and drops the wrapper),
+       then render. Same fix as the personal-repo report builds (commit d525c50 there). */
+    function renderMermaid() {
+      document.querySelectorAll("pre.mermaid").forEach(function (el) {
+        if (!el.dataset.mflattened) {
+          el.textContent = el.textContent;
+          el.dataset.mflattened = "1";
+        }
+      });
+      mermaid.run({ querySelector: "pre.mermaid" });
+    }
+    if (document.readyState === "loading") {
+      window.addEventListener("DOMContentLoaded", renderMermaid);
+    } else {
+      renderMermaid();
+    }
+  </script>
+
+  <!-- The review comment module and the shared document fixes are injected here
+       at build time from ~/.claude/skills/shared-assets/ (comment_module.html +
+       doc_fixes.css) by shared_assets.resolve_header(). Do not paste a copy back
+       into this file. -->
+  <style>
+  /* Shared document fixes: one source for both document builds.
+
+     Injected at build time alongside comment_module.html, in place of the
+     <!-- SHARED_ASSETS --> placeholder in each pandoc header. Because it lands
+     last in <head>, these rules win over the same-specificity rules earlier in a
+     header without needing !important.
+
+     Keep this file to fixes that are true for every document we build. Anything
+     that depends on a skill's own look (colors, radius, shadow) belongs in that
+     skill's header. */
+
+  /* --- Tables: never spill past the reading column (plan Task 4.3, defect 1) ---
+     Two halves to the fix, and both are needed.
+     1. A wide table scrolls inside its wrapper. Both builds wrap every table in
+        <div class="table-scroll">.
+     2. Long unbroken strings (URLs, tokens, absolute paths) wrap instead of
+        setting a min-content width that forces the table wider than the page.
+        Without this the table is simply wider than the wrapper and the text is
+        cut off at the wrapper edge. */
+  .table-scroll {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    max-width: 100%;
+  }
+  .table-scroll > table { margin: 0; }
+  table { max-width: 100%; }
+  thead th, tbody td { overflow-wrap: anywhere; word-break: break-word; }
+  thead th code, tbody td code,
+  thead th a, tbody td a { overflow-wrap: anywhere; word-break: break-word; }
+
+  /* Print/PDF has no scrollbars, so show the whole table and let it shrink. */
+  @media print {
+    .table-scroll { overflow: visible; }
+  }
+
+  /* --- Charts: never let a chart set the page width (plan Task 4.3, defect 2) ---
+     The label-truncation fix itself is Plotly's automargin, applied in the
+     report header's render script. This is the CSS guard next to it: a chart
+     that computes a wider layout than its column stays inside the column
+     instead of pushing the whole page sideways. */
+  figure.plotly-chart,
+  figure.plotly-chart > div,
+  figure.chart svg,
+  figure.plotly-chart .main-svg { max-width: 100%; }
+
+  </style>
+</head>
+<body>
+<header id="title-block-header">
+<h1 class="title">Plan: Stable addresses</h1>
+</header>
+
+<div class="doc-nav"><span class="doc-nav-label">Docs</span><a href="00_crucible_stable_addresses.html">Crucible</a><a href="01_brief_stable_addresses.html">Brief</a><a href="02_architecture_stable_addresses.html">Architecture</a><a href="03_plan_stable_addresses.html" class="current">Plan</a><a href="04_progress_stable_addresses.md">Progress</a></div>
+<nav id="TOC" role="doc-toc">
+<ul>
+<li><a href="#summary" id="toc-summary">Summary</a></li>
+<li><a href="#steps" id="toc-steps">Steps</a></li>
+<li><a href="#workstreams-and-prs"
+id="toc-workstreams-and-prs">Workstreams and PRs</a></li>
+<li><a href="#test-list" id="toc-test-list">Test List</a></li>
+<li><a href="#acceptance-criteria"
+id="toc-acceptance-criteria">Acceptance Criteria</a></li>
+<li><a href="#plan-review" id="toc-plan-review">Plan Review</a></li>
+</ul>
+</nav>
+<h2 id="summary">Summary</h2>
+<p>Four workstreams, five pull requests. <strong>core</strong> moves
+page serving into the helper behind a switch, rewires every helper
+module to the new name registry, then makes it the default and retires
+per-session page servers. <strong>library</strong> points the Library at
+stable addresses. <strong>install</strong> adds the login item and
+always-on behavior on three systems. <strong>lahe-names</strong> adds
+the optional <code>.lahe</code> ending on macOS. Docs, the skill, and
+the contract change in the same pull request as the behavior they
+describe.</p>
+<pre class="mermaid"><code>flowchart LR
+    S1[&quot;core: Step 1&lt;br/&gt;named sites, behind a switch&quot;] --&gt; S2[&quot;core: Step 2&lt;br/&gt;modules ask the registry&quot;]
+    S2 --&gt; S3[&quot;core: Step 3&lt;br/&gt;default on, page servers retired&quot;]
+    S1 --&gt; S5[&quot;install: Step 5&lt;br/&gt;login item, always-on&quot;]
+    S3 --&gt; S4[&quot;library: Step 4&quot;]
+    S5 --&gt; S6[&quot;lahe-names: Step 6&quot;]
+    S3 --&gt; S6</code></pre>
+<h2 id="steps">Steps</h2>
+<h3 id="workstream-core-steps-1-to-3">Workstream: core (Steps 1 to
+3)</h3>
+<p><strong>Outcome:</strong> the helper serves every page Lahe serves
+itself, at
+<code>&lt;name&gt;.lahe.localhost:&lt;port&gt;/&lt;path&gt;</code>, with
+today's paths, today's rail rules, and no per-session page-server
+process. Behind the <code>LAHE_PAGES=sites</code> switch until Task 3.1
+makes it the default.</p>
+<p><strong>Reads first:</strong> the architecture (Summary, Data / State
+Changes, Key Flows "Serving a request", "Which review answers on a
+page", "Binding"), <a href="../architecture/recon.md">recon</a> sections
+1, 2, 5, 9, <code>docs/ongoing/SERVING_ARCHITECTURES.md</code>,
+<code>docs/ongoing/STATIC_SITE_FOLDER.md</code>,
+<code>docs/ongoing/FREE_WRITING.md</code> (notes pages),
+<code>docs/CONTRACTS.md</code> (D11 checks),
+<code>docs/diagrams/module_map.md</code>. Not the alternatives leaf, not
+the review files, unless weighing a deviation.</p>
+<p><strong>Authority:</strong> the architecture. A deviation goes under
+Changes from plan on the progress page, with a one-line question to the
+orchestrator first.</p>
+<h4 id="step-1-named-sites-behind-a-switch">Step 1: Named sites behind a
+switch</h4>
+<p><strong>Task 1.0: Spike, <code>*.lahe.localhost</code> in the three
+Playwright lanes.</strong> Prove that Chromium, Firefox, and WebKit in
+this repo's Playwright setup load
+<code>http://x.lahe.localhost:&lt;port&gt;/</code> from a helper bound
+to <code>127.0.0.1</code> and <code>::1</code>, locally on macOS and in
+CI (Linux). Record the result and any launch flag needed in
+<code>progress/phase6_workstream_core.md</code>. Acceptance: one
+throwaway spec passes in all three lanes, or the gap is reported before
+Task 1.4.</p>
+<p><strong>Task 1.1: The registry
+(<code>src/service/sites.js</code>).</strong> Name rule, clash rule,
+reserved names, <code>realpathSync.native</code> roots, modes, mounts,
+worktree recording from the <code>.git</code> file,
+<code>sites.json</code> plus the append-only <code>sites.log</code>,
+rebuild from the log, read-only mode when neither reads. Single writer:
+only the helper process calls the writing functions. Acceptance: unit
+rows V1 to V6.</p>
+<p><strong>Task 1.2: Host dispatch and listeners (<code>index.js</code>,
+<code>protocol.js</code>).</strong> Host dispatch runs before
+<code>OPTIONS</code> and catalog matching. Grammar per the security
+notes. Second listener on <code>::1</code>, failure logged.
+<code>PAGES</code> constants and Host rules live in
+<code>src/shared/protocol.js</code>. Acceptance: V7 to V10.</p>
+<p><strong>Task 1.3: Page serving
+(<code>src/service/page_routes.js</code>).</strong> Move the serving
+half of <code>static_servers.js</code>: path safety, hidden-file
+refusal, <code>page-only</code> mode, injection (with
+<code>data-lahe-aliases</code>), Markdown render from source with a
+file-time cache, site-scoped mounts, reserved files,
+<code>Cross-Origin-Resource-Policy</code>, the unknown-name and
+file-gone pages, the read-only worktree copy. The review rule per
+request, without the session filter. Acceptance: V11 to V20.</p>
+<p><strong>Task 1.4: Binding and the CLI order.</strong>
+<code>site.bind</code> route with the CLI secret file, refusal of any
+<code>Origin</code>, root from the request.
+<code>add --served-by-helper</code>. <code>lahe review</code>,
+<code>lahe write</code> use the new order when
+<code>LAHE_PAGES=sites</code>. Old loopback origins removed at bind. The
+Origin check for page requests reads the registry. Acceptance: V21 to
+V25.</p>
+<p><strong>Step test:</strong> with <code>LAHE_PAGES=sites</code>,
+<code>lahe review</code> on an HTML file, a Markdown file with an image
+and a link outside its folder, a folder, and <code>lahe write</code>
+each print a <code>.lahe.localhost</code> address. Each page loads with
+its rail, and a comment round-trips to <code>review.json</code>.</p>
+<h4 id="step-2-every-helper-module-asks-the-registry">Step 2: Every
+helper module asks the registry</h4>
+<p><strong>Task 2.1: Page-to-file mappers.</strong>
+<code>reviews.js</code> (<code>servesPath</code>, healing stand-down,
+<code>pageUnderFolder</code>, <code>targetForPage</code>),
+<code>heal.js</code>, <code>rebuild.js</code>,
+<code>handled_check.js</code>, <code>projection.js</code>,
+<code>markdown.js</code>, <code>markdown_links.js</code>, linked files.
+Each reads sites instead of page-server records. Acceptance: V26 to
+V30.</p>
+<p><strong>Task 2.2: Old comments and grouping.</strong> Aliases
+computed from old page-server records at serve time.
+<code>samePage</code> in <code>src/shared/record.js</code> and grouping
+in <code>src/shared/review_format.js</code> accept them. Acceptance:
+V31, V32.</p>
+<p><strong>Step test:</strong> the same reviews as Step 1, plus a review
+created before the switch, reopened under the switch: its old comments
+show, an agent reply reloads the page, a handled check reads the right
+file, and no served HTML file on disk changes after a poll.</p>
+<h4 id="step-3-make-it-the-default-retire-page-servers">Step 3: Make it
+the default, retire page servers</h4>
+<p><strong>Task 3.1: Flip the switch.</strong> Sites become the only
+path for HTML, Markdown, folders, and notes. Page-server spawning, the
+idle sweep, the session-close stop, port history, origin swaps, and the
+<code>SIGHUP</code> mount reload are removed. Old records stay readable.
+Every helper start stops leftover page-server processes named in old
+records. <code>lahe session close</code> stops only the session. Remove
+<code>LAHE_PAGES</code>. Acceptance: V33 to V36, V63, V64.</p>
+<p><strong>Task 3.2: <code>lahe status</code> and printed
+lines.</strong> Status shows the port, the printed ending and why, and
+the site name for each review. No line mentions an idle-stopped port.
+Acceptance: V37.</p>
+<p><strong>Task 3.3: Skill, contract, and serving docs.</strong>
+<code>skills/lahe/SKILL.md</code>, the contract in
+<code>src/shared/review_format.js</code> and its two restated copies
+(<code>test/unit/review_format.test.js</code>,
+<code>docs/CONTRACTS.md</code>), <code>docs/CLI.md</code>,
+<code>docs/ongoing/SERVING_ARCHITECTURES.md</code>,
+<code>STATIC_SITE_FOLDER.md</code>, <code>FREE_WRITING.md</code>,
+<code>SESSION_OWNERSHIP.md</code>,
+<code>docs/diagrams/system_overview.md</code>,
+<code>session_ownership.md</code>, <code>review_round_trip.md</code>,
+<code>module_map.md</code>, <code>src/shared/manifest.js</code>, and the
+D11 residual line. Then <code>npm run install-skills</code>. Acceptance:
+V38.</p>
+<p><strong>Step test:</strong> full <code>npm run gate</code> alone, 0
+failed. The leak check counts no <code>static_servers.js --serve</code>
+process left by any test.</p>
+<p><strong>Don't touch:</strong> <code>src/service/catalog_*.js</code>,
+<code>src/layer/catalog/</code>,
+<code>src/cli/commands/install.js</code>,
+<code>src/service/login_item.js</code>,
+<code>src/service/name_server.js</code>.</p>
+<h3 id="workstream-library-step-4">Workstream: library (Step 4)</h3>
+<p><strong>Outcome:</strong> the Library lists stable addresses, Open
+binds instead of restarting a process, and the Library answers at
+<code>library.lahe.localhost</code>.</p>
+<p><strong>Reads first:</strong> the architecture's "The Library"
+section and Security notes, <code>docs/ongoing/LIBRARY.md</code>,
+<code>docs/diagrams/session_ownership.md</code> (hand-over from the
+Library), the <code>sites.js</code> interface as merged in Step 1.</p>
+<p><strong>Authority:</strong> the architecture. Depends on core Step 3
+being merged.</p>
+<p><strong>Task 4.1: Kinds and Open.</strong> Redefine
+<code>openable</code>, <code>worktree</code>, <code>via-agent</code>,
+<code>legacy</code> per the architecture's table in
+<code>catalog_reader.js</code>. Open binds through
+<code>sites.js</code>, stamps the row's review as re-served unless a
+newer review in an open session holds the file, and returns the stable
+address. Remove the restart, the session reopen, the rollback, and the
+reopened-session sweep. Acceptance: V39 to V42.</p>
+<p><strong>Task 4.2: The Library's own address and copy.</strong>
+Catalog routes accept <code>library.lahe.localhost:&lt;port&gt;</code>
+with today's same-origin and token checks. Rows link to stable
+addresses. The Library page's copy works without the clipboard API.
+Acceptance: V43, V44.</p>
+<p><strong>Task 4.3: Docs.</strong> <code>docs/ongoing/LIBRARY.md</code>
+and the Library parts of <code>docs/diagrams/system_overview.md</code>
+and <code>session_ownership.md</code>. Acceptance: V38 (Library
+part).</p>
+<p><strong>Step test:</strong> the browser walk opens the Library at
+<code>library.lahe.localhost</code>, opens an old review and a worktree
+row, and lands on stable addresses.</p>
+<p><strong>Don't touch:</strong> <code>src/service/page_routes.js</code>
+and <code>sites.js</code> beyond calling their exported functions;
+install files.</p>
+<h3 id="workstream-install-step-5">Workstream: install (Step 5)</h3>
+<p><strong>Outcome:</strong> <code>lahe install</code> makes the helper
+start at login and restart if it stops, on macOS, Linux, and Windows.
+Installed, the helper never stops itself, the CLI never spawns a second
+copy, and a stale helper is replaced at a quiet moment.</p>
+<p><strong>Reads first:</strong> the architecture's "Always-on lifetime"
+and "Login item per system" sections, Security notes (install hygiene),
+<code>scripts/install-cli.js</code>,
+<code>src/service/self_stop.js</code>, <code>startHelper</code> in
+<code>src/cli/commands/session.js</code> and its copy in
+<code>add.js</code>, <code>docs/INSTALL.md</code>.</p>
+<p><strong>Authority:</strong> the architecture. The spikes in Task 5.1
+may change a mechanism; report before building on a changed one.</p>
+<p><strong>Task 5.1: Spikes, one per system.</strong> For macOS
+(<code>launchd</code> agent with <code>KeepAlive</code>, the Background
+Items notice), Linux (<code>systemd --user</code> unit), and Windows
+(Task Scheduler XML with restart on failure and a hidden window), prove
+install, start at login, restart after a kill, and uninstall on a
+throwaway state folder and port. macOS is run on this Mac. Linux and
+Windows run in CI jobs that never fail the run
+(<code>continue-on-error</code>, verdict in the log), per CLAUDE.md's CI
+rule. Acceptance: a written verdict per system in
+<code>progress/phase6_workstream_install.md</code>.</p>
+<p><strong>Task 5.2: <code>lahe install</code> and
+<code>lahe uninstall</code>.</strong>
+<code>src/cli/commands/install.js</code>,
+<code>src/service/login_item.js</code>, <code>install.json</code> with
+the resolved state folder and port, the login item passing
+<code>--always-on --port --state-dir</code>. Refuses without a terminal
+and when run as root. Warns on a computer with more than one interactive
+user. Registered in <code>src/cli/index.js</code>. Acceptance: V45 to
+V48.</p>
+<p><strong>Task 5.3: Always-on behavior.</strong>
+<code>--always-on</code> turns self-stop rule 1 off and keeps rule 2.
+<code>/health</code> reports a state-folder id. When
+<code>install.json</code> exists, both <code>startHelper</code> copies
+ask the login item instead of spawning, and compare source stamps
+against the clone the login item names. A stale helper is replaced at a
+quiet outbox moment with windows open. Acceptance: V49 to V52.</p>
+<p><strong>Task 5.4: Idle cost (brief requirement 11, light when
+idle).</strong> Before building, write the two limits in
+<code>progress/phase6_workstream_install.md</code>: memory and wakeups
+per minute with nothing open, and with Ken's usual tab count (read from
+his browser) overnight. Measure today's helper plus page servers, then
+the always-on helper, with the existing
+<code>scripts/measure_idle_requests.js</code> style. Raise
+<code>NumberOfFiles</code> in the plist only if the measurement calls
+for it. Acceptance: V53.</p>
+<p><strong>Task 5.5: Docs.</strong> <code>docs/INSTALL.md</code>,
+<code>README.md</code>, <code>docs/CLI.md</code> (install, uninstall),
+and the always-on lines in <code>SESSION_OWNERSHIP.md</code>.
+Acceptance: V38 (install part).</p>
+<p><strong>Don't touch:</strong> <code>page_routes.js</code>,
+<code>sites.js</code>, catalog files. <code>session.js</code> only in
+<code>startHelper</code>; core owns session close.</p>
+<h3 id="workstream-lahe-names-step-6">Workstream: lahe-names (Step
+6)</h3>
+<p><strong>Outcome:</strong> on macOS,
+<code>lahe install --lahe-names</code> makes every site also answer at
+<code>&lt;name&gt;.lahe</code>, and only after the helper has proved its
+own name server answers <code>.lahe</code> lookups. What
+<code>lahe review</code> prints follows Ken's answer to the open
+question on the printed ending.</p>
+<p><strong>Reads first:</strong> the architecture's "<code>.lahe</code>
+on macOS (opt-in)" section, Security notes (DNS rebinding, name server),
+the brief's questions leaf (the printed-ending question and Ken's
+answer).</p>
+<p><strong>Authority:</strong> the architecture, plus Ken's answer at
+the review gate. Depends on install Step 5.</p>
+<p><strong>Task 6.1: The name server
+(<code>src/service/name_server.js</code>).</strong> Loopback UDP on the
+port from <code>install.json</code>. Answers <code>A 127.0.0.1</code>
+and <code>AAAA ::1</code> for names under <code>.lahe</code>,
+<code>REFUSED</code> otherwise, drops malformed packets without
+throwing. Started only when <code>install.json</code> records the
+resolver. Acceptance: V54, V55.</p>
+<p><strong>Task 6.2: Resolver setup and verification.</strong>
+<code>--lahe-names</code> writes <code>/etc/resolver/lahe</code> with
+fixed content and a Lahe marker in one <code>sudo</code> call, no shell
+interpolation. The helper verifies at start and every 5 minutes with a
+fresh random name it must see itself. Page routes accept
+<code>.lahe</code> Hosts only while verified. Uninstall removes the file
+only when it carries the marker. Acceptance: V56 to V59.</p>
+<p><strong>Task 6.3: Only if Ken chooses <code>.lahe</code> as the
+printed ending.</strong> Copy fallback in
+<code>src/layer/export.js</code> and <code>overlay.js</code> (the
+Library's ships in Task 4.2 either way), a local-storage lease when Web
+Locks is missing in <code>src/layer/store.js</code>, and page-type
+detection from <code>Accept</code> when Fetch Metadata is missing.
+Acceptance: V60 to V62. If Ken keeps <code>.lahe.localhost</code>
+printed, this task is dropped and the rows are marked not
+applicable.</p>
+<p><strong>Don't touch:</strong> catalog files; <code>sites.js</code>
+beyond its exports.</p>
+<h2 id="workstreams-and-prs">Workstreams and PRs</h2>
+<div class="table-scroll"><table>
+<thead>
+<tr>
+<th>Workstream</th>
+<th>Tasks</th>
+<th>Agent and model</th>
+<th>Reuses</th>
+<th>Owns</th>
+<th>Depends on</th>
+<th>PR</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>core</td>
+<td>1.0 to 3.3</td>
+<td>one builder, Opus</td>
+<td>itself across Steps 1 to 3</td>
+<td><code>sites.js</code>, <code>page_routes.js</code>,
+<code>index.js</code>, <code>routes.js</code>, <code>auth.js</code>
+(non-catalog), <code>protocol.js</code>, <code>record.js</code>,
+<code>review_format.js</code>, <code>reviews.js</code>,
+<code>heal.js</code>, <code>rebuild.js</code>,
+<code>handled_check.js</code>, <code>projection.js</code>,
+<code>markdown*.js</code>, <code>static_servers.js</code>,
+<code>idle_servers.js</code>, <code>commands/review.js</code>,
+<code>add.js</code> (served-by-helper), <code>write.js</code>,
+<code>status.js</code>, <code>session.js</code> (close)</td>
+<td>none</td>
+<td>PR 1 (Steps 1 and 2, switch off by default), PR 2 (Step 3)</td>
+</tr>
+<tr>
+<td>install</td>
+<td>5.1 to 5.5</td>
+<td>one builder, Opus</td>
+<td>none</td>
+<td><code>commands/install.js</code>, <code>login_item.js</code>,
+<code>self_stop.js</code>, <code>startHelper</code> in
+<code>session.js</code> and <code>add.js</code>,
+<code>scripts/install-cli.js</code>, <code>docs/INSTALL.md</code></td>
+<td>core Step 1 merged</td>
+<td>PR 3</td>
+</tr>
+<tr>
+<td>library</td>
+<td>4.1 to 4.3</td>
+<td>one builder, Sonnet</td>
+<td>none</td>
+<td><code>catalog_*.js</code>, <code>src/layer/catalog/</code>,
+<code>auth.js</code> (catalog part),
+<code>docs/ongoing/LIBRARY.md</code></td>
+<td>core Step 3 merged</td>
+<td>PR 4</td>
+</tr>
+<tr>
+<td>lahe-names</td>
+<td>6.1 to 6.3</td>
+<td>the install builder, continued</td>
+<td>install</td>
+<td><code>name_server.js</code>, resolver parts of
+<code>login_item.js</code> and <code>install.js</code>, layer fallbacks
+(6.3 only)</td>
+<td>install, core Step 3</td>
+<td>PR 5</td>
+</tr>
+</tbody>
+</table></div>
+<ul>
+<li><p><strong>Agent reuse:</strong> the core builder holds the serving
+model for all three of its steps. The install builder continues into
+lahe-names because both touch <code>install.json</code>, the installer,
+and macOS system setup.</p></li>
+<li><p><strong>Token plan:</strong> core and install run in parallel
+after core Step 1 lands, because they share no files except two separate
+functions in <code>session.js</code>, which the orchestrator merges.
+Library waits for core Step 3. Packets name only the architecture
+sections and docs listed under each workstream's "Reads first".</p></li>
+<li><p><strong>Packet sources:</strong> each workstream leaf above is
+its packet, plus the brief's Requirements section and the verification
+rows it names.</p></li>
+<li><p><strong>PRs:</strong> each leaves the app working.</p>
+<ul>
+<li>PR 1 ships the registry and the new serving behind
+<code>LAHE_PAGES=sites</code>, off by default.</li>
+<li>PR 2 turns it on and removes the old path, with the skill and
+contract changes.</li>
+<li>PR 3 adds install; without running <code>lahe install</code>,
+nothing changes for a clone.</li>
+<li>PR 4 is the Library.</li>
+<li>PR 5 adds the <code>.lahe</code> option.</li>
+</ul>
+<p>Each PR runs <code>npm run gate</code> locally, alone, and reads 0
+failed before it is pushed. <code>dist/lahe-layer.js</code> is rebuilt
+and committed by the orchestrator once per PR, not by builders.</p></li>
+</ul>
+<h2 id="test-list">Test List</h2>
+<div class="callout callout-req">
+<p>The one verification table. U is a unit test under
+<code>test/unit/</code>; B is a Playwright spec under
+<code>test/browser/</code>; M is a manual or measured check with its
+evidence on the progress page. Every process a test starts is stopped in
+teardown, and the leak check passes.</p>
+<div class="table-scroll"><table>
+<thead>
+<tr>
+<th>Row</th>
+<th>Requirement or failure</th>
+<th>Behavior to prove</th>
+<th>Kind</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>V1</td>
+<td>R3 name rule</td>
+<td>Folder names become lowercase dashed names; empty becomes
+<code>doc</code>; <code>xn--</code> and <code>--</code> at positions 3
+and 4 are refused</td>
+<td>U</td>
+</tr>
+<tr>
+<td>V2</td>
+<td>R3 clash</td>
+<td>A second folder with the same name takes its parent's name, then a
+number; a name is not reused</td>
+<td>U</td>
+</tr>
+<tr>
+<td>V3</td>
+<td>R3 reserved</td>
+<td><code>library</code>, <code>lahe</code>, <code>www</code>,
+<code>api</code> are never granted</td>
+<td>U</td>
+</tr>
+<tr>
+<td>V4</td>
+<td>Registry loss</td>
+<td>A corrupt <code>sites.json</code> rebuilds from
+<code>sites.log</code> with the same names; with neither readable, no
+new name is minted</td>
+<td>U</td>
+</tr>
+<tr>
+<td>V5</td>
+<td>R13 worktree record</td>
+<td>Binding inside a sibling worktree records <code>main_checkout</code>
+from its <code>.git</code> file</td>
+<td>U</td>
+</tr>
+<tr>
+<td>V6</td>
+<td>Single writer</td>
+<td>Only the helper writes <code>sites.json</code>; a CLI write attempt
+is not possible through any export</td>
+<td>U</td>
+</tr>
+<tr>
+<td>V7</td>
+<td>R10 Host closed set</td>
+<td>API answers loopback Hosts only; pages answer registered names only;
+anything else is 400</td>
+<td>U</td>
+</tr>
+<tr>
+<td>V8</td>
+<td>R10 grammar</td>
+<td>Trailing dot, nested label, wrong port, uppercase are refused</td>
+<td>U</td>
+</tr>
+<tr>
+<td>V9</td>
+<td>Dispatch order</td>
+<td>A document Host never gets a CORS preflight answer or a catalog
+route</td>
+<td>U</td>
+</tr>
+<tr>
+<td>V10</td>
+<td><code>::1</code></td>
+<td>The helper serves on <code>::1</code>; a failed <code>::1</code>
+bind logs and keeps serving</td>
+<td>U</td>
+</tr>
+<tr>
+<td>V11</td>
+<td>R1, R2</td>
+<td>A bound HTML page loads at
+<code>name.lahe.localhost:&lt;port&gt;/&lt;file&gt;</code> with its
+rail, and with no agent attached shows "No agent watching"</td>
+<td>B</td>
+</tr>
+<tr>
+<td>V12</td>
+<td>R8a assets</td>
+<td>Relative images, styles, and scripts load, including
+<code>../</code> within the root of a folder review</td>
+<td>B</td>
+</tr>
+<tr>
+<td>V13</td>
+<td>R8a Markdown</td>
+<td>A Markdown page renders from source; its images load; a link to a
+file outside its folder opens through the site's mount</td>
+<td>B</td>
+</tr>
+<tr>
+<td>V14</td>
+<td>R4 hidden files</td>
+<td>Dot segments and dotfiles return 404 under every site</td>
+<td>U</td>
+</tr>
+<tr>
+<td>V15</td>
+<td>Notes page-only</td>
+<td>A <code>lahe write</code> site serves its one page and Lahe's
+reserved files, and 404s a sibling file</td>
+<td>U</td>
+</tr>
+<tr>
+<td>V16</td>
+<td>R4 isolation</td>
+<td>A page on site A cannot read a page or token from site B
+(cross-origin fetch fails); same-folder pages share an origin as
+today</td>
+<td>B</td>
+</tr>
+<tr>
+<td>V17</td>
+<td>CORP</td>
+<td>Page responses carry
+<code>Cross-Origin-Resource-Policy: same-origin</code></td>
+<td>U</td>
+</tr>
+<tr>
+<td>V18</td>
+<td>R14 unknown name</td>
+<td>An unknown name shows the "no document by that name" page with a
+Library link</td>
+<td>U</td>
+</tr>
+<tr>
+<td>V19</td>
+<td>R14 gone file</td>
+<td>A gone file shows the "file is gone" page naming the path</td>
+<td>U</td>
+</tr>
+<tr>
+<td>V20</td>
+<td>R13 worktree copy</td>
+<td>A gone worktree file shows the main checkout's copy read-only, with
+the moved note and no script tag</td>
+<td>B</td>
+</tr>
+<tr>
+<td>V21</td>
+<td>Rail rule</td>
+<td>The rail follows today's rules without the session filter: exact
+file, then folder review, then linking review; <code>--only</code> opts
+out</td>
+<td>U</td>
+</tr>
+<tr>
+<td>V22</td>
+<td>Binding authority</td>
+<td><code>site.bind</code> refuses a request without the CLI secret, and
+any request carrying <code>Origin</code></td>
+<td>U</td>
+</tr>
+<tr>
+<td>V23</td>
+<td>GET never writes</td>
+<td>A page GET for an unbound file creates no name and changes no
+review</td>
+<td>U</td>
+</tr>
+<tr>
+<td>V24</td>
+<td>Origin check</td>
+<td>A page request's Origin is accepted only when it is the site the
+rule maps to that review</td>
+<td>U</td>
+</tr>
+<tr>
+<td>V25</td>
+<td>Old origins</td>
+<td>Binding removes the review's old <code>127.0.0.1:&lt;port&gt;</code>
+origins</td>
+<td>U</td>
+</tr>
+<tr>
+<td>V26</td>
+<td>Healer</td>
+<td>After a poll, a served HTML file's bytes on disk are unchanged</td>
+<td>U</td>
+</tr>
+<tr>
+<td>V27</td>
+<td>Reload</td>
+<td>An agent's edit to a page in a multi-page review reloads that
+page</td>
+<td>B</td>
+</tr>
+<tr>
+<td>V28</td>
+<td>Handled check</td>
+<td>A handled claim is checked against the right file for a folder
+review page</td>
+<td>U</td>
+</tr>
+<tr>
+<td>V29</td>
+<td>Linked docs</td>
+<td>A linked document rides the linking review's rail</td>
+<td>B</td>
+</tr>
+<tr>
+<td>V30</td>
+<td>Rebuild</td>
+<td>A newer Markdown source re-renders on the next poll</td>
+<td>U</td>
+</tr>
+<tr>
+<td>V31</td>
+<td>Old comments</td>
+<td>A review created on a random port shows its comments at its new
+address</td>
+<td>B</td>
+</tr>
+<tr>
+<td>V32</td>
+<td>Grouping</td>
+<td><code>review.json</code> groups old-origin and new-origin items of
+one page together</td>
+<td>U</td>
+</tr>
+<tr>
+<td>V33</td>
+<td>R1 session close</td>
+<td>After <code>lahe session close</code>, the page still loads</td>
+<td>B</td>
+</tr>
+<tr>
+<td>V34</td>
+<td>R1 idle</td>
+<td>After the old idle grace with no window, the page still loads</td>
+<td>U</td>
+</tr>
+<tr>
+<td>V35</td>
+<td>Leftovers</td>
+<td>Every helper start stops page-server processes named in old
+records</td>
+<td>U</td>
+</tr>
+<tr>
+<td>V36</td>
+<td>Retired paths</td>
+<td>No code path spawns <code>static_servers.js --serve</code>; the leak
+check finds none</td>
+<td>U</td>
+</tr>
+<tr>
+<td>V37</td>
+<td>R5, R6 status</td>
+<td><code>lahe status</code> prints the port, the printed ending and
+why, and each review's site; a taken port is named</td>
+<td>U</td>
+</tr>
+<tr>
+<td>V38</td>
+<td>R12 docs</td>
+<td>The skill, contract and its copies, CLI doc, ongoing docs, diagrams,
+and manifest describe sites and the always-on server; a grep finds no
+"random port" or per-session page-server wording</td>
+<td>M</td>
+</tr>
+<tr>
+<td>V39</td>
+<td>R8 Open</td>
+<td>Open on an old row binds and opens its stable address</td>
+<td>B</td>
+</tr>
+<tr>
+<td>V40</td>
+<td>Open and the live rail</td>
+<td>Open on an older row whose file a newer open review holds does not
+move the rail, and says which review holds it</td>
+<td>U</td>
+</tr>
+<tr>
+<td>V41</td>
+<td>Kinds</td>
+<td><code>openable</code>, <code>worktree</code>,
+<code>via-agent</code>, <code>legacy</code> follow the architecture's
+table</td>
+<td>U</td>
+</tr>
+<tr>
+<td>V42</td>
+<td>Sweep removed</td>
+<td>No Open restarts a process or reopens a session</td>
+<td>U</td>
+</tr>
+<tr>
+<td>V43</td>
+<td>R15 Library address</td>
+<td>The Library loads at <code>library.lahe.localhost</code> with
+today's checks; a document Host never reaches it</td>
+<td>B</td>
+</tr>
+<tr>
+<td>V44</td>
+<td>Copy</td>
+<td>The Library's copy button works with the clipboard API removed</td>
+<td>B</td>
+</tr>
+<tr>
+<td>V45</td>
+<td>R7 install macOS</td>
+<td>Install, login, kill, restart, uninstall on macOS</td>
+<td>M</td>
+</tr>
+<tr>
+<td>V46</td>
+<td>R7 install Linux</td>
+<td>Same on Linux, CI job that never fails the run</td>
+<td>M</td>
+</tr>
+<tr>
+<td>V47</td>
+<td>R7 install Windows</td>
+<td>Same on Windows, CI job that never fails the run</td>
+<td>M</td>
+</tr>
+<tr>
+<td>V48</td>
+<td>Install hygiene</td>
+<td>No terminal or running as root: refused; more than one user: warned;
+login item carries port and state folder</td>
+<td>U</td>
+</tr>
+<tr>
+<td>V49</td>
+<td>Always-on</td>
+<td><code>--always-on</code> does not self-stop when quiet, and still
+stops when the state folder is removed</td>
+<td>U</td>
+</tr>
+<tr>
+<td>V50</td>
+<td>No double spawn</td>
+<td>With <code>install.json</code>, the CLI does not spawn a helper</td>
+<td>U</td>
+</tr>
+<tr>
+<td>V51</td>
+<td>Stale replace</td>
+<td>A stale always-on helper is replaced at a quiet moment with a window
+open, and the layer keeps working</td>
+<td>B</td>
+</tr>
+<tr>
+<td>V52</td>
+<td>State folder</td>
+<td>A CLI with a different state folder says so instead of failing on
+the port</td>
+<td>U</td>
+</tr>
+<tr>
+<td>V53</td>
+<td>R11 idle cost</td>
+<td>Both measured states are under the limits written before
+building</td>
+<td>M</td>
+</tr>
+<tr>
+<td>V54</td>
+<td>Name server</td>
+<td>Answers names under <code>.lahe</code> with loopback; refuses
+others; malformed packets do not crash</td>
+<td>U</td>
+</tr>
+<tr>
+<td>V55</td>
+<td>Name server start</td>
+<td>Starts only when <code>install.json</code> records the resolver</td>
+<td>U</td>
+</tr>
+<tr>
+<td>V56</td>
+<td>Resolver write</td>
+<td>Fixed content, marker, one <code>sudo</code> call, no
+interpolation</td>
+<td>U</td>
+</tr>
+<tr>
+<td>V57</td>
+<td>Verification</td>
+<td><code>.lahe</code> Hosts are refused until a fresh random query is
+seen by our own name server</td>
+<td>U</td>
+</tr>
+<tr>
+<td>V58</td>
+<td>Squatter</td>
+<td>Another process answering <code>.lahe</code> fails verification</td>
+<td>U</td>
+</tr>
+<tr>
+<td>V59</td>
+<td>Uninstall</td>
+<td>Removes the resolver only when it carries the marker;
+<code>.lahe.localhost</code> addresses keep working</td>
+<td>U</td>
+</tr>
+<tr>
+<td>V60</td>
+<td>6.3 copy</td>
+<td>Copy review works on a non-secure origin (only if <code>.lahe</code>
+is printed)</td>
+<td>B</td>
+</tr>
+<tr>
+<td>V61</td>
+<td>6.3 tab guard</td>
+<td>Two tabs of one page on a non-secure origin do not both hold the
+window (only if <code>.lahe</code> is printed)</td>
+<td>B</td>
+</tr>
+<tr>
+<td>V62</td>
+<td>6.3 page type</td>
+<td>Page detection works with no Fetch Metadata headers (only if
+<code>.lahe</code> is printed)</td>
+<td>U</td>
+</tr>
+<tr>
+<td>V63</td>
+<td>R9 drafts</td>
+<td>An unsent draft on a page is there after the helper restarts and the
+tab reloads</td>
+<td>B</td>
+</tr>
+<tr>
+<td>V64</td>
+<td>Browsers</td>
+<td>V11, V13, V16, and V43 pass in Chromium, Firefox, and WebKit on
+<code>gate:all</code></td>
+<td>B</td>
+</tr>
+</tbody>
+</table></div>
+</div>
+<h2 id="acceptance-criteria">Acceptance Criteria</h2>
+<div class="callout callout-metric">
+<p><strong>Standard (every feature inherits these; keep them
+verbatim):</strong></p>
+<ul class="task-list">
+<li><label><input type="checkbox" />Full test suite green, not just the
+new tests.</label></li>
+<li><label><input type="checkbox" />Design and lint gates green (the
+project's gate command).</label></li>
+<li><label><input type="checkbox" />Every requirement in the brief
+walked end to end in the browser, on the running app.</label></li>
+<li><label><input type="checkbox" />Nothing punted: no TODOs, no stubbed
+tests, no "out of scope" that was in scope.</label></li>
+<li><label><input type="checkbox" />Implementation matches brief and
+architecture; any deviation is deliberate and written down under Changes
+from plan on the progress page.</label></li>
+<li><label><input type="checkbox" /><strong>It looks like a staff
+designer built it.</strong> The whole surface holds up at that level,
+and includes at least:</label>
+<ul>
+<li>Clear visual hierarchy and information architecture. You know where
+to look, and the page's organization makes sense.</li>
+<li>Consistency with the rest of the app. Buttons look like our other
+buttons, hover states follow the same convention, primary and secondary
+carry the same color meaning they carry elsewhere.</li>
+<li>Honest feedback. Toasts and status messages report what actually
+happened. Never an optimistic "done" for something still in flight, or
+something that failed.</li>
+<li>Micro-animations that mean something. Motion signals state or
+direction; it isn't decoration.</li>
+<li>Copy in the brand voice (the project's brand or voice doc).</li>
+<li>Existing components reused and the style guide followed. Nothing
+reads as a stock framework default.</li>
+</ul></li>
+<li><label><input type="checkbox" />It reads as one feature, not several
+agents' work stitched together: consistent components, spacing, and
+interaction patterns across every surface it touches.</label></li>
+</ul>
+<p><strong>This feature:</strong></p>
+<ul class="task-list">
+<li><label><input type="checkbox" />Old addresses keep working (brief
+requirement 1): V33, V34, plus V45 after a reboot on this
+Mac.</label></li>
+<li><label><input type="checkbox" />Pages load with no agent
+(requirement 2): V11.</label></li>
+<li><label><input type="checkbox" />Addresses name the folder and file
+(requirement 3): V1 to V3, and the walk reads every printed
+address.</label></li>
+<li><label><input type="checkbox" />Documents stay walled off
+(requirement 4): V14 to V17.</label></li>
+<li><label><input type="checkbox" />One port (requirement 5): V7,
+V37.</label></li>
+<li><label><input type="checkbox" />Endings (requirement 6): V37, V54 to
+V59, and Ken's answer on the printed ending applied.</label></li>
+<li><label><input type="checkbox" />Starts at login on three systems
+(requirement 7): V45 to V52.</label></li>
+<li><label><input type="checkbox" />Existing documents get addresses,
+and links keep working (requirements 8 and 8a): V12, V13, V29, V31,
+V39.</label></li>
+<li><label><input type="checkbox" />Drafts come back (requirement 9):
+V63.</label></li>
+<li><label><input type="checkbox" />Only this computer, and only Lahe's
+names (requirement 10): V7 to V9, V22 to V24.</label></li>
+<li><label><input type="checkbox" />Light when idle (requirement 11):
+V53.</label></li>
+<li><label><input type="checkbox" />Agents are told (requirement 12):
+V38.</label></li>
+<li><label><input type="checkbox" />Worktree documents survive
+(requirement 13): V5, V20.</label></li>
+<li><label><input type="checkbox" />Wrong or gone addresses say so
+(requirement 14): V18, V19.</label></li>
+<li><label><input type="checkbox" />The Library has a stable address
+(requirement 15): V43.</label></li>
+<li><label><input type="checkbox" />Every helper module agrees on
+page-to-file mapping: V26 to V30, V32.</label></li>
+<li><label><input type="checkbox" />Human has reviewed and approved
+(single consolidated gate after Plan)</label></li>
+</ul>
+</div>
+<h2 id="plan-review">Plan Review</h2>
+<p>Not yet run.</p>
+</body>
+</html>

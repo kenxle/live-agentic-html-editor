@@ -229,7 +229,7 @@ flowchart TD
 - **The worktree fallback is read-only.** It never injects a token into a file nobody bound.
 - **Always-on exposure.** Websites cannot reach pages: Host checks, `Cross-Origin-Resource-Policy`, and the Origin checks. Other accounts on the same computer, and sandboxed local programs with network access, can. Today they would have to find a short-lived random port first. This feature accepts that, and records it as a new residual under D11. `lahe install` warns when the machine has more than one interactive user.
 - **Old origins.** When a site is bound, the old `127.0.0.1:<port>` origins of its reviews are removed, so they stop being credentials.
-- Full security review: [reviews file](02_architecture_stable_addresses_reviews_security.md).
+- Full security review: [reviews file](02_architecture_stable_addresses_reviews.md).
 
 ## Test Strategy
 
@@ -241,7 +241,7 @@ Tracked in [the brief's questions leaf](parts/brief/questions.md).
 
 ## Architect Review
 
-Full prose: [architect review](02_architecture_stable_addresses_reviews_architect.md).
+Full prose: [architect review](02_architecture_stable_addresses_reviews.md).
 
 | # | Finding | Disposition | Rationale |
 |---|---------|-------------|-----------|
@@ -272,7 +272,7 @@ Full prose: [architect review](02_architecture_stable_addresses_reviews_architec
 
 ## Security Review
 
-Full prose: [security review](02_architecture_stable_addresses_reviews_security.md).
+Full prose: [security review](02_architecture_stable_addresses_reviews.md).
 
 | # | Finding | Disposition | Rationale |
 |---|---------|-------------|-----------|

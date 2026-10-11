@@ -1,0 +1,1409 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+  <meta charset="utf-8" />
+  <meta name="generator" content="pandoc" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
+  <title>Feature Brief: Stable addresses</title>
+  <style>
+    /* Default styles provided by pandoc.
+    ** See https://pandoc.org/MANUAL.html#variables-for-html for config info.
+    */
+    html {
+      color: #1a1a1a;
+      background-color: #fdfdfd;
+    }
+    body {
+      margin: 0 auto;
+      max-width: 36em;
+      padding-left: 50px;
+      padding-right: 50px;
+      padding-top: 50px;
+      padding-bottom: 50px;
+      hyphens: auto;
+      overflow-wrap: break-word;
+      text-rendering: optimizeLegibility;
+      font-kerning: normal;
+    }
+    @media (max-width: 600px) {
+      body {
+        font-size: 0.9em;
+        padding: 12px;
+      }
+      h1 {
+        font-size: 1.8em;
+      }
+    }
+    @media print {
+      html {
+        background-color: white;
+      }
+      body {
+        background-color: transparent;
+        color: black;
+        font-size: 12pt;
+      }
+      p, h2, h3 {
+        orphans: 3;
+        widows: 3;
+      }
+      h2, h3, h4 {
+        page-break-after: avoid;
+      }
+    }
+    p {
+      margin: 1em 0;
+    }
+    a {
+      color: #1a1a1a;
+    }
+    a:visited {
+      color: #1a1a1a;
+    }
+    img {
+      max-width: 100%;
+    }
+    svg {
+      height: auto;
+      max-width: 100%;
+    }
+    h1, h2, h3, h4, h5, h6 {
+      margin-top: 1.4em;
+    }
+    h5, h6 {
+      font-size: 1em;
+      font-style: italic;
+    }
+    h6 {
+      font-weight: normal;
+    }
+    ol, ul {
+      padding-left: 1.7em;
+      margin-top: 1em;
+    }
+    li > ol, li > ul {
+      margin-top: 0;
+    }
+    blockquote {
+      margin: 1em 0 1em 1.7em;
+      padding-left: 1em;
+      border-left: 2px solid #e6e6e6;
+      color: #606060;
+    }
+    code {
+      white-space: pre-wrap;
+      font-family: Menlo, Monaco, Consolas, 'Lucida Console', monospace;
+      font-size: 85%;
+      margin: 0;
+      hyphens: manual;
+    }
+    pre {
+      margin: 1em 0;
+      overflow: auto;
+    }
+    pre code {
+      padding: 0;
+      overflow: visible;
+      overflow-wrap: normal;
+    }
+    .sourceCode {
+     background-color: transparent;
+     overflow: visible;
+    }
+    hr {
+      border: none;
+      border-top: 1px solid #1a1a1a;
+      height: 1px;
+      margin: 1em 0;
+    }
+    table {
+      margin: 1em 0;
+      border-collapse: collapse;
+      width: 100%;
+      overflow-x: auto;
+      display: block;
+      font-variant-numeric: lining-nums tabular-nums;
+    }
+    table caption {
+      margin-bottom: 0.75em;
+    }
+    tbody {
+      margin-top: 0.5em;
+      border-top: 1px solid #1a1a1a;
+      border-bottom: 1px solid #1a1a1a;
+    }
+    th {
+      border-top: 1px solid #1a1a1a;
+      padding: 0.25em 0.5em 0.25em 0.5em;
+    }
+    td {
+      padding: 0.125em 0.5em 0.25em 0.5em;
+    }
+    header {
+      margin-bottom: 4em;
+      text-align: center;
+    }
+    #TOC li {
+      list-style: none;
+    }
+    #TOC ul {
+      padding-left: 1.3em;
+    }
+    #TOC > ul {
+      padding-left: 0;
+    }
+    #TOC a:not(:hover) {
+      text-decoration: none;
+    }
+    span.smallcaps{font-variant: small-caps;}
+    div.columns{display: flex; gap: min(4vw, 1.5em);}
+    div.column{flex: auto; overflow-x: auto;}
+    div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+    /* The extra [class] is a hack that increases specificity enough to
+       override a similar rule in reveal.js */
+    ul.task-list[class]{list-style: none;}
+    ul.task-list li input[type="checkbox"] {
+      font-size: inherit;
+      width: 0.8em;
+      margin: 0 0.8em 0.2em -1.6em;
+      vertical-align: middle;
+    }
+    .display.math{display: block; text-align: center; margin: 0.5rem auto;}
+  </style>
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>%F0%9F%94%A8</text></svg>">
+  <!--
+    St. Clair AI document style for forge docs.
+
+    The palette, type and spacing values below are copied from the St. Clair
+    system tokens (live-agentic-html-editor/vendor/stclair-doc-style/
+    system-tokens.css). This header does NOT link LAHE's ./.lahe-doc-style.css
+    bundle, on purpose: that bundle's document.css styles bare elements and a
+    generic .callout (an ink fill with white text) and puts padding on every body
+    child, and all three collide with the forge structure. So the page is
+    self-contained and reads the same whether or not LAHE is serving it.
+
+    The fonts are the one thing taken from LAHE: it serves the three vendored
+    faces at ./.lahe-fonts/<file>.woff2 from every folder. When that fails, each
+    stack falls back to system-ui and a platform monospace.
+
+    House rules this file keeps: no pills, no shadows, no gradients, no all caps
+    labels, no single-side coloured borders. Colour comes from tints and dots.
+  -->
+  <style>
+    @font-face {
+      font-family: "Schibsted Grotesk"; font-style: normal; font-weight: 500 700; font-display: swap;
+      src: url("./.lahe-fonts/schibsted-grotesk-variable.woff2") format("woff2");
+    }
+    @font-face {
+      font-family: "Hanken Grotesk"; font-style: normal; font-weight: 400 600; font-display: swap;
+      src: url("./.lahe-fonts/hanken-grotesk-variable.woff2") format("woff2");
+    }
+    @font-face {
+      font-family: "JetBrains Mono"; font-style: normal; font-weight: 400 500; font-display: swap;
+      src: url("./.lahe-fonts/jetbrains-mono-variable.woff2") format("woff2");
+    }
+
+    :root {
+      color-scheme: light dark;
+
+      /* St. Clair palette (raw names and values from system-tokens.css) */
+      --white: #ffffff;
+      --paper: #f7f7f5;
+      --ink: #1f1e1a;
+      --ink-soft: #55534b;
+      --ink-faint: #6b6860;
+      --rule: #dcdad6;
+      --purple: #46188c;
+      --purple-tint: #f1ebfa;
+      --link: #6d28d9;
+      --cobalt: #0760c7;
+      --cobalt-tint: #e6effc;
+      --sage-fill: #8fb5a0;
+      --sage: #637a63;
+      --sage-tint: #e7f1ed;
+
+      --font-display: "Schibsted Grotesk", "Hanken Grotesk", system-ui, sans-serif;
+      --font-body: "Hanken Grotesk", system-ui, -apple-system, "Helvetica Neue", sans-serif;
+      --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+
+      --r: 4px;
+
+      /* Forge roles. Prefixed --ff- so none of them can collide with a St. Clair
+         token of the same name if the two ever share a page. Dark mode repoints
+         these and nothing else. */
+      --ff-bg: var(--white);
+      --ff-fg: var(--ink);
+      --ff-soft: var(--ink-soft);
+      --ff-faint: var(--ink-faint);
+      --ff-rule: var(--rule);
+      --ff-divider: var(--ink);
+      --ff-link: var(--link);
+      --ff-accent: var(--cobalt);
+      --ff-panel: var(--paper);
+      --ff-code-bg: var(--cobalt-tint);
+      --ff-bullet: var(--sage);
+      --ff-hl-kw: var(--cobalt);
+      --ff-hl-str: var(--sage);
+      --ff-hl-num: var(--purple);
+
+      /* Callouts: a tint, a dot and a label colour each. */
+      --ff-req-bg: var(--cobalt-tint);      --ff-req-dot: var(--cobalt);    --ff-req-label: var(--cobalt);
+      --ff-nongoal-bg: var(--paper);        --ff-nongoal-dot: var(--ink-faint); --ff-nongoal-label: var(--ink-faint);
+      --ff-metric-bg: var(--sage-tint);     --ff-metric-dot: var(--sage);   --ff-metric-label: var(--ink-soft);
+      --ff-question-bg: var(--purple-tint); --ff-question-dot: var(--purple); --ff-question-label: var(--purple);
+      --ff-suggest-bg: var(--white);        --ff-suggest-dot: var(--sage);  --ff-suggest-label: var(--sage);
+      --ff-flag-bg: var(--ink);             --ff-flag-fg: var(--white);     --ff-flag-dot: var(--sage-fill);
+
+      /* Disposition verdicts */
+      --ff-accepted: var(--sage);
+      --ff-rejected: var(--purple);
+      --ff-deferred: var(--cobalt);
+    }
+
+    /* Dark: the St. Clair on-ink values. Body text is full white on ink, as the
+       system decides; tints are the accent mixed into the ink ground. */
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --ff-bg: var(--ink);
+        --ff-fg: var(--white);
+        --ff-soft: #d9d7d1;   /* --ink-soft-ondark */
+        --ff-faint: #b3b0a8;  /* --ink-faint-ondark */
+        --ff-rule: #4a4842;   /* --rule-ondark */
+        --ff-divider: var(--white);
+        --ff-link: var(--sage-fill);
+        --ff-accent: color-mix(in srgb, var(--cobalt) 45%, var(--white));
+        --ff-panel: color-mix(in srgb, var(--white) 6%, var(--ink));
+        --ff-code-bg: color-mix(in srgb, var(--cobalt) 22%, var(--ink));
+        --ff-bullet: var(--sage-fill);
+        --ff-hl-kw: color-mix(in srgb, var(--cobalt) 40%, var(--white));
+        --ff-hl-str: var(--sage-fill);
+        --ff-hl-num: color-mix(in srgb, var(--purple) 30%, var(--white));
+
+        --ff-req-bg: color-mix(in srgb, var(--cobalt) 22%, var(--ink));
+        --ff-req-dot: color-mix(in srgb, var(--cobalt) 45%, var(--white));
+        --ff-req-label: color-mix(in srgb, var(--cobalt) 35%, var(--white));
+        --ff-nongoal-bg: color-mix(in srgb, var(--white) 6%, var(--ink));
+        --ff-nongoal-dot: #b3b0a8; --ff-nongoal-label: #b3b0a8;
+        --ff-metric-bg: color-mix(in srgb, var(--sage) 30%, var(--ink));
+        --ff-metric-dot: var(--sage-fill); --ff-metric-label: var(--sage-fill);
+        --ff-question-bg: color-mix(in srgb, var(--purple) 45%, var(--ink));
+        --ff-question-dot: color-mix(in srgb, var(--purple) 30%, var(--white));
+        --ff-question-label: color-mix(in srgb, var(--purple) 25%, var(--white));
+        --ff-suggest-bg: var(--ink);
+        --ff-suggest-dot: var(--sage-fill); --ff-suggest-label: var(--sage-fill);
+        --ff-flag-bg: var(--paper); --ff-flag-fg: var(--ink); --ff-flag-dot: var(--sage);
+
+        --ff-accepted: var(--sage-fill);
+        --ff-rejected: color-mix(in srgb, var(--purple) 30%, var(--white));
+        --ff-deferred: color-mix(in srgb, var(--cobalt) 40%, var(--white));
+      }
+    }
+
+    /* Pandoc's own default styles load before this block. The rules marked
+       "pandoc" below undo the ones that fight this look: black table rules,
+       a block-level table, auto hyphens, italic h5/h6, and a:visited in
+       near-black, which outranks a plain a rule. */
+    html { scroll-behavior: smooth; -webkit-print-color-adjust: exact; print-color-adjust: exact; background: var(--ff-bg); }
+    * { box-sizing: border-box; }
+
+    body {
+      font-family: var(--font-body);
+      font-size: 17px;
+      line-height: 1.65;
+      color: var(--ff-fg);
+      background: var(--ff-bg);
+      max-width: 880px;
+      margin: 0 auto;
+      padding: 56px 28px 104px;
+      -webkit-font-smoothing: antialiased;
+      text-rendering: optimizeLegibility;
+      hyphens: manual;   /* pandoc */
+    }
+
+    /* Title block (pandoc emits <header id="title-block-header">) */
+    header#title-block-header { padding-bottom: 8px; margin-bottom: 0; text-align: left; }
+    header#title-block-header h1.title {
+      font-family: var(--font-display);
+      font-size: clamp(34px, 4.6vw, 52px);
+      font-weight: 600;
+      margin: 0 0 12px;
+      letter-spacing: -0.012em;
+      line-height: 1.1;
+    }
+    header#title-block-header p.subtitle,
+    header#title-block-header p.author,
+    header#title-block-header p.date {
+      font-size: 20px;
+      line-height: 1.55;
+      color: var(--ff-soft);
+      margin: 0;
+    }
+
+    /* Cross-doc nav (injected by the build before the TOC). A plain line:
+       "Docs  Crucible · Brief · Architecture", the current doc in ink. */
+    .doc-nav {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: baseline;
+      gap: 4px 0;
+      margin: 20px 0 8px;
+      padding: 12px 0;
+      border-top: 1px solid var(--ff-rule);
+      border-bottom: 1px solid var(--ff-rule);
+      font-size: 15px;
+    }
+    .doc-nav .doc-nav-label {
+      font-family: var(--font-display);
+      font-weight: 600;
+      font-size: 14px;
+      color: var(--ff-faint);
+      margin-right: 14px;
+    }
+    .doc-nav a {
+      color: var(--ff-link);
+      text-decoration: underline;
+      text-decoration-thickness: 1px;
+      text-underline-offset: 3px;
+      border: 0;
+      background: none;
+      padding: 0;
+    }
+    .doc-nav a + a::before {
+      content: "\00B7";
+      display: inline-block;
+      color: var(--ff-faint);
+      margin: 0 10px;
+      text-decoration: none;
+    }
+    .doc-nav a:hover { background: none; text-decoration-thickness: 2px; }
+    .doc-nav a:visited { color: var(--ff-link); }
+    .doc-nav a.current, .doc-nav a.current:visited {
+      color: var(--ff-fg);
+      font-weight: 600;
+      text-decoration: none;
+      cursor: default;
+    }
+
+    /* TOC (pandoc emits <nav id="TOC">) */
+    nav#TOC {
+      margin: 28px 0 44px;
+      font-size: 15px;
+      line-height: 1.5;
+    }
+    nav#TOC::before {
+      content: "Contents";
+      display: block;
+      font-family: var(--font-display);
+      font-weight: 600;
+      font-size: 14px;
+      color: var(--ff-faint);
+      padding-bottom: 8px;
+      margin-bottom: 12px;
+      border-bottom: 2px solid var(--ff-divider);
+    }
+    nav#TOC ul { list-style: none; padding-left: 0; margin: 0; }
+    nav#TOC ul ul { padding-left: 18px; margin-top: 4px; }
+    nav#TOC li { margin-bottom: 4px; }
+    nav#TOC li::marker { content: none; }
+    nav#TOC a, nav#TOC a:visited { color: var(--ff-fg); text-decoration: none; border: 0; }
+    nav#TOC a:hover { color: var(--ff-link); text-decoration: underline; background: none; }
+
+    /* Headings: Schibsted at display weight, sentence case. An h2 hangs under a
+       full-width ink rule, the St. Clair section head. */
+    h1, h2, h3, h4, h5, h6 {
+      font-family: var(--font-display);
+      font-weight: 600;
+      line-height: 1.15;
+      letter-spacing: -0.012em;
+      color: var(--ff-fg);
+    }
+    h2 {
+      font-size: clamp(25px, 3vw, 32px);
+      margin: 64px 0 18px;
+      padding-top: 12px;
+      border-top: 2px solid var(--ff-divider);
+    }
+    h3 { font-size: clamp(19px, 2vw, 23px); margin: 40px 0 12px; }
+    h4 { font-size: 18px; margin: 28px 0 8px; }
+    h5, h6 { font-size: 17px; margin: 24px 0 8px; font-style: normal; font-weight: 600; }   /* pandoc */
+    h6 { color: var(--ff-soft); }
+
+    p { margin: 0 0 18px; }
+    p, li, td, dd { overflow-wrap: anywhere; }
+
+    a {
+      color: var(--ff-link);
+      text-decoration: underline;
+      text-decoration-thickness: 1px;
+      text-underline-offset: 3px;
+    }
+    a:visited { color: var(--ff-link); }   /* pandoc */
+    a:hover { text-decoration-thickness: 2px; }
+    :focus-visible { outline: 2px solid var(--ff-link); outline-offset: 3px; border-radius: var(--r); }
+
+    strong { color: inherit; font-weight: 700; }
+
+    ul, ol { margin: 0 0 18px; padding-left: 1.6em; }
+    li { margin: 0 0 8px; line-height: 1.55; }
+    li > p { margin-bottom: 8px; }
+    ul > li::marker { color: var(--ff-bullet); }
+    .callout ul > li::marker { color: var(--ff-dot); }
+    ol > li::marker { color: var(--ff-fg); font-weight: 600; }
+    li > ul, li > ol { margin-top: 8px; }
+
+    /* Callout boxes (from ::: callout-* fenced divs). A tint holding the text,
+       and a label row generated by CSS: a dot in the callout's colour, then the
+       label in the display face. */
+    .callout {
+      border-radius: var(--r);
+      padding: 16px 22px 18px;
+      margin: 18px 0;
+      background: var(--ff-panel);
+      color: var(--ff-fg);
+      line-height: 1.6;
+    }
+    .callout > :first-child { margin-top: 0; }
+    .callout > :last-child { margin-bottom: 0; }
+    .callout::before {
+      display: flex;
+      align-items: center;
+      gap: 9px;
+      font-family: var(--font-display);
+      font-weight: 600;
+      font-size: 14px;
+      line-height: 1.4;
+      margin-bottom: 6px;
+      padding-left: 16px;   /* room for the dot, which ::after draws */
+    }
+    .callout { position: relative; }
+    .callout::after {
+      content: "";
+      position: absolute;
+      left: 22px;
+      top: 23px;
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: var(--ff-dot, var(--ff-faint));
+    }
+    .callout-req      { background: var(--ff-req-bg);      --ff-dot: var(--ff-req-dot); }
+    .callout-req::before      { content: "Requirement";   color: var(--ff-req-label); }
+    .callout-nongoal  { background: var(--ff-nongoal-bg);  --ff-dot: var(--ff-nongoal-dot); border: 1px solid var(--ff-rule); }
+    .callout-nongoal::before  { content: "Non-goals";     color: var(--ff-nongoal-label); }
+    .callout-metric   { background: var(--ff-metric-bg);   --ff-dot: var(--ff-metric-dot); }
+    .callout-metric::before   { content: "Metrics";       color: var(--ff-metric-label); }
+    .callout-question { background: var(--ff-question-bg); --ff-dot: var(--ff-question-dot); }
+    .callout-question::before { content: "Open question"; color: var(--ff-question-label); }
+    .callout-suggest  { background: var(--ff-suggest-bg);  --ff-dot: var(--ff-suggest-dot); border: 1px solid var(--ff-suggest-dot); }
+    .callout-suggest::before  { content: "Suggestion";    color: var(--ff-suggest-label); }
+    .callout-flag     { background: var(--ff-flag-bg);     --ff-dot: var(--ff-flag-dot); color: var(--ff-flag-fg); }
+    .callout-flag::before     { content: "Red flag";      color: var(--ff-flag-fg); }
+    .callout-flag a, .callout-flag strong, .callout-flag code { color: inherit; }
+    .callout-flag code { background: color-mix(in srgb, currentColor 14%, transparent); }
+    /* The nongoal and suggest boxes carry a 1px border, so their dot moves with it. */
+    .callout-nongoal::after, .callout-suggest::after { left: 21px; top: 22px; }
+
+    /* Reviews section: the _reviews.md files are merged into the HTML below this
+       divider (they stay separate files on disk for agents). The build writes
+       the divider with an inline red rule; this repaints it in the house ink. */
+    hr.reviews-divider {
+      border: 0 !important;
+      border-top: 2px solid var(--ff-divider) !important;
+      margin: 88px 0 6px !important;
+      display: block !important;
+    }
+    hr.reviews-divider + * { margin-top: 0; }
+    .reviews-banner {
+      border-top: 1px solid var(--ff-divider);
+      padding: 14px 0 0;
+      margin: 0 0 32px;
+      font-size: 15px;
+      line-height: 1.55;
+      color: var(--ff-soft);
+    }
+    .reviews-banner::before {
+      display: block;
+      content: "Reviews, full prose";
+      font-family: var(--font-display);
+      font-weight: 600;
+      font-size: clamp(25px, 3vw, 32px);
+      line-height: 1.15;
+      letter-spacing: -0.012em;
+      color: var(--ff-fg);
+      margin-bottom: 8px;
+    }
+    /* Jump target for spec -> review-detail links; offset so the heading clears. */
+    .finding-anchor { display: inline-block; scroll-margin-top: 1.5rem; }
+    td a[href^="#"] { font-weight: 600; }
+
+    /* Inline xref deep-dive (from ::: xref fenced div) */
+    .xref {
+      font-size: 15px;
+      background: var(--ff-code-bg);
+      border-radius: var(--r);
+      padding: 10px 16px;
+      margin: 0 0 18px;
+      color: var(--ff-soft);
+      line-height: 1.5;
+    }
+    .xref::before {
+      content: "\21B3  See";
+      font-family: var(--font-display);
+      font-weight: 600;
+      font-size: 14px;
+      color: var(--ff-accent);
+      margin-right: 8px;
+    }
+    .xref > * { display: inline; margin: 0; }
+    .xref a, .xref a:visited { font-weight: 600; color: var(--ff-fg); }
+
+    /* Tables: the St. Clair naked ruled table. A 2px rule under the head,
+       hairlines between rows, no box, no tint, no shadow. The build wraps every
+       table in .table-scroll; the scrolling itself lives in
+       shared-assets/doc_fixes.css. */
+    .table-scroll { margin: 24px 0 32px; }
+    .table-scroll table { margin: 0; }
+    table {
+      border-collapse: collapse;
+      width: 100%;
+      margin: 24px 0 32px;
+      font-size: 15px;
+      line-height: 1.5;
+      background: none;
+      display: table;   /* pandoc sets block; .table-scroll does the scrolling */
+    }
+    tbody { border: 0; }   /* pandoc */
+    th { border-top: 0; }  /* pandoc */
+    thead th {
+      font-family: var(--font-display);
+      font-weight: 600;
+      font-size: 14px;
+      color: var(--ff-faint);
+      text-align: left;
+      padding: 0 16px 10px 0;
+      border-bottom: 2px solid var(--ff-divider);
+      vertical-align: bottom;
+    }
+    tbody td {
+      padding: 12px 16px 12px 0;
+      border-bottom: 1px solid var(--ff-rule);
+      vertical-align: top;
+    }
+    td:last-child, th:last-child { padding-right: 0; }
+    /* A short id column ("RF 12", "T3") stays on one line beside wide prose. */
+    tbody td:first-child { min-width: 3.4em; }
+    tbody tr:nth-child(even) { background: none; }
+    td > :first-child { margin-top: 0; }
+    td > :last-child { margin-bottom: 0; }
+
+    /* Disposition verdicts rendered by the build (Accepted/Rejected/Deferred).
+       A dot and the word, in the verdict's colour. */
+    td .accepted, span.accepted,
+    td .rejected, span.rejected,
+    td .deferred, span.deferred {
+      font-family: var(--font-display);
+      font-weight: 600;
+      white-space: nowrap;
+    }
+    td .accepted::before, span.accepted::before,
+    td .rejected::before, span.rejected::before,
+    td .deferred::before, span.deferred::before {
+      content: "";
+      display: inline-block;
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: currentColor;
+      margin-right: 7px;
+      vertical-align: 0.12em;
+    }
+    td .accepted, span.accepted { color: var(--ff-accepted); }
+    td .rejected, span.rejected { color: var(--ff-rejected); }
+    td .deferred, span.deferred { color: var(--ff-deferred); }
+
+    /* Inline + block code: JetBrains Mono on the cobalt tint, ink text.
+       Ligatures off, so an arrow in code reads as the two characters it is. */
+    code, pre {
+      font-family: var(--font-mono);
+      font-variant-ligatures: none;
+      font-feature-settings: "liga" 0, "calt" 0;
+    }
+    code {
+      font-size: 0.86em;
+      background: var(--ff-code-bg);
+      color: var(--ff-fg);
+      padding: 0.1em 0.35em;
+      border-radius: 3px;
+    }
+    pre {
+      font-size: 14px;
+      background: var(--ff-code-bg);
+      color: var(--ff-fg);
+      padding: 18px 24px;
+      border-radius: var(--r);
+      overflow-x: auto;
+      margin: 0 0 24px;
+      line-height: 1.55;
+      /* Wrap long lines instead of forcing a horizontal scroll (readability). */
+      white-space: pre-wrap;
+      word-break: break-word;
+      overflow-wrap: anywhere;
+    }
+    pre code { background: none; color: inherit; padding: 0; font-size: inherit; }
+    /* A code chip inside a tinted callout would vanish into the tint. */
+    .callout code { background: color-mix(in srgb, currentColor 9%, transparent); }
+
+    /* Highlighted blocks: pandoc wraps them in div.sourceCode and paints its
+       own transparent ground and a green-and-teal palette. Repaint both in the
+       St. Clair accents. */
+    div.sourceCode { margin: 0 0 24px; }
+    div.sourceCode > pre.sourceCode { background: var(--ff-code-bg); margin: 0; }
+    pre.sourceCode code span.kw, pre.sourceCode code span.cf, pre.sourceCode code span.im,
+    pre.sourceCode code span.op, pre.sourceCode code span.bu { color: var(--ff-hl-kw); font-weight: 500; }
+    pre.sourceCode code span.st, pre.sourceCode code span.ch, pre.sourceCode code span.ss,
+    pre.sourceCode code span.vs, pre.sourceCode code span.sc { color: var(--ff-hl-str); }
+    pre.sourceCode code span.dv, pre.sourceCode code span.fl, pre.sourceCode code span.bn,
+    pre.sourceCode code span.cn, pre.sourceCode code span.dt { color: var(--ff-hl-num); }
+    pre.sourceCode code span.co, pre.sourceCode code span.an, pre.sourceCode code span.cv,
+    pre.sourceCode code span.do, pre.sourceCode code span.in { color: var(--ff-soft); font-style: normal; font-weight: 400; }
+    pre.sourceCode code span.fu, pre.sourceCode code span.va, pre.sourceCode code span.at,
+    pre.sourceCode code span.ot { color: inherit; font-weight: 400; }
+
+    /* Mermaid blocks: pandoc renders ```mermaid as <pre class="mermaid">; the
+       Mermaid script replaces the text with SVG. It is a figure, not code: no
+       tint, a hairline frame, centred. Mermaid source must not wrap before the
+       script swaps it for SVG. */
+    pre.mermaid {
+      white-space: pre;
+      background: none;
+      border: 1px solid var(--ff-rule);
+      border-radius: var(--r);
+      padding: 24px;
+      text-align: center;
+      color: var(--ff-fg);
+      font-family: var(--font-body);
+    }
+    pre.mermaid svg { max-width: 100%; height: auto; }
+
+    blockquote {
+      margin: 18px 0;
+      padding: 2px 0 2px 18px;
+      border-left: 3px solid var(--ff-rule);
+      color: var(--ff-soft);
+    }
+    blockquote p:last-child { margin-bottom: 0; }
+
+    hr { border: none; border-top: 1px solid var(--ff-rule); margin: 44px 0; }
+    hr:has(+ h2) { display: none; }
+
+    img { max-width: 100%; height: auto; }
+
+    /* Task-list checkboxes from "- [ ]" lists */
+    ul.task-list { list-style: none; padding-left: 4px; }
+    ul.task-list li input[type="checkbox"] { margin-right: 8px; accent-color: var(--cobalt); }
+
+    @page { size: letter; margin: 0.7in 0.65in; }
+    @media (max-width: 620px) {
+      body { padding: 32px 16px 64px; font-size: 16px; }
+      .callout { padding: 14px 16px 16px; }
+      .callout::after { left: 16px; top: 22px; }
+      table { font-size: 14px; }
+    }
+    @media print {
+      :root { color-scheme: light; }
+      * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+      html, body { background: #fff; color: var(--ink); }
+      body { max-width: 100%; font-size: 11pt; padding: 0; }
+      .doc-nav { display: none; }
+      a { color: var(--ink); }
+      .callout, table, pre, blockquote { break-inside: avoid; }
+      h2, h3 { break-after: avoid; }
+    }
+  </style>
+  <script type="module">
+    import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.esm.min.mjs";
+    const dark = window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches;
+    mermaid.initialize({
+      startOnLoad: false,
+      theme: dark ? "dark" : "neutral",
+      securityLevel: "loose",
+      themeVariables: { fontFamily: '"Hanken Grotesk", system-ui, sans-serif' },
+    });
+    /* Pandoc emits ```mermaid blocks as <pre class="mermaid"><code>…</code></pre> with the
+       diagram source HTML-entity-encoded. Mermaid 10 reads innerHTML, so it sees the literal
+       <code> tag and &quot;/&gt; entities and throws syntax errors. Flatten each block to a
+       single decoded text node first (textContent decodes entities and drops the wrapper),
+       then render. Same fix as the personal-repo report builds (commit d525c50 there). */
+    function renderMermaid() {
+      document.querySelectorAll("pre.mermaid").forEach(function (el) {
+        if (!el.dataset.mflattened) {
+          el.textContent = el.textContent;
+          el.dataset.mflattened = "1";
+        }
+      });
+      mermaid.run({ querySelector: "pre.mermaid" });
+    }
+    if (document.readyState === "loading") {
+      window.addEventListener("DOMContentLoaded", renderMermaid);
+    } else {
+      renderMermaid();
+    }
+  </script>
+
+  <!-- The review comment module and the shared document fixes are injected here
+       at build time from ~/.claude/skills/shared-assets/ (comment_module.html +
+       doc_fixes.css) by shared_assets.resolve_header(). Do not paste a copy back
+       into this file. -->
+  <style>
+  /* Shared document fixes: one source for both document builds.
+
+     Injected at build time alongside comment_module.html, in place of the
+     <!-- SHARED_ASSETS --> placeholder in each pandoc header. Because it lands
+     last in <head>, these rules win over the same-specificity rules earlier in a
+     header without needing !important.
+
+     Keep this file to fixes that are true for every document we build. Anything
+     that depends on a skill's own look (colors, radius, shadow) belongs in that
+     skill's header. */
+
+  /* --- Tables: never spill past the reading column (plan Task 4.3, defect 1) ---
+     Two halves to the fix, and both are needed.
+     1. A wide table scrolls inside its wrapper. Both builds wrap every table in
+        <div class="table-scroll">.
+     2. Long unbroken strings (URLs, tokens, absolute paths) wrap instead of
+        setting a min-content width that forces the table wider than the page.
+        Without this the table is simply wider than the wrapper and the text is
+        cut off at the wrapper edge. */
+  .table-scroll {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    max-width: 100%;
+  }
+  .table-scroll > table { margin: 0; }
+  table { max-width: 100%; }
+  thead th, tbody td { overflow-wrap: anywhere; word-break: break-word; }
+  thead th code, tbody td code,
+  thead th a, tbody td a { overflow-wrap: anywhere; word-break: break-word; }
+
+  /* Print/PDF has no scrollbars, so show the whole table and let it shrink. */
+  @media print {
+    .table-scroll { overflow: visible; }
+  }
+
+  /* --- Charts: never let a chart set the page width (plan Task 4.3, defect 2) ---
+     The label-truncation fix itself is Plotly's automargin, applied in the
+     report header's render script. This is the CSS guard next to it: a chart
+     that computes a wider layout than its column stays inside the column
+     instead of pushing the whole page sideways. */
+  figure.plotly-chart,
+  figure.plotly-chart > div,
+  figure.chart svg,
+  figure.plotly-chart .main-svg { max-width: 100%; }
+
+  </style>
+</head>
+<body>
+<header id="title-block-header">
+<h1 class="title">Feature Brief: Stable addresses</h1>
+</header>
+
+<div class="doc-nav"><span class="doc-nav-label">Docs</span><a href="00_crucible_stable_addresses.html">Crucible</a><a href="01_brief_stable_addresses.html" class="current">Brief</a><a href="02_architecture_stable_addresses.html">Architecture</a><a href="03_plan_stable_addresses.html">Plan</a><a href="04_progress_stable_addresses.md">Progress</a></div>
+<nav id="TOC" role="doc-toc">
+<ul>
+<li><a href="#summary" id="toc-summary">Summary</a></li>
+<li><a href="#problem-user-and-context"
+id="toc-problem-user-and-context">Problem, User, and Context</a></li>
+<li><a href="#non-goals" id="toc-non-goals">Non-Goals</a></li>
+<li><a href="#solution-outline" id="toc-solution-outline">Solution
+Outline</a></li>
+<li><a href="#requirements" id="toc-requirements">Requirements</a></li>
+<li><a href="#ux-notes" id="toc-ux-notes">UX Notes</a></li>
+<li><a href="#analytics--logging" id="toc-analytics--logging">Analytics
+/ Logging</a></li>
+<li><a href="#rollout--flags" id="toc-rollout--flags">Rollout /
+Flags</a></li>
+<li><a href="#questions-and-decisions"
+id="toc-questions-and-decisions">Questions and Decisions</a></li>
+<li><a href="#pm-review" id="toc-pm-review">PM Review</a></li>
+<li><a href="#pm-review-stable-addresses-brief"
+id="toc-pm-review-stable-addresses-brief">PM review: Stable addresses
+brief</a>
+<ul>
+<li><a href="#summary-1" id="toc-summary-1">Summary</a></li>
+<li><a href="#findings" id="toc-findings">Findings</a></li>
+<li><a href="#smaller-notes-no-finding"
+id="toc-smaller-notes-no-finding">Smaller notes, no finding</a></li>
+</ul></li>
+</ul>
+</nav>
+<h2 id="summary">Summary</h2>
+<p>Every document Lahe serves gets an address that keeps working, like
+<code>http://20261011-02-stable-addresses.lahe.localhost:7817/01_brief_stable_addresses.md</code>.
+A tab left open overnight, a history entry, or a bookmark loads the
+page, with no agent running. The address names the folder and the file,
+so a tab says what it is. One always-on Lahe server, started at login,
+answers for every document on one port. Each folder's name is its own
+browser origin, so documents stay walled off from each other as they are
+today.</p>
+<h2 id="problem-user-and-context">Problem, User, and Context</h2>
+<p>Ken reads nearly every plan, brief, and report through Lahe, and
+keeps many Lahe tabs open across days. Today those tabs die. Each
+document is served by a small server that an agent session owns. The
+server stops two minutes after its last window closes, or when the
+session closes, and the helper itself stops once nothing is open. After
+that, nothing answers at the address. The browser shows its own "can't
+connect" page, and Lahe never sees the request.</p>
+<p>So Ken cannot use browser history or bookmarks to get back to a
+document. He routes through the Library or asks an agent, and he reads
+bare <code>127.0.0.1:56055</code> addresses trying to work out what a
+dead tab was. In his words: "it's the constant dead tabs that i run into
+and have to try and decipher what they are by the url."</p>
+<pre class="mermaid"><code>flowchart TD
+    Tab[&quot;Ken clicks an old Lahe tab&lt;br/&gt;or a history entry&quot;] --&gt; Up{&quot;is that document&#39;s&lt;br/&gt;server running?&quot;}
+    Up --&gt;|&quot;usually not&quot;| Dead[&quot;browser: can&#39;t connect&lt;br/&gt;address says only 127.0.0.1:56055&quot;]
+    Dead --&gt; Lib[&quot;open the Library, find the row,&lt;br/&gt;click Open, read in a new tab&quot;]
+    Dead --&gt; Ask[&quot;or ask an agent to find it by name&quot;]
+    Up --&gt;|&quot;yes, rarely&quot;| Page[&quot;the page loads&quot;]</code></pre>
+<p>The settled decisions, and the reasoning Ken reviewed, are on <a
+href="../../ongoing/STABLE_ADDRESSES.md">the decisions page</a>. Prior
+work: <a href="00_crucible_stable_addresses.md">the crucible</a>; option
+D on <a href="../../ongoing/DOCUMENT_INDEX_IDEAS.md">the Library ideas
+page</a>, dropped on 2026-09-22 and revisited here.</p>
+<p><strong>What "a document" means here:</strong> one file on disk. The
+same file gets the same address every time it is served, in any review.
+The address has two parts: a name for the folder Lahe serves the file
+from, and the file's path in that folder.</p>
+<p><strong>Related bulletin rows:</strong> this feature closes or
+changes four open rows:</p>
+<ul>
+<li>LAHE-static-server-host-check (filed twice): page servers do not
+check the Host header. The always-on server checks it (requirement 10,
+only this computer can reach it).</li>
+<li>LAHE-idle-battery-cost: finished sessions' page servers keep
+running. There are no per-session page servers after this feature. Live
+tabs still poll, which requirement 11 (light when idle) measures.</li>
+<li>LAHE-library-quiet-close-no-self-stop: the helper stays up after a
+Library close. The server is meant to stay up now, so the row
+closes.</li>
+<li>LAHE-title-recorded-late: titles are only recorded after a comment.
+Names come from file names (requirement 3), so this row is not needed
+for addresses.</li>
+</ul>
+<p>The user is Ken today, on a Mac laptop. Lahe is public, and other
+people run it on Mac, Linux, and Windows, so nothing here may be
+Mac-only in the core.</p>
+<h2 id="non-goals">Non-Goals</h2>
+<div class="callout callout-nongoal">
+<ul>
+<li>Not reviving tabs opened before this feature ships. Their addresses
+used ports nothing will listen on again. The Library's Open moves them
+to a stable address.</li>
+<li>Not stable addresses for pages served by a server Lahe does not own,
+like an app's own dev server. Lahe reviews those where they run.</li>
+<li>Not a better story for deleted or moved files, beyond requirement 13
+(worktree copies) and a plain "this file is gone" page.</li>
+<li>Not the Mac menu-bar companion app. It is its own follow-up.</li>
+<li>Not a single-file build of Lahe that runs without Node. That stays
+open for later.</li>
+<li>Not a change to how agents run a review: <code>lahe review</code>,
+the monitor, draining, replying, and takeover work as they do now. What
+changes underneath is who keeps pages served (the always-on server, not
+the session) and when the server stops (it does not, once
+installed).</li>
+<li>Not a change of address when a Library row is renamed. The address
+comes from the file name and stays put.</li>
+<li>Not new outside packages. The zero-runtime-dependency rule holds;
+the install step is for setup only.</li>
+</ul>
+</div>
+<h2 id="solution-outline">Solution Outline</h2>
+<ol type="1">
+<li><strong>One always-on Lahe server.</strong> It starts when Ken logs
+in and restarts if it stops. It answers for every document Lahe serves,
+whether or not an agent is working on it.</li>
+<li><strong>An address per document.</strong> The first time Lahe serves
+from a folder, the folder gets a short name from its own name. The name
+stays the same after that. A document's address is
+<code>http://&lt;folder name&gt;.lahe.localhost:&lt;port&gt;/&lt;file&gt;</code>.</li>
+<li><strong>One shared port.</strong> Every document uses the same port.
+The server reads the name in the address to know which document was
+asked for.</li>
+<li><strong><code>.lahe.localhost</code> everywhere, with
+<code>.lahe</code> as a Mac option.</strong> Every browser already sends
+<code>.localhost</code> names to this computer, with no setup. On a Mac,
+an optional setup step, run once with an admin password, also makes the
+shorter <code>.lahe</code> ending work. Which ending
+<code>lahe review</code> prints is the open decision in the questions
+below.</li>
+<li><strong>Agents keep working the same way.</strong>
+<code>lahe review</code> prints the stable address. Sessions, the
+monitor, and takeover are unchanged. A comment left on a page with no
+agent waits in the store, as it does after the Library's Open
+today.</li>
+</ol>
+<pre class="mermaid"><code>flowchart LR
+    Tab[&quot;tab, history, or bookmark&lt;br/&gt;ongoing.lahe.localhost:7817/STABLE_ADDRESSES.md&quot;] --&gt; Server[&quot;always-on Lahe server&lt;br/&gt;(started at login)&quot;]
+    Server --&gt; Which{&quot;which folder is this name,&lt;br/&gt;which file is this path?&quot;}
+    Which --&gt; Doc[&quot;serve that document&#39;s page,&lt;br/&gt;with its own review key&quot;]
+    Doc --&gt; Store[(&quot;comments wait in the store&quot;)]
+    Store --&gt; Agent[&quot;an agent drains them&lt;br/&gt;when one is attached&quot;]</code></pre>
+<h2 id="requirements">Requirements</h2>
+<div class="callout callout-req">
+<p><strong>R1. An old address keeps working.</strong> Once Lahe is
+installed, a document's address loads its page after the agent session
+closes, after any idle time, after the server restarts, and after a
+reboot. Nobody has to run a command first. Without the install, see
+requirement 7 (starts at login).</p>
+</div>
+<div class="callout callout-req">
+<p><strong>R2. A page loads with no agent.</strong> Visiting an address
+with no agent attached shows the page and lets Ken comment. Comments
+wait for an agent, and the rail's "No agent watching" line says so, as
+it does after the Library's Open today.</p>
+</div>
+<div class="callout callout-req">
+<p><strong>R3. The address names the folder and the file.</strong> The
+folder's name, in lowercase words joined by dashes, comes first:
+<code>20261011.02_stable_addresses</code> becomes
+<code>20261011-02-stable-addresses</code>. The file's path in that
+folder comes after the port, as it does today. Two different folders
+with the same name get a short tag from their parent folder, like
+<code>notes-personal</code>. A folder keeps its name once it has one.
+Serving the same file again, in any review, gives the same address.</p>
+</div>
+<div class="callout callout-req">
+<p><strong>R4. Documents stay walled off.</strong> Each folder's name is
+its own browser origin, the same unit a page server is today. JavaScript
+on a page in one folder cannot read pages, comment keys, or drafts from
+another folder, and cannot use the Library's controls. Files in the same
+folder share an origin, as they do today. Hidden files are never
+served.</p>
+</div>
+<div class="callout callout-req">
+<p><strong>R5. One port for every document.</strong> All documents share
+one port: the helper's own port, 7817 unless the install picks another.
+It is kept away from common dev-server ports. If something else holds
+that port when the server starts, <code>lahe review</code>,
+<code>lahe status</code>, and the log say so plainly, naming the port,
+rather than moving documents to random ports.</p>
+</div>
+<div class="callout callout-req">
+<p><strong>R6. <code>.lahe.localhost</code> works everywhere;
+<code>.lahe</code> is a guarded Mac option.</strong> Every name answers
+at <code>.lahe.localhost</code> on every system, with no setup, so those
+addresses keep working through install, uninstall, and any setup
+failure. On macOS, an optional setup (an admin password, once at setup)
+makes the same names answer at <code>.lahe</code> too. Lahe answers
+<code>.lahe</code> only after it has checked that its own setup is the
+one answering <code>.lahe</code> lookups on this machine.
+<code>lahe status</code> says which ending <code>lahe review</code>
+prints, and why.</p>
+</div>
+<div class="callout callout-req">
+<p><strong>R7. Starts at login on every system.</strong> An install
+command sets the server to start at login and restart if it stops, on
+macOS, Linux, and Windows. An uninstall command removes that, and
+removes the <code>.lahe</code> setup. Running Lahe from a clone without
+installing still works: <code>lahe review</code> starts the server as it
+does today, and a document's address stays the same. Its old tabs load
+again whenever the server is running, and are dead while it is not.</p>
+</div>
+<div class="callout callout-req">
+<p><strong>R8. Every existing document can get an address.</strong> Any
+review already in the state folder, served by Lahe, gets its stable
+address the next time it is served: by <code>lahe review</code>, or by
+the Library's Open. The Library's rows link to stable addresses.</p>
+</div>
+<div class="callout callout-req">
+<p><strong>R8a. Links between pages keep working.</strong> A link from
+one Lahe page to another file Lahe serves opens that file at its own
+stable address. Images, styles, and scripts a page loads by relative
+path keep loading, as they do today.</p>
+</div>
+<div class="callout callout-req">
+<p><strong>R9. Drafts come back.</strong> Unsent drafts saved on a
+document's page are there when that address is opened again, because the
+address no longer changes.</p>
+</div>
+<div class="callout callout-req">
+<p><strong>R10. Only this computer can reach it.</strong> The server
+answers only on this computer. A request naming a host that is not one
+of Lahe's own names is refused, so a website cannot reach a page by
+pointing its own domain at this computer.</p>
+</div>
+<div class="callout callout-req">
+<p><strong>R11. Light when idle.</strong> The plan measures the
+always-on server in two states, and sets a limit for each before
+building: nothing open, and Ken's usual number of Lahe tabs left open
+overnight. Both are compared with today's helper plus its page
+servers.</p>
+</div>
+<div class="callout callout-req">
+<p><strong>R12. Agents are told.</strong> <code>lahe review</code>
+prints the stable address. The skill, the contract inside every review,
+<code>docs/CLI.md</code>, <code>docs/ongoing/LIBRARY.md</code>,
+<code>docs/ongoing/SESSION_OWNERSHIP.md</code>, and the diagrams
+describe the new addresses and the always-on server. None of them still
+describes per-session page servers or random ports.</p>
+</div>
+<div class="callout callout-req">
+<p><strong>R13. A worktree document survives its worktree.</strong> When
+a file served from a worktree is gone because the worktree was removed,
+its address shows the same file from the main checkout, read-only, if it
+exists there, with a note saying it moved. Commenting on it starts from
+the Library, as other moved documents do.</p>
+</div>
+<div class="callout callout-req">
+<p><strong>R14. Wrong or gone addresses say so.</strong> A name Lahe
+does not know shows a short page saying so, with a link to the Library.
+A file that is gone, with no main-checkout copy, shows a page naming the
+file and linking to the Library.</p>
+</div>
+<div class="callout callout-req">
+<p><strong>R15. The Library has a stable address.</strong> The Library
+answers at <code>library.lahe.localhost:&lt;port&gt;</code>, and at
+<code>127.0.0.1:&lt;port&gt;/catalog</code> as today. No folder can take
+the name <code>library</code>.</p>
+</div>
+<h2 id="ux-notes">UX Notes</h2>
+<ul>
+<li>The address bar is the UI. A name Ken can read at a glance matters
+more than a short one:
+<code>ongoing.lahe.localhost:7817/STABLE_ADDRESSES.md</code> beats
+<code>127.0.0.1:56055/STABLE_ADDRESSES-bd14d360685f150a.html</code>.</li>
+<li>The fallback is not an error. A <code>.lahe.localhost</code> address
+works the same way; it is only longer.</li>
+<li>Typing an address by hand: <code>.lahe.localhost</code> addresses
+work typed as they are. A <code>.lahe</code> address typed without
+<code>http://</code> may make the browser search instead. Links from
+history and bookmarks work either way.</li>
+</ul>
+<h2 id="analytics--logging">Analytics / Logging</h2>
+<p>The helper log records, once per start: the port, whether
+<code>.lahe</code> or <code>.lahe.localhost</code> is in use and why,
+and whether the login item is installed. It records each new name given
+to a document, and each refused request with an unknown host name
+(without the page content). <code>lahe status</code> shows the same
+state. No other analytics: this is a local tool.</p>
+<h2 id="rollout--flags">Rollout / Flags</h2>
+<p>No flag. The install step is the switch: until it runs, Lahe behaves
+as requirement 7 (starts at login) describes for a clone: the server
+starts on first use, and addresses stay the same while it runs. Pages
+opened before the change stay dead, and the Library's Open moves each to
+its stable address. Uninstall removes the login item and the
+<code>.lahe</code> setup; the names and the <code>.lahe.localhost</code>
+addresses keep working whenever the server runs. The login item names
+the Node that ran the install, the same way
+<code>npm run install-cli</code> does today. Removing that Node means
+running the install again, and <code>lahe status</code> says so.</p>
+<h2 id="questions-and-decisions">Questions and Decisions</h2>
+<h3 id="resolved">Resolved</h3>
+<p>Settled by Ken on <a href="../../ongoing/STABLE_ADDRESSES.md">the
+decisions page</a>, 2026-10-11:</p>
+<ul>
+<li><strong>Is the always-on server acceptable?</strong> Yes. It starts
+at login and stays up.</li>
+<li><strong>A port per document, or one port with a name per
+document?</strong> One port, a name per document. Each name is its own
+browser origin, which also answers the worry about one page reading
+another.</li>
+<li><strong><code>.lahe</code> or <code>.lahe.localhost</code>?</strong>
+<code>.lahe</code> from the start, with <code>.lahe.localhost</code> as
+the fallback. <code>.lahe</code> becoming a real internet ending is
+unlikely; deal with it then.</li>
+<li><strong>Login item, or a Mac menu-bar app?</strong> The login item
+ships with this feature. The menu-bar companion app, with its Library
+link, is a follow-up.</li>
+<li><strong>Is an install step acceptable?</strong> Yes. It is for setup
+only; no outside packages.</li>
+<li><strong>Core platform rule:</strong> the core is a plain server that
+runs on Mac, Linux, and Windows. Mac-only pieces are companions on
+top.</li>
+<li><strong>Deleted files:</strong> not a concern for this feature. A
+plain "file is gone" page is enough.</li>
+</ul>
+<p>Chosen by the brief, for Ken to overrule in review:</p>
+<ul>
+<li><p><strong>Which systems get <code>.lahe</code> now:</strong> macOS,
+as an option. <code>.lahe.localhost</code> works everywhere.</p></li>
+<li><p><strong>Worktree documents:</strong> a gone worktree file is
+shown read-only from the main checkout when the same file exists there
+(requirement 13).</p></li>
+<li><p><strong>The name is per folder, not per file.</strong> The
+architecture review showed per-file names break Markdown images and
+links, folder sites, the rail rules, and how comments are tied to files.
+The folder is today's isolation unit, so nothing gets weaker. The
+address still reads as folder plus file.</p></li>
+<li><p><strong>Other accounts on the same computer</strong> can reach
+pages whenever the server runs. Recorded as a known limit;
+<code>lahe install</code> warns on a computer with more than one
+user.</p></li>
+<li><p><strong>How long a document keeps its name after its file is
+gone:</strong> forever. Names are small, and keeping them means an old
+bookmark still says what it was.</p></li>
+</ul>
+<h3 id="open">Open</h3>
+<div class="callout callout-question">
+<p><span id="questions-and-decisions-q1" class="finding-anchor"></span><strong>Q1. Which ending does <code>lahe review</code> print:
+<code>.lahe.localhost</code> or <code>.lahe</code>?</strong> Ken chose
+<code>.lahe</code>. Both architecture reviews found that a plain
+<code>http://name.lahe</code> address is not "secure" to the browser,
+and that costs five things:</p>
+<ul>
+<li>the address bar shows "Not secure";</li>
+<li>copy buttons lose the clipboard and need an older copy method;</li>
+<li>the guard against two tabs of one document both acting turns
+off;</li>
+<li>the browser stops sending headers the Library's safety checks rely
+on;</li>
+<li>on a machine where Lahe does not control <code>.lahe</code> lookups,
+someone on the network could take over a name.</li>
+</ul>
+<p><code>.lahe.localhost</code> has none of these, needs no setup on any
+system, and its addresses survive an uninstall.</p>
+<p><strong>Recommendation:</strong> print <code>.lahe.localhost</code>.
+Keep <code>.lahe</code> as a Mac option that answers the same names, for
+typing by hand. If Ken still wants <code>.lahe</code> printed, the plan
+adds the copy, tab-guard, and header fallbacks (task 6.3), and the "Not
+secure" label stays.</p>
+</div>
+<h2 id="pm-review">PM Review</h2>
+<p>Full prose in <a href="01_brief_stable_addresses_reviews.md">the
+reviews file</a>.</p>
+<div class="table-scroll"><table>
+<thead>
+<tr>
+<th>#</th>
+<th>Finding</th>
+<th>Disposition</th>
+<th>Rationale</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>RF1</td>
+<td>Switching endings would kill addresses made under the other</td>
+<td><span class="accepted">Accepted</span></td>
+<td>The server answers both endings for every name (requirement 6)</td>
+</tr>
+<tr>
+<td>RF2</td>
+<td>"Works after reboot" contradicted the no-install case</td>
+<td><span class="accepted">Accepted</span></td>
+<td>Requirement 1 now applies once installed; requirement 7 says what a
+clone gets</td>
+</tr>
+<tr>
+<td>RF3</td>
+<td>"A document" was undefined</td>
+<td><span class="accepted">Accepted</span></td>
+<td>Defined as one file; same file, same address; links between pages
+added as requirement 8a</td>
+</tr>
+<tr>
+<td>RF4</td>
+<td>Worktree documents die with their worktree</td>
+<td><span class="accepted">Accepted</span></td>
+<td>Requirement 13 serves the main-checkout copy, reusing the Library's
+mapping. Chosen without Ken, for review</td>
+</tr>
+<tr>
+<td>RF5</td>
+<td>Idle cost measured the wrong idle</td>
+<td><span class="accepted">Accepted</span></td>
+<td>Requirement 11 measures nothing open and Ken's usual tabs overnight,
+with limits set first</td>
+</tr>
+<tr>
+<td>RF6</td>
+<td>Which systems get <code>.lahe</code> was unclear</td>
+<td><span class="accepted">Accepted</span></td>
+<td>macOS only, as an option; <code>.lahe.localhost</code>
+everywhere</td>
+</tr>
+<tr>
+<td>RF7</td>
+<td>Non-goal about sessions was false; docs list incomplete</td>
+<td><span class="accepted">Accepted</span></td>
+<td>Non-goal reworded; LIBRARY.md and SESSION_OWNERSHIP.md added to
+requirement 12</td>
+</tr>
+<tr>
+<td>RF8</td>
+<td>Library address and gone-file page lived outside requirements</td>
+<td><span class="accepted">Accepted</span></td>
+<td>Requirements 14 and 15</td>
+</tr>
+<tr>
+<td>RF9</td>
+<td>Names will come from file names</td>
+<td><span class="accepted">Accepted</span></td>
+<td>Requirement 3 uses the file name; example updated; Library rename
+keeps the address</td>
+</tr>
+<tr>
+<td>RF10</td>
+<td>Related bulletin rows not named</td>
+<td><span class="accepted">Accepted</span></td>
+<td>Listed under the problem</td>
+</tr>
+<tr>
+<td>RF11</td>
+<td>No word on a taken port or a mistyped name</td>
+<td><span class="accepted">Accepted</span></td>
+<td>Requirements 5 and 14</td>
+</tr>
+<tr>
+<td>RF12</td>
+<td>Bare requirement number, absolutes, broken link</td>
+<td><span class="accepted">Accepted</span></td>
+<td>Fixed</td>
+</tr>
+</tbody>
+</table></div>
+<hr class="reviews-divider" style="margin:4.5rem 0 1.5rem;border:0;border-top:3px solid #b0463b">
+
+<div class="reviews-banner">
+<p>The sections below are the full verbatim persona + human reviews for
+this document. They live in a separate <code>_reviews.md</code> file (so
+agents read the lean spec), merged here for review.</p>
+</div>
+<h1 id="pm-review-stable-addresses-brief">PM review: Stable addresses
+brief</h1>
+<p>Reviewer: PM persona, 2026-10-11. Read against Ken's directive, the
+crucible, the decisions page
+(<code>docs/ongoing/STABLE_ADDRESSES.md</code>),
+<code>docs/ongoing/LIBRARY.md</code>, the system overview and session
+ownership diagrams, and <code>docs/BULLETIN.md</code>.</p>
+<h2 id="summary-1">Summary</h2>
+<p>The brief is faithful to what Ken asked for. It names the real
+problem (nothing answers at an old address, and the address says nothing
+about the page), and it carries every decision Ken settled. Twelve
+findings, worst first. One blocker: switching between the
+<code>.lahe</code> and <code>.lahe.localhost</code> endings changes
+every address, which brings back the dead tabs the feature exists to
+remove. Six are important, mostly gaps where the brief does not say what
+"a document" is or leaves Ken's most common case (docs in worktrees) out
+by accident. None of the findings disagree with what Ken asked for.</p>
+<h2 id="findings">Findings</h2>
+<h3
+id="rf1-changing-the-address-ending-kills-every-address-made-under-the-other-one">RF1.
+Changing the address ending kills every address made under the other
+one</h3>
+<pre><code>severity   blocker
+kind       defect
+where      Requirements, R6 (&quot;.lahe with a fallback&quot;); Rollout / Flags; UX Notes, second bullet
+what       An address is only stable if its ending never changes, but the brief switches endings at install, at uninstall, and whenever the setup breaks.
+why        Before the install, Ken&#39;s tabs and history fill with `.lahe.localhost` addresses. The install moves new addresses to `.lahe`. If those old ones stop answering, or if a broken setup flips him back, he gets the dead tabs and lost drafts the feature exists to end. Drafts are kept per address, so they do not cross endings either. The UX note &quot;the fallback is not an error&quot; hides this.
+fix        Add a requirement: an address handed out under either ending keeps loading for as long as the server runs. The server answers both endings for every name. The only exception is a `.lahe` address while `.lahe` lookup is off, and `lahe status` says so. Say plainly whether drafts follow a document from one ending to the other, or accept that they do not and list it as a non-goal.</code></pre>
+<h3
+id="rf2-keeps-working-after-a-reboot-with-no-command-is-only-true-after-the-install">RF2.
+"Keeps working after a reboot with no command" is only true after the
+install</h3>
+<pre><code>severity   important
+kind       defect
+where      R1 (&quot;An old address keeps working&quot;) and R7 (&quot;Starts at login on every system&quot;)
+what       R1 promises an address works after a reboot with no command run, while R7 says a clone with no install starts the server only when `lahe review` runs.
+why        The two requirements cannot both be tested as written. A tester on a clone install fails R1 on the first reboot. It also leaves open whether an uninstalled server still stops itself when quiet, as the helper does today. If it does, &quot;stable for as long as it runs&quot; is close to today&#39;s behavior and the clone user gains little.
+fix        Scope R1 to an installed Lahe. Then say in one line what a clone user gets: does the server stay up until logout once started, or stop when quiet as today?</code></pre>
+<h3 id="rf3-the-brief-never-says-what-a-document-is">RF3. The brief
+never says what "a document" is</h3>
+<pre><code>severity   important
+kind       defect
+where      Summary; R3 (&quot;The address names the document&quot;); R4 (&quot;Documents stay walled off&quot;); R8 (&quot;Every existing document can get an address&quot;)
+what       The address belongs to &quot;a document&quot;, but Lahe has reviews, pages inside a review, linked pages, and the same file reviewed many times.
+why        The Library already folds &quot;several reviews of one document&quot; into one row, and one review can hold several pages. If a new `lahe review` of the same brief gets `stable-addresses-2`, Ken&#39;s history fills with near-duplicates and the old address shows an old review. If each linked page is its own origin, links between pages and relative images could break. This brief itself links to the decisions page. These are product choices Ken would notice, not build details.
+fix        Add one sentence defining the unit: an address names one file on disk. Add two requirements: (a) serving the same file again, in any review, gives the same address; (b) links between Lahe pages, and images and styles a page loads by relative path, keep working. If (a) is not wanted, say what Ken sees instead.</code></pre>
+<h3
+id="rf4-docs-in-worktrees-kens-most-common-case-are-left-out-by-accident">RF4.
+Docs in worktrees, Ken's most common case, are left out by accident</h3>
+<pre><code>severity   important
+kind       risk
+where      Non-Goals, third bullet (&quot;Not a better story for deleted or moved files&quot;); Questions, &quot;how long a document keeps its name&quot;
+what       Most of Ken&#39;s feature docs, this brief included, are written in a worktree that is torn down once the feature merges. The same file then lives on in the main checkout.
+why        Under the brief as written, every feature doc&#39;s address turns into &quot;this file is gone&quot; the day its worktree is removed. That is a dead tab with a nicer message. Ken said deleted docs are not his concern; a worktree doc is not deleted, it moved. The Library already serves &quot;the main-repo copy of a worktree&quot; on pick-up, so the idea exists in the product.
+fix        Add an open question for Ken: when a worktree is gone, should its addresses serve the main-checkout copy of the same file? If he says no, name worktree teardown in the non-goal, so the gap is chosen rather than missed.</code></pre>
+<h3 id="rf5-light-when-idle-measures-the-wrong-idle">RF5. "Light when
+idle" measures the wrong idle</h3>
+<pre><code>severity   important
+kind       risk
+where      R11 (&quot;Light when idle&quot;)
+what       R11 measures the server with nothing open, but Ken&#39;s normal state is many Lahe tabs open across days.
+why        Today most of those tabs are dead, so they cost nothing. Once every address answers, every open tab is live and polls the helper. The bulletin row LAHE-idle-battery-cost (battery drain with review tabs open, with a visible tab polling once a second) shows this is where the cost is. &quot;No CPU&quot; is also an absolute no test can pass, since the helper already runs 15-second checks.
+fix        Measure two cases: nothing open, and a realistic count of open tabs (taken from Ken&#39;s own browser) left overnight. Replace &quot;no CPU&quot; with a number the plan sets and then measures.</code></pre>
+<h3
+id="rf6-which-systems-get-the-lahe-setup-in-this-feature-is-unclear">RF6.
+Which systems get the <code>.lahe</code> setup in this feature is
+unclear</h3>
+<pre><code>severity   important
+kind       risk
+where      R6 (&quot;.lahe with a fallback&quot;); R7 (&quot;Starts at login on every system&quot;); decisions page, &quot;Your rule for this&quot;
+what       The decisions page calls the `.lahe` ending &quot;an optional extra per system&quot;. The brief reads as if the one-time `.lahe` setup ships for macOS, Linux and Windows at once.
+why        Each system sets up name lookup differently. The plan cannot size the work, and a tester cannot tell whether Linux or Windows on `.lahe.localhost` passes or fails.
+fix        State it: the login item ships on all three systems. The `.lahe` setup ships on the systems Ken names now (likely macOS), and the others use `.lahe.localhost` until it is added. Put each system that is left out under Non-Goals.</code></pre>
+<h3
+id="rf7-not-a-change-to-agent-sessions-is-not-true-and-agents-will-act-on-it">RF7.
+"Not a change to agent sessions" is not true, and agents will act on
+it</h3>
+<pre><code>severity   important
+kind       defect
+where      Non-Goals, sixth bullet (&quot;Not a change to agent sessions, takeover, or the monitor&quot;); R12 (&quot;Agents are told&quot;)
+what       Sessions stop owning page servers. Closing a session no longer stops anything. Takeover no longer reopens servers. The helper&#39;s stop-when-quiet rule and the reopened-session sweep lose their reason to exist.
+why        A reader, or an architect agent, will take &quot;not a change&quot; at its word and leave those rules in place or skip their docs. R12&#39;s list of docs to update leaves out `docs/ongoing/LIBRARY.md` (its &quot;Helper lifetime&quot; section) and `docs/ongoing/SESSION_OWNERSHIP.md`, which describe exactly these rules.
+fix        Reword the non-goal: &quot;Sessions keep owning reviews, takeover and the monitor. What changes is that a session no longer starts or stops page servers.&quot; Add the two missing docs to R12&#39;s list.</code></pre>
+<h3 id="rf8-three-requirements-are-hidden-in-other-sections">RF8. Three
+requirements are hidden in other sections</h3>
+<pre><code>severity   minor
+kind       defect
+where      UX Notes, fourth bullet (the Library at `library.lahe`); Non-Goals, first and third bullets
+what       The Library&#39;s own stable address, the &quot;this file is gone&quot; page, and &quot;the Library&#39;s Open moves an old tab to its stable address&quot; are all promises, but none is a numbered requirement.
+why        Promises outside Requirements do not reach the plan&#39;s test list. The Library bookmark is the one Ken uses to get back to everything else, so it matters most. A document whose name comes out as `library` would also clash with it.
+fix        Promote the Library address and the gone-file page to requirements. Say that `library` and any other names Lahe uses itself are reserved.</code></pre>
+<h3 id="rf9-most-names-will-come-from-file-names-not-titles">RF9. Most
+names will come from file names, not titles</h3>
+<pre><code>severity   minor
+kind       risk
+where      R3 (&quot;The address names the document&quot;); Summary example `stable-addresses.lahe`
+what       A name is fixed the first time a page is served, but the bulletin row LAHE-title-recorded-late says a page&#39;s title is only recorded once someone comments.
+why        Most addresses will be built from file names, like `01-brief-stable-addresses`, not from titles. Common names like `README`, `index` or `progress` will collide often and need tags. The brief&#39;s example sets an expectation the product will not meet.
+fix        Use a realistic example built from a file name. Either say the title is read from the file when it is first served, or say the file name is used first. Add a non-goal: renaming a row in the Library does not change its address.</code></pre>
+<h3 id="rf10-the-related-bulletin-rows-are-not-named">RF10. The related
+bulletin rows are not named</h3>
+<pre><code>severity   minor
+kind       defect
+where      Problem section; R10 (&quot;Only this computer can reach it&quot;)
+what       Four open rows are closed or changed by this feature: LAHE-static-server-host-check (filed twice: page servers do not check the Host header), LAHE-idle-battery-cost (finished sessions&#39; page servers keep running), LAHE-library-quiet-close-no-self-stop (the helper stays up after a Library close), and LAHE-title-recorded-late (titles are only recorded after a comment).
+why        Without them, cleanup will not close them, and the architect will not know R10 has already been found twice by security review.
+fix        Add a &quot;Related rows&quot; line under Problem naming each row and what this feature does to it.</code></pre>
+<h3
+id="rf11-a-port-clash-and-a-mistyped-name-do-not-say-what-ken-sees">RF11.
+A port clash and a mistyped name do not say what Ken sees</h3>
+<pre><code>severity   minor
+kind       defect
+where      R5 (&quot;One port for every document&quot;); R10 (&quot;Only this computer can reach it&quot;)
+what       R5 reports a port clash only in the log and `lahe status`, and says the port is &quot;picked once at install&quot;, with no word on clone use. R10 refuses an unknown host, but does not say what a mistyped `something.lahe` name shows.
+why        When the port is taken, every document is dead and the browser says only &quot;can&#39;t connect&quot;. Ken will not think to run `lahe status`. A typo under Lahe&#39;s own ending is a Lahe name, not a foreign site, and a bare refusal looks like a dead tab.
+fix        Have `lahe review` also print the clash and what to do about it. Say that the port is never changed on its own, since a change kills every address. Say that an unknown name under a Lahe ending shows a short &quot;no document by that name&quot; page with a link to the Library.</code></pre>
+<h3
+id="rf12-style-a-bare-requirement-number-absolutes-and-a-broken-link">RF12.
+Style: a bare requirement number, absolutes, and a broken link</h3>
+<pre><code>severity   minor
+kind       defect
+where      Rollout / Flags, first sentence; R3, R6, UX Notes; parts/brief/questions.md line 3
+what       (a) Rollout says &quot;as described under R7&quot; with no description. (b) Absolutes: &quot;once, ever&quot; (R6), &quot;never changes&quot; (R3), &quot;never dies&quot; (UX Notes), &quot;no CPU&quot; (R11). (c) The questions file links to `../../../../ongoing/STABLE_ADDRESSES.md`. That path is right from `parts/brief/`, but the build inlines the file into the brief without rewriting links, so in the built brief it points outside `docs/`.
+why        (a) sends Ken hunting for the requirement. (b) Absolutes are claims a test will catch out: reinstalling, or a new Node, asks for the password again. (c) The link Ken is most likely to click is dead.
+fix        (a) &quot;as described under R7 (starts at login on every system)&quot;. (b) &quot;asks for an admin password once at setup&quot;; &quot;does not change&quot;; &quot;keeps working&quot;. (c) Write the link relative to the brief&#39;s folder (`../../ongoing/STABLE_ADDRESSES.md`), as the brief body does.</code></pre>
+<h2 id="smaller-notes-no-finding">Smaller notes, no finding</h2>
+<ul>
+<li>The evidence is good. One strong data point from the crucible is
+missing: the decisions page's own server stopped mid-review, two minutes
+after its window lost focus. It is worth one sentence under
+Problem.</li>
+<li>Old drafts saved under today's random-port addresses cannot be
+recovered. The first non-goal covers old tabs; adding "or their drafts"
+makes the trade explicit.</li>
+<li>Nothing to cut. The Analytics and Rollout sections are the right
+size.</li>
+</ul>
+</body>
+</html>
