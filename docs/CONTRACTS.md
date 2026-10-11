@@ -1016,10 +1016,14 @@ it for that review, which is D11's stated residual risk rather than a hole.
 **Residual risk, stated: pages are up whenever the helper is.** Websites cannot reach a page: the
 Host check refuses any name Lahe did not grant, every page response carries
 `Cross-Origin-Resource-Policy: same-origin`, and the Origin check refuses another site. Other
-accounts on the same computer, and sandboxed local programs with network access, can load a page
-at its stable address. Before stable addresses they first had to find a short-lived port;
-now the port is fixed and the helper may run all day. This is accepted, and `lahe install` warns
-when the computer has more than one interactive user.
+accounts on the same computer, and sandboxed local programs with network access, are not stopped.
+They can load a page at its stable address, and a site's name follows its folder path, so it can be
+guessed. The page carries its review's token in its script tag. With that token, a program that is
+not a browser can send any Origin header it likes, so it passes every check the page's own requests pass: it can read
+the review's comments and edits, and write new ones, and what it writes reaches the agent working
+that review. Before stable addresses such a program first had to find a short-lived port; now the
+port is fixed and the helper may run all day. This is accepted for a computer with one person on
+it, and `lahe install` warns when the computer has more than one interactive user.
 
 **The origin trap, and how the page diagnoses it.** A static file registers `"null"` and nothing else.
 Serve that same page over http and the browser sends the server's origin, which no review registered,
