@@ -1,12 +1,13 @@
 # Progress: Stable addresses
 
-**Phase 5, Human review.** The full doc set is written and reviewed by four agents, and is ready for you. Three things need your answer before any code. Last updated 2026-10-11 12:56.
+**Phase 5, Human review.** The full doc set is written and reviewed by four agents, and is ready for you. Four things need your answer before any code. Last updated 2026-10-11 12:56.
 
 **Docs:** [Decisions page](../../ongoing/STABLE_ADDRESSES.md) · [Crucible](00_crucible_stable_addresses.html) · [Brief](01_brief_stable_addresses.html) · [Architecture](02_architecture_stable_addresses.html) · [Plan](03_plan_stable_addresses.html) · [Code survey](parts/architecture/recon.md)
 
 ## Needs your attention
 
 - [ ] **Which ending should `lahe review` print?** You chose `.lahe`. The fix for one page reading another still holds with either ending: it came from giving each document its own name, and every name is its own origin under both. Both architecture reviews found that a plain `http://name.lahe` page counts as "not secure" to the browser. The address bar says "Not secure", copy buttons and the two-tab guard lose features, the Library's safety checks lose the headers they read, and a hostile network could take over a name wherever Lahe does not control `.lahe` lookups. `.lahe.localhost` has none of these and needs no setup. I recommend printing `.lahe.localhost`, and keeping `.lahe` as a Mac option that answers the same names. Details: the open question in the [brief](01_brief_stable_addresses.html). The skill and contract wait on this answer.
+- [ ] **Drop the port?** You asked for `folder.lahe/file`. A normal program cannot listen on port 80 on this Mac, so dropping the port needs a one-time admin step that forwards port 80 to Lahe. I recommend adding it to the optional setup. It shortens the address but does not remove the "Not secure" label on `.lahe`; that needs HTTPS, a bigger follow-up. Details: Q2 in the [brief](01_brief_stable_addresses.html).
 - [ ] **One name per folder, not per file.** The architecture review showed per-file names would break Markdown images and links, folder sites, your rail rules, and which file a comment points at. Addresses now read as folder plus file: `ongoing.lahe.localhost:7817/STABLE_ADDRESSES.md`. Isolation stays the same as today. Approve, or say what to change.
 - [ ] **Approve the plan's two process items:** a small dispatch-only CI workflow on main (it never runs on push and never emails you), and accepting that CI cannot prove "starts at login" on Linux and Windows. Your reboot of this Mac proves it on macOS.
 

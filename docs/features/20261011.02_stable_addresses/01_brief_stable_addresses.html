@@ -1179,6 +1179,42 @@ typing by hand. If Ken still wants <code>.lahe</code> printed, the plan
 adds the copy, tab-guard, and header fallbacks (task 6.3), and the "Not
 secure" label stays.</p>
 </div>
+<div class="callout callout-question">
+<p><span id="questions-and-decisions-q2" class="finding-anchor"></span><strong>Q2. Drop the port, so an address reads
+<code>folder.lahe/file</code>?</strong> Ken prefers it, even as an extra
+setup step. Without a port in the address, the browser goes to port 80.
+Lahe cannot simply listen there: on this Mac, a normal program asking
+for port 80 is refused (checked on 2026-10-11). So each system needs a
+one-time admin step that sends port 80 on this computer to Lahe's own
+port:</p>
+<ul>
+<li><strong>macOS:</strong> a port forward on the loopback address, set
+up with the admin password in the same step that turns on
+<code>.lahe</code>. This is how other local dev tools give clean
+addresses.</li>
+<li><strong>Linux:</strong> a one-time admin setting that lets normal
+programs use port 80, or a port forward. Either takes <code>sudo</code>
+once.</li>
+<li><strong>Windows:</strong> usually allowed with no admin step, unless
+another program already holds port 80.</li>
+</ul>
+<p>If something else on the computer already uses port 80 (Docker, a
+local web server), Lahe keeps printing <code>:7817</code> and
+<code>lahe status</code> names the program in the way.
+<code>:7817</code> addresses keep working either way, so a bookmark
+never breaks when the forward is added or removed.</p>
+<p>Dropping the port fixes length, not the "Not secure" label.
+<code>folder.lahe/file</code> still carries the five costs in Q1. The
+only way to remove them under <code>.lahe</code> is serving HTTPS with a
+certificate Lahe makes and the computer trusts. That is a larger change
+with its own risks (a trusted certificate on Ken's machine), so it is
+not in this feature; it can be a follow-up.</p>
+<p><strong>Recommendation:</strong> add the port-80 forward as part of
+the optional setup, on macOS first, with Linux and Windows in the same
+feature if the spikes go cleanly. Then the printed address is either
+<code>folder.lahe.localhost/file</code> (secure, no "Not secure" label)
+or <code>folder.lahe/file</code> (shortest), which is Q1.</p>
+</div>
 <h2 id="pm-review">PM Review</h2>
 <p>Full prose in <a href="01_brief_stable_addresses_reviews.md">the
 reviews file</a>.</p>
