@@ -859,8 +859,6 @@
     // purpose: that window only withholds an accusation on the rail, while
     // this one decides whether a person is told another agent has the session.
     WORKING_MS: 2 * 60 * 1000,
-    // A quiet Library-reopened session closes.
-    REOPENED_AUTOCLOSE_MS: 30 * 60 * 1000,
     // A session bare `lahe library` started closes once it owns no reviews and
     // its agent has been quiet this long (no live monitor, no lahe command).
     LIBRARY_SESSION_IDLE_MS: 30 * 60 * 1000,
@@ -1363,16 +1361,24 @@
     ALIASES: "data-lahe-aliases"
   };
 
+  // A plain loopback http origin with a port: what a page server registered
+  // before stable addresses. The one spelling of it: a script tag's aliases
+  // are these, and binding a review to a site drops these from it.
+  var LOOPBACK_PORT_ORIGIN = /^http:\/\/(127\.0\.0\.1|localhost):\d{1,5}$/;
+
+  function isLoopbackPortOrigin(value) {
+    return typeof value === "string" && LOOPBACK_PORT_ORIGIN.test(value);
+  }
+
   // At most this many aliases on one tag, and only plain loopback origins.
   var ALIAS_MAX = 16;
-  var ALIAS_ORIGIN = /^http:\/\/(127\.0\.0\.1|localhost):\d{1,5}$/;
 
   /** The aliases as an attribute value: JSON, escaped for a double-quoted attribute. */
   function aliasesAttribute(aliases) {
     if (!Array.isArray(aliases)) throw new Error("scriptTag: aliases must be a list");
     if (aliases.length > ALIAS_MAX) throw new Error("scriptTag: at most " + ALIAS_MAX + " aliases");
     aliases.forEach(function (alias) {
-      if (typeof alias !== "string" || !ALIAS_ORIGIN.test(alias)) {
+      if (!isLoopbackPortOrigin(alias)) {
         throw new Error("scriptTag: an alias must be a loopback http origin, not " + JSON.stringify(alias));
       }
     });
@@ -1990,6 +1996,7 @@
 
     SCRIPT_ATTR: SCRIPT_ATTR,
     ALIAS_MAX: ALIAS_MAX,
+    isLoopbackPortOrigin: isLoopbackPortOrigin,
     FRAMES_ALLOW: FRAMES_ALLOW,
     START_HIDDEN: START_HIDDEN,
     NOTES_ON: NOTES_ON,

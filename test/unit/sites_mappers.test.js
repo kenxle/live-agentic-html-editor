@@ -7,9 +7,9 @@
 // only from the helper's records).
 //
 // "On" means the helper has activated the registry for this state folder
-// (page_routes.activate), which is what serve() does with LAHE_PAGES=sites.
-// "Off" means a real page server of the session serves the folder, as today.
-// Both are stopped or deactivated in teardown, even on failure.
+// (page_routes.activate), which is what serve() does on every start. "Off"
+// means no helper in this process holds the registry. Both are deactivated in
+// teardown, even on failure.
 
 "use strict";
 
@@ -26,12 +26,16 @@ const reviewsModule = require("../../src/service/reviews.js");
 const routes = require("../../src/service/routes.js");
 const sitesModule = require("../../src/service/sites.js");
 const pageRoutes = require("../../src/service/page_routes.js");
-const staticServers = require("../../src/service/static_servers.js");
 const handledCheck = require("../../src/service/handled_check.js");
 const rebuildModule = require("../../src/service/rebuild.js");
 const markdown = require("../../src/service/markdown.js");
 const stateDir = require("../../src/service/state_dir.js");
 const { tempRoot, writeFile } = require("../helpers/sites_world.js");
+
+// The id the old page servers gave their record: a hash of the root.
+function oldServerId(root) {
+  return "ss_" + require("node:crypto").createHash("sha256").update(path.resolve(root)).digest("hex").slice(0, 16);
+}
 
 const PAGES_PORT = 61483;
 const SESSION = "s_mappers";
@@ -310,7 +314,7 @@ test("V31 (unit half): samePage matches an item made on an alias origin, at the 
 // --- V70: aliases -----------------------------------------------------------------
 
 function oldRecord(dir, session, root, ports, extra) {
-  const id = staticServers.serverId(root);
+  const id = oldServerId(root);
   stateDir.ensureStaticServersRoot(dir, session);
   fs.writeFileSync(stateDir.staticServerPath(dir, session, id), JSON.stringify(Object.assign({
     schema: 1, id, session_id: session, instance: "x", root, logical_root: root, host: "127.0.0.1",

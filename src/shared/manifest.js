@@ -245,7 +245,7 @@ var NON_BUNDLE_FILES = [
   { path: "src/service/wake_feed.js", owner: "1A", why: "the per-session append-only wake feed a host tails" },
   { path: "src/service/watchers.js", owner: "1A", why: "asks the machine whether anything holds a session's wake feed open" },
   { path: "src/service/static_servers.js", owner: "1A", why: "read the records of the retired page servers: old origins, the Library, and stopping leftovers on start" },
-  { path: "src/service/idle_servers.js", owner: "1A", why: "retired with page servers and no longer loaded; listed for deletion at cleanup" },
+  { path: "src/service/idle_servers.js", owner: "1A", why: "retired with page servers; nothing requires it, and it is listed only because lint lists every file under src/. Deleted at cleanup, with this entry" },
   { path: "src/service/sites.js", owner: "stable-addresses", why: "the name registry: one name per served folder or notes page, single writer, rebuilt from its log" },
   { path: "src/service/page_routes.js", owner: "stable-addresses", why: "serve a site's pages from the helper: path safety, the page rule, injection, Markdown, mounts, unknown and gone pages" },
   { path: "src/service/self_stop.js", owner: "1A", why: "the helper stops itself after a deferred last close once nothing needs it, or when its state dir is gone" },

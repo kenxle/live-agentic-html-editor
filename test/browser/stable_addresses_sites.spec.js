@@ -51,7 +51,6 @@ test.beforeEach(async () => {
     port: 0,
     stateDir: state,
     quiet: true,
-    pages: "sites",
     pagesPort: 0,
     sitesHome: home
   });

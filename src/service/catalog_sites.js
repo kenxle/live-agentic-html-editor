@@ -38,9 +38,6 @@ var sitesModule = require("./sites.js");
 var MODE = sitesModule.MODE;
 // What Lahe serves as a page: the extensions the reader already counts.
 var PAGE_EXTENSIONS = [".html", ".htm", ".md", ".markdown"];
-// A page-server origin a bound review no longer needs: the same pattern the
-// site.bind route removes.
-var OLD_PORT_ORIGIN = /^http:\/\/(127\.0\.0\.1|localhost):\d{1,5}$/;
 
 function realOrNull(file) {
   try {
@@ -233,10 +230,7 @@ function createCatalogSites(options) {
     reviews.ensureKnown(reviewId);
     var review = reviews.get(reviewId);
     if (!review) return;
-    reviews.stampServed(reviewId, new Date(nowMs).toISOString());
-    review.origins.filter(function (origin) { return OLD_PORT_ORIGIN.test(origin); }).forEach(function (origin) {
-      reviews.removeOrigin(reviewId, origin);
-    });
+    reviews.stampServedByHelper(reviewId, new Date(nowMs).toISOString());
   }
 
   return {

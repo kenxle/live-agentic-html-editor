@@ -1,8 +1,7 @@
 // `lahe review` and `lahe write` on stable addresses (Task 1.4 and its step
 // test), and the single writer (V6).
 //
-// These run the real command through bin/lahe.js, with the switch set in the
-// environment the helper starts in, on free ports and a temp state folder and
+// These run the real command through bin/lahe.js, on free ports and a temp state folder and
 // home. Each test closes its session and stops every helper its state folder
 // names in teardown, even when it fails.
 
@@ -26,8 +25,7 @@ const REPO_ROOT = path.join(__dirname, "..", "..");
 const BIN = path.join(REPO_ROOT, "bin", "lahe.js");
 const PAGE = "<!doctype html><html><head><title>t</title></head><body><p>reviewed page</p></body></html>";
 
-async function cliWorld(t, options) {
-  const opts = options || {};
+async function cliWorld(t) {
   const root = tempRoot("lahe-sites-cli-");
   const home = path.join(root, "home");
   const state = path.join(root, "state");
@@ -38,8 +36,6 @@ async function cliWorld(t, options) {
     LAHE_HOME_DIR: home,
     LAHE_PAGES_PORT: String(pagesPort)
   });
-  if (opts.pages === false) delete env.LAHE_PAGES;
-  else env.LAHE_PAGES = "sites";
   const world = { root, home, state, port, pagesPort, env, sessions: [] };
   t.after(async () => {
     for (const session of world.sessions) {

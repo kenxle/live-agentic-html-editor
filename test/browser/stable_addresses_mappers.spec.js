@@ -22,11 +22,15 @@ const { test, expect } = require("@playwright/test");
 
 const service = require("../../src/service/index.js");
 const agentSessions = require("../../src/service/agent_sessions.js");
-const staticServers = require("../../src/service/static_servers.js");
 const stateDir = require("../../src/service/state_dir.js");
 const handledCheck = require("../../src/service/handled_check.js");
 const protocol = require("../../src/shared/protocol.js");
 const record = require("../../src/shared/record.js");
+
+// The id the old page servers gave their record: a hash of the root.
+function oldServerId(root) {
+  return "ss_" + require("node:crypto").createHash("sha256").update(path.resolve(root)).digest("hex").slice(0, 16);
+}
 
 const OLD_PORT = 51234;
 let world = null;
@@ -58,7 +62,7 @@ test.beforeEach(async () => {
   fs.mkdirSync(home);
   const priorHome = process.env.LAHE_HOME_DIR;
   process.env.LAHE_HOME_DIR = home;
-  const helper = await service.serve({ port: 0, stateDir: state, quiet: true, pages: "sites", pagesPort: 0, sitesHome: home });
+  const helper = await service.serve({ port: 0, stateDir: state, quiet: true, pagesPort: 0, sitesHome: home });
   world = { root, home, state, helper, priorHome };
 });
 
@@ -83,7 +87,7 @@ function bindSite(root, entry) {
 /** A page server record from before this feature, naming `root` on OLD_PORT. */
 function oldPageServer(root) {
   const session = "s_before";
-  const id = staticServers.serverId(root);
+  const id = oldServerId(root);
   stateDir.ensureStaticServersRoot(world.state, session);
   fs.writeFileSync(stateDir.staticServerPath(world.state, session, id), JSON.stringify({
     schema: 1, id, session_id: session, instance: "old", root, logical_root: root, host: "127.0.0.1",
