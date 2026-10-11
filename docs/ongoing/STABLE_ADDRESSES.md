@@ -30,7 +30,7 @@ So "persistent port" is really "something always answering at the document's add
 
 ## Cons and risks
 
-- **The helper runs all the time.** It would start at login (a macOS login item). An idle Lahe process uses roughly 20 to 50 MB of memory going by the monitors running now, and almost no CPU when nothing is happening. Your battery trouble on 2026-10-07 was nearly two thousand leaked test helpers, not one idle one. Still worth measuring before and after.
+- **The helper runs all the time.** It would start at login (a macOS login item). An idle Lahe process uses roughly 20 to 50 MB of memory going by the monitors running now, and almost no CPU when nothing is happening. Your battery trouble on 2026-10-07 was nearly two thousand leaked test helpers, not one idle one. Still worth measuring before and after. You are likely OK with this, since the helper has already been optimized.
 - **Many open ports.** There are 682 reviews in your state folder. One listening port each is cheap for one process, but macOS starts a login item with a limit of 256 open files, so the helper would need that raised, or only keep addresses for recent and starred documents.
 - **Port clashes with your other tools.** Lahe would reserve a range of port numbers away from the common dev-server ones. A clash is still possible; then that one document moves, as it does today.
 - **A page is reachable whenever the helper is up.** Today a document's page, and the review token inside it, is reachable only while it is being served. Other websites still cannot read it (the existing host checks stay), but the security review would need to look at it again.
@@ -61,6 +61,6 @@ While checking this, I found 63 page-server processes left running from test run
 
 ## Questions for you
 
-1. Are you OK with the Lahe helper starting at login and staying up?
+1. Are you OK with the Lahe helper starting at login and staying up? Leaning yes, from your note on the cons.
 2. Should every document keep a working address, or only recent and starred ones? Every document is simpler to explain; recent and starred keeps the port count small.
 3. Ready for this to become a feature-forge feature, starting with the brief?
