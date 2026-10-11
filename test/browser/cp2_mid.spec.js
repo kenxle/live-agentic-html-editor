@@ -140,23 +140,21 @@ test.describe("CP2-mid: ranked test 2 with real records", () => {
     // that anything protected anything.
     //
     // THE FIRST CHANGING KEYSTROKE WITHDRAWS IT (spec
-    // 20260922.01_draft_write_cost, requirement 6). A reopened edit, ready or
-    // not_handled, goes to `draft` on the first keystroke that changes its
-    // wording, and a draft is never replayed (record.isOutstanding is false for
-    // it). So replay's refusal to write into the region the reviewer is in is
-    // proved in the window where the record IS outstanding: the block is open
-    // and protected, nothing typed yet, and the page repaints. The typing below
-    // then proves the reviewer's sentence and caret survive the repaints.
-    // The `not_handled` reply stays in the setup so the rewording of a refused
-    // edit is covered end to end, withdrawal included.
+    // 20260922.01_draft_write_cost, requirement 6). A reopened ready edit goes
+    // to `draft` on the first keystroke that changes its wording, and a draft
+    // is never replayed. So replay's refusal to write into the region the
+    // reviewer is in is proved in the window where the record IS replayable:
+    // the block is open and protected, nothing typed yet, and the page
+    // repaints. The typing below then proves the reviewer's sentence and caret
+    // survive the repaints.
+    //
+    // The record is READY, not refused. A refused record is not replayed at
+    // all and typing in its passage starts a new card (spec 20261011.01), so
+    // it could not show protection doing anything.
 
     const firstGo = await editAndCommit(page, "#region-a", " Every Monday.");
     expect(firstGo.state).toBe("ready");
     expect(firstGo.before).toBe(SOURCE.a);
-
-    const notHandled = await page.evaluate(() => window.__laheCp2.markNotHandled("#region-a", "left for the reviewer"));
-    expect(notHandled.state).toBe("not_handled");
-    expect(notHandled.rev).toBe(firstGo.rev);
 
     await enterEdit(page, "#region-a");
     const openItemId = await page.evaluate(() => window.__laheCp2.state().itemId);
@@ -237,9 +235,39 @@ test.describe("CP2-mid: ranked test 2 with real records", () => {
     const open = await page.evaluate((id) => window.__laheCp2.itemById(id), openItemId);
     expect(open.id, "a re-entry rewords the SAME record").toBe(firstGo.id);
     expect(open.rev).toBe(1);
-    expect(open.state, "rewording a refused edit takes it off the agent's desk until commit").toBe("draft");
+    expect(open.state, "rewording a ready edit takes it off the agent's desk until commit").toBe("draft");
     expect(open.before, "before is pinned to the page's wording, not to what is on screen").toBe(SOURCE.a);
     expect(open.after).toBe(typed.expected);
+  });
+
+  // Spec 20261011.01, requirement 1: a refused edit is not written onto the
+  // page. After a repaint the page shows the file, and typing in that passage
+  // is a new card that never overwrites the refused one's words.
+  test("a refused edit is not written back after a repaint, and typing there starts a new card", async ({ page }) => {
+    const refused = await editAndCommit(page, "#region-a", " Every Monday.");
+    await page.evaluate(() => window.__laheCp2.markNotHandled("#region-a", "the plan is fixed on purpose"));
+
+    await configureFixture(page, { flavor: "morph", target: "#live-frame", protection: "off" });
+    const passesBefore = (await readCounters(page)).replayPasses;
+    await forceRepaint(page, { flavor: "morph" });
+    await pollPage(page, (n) => window.__lahe.counters.replayPasses > n, passesBefore, {
+      message: "a replay pass after the repaint"
+    });
+    await stopRepaints(page);
+    expect(await page.evaluate(() => window.__laheCp2.text("#region-a")), "the page shows the file").toBe(SOURCE.a);
+
+    await enterEdit(page, "#region-a");
+    const openItemId = await page.evaluate(() => window.__laheCp2.state().itemId);
+    expect(openItemId, "a new card, not the refused one").not.toBe(refused.id);
+    await typeAtEnd(page, "#region-a", " On Tuesdays.");
+    await commitWithEscape(page);
+
+    const old = await page.evaluate((id) => window.__laheCp2.itemById(id), refused.id);
+    expect(old.state, "the refused card keeps its state").toBe("not_handled");
+    expect(old.after, "and the words the agent answered").toBe(refused.after);
+    const fresh = await page.evaluate((id) => window.__laheCp2.itemById(id), openItemId);
+    expect(fresh.state).toBe("ready");
+    expect(fresh.before, "the new card starts from the page's own words").toBe(SOURCE.a);
   });
 
   test("the page rewrites region A while the reviewer is in it: on commit, one card is flagged and nothing is written", async ({

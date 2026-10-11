@@ -1,4 +1,4 @@
-// The reviewer's bold and italic survive a rebuild that dropped them.
+// The reviewer's bold and italic, and a rebuild that dropped them.
 //
 // The incident, review r198259e39417 on 2026-09-11. Ken rewrote a paragraph and,
 // in the same revision, made one word italic and a closing clause bold. The
@@ -14,10 +14,16 @@
 // from the page and from the source and nothing anywhere said so; Ken had to
 // notice and complain.
 //
-// Both halves are asserted here, and so is the negative:
+// That incident is why the change sentence names the italic now, and why
+// replay writes the markup while the edit waits for the agent. What happens
+// AFTER the agent answers changed with spec
+// docs/features/20261011.01_stuck_replayed_blocks: the page is the file. A
+// rebuild that drops the italic is not reopened and not written over; the
+// reviewer sees the page as it is and can edit it again. That is the cost the
+// spec accepts.
 //
-//   dropped    the words land without the <em>: replay writes the markup back,
-//              and the page check reopens the item ONCE with its own sentence
+//   dropped    the words land without the <em>: the card stays handled and the
+//              page shows the file
 //   carried    the rebuild keeps the <em>: nothing is written and the item
 //              stays handled
 //
@@ -42,12 +48,6 @@ const CLI = path.join(REPO_ROOT, "bin", "lahe.js");
 
 // One walk, one helper, one session. Serial because the file is one story.
 test.describe.configure({ mode: "serial" });
-
-// The check's formatting sentence, restated so the browser test asserts the
-// reviewer's own copy of it rather than importing the layer.
-const FORMAT_SENTENCE =
-  "Reopened by the page check: the words landed but the bold or italic in this edit did not. " +
-  "Carry the formatting into the source, or reply not_handled saying why.";
 
 const P_BEFORE = "The trainer writes the plan every week.";
 // What the reviewer retypes, then italicizes one word of.
@@ -94,7 +94,7 @@ function labelled(output, label) {
   return match ? match[1] : null;
 }
 
-test.describe("an edit's bold and italic survive the rebuild that dropped them", () => {
+test.describe("an edit's bold and italic, and a rebuild that dropped them", () => {
   let world = null;
 
   test.beforeAll(async () => {
@@ -283,9 +283,7 @@ test.describe("an edit's bold and italic survive the rebuild that dropped them",
     }, P_AFTER);
   }
 
-  test("the words without the italic: replay puts it back and the check reopens the item once", async ({
-    page
-  }) => {
+  test("the words without the italic: the card stays handled and the page shows the file", async ({ page }) => {
     await page.goto(world.open);
     await booted(page);
 
@@ -297,9 +295,10 @@ test.describe("an edit's bold and italic survive the rebuild that dropped them",
     // AND THE CHANGE SENTENCE SAYS IT, which was the problem.
     expect(made.change, "the one intent line names the italic").toContain('Made "' + ITALIC_WORD + '" italic.');
 
-    // What the agent did: carried the words into the source and not the
-    // emphasis, then replied handled.
-    rebuild(P_AFTER_PLAIN_HTML);
+    // What the agent did: carried the words (and the id) into the source and
+    // not the emphasis, then replied handled.
+    const stamp = await page.evaluate(() => document.getElementById("p").getAttribute("data-lahe-id"));
+    rebuild(P_AFTER_PLAIN_HTML, stamp);
     await helperHasRev(made.id, made.rev);
     reply(made.id, made.rev);
     await pollPage(
@@ -312,64 +311,20 @@ test.describe("an edit's bold and italic survive the rebuild that dropped them",
       { message: "the agent's reply to fold and move the item to Done", timeoutMs: 20000 }
     );
 
-    // The reviewer's page reloads onto the rebuilt file.
-    await page.reload();
-    await booted(page);
-
-    // REPLAY PUTS THE ITALIC BACK. The words are right, so the text comparison
-    // calls this idempotent; the markup comparison does not.
-    await pollPage(page, () => document.getElementById("p").innerHTML.indexOf("<em>") !== -1, undefined, {
-      message: "replay to write the reviewer's italic back onto the page",
-      timeoutMs: 20000
-    });
-    expect(await blockHtml(page, "p")).toBe(P_AFTER_ITALIC_HTML);
-
-    // AND THE ITEM COMES BACK, with the sentence that says what is wrong.
-    await pollPage(
-      page,
-      (id) => {
-        const found = window.__lahe.items().find((item) => item.id === id);
-        return !!found && found.state === "ready";
-      },
-      made.id,
-      { message: "the page check to reopen the item on this load", timeoutMs: 20000 }
-    );
-    const reopened = await itemState(page, made.id);
-    expect(reopened.note, "the reopened item says the words landed and the formatting did not").toContain(
-      FORMAT_SENTENCE
-    );
-    expect(reopened.note.split(FORMAT_SENTENCE).length - 1, "one copy of the sentence").toBe(1);
-    expect(reopened.rev, "the reopen bumped the rev").toBeGreaterThan(made.rev);
-    expect(await page.evaluate(() => window.__lahe.counters.revertReopens), "one reopen on this load").toBe(1);
-
-    // The agent answers handled again with the page unchanged, which is it
-    // saying the rendering is intended. That has to end it: reopening again is
-    // the loop of 2026-09-10 wearing different clothes.
-    await helperHasRev(made.id, reopened.rev);
-    reply(made.id, reopened.rev);
-    await pollPage(
-      page,
-      (id) => {
-        const found = window.__lahe.items().find((item) => item.id === id);
-        return !!found && found.state === "handled";
-      },
-      made.id,
-      { message: "the second handled reply to fold", timeoutMs: 20000 }
-    );
-
     await page.reload();
     await booted(page);
     await pollPage(page, () => window.__lahe.counters.revertChecks >= 1, undefined, {
       message: "the page check to run once the settling window closes",
       timeoutMs: 20000
     });
-    expect(
-      await page.evaluate(() => window.__lahe.counters.revertReopens),
-      "the check reopened nothing on the second load"
-    ).toBe(0);
+
+    expect(await blockHtml(page, "p"), "the page shows the file: no italic written back").toBe(P_AFTER_PLAIN_HTML);
+    expect(await page.evaluate(() => window.__lahe.counters.regionsWritten), "replay wrote nothing").toBe(0);
+    expect(await page.evaluate(() => window.__lahe.counters.revertReopens), "the check reopened nothing").toBe(0);
     const settled = await itemState(page, made.id);
-    expect(settled.state, "the item stays handled").toBe("handled");
-    expect(settled.rev, "and no second reopen bumped the rev again").toBe(reopened.rev);
+    expect(settled.state, "the card stays handled").toBe("handled");
+    expect(settled.rev, "at the revision the agent answered").toBe(made.rev);
+    expect(String(settled.note || ""), "with nothing added to it").not.toContain("Reopened by the page check");
   });
 
   test("a rebuild that carries the italic is idempotent, and the item stays handled", async ({ page }) => {

@@ -246,10 +246,8 @@
      * The agent replying not_handled to a committed edit, the way a real
      * folded reply would land: the record's state moves to `not_handled` and
      * it carries the reply, with no other field touched (same rev, same
-     * before/after). A reopened `not_handled` edit, like a `ready` one, is
-     * withdrawn to `draft` by the first keystroke that changes its wording
-     * (src/layer/editing.js, captureTyping), so it is outstanding only until
-     * the reviewer starts typing.
+     * before/after). A refused edit is not replayed, and typing in its
+     * passage opens a new card (src/layer/editing.js, releasedBlock).
      */
     markNotHandled: function (selector, reason) {
       var item = itemForRegion(selector);
