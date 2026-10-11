@@ -8,6 +8,12 @@ The fix that works: the helper starts when you log in and stays up, and it keeps
 
 Stable addresses were the last option on [the Library ideas page](DOCUMENT_INDEX_IDEAS.md), which we skipped then. It is a real feature (serving, sessions, and security all change), so it would go through feature-forge.
 
+**Your rule for this:** the core stays a plain server that runs on Mac, Linux, and Windows. Anything Mac-only, like a menu-bar icon, is a separate companion app on top. What that means here:
+
+- `.lahe.localhost` addresses are the default. Chrome and Firefox handle them the same way on every system, and your Mac handles them for Safari.
+- A short `docname.lahe` ending is an optional extra per system. The one-time setup differs on Mac, Linux, and Windows.
+- "Start at login" is a small setup step per system (macOS login item, a Linux user service, a Windows scheduled task). The server they start is the same code.
+
 **Needs your answer:** the four questions at the bottom.
 
 ## Why your old links fail today
@@ -42,7 +48,7 @@ So "persistent port" is really "something always answering at the document's add
 Your note suggested making it a separate thing, like its own program or a Mac app. That fits: the always-on server is separate from agents either way. Two ways to run it, simplest first:
 
 - **A login item Lahe installs.** `npm run install-cli` would also tell macOS to start the server at login and restart it if it stops. No new code to build, and nothing visible on screen.
-- **A small Mac app.** The same server, wrapped as an app with a menu-bar icon: it shows it is running, links to the Library, and has a Quit button. The server stays the existing Node code, but the icon needs a small piece of native Mac code, built once and shipped with Lahe. That bends the "runs from a git clone" rule a little, so it would be optional.
+- **A small Mac companion app.** It sits on top of the same server and adds a menu-bar icon: it shows it is running, links to the Library, and has a Quit button. The server stays the existing Node code, but the icon needs a small piece of native Mac code, built once and shipped with Lahe. That bends the "runs from a git clone" rule a little, so it would be optional.
 
 I'd start with the login item and add the menu-bar app later if you want to see it running.
 
