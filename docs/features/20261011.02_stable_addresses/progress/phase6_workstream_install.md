@@ -184,7 +184,7 @@ Moved to "Manual checks for Ken" at the end of this file, with V45.
 
 ## Summary
 
-The install docs are written. `lahe install`, `lahe uninstall`, `--port-80` and `--lahe-names` are documented for macOS, Linux and Windows. The Linux and Windows steps are marked untested where they are. `npm run gate:unit` passes once a marker line in `docs/INSTALL.md` was reworded; that rewording is the last change, and the docs test file passes 29 of 29.
+The install docs are written. `lahe install`, `lahe uninstall`, `--port-80` and `--lahe-names` are documented for macOS, Linux and Windows. The Linux and Windows steps are marked untested where they are. `npm run gate:unit`: 2654 tests, 2652 pass, 0 fail, 2 todo (both were already there). Leak check: helpers from this worktree 0 before, 0 after; `launchctl list | grep -c lahe` 0 before, 0 after.
 
 - [docs/INSTALL.md](../../../../docs/INSTALL.md): new sections "Keeping addresses working: `lahe install`" and "Optional: no port, and the short `.lahe` ending" (macOS, Linux, Windows), and an uninstall line under "Removing it".
 - [README.md](../../../../README.md): a short "Addresses that stay put" section, the `lahe install` line in the setup block, and the INSTALL.md pointer.
