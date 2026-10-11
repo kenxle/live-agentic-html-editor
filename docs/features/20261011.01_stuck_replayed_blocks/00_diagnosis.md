@@ -2,13 +2,18 @@
 
 ## Needs your call
 
-Pick a fix, or a mix, from "Ways to fix it" below. My recommendation, updated after your replay question, is **A plus D, then G**:
+**Your direction:** the tool holds the line too hard on words you wrote. Often you *want* the agent to rewrite them. Flag it when that happens; don't fight it.
 
-- A: a card the agent refused is never written onto the page.
-- D: a card the page check reopens is flagged, not written back, until the agent answers it.
-- G: the page check counts a block found in a different shape (a table cell, a list item) as present.
+That becomes option H below, "flag, don't hold", plus A. Together:
 
-A and D together set one rule: the page differs from the file only while an edit is still waiting for the agent's first answer. G then cuts the false alarms, so D's flag rarely shows up. See "Why does replay let the page differ from the file?" below.
+- **H.** After a card is handled, the page check never reopens it and never writes your old words back. If your words have changed on the page since, the card says so ("the agent reworded what you wrote") and shows your version beside the page's. A **Reopen** button on the card sends it back to the agent if you didn't want the change.
+- **A.** A card the agent refused is never written onto the page. Your words stay on the card with the agent's reason.
+
+The rule this sets: the page differs from the file only while an edit is still waiting for the agent's first answer. After that, the page is the file, and the card tells you what changed.
+
+**One question before I write the spec:** should the flag show for any change to your words, or only when the agent changed them without being asked? The tool can't always tell those apart. "Any change" is simpler and more honest, but it will also flag the table you asked for.
+
+This changes how the page check works, so the next step is a short spec for you to approve on a page, not a direct code change.
 
 ## The short version
 
@@ -183,6 +188,15 @@ Before reopening a handled card, the page check asks the looser question the hig
 - Size: medium. The pointing ladder exists already; the check would call it.
 - Fixes: the "found it, but in a different shape" half of the problem, using the fingerprinting work as it was meant to be used.
 
+### H. Flag, don't hold (your direction)
+
+Once a card is handled, the page check stops enforcing it. It still looks, and if your words are no longer on the page, it marks the card: "the agent reworded what you wrote", with both versions shown. Nothing is reopened and nothing is written back unless you press Reopen on the card.
+
+- What you notice: no stray lines, no surprise reopens. A quiet note on cards where your words changed, and one click to push back.
+- Cost: a rebuild that really dropped your words is flagged instead of fixed automatically. You have to notice the flag and press Reopen. Today the tool fixes it without asking. That was the reason the check reopened in the first place, for example to restore bold that a rebuild dropped.
+- Size: medium. It replaces D, and makes G optional: G would only make the flag show less often.
+- Fixes: both stuck cases, and any future restructure you ask for.
+
 ### How they compare
 
 | Option | Stops stray lines | Stops false reopens | Changes a design rule | Size |
@@ -194,6 +208,7 @@ Before reopening a handled card, the page check asks the looser question the hig
 | E. agent says superseded | when agents use it | no | contract change | medium |
 | F. Keep the page button | by hand | no | no | small to medium |
 | G. check uses the pointing ladder | when a probable match exists | when a probable match exists | no, applies an existing rule | medium |
+| H. flag, don't hold | yes | yes, it only flags | yes | medium |
 
 ## Related
 
