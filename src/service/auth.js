@@ -27,6 +27,7 @@
 var crypto = require("node:crypto");
 
 var protocol = require("../shared/protocol.js");
+var logModule = require("./log.js");
 
 /**
  * The check block for one helper.
@@ -41,6 +42,9 @@ function createAuth(options) {
   if (!opts.reviews) throw new Error("createAuth: reviews is required");
   var log = opts.log;
   var reviews = opts.reviews;
+  // One line per distinct refusal, capped: any web page can send requests that
+  // are refused, as many and as varied as it likes.
+  var refusals = logModule.createNoteOnce(log, "further refusals are not logged until the helper restarts");
 
   /**
    * Check one request.
@@ -105,15 +109,14 @@ function createAuth(options) {
     // attacker-controlled, so each is JSON.stringify'd and capped before it joins
     // the line (finding 8). helperLog neutralizes control characters as a second
     // layer, including in result.log, which carries the review id built upstream.
-    log.helperLog(
-      result.log +
-        " [request " +
-        field(req.requestId) +
-        ", " +
-        field(String(req.method || "-") + " " + String(req.path || req.routeName || "-")) +
-        ", origin " +
-        field(headerOrNone(req.headers, protocol.HEADER.ORIGIN)) +
-        "]"
+    var what = field(String(req.method || "-") + " " + String(req.path || req.routeName || "-"));
+    var from = field(headerOrNone(req.headers, protocol.HEADER.ORIGIN));
+    // The same request again (same refusal, path, origin and headers) logs
+    // nothing new; a request that differs in any header is its own line. The
+    // key is a hash, so no token is held in memory by it.
+    refusals.say(
+      crypto.createHash("sha256").update(result.log + "\u0000" + what + "\u0000" + from + "\u0000" + headerKey(req.headers)).digest("hex"),
+      result.log + " [request " + field(req.requestId) + ", " + what + ", origin " + from + "]"
     );
 
     return {
@@ -123,6 +126,11 @@ function createAuth(options) {
       log: result.log,
       status: protocol.statusFor(result.code)
     };
+  }
+
+  function headerKey(headers) {
+    if (!headers || typeof headers !== "object") return "";
+    return Object.keys(headers).sort().map(function (name) { return name + "=" + String(headers[name]); }).join("\u0000");
   }
 
   function headerOrNone(headers, name) {

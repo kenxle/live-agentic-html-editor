@@ -138,9 +138,28 @@ function rootProblem(root, mode, dir) {
 // ---------------------------------------------------------------------------
 
 /**
+ * Does git's own back-link agree? A worktree's admin folder in the main
+ * checkout holds a `gitdir` file naming the worktree's `.git` file. The `.git`
+ * file is folder content anyone can write, so without this check a folder
+ * could name any path as its "main checkout" and the read-only fallback would
+ * serve files from it.
+ */
+function linksBack(adminDir, gitFile) {
+  var text;
+  try { text = fs.readFileSync(path.join(adminDir, "gitdir"), "utf8").trim(); } catch (err) { return false; }
+  if (!text) return false;
+  var named = path.resolve(adminDir, text);
+  var a;
+  var b;
+  try { a = fs.realpathSync.native(named); b = fs.realpathSync.native(gitFile); } catch (err) { return false; }
+  return a === b;
+}
+
+/**
  * The worktree a root sits in and that worktree's main checkout, read from the
- * worktree's `.git` file while it still exists. A plain checkout (a `.git`
- * folder) or no checkout at all records nothing.
+ * worktree's `.git` file while it still exists, and only when the main
+ * checkout's back-link names the same `.git` file (linksBack). A plain
+ * checkout (a `.git` folder) or no checkout at all records nothing.
  */
 function worktreeOf(root) {
   var current = path.resolve(root);
@@ -153,8 +172,9 @@ function worktreeOf(root) {
       var text = "";
       try { text = fs.readFileSync(gitPath, "utf8"); } catch (err) { text = ""; }
       var gitdir = /^gitdir:\s*(.+?)\s*$/m.exec(text);
-      var main = gitdir ? /^(.*)[\\/]\.git[\\/]worktrees[\\/][^\\/]+[\\/]?$/.exec(path.resolve(current, gitdir[1])) : null;
-      if (!main) return { main_checkout: null, worktree_root: null };
+      var adminDir = gitdir ? path.resolve(current, gitdir[1]) : null;
+      var main = adminDir ? /^(.*)[\\/]\.git[\\/]worktrees[\\/][^\\/]+[\\/]?$/.exec(adminDir) : null;
+      if (!main || !linksBack(adminDir, gitPath)) return { main_checkout: null, worktree_root: null };
       return { main_checkout: main[1], worktree_root: current };
     }
     var parent = path.dirname(current);
@@ -198,6 +218,8 @@ function cleanMounts(mounts) {
   Object.keys(mounts).forEach(function (prefix) {
     var dirPath = mounts[prefix];
     if (!MOUNT_PREFIX.test(prefix) || typeof dirPath !== "string" || !path.isAbsolute(dirPath)) return;
+    // Never a hidden folder, or one outside home (markdownLinks.mountableDir).
+    if (!markdownLinks.mountableDir(dirPath)) return;
     out[prefix] = dirPath;
   });
   return out;
@@ -373,6 +395,22 @@ function createSites(options) {
     var s = spec || {};
     var problem = rootProblem(s.root, s.mode, dir);
     if (problem) throw new Error(problem);
+    // SAME FILE, SAME ADDRESS. A file reviewed on its own (`containing`) goes
+    // into the deepest folder site that already holds it, at its path there,
+    // so a file under a reviewed folder never gets a second address. The site
+    // keeps its own entry page; the file's path comes back as `entry`.
+    if (s.containing === true && s.mode === MODE.FOLDER && typeof s.entry === "string" && s.entry) {
+      var outer = deepestFolderSite(path.join(s.root, s.entry));
+      if (outer && outer.site.root !== s.root) {
+        var outerMounts = Object.assign({}, outer.site.mounts || {}, cleanMounts(s.mounts));
+        if (JSON.stringify(outerMounts) !== JSON.stringify(outer.site.mounts || {}) && !readOnly) {
+          outer.site.mounts = outerMounts;
+          record("update", outer.name);
+        }
+        var relative = path.relative(outer.site.root, path.join(s.root, s.entry)).split(path.sep).join("/");
+        return { name: outer.name, site: outer.site, created: false, entry: relative };
+      }
+    }
     var found = byRoot(s.root, s.mode);
     if (!found && readOnly) {
       throw new Error("the site registry cannot be read, so no new name is made; see " + jsonPath(dir));
@@ -403,6 +441,18 @@ function createSites(options) {
     record("grant", name);
     say("sites: new name " + name + " for " + s.root + " (" + s.mode + ")");
     return { name: name, site: table[name], created: true };
+  }
+
+  /** The folder site with the longest root that holds `file`, or null. */
+  function deepestFolderSite(file) {
+    var best = null;
+    Object.keys(table).forEach(function (name) {
+      var entry = table[name];
+      if (entry.mode !== MODE.FOLDER) return;
+      if (file.indexOf(entry.root + path.sep) !== 0) return;
+      if (!best || entry.root.length > best.site.root.length) best = { name: name, site: entry };
+    });
+    return best;
   }
 
   /** Add mounts to an existing site. Returns whether anything was written. */
@@ -462,6 +512,7 @@ module.exports = {
   candidates: candidates,
   nameFor: nameFor,
   rootProblem: rootProblem,
+  cleanMounts: cleanMounts,
   worktreeOf: worktreeOf,
   ensureCliSecret: ensureCliSecret,
   readCliSecret: readCliSecret,

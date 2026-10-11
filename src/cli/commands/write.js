@@ -14,10 +14,11 @@
 //    the path is checked again with lstat and used only if it is a regular
 //    file. It never overwrites. The parent's real path is printed, so a folder
 //    reached through a symlink is named as what it is.
-//  - ITS OWN ONE-PAGE SERVER. Notes often sit in a home, Desktop or Documents
-//    folder, and a folder server would serve all of it, dotfiles included. So
-//    the page gets a server that serves that page and nothing else
-//    (src/service/static_servers.js), even with --session.
+//  - ITS OWN NOTES SITE. Notes often sit in a home, Desktop or Documents
+//    folder, and a folder site would serve all of it. So the page gets a
+//    page-only site, whose address serves that page and nothing else
+//    (src/service/sites.js, served by src/service/page_routes.js), even with
+//    --session.
 //  - A NOTES REVIEW. The review carries `notes: true`, so the agent does not
 //    proofread long sittings (plan PQ3).
 //

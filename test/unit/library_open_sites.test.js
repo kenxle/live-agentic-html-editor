@@ -196,6 +196,8 @@ function worktreeWorld(w) {
   const wt = path.join(w.home, "ws", "wt1");
   fs.mkdirSync(wt, { recursive: true });
   fs.writeFileSync(path.join(wt, ".git"), "gitdir: " + path.join(main, ".git", "worktrees", "wt1") + "\n");
+  // git's back-link, which the registry checks before it trusts the .git file.
+  fs.writeFileSync(path.join(main, ".git", "worktrees", "wt1", "gitdir"), path.join(wt, ".git") + "\n");
   const copy = writeFile(main, "docs/page.html", "<!doctype html><title>main copy</title><p>main copy</p>");
   const file = writeFile(wt, "docs/page.html", PAGE_HTML);
   return { main, wt, copy, file, folder: path.join(wt, "docs") };

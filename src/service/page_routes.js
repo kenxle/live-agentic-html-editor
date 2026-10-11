@@ -97,18 +97,29 @@ function currentHelperOrigin(dir) {
  * A root-absolute path resolves back to whatever served the page, which cannot
  * be down: it just answered. Nothing is written into the reviewer's folder.
  */
+// One capped note logger per state folder, for the "not injecting" line.
+var notInjecting = new Map();
+
+function notInjectingNotes(dir) {
+  var key = dirKey(dir);
+  var held = notInjecting.get(key);
+  if (held) return held;
+  var log;
+  try { log = logModule.createEventLog({ dir: dir }); } catch (err) { log = null; }
+  held = logModule.createNoteOnce(log, "pages: further not-injecting notes are not logged until the helper restarts");
+  notInjecting.set(key, held);
+  return held;
+}
+
 function injectForMatch(dir, match, target, html, aliases) {
   var carried = scriptLine.reviewAlreadyInFile(html);
   if (carried === match.review) return null;
   if (carried) {
-    try {
-      logModule.createEventLog({ dir: dir }).helperLog(
-        "review " + match.review + ": not injecting at serve time into " + target +
-          ", it carries review " + carried + " now, so it was re-attached somewhere else on purpose"
-      );
-    } catch (err) {
-      // Diagnostic only; a page that cannot log must still be served.
-    }
+    // Once per review, file and carried review, and capped: a page's image
+    // requests can ask for this file again and again.
+    notInjectingNotes(dir).say(match.review + "\u0000" + target + "\u0000" + carried,
+      "review " + match.review + ": not injecting at serve time into " + target +
+        ", it carries review " + carried + " now, so it was re-attached somewhere else on purpose");
     return null;
   }
   var helperOrigin = currentHelperOrigin(dir);
@@ -357,6 +368,8 @@ function locate(site, decoded, rawPath) {
     var mount = /^(\/\.lahe-source\/[a-f0-9]+\/)(.*)$/.exec(decoded);
     var mountDir = mount && site.mounts ? site.mounts[mount[1]] : null;
     if (typeof mountDir !== "string" || hasHiddenSegment(mount[2])) return null;
+    // A mount saved before hidden folders were refused serves nothing.
+    if (!markdownLinks.mountableDir(mountDir)) return null;
     return { base: mountDir, prefix: mount[1], relative: mount[2], mounted: true, page: false };
   }
   if (hasHiddenSegment(decoded)) return null;
@@ -728,40 +741,6 @@ function movedNote(goneFile, shownFile) {
 // The request handler
 // ---------------------------------------------------------------------------
 
-/** How many distinct notes one helper logs of a kind before it stops. */
-var LOG_NOTE_CAP = 256;
-
-/**
- * Logs a line once per key, for at most LOG_NOTE_CAP keys. Any web page can
- * make the browser ask for random names or send random Host headers, so an
- * unbounded "once per key" set would let a page grow the helper's memory and
- * helper.log without end. Past the cap it logs `fullLine` once and stops.
- *
- * @param {{helperLog: function}|null} log
- * @param {string} fullLine
- * @returns {{say: function(string, string): void}}
- */
-function createNoteOnce(log, fullLine) {
-  var said = new Set();
-  var full = false;
-  function write(line) {
-    if (!log) return;
-    try { log.helperLog(line); } catch (err) { /* diagnostic only */ }
-  }
-  return {
-    say: function (key, line) {
-      if (said.has(key) || full) return;
-      if (said.size >= LOG_NOTE_CAP) {
-        full = true;
-        write(fullLine);
-        return;
-      }
-      said.add(key);
-      write(line);
-    }
-  };
-}
-
 /**
  * @param {{dir: string, sites: object, log?: object}} options `sites` is the
  *   helper's registry (sites.createSites)
@@ -790,7 +769,7 @@ function createPageRoutes(options) {
     return typeof port === "number" ? libraryAddress(port) : currentHelperOrigin(dir) + protocol.route("catalog.page").path;
   }
 
-  var notes = createNoteOnce(log, "pages: further notes of this kind are not logged until the helper restarts");
+  var notes = logModule.createNoteOnce(log, "pages: further notes of this kind are not logged until the helper restarts");
 
   function sayOnce(key, line) {
     notes.say(key, line);
@@ -1060,6 +1039,6 @@ module.exports = {
   aliasesFor: aliasesFor,
   aliasMap: aliasMap,
   createPageRoutes: createPageRoutes,
-  createNoteOnce: createNoteOnce,
-  LOG_NOTE_CAP: LOG_NOTE_CAP
+  createNoteOnce: logModule.createNoteOnce,
+  LOG_NOTE_CAP: logModule.LOG_NOTE_CAP
 };

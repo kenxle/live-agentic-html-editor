@@ -263,27 +263,6 @@ function sourceNote(sourcePath) {
 }
 
 /**
- * The note a linked document carries when the reviewed page that linked to it
- * has no review in this session any more. Reviews are never deleted, so this
- * should not happen; when it does the page says so, and hands the reviewer the
- * command that opens a review rather than opening one itself. Nothing is ever
- * created by a click (spec 20260922.02, requirement 3).
- */
-/** `value` as one word for a POSIX shell: single-quoted, each ' as '\''. */
-function shellQuote(value) {
-  return "'" + String(value).replace(/'/g, "'\\''") + "'";
-}
-
-function missingReviewNote(sourcePath, sessionId) {
-  var command = "lahe review " + shellQuote(sourcePath) + " --session " + shellQuote(sessionId);
-  return "<p class=\"lahe-readonly-note lahe-missing-review\">This document has no review, which should not happen: " +
-    "the reviewed page that linked here is not in this session any more. Nothing was created. " +
-    "To open a review of <code>" + escapeHtml(sourcePath) + "</code>, run <code>" + escapeHtml(command) + "</code> " +
-    "<button type=\"button\" data-command=\"" + escapeHtml(command) + "\" " +
-    "onclick=\"navigator.clipboard&&navigator.clipboard.writeText(this.getAttribute('data-command'))\">Copy the command</button></p>";
-}
-
-/**
  * The Markdown source's text. With noFollow (a notes review, security review
  * 5) the file is opened once without following a symlink, checked on that
  * same handle to be a regular file with one link, and read from it, so a swap
@@ -516,7 +495,6 @@ module.exports = {
   rewriteRelativeUrls: rewriteRelativeUrls,
   artifactPath: artifactPath,
   sourceNote: sourceNote,
-  missingReviewNote: missingReviewNote,
   render: render,
   renderPage: renderPage,
   writeArtifact: writeArtifact

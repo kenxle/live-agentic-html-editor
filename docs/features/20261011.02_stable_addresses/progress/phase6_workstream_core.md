@@ -491,12 +491,57 @@ Not run: the whole unit suite and the whole browser suite (the disk rule). The o
 
 `lahe.js serve` count: 2 before and 2 after (Ken's two helpers). Four old page servers from this worktree were still running from a Step 2-era `sites_mappers` run at 16:00 (state folders `lahe-mappers-*` in the temp folder). I stopped them by pid. Nothing from `sa-core` is running now.
 
+## Fix round 2: security review and spec check
+
+### Summary
+
+Every item given to core is done, each with a test (failing first where it is a behavior change; a mutation check where it restores coverage). On top of `feat/stable-addresses` at df121c4. Single test files only; disk stayed at 1.9 to 2.0 GB free.
+
+### Each item, and the test that proves it
+
+| Item | Done | Test |
+| --- | --- | --- |
+| S2. A Markdown link could mount `~/.ssh` and serve it all day | yes: `markdownLinks.mountableDir` refuses a folder with a hidden segment below home (or outside home) when a link makes the mount, in `sites.cleanMounts`, and in `locate()` at serve time | `test/unit/mount_hidden_folders.test.js`; `markdown_links.test.js` updated (it pinned the old rule) |
+| S3. A taken `[::1]` twin left the helper on 127.0.0.1 alone | yes: only EADDRNOTAVAIL and EAFNOSUPPORT log and go on; anything else closes the listeners and refuses to start, naming the `[::1]` port | `test/unit/ipv6_twin_taken.test.js`; V10 in `sites_dispatch.test.js` now proves the no-IPv6 path through an in-process `ipv6Loopback` option |
+| S4. The residual risk understated what another account can do | yes: `docs/CONTRACTS.md` says loading a page yields the token, and a non-browser client can then read and write the review, which reaches the agent | doc |
+| S5. A `.git` file could name any folder as the main checkout | yes: recorded only when `<main>/.git/worktrees/<id>/gitdir` names the same `.git` file | new V5 case in `sites_registry.test.js`; fixtures in `library_open_sites.test.js` and `stable_addresses_sites.spec.js` gain git's back-link |
+| Log growth: the not-injecting line and auth refusals | yes: once per distinct refusal (keyed by check, path, origin and a hash of the headers), at most 256, then one line saying so. The note logger moved to `log.js` | `test/unit/log_caps_round2.test.js`; `harness_second_origin.spec.js` passes 5 of 5 |
+| R3. One file, two addresses | yes: a file review asks `site.bind` with `containing: true`, and the registry binds the deepest folder site that already holds the file, at its path there. `lahe review` prints the root it was bound to | `test/unit/same_file_same_address.test.js` (both orders, a notes site, and the CLI end to end) |
+| V24 deviation | yes: a same-site Origin is accepted for a review the rule would not pick now, if it could answer there; refused for one that recorded nothing there | new V24 case in `sites_binding.test.js` (fails with either check mutated) |
+| Stale docs | yes: skill (always-on close, gotcha 23, no-port address, name rule), contract and its two copies, `docs/CLI.md` (library address, close), `STATIC_SITE_FOLDER.md`, `CONTRACTS.md` injection paragraph, `docs/diagrams/README.md`, `STYLES.md`, comments in `review.js` and `write.js` | `stable_addresses_docs.test.js` now scans LIBRARY, INSTALL, README, STYLES and the diagrams README, and checks the docs agree on the name rule and on 1483 or no port |
+| Restored linked-document tests | yes: reload and handled check read the linked file; a render lists the real files; a path the mounts cannot vouch for names no file | `test/unit/linked_docs_mappers.test.js` |
+| Spike spec, rollback header, `missingReviewNote` | yes: the spike moved to `test/retired/browser/` with a header; `catalog_open_rollback` has its header; `missingReviewNote` and `shellQuote` removed (no reader) | lint passes |
+
+### Notes for the reviewers
+
+- R3 covers `lahe review` and `lahe write` only. The Library's Open (`catalog_sites.planOf`, the library builder's file) still binds a file's own folder. A file opened from the Library under an already reviewed folder can still get a second address there.
+- With the S2 rule, a link to a file in a hidden folder below home (for example `~/.config/notes/x.md`) now renders inert instead of opening. That is the intended trade.
+- The `skills/lahe/SKILL.md` change needs `npm run install-skills` at the checkpoint (not run here: it writes into Ken's live skill folder).
+
+### Files changed
+
+- `src/service/markdown_links.js`, `sites.js`, `page_routes.js`, `index.js`, `auth.js`, `log.js`, `routes.js`, `markdown.js`
+- `src/cli/commands/review.js`, `src/cli/commands/write.js` (comment)
+- `src/shared/review_format.js`
+- `skills/lahe/SKILL.md`, `docs/CONTRACTS.md`, `docs/CLI.md`, `docs/ongoing/STATIC_SITE_FOLDER.md`, `docs/ongoing/STYLES.md`, `docs/diagrams/README.md`
+- Tests: `mount_hidden_folders`, `ipv6_twin_taken`, `log_caps_round2`, `same_file_same_address`, `linked_docs_mappers` (new); `markdown_links`, `sites_dispatch`, `sites_registry`, `sites_binding`, `library_open_sites`, `review_format`, `stable_addresses_docs`; the spec `stable_addresses_sites`; two files under `test/retired/`
+
+### Single-file runs
+
+Unit: mount_hidden_folders 3/3, markdown_links 5/5, markdown_linked_docs 1/1, markdown_render 10/10, markdown_review 1/1, ipv6_twin_taken 2/2, sites_dispatch 15/15, serve_pages_port_taken 1/1, sites_registry 20/20, library_open_sites 17/17, install_hook 13/13, log_caps_round2 4/4, catalog_opens_script 5/5, catalog_auth 13/13, service_paths 9/9, pages_log_cap 2/2, sites_step3 5/5, catalog_routes 34/34, log_injection 2/2, protocol_wire 41/41, sites_styles 9/9, same_file_same_address 4/4, sites_cli 7/7, review_binds_used_review 1/1, sites_binding 18/18, review_format 56/56, stable_addresses_docs 3/3, linked_docs_mappers 4/4, sites_linked_docs 15/15, sites_pages 17/17, sites_mappers 17/17, page_load_reads 2/2, library_link_navigation 6/6, sites_state_dir_hidden 1/1, page_routes_carried 10/10, sites_lahe_names 7/7, status_catalog 18/18. Lint passes.
+
+Browser, Chromium, one spec at a time: stable_addresses_sites 7/7, harness_second_origin 5/5, stable_addresses_mappers 3/3, library_stable_address 5/5.
+
+### Leaks
+
+`lahe.js serve` count: 2 before and 2 after (Ken's two helpers). Nothing from `sa-core` is running.
+
 ## Cleanup needed
 
-- `test/browser/tmp_spike_lahe_localhost.spec.js`: the Task 1.0 spike, committed for the Linux run. Remove once Linux has been checked.
+- `test/retired/browser/tmp_spike_lahe_localhost.spec.js`: the Task 1.0 spike, retired in fix round 2.
 - `test-results/`: Playwright's output folder from the spec runs (gitignored).
 - Everything under `test/retired/` (see the Step 3 list), once Ken approves.
 - `src/service/idle_servers.js`: nothing requires it; take its entry out of `src/shared/manifest.js` in the same change (lint needs the entry while the file exists).
 - `test/retired/unit/sites_step3_v34.retired.test.js`: V34, retired in the fix round.
 - `docs/features/20260922.02_linked_docs_rail/linked_page_rail.png` and `docs/features/20260923.01_rebuild_not_the_agents_job/card_not_on_page.png`: rewritten in the working tree by spec runs (not committed). Put them back with `git checkout`.
-- `.claude-commit202610111600-core`, `...1630-core`, `...1645-core`, `...1700-core`, `...1730-core`, `...1800-core`, `...1815-core`, `...1900-core`, `...1930-core`, `...1931-core`, the Step 3 ones (`...2100-core` onward), the fix-round ones (`...202610120100-core` to `...202610120320-core`), and the one this page's commit adds, in the worktree root: commit message scratch files (gitignored).
+- `.claude-commit202610111600-core`, `...1630-core`, `...1645-core`, `...1700-core`, `...1730-core`, `...1800-core`, `...1815-core`, `...1900-core`, `...1930-core`, `...1931-core`, the Step 3 ones (`...2100-core` onward), the fix-round ones (`...202610120100-core` to `...202610120550-core`), and the one this page's commit adds, in the worktree root: commit message scratch files (gitignored).

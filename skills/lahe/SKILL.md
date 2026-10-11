@@ -77,10 +77,12 @@ lahe review <target>
 The command prints one `open` URL, the agent session id, the review folder, and
 the wake, monitor, drain, and close commands for this session. The URL is the
 document's stable address, served by the Lahe helper:
-`http://<name>.lahe.localhost:1483/<file>`. The name is the document's folder
-and its two parent folders, joined by dots (`repo.docs.ongoing`). The same file
-always gets the same address, and the address keeps working after the session
-closes, for as long as the helper runs.
+`http://<name>.lahe.localhost:1483/<file>`, or with no `:1483` when the
+port-80 forward is set up (`lahe install`). The name is the document's folder
+and its two parent folders, joined by dots (`repo.docs.ongoing`). A file inside
+a folder that already has an address gets that folder's name and its path
+there. The same file always gets the same address, and the address keeps
+working after the session closes, for as long as the helper runs.
 
 **Read the `contract` field at the top of `review.json`** in the review folder
 once, when you start on a review. It is the rules for reading an item, changing
@@ -858,8 +860,9 @@ lahe session close <agent-session-id> # ends the session; its pages keep their a
 `--remove` takes out the script line and a `lahe-layer.js` beside the page that this
 tool put there. A served review put neither there. Closing the last open session
 also stops the shared helper, and any running monitor exits with code 5. The
-helper stays up if the Library page polled it in the last two minutes, or a
-review page is still open. For your
+helper stays up if it is always on (`lahe install`, or `lahe serve --always-on`),
+if the Library page polled it in the last two minutes, or if a review page is
+still open. For your
 own dev app, delete the script line you pasted into its layout.
 
 Delete the state directory only when your human asks. `Removing it` in
@@ -933,7 +936,7 @@ Each of these is a rule that a live review paid for.
 22. **Leave framing refused unless the page is meant to be embedded.** A reveal.js
     speaker-notes window embeds the same deck, and the framed copy fought the real
     window over the review.
-23. **End the review in order.** Stopping the servers before the routine leaves you
+23. **End the review in order.** Closing the session before the routine leaves you
     unable to read what you are meant to summarize.
 24. **Write the hand-edit list beside the document.** Nobody reads LAHE's state
     directory.

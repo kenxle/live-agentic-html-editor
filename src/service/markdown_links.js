@@ -53,6 +53,26 @@ function within(candidate, root) {
   return candidate === root || candidate.indexOf(root + path.sep) === 0;
 }
 
+/**
+ * May Lahe serve the files in `dir` under a mount? Only a folder whose real
+ * path is under the home folder, with no hidden segment below home. A link
+ * like ../../.ssh/id_rsa would otherwise mount ~/.ssh, and every file in it
+ * would be served for as long as the site lives. Checked when a link makes a
+ * mount, when the registry takes one, and when a mount is served.
+ *
+ * @param {string} dir
+ * @returns {boolean}
+ */
+function mountableDir(dir) {
+  if (typeof dir !== "string" || !path.isAbsolute(dir)) return false;
+  var real;
+  var home;
+  try { real = fs.realpathSync.native(dir); } catch (err) { return false; }
+  try { home = fs.realpathSync.native(homeRoot()); } catch (err) { home = homeRoot(); }
+  if (!within(real, home)) return false;
+  return !path.relative(home, real).split(path.sep).some(function (segment) { return segment.charAt(0) === "."; });
+}
+
 function mountPrefix(dir) {
   return "/.lahe-source/" + crypto.createHash("sha256").update(path.resolve(dir)).digest("hex").slice(0, 16) + "/";
 }
@@ -162,6 +182,7 @@ function classify(href, sourceDir, registry) {
   // directory is refused even when the link itself sits inside it.
   if (!within(real, home)) return { kind: "inert", target: candidate, reason: "outside-home" };
   var dir = path.dirname(real);
+  if (!mountableDir(dir)) return { kind: "inert", target: candidate, reason: "hidden" };
   var prefix = registry ? registry.add(dir) : mountPrefix(dir);
   if (!prefix) return { kind: "inert", target: candidate, reason: "cap" };
   if (registry && typeof registry.note === "function") registry.note(real);
@@ -179,6 +200,7 @@ module.exports = {
   isPage: isPage,
   homeRoot: homeRoot,
   mountPrefix: mountPrefix,
+  mountableDir: mountableDir,
   createRegistry: createRegistry,
   classify: classify
 };
