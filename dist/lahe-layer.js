@@ -1,6 +1,6 @@
 /*
  * live-agentic-html-editor review layer
- * version 0.2.0+0dc25dcbc3a1
+ * version 0.2.0+464774a8a7e9
  *
  * GENERATED FILE. Do not edit. Edit the sources under src/ and run
  *   npm run build:layer
@@ -12,7 +12,7 @@
   "use strict";
   var g = typeof globalThis !== "undefined" ? globalThis : window;
   g.LAHE = g.LAHE || {};
-  g.LAHE.version = "0.2.0+0dc25dcbc3a1";
+  g.LAHE.version = "0.2.0+464774a8a7e9";
 })();
 /* ---- src/shared/markers.js  (owner: 0A-kernel) ---- */
 // Markers: the attribute and class names that identify DOM the tool added.
@@ -44701,8 +44701,15 @@
       var node = event.target;
       if (markers.isInsideOverlay(node)) return;
       var next = targetFor(node) || targetInside(node);
-      if (next) showFor(next, node);
-      else if (shown && !overButton) scheduleHide();
+      pendingFocus = null;
+      if (next) {
+        showFor(next, node);
+        // WebKit sends focusin BEFORE it scrolls the focused element into view
+        // (Chromium and Firefox scroll first), so a picture below the fold has
+        // no visible part yet and the button finds nowhere to sit. The scroll
+        // comes later and not on a fixed frame, so the scroll itself retries.
+        if (!shown) pendingFocus = { node: node, target: next };
+      } else if (shown && !overButton) scheduleHide();
     }
 
     function onKeyDown(event) {
@@ -44716,13 +44723,26 @@
     // Scroll and resize move the visible part, so the button follows, once a
     // frame at most: a scroll fires far more often than the screen repaints.
     var placeFrame = null;
+    // A focused element whose picture was off screen when focus arrived, so a
+    // scroll can still offer the button while that element keeps focus.
+    var pendingFocus = null;
 
     function onScrollOrResize() {
       lastNode = null;
-      if (!shown || openOn || placeFrame !== null) return;
+      if ((!shown && !pendingFocus) || openOn || placeFrame !== null) return;
       placeFrame = win.requestAnimationFrame(function () {
         placeFrame = null;
-        if (shown && !openOn && !placeButton()) hideNow();
+        if (openOn) return;
+        if (!shown && pendingFocus) {
+          var p = pendingFocus;
+          if (doc.activeElement !== p.node || !p.node.isConnected) pendingFocus = null;
+          else {
+            showFor(p.target, p.node);
+            if (shown) pendingFocus = null;
+          }
+          return;
+        }
+        if (shown && !placeButton()) hideNow();
       });
     }
 
@@ -49904,7 +49924,7 @@
   "use strict";
 
   // Replaced by scripts/build-layer.js at concatenation time.
-  var VERSION = "0.2.0+0dc25dcbc3a1";
+  var VERSION = "0.2.0+464774a8a7e9";
 
   var protocol = ns.protocol;
   var record = ns.record;
