@@ -1,19 +1,8 @@
 # Old words stuck on the page after a restructure
 
-## Needs your call
+## Status
 
-**Your direction:** the tool holds the line too hard on words you wrote. Often you *want* the agent to rewrite them. Flag it when that happens; don't fight it.
-
-That becomes option H below, "flag, don't hold", plus A. Together:
-
-- **H.** After a card is handled, the page check never reopens it and never writes your old words back. If your words have changed on the page since, the card says so ("the agent reworded what you wrote") and shows your version beside the page's. A **Reopen** button on the card sends it back to the agent if you didn't want the change.
-- **A.** A card the agent refused is never written onto the page. Your words stay on the card with the agent's reason.
-
-The rule this sets: the page differs from the file only while an edit is still waiting for the agent's first answer. After that, the page is the file, and the card tells you what changed.
-
-**One question before I write the spec:** should the flag show for any change to your words, or only when the agent changed them without being asked? The tool can't always tell those apart. "Any change" is simpler and more honest, but it will also flag the table you asked for.
-
-This changes how the page check works, so the next step is a short spec for you to approve on a page, not a direct code change.
+Nothing open here. You chose A plus H, without a flag: once the agent answers a card, the page shows the file. The work is in [the spec](01_spec_flag_dont_hold.md), which is where progress goes.
 
 ## The short version
 
@@ -219,3 +208,8 @@ Once a card is handled, the page check stops enforcing it. It still looks, and i
 ## Right now, for the hackathon article
 
 The five stuck cards will keep re-adding lines until they are gone. I have not touched that review, because another agent session owns it. The agent there already opened a fresh page, which works but drops the history. If you want the history kept, nothing short of a fix above keeps both.
+
+## Decisions
+
+- Chosen: A (refused cards are not written onto the page) and H (the page check stops reopening handled cards over your words). H ships with no flag, note or button: the page behaves like a normal document.
+- Not chosen: B, C, D, E, F and G. F (a way to dismiss a card) is boarded separately as LAHE-dismiss-card.
