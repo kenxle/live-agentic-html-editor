@@ -6,6 +6,8 @@
 
 The fix that works: the helper starts when you log in and stays up, and it keeps every document's address answering, so a history link loads the page with no agent involved. The best way to do that is one port for all documents, with a separate host name per document (option D).
 
+**Settled in review:** option D. One port, a host name per document. Because each name is its own address to the browser, this also answers the security worry about pages reading each other.
+
 Stable addresses were the last option on [the Library ideas page](DOCUMENT_INDEX_IDEAS.md), which we skipped then. It is a real feature (serving, sessions, and security all change), so it would go through feature-forge.
 
 **Your rule for this:** the core stays a plain server that runs on Mac, Linux, and Windows. Anything Mac-only, like a menu-bar icon, is a separate companion app on top. What that means here:
@@ -151,6 +153,6 @@ While checking this, I found 63 page-server processes left running from test run
 ## Questions for you
 
 1. Are you OK with the Lahe helper starting at login and staying up? Leaning yes, from your note on the cons.
-2. Option D (one port, a host name per document) or option A (a port per document)? I recommend D. With D, every document can keep a working address at no extra cost.
+2. ~~Option D or option A?~~ Settled: option D. Still open: the default `docname.lahe.localhost`, with the short `docname.lahe` as an optional extra, or `.lahe` from the start?
 3. Login item first, or go straight to a menu-bar app? From your notes: the login item sounds reasonable, and you like the app for one-click access to the Library. One path: ship the login item with this feature, then the menu-bar app as its own follow-up.
 4. Ready for this to become a feature-forge feature, starting with the brief?
