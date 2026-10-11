@@ -836,7 +836,7 @@ var SITE_HANDLERS = {
     catch (err) { return badSiteRequest("the root is not there: " + body.root); }
     var bound;
     try {
-      bound = deps.sites.bind({ root: root, mode: body.mode, entry: body.entry, mounts: body.mounts });
+      bound = deps.sites.bind({ root: root, mode: body.mode, entry: body.entry, mounts: body.mounts, containing: body.containing === true });
     } catch (err) {
       return badSiteRequest(err.message);
     }
@@ -857,7 +857,8 @@ var SITE_HANDLERS = {
       body: {
         name: bound.name,
         origin: origin,
-        url: origin ? origin + "/" + encodeEntry(bound.site.entry) : null,
+        url: origin ? origin + "/" + encodeEntry(typeof bound.entry === "string" ? bound.entry : bound.site.entry) : null,
+        root: bound.site.root,
         printed_ending: protocol.PAGES.PRINTED_ENDING
       }
     };

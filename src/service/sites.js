@@ -395,6 +395,22 @@ function createSites(options) {
     var s = spec || {};
     var problem = rootProblem(s.root, s.mode, dir);
     if (problem) throw new Error(problem);
+    // SAME FILE, SAME ADDRESS. A file reviewed on its own (`containing`) goes
+    // into the deepest folder site that already holds it, at its path there,
+    // so a file under a reviewed folder never gets a second address. The site
+    // keeps its own entry page; the file's path comes back as `entry`.
+    if (s.containing === true && s.mode === MODE.FOLDER && typeof s.entry === "string" && s.entry) {
+      var outer = deepestFolderSite(path.join(s.root, s.entry));
+      if (outer && outer.site.root !== s.root) {
+        var outerMounts = Object.assign({}, outer.site.mounts || {}, cleanMounts(s.mounts));
+        if (JSON.stringify(outerMounts) !== JSON.stringify(outer.site.mounts || {}) && !readOnly) {
+          outer.site.mounts = outerMounts;
+          record("update", outer.name);
+        }
+        var relative = path.relative(outer.site.root, path.join(s.root, s.entry)).split(path.sep).join("/");
+        return { name: outer.name, site: outer.site, created: false, entry: relative };
+      }
+    }
     var found = byRoot(s.root, s.mode);
     if (!found && readOnly) {
       throw new Error("the site registry cannot be read, so no new name is made; see " + jsonPath(dir));
@@ -425,6 +441,18 @@ function createSites(options) {
     record("grant", name);
     say("sites: new name " + name + " for " + s.root + " (" + s.mode + ")");
     return { name: name, site: table[name], created: true };
+  }
+
+  /** The folder site with the longest root that holds `file`, or null. */
+  function deepestFolderSite(file) {
+    var best = null;
+    Object.keys(table).forEach(function (name) {
+      var entry = table[name];
+      if (entry.mode !== MODE.FOLDER) return;
+      if (file.indexOf(entry.root + path.sep) !== 0) return;
+      if (!best || entry.root.length > best.site.root.length) best = { name: name, site: entry };
+    });
+    return best;
   }
 
   /** Add mounts to an existing site. Returns whether anything was written. */

@@ -305,6 +305,11 @@ async function run(argv, mode) {
   if (code === 0) {
     if (bound) {
       process.stdout.write("\n  open      " + bound.url + "\n");
+      // The helper may have put the file in a larger site that already held it.
+      if (typeof bound.root === "string" && bound.root !== site.root) {
+        site.root = bound.root;
+        site.inOuter = true;
+      }
       printSiteScope(notesMode ? "notes" : served, site, opts, notesFolder);
     }
     if (rendered) {
@@ -416,7 +421,9 @@ async function bindSite(dir, port, reviewId, site) {
     mode: site.mode,
     entry: site.entry,
     mounts: site.mounts || {},
-    linked: site.linked || []
+    linked: site.linked || [],
+    // A file goes into the folder site that already holds it, if there is one.
+    containing: site.served === "file"
   };
   var res = await fetch("http://" + protocol.DEFAULT_HOST + ":" + helperPort + protocol.route("site.bind").path, {
     method: "POST",
@@ -445,7 +452,9 @@ function printSiteScope(kind, site, opts, notesFolder) {
     "  root      " + site.root +
       (kind === "folder"
         ? "  (every page in it is this one review; links between them keep the rail)"
-        : "  (the page's own folder, which is everything this address can serve)") +
+        : site.inOuter
+          ? "  (a folder already served at this address, which holds this page)"
+          : "  (the page's own folder, which is everything this address can serve)") +
       "\n"
   );
   if (opts.only) {
