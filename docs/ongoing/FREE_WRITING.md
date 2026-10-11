@@ -69,10 +69,10 @@ There are two checks, and they do different jobs.
 - Because an unchanged anchor makes the whole sitting look like "only added words", the helper judges a run only when nothing in the review was written. An agent that places one run and says handled on two is not caught by the helper. The reviewer sees the skipped one missing from the page and writes it again.
 - Format-only edits (bold or italic added to existing words) are checked the same way: each span whose formatting changed must sit inside a `strong`/`b` or `em`/`i` in the built page.
 
-## `lahe write` and its one-page server
+## `lahe write` and its own address
 
 - `lahe write notes/day.md` creates the Markdown file if it is not there (its folder must exist), or opens an existing regular `.md` file as is. It never overwrites, and refuses a symlink, a directory, or a file with more than one hard link. Code: `src/cli/commands/write.js`. Flags and output: `docs/CLI.md`.
-- The page gets its own one-page server (`src/service/static_servers.js`): the page, the style and fonts it names, and 404 for everything else, dotfiles and other reviews' pages included. It answers only its own loopback address. The reason is that a notes file in a broad folder must not serve the folder.
+- The page gets its own stable address, a notes site in the helper's registry (`src/service/sites.js`, mode `page-only`, served by `src/service/page_routes.js`): the page, the style and fonts it names, and 404 for everything else, dotfiles and other reviews' pages included. Its name comes from the folder it sits in, like any address. The reason is that a notes file in a broad folder must not serve the folder.
 - The review carries `notes: true`. That turns off proofreading for the review.
 - An empty Markdown file renders a hero title from the file name. `markdown.js` marks that title as chrome (`data-lahe-file-title`) so it is never a content block. The page then has no content blocks, and the first sitting uses `placement: start_of_container` on the page's one `main`.
 - After the first record is placed and handled, later sittings use `after_anchor` like any page.
@@ -118,6 +118,6 @@ There are two checks, and they do different jobs.
 | Run fields, validation, ceilings, take-back | `src/shared/record.js` |
 | Contract lines, projection, `PROOFREAD_MIN_WORDS` | `src/shared/review_format.js` |
 | Helper checks and the size ceiling | `src/service/log.js`, `src/service/handled_check.js` |
-| `lahe write` and the one-page server | `src/cli/commands/write.js`, `src/service/static_servers.js` |
+| `lahe write` and its notes address | `src/cli/commands/write.js`, `src/service/sites.js`, `src/service/page_routes.js` |
 
 The contract lines an agent reads (place blocks in order, escape them as literal text, `from_anchor`, `anchor_tag_after`, `placement`, proofreading) are in `skills/lahe/SKILL.md` and `docs/CONTRACTS.md`, and travel with the contract in `review_format.js`.

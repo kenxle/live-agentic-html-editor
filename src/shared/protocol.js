@@ -66,7 +66,10 @@
   // catalog_seen_at, so `lahe library` would print a URL they answer with a
   // 404 and a restarted static server's stale origins would come back. They
   // must be restarted.
-  var SERVICE_CONTRACT = 15;
+  // 16: older helpers serve no pages themselves: they have no pages port, no
+  // site registry and no site.bind route, so `lahe review` could not give a
+  // page its stable address. They must be restarted.
+  var SERVICE_CONTRACT = 16;
 
   // What a CLI or layer makes of the contract a running helper reports. OLDER
   // is refused (the helper is restarted), NEWER means this clone is behind and

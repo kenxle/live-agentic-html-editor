@@ -1,0 +1,73 @@
+// V38 (R12, agents are told): the skill, the contract and its copies, the CLI
+// doc, the serving docs, the diagrams and the manifest describe stable
+// addresses and the always-on helper, and none of them still describes
+// per-session page servers or random ports. A scripted grep, so a sentence
+// that drifts back in fails the gate.
+//
+// Dated history bullets ("- 2026-09-16: ...") are a record of what was true
+// then, and are not read.
+
+"use strict";
+
+const test = require("node:test");
+const assert = require("node:assert/strict");
+const fs = require("node:fs");
+const path = require("node:path");
+
+const REPO_ROOT = path.join(__dirname, "..", "..");
+
+const FILES = [
+  "skills/lahe/SKILL.md",
+  "src/shared/review_format.js",
+  "test/unit/review_format.test.js",
+  "docs/CONTRACTS.md",
+  "docs/CLI.md",
+  "docs/ongoing/SERVING_ARCHITECTURES.md",
+  "docs/ongoing/STATIC_SITE_FOLDER.md",
+  "docs/ongoing/FREE_WRITING.md",
+  "docs/ongoing/SESSION_OWNERSHIP.md",
+  "docs/diagrams/system_overview.md",
+  "docs/diagrams/session_ownership.md",
+  "docs/diagrams/review_round_trip.md",
+  "docs/diagrams/module_map.md",
+  "src/shared/manifest.js"
+];
+
+// Wording that describes the retired serving model.
+const STALE = [
+  /random (loopback )?port/i,
+  /ephemeral port/i,
+  /per-session (page|static)/i,
+  /session-owned static/i,
+  /one per folder per agent session/i,
+  /static servers? (of|owned by) (this|the|that|a) session/i,
+  /session's (static|page) servers?/i,
+  /stops? (its|the|every|a session's) (static|page) servers?/i,
+  /on its old port/i,
+  /idle[- ]stop/i,
+  /one-page server/i
+];
+
+test("V38: no doc an agent reads still describes per-session page servers or random ports", () => {
+  const found = [];
+  FILES.forEach((rel) => {
+    const lines = fs.readFileSync(path.join(REPO_ROOT, rel), "utf8").split("\n");
+    lines.forEach((line, index) => {
+      if (/^\s*- \d{4}-\d{2}-\d{2}:/.test(line)) return;
+      STALE.forEach((pattern) => {
+        if (pattern.test(line)) found.push(rel + ":" + (index + 1) + ": " + line.trim().slice(0, 120));
+      });
+    });
+  });
+  assert.deepEqual(found, []);
+});
+
+test("V38: the skill, the contract and the CLI doc name the stable address", () => {
+  const skill = fs.readFileSync(path.join(REPO_ROOT, "skills/lahe/SKILL.md"), "utf8");
+  const contract = require("../../src/shared/review_format.js").CONTRACT.join("\n");
+  const cli = fs.readFileSync(path.join(REPO_ROOT, "docs/CLI.md"), "utf8");
+  for (const [name, text] of [["skill", skill], ["contract", contract], ["CLI doc", cli]]) {
+    assert.match(text, /<name>\.lahe\.localhost:1483/, name);
+    assert.match(text, /after\s+(the|this)\s+session\s+closes/, name);
+  }
+});
