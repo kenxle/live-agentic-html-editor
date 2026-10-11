@@ -429,9 +429,6 @@ var HANDLERS = {
       // down. A boolean and nothing else; the registry owns what it buys.
       quiet: body.quiet === true
     });
-    // A window of this review is open, so its session's page servers stay up,
-    // and come back if the idle sweep had stopped them (idle_servers.js).
-    if (outcome.granted) noteWindow(deps, request.review);
     return {
       status: outcome.granted ? 200 : protocol.statusFor("PROTO_SECOND_WINDOW"),
       body: outcome
@@ -449,8 +446,6 @@ var HANDLERS = {
     var outcome = deps.reviews.releaseWindow(request.review, {
       session_secret: typeof body.session_secret === "string" ? body.session_secret : undefined
     });
-    // The goodbye is where the idle grace starts, not the last sweep.
-    if (outcome.released) noteWindow(deps, request.review);
     return { status: 200, body: outcome };
   },
 
@@ -497,17 +492,6 @@ function ownerSessionOf(request, deps) {
   // has no directory and therefore no feed and no heartbeat.
   if (!owner || owner === "legacy" || !protocol.isSafeId(owner)) return null;
   return owner;
-}
-
-/** Tell the idle sweep a window of this review was active. Never throws. */
-function noteWindow(deps, reviewId) {
-  if (!deps.idleServers || typeof deps.idleServers.windowActivity !== "function") return;
-  try {
-    var pending = deps.idleServers.windowActivity(reviewId);
-    if (pending && typeof pending.catch === "function") pending.catch(function () {});
-  } catch (err) {
-    // The claim's answer matters more than the server bookkeeping.
-  }
 }
 
 /**
@@ -869,7 +853,10 @@ var SITE_HANDLERS = {
     review.origins.filter(function (origin) { return OLD_PORT_ORIGIN.test(origin); }).forEach(function (origin) {
       deps.reviews.removeOrigin(review.id, origin);
     });
-    var port = typeof deps.pagesPort === "function" ? deps.pagesPort() : null;
+    // The port the helper has proved: 80 once the port-80 forward is checked,
+    // otherwise the pages port (src/service/addresses.js).
+    var port = typeof deps.printedPort === "function" ? deps.printedPort()
+      : typeof deps.pagesPort === "function" ? deps.pagesPort() : null;
     var origin = typeof port === "number" ? protocol.siteOrigin(bound.name, port) : null;
     deps.log.helperLog("site " + bound.name + (bound.created ? " granted" : " bound") + " for review " + review.id + ": " + root);
     return {

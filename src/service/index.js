@@ -52,7 +52,6 @@ var catalogRequests = require("./catalog_requests.js");
 var catalogActions = require("./catalog_actions.js");
 var catalogSites = require("./catalog_sites.js");
 var staticServers = require("./static_servers.js");
-var idleServersModule = require("./idle_servers.js");
 var selfStopModule = require("./self_stop.js");
 var loginItemModule = require("./login_item.js");
 var addressesModule = require("./addresses.js");
@@ -171,18 +170,16 @@ function readBody(req, limit) {
 }
 
 /**
- * The port the pages listener asks for, or null for no pages listener.
+ * The port the pages listener asks for.
  *
- * An explicit option wins (tests pass 0 for any free port, or null for none),
- * then LAHE_PAGES_PORT, then PAGES.PORT when the switch is on. With the switch
- * off and nothing named, there is no pages listener at all.
+ * An explicit option wins (tests pass 0 for any free port), then
+ * LAHE_PAGES_PORT, then PAGES.PORT (1483).
  */
-function pagesPortFrom(opts, pagesOn) {
-  if (opts.pagesPort === null) return null;
+function pagesPortFrom(opts) {
   if (typeof opts.pagesPort === "number") return opts.pagesPort;
   var fromEnv = process.env[protocol.PAGES.PORT_ENV];
   if (fromEnv !== undefined && fromEnv !== "" && Number.isInteger(Number(fromEnv))) return Number(fromEnv);
-  return pagesOn ? protocol.PAGES.PORT : null;
+  return protocol.PAGES.PORT;
 }
 
 /**
@@ -228,29 +225,25 @@ async function serve(options) {
   var reviews = reviewsModule.createReviews({ dir: dir, log: log });
   reviews.loadFromDisk();
 
-  // STABLE ADDRESSES (docs/features/20261011.02_stable_addresses). The switch
-  // is read once, here, and reported in service.json; the CLI follows what a
-  // running helper reports. With it off there is no pages listener unless a
-  // test names a pages port, and no registry lookup answers a request. The
-  // registry itself, Host dispatch, the ::1 listener and site.bind are live
-  // either way: each is harmless while no name is granted.
-  var pagesOn = opts.pages !== undefined ? opts.pages === protocol.PAGES.SWITCH_ON : protocol.pagesSwitchOn(process.env);
-  var pagesPortWanted = pagesPortFrom(opts, pagesOn);
+  // STABLE ADDRESSES (docs/features/20261011.02_stable_addresses). The helper
+  // serves every page Lahe serves, at <name>.lahe.localhost:<pages port>, from
+  // a name registry it alone writes. There are no per-session page servers.
+  var pagesPortWanted = pagesPortFrom(opts);
   var sites = sitesModule.createSites({
     dir: dir,
     home: opts.sitesHome,
     log: function (line) { log.helperLog(line); }
   });
   sites.load();
-  if (pagesOn) sitesModule.ensureCliSecret(dir);
+  sitesModule.ensureCliSecret(dir);
   var pageRoutes = pageRoutesModule.createPageRoutes({ dir: dir, sites: sites, log: log });
   // Filled in once the pages listener is bound.
   var boundPagesPort = null;
 
   /** A page's request to the API: is its site origin good for this review? */
   function siteOriginAllowed(reviewId, origin) {
-    if (!pagesOn || boundPagesPort === null) return false;
-    var name = protocol.siteNameFromOrigin(origin, boundPagesPort);
+    if (boundPagesPort === null) return false;
+    var name = protocol.siteNameFromOrigin(origin, boundPagesPort, !!addresses && addresses.laheNamesVerified());
     var site = name ? sites.get(name) : null;
     var review = site ? reviews.get(reviewId) : null;
     return !!review && pageRoutesModule.reviewAnswersOnSite(site, review);
@@ -258,8 +251,8 @@ async function serve(options) {
 
   /** The preflight's question for a site origin: is it a registered site? */
   function siteOriginKnown(origin) {
-    if (!pagesOn || boundPagesPort === null) return false;
-    var name = protocol.siteNameFromOrigin(origin, boundPagesPort);
+    if (boundPagesPort === null) return false;
+    var name = protocol.siteNameFromOrigin(origin, boundPagesPort, !!addresses && addresses.laheNamesVerified());
     return !!name && !!sites.get(name);
   }
   // The window sessions the LAST helper was holding. A helper is replaced
@@ -328,21 +321,30 @@ async function serve(options) {
   });
   // With pages served by the helper, the Library reads a row's address from
   // the registry and Open binds a site instead of restarting a page server.
-  var catalogSiteTools = pagesOn
-    ? catalogSites.createCatalogSites({
-        dir: dir,
-        sites: sites,
-        reviews: reviews,
-        port: function () { return boundPagesPort; },
-        log: function (line) { log.helperLog(line); }
-      })
-    : null;
+  var catalogSiteTools = catalogSites.createCatalogSites({
+    dir: dir,
+    sites: sites,
+    reviews: reviews,
+    port: function () { return boundPagesPort; },
+    log: function (line) { log.helperLog(line); }
+  });
   var catalogReaderInstance = catalogReader.createReader(Object.assign({
     dir: dir,
     pidAlive: opts.pidAlive,
     pages: catalogSiteTools
   }, catalogReader.queueInputs(catalogQueue)));
-  var catalogOps = staticServers.createCatalogOps({ dir: dir, reviews: reviews, sessions: agentSessions });
+  // Page servers are retired, so the Library's old restart path has nothing to
+  // restart: Open binds a site (catalogSiteTools). What the Library's sweep of
+  // its own quiet sessions still needs is a plain session close.
+  var catalogOps = {
+    reopenForCatalog: function () {
+      return Promise.reject(new Error("page servers are retired; Open binds a site instead"));
+    },
+    closeQuiet: function (sessionId) {
+      agentSessions.close(sessionId);
+      return Promise.resolve({ stopped: 0 });
+    }
+  };
   var catalogActionsInstance = catalogActions.createCatalogActions({
     dir: dir,
     reader: catalogReaderInstance,
@@ -356,20 +358,9 @@ async function serve(options) {
     log: function (line, atMs) { log.helperLog(line, atMs); }
   });
 
-  // Page servers nobody has had open for two minutes are stopped; the session
-  // stays open (idle_servers.js). The two env knobs are for tests only.
-  var idleServers = idleServersModule.createIdleServers({
-    dir: dir,
-    reviews: reviews,
-    agentSessions: agentSessions,
-    log: log,
-    graceMs: typeof opts.idleGraceMs === "number" ? opts.idleGraceMs : envMs("LAHE_IDLE_GRACE_MS")
-  });
-
   var deps = {
     log: log,
     reviews: reviews,
-    idleServers: idleServers,
     projection: projection,
     // The session store, so a route can answer two questions server-side: which
     // agent session owns this review, and is that session's monitor alive. Both
@@ -395,14 +386,13 @@ async function serve(options) {
   // here, because the agent loop has to run for the life of the helper rather
   // than only while a page happens to be asking something.
   projection.startWatching(deps);
-  idleServers.start(typeof opts.idleSweepMs === "number" ? opts.idleSweepMs : envMs("LAHE_IDLE_SWEEP_MS"));
 
   // HOST DISPATCH COMES FIRST, on every listener, before the preflight and
   // before any route is matched. Each family answers a closed set of Hosts:
   //
   //   api      loopback names, on either port: today's handling, unchanged
   //   library  library.lahe.localhost: the Library's routes only
-  //   page     a registered name, on the pages port only, with the switch on
+  //   page     a registered name, on the pages port only
   //   anything else is a 400, and a page name on the API port is too
   function dispatch(listener) {
     return function (req, res) {
@@ -419,7 +409,7 @@ async function serve(options) {
         });
         return;
       }
-      if (family.family === protocol.HOST_FAMILY.PAGE && listener === "pages" && pagesOn) {
+      if (family.family === protocol.HOST_FAMILY.PAGE && listener === "pages") {
         try {
           pageRoutes.handle(req, res, family.name);
         } catch (err) {
@@ -491,11 +481,12 @@ async function serve(options) {
   /** What service.json says about pages, for the CLI to follow. */
   function pagesReport() {
     return {
-      mode: pagesOn ? protocol.PAGES.MODE_SITES : protocol.PAGES.MODE_SERVERS,
+      mode: protocol.PAGES.MODE_SITES,
       port: boundPagesPort,
       printed_ending: protocol.PAGES.PRINTED_ENDING,
-      port_free: addresses ? addresses.report().port_free : { on: false, verified: false, reason: "not set up" },
-      lahe_names: addresses ? addresses.report().lahe_names : { on: false, verified: false, reason: "not set up" },
+      printed_ending_reason: protocol.PAGES.PRINTED_ENDING_REASON,
+      port_free: addresses ? addresses.report().port_free : { on: false, verified: false, reason: protocol.PAGES.PORT_FREE_OFF_REASON },
+      lahe_names: addresses ? addresses.report().lahe_names : { on: false, verified: false, reason: protocol.PAGES.LAHE_NAMES_OFF_REASON },
       // The port `lahe review` prints: 80 once the forward is proved.
       printed_port: addresses ? addresses.printedPort() : boundPagesPort
     };
@@ -848,35 +839,49 @@ async function serve(options) {
   var boundPort = server.address().port;
   catalog.port = boundPort;
   if (host === protocol.DEFAULT_HOST) await listenOn("api", boundPort, "::1", false);
-  if (pagesPortWanted !== null) {
-    var pagesServer;
-    try {
-      pagesServer = await listenOn("pages", pagesPortWanted, protocol.DEFAULT_HOST, true);
-    } catch (err) {
-      await closeListeners();
-      var why = err && err.code === "EADDRINUSE"
-        ? "the pages port " + pagesPortWanted + " is taken by another program"
-        : "could not listen for pages on port " + pagesPortWanted + ": " + (err && err.message);
-      log.helperLog(why);
-      throw new Error(why);
-    }
-    boundPagesPort = pagesServer.address().port;
-    // library.lahe.localhost answers at this port, with the switch on.
-    if (pagesOn) catalog.pagesPort = boundPagesPort;
-    await listenOn("pages", boundPagesPort, "::1", false);
-    addresses = addressesModule.createAddresses(Object.assign({
-      installed: installed,
-      pagesPort: boundPagesPort,
-      pagesServers: listeners.filter(function (entry) { return entry.kind === "pages"; }).map(function (entry) { return entry.server; }),
-      log: function (line) { log.helperLog(line); },
-      onChange: function () { reviews.writeReadyFile(readyDetails()); }
-    }, opts.addresses || {}));
-    await addresses.start();
+  var pagesServer;
+  try {
+    pagesServer = await listenOn("pages", pagesPortWanted, protocol.DEFAULT_HOST, true);
+  } catch (err) {
+    await closeListeners();
+    var why = err && err.code === "EADDRINUSE"
+      ? "the pages port " + pagesPortWanted + " is taken by another program, so the helper did not start"
+      : "could not listen for pages on port " + pagesPortWanted + ": " + (err && err.message);
+    log.helperLog(why);
+    throw Object.assign(new Error(why), { code: err && err.code, pagesPort: pagesPortWanted });
   }
+  boundPagesPort = pagesServer.address().port;
+  // library.lahe.localhost answers at this port.
+  catalog.pagesPort = boundPagesPort;
+  await listenOn("pages", boundPagesPort, "::1", false);
+  // The two optional checks: the port-80 forward and the .lahe names
+  // (src/service/addresses.js). Each one proves itself before it is used.
+  addresses = addressesModule.createAddresses(Object.assign({
+    installed: installed,
+    pagesPort: boundPagesPort,
+    pagesServers: listeners.filter(function (entry) { return entry.kind === "pages"; }).map(function (entry) { return entry.server; }),
+    log: function (line) { log.helperLog(line); },
+    onChange: function () { reviews.writeReadyFile(readyDetails()); }
+  }, opts.addresses || {}));
+  await addresses.start();
   // The helper modules that map a page to a file (the healer, the reload
   // check, rebuild, the handled check, the projection) ask the registry from
-  // here on, for this state folder only, and only with the switch on.
-  if (pagesOn && boundPagesPort !== null) pageRoutesModule.activate(dir, { sites: sites, pagesPort: boundPagesPort });
+  // here on, for this state folder.
+  pageRoutesModule.activate(dir, {
+    sites: sites,
+    pagesPort: boundPagesPort,
+    laheNames: function () { return !!addresses && addresses.laheNamesVerified(); }
+  });
+
+  // Page-server processes from before stable addresses are stopped on every
+  // start, each only after its own health probe proves it is the recorded
+  // process (static_servers.stopLeftovers). Not awaited: the helper serves
+  // while they go.
+  staticServers.stopLeftovers(dir).then(function (stopped) {
+    if (stopped > 0) log.helperLog("stopped " + stopped + " page server" + (stopped === 1 ? "" : "s") + " left over from before stable addresses");
+  }).catch(function (err) {
+    log.helperLog("could not check for leftover page servers: " + err.message);
+  });
 
   // The reopened-session sweep (architecture, Helper lifetime). One run at a
   // time: a slow close must not overlap the next tick. unref'd, so it never
@@ -922,11 +927,13 @@ async function serve(options) {
   log.helperLog(
     "serving on http://" + host + ":" + boundPort + ", state directory " + dir + ", reviews " + (reviews.list().join(", ") || "none")
   );
+  // What `lahe status` reports, said once at start for the log (V71): the
+  // port, the ending printed and why, and whether addresses carry the port.
+  var report = pagesReport();
   log.helperLog(
-    pagesOn
-      ? "pages on port " + boundPagesPort + ", printed as <name>." + protocol.PAGES.PRINTED_ENDING +
-          " (" + protocol.PAGES.SWITCH_ENV + "=" + protocol.PAGES.SWITCH_ON + ")"
-      : "pages served by per-session page servers (" + protocol.PAGES.SWITCH_ENV + " is not " + protocol.PAGES.SWITCH_ON + ")"
+    "pages on port " + boundPagesPort + "; addresses print as <name>." + report.printed_ending +
+      " because " + report.printed_ending_reason + "; " +
+      (report.port_free.verified ? "printed without the port" : "printed with :" + boundPagesPort + " (port-80 forward: " + report.port_free.reason + ")")
   );
   log.helperLog(
     installed && alwaysOn
@@ -983,7 +990,7 @@ async function serve(options) {
     sweepReopened: sweepReopened,
     sweepLibrarySessions: sweepLibrarySessions,
     server: server,
-    // Stable addresses: the bound pages port (null with the switch off), the
+    // Stable addresses: the bound pages port, the
     // registry, and every listener's address.
     pagesPort: boundPagesPort,
     sites: sites,
@@ -997,7 +1004,6 @@ async function serve(options) {
       // Once: a self-stop and the caller's own close may both ask.
       if (closing) return closing;
       if (!opts.schedule) clearInterval(sweepTimer);
-      idleServers.stop();
       selfStop.stop();
       pageRoutesModule.deactivate(dir);
       closing = Promise.all([closeListeners(), addresses ? addresses.close() : null]).then(function () {});

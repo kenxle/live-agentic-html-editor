@@ -13,7 +13,6 @@ var sessions = require("../../service/agent_sessions.js");
 var service = require("../../service/index.js");
 var sourceStamp = require("../../service/source_stamp.js");
 var reviewsModule = require("../../service/reviews.js");
-var staticServers = require("../../service/static_servers.js");
 var catalogReader = require("../../service/catalog_reader.js");
 var loginItem = require("../../service/login_item.js");
 var selfStop = require("../../service/self_stop.js");
@@ -147,6 +146,13 @@ async function helperStillWanted(dir, nowMs) {
   var ready = readReady(dir);
   if (ready && typeof ready.port === "number") {
     var live = await service.probeHealth(protocol.DEFAULT_HOST, ready.port);
+    // AN ALWAYS-ON HELPER STAYS UP THROUGH EVERY CLOSE. It serves every page
+    // at its stable address, so stopping it would take every page down until
+    // the login item restarted it. Said by the helper itself, or by the
+    // install recorded for this port.
+    if ((live && live.always_on === true) || loginItem.installedFor(dir, ready.port)) {
+      return { keep: true, why: "it is always on", always: true };
+    }
     var seen = live ? Date.parse(live[protocol.HEALTH_FIELD.CATALOG_SEEN_AT]) : NaN;
     if (!Number.isNaN(seen) && nowMs - seen < protocol.CATALOG.LIBRARY_SEEN_MS) {
       return {
@@ -512,7 +518,8 @@ async function run(argv, options) {
           (renamed.name ? " is named " + JSON.stringify(renamed.name) : " has no name now") + "\n"
       );
     } else if (args.action === "close") {
-      var staticStopped = await staticServers.stopAll(dir, args.id);
+      // Only the session closes. Its pages stay at their addresses, served by
+      // the helper, for as long as the helper runs.
       store.close(args.id);
       var stopped = false;
       var kept = null;
@@ -520,14 +527,14 @@ async function run(argv, options) {
         var wanted = await helperStillWanted(dir, typeof opts.now === "number" ? opts.now : Date.now());
         if (wanted.keep) {
           kept = wanted.why;
-          askStopWhenQuiet(dir, typeof opts.now === "number" ? opts.now : Date.now(), wanted.why);
+          // An always-on helper is never asked to stop once quiet either.
+          if (!wanted.always) askStopWhenQuiet(dir, typeof opts.now === "number" ? opts.now : Date.now(), wanted.why);
         } else {
           stopped = await stopVerifiedHelper(dir);
         }
       }
       out(
         "agent session " + args.id + " closed; review history kept" +
-          (staticStopped ? "; static review server" + (staticStopped === 1 ? "" : "s") + " stopped" : "") +
           (stopped ? "; shared helper stopped" : "") +
           (kept ? "; shared helper left running" + (/^for /.test(kept) ? " " : ": ") + kept : "") + "\n"
       );
@@ -539,14 +546,14 @@ async function run(argv, options) {
       var prior = readReady(dir);
       var port = args.port || (prior && prior.port) || protocol.DEFAULT_PORT;
       var helperRun = await startHelper(dir, port);
-      var staticStarted = await staticServers.restartAll(dir, args.id);
       var helperNote = "; shared helper already running";
       if (helperRun.started) helperNote = helperRun.stale ? "; shared helper restarted" : "; shared helper started";
-      else if (helperRun.keptForReviewer) helperNote = "; shared helper left running for an open review page";
+      // The helper line below says why: an open review page, or a busy helper.
+      else if (helperRun.keptForReviewer) helperNote = "; shared helper left running";
       var message =
         "agent session " + args.id + (handedOff ? " taken over explicitly" : " reopened") +
           helperNote +
-          (staticStarted ? "; static review server" + (staticStarted === 1 ? "" : "s") + " restarted" : "") + "\n";
+          "\n";
       // Never a silent bounce: a restart drops every open review page's
       // connection for a moment, and the person watching that page is owed the
       // reason.

@@ -220,7 +220,9 @@ function isEntry(value) {
 }
 
 /**
- * @param {{dir: string, home?: string, now?: function(): number, log?: function(string)}} options
+ * @param {{dir: string, home?: string, now?: function(): number, log?: function(string), reader?: boolean}} options
+ *   `reader` is for the CLI (`lahe status`): it reads the registry and never
+ *   writes it, not even the rebuild from the log. Only the helper writes.
  */
 function createSites(options) {
   var opts = options || {};
@@ -229,7 +231,8 @@ function createSites(options) {
   var now = typeof opts.now === "function" ? opts.now : function () { return Date.now(); };
   var say = typeof opts.log === "function" ? opts.log : function () {};
   var table = {};
-  var readOnly = false;
+  var reader = opts.reader === true;
+  var readOnly = reader;
   var loaded = false;
 
   function readLog() {
@@ -250,7 +253,7 @@ function createSites(options) {
 
   function load() {
     loaded = true;
-    readOnly = false;
+    readOnly = reader;
     var raw = null;
     var missing = false;
     try { raw = fs.readFileSync(jsonPath(dir), "utf8"); }
@@ -272,7 +275,7 @@ function createSites(options) {
     var fromLog = readLog();
     if (fromLog) {
       table = fromLog;
-      if (Object.keys(table).length) {
+      if (Object.keys(table).length && !reader) {
         say("sites: rebuilt " + JSON_FILE + " from " + LOG_FILE + " (" + Object.keys(table).length + " names)");
         writeJson();
       }

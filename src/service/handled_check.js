@@ -72,7 +72,6 @@ var record = require("../shared/record.js");
 var rebuildModule = require("./rebuild.js");
 var markdown = require("./markdown.js");
 var markdownLinks = require("./markdown_links.js");
-var staticServers = require("./static_servers.js");
 var pageRoutes = require("./page_routes.js");
 var reviewFormat = require("../shared/review_format.js");
 
@@ -706,9 +705,7 @@ function createHandledCheck(options) {
   function linkedPageShows(meta, reviewId, item, pagePath) {
     var file = null;
     try {
-      file = pageRoutes.activeFor(dir)
-        ? pageRoutes.linkedFileForPage(dir, reviewId, pagePath)
-        : staticServers.linkedFileForPage(dir, meta.agent_session_id, reviewId, pagePath);
+      file = pageRoutes.linkedFileForPage(dir, reviewId, pagePath);
     } catch (error) {
       file = null;
     }

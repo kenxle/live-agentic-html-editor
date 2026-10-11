@@ -26,11 +26,13 @@ Every setup has the same three pieces. Only the third one changes.
    - `review.json`, what the agent reads
    - the reply files, where the agent answers
 
-   It runs in every use case, no exceptions.
+      It runs in every use case, no exceptions. It also serves every page LAHE
+   serves itself, on a second fixed port (1483), at the page's stable address
+   (see "Stable addresses" below).
 3. **The page server.** Whatever answers the browser's request for the page
    itself. This is the piece that varies, and it is the whole difference
    between the use cases below:
-   - LAHE's own small static server (the preferred path for documents)
+   - the helper itself, at the page's stable address (the preferred path for documents)
    - your app's own dev server (Rails, Vite, whatever you already run)
    - no server at all (the `file://` fallback)
 
@@ -41,7 +43,7 @@ flowchart LR
         L["Library (rail, recording)"]
         P --- L
     end
-    PS["Page server (varies by use case)"] -->|serves the page| P
+        PS["Page server (the helper :1483, your dev server, or file://)"] -->|serves the page| P
     L <-->|"comments, edits, replies"| H["Helper :7817 (always running)"]
     H --> S[("Review store on disk<br/>events.jsonl, review.json, replies.jsonl")]
     A["Agent"] -->|reads review.json| S
@@ -66,6 +68,40 @@ Two facts worth holding onto before the cases:
   Every use case is really a different answer to "how does that one line get
   into the page".
 
+## Stable addresses
+
+Every page the helper serves has one address that does not change:
+
+```
+http://<name>.lahe.localhost:1483/<path under the folder>
+```
+
+- **The name is the folder.** It is the page's folder and its two parent
+  folders, in path order, joined by dots: `live-agentic-html-editor/docs/ongoing`
+  becomes `live-agentic-html-editor.docs.ongoing`. Each folder name is
+  lowercased, and every run of other characters becomes one dash. The home
+  folder and anything above it are never part of a name. When two folders
+  would get the same name, the second takes one more parent folder, then a
+  number. A name is never reused for another folder.
+- **The path is the file.** It is the same path under the folder that a page
+  server used before, so links between pages, images and recorded comments
+  keep working.
+- **A site is one folder, or one notes page.** Every file in a site's folder
+  shares its address's origin, the same unit a page server was. Different
+  folders are different origins, so one cannot read another.
+- **It keeps working.** The address does not depend on the agent session: it
+  loads after the session closes and after the helper restarts, whenever the
+  helper is running. With `lahe install`, the helper starts at login.
+- **Every browser treats `.lahe.localhost` as this computer, and as secure,**
+  with no setup.
+- **Names are made by the CLI only.** `lahe review` and `lahe write` ask the
+  helper to bind the review to its site (`site.bind`, with a secret from the
+  state folder). Visiting an address never makes a name.
+
+The registry is `sites.json` plus its append-only `sites.log` in the state
+folder, written only by the helper. `lahe status` prints each review's address,
+and the pages port and why addresses print the way they do.
+
 ## Use case 1: one HTML file that is the document
 
 A one-pager, a presentation, a mockup, three logo options on a page. The HTML
@@ -75,13 +111,13 @@ file is the source: editing it is editing the document.
 lahe review path/to/page.html
 ```
 
-LAHE starts a small read-only static server rooted at the page's own folder.
-It picks a free loopback port and prints one URL. The reviewer opens that URL
-and nothing else.
+The helper serves the page's own folder, read-only, at the folder's stable
+address, and `lahe review` prints one URL. The reviewer opens that URL and
+nothing else.
 
 ```mermaid
 flowchart LR
-    F[("page.html<br/>(untouched on disk)")] --> RS["LAHE review server<br/>:random loopback port"]
+    F[("page.html<br/>(untouched on disk)")] --> RS["The helper's pages<br/>name.lahe.localhost:1483"]
     RS -->|"page + script line,<br/>injected into the response"| B["Browser"]
     RS -->|"serves the library at<br/>/.lahe-library/lahe-layer.js"| B
     B <--> H["Helper :7817"]
@@ -92,19 +128,20 @@ flowchart LR
 What makes this the preferred path:
 
 - **Nothing is written into your folder.** The script line goes into the HTTP
-  response, not into the file, and the library is served from the review
-  server's own route. So no review id, no token, and no copy of the library
+  response, not into the file, and the library is served from a reserved
+  route on the page's own address. So no review id, no token, and no copy of the library
   land next to your page. This matters because the folder is usually a git
   checkout: before this design, `git add -A` committed both, and a deployed
   copy brought the review rail up for every visitor to the live site.
 - **The page reloads itself.** The helper watches the file. When the agent's
   edit lands, the reviewer's page reloads and their outstanding comments and
   edits are re-applied on top. Nobody tells anybody to refresh.
-- **The server belongs to the agent session.** `lahe session close <id>`
-  stops it. It is read-only and loopback-only.
+- **The address outlives the agent session.** `lahe session close <id>`
+  closes the session; the page stays at its address. It is read-only and
+  loopback-only.
 
-One trap: the server is rooted at the page's own folder. An image beside the
-page loads; an image referenced as `../assets/x.png` is above the root and
+One trap: the address serves the page's own folder. An image beside the page
+loads; an image referenced as `../assets/x.png` is above that folder and
 404s. Opened from disk the same page looks fine, because `file://` has no
 root to escape. Load the served URL yourself before handing it over, and if
 assets live above the page, move them under it or move the page.
@@ -117,21 +154,25 @@ A spec, a skill, a plan, a draft. The `.md` file is the document.
 lahe review path/to/SKILL.md
 ```
 
-Same shape as use case 1, with one extra step in front: LAHE renders the
-Markdown to HTML itself and serves that generated page. The rendering:
+Same shape as use case 1, with one extra step in front: the helper renders the
+Markdown to HTML itself, from the source, when the page is asked for. The
+address serves the source's own folder, and the page's path is the `.md` file's
+own name. The rendering:
 
 - handles CommonMark and GFM
 - draws mermaid diagrams as local SVG
 - sets the page in the St. Clair AI document style, vendored under
   `vendor/stclair-doc-style/` and inlined so a saved page stays self-contained
 
-The generated HTML lives in LAHE's own state directory, owned by the agent
-session, never beside your source.
+Nothing is written beside your source. The render is cached by the source's
+file time, and the reload check, rebuild and the handled check all read that
+same render. LAHE also keeps a rendered copy in its own state directory, which
+older addresses and a `file://` open read.
 
 ```mermaid
 flowchart LR
-    MD[("SKILL.md<br/>(the source, never written by LAHE)")] -->|rendered by LAHE| G[("generated HTML<br/>in LAHE's state dir")]
-    G --> RS["LAHE review server"]
+    MD[("SKILL.md<br/>(the source, never written by LAHE)")] -->|rendered by the helper| G[("the render,<br/>cached by file time")]
+    G --> RS["The helper's pages<br/>name.lahe.localhost:1483/SKILL.md"]
     RS -->|page + script line| B["Browser"]
     B <--> H["Helper :7817"]
     A["Agent"] -->|edits the .md| MD
@@ -145,8 +186,8 @@ The loop for the agent:
 2. Reply.
 
 There is no rebuild step. When the reviewer's page asks the helper whether
-anything moved, the helper checks whether the `.md` behind the artifact is
-newer and renders it again if it is (`src/service/rebuild.js`). The page then
+anything moved, the helper checks whether the `.md` is newer and renders it
+again if it is (`src/service/rebuild.js`). The page then
 reloads onto the new render. An agent that forgets to rerun anything is not a
 failure mode any more; before this, a forgotten rerun left the reviewer's own
 edit disappearing on every refresh.
@@ -159,7 +200,9 @@ Do not hand-convert Markdown to HTML or start a separate server; the
 renderer exists so that never happens.
 
 Relative images and local links work: they are served from the source folder,
-and a link to another local `.md` opens as another rendered page. Links stay
+and a link to another local `.md` opens as another rendered page. A link to a
+file in another folder is served through a mount, `/.lahe-source/<hash>/`,
+stored on the page's site. Links stay
 source-true on disk; the renderer translates them for the browser at build time.
 A link that leaves the documentation (an external URL, or a protocol-relative
 `//host` link) opens in a new tab, so following it never takes the reviewer off
@@ -168,10 +211,9 @@ and `mailto:`/`tel:` links stay in the same tab.
 
 The rail follows the link (spec `docs/features/20260922.02_linked_docs_rail/`):
 
-- A linked document with its own review in this agent session redirects to
-  that review's page, so its earlier comments are there.
-- Otherwise it carries the rail of the review whose page linked to it, and a
-  comment there lands in that review naming the linked file on disk.
+- A linked document carries the rail of the review whose page linked to it,
+  and a comment there lands in that review naming the linked file on disk.
+  There are no redirects between pages: the link opens where it points.
 - Nothing is created by the click: no review, no enrollment.
 - Only the files a page actually links to get the rail. Their neighbours in the
   mounted folder, and anything hidden, do not.
@@ -205,7 +247,7 @@ flowchart LR
     S2 --> BLD
     S3 --> BLD
     BLD --> OUT[("build/report.html")]
-    OUT --> RS["LAHE review server"]
+    OUT --> RS["The helper's pages<br/>name.lahe.localhost:1483"]
     RS -->|page + script line| B["Browser"]
     B <--> H["Helper :7817"]
     A["Agent"] -->|"edits the right fragment,<br/>guided by --source and the item's page text"| S2
@@ -215,7 +257,7 @@ flowchart LR
 
 The serving is identical to use case 1:
 
-- LAHE's review server serves the built file
+- the helper serves the built file at its folder's stable address
 - the script line rides in the response
 - the helper watches the built file and reloads the page when a rebuild lands
 
@@ -247,7 +289,7 @@ and LAHE's helper run side by side, each doing its own job:
 
 So to answer the natural question directly: yes, there is a second server
 alongside your dev server, and it is the same helper that runs in every other
-use case. What does not run here is LAHE's page server; your app already is
+use case. What LAHE does not do here is serve the page; your app already is
 one.
 
 ```sh
@@ -394,9 +436,9 @@ Four, and every review is one of them:
 
 | Shape | Page served by | Written into your folder | Where edits go |
 | --- | --- | --- | --- |
-| Static HTML doc | LAHE review server (rooted at the page's own folder, and the rail follows the reviewer onto every page in it unless `--only`) | nothing | the HTML file the item names |
-| Markdown doc | LAHE review server (LAHE renders first) | nothing | the `.md` source |
-| Built document | LAHE review server (you run the build) | nothing | the source fragments, then rebuild |
+| Static HTML doc | the helper, at the folder's stable address (the page's own folder, and the rail follows the reviewer onto every page in it unless `--only`) | nothing | the HTML file the item names |
+| Markdown doc | the helper, at the source folder's stable address (rendered on request) | nothing | the `.md` source |
+| Built document | the helper, at the build folder's stable address (you run the build) | nothing | the source fragments, then rebuild |
 | App in dev | your own dev server | one pasted line in a layout | the app's code |
 
 Plus the `file://` fallback, which is the first shape with no server and two
@@ -419,8 +461,8 @@ Variations that are not separate architectures:
   What makes it work is a rule rather than a mechanism: **the rail follows the
   reviewer.** Ken, setting it: "if you can navigate to a page from where you
   currently are, and you currently have the lahe editor, it should follow you
-  across anything you click on." So every HTML page our own server hands out of
-  a reviewed folder gets the rail, whether or not any review recorded it: pages
+  across anything you click on." So every HTML page the helper hands out of a
+  reviewed folder gets the rail, whether or not any review recorded it: pages
   reached by a link, pages written after the review was opened, and the siblings
   of a single reviewed page. No page is enrolled, nothing is written to the
   review store, and the server stays a reader of it. A dev server somebody else
@@ -430,24 +472,29 @@ Variations that are not separate architectures:
   **`lahe review <page> --only` is the way out**, and it is the same sentence
   from Ken: "if you want to isolate a single file because you know other things
   around shouldn't be in there, that should be an option." The case is the
-  folder nobody chose. `lahe review ~/Downloads/statement.html` roots a server
-  at Downloads, and an isolated review is never borrowed for a page it did not
+  folder nobody chose. `lahe review ~/Downloads/statement.html` serves the
+  Downloads folder at its address, and an isolated review is never borrowed for a page it did not
   record, so the rest of that folder is served plain. It records
   `only_recorded_pages` on the review, and it goes one way only: the helper
   route that applies it accepts `true` and never `false`, because widening a
   review back out is the one thing a script that read the token off the script
   tag would ask for.
 
-  Nesting is where the rule stops. A review answers for the folder its OWN
-  server is rooted at: the folder for a folder review, the page's own folder for
-  a single page. `lahe review site/` and `lahe review site/sub/` are two
-  documents that happen to sit one inside the other, each rooted at its own
-  folder, so the newer inner review never takes over the outer one's pages.
+  Nesting is where the rule stops. A review answers for the folder it serves:
+  the folder for a folder review, the page's own folder for a single page.
+  `lahe review site/` and `lahe review site/sub/` are two documents that happen
+  to sit one inside the other, each at its own address, so the newer inner
+  review never takes over the outer one's pages.
 
-  **`lahe write` is the one exception to the folder rule.** A notes page gets a
-  one-page server that serves that page, the style and fonts it names, and a
-  404 for everything else, dotfiles included. It takes no mounts and answers
-  only its own loopback address. See `docs/ongoing/FREE_WRITING.md`.
+  **The rule has no session filter.** Two reviews of the same file, in two
+  agent sessions, share one address. The review that recorded the file wins,
+  newest first, where "newest" is created or re-served most recently: `lahe
+  review` and the Library's Open both stamp a review as re-served. So the most
+  recent explicit act decides which review's rail a page carries.
+
+  **`lahe write` is the one exception to the folder rule.** A notes page gets
+  its own address, a site that serves that one page, the style and fonts it
+  names, and a 404 for everything else, dotfiles included. It takes no mounts. See `docs/ongoing/FREE_WRITING.md`.
 
   **A page recorded on its own keeps its own review**, and the wider review
   covers the rest. That happens when someone ran `lahe review page.html` on a
@@ -469,22 +516,21 @@ Variations that are not separate architectures:
   recorded target is the folder, and a folder's modification time is no use as a
   trigger: it moves when a stray file appears and stands still when a page's own
   text is rewritten. So the poll's page path is what the helper stats, resolved
-  under the folder with the same containment check the server applies to a
-  request. An edit to one page reloads that page and no other. Nothing is ever
+  under the folder with the same rules the helper applies to the request. An edit to one page reloads that page and no other. Nothing is ever
   written into those pages, healing included: their script line only ever lived
   in the response, and writing one to disk would put a live token in a file
   nobody asked to enroll.
 
-  One thing this does not do: it does not render Markdown in the folder. That is
-  wanted and is its own piece of work, because a rendered page lives in LAHE's
-  state directory rather than in the source folder.
+  A Markdown file in the folder is rendered from its source like any other
+  Markdown page, and carries the folder review's rail when it has no review of
+  its own.
 
 - **Several pages, one review.** Run `lahe review` again with the same
   `--session <id>`. Each page shows only its own items; `review.json` and
   `lahe status` show them all.
 - **A distinct deliverable gets its own review** in the same session, for the
   same reason two documents do not share a comment thread.
-- **Your own static server** (`--origin` pointing at something you run,
+- **Your own file server** (`--origin` pointing at something you run,
   serving plain files) behaves like the app-in-dev row: the origin is
   registered, the line is yours to place, the server is yours to run.
 

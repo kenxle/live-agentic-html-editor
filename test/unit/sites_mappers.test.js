@@ -56,24 +56,19 @@ function world(t, mode) {
   sites.load();
   const priorHome = process.env.LAHE_HOME_DIR;
   process.env.LAHE_HOME_DIR = home;
-  if (mode === "on") pageRoutes.activate(dir, { sites, pagesPort: PAGES_PORT });
+  pageRoutes.activate(dir, { sites, pagesPort: PAGES_PORT });
   t.after(async () => {
     pageRoutes.deactivate(dir);
     if (priorHome === undefined) delete process.env.LAHE_HOME_DIR;
     else process.env.LAHE_HOME_DIR = priorHome;
-    await staticServers.stopAll(dir, SESSION).catch(() => {});
   });
   return {
     root, home, dir, log, reviews, sites, mode,
     advance(ms) { now += ms; },
-    /** Serve `folder` the way this mode serves it, and return the page origin. */
+    /** Bind `folder` as a site, and return its page origin. */
     async serve(folder, entry) {
-      if (mode === "on") {
-        const bound = sites.bind({ root: fs.realpathSync(folder), mode: "folder", entry });
-        return protocol.siteOrigin(bound.name, PAGES_PORT);
-      }
-      const started = await staticServers.start({ dir, sessionId: SESSION, root: folder });
-      return "http://127.0.0.1:" + started.meta.port;
+      const bound = sites.bind({ root: fs.realpathSync(folder), mode: "folder", entry });
+      return protocol.siteOrigin(bound.name, PAGES_PORT);
     }
   };
 }
@@ -85,7 +80,9 @@ function poll(w, reviewId, pagePath, origin) {
   ).body;
 }
 
-for (const mode of ["on", "off"]) {
+// The switch is gone (Step 3): every run is the helper serving pages. The
+// "switch off" runs these rows had in Step 2 are retired with page servers.
+for (const mode of ["on"]) {
   // --- V26: the healer ----------------------------------------------------------
 
   test("V26 (switch " + mode + "): after a poll, a served HTML file's bytes on disk are unchanged", async (t) => {
@@ -139,15 +136,9 @@ for (const mode of ["on", "off"]) {
     const folder = path.join(w.home, "ws", "repo", "notes");
     const doc = writeFile(folder, "doc.md", "# Doc\n\nfirst version\n");
     const artifact = markdown.writeArtifact(w.dir, SESSION, doc).target;
-    let origin;
-    if (mode === "on") {
-      origin = await w.serve(folder, "doc.md");
-    } else {
-      const started = await staticServers.start({ dir: w.dir, sessionId: SESSION, root: path.dirname(artifact) });
-      origin = "http://127.0.0.1:" + started.meta.port;
-    }
+    const origin = await w.serve(folder, "doc.md");
     const review = w.reviews.create({ target_path: artifact, source_path: doc, agent_session_id: SESSION, origins: ["null"] });
-    const pagePath = mode === "on" ? "/doc.md" : "/" + path.basename(artifact);
+    const pagePath = "/doc.md";
     const first = poll(w, review.id, pagePath, origin).target_mtime;
     const later = new Date(Date.now() + 5000);
     fs.writeFileSync(doc, "# Doc\n\nsecond version\n");
@@ -155,9 +146,7 @@ for (const mode of ["on", "off"]) {
     w.advance(1000);
     const second = poll(w, review.id, pagePath, origin).target_mtime;
     assert.notEqual(second, first, "the poll reports the new render");
-    const rendered = mode === "on"
-      ? pageRoutes.renderForFile(w.dir, fs.realpathSync(doc))
-      : fs.readFileSync(artifact, "utf8");
+    const rendered = pageRoutes.renderForFile(w.dir, fs.realpathSync(doc));
     assert.match(rendered, /second version/);
   });
 }
@@ -253,15 +242,6 @@ test("on: fileForPage maps a site origin and path to the file, and refuses what 
   }
   assert.equal(pageRoutes.fileForPage(w.dir, "http://127.0.0.1:5555", "/sub/page.html"), null);
   assert.equal(pageRoutes.fileForPage(w.dir, "http://no.such.lahe.localhost:" + PAGES_PORT, "/sub/page.html"), null);
-});
-
-test("off: nothing is active, so the registry answers nothing", async (t) => {
-  const w = world(t, "off");
-  const folder = path.join(w.home, "ws", "repo", "docs");
-  writeFile(folder, "page.html", PAGE);
-  w.sites.bind({ root: fs.realpathSync(folder), mode: "folder", entry: "page.html" });
-  assert.equal(pageRoutes.fileForPage(w.dir, "http://ws.repo.docs.lahe.localhost:" + PAGES_PORT, "/page.html"), null);
-  assert.equal(pageRoutes.servesFile(w.dir, path.join(folder, "page.html")), false);
 });
 
 test("on: linkedFileForPage answers only for a file this review linked, under one of the site's mounts", async (t) => {

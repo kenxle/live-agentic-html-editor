@@ -114,6 +114,8 @@ test.describe("lahe review <folder>: one review, every page carries the rail", (
     delete env.XDG_STATE_HOME;
     const port = await freePort();
 
+    // Teardown can find this state folder even if an assertion below fails.
+    world = { stateDir, env };
     const output = execFileSync(process.execPath, [CLI, "review", site, "--port", String(port)], {
       cwd: REPO_ROOT,
       env: env,
@@ -124,12 +126,14 @@ test.describe("lahe review <folder>: one review, every page carries the rail", (
     const session = labelled(output, "session");
     const review = labelled(output, "review");
     const open = labelled(output, "open");
-    const server = labelled(output, "server");
     const folder = labelled(output, "folder");
+    // The folder's stable address: the helper serves it, so there is no
+    // separate server line, and the address's origin is the folder's site.
+    const server = open ? new URL(open).origin : null;
     expect(session, "`lahe review <folder>` printed the agent session id").toBeTruthy();
     expect(review, "`lahe review <folder>` printed the review id").toBeTruthy();
-    expect(server, "a static server was started for the folder, not a dev-server snippet").toBeTruthy();
     expect(open, "`lahe review <folder>` printed one URL to open").toBeTruthy();
+    expect(server, "the folder has a stable address, not a dev-server snippet").toMatch(/^http:\/\/[a-z0-9.-]+\.lahe\.localhost:\d+$/);
     expect(output, "a folder of HTML is not the app-in-dev row: no snippet to paste").not.toContain(
       "Wrap the script in your framework"
     );

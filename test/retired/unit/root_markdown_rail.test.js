@@ -1,3 +1,8 @@
+// RETIRED by stable addresses Step 3 (docs/features/20261011.02_stable_addresses).
+// Moved here from test/unit/root_markdown_rail.test.js with git mv. Nothing runs it: test:unit reads
+// test/unit/ and Playwright reads test/browser/. Ken approves deleting it at cleanup.
+// Why: Written against page servers and redirects. The root-Markdown rail rules are carried over to test/unit/sites_linked_docs.test.js.
+//
 // A Markdown file under a page server's own root gets the rail.
 //
 // Spec: docs/features/20261007.02_md_in_root_gets_rail/01_spec_md_in_root_gets_rail.md

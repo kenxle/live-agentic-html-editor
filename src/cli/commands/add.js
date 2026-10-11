@@ -83,6 +83,7 @@ var logModule = require("../../service/log.js");
 var reviewsModule = require("../../service/reviews.js");
 var agentSessionsModule = require("../../service/agent_sessions.js");
 var staticServersModule = require("../../service/static_servers.js");
+var pageRoutesModule = require("../../service/page_routes.js");
 var sourceStamp = require("../../service/source_stamp.js");
 var service = require("../../service/index.js");
 var catalogRequests = require("../../service/catalog_requests.js");
@@ -1425,7 +1426,7 @@ async function run(argv) {
   // review.json: the state directory is derived from environment this command
   // resolved and the agent did not.
   say("  folder    " + stateDirModule.reviewDir(dir, review.id));
-  say("  library   " + (servedInjection ? staticServersModule.LIBRARY_PATH : librarySrc));
+  say("  library   " + (servedInjection ? pageRoutesModule.LIBRARY_PATH : librarySrc));
   say(
     "  fallback  " +
       (servedInjection
@@ -1467,10 +1468,10 @@ async function run(argv) {
       );
     }
     if (options.servedByHelper) {
-      say("  The helper publishes the library at " + staticServersModule.LIBRARY_PATH + " on the page's own address,");
+      say("  The helper publishes the library at " + pageRoutesModule.LIBRARY_PATH + " on the page's own address,");
       say("  so no copy of it sits beside the page either.");
     } else {
-      say("  That same server publishes the library at " + staticServersModule.LIBRARY_PATH + ", so no copy of it");
+      say("  That same server publishes the library at " + pageRoutesModule.LIBRARY_PATH + ", so no copy of it");
       say("  sits beside the page either, and the page still opens with the helper down.");
     }
     if (carried) {

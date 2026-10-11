@@ -74,9 +74,13 @@ Then find your row in "Scenarios" and serve:
 lahe review <target>
 ```
 
-The command starts a local server and prints one `open` URL, the agent session
-id, the review folder, and the wake, monitor, drain, and close commands for this
-session.
+The command prints one `open` URL, the agent session id, the review folder, and
+the wake, monitor, drain, and close commands for this session. The URL is the
+document's stable address, served by the Lahe helper:
+`http://<name>.lahe.localhost:1483/<file>`. The name is the document's folder
+and its two parent folders, joined by dots (`repo.docs.ongoing`). The same file
+always gets the same address, and the address keeps working after the session
+closes, for as long as the helper runs.
 
 **Read the `contract` field at the top of `review.json`** in the review folder
 once, when you start on a review. It is the rules for reading an item, changing
@@ -453,7 +457,7 @@ legacy command; use `lahe review` for normal work.)
 | A page with images, CSS or fonts beside it | as its row above | as its row above | as its row above; read "Assets" first |
 | A page whose own stack hot-reloads it | as its row above | as its row above | nothing extra |
 
-**The rail follows the reviewer.** The server serves a whole folder: the one you
+**The rail follows the reviewer.** The address serves a whole folder: the one you
 named, or the folder the page you named lives in. Every HTML page in it carries
 the rail, so there is nothing to enroll page by page.
 
@@ -486,12 +490,12 @@ to type.
 - The folder must already exist. It refuses a name that is not `.md` or
   `.markdown`, a directory, any symlink, and a file with more than one hard
   link, and it never overwrites a file.
-- The page gets its own server that serves that one page and nothing else in its
-  folder, so notes in a home or Documents folder are safe to open.
-  `--session <id>` adds it to your session and still starts its own server.
-- To bring a notes page back after its server stopped, run either
+- The page gets its own address that serves that one page and nothing else in
+  its folder, so notes in a home or Documents folder are safe to open.
+  `--session <id>` adds it to your session and still gives it its own address.
+- To hand a notes page over again, run either
   `lahe write <file.md> --session <id>` or `lahe review <file.md> --session <id>`.
-  Both keep the one-page server, because the review is a notes review.
+  Both print the same notes address, because the review is a notes review.
 - The review carries `notes: true` in `review.json`. Each sitting arrives as one
   item with its words in `new_blocks`: place them in the file as written, at the
   top of the file for `start_of_container`. Organize the notes only when your
@@ -848,7 +852,7 @@ else: a PDF, a deploy, an email, an attachment.
 
 ```sh
 lahe add path/to/page.html --remove   # takes the script line back out
-lahe session close <agent-session-id> # stops the servers
+lahe session close <agent-session-id> # ends the session; its pages keep their addresses
 ```
 
 `--remove` takes out the script line and a `lahe-layer.js` beside the page that this

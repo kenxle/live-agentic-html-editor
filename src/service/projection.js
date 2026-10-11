@@ -56,7 +56,6 @@ var protocol = require("../shared/protocol.js");
 var record = require("../shared/record.js");
 var lifecycle = require("../shared/lifecycle.js");
 var reviewFormat = require("../shared/review_format.js");
-var staticServers = require("./static_servers.js");
 var pageRoutes = require("./page_routes.js");
 var reviewWriter = require("./review_writer.js");
 var stateDir = require("./state_dir.js");
@@ -547,18 +546,12 @@ function createProjector(options) {
   }
 
   /**
-   * The helper's mount lookup for one review's linked pages: the review's own
-   * agent session is read off its meta.json, and the static servers of that
-   * session are asked (static_servers.linkedFileForPage).
+   * The helper's mount lookup for one review's linked pages: the registry's
+   * site mounts and linked files (page_routes.linkedFileForPage).
    */
   function linkedLookup(reviewId) {
     return function (pagePath) {
-      // With the switch on, the registry's mounts and linked files answer.
-      if (pageRoutes.activeFor(dir)) return pageRoutes.linkedFileForPage(dir, reviewId, pagePath);
-      var meta;
-      try { meta = JSON.parse(fs.readFileSync(stateDir.metaPath(dir, reviewId), "utf8")); } catch (err) { return null; }
-      if (!meta || typeof meta.agent_session_id !== "string") return null;
-      return staticServers.linkedFileForPage(dir, meta.agent_session_id, reviewId, pagePath);
+      return pageRoutes.linkedFileForPage(dir, reviewId, pagePath);
     };
   }
 
@@ -566,7 +559,7 @@ function createProjector(options) {
   function projectOptions(reviewId) {
     return {
       linkedFileFor: linkedLookup(reviewId),
-      originAliases: pageRoutes.activeFor(dir) ? pageRoutes.aliasMap(dir) : null
+      originAliases: pageRoutes.aliasMap(dir)
     };
   }
 

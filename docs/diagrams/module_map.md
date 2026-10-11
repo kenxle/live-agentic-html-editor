@@ -28,7 +28,8 @@ flowchart TD
 
     subgraph SERVICE["service slash - runs in the helper process"]
         SV_CORE["routes.js, auth.js, log.js<br/>the router, the per-request check block,<br/>the events.jsonl appender"]
-        SV_SESS["agent_sessions.js, wake_feed.js,<br/>watchers.js, static_servers.js<br/>session lifecycle and heartbeat,<br/>the wake feed a host tails, liveness checks,<br/>session-owned static servers"]
+        SV_SESS["agent_sessions.js, wake_feed.js,<br/>watchers.js<br/>session lifecycle and heartbeat,<br/>the wake feed a host tails, liveness checks"]
+        SV_PAGES["sites.js, page_routes.js, static_servers.js<br/>the name registry, every page at its stable<br/>address, and the old page-server records<br/>read for old origins and leftovers"]
         SV_STORE["state_dir.js, reviews.js, review_writer.js,<br/>projection.js, replies.js, handled_check.js<br/>on-disk layout, review creation and tokens,<br/>the single writer of review.json,<br/>log-to-projection, reply folding,<br/>is a handled claim true on the built page"]
         SV_MISC["markdown.js, markdown_links.js, rebuild.js,<br/>tab_icon.js, heal.js, source_stamp.js<br/>Markdown rendering, link rewriting,<br/>re-rendering a Markdown review when its<br/>source moves, fallback tab icon, putting the<br/>script line back after a rebuild,<br/>helper-version check"]
         SV_CAT["catalog_reader.js, catalog_store.js,<br/>catalog_requests.js, catalog_actions.js,<br/>catalog_page.js<br/>the Library: the list from disk, stars,<br/>the request queue, Open and the sweep,<br/>the page template and its asset allowlist"]
@@ -41,7 +42,7 @@ flowchart TD
 
     subgraph CLI["cli slash - the command surface"]
         CLI_INDEX["index.js<br/>the command dispatcher"]
-        CLI_CMDS["serve, review, session,<br/>add, status, reply, monitor, library,<br/>write: notes on a blank page,<br/>on its own one-page server"]
+        CLI_CMDS["serve, review, session,<br/>add, status, reply, monitor, library,<br/>write: notes on a blank page,<br/>at its own address"]
         CLI_INDEX --> CLI_CMDS
     end
 

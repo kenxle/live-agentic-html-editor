@@ -54,6 +54,11 @@ const askedForProject = process.argv.some(function (arg) {
   return arg === "--project" || arg.indexOf("--project=") === 0;
 });
 if (askedForProject) process.env.LAHE_ALL_BROWSERS = "1";
+// Every helper a spec starts serves pages on its own free port, never 1483:
+// parallel workers would otherwise fight over it, and Ken's own helper holds
+// it. Workers inherit this. A spec that needs a fixed pages port (one that
+// restarts the helper and reloads an old address) names a free one itself.
+if (process.env.LAHE_PAGES_PORT === undefined) process.env.LAHE_PAGES_PORT = "0";
 const askedForAll = !!process.env.LAHE_ALL_BROWSERS;
 const projects =
   askedForAll

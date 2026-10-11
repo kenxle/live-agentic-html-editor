@@ -96,7 +96,9 @@ test("lahe review renders Markdown without touching it, serves assets, and reuse
   const page = await request(open);
   assert.equal(page.status, 200);
   assert.match(page.body, /<ul>\s*<li>One<\/li>\s*<\/ul>\s*<p>A separate paragraph\.<\/p>/);
-  const assetPath = page.body.match(/src="(\/\.lahe-source\/[a-f0-9]+\/assets\/pixel\.txt)"/)[1];
+  // The source folder is the site's root, so a relative asset stays a plain
+  // path on the page's own address.
+  const assetPath = page.body.match(/src="(\/assets\/pixel\.txt)"/)[1];
   const asset = await request(new URL(assetPath, open).href);
   assert.equal(asset.status, 200);
   assert.equal(asset.body, "asset bytes");

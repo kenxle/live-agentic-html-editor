@@ -1,3 +1,8 @@
+// RETIRED by stable addresses Step 3 (docs/features/20261011.02_stable_addresses).
+// Moved here from test/unit/linked_docs_rail.test.js with git mv. Nothing runs it: test:unit reads
+// test/unit/ and Playwright reads test/browser/. Ken approves deleting it at cleanup.
+// Why: Page-server link records, registerMount, restarts and redirects are removed. The linked-document rules are carried over to test/unit/sites_linked_docs.test.js.
+//
 // The rail follows a link onto a linked document.
 //
 // Spec: docs/features/20260922.02_linked_docs_rail/01_spec_linked_docs_rail.md

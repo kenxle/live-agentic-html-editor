@@ -16,10 +16,10 @@ flowchart TD
     SessA --> RevA2["Review 2"]
     RevA1 --> PageA1["Page(s) of review 1"]
     RevA2 --> PageA2["Page(s) of review 2"]
-    SessA --> StaticA["Static server(s),<br/>owned by session A"]
+    Helper --> Pages["Every page, at its stable address<br/>name.lahe.localhost:1483,<br/>owned by no session"]
 
     SessB --> RevB1["Review 3"]
-    SessB --> StaticB["Static server(s),<br/>owned by session B"]
+    
 
     Refuse["The CLI refuses to attach a page<br/>or a review to a session<br/>that does not already own it"]
     RevA1 -.->|"immutable owner rule"| Refuse
@@ -27,7 +27,7 @@ flowchart TD
 
     Human["Human explicitly asks for a handoff"] --> Takeover["lahe session takeover A"]
     Takeover --> Fence["session A's handoff_rev advances by 1"]
-    Fence --> Reopen["session and its static servers<br/>reopen if they were closed"]
+    Fence --> Reopen["the session reopens<br/>if it was closed"]
     Fence --> OldMonitor["any older lahe monitor process<br/>for session A"]
     OldMonitor --> Exit6["sees the newer handoff_rev,<br/>exits with code 6, does not relaunch"]
     Fence --> Catchup["lahe status --session A --json<br/>lists every unanswered item first"]
@@ -36,13 +36,11 @@ flowchart TD
 
 ## What to notice
 
-- Ownership nests: a session owns reviews, a review owns pages, and a session
-  separately owns the static servers that serve those pages. Closing session A
-  stops only session A's static servers; session B's keep answering.
-- The helper also stops a session's static servers when no browser window has
-  been open on that session's pages for two minutes. The session stays open,
-  and `lahe review` brings a page back. Session B's open windows never keep
-  session A's servers running.
+- Ownership nests: a session owns reviews, and a review owns the pages its
+  items were made on. No session owns a page's address: the helper serves
+  every page at its stable address, named for its folder. Closing session A
+  closes only session A, and its pages stay at their addresses for as long as
+  the helper runs.
 - The immutable-owner rule is not about people, it is about the session
   record. A review remembers the session that created it, and no later
   command can move it to a different session by accident. The one exception
@@ -128,7 +126,7 @@ flowchart TD
     Moved -->|"monitor live"| Leave["leave it open"]
     Moved -->|"neither"| Quiet{"30 minutes since the reopen<br/>and since any window of its<br/>reviews was last held?"}
     Quiet -->|"no"| Leave
-    Quiet -->|"yes"| CloseQuiet["closeQuiet: stop its servers,<br/>mark it closed, clear the entry.<br/>The helper stays up"]
+    Quiet -->|"yes"| CloseQuiet["closeQuiet: mark it closed,<br/>clear the entry.<br/>The helper stays up"]
 ```
 
 - A last close that leaves the helper up asks it to stop once quiet
@@ -137,7 +135,7 @@ flowchart TD
   (`src/service/self_stop.js`). An open session never lets it stop.
 - A new helper clears any old `stop-when-quiet.json`. After a sleep, the two
   minutes start again from the wake.
-- A helper or page server whose state directory is removed stops within 30
+- A helper whose state directory is removed stops within 30
   seconds (two checks in a row), even with a session open. A restored or synced
   copy that still names that process keeps it running.
 - The same sweep closes a session that bare `lahe library` started, once it

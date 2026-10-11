@@ -97,7 +97,7 @@ test("a reviewed Markdown document's local links serve rendered documents with i
   t.after(async () => {
     await capture(() => sessionCommand.run(["close", sessionId, "--state-dir", state, "--port", String(port)]));
   });
-  assert.match(first.stdout, /links\s+1 linked folder served read-only for this session/);
+  assert.match(first.stdout, /links\s+1 linked folder served read-only at this address/);
   assert.equal(fs.readFileSync(source, "utf8"), original, "the Markdown source keeps the links its author wrote");
 
   const page = await request(open);
@@ -108,7 +108,9 @@ test("a reviewed Markdown document's local links serve rendered documents with i
   // A link out of the document's folder became a mounted URL; a link LAHE
   // cannot serve became inert text naming the path on disk.
   const crucibleHref = page.body.match(/href="(\/\.lahe-source\/[a-f0-9]+\/SKILL\.md)"/)[1];
-  const templateHref = page.body.match(/href="(\/\.lahe-source\/[a-f0-9]+\/references\/document-templates\.md)"/)[1];
+  // A link inside the document's own folder is a plain path on its address:
+  // that folder is the site's root.
+  const templateHref = page.body.match(/href="(\/references\/document-templates\.md)"/)[1];
   assert.match(page.body, /<span class="lahe-local-link" title="local file, open it on disk: [^"]*GONE\.md">Outside<\/span>/);
 
   const template = await request(new URL(templateHref, open).href);
