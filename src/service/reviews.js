@@ -1124,7 +1124,13 @@ function createReviews(options) {
 
   function writeReadyFile(details) {
     var d = details || {};
-    lastReadyDetails = { port: d.port, started_at: d.started_at || new Date().toISOString(), pages: d.pages || null };
+    lastReadyDetails = {
+      port: d.port,
+      started_at: d.started_at || new Date().toISOString(),
+      pages: d.pages || null,
+      always_on: d.always_on === true,
+      install: d.install || null
+    };
     var payload = {
       port: lastReadyDetails.port,
       pid: process.pid,
@@ -1136,6 +1142,10 @@ function createReviews(options) {
     // Stable addresses: the pages port, the printed ending and why, so the CLI
     // and `lahe status` report what the running helper is doing.
     if (lastReadyDetails.pages) payload.pages = lastReadyDetails.pages;
+    // Stable addresses, install: whether a login item runs this helper, and
+    // what it is, for `lahe status` to print.
+    payload.always_on = lastReadyDetails.always_on;
+    if (lastReadyDetails.install) payload.install = lastReadyDetails.install;
     Object.keys(reviews).forEach(function (id) {
       payload.reviews[id] = {
         token: reviews[id].token,
