@@ -113,6 +113,7 @@ Separate addresses stop all of it with one rule the browser already follows. Opt
 - **A name does not change port clashes.** A port belongs to the computer, not to a name. If another tool is on the port, no name gets Lahe onto it. Option D already cuts clashes down to the one shared port.
 - **`.local` is a poor fit on a Mac.** macOS uses `.local` for finding devices on your network, so lookups are slow, and the name only works after an admin edit to a system file. That file cannot say "every name ending in `.lahe.local`", so each document would need its own line.
 - **`.localhost` gives the same look with no setup.** `stable-addresses.lahe.localhost` works today on your Mac, in every browser. I checked.
+- **A shorter name like `docname.lahe`** is possible, but costs more than it looks. Your Mac does not know `.lahe`, so Lahe would need a one-time admin setup plus a small name server of its own. Browsers also treat an unknown ending like `.lahe` as a search when you type it, and `.lahe` could one day become a real internet ending. Browsers promise that anything ending in `.localhost` stays on your computer, which also makes it safer. So I'd keep `.lahe.localhost`.
 - **Dropping the port from the address** (so it reads `http://stable-addresses.lahe.localhost/`) needs port 80. macOS refused that for a normal program when I tried. It would take a one-time admin setting at install. Possible, but optional.
 
 ### A. Each document keeps its own port, and the helper answers on it
