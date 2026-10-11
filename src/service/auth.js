@@ -179,6 +179,10 @@ function createCatalogState() {
   return {
     token: crypto.randomBytes(32).toString("hex"),
     port: null,
+    // The pages port, set by serve() once it is bound and only with the pages
+    // switch on. Until then, and with the switch off, library.lahe.localhost
+    // fails the Host check, so the Library keeps its two loopback Hosts.
+    pagesPort: null,
     /** Task 2.1's list handler calls this on an authenticated list. */
     markSeen: function (now) {
       seenAt = (now instanceof Date ? now : new Date(now)).toISOString();
@@ -223,13 +227,28 @@ function refusal(name, detail, routeName) {
 }
 
 /**
+ * Is this Host one the Library answers to? The loopback names at the helper's
+ * own port, compared in lower case as they always were. The library name is
+ * compared exactly as sent: a Host with capitals never passed dispatch, and
+ * "library" is the only name that reaches the Library.
+ */
+function catalogHostAllowed(host, hostLower, port, catalog) {
+  if (port !== null && (hostLower === "127.0.0.1:" + port || hostLower === "localhost:" + port)) return true;
+  var pagesPort = catalog && typeof catalog.pagesPort === "number" ? catalog.pagesPort : null;
+  return pagesPort !== null &&
+    host === protocol.PAGES.LIBRARY_NAME + "." + protocol.PAGES.SUFFIX + ":" + pagesPort;
+}
+
+/**
  * The Library's check block, one pure function, per the route's `checks`.
  *
  * Order: Host, Sec-Fetch-Site, client header, content type, token, Origin.
  *
  * - Host is exactly 127.0.0.1:<port> or localhost:<port> at the helper's actual
- *   port, on every catalog route. The page carries the token, so a DNS-rebound
- *   name must not be able to load it.
+ *   port, on every catalog route, or library.lahe.localhost:<pages port> when
+ *   the pages switch is on (stable addresses). The page carries the token, so
+ *   a DNS-rebound name must not be able to load it, and no other name, a
+ *   document's included, ever matches.
  * - Sec-Fetch-Site is set by the browser, never by a script. The API routes take
  *   exactly same-origin: a document under review on another loopback port sends
  *   same-site and is refused. A missing value is refused.
@@ -251,7 +270,7 @@ function checkCatalogRequest(request, catalog) {
   var host = headerOf(headers, protocol.HEADER.HOST);
   var hostLower = typeof host === "string" ? host.toLowerCase() : "";
   var port = catalog && typeof catalog.port === "number" ? catalog.port : null;
-  if (port === null || (hostLower !== "127.0.0.1:" + port && hostLower !== "localhost:" + port)) {
+  if (!catalogHostAllowed(host, hostLower, port, catalog)) {
     return refusal(protocol.CHECK.HOST, String(host), r.name);
   }
 

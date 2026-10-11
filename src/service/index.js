@@ -819,6 +819,8 @@ async function serve(options) {
       throw new Error(why);
     }
     boundPagesPort = pagesServer.address().port;
+    // library.lahe.localhost answers at this port, with the switch on.
+    if (pagesOn) catalog.pagesPort = boundPagesPort;
     await listenOn("pages", boundPagesPort, "::1", false);
   }
 
