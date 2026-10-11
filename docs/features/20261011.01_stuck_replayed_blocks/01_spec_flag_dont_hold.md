@@ -82,8 +82,18 @@ Architecture review (one reviewer, on the flag version). Accepted: refused cards
 
 ## Progress
 
-Not started.
+Done and pushed:
+
+- **A refused card is no longer written onto the page.** Replay now only writes cards still waiting for the agent. A refused card also drops any stale conflict or "lost" mark. Keep mine on a refused card's clash sends it back to the agent. Typing in a refused card's passage starts a new card. New unit tests in `test/unit/refused_not_replayed.test.js`; the refused-reword tests in `test/unit/reword_not_handled_floor.test.js` were rewritten for the new rule.
+- **The page check only asks for the missing `data-lahe-id` now.** It no longer reopens a handled card when its words, blocks, tag, bold or italic, or take-back are gone. The old reasons, their sentences and notices, and the run block check were removed with their tests. The stamp round needs the words on the page and is never written by replay.
+- **Tests rewritten for the new behavior:** unit `reverted_edit`, `replay_run`, `flow_fix_g2`, `run_record`, `fix_round_f3_record`, `done_tab_replies`; browser `reverted_edit`, `formatting_survives`, `cp2_mid` (plus a new test: a refused edit is not written back after a repaint and typing there starts a new card), `replay_run_check`, `free_writing_flow_fix_rail`, `free_writing_seams`, `no_duplicate_text`.
+- `npm run gate:unit` passes. The named browser specs I ran all pass.
+
+Still to do: the hackathon browser spec with screenshots, the skill text, and the living docs.
+
+One trade-off to know: an old-contract agent on a Markdown page that pastes a heading as a paragraph is no longer reopened for the wrong tag (`free_writing_seams`). That follows from requirement 2.
 
 ## To delete at cleanup
 
-Nothing yet.
+- `node_modules` in the worktree root: a symlink to the main clone's `node_modules`, made so Playwright runs here.
+- `test-results/` from the browser runs.
