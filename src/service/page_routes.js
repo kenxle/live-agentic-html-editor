@@ -31,6 +31,7 @@ var styles = require("./styles.js");
 var tabIcon = require("./tab_icon.js");
 var heal = require("./heal.js");
 var logModule = require("./log.js");
+var staticServers = require("./static_servers.js");
 
 var MOUNT_ROOT = "/.lahe-source/";
 var LIBRARY_PREFIX = "/.lahe-library/";
@@ -355,11 +356,11 @@ function candidateOf(where, decoded) {
 // The registry, for the helper modules that map a page to a file
 // ---------------------------------------------------------------------------
 //
-// THE SWITCH, AS THE HELPER MODULES SEE IT. serve() activates the registry
-// for its state folder when LAHE_PAGES=sites, and deactivates it on close.
-// The healer, the reload check, rebuild, the handled check and the projection
-// each ask here first; with nothing active they read page-server records as
-// before. Task 3.1 removes that second branch, and this table with it.
+// HOW THE HELPER MODULES FIND THE REGISTRY. serve() puts its registry here,
+// for its own state folder, once the pages port is bound, and takes it out on
+// close. The healer, the reload check, rebuild, the handled check and the
+// projection ask here by state folder; with no helper running in this process
+// they map nothing to a site, and fall back to a review's recorded targets.
 
 var active = Object.create(null);
 
@@ -376,7 +377,7 @@ function deactivate(dir) {
   delete active[dirKey(dir)];
 }
 
-/** The active registry for a state folder, or null with the switch off. */
+/** The registry a helper in this process holds for a state folder, or null. */
 function activeFor(dir) {
   if (typeof dir !== "string" || !dir) return null;
   return active[dirKey(dir)] || null;
@@ -570,28 +571,13 @@ function validPort(value) {
   return typeof value === "number" && Number.isInteger(value) && value > 0 && value < 65536;
 }
 
-/** Every old page-server record in the state folder: [{root, ports}]. */
+/** Every old page-server record in the state folder: [{root, ports, at}]. */
 function oldServerRecords(dir) {
-  var out = [];
-  var sessionsRoot;
-  try { sessionsRoot = stateDir.agentSessionsRoot(dir); } catch (err) { return out; }
-  var sessions;
-  try { sessions = fs.readdirSync(sessionsRoot); } catch (err) { return out; }
-  sessions.forEach(function (session) {
-    if (!protocol.isSafeId(session)) return;
-    var folder;
-    try { folder = stateDir.staticServersRoot(dir, session); } catch (err) { return; }
-    var names;
-    try { names = fs.readdirSync(folder); } catch (err) { return; }
-    names.forEach(function (fileName) {
-      if (!/^ss_[A-Za-z0-9_-]+\.json$/.test(fileName)) return;
-      var meta = readJson(path.join(folder, fileName));
-      if (!meta || typeof meta.root !== "string") return;
-      var ports = (Array.isArray(meta.ports) ? meta.ports : []).concat([meta.port]).filter(validPort);
-      out.push({ root: realOrNull(meta.root) || meta.root, ports: ports, at: String(meta.started_at || "") });
-    });
+  return staticServers.allRecords(dir).map(function (entry) {
+    var meta = entry.meta;
+    var ports = (Array.isArray(meta.ports) ? meta.ports : []).concat([meta.port]).filter(validPort);
+    return { root: realOrNull(meta.root) || meta.root, ports: ports, at: String(meta.started_at || "") };
   });
-  return out;
 }
 
 /** The old origins of this site's root, newest port first, at most ALIAS_MAX. */

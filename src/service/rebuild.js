@@ -52,7 +52,6 @@ var path = require("node:path");
 
 var markdown = require("./markdown.js");
 var stateDir = require("./state_dir.js");
-var staticServers = require("./static_servers.js");
 var pageRoutes = require("./page_routes.js");
 
 // Several callers can ask inside one tick (the poll's mtime stat, and a reply
@@ -109,109 +108,6 @@ function renderableOf(dir, review) {
   // source in this session belongs to somebody else's build.
   if (path.resolve(target) !== path.resolve(ours)) return null;
   return { source: path.resolve(source), target: path.resolve(ours), session: session };
-}
-
-/**
- * Put any local-link mounts the new render needs onto the session's static
- * server, without going through the async registration handshake.
- *
- * The render is deterministic, so an unchanged document produces the mounts the
- * server already has and nothing is written. A document that gained a link to a
- * new folder is the case this exists for: without it, the link the reviewer now
- * sees would point at a prefix the server does not serve.
- *
- * Best effort in every branch. A mount that does not land is a link that reads
- * as a 404; a throw here would be the reviewer's poll.
- */
-function mergeMounts(dir, session, target, added, log) {
-  if (!added || !added.length) return 0;
-  var servers;
-  try {
-    servers = staticServers.list(dir, session);
-  } catch (error) {
-    return 0;
-  }
-  var folder = path.dirname(target);
-  var landed = 0;
-  servers.forEach(function (meta) {
-    var root;
-    try {
-      root = fs.realpathSync(meta.root);
-    } catch (error) {
-      return;
-    }
-    // The server rooted at the artifact's own folder is the one serving this page.
-    if (path.resolve(folder) !== root && path.resolve(folder).indexOf(root + path.sep) !== 0) return;
-    var file;
-    try {
-      file = stateDir.staticServerPath(dir, session, meta.id);
-    } catch (error) {
-      return;
-    }
-    var current;
-    try {
-      current = JSON.parse(fs.readFileSync(file, "utf8"));
-    } catch (error) {
-      return;
-    }
-    var mounts = Object.assign({}, current.mounts || {});
-    var auto = Array.isArray(current.auto_mounts) ? current.auto_mounts.slice() : [];
-    var changed = false;
-    added.forEach(function (entry) {
-      if (!entry || typeof entry.prefix !== "string" || typeof entry.dir !== "string") return;
-      if (mounts[entry.prefix] === entry.dir) return;
-      mounts[entry.prefix] = entry.dir;
-      if (auto.indexOf(entry.prefix) === -1) auto.push(entry.prefix);
-      changed = true;
-    });
-    if (!changed) return;
-    current.mounts = mounts;
-    current.auto_mounts = auto;
-    try {
-      stateDir.writeAtomic(file, JSON.stringify(current, null, 2) + "\n");
-      process.kill(meta.pid, "SIGHUP");
-      landed += 1;
-    } catch (error) {
-      if (log && typeof log.helperLog === "function") {
-        log.helperLog("could not hand a new link mount to the static server: " + error.message);
-      }
-    }
-  });
-  return landed;
-}
-
-/**
- * Record, on the server serving this artifact, that this review's page links to
- * each file the new render linked (spec 20260922.02). A document that gained a
- * link gets the rail on the linked page the moment the reviewer follows it.
- * Best effort, like mergeMounts: a record that does not land leaves that link
- * read-only, which is what it was before.
- */
-function recordLinked(dir, session, target, reviewId, linked, log) {
-  if (!reviewId || !linked || !linked.length) return;
-  var servers;
-  try {
-    servers = staticServers.list(dir, session);
-  } catch (error) {
-    return;
-  }
-  var folder = path.resolve(path.dirname(target));
-  servers.forEach(function (meta) {
-    var root;
-    try {
-      root = fs.realpathSync(meta.root);
-    } catch (error) {
-      return;
-    }
-    if (folder !== root && folder.indexOf(root + path.sep) !== 0) return;
-    try {
-      staticServers.recordLinks(dir, session, meta.id, reviewId, linked);
-    } catch (error) {
-      if (log && typeof log.helperLog === "function") {
-        log.helperLog("could not record a linked document for review " + reviewId + ": " + error.message);
-      }
-    }
-  });
 }
 
 /**
@@ -298,17 +194,13 @@ function createRebuilder(options) {
       );
       return { rendered: false, reason: "render-failed" };
     }
-    if (pageRoutes.activeFor(dir)) {
-      // STABLE ADDRESSES: the page is the site's render of the source, from
-      // the shared cache. Rendering it here warms that cache and puts any new
-      // link mounts on the site; the links it records give a linked document
-      // this review's rail. The artifact above stays current for old addresses.
-      pageRoutes.renderForFile(dir, pair.source);
-      if (id) pageRoutes.recordLinkedFor(dir, pair.source, id, result.linked);
-    } else {
-      mergeMounts(dir, pair.session, pair.target, result.linkMounts, log);
-      recordLinked(dir, pair.session, pair.target, id, result.linked, log);
-    }
+    // The page is the site's render of the source, from the shared cache.
+    // Rendering it here warms that cache and puts any new link mounts on the
+    // site; the links it records give a linked document this review's rail.
+    // The state-folder copy above is what an older address and the handled
+    // check's fallback read.
+    pageRoutes.renderForFile(dir, pair.source);
+    if (id) pageRoutes.recordLinkedFor(dir, pair.source, id, result.linked);
     if (id) {
       lastRenderAt[id] = new Date(clock()).toISOString();
       delete toldAbout[String(id) + "\u001fsource-missing"];

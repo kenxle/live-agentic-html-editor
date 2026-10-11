@@ -13,7 +13,6 @@ var sessions = require("../../service/agent_sessions.js");
 var service = require("../../service/index.js");
 var sourceStamp = require("../../service/source_stamp.js");
 var reviewsModule = require("../../service/reviews.js");
-var staticServers = require("../../service/static_servers.js");
 var catalogReader = require("../../service/catalog_reader.js");
 
 var statusCommand = require("./status.js");
@@ -474,7 +473,8 @@ async function run(argv, options) {
           (renamed.name ? " is named " + JSON.stringify(renamed.name) : " has no name now") + "\n"
       );
     } else if (args.action === "close") {
-      var staticStopped = await staticServers.stopAll(dir, args.id);
+      // Only the session closes. Its pages stay at their addresses, served by
+      // the helper, for as long as the helper runs.
       store.close(args.id);
       var stopped = false;
       var kept = null;
@@ -489,7 +489,6 @@ async function run(argv, options) {
       }
       out(
         "agent session " + args.id + " closed; review history kept" +
-          (staticStopped ? "; static review server" + (staticStopped === 1 ? "" : "s") + " stopped" : "") +
           (stopped ? "; shared helper stopped" : "") +
           (kept ? "; shared helper left running" + (/^for /.test(kept) ? " " : ": ") + kept : "") + "\n"
       );
@@ -501,14 +500,13 @@ async function run(argv, options) {
       var prior = readReady(dir);
       var port = args.port || (prior && prior.port) || protocol.DEFAULT_PORT;
       var helperRun = await startHelper(dir, port);
-      var staticStarted = await staticServers.restartAll(dir, args.id);
       var helperNote = "; shared helper already running";
       if (helperRun.started) helperNote = helperRun.stale ? "; shared helper restarted" : "; shared helper started";
       else if (helperRun.keptForReviewer) helperNote = "; shared helper left running for an open review page";
       var message =
         "agent session " + args.id + (handedOff ? " taken over explicitly" : " reopened") +
           helperNote +
-          (staticStarted ? "; static review server" + (staticStarted === 1 ? "" : "s") + " restarted" : "") + "\n";
+          "\n";
       // Never a silent bounce: a restart drops every open review page's
       // connection for a moment, and the person watching that page is owed the
       // reason.

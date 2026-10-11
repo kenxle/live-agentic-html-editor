@@ -40,6 +40,7 @@
 "use strict";
 
 var fs = require("node:fs");
+var net = require("node:net");
 var os = require("node:os");
 var path = require("node:path");
 
@@ -54,6 +55,10 @@ var healModule = require("../../service/heal.js");
 var staticServersModule = require("../../service/static_servers.js");
 var catalogRequestsModule = require("../../service/catalog_requests.js");
 var catalogReaderModule = require("../../service/catalog_reader.js");
+var catalogSitesModule = require("../../service/catalog_sites.js");
+var sitesModule = require("../../service/sites.js");
+var markdownModule = require("../../service/markdown.js");
+var service = require("../../service/index.js");
 
 // Shared CLI codes. OK means status completed, whether or not it found an item.
 var EXIT = protocol.CLI_EXIT;
@@ -240,148 +245,144 @@ function healLine(liveness, nowMs) {
 }
 
 /**
- * Which mechanism is carrying this review's page: the static server injecting
- * the tag into every response ("injected"), or the on-disk line alone
- * ("on_disk", the file:// fallback and the only thing a dev-server review
- * ever has).
+ * Where this review's page is served, as {via, address}.
  *
- * "injected" only when a static server this session owns is actually
- * answering, rooted at the target's own directory: a page it could not
- * possibly be reachable at gains a reviewer nothing to know it is "injected".
- * Everything else, including a review whose static server has stopped, is
- * "on_disk": that review is back on the race window heal.js has, the one this
- * whole feature exists to close for the common case.
+ *   site      the helper serves it at a stable address (`address`), and puts
+ *             the script line in every response, so a rebuild that drops the
+ *             line never breaks the page
+ *   on_disk   the on-disk line alone: a file:// review, or a page no site
+ *             serves yet
+ *   unserved  a folder review no site serves: its pages carry no line on disk
+ *
+ * Read from the registry the helper writes. This command never writes it.
  *
  * @param {string} dir the state directory
- * @param {string} agentSessionId the review's owning session (static servers
- *   are leased per session, src/service/static_servers.js)
- * @param {string[]} targetPaths the review's recorded target paths
- * A folder review (`lahe review <folder>`) records the folder itself, and its
- * server is rooted there. That reads "injected" the same way a page does, which
- * matters because every page in the folder carries the rail through the
- * response and none of them has a line on disk to fall back on.
- *
- * @returns {Promise<"injected"|"on_disk"|null>} null when nothing here applies
- *   (a dev-server review, or a review with no recorded target at all)
+ * @param {{targets: string[], source: string|null, notes: boolean, session: string}} review
+ * @param {{tools: object}} pages the read-only site tools (sitePages below)
+ * @returns {{via: string, address: string|null}|null} null for a dev-server
+ *   review or one with no recorded target
  */
-async function servedVia(dir, agentSessionId, targetPaths) {
-  var named = (targetPaths || []).filter(function (target) {
-    return typeof target === "string" && !!target;
-  });
+function servedVia(dir, review, pages) {
+  var named = (review.targets || []).filter(function (target) { return typeof target === "string" && !!target; });
   var pageTargets = named.filter(function (target) { return healModule.isStaticPage(target); });
-  // A FOLDER REVIEW RECORDS THE FOLDER, which carries no page extension. It is
-  // served the same way, with the server rooted AT it rather than at a parent,
-  // so it is worth matching. It is NOT enough on its own to call a review
-  // "on_disk" though: the app-in-dev row records a project directory too, and
-  // that row has no on-disk line of ours to be stale. So a directory only ever
-  // turns this answer into "injected", by a live server of ours rooted there.
   var folderTargets = named.filter(function (target) {
     if (healModule.isStaticPage(target)) return false;
-    try {
-      return fs.statSync(target).isDirectory();
-    } catch (error) {
-      return false;
-    }
+    try { return fs.statSync(target).isDirectory(); } catch (error) { return false; }
   });
-  // What "not served" means depends on which shape this is. A page review has
-  // its own on-disk line to fall back on. A folder review has nothing: its
-  // pages only ever carried a line in the response, so a dead server means no
-  // rail at all, and saying nothing hid that from the one person who could fix
-  // it by reopening the session.
-  var fallback = pageTargets.length ? "on_disk" : "unserved";
   if (!pageTargets.length && !folderTargets.length) return null;
-
-  var servers;
-  try {
-    servers = staticServersModule.list(dir, agentSessionId);
-  } catch (error) {
-    return fallback;
-  }
-  if (!servers.length) return fallback;
-
-  var roots = pageTargets.map(function (target) { return path.dirname(target); }).concat(folderTargets);
-  for (var i = 0; i < roots.length; i += 1) {
-    var targetDir = roots[i];
-    var real = targetDir;
+  var fallback = pageTargets.length ? "on_disk" : "unserved";
+  var candidates = (review.source ? [{ sourcePath: review.source, servedPath: null }] : [])
+    .concat(pageTargets.concat(folderTargets).map(function (target) { return { sourcePath: null, servedPath: target }; }));
+  for (var i = 0; i < candidates.length; i += 1) {
+    var plan = null;
     try {
-      real = fs.realpathSync(targetDir);
+      plan = pages.tools.planOf({
+        sourcePath: candidates[i].sourcePath,
+        servedPath: candidates[i].servedPath,
+        notes: review.notes,
+        sessionId: review.session,
+        records: [],
+        landing: function (folder) {
+          var entry = staticServersModule.folderEntryPage(folder);
+          return entry ? path.join(folder, entry) : null;
+        }
+      });
     } catch (error) {
-      // The folder is gone; the plain path is still worth trying against a
-      // server started before it disappeared.
+      plan = null;
     }
-    for (var j = 0; j < servers.length; j += 1) {
-      var server = servers[j];
-      if (server.stopped_at) continue;
-      if (server.root !== targetDir && server.root !== real) continue;
-      if (await staticServersModule.isExactServer(server)) return "injected";
-    }
+    var found = plan ? pages.tools.siteFor(plan) : null;
+    if (found) return { via: "site", address: pages.tools.addressOf(found.name, pages.tools.urlPathOf(plan)) };
   }
-  return fallback;
+  return { via: fallback, address: null };
 }
 
 /**
- * This review's page server, when the helper stopped it because no browser
- * window was open on the session's pages (src/service/idle_servers.js), with
- * the command that brings it back. Null when a server of this session is
- * running at the review's folder, or none was stopped that way.
- *
- * An old link to a stopped server is refused, and an agent that ran `open` on
- * one is owed the reason and the fix here.
- *
- * @returns {{server: string, port: number, stopped_at: string, restart: string}|null}
+ * The registry and the Library's site tools, read-only, for this command. The
+ * address uses the running helper's pages port, else the one it would bind.
  */
-function idleStoppedServer(dir, agentSessionId, reviewId) {
-  if (typeof agentSessionId !== "string" || !protocol.isSafeId(agentSessionId)) return null;
-  var meta;
-  try { meta = JSON.parse(fs.readFileSync(stateDirModule.metaPath(dir, reviewId), "utf8")); }
-  catch (err) { return null; }
-  var targets = targetPathsOfReview(dir, reviewId);
-  if (!targets.length) return null;
-  var roots = [];
-  targets.forEach(function (target) {
-    var isDir = false;
-    try { isDir = fs.statSync(target).isDirectory(); } catch (err) { isDir = false; }
-    var base = isDir ? target : path.dirname(target);
-    [base, realOr(base)].forEach(function (candidate) {
-      if (roots.indexOf(candidate) === -1) roots.push(candidate);
+function sitePages(dir, ready) {
+  var registry = sitesModule.createSites({ dir: dir, reader: true });
+  var port = ready && ready.pages && Number.isInteger(ready.pages.port) ? ready.pages.port : configuredPagesPort();
+  var tools = catalogSitesModule.createCatalogSites({
+    dir: dir,
+    sites: registry,
+    // Only Open's re-served stamp reads reviews, and this command never opens.
+    reviews: {},
+    port: function () { return port; }
+  });
+  return { registry: registry, tools: tools, port: port };
+}
+
+/** service.json, or null. */
+function readyOf(dir) {
+  try { return JSON.parse(fs.readFileSync(stateDirModule.readyPath(dir), "utf8")); } catch (err) { return null; }
+}
+
+/** The pages port a helper started now would ask for. */
+function configuredPagesPort() {
+  var fromEnv = process.env[protocol.PAGES.PORT_ENV];
+  var port = fromEnv !== undefined && fromEnv !== "" ? Number(fromEnv) : protocol.PAGES.PORT;
+  return Number.isInteger(port) && port > 0 ? port : protocol.PAGES.PORT;
+}
+
+/** Can this process listen on 127.0.0.1:<port> right now? */
+function portFree(port) {
+  return new Promise(function (resolve) {
+    var probe = net.createServer();
+    probe.once("error", function () { resolve(false); });
+    probe.listen(port, protocol.DEFAULT_HOST, function () {
+      probe.close(function () { resolve(true); });
     });
   });
-  var servers;
-  try { servers = staticServersModule.list(dir, agentSessionId); } catch (err) { return null; }
-  var here = servers.filter(function (server) { return roots.indexOf(server.root) !== -1; });
-  if (here.some(function (server) { return !server.stopped_at; })) return null;
-  var idle = here.filter(function (server) { return server.stop_reason === staticServersModule.IDLE_REASON; })[0];
-  if (!idle) return null;
-  var document = typeof meta.source_path === "string" && meta.source_path ? meta.source_path : targets[0];
-  return {
-    server: idle.id,
-    port: idle.port,
-    stopped_at: idle.stopped_at,
-    restart: protocol.reviewCommand(document, agentSessionId, stateDirModule.flagFor(dir))
-  };
 }
 
-function realOr(target) {
-  try { return fs.realpathSync(target); } catch (err) { return target; }
-}
-
-/** The human line for `idleStoppedServer`'s answer. */
-function idleStoppedLine(stopped) {
-  return "server    stopped: no browser window was open on this session's pages, so the helper stopped it.\n" +
-    "            The session is still open. An old link to port " + stopped.port + " is refused until you run:\n" +
-    "            " + stopped.restart;
+/**
+ * The pages lines at the top of the human status (V37): the port, the ending
+ * the addresses print with and why, and whether they print without the port
+ * and why. With no helper running, a pages port another program holds is
+ * named, because a helper started now would not come up.
+ */
+async function pagesLines(ready, helperRunning) {
+  var pages = ready && ready.pages ? ready.pages : null;
+  if (helperRunning && pages && Number.isInteger(pages.port)) {
+    var portFreeOn = pages.port_free && pages.port_free.on === true;
+    return [
+      "pages     port " + pages.port + "; addresses end in ." + pages.printed_ending +
+        " because " + (pages.printed_ending_reason || protocol.PAGES.PRINTED_ENDING_REASON),
+      "          " + (portFreeOn
+        ? "addresses print without the port, because the port-80 forward is set up and checked"
+        : "addresses print with :" + pages.port + " because " +
+          ((pages.port_free && pages.port_free.reason) || protocol.PAGES.PORT_FREE_OFF_REASON)),
+      ""
+    ];
+  }
+  var port = configuredPagesPort();
+  if (!(await portFree(port))) {
+    return [
+      "pages     port " + port + " is taken by another program, so a helper started now could not serve pages.",
+      "          Free that port, then run lahe review again.",
+      ""
+    ];
+  }
+  return [
+    "pages     no helper is running; one started now serves pages on port " + port +
+      " at addresses ending in ." + protocol.PAGES.PRINTED_ENDING,
+    ""
+  ];
 }
 
 /** The human line for `servedVia`'s answer, or null when nothing applies. */
-function servedViaLine(servedViaValue) {
-  if (servedViaValue === "injected") {
-    return "served: the static server injects the script line into every response, so a rebuild that drops it never breaks the page";
+function servedViaLine(served) {
+  if (!served) return null;
+  if (served.via === "site") {
+    return "address   " + served.address + "\n" +
+      "  served: the helper serves this page and puts the script line in every response, so a rebuild that drops it never breaks the page";
   }
-  if (servedViaValue === "on_disk") {
-    return "served: the on-disk script line only (file:// review, or no static server is running); a rebuild between one poll and the next can drop the rail until something polls again";
+  if (served.via === "on_disk") {
+    return "served: the on-disk script line only (a file:// review, or a page no address serves yet); a rebuild between one poll and the next can drop the rail until something polls again";
   }
-  if (servedViaValue === "unserved") {
-    return "served: nothing right now. This is a folder review, whose pages carry no script line on disk, and no static server of this session is rooted at that folder. Reopen the session to start it again: lahe session reopen <id>";
+  if (served.via === "unserved") {
+    return "served: nothing yet. This is a folder review, whose pages carry no script line on disk, and no address serves that folder. Run lahe review on it to give it one";
   }
   return null;
 }
@@ -655,7 +656,10 @@ function readerDescriber(dir, nowMs) {
   var reader = null;
   var sessions = agentSessionsModule.createStore({ dir: dir });
   return function (request) {
-    if (!reader) reader = catalogReaderModule.createReader({ dir: dir });
+    // With the site tools, the reader names the folder for a review the
+    // helper serves, as the Library's own reader does: "Launch a new agent"
+    // gets the project folder for those rows too.
+    if (!reader) reader = catalogReaderModule.createReader({ dir: dir, pages: sitePages(dir, readyOf(dir)).tools });
     var described = reader.describeReview(request.review, nowMs);
     var sessionId = request.session;
     var name = null;
@@ -1086,7 +1090,18 @@ async function run(argv, options) {
 
   var lines = [];
   var jsonItems = [];
-  var stoppedServers = [];
+  var pages = sitePages(dir, ready);
+  /** Where one review's page is served, from the registry. */
+  function servedOf(reviewId, ownerSessionId) {
+    var meta = null;
+    try { meta = JSON.parse(fs.readFileSync(stateDirModule.metaPath(dir, reviewId), "utf8")); } catch (err) { meta = null; }
+    return servedVia(dir, {
+      targets: targetPathsOfReview(dir, reviewId),
+      source: meta && typeof meta.source_path === "string" && markdownModule.isMarkdown(meta.source_path) ? meta.source_path : null,
+      notes: !!(meta && meta.notes === true),
+      session: ownerSessionId
+    }, pages);
+  }
   var livenessByReview = Object.create(null);
   var endedReviews = [];
   var totalUnanswered = 0;
@@ -1170,14 +1185,9 @@ async function run(argv, options) {
       last_heal_at: lastHeal,
       last_item_at: lastItemAt(items),
       drafts: draftCount,
-      served_via: await servedVia(dir, ownerSessionId, targetPathsOfReview(dir, id)),
+      served_via: servedOf(id, ownerSessionId),
       only_recorded_pages: isolatedReview(dir, id)
     };
-    var stoppedServer = liveness.served_via === "injected" ? null : idleStoppedServer(dir, ownerSessionId, id);
-    if (stoppedServer) {
-      liveness.server_stopped = stoppedServer;
-      stoppedServers.push(Object.assign({ review: id }, stoppedServer));
-    }
 
     if (args.json) {
       // Once per review, on the summary line: the same block on every item was
@@ -1242,7 +1252,6 @@ async function run(argv, options) {
     if (healed) lines.push("            " + healed);
     var served = servedViaLine(liveness.served_via);
     if (served) lines.push("  " + served);
-    if (stoppedServer) lines.push("  " + idleStoppedLine(stoppedServer));
     // `--only`. Worth its own line, because the default is the opposite and an
     // agent that assumes the reviewer can wander onto any page in the folder
     // will be wrong about where a comment can come from.
@@ -1394,8 +1403,6 @@ async function run(argv, options) {
         unanswered_ready: totalUnanswered,
         ended_reviews: endedToReport,
         catalog_requests: catalogReport.entries.map(printableEntry),
-        // Only when there are any, so a drain line is unchanged for everyone else.
-        stopped_servers: stoppedServers.length ? stoppedServers : undefined,
         liveness: livenessOfPrinted(toPrint, livenessByReview),
         new_since_seen_file: args.seenFile ? toPrint.length : undefined,
         helper: helperOrigin,
@@ -1438,7 +1445,8 @@ async function run(argv, options) {
     return EXIT.OK;
   }
 
-  out(lines.concat(catalogLines(catalogPending, dir)).join("\n") + "\n");
+  var helperRunning = !!helperOrigin && !!(await service.probeHealth(protocol.DEFAULT_HOST, ready.port));
+  out((await pagesLines(ready, helperRunning)).concat(lines, catalogLines(catalogPending, dir)).join("\n") + "\n");
   return EXIT.OK;
 }
 
@@ -1455,6 +1463,9 @@ module.exports = {
   healLine: healLine,
   servedVia: servedVia,
   servedViaLine: servedViaLine,
+  sitePages: sitePages,
+  pagesLines: pagesLines,
+  readerDescriber: readerDescriber,
   excerpt: excerpt,
   PAGE_TEXT_LABEL: PAGE_TEXT_LABEL,
   drainLine: drainLine,

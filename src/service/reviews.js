@@ -54,7 +54,6 @@ var elapsed = require("../shared/elapsed.js");
 var stateDir = require("./state_dir.js");
 var healModule = require("./heal.js");
 var rebuildModule = require("./rebuild.js");
-var staticServersModule = require("./static_servers.js");
 var pageRoutesModule = require("./page_routes.js");
 var reviewFormatModule = require("../shared/review_format.js");
 
@@ -942,20 +941,14 @@ function createReviews(options) {
     // page or a Markdown source reloads on its own file. The re-render still
     // runs first, so the artifact an older address reads stays current too.
     // STAT ONLY: a site's page gets its script line in the response.
-    if (pageRoutesModule.activeFor(dir)) {
-      if (reviewFormatModule.isLinkedPage(pagePath)) {
-        var siteLinked = pageRoutesModule.linkedFileForPage(dir, review.id, pagePath);
-        return siteLinked ? healer.consider({ path: siteLinked }) : null;
+    var siteFile = pageRoutesModule.fileForPage(dir, pageOrigin, pagePath);
+    if (siteFile && !reviewFormatModule.isLinkedPage(pagePath)) {
+      try {
+        rebuilder.refresh(review);
+      } catch (error) {
+        log.helperLog("review " + review.id + ": the re-render trigger threw and was ignored: " + error.message);
       }
-      var siteFile = pageRoutesModule.fileForPage(dir, pageOrigin, pagePath);
-      if (siteFile) {
-        try {
-          rebuilder.refresh(review);
-        } catch (error) {
-          log.helperLog("review " + review.id + ": the re-render trigger threw and was ignored: " + error.message);
-        }
-        return healer.consider({ path: siteFile });
-      }
+      return healer.consider({ path: siteFile });
     }
     // A LINKED DOCUMENT RELOADS ON ITS OWN FILE (spec 20260922.02, requirement
     // 7). A page under a /.lahe-source/ mount rides the review of the page that
@@ -968,7 +961,7 @@ function createReviews(options) {
     if (reviewFormatModule.isLinkedPage(pagePath)) {
       var linkedFile = null;
       try {
-        linkedFile = staticServersModule.linkedFileForPage(dir, review.agent_session_id, review.id, pagePath);
+        linkedFile = pageRoutesModule.linkedFileForPage(dir, review.id, pagePath);
       } catch (error) {
         linkedFile = null;
       }
@@ -1048,9 +1041,7 @@ function createReviews(options) {
    */
   function servedByStaticServer(review, target) {
     try {
-      // With the switch on, a site serves it; with it off, a page server does.
-      if (pageRoutesModule.activeFor(dir)) return pageRoutesModule.servesFile(dir, target);
-      return staticServersModule.servesPath(dir, review.agent_session_id, target);
+      return pageRoutesModule.servesFile(dir, target);
     } catch (error) {
       return false;
     }
@@ -1142,8 +1133,8 @@ function createReviews(options) {
       service_contract: protocol.SERVICE_CONTRACT,
       reviews: {}
     };
-    // Stable addresses: the switch, the pages port and the printed ending, so
-    // the CLI follows the running helper rather than its own environment.
+    // Stable addresses: the pages port, the printed ending and why, so the CLI
+    // and `lahe status` report what the running helper is doing.
     if (lastReadyDetails.pages) payload.pages = lastReadyDetails.pages;
     Object.keys(reviews).forEach(function (id) {
       payload.reviews[id] = {

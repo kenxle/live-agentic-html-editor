@@ -23,6 +23,10 @@ async function main(argv) {
   // only what names it is counted.
   const runRoot = makeRunRoot();
   const env = Object.assign({}, process.env, { TMPDIR: runRoot, TMP: runRoot, TEMP: runRoot });
+  // Every helper a test starts serves pages on its own free port, never 1483:
+  // parallel test files would otherwise fight over it, and Ken's own helper
+  // holds it. A test that needs a fixed pages port names one itself.
+  if (env.LAHE_PAGES_PORT === undefined) env.LAHE_PAGES_PORT = "0";
   const code = await new Promise((resolve) => {
     const child = spawn(argv[0], argv.slice(1), { stdio: "inherit", env });
     child.on("error", (err) => {

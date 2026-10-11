@@ -470,32 +470,26 @@
   // http://<name>.lahe.localhost:<PAGES.PORT>/<path>. Names are made only by
   // site.bind, which only the CLI can call.
   //
-  // THE SWITCH. LAHE_PAGES=sites, read by the helper at start and reported in
-  // service.json; the CLI follows the running helper's value. Host dispatch,
-  // the ::1 listener and site.bind are live either way, because each is
-  // harmless while no name is granted.
   var PAGES = {
     PORT: 1483,
-    SWITCH_ENV: "LAHE_PAGES",
-    SWITCH_ON: "sites",
     // Tests (and a person who needs another port) set this; 0 means any.
     PORT_ENV: "LAHE_PAGES_PORT",
     SUFFIX: "lahe.localhost",
     PRINTED_ENDING: "lahe.localhost",
+    // Why: what `lahe status` and the start log line say about the ending.
+    PRINTED_ENDING_REASON: "every browser treats .localhost names as this computer and as secure, with no setup",
+    PORT_FREE_OFF_REASON: "the port-80 forward is not set up",
+    LAHE_NAMES_OFF_REASON: "the .lahe option is not set up",
     LIBRARY_NAME: "library",
     MAX_LABELS: 4,
     LABEL_MAX: 63,
     NAME_MAX: 150,
     RESERVED_NAMES: ["library", "lahe", "www", "api"],
+    // service.json's pages.mode: the helper serves pages itself. The only mode.
     MODE_SITES: "sites",
-    MODE_SERVERS: "servers",
     // Every page response carries this, so another website cannot embed it.
     CORP: "same-origin"
   };
-
-  function pagesSwitchOn(env) {
-    return !!env && env[PAGES.SWITCH_ENV] === PAGES.SWITCH_ON;
-  }
 
   /** One DNS label as Lahe makes them: lowercase letters, digits, single dashes. */
   function isSiteLabel(value) {
@@ -1975,7 +1969,6 @@
     scriptTag: scriptTag,
 
     PAGES: PAGES,
-    pagesSwitchOn: pagesSwitchOn,
     isSiteLabel: isSiteLabel,
     isSiteName: isSiteName,
     HOST_FAMILY: HOST_FAMILY,

@@ -8,7 +8,6 @@ var path = require("node:path");
 var protocol = require("../../shared/protocol.js");
 var stateDir = require("../../service/state_dir.js");
 var sessions = require("../../service/agent_sessions.js");
-var staticServers = require("../../service/static_servers.js");
 var markdown = require("../../service/markdown.js");
 var sitesModule = require("../../service/sites.js");
 var service = require("../../service/index.js");
@@ -238,16 +237,22 @@ async function run(argv, mode) {
       notesFolder = checked.folder;
     }
   }
-  var staticServer = null;
   var rendered = null;
   var served = null;
-  var openPage = null;
   var site = null;
   var target = originalTarget;
-  // STABLE ADDRESSES: the running helper's switch decides, never this
-  // process's environment, unless no helper is up yet; then the helper `add`
-  // is about to start inherits this environment and the two agree.
-  var sitesMode = await helperServesSites(dir, opts.port);
+  // The helper serves the page itself. When no helper is up yet, the pages
+  // port is checked first, so a taken port is said plainly, naming it, rather
+  // than as a helper that never came up.
+  var taken = await pagesPortTaken(opts.port);
+  if (taken) {
+    if (createdSession) store.close(sessionId);
+    process.stderr.write(
+      "lahe review: port " + taken + " is taken by another program, so the helper cannot serve pages. " +
+        "Free that port and run this again.\n"
+    );
+    return 1;
+  }
   try {
     if (notesMode && !markdownTarget) throw new Error("lahe write serves a Markdown file only");
     if (markdownTarget) {
@@ -258,30 +263,11 @@ async function run(argv, mode) {
       list.push("--source", originalTarget);
       target = rendered.target;
     }
-    var started = null;
-    if (sitesMode) {
-      site = planSite(target, originalTarget, rendered, opts, notesMode);
-      if (site) {
-        if (notesMode) markNotes(dir, sessionId, rendered, list);
-        openPage = site.entry;
-        served = site.served;
-        list.push("--served-by-helper");
-      }
-    } else {
-      started = notesMode
-        ? await startNotesServer(dir, sessionId, rendered, list)
-        : await startFolderServer(dir, sessionId, target, rendered, opts);
-    }
-    if (started) {
-      staticServer = started.server;
-      openPage = started.openPage;
-      served = started.served;
-      list.push("--origin", "http://" + staticServer.meta.host + ":" + staticServer.meta.port);
-      // This command owns the server, knows the exact path under it, and
-      // prints its own "server"/"open" lines below. `--under-review` tells
-      // `add` to hold back its own "Open it"/"Fallback: file://" block so the
-      // reviewer is handed exactly one URL, not three (see add.js).
-      list.push("--under-review");
+    site = planSite(target, originalTarget, rendered, opts, notesMode);
+    if (site) {
+      if (notesMode) markNotes(dir, sessionId, rendered, list);
+      served = site.served;
+      list.push("--served-by-helper");
     }
   } catch (err) {
     if (createdSession) store.close(sessionId);
@@ -300,28 +286,10 @@ async function run(argv, mode) {
       code = 1;
     }
   }
-  if (code !== 0) {
-    if (staticServer && staticServer.started) {
-      try { await staticServers.stopOne(dir, sessionId, staticServer.meta); } catch (err) { /* the add failure remains primary */ }
-    }
-    if (createdSession) {
-      store.close(sessionId);
-      if (store.openSessions().length === 0) {
-        try { await require("./session.js").stopVerifiedHelper(dir); } catch (err) { /* the original add failure remains primary */ }
-      }
-    }
-  }
-  if (code === 0 && rendered && staticServer && !notesMode) {
-    // WHICH REVIEW LINKED TO WHICH FILE, recorded once the review exists. The
-    // mounts above had to be registered before `add` ran, when this review may
-    // not have had an id yet. A linked document rides this review's rail only
-    // because of this record (spec 20260922.02). Best effort: a failure here
-    // leaves the links read-only, which is what they were before.
-    try {
-      var owner = recordedReviewFor(dir, sessionId, rendered.target);
-      if (owner) staticServers.recordLinks(dir, sessionId, staticServer.meta.id, owner, rendered.linked || []);
-    } catch (err) {
-      process.stderr.write("lahe review: linked documents stay read-only: " + err.message + "\n");
+  if (code !== 0 && createdSession) {
+    store.close(sessionId);
+    if (store.openSessions().length === 0) {
+      try { await require("./session.js").stopVerifiedHelper(dir); } catch (err) { /* the original add failure remains primary */ }
     }
   }
   if (code === 0) {
@@ -329,27 +297,13 @@ async function run(argv, mode) {
       process.stdout.write("\n  open      " + bound.url + "\n");
       printSiteScope(notesMode ? "notes" : served, site, opts, notesFolder);
     }
-    if (staticServer) {
-      // The link below is about to be handed to the reviewer. The helper's idle
-      // sweep gives a server two minutes from this stamp before it stops it, so
-      // a reused server is not stopped before the page has had time to load.
-      try { staticServers.noteLinkGiven(dir, sessionId, staticServer.meta.id); }
-      catch (err) { /* the link still works now; only the grace is shorter */ }
-      process.stdout.write(
-        "\n  server    http://" + staticServer.meta.host + ":" + staticServer.meta.port +
-          (staticServer.started ? "  (started for this agent session)" : "  (reused for this agent session)") +
-          "\n  open      http://" + staticServer.meta.host + ":" + staticServer.meta.port +
-          "/" + encodeURIComponent(openPage) + "\n"
-      );
-      printScope(notesMode ? "notes" : served, staticServer, opts, notesFolder);
-    }
     if (rendered) {
       process.stdout.write(
         "  source    " + originalTarget + "  (Markdown rendered deterministically)\n" +
         "  rebuild   nothing to do. Edit the Markdown and the page re-renders and reloads itself\n" +
         (rendered.linkMounts.length && !notesMode
           ? "  links     " + rendered.linkMounts.length + " linked folder" +
-            (rendered.linkMounts.length === 1 ? "" : "s") + " served read-only for this session\n"
+            (rendered.linkMounts.length === 1 ? "" : "s") + " served read-only at this address\n"
           : "") +
         (rendered.linkMountsSkipped && !notesMode
           ? "  links     " + rendered.linkMountsSkipped + " local link" +
@@ -359,60 +313,10 @@ async function run(argv, mode) {
       );
     }
     process.stdout.write(
-      (staticServer || bound ? "" : "\n") + sessions.commandBlock({ dir: dir, session: sessionId })
+      (bound ? "" : "\n") + sessions.commandBlock({ dir: dir, session: sessionId })
     );
   }
   return code;
-}
-
-/**
- * A notes page's server: ITS OWN ONE-PAGE SERVER, keyed by the page and never
- * by a folder, so it never reuses a folder server even with --session.
- * Nothing else in the notes folder, or in the folder of renders, is reachable
- * over it. No mounts. The review is minted as a notes review; a render of this
- * file that already has an ordinary review keeps that review, and this run
- * starts a new one.
- */
-async function startNotesServer(dir, sessionId, rendered, list) {
-  var server = await staticServers.start({ dir: dir, sessionId: sessionId, root: rendered.target });
-  var existing = recordedReviewFor(dir, sessionId, rendered.target);
-  if (existing && !stateDir.isNotesReview(dir, existing) && list.indexOf("--new") === -1) list.push("--new");
-  if (list.indexOf("--notes") === -1) list.push("--notes");
-  return { server: server, openPage: path.basename(rendered.target), served: "page" };
-}
-
-/**
- * Any other page's server, or null when the target is not served. A single
- * page's server is rooted at the page's own folder; a folder of pages is its
- * own root, so links between the pages resolve and a page added later is
- * served the moment it exists. A rendered Markdown page also mounts its
- * source folder, for its images, and each folder its local links point into.
- */
-async function startFolderServer(dir, sessionId, target, rendered, opts) {
-  var served = servedKind(target, opts);
-  if (!served) return null;
-  var server = await staticServers.start({
-    dir: dir,
-    sessionId: sessionId,
-    root: served === "folder" ? target : path.dirname(target)
-  });
-  var openPage;
-  if (served === "folder") {
-    openPage = add.folderEntryPage(target);
-    if (!openPage) throw new Error("there are no pages in " + target + " to open");
-  } else {
-    openPage = path.basename(target);
-  }
-  if (rendered) {
-    await staticServers.registerMount(dir, sessionId, server.meta, rendered.assetPrefix, rendered.assetRoot);
-    // Local links the renderer translated need their target directory served
-    // read-only. The Markdown on disk keeps the links its author wrote; only
-    // the rendered page points at these mounts.
-    for (var i = 0; i < rendered.linkMounts.length; i += 1) {
-      await staticServers.registerMount(dir, sessionId, server.meta, rendered.linkMounts[i].prefix, rendered.linkMounts[i].dir);
-    }
-  }
-  return { server: server, openPage: openPage, served: served };
 }
 
 // ---------------------------------------------------------------------------
@@ -420,18 +324,27 @@ async function startFolderServer(dir, sessionId, target, rendered, opts) {
 // ---------------------------------------------------------------------------
 
 /**
- * Does the helper serve pages itself (LAHE_PAGES=sites)? The running helper
- * says so in service.json; a helper that is not running yet will inherit this
- * process's environment when `add` starts it.
+ * The pages port, when no helper is answering and something else holds it;
+ * else null. A running helper already holds the pages port itself.
  */
-async function helperServesSites(dir, port) {
+async function pagesPortTaken(port) {
   var helperPort = typeof port === "number" ? port : protocol.DEFAULT_PORT;
-  var alive = await service.probeHealth(protocol.DEFAULT_HOST, helperPort);
-  if (!alive) return protocol.pagesSwitchOn(process.env);
-  var ready = null;
-  try { ready = JSON.parse(fs.readFileSync(stateDir.readyPath(dir), "utf8")); } catch (err) { ready = null; }
-  if (!ready || ready.started_at !== alive.started_at) return false;
-  return !!ready.pages && ready.pages.mode === protocol.PAGES.MODE_SITES;
+  if (await service.probeHealth(protocol.DEFAULT_HOST, helperPort)) return null;
+  var fromEnv = process.env[protocol.PAGES.PORT_ENV];
+  var pagesPort = fromEnv !== undefined && fromEnv !== "" ? Number(fromEnv) : protocol.PAGES.PORT;
+  if (!Number.isInteger(pagesPort) || pagesPort <= 0) return null;
+  return (await portFree(pagesPort)) ? null : pagesPort;
+}
+
+/** Can this process listen on 127.0.0.1:<port> right now? */
+function portFree(port) {
+  return new Promise(function (resolve) {
+    var probe = require("node:net").createServer();
+    probe.once("error", function () { resolve(false); });
+    probe.listen(port, protocol.DEFAULT_HOST, function () {
+      probe.close(function () { resolve(true); });
+    });
+  });
 }
 
 /**
@@ -481,7 +394,7 @@ function markNotes(dir, sessionId, rendered, list) {
  */
 async function bindSite(dir, port, reviewId, site) {
   var secret = sitesModule.readCliSecret(dir);
-  if (!secret) throw new Error("the helper has not written its CLI secret into " + dir + "; is it serving pages (" + protocol.PAGES.SWITCH_ENV + "=" + protocol.PAGES.SWITCH_ON + ")?");
+  if (!secret) throw new Error("the helper has not written its CLI secret into " + dir + "; is it running from this clone?");
   var helperPort = typeof port === "number" ? port : protocol.DEFAULT_PORT;
   var headers = {};
   headers[protocol.HEADER.CLIENT] = protocol.CLIENT_CLI;
@@ -509,7 +422,7 @@ async function bindSite(dir, port, reviewId, site) {
   return answer;
 }
 
-/** What the address covers, the stable-address counterpart of printScope. */
+/** What the printed address covers: the root folder and the rail's reach, or one notes page. */
 function printSiteScope(kind, site, opts, notesFolder) {
   if (kind === "notes") {
     process.stdout.write(
@@ -523,40 +436,6 @@ function printSiteScope(kind, site, opts, notesFolder) {
       (kind === "folder"
         ? "  (every page in it is this one review; links between them keep the rail)"
         : "  (the page's own folder, which is everything this address can serve)") +
-      "\n"
-  );
-  if (opts.only) {
-    process.stdout.write("  scope     only this page. Other pages under that root are served without the rail\n");
-  } else if (kind === "file") {
-    process.stdout.write(
-      "  scope     the rail follows links onto any page under that root.\n" +
-        "            Rerun with --only to keep this review to the one page.\n"
-    );
-  }
-}
-
-/**
- * THE SERVED ROOT, PRINTED. It is not always the folder the reviewer named: a
- * single page's server is rooted at the page's own directory, which is what
- * decides whether `../assets/x.png` resolves and what else on disk is
- * reachable over the link being handed out. Not labelled "folder": `add`
- * already prints that for the review's own directory in the state dir, and two
- * different paths under one label is how a reader (or a script) takes the
- * wrong one. A notes page prints its scope and the real folder instead.
- */
-function printScope(kind, staticServer, opts, notesFolder) {
-  if (kind === "notes") {
-    process.stdout.write(
-      "  scope     this page only, on its own server. Nothing else in its folder is served\n" +
-        (notesFolder ? "  notes in  " + notesFolder + "\n" : "")
-    );
-    return;
-  }
-  process.stdout.write(
-    "  root      " + staticServer.meta.root +
-      (kind === "folder"
-        ? "  (every page in it is this one review; links between them keep the rail)"
-        : "  (the page's own folder, which is everything this server can serve)") +
       "\n"
   );
   if (opts.only) {
