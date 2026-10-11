@@ -167,12 +167,20 @@ Script: `scripts/spike_localhost_names.js` on branch `spike/localhost-names`. Li
 
 Windows restarts through the once-a-minute trigger, so a crashed helper there can be down for up to about a minute. "Starts at login" itself is proven on this Mac by your reboot (row V45).
 
+**Real `lahe install` and `lahe uninstall`, Linux and Windows** (rows V46, V47), on the merged branch: [run 38180638262](https://github.com/kenxle/live-agentic-html-editor/actions/runs/38180638262).
+
+| System | `lahe install`, helper up | Restart after a kill | `lahe uninstall` |
+|---|---|---|---|
+| Linux | 0.4 s, exit 0 | 2.5 s | exit 0, clean |
+| Windows | 0.4 s, exit 0 | 61.0 s | exit 0, clean |
+
 ### Ship
 
 Not shipped yet.
 
 ## Log
 
+- 2026-10-11 18:31: Install fix round 2 merged. The real `lahe install` and `lahe uninstall` commands pass on Linux and Windows on the merged branch.
 - 2026-10-11 18:23: Security review: no blocker; six findings (a website could read a permanent machine id from `/health`; a Markdown link could mount a hidden folder like `~/.ssh`; another program could take the IPv6 half of the pages port; the stated risk for other local accounts was too mild; a folder's `.git` file could pick the worktree fallback; test settings worked in normal use). Independent spec check: most requirements met; light-when-idle not yet measured; one file could get two addresses; stale docs; some tests weaker than their rows; five changes from the docs need your OK. All sent to the core and install builders as fix round 2.
 - 2026-10-11 18:14: Code review fixes merged from both builders, each with a test that failed first (single test files only, because of the disk). One Library change to note: a link on a `.lahe.localhost` page can now open the Library page; the Library still cannot be framed, and its other routes are unchanged. Security review and an independent spec check started (read only). The full suite waits on disk space.
 - 2026-10-11 17:55: Phase 7 code review (whole merged diff, read only) found 10 important issues and a set of smaller ones; none is a design change. Most serious: a failed `lahe review` can stop the always-on helper; the `--port-80`/`--lahe-names` root step reads files another program of yours could swap first; any web page can grow the helper's memory and log. All sent to the core and install builders as one fix round. They run single test files only, and stop if free disk drops under 1 GB.
