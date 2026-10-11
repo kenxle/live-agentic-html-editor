@@ -2,10 +2,11 @@
 
 ## Needs your call
 
-1. **Size.** About three source files, plus the contract and skill text and the docs that travel with them. That is past whetstone's usual limit of about five files. The design analysis is already done in [the diagnosis](00_diagnosis.md), so I'm treating that as the alternatives work instead of running the full forge. Say if you want the full forge.
+Nothing open. Building.
 
 ## Decided
 
+- **Whetstone, not the full forge.** You approved this size.
 - **No flag, no Reopen, nothing new on the card.** You: "the user just wants to write comments and have things work like a normal doc. they don't understand that things can be different between the browser and the file." So once the agent has answered a card, the page simply shows the file. If you want something changed again, you edit or comment again, as in any document.
 - **The cost, accepted:** if a rebuild quietly drops something the agent had placed (your bold, a paragraph), the tool no longer puts it back or asks the agent. You see the page as it is and can edit it again.
 
@@ -71,7 +72,6 @@ Rules for the builder: no `rm`, no `git clean`, no deleting anything, including 
 
 ## Questions
 
-- Open: the size question under "Needs your call".
 - Resolved: A plus H, chosen on [the diagnosis](00_diagnosis.md). H and E are different: H needs nothing from the agent.
 - Resolved: H ships without a flag or a Reopen. The page behaves like a normal document.
 - Boarded separately: a way to dismiss a card and keep its history (LAHE-dismiss-card).
