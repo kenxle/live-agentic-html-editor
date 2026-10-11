@@ -22,8 +22,8 @@
 
 | Agent or task | Doing | Started | Branch |
 |---|---|---|---|
-| Core builder (Opus) | Code review fixes: failed `lahe review` stopping the always-on helper, memory and log growth from web pages, the dead Library link, state folder exposure, one page with two origins, page-load disk scans, tests reaching port 1483, smaller items | 2026-10-11 17:55 | `unit/sa-core` |
-| Install builder (Opus) | Code review fixes: root installing files a user process could swap, forward-check memory growth, restart loop against an older clone, sudo timeout, smaller items | 2026-10-11 17:55 | `unit/sa-install` |
+| Security reviewer (Opus) | Reads the merged code; re-checks the security fixes and the widened Library link | 2026-10-11 18:14 | `feat/stable-addresses` |
+| Spec checker (Opus) | Checks the merged code against every requirement, test row, and doc | 2026-10-11 18:14 | `feat/stable-addresses` |
 
 ## Phases
 
@@ -167,6 +167,7 @@ Not shipped yet.
 
 ## Log
 
+- 2026-10-11 18:14: Code review fixes merged from both builders, each with a test that failed first (single test files only, because of the disk). One Library change to note: a link on a `.lahe.localhost` page can now open the Library page; the Library still cannot be framed, and its other routes are unchanged. Security review and an independent spec check started (read only). The full suite waits on disk space.
 - 2026-10-11 17:55: Phase 7 code review (whole merged diff, read only) found 10 important issues and a set of smaller ones; none is a design change. Most serious: a failed `lahe review` can stop the always-on helper; the `--port-80`/`--lahe-names` root step reads files another program of yours could swap first; any web page can grow the helper's memory and log. All sent to the core and install builders as one fix round. They run single test files only, and stop if free disk drops under 1 GB.
 - 2026-10-11 17:41: First full gate on the merged branch: unit 2,577 passed, 0 failed; browser 861 passed, 2 failed, 7 skipped. One failure is a log-wording change in Host refusals (to fix); the other hit "no space left on device". Disk is full from test temp folders; all test runs paused until it is cleared.
 - 2026-10-11 17:17: Library 4.3 merged. Every workstream is now merged. Unit gate: 2,575 tests, 1 failed, an install test that only fails under load, sent to the install builder. Full browser suite next, once that is fixed.
