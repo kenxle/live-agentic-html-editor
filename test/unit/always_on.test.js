@@ -329,3 +329,41 @@ test("the helper log says once per start whether a login item runs it", async (t
   t.after(() => other.result.close());
   assert.match(fs.readFileSync(stateDir.helperLogPath(plain.dir), "utf8"), /no login item: started on demand/);
 });
+
+// --- lahe serve by hand, when installed --------------------------------------
+
+test("installed: lahe serve --restart restarts through the login item instead of binding by hand", async (t) => {
+  const w = tempState();
+  t.after(() => stopTempHelpers(w.dir));
+  const port = await freePort();
+  install(w.dir, port);
+  const item = fakeLoginItem(w.dir, port);
+  await sessionCommand.startHelper(w.dir, port, { runner: item.runner });
+  const before = await service.probeHealth(protocol.DEFAULT_HOST, port);
+  const out = [];
+  const code = await serveCommand.run(["--restart", "--port", String(port), "--state-dir", w.dir], {
+    runner: item.runner,
+    stdout: (x) => out.push(x),
+    stderr: (x) => out.push(x)
+  });
+  assert.equal(code, 0, out.join(""));
+  const after = await service.probeHealth(protocol.DEFAULT_HOST, port);
+  assert.notEqual(after.started_at, before.started_at);
+  assert.equal(after.always_on, true, "the login item's helper, not one bound by this process");
+  assert.equal(item.calls.length, 2);
+  assert.match(out.join(""), /restarted through the login item/);
+});
+
+test("installed: lahe serve by hand does not start a second helper beside the login item", async (t) => {
+  const w = tempState();
+  const port = await freePort();
+  install(w.dir, port);
+  const out = [];
+  const code = await serveCommand.run(["--port", String(port), "--state-dir", w.dir], {
+    stdout: (x) => out.push(x),
+    stderr: (x) => out.push(x)
+  });
+  assert.notEqual(code, 0);
+  assert.match(out.join(""), /login item lahe-test-\d+ runs the helper on this port/);
+  assert.equal(await service.probeHealth(protocol.DEFAULT_HOST, port), null);
+});
