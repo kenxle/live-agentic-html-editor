@@ -523,3 +523,17 @@ test("V59: after uninstall, a .lahe.localhost address loads a page again once th
   assert.equal(res.status, 200, res.text.slice(0, 200));
   assert.match(res.text, /Still here after uninstall\./);
 });
+
+test("a label passed in names the login item, and uninstall finds it from install.json", async (t) => {
+  const w = await world(t);
+  const port = await freePort();
+  const fake = withSudo(w, port);
+  const d = deps(w, { runner: fake.runner, label: "lahe-spike-abc123" });
+  assert.equal(await installCommand.run(["--state-dir", w.dir, "--port", String(port)], d), 0, d.err());
+  assert.ok(fs.existsSync(path.join(w.home, "Library", "LaunchAgents", "lahe-spike-abc123.plist")));
+  assert.equal(loginItem.readInstall(w.dir).label, "lahe-spike-abc123");
+  const u = deps(w, { runner: fake.runner });
+  assert.equal(await installCommand.uninstall.run(["--state-dir", w.dir], u), 0, u.err());
+  assert.ok(fake.calls.some((c) => c.join(" ") === "launchctl bootout gui/501/lahe-spike-abc123"));
+  assert.equal(fs.existsSync(path.join(w.home, "Library", "LaunchAgents", "lahe-spike-abc123.plist")), false);
+});

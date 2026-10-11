@@ -138,6 +138,7 @@ function environment(argv, given, name) {
     home: d.home || os.homedir(),
     node: d.node || process.execPath,
     runner: d.runner,
+    label: d.label,
     users: d.users,
     waitMs: d.waitMs,
     portHolder: d.portHolder || defaultPortHolder,
@@ -196,7 +197,9 @@ function environment(argv, given, name) {
   // The label an earlier install recorded, so a reinstall or an uninstall
   // finds the same item.
   env.record = loginItem.readInstall(env.dir);
-  var label = env.record && env.record.system === env.system ? env.record.label : undefined;
+  // A label passed in (the spike's unique one) wins; else the one an earlier
+  // install recorded; else the default.
+  var label = env.label || (env.record && env.record.system === env.system ? env.record.label : undefined);
   try {
     env.item = describeItem(env, label);
   } catch (error) {
