@@ -27,7 +27,7 @@ Chosen by the brief, for Ken to overrule in review:
 **Q1. Which ending does `lahe review` print: `.lahe.localhost` or `.lahe`?** Ken chose `.lahe`. The fix for one page reading another holds with either ending: it came from a name per document, and each name is its own browser origin under both endings. The question is only which ending costs less. Both architecture reviews found that a plain `http://name.lahe` address is not "secure" to the browser, and that costs five things:
 
 - the address bar shows "Not secure";
-- copy buttons lose the clipboard and need an older copy method;
+- Lahe's copy buttons stop working unless they switch to an older copy method. These are the rail's "copy my feedback" button (for pasting comments to an agent when no helper is running), the copy button on the hand-off message for a new agent, the Library's copy of that message, and "Copy the command" on a page whose review is missing. Browsers only give the modern clipboard to secure pages;
 - the guard against two tabs of one document both acting turns off;
 - the browser stops sending headers the Library's safety checks rely on;
 - on a machine where Lahe does not control `.lahe` lookups, someone on the network could take over a name.
