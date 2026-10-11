@@ -24,12 +24,30 @@ const stateDir = require("../../src/service/state_dir.js");
 const loginItem = require("../../src/service/login_item.js");
 const installCommand = require("../../src/cli/commands/install.js");
 const { freePort } = require("../helpers/free_port.js");
+const dgram = require("node:dgram");
+const net = require("node:net");
+
+function freeUdpPort() {
+  return new Promise((resolve) => {
+    const socket = dgram.createSocket("udp4");
+    socket.bind(0, "127.0.0.1", () => {
+      const port = socket.address().port;
+      socket.close(() => resolve(port));
+    });
+  });
+}
 const { pollUntil } = require("../helpers/poll.js");
 const { trackSpawned } = require("../helpers/spawned.js");
 
 const BIN = path.join(__dirname, "..", "..", "bin", "lahe.js");
 
-function world(t) {
+/**
+ * A temp home and state folder, plus the test-owned listeners a helper's
+ * address checks use instead of the real ones: a free UDP port for the name
+ * server, and a TCP listener standing in for port 80. No helper in this file
+ * binds 7853, sends a request to port 80, or asks the system resolver.
+ */
+async function world(t) {
   const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "lahe-install-")));
   const home = path.join(root, "home dir");
   const dir = path.join(root, "state dir");
@@ -37,7 +55,19 @@ function world(t) {
   // Every helper the fake service manager or a test starts is tracked by pid,
   // so teardown stops one that was still starting when the test ended.
   const spawned = trackSpawned(t, dir);
-  return { root, home, dir, spawned };
+  const udp = await freeUdpPort();
+  const port80 = { hits: 0 };
+  const stand = net.createServer((socket) => { port80.hits += 1; socket.destroy(); });
+  await new Promise((resolve) => stand.listen(0, "127.0.0.1", resolve));
+  port80.port = stand.address().port;
+  t.after(() => new Promise((resolve) => stand.close(() => resolve())));
+  // What the helpers this file starts get in place of port 80 and the system
+  // resolver.
+  const helperEnv = {
+    LAHE_FORWARD_CHECK_PORT: String(port80.port),
+    LAHE_NAME_CHECK_SERVER: "127.0.0.1:" + udp
+  };
+  return { root, home, dir, spawned, udp, port80, helperEnv };
 }
 
 function readyPid(dir) {
@@ -63,7 +93,7 @@ function fakeManager(w, port) {
       return { status: 0, output: "" };
     }
     if (args.some((a) => startWords.indexOf(a) !== -1) && !(await service.probeHealth(protocol.DEFAULT_HOST, port))) {
-      w.spawned.spawn([BIN, "serve", "--always-on", "--port", String(port), "--state-dir", w.dir]);
+      w.spawned.spawn([BIN, "serve", "--always-on", "--port", String(port), "--state-dir", w.dir], w.helperEnv);
     }
     return { status: 0, output: "" };
   };
@@ -82,6 +112,7 @@ function deps(w, overrides) {
     home: w.home,
     node: path.join(w.root, "node bin", "node"),
     users: () => ["jo"],
+    nameServerPort: w.udp,
     // Never the real /etc files or the real port 80.
     portHolder: () => null,
     rootPaths: {
@@ -97,7 +128,7 @@ function deps(w, overrides) {
 }
 
 test("V48: install refuses to run without a terminal, and tells an agent what to ask for", async (t) => {
-  const w = world(t);
+  const w = await world(t);
   const d = deps(w, { isTTY: false });
   const code = await installCommand.run(["--state-dir", w.dir], d);
   assert.notEqual(code, 0);
@@ -107,7 +138,7 @@ test("V48: install refuses to run without a terminal, and tells an agent what to
 });
 
 test("V48: install refuses to run as root", async (t) => {
-  const w = world(t);
+  const w = await world(t);
   const d = deps(w, { uid: 0 });
   const code = await installCommand.run(["--state-dir", w.dir], d);
   assert.notEqual(code, 0);
@@ -115,7 +146,7 @@ test("V48: install refuses to run as root", async (t) => {
 });
 
 test("V48 and V72: install writes a login item carrying the port and state folder, starts it, and records install.json", async (t) => {
-  const w = world(t);
+  const w = await world(t);
   const port = await freePort();
   const manager = fakeManager(w, port);
   const d = deps(w, { runner: manager.runner });
@@ -144,7 +175,7 @@ test("V48 and V72: install writes a login item carrying the port and state folde
 });
 
 test("V48: more than one user on the machine is warned about, and install goes on", async (t) => {
-  const w = world(t);
+  const w = await world(t);
   const port = await freePort();
   const d = deps(w, { runner: fakeManager(w, port).runner, users: () => ["jo", "sam"] });
   const code = await installCommand.run(["--state-dir", w.dir, "--port", String(port)], d);
@@ -154,7 +185,7 @@ test("V48: more than one user on the machine is warned about, and install goes o
 });
 
 test("V72: installing again replaces the login item rather than adding a second", async (t) => {
-  const w = world(t);
+  const w = await world(t);
   const port = await freePort();
   const manager = fakeManager(w, port);
   assert.equal(await installCommand.run(["--state-dir", w.dir, "--port", String(port)], deps(w, { runner: manager.runner })), 0);
@@ -168,9 +199,9 @@ test("V72: installing again replaces the login item rather than adding a second"
 });
 
 test("install replaces a helper the CLI started on demand, so the login item can take the port", async (t) => {
-  const w = world(t);
+  const w = await world(t);
   const port = await freePort();
-  w.spawned.spawn([BIN, "serve", "--port", String(port), "--state-dir", w.dir]);
+  w.spawned.spawn([BIN, "serve", "--port", String(port), "--state-dir", w.dir], w.helperEnv);
   await pollUntil(() => service.probeHealth(protocol.DEFAULT_HOST, port), { timeoutMs: 10000, message: "the plain helper" });
   const d = deps(w, { runner: fakeManager(w, port).runner });
   assert.equal(await installCommand.run(["--state-dir", w.dir, "--port", String(port)], d), 0, d.err());
@@ -178,7 +209,7 @@ test("install replaces a helper the CLI started on demand, so the login item can
 });
 
 test("Linux without a user systemd: install says so, stays in clone mode, and writes nothing", async (t) => {
-  const w = world(t);
+  const w = await world(t);
   const port = await freePort();
   const calls = [];
   const d = deps(w, {
@@ -198,7 +229,7 @@ test("Linux without a user systemd: install says so, stays in clone mode, and wr
 });
 
 test("V72: uninstall unloads the item, removes its file and install.json, and the helper is stopped", async (t) => {
-  const w = world(t);
+  const w = await world(t);
   const port = await freePort();
   const manager = fakeManager(w, port);
   assert.equal(await installCommand.run(["--state-dir", w.dir, "--port", String(port)], deps(w, { runner: manager.runner })), 0);
@@ -213,7 +244,7 @@ test("V72: uninstall unloads the item, removes its file and install.json, and th
 });
 
 test("uninstall with nothing installed says so and succeeds", async (t) => {
-  const w = world(t);
+  const w = await world(t);
   const d = deps(w, { runner: () => ({ status: 0, output: "" }) });
   assert.equal(await installCommand.uninstall.run(["--state-dir", w.dir], d), 0);
   assert.match(d.out(), /nothing to uninstall/);
@@ -279,7 +310,7 @@ function rootPaths(w) {
 }
 
 test("V56: --lahe-names makes one sudo call with the fixed resolver file, and records it", async (t) => {
-  const w = world(t);
+  const w = await world(t);
   const port = await freePort();
   const fake = withSudo(w, port);
   const d = deps(w, { runner: fake.runner, portHolder: () => null, rootPaths: rootPaths(w) });
@@ -287,17 +318,17 @@ test("V56: --lahe-names makes one sudo call with the fixed resolver file, and re
   assert.equal(code, 0, d.err());
   assert.equal(fake.sudo.length, 1, "one admin step, one sudo call");
   assert.equal(fake.sudo[0].args[2], loginItem.ROOT_SCRIPTS.installResolver);
-  assert.equal(fake.sudo[0].files[loginItem.ROOT_FILES.resolver], loginItem.resolverText(loginItem.NAME_SERVER_PORT));
+  assert.equal(fake.sudo[0].files[loginItem.ROOT_FILES.resolver], loginItem.resolverText(w.udp));
   const record = loginItem.readInstall(w.dir);
   assert.equal(record.lahe_names, true);
   assert.equal(record.resolver, loginItem.RESOLVER_PATH);
-  assert.equal(record.name_server_port, loginItem.NAME_SERVER_PORT);
+  assert.equal(record.name_server_port, w.udp, "a free port the test owns, never 7853");
   assert.equal(record.port_80, false, "the other option stays off");
   assert.match(d.out(), /\.lahe/);
 });
 
 test("V74: --port-80 makes one sudo call with the fixed forward rule and boot item, and records it", async (t) => {
-  const w = world(t);
+  const w = await world(t);
   const port = await freePort();
   const fake = withSudo(w, port);
   const d = deps(w, { runner: fake.runner, portHolder: () => null, rootPaths: rootPaths(w) });
@@ -309,11 +340,12 @@ test("V74: --port-80 makes one sudo call with the fixed forward rule and boot it
   const record = loginItem.readInstall(w.dir);
   assert.equal(record.port_80, true);
   assert.equal(record.forward_rule, loginItem.FORWARD_RULE_PATH);
+  await pollUntil(() => w.port80.hits > 0, { timeoutMs: 10000, message: "the helper's forward check to reach the test's stand-in for port 80" });
   assert.equal(record.lahe_names, false);
 });
 
 test("V74: --port-80 is skipped, naming the holder, when something listens on port 80", async (t) => {
-  const w = world(t);
+  const w = await world(t);
   const port = await freePort();
   const fake = withSudo(w, port);
   const d = deps(w, { runner: fake.runner, portHolder: () => "httpd (pid 412)", rootPaths: rootPaths(w) });
@@ -327,7 +359,7 @@ test("V74: --port-80 is skipped, naming the holder, when something listens on po
 });
 
 test("on Linux, both options are steps done by hand: install records them so the helper checks them, and runs no sudo", async (t) => {
-  const w = world(t);
+  const w = await world(t);
   const port = await freePort();
   const fake = withSudo(w, port);
   const d = deps(w, { platform: "linux", runner: fake.runner });
@@ -336,7 +368,7 @@ test("on Linux, both options are steps done by hand: install records them so the
   const record = loginItem.readInstall(w.dir);
   assert.equal(record.lahe_names, true);
   assert.equal(record.resolver, loginItem.LINUX_RESOLVER_PATH);
-  assert.equal(record.name_server_port, loginItem.NAME_SERVER_PORT);
+  assert.equal(record.name_server_port, w.udp, "a free port the test owns, never 7853");
   assert.equal(record.port_80, true);
   assert.equal(record.by_hand, true);
   assert.match(d.out(), /by hand/);
@@ -344,7 +376,7 @@ test("on Linux, both options are steps done by hand: install records them so the
 });
 
 test("on Windows, --port-80 is a step done by hand, and --lahe-names is refused for now", async (t) => {
-  const w = world(t);
+  const w = await world(t);
   const port = await freePort();
   const fake = withSudo(w, port);
   const refused = deps(w, { platform: "win32", uid: null, runner: fake.runner });
@@ -358,7 +390,7 @@ test("on Windows, --port-80 is a step done by hand, and --lahe-names is refused 
 });
 
 test("a refused sudo leaves the option off and says so; the login item still installs", async (t) => {
-  const w = world(t);
+  const w = await world(t);
   const port = await freePort();
   const fake = withSudo(w, port, { sudoFails: true });
   const d = deps(w, { runner: fake.runner, portHolder: () => null, rootPaths: rootPaths(w) });
@@ -368,15 +400,17 @@ test("a refused sudo leaves the option off and says so; the login item still ins
 });
 
 test("a later plain install keeps the options already set, with no new sudo call", async (t) => {
-  const w = world(t);
+  const w = await world(t);
   const port = await freePort();
   const fake = withSudo(w, port);
   const paths = rootPaths(w);
-  assert.equal(await installCommand.run(["--state-dir", w.dir, "--port", String(port), "--lahe-names", "--port-80"],
-    deps(w, { runner: fake.runner, portHolder: () => null, rootPaths: paths })), 0);
+  const first = deps(w, { runner: fake.runner, portHolder: () => null, rootPaths: paths });
+  assert.equal(await installCommand.run(["--state-dir", w.dir, "--port", String(port), "--lahe-names", "--port-80"], first), 0,
+    first.out() + first.err());
   assert.equal(fake.sudo.length, 2, "one sudo call per option");
-  assert.equal(await installCommand.run(["--state-dir", w.dir, "--port", String(port)],
-    deps(w, { runner: fake.runner, portHolder: () => null, rootPaths: paths })), 0);
+  const second = deps(w, { runner: fake.runner, portHolder: () => null, rootPaths: paths });
+  assert.equal(await installCommand.run(["--state-dir", w.dir, "--port", String(port)], second), 0,
+    second.out() + second.err());
   assert.equal(fake.sudo.length, 2);
   const record = loginItem.readInstall(w.dir);
   assert.equal(record.lahe_names, true);
@@ -384,7 +418,7 @@ test("a later plain install keeps the options already set, with no new sudo call
 });
 
 test("V59 and V74: uninstall removes the resolver and the forward only when each carries the marker", async (t) => {
-  const w = world(t);
+  const w = await world(t);
   const port = await freePort();
   const fake = withSudo(w, port);
   const paths = rootPaths(w);
@@ -402,7 +436,7 @@ test("V59 and V74: uninstall removes the resolver and the forward only when each
 });
 
 test("--port-80 again, with Lahe's forward already in place, is not mistaken for another program on port 80", async (t) => {
-  const w = world(t);
+  const w = await world(t);
   const port = await freePort();
   const fake = withSudo(w, port);
   const paths = rootPaths(w);
@@ -416,7 +450,7 @@ test("--port-80 again, with Lahe's forward already in place, is not mistaken for
 });
 
 test("uninstall after hand steps says which steps to undo by hand", async (t) => {
-  const w = world(t);
+  const w = await world(t);
   const port = await freePort();
   const fake = withSudo(w, port);
   assert.equal(await installCommand.run(["--state-dir", w.dir, "--port", String(port), "--port-80"],

@@ -141,6 +141,8 @@ function environment(argv, given, name) {
     users: d.users,
     waitMs: d.waitMs,
     portHolder: d.portHolder || defaultPortHolder,
+    // The name server's port in install.json. Tests pass a free one.
+    nameServerPort: typeof d.nameServerPort === "number" ? d.nameServerPort : loginItem.NAME_SERVER_PORT,
     rootPaths: d.rootPaths || {
       resolver: loginItem.RESOLVER_PATH,
       rule: loginItem.FORWARD_RULE_PATH,
@@ -225,11 +227,22 @@ async function stopOurHelper(env) {
   return sessionCommand.stopVerifiedHelper(env.dir);
 }
 
+function readyNames(dir, live) {
+  try {
+    var ready = JSON.parse(fs.readFileSync(stateDirModule.readyPath(dir), "utf8"));
+    return typeof ready.pid === "number" && ready.started_at === live.started_at;
+  } catch (err) {
+    return false;
+  }
+}
+
 async function waitForInstalledHelper(env) {
   var deadline = Date.now() + (typeof env.waitMs === "number" ? env.waitMs : 20000);
   for (;;) {
     var live = await service.probeHealth(protocol.DEFAULT_HOST, env.port);
-    if (live && live.always_on === true && !selfStop.stateFolderMismatch(env.dir, live)) return true;
+    // Up, and done starting: service.json names this same helper, so a later
+    // command can stop it by its pid.
+    if (live && live.always_on === true && !selfStop.stateFolderMismatch(env.dir, live) && readyNames(env.dir, live)) return true;
     if (Date.now() >= deadline) return false;
     await new Promise(function (resolve) { setTimeout(resolve, 100); });
   }
@@ -294,7 +307,7 @@ async function adminSteps(env) {
     port_80_reason: before.port_80_reason || null,
     lahe_names: before.lahe_names === true,
     resolver: before.lahe_names === true ? before.resolver || loginItem.RESOLVER_PATH : null,
-    name_server_port: before.lahe_names === true ? before.name_server_port || loginItem.NAME_SERVER_PORT : null
+    name_server_port: before.lahe_names === true ? before.name_server_port || env.nameServerPort : null
   };
   if (env.port80) {
     // With Lahe's own forward in place, port 80 answers because it reaches the
@@ -321,11 +334,11 @@ async function adminSteps(env) {
   }
   if (env.laheNames) {
     var names = {};
-    names[loginItem.ROOT_FILES.resolver] = loginItem.resolverText(loginItem.NAME_SERVER_PORT);
+    names[loginItem.ROOT_FILES.resolver] = loginItem.resolverText(env.nameServerPort);
     var resolver = await rootStep(env, "installResolver", names);
     out.lahe_names = resolver.ok;
     out.resolver = resolver.ok ? loginItem.RESOLVER_PATH : null;
-    out.name_server_port = resolver.ok ? loginItem.NAME_SERVER_PORT : null;
+    out.name_server_port = resolver.ok ? env.nameServerPort : null;
     if (resolver.ok) env.out("lahe install: .lahe lookups on this Mac go to the helper's name server.\n");
     else env.err("lahe install: .lahe was not set up (" + resolver.failed + ").\n");
   }
@@ -358,7 +371,7 @@ function handSteps(env) {
     port_80_reason: null,
     lahe_names: names,
     resolver: names ? loginItem.LINUX_RESOLVER_PATH : null,
-    name_server_port: names ? loginItem.NAME_SERVER_PORT : null
+    name_server_port: names ? env.nameServerPort : null
   };
 }
 

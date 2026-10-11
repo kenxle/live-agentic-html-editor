@@ -248,3 +248,23 @@ Do these on your Mac, in your own terminal (the commands ask for your password w
 `install_command.test.js` could leave one `lahe.js serve --always-on` helper running under load. The fake service manager spawned it, and it finished starting after teardown had looked for it in `service.json`. Now [spawned.js](../../../../test/helpers/spawned.js) tracks every helper a test spawns by its own pid from the moment it exists. Teardown stops each one (SIGTERM, then SIGKILL) and then sweeps the state folder, even when the test failed. `always_on.test.js` had the same pattern and uses it too.
 
 Proof: two full `npm run gate:unit` runs in a row. Each run: 2590 tests, 2534 pass, 54 fail, all 54 in the library's files, which the library builder is fixing. After each run, helpers from this worktree with `lahe-install` in their state folder: 0. The one `lahe-install` helper still running on the machine came from the `sa-library` worktree, started before these runs, running the old version of the test file.
+
+# Fix: "a later plain install" failed under load
+
+**Cause.** The helper ran its `.lahe` and port 80 checks before writing `service.json`, and under load the real lookup in those checks could take seconds. For that whole time `/health` answered but `service.json` did not exist yet, so the second `lahe install` could not stop the first helper by its pid and refused it as "not this state folder's helper".
+
+**Fix.**
+- The helper now writes `service.json` as soon as it is ready. The checks run afterward and rewrite `service.json` when they land. A check that lands after the helper closes writes nothing.
+- `lahe install` waits until `service.json` names the helper `/health` showed.
+- New test in [addresses.test.js](../../../../test/unit/addresses.test.js): `service.json` exists while a slow `.lahe` lookup is still waiting. It failed before the fix.
+- The failing assertion in `install_command.test.js` now prints the install's output.
+
+**Proof.** Two full `npm run gate:unit` runs: 2576 tests, 0 failed, both times. `ps -axo pid,command | grep "[l]ahe.js serve" | grep -c lahe-worktrees` was 0 after each.
+
+**Follow-up, done.** The install tests used to record port 7853, and their helpers sent a request to the real port 80 and asked the system resolver about `.lahe`. Now:
+- Each test records a free UDP port for the name server.
+- The helpers it starts get two test seams, read only from the environment:
+  - `LAHE_FORWARD_CHECK_PORT` sends the forward check to a listener the test owns, instead of port 80.
+  - `LAHE_NAME_CHECK_SERVER` asks the helper's own name server directly, instead of the system resolver.
+- No unit test binds 7853, sends to port 80, or does a real `.lahe` lookup, so none needs a network.
+- Proof: two full `npm run gate:unit` runs, 2577 tests, 0 failed, and no `lahe-worktrees` helper left after either.

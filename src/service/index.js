@@ -849,7 +849,14 @@ async function serve(options) {
     log: function (line) { log.helperLog(line); },
     onChange: function () { reviews.writeReadyFile(readyDetails()); }
   }, opts.addresses || {}));
-  await addresses.start();
+  // The name server binds now; the checks run on their own. A check can take
+  // seconds (a lookup that times out), and the helper must not answer /health
+  // for that long with no service.json: a CLI that sees /health and then reads
+  // service.json for the pid would find nothing. Each check's result rewrites
+  // service.json when it lands; until then nothing is proved.
+  await addresses.listen();
+  addresses.schedule();
+  addresses.verifyNow().catch(function (err) { log.helperLog("address check failed: " + err.message); });
   // The helper modules that map a page to a file (the healer, the reload
   // check, rebuild, the handled check, the projection) ask the registry from
   // here on, for this state folder.

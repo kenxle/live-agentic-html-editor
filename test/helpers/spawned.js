@@ -42,7 +42,7 @@ async function stopPid(pid) {
 /**
  * @param {object} t the node:test context
  * @param {string} stateDir the temp state folder the helpers use
- * @returns {{spawn: function(string[]): object, pids: number[]}}
+ * @returns {{spawn: function(string[], object=): object, pids: number[]}}
  */
 function trackSpawned(t, stateDir) {
   const pids = [];
@@ -52,8 +52,12 @@ function trackSpawned(t, stateDir) {
   });
   return {
     pids,
-    spawn(args) {
-      const child = childProcess.spawn(process.execPath, args, { detached: true, stdio: "ignore" });
+    spawn(args, env) {
+      const child = childProcess.spawn(process.execPath, args, {
+        detached: true,
+        stdio: "ignore",
+        env: Object.assign({}, process.env, env || {})
+      });
       pids.push(child.pid);
       child.unref();
       return child;
