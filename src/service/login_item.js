@@ -366,11 +366,16 @@ async function startThroughItem(record, isUp, options) {
 // ---------------------------------------------------------------------------
 //
 // `lahe install --port-80` and `lahe install --lahe-names` each make one
-// `sudo` call. The files are written first, as the user, into a fresh private
-// temp folder; the root step copies them into place with `install`. The root
-// script is a constant: no path, port, or name is spliced into it. Its one
-// argument is that temp folder, read as "$1". Every file carries MARKER, and
-// both the install and the removal scripts leave alone a file without it.
+// `sudo` call. ROOT NEVER READS A FILE THE USER OWNS: the root script builds
+// each file's text itself, from constants in the script, and writes it into a
+// root-owned folder. Its one argument is a port number, and the script refuses
+// anything that is not one (lahe_port_ok) before it writes anything. The
+// script is a constant: nothing is spliced into it. Every file carries MARKER,
+// and both the install and the removal scripts leave alone a file without it.
+//
+// The text functions in ROOT_TEXT_FUNCTIONS are generated from the same
+// constants as resolverText, forwardRuleText and forwardDaemonText, and a test
+// runs them (as the user, printing only) to check they match byte for byte.
 //
 // The forward is a pf rule in the com.apple/lahe anchor. macOS's own
 // /etc/pf.conf already has `rdr-anchor "com.apple/*"`, so no system file is
@@ -385,7 +390,38 @@ var NAME_SERVER_PORT = 7853;
 // Linux, by hand (docs/INSTALL.md): the systemd-resolved drop-in that sends
 // .lahe lookups to the name server.
 var LINUX_RESOLVER_PATH = "/etc/systemd/resolved.conf.d/lahe.conf";
-var ROOT_FILES = { resolver: "lahe.resolver", rule: "lahe.anchor", daemon: FORWARD_DAEMON_LABEL + ".plist" };
+
+// Each file as lines. "%PORT%" stands where the port number goes.
+var RESOLVER_LINES = [
+  MARKER + ": .lahe names, written by lahe install. lahe uninstall removes it.",
+  "nameserver 127.0.0.1",
+  "port %PORT%"
+];
+var RULE_LINES = [
+  MARKER + ": port-free addresses, written by lahe install. lahe uninstall removes it.",
+  "rdr pass on lo0 inet proto tcp from any to 127.0.0.1 port 80 -> 127.0.0.1 port %PORT%",
+  "rdr pass on lo0 inet6 proto tcp from any to ::1 port 80 -> ::1 port %PORT%"
+];
+var DAEMON_LINES = [
+  '<?xml version="1.0" encoding="UTF-8"?>',
+  '<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">',
+  // No double dash inside an XML comment: XML forbids it.
+  "<!-- " + MARKER + ": reloads the port-free forward at boot, written by lahe install. -->",
+  '<plist version="1.0">',
+  "<dict>",
+  "  <key>Label</key>",
+  "  <string>" + FORWARD_DAEMON_LABEL + "</string>",
+  "  <key>ProgramArguments</key>",
+  "  <array>",
+  "    <string>/bin/sh</string>",
+  "    <string>-c</string>",
+  "    <string>/sbin/pfctl -E 2&gt;/dev/null; /sbin/pfctl -a com.apple/lahe -f " + FORWARD_RULE_PATH + "</string>",
+  "  </array>",
+  "  <key>RunAtLoad</key>",
+  "  <true/>",
+  "</dict>",
+  "</plist>"
+];
 
 function hasMarker(text) {
   return typeof text === "string" && text.indexOf(MARKER) !== -1;
@@ -398,69 +434,82 @@ function checkedPort(port) {
   return port;
 }
 
+function fill(lines, port) {
+  return lines.map(function (line) { return line.replace(/%PORT%/g, String(port)); }).join("\n") + "\n";
+}
+
 /** /etc/resolver/lahe: send `.lahe` lookups to the helper's name server. */
 function resolverText(port) {
-  return MARKER + ": .lahe names, written by `lahe install --lahe-names`. `lahe uninstall` removes it.\n" +
-    "nameserver 127.0.0.1\n" +
-    "port " + checkedPort(port) + "\n";
+  return fill(RESOLVER_LINES, checkedPort(port));
 }
 
 /** The pf anchor: loopback port 80 to the pages port, for IPv4 and IPv6. */
 function forwardRuleText(pagesPort) {
-  var to = checkedPort(pagesPort);
-  return MARKER + ": port-free addresses, written by `lahe install --port-80`. `lahe uninstall` removes it.\n" +
-    "rdr pass on lo0 inet proto tcp from any to 127.0.0.1 port 80 -> 127.0.0.1 port " + to + "\n" +
-    "rdr pass on lo0 inet6 proto tcp from any to ::1 port 80 -> ::1 port " + to + "\n";
+  return fill(RULE_LINES, checkedPort(pagesPort));
 }
 
 /** The boot item that turns pf on and loads the anchor at every start. */
 function forwardDaemonText() {
-  return [
-    '<?xml version="1.0" encoding="UTF-8"?>',
-    '<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">',
-    "<!-- " + MARKER + ": reloads the port-free forward at boot, written by `lahe install --port-80`. -->",
-    '<plist version="1.0">',
-    "<dict>",
-    "  <key>Label</key>",
-    "  <string>" + FORWARD_DAEMON_LABEL + "</string>",
-    "  <key>ProgramArguments</key>",
-    "  <array>",
-    "    <string>/bin/sh</string>",
-    "    <string>-c</string>",
-    "    <string>/sbin/pfctl -E 2&gt;/dev/null; /sbin/pfctl -a com.apple/lahe -f " + FORWARD_RULE_PATH + "</string>",
-    "  </array>",
-    "  <key>RunAtLoad</key>",
-    "  <true/>",
-    "</dict>",
-    "</plist>",
-    ""
-  ].join("\n");
+  return fill(DAEMON_LINES, 0);
 }
+
+/** A shell function that prints these lines, with "$1" where the port goes. */
+function shellPrinter(name, lines) {
+  var body = lines.map(function (line) {
+    if (line.indexOf("'") !== -1 || line.indexOf("%") !== line.indexOf("%PORT%")) {
+      throw new Error("a root file line cannot hold a quote or a percent sign: " + line);
+    }
+    return line.indexOf("%PORT%") === -1
+      ? "  printf '%s\\n' '" + line + "'"
+      : "  printf '" + line.replace(/%PORT%/g, "%s") + "\\n' \"$1\"";
+  });
+  return [name + "() {"].concat(body, ["}"]).join("\n");
+}
+
+var ROOT_TEXT_FUNCTIONS = [
+  // A port number: digits only, no leading zero, at most 65535.
+  "lahe_port_ok() {",
+  "  case \"$1\" in ''|*[!0-9]*|0*) return 1;; esac",
+  "  [ \"$1\" -le 65535 ] 2>/dev/null",
+  "}",
+  shellPrinter("lahe_resolver_text", RESOLVER_LINES),
+  shellPrinter("lahe_rule_text", RULE_LINES),
+  shellPrinter("lahe_daemon_text", DAEMON_LINES)
+].join("\n");
 
 function notOurs(file) {
   return "if [ -e " + file + " ] && ! grep -qF '" + MARKER + "' " + file + "; then echo \"" + file +
     " was not written by Lahe; leaving it\" >&2; exit 3; fi";
 }
 
+/** Write a file as root: built in the same root-owned folder, then moved into place. */
+function rootWrite(printer, target, withPort) {
+  var temp = target + ".lahe-new";
+  return [
+    printer + (withPort ? ' "$1"' : "") + " > " + temp,
+    "/usr/sbin/chown root:wheel " + temp,
+    "/bin/chmod 0644 " + temp,
+    "/bin/mv -f " + temp + " " + target
+  ];
+}
+
+var CHECK_PORT = "lahe_port_ok \"$1\" || { echo \"lahe: not a port number\" >&2; exit 2; }";
+
 var ROOT_SCRIPTS = {
-  installResolver: [
-    "set -e",
-    notOurs(RESOLVER_PATH),
-    "/bin/mkdir -p /etc/resolver",
-    "/usr/bin/install -m 0644 -o root -g wheel \"$1/" + ROOT_FILES.resolver + "\" " + RESOLVER_PATH
-  ].join("\n"),
+  installResolver: ["set -e", ROOT_TEXT_FUNCTIONS, CHECK_PORT, notOurs(RESOLVER_PATH), "umask 022", "/bin/mkdir -p /etc/resolver"]
+    .concat(rootWrite("lahe_resolver_text", RESOLVER_PATH, true))
+    .join("\n"),
   removeResolver: [
     "if [ -f " + RESOLVER_PATH + " ]; then grep -qF '" + MARKER + "' " + RESOLVER_PATH + " && rm -f " + RESOLVER_PATH + " || true; fi"
   ].join("\n"),
-  installForward: [
-    "set -e",
-    notOurs(FORWARD_RULE_PATH),
-    notOurs(FORWARD_DAEMON_PATH),
-    "/usr/bin/install -m 0644 -o root -g wheel \"$1/" + ROOT_FILES.rule + "\" " + FORWARD_RULE_PATH,
-    "/usr/bin/install -m 0644 -o root -g wheel \"$1/" + ROOT_FILES.daemon + "\" " + FORWARD_DAEMON_PATH,
-    "/bin/launchctl bootout system/" + FORWARD_DAEMON_LABEL + " 2>/dev/null || true",
-    "/bin/launchctl bootstrap system " + FORWARD_DAEMON_PATH
-  ].join("\n"),
+  installForward: ["set -e", ROOT_TEXT_FUNCTIONS, CHECK_PORT, notOurs(FORWARD_RULE_PATH), notOurs(FORWARD_DAEMON_PATH), "umask 022"]
+    .concat(rootWrite("lahe_rule_text", FORWARD_RULE_PATH, true))
+    .concat(rootWrite("lahe_daemon_text", FORWARD_DAEMON_PATH, false))
+    .concat([
+      "/bin/launchctl bootout system/" + FORWARD_DAEMON_LABEL + " 2>/dev/null || true",
+      "/bin/launchctl bootstrap system " + FORWARD_DAEMON_PATH
+    ])
+    .join("\n"),
   removeForward: [
     "if [ -f " + FORWARD_DAEMON_PATH + " ] && grep -qF '" + MARKER + "' " + FORWARD_DAEMON_PATH +
       "; then /bin/launchctl bootout system/" + FORWARD_DAEMON_LABEL + " 2>/dev/null || true; rm -f " + FORWARD_DAEMON_PATH + "; fi",
@@ -469,10 +518,16 @@ var ROOT_SCRIPTS = {
   ].join("\n")
 };
 
-/** The one sudo call for an admin step: a constant script, and the temp folder as $1 when it installs files. */
-function rootCommand(name, folder) {
+var TAKES_PORT = { installResolver: true, installForward: true };
+
+/**
+ * The one sudo call for an admin step: a constant script, and for an install
+ * step the port number as "$1". Nothing else crosses to root.
+ */
+function rootCommand(name, port) {
   if (!Object.prototype.hasOwnProperty.call(ROOT_SCRIPTS, name)) throw new Error("no root script " + JSON.stringify(name));
-  return ["sudo", "/bin/sh", "-c", ROOT_SCRIPTS[name], "lahe"].concat(folder ? [String(folder)] : []);
+  var command = ["sudo", "/bin/sh", "-c", ROOT_SCRIPTS[name], "lahe"];
+  return TAKES_PORT[name] ? command.concat([String(checkedPort(port))]) : command;
 }
 
 // ---------------------------------------------------------------------------
@@ -589,7 +644,7 @@ module.exports = {
   FORWARD_DAEMON_PATH: FORWARD_DAEMON_PATH,
   NAME_SERVER_PORT: NAME_SERVER_PORT,
   LINUX_RESOLVER_PATH: LINUX_RESOLVER_PATH,
-  ROOT_FILES: ROOT_FILES,
+  ROOT_TEXT_FUNCTIONS: ROOT_TEXT_FUNCTIONS,
   ROOT_SCRIPTS: ROOT_SCRIPTS,
   hasMarker: hasMarker,
   resolverText: resolverText,

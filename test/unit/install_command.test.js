@@ -282,17 +282,29 @@ test("lahe install and lahe uninstall are commands the dispatcher knows", () => 
 // call, and reads the files the install handed it. Nothing is written to /etc.
 
 /** The fake manager, plus a sudo that records each call and the files it was given. */
+/**
+ * The fake manager, plus a sudo that records each call. It plays root too: an
+ * install step writes the file root would build (from the port it was given)
+ * into the test's stand-in paths, so a later uninstall finds it.
+ */
 function withSudo(w, port, options) {
   const opts = options || {};
   const manager = fakeManager(w, port);
   const sudo = [];
   const runner = async (command, args) => {
     if (command === "sudo") {
-      const folder = args[4];
-      const files = {};
-      if (folder) fs.readdirSync(folder).forEach((name) => { files[name] = fs.readFileSync(path.join(folder, name), "utf8"); });
-      sudo.push({ args, files });
-      return opts.sudoFails ? { status: 1, output: "Sorry, try again." } : { status: 0, output: "" };
+      sudo.push({ args });
+      if (opts.sudoFails) return { status: 1, output: "Sorry, try again." };
+      const script = args[2];
+      const given = Number(args[4]);
+      if (opts.paths && script === loginItem.ROOT_SCRIPTS.installResolver) {
+        fs.writeFileSync(opts.paths.resolver, loginItem.resolverText(given));
+      }
+      if (opts.paths && script === loginItem.ROOT_SCRIPTS.installForward) {
+        fs.writeFileSync(opts.paths.rule, loginItem.forwardRuleText(given));
+        fs.writeFileSync(opts.paths.daemon, loginItem.forwardDaemonText());
+      }
+      return { status: 0, output: "" };
     }
     return manager.runner(command, args);
   };
@@ -318,7 +330,7 @@ test("V56: --lahe-names makes one sudo call with the fixed resolver file, and re
   assert.equal(code, 0, d.err());
   assert.equal(fake.sudo.length, 1, "one admin step, one sudo call");
   assert.equal(fake.sudo[0].args[2], loginItem.ROOT_SCRIPTS.installResolver);
-  assert.equal(fake.sudo[0].files[loginItem.ROOT_FILES.resolver], loginItem.resolverText(w.udp));
+  assert.deepEqual(fake.sudo[0].args.slice(3), ["lahe", String(w.udp)], "only the port crosses to root, no file and no folder");
   const record = loginItem.readInstall(w.dir);
   assert.equal(record.lahe_names, true);
   assert.equal(record.resolver, loginItem.RESOLVER_PATH);
@@ -335,8 +347,7 @@ test("V74: --port-80 makes one sudo call with the fixed forward rule and boot it
   assert.equal(await installCommand.run(["--state-dir", w.dir, "--port", String(port), "--port-80"], d), 0, d.err());
   assert.equal(fake.sudo.length, 1);
   assert.equal(fake.sudo[0].args[2], loginItem.ROOT_SCRIPTS.installForward);
-  assert.equal(fake.sudo[0].files[loginItem.ROOT_FILES.rule], loginItem.forwardRuleText(protocol.PAGES.PORT));
-  assert.equal(fake.sudo[0].files[loginItem.ROOT_FILES.daemon], loginItem.forwardDaemonText());
+  assert.deepEqual(fake.sudo[0].args.slice(3), ["lahe", String(protocol.PAGES.PORT)], "only the pages port crosses to root");
   const record = loginItem.readInstall(w.dir);
   assert.equal(record.port_80, true);
   assert.equal(record.forward_rule, loginItem.FORWARD_RULE_PATH);
@@ -459,4 +470,25 @@ test("uninstall after hand steps says which steps to undo by hand", async (t) =>
   assert.equal(await installCommand.uninstall.run(["--state-dir", w.dir], d), 0, d.err());
   assert.match(d.out(), /undo the port 80 forward by hand/);
   assert.equal(fake.sudo.length, 0);
+});
+
+test("a failed install takes back what root set up, through the marker-guarded removal, and names a blocked pages port", async (t) => {
+  const w = await world(t);
+  const port = await freePort();
+  const paths = rootPaths(w);
+  const fake = withSudo(w, port, { paths });
+  // The login item "starts" nothing: the helper never comes up.
+  const runner = (command, args) => (command === "sudo" ? fake.runner(command, args) : { status: 0, output: "" });
+  // Another program holds the pages port.
+  const holder = require("node:net").createServer();
+  await new Promise((resolve) => holder.listen(0, "127.0.0.1", resolve));
+  t.after(() => new Promise((resolve) => holder.close(() => resolve())));
+  const d = deps(w, { runner, portHolder: () => null, rootPaths: paths, waitMs: 300, pagesPort: holder.address().port });
+  assert.notEqual(await installCommand.run(["--state-dir", w.dir, "--port", String(port), "--port-80", "--lahe-names"], d), 0);
+  const scripts = fake.sudo.map((call) => call.args[2]);
+  assert.ok(scripts.indexOf(loginItem.ROOT_SCRIPTS.removeResolver) !== -1, "the resolver it installed is removed");
+  assert.ok(scripts.indexOf(loginItem.ROOT_SCRIPTS.removeForward) !== -1, "the forward it installed is removed");
+  assert.match(d.err(), new RegExp("port " + holder.address().port + " is taken by another program"));
+  assert.doesNotMatch(d.err(), /Nothing is left installed/);
+  assert.equal(fs.existsSync(loginItem.installPath(w.dir)), false);
 });

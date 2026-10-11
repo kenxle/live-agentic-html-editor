@@ -190,7 +190,7 @@ test("V56: the resolver file is fixed text with the Lahe marker and an integer p
   const text = loginItem.resolverText(7853);
   assert.equal(
     text,
-    "# lahe-managed: .lahe names, written by `lahe install --lahe-names`. `lahe uninstall` removes it.\n" +
+    "# lahe-managed: .lahe names, written by lahe install. lahe uninstall removes it.\n" +
       "nameserver 127.0.0.1\nport 7853\n"
   );
   assert.ok(loginItem.hasMarker(text));
@@ -217,17 +217,52 @@ test("V74: the boot item that reloads the forward is fixed text with the marker,
   assert.match(plist, /\/sbin\/pfctl -a com\.apple\/lahe -f \/etc\/pf\.anchors\/lahe/);
 });
 
-test("V56 and V74: each admin step is one sudo call of a fixed script, with the files' folder as an argument", () => {
-  const install = loginItem.rootCommand("installResolver", "/tmp/lahe-root-x y");
+const { execFileSync } = require("node:child_process");
+
+/** Run a root script's text functions as the user, the way root would, and return the output. */
+function rendered(fn, arg) {
+  return execFileSync("/bin/sh", ["-c", loginItem.ROOT_TEXT_FUNCTIONS + "\n" + fn + ' "$1"', "lahe", String(arg)], { encoding: "utf8" });
+}
+
+test("V56 and V74: each install step is one sudo call of a constant script, and its only argument is a port number", () => {
+  const install = loginItem.rootCommand("installResolver", 7853);
   assert.equal(install[0], "sudo");
   assert.deepEqual(install.slice(1, 3), ["/bin/sh", "-c"]);
   assert.equal(install[3], loginItem.ROOT_SCRIPTS.installResolver, "the script is the constant, nothing spliced in");
-  assert.deepEqual(install.slice(4), ["lahe", "/tmp/lahe-root-x y"]);
+  assert.deepEqual(install.slice(4), ["lahe", "7853"]);
+  assert.deepEqual(loginItem.rootCommand("removeResolver"), ["sudo", "/bin/sh", "-c", loginItem.ROOT_SCRIPTS.removeResolver, "lahe"]);
+  assert.throws(() => loginItem.rootCommand("installForward", "/tmp/folder"), /port/);
+  assert.throws(() => loginItem.rootCommand("nope", 1), /no root script/);
   for (const [name, script] of Object.entries(loginItem.ROOT_SCRIPTS)) {
-    assert.ok(script.indexOf("/tmp") === -1, name + " names no temp path");
     assert.ok(!/\$\{|`|\$\(/.test(script), name + " has no substitution beyond \"$1\"");
+    assert.ok(!/\$1\//.test(script), name + " reads no file from a folder the user owns");
   }
-  assert.throws(() => loginItem.rootCommand("nope", "/x"), /no root script/);
+});
+
+test("V56 and V74: root builds each file itself, from constants, byte for byte what Lahe expects", () => {
+  assert.equal(rendered("lahe_resolver_text", 7853), loginItem.resolverText(7853));
+  assert.equal(rendered("lahe_rule_text", 1483), loginItem.forwardRuleText(1483));
+  assert.equal(rendered("lahe_daemon_text", 0), loginItem.forwardDaemonText());
+});
+
+test("V56 and V74: the root scripts refuse an argument that is not a port number", () => {
+  for (const bad of ["", "80; rm -rf /", "1483\nnameserver 8.8.8.8", "-1", "70000", "0", "0x50", "../x"]) {
+    assert.throws(
+      () => execFileSync("/bin/sh", ["-c", loginItem.ROOT_TEXT_FUNCTIONS + '\nlahe_port_ok "$1"', "lahe", bad], { stdio: "ignore" }),
+      undefined,
+      JSON.stringify(bad)
+    );
+  }
+  execFileSync("/bin/sh", ["-c", loginItem.ROOT_TEXT_FUNCTIONS + '\nlahe_port_ok "$1"', "lahe", "1483"]);
+  for (const name of ["installResolver", "installForward"]) {
+    assert.match(loginItem.ROOT_SCRIPTS[name], /lahe_port_ok "\$1" \|\| \{/, name + " checks its argument first");
+  }
+});
+
+test("the boot item's XML comment holds no double dash, which XML forbids", () => {
+  const comments = loginItem.forwardDaemonText().match(/<!--([\s\S]*?)-->/g) || [];
+  assert.ok(comments.length > 0);
+  comments.forEach((c) => assert.ok(c.slice(4, -3).indexOf("--") === -1, c));
 });
 
 test("V59 and V74: the removal scripts delete a file only when it carries the marker", () => {
