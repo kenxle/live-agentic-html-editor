@@ -12,7 +12,7 @@ Settled by Ken on [the decisions page](../../ongoing/STABLE_ADDRESSES.md), 2026-
 
 Chosen by the brief, for Ken to overrule in review:
 
-- **Which systems get `.lahe` now:** macOS, as an option. `.lahe.localhost` works everywhere.
+- **Which systems get `.lahe` now:** all three, as an option. The setup command does it on macOS. Linux and Windows get written steps in the install guide, and the setup command can take them on later. Ken's point: the same idea works on each system, so document it for all of them. `.lahe.localhost` works everywhere with no setup.
 - **Worktree documents:** a gone worktree file is shown read-only from the main checkout when the same file exists there (requirement 13).
 - **The name is per folder, not per file.** The architecture review showed per-file names break Markdown images and links, folder sites, the rail rules, and how comments are tied to files. The folder is today's isolation unit, so nothing gets weaker. The address still reads as folder plus file.
 - **Other accounts on the same computer** can reach pages whenever the server runs. Recorded as a known limit; `lahe install` warns on a computer with more than one user.
@@ -32,7 +32,7 @@ Chosen by the brief, for Ken to overrule in review:
 
 `.lahe.localhost` has none of these, needs no setup on any system, and its addresses survive an uninstall.
 
-**Recommendation:** print `.lahe.localhost`. Keep `.lahe` as a Mac option that answers the same names, for typing by hand. If Ken still wants `.lahe` printed, the plan adds the copy, tab-guard, and header fallbacks (task 6.3), and the "Not secure" label stays.
+**Recommendation:** print `.lahe.localhost`. Keep `.lahe` as an option that answers the same names, for typing by hand. If Ken still wants `.lahe` printed, the plan adds the copy, tab-guard, and header fallbacks (task 6.3), and the "Not secure" label stays.
 :::
 
 ::: callout-question

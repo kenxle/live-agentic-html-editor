@@ -18,4 +18,4 @@ CI cannot log in, so "starts at login" is proven by the service manager's start 
 
 **Task 5.4: Idle cost (brief requirement 11, light when idle).** The orchestrator measures the baseline before PR 2 lands: memory and wakeups per minute for today's helper plus page servers, with nothing open and with Ken's usual tab count overnight. This task writes the two limits first, then measures the always-on helper after PR 2 and PR 3 are on the integration branch. Raise `NumberOfFiles` in the plist only if the measurement calls for it. Acceptance: V53.
 
-**Task 5.5: Docs.** `docs/INSTALL.md`, `README.md`, the install section of `docs/CLI.md`, and the always-on lines of `SESSION_OWNERSHIP.md`. Acceptance: V38 (install part).
+**Task 5.5: Docs.** `docs/INSTALL.md`, including the hand steps for `.lahe` and a port-free address on macOS, Linux, and Windows from the architecture's written-steps table, each confirmed in the Task 5.1 spikes, `README.md`, the install section of `docs/CLI.md`, and the always-on lines of `SESSION_OWNERSHIP.md`. Acceptance: V38 (install part).

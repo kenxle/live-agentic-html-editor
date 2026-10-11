@@ -1364,6 +1364,53 @@ resolving. The <code>.lahe.localhost</code> addresses keep working.</li>
 <li>The Library is never served on <code>library.lahe</code>, only on
 loopback and <code>library.lahe.localhost</code>.</li>
 </ul>
+<h3
+id="lahe-and-a-port-free-address-on-linux-and-windows-written-steps"><code>.lahe</code>
+and a port-free address on Linux and Windows (written steps)</h3>
+<p><code>docs/INSTALL.md</code> gives hand steps for each system. The
+same verification guards <code>.lahe</code> everywhere: the helper
+answers <code>.lahe</code> Hosts only after its own name server saw its
+random test query. The install spike confirms each step before it is
+written down.</p>
+<div class="table-scroll"><table>
+<thead>
+<tr>
+<th>System</th>
+<th><code>.lahe</code> lookups</th>
+<th>Port-free address</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>macOS</td>
+<td><code>/etc/resolver/lahe</code>, done by
+<code>lahe install --lahe-names</code></td>
+<td>a loopback port forward from 80 to Lahe's port, for
+<code>127.0.0.1</code> and <code>::1</code>, loaded at boot. Waits on Q2
+(drop the port) in the brief</td>
+</tr>
+<tr>
+<td>Linux</td>
+<td>a <code>systemd-resolved</code> drop-in that sends
+<code>~lahe</code> to the helper's name server, where
+<code>systemd-resolved</code> runs. Other setups: the guide says so and
+stops</td>
+<td>a one-time setting that lets normal programs use port 80, then the
+helper also listens on 80</td>
+</tr>
+<tr>
+<td>Windows</td>
+<td>a name-resolution rule for <code>.lahe</code>. It cannot name a
+port, so the name server must also answer on port 53; the spike checks
+this</td>
+<td>the helper also listens on 80 when nothing else holds it; usually no
+admin step</td>
+</tr>
+</tbody>
+</table></div>
+<p>If port 80 is taken, the helper keeps <code>:7817</code>, and
+<code>lahe status</code> names what holds 80. <code>:7817</code>
+addresses keep working in every case.</p>
 <h2 id="alternatives-considered">Alternatives Considered</h2>
 <h3
 id="chosen-the-helper-serves-pages-one-name-per-site-one-port-lahelocalhost-printed">Chosen:

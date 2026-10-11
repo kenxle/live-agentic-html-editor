@@ -50,7 +50,7 @@ The user is Ken today, on a Mac laptop. Lahe is public, and other people run it 
 1. **One always-on Lahe server.** It starts when Ken logs in and restarts if it stops. It answers for every document Lahe serves, whether or not an agent is working on it.
 2. **An address per document.** The first time Lahe serves from a folder, the folder gets a short name from its own name. The name stays the same after that. A document's address is `http://<folder name>.lahe.localhost:<port>/<file>`.
 3. **One shared port.** Every document uses the same port. The server reads the name in the address to know which document was asked for.
-4. **`.lahe.localhost` everywhere, with `.lahe` as a Mac option.** Every browser already sends `.localhost` names to this computer, with no setup. On a Mac, an optional setup step, run once with an admin password, also makes the shorter `.lahe` ending work. Which ending `lahe review` prints is the open decision in the questions below.
+4. **`.lahe.localhost` everywhere, with `.lahe` as an option on every system.** Every browser already sends `.localhost` names to this computer, with no setup. An optional setup step, run once with an admin password, also makes the shorter `.lahe` ending work. On a Mac the setup command does it; on Linux and Windows the install guide gives the steps by hand. Which ending `lahe review` prints is the open decision in the questions below.
 5. **Agents keep working the same way.** `lahe review` prints the stable address. Sessions, the monitor, and takeover are unchanged. A comment left on a page with no agent waits in the store, as it does after the Library's Open today.
 
 ```mermaid
@@ -85,7 +85,7 @@ flowchart LR
 :::
 
 ::: callout-req
-**R6. `.lahe.localhost` works everywhere; `.lahe` is a guarded Mac option.** Every name answers at `.lahe.localhost` on every system, with no setup, so those addresses keep working through install, uninstall, and any setup failure. On macOS, an optional setup (an admin password, once at setup) makes the same names answer at `.lahe` too. Lahe answers `.lahe` only after it has checked that its own setup is the one answering `.lahe` lookups on this machine. `lahe status` says which ending `lahe review` prints, and why.
+**R6. `.lahe.localhost` works everywhere; `.lahe` is a guarded option on every system.** Every name answers at `.lahe.localhost` on every system, with no setup, so those addresses keep working through install, uninstall, and any setup failure. An optional setup (an admin password, once at setup) makes the same names answer at `.lahe` too. On macOS the setup command does it. On Linux and Windows the install guide writes out the steps by hand, because each system routes name lookups differently: Linux through its name-lookup service, when it runs one, and Windows through a rule for one name ending. Lahe answers `.lahe` only after it has checked that its own setup is the one answering `.lahe` lookups on this machine. `lahe status` says which ending `lahe review` prints, and why.
 :::
 
 ::: callout-req

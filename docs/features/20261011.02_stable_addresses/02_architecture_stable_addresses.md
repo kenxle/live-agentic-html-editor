@@ -193,6 +193,18 @@ flowchart TD
 - `lahe uninstall` removes the resolver file only if it carries the marker. After that, `.lahe` addresses stop resolving. The `.lahe.localhost` addresses keep working.
 - The Library is never served on `library.lahe`, only on loopback and `library.lahe.localhost`.
 
+### `.lahe` and a port-free address on Linux and Windows (written steps)
+
+`docs/INSTALL.md` gives hand steps for each system. The same verification guards `.lahe` everywhere: the helper answers `.lahe` Hosts only after its own name server saw its random test query. The install spike confirms each step before it is written down.
+
+| System | `.lahe` lookups | Port-free address |
+|---|---|---|
+| macOS | `/etc/resolver/lahe`, done by `lahe install --lahe-names` | a loopback port forward from 80 to Lahe's port, for `127.0.0.1` and `::1`, loaded at boot. Waits on Q2 (drop the port) in the brief |
+| Linux | a `systemd-resolved` drop-in that sends `~lahe` to the helper's name server, where `systemd-resolved` runs. Other setups: the guide says so and stops | a one-time setting that lets normal programs use port 80, then the helper also listens on 80 |
+| Windows | a name-resolution rule for `.lahe`. It cannot name a port, so the name server must also answer on port 53; the spike checks this | the helper also listens on 80 when nothing else holds it; usually no admin step |
+
+If port 80 is taken, the helper keeps `:7817`, and `lahe status` names what holds 80. `:7817` addresses keep working in every case.
+
 ## Alternatives Considered
 
 <!-- forge-include: parts/architecture/alternatives.md -->

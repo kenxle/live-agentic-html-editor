@@ -933,12 +933,13 @@ stays the same after that. A document's address is
 The server reads the name in the address to know which document was
 asked for.</li>
 <li><strong><code>.lahe.localhost</code> everywhere, with
-<code>.lahe</code> as a Mac option.</strong> Every browser already sends
-<code>.localhost</code> names to this computer, with no setup. On a Mac,
-an optional setup step, run once with an admin password, also makes the
-shorter <code>.lahe</code> ending work. Which ending
-<code>lahe review</code> prints is the open decision in the questions
-below.</li>
+<code>.lahe</code> as an option on every system.</strong> Every browser
+already sends <code>.localhost</code> names to this computer, with no
+setup. An optional setup step, run once with an admin password, also
+makes the shorter <code>.lahe</code> ending work. On a Mac the setup
+command does it; on Linux and Windows the install guide gives the steps
+by hand. Which ending <code>lahe review</code> prints is the open
+decision in the questions below.</li>
 <li><strong>Agents keep working the same way.</strong>
 <code>lahe review</code> prints the stable address. Sessions, the
 monitor, and takeover are unchanged. A comment left on a page with no
@@ -993,15 +994,18 @@ rather than moving documents to random ports.</p>
 </div>
 <div class="callout callout-req">
 <p><strong>R6. <code>.lahe.localhost</code> works everywhere;
-<code>.lahe</code> is a guarded Mac option.</strong> Every name answers
-at <code>.lahe.localhost</code> on every system, with no setup, so those
-addresses keep working through install, uninstall, and any setup
-failure. On macOS, an optional setup (an admin password, once at setup)
-makes the same names answer at <code>.lahe</code> too. Lahe answers
-<code>.lahe</code> only after it has checked that its own setup is the
-one answering <code>.lahe</code> lookups on this machine.
-<code>lahe status</code> says which ending <code>lahe review</code>
-prints, and why.</p>
+<code>.lahe</code> is a guarded option on every system.</strong> Every
+name answers at <code>.lahe.localhost</code> on every system, with no
+setup, so those addresses keep working through install, uninstall, and
+any setup failure. An optional setup (an admin password, once at setup)
+makes the same names answer at <code>.lahe</code> too. On macOS the
+setup command does it. On Linux and Windows the install guide writes out
+the steps by hand, because each system routes name lookups differently:
+Linux through its name-lookup service, when it runs one, and Windows
+through a rule for one name ending. Lahe answers <code>.lahe</code> only
+after it has checked that its own setup is the one answering
+<code>.lahe</code> lookups on this machine. <code>lahe status</code>
+says which ending <code>lahe review</code> prints, and why.</p>
 </div>
 <div class="callout callout-req">
 <p><strong>R7. Starts at login on every system.</strong> An install
@@ -1133,8 +1137,12 @@ plain "file is gone" page is enough.</li>
 </ul>
 <p>Chosen by the brief, for Ken to overrule in review:</p>
 <ul>
-<li><p><strong>Which systems get <code>.lahe</code> now:</strong> macOS,
-as an option. <code>.lahe.localhost</code> works everywhere.</p></li>
+<li><p><strong>Which systems get <code>.lahe</code> now:</strong> all
+three, as an option. The setup command does it on macOS. Linux and
+Windows get written steps in the install guide, and the setup command
+can take them on later. Ken's point: the same idea works on each system,
+so document it for all of them. <code>.lahe.localhost</code> works
+everywhere with no setup.</p></li>
 <li><p><strong>Worktree documents:</strong> a gone worktree file is
 shown read-only from the main checkout when the same file exists there
 (requirement 13).</p></li>
@@ -1174,7 +1182,7 @@ someone on the network could take over a name.</li>
 <p><code>.lahe.localhost</code> has none of these, needs no setup on any
 system, and its addresses survive an uninstall.</p>
 <p><strong>Recommendation:</strong> print <code>.lahe.localhost</code>.
-Keep <code>.lahe</code> as a Mac option that answers the same names, for
+Keep <code>.lahe</code> as an option that answers the same names, for
 typing by hand. If Ken still wants <code>.lahe</code> printed, the plan
 adds the copy, tab-guard, and header fallbacks (task 6.3), and the "Not
 secure" label stays.</p>
