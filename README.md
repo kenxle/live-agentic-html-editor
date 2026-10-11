@@ -28,7 +28,9 @@ No matter how many files were used to create the HTML page, Lahe knows how to ed
 - **Write new text in place.** Add paragraphs, headings, and bulleted or numbered lists after any block, or start a notes page from nothing with `lahe write notes.md`. A long piece gets a proofreading question, and your words are placed as you typed them.
 - **Ask questions and get threaded answers.** Ask a question and the answer arrives on the same card, no need to go back to the chat window. An exchange from ten minutes ago is threaded and easy to find, not lost in the neverending scroll of the chat window.
 - **Drafted until sent.** A half-typed thought is private to your browser until you hit Cmd-Enter.
+- **Zoom into big diagrams.** Hover a graph or a large image and click the magnifier at its corner. It opens full screen: scroll to zoom toward the pointer, drag to move around, Esc to close. Graphs stay sharp at any zoom.
 - **Hotkeys for speed.** Comment, edit, and send without reaching for the mouse.
+- **Save as PDF.** A button in the rail asks your agent to turn the page into a PDF, in one click.
 
 - **Hand-made edits are protected.** If a doc-wide change would clobber your carefully crafted text, it stops at text you placed by hand and asks. If an edit gets reverted anyway, the item reopens itself.
 
@@ -143,6 +145,7 @@ An idle review costs no model tokens on any of them. The watcher is a small loca
 | Cmd-Enter in a comment box | This comment is ready, send it to the agent |
 | Cmd-Enter, Esc, or a click outside an edit | Commit the edit and give the block back to the page |
 | The box at the foot of the rail | A note about the page, tied to nothing in particular |
+| The magnifier on a graph or large image | Open it full screen. Scroll or pinch to zoom, drag to pan, Esc to close |
 | Clicking a card, anywhere but its buttons | Scroll the page to the passage that card is about |
 
 The rail also shows these as hints, so you do not need this file open to work them out.

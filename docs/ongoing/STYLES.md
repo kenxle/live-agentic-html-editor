@@ -101,11 +101,11 @@ When Lahe writes a rendered Markdown file to disk, it copies the style's checked
 
 ## The style button in the rail
 
-The reviewer tries a style from a swatch button in the rail's head, just left of the "..." menu. It is not in that menu.
+The reviewer tries a style from a swatch button in the rail's head, left of the PDF button and the "..." menu. It is not in that menu.
 
 - **When it shows.** Only on a page that uses the house style: a link to `./.lahe-doc-style.css`, or rendered Markdown. A page with its own CSS gets no button.
 - **What it opens.** A click opens a dropdown that hangs from the head. It holds the status line, "Ask the agent to use ..." and "Back to the document's style", then the style list with each style's palette strip, then any notes (a missing style, a removed style, nothing installed).
-- **How it closes.** Click the button again, press Esc, press Close, or click anywhere else on the page or the rail. Opening the "..." menu closes it too, and so do collapsing the rail and presenting. A pick does not close it, so the reviewer can walk the list with clicks or arrow keys. Esc, Close and the second click put focus back on the button.
+- **How it closes.** Click the button again, press Esc, press Close, or click anywhere else on the page or the rail. Opening the "..." menu or the PDF tray closes it too, and so do collapsing the rail and presenting. A pick does not close it, so the reviewer can walk the list with clicks or arrow keys. Esc, Close and the second click put focus back on the button.
 - **The dot.** While a preview is on, a small accent dot sits on the button's corner, so the reviewer knows the page is not in its own style with the dropdown closed. Hovering the button says which style, or the waiting sentence after an Ask. A style removed under a preview gets a warn-coloured dot instead. Its sentence is in the dropdown, and closing the dropdown dismisses it.
 - **For a screen reader.** The button's name is "Document style", it carries `aria-expanded` and `aria-controls`, and the hover line is its description. The status line is a polite live region. Focus goes to the checked style when the dropdown opens.
 
