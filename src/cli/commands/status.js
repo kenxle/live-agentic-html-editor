@@ -303,7 +303,10 @@ function servedVia(dir, review, pages) {
  */
 function sitePages(dir, ready) {
   var registry = sitesModule.createSites({ dir: dir, reader: true });
-  var port = ready && ready.pages && Number.isInteger(ready.pages.port) ? ready.pages.port : configuredPagesPort();
+  // The port an address prints with: 80 once the forward is checked.
+  var pages = ready && ready.pages ? ready.pages : null;
+  var port = pages && Number.isInteger(pages.printed_port) ? pages.printed_port
+    : pages && Number.isInteger(pages.port) ? pages.port : configuredPagesPort();
   var tools = catalogSitesModule.createCatalogSites({
     dir: dir,
     sites: registry,
@@ -337,6 +340,13 @@ function portFree(port) {
   });
 }
 
+/** One option's on / checked / reason, as service.json reports it. */
+function optionState(option) {
+  var o = option || {};
+  return (o.on === true ? "on" : "off") + ", " + (o.verified === true ? "checked" : "not checked") +
+    (o.reason ? " (" + o.reason + ")" : "");
+}
+
 /**
  * The install lines: whether a login item runs the helper (what install wrote
  * into service.json), and the reinstall sentence when the Node the login item
@@ -366,14 +376,17 @@ function installLines(dir, ready, helperRunning) {
 async function pagesLines(ready, helperRunning) {
   var pages = ready && ready.pages ? ready.pages : null;
   if (helperRunning && pages && Number.isInteger(pages.port)) {
-    var portFreeOn = pages.port_free && pages.port_free.on === true;
+    var forward = pages.port_free || {};
+    var names = pages.lahe_names || {};
     return [
       "pages     port " + pages.port + "; addresses end in ." + pages.printed_ending +
         " because " + (pages.printed_ending_reason || protocol.PAGES.PRINTED_ENDING_REASON),
-      "          " + (portFreeOn
+      "          " + (forward.verified === true
         ? "addresses print without the port, because the port-80 forward is set up and checked"
-        : "addresses print with :" + pages.port + " because " +
-          ((pages.port_free && pages.port_free.reason) || protocol.PAGES.PORT_FREE_OFF_REASON)),
+        : "addresses print with :" + pages.port + " (port-80 forward: " + (forward.reason || protocol.PAGES.PORT_FREE_OFF_REASON) + ")"),
+      "          port-80 forward: " + optionState(forward),
+      "          .lahe names: " + optionState(names) +
+        (names.verified === true ? "; <name>.lahe answers too, and addresses still print .lahe.localhost" : ""),
       ""
     ];
   }

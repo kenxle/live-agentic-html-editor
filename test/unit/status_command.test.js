@@ -763,7 +763,23 @@ test("V37: with a helper running, status prints the pages port, the ending and w
   };
   const text = (await status.pagesLines(ready, true)).join("\n");
   assert.match(text, /pages\s+port 61999; addresses end in \.lahe\.localhost because every browser treats/);
-  assert.match(text, /addresses print with :61999 because the port-80 forward is not set up/);
+  assert.match(text, /addresses print with :61999 \(port-80 forward: the port-80 forward is not set up\)/);
+});
+
+test("V37: status prints each option's on, checked and reason line from service.json", async () => {
+  const ready = {
+    pages: {
+      mode: "sites", port: 1483, printed_ending: "lahe.localhost",
+      port_free: { on: true, verified: false, reason: "port 80 is held by httpd (pid 412)" },
+      lahe_names: { on: true, verified: true, reason: "checked" }
+    }
+  };
+  const text = (await status.pagesLines(ready, true)).join("\n");
+  assert.match(text, /addresses print with :1483 \(port-80 forward: port 80 is held by httpd \(pid 412\)\)/);
+  assert.match(text, /port-80 forward: on, not checked \(port 80 is held by httpd \(pid 412\)\)/);
+  assert.match(text, /\.lahe names: on, checked/);
+  const forwarded = (await status.pagesLines({ pages: Object.assign({}, ready.pages, { port_free: { on: true, verified: true, reason: "checked" } }) }, true)).join("\n");
+  assert.match(forwarded, /addresses print without the port/);
 });
 
 test("V37: with no helper running and the pages port taken, status names the port", async (t) => {

@@ -243,7 +243,7 @@ async function serve(options) {
   /** A page's request to the API: is its site origin good for this review? */
   function siteOriginAllowed(reviewId, origin) {
     if (boundPagesPort === null) return false;
-    var name = protocol.siteNameFromOrigin(origin, boundPagesPort);
+    var name = protocol.siteNameFromOrigin(origin, boundPagesPort, !!addresses && addresses.laheNamesVerified());
     var site = name ? sites.get(name) : null;
     var review = site ? reviews.get(reviewId) : null;
     return !!review && pageRoutesModule.reviewAnswersOnSite(site, review);
@@ -252,7 +252,7 @@ async function serve(options) {
   /** The preflight's question for a site origin: is it a registered site? */
   function siteOriginKnown(origin) {
     if (boundPagesPort === null) return false;
-    var name = protocol.siteNameFromOrigin(origin, boundPagesPort);
+    var name = protocol.siteNameFromOrigin(origin, boundPagesPort, !!addresses && addresses.laheNamesVerified());
     return !!name && !!sites.get(name);
   }
   // The window sessions the LAST helper was holding. A helper is replaced
@@ -867,7 +867,11 @@ async function serve(options) {
   // The helper modules that map a page to a file (the healer, the reload
   // check, rebuild, the handled check, the projection) ask the registry from
   // here on, for this state folder.
-  pageRoutesModule.activate(dir, { sites: sites, pagesPort: boundPagesPort });
+  pageRoutesModule.activate(dir, {
+    sites: sites,
+    pagesPort: boundPagesPort,
+    laheNames: function () { return !!addresses && addresses.laheNamesVerified(); }
+  });
 
   // Page-server processes from before stable addresses are stopped on every
   // start, each only after its own health probe proves it is the recorded
@@ -929,7 +933,7 @@ async function serve(options) {
   log.helperLog(
     "pages on port " + boundPagesPort + "; addresses print as <name>." + report.printed_ending +
       " because " + report.printed_ending_reason + "; " +
-      (report.port_free.on ? "printed without the port" : "printed with :" + boundPagesPort + " because " + report.port_free.reason)
+      (report.port_free.verified ? "printed without the port" : "printed with :" + boundPagesPort + " (port-80 forward: " + report.port_free.reason + ")")
   );
   log.helperLog(
     installed && alwaysOn

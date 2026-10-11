@@ -853,7 +853,10 @@ var SITE_HANDLERS = {
     review.origins.filter(function (origin) { return OLD_PORT_ORIGIN.test(origin); }).forEach(function (origin) {
       deps.reviews.removeOrigin(review.id, origin);
     });
-    var port = typeof deps.pagesPort === "function" ? deps.pagesPort() : null;
+    // The port the helper has proved: 80 once the port-80 forward is checked,
+    // otherwise the pages port (src/service/addresses.js).
+    var port = typeof deps.printedPort === "function" ? deps.printedPort()
+      : typeof deps.pagesPort === "function" ? deps.pagesPort() : null;
     var origin = typeof port === "number" ? protocol.siteOrigin(bound.name, port) : null;
     deps.log.helperLog("site " + bound.name + (bound.created ? " granted" : " bound") + " for review " + review.id + ": " + root);
     return {

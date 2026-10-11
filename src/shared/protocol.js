@@ -512,6 +512,9 @@
 
   var HOST_FAMILY = { API: "api", LIBRARY: "library", PAGE: "page", BAD: "bad" };
   var SITE_HOST = /^([a-z0-9.-]+)\.lahe\.localhost(?::(\d{1,5}))?$/;
+  // The short ending, answered only once the helper has proved its own name
+  // server answers .lahe lookups on this computer (src/service/addresses.js).
+  var SHORT_HOST = /^([a-z0-9.-]+)\.lahe(?::(\d{1,5}))?$/;
 
   /**
    * Which route family a Host header belongs to. Checked before anything else
@@ -520,13 +523,15 @@
    *   api      a loopback name (127.0.0.1, localhost, [::1]), as today
    *   library  library.lahe.localhost
    *   page     <name>.lahe.localhost with one to four labels, at the pages
-   *            port or with no port. Whether the name is REGISTERED is the
-   *            registry's question, asked after this.
+   *            port or with no port; or <name>.lahe the same way, but only
+   *            with `laheNames` (the .lahe check has passed), and never for
+   *            the Library. Whether the name is REGISTERED is the registry's
+   *            question, asked after this.
    *   bad      anything else: a trailing dot, uppercase, too many labels, a
    *            wrong port, a foreign name
    *
    * @param {string} hostHeader
-   * @param {{pagesPort?: number}} [options]
+   * @param {{pagesPort?: number, laheNames?: boolean}} [options]
    * @returns {{family: string, name?: string}}
    */
   function classifyHost(hostHeader, options) {
@@ -534,7 +539,12 @@
     if (typeof hostHeader !== "string" || !hostHeader) return { family: HOST_FAMILY.BAD };
     if (hostAllowed(hostHeader)) return { family: HOST_FAMILY.API };
     var match = SITE_HOST.exec(hostHeader);
-    if (!match) return { family: HOST_FAMILY.BAD };
+    if (!match) {
+      var short = opts.laheNames === true ? SHORT_HOST.exec(hostHeader) : null;
+      if (!short || short[1] === PAGES.LIBRARY_NAME || !isSiteName(short[1])) return { family: HOST_FAMILY.BAD };
+      if (short[2] !== undefined && Number(short[2]) !== opts.pagesPort) return { family: HOST_FAMILY.BAD };
+      return { family: HOST_FAMILY.PAGE, name: short[1] };
+    }
     var name = match[1];
     if (name === PAGES.LIBRARY_NAME) return { family: HOST_FAMILY.LIBRARY, name: name };
     if (!isSiteName(name)) return { family: HOST_FAMILY.BAD };
@@ -547,13 +557,20 @@
     return "http://" + name + "." + PAGES.SUFFIX + (port === 80 ? "" : ":" + port);
   }
 
-  /** The site name an Origin header names at this pages port, or null. */
-  function siteNameFromOrigin(origin, pagesPort) {
+  /**
+   * The site name an Origin header names, or null.
+   *
+   * `<name>.lahe.localhost` at the pages port, or with no port (the port-80
+   * forward), always: nobody else can answer that name. `<name>.lahe` the same
+   * two ways, only with `laheNames` (the .lahe check has passed), so a website
+   * that answers its own `.lahe` name cannot pass as a page. Never the Library.
+   */
+  function siteNameFromOrigin(origin, pagesPort, laheNames) {
     if (typeof origin !== "string") return null;
-    var match = /^http:\/\/([a-z0-9.-]+)\.lahe\.localhost(?::(\d{1,5}))?$/.exec(origin);
-    if (!match || !isSiteName(match[1])) return null;
-    var port = match[2] === undefined ? 80 : Number(match[2]);
-    return port === pagesPort ? match[1] : null;
+    var match = /^http:\/\/([a-z0-9.-]+)\.lahe\.localhost(?::(\d{1,5}))?$/.exec(origin) ||
+      (laheNames === true ? /^http:\/\/([a-z0-9.-]+)\.lahe(?::(\d{1,5}))?$/.exec(origin) : null);
+    if (!match || !isSiteName(match[1]) || match[1] === PAGES.LIBRARY_NAME) return null;
+    return match[2] === undefined || Number(match[2]) === pagesPort ? match[1] : null;
   }
 
   var SITE_ROUTES = [

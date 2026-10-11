@@ -151,7 +151,7 @@ test("V71: the log records the port, the ending and why, each new name, and each
   await raw(w.helper.pagesPort, { path: "/secret-page-name.html?token=abc", headers: { host: "evil.example:" + w.helper.pagesPort } });
   const log = fs.readFileSync(path.join(w.state, "helper.log"), "utf8");
   assert.match(log, new RegExp("pages on port " + w.helper.pagesPort + "; addresses print as <name>\\.lahe\\.localhost because every browser"));
-  assert.match(log, new RegExp("printed with :" + w.helper.pagesPort + " because the port-80 forward is not set up"));
+  assert.match(log, new RegExp("printed with :" + w.helper.pagesPort + " \\(port-80 forward: "));
   assert.match(log, new RegExp("sites: new name " + bound.name.replace(/\./g, "\\.") + " for "));
   const refused = log.split("\n").filter((line) => /refused Host "evil\.example/.test(line));
   assert.equal(refused.length, 1);

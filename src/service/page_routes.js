@@ -368,7 +368,7 @@ function dirKey(dir) {
   return realOrNull(dir) || path.resolve(dir);
 }
 
-/** @param {{sites: object, pagesPort: number}} entry */
+/** @param {{sites: object, pagesPort: number, laheNames?: function(): boolean}} entry */
 function activate(dir, entry) {
   active[dirKey(dir)] = entry;
 }
@@ -417,7 +417,7 @@ function servesFile(dir, file) {
 function fileForPage(dir, origin, pagePath) {
   var entry = activeFor(dir);
   if (!entry) return null;
-  var name = protocol.siteNameFromOrigin(origin, entry.pagesPort);
+  var name = protocol.siteNameFromOrigin(origin, entry.pagesPort, typeof entry.laheNames === "function" && entry.laheNames());
   var site = name ? entry.sites.get(name) : null;
   var decoded = site ? decodePath(String(pagePath || "")) : null;
   var where = decoded !== null ? locate(site, decoded, pagePath) : null;
