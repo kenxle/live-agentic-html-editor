@@ -111,8 +111,11 @@ function createAuth(options) {
     // layer, including in result.log, which carries the review id built upstream.
     var what = field(String(req.method || "-") + " " + String(req.path || req.routeName || "-"));
     var from = field(headerOrNone(req.headers, protocol.HEADER.ORIGIN));
+    // The same request again (same refusal, path, origin and headers) logs
+    // nothing new; a request that differs in any header is its own line. The
+    // key is a hash, so no token is held in memory by it.
     refusals.say(
-      result.log + "\u0000" + what + "\u0000" + from,
+      crypto.createHash("sha256").update(result.log + "\u0000" + what + "\u0000" + from + "\u0000" + headerKey(req.headers)).digest("hex"),
       result.log + " [request " + field(req.requestId) + ", " + what + ", origin " + from + "]"
     );
 
@@ -123,6 +126,11 @@ function createAuth(options) {
       log: result.log,
       status: protocol.statusFor(result.code)
     };
+  }
+
+  function headerKey(headers) {
+    if (!headers || typeof headers !== "object") return "";
+    return Object.keys(headers).sort().map(function (name) { return name + "=" + String(headers[name]); }).join("\u0000");
   }
 
   function headerOrNone(headers, name) {

@@ -61,3 +61,14 @@ test("the not-injecting line is logged once per review and file", () => {
   const lines = fs.readFileSync(path.join(dir, "helper.log"), "utf8").split("\n").filter((l) => /not injecting/.test(l));
   assert.equal(lines.length, 1);
 });
+
+test("two refusals of one check that differ in their headers each get a line", () => {
+  const log = fakeLog();
+  const auth = authModule.createAuth({ log, reviews: fakeReviews });
+  const noToken = badRequest("/review?review=r_nope");
+  delete noToken.headers["x-lahe-token"];
+  auth.check(badRequest("/review?review=r_nope"));
+  auth.check(noToken);
+  auth.check(noToken);
+  assert.equal(log.lines.length, 2);
+});
