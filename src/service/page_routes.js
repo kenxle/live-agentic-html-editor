@@ -594,6 +594,11 @@ function createPageRoutes(options) {
   function handle(req, res, name) {
     var site = sites.get(name);
     if (!site) {
+      // Lahe's own fonts and style still answer, so the page that says so
+      // looks like every other Lahe page. Nothing else does.
+      var asked = null;
+      try { asked = decodeURIComponent(String(req.url || "").split("?")[0]); } catch (err) { asked = null; }
+      if (asked && asked.indexOf("..") === -1 && servePackaged(req, res, asked)) return;
       sayOnce("unknown\u0000" + name, "pages: no document by the name " + name);
       return sendHtml(req, res, 404, unknownNamePage(name, currentHelperOrigin(dir)));
     }
