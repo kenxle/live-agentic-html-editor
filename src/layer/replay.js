@@ -277,6 +277,9 @@
     document: null,
     editing: null,
     persist: null,
+    // Puts a refused card back in front of the agent (Keep mine on a refused
+    // card's clash). index.js wires it to the Done tab's reopen.
+    reopen: null,
     hooks: null,
     pointing: null,
     highlights: null,
@@ -1878,6 +1881,25 @@
     var flagged = conflicts[id];
     if (!flagged) return { resolved: false, choice: choice, reason: "no conflict is flagged on " + String(id) };
 
+    // KEEP MINE ON A REFUSED CARD. The agent answered no while the clash was
+    // still on the card. A refused card is not written onto the page, so a
+    // one-shot write here would be gone at the next repaint. The press is the
+    // reviewer putting the card back in front of the agent: it goes to ready at
+    // a new revision, the page state it answered is remembered, and the
+    // ordinary replay writes it from then on.
+    var refusedItem = choice === "keep_mine" ? itemWithId(ctx, id) : null;
+    if (refusedItem && refusedItem[record.FIELD.STATE] === record.STATE.NOT_HANDLED) {
+      if (typeof ctx.reopen !== "function") {
+        return { resolved: false, choice: choice, reason: "no way to send the card back to the agent" };
+      }
+      if (typeof flagged.theirs === "string") record.acceptPageText(refusedItem, flagged.theirs);
+      persistItem(ctx, refusedItem);
+      ctx.reopen(id);
+      forceClearConflict(ctx, id);
+      notify(ctx, "onResolved", id);
+      return { resolved: true, choice: choice, reason: null };
+    }
+
     // A held run: both answers place it (see resolveRunConflict).
     if (flagged.run) {
       var runItem = itemWithId(ctx, id);
@@ -2643,10 +2665,26 @@
   }
 
   /**
+   * What a refused record lets go of. Only what it holds: an ordinary pass
+   * calls this for every refused record, so a record with nothing to drop
+   * touches neither the card nor storage.
+   */
+  function releaseRefused(ctx, item) {
+    var id = item[record.FIELD.ID];
+    if (conflicts[id]) {
+      forceClearConflict(ctx, id);
+      notify(ctx, "onResolved", id);
+    }
+    var region = item[record.FIELD.REGION];
+    if (region && region.lost) clearLost(ctx, item);
+  }
+
+  /**
    * Applies one committed record.
    *
    * The contract, in the order it is enforced:
-   *  - a record that is not outstanding is not replayed at all
+   *  - a record that is not outstanding is not replayed at all, and neither
+   *    is one the agent already answered no to (record.isReplayable)
    *  - a region the reviewer is in right now is skipped, never written
    *  - an anchor that does not bind uniquely is surfaced as lost: nothing is
    *    written, nothing is moved, and the record says so
@@ -2666,6 +2704,15 @@
 
     if (!record.isOutstanding(item)) {
       return { wrote: false, branch: null, lost: false, reason: "not outstanding", item: item, element: null };
+    }
+    // Outstanding but answered: the agent refused it, or the page check opened
+    // a round with the agent the reviewer is not part of. Either way the page
+    // shows the file (record.isReplayable). A refused card also lets go of any
+    // conflict or lost stamp it carried from when it was waiting, so neither
+    // stands stale on the card or in review.json.
+    if (!record.isReplayable(item)) {
+      if (item[record.FIELD.STATE] === record.STATE.NOT_HANDLED) releaseRefused(ctx, item);
+      return { wrote: false, branch: null, lost: false, reason: "not replayed", item: item, element: null };
     }
 
     // A free-writing record (an anchor plus a run, a tag change, or a

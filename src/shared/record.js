@@ -1053,6 +1053,24 @@
     return item[FIELD.STATE] === STATE.READY || item[FIELD.STATE] === STATE.NOT_HANDLED;
   }
 
+  // Replayed onto the page: waiting for the agent's answer. The page differs
+  // from the file only while an edit is waiting, so this is ready alone.
+  //
+  //   not_handled  the agent answered no. The page shows the file, and the
+  //                reviewer's words stay on the card with the reason. Writing
+  //                them back after every repaint is how a refused card kept old
+  //                lines inside a table the agent built on request (spec
+  //                docs/features/20261011.01_stuck_replayed_blocks).
+  //   a tool round the page check asking the agent for a data-lahe-id. The
+  //                reviewer's card still reads handled (displayState), so the
+  //                page shows the file the same way.
+  //
+  // The rail's open count is a different question and keeps isOutstanding.
+  function isReplayable(item) {
+    if (!item || item[FIELD.STATE] !== STATE.READY) return false;
+    return !toolRoundOf(item);
+  }
+
   // ---------------------------------------------------------------------------
   // The applied-`after` history
   // ---------------------------------------------------------------------------
@@ -2359,6 +2377,7 @@
     isReady: isReady,
     isUnansweredReady: isUnansweredReady,
     isOutstanding: isOutstanding,
+    isReplayable: isReplayable,
     comparisonMode: comparisonMode,
     normalizedBefore: normalizedBefore,
     normalizedAfter: normalizedAfter

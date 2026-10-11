@@ -1,4 +1,13 @@
-// Rewording an edit the agent said no to is treated like rewording a ready one.
+// An edit the agent said no to, and what typing on the page does to it.
+//
+// Since docs/features/20261011.01_stuck_replayed_blocks (requirement 1), a
+// refused edit is not written onto the page, and typing into that passage
+// starts a new card instead of rewording the refused one. The tests below
+// that drive the page say so. The helper-side tests further down still hold:
+// the helper honors a withdrawal an older page may have sent.
+//
+// The history of the file: rewording an edit the agent said no to was treated
+// like rewording a ready one.
 //
 // Owner: 2A. The spec is
 // docs/features/20260922.01_draft_write_cost/01_spec_draft_write_cost.md,
@@ -231,114 +240,48 @@ async function refusedEdit(t) {
   return { r, surface, block, id: committed.id, postsBefore: r.posts.length };
 }
 
-test("the first changing keystroke withdraws a refused edit to draft and posts at once", async (t) => {
-  const { r, surface, block, id, postsBefore } = await refusedEdit(t);
-  surface.editBlock(block);
-  block.typeTo("Warm up for fifteen minutes, then");
+// Spec docs/features/20261011.01_stuck_replayed_blocks/01_spec_flag_dont_hold.md,
+// requirement 1: a refused card is not written onto the page, so the passage on
+// the page is the file's. Typing there is an ordinary edit of that passage and
+// starts a new card, as in any document. It never overwrites the refused card.
 
-  const now = r.store.readItem(REVIEW, id);
-  assert.equal(now.state, record.STATE.DRAFT, "off the agent's desk while the reviewer rewords it");
-  assert.equal(now.rev, 1, "a keystroke never moves the revision");
-
-  await r.advance(DEBOUNCE + 200);
-  const sent = r.posts.slice(postsBefore);
-  assert.equal(sent.length, 1, "the withdrawal went on the ordinary debounce");
-  assert.equal(sent[0].events[0].draft, true);
-  assert.equal(r.items().length, 0, "review.json stops carrying the refused wording once the withdrawal lands");
-});
-
-test("typing into a refused edit posts once at the first change, then at most once per 10 seconds", async (t) => {
-  const { r, surface, block, postsBefore } = await refusedEdit(t);
-  surface.editBlock(block);
-  let text = "Warm up for fifteen minutes";
-  // Thirty seconds of typing, a keystroke every 200 ms, with a pause long
-  // enough to fire the old 750 ms debounce every tenth keystroke.
-  for (let i = 0; i < 100; i += 1) {
-    text += "x";
-    block.typeTo(text);
-    await r.advance(i % 10 === 9 ? 1000 : 200);
-  }
-  const sent = r.posts.slice(postsBefore);
-  assert.ok(sent.length >= 1, "the withdrawal reached the helper");
-  assert.ok(sent.length <= 5, "at most one draft copy per 10 seconds, plus the first: " + sent.length);
-  for (let i = 1; i < sent.length; i += 1) {
-    assert.ok(sent[i].at - sent[i - 1].at >= FLOOR, "draft posts " + (i - 1) + " and " + i + " are 10 seconds apart");
-  }
-  sent.forEach((p) => p.events.forEach((e) => assert.equal(e.draft, true, "nothing but drafts went while typing")));
-});
-
-test("review.json is not rewritten per pause while a refused edit is reworded", async (t) => {
-  const { r, surface, block, postsBefore } = await refusedEdit(t);
-  surface.editBlock(block);
-  block.typeTo("Warm up for fifteen minutes, t");
-  await r.advance(DEBOUNCE + 200);
-  const afterWithdrawal = r.reviewJson();
-
-  let text = "Warm up for fifteen minutes, t";
-  const versions = new Set();
-  for (let i = 0; i < 40; i += 1) {
-    text += "y";
-    block.typeTo(text);
-    await r.advance(1000);
-    versions.add(r.reviewJson());
-  }
-  assert.ok(r.posts.length > postsBefore + 1, "the helper did get draft copies");
-  assert.equal(versions.size, 1, "every draft copy left review.json's bytes as they were");
-  assert.ok(versions.has(afterWithdrawal), "the same bytes the withdrawal wrote");
-});
-
-test("committing a reworded refused edit makes it ready at a new revision", async (t) => {
+test("typing into a refused edit's passage starts a new card", async (t) => {
   const { r, surface, block, id } = await refusedEdit(t);
+  assert.equal(surface.itemFor(block), null, "the refused card does not own the block any more");
   surface.editBlock(block);
   block.typeTo("Warm up for twenty minutes.");
-  assert.equal(r.store.readItem(REVIEW, id).state, record.STATE.DRAFT);
-
   const committed = surface.commit({ reason: "commit" });
+
+  assert.notEqual(committed.id, id, "a new card");
   assert.equal(committed.state, record.STATE.READY);
-  assert.equal(committed.rev, 2, "the agent sees a new revision");
-  const stale = lifecycle.applyReply(committed, { rev: 1, status: "handled", agent: "claude" });
-  assert.equal(stale.accepted, false, "a reply to the refused wording is refused as stale");
+  assert.equal(committed.rev, 1);
 
   await r.advance(DEBOUNCE + 200);
   const listed = r.items();
-  assert.equal(listed.length, 1);
-  assert.equal(listed[0].state, "ready");
-  assert.equal(listed[0].rev, 2);
-  assert.equal(listed[0].after_full, "Warm up for twenty minutes.");
-  assert.equal(listed[0].reply, null, "the old refusal does not answer the new wording");
+  assert.equal(listed.length, 2, "review.json carries both cards");
+  const old = listed.find((each) => each.id === id);
+  assert.equal(old.state, "not_handled");
+  assert.equal(old.rev, 1);
+  assert.equal(old.reply && old.reply.reason, REASON, "the agent's reason is still on the refused card");
 });
 
-test("typing the refused wording back gives not_handled again, with no new revision", async (t) => {
+test("the refused card's words are never overwritten by typing on the page", async (t) => {
   const { r, surface, block, id } = await refusedEdit(t);
   surface.editBlock(block);
-  block.typeTo("Warm up for fifteen minutes, then");
-  await r.advance(DEBOUNCE + 200);
-  assert.equal(r.items().length, 0);
-
-  block.typeTo("Warm up for fifteen minutes.");
-  const back = r.store.readItem(REVIEW, id);
-  assert.equal(back.state, record.STATE.NOT_HANDLED, "back to the state it opened in");
-  assert.equal(back.rev, 1);
-  assert.equal(back.reply && back.reply.reason, REASON, "the agent's reason is still on the card");
-  assert.equal(surface.commit({ reason: "commit" }), null, "leaving is not a commit");
-  assert.equal(r.store.readItem(REVIEW, id).rev, 1);
-
-  await r.advance(DEBOUNCE + 200);
-  const listed = r.items();
-  assert.equal(listed.length, 1, "review.json carries it again");
-  assert.equal(listed[0].state, "not_handled");
-  assert.equal(listed[0].rev, 1);
-  assert.equal(listed[0].reply && listed[0].reply.reason, REASON);
+  block.typeTo("Warm up for twenty minutes, then");
+  const held = r.store.readItem(REVIEW, id);
+  assert.equal(held.state, record.STATE.NOT_HANDLED, "no keystroke withdraws it");
+  assert.equal(held.after, "Warm up for fifteen minutes.", "its words are the ones the agent answered");
+  assert.equal(held.rev, 1);
 });
 
-test("a crash while a refused edit is withdrawn recovers the way a withdrawn ready edit does", async (t) => {
-  const { r, surface, block, id } = await refusedEdit(t);
-  surface.editBlock(block);
-  block.typeTo("Warm up for fifteen minutes, then stretch");
-  assert.equal(r.store.readItem(REVIEW, id).state, record.STATE.DRAFT);
+test("a refused edit left withdrawn by an older page still recovers on the next page", async (t) => {
+  const { r, id } = await refusedEdit(t);
+  // Stored by a page from before this rule, which withdrew a refused edit to
+  // draft on the first keystroke and then died mid-rewording.
+  const stored = r.store.readItem(REVIEW, id);
+  r.store.write(REVIEW, Object.assign({}, stored, { state: record.STATE.DRAFT, after: "Warm up for fifteen minutes, then stretch" }));
 
-  // The tab dies: no commit, no unload. The next page to hold the review
-  // builds a new surface over the same storage.
   const second = surfaceOver(r.store, r.sync);
   const recovered = second.recoverWithdrawn();
   assert.equal(recovered.length, 1);

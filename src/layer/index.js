@@ -1519,6 +1519,12 @@
       // For one thing only: the conflict card's "take the page's" button, which
       // retires a record and writes nothing. See replay's `context`.
       editing: editing,
+      // Keep mine on a refused card's clash: the card goes back to ready
+      // through the Done tab's own reopen, the same path a reviewer's reply
+      // takes. `done` is read when pressed, since a remount replaces it.
+      reopen: function (id) {
+        return done.reopen(id, { notice: "Your version is back in front of the agent." });
+      },
       onPass: function () {
         conflictToasts.sync();
       },
