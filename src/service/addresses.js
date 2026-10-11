@@ -28,6 +28,9 @@
 
 var crypto = require("node:crypto");
 var dgram = require("node:dgram");
+var fs = require("node:fs");
+var os = require("node:os");
+var path = require("node:path");
 var dns = require("node:dns");
 var http = require("node:http");
 
@@ -40,20 +43,48 @@ var FORWARD_PATH = "/.lahe-forward-check/";
 var NOT_SET_UP = "not set up";
 
 /**
- * Test seams, for a helper a test starts as its own process. Unit tests never
+ * Test seams, for a helper a test starts as its own process, honored only when
+ * its state folder is under the temp folder. Unit tests never
  * send a request to the real port 80 or ask the system resolver about `.lahe`:
  *
  *   LAHE_FORWARD_CHECK_PORT  the port the forward check sends to, in place of 80
  *   LAHE_NAME_CHECK_SERVER   127.0.0.1:<port>: ask that name server directly,
  *                            in place of the system resolver
  */
-function envSeams(env) {
-  var out = {};
+function envSeams(env, stateDir) {
+  var out = { ignored: [] };
+  var wanted = {};
   var forward = Number(env.LAHE_FORWARD_CHECK_PORT);
-  if (Number.isInteger(forward) && forward > 0 && forward < 65536) out.forwardPort = forward;
+  if (Number.isInteger(forward) && forward > 0 && forward < 65536) wanted.forwardPort = forward;
   var direct = /^127\.0\.0\.1:(\d{1,5})$/.exec(String(env.LAHE_NAME_CHECK_SERVER || ""));
-  if (direct) out.lookup = directLookup(Number(direct[1]));
+  if (direct) wanted.lookup = directLookup(Number(direct[1]));
+  // Only a test's helper: one whose state folder is under the temp folder. A
+  // real helper ignores them, because a check that passes without the system
+  // routing .lahe to Lahe reopens DNS rebinding (security review S6).
+  var testHelper = underTemp(stateDir);
+  if (wanted.forwardPort !== undefined) {
+    if (testHelper) out.forwardPort = wanted.forwardPort;
+    else out.ignored.push("LAHE_FORWARD_CHECK_PORT");
+  }
+  if (wanted.lookup) {
+    if (testHelper) out.lookup = wanted.lookup;
+    else out.ignored.push("LAHE_NAME_CHECK_SERVER");
+  }
   return out;
+}
+
+function realOrSame(p) {
+  try { return fs.realpathSync(p); } catch (err) { return path.resolve(p); }
+}
+
+/** Is this folder inside the operating system's temp folder? */
+function underTemp(dir) {
+  if (typeof dir !== "string" || !dir) return false;
+  var real = realOrSame(dir);
+  return [os.tmpdir(), realOrSame(os.tmpdir())].some(function (root) {
+    var base = root.replace(/[\\/]+$/, "");
+    return real.indexOf(base + path.sep) === 0;
+  });
 }
 
 /** A lookup that sends one A query straight to a name server on 127.0.0.1. */
@@ -116,7 +147,7 @@ function createAddresses(options) {
   var installed = opts.installed || {};
   var forwardOn = installed.port_80 === true;
   var namesOn = installed.lahe_names === true && !!installed.resolver;
-  var seams = envSeams(process.env);
+  var seams = envSeams(process.env, opts.stateDir);
   var forwardPort = typeof opts.forwardPort === "number" ? opts.forwardPort : seams.forwardPort || 80;
   var lookup = opts.lookup || seams.lookup || function (name) { return dns.promises.lookup(name, { family: 4 }); };
   var intervalMs = typeof opts.intervalMs === "number" ? opts.intervalMs : CHECK_EVERY_MS;
@@ -142,7 +173,10 @@ function createAddresses(options) {
     if (typeof opts.log === "function") {
       try { opts.log(line); } catch (err) { /* keep going */ }
     }
+  }  if (seams.ignored.length) {
+    say("ignoring " + seams.ignored.join(" and ") + ": test settings, honored only for a state folder under the temp folder");
   }
+
 
   function set(key, verified, reason) {
     var before = state[key];

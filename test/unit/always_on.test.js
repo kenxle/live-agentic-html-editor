@@ -420,3 +420,21 @@ test("installed from another clone: lahe add says the same, and stops nothing", 
   assert.ok(result.stderr.indexOf("the login item runs " + otherClone) !== -1, result.stderr);
   assert.ok(await service.probeHealth(protocol.DEFAULT_HOST, port), "the running helper was left alone");
 });
+
+// Security review S1: /health answers any page's Origin, so a value on it is a
+// value every website can read. The state-folder id is permanent and random
+// per machine: a tracking ID. It goes only to callers with no Origin, which is
+// the CLI.
+test("S1: /health gives the state-folder id to the CLI and never to a page", async (t) => {
+  const w = tempState();
+  const { result: helper } = await onFreePort((port) => service.serve({ port, stateDir: w.dir, quiet: true }));
+  t.after(() => helper.close());
+  const url = "http://127.0.0.1:" + helper.port + protocol.BASE + "/health";
+  const fromPage = await (await fetch(url, { headers: { origin: "https://example.com" } })).json();
+  assert.equal(fromPage.ok, true);
+  assert.equal("state_id" in fromPage, false, "a page never sees it");
+  const fromNull = await (await fetch(url, { headers: { origin: "null" } })).json();
+  assert.equal("state_id" in fromNull, false, "nor a page opened from disk");
+  const fromCli = await service.probeHealth(protocol.DEFAULT_HOST, helper.port);
+  assert.equal(fromCli.state_id, selfStop.stateToken(w.dir), "the CLI still gets it, so the folder check works");
+});

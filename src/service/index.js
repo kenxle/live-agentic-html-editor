@@ -707,7 +707,10 @@ async function serve(options) {
 
     if (route.name === "health" && outcome && outcome.body) {
       outcome.body.always_on = alwaysOn;
-      outcome.body.state_id = stateId;
+      // The state-folder id goes only to a caller with no Origin: the CLI.
+      // /health answers any page, and a permanent random value every website
+      // can read is a tracking ID (security review S1).
+      if (origin === undefined) outcome.body.state_id = stateId;
     }
 
     if (outcome && outcome.raw) {
@@ -855,6 +858,7 @@ async function serve(options) {
   // (src/service/addresses.js). Each one proves itself before it is used.
   addresses = addressesModule.createAddresses(Object.assign({
     installed: installed,
+    stateDir: dir,
     pagesPort: boundPagesPort,
     pagesServers: listeners.filter(function (entry) { return entry.kind === "pages"; }).map(function (entry) { return entry.server; }),
     log: function (line) { log.helperLog(line); },

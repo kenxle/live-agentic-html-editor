@@ -2,7 +2,15 @@
 // start the helper, restart it when it is killed, start it on request, and
 // go away cleanly, on this machine's real service manager?
 //
-//   node scripts/spike_login_item.js [--ci]
+//   node scripts/spike_login_item.js [--ci] [--commands]
+//
+// --commands drives the real `lahe install` and `lahe uninstall` commands
+// (src/cli/commands/install.js), in this process, instead of login_item.js
+// directly. The commands refuse to run without a terminal, which CI has not
+// got, so the spike tells them it has one; everything else is the real path.
+// It passes a unique label, a temp state folder and a free port. The helper
+// the login item starts binds the pages port 1483, so run this mode on a CI
+// runner, not on a machine whose own helper holds 1483.
 //
 // It uses src/service/login_item.js as `lahe install` does, with a unique
 // label, a throwaway state folder, and a free port. It never touches the real
@@ -95,6 +103,8 @@ async function main() {
     await waitFor(function () { return fs.existsSync(process.env.XDG_RUNTIME_DIR + "/bus"); }, 15000);
   }
 
+  if (process.argv.indexOf("--commands") !== -1) return commandsSpike(system);
+
   var root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "lahe-spike-")));
   var dir = path.join(root, "state dir");
   var port = await freePort();
@@ -181,6 +191,63 @@ async function main() {
     if (fs.existsSync(logPath)) say("login item log:\n" + fs.readFileSync(logPath, "utf8").split("\n").slice(-20).join("\n"));
   }
   var pass = ["start", "restart", "kick", "uninstall"].every(function (k) { return /^ok/.test(verdicts[k] || ""); });
+  say("SPIKE RESULT: " + (pass ? "pass" : "fail"));
+  return pass ? 0 : 1;
+}
+
+/** Install, kill, restart, uninstall, through the real commands. */
+async function commandsSpike(system) {
+  var installCommand = require("../src/cli/commands/install.js");
+  var root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "lahe-spike-")));
+  var dir = path.join(root, "state dir");
+  var port = await freePort();
+  var label = "lahe-spike-" + crypto.randomBytes(4).toString("hex");
+  // macOS loads a plist from any folder, so the spike's stays in its temp
+  // home. systemd only finds user units in its own folders.
+  var home = system === "macos" ? path.join(root, "home") : os.homedir();
+  var deps = { isTTY: true, label: label, home: home, users: function () { return []; } };
+  var args = ["--state-dir", dir, "--port", String(port)];
+  var verdicts = {};
+  var up = function () {
+    return service.probeHealth(HOST, port).then(function (live) { return live && live.always_on === true ? live : null; });
+  };
+  say("spike (commands): " + system + ", label " + label + ", port " + port + ", state " + dir);
+  try {
+    var started = Date.now();
+    var code = await installCommand.run(args, deps);
+    var first = code === 0 ? await up() : null;
+    verdicts.start = first ? "ok in " + ((Date.now() - started) / 1000).toFixed(1) + "s (lahe install exited 0)" : "fail: lahe install exited " + code;
+    say("INSTALL AND START: " + verdicts.start);
+    if (first) {
+      var pid1 = readyFile(dir).pid;
+      process.kill(pid1, "SIGKILL");
+      var back = await waitFor(function () {
+        return up().then(function (live) { return live && live.started_at !== first.started_at ? live : null; });
+      }, 150000);
+      verdicts.restart = back ? "ok in " + back.seconds + "s" : "fail: not restarted within 150s";
+      say("RESTART: " + verdicts.restart);
+    }
+  } catch (err) {
+    say("spike error: " + (err && err.stack ? err.stack : String(err)));
+  } finally {
+    var uninstalled = await installCommand.uninstall.run(args, deps);
+    var gone = await waitFor(function () { return service.probeHealth(HOST, port).then(function (live) { return !live; }); }, 15000);
+    // launchd can list a job for a moment after bootout returns, while its
+    // process exits; wait for it to go rather than reading one instant.
+    var stillKnown = function () {
+      if (system === "macos") return run(["launchctl", "print", "gui/" + process.getuid() + "/" + label]).status === 0;
+      if (system === "linux") return run(["systemctl", "--user", "cat", label + ".service"]).status === 0;
+      return run(["schtasks", "/Query", "/TN", label]).status === 0;
+    };
+    var forgotten = await waitFor(function () { return Promise.resolve(!stillKnown()); }, 15000);
+    var known = !forgotten;
+    if (known && system === "macos") run(["launchctl", "bootout", "gui/" + process.getuid() + "/" + label]);
+    verdicts.uninstall = uninstalled === 0 && gone && !known && !fs.existsSync(path.join(dir, "install.json"))
+      ? "ok (lahe uninstall exited 0)"
+      : "fail: exit " + uninstalled + (gone ? "" : "; helper still answering") + (known ? "; service manager still knows " + label : "");
+    say("UNINSTALL: " + verdicts.uninstall);
+  }
+  var pass = ["start", "restart", "uninstall"].every(function (k) { return /^ok/.test(verdicts[k] || ""); });
   say("SPIKE RESULT: " + (pass ? "pass" : "fail"));
   return pass ? 0 : 1;
 }

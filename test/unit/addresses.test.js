@@ -368,16 +368,17 @@ test("service.json is written as soon as the helper answers, before a slow .lahe
 });
 
 test("the test seams take only a port, and a name server on 127.0.0.1", async (t) => {
-  assert.deepEqual(addressesModule.envSeams({}), {});
-  assert.equal(addressesModule.envSeams({ LAHE_FORWARD_CHECK_PORT: "5123" }).forwardPort, 5123);
-  assert.equal(addressesModule.envSeams({ LAHE_FORWARD_CHECK_PORT: "80; rm" }).forwardPort, undefined);
-  assert.equal(addressesModule.envSeams({ LAHE_NAME_CHECK_SERVER: "8.8.8.8:53" }).lookup, undefined);
+  const tmp = tempState();
+  assert.deepEqual(addressesModule.envSeams({}, tmp), { ignored: [] });
+  assert.equal(addressesModule.envSeams({ LAHE_FORWARD_CHECK_PORT: "5123" }, tmp).forwardPort, 5123);
+  assert.equal(addressesModule.envSeams({ LAHE_FORWARD_CHECK_PORT: "80; rm" }, tmp).forwardPort, undefined);
+  assert.equal(addressesModule.envSeams({ LAHE_NAME_CHECK_SERVER: "8.8.8.8:53" }, tmp).lookup, undefined);
   // The direct lookup reaches a name server the test owns.
   const seen = [];
   const server = nameServer.createNameServer({ port: 0, onQuery: (name) => seen.push(name) });
   await server.start();
   t.after(() => server.close());
-  const { lookup } = addressesModule.envSeams({ LAHE_NAME_CHECK_SERVER: "127.0.0.1:" + server.port() });
+  const { lookup } = addressesModule.envSeams({ LAHE_NAME_CHECK_SERVER: "127.0.0.1:" + server.port() }, tmp);
   assert.deepEqual(await lookup("check-1.lahe"), { address: "127.0.0.1", family: 4 });
   assert.deepEqual(seen, ["check-1.lahe"]);
 });
@@ -408,4 +409,28 @@ test("a flood of check-shaped requests and queries holds nothing, and a stale on
   assert.equal(a.heldCount(), 0, "nothing an outsider sends is kept");
   await a.verifyNow();
   assert.equal(a.laheNamesVerified(), false, "queries sent before the check do not prove it");
+});
+
+// Security review S6: a seam that makes the .lahe check pass without the
+// system routing .lahe to Lahe would reopen DNS rebinding. The seams count
+// only for a helper whose state folder is under the temp folder, as every
+// test's is; a real helper ignores them and says so in its log.
+test("S6: the check seams are ignored, with a log line, for a state folder outside the temp folder", async (t) => {
+  const env = { LAHE_FORWARD_CHECK_PORT: "5123", LAHE_NAME_CHECK_SERVER: "127.0.0.1:5353" };
+  const real = path.join(os.homedir(), ".local", "state", "lahe");
+  const seams = addressesModule.envSeams(env, real);
+  assert.equal(seams.forwardPort, undefined);
+  assert.equal(seams.lookup, undefined);
+  assert.deepEqual(seams.ignored, ["LAHE_FORWARD_CHECK_PORT", "LAHE_NAME_CHECK_SERVER"]);
+
+  const saved = { f: process.env.LAHE_FORWARD_CHECK_PORT, n: process.env.LAHE_NAME_CHECK_SERVER };
+  Object.assign(process.env, env);
+  t.after(() => {
+    if (saved.f === undefined) delete process.env.LAHE_FORWARD_CHECK_PORT; else process.env.LAHE_FORWARD_CHECK_PORT = saved.f;
+    if (saved.n === undefined) delete process.env.LAHE_NAME_CHECK_SERVER; else process.env.LAHE_NAME_CHECK_SERVER = saved.n;
+  });
+  const lines = [];
+  const a = addressesModule.createAddresses({ installed: null, pagesPort: 1483, pagesServers: [], stateDir: real, log: (l) => lines.push(l) });
+  t.after(() => a.close());
+  assert.ok(lines.some((l) => /ignoring LAHE_FORWARD_CHECK_PORT and LAHE_NAME_CHECK_SERVER/.test(l)), lines.join("\n"));
 });

@@ -182,6 +182,9 @@ test("V48: more than one user on the machine is warned about, and install goes o
   assert.equal(code, 0, d.err());
   assert.match(d.out() + d.err(), /2 people have accounts on this computer/);
   assert.match(d.out() + d.err(), /other accounts can reach/);
+  // Security review S4: say the whole of it. The review token is on the page.
+  assert.match(d.out() + d.err(), /read and write every review/);
+  assert.match(d.out() + d.err(), /reaches your agent/);
 });
 
 test("V72: installing again replaces the login item rather than adding a second", async (t) => {
@@ -491,4 +494,46 @@ test("a failed install takes back what root set up, through the marker-guarded r
   assert.match(d.err(), new RegExp("port " + holder.address().port + " is taken by another program"));
   assert.doesNotMatch(d.err(), /Nothing is left installed/);
   assert.equal(fs.existsSync(loginItem.installPath(w.dir)), false);
+});
+
+// V59, proved by loading a page rather than by the printed sentence: after
+// uninstall removes the .lahe setup, a site's .lahe.localhost address still
+// loads whenever the helper runs. In process, in this test's temp folder; no
+// real login item, no real /etc file.
+test("V59: after uninstall, a .lahe.localhost address loads a page again once the helper runs", async (t) => {
+  const { writeFile, raw } = require("../helpers/sites_world.js");
+  const w = await world(t);
+  const port = await freePort();
+  const paths = rootPaths(w);
+  const fake = withSudo(w, port, { paths });
+  assert.equal(await installCommand.run(["--state-dir", w.dir, "--port", String(port), "--lahe-names"],
+    deps(w, { runner: fake.runner, rootPaths: paths })), 0);
+  const d = deps(w, { runner: fake.runner, rootPaths: paths });
+  assert.equal(await installCommand.uninstall.run(["--state-dir", w.dir], d), 0, d.err());
+  assert.ok(fake.sudo.some((call) => call.args[2] === loginItem.ROOT_SCRIPTS.removeResolver), "the .lahe setup was removed");
+  assert.equal(fs.existsSync(loginItem.installPath(w.dir)), false);
+
+  // The helper as `lahe review` starts it after an uninstall: on demand, same state folder.
+  const helper = await service.serve({ port, stateDir: w.dir, quiet: true, pagesPort: 0, sitesHome: w.home });
+  t.after(() => helper.close());
+  const folder = path.join(w.home, "ws", "repo", "docs");
+  writeFile(folder, "plan.html", "<!doctype html><title>Plan</title><p>Still here after uninstall.</p>");
+  const bound = helper.sites.bind({ root: folder, mode: "folder", entry: "plan.html" });
+  const res = await raw(helper.pagesPort, { path: "/plan.html", headers: { host: bound.name + ".lahe.localhost:" + helper.pagesPort } });
+  assert.equal(res.status, 200, res.text.slice(0, 200));
+  assert.match(res.text, /Still here after uninstall\./);
+});
+
+test("a label passed in names the login item, and uninstall finds it from install.json", async (t) => {
+  const w = await world(t);
+  const port = await freePort();
+  const fake = withSudo(w, port);
+  const d = deps(w, { runner: fake.runner, label: "lahe-spike-abc123" });
+  assert.equal(await installCommand.run(["--state-dir", w.dir, "--port", String(port)], d), 0, d.err());
+  assert.ok(fs.existsSync(path.join(w.home, "Library", "LaunchAgents", "lahe-spike-abc123.plist")));
+  assert.equal(loginItem.readInstall(w.dir).label, "lahe-spike-abc123");
+  const u = deps(w, { runner: fake.runner });
+  assert.equal(await installCommand.uninstall.run(["--state-dir", w.dir], u), 0, u.err());
+  assert.ok(fake.calls.some((c) => c.join(" ") === "launchctl bootout gui/501/lahe-spike-abc123"));
+  assert.equal(fs.existsSync(path.join(w.home, "Library", "LaunchAgents", "lahe-spike-abc123.plist")), false);
 });
