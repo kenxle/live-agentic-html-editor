@@ -78,6 +78,8 @@ For you, the risk is low. Lahe is public, though, and other people use it in oth
 
 This is what could happen if every document shared one address (option B). With separate addresses, step 3 fails and nothing after it happens.
 
+Different names count as different addresses. `brief.lahe` and `plan.lahe` are separate to the browser, and so are `brief.lahe.localhost` and `plan.lahe.localhost`, even on the same port. (One note for the security review: names that share an ending can share cookies. Lahe does not use cookies for its keys, so that does not open this attack.)
+
 ```mermaid
 flowchart TD
     A["1. You open a bad page with Lahe<br/>(sent to you, or saved from the web)"] --> B["2. JavaScript on that page runs in your browser:<br/>its own script tags, or a script it loads from the web"]
