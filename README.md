@@ -95,6 +95,17 @@ From a row you can:
 
 The Library reads only files on disk and talks only to the helper on your machine. A rename or a star is never sent to an agent.
 
+## Addresses that stay put
+
+Every document gets one address for good: its folder and two parent folders as
+the name, then the file, as in
+`http://docs.features.my-plan.lahe.localhost:1483/brief.md`. Bookmark it, and
+your unsent drafts come back when you open it again. Run `lahe install` once and
+the address loads after a session ends and after a reboot, with nothing to start
+first. On macOS, `lahe install --port-80` drops the `:1483`, and
+`lahe install --lahe-names` adds a short `<name>.lahe` alias. Both are optional.
+See [docs/INSTALL.md](docs/INSTALL.md#keeping-addresses-working-lahe-install).
+
 ## Quickstart
 
 Clone it, and hand the rest to your agent:
@@ -118,6 +129,7 @@ cd live-agentic-html-editor
 npm run install-cli                       # writes ~/.local/bin/lahe
 lahe review path/to/page.html             # or path/to/notes.md
 lahe write notes/today.md                 # a blank notes page to write into
+lahe install                              # optional: keep addresses working after sessions end and reboots
 ```
 
 ## Which agents this works with
@@ -167,7 +179,7 @@ The rail also shows these as hints, so you do not need this file open to work th
 
 - [AGENTS.md](AGENTS.md): how each agent host connects to the tool. Point your agent here.
 - [skills/lahe/SKILL.md](skills/lahe/SKILL.md): the instructions an agent follows during a review.
-- [docs/INSTALL.md](docs/INSTALL.md): install details, the CLI wrapper, and dev-server setup.
+- [docs/INSTALL.md](docs/INSTALL.md): install details, the CLI wrapper, starting at login with `lahe install`, and dev-server setup.
 - [docs/CLI.md](docs/CLI.md): every command and flag.
 - [docs/ongoing/FREE_WRITING.md](docs/ongoing/FREE_WRITING.md): how writing new paragraphs, headings, and lists works, for the next builder.
 - [docs/ongoing/STYLES.md](docs/ongoing/STYLES.md): how installed document styles work: the folder, the checks, serving, and Markdown.

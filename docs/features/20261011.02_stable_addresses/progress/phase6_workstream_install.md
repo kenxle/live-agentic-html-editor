@@ -162,39 +162,83 @@ Every test above was watched failing first, either before the module existed or 
 
 ## Manual checks for Ken (V73, V75)
 
-V75 and the browser half of V73 need core changes 1 to 3 merged first. Run these in your own terminal, in the clone that `lahe install` points at.
-
-**V75, port-free addresses**
-
-1. `lsof -nP -iTCP:80 -sTCP:LISTEN`. If anything is listed, `lahe install --port-80` should print "port-free addresses skipped: port 80 is held by ...", and it stops there.
-2. `lahe install --port-80`, then type your password once. It should print "port 80 forwards to 1483 on this computer, reloaded at boot."
-3. `sudo pfctl -a com.apple/lahe -s nat` should show two `rdr` lines, port 80 to 1483 for `127.0.0.1` and for `::1`.
-4. `grep -A4 port_free ~/.local/state/lahe/service.json` should show `"verified": true`, and `printed_port` should be `80`.
-5. `lahe review <some file>.md` should print `http://<name>.lahe.localhost/<file>` with no port. That address loads in Chrome, Firefox and Safari, and the same address with `:1483` loads too.
-6. Restart the Mac and log in. Repeat steps 3 and 5. Both should still work with no command run.
-7. `lahe uninstall`. Step 3 should show nothing, and `ls /etc/pf.anchors/lahe /Library/LaunchDaemons/lahe-port80.plist` should report no such file. After `lahe review`, the `:1483` address loads.
-
-**V73, `.lahe` names**
-
-1. `lahe install --lahe-names`, then type your password once.
-2. `cat /etc/resolver/lahe` should show the `# lahe-managed` line, `nameserver 127.0.0.1` and `port 7853`. `scutil --dns | grep -B1 -A4 'domain   : lahe'` should list it.
-3. `dscacheutil -q host -a name anything.lahe` should answer `127.0.0.1`.
-4. `grep -A4 lahe_names ~/.local/state/lahe/service.json` should show `"verified": true`.
-5. Open `http://<name>.lahe:1483/<file>` in Chrome, Firefox and Safari. It should load with the rail. A browser with secure DNS turned on may not ask the system and so fail; that is a known limit, and `.lahe.localhost` still works there.
-6. Name server stopped:
-   - Run `nc -u -l 127.0.0.1 7853` in another terminal, then `lahe serve --restart`.
-   - `service.json` should show `lahe_names.verified: false` with "the name server could not answer on port 7853". A `.lahe` address should now be refused.
-   - Stop `nc`, then `lahe serve --restart` again. `.lahe` should be verified again.
-7. `lahe uninstall`. `ls /etc/resolver/lahe` should report no such file, and `.lahe.localhost` addresses still load after `lahe review`.
+Moved to "Manual checks for Ken" at the end of this file, with V45.
 
 ## Deviations
 
 - **New file `src/service/addresses.js`.** The proofs and the printed-port rule are neither the name server nor the login item, so they have their own file. It is in the manifest.
 - **The forward boot item runs `pfctl -E`**, which turns pf on and is not undone at uninstall. That leaves Apple's own rules running as they would with any pf user. No Lahe rule is left behind.
-- **Only the IPv4 path through the forward is proved.** The `::1` rule is installed, but not checked separately.
+- **Only the IPv4 path through the forward is proved.** The `::1` rule is installed, but not checked separately. Follow-up below.
 - **Edits in `index.js` outside `/health`:** the proofs started after the pages listener binds, `pagesReport` reads them, `readyDetails()` so a changed proof rewrites `service.json`, `laheNames` passed to `classifyHost`, two `deps` functions, and `addresses()` on the helper handle for tests.
 - **Linux and Windows written steps** in `docs/INSTALL.md` are not written yet. They belong with Task 5.5 (docs), after the core changes land.
+
+## Follow-ups (lahe-names)
+
+- **The IPv6 forward is untested.** The `::1` rule (port 80 to 1483) is installed on macOS, but neither a test nor the helper's check exercises it. A browser that tries `::1` first for `*.lahe.localhost` depends on it. Next step: have the check also send its request to `[::1]:80` when the `::1` pages listener is up, and add that to V75 on Ken's Mac.
 
 ## Cleanup needed (lahe-names)
 
 - Nothing new in the repo. The scratch files from the hand checks are under `/tmp` and stay there.
+
+# Task 5.5: docs
+
+## Summary
+
+The install docs are written. `lahe install`, `lahe uninstall`, `--port-80` and `--lahe-names` are documented for macOS, Linux and Windows. The Linux and Windows steps are marked untested where they are. `npm run gate:unit` passes once a marker line in `docs/INSTALL.md` was reworded; that rewording is the last change, and the docs test file passes 29 of 29.
+
+- [docs/INSTALL.md](../../../../docs/INSTALL.md): new sections "Keeping addresses working: `lahe install`" and "Optional: no port, and the short `.lahe` ending" (macOS, Linux, Windows), and an uninstall line under "Removing it".
+- [README.md](../../../../README.md): a short "Addresses that stay put" section, the `lahe install` line in the setup block, and the INSTALL.md pointer.
+- [docs/CLI.md](../../../../docs/CLI.md): the `install` and `uninstall` rows, with both options.
+- [docs/ongoing/SESSION_OWNERSHIP.md](../../../../docs/ongoing/SESSION_OWNERSHIP.md): one bullet for an installed, always-on helper.
+
+## A code change the docs needed
+
+On Linux and Windows, `--port-80` and `--lahe-names` used to refuse and point to the docs. But the helper starts its name server and its checks only when `install.json` records the option. So the written steps could never take effect. Now, on Linux and Windows, the option is recorded as a hand step (`by_hand: true`) and no `sudo` runs. The helper checks it like on macOS. `lahe uninstall` names the hand steps to undo. `--lahe-names` is refused on Windows, because Windows sends a name ending only to port 53 and Lahe's name server is on 7853. Tests: three in [install_command.test.js](../../../../test/unit/install_command.test.js), each seen failing first.
+
+## Where the docs differ from the architecture's written-steps table
+
+- **Linux, no port:** the table says to let ordinary programs use port 80 and have the helper listen there. The helper does not listen on port 80, so the docs give an `iptables` redirect from loopback port 80 to 1483 instead. The helper's check proves it either way.
+- **Windows, no port:** the table says the helper listens on 80. Same reason; the docs give a `netsh interface portproxy` forward.
+- **Windows, `.lahe`:** not offered. The name-ending rule cannot name a port, and the name server does not answer on 53. Task 6.3, which would have covered that, was dropped.
+
+All Linux and Windows steps say plainly that they are untested.
+
+## A defect found while writing the docs (core's file)
+
+**`lahe session close` stops an installed helper.** When the last session closes and no page or Library poll holds it, `close` in `src/cli/commands/session.js` calls `stopVerifiedHelper`. An installed helper is then down until the login item restarts it: about 10 seconds on macOS, up to a minute on Windows. The architecture says the always-on helper stays up through a close. The fix is one condition: skip the stop (and the stop-when-quiet ask) when `loginItem.installedFor(dir, port)` is set or the helper's `/health` says `always_on`. That code is core's, so I did not change it. `SESSION_OWNERSHIP.md` describes the intended behavior.
+
+# Manual checks for Ken
+
+Do these on your Mac, in your own terminal (the commands ask for your password where noted). Steps 2, 3 and 4 need the core builder's address changes merged first; a step that says "should print" without a port will still show `:1483` before then.
+
+**1. The helper starts at login (V45)**
+
+1. Run `lahe install`. It should end with "the helper now starts at login and restarts if it stops."
+2. Run `launchctl list | grep lahe-helper`. You should see one line with a process number.
+3. Restart the Mac and log in. If macOS shows a "Background Items Added" notice, note what it names (we expect `node`).
+4. Without running any command, open a document address you had before, such as one from the Library. It should load.
+5. Run `kill $(launchctl list | awk '/lahe-helper/ {print $1}')`. Within about 10 seconds, `launchctl list | grep lahe-helper` should show a new process number, and the page should reconnect.
+
+**2. No port (V75)**
+
+1. Run `lsof -nP -iTCP:80 -sTCP:LISTEN`. If it lists anything, `lahe install --port-80` should say it skipped the step and name that program. Stop there.
+2. Run `lahe install --port-80` and type your password once. It should say port 80 forwards to 1483.
+3. Run `sudo pfctl -a com.apple/lahe -s nat`. You should see two `rdr` lines, one for `127.0.0.1` and one for `::1`.
+4. Run `lahe status`. It should show the port-free check passed.
+5. Run `lahe review` on any Markdown file. It should print an address with no `:1483`. Open it in Chrome, Firefox and Safari: it loads. The same address with `:1483` also loads.
+6. Restart the Mac, log in, and repeat steps 3 and 5 without running anything else. Both should still work.
+
+**3. `.lahe` (V73)**
+
+1. Run `lahe install --lahe-names` and type your password once.
+2. Run `cat /etc/resolver/lahe`. You should see `# lahe-managed`, `nameserver 127.0.0.1` and `port 7853`.
+3. Run `dscacheutil -q host -a name anything.lahe`. It should answer `127.0.0.1`.
+4. Run `lahe status`. It should show the `.lahe` check passed.
+5. Take an address `lahe review` printed, change `.lahe.localhost` to `.lahe`, and open it in Chrome, Firefox and Safari. It should load with the rail. If a browser fails, check whether its secure DNS setting is on; that is a known limit.
+6. Run `nc -u -l 127.0.0.1 7853` in a second terminal, then `lahe serve --restart`. `lahe status` should now say `.lahe` is off because the name server could not answer on port 7853, and the `.lahe` address should be refused. Stop `nc` with Ctrl-C and run `lahe serve --restart` again: `.lahe` comes back.
+
+**4. Taking it all out**
+
+1. Run `lahe uninstall`. It asks for your password once for each option you set up.
+2. `ls /etc/resolver/lahe /etc/pf.anchors/lahe /Library/LaunchDaemons/lahe-port80.plist` should report that none of them exist, and `launchctl list | grep lahe-helper` should print nothing.
+3. Run `lahe review` on a document. Its `.lahe.localhost:1483` address should load as before.
