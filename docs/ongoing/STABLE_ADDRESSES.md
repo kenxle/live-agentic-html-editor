@@ -68,6 +68,34 @@ Your own pages never try to do this. The protection is for the rare bad page, wh
 
 For you, the risk is low. Lahe is public, though, and other people use it in other ways. Option D keeps the protection, and you would never see the difference.
 
+### The attack, step by step
+
+This is what could happen if every document shared one address (option B). With separate addresses, step 3 fails and nothing after it happens.
+
+```mermaid
+flowchart TD
+    A["1. You open a bad page with Lahe<br/>(sent to you, or saved from the web)"] --> B["2. Hidden code on that page runs<br/>in your browser"]
+    B --> C{"3. Is your other document<br/>at the same address?"}
+    C -->|"no: separate addresses"| Stop["The browser blocks it.<br/>Nothing more happens."]
+    C -->|"yes: one shared address"| D["4. The code opens your other document<br/>in the background and reads it,<br/>including its comment key"]
+    D --> E["5. It reads your unsent drafts<br/>for every document"]
+    D --> F["6. It posts a comment to that document,<br/>using the key, as if you wrote it"]
+    F --> G["7. Your agent on that document reads the comment<br/>and may act on it: edit files, run commands"]
+    D --> H["8. It opens the Library page too,<br/>lists every document, and asks for new agents"]
+```
+
+The step that matters is 7. A fake comment is an instruction to an agent that can change files on your computer. Lahe already marks comments as page content rather than orders, which helps, but an agent following a comment is the whole point of Lahe.
+
+### Other ways to stop it
+
+You are right that there are other ways. Each one stops part of the attack:
+
+- **A browser rule that boxes each page in.** Lahe can send a rule with each page telling the browser to treat it as if it had its own address. This stops steps 4 through 8. The catch: a boxed page cannot save anything in the browser, so Lahe would lose unsent drafts on reload and would need another place to keep them.
+- **A browser rule limiting where a page can send requests.** Lahe can tell the browser that a page may only talk to its own document. This stops step 6, but not a page opening another document in a window and reading it, so on its own it is leaky.
+- **Ask you before an agent acts on a comment from a page you did not write.** This guards step 7 directly, but it adds a step to every review of an outside page, and the agent has to know which pages those are.
+
+Separate addresses stop all of it with one rule the browser already follows. Option D gets them on one port. So I still recommend D, but the boxing rule is a real alternative if separate host names cause trouble.
+
 ## The options
 
 ### D. One port, a host name per document (recommended)
