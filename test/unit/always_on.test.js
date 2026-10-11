@@ -34,6 +34,7 @@ const sessionCommand = require("../../src/cli/commands/session.js");
 const { pollUntil } = require("../helpers/poll.js");
 const { onFreePort, freePort } = require("../helpers/free_port.js");
 const { stopTempHelpers } = require("../helpers/temp_helpers.js");
+const { trackSpawned } = require("../helpers/spawned.js");
 
 const BIN = path.join(__dirname, "..", "..", "bin", "lahe.js");
 const GRACE = 1000;
@@ -119,18 +120,16 @@ test("V49: a helper started without the flag reports always_on false", async (t)
  * A runner standing in for the service manager. It records every command, and
  * a start command starts a detached always-on helper, as launchd would.
  */
-function fakeLoginItem(dir, port, options) {
+function fakeLoginItem(t, dir, port, options) {
   const opts = options || {};
   const calls = [];
+  // Each helper it starts is tracked by pid and stopped in teardown, even one
+  // still starting when the test ends.
+  const spawned = trackSpawned(t, dir);
   const runner = (command, args) => {
     calls.push([command].concat(args));
     if (opts.fail) return { status: 113, output: "Could not find service" };
-    const child = childProcess.spawn(
-      process.execPath,
-      [BIN, "serve", "--always-on", "--port", String(port), "--state-dir", dir],
-      { detached: true, stdio: "ignore" }
-    );
-    child.unref();
+    spawned.spawn([BIN, "serve", "--always-on", "--port", String(port), "--state-dir", dir]);
     return { status: 0, output: "" };
   };
   return { runner, calls };
@@ -157,7 +156,7 @@ test("V50: with install.json, startHelper asks the login item and does not spawn
   t.after(() => stopTempHelpers(w.dir));
   const port = await freePort();
   install(w.dir, port);
-  const item = fakeLoginItem(w.dir, port);
+  const item = fakeLoginItem(t, w.dir, port);
   const result = await sessionCommand.startHelper(w.dir, port, { runner: item.runner });
   assert.equal(result.started, true);
   assert.equal(item.calls.length, 1, "one start command");
@@ -172,7 +171,7 @@ test("V50: when the login item cannot start the helper, the CLI says so and spaw
   t.after(() => stopTempHelpers(w.dir));
   const port = await freePort();
   install(w.dir, port);
-  const item = fakeLoginItem(w.dir, port, { fail: true });
+  const item = fakeLoginItem(t, w.dir, port, { fail: true });
   await assert.rejects(
     sessionCommand.startHelper(w.dir, port, { runner: item.runner, waitMs: 300 }),
     /login item lahe-test-\d+ did not start the helper on 127\.0\.0\.1:\d+.*Could not find service/s
@@ -233,7 +232,7 @@ async function installedHelper(t) {
   t.after(() => stopTempHelpers(w.dir));
   const port = await freePort();
   const record = install(w.dir, port, { clone: newerClone(w.root) });
-  const item = fakeLoginItem(w.dir, port);
+  const item = fakeLoginItem(t, w.dir, port);
   await sessionCommand.startHelper(w.dir, port, { runner: item.runner });
   const before = await service.probeHealth(protocol.DEFAULT_HOST, port);
   return Object.assign(w, { port, record, item, before });
@@ -287,7 +286,7 @@ test("V50: lahe add's own start asks the login item when installed, and spawns n
   t.after(() => stopTempHelpers(w.dir));
   const port = await freePort();
   install(w.dir, port);
-  const item = fakeLoginItem(w.dir, port);
+  const item = fakeLoginItem(t, w.dir, port);
   const health = await addCommand.startHelper(protocol.DEFAULT_HOST, port, w.dir, { runner: item.runner });
   assert.equal(health.always_on, true);
   assert.equal(item.calls.length, 1);
@@ -337,7 +336,7 @@ test("installed: lahe serve --restart restarts through the login item instead of
   t.after(() => stopTempHelpers(w.dir));
   const port = await freePort();
   install(w.dir, port);
-  const item = fakeLoginItem(w.dir, port);
+  const item = fakeLoginItem(t, w.dir, port);
   await sessionCommand.startHelper(w.dir, port, { runner: item.runner });
   const before = await service.probeHealth(protocol.DEFAULT_HOST, port);
   const out = [];

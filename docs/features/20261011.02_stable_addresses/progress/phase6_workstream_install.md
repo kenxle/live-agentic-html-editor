@@ -242,3 +242,9 @@ Do these on your Mac, in your own terminal (the commands ask for your password w
 1. Run `lahe uninstall`. It asks for your password once for each option you set up.
 2. `ls /etc/resolver/lahe /etc/pf.anchors/lahe /Library/LaunchDaemons/lahe-port80.plist` should report that none of them exist, and `launchctl list | grep lahe-helper` should print nothing.
 3. Run `lahe review` on a document. Its `.lahe.localhost:1483` address should load as before.
+
+# Leak fix: helpers started by the fake service manager
+
+`install_command.test.js` could leave one `lahe.js serve --always-on` helper running under load. The fake service manager spawned it, and it finished starting after teardown had looked for it in `service.json`. Now [spawned.js](../../../../test/helpers/spawned.js) tracks every helper a test spawns by its own pid from the moment it exists. Teardown stops each one (SIGTERM, then SIGKILL) and then sweeps the state folder, even when the test failed. `always_on.test.js` had the same pattern and uses it too.
+
+Proof: two full `npm run gate:unit` runs in a row. Each run: 2590 tests, 2534 pass, 54 fail, all 54 in the library's files, which the library builder is fixing. After each run, helpers from this worktree with `lahe-install` in their state folder: 0. The one `lahe-install` helper still running on the machine came from the `sa-library` worktree, started before these runs, running the old version of the test file.
