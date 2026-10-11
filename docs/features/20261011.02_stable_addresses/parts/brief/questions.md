@@ -42,6 +42,8 @@ Chosen by the brief, for Ken to overrule in review:
 - **Linux:** a one-time admin setting that lets normal programs use port 80, or a port forward. Either takes `sudo` once.
 - **Windows:** usually allowed with no admin step, unless another program already holds port 80.
 
+The forward only touches requests to this computer's own loopback address on port 80. Requests to websites go to their own servers and never pass through it. The only other traffic it could catch is a local program that also expects port 80 on this computer, which is the "port 80 is taken" case below.
+
 Whatever the feature automates, `docs/INSTALL.md` writes out the steps by hand for each system, so a reader can reach `folder.lahe/file` on a system the setup command does not cover yet.
 
 If something else on the computer already uses port 80 (Docker, a local web server), Lahe keeps printing `:7817` and `lahe status` names the program in the way. `:7817` addresses keep working either way, so a bookmark never breaks when the forward is added or removed.

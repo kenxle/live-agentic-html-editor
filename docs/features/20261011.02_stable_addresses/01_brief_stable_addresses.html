@@ -1206,6 +1206,11 @@ once.</li>
 <li><strong>Windows:</strong> usually allowed with no admin step, unless
 another program already holds port 80.</li>
 </ul>
+<p>The forward only touches requests to this computer's own loopback
+address on port 80. Requests to websites go to their own servers and
+never pass through it. The only other traffic it could catch is a local
+program that also expects port 80 on this computer, which is the "port
+80 is taken" case below.</p>
 <p>Whatever the feature automates, <code>docs/INSTALL.md</code> writes
 out the steps by hand for each system, so a reader can reach
 <code>folder.lahe/file</code> on a system the setup command does not
