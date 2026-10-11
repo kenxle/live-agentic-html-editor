@@ -85,7 +85,14 @@ function deps(w, overrides) {
     platform: "darwin",
     home: w.home,
     node: path.join(w.root, "node bin", "node"),
-    users: () => ["jo"]
+    users: () => ["jo"],
+    // Never the real /etc files or the real port 80.
+    portHolder: () => null,
+    rootPaths: {
+      resolver: path.join(w.root, "no-etc", "resolver-lahe"),
+      rule: path.join(w.root, "no-etc", "pf-anchor-lahe"),
+      daemon: path.join(w.root, "no-etc", "lahe-port80.plist")
+    }
   };
   const d = Object.assign(base, overrides || {});
   d.out = () => out.join("");
@@ -244,4 +251,154 @@ test("lahe install and lahe uninstall are commands the dispatcher knows", () => 
   assert.equal(typeof cli.COMMANDS.uninstall().run, "function");
   assert.match(cli.USAGE, /^  install /m);
   assert.match(cli.USAGE, /^  uninstall /m);
+});
+
+// --- the two macOS admin options (lahe-names workstream) ----------------------
+//
+// sudo is never run: the fake service manager also plays sudo, records the
+// call, and reads the files the install handed it. Nothing is written to /etc.
+
+/** The fake manager, plus a sudo that records each call and the files it was given. */
+function withSudo(w, port, options) {
+  const opts = options || {};
+  const manager = fakeManager(w, port);
+  const sudo = [];
+  const runner = async (command, args) => {
+    if (command === "sudo") {
+      const folder = args[4];
+      const files = {};
+      if (folder) fs.readdirSync(folder).forEach((name) => { files[name] = fs.readFileSync(path.join(folder, name), "utf8"); });
+      sudo.push({ args, files });
+      return opts.sudoFails ? { status: 1, output: "Sorry, try again." } : { status: 0, output: "" };
+    }
+    return manager.runner(command, args);
+  };
+  return { runner, sudo, calls: manager.calls };
+}
+
+function rootPaths(w) {
+  const etc = path.join(w.root, "etc");
+  fs.mkdirSync(etc, { recursive: true });
+  return {
+    resolver: path.join(etc, "resolver-lahe"),
+    rule: path.join(etc, "pf-anchor-lahe"),
+    daemon: path.join(etc, "lahe-port80.plist")
+  };
+}
+
+test("V56: --lahe-names makes one sudo call with the fixed resolver file, and records it", async (t) => {
+  const w = world(t);
+  const port = await freePort();
+  const fake = withSudo(w, port);
+  const d = deps(w, { runner: fake.runner, portHolder: () => null, rootPaths: rootPaths(w) });
+  const code = await installCommand.run(["--state-dir", w.dir, "--port", String(port), "--lahe-names"], d);
+  assert.equal(code, 0, d.err());
+  assert.equal(fake.sudo.length, 1, "one admin step, one sudo call");
+  assert.equal(fake.sudo[0].args[2], loginItem.ROOT_SCRIPTS.installResolver);
+  assert.equal(fake.sudo[0].files[loginItem.ROOT_FILES.resolver], loginItem.resolverText(loginItem.NAME_SERVER_PORT));
+  const record = loginItem.readInstall(w.dir);
+  assert.equal(record.lahe_names, true);
+  assert.equal(record.resolver, loginItem.RESOLVER_PATH);
+  assert.equal(record.name_server_port, loginItem.NAME_SERVER_PORT);
+  assert.equal(record.port_80, false, "the other option stays off");
+  assert.match(d.out(), /\.lahe/);
+});
+
+test("V74: --port-80 makes one sudo call with the fixed forward rule and boot item, and records it", async (t) => {
+  const w = world(t);
+  const port = await freePort();
+  const fake = withSudo(w, port);
+  const d = deps(w, { runner: fake.runner, portHolder: () => null, rootPaths: rootPaths(w) });
+  assert.equal(await installCommand.run(["--state-dir", w.dir, "--port", String(port), "--port-80"], d), 0, d.err());
+  assert.equal(fake.sudo.length, 1);
+  assert.equal(fake.sudo[0].args[2], loginItem.ROOT_SCRIPTS.installForward);
+  assert.equal(fake.sudo[0].files[loginItem.ROOT_FILES.rule], loginItem.forwardRuleText(protocol.PAGES.PORT));
+  assert.equal(fake.sudo[0].files[loginItem.ROOT_FILES.daemon], loginItem.forwardDaemonText());
+  const record = loginItem.readInstall(w.dir);
+  assert.equal(record.port_80, true);
+  assert.equal(record.forward_rule, loginItem.FORWARD_RULE_PATH);
+  assert.equal(record.lahe_names, false);
+});
+
+test("V74: --port-80 is skipped, naming the holder, when something listens on port 80", async (t) => {
+  const w = world(t);
+  const port = await freePort();
+  const fake = withSudo(w, port);
+  const d = deps(w, { runner: fake.runner, portHolder: () => "httpd (pid 412)", rootPaths: rootPaths(w) });
+  assert.equal(await installCommand.run(["--state-dir", w.dir, "--port", String(port), "--port-80"], d), 0, d.err());
+  assert.equal(fake.sudo.length, 0, "no admin step");
+  assert.match(d.out(), /port 80 is held by httpd \(pid 412\)/);
+  assert.match(d.out(), /:1483/);
+  const record = loginItem.readInstall(w.dir);
+  assert.equal(record.port_80, false);
+  assert.match(record.port_80_reason, /httpd \(pid 412\)/);
+});
+
+test("the admin options are macOS only; elsewhere install points to the written steps and does nothing", async (t) => {
+  const w = world(t);
+  const port = await freePort();
+  const fake = withSudo(w, port);
+  const d = deps(w, { platform: "linux", runner: fake.runner });
+  assert.notEqual(await installCommand.run(["--state-dir", w.dir, "--port", String(port), "--lahe-names"], d), 0);
+  assert.match(d.err(), /docs\/INSTALL\.md/);
+  assert.equal(fake.sudo.length, 0);
+  assert.equal(fake.calls.length, 0);
+});
+
+test("a refused sudo leaves the option off and says so; the login item still installs", async (t) => {
+  const w = world(t);
+  const port = await freePort();
+  const fake = withSudo(w, port, { sudoFails: true });
+  const d = deps(w, { runner: fake.runner, portHolder: () => null, rootPaths: rootPaths(w) });
+  assert.equal(await installCommand.run(["--state-dir", w.dir, "--port", String(port), "--lahe-names"], d), 0, d.err());
+  assert.equal(loginItem.readInstall(w.dir).lahe_names, false);
+  assert.match(d.err(), /\.lahe was not set up/);
+});
+
+test("a later plain install keeps the options already set, with no new sudo call", async (t) => {
+  const w = world(t);
+  const port = await freePort();
+  const fake = withSudo(w, port);
+  const paths = rootPaths(w);
+  assert.equal(await installCommand.run(["--state-dir", w.dir, "--port", String(port), "--lahe-names", "--port-80"],
+    deps(w, { runner: fake.runner, portHolder: () => null, rootPaths: paths })), 0);
+  assert.equal(fake.sudo.length, 2, "one sudo call per option");
+  assert.equal(await installCommand.run(["--state-dir", w.dir, "--port", String(port)],
+    deps(w, { runner: fake.runner, portHolder: () => null, rootPaths: paths })), 0);
+  assert.equal(fake.sudo.length, 2);
+  const record = loginItem.readInstall(w.dir);
+  assert.equal(record.lahe_names, true);
+  assert.equal(record.port_80, true);
+});
+
+test("V59 and V74: uninstall removes the resolver and the forward only when each carries the marker", async (t) => {
+  const w = world(t);
+  const port = await freePort();
+  const fake = withSudo(w, port);
+  const paths = rootPaths(w);
+  assert.equal(await installCommand.run(["--state-dir", w.dir, "--port", String(port)],
+    deps(w, { runner: fake.runner, rootPaths: paths })), 0);
+  // As root would have left them: ours carry the marker, the stranger does not.
+  fs.writeFileSync(paths.resolver, loginItem.resolverText(7853));
+  fs.writeFileSync(paths.rule, "rdr pass on lo0 inet proto tcp from any to 127.0.0.1 port 80 -> 127.0.0.1 port 8080\n");
+  const d = deps(w, { runner: fake.runner, rootPaths: paths });
+  assert.equal(await installCommand.uninstall.run(["--state-dir", w.dir], d), 0, d.err());
+  const scripts = fake.sudo.map((call) => call.args[2]);
+  assert.deepEqual(scripts, [loginItem.ROOT_SCRIPTS.removeResolver], "only the marked file is removed");
+  assert.match(d.out(), /pf-anchor-lahe was not written by Lahe; left alone/);
+  assert.match(d.out(), /\.lahe\.localhost addresses keep working/);
+});
+
+test("--port-80 again, with Lahe's forward already in place, is not mistaken for another program on port 80", async (t) => {
+  const w = world(t);
+  const port = await freePort();
+  const fake = withSudo(w, port);
+  const paths = rootPaths(w);
+  assert.equal(await installCommand.run(["--state-dir", w.dir, "--port", String(port), "--port-80"],
+    deps(w, { runner: fake.runner, portHolder: () => null, rootPaths: paths })), 0);
+  // Now port 80 answers, because the forward sends it to the helper.
+  const d = deps(w, { runner: fake.runner, portHolder: () => "a program", rootPaths: paths });
+  assert.equal(await installCommand.run(["--state-dir", w.dir, "--port", String(port), "--port-80"], d), 0, d.err());
+  assert.equal(fake.sudo.length, 2);
+  assert.equal(loginItem.readInstall(w.dir).port_80, true);
 });

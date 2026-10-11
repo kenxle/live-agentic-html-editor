@@ -235,8 +235,11 @@ function refusal(name, detail, routeName) {
 function catalogHostAllowed(host, hostLower, port, catalog) {
   if (port !== null && (hostLower === "127.0.0.1:" + port || hostLower === "localhost:" + port)) return true;
   var pagesPort = catalog && typeof catalog.pagesPort === "number" ? catalog.pagesPort : null;
-  return pagesPort !== null &&
-    host === protocol.PAGES.LIBRARY_NAME + "." + protocol.PAGES.SUFFIX + ":" + pagesPort;
+  var library = protocol.PAGES.LIBRARY_NAME + "." + protocol.PAGES.SUFFIX;
+  // No port is the port-free address: the port 80 forward delivers it to the
+  // pages port. A *.localhost name cannot be rebound, so it is as safe as the
+  // form with the port.
+  return pagesPort !== null && (host === library + ":" + pagesPort || host === library);
 }
 
 /**
@@ -245,8 +248,9 @@ function catalogHostAllowed(host, hostLower, port, catalog) {
  * Order: Host, Sec-Fetch-Site, client header, content type, token, Origin.
  *
  * - Host is exactly 127.0.0.1:<port> or localhost:<port> at the helper's actual
- *   port, on every catalog route, or library.lahe.localhost:<pages port> when
- *   the pages switch is on (stable addresses). The page carries the token, so
+ *   port, on every catalog route, or library.lahe.localhost:<pages port> (or
+ *   with no port, through the port 80 forward) when the pages switch is on
+ *   (stable addresses). The page carries the token, so
  *   a DNS-rebound name must not be able to load it, and no other name, a
  *   document's included, ever matches.
  * - Sec-Fetch-Site is set by the browser, never by a script. The API routes take
