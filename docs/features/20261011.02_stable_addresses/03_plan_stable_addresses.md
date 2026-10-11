@@ -156,6 +156,8 @@ The one verification table. U is a unit test under `test/unit/`; B is a Playwrig
 | V71 | Logging | The log records the port, ending and why, install state, each new name, and each refused Host without page content | U |
 | V72 | Install details | Paths with spaces are quoted in each login item, and `lahe status` says to reinstall when the recorded Node is gone | U |
 | V73 | `.lahe` for real | On Ken's Mac with the resolver installed: a `.lahe` page loads in Chrome, Firefox, and Safari; a stopped name server turns `.lahe` off and status says why | M |
+| V74 | Port forward | The forward rule is fixed text with a Lahe marker, covers only loopback port 80, is skipped when port 80 is held, and uninstall removes only a marked rule | U |
+| V75 | Port-free for real | On Ken's Mac after install: `http://<name>.lahe/<file>` and `http://<name>.lahe.localhost/<file>` load with no port, a `:7817` address still loads, and a reboot keeps the forward | M |
 :::
 
 ## Acceptance Criteria
@@ -184,7 +186,7 @@ The one verification table. U is a unit test under `test/unit/`; B is a Playwrig
 - [ ] Addresses name the folder and file (requirement 3): V1 to V3, V65, and the walk reads every printed address.
 - [ ] Documents stay walled off (requirement 4): V14 to V17.
 - [ ] One port (requirement 5): V7, V37.
-- [ ] Endings (requirement 6): V37, V54 to V59, V73, and Ken's answer on the printed ending applied.
+- [ ] Endings (requirement 6): V37, V54 to V59, V73 to V75, and Ken's answer on the printed ending applied.
 - [ ] Starts at login on three systems (requirement 7): V45 to V52.
 - [ ] Existing documents get addresses, and links keep working (requirements 8 and 8a): V12, V13, V29, V31, V39.
 - [ ] Drafts come back (requirement 9): V63.

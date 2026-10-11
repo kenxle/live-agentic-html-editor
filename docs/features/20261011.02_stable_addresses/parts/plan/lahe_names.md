@@ -10,6 +10,8 @@
 
 **Task 6.2: Resolver setup and verification.** Acceptance: V56 to V59, plus V73 on Ken's Mac.
 
+**Task 6.2b: Port-free addresses on macOS.** `lahe install --lahe-names` also loads a loopback forward from port 80 to the helper's port, for `127.0.0.1` and `::1`, in the same admin step, and reloads it at boot. It is skipped, with a status line naming the holder, when something already listens on port 80. `lahe uninstall` removes only the forward it added. Acceptance: V74, V75.
+
 **Task 6.3: Only if Ken chose `.lahe` as the printed ending.** Fallbacks for a non-secure page:
 
 - copy, reusing Task 4.2's function in `export.js` and `overlay.js`;

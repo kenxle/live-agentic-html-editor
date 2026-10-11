@@ -17,6 +17,7 @@ Chosen by the brief, for Ken to overrule in review:
 - **The name is per folder, not per file.** The architecture review showed per-file names break Markdown images and links, folder sites, the rail rules, and how comments are tied to files. The folder is today's isolation unit, so nothing gets weaker. The address still reads as folder plus file.
 - **Other accounts on the same computer** can reach pages whenever the server runs. Recorded as a known limit; `lahe install` warns on a computer with more than one user.
 
+- **Drop the port from the address?** Yes. Ken approved it on 2026-10-11 once it was clear the forward only covers this computer's own port 80, never web traffic. The setup command adds a port-80 forward on macOS, with the admin password, in the same step as `.lahe`. Linux and Windows get written steps in the install guide. If port 80 is taken, Lahe keeps `:7817`. `:7817` addresses keep working in every case. A port-free address still shows "Not secure" under `.lahe`; HTTPS to remove that is a follow-up.
 - **How long a document keeps its name after its file is gone:** forever. Names are small, and keeping them means an old bookmark still says what it was.
 
 ### Open
@@ -33,22 +34,4 @@ Chosen by the brief, for Ken to overrule in review:
 `.lahe.localhost` has none of these, needs no setup on any system, and its addresses survive an uninstall.
 
 **Recommendation:** print `.lahe.localhost`. Keep `.lahe` as an option that answers the same names, for typing by hand. If Ken still wants `.lahe` printed, the plan adds the copy, tab-guard, and header fallbacks (task 6.3), and the "Not secure" label stays.
-:::
-
-::: callout-question
-**Q2. Drop the port, so an address reads `folder.lahe/file`?** Ken prefers it, even as an extra setup step. Without a port in the address, the browser goes to port 80. Lahe cannot simply listen there: on this Mac, a normal program asking for port 80 is refused (checked on 2026-10-11). So each system needs a one-time admin step that sends port 80 on this computer to Lahe's own port:
-
-- **macOS:** a port forward on the loopback address, set up with the admin password in the same step that turns on `.lahe`. This is how other local dev tools give clean addresses.
-- **Linux:** a one-time admin setting that lets normal programs use port 80, or a port forward. Either takes `sudo` once.
-- **Windows:** usually allowed with no admin step, unless another program already holds port 80.
-
-The forward only touches requests to this computer's own loopback address on port 80. Requests to websites go to their own servers and never pass through it. The only other traffic it could catch is a local program that also expects port 80 on this computer, which is the "port 80 is taken" case below.
-
-Whatever the feature automates, `docs/INSTALL.md` writes out the steps by hand for each system, so a reader can reach `folder.lahe/file` on a system the setup command does not cover yet.
-
-If something else on the computer already uses port 80 (Docker, a local web server), Lahe keeps printing `:7817` and `lahe status` names the program in the way. `:7817` addresses keep working either way, so a bookmark never breaks when the forward is added or removed.
-
-Dropping the port fixes length, not the "Not secure" label. `folder.lahe/file` still carries the five costs in Q1. The only way to remove them under `.lahe` is serving HTTPS with a certificate Lahe makes and the computer trusts. That is a larger change with its own risks (a trusted certificate on Ken's machine), so it is not in this feature; it can be a follow-up.
-
-**Recommendation:** add the port-80 forward as part of the optional setup, on macOS first, with Linux and Windows in the same feature if the spikes go cleanly. Then the printed address is either `folder.lahe.localhost/file` (secure, no "Not secure" label) or `folder.lahe/file` (shortest), which is Q1.
 :::

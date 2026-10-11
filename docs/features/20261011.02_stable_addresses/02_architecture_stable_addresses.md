@@ -199,7 +199,7 @@ flowchart TD
 
 | System | `.lahe` lookups | Port-free address |
 |---|---|---|
-| macOS | `/etc/resolver/lahe`, done by `lahe install --lahe-names` | a loopback port forward from 80 to Lahe's port, for `127.0.0.1` and `::1`, loaded at boot. Waits on Q2 (drop the port) in the brief |
+| macOS | `/etc/resolver/lahe`, done by `lahe install --lahe-names` | a loopback port forward from 80 to Lahe's port, for `127.0.0.1` and `::1`, loaded at boot, done by `lahe install --lahe-names`. Approved by Ken |
 | Linux | a `systemd-resolved` drop-in that sends `~lahe` to the helper's name server, where `systemd-resolved` runs. Other setups: the guide says so and stops | a one-time setting that lets normal programs use port 80, then the helper also listens on 80 |
 | Windows | a name-resolution rule for `.lahe`. It cannot name a port, so the name server must also answer on port 53; the spike checks this | the helper also listens on 80 when nothing else holds it; usually no admin step |
 
