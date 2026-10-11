@@ -213,7 +213,7 @@ Full prose: [plan review](03_plan_stable_addresses_reviews.md).
 | PR7 | Ending answer after the skill ships | Accepted | Ending settled before PR 2 writes the skill and contract |
 | PR8 | Security fixes without rows | Accepted | V66, V68 to V70, V72, V73; V43 covers `library.lahe` |
 | PR9 | Headline promises without rows | Accepted | V65, V67; V37 covers `lahe review` naming a taken port |
-| PR10 | CI cannot prove login on Linux and Windows | Accepted | Rows reworded; Ken accepts the gap at the gate |
+| PR10 | CI cannot prove login on Linux and Windows | Accepted | Rows reworded; gap accepted: CI proves the service manager starts Lahe, and a reboot of the Mac proves login there |
 | PR11 | Spikes had no allowed CI path | Accepted | PR 0: a dispatch-only workflow that never fails or emails |
 | PR12 | New leak paths | Accepted | Leak rules in every builder's contract; spike teardown spelled out |
 | PR13 | Stopping old pids could kill a stranger | Accepted | Health probe and instance id checked before any stop |

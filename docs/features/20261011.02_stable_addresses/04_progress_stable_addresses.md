@@ -6,7 +6,7 @@
 
 ## Needs your attention
 
-- [ ] **Approve the plan's two process items:** a small dispatch-only CI workflow on main (it never runs on push and never emails you), and accepting that CI cannot prove "starts at login" on Linux and Windows. Your reboot of this Mac proves it on macOS.
+- [ ] **Approve a hand-run test workflow on GitHub.** We have no Linux or Windows machine, so the plan borrows GitHub's for two checks: that `.lahe.localhost` names load in browsers there, and that `lahe install` sets up the login item there. The workflow is one small file on main. It runs only when the orchestrator starts it by hand (GitHub only allows hand-started workflows that live on main), never on a push. Every step is set so a failure is written to the log instead of failing the run, so it never emails you. It is removed at cleanup.
 
 ## Currently working on
 
