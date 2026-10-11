@@ -388,3 +388,17 @@ test("V59 and V74: uninstall removes the resolver and the forward only when each
   assert.match(d.out(), /pf-anchor-lahe was not written by Lahe; left alone/);
   assert.match(d.out(), /\.lahe\.localhost addresses keep working/);
 });
+
+test("--port-80 again, with Lahe's forward already in place, is not mistaken for another program on port 80", async (t) => {
+  const w = world(t);
+  const port = await freePort();
+  const fake = withSudo(w, port);
+  const paths = rootPaths(w);
+  assert.equal(await installCommand.run(["--state-dir", w.dir, "--port", String(port), "--port-80"],
+    deps(w, { runner: fake.runner, portHolder: () => null, rootPaths: paths })), 0);
+  // Now port 80 answers, because the forward sends it to the helper.
+  const d = deps(w, { runner: fake.runner, portHolder: () => "a program", rootPaths: paths });
+  assert.equal(await installCommand.run(["--state-dir", w.dir, "--port", String(port), "--port-80"], d), 0, d.err());
+  assert.equal(fake.sudo.length, 2);
+  assert.equal(loginItem.readInstall(w.dir).port_80, true);
+});

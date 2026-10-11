@@ -295,7 +295,9 @@ async function adminSteps(env) {
     name_server_port: before.lahe_names === true ? before.name_server_port || loginItem.NAME_SERVER_PORT : null
   };
   if (env.port80) {
-    var holder = await env.portHolder();
+    // With Lahe's own forward in place, port 80 answers because it reaches the
+    // helper; that is not another program holding it.
+    var holder = before.port_80 === true ? null : await env.portHolder();
     if (holder) {
       out.port_80 = false;
       out.forward_rule = null;
