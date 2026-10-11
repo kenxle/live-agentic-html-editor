@@ -1,0 +1,163 @@
+# Old words stuck on the page after a restructure
+
+## Needs your call
+
+Pick a fix, or a mix, from "Ways to fix it" below. My recommendation is **B plus A**:
+
+- B: the page check does not reopen a card whose passage you later asked the agent to restructure.
+- A: a card the agent refused is never written onto the page.
+
+B stops the false alarm. A makes sure that if a false alarm still happens, it can never paste old words into the page.
+
+## The short version
+
+Your file was correct the whole time. Your browser was re-adding words from old cards, so the page and the file disagreed.
+
+It takes four steps, and every one of them works as designed on its own:
+
+1. You type loose lines. The agent places them and says handled.
+2. You ask the agent to reshape those lines (a file tree, a table). It does. The loose lines no longer exist as written.
+3. Your browser's **page check** sees the old lines missing, decides the agent's change was lost, and reopens the old card. Reopening also tells **replay** to write the old lines back into the page right away.
+4. The agent replies `not_handled` ("nothing is missing"). Our own instructions tell it to do that. But `not_handled` still counts as open work to replay, so the browser keeps writing the old lines back on every repaint.
+
+The file never gets the old lines. Only your screen does. That is the "edit stuck on the page while the agent says the file is right" you have been seeing.
+
+## The parts involved
+
+| Part | Where it runs | What it does |
+| --- | --- | --- |
+| The card (item) | stored in the review folder | One comment or edit. States: draft, ready, handled, not_handled. See [item lifecycle](../../diagrams/item_lifecycle.md) |
+| Free-writing run | a kind of card | New text you typed after a paragraph. Its words are kept as a list of blocks (`new_blocks`) |
+| Replay | your browser | After every repaint, walks every open card and writes its words onto the page if they are missing. See [replay branches](../../diagrams/replay_branches.md) |
+| Page check | your browser | After a repaint, looks at every *handled* card. If the card's words are gone from the page, it reopens the card with a "Reopened by the page check" note |
+| Handled check | the helper | When the agent says handled, reads the built page and holds the card if the words are not there |
+| The agent | its own process | Edits the source, replies handled, not_handled, or question |
+
+The key rule in the code: replay treats both `ready` and `not_handled` as open ([record.js, isOutstanding](../../../src/shared/record.js)). Replay only skips `handled` cards.
+
+## The whole flow
+
+```mermaid
+flowchart TD
+    A["You type loose lines under a paragraph<br/>(a free-writing card, rev 1)"] --> B["Agent puts them in the .md<br/>and replies handled"]
+    B --> C["You leave a separate comment:<br/>make this a table"]
+    C --> D["Agent rewrites the .md:<br/>the loose lines become table rows"]
+    D --> E["Page re-renders from the .md"]
+    E --> F{"Page check (browser):<br/>are the handled card's blocks<br/>on the page, word for word?"}
+    F -->|"yes"| OK["Nothing happens"]
+    F -->|"no: they are table cells now"| G["Card reopened as ready, rev 2,<br/>note: a block is not on the page"]
+    G --> H["Replay runs right away<br/>(the card is open again)"]
+    H --> I["Old line written back into the page,<br/>often inside the table"]
+    G --> J["Agent is woken for the reopened card"]
+    J --> K["Agent checks the .md: it is correct.<br/>Replies not_handled: nothing is missing"]
+    K --> L["Card is not_handled"]
+    L --> M{"Replay, every repaint:<br/>is this card open?"}
+    M -->|"not_handled counts as open"| I
+    I --> N["Page and file disagree.<br/>Agent says the file is right.<br/>You see stray lines."]
+```
+
+Two loops keep it going:
+
+- The page check does not fire twice for the same card and revision ([answeredPageCheckReopen](../../../src/shared/record.js)), so this is not an endless reopen loop.
+- The loop that stays is replay. It writes the refused card's words back after every repaint, for as long as the card exists.
+
+## Why the existing safety nets miss it
+
+- **The "handed over" rule only counts edits, not comments.** The page check already knows a block can be taken over by a later card. It only counts a later *hand edit* that starts from that block's exact words ([handedOverBlocks](../../../src/shared/record.js)). Your "make a table" was a comment, so the check doesn't treat it as a handover.
+- **The helper's check and the browser's check use different rules.** The helper says: if the agent changed the passage, in any words, it did work, so don't second-guess it. The browser's page check for free-writing has no such rule. It wants every block word for word.
+- **The agent's escape hatch makes things worse.** The skill and contract tell the agent to reply `not_handled` when the check is wrong. That takes the card off the agent's list. It does not stop replay, because replay counts `not_handled` as open.
+- **There is no "the page is right, drop this card" button.** You asked "how do I dismiss them?" Today you can only delete the card, which erases its history. So the agent's fallback was a fresh review, which loses all your history.
+
+## What actually happened, from the review's log
+
+The "Competitors" card in the hackathon review (timestamps as written in the log, UTC):
+
+| Time | What happened |
+| --- | --- |
+| 12:36:23 | You add the line "Competitors" under "The company you are hacking for". Card ready, rev 1 |
+| 12:36:41 | Agent places it, replies handled |
+| 12:36:45 | You comment "make a table" |
+| 12:37:13 | Agent turns the list into a table, replies handled |
+| 12:37:42 | Page check reopens the Competitors card, rev 2 ("a block landed with a different tag") |
+| 12:37:52 | Agent replies not_handled: "These lines are now rows in the research table you asked for" |
+| 12:44:03 | You comment "formatting is messed up in this table". Replay had put "Competitors" back inside the table |
+
+The folder-tree cards followed the same path at 12:27 to 12:28. Five cards in that review are stuck this way.
+
+The [bulletin row from 2026-10-08](../../BULLETIN.md) (LAHE-replayed-new-blocks-after-restructure) is the same bug. Its guess, "the layer replays handled new_blocks", is slightly off. Handled cards are not replayed. The page check reopens them first, and *then* they are replayed.
+
+## Ways to fix it
+
+Each option says what you would notice and what it costs.
+
+### A. Never write a refused card onto the page
+
+Replay skips `not_handled` cards. Your words stay on the card, with the agent's reason beside them, but they are no longer pasted into the page.
+
+- What you notice: after an agent refuses something, the page shows what the file says. You read your version on the card.
+- Cost: this changes a design rule. Today a refused edit stays visible on the page so your words are not lost from view. With A they live only on the card.
+- Size: small. One rule in replay, plus tests.
+- Fixes: the stuck loop for good, for any cause, not just restructures.
+
+### B. Don't reopen a card you later asked to restructure
+
+The page check counts a later handled *comment* on the same passage as a handover, the way it already counts a later edit. If you asked for a table and the agent made one, the old free-writing card counts as done.
+
+- What you notice: no "Reopened by the page check" on old cards after you ask for a restructure. No stray lines.
+- Cost: "the same passage" has to be decided. A comment points at a quoted region. The check would need to match that region to the run's blocks. A comment on a nearby heading might not match, and then the old behavior comes back.
+- Size: medium.
+- Fixes: the most common trigger, without changing what refused cards do.
+
+### C. Make the browser's check use the helper's rule
+
+When the source was written after the card was handled, the page check trusts that the agent changed the passage on purpose and does not reopen. This is the rule the helper already uses for a handled reply.
+
+- What you notice: same as B, for every kind of restructure, whether you asked by comment, by chat, or not at all.
+- Cost: weakens the page check's real job. It exists to catch a rebuild that quietly dropped your words, and a rebuild is a source write too. Some real losses would go unflagged.
+- Size: medium. The browser has to learn when the source last changed.
+
+### D. A reopen flags but does not write
+
+A page-check reopen marks the card and wakes the agent, but replay does not write the old words until the agent confirms they really are missing.
+
+- What you notice: false alarms show as a note on the card, never as stray text in the page.
+- Cost: today the immediate write is deliberate. It is how your bold or italic comes back after a rebuild dropped it. D delays that until the agent acts.
+- Size: medium. A new "flagged, not replayed" status on the card.
+
+### E. Let the agent say "restructured on request"
+
+Add a reply the agent can give, such as `handled --superseded-by <the comment's id>`. The browser records it as a handover, retires the card, and stops replaying it.
+
+- What you notice: the agent's reply on the card reads "turned into the table you asked for", and the card moves to Done.
+- Cost: relies on every agent using it correctly. It changes the contract and the skill, which travel together with four copies.
+- Size: medium.
+
+### F. Give you a "Keep the page" button
+
+On a refused or reopened card, a button that says the page is right. It retires the card into Done with its history kept, instead of deleting it.
+
+- What you notice: one click to clear a stuck card, with nothing lost.
+- Cost: it is a workaround. You still have to notice the stray line and click.
+- Size: small to medium.
+- Good alongside any other option, as the manual way out.
+
+### How they compare
+
+| Option | Stops stray lines | Stops false reopens | Changes a design rule | Size |
+| --- | --- | --- | --- | --- |
+| A. refused never written | yes, always | no | yes | small |
+| B. comment counts as handover | when the match works | when the match works | no | medium |
+| C. trust source writes | yes | yes | weakens the check | medium |
+| D. reopen flags only | yes | no, but harmless | yes | medium |
+| E. agent says superseded | when agents use it | no | contract change | medium |
+| F. Keep the page button | by hand | no | no | small to medium |
+
+## Related
+
+- [Bulletin row LAHE-replayed-new-blocks-after-restructure](../../BULLETIN.md). Same bug, and a second symptom: deleting the replayed lines on the page made them multiply. That is probably your deletion recorded as a new edit fighting the replayed card. I have not traced it yet.
+- [Item lifecycle](../../diagrams/item_lifecycle.md), [replay branches](../../diagrams/replay_branches.md).
+- Code: the page check is `runRevertCheck` in [src/layer/index.js](../../../src/layer/index.js) and `runCheckReason` in [src/layer/replay.js](../../../src/layer/replay.js).
+
+## Right now, for the hackathon article
+
+The five stuck cards will keep re-adding lines until they are gone. I have not touched that review, because another agent session owns it. The agent there already opened a fresh page, which works but drops the history. If you want the history kept, nothing short of a fix above keeps both.
