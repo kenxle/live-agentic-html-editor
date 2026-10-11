@@ -838,7 +838,7 @@ id="toc-smaller-notes-no-finding">Smaller notes, no finding</a></li>
 </nav>
 <h2 id="summary">Summary</h2>
 <p>Every document Lahe serves gets an address that keeps working, like
-<code>http://docs-features-20261011-02-stable-addresses.lahe.localhost:1483/01_brief_stable_addresses.md</code>.
+<code>http://docs_features_20261011-02-stable-addresses.lahe.localhost:1483/01_brief_stable_addresses.md</code>.
 A tab left open overnight, a history entry, or a bookmark loads the
 page, with no agent running. The address names the folder and the file,
 so a tab says what it is. One always-on Lahe server, started at login,
@@ -947,7 +947,7 @@ agent waits in the store, as it does after the Library's Open
 today.</li>
 </ol>
 <pre class="mermaid"><code>flowchart LR
-    Tab[&quot;tab, history, or bookmark&lt;br/&gt;live-agentic-html-editor-docs-ongoing.lahe.localhost:1483/STABLE_ADDRESSES.md&quot;] --&gt; Server[&quot;always-on Lahe server&lt;br/&gt;(started at login)&quot;]
+    Tab[&quot;tab, history, or bookmark&lt;br/&gt;live-agentic-html-editor_docs_ongoing.lahe.localhost:1483/STABLE_ADDRESSES.md&quot;] --&gt; Server[&quot;always-on Lahe server&lt;br/&gt;(started at login)&quot;]
     Server --&gt; Which{&quot;which folder is this name,&lt;br/&gt;which file is this path?&quot;}
     Which --&gt; Doc[&quot;serve that document&#39;s page,&lt;br/&gt;with its own review key&quot;]
     Doc --&gt; Store[(&quot;comments wait in the store&quot;)]
@@ -968,12 +968,13 @@ it does after the Library's Open today.</p>
 </div>
 <div class="callout callout-req">
 <p><strong>R3. The address names the folder and the file.</strong> The
-name is the folder plus its two parent folders, in path order, as
-lowercase words joined by dashes.
+name is the folder plus its two parent folders, in path order. Each
+folder name becomes lowercase words joined by dashes, and an underscore
+stands where each <code>/</code> was.
 <code>live-agentic-html-editor/docs/ongoing</code> becomes
-<code>live-agentic-html-editor-docs-ongoing</code>, and
+<code>live-agentic-html-editor_docs_ongoing</code>, and
 <code>docs/features/20261011.02_stable_addresses</code> becomes
-<code>docs-features-20261011-02-stable-addresses</code>. Ken reuses the
+<code>docs_features_20261011-02-stable-addresses</code>. Ken reuses the
 same folder layout in many repos, so a folder's own name alone would
 clash all the time. The home folder and anything above it are never part
 of a name. The file's path in that folder comes after the name, as it
@@ -1088,7 +1089,7 @@ the name <code>library</code>.</p>
 <ul>
 <li>The address bar is the UI. A name Ken can read at a glance matters
 more than a short one:
-<code>live-agentic-html-editor-docs-ongoing.lahe.localhost:1483/STABLE_ADDRESSES.md</code>
+<code>live-agentic-html-editor_docs_ongoing.lahe.localhost:1483/STABLE_ADDRESSES.md</code>
 beats
 <code>127.0.0.1:56055/STABLE_ADDRESSES-bd14d360685f150a.html</code>.</li>
 <li>The fallback is not an error. A <code>.lahe.localhost</code> address
