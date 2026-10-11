@@ -56,7 +56,7 @@ The user is Ken today, on a Mac laptop. Lahe is public, and other people run it 
 ```mermaid
 flowchart LR
     Tab["tab, history, or bookmark<br/>ongoing.lahe.localhost:7817/STABLE_ADDRESSES.md"] --> Server["always-on Lahe server<br/>(started at login)"]
-    Server --> Which{"which document<br/>is this name?"}
+    Server --> Which{"which folder is this name,<br/>which file is this path?"}
     Which --> Doc["serve that document's page,<br/>with its own review key"]
     Doc --> Store[("comments wait in the store")]
     Store --> Agent["an agent drains them<br/>when one is attached"]

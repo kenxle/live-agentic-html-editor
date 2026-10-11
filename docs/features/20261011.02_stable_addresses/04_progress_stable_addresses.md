@@ -1,6 +1,6 @@
 # Progress: Stable addresses
 
-**Phase 3, Architecture.** The brief is reviewed and updated; the architecture is written and two reviewers (security, architecture) are reading it. Nothing is waiting on you until the full set is ready. Last updated 2026-10-11 12:35.
+**Phase 4, Plan.** The plan is written and the plan reviewer is reading it. Both architecture reviews changed the design: one name per folder instead of per file, and `.lahe.localhost` recommended as the printed ending (your call at the review). Nothing is waiting on you until the full set is ready. Last updated 2026-10-11 12:48.
 
 **Docs:** [Decisions page](../../ongoing/STABLE_ADDRESSES.md) · [Crucible](00_crucible_stable_addresses.md) · [Brief](01_brief_stable_addresses.md) · [Architecture](02_architecture_stable_addresses.md) · [Plan](03_plan_stable_addresses.md)
 
@@ -12,8 +12,7 @@ Nothing is waiting on you.
 
 | Agent or task | Doing | Started | Branch |
 |---|---|---|---|
-| Security reviewer | Reviewing the architecture | 2026-10-11 12:35 | `feat/stable-addresses` |
-| Architecture reviewer | Reviewing the architecture | 2026-10-11 12:35 | `feat/stable-addresses` |
+| Plan reviewer | Reviewing the plan's workstreams and test table | 2026-10-11 12:48 | `feat/stable-addresses` |
 
 ## Phases
 
@@ -22,8 +21,8 @@ Nothing is waiting on you.
 | 0 Setup | done | 2026-10-11 |
 | 1 Crucible | done | 2026-10-11 |
 | 2 Brief | done | 2026-10-11 |
-| 3 Architecture | in progress | 2026-10-11 |
-| 4 Plan | not started | 2026-10-11 |
+| 3 Architecture | done | 2026-10-11 |
+| 4 Plan | in progress | 2026-10-11 |
 | 5 Human review | not started | 2026-10-11 |
 | 6 Implement | not started | 2026-10-11 |
 | 7 Verify | not started | 2026-10-11 |
@@ -63,6 +62,8 @@ Not shipped yet.
 
 ## Log
 
+- 2026-10-11 12:48: Plan written: four workstreams, five PRs, 64 verification rows. Plan review dispatched.
+- 2026-10-11 12:48: Architecture and security reviews returned 5 blockers between them. Architecture reworked: a name per folder (today's isolation unit) so paths, Markdown links, and rail rules keep working; binding is CLI-only; `.lahe` becomes a guarded Mac option with `.lahe.localhost` recommended as the printed ending, which reverses your earlier choice and is queued for your decision.
 - 2026-10-11 12:35: Architecture written. Security and architecture reviews dispatched.
 - 2026-10-11 12:35: PM review returned 12 findings (1 blocker: switching between `.lahe` and `.lahe.localhost` would kill addresses). All accepted into the brief. Recon found four blockers the architecture handles, including one worth your eye: a plain `.lahe` address is "Not secure" to the browser (see the architecture's failure modes).
 - 2026-10-11 12:27: Crucible and brief written from the decisions page. PM review dispatched.
