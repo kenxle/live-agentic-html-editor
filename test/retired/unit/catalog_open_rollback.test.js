@@ -1,3 +1,9 @@
+// RETIRED by stable addresses Step 3 (docs/features/20261011.02_stable_addresses).
+// Nothing runs this file: test:unit reads test/unit/. Ken approves deleting it at cleanup.
+// Why: it pins the rollback of an Open that reopened a closed session and started a page
+// server. Open no longer reopens sessions or starts servers (the helper serves every page),
+// so the state it rolls back no longer exists.
+
 "use strict";
 
 // An Open that fails AFTER its server started (final adversarial review,

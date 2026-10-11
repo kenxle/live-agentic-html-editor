@@ -1,3 +1,9 @@
+// RETIRED in the stable addresses fix round 2 (docs/features/20261011.02_stable_addresses).
+// Moved here from test/browser/ with git mv. Nothing runs it: Playwright reads test/browser/,
+// and this throwaway spike ran in every suite. Ken approves deleting it at cleanup.
+// Why: the Task 1.0 spike answered its question (dotted *.lahe.localhost names load in all
+// three lanes with no flag), and the stable addresses specs now load such names every run.
+
 // Task 1.0 spike (throwaway): does each Playwright lane load a page at a
 // dotted *.lahe.localhost name with no launch flag? Listens on 127.0.0.1 and
 // ::1 so the lane may resolve to either.
