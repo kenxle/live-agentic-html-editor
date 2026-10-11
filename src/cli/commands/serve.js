@@ -228,6 +228,15 @@ async function run(argv, deps) {
       onSelfStop: function () { selfStopped(0); }
     }));
   } catch (err) {
+    if (err && typeof err.pagesPort === "number") {
+      // The pages port, not the API port: say which one, so nobody goes
+      // looking for what holds the API port.
+      process.stderr.write(
+        "lahe serve: " + err.message + ". Free port " + err.pagesPort + ", or set " +
+          protocol.PAGES.PORT_ENV + " to another port.\n"
+      );
+      return 1;
+    }
     if (err && err.code === "EADDRINUSE") {
       var port = parsed.options.port === undefined ? protocol.DEFAULT_PORT : parsed.options.port;
       var already = await service.probeHealth(protocol.DEFAULT_HOST, port);
