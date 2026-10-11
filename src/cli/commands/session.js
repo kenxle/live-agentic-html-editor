@@ -540,7 +540,8 @@ async function run(argv, options) {
       var helperRun = await startHelper(dir, port);
       var helperNote = "; shared helper already running";
       if (helperRun.started) helperNote = helperRun.stale ? "; shared helper restarted" : "; shared helper started";
-      else if (helperRun.keptForReviewer) helperNote = "; shared helper left running for an open review page";
+      // The helper line below says why: an open review page, or a busy helper.
+      else if (helperRun.keptForReviewer) helperNote = "; shared helper left running";
       var message =
         "agent session " + args.id + (handedOff ? " taken over explicitly" : " reopened") +
           helperNote +

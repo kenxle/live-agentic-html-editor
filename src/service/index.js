@@ -182,19 +182,6 @@ function pagesPortFrom(opts) {
 }
 
 /**
- * Whether Lahe is installed as a login item, for the start log line. The
- * install workstream writes install.json; until it exists this says "none".
- */
-function installState(dir) {
-  try {
-    var parsed = JSON.parse(fs.readFileSync(path.join(dir, "install.json"), "utf8"));
-    return parsed && typeof parsed.system === "string" ? "installed (" + parsed.system + ")" : "install.json unreadable";
-  } catch (err) {
-    return err && err.code === "ENOENT" ? "none, so a command starts the helper when it is needed" : "install.json unreadable";
-  }
-}
-
-/**
  * Start the helper.
  *
  * @param {{port?: number, host?: string, stateDir?: string, reviews?: string[],
@@ -915,8 +902,7 @@ async function serve(options) {
   log.helperLog(
     "pages on port " + boundPagesPort + "; addresses print as <name>." + report.printed_ending +
       " because " + report.printed_ending_reason + "; " +
-      (report.port_free.on ? "printed without the port" : "printed with :" + boundPagesPort + " because " + report.port_free.reason) +
-      "; install: " + installState(dir)
+      (report.port_free.on ? "printed without the port" : "printed with :" + boundPagesPort + " because " + report.port_free.reason)
   );
   log.helperLog(
     installed && alwaysOn

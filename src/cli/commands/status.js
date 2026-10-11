@@ -59,6 +59,7 @@ var catalogSitesModule = require("../../service/catalog_sites.js");
 var sitesModule = require("../../service/sites.js");
 var markdownModule = require("../../service/markdown.js");
 var service = require("../../service/index.js");
+var loginItemModule = require("../../service/login_item.js");
 
 // Shared CLI codes. OK means status completed, whether or not it found an item.
 var EXIT = protocol.CLI_EXIT;
@@ -334,6 +335,26 @@ function portFree(port) {
       probe.close(function () { resolve(true); });
     });
   });
+}
+
+/**
+ * The install lines: whether a login item runs the helper (what install wrote
+ * into service.json), and the reinstall sentence when the Node the login item
+ * names is gone (login_item.reinstallReason). [] when there is nothing to say.
+ */
+function installLines(dir, ready, helperRunning) {
+  var out = [];
+  var install = ready && ready.install && typeof ready.install === "object" ? ready.install : null;
+  if (helperRunning && install && install.system) {
+    out.push("install   login item " + (install.label || "") + " (" + install.system + ") runs the helper; it does not stop when quiet");
+  } else if (helperRunning && ready && ready.always_on !== true) {
+    out.push("install   none; a lahe command starts the helper when it is needed, and it stops when quiet");
+  }
+  var reinstall = null;
+  try { reinstall = loginItemModule.reinstallReason(loginItemModule.readInstall(dir)); } catch (err) { reinstall = null; }
+  if (reinstall) out.push("install   " + reinstall);
+  if (out.length) out.push("");
+  return out;
 }
 
 /**
@@ -1446,7 +1467,7 @@ async function run(argv, options) {
   }
 
   var helperRunning = !!helperOrigin && !!(await service.probeHealth(protocol.DEFAULT_HOST, ready.port));
-  out((await pagesLines(ready, helperRunning)).concat(lines, catalogLines(catalogPending, dir)).join("\n") + "\n");
+  out((await pagesLines(ready, helperRunning)).concat(installLines(dir, ready, helperRunning), lines, catalogLines(catalogPending, dir)).join("\n") + "\n");
   return EXIT.OK;
 }
 
@@ -1465,6 +1486,7 @@ module.exports = {
   servedViaLine: servedViaLine,
   sitePages: sitePages,
   pagesLines: pagesLines,
+  installLines: installLines,
   readerDescriber: readerDescriber,
   excerpt: excerpt,
   PAGE_TEXT_LABEL: PAGE_TEXT_LABEL,
