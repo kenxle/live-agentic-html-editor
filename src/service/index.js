@@ -707,7 +707,10 @@ async function serve(options) {
 
     if (route.name === "health" && outcome && outcome.body) {
       outcome.body.always_on = alwaysOn;
-      outcome.body.state_id = stateId;
+      // The state-folder id goes only to a caller with no Origin: the CLI.
+      // /health answers any page, and a permanent random value every website
+      // can read is a tracking ID (security review S1).
+      if (origin === undefined) outcome.body.state_id = stateId;
     }
 
     if (outcome && outcome.raw) {
