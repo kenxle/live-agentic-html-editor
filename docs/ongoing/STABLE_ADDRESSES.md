@@ -16,7 +16,7 @@ Stable addresses were the last option on [the Library ideas page](DOCUMENT_INDEX
 - A short `docname.lahe` ending is an optional extra per system. The one-time setup differs on Mac, Linux, and Windows.
 - "Start at login" is a small setup step per system (macOS login item, a Linux user service, a Windows scheduled task). The server they start is the same code.
 
-**Needs your answer:** the four questions at the bottom.
+**Status:** all four questions are settled. The feature-forge doc set is being written next.
 
 ## Why your old links fail today
 
@@ -156,4 +156,4 @@ While checking this, I found 63 page-server processes left running from test run
 2. ~~Option D or option A?~~ Settled: option D, with `docname.lahe` addresses from the start. If the one-time setup has not been done, or fails, Lahe falls back to `docname.lahe.localhost`.
    - You said this probably means moving to an install step, and that is fine. One note: the install step is needed for the setup (the `.lahe` name lookup and start at login), not for new packages. The tiny name server can be built from what Node already ships, so the "no outside packages" rule can still hold. A `lahe install` command that asks for your password once would do it.
 3. ~~Login item first, or go straight to a menu-bar app?~~ Settled: the login item ships with this feature. The Mac menu-bar companion app, with its Library link, is its own follow-up.
-4. Ready for this to become a feature-forge feature, starting with the brief?
+4. ~~Ready for this to become a feature-forge feature?~~ Settled: yes, the full forge. The agent writes the whole doc set (brief, architecture, plan) from this page without stopping, and you review it before any code.
