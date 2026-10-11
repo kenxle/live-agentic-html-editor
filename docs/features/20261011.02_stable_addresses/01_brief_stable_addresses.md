@@ -2,7 +2,7 @@
 
 ## Summary
 
-Every document Lahe serves gets an address that keeps working: `http://stable-addresses.lahe:7820/`. A tab left open overnight, a history entry, or a bookmark loads the page, with no agent running. The address names the document, so a tab says what it is. One always-on Lahe server, started at login, answers for every document on one port. Each document's name is its own browser origin, so documents stay walled off from each other as they are today.
+Every document Lahe serves gets an address that keeps working, like `http://01-brief-stable-addresses.lahe:7820/`. A tab left open overnight, a history entry, or a bookmark loads the page, with no agent running. The address names the document, so a tab says what it is. One always-on Lahe server, started at login, answers for every document on one port. Each document's name is its own browser origin, so documents stay walled off from each other as they are today.
 
 ## Problem, User, and Context
 
@@ -21,6 +21,15 @@ flowchart TD
 
 The settled decisions, and the reasoning Ken reviewed, are on [the decisions page](../../ongoing/STABLE_ADDRESSES.md). Prior work: [the crucible](00_crucible_stable_addresses.md); option D on [the Library ideas page](../../ongoing/DOCUMENT_INDEX_IDEAS.md), dropped on 2026-09-22 and revisited here.
 
+**What "a document" means here:** one file on disk. The same file gets the same address every time it is served, in any review.
+
+**Related bulletin rows:** this feature closes or changes four open rows:
+
+- LAHE-static-server-host-check (filed twice): page servers do not check the Host header. The always-on server checks it (requirement 10, only this computer can reach it).
+- LAHE-idle-battery-cost: finished sessions' page servers keep running. There are no per-session page servers after this feature. Live tabs still poll, which requirement 11 (light when idle) measures.
+- LAHE-library-quiet-close-no-self-stop: the helper stays up after a Library close. The server is meant to stay up now, so the row closes.
+- LAHE-title-recorded-late: titles are only recorded after a comment. Names come from file names (requirement 3), so this row is not needed for addresses.
+
 The user is Ken today, on a Mac laptop. Lahe is public, and other people run it on Mac, Linux, and Windows, so nothing here may be Mac-only in the core.
 
 ## Non-Goals
@@ -28,19 +37,20 @@ The user is Ken today, on a Mac laptop. Lahe is public, and other people run it 
 ::: callout-nongoal
 - Not reviving tabs opened before this feature ships. Their addresses used ports nothing will listen on again. The Library's Open moves them to a stable address.
 - Not stable addresses for pages served by a server Lahe does not own, like an app's own dev server. Lahe reviews those where they run.
-- Not a better story for deleted or moved files. A gone file gets a plain "this file is gone" page with a link to the Library, and no more.
+- Not a better story for deleted or moved files, beyond requirement 13 (worktree copies) and a plain "this file is gone" page.
 - Not the Mac menu-bar companion app. It is its own follow-up.
 - Not a single-file build of Lahe that runs without Node. That stays open for later.
-- Not a change to agent sessions, takeover, or the monitor. Sessions still own reviews; they stop owning the page servers.
+- Not a change to how agents run a review: `lahe review`, the monitor, draining, replying, and takeover work as they do now. What changes underneath is who keeps pages served (the always-on server, not the session) and when the server stops (it does not, once installed).
+- Not a change of address when a Library row is renamed. The address comes from the file name and stays put.
 - Not new outside packages. The zero-runtime-dependency rule holds; the install step is for setup only.
 :::
 
 ## Solution Outline
 
 1. **One always-on Lahe server.** It starts when Ken logs in and restarts if it stops. It answers for every document Lahe serves, whether or not an agent is working on it.
-2. **An address per document, named after it.** The first time a document is served, it gets a short name from its title or file name. The name never changes after that. The address is `http://<name>.lahe:<port>/`.
+2. **An address per document, named after its file.** The first time a file is served, it gets a short name from its file name. The name stays the same after that. The address is `http://<name>.lahe:<port>/`.
 3. **One shared port.** Every document uses the same port. The server reads the name in the address to know which document was asked for.
-4. **`.lahe` after a one-time setup, `.lahe.localhost` without it.** A setup step, run once with an admin password, teaches the computer that `.lahe` names mean "this computer". Until that is done, or if it fails, every address uses `.lahe.localhost` instead, which every browser already sends to this computer.
+4. **`.lahe` after a one-time setup, `.lahe.localhost` without it.** A setup step, run once with an admin password, teaches the computer that `.lahe` names mean "this computer". Until that is done, or if it fails, `lahe review` prints the `.lahe.localhost` address instead, which every browser already sends to this computer. The server answers both endings for every name, so an address that worked once keeps working whichever ending is in use.
 5. **Agents keep working the same way.** `lahe review` prints the stable address. Sessions, the monitor, and takeover are unchanged. A comment left on a page with no agent waits in the store, as it does after the Library's Open today.
 
 ```mermaid
@@ -55,7 +65,7 @@ flowchart LR
 ## Requirements
 
 ::: callout-req
-**R1. An old address keeps working.** A document's address loads its page after the agent session closes, after any idle time, after the server restarts, and after a reboot. Nobody has to run a command first.
+**R1. An old address keeps working.** Once Lahe is installed, a document's address loads its page after the agent session closes, after any idle time, after the server restarts, and after a reboot. Nobody has to run a command first. Without the install, see requirement 7 (starts at login).
 :::
 
 ::: callout-req
@@ -63,7 +73,7 @@ flowchart LR
 :::
 
 ::: callout-req
-**R3. The address names the document.** The name comes from the document's title or file name, in lowercase words joined by dashes. Two documents with the same name get a short tag to tell them apart. A document's name is fixed the first time it is served and never changes, even if its title does.
+**R3. The address names the file.** The name comes from the file name, in lowercase words joined by dashes: `01_brief_stable_addresses.md` becomes `01-brief-stable-addresses`. Two different files with the same name get a short tag from their folder to tell them apart, like `readme-personal`. A file keeps its name once it has one. Serving the same file again, in any review, gives the same address.
 :::
 
 ::: callout-req
@@ -71,19 +81,23 @@ flowchart LR
 :::
 
 ::: callout-req
-**R5. One port for every document.** All documents share one port, picked once at install and kept away from common dev-server ports. If something else holds that port when the server starts, the server says so plainly in its log and in `lahe status`, rather than moving documents to random ports.
+**R5. One port for every document.** All documents share one port: the helper's own port, 7817 unless the install picks another. It is kept away from common dev-server ports. If something else holds that port when the server starts, `lahe review`, `lahe status`, and the log say so plainly, naming the port, rather than moving documents to random ports.
 :::
 
 ::: callout-req
-**R6. `.lahe` with a fallback.** After the one-time setup, addresses end in `.lahe`. The setup asks for an admin password once, ever. Without the setup, or when the setup is broken, addresses end in `.lahe.localhost` and everything else works the same. `lahe status` says which one is in use and why.
+**R6. `.lahe` with a fallback, and both always answer.** On macOS, after the one-time setup, `lahe review` prints addresses ending in `.lahe`. The setup asks for an admin password once at setup. On Linux and Windows, and on a Mac without the setup or with a broken one, it prints `.lahe.localhost` addresses. The server answers both endings for every name, so installing, uninstalling, or a broken setup never makes an address that worked stop working. `lahe status` says which ending is printed and why.
 :::
 
 ::: callout-req
-**R7. Starts at login on every system.** An install command sets the server to start at login and restart if it stops, on macOS, Linux, and Windows. An uninstall command removes that, and removes the `.lahe` setup. Running Lahe from a clone without installing still works: `lahe review` starts the server as it does today, and addresses are stable for as long as it runs.
+**R7. Starts at login on every system.** An install command sets the server to start at login and restart if it stops, on macOS, Linux, and Windows. An uninstall command removes that, and removes the `.lahe` setup. Running Lahe from a clone without installing still works: `lahe review` starts the server as it does today, and a document's address stays the same. Its old tabs load again whenever the server is running, and are dead while it is not.
 :::
 
 ::: callout-req
 **R8. Every existing document can get an address.** Any review already in the state folder, served by Lahe, gets its stable address the next time it is served: by `lahe review`, or by the Library's Open. The Library's rows link to stable addresses.
+:::
+
+::: callout-req
+**R8a. Links between pages keep working.** A link from one Lahe page to another file Lahe serves opens that file at its own stable address. Images, styles, and scripts a page loads by relative path keep loading, as they do today.
 :::
 
 ::: callout-req
@@ -95,19 +109,30 @@ flowchart LR
 :::
 
 ::: callout-req
-**R11. Light when idle.** The always-on server uses no CPU when nothing is open and about as much memory as one helper does today. The plan measures it before and after.
+**R11. Light when idle.** The plan measures the always-on server in two states, and sets a limit for each before building: nothing open, and Ken's usual number of Lahe tabs left open overnight. Both are compared with today's helper plus its page servers.
 :::
 
 ::: callout-req
-**R12. Agents are told.** `lahe review` prints the stable address. The skill, the contract inside every review, `docs/CLI.md`, and the diagrams describe the new addresses and the always-on server, and none of them still describes per-session page servers or random ports.
+**R12. Agents are told.** `lahe review` prints the stable address. The skill, the contract inside every review, `docs/CLI.md`, `docs/ongoing/LIBRARY.md`, `docs/ongoing/SESSION_OWNERSHIP.md`, and the diagrams describe the new addresses and the always-on server. None of them still describes per-session page servers or random ports.
+:::
+
+::: callout-req
+**R13. A worktree document survives its worktree.** When a file served from a worktree is gone because the worktree was removed, its address serves the same file from the main checkout, if it exists there. The Library already makes this mapping for its Open.
+:::
+
+::: callout-req
+**R14. Wrong or gone addresses say so.** A name Lahe does not know shows a short page saying so, with a link to the Library. A file that is gone, with no main-checkout copy, shows a page naming the file and linking to the Library.
+:::
+
+::: callout-req
+**R15. The Library has a stable address.** The Library answers at `library.lahe:<port>` (and `library.lahe.localhost:<port>`). No document can take the name `library`.
 :::
 
 ## UX Notes
 
-- The address bar is the UI. A name Ken can read at a glance matters more than a short one: `stable-addresses.lahe:7820` beats `ra192291dfb29.lahe:7820`.
+- The address bar is the UI. A name Ken can read at a glance matters more than a short one: `01-brief-stable-addresses.lahe:7820` beats `ra192291dfb29.lahe:7820`.
 - The fallback is not an error. A `.lahe.localhost` address works the same way; it is only longer.
-- Typing `stable-addresses.lahe` by hand without `http://` may make the browser search instead. Links from history and bookmarks work either way. The install step's output says this once.
-- The Library is reachable at a stable name too (`library.lahe:<port>`), so a bookmark to it never dies.
+- Typing `01-brief-stable-addresses.lahe` by hand without `http://` may make the browser search instead. Links from history and bookmarks work either way. The install step's output says this once.
 
 ## Analytics / Logging
 
@@ -115,7 +140,7 @@ The helper log records, once per start: the port, whether `.lahe` or `.lahe.loca
 
 ## Rollout / Flags
 
-No flag. The install step is the switch: until it runs, Lahe behaves as described under R7 (the server starts on first use and addresses stay stable while it runs, using `.lahe.localhost`). Pages opened before the change stay dead, and the Library's Open moves each to its stable address. Uninstall puts the system back as it was. The login item names the Node that ran the install, the same way `npm run install-cli` does today. Removing that Node means running the install again, and `lahe status` says so.
+No flag. The install step is the switch: until it runs, Lahe behaves as requirement 7 (starts at login) describes for a clone: the server starts on first use, and addresses stay the same while it runs, using `.lahe.localhost`. Pages opened before the change stay dead, and the Library's Open moves each to its stable address. Uninstall removes the login item and the `.lahe` setup; the addresses keep their names. The login item names the Node that ran the install, the same way `npm run install-cli` does today. Removing that Node means running the install again, and `lahe status` says so.
 
 ## Questions and Decisions
 
@@ -123,4 +148,19 @@ No flag. The install step is the switch: until it runs, Lahe behaves as describe
 
 ## PM Review
 
-Not yet run.
+Full prose in [the reviews file](01_brief_stable_addresses_reviews.md).
+
+| # | Finding | Disposition | Rationale |
+|---|---------|-------------|-----------|
+| RF1 | Switching endings would kill addresses made under the other | Accepted | The server answers both endings for every name (requirement 6) |
+| RF2 | "Works after reboot" contradicted the no-install case | Accepted | Requirement 1 now applies once installed; requirement 7 says what a clone gets |
+| RF3 | "A document" was undefined | Accepted | Defined as one file; same file, same address; links between pages added as requirement 8a |
+| RF4 | Worktree documents die with their worktree | Accepted | Requirement 13 serves the main-checkout copy, reusing the Library's mapping. Chosen without Ken, for review |
+| RF5 | Idle cost measured the wrong idle | Accepted | Requirement 11 measures nothing open and Ken's usual tabs overnight, with limits set first |
+| RF6 | Which systems get `.lahe` was unclear | Accepted | macOS in this feature; Linux and Windows use `.lahe.localhost` |
+| RF7 | Non-goal about sessions was false; docs list incomplete | Accepted | Non-goal reworded; LIBRARY.md and SESSION_OWNERSHIP.md added to requirement 12 |
+| RF8 | Library address and gone-file page lived outside requirements | Accepted | Requirements 14 and 15 |
+| RF9 | Names will come from file names | Accepted | Requirement 3 uses the file name; example updated; Library rename keeps the address |
+| RF10 | Related bulletin rows not named | Accepted | Listed under the problem |
+| RF11 | No word on a taken port or a mistyped name | Accepted | Requirements 5 and 14 |
+| RF12 | Bare requirement number, absolutes, broken link | Accepted | Fixed |
