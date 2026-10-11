@@ -2,12 +2,13 @@
 
 ## Needs your call
 
-Pick a fix, or a mix, from "Ways to fix it" below. My recommendation is **B plus A**:
+Pick a fix, or a mix, from "Ways to fix it" below. My recommendation, updated after your replay question, is **A plus D, then G**:
 
-- B: the page check does not reopen a card whose passage you later asked the agent to restructure.
 - A: a card the agent refused is never written onto the page.
+- D: a card the page check reopens is flagged, not written back, until the agent answers it.
+- G: the page check counts a block found in a different shape (a table cell, a list item) as present.
 
-B stops the false alarm. A makes sure that if a false alarm still happens, it can never paste old words into the page.
+A and D together set one rule: the page differs from the file only while an edit is still waiting for the agent's first answer. G then cuts the false alarms, so D's flag rarely shows up. See "Why does replay let the page differ from the file?" below.
 
 ## The short version
 
@@ -85,6 +86,23 @@ The "Competitors" card in the hackathon review (timestamps as written in the log
 The folder-tree cards followed the same path at 12:27 to 12:28. Five cards in that review are stuck this way.
 
 The [bulletin row from 2026-10-08](../../BULLETIN.md) (LAHE-replayed-new-blocks-after-restructure) is the same bug. Its guess, "the layer replays handled new_blocks", is slightly off. Handled cards are not replayed. The page check reopens them first, and *then* they are replayed.
+
+## Why does replay let the page differ from the file?
+
+On purpose, for one reason: so your edits don't vanish while the agent is still working on them.
+
+You type straight into the page. The file doesn't have your words until the agent puts them there. Meanwhile the page reloads for other reasons: the agent landed a different change, the Markdown re-rendered, a dev server hot-reloaded. Each reload draws the page from the file, which would wipe every edit the agent hasn't reached yet. Replay draws them back on top. That is decision D7 in the [architecture](../20260812.01_live_agentic_html_editor/02_architecture_live_agentic_html_editor.md), and it grounds two brief rules: nothing you type is lost, and the page keeps working while it changes underneath you.
+
+So the page is meant to be "the file, plus your edits the agent hasn't answered yet." That gap is supposed to be temporary. It should close when the agent answers.
+
+**Where the logic isn't sound:** replay doesn't use "has the agent answered?" It uses "is the card open?", and two kinds of card count as open even though the agent has answered:
+
+- **Refused cards** (`not_handled`). The agent has answered "no", but the page keeps showing your version forever.
+- **Cards the page check reopened.** The agent already said handled. The browser then decides on its own that the change is missing and redraws your old words, before the agent has said anything new.
+
+In both cases the gap never closes, because nothing the agent does can close it. That's the bug you've been seeing.
+
+A sounder rule would be: **the page differs from the file only by edits still waiting for the agent's first answer, at their current revision.** Once the agent answers, the page is the file, and any disagreement shows on the card, not in the page. Options A and D below are the two halves of that rule. Together they make it the principle instead of a patch.
 
 ## Is this a fingerprinting problem?
 
