@@ -218,7 +218,7 @@ function cleanMounts(mounts) {
   Object.keys(mounts).forEach(function (prefix) {
     var dirPath = mounts[prefix];
     if (!MOUNT_PREFIX.test(prefix) || typeof dirPath !== "string" || !path.isAbsolute(dirPath)) return;
-    // Never a hidden folder, or one outside home (markdownLinks.mountableDir).
+    // Never a folder outside home, by real path (markdownLinks.mountableDir).
     if (!markdownLinks.mountableDir(dirPath)) return;
     out[prefix] = dirPath;
   });

@@ -1026,7 +1026,8 @@ it for that review, which is D11's stated residual risk rather than a hole.
 
 **Residual risk, stated: pages are up whenever the helper is.** Websites cannot reach a page: the
 Host check refuses any name Lahe did not grant, every page response carries
-`Cross-Origin-Resource-Policy: same-origin`, and the Origin check refuses another site. Other
+`Cross-Origin-Resource-Policy: same-origin` and `Content-Security-Policy: frame-ancestors 'self'`, and the
+Origin check refuses another site. Other
 accounts on the same computer, and sandboxed local programs with network access, are not stopped.
 They can load a page at its stable address, and a site's name follows its folder path, so it can be
 guessed. The page carries its review's token in its script tag. With that token, a program that is

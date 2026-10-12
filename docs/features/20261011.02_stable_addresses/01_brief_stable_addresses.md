@@ -77,7 +77,7 @@ flowchart LR
 :::
 
 ::: callout-req
-**R4. Documents stay walled off.** Each folder's name is its own browser origin, the same unit a page server is today. JavaScript on a page in one folder cannot read pages, comment keys, or drafts from another folder, and cannot use the Library's controls. Files in the same folder share an origin, as they do today. Hidden files are never served.
+**R4. Documents stay walled off.** Each folder's name is its own browser origin, the same unit a page server is today. JavaScript on a page in one folder cannot read pages, comment keys, or drafts from another folder, and cannot use the Library's controls. Files in the same folder share an origin, as they do today. Hidden files are served like any other file: worktrees usually live in hidden folders.
 :::
 
 ::: callout-req

@@ -503,7 +503,7 @@ Every item given to core is done, each with a test (failing first where it is a 
 
 | Item | Done | Test |
 | --- | --- | --- |
-| S2. A Markdown link could mount `~/.ssh` and serve it all day | yes: `markdownLinks.mountableDir` refuses a folder with a hidden segment below home (or outside home) when a link makes the mount, in `sites.cleanMounts`, and in `locate()` at serve time | `test/unit/mount_hidden_folders.test.js`; `markdown_links.test.js` updated (it pinned the old rule) |
+| S2. A Markdown link could mount `~/.ssh` and serve it all day | not as asked: Ken's rule is that hidden files are served and linked like any other file (worktrees live in hidden folders). `markdownLinks.mountableDir` keeps the home boundary by real path, checked when a link makes the mount, in `sites.cleanMounts`, and in `locate()` at serve time | `test/unit/mount_home_boundary.test.js`, `test/unit/hidden_files_served.test.js` |
 | S3. A taken `[::1]` twin left the helper on 127.0.0.1 alone | yes: only EADDRNOTAVAIL and EAFNOSUPPORT log and go on; anything else closes the listeners and refuses to start, naming the `[::1]` port | `test/unit/ipv6_twin_taken.test.js`; V10 in `sites_dispatch.test.js` now proves the no-IPv6 path through an in-process `ipv6Loopback` option |
 | S4. The residual risk understated what another account can do | yes: `docs/CONTRACTS.md` says loading a page yields the token, and a non-browser client can then read and write the review, which reaches the agent | doc |
 | S5. A `.git` file could name any folder as the main checkout | yes: recorded only when `<main>/.git/worktrees/<id>/gitdir` names the same `.git` file | new V5 case in `sites_registry.test.js`; fixtures in `library_open_sites.test.js` and `stable_addresses_sites.spec.js` gain git's back-link |
@@ -517,7 +517,7 @@ Every item given to core is done, each with a test (failing first where it is a 
 ### Notes for the reviewers
 
 - R3 covers `lahe review` and `lahe write` only. The Library's Open (`catalog_sites.planOf`, the library builder's file) still binds a file's own folder. A file opened from the Library under an already reviewed folder can still get a second address there.
-- With the S2 rule, a link to a file in a hidden folder below home (for example `~/.config/notes/x.md`) now renders inert instead of opening. That is the intended trade.
+- A link to a file in a hidden folder below home (for example `~/.config/notes/x.md`) opens like any other link. Hidden files are served like any other file; the home boundary and real-path containment are what bound a mount.
 - The `skills/lahe/SKILL.md` change needs `npm run install-skills` at the checkpoint (not run here: it writes into Ken's live skill folder).
 
 ### Files changed
@@ -583,6 +583,45 @@ The card at the new address, from the browser test above:
 ### Next: each page carries its own comments
 
 Ken widened the linked-document fix to every page. The design note is [each_page_its_own_comments.md](../parts/architecture/each_page_its_own_comments.md). It recommends making `records.read` per file rather than per review. Nothing from it is built yet.
+
+## Hidden files are served like any other file
+
+### Summary
+
+Hidden files get no special handling: they are served and linked like any other file, the rule Ken set on main. Worktrees usually live in hidden folders (`repo/.claude/worktrees/<name>/`), and refusing hidden segments broke every document in one.
+
+### What it does
+
+- A dotfile under a site root, or under a mount, is served.
+- A Markdown link into a hidden folder under home is a mount, like any other link.
+- What still bounds a request:
+  - `decodePath` refuses dot segments, encoded slashes and NUL.
+  - Real-path containment holds for the site root and every mount.
+  - A mount must be under the home folder by real path. That is checked when a link makes the mount, in `sites.cleanMounts`, and at serve time, so a mount in `sites.json` whose folder is outside home serves nothing.
+  - Nothing inside the state folder is served.
+  - The 16-mount cap holds.
+  - Lahe's reserved names (`/.lahe-source/`, `/.lahe-library/`, `.lahe-doc-style.css`, `.lahe-fonts/`, `.lahe-styles`) are answered by Lahe and never read from the folder.
+- Every page response carries `Content-Security-Policy: frame-ancestors 'self'`: only the page's own site may frame it. This closes a gap the security review of the design note found in the current build.
+- `catalog_reader.js` `hasHiddenSegment` is left as it is. It guards only the Library's fallback for a document whose worktree is gone: the main checkout's copy is refused when its path inside the repository has a hidden segment (for example `repo/.github/x.md`). It does not stop the Library listing or opening a document in a live worktree under `.claude/worktrees/`, because the hidden part there is outside the path it checks. It is the library builder's file.
+
+### Tests
+
+- `test/unit/hidden_files_served.test.js` (6):
+  - a worktree Markdown review under `.claude` serves, and its sibling links work;
+  - a link into a hidden folder under home is served;
+  - a hidden file under the root and under a mount is served;
+  - the reserved names answer as before, and dot segments and encoded slashes are refused;
+  - a symlink out of a mount is refused;
+  - every page carries `frame-ancestors 'self'`.
+  - The first three failed before the change, and so did the frame-ancestors test.
+- Rewritten to the restored rule:
+  - `mount_home_boundary.test.js` (renamed from `mount_hidden_folders.test.js`, home boundary only);
+  - the two V14 tests in `sites_pages.test.js`;
+  - the hidden-link test in `markdown_links.test.js`;
+  - the `fileForPage` case in `sites_mappers.test.js`.
+- `npm run test:unit`, once: 2654 tests, 2652 pass, 0 fail, 2 todo.
+- Chromium: `stable_addresses_sites` 7 of 7. `stable_addresses_mappers` 4 of 4. In one run, V27 (an agent's edit reloads only its own page) missed its poll timing; it passed alone and on the next full run.
+- `lahe.js serve` count: 2 before. After: 3, and the third is a helper from the `sa-library` worktree, not this one.
 
 ## Cleanup needed
 

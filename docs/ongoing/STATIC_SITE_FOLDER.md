@@ -57,11 +57,13 @@ folders, served under `/.lahe-source/<hash>/` mounts. Spec:
 - Only recorded link targets get the rail, never their neighbours. An `--only`
   review keeps its links read-only.
 - A notes page from `lahe write` is outside all of this. Its own address serves that page and nothing else, so no folder, link, or mount rule applies (`docs/ongoing/FREE_WRITING.md`).
-- Hidden (dot-prefixed) files and folders are refused. A request whose path
-  has a segment starting with a dot, in any spelling, is a 404, and a Markdown
-  link into a hidden folder below home renders inert and mounts nothing. A
+- Hidden (dot-prefixed) files and folders get no special handling: the served
+  folder and a linked folder serve them like any other file, and a link to one
+  translates like any other link. Worktrees usually live in hidden folders
+  (`repo/.claude/worktrees/<name>/`). What bounds a request is containment: a
   path, or a symlink, that resolves outside the served folder or the mount is
-  refused too, and so is anything inside the state folder.
+  refused, a mount must be under the home folder, and nothing inside the state
+  folder is served. Lahe's reserved names are never read from the folder.
 - If no review answers for a page, the helper serves it without the rail. Nothing
   is created.
 - The helper, not the page, names the file an item was made on: review.json's

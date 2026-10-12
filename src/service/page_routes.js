@@ -359,10 +359,6 @@ function decodePath(rawPath) {
   return decoded;
 }
 
-function hasHiddenSegment(relative) {
-  return relative.split("/").some(function (s) { return s.charAt(0) === "."; });
-}
-
 /**
  * Where a decoded path lands under a site: the folder it is read from, the URL
  * prefix that folder is served at, the path under it, and whether it is a
@@ -377,12 +373,12 @@ function locate(site, decoded, rawPath) {
     if (site.mode !== "folder" || String(rawPath).indexOf(MOUNT_ROOT) !== 0) return null;
     var mount = /^(\/\.lahe-source\/[a-f0-9]+\/)(.*)$/.exec(decoded);
     var mountDir = mount && site.mounts ? site.mounts[mount[1]] : null;
-    if (typeof mountDir !== "string" || hasHiddenSegment(mount[2])) return null;
-    // A mount saved before hidden folders were refused serves nothing.
+    if (typeof mountDir !== "string") return null;
+    // A mount whose folder is not under home (by real path) serves nothing,
+    // whatever sites.json holds.
     if (!markdownLinks.mountableDir(mountDir)) return null;
     return { base: mountDir, prefix: mount[1], relative: mount[2], mounted: true, page: false };
   }
-  if (hasHiddenSegment(decoded)) return null;
   if (site.mode === "page-only") {
     if (decoded !== "/" + path.basename(site.root)) return null;
     return { base: path.dirname(site.root), prefix: "/", relative: path.basename(site.root), mounted: false, page: true };
@@ -854,6 +850,11 @@ function createPageRoutes(options) {
       "cache-control": "no-store",
       "content-type": type,
       "cross-origin-resource-policy": protocol.PAGES.CORP,
+      // Only the page's own site may frame it. A reveal.js speaker-notes
+      // window frames the same deck, which is same-origin; any other page
+      // framing a reviewed page, and its token, is refused by the browser.
+      // Only this one directive, so a page's own policy is untouched.
+      "content-security-policy": "frame-ancestors 'self'",
       "x-content-type-options": "nosniff"
     };
     if (typeof length === "number") out["content-length"] = length;
@@ -1064,7 +1065,9 @@ function createPageRoutes(options) {
     }
     if (req.method !== "GET" && req.method !== "HEAD") return sendText(req, res, 405, "method not allowed\n");
     if (rawPath.charAt(0) !== "/") return sendText(req, res, 400, "bad request\n");
-    // HIDDEN FILES AND DOT SEGMENTS, in every spelling (decodePath, locate).
+    // DOT SEGMENTS, ENCODED SLASHES AND NUL, in every spelling (decodePath).
+    // Hidden files are served like any other; Lahe's reserved names are
+    // answered by servePackaged and locate, never from the folder.
     if (decoded === null) return notFound(req, res);
     if (servePackaged(req, res, decoded)) return;
     var where = locate(site, decoded, rawPath);

@@ -241,9 +241,11 @@ test("on: fileForPage maps a site origin and path to the file, and refuses what 
   const origin = await w.serve(folder, "sub/page.html");
   assert.equal(pageRoutes.fileForPage(w.dir, origin, "/sub/page.html"), page);
   assert.equal(pageRoutes.fileForPage(w.dir, origin, "/sub/"), path.join(folder, "sub", "index.html"));
-  for (const bad of ["/../x.html", "/.secret.html", "/sub/%2e%2e/%2e%2e/x.html"]) {
+  for (const bad of ["/../x.html", "/sub/%2e%2e/%2e%2e/x.html"]) {
     assert.equal(pageRoutes.fileForPage(w.dir, origin, bad), null, bad);
   }
+  // A hidden file is served, so it maps like any other.
+  assert.equal(pageRoutes.fileForPage(w.dir, origin, "/.secret.html"), path.join(folder, ".secret.html"));
   assert.equal(pageRoutes.fileForPage(w.dir, "http://127.0.0.1:5555", "/sub/page.html"), null);
   assert.equal(pageRoutes.fileForPage(w.dir, "http://no.such.lahe.localhost:" + PAGES_PORT, "/sub/page.html"), null);
 });
