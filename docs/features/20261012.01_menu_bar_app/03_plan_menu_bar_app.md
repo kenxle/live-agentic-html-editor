@@ -77,7 +77,7 @@ Every packet carries this block, near the top:
 - **Agent reuse.** Fix rounds go back to the builder that owns the file. The summary builder takes any later change to the summary's shape, so the app and the helper never disagree about it.
 - **Token plan.** Three agents in parallel is worth it: they share no files, and each packet is small. Packets do not include the alternatives leaf, the reviews, or the crucible. Each packet reads only its own leaf, the brief requirements and architecture sections it names, and `CLAUDE.md`.
 - **Packet sources.** summary: brief R1 to R13, R21 to R23; architecture "Data / State Changes", "Key Flows" (first two), "Failure Modes", "Security & Privacy Notes". macapp: brief R1 to R14, R17, R18; architecture "`summary.read` response", "`summary.open` request", "Install, rebuild, and Quit", "Failure Modes", "Security & Privacy Notes"; UX Notes. install: brief R14 to R20; architecture "`install.json` gains a `menubar` block", "Install, rebuild, and Quit", "Failure Modes", "Security & Privacy Notes"; `docs/ongoing/STABLE_ADDRESSES.md` for the existing login item.
-- **PR 1** (summary): the summary routes, seen marks, the claim's `page` field, and the rebuilt bundle. Proof: V1 to V17, V19, V20. Leaves every surface as it was; nothing reads the summary yet.
+- **PR 1** (summary): the summary routes and their signed auth mode, seen marks, the claim's `page` field, and the rebuilt bundle. Proof: V1 to V17, V19, V20, V34 (helper half). Leaves every surface as it was; nothing reads the summary yet.
 - **PR 2** (macapp and install): the app, `lahe install --menu-bar`, `lahe menubar`, Stop and Start, status, docs. Proof: V18, V21 to V33. Merges after PR 1.
 
 ## Test List
@@ -93,14 +93,14 @@ The one verification table. U is a unit test under `test/unit/` (runs on every s
 | V4 | R6 old bundle | A claim with no `page` marks every page of that review | U |
 | V5 | Seen writes | A hundred focused heartbeats with no new reply write `seen.json` zero times; one new reply then one focused heartbeat writes it once | U |
 | V6 | Seen loss | A corrupt or missing `seen.json` starts fresh with `seeded_at = now`; no count goes up | U |
-| V7 | Page field | A `page` the review does not know, or one past the length limit, marks nothing and stores nothing | U |
+| V7 | Page field (SR3) | A `page` the review does not know, one with no agent reply, one past 1024 characters, and `__proto__` each mark nothing and store nothing | U |
 | V8 | R7 | Retired, ended, and missing-file reviews never appear under waiting on you | U |
 | V9 | R1 | Three answered cards on one document count as one document; `count` equals the number of listed documents | U |
 | V10 | R9 | `waiting_on_agents.count` equals the Library's waiting total for the same state folder | U |
 | V11 | R10 | Open documents are the current window holders, focused or not; connected sessions are those the liveness test calls listening or working; a session's name is its Library rename, else its newest review's title | U |
 | V12 | R11, R12 | Recent follows the Library's order; open, connected and recent cap at 8 with a correct `more`; waiting on you is never capped | U |
-| V13 | Privacy | The summary of a fixture state folder holds no comment text, no token, no absolute path, no control character | U |
-| V14 | R22 auth | No secret: 401. Wrong secret: 401. A correct secret with any `Origin` header: refused. A non-loopback Host: refused. The Library token: refused | U |
+| V13 | Privacy | The summary of a fixture state folder holds no comment text, no token, no absolute path, no control or Unicode format character, and no title past the cap | U |
+| V14 | R22 auth (SR2) | No proof: 401. A wrong key: 401. A proof older than 30 s: 401. A good proof with any `Sec-Fetch-*` header: refused, including a GET with no `Origin`. `summary.open` with an `Origin` header: refused. A non-loopback Host, or the path at `library.lahe.localhost`: refused. The raw CLI secret header or the Library token: refused | U |
 | V15 | R11 open | `summary.open` returns the address catalog Open returns, never writes to the request queue, and returns `url: null` for a row only an agent can serve | U |
 | V16 | Version | A request naming another `summary_version` gets `409 SUMMARY_VERSION` | U |
 | V17 | R21 cache | A second summary with nothing changed rebuilds no review; touching one review's `events.jsonl` rebuilds only that review | U |
@@ -110,16 +110,17 @@ The one verification table. U is a unit test under `test/unit/` (runs on every s
 | V21 | R15 install | On macOS (runner mocked): `--menu-bar` builds, writes `lahe-menubar.plist`, and records the `menubar` block; `--no-menu-bar` skips it; with neither, a terminal is asked once. On Linux and Windows the flag says it is macOS only and the install goes on | U |
 | V22 | R16 | No `swiftc`: the message names `xcode-select --install`, no plist is written, and the rest of the install completes | U |
 | V23 | R17 | The plist restarts the app only on a crash; `lahe menubar show` starts it; `lahe review`, `lahe status` and `lahe monitor` never touch the app's item | U |
-| V24 | R18 rebuild | A changed source stamp rebuilds once and restarts the app; a failed build keeps the old app, logs, and does not retry until the stamp changes again | U |
+| V24 | R18 rebuild (SR5) | A changed source stamp in the installed clone rebuilds once in a fresh temp folder and renames into place; a failed build keeps the old app, logs, and does not retry until the stamp changes again; a worktree's copy is never compiled | U |
 | V25 | R19 | `lahe uninstall` removes the app's plist, the built app, and the `menubar` block, and leaves nothing loaded | U |
 | V26 | R20 | `lahe status` says installed and running, installed and not running, not installed, or names the failed rebuild | U |
-| V27 | R14 Start | When kickstart reports the helper's job is not loaded, the CLI bootstraps the plist and then kickstarts, and an agent's `lahe review` works after Stop | U |
+| V27 | R14 Start (SR6) | When kickstart reports the helper's job is not loaded, the CLI checks the plist's contents, bootstraps it, then kickstarts, and an agent's `lahe review` works after Stop; a plist that differs is refused with a message to run `lahe install` | U |
 | V28 | Build | `npm run check:menubar` compiles the app with `swiftc` on a Mac and says it skipped elsewhere | M |
 | V29 | R1, R2 looks | Against the fake helper: nothing waiting, 3 waiting, 99+, not running, can't tell (refused, timeout, version mismatch, just after wake). Screenshots in a light and a dark menu bar | M |
-| V30 | Allowlist | The app's self-test rejects `javascript:`, `file:`, `https://` and any other host, and accepts the five Lahe host forms | M |
+| V30 | Allowlist (SR4) | The app's self-test rejects `javascript:`, `file:`, `https://`, a user part, `localhost`, `127.0.0.1`, `<name>.lahe`, and a wrong port; it accepts `library.lahe.localhost` and `<name>.lahe.localhost` with no port or the pages port | M |
 | V31 | R14, R17 Quit | Hide exits and stays hidden through a crash test of the helper; Stop unloads the helper; Start brings it back; the menu shows the line about agents | M |
 | V32 | Walkthrough | On a copy of Ken's state folder: install, day one shows no number, an agent asks a question and the icon shows 1, clicking opens the page at its address, answering clears it, a stray session shows under connected | M |
 | V33 | Leaks | The helper count after the full run equals the count before it | M |
+| V34 | Squatter (SR1) | A fake server on the helper's port receives only proofs, never the secret; replaying a captured proof to the real helper is refused; the app drops the fake server's unsigned answer and shows can't tell | U and M |
 :::
 
 ## Acceptance Criteria
@@ -145,7 +146,7 @@ The one verification table. U is a unit test under `test/unit/` (runs on every s
 
 - [ ] The count is right: V1 to V9, V19 green.
 - [ ] The menu shows what the brief lists, in its order: V10 to V12, V29 green.
-- [ ] Only Ken's programs can read the summary, and the app opens only Lahe addresses: V13 to V15, V30 green, and the security review of the code has no open blocker.
+- [ ] Only Ken's programs can read the summary, the secret never travels, and the app opens only Lahe addresses: V13 to V15, V30, V34 green, and the security review of the code has no open blocker.
 - [ ] Installing, updating, hiding, stopping and removing work: V21 to V28, V31 green.
 - [ ] Light when idle: V17, V18 within budget.
 - [ ] The core stays cross-platform: V20 green; `dependencies` in `package.json` is still `{}`.

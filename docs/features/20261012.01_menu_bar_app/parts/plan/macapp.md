@@ -6,13 +6,13 @@ Architecture: "`summary.read` response", "`summary.open` request", "Install, reb
 
 ### Task 2.1: The app
 
-**Spec:** One Swift file, `macos/menubar/LaheMenuBar.swift`, using AppKit only, and an `Info.plist` with `LSUIElement` so it has no Dock icon. Arguments: `--port`, `--state-dir`, and the helper's login item label, all passed by the login item. It reads `cli-secret` from the state folder, asks `summary.read` every 5 seconds and when the menu opens, and draws the icon and the menu in the brief's order. The icon is a template image drawn in code from the review layer's speech-bubble mark (`src/service/tab_icon.js`), with the count beside it. Four looks: nothing waiting, a count (to 99, then 99+), not running, can't tell.
+**Spec:** One Swift file, `macos/menubar/LaheMenuBar.swift`, using AppKit only, and an `Info.plist` with `LSUIElement` so it has no Dock icon. Arguments: `--port`, `--state-dir`, and the helper's login item label, all passed by the login item. It reads `cli-secret` and `service.json` from the state folder, connects to `127.0.0.1` at the port `service.json` names, signs every request with the `AUTH.CLI_PROOF` scheme (CryptoKit HMAC), drops any answer whose signature does not check, asks `summary.read` every 5 seconds and when the menu opens, and draws the icon and the menu in the brief's order. The icon is a template image drawn in code from the review layer's speech-bubble mark (`src/service/tab_icon.js`), with the count beside it. Four looks: nothing waiting, a count (to 99, then 99+), not running, can't tell.
 **Files:** `macos/menubar/LaheMenuBar.swift`, `macos/menubar/Info.plist`, `macos/menubar/README.md` (what it is, how it is built, that nothing here is required).
 **Acceptance:** V28, V29.
 
 ### Task 2.2: Opening, Quit, Stop, Start
 
-**Spec:** A click calls `summary.open` and opens the returned address only when it passes the allowlist; `url: null` opens the Library. Hide exits with status 0. Stop runs `launchctl bootout` on the helper's label; Start runs bootstrap then kickstart. Labels are checked by the same safe-label rule as `src/service/login_item.js`. Errors go to `menubar.log` in the state folder. A `--self-test` flag runs the allowlist, label check and count formatting and exits non-zero on a failure.
+**Spec:** A click calls `summary.open` and opens the returned address only when it passes the allowlist (`http`, no user part, `library.lahe.localhost` or a site name plus `.lahe.localhost`, port absent or the pages port), rebuilt from its parsed parts; `url: null` opens the Library. Hide exits with status 0. Stop runs `launchctl bootout` on the helper's label; Start runs bootstrap then kickstart. Labels and plist paths are constants in the app, never read from a file. Errors go to `menubar.log` in the state folder. A `--self-test` flag runs the allowlist, label check and count formatting and exits non-zero on a failure.
 **Files:** the same.
 **Acceptance:** V30, V31.
 

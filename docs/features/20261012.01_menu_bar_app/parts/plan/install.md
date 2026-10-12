@@ -6,7 +6,7 @@ Architecture: "`install.json` gains a `menubar` block", "Install, rebuild, and Q
 
 ### Task 3.1: Build and the app's login item
 
-**Spec:** `src/service/menubar.js`, macOS only: find `swiftc` with `xcrun`, compile `macos/menubar/` into `<state>/menubar/Lahe.app` (argument arrays, never a shell), write `~/Library/LaunchAgents/lahe-menubar.plist` (RunAtLoad; KeepAlive only on a crash; the app's arguments pinned as absolute values), record the `menubar` block in `install.json` with the source stamp. Every system call goes through the injectable runner `login_item.js` already uses, so tests run on every system.
+**Spec:** `src/service/menubar.js`, macOS only: find `swiftc` with `xcrun`, copy the fixed file list from the installed clone's `macos/menubar/` into a fresh temp folder, hash it there, compile it there with `/usr/bin/xcrun swiftc` (argument arrays, never a shell), and rename the result into `<state>/menubar/Lahe.app` only on success, write `~/Library/LaunchAgents/lahe-menubar.plist` (RunAtLoad; KeepAlive only on a crash; the app's arguments pinned as absolute values), record the `menubar` block in `install.json` with the source stamp. Every system call goes through the injectable runner `login_item.js` already uses, so tests run on every system.
 **Files:** `src/service/menubar.js`, tests.
 **Acceptance:** V21, V22 (logic), V25.
 
@@ -18,13 +18,13 @@ Architecture: "`install.json` gains a `menubar` block", "Install, rebuild, and Q
 
 ### Task 3.3: Rebuild on change
 
-**Spec:** On macOS with the icon installed, the helper's existing 15-second timer compares the source stamp of `macos/menubar/` with the recorded one and, when it changed, rebuilds in a child process and restarts the app. A failed build keeps the old app, writes the error to `menubar.log` and records it in `install.json`, and is not retried until the stamp changes again.
+**Spec:** On macOS with the icon installed, the helper's existing 15-second timer compares the source stamp of the fixed file list in the clone named in `install.json` (never a worktree) with the recorded one and, when it changed, rebuilds in a child process and restarts the app. A failed build keeps the old app, writes the error to `menubar.log` and records it in `install.json`, and is not retried until the stamp changes again.
 **Files:** `src/service/menubar.js`, the timer's call site in the helper, tests.
 **Acceptance:** V24.
 
 ### Task 3.4: Starting a stopped helper, and status
 
-**Spec:** `startThroughItem` bootstraps the helper's plist and then kickstarts when kickstart reports the job is not loaded. `lahe status` prints one line on the icon.
+**Spec:** `startThroughItem` bootstraps the helper's plist and then kickstarts when kickstart reports the job is not loaded, after checking the plist's contents are what `login_item.js` would write for the recorded install. Labels and paths are constants. `lahe status` prints one line on the icon.
 **Files:** `src/service/login_item.js`, `src/cli/commands/status.js`, tests.
 **Acceptance:** V26, V27.
 

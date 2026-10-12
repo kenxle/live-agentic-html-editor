@@ -6,14 +6,14 @@ Architecture: "Data / State Changes" (`seen.json`, what counts as waiting on you
 
 ### Task 1.1: Seen marks
 
-**Spec:** `seen_store.js` owns `seen.json`: `seeded_at` on first run, per-review per-page marks, writes only when a write would change a count, a fresh file on loss. `reviews.js` calls it on every claim and heartbeat that carries a valid review token and `quiet: false`, whether or not the window gets the rail. `src/layer/sync.js` adds the page's path as `page` to its claim and heartbeat bodies; nothing else in the layer changes.
+**Spec:** `seen_store.js` owns `seen.json`: `seeded_at` on first run, per-review per-page marks in prototype-free objects, writes only when a write would change a count, a fresh file on loss. A `page` over 1024 characters, or one that is not a page of that review carrying an agent reply, marks nothing. `reviews.js` calls it on every claim and heartbeat that carries a valid review token and `quiet: false`, whether or not the window gets the rail. `src/layer/sync.js` adds the page's path as `page` to its claim and heartbeat bodies; nothing else in the layer changes.
 **Files:** `src/service/seen_store.js`, `src/service/reviews.js` (claim and heartbeat handlers only), `src/layer/sync.js` (claim body only), `src/shared/protocol.js` (the claim's request description), tests.
 **Acceptance:** V1, V3 to V7.
 **Don't touch:** the rail, replay, anything in `src/layer/` but the claim body.
 
 ### Task 1.2: The one-review summary
 
-**Spec:** The catalog reader exposes one review's summary on its own, and the summary gains two things: open questions after the cutoff, and per-page newest agent reply times. Comment text still never leaves the reader.
+**Spec:** The catalog reader exposes one review's summary on its own, and the summary gains two things: open questions after the cutoff, and per-page newest agent reply times. Comment text still never leaves the reader. Titles lose control and Unicode format characters and are capped.
 **Files:** `src/service/catalog_reader.js`, tests.
 **Acceptance:** V2, V8, and the Library's own tests still pass unchanged.
 
@@ -25,8 +25,8 @@ Architecture: "Data / State Changes" (`seen.json`, what counts as waiting on you
 
 ### Task 1.4: The routes
 
-**Spec:** `summary.read` (GET) and `summary.open` (POST) in `protocol.js` and `routes.js`, both `AUTH.CLI_SECRET`, both refusing any `Origin` header, both behind the Host check. `summary.read` takes the app's `summary_version` and answers a mismatch with `409 SUMMARY_VERSION`. `summary.open` runs catalog Open with `handoff: false`.
-**Files:** `src/shared/protocol.js`, `src/service/routes.js`, tests.
-**Acceptance:** V14 to V16, V19, V20.
+**Spec:** A new auth mode, `AUTH.CLI_PROOF`: a signed request (timestamp, nonce, HMAC-SHA256 keyed by the CLI secret over route, timestamp, nonce and body hash), a 30-second window, a nonce cache, and a signed answer. `summary.read` (GET) and `summary.open` (POST, JSON) use it, refuse any `Sec-Fetch-*` header, sit behind the Host check, are never catalog routes, and `summary.open` also refuses an `Origin` header. `summary.read` takes the app's `summary_version` and answers a mismatch with `409 SUMMARY_VERSION`. `summary.open` runs catalog Open with `handoff: false`.
+**Files:** `src/shared/protocol.js`, `src/service/routes.js`, `src/service/auth.js`, tests.
+**Acceptance:** V14 to V16, V19, V20, V34.
 
 **Step test:** `npm run gate:unit` green, and V19's browser spec green alone. The orchestrator rebuilds `dist/` once and opens PR 1.

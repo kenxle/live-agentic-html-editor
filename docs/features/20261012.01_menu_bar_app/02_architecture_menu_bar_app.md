@@ -2,7 +2,7 @@
 
 ## Summary
 
-The helper gains one read-only answer, the **summary**, and one small record, the **seen marks**. Both are plain Node in `src/service/` and run on every system. A Swift program in a new top-level `macos/` folder draws the icon and menu from the summary. `lahe install` builds that program on the Mac with `swiftc`, puts it in the state folder as a small app, and starts it at login with its own login item. The helper rebuilds the app when its source changes. The app proves its permission with the CLI secret the `lahe` command already uses. No agent-facing behavior changes.
+The helper gains one read-only answer, the **summary**, and one small record, the **seen marks**. Both are plain Node in `src/service/` and run on every system. A Swift program in a new top-level `macos/` folder draws the icon and menu from the summary. `lahe install` builds that program on the Mac with `swiftc`, puts it in the state folder as a small app, and starts it at login with its own login item. The helper rebuilds the app when its source changes. The app proves its permission with a signed request keyed by the CLI secret, so the secret itself never travels, and it trusts only answers the helper signs back. No agent-facing behavior changes.
 
 ```mermaid
 flowchart LR
@@ -17,7 +17,7 @@ flowchart LR
         App["Lahe menu bar app<br/>(Swift, built on the Mac)"]
         Item["login item<br/>lahe-menubar"]
     end
-    App -->|"every 5 s, CLI secret"| Summary
+    App -->|"every 5 s, signed request"| Summary
     App -->|"click a row"| OpenRoute
     App -->|"opens the returned address"| Browser["browser"]
     Item --> App
@@ -45,7 +45,7 @@ What stays the same: every existing route, the Library page and its token, the a
 | `src/service/catalog_reader.js` | Exposes a one-review summary, and adds two counts to it: open questions and the newest agent reply time | changed |
 | `src/service/reviews.js` | Tells the seen store when a focused window claims or heartbeats, naming its page | changed |
 | `src/layer/sync.js` | Adds the page's path to its claim and heartbeat (one optional field) | changed |
-| `src/service/routes.js`, `src/shared/protocol.js` | Two routes, `summary.read` and `summary.open` | changed |
+| `src/service/routes.js`, `src/shared/protocol.js`, `src/service/auth.js` | Two routes, `summary.read` and `summary.open`, and a new auth mode, `AUTH.CLI_PROOF` (signed requests and answers) | changed |
 | `src/service/menubar.js` | macOS only: build the app, write its login item, rebuild on change | new |
 | `src/cli/commands/install.js` | Offers the icon, `--menu-bar` and `--no-menu-bar`; uninstall removes it | changed |
 | `src/cli/commands/menubar.js` | `lahe menubar show` brings a hidden icon back; `lahe menubar rebuild` | new |
@@ -130,11 +130,12 @@ sequenceDiagram
     participant H as Helper
     participant Cache as per-review cache
     loop every 5 seconds, and when the menu opens
-        App->>H: GET summary.read (CLI secret, no Origin)
+        App->>H: GET summary.read (signed proof, no Sec-Fetch headers)
         H->>Cache: stat events.jsonl and review.json per review
         Cache-->>H: rebuild only reviews whose files changed
         H->>H: add window holders, seen marks, sessions
-        H-->>App: summary
+        H-->>App: summary, signed
+        App->>App: drop it unless the signature checks
         App->>App: redraw icon count and menu
     end
 ```
@@ -179,8 +180,11 @@ flowchart TD
 ```
 
 - **Hide** exits with status 0. The login item restarts the app only on a crash (`KeepAlive` with `SuccessfulExit: false`), so Hide holds until the next login or `lahe menubar show`.
-- **Stop Lahe** unloads the helper's login item, because a plain kill would be restarted at once. Today a `lahe` command asks an unloaded item to kickstart and fails. `startThroughItem` gains one step: when kickstart reports the job is not loaded, bootstrap the plist first. That keeps agents working after Ken stops Lahe.
+- **Stop Lahe** unloads the helper's login item, because a plain kill would be restarted at once. Whether Stop should hold while agents are connected is a question for Ken (the questions leaf); this design assumes it does not, and the menu says so. Today a `lahe` command asks an unloaded item to kickstart and fails. `startThroughItem` gains one step: when kickstart reports the job is not loaded, bootstrap the plist first. That keeps agents working after Ken stops Lahe.
 - **Start Lahe**, shown when the helper is down, does the same bootstrap and kickstart.
+- **Bootstrap checks the plist first.** Before loading `lahe-helper.plist`, the CLI checks its contents are what `login_item.js` would write for the recorded install, and refuses with a message to run `lahe install` if not (SR6).
+- **The labels are constants.** The app and the CLI use the fixed labels `lahe-helper` and `lahe-menubar` and their fixed plist paths; nothing reads a label from `install.json` to run `launchctl` (SR6).
+- **What a rebuild compiles.** Only the clone named in `install.json`, never a worktree; a fixed list of files in `macos/menubar/`, copied into a fresh temp folder, hashed there, built there with `/usr/bin/xcrun swiftc`, and renamed into place only on success (SR5).
 
 ## Alternatives Considered
 
@@ -193,7 +197,9 @@ flowchart TD
 - **App older than the helper.** The app sends the `summary_version` it was built for. The helper answers a mismatch with `409 SUMMARY_VERSION`, and the app shows "can't tell" with "Lahe was updated; rebuilding" (R18). The rebuild timer usually gets there first.
 - **App newer than the helper** (pulled, helper not yet restarted). The route does not exist, so the request gets a 400 and the app shows "can't tell". The helper's own staleness check replaces it at a quiet moment, as today.
 - **Rebuild fails** (tools removed, compile error). The helper keeps the old app, records the error in `menubar.log`, and `lahe status` names it. It retries only when the source stamp changes again, so a broken build does not compile every 15 s.
-- **CLI secret missing or changed.** The app rereads the file on each 401. A missing file shows "not running" with the reason in the log.
+- **CLI secret missing or changed.** The app rereads the file on each 401. A missing file shows "can't tell" with the reason in the log.
+- **An answer the app cannot verify.** A missing or wrong signature, from a squatter or a bug, is dropped: "can't tell", logged once per minute at most.
+- **Clock skew.** The helper and the app read the same Mac clock, so the 30-second window only matters across a sleep. A refused proof after a wake is retried with a fresh timestamp on the next poll.
 - **A review whose file is gone, or an unreadable review.** Never waiting on you (R7). It can still appear under recent, and Open goes wherever catalog Open sends it, which for a gone file is the plain "file is gone" page.
 - **A worktree review.** Open follows catalog Open, which already serves a gone worktree file from the main checkout.
 - **Many documents waiting.** The icon shows the number up to 99, then "99+". The waiting list is not cut (R12); in practice the install cutoff (R4) keeps it short.
@@ -204,12 +210,14 @@ flowchart TD
 
 ## Security & Privacy Notes
 
-- **Who can read the summary.** `summary.read` and `summary.open` take `AUTH.CLI_SECRET` and refuse any request with an `Origin` header, like `site.bind`. A web page cannot read the secret file, and a browser always sends `Origin` on a cross-origin request, so a page at any address, Lahe's own included, is refused. The helper's Host check still applies, which stops DNS rebinding.
+- **Signed requests, so the secret never travels (SR1).** The app does not send the CLI secret. It sends a proof: a timestamp, a random nonce, and HMAC-SHA256 keyed with the secret over the route name, timestamp, nonce, and a hash of the body. The helper accepts a proof within 30 seconds of its own clock and refuses a nonce it has seen in that window. The helper signs its answer the same way, over the nonce and a hash of the response body, and the app drops any answer whose signature does not check and shows "can't tell". A program squatting on the port while the helper is stopped learns one used proof for one route, nothing it can replay or use on `site.bind`. Node has HMAC in `node:crypto` and Swift in CryptoKit, so no packages are added. The app connects to `127.0.0.1` at the port in `service.json`, never `localhost`.
+- **Who can reach the routes.** The proof is the control: a web page cannot read the secret file. Two more checks stand behind it. Both routes refuse any request carrying a `Sec-Fetch-Site`, `Sec-Fetch-Mode` or `Sec-Fetch-Dest` header, which current browsers send on every request to a loopback address and the app never sends (SR2). `summary.open` is a POST with a JSON body, so it also refuses any `Origin` header. Neither route is a catalog route, the Library host never routes to them, and the Library token is never accepted. The helper's Host check still applies, which stops DNS rebinding.
+- **The `page` field (SR3).** At most 1024 characters, and it marks something only when it is one of the review's own pages that carries an agent reply; anything else is ignored and nothing is stored. Keys are stored in an object with no prototype, so a name like `__proto__` is just a string. Accepted risk: a page holding a review's token can clear that review's unseen answers, and only that review's. A page's token already lets it do far more to its own review.
 - **What it holds.** Titles, `~` paths, counts, times, session names. No comment text, no review tokens, no absolute paths. Same exposure as `lahe status`, which any process running as Ken can already run.
-- **`summary.open` opens nothing itself.** It returns an address. The app opens it only when it is an `http` URL whose host is `library.lahe.localhost`, `<name>.lahe.localhost`, `<name>.lahe`, `127.0.0.1` or `localhost`. Anything else is dropped and logged. Titles are page-derived, so the app sets them as plain menu text, never as markup.
-- **Building code on the user's machine.** `swiftc` compiles only files in the clone's `macos/menubar/`, invoked as an argument array, never through a shell. The app is not signed. A program built locally carries no quarantine flag, so Gatekeeper does not block it.
-- **launchctl calls from the app** use fixed labels read from `install.json` and checked against the same safe-label rule `login_item.js` uses.
-- A security review of this design is required before the plan (see below).
+- **`summary.open` opens nothing itself (SR4).** It returns an address. The app opens it only when it parses as `http`, with no user or password part, a host of `library.lahe.localhost` or a valid site name followed by `.lahe.localhost`, and a port that is absent or equal to the pages port in `service.json`. It opens the URL rebuilt from those parsed parts, not the original string. The same check applies to `library_url`. Anything else is dropped and logged. Titles are page-derived: the helper strips control characters and Unicode format characters (such as bidirectional overrides) and caps the length, and the app sets them as plain menu text.
+- **Building code on the user's machine.** `swiftc` compiles only the fixed file list from the installed clone, in a fresh temp folder, invoked as an argument array, never through a shell (SR5). The app is not signed. A program built locally carries no quarantine flag, so Gatekeeper does not block it.
+- **launchctl calls from the app and CLI** use the fixed labels and paths, never values read from a file (SR6).
+- **Follow-up, not in this feature:** the CLI's two existing secret routes (`site.bind`, `review.retire`) still send the raw secret after an unauthenticated `/health` probe. They should move to the same signed proof. Filed on the board.
 
 ## Test Strategy
 
@@ -225,4 +233,14 @@ Not run. The orchestrator chose the security review for this design (a new reade
 
 ## Security Review
 
-Not run yet.
+Full prose in [02_architecture_menu_bar_app_reviews.md](02_architecture_menu_bar_app_reviews.md).
+
+| # | Finding | Disposition | Rationale |
+|---|---------|-------------|-----------|
+| SR1 | The app would send the secret to anything on the helper's port, open for hours after Stop | Accepted | Signed requests and signed answers; the secret never travels. The CLI's routes move later (board). |
+| SR2 | Browsers send no Origin on a GET | Accepted | Corrected text; Sec-Fetch headers refused; `summary.open` is a POST; never a catalog route. |
+| SR3 | The `page` field was unbounded | Accepted | Length cap, only known pages with replies, prototype-free keys; the one-review reach is an accepted risk. |
+| SR4 | The URL allowlist was wider than needed | Accepted | Only `*.lahe.localhost` at the pages port or none; URL rebuilt from parsed parts; titles cleaned. |
+| SR5 | Which clone and which files a rebuild compiles | Accepted | Installed clone only, fixed file list, temp folder, rename on success, full path to `xcrun`. |
+| SR6 | launchctl labels read from a file | Accepted | Fixed labels and paths; bootstrap checks the plist's contents. |
+| SR7 | Agents restart a stopped helper within seconds | Deferred to Ken | A question in the questions leaf; the design keeps agents able to restart it, and the menu says so plainly. |

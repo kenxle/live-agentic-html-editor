@@ -7,6 +7,13 @@ For Ken to decide in review:
 - **B.** A question stops counting once you have looked at its page, like an answer does. The count clears more easily, but a question you glanced past stops nagging.
 :::
 
+::: callout-question
+**Should "Stop Lahe" hold while agents are connected?** As designed, the next `lahe` command an agent runs starts Lahe again, and a listening agent runs one within seconds. So with an agent connected, Stop barely stops anything. The menu line under it will say so plainly. The security reviewer points out that people reach for Stop when something looks wrong.
+
+- **A.** Keep it as designed: agents can start Lahe again, and the menu warns. Nothing an agent is doing breaks. (Recommended: you rarely stop Lahe, and a stop that breaks your agents mid-review costs more than it saves.)
+- **B.** Stop holds until the next login. Agent commands refuse to start it and tell the agent you stopped Lahe. Only Start in the menu, or a command you run, brings it back.
+:::
+
 Settled with Ken in the crucible:
 
 - **Which version?** The icon that says when something is waiting on him, plus recent documents and what is open and who is connected. The running indicator, Library link, and Quit stay in.

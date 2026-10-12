@@ -114,7 +114,7 @@ flowchart LR
 :::
 
 ::: callout-req
-**R14. Quit has two items.** "Hide the icon" closes the menu bar app only; the helper keeps running. "Stop Lahe until next login" stops the helper. A line under it says that connected agents will start it again when they need it.
+**R14. Quit has two items.** "Hide the icon" closes the menu bar app only; the helper keeps running. "Stop Lahe until next login" stops the helper. A line under it says plainly that a connected agent will start it again, usually within seconds. Whether Stop should hold instead is a question for Ken.
 :::
 
 ### Installing and keeping it working
