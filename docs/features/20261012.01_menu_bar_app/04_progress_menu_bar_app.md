@@ -1,8 +1,8 @@
 # Progress: Menu bar app
 
-**Phase 2, Brief.** The brief is written and with the PM reviewer. I am starting the architecture alongside. Nothing is waiting on you. Last updated 2026-10-12 10:10.
+**Phase 3, Architecture.** The brief is done with all 15 PM findings taken in, and the architecture is drafted. A security reviewer is on it now. Nothing is waiting on you yet; one question for you will come with the full set. Last updated 2026-10-12 10:17.
 
-**Docs:** [Crucible](00_crucible_menu_bar_app.md) · [Brief](01_brief_menu_bar_app.md) · [Architecture](02_architecture_menu_bar_app.md) · [Plan](03_plan_menu_bar_app.md)
+**Docs:** [Crucible](00_crucible_menu_bar_app.md) · [Brief](01_brief_menu_bar_app.md) · [Brief reviews](01_brief_menu_bar_app_reviews.md) · [Architecture](02_architecture_menu_bar_app.md) · [Plan](03_plan_menu_bar_app.md)
 
 ## Needs your attention
 
@@ -12,8 +12,7 @@ Nothing is waiting on you.
 
 | Agent or task | Doing | Started | Branch |
 |---|---|---|---|
-| Orchestrator | Architecture reconnaissance | 2026-10-12 10:10 | `feat/menu-bar` |
-| PM reviewer | Reviewing the brief | 2026-10-12 10:10 | `feat/menu-bar` |
+| Security reviewer | Reviewing the architecture | 2026-10-12 10:17 | `feat/menu-bar` |
 
 ## Phases
 
@@ -21,8 +20,8 @@ Nothing is waiting on you.
 |---|---|---|
 | 0 Setup | done | 2026-10-12 |
 | 1 Crucible | done | 2026-10-12 |
-| 2 Brief | in progress | 2026-10-12 |
-| 3 Architecture | not started | |
+| 2 Brief | done | 2026-10-12 |
+| 3 Architecture | in progress | 2026-10-12 |
 | 4 Plan | not started | |
 | 5 Human review | not started | |
 | 6 Implement | not started | |
@@ -62,6 +61,8 @@ Not shipped yet.
 
 ## Log
 
+- 2026-10-12 10:17: PM review returned 15 findings (4 high). All accepted: only a focused tab counts as looking, per page; replies before install never count, so day one shows zero; a distinct "can't tell" look; every way a question clears is listed. One question for you came out of it (when an open question stops counting); it waits for the full review. Architecture drafted; security review started.
+- 2026-10-12 10:17: Measured on your real data: building the Library's whole list takes about 150 ms (870 ms cold) over 690 reviews, so the menu reads a per-review cache instead. 45 documents have an old unanswered agent question today.
 - 2026-10-12 10:10: Brief written: 20 requirements across the icon, what waiting on you means, the menu, installing, and cost and safety. Sent to the PM reviewer.
 - 2026-10-12 10:09: You agreed all five premises. Crucible summary written and marked accepted. Brief started.
 - 2026-10-12 10:02: Eleven comments answered. Requirements moved out of the premises into their own list; the job moved to Jobs to be done. A (SwiftBar) and C (Dock badge) ruled out, so the approach is B. Five new premises posted.
