@@ -1,6 +1,6 @@
 /*
  * live-agentic-html-editor review layer
- * version 0.3.0+1bfef4d2d990
+ * version 0.3.0+c5567373ad47
  *
  * GENERATED FILE. Do not edit. Edit the sources under src/ and run
  *   npm run build:layer
@@ -12,7 +12,7 @@
   "use strict";
   var g = typeof globalThis !== "undefined" ? globalThis : window;
   g.LAHE = g.LAHE || {};
-  g.LAHE.version = "0.3.0+1bfef4d2d990";
+  g.LAHE.version = "0.3.0+c5567373ad47";
 })();
 /* ---- src/shared/markers.js  (owner: 0A-kernel) ---- */
 // Markers: the attribute and class names that identify DOM the tool added.
@@ -19126,6 +19126,130 @@
     }
   }
 
+  /**
+   * The time on a turn's caption: just the time for today, the date as well
+   * for anything older. The card head keeps the full date; repeating "Oct 12"
+   * over every bubble of a conversation was noise to scan past. The full date
+   * and time are always on the caption's hover.
+   *
+   * @param {string} value ISO time
+   * @param {Date} [now] for tests
+   */
+  function captionTimeLabel(value, now) {
+    if (!value) return "";
+    var date = new Date(value);
+    if (!Number.isFinite(date.getTime())) return "";
+    var today = now instanceof Date ? now : new Date();
+    var sameDay =
+      date.getFullYear() === today.getFullYear() &&
+      date.getMonth() === today.getMonth() &&
+      date.getDate() === today.getDate();
+    if (!sameDay) return timestampLabel(value);
+    try {
+      return new Intl.DateTimeFormat(undefined, { hour: "numeric", minute: "2-digit" }).format(date);
+    } catch (err) {
+      return date.toLocaleTimeString();
+    }
+  }
+
+  // Each file tip gets its own id, so the name that shows it can point at it
+  // with aria-describedby inside the rail's one shadow root.
+  var turnFilesSeq = 0;
+
+  /**
+   * One turn of a card's conversation: a caption (who, then when) over a
+   * bubble. The one builder for every turn on every card, so the reviewer's
+   * words and the agent's look the same wherever they are drawn.
+   *
+   * @param {Element} host the element that becomes the turn
+   * @param {function(string, string=, string=): Element} make the caller's own
+   *   element factory, so the nodes carry that caller's chrome marker
+   * @param {object} opts
+   *   side    "you" (the reviewer, on the right) or "agent" (on the left)
+   *   who     the caption's name
+   *   at      ISO time, or null for none
+   *   text    the words, set as text, never markup
+   *   bubble  an existing node to use as the bubble instead of a new one (the
+   *           Active tab's editable note is its own bubble)
+   *   files   paths the agent changed, shown under a hover on the name
+   *   names   extra class names for {cap, who, time, text, files, file}, so
+   *           older selectors keep finding the parts they always found
+   * @returns {{cap: Element, who: Element, time: Element|null, bubble: Element, files: Element|null}}
+   */
+  function fillTurn(host, make, opts) {
+    var o = opts || {};
+    var names = o.names || {};
+    var withName = function (base, extra) {
+      return extra ? base + " " + extra : base;
+    };
+    var side = o.side === "agent" ? "agent" : "you";
+    host.classList.add("turn");
+    host.setAttribute("data-side", side);
+    var cap = make("div", withName("turn__cap", names.cap));
+    var files = Array.isArray(o.files)
+      ? o.files.filter(function (one) {
+          return typeof one === "string" && one !== "";
+        })
+      : [];
+    var who;
+    if (files.length) {
+      who = make("button", withName("turn__who turn__who--files", names.who), o.who || "");
+      who.setAttribute("type", "button");
+    } else {
+      who = make("span", withName("turn__who", names.who), o.who || "");
+    }
+    cap.appendChild(who);
+    var time = null;
+    if (o.at) {
+      time = make("time", withName("turn__time", names.time), captionTimeLabel(o.at));
+      time.setAttribute("datetime", o.at);
+      var when = new Date(o.at);
+      if (Number.isFinite(when.getTime())) time.setAttribute("title", when.toLocaleString());
+    }
+    if (time) cap.appendChild(time);
+    var list = null;
+    if (files.length) {
+      turnFilesSeq += 1;
+      list = make("div", withName("turn__files", names.files));
+      list.id = "lahe-turn-files-" + turnFilesSeq;
+      list.setAttribute("role", "tooltip");
+      list.appendChild(
+        make("div", "turn__fileshead", files.length === 1 ? "Changed 1 file" : "Changed " + files.length + " files")
+      );
+      files.forEach(function (name) {
+        list.appendChild(make("div", withName("turn__file", names.file), name));
+      });
+      cap.appendChild(list);
+      who.setAttribute("aria-describedby", list.id);
+    }
+    host.appendChild(cap);
+    var bubble = o.bubble || make("div", withName("bubble", names.text), o.text === undefined ? "" : String(o.text));
+    if (o.bubble) {
+      bubble.classList.add("bubble");
+      if (names.text) bubble.classList.add(names.text);
+    }
+    host.appendChild(bubble);
+    return { cap: cap, who: who, time: time, bubble: bubble, files: list };
+  }
+
+  /**
+   * Rewrite a caption's time in place, for a turn whose node outlives one
+   * paint (the Active tab's note is never rebuilt under the reviewer's caret).
+   */
+  function setTurnTime(time, at) {
+    if (!time) return;
+    time.textContent = captionTimeLabel(at);
+    if (at) {
+      time.setAttribute("datetime", at);
+      var when = new Date(at);
+      if (Number.isFinite(when.getTime())) time.setAttribute("title", when.toLocaleString());
+      else time.removeAttribute("title");
+    } else {
+      time.removeAttribute("datetime");
+      time.removeAttribute("title");
+    }
+  }
+
   // The named limit from D5, said on the status line rather than claimed as
   // covered: two windows in separate storage with no helper running cannot be
   // refused by anything, so the rail says so out loud.
@@ -19252,11 +19376,19 @@
   // child, so one attribute puts away every block the rail and the three tab
   // owners draw inside it, and nothing has to be told.
   var CARD_COLLAPSED_ATTR = "data-lahe-collapsed";
-  // The two marks a folded card still has to show. tab_done.js SETS both of
+  // The marks a folded card still has to show. tab_done.js SETS all three of
   // these; the rail only reads them, which is what lets a folded card say "1
   // new" without this file knowing what a reply is. Spelled here so there is one
   // spelling: tab_done.js takes its own constants from these.
   var CARD_UNSEEN_ATTR = "data-lahe-unseen";
+  // The narrower of the two: a reply nobody has read yet, and nothing else.
+  // CARD_UNSEEN_ATTR also stays on a card for the rest of the visit that
+  // brought the reviewer to it, so the badge's "which ones?" has an answer on
+  // screen. The "1 new" tag reads THIS one, so a card the reviewer opened, read
+  // and folded again never says "1 new" (Ken, 2026-10-12: "I can read
+  // something and then close that card with the accordion and it still says
+  // new").
+  var CARD_UNREAD_ATTR = "data-lahe-unread";
   var CARD_ASKING_ATTR = "data-lahe-asking";
   // A ready card nobody has picked up, past the overdue rule. Set by the rail
   // alone, off the item and the helper's liveness answer.
@@ -19285,6 +19417,9 @@
     // are washes over the card's paper, not fills: the reviewer's own sentence
     // stays the strongest thing on the card.
     "--draft-wash:#fdf8ef;--draft-line:#ecdcbe;--handled-wash:#f1f8f4;--handled-line:#cee2d6;",
+    // The reviewer's own chat bubble: the accent mixed into the card's paper,
+    // opaque so it reads the same on a draft, a ready and a handled card.
+    "--you-wash:color-mix(in srgb,var(--accent) 9%,var(--paper));",
     "--radius:14px;--radius-sm:10px}",
     // THE PAGE PICKS THE SCHEME, NOT THE OS. highlight.js samples the reviewed
     // page's own background and stamps data-lahe-scheme on this rail's host, so
@@ -19307,6 +19442,7 @@
     // carried into dark reads as a lit panel; these are the dark paper with the
     // hue mixed into it.
     "--draft-wash:#26221b;--draft-line:#3b3327;--handled-wash:#1a2420;--handled-line:#2a3d34;",
+    "--you-wash:color-mix(in srgb,var(--accent) 17%,var(--paper));",
     "--shadow:0 1px 2px rgba(0,0,0,.4),0 16px 40px rgba(0,0,0,.45)}",
     "*{box-sizing:border-box;margin:0;padding:0;font:inherit;color:inherit}",
     "button{background:none;border:0;cursor:pointer;font:inherit;color:inherit}",
@@ -19579,7 +19715,7 @@
     "letter-spacing:.06em;text-transform:uppercase;border-radius:999px;padding:3px 6px;",
     "color:#fff;background:var(--accent)}",
     ":host([data-lahe-scheme='dark']) .card__tag{color:#12151a}",
-    ".card[" + CARD_COLLAPSED_ATTR + "='true'][" + CARD_UNSEEN_ATTR + "='true'] .card__tag--new{display:inline-block}",
+    ".card[" + CARD_COLLAPSED_ATTR + "='true'][" + CARD_UNREAD_ATTR + "='true'] .card__tag--new{display:inline-block}",
     ".card[" + CARD_COLLAPSED_ATTR + "='true'][" + CARD_ASKING_ATTR + "='true'] .card__tag--ask{display:inline-block}",
     // A card that is both is a question, which is the louder of the two.
     ".card[" + CARD_COLLAPSED_ATTR + "='true'][" + CARD_ASKING_ATTR + "='true'] .card__tag--new{display:none}",
@@ -19651,33 +19787,69 @@
     ".card__notice{font-size:12px;color:var(--ink-faint)}",
     ".card__notice:empty{display:none}",
 
-    // The agent's question is the loudest thing on a card: its own block, its
-    // own rule, its own weight. Not a tinted label (D10).
-    // THE AGENT'S WORDS ARE WHAT THE REVIEWER CAME TO READ. Ken, 2026-09-11: the
-    // answer sat at 12.5px on a tinted surface, so it was both smaller and
-    // lower-contrast than his own note above it, "and it's the thing I need to
-    // read." Full ink and the card body's size, the same weight as the note.
-    ".agent{border-radius:8px;padding:9px 11px;background:var(--surface);color:var(--ink);",
-    "font-size:14px;line-height:1.55}",
+    // --- the conversation ------------------------------------------------------
+    //
+    // Ken, 2026-10-12: the threaded cards had been "designed by accretion of
+    // new features". A card's exchange now reads like a chat: the reviewer's
+    // turns sit on the right in a tinted bubble, the agent's on the left in a
+    // plain one, each under one small caption (who, then when). Every turn on
+    // every card is drawn by fillTurn (beside timestampLabel), in the Active and Done tabs alike,
+    // so there is one bubble, one caption and one spacing step.
+    //
+    // THE SPACING SCALE. 3px from a caption to its bubble, and the card's own
+    // 8px between one turn and the next, wherever the two turns live. Nothing
+    // in a turn adds a margin of its own.
+    //
+    // THE GRAY RULE. Gray is for the caption and for the quoted page text, the
+    // two things that are about the words rather than the words. Both the
+    // reviewer's and the agent's words are full ink at the same size.
+    //
+    // A turn is 88% of the card wide and pushed to its own side; the bubble in
+    // it is as wide as its words. The caption stretches the turn's width so the
+    // file tip under the agent's name can be as wide as the card.
+    ".turn{display:flex;flex-direction:column;gap:3px;width:88%;min-width:0}",
+    ".turn[data-side='you']{align-self:flex-end;align-items:flex-end}",
+    ".turn[data-side='agent']{align-self:flex-start;align-items:flex-start}",
+    ".turn__cap{align-self:stretch;position:relative;display:flex;align-items:baseline;gap:6px;",
+    "min-width:0;padding:0 2px;font-size:11px;line-height:1.35;color:var(--ink-faint)}",
+    ".turn[data-side='you'] .turn__cap{justify-content:flex-end}",
+    ".turn__who{font-weight:600;color:var(--ink-soft);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;",
+    "min-width:0}",
+    ".turn__time{flex:none;font-variant-numeric:tabular-nums;white-space:nowrap}",
+    ".bubble{display:block;max-width:100%;min-width:0;padding:7px 11px;border-radius:12px;",
+    "border:1px solid transparent;font-size:13.5px;line-height:1.5;color:var(--ink);",
+    "white-space:pre-wrap;overflow-wrap:anywhere}",
+    // The corner nearest the speaker is the tail, the way chat bubbles point.
+    ".turn[data-side='you'] .bubble{background:var(--you-wash);border-bottom-right-radius:4px}",
+    ".turn[data-side='agent'] .bubble{background:var(--paper);border-color:var(--line);",
+    "border-bottom-left-radius:4px}",
+    // THE FILES ARE ONE HOVER AWAY. The agent's name is a button when it
+    // changed files: hovering it, focusing it, or clicking it (which focuses it,
+    // so a touch screen gets it too) shows the list. The dotted underline is the
+    // only sign that there is something under the name. The list stays in the
+    // DOM, so a screen reader hears it through aria-describedby.
+    ".turn__who--files{font-weight:600;color:var(--ink-soft);cursor:help;padding:0;",
+    "text-decoration:underline dotted;text-decoration-color:var(--ink-faint);text-underline-offset:2px}",
+    ".turn__who--files:hover,.turn__who--files:focus{color:var(--ink)}",
+    ".turn__files{display:none;position:absolute;left:0;top:calc(100% + 4px);z-index:6;",
+    "width:max-content;max-width:calc(100% / .88);flex-direction:column;gap:3px;",
+    "padding:8px 10px;border-radius:7px;background:#15171c;color:#fff;",
+    "box-shadow:0 6px 18px rgba(0,0,0,.25);pointer-events:none;",
+    "font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11px;line-height:1.4}",
+    ":host([data-lahe-scheme='dark']) .turn__files{background:#0b0d11;border:1px solid var(--line)}",
+    ".turn__who--files:hover~.turn__files,.turn__who--files:focus~.turn__files{display:flex}",
+    ".turn__fileshead{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;",
+    "font-size:10.5px;font-weight:600;color:rgba(255,255,255,.65)}",
+    // One path per line, and it breaks: repo paths have no natural break
+    // points, and the longest one still has to fit inside the card.
+    ".turn__file{overflow-wrap:anywhere;word-break:break-word}",
+
+    // The rail's own carrier for the agent's current answer is a turn like
+    // any other. A loud one (an agent message the reviewer has not dealt with)
+    // wears the accent on its bubble, all the way round.
     ".agent:empty{display:none}",
-    ".agent__head{display:flex;align-items:baseline;justify-content:space-between;gap:8px;margin-bottom:3px}",
-    ".agent__who{font-size:10px;font-weight:600;letter-spacing:.07em;text-transform:uppercase;",
-    "color:var(--ink-faint);display:block}",
-    // An attention marker: a loud reply is one the reviewer has not dealt with
-    // yet, so the accent rule down the edge earns its place. Color, size and
-    // line-height are NOT repeated here; they are already set on .agent above,
-    // and this rule only adds to it.
-    ".agent.is-loud{background:var(--accent-wash);border-left:3px solid var(--accent)}",
-    ".agent.is-loud .agent__who{color:var(--accent-ink)}",
-    // ONE PATH PER LINE, AND IT BREAKS. Repo-relative paths are long and have
-    // no natural break points, so joined on one line with normal wrapping they
-    // ran straight out of the card (Ken, Done tab, first real use). A path is a
-    // unit the reviewer scans, so it gets its own line, and anywhere-breaking
-    // keeps the longest one inside the card at rail width.
-    ".agent__files{margin-top:5px;font-size:11px;color:var(--ink-faint);",
-    "font-family:ui-monospace,SFMono-Regular,Menlo,monospace;",
-    "display:flex;flex-direction:column;gap:2px;min-width:0}",
-    ".agent__file{overflow-wrap:anywhere;word-break:break-word;line-height:1.35}",
+    ".agent.is-loud .bubble{background:var(--accent-wash);border:2px solid var(--accent)}",
+    ".agent.is-loud .turn__who{color:var(--accent-ink)}",
 
     // --- the overdue banner ---------------------------------------------------
     //
@@ -22731,32 +22903,24 @@
 
       p.agent.textContent = "";
       p.agent.className = "agent";
+      p.agent.removeAttribute("data-side");
       if (card.agentMessage) {
         var who = card.agentMessage.agent || "agent";
         var label =
           card.agentMessage.status === record.REPLY_STATUS.QUESTION
             ? "Question from " + who
             : who;
-        var agentHead = el("div", "agent__head");
-        agentHead.appendChild(el("span", "agent__who", label));
-        if (card.agentMessage.at) {
-          var agentTime = el("time", "agent__time", timestampLabel(card.agentMessage.at));
-          agentTime.setAttribute("datetime", card.agentMessage.at);
-          agentTime.setAttribute("title", new Date(card.agentMessage.at).toLocaleString());
-          agentHead.appendChild(agentTime);
-        }
-        p.agent.appendChild(agentHead);
-        p.agent.appendChild(
-          el("span", null, card.agentMessage.text || card.agentMessage.reason || "")
-        );
-        if (card.agentMessage.files && card.agentMessage.files.length) {
-          var fileList = el("div", "agent__files");
-          card.agentMessage.files.forEach(function (name) {
-            fileList.appendChild(el("div", "agent__file", name));
-          });
-          p.agent.appendChild(fileList);
-        }
-        if (card.agentMessage.loud) p.agent.className = "agent is-loud";
+        // A turn like every other on the card. The older class names ride
+        // along so anything reading the carrier by them still finds it.
+        fillTurn(p.agent, el, {
+          side: "agent",
+          who: label,
+          at: card.agentMessage.at || null,
+          text: card.agentMessage.text || card.agentMessage.reason || "",
+          files: card.agentMessage.files,
+          names: { cap: "agent__head", who: "agent__who", time: "agent__time", files: "agent__files", file: "agent__file" }
+        });
+        if (card.agentMessage.loud) p.agent.classList.add("is-loud");
       }
 
       p.notice.textContent = card.notice || "";
@@ -26720,6 +26884,7 @@
     FOLD_ALL: FOLD_ALL,
     CARD_COLLAPSED_ATTR: CARD_COLLAPSED_ATTR,
     CARD_UNSEEN_ATTR: CARD_UNSEEN_ATTR,
+    CARD_UNREAD_ATTR: CARD_UNREAD_ATTR,
     CARD_ASKING_ATTR: CARD_ASKING_ATTR,
     DOT_WORDS: DOT_WORDS,
     HELPER_RESTART_MESSAGE: HELPER_RESTART_MESSAGE,
@@ -26777,6 +26942,9 @@
     RAIL_GRIP_LABEL: RAIL_GRIP_LABEL,
     clampRailWidth: clampRailWidth,
     timestampLabel: timestampLabel,
+    captionTimeLabel: captionTimeLabel,
+    fillTurn: fillTurn,
+    setTurnTime: setTurnTime,
     paneForItem: paneForItem,
     createRail: createRail,
     shared: shared,
@@ -26996,8 +27164,10 @@
     ".lahe-rail-note{white-space:pre-wrap;overflow-wrap:anywhere}",
     // Delete is a small x at the right of the comment, not a word under it.
     "[data-lahe-active-row]{position:relative}",
-    "[data-lahe-active-row]:has(> .cardx:not([hidden])) > .lahe-rail-note{padding-right:22px}",
-    ".cardx{position:absolute;top:0;right:0;width:20px;height:20px;border-radius:5px;display:flex;",
+    // The x sits at the right end of the reviewer's caption row, so the
+    // caption makes room for it.
+    "[data-lahe-active-row]:has(> .cardx:not([hidden])) .turn__cap{padding-right:24px}",
+    ".cardx{position:absolute;top:-3px;right:0;width:20px;height:20px;border-radius:5px;display:flex;",
     "align-items:center;justify-content:center;font-size:15px;line-height:1;color:var(--ink-faint);",
     "background:none;border:0;cursor:pointer}",
     // Hovering the x shows what it would delete: the x and the whole comment
@@ -27012,14 +27182,14 @@
     // yellow and that was how we knew." So the words carry the affordance the
     // button used to: a text cursor, a hover that lifts them off the card, and a
     // focus ring while the reviewer is typing in them.
-    ".lahe-rail-note[data-lahe-note-editor]{cursor:text;border-radius:6px;",
-    "margin:0 -4px;padding:2px 4px;transition:background 90ms ease}",
-    ".lahe-rail-note[data-lahe-note-editor]:hover{background:var(--sunken)}",
-    ".lahe-rail-note[data-lahe-note-editor]:focus{outline:2px solid var(--accent);",
-    "outline-offset:1px;background:var(--paper)}",
+    // The note is the reviewer's bubble, so the hover outlines the bubble
+    // rather than changing its color, and typing gets the accent ring.
+    ".lahe-rail-note[data-lahe-note-editor]{cursor:text;transition:border-color 90ms ease}",
+    ".lahe-rail-note[data-lahe-note-editor]:hover{border-color:var(--line)}",
+    ".lahe-rail-note[data-lahe-note-editor]:focus{outline:2px solid var(--accent);outline-offset:1px}",
     // A window that may not write to the review reads as prose again.
     ".lahe-rail-note[contenteditable='false']{cursor:default}",
-    ".lahe-rail-note[contenteditable='false']:hover{background:transparent}",
+    ".lahe-rail-note[contenteditable='false']:hover{border-color:transparent}",
     // The empty-draft label is drawn, not typed: text inside the node would be
     // text the reviewer has to delete before writing their own sentence.
     ".lahe-rail-note[data-empty='true']::before{content:'Empty draft'}",
@@ -27064,8 +27234,10 @@
     ".lahe-rail-add[hidden]{display:none}",
     ".lahe-rail-add textarea{resize:none;width:100%;box-sizing:border-box;",
     "font:inherit;font-size:12.5px;line-height:1.45;color:var(--ink);",
-    "background:var(--sunken);border:1px solid var(--line);border-radius:6px;",
-    "padding:5px 7px;transition:background 90ms ease}",
+    // The same paper box as the follow-up composer, so the card has one kind
+    // of text box whether or not the agent has answered yet.
+    "background:var(--paper);border:1px solid var(--line);border-radius:7px;",
+    "padding:5px 8px;transition:background 90ms ease}",
     ".lahe-rail-add textarea::placeholder{color:var(--ink-faint)}",
     ".lahe-rail-add textarea:focus{outline:2px solid var(--accent);outline-offset:1px;",
     "background:var(--paper)}",
@@ -27421,7 +27593,20 @@
       // Swapping one for a control on click would be the rail rebuilding a row
       // under a caret, which is the revert mechanism this file exists to avoid.
       var note = el("p", "lahe-rail-note", "");
-      row.appendChild(note);
+      // Hosted, the note is the reviewer's own turn: a bubble on the right
+      // under a "You" caption, the same turn every other card draws.
+      if (hosted) {
+        var turn = el("div", "lahe-rail-turn");
+        overlayModule.fillTurn(turn, el, {
+          side: "you",
+          who: "You",
+          at: item[record.FIELD.UPDATED_AT] || item[record.FIELD.CREATED_AT] || null,
+          bubble: note
+        });
+        row.appendChild(turn);
+      } else {
+        row.appendChild(note);
+      }
       comments.attachNoteEditor(id, note);
 
       // Hosted, these are the rail's own quiet card actions (one register for
@@ -27613,6 +27798,17 @@
         } else if (!wantSend && sendBtn) {
           sendBtn.parentNode.removeChild(sendBtn);
         }
+      }
+
+      var cap = row.querySelector(".lahe-rail-turn .turn__cap");
+      if (cap) {
+        var at = item[record.FIELD.UPDATED_AT] || item[record.FIELD.CREATED_AT] || null;
+        var time = cap.querySelector(".turn__time");
+        if (at && !time) {
+          time = el("time", "turn__time", "");
+          cap.appendChild(time);
+        }
+        overlayModule.setTurnTime(time, at);
       }
 
       var state = row.querySelector(".lahe-rail-state");
@@ -27956,9 +28152,9 @@
   var ASKING_ATTR = overlayModule.CARD_ASKING_ATTR;
   // A card holding a reply the reviewer has not read yet.
   var UNSEEN_ATTR = overlayModule.CARD_UNSEEN_ATTR;
-  // How much of a turn fits on a folded round's line. Shorter than a card's,
-  // because a round's line already spends room on who said it and when.
-  var ROUND_LINE_MAX = 48;
+  // The narrower mark: a reply not read yet, and nothing else. The folded
+  // card's "1 new" tag reads this one, never the visit-long mark above.
+  var UNREAD_ATTR = overlayModule.CARD_UNREAD_ATTR;
 
   /**
    * Which reply this is, as one string.
@@ -28028,8 +28224,8 @@
    * Does this round of a thread start open?
    *
    * A long exchange is the thing Ken was scrolling through, so an old thread
-   * opens as a list of one-line rounds with the last one showing. Three rules,
-   * in this order:
+   * opens with its older rounds behind one "Show earlier messages" line (see
+   * foldedRoundCount) and the last one showing. Three rules, in this order:
    *
    *   THE NEWEST IS OPEN     it is what the reviewer came back for
    *   A SHORT THREAD IS OPEN two rounds is not a scroll, and folding half of a
@@ -28054,6 +28250,32 @@
     if (agent.status === record.REPLY_STATUS.NOT_HANDLED) return true;
     return false;
   }
+
+  /**
+   * How many of a thread's rounds, from the oldest, sit behind the one
+   * "Show earlier messages" line.
+   *
+   * The rounds roundStartsExpanded would fold, up to the first one it keeps
+   * open. Only a leading run folds, so the earlier line holds one unbroken
+   * stretch of the past and everything below it reads in order: a round that
+   * needs an answer, and every round after it, stays on the card.
+   *
+   * @param {object[]} rounds record.chronologicalThread(item), tool rounds out
+   * @returns {number}
+   */
+  function foldedRoundCount(rounds) {
+    var list = rounds || [];
+    var count = 0;
+    while (count < list.length && !roundStartsExpanded(list[count], count, list.length)) count += 1;
+    return count;
+  }
+
+  // What an agent turn says when the agent sent a status and no words.
+  var STATUS_WORDS = {
+    handled: "Handled this.",
+    not_handled: "Did not handle this.",
+    question: "Asked a question."
+  };
 
   /**
    * The ids whose reply the reviewer has not read.
@@ -28346,8 +28568,6 @@
   // these rules add the things this file draws.
   var STYLE = [
     "." + ROW_CLASS + "{display:flex;flex-direction:column;gap:8px}",
-    "." + ROW_CLASS + " .lahe-done-said{font-size:13.5px;line-height:1.5;color:var(--ink);",
-    "white-space:pre-wrap;overflow-wrap:anywhere}",
     // Reopen wears the rail's own card-action register (`.cardact`), so every
     // control that sits on a card has one voice rather than one per file.
     // On a hand-edit card this row draws nothing at all: the reviewer's words
@@ -28355,65 +28575,47 @@
     // slots are hidden rather than left as two blank gaps in the card.
     "." + ROW_CLASS + " .lahe-done-said:empty{display:none}",
     "." + ROW_CLASS + " .cardacts:empty{display:none}",
-    ".lahe-thread{display:flex;flex-direction:column;gap:8px;padding:8px 0;border-bottom:1px solid var(--line)}",
-    ".lahe-thread-round{display:flex;flex-direction:column;gap:5px}",
-    // --- one round, folded to a line ----------------------------------------
+    // The Done row is a column so the reviewer's turn can sit on its own side.
+    // A turn with nothing in its bubble (a hand edit carries no note) is not
+    // drawn at all, rather than left as an empty bubble.
+    "." + ROW_CLASS + " .turn:has(> .lahe-done-said:empty){display:none}",
+    // --- the earlier exchanges -------------------------------------------------
     //
-    // The same gesture as a card's, one level down, so an old exchange is a
-    // short list of who-said-what and the reviewer opens the one they want.
-    // The control is a button and carries the whole summary, which is what makes
-    // the line pressable and keeps the round reachable from the keyboard with
-    // nothing extra wired up.
-    ".lahe-round-toggle{display:flex;align-items:baseline;gap:6px;width:100%;",
-    "min-height:24px;padding:3px 0;border:0;background:none;text-align:left;",
-    "font:inherit;color:var(--ink-faint);cursor:pointer}",
-    ".lahe-round-toggle:hover .lahe-round-line{color:var(--ink-soft)}",
-    ".lahe-round-toggle:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:5px}",
-    ".lahe-round-chev{flex:none;display:inline-flex;align-self:center;color:var(--ink-faint)}",
-    ".lahe-round-chev svg{width:11px;height:11px;transform:rotate(90deg);transition:transform 120ms ease}",
-    ".lahe-thread-round[data-lahe-open='false'] .lahe-round-chev svg{transform:rotate(0deg)}",
-    "@media (prefers-reduced-motion:reduce){.lahe-round-chev svg{transition:none}}",
-    ".lahe-round-who{flex:none;font-size:10px;font-weight:600;letter-spacing:.06em;",
-    "text-transform:uppercase;color:var(--ink-faint)}",
-    ".lahe-round-line{flex:1;min-width:0;font-size:12px;color:var(--ink-faint);",
-    "white-space:nowrap;overflow:hidden;text-overflow:ellipsis}",
-    ".lahe-thread-round[data-lahe-open='false'] .lahe-round-turns{display:none}",
-    ".lahe-round-turns{display:flex;flex-direction:column;gap:5px}",
-    // The reviewer's own turns are context; the agent's turns are the reading.
-    // So the agent's words get full ink and the card body's size, and the
-    // reviewer's stay smaller and softer (Ken, 2026-09-11).
-    ".lahe-thread-turn{margin:0;white-space:pre-wrap;overflow-wrap:anywhere;font-size:12.5px;line-height:1.45;color:var(--ink-soft)}",
-    ".lahe-thread-turn[data-lahe-turn='agent']{font-size:14px;line-height:1.55;color:var(--ink)}",
-    ".lahe-thread-head{display:flex;align-items:baseline;justify-content:space-between;gap:8px}",
-    ".lahe-thread-turn strong{font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--ink-faint)}",
-    ".lahe-thread-time,.lahe-ask-time{font-size:10px;color:var(--ink-faint);font-variant-numeric:tabular-nums;white-space:nowrap}",
-    ".lahe-ask-time{margin-left:auto;font-weight:400;letter-spacing:0;text-transform:none}",
-    ".lahe-thread-text{display:block}",
+    // Every turn is a turn (overlay.js's fillTurn), so the thread is just more
+    // of the conversation above the current exchange, at the card's own 8px.
+    // No rule under it: the bubbles already say where one message ends.
+    ".lahe-thread{display:flex;flex-direction:column;gap:8px}",
+    ".lahe-thread-round,.lahe-round-turns,.lahe-thread-pending{display:flex;flex-direction:column;gap:8px}",
+    ".lahe-thread-round[data-lahe-open='false']{display:none}",
+    // ONE FOLD FOR THE OLD PART OF A LONG THREAD, the way chat apps do it. A
+    // row per round, each with its own chevron, put a header between every
+    // pair of bubbles and spaced the card unevenly. Now the older rounds sit
+    // behind one quiet line at the top, and the newest is always open.
+    ".lahe-thread-earlier{align-self:center;display:inline-flex;align-items:center;gap:5px;",
+    "min-height:24px;padding:2px 10px;border-radius:999px;font-size:11px;font-weight:550;",
+    "color:var(--ink-faint);background:none;border:0;cursor:pointer}",
+    ".lahe-thread-earlier:hover{color:var(--ink-soft);background:var(--sunken)}",
+    ".lahe-thread-earlier:focus-visible{outline:2px solid var(--accent);outline-offset:1px}",
+    ".lahe-thread-earlier svg{width:10px;height:10px;transform:rotate(0deg);transition:transform 120ms ease}",
+    ".lahe-thread-earlier[aria-expanded='true'] svg{transform:rotate(90deg)}",
+    "@media (prefers-reduced-motion:reduce){.lahe-thread-earlier svg{transition:none}}",
     ".lahe-followup{display:flex;flex-direction:column;gap:7px;padding-top:8px}",
     ".lahe-followup textarea{box-sizing:border-box;width:100%;min-height:72px;resize:vertical;border:1px solid var(--line);border-radius:7px;padding:8px 9px;background:var(--paper);color:var(--ink);font:inherit;line-height:1.4}",
     ".lahe-followup textarea:focus{outline:2px solid var(--accent);outline-offset:1px}",
     ".lahe-followup .cardacts{justify-content:flex-end}",
 
-    // The question. Full bleed to the card's padding, so the rule runs the
-    // whole height of the block rather than sitting in a box inside a box.
-    // The accent rule stays: this block is the layer asking the reviewer for
-    // something, and nothing has happened until they answer. That is exactly
-    // what a stripe is for here. It does not move or animate, so the stripe is
-    // the only thing pulling the eye to it.
-    "." + ASK_CLASS + "{margin:2px -12px -2px;padding:10px 12px 11px 13px;",
-    "border-left:3px solid var(--accent);background:var(--accent-wash);",
-    "display:flex;flex-direction:column;gap:7px}",
-    "." + ASK_CLASS + " .lahe-ask-who{display:flex;align-items:center;gap:6px;font-size:10px;",
-    "font-weight:700;letter-spacing:.09em;text-transform:uppercase;color:var(--accent-ink)}",
-    "." + ASK_CLASS + " .lahe-ask-dot{width:6px;height:6px;border-radius:50%;background:var(--accent);flex:none}",
-    // One step above the reviewer's own 13.5px, which is otherwise the largest
-    // text in the rail. The question is a stop, not a line of chrome.
-    "." + ASK_CLASS + " .lahe-ask-text{font-size:15px;line-height:1.45;color:var(--ink);",
-    "overflow-wrap:anywhere;white-space:pre-wrap}",
-    // In dark the wash alone carries less separation from the card behind it, so
-    // the block gets a hairline as well. Same relationship, drawn twice.
-    ":host([data-lahe-scheme='dark']) ." + ASK_CLASS + "{",
-    "border-top:1px solid rgba(147,167,234,.28);border-bottom:1px solid rgba(147,167,234,.28)}",
+    // The question. An agent turn like any other, on the agent's side, made
+    // loud by what only it wears: the accent wash, an accent edge all the way
+    // round the bubble, the asking line in accent ink with a dot, and words a
+    // step larger than anything else on the card. It does not move or animate.
+    "." + ASK_CLASS + " .lahe-ask-who{color:var(--accent-ink)}",
+    "." + ASK_CLASS + " .lahe-ask-name{color:var(--accent-ink);font-weight:650}",
+    "." + ASK_CLASS + " .lahe-ask-dot{width:6px;height:6px;border-radius:50%;background:var(--accent);",
+    "flex:none;align-self:center}",
+    "." + ASK_CLASS + ".turn .lahe-ask-text.bubble{font-size:14.5px;line-height:1.45;background:var(--accent-wash);",
+    "border:2px solid var(--accent)}",
+    // The proofreading fixes and their two answers run the turn's full width.
+    "." + ASK_CLASS + " .lahe-ask-fixes,." + ASK_CLASS + " .lahe-ask-acts{align-self:stretch}",
     // The card carrying a question is pulled to the top of its pane and given
     // the accent border, so it is the first thing in the tab and reads as one
     // object with the block inside it.
@@ -28424,8 +28626,7 @@
     "." + ASK_CLASS + " .lahe-ask-fixes{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px}",
     "." + ASK_CLASS + " .lahe-fix{font-size:13px;line-height:1.4;color:var(--ink);overflow-wrap:anywhere;",
     "border-top:1px solid var(--rule,rgba(128,128,128,.25));padding-top:6px}",
-    "." + ASK_CLASS + " .lahe-fix-where{display:block;font-size:10px;font-weight:700;letter-spacing:.06em;",
-    "text-transform:uppercase;color:var(--ink-faint)}",
+    "." + ASK_CLASS + " .lahe-fix-where{display:block;font-size:11px;font-weight:600;color:var(--ink-faint)}",
     "." + ASK_CLASS + " .lahe-fix-from{text-decoration:line-through;color:var(--ink-faint);white-space:pre-wrap}",
     "." + ASK_CLASS + " .lahe-fix-to{white-space:pre-wrap}",
     "." + ASK_CLASS + " .lahe-ask-acts [hidden]{display:none}",
@@ -28595,10 +28796,10 @@
     var rows = Object.create(null);
     var asks = Object.create(null);
     var threads = Object.create(null);
-    // id -> {total, byIndex} for rounds the reviewer opened or shut BY HAND this
-    // session. Never persisted: a reload derives every round from newest and
-    // needs-an-answer again (roundStartsExpanded). It exists only so a repaint,
-    // which redraws the whole thread, does not shut a round mid-read.
+    // id -> {total, earlierOpen}: whether the reviewer opened the "Show earlier
+    // messages" line BY HAND this session. Never persisted: a reload folds the
+    // old rounds again (foldedRoundCount). It exists only so a repaint, which
+    // redraws the whole thread, does not shut what they opened mid-read.
     var roundState = Object.create(null);
     var composers = Object.create(null);
     // id -> the Reopen button. Held separately from its row because on a
@@ -28717,6 +28918,11 @@
       if (!dropCardCollapseWatch && typeof rail.onCardCollapse === "function") {
         dropCardCollapseWatch = rail.onCardCollapse(function (id, folded) {
           if (folded) {
+            // FOLDING A CARD THE REVIEWER HAS READ ENDS ITS VISIT MARK. The mark
+            // answered "which of these did the badge mean"; they opened it,
+            // read it and put it away, so it has nothing left to point at.
+            // Only an unread card keeps its marks (and its "1 new") folded.
+            if (!unseenNow[id]) delete freshNow[id];
             paintUnseen();
             return;
           }
@@ -28766,12 +28972,18 @@
       return marks;
     }
 
-    /** The card wears the mark, so it survives whatever this file draws inside it. */
-    function markUnseenCard(id, unseen) {
+    /**
+     * The card wears the marks, so they survive whatever this file draws inside
+     * it. `marked` is the visit-long accent rule (unread, or unread when the
+     * reviewer arrived); `unread` is only the first, and drives "1 new".
+     */
+    function markUnseenCard(id, marked, unread) {
       var node = rail.cardNode(id);
       if (!node) return false;
-      if (unseen) node.setAttribute(UNSEEN_ATTR, "true");
+      if (marked) node.setAttribute(UNSEEN_ATTR, "true");
       else node.removeAttribute(UNSEEN_ATTR);
+      if (marked && unread) node.setAttribute(UNREAD_ATTR, "true");
+      else node.removeAttribute(UNREAD_ATTR);
       return true;
     }
 
@@ -28812,10 +29024,10 @@
         marked[id] = true;
       });
       Object.keys(markedNow).forEach(function (id) {
-        if (!marked[id]) markUnseenCard(id, false);
+        if (!marked[id]) markUnseenCard(id, false, false);
       });
       Object.keys(marked).forEach(function (id) {
-        markUnseenCard(id, true);
+        markUnseenCard(id, true, next[id] === true);
       });
       markedNow = marked;
       unseenNow = next;
@@ -29054,7 +29266,15 @@
     function buildRow(item) {
       var row = el("div", ROW_CLASS);
       row.setAttribute("data-lahe-item", item[record.FIELD.ID]);
-      row.appendChild(el("div", "lahe-done-said", ""));
+      // The reviewer's latest words, as their own turn on the right.
+      var turn = el("div", "lahe-done-turn");
+      overlayModule.fillTurn(turn, el, {
+        side: "you",
+        who: "You",
+        at: reviewerAt(item),
+        bubble: el("div", "lahe-done-said", "")
+      });
+      row.appendChild(turn);
 
       // NO BUTTONS. Ken: "in a completed comment we have buttons for follow up
       // and reopen and then below a text field to follow up. this all seems very
@@ -29099,6 +29319,19 @@
 
     function updateRow(row, item) {
       row.querySelector(".lahe-done-said").textContent = saidBy(item);
+      var cap = row.querySelector(".turn__cap");
+      var time = cap && cap.querySelector(".turn__time");
+      var at = reviewerAt(item);
+      if (at && !time && cap) {
+        time = el("time", "turn__time", "");
+        cap.appendChild(time);
+      }
+      overlayModule.setTurnTime(time, at);
+    }
+
+    /** When the reviewer last said something on this item: the card head's own time. */
+    function reviewerAt(item) {
+      return item[record.FIELD.UPDATED_AT] || item[record.FIELD.CREATED_AT] || null;
     }
 
     /**
@@ -29199,12 +29432,24 @@
         return !record.isToolRound(round);
       });
       // A thread whose length changed is a different thread, so the reviewer's
-      // hand-opened rounds from the old one do not apply to it.
+      // "show earlier" from the old one does not apply to it.
       if (!roundState[id] || roundState[id].total !== rounds.length) {
-        roundState[id] = { total: rounds.length, byIndex: Object.create(null) };
+        roundState[id] = { total: rounds.length, earlierOpen: false };
       }
-      rounds.forEach(function (round, index) {
-        node.appendChild(buildRound(id, round, index, rounds.length));
+      var folded = foldedRoundCount(rounds);
+      var built = rounds.map(function (round, index) {
+        return buildRound(id, round, index);
+      });
+      if (folded > 0) {
+        var hidden = 0;
+        built.slice(0, folded).forEach(function (pair) {
+          hidden += pair.querySelectorAll(".lahe-thread-turn").length;
+        });
+        node.appendChild(buildEarlier(id, node, hidden, folded));
+      }
+      built.forEach(function (pair, index) {
+        node.appendChild(pair);
+        applyRound(pair, index >= folded || roundState[id].earlierOpen === true);
       });
       // The reviewer's proofreading answer, sent and not yet answered. It is
       // the current turn rather than a round, so it follows the rounds.
@@ -29217,92 +29462,89 @@
     }
 
     /**
-     * One completed exchange, foldable.
+     * The one line that holds a long thread's older rounds.
      *
-     * The turns are built first, because the folded line is the FIRST of them:
-     * who spoke, what they said, and when. Nothing is summarized twice.
+     * @param {string} id the item
+     * @param {Element} thread the thread section the rounds live in
+     * @param {number} hidden how many turns sit behind it
+     * @param {number} folded how many rounds, from the oldest, it holds
      */
-    function buildRound(id, round, index, total) {
+    function buildEarlier(id, thread, hidden, folded) {
+      var button = el("button", "lahe-thread-earlier");
+      button.setAttribute("type", "button");
+      var chev = el("span", "lahe-thread-earlier-chev");
+      chev.innerHTML = overlayModule.CHEVRON_ICON;
+      button.appendChild(chev);
+      var label = el("span", "lahe-thread-earlier-label", "");
+      button.appendChild(label);
+      var paint = function (open) {
+        button.setAttribute("aria-expanded", open ? "true" : "false");
+        label.textContent = open
+          ? "Hide earlier messages"
+          : hidden === 1
+          ? "Show 1 earlier message"
+          : "Show " + hidden + " earlier messages";
+      };
+      paint(roundState[id].earlierOpen === true);
+      button.addEventListener("click", function () {
+        // SESSION MEMORY, NOT STORAGE. Every draw starts folded again by the
+        // rule; this only stops a repaint shutting what the reviewer opened.
+        var open = roundState[id].earlierOpen !== true;
+        roundState[id].earlierOpen = open;
+        Array.prototype.forEach.call(thread.querySelectorAll(".lahe-thread-round"), function (pair, index) {
+          if (index < folded) applyRound(pair, open);
+        });
+        paint(open);
+      });
+      return button;
+    }
+
+    /**
+     * One completed exchange: the reviewer's turn, then the agent's.
+     */
+    function buildRound(id, round, index) {
       var pair = el("div", "lahe-thread-round");
       pair.setAttribute("data-lahe-round", String(index));
       var turns = el("div", "lahe-round-turns");
 
       var reviewer = round.reviewer || {};
-      if (reviewer.note) appendTurn(turns, "Reviewer note", reviewer.note, reviewer.at, "reviewer");
       // A run's change text is written for the agent, and the card already
       // leads with the reviewer's own two lines for it, so a round on a run
       // record does not print it again.
       var runCard = !!overlayModule.runSummary(itemById(id));
-      if (reviewer.change && !runCard) appendTurn(turns, "Reviewer change", reviewer.change, reviewer.at, "reviewer");
+      var said = [];
+      if (reviewer.note) said.push(reviewer.note);
+      if (reviewer.change && !runCard && reviewer.change !== reviewer.note) said.push(reviewer.change);
+      if (said.length) appendTurn(turns, "You", said.join("\n"), reviewer.at, "reviewer");
       var agent = round.agent || {};
-      if (agent.text) appendTurn(turns, agent.agent || "Agent", agent.text, agent.at, "agent");
-      if (agent.reason) appendTurn(turns, (agent.agent || "Agent") + " reason", agent.reason, agent.at, "agent");
-      if (!agent.text && !agent.reason) appendTurn(turns, agent.agent || "Agent", agent.status || "", agent.at, "agent");
+      var name = agent.agent || "agent";
+      var answer = [];
+      if (agent.text) answer.push(agent.text);
+      if (agent.reason && agent.reason !== agent.text) answer.push(agent.reason);
+      if (!answer.length) answer.push(STATUS_WORDS[agent.status] || agent.status || "");
+      appendTurn(turns, name, answer.join("\n\n"), agent.at, "agent", agent.files);
 
-      var first = turns.firstChild;
-      var toggle = el("button", "lahe-round-toggle");
-      toggle.setAttribute("type", "button");
-      var chev = el("span", "lahe-round-chev");
-      chev.innerHTML = overlayModule.CHEVRON_ICON;
-      toggle.appendChild(chev);
-      toggle.appendChild(el("span", "lahe-round-who", first ? first.getAttribute("data-lahe-who") || "" : ""));
-      toggle.appendChild(
-        el("span", "lahe-round-line", first ? first.getAttribute("data-lahe-said") || "" : "")
-      );
-      var firstAt = first ? first.getAttribute("data-lahe-at") : null;
-      if (firstAt) {
-        var time = el("time", "lahe-thread-time", overlayModule.timestampLabel(firstAt));
-        time.setAttribute("datetime", firstAt);
-        time.setAttribute("title", new Date(firstAt).toLocaleString());
-        toggle.appendChild(time);
-      }
-
-      var byHand = roundState[id].byIndex[index];
-      var open = byHand === undefined ? roundStartsExpanded(round, index, total) : byHand === true;
-      pair.appendChild(toggle);
       pair.appendChild(turns);
-      applyRound(pair, open);
-      toggle.addEventListener("click", function () {
-        var next = pair.getAttribute("data-lahe-open") !== "true";
-        // SESSION MEMORY, NOT STORAGE. The defaults above are worked out again
-        // on every draw, which is the rule; this only stops a repaint from
-        // shutting a round the reviewer opened a second ago.
-        roundState[id].byIndex[index] = next;
-        applyRound(pair, next);
-      });
       return pair;
     }
 
     function applyRound(pair, open) {
       pair.setAttribute("data-lahe-open", open ? "true" : "false");
-      var toggle = pair.querySelector(".lahe-round-toggle");
-      if (!toggle) return open;
-      toggle.setAttribute("aria-expanded", open ? "true" : "false");
-      var who = toggle.querySelector(".lahe-round-who");
-      var label = (who && who.textContent) || "this exchange";
-      toggle.setAttribute("aria-label", (open ? "Collapse " : "Expand ") + label);
       return open;
     }
 
-    function appendTurn(host, who, text, at, side) {
-      var line = el("p", "lahe-thread-turn");
-      line.setAttribute("data-lahe-turn", side === "agent" ? "agent" : "reviewer");
-      // What the round's folded line reads off this turn, stamped here so the
-      // summary is taken from the turn itself rather than rebuilt beside it.
-      line.setAttribute("data-lahe-who", String(who || ""));
-      line.setAttribute("data-lahe-said", overlayModule.clipAtWord(text, ROUND_LINE_MAX));
-      if (at) line.setAttribute("data-lahe-at", at);
-      var head = el("span", "lahe-thread-head");
-      head.appendChild(el("strong", null, who));
-      if (at) {
-        var time = el("time", "lahe-thread-time", overlayModule.timestampLabel(at));
-        time.setAttribute("datetime", at);
-        time.setAttribute("title", new Date(at).toLocaleString());
-        head.appendChild(time);
-      }
-      line.appendChild(head);
-      line.appendChild(el("span", "lahe-thread-text", String(text || "")));
-      host.appendChild(line);
+    function appendTurn(host, who, text, at, side, files) {
+      var turn = el("div", "lahe-thread-turn");
+      turn.setAttribute("data-lahe-turn", side === "agent" ? "agent" : "reviewer");
+      overlayModule.fillTurn(turn, el, {
+        side: side === "agent" ? "agent" : "you",
+        who: who,
+        at: at || null,
+        text: String(text || ""),
+        files: files,
+        names: { cap: "lahe-thread-head", time: "lahe-thread-time", text: "lahe-thread-text" }
+      });
+      host.appendChild(turn);
     }
 
     function clearThread(id) {
@@ -30097,7 +30339,10 @@
       // it unseen and the badge appears on the next paint, on the tab the card
       // is in.
       var watching = watchingTab(paneOf(next));
-      if (watching || toolAnswer || !needsToSeeReply(next[record.FIELD.REPLY])) {
+      // A FOLDED CARD ON THE TAB BEING WATCHED IS STILL NOT READ: its words are
+      // off the screen, so it keeps "1 new" until the reviewer opens it.
+      var watchingOpen = watching && !cardIsFolded(id);
+      if (watchingOpen || toolAnswer || !needsToSeeReply(next[record.FIELD.REPLY])) {
         // DURABLE, not just quiet. Suppressing the toast and the badge is only
         // half of "the reviewer has seen this": the mark has to reach storage,
         // or the next load finds it unread and announces it all over again.
@@ -30144,7 +30389,7 @@
       node.querySelector(".lahe-ask-name").textContent = agentName(reply) + " is asking";
       var time = node.querySelector(".lahe-ask-time");
       if (reply.at) {
-        time.textContent = overlayModule.timestampLabel(reply.at);
+        time.textContent = overlayModule.captionTimeLabel(reply.at);
         time.setAttribute("datetime", reply.at);
         time.setAttribute("title", new Date(reply.at).toLocaleString());
       } else {
@@ -30267,13 +30512,17 @@
       node.setAttribute("data-lahe-item", id);
       node.setAttribute("role", "note");
 
-      var who = el("div", "lahe-ask-who");
-      who.appendChild(el("span", "lahe-ask-dot"));
-      who.appendChild(el("span", "lahe-ask-name", ""));
-      who.appendChild(el("time", "lahe-ask-time", ""));
-      node.appendChild(who);
-
-      node.appendChild(el("p", "lahe-ask-text", ""));
+      // An agent turn: the asking line is its caption, the question its bubble.
+      var parts = overlayModule.fillTurn(node, el, {
+        side: "agent",
+        who: "",
+        at: null,
+        bubble: el("p", "lahe-ask-text", ""),
+        names: { cap: "lahe-ask-who", who: "lahe-ask-name" }
+      });
+      parts.cap.insertBefore(el("span", "lahe-ask-dot"), parts.cap.firstChild);
+      // Always present, so drawQuestion can fill or empty it in place.
+      parts.cap.appendChild(el("time", "turn__time lahe-ask-time", ""));
 
       // NO BUTTON HERE. There was an Answer button, on the theory that a
       // question with nothing to press is a notification. It could never do
@@ -30316,7 +30565,7 @@
       }
       neglectTimer = null;
       Object.keys(markedNow).forEach(function (id) {
-        markUnseenCard(id, false);
+        markUnseenCard(id, false, false);
       });
       unseenNow = Object.create(null);
       // A remount is a new visit. Nothing is fresh in it: the cards were already
@@ -30445,7 +30694,7 @@
     replyStamp: replyStamp,
     needsToSeeReply: needsToSeeReply,
     roundStartsExpanded: roundStartsExpanded,
-    ROUND_LINE_MAX: ROUND_LINE_MAX,
+    foldedRoundCount: foldedRoundCount,
     unseenReplyIds: unseenReplyIds,
     unseenByTab: unseenByTab,
     seenMarksFor: seenMarksFor,
@@ -30620,7 +30869,8 @@
   // the rail's closed shadow root, so :host's custom properties inherit into
   // them and they cannot drift from the chrome around them.
   var STYLE = [
-    "." + ROW_CLASS + "{display:flex;flex-direction:column;gap:6px}",
+    // The card's own 8px step, the same one between turns of a conversation.
+    "." + ROW_CLASS + "{display:flex;flex-direction:column;gap:8px}",
     // The rule per pair stays, and so does the accent on an edit row. This is
     // the row's new-versus-old signal: scanning a column of cards, the accent
     // rule is what separates the reviewer's own edits from everything else.
@@ -30650,7 +30900,8 @@
     "." + ROW_CLASS + "__structure{font-size:11.5px;color:var(--ink-soft);",
     "font-family:ui-monospace,SFMono-Regular,Menlo,monospace}",
     "." + ROW_CLASS + "__structure:empty{display:none}",
-    "." + ROW_CLASS + "__said{font-size:12px;color:var(--ink-soft)}",
+    // The change summary heads the pair in the rail's one caption style.
+    "." + ROW_CLASS + "__said{font-size:11px;line-height:1.35;color:var(--ink-faint);margin-bottom:-5px}",
     "." + ROW_CLASS + "__said:empty{display:none}",
     // A run's two pinned lines: where the new text went, then its shape. The
     // first reads as the row's header, the second as its quieter subtitle.
@@ -30666,8 +30917,7 @@
     "." + ROW_CLASS + "__block{display:flex;flex-direction:column;gap:1px;",
     "border-left:2px solid var(--accent);padding-left:9px}",
     "." + ROW_CLASS + "__block[data-lahe-run-block='moved']{border-left-color:var(--line)}",
-    "." + ROW_CLASS + "__block-label{font-size:10px;font-weight:650;letter-spacing:.06em;",
-    "text-transform:uppercase;color:var(--ink-faint)}",
+    "." + ROW_CLASS + "__block-label{font-size:11px;line-height:1.35;font-weight:600;color:var(--ink-faint)}",
     "." + ROW_CLASS + "__block-words{font-size:12.5px;line-height:1.45;color:var(--ink);white-space:pre-wrap;",
     "display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}",
     "." + ROW_CLASS + "__pair[hidden]{display:none}",
@@ -51057,7 +51307,7 @@
   "use strict";
 
   // Replaced by scripts/build-layer.js at concatenation time.
-  var VERSION = "0.3.0+1bfef4d2d990";
+  var VERSION = "0.3.0+c5567373ad47";
 
   var protocol = ns.protocol;
   var record = ns.record;
