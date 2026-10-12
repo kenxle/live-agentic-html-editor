@@ -305,7 +305,7 @@ function commandBlock(input) {
     "            one line per wake. Wait on it with the monitor below, not a tail of your own.\n" +
     "  monitor   " + protocol.monitorCommand(spec.session, flagDir) + "\n" +
     "            Claude Code: one Bash call in the background, timeout 86400000. It waits until there is\n" +
-    "            work. Reply to every item before you launch it again, or it exits at once.\n" +
+    "            new work, so launch it again after each drain.\n" +
     "            Codex: run as a foreground pending exec and keep waiting on it. Antigravity: a\n" +
     "            background terminal task, never the native schedule timer. It prints work and exits.\n" +
     "  drain     " + protocol.drainCommand(spec.session, flagDir) + "\n" +
@@ -517,6 +517,26 @@ function createStore(options) {
     return true;
   }
 
+  /**
+   * The items the monitor already printed: {handoff_rev, keys}, or null.
+   * A key is "<review>/<item>/<rev>". Read only by the monitor.
+   */
+  function readDelivered(id) {
+    return readJson(stateDir.deliveredPath(dir, id));
+  }
+
+  /** Replace the printed list. Written only by the monitor, atomically. */
+  function writeDelivered(id, spec) {
+    var s = spec || {};
+    stateDir.ensureAgentSessionDir(dir, id);
+    var record = {
+      handoff_rev: Number.isInteger(s.handoff_rev) ? s.handoff_rev : 0,
+      keys: Array.isArray(s.keys) ? s.keys.filter(function (key) { return typeof key === "string"; }) : []
+    };
+    stateDir.writeAtomic(stateDir.deliveredPath(dir, id), JSON.stringify(record, null, 2) + "\n");
+    return record;
+  }
+
   /** When this session last ran a lahe command, or null. */
   function readActivity(id) {
     return readJson(stateDir.activityPath(dir, id));
@@ -627,6 +647,8 @@ function createStore(options) {
     readMonitor: readMonitor,
     writeMonitor: writeMonitor,
     clearMonitor: clearMonitor,
+    readDelivered: readDelivered,
+    writeDelivered: writeDelivered,
     readActivity: readActivity,
     touchActivity: touchActivity,
     watchingFeed: watchingFeed,

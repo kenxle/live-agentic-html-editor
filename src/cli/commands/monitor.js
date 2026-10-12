@@ -112,6 +112,34 @@ function parseArgs(argv) {
   return out;
 }
 
+/**
+ * Read one drain's output into item keys ("<review>/<id>/<rev>") and whether it
+ * carries anything else: an ended review, a Library request, or a line that is
+ * not one of the two shapes the drain prints. Anything unrecognised counts as
+ * new, so a format change can only cost a repeat wake, never a missed one.
+ */
+function parseDrain(text) {
+  var keys = [];
+  var other = false;
+  String(text).split("\n").forEach(function (line) {
+    if (!line.trim()) return;
+    var row;
+    try { row = JSON.parse(line); } catch (parseError) { other = true; return; }
+    if (!row || typeof row !== "object") { other = true; return; }
+    if (typeof row.id === "string" && row.rev !== undefined) {
+      keys.push(String(row.review) + "/" + row.id + "/" + String(row.rev));
+      return;
+    }
+    if (row.reviews !== undefined) {
+      if ((Array.isArray(row.ended_reviews) && row.ended_reviews.length) ||
+          (Array.isArray(row.catalog_requests) && row.catalog_requests.length)) other = true;
+      return;
+    }
+    other = true;
+  });
+  return { keys: keys, other: other };
+}
+
 function waitMs(ms) {
   return new Promise(function (resolve) {
     setTimeout(resolve, ms);
@@ -351,6 +379,28 @@ async function run(argv, options) {
     return null;
   }
 
+  /** The keys this monitor's session already printed at this handoff rev. */
+  function deliveredKeys(entry) {
+    if (typeof store.readDelivered !== "function") return [];
+    try {
+      var record = store.readDelivered(entry.id);
+      if (!record || record.handoff_rev !== entry.handoffRev || !Array.isArray(record.keys)) return [];
+      return record.keys;
+    } catch (readError) {
+      return [];
+    }
+  }
+
+  /** Remember what was just printed: the items unanswered right now, no more. */
+  function recordDelivered(result) {
+    if (typeof store.writeDelivered !== "function") return;
+    try {
+      store.writeDelivered(result.entry.id, { handoff_rev: result.entry.handoffRev, keys: result.keys || [] });
+    } catch (writeError) {
+      // A list that cannot be written costs one repeat wake, not the work.
+    }
+  }
+
   // The drain command, in exactly the spelling every doc and every wake line
   // uses. One spelling, in protocol.js. It carries --state-dir when this monitor
   // is not on the default directory, because the agent copies these two lines
@@ -417,8 +467,24 @@ async function run(argv, options) {
     if (late !== null) return late;
     results = results.filter(function (result) { return watched.indexOf(result.entry) !== -1; });
 
-    var withWork = results.filter(function (result) { return !!result.printed; });
+    // NOT AGAIN AT THE SAME REVISION. Work this monitor already printed to the
+    // agent holding this handoff rev is not new: the agent has it and may be
+    // mid-way through it (waiting on CI, a build). Printing it again and exiting
+    // at once is the relaunch loop, a wasted model turn each round. So a poll
+    // whose items were all printed before waits, and the first new item, a new
+    // revision, an ended review, or a Library request wakes the agent with the
+    // whole drain output. A takeover moves the rev, which empties the list, so a
+    // new agent is caught up on everything.
+    results.forEach(function (result) {
+      if (!result.printed) return;
+      var seen = deliveredKeys(result.entry);
+      var parsed = parseDrain(result.printed);
+      result.keys = parsed.keys;
+      result.fresh = parsed.other || parsed.keys.some(function (key) { return seen.indexOf(key) === -1; });
+    });
+    var withWork = results.filter(function (result) { return !!result.printed && result.fresh; });
     if (withWork.length > 0) {
+      withWork.forEach(recordDelivered);
       // ON STDOUT, ahead of the items, and on stderr as well. A host that
       // captures one stream used to get the instruction without the work, or the
       // work without the instruction.
@@ -466,5 +532,6 @@ module.exports = {
   USAGE: USAGE,
   liveDuplicate: liveDuplicate,
   parseArgs: parseArgs,
+  parseDrain: parseDrain,
   run: run
 };

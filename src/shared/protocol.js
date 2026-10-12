@@ -1697,6 +1697,10 @@
     // would race it.
     HEARTBEAT_FILE: "monitor.json",
     ACTIVITY_FILE: "activity.json",
+    // The items (review, id, rev) the monitor has already printed to the agent
+    // holding this handoff rev. A relaunch with only these still unanswered
+    // waits rather than printing them again and exiting at once.
+    DELIVERED_FILE: "delivered.json",
     // The monitor's default local poll interval, in seconds. The heartbeat is
     // written once per loop, so a heartbeat older than a few intervals means the
     // process is gone rather than slow.
