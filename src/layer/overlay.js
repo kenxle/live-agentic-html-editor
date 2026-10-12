@@ -518,7 +518,24 @@
     // position/z-index so the head's menu can hang over the panes below it.
     ".head{position:relative;z-index:3;display:flex;align-items:center;gap:10px;padding:13px 14px 12px;",
     "border-bottom:1px solid var(--line-soft)}",
-    ".mark{width:8px;height:8px;border-radius:50%;background:var(--accent);flex:none}",
+    // THE STATUS DOT. The head's dot is the status line's dot: one reading of
+    // "is my work stored, and is an agent on it", drawn where the eye starts.
+    // Shape as well as color, so it reads without color vision:
+    //   circle         stored, and an agent is listening or nothing is waiting
+    //   circle + halo  an agent is working on it
+    //   ring           stored, but no agent is listening
+    //   square         kept in this browser, not stored yet
+    //   triangle       work has waited too long; the rail also says so in words
+    // The words live in the dot's title and in the screen-reader status row.
+    ".mark{width:9px;height:9px;border-radius:50%;background:var(--ink-faint);flex:none;",
+    "box-sizing:border-box;cursor:default}",
+    ".mark[data-status='stored']{background:var(--good)}",
+    ".mark[data-status='kept_locally'],.mark[data-status='kept_unconfirmed']{border-radius:2px;width:8px;height:8px}",
+    ".mark[data-status='kept_locally']{background:var(--warn)}",
+    ".mark[data-agent='working']{background:var(--accent);box-shadow:0 0 0 3px var(--accent-wash)}",
+    ".mark[data-agent='absent'],.mark[data-agent='no_agent']{background:transparent;border:1.5px solid var(--ink-faint)}",
+    ".mark[data-loud='true']{background:var(--warn);border:0;border-radius:0;width:11px;height:10px;",
+    "clip-path:polygon(50% 0,100% 100%,0 100%)}",
     ".title{font-size:13px;font-weight:600;letter-spacing:-.005em}",
     ".head .spacer{flex:1}",
     ".iconbtn{width:26px;height:26px;border-radius:7px;color:var(--ink-soft);",
@@ -859,22 +876,17 @@
     // in front of the reviewer. Calm by default, because the healthy reading is
     // most of the reviewer's session and a rail that shouts through it is a rail
     // nobody reads by the third comment.
-    ".statusline{display:flex;align-items:center;gap:8px}",
+    // The row is for screen readers now: the head's dot is what the eye reads,
+    // and the row's words are the dot's title. Kept as a live region so a
+    // change is still announced.
+    ".statusline{position:absolute;width:1px;height:1px;margin:-1px;padding:0;overflow:hidden;",
+    "clip:rect(0 0 0 0);white-space:nowrap;border:0}",
     ".status{display:flex;align-items:center;gap:7px;font-size:12px;color:var(--ink-soft);flex:1;min-width:0}",
-    ".status__dot{width:6px;height:6px;border-radius:50%;background:var(--ink-faint);flex:none}",
-    ".status[data-status='stored'] .status__dot{background:var(--good)}",
-    ".status[data-status='kept_locally'] .status__dot{background:var(--warn)}",
-    ".status[data-agent='working'] .status__dot{background:var(--accent)}",
-    // The quiet indicator is a dot's worth of difference, not a colour change
-    // anyone has to decode: connected keeps the stored green, nobody connected
-    // goes grey. Grey is not an alarm; nothing is waiting.
-    ".status[data-agent='absent'] .status__dot{background:var(--ink-faint)}",
     // LOUD IS THE WAIT'S DOING. Last, so it wins over the calm rules above it:
     // an item nobody has answered in ten minutes, or one the machine can see
     // nothing has picked up, is the one thing on this line worth interrupting
     // for.
     ".status[data-loud='true']{color:var(--warn-ink,var(--ink));font-weight:600}",
-    ".status[data-loud='true'] .status__dot{background:var(--warn)}",
     ".status__text{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}",
 
     // THE HOLD TOGGLE (docs/features/20260917.01_hold_toggle). Beside the
@@ -1934,7 +1946,9 @@
       rail.appendChild(grip);
 
       var head = el("div", "head");
-      head.appendChild(el("span", "mark"));
+      var statusDot = el("span", "mark");
+      statusDot.setAttribute("aria-hidden", "true");
+      head.appendChild(statusDot);
       head.appendChild(el("span", "title", "Review"));
       // No review id in the head: it only ever showed a hash, never a name.
       head.appendChild(el("span", "spacer"));
@@ -2206,8 +2220,6 @@
       var statusLineWrap = el("div", "statusline");
       var statusRow = el("div", "status");
       statusRow.setAttribute("role", "status");
-      var statusDot = el("span", "status__dot");
-      statusRow.appendChild(statusDot);
       var statusText = el("span", "status__text", "Kept in this browser");
       statusRow.appendChild(statusText);
       statusLineWrap.appendChild(statusRow);
@@ -4584,6 +4596,7 @@
       var view = dom.statusRow.ownerDocument ? dom.statusRow.ownerDocument.defaultView : null;
       var computed = view ? view.getComputedStyle(dom.statusRow) : null;
       var dotComputed = view ? view.getComputedStyle(dom.statusDot) : null;
+      // What a reviewer sees is the head's dot; the row is screen-reader text.
       return {
         present: true,
         status: dom.statusRow.getAttribute("data-status") || "",
@@ -4591,8 +4604,8 @@
         loud: dom.statusRow.getAttribute("data-loud") === "true",
         text: dom.statusText.textContent || "",
         title: dom.statusRow.title || "",
-        display: computed ? computed.display : null,
-        visible: !!computed && computed.display !== "none",
+        display: dotComputed ? dotComputed.display : null,
+        visible: !!dotComputed && dotComputed.display !== "none",
         weight: computed ? computed.fontWeight : null,
         dotColor: dotComputed ? dotComputed.backgroundColor : null
       };
@@ -4850,6 +4863,10 @@
       dom.statusRow.setAttribute("data-loud", line.loud ? "true" : "");
       dom.statusText.textContent = line.text;
       dom.statusRow.title = line.title;
+      dom.statusDot.setAttribute("data-status", status || "");
+      dom.statusDot.setAttribute("data-agent", line.agentState || "");
+      dom.statusDot.setAttribute("data-loud", line.loud ? "true" : "");
+      dom.statusDot.title = line.title ? line.text + "\n\n" + line.title : line.text;
       // The banner and the late cards run off the same clock and the same
       // liveness answer as this line, so they are repainted with it.
       renderWaitBanner(banner);

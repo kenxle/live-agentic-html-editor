@@ -38,6 +38,24 @@ function esc(s) {
 const sections = shots
   .map(function (shot, i) {
     const scheme = /data-mock-scheme="dark"/.test(shot.hostAttrs) ? "dark" : "light";
+    if (shot.legend) {
+      return (
+        '<section class="mock-section" id="state-' + (i + 1) + '">\n' +
+        "<h2>" + esc(shot.label) + "</h2>\n" +
+        "<p>" + esc(shot.caption) + "</p>\n" +
+        '<div class="mock-stage mock-legend">\n' +
+        shot.legend
+          .map(function (row) {
+            return (
+              '<div class="mock-legend__row"><div class="mock-frame" data-mock-scheme="light"><aside class="rail">' +
+              cleanHtml(row.html) +
+              '</aside></div><span class="mock-legend__label">' + esc(row.label) + "</span></div>"
+            );
+          })
+          .join("\n") +
+        "\n</div>\n</section>"
+      );
+    }
     return (
       '<section class="mock-section" id="state-' + (i + 1) + '">\n' +
       "<h2>" + esc(shot.label) + "</h2>\n" +
@@ -72,6 +90,9 @@ html, body { margin: 0; background: #f4f3ef; }
 .mock-section > p { margin: 0 0 14px; color: #55524b; }
 .mock-stage { padding: 24px; border-radius: 12px; background: #e9e7e1; display: inline-block; }
 .mock-stage--dark { background: #12151a; }
+.mock-legend { display: flex; flex-direction: column; gap: 10px; }
+.mock-legend__row { display: flex; align-items: center; gap: 18px; }
+.mock-legend__label { font-size: 15px; }
 
 /* Unfix the copy: the real rail is pinned to the window; this one sits in the page,
    at its real width, showing every card instead of scrolling. */

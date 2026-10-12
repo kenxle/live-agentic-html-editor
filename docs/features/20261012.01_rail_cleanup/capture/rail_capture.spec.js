@@ -97,7 +97,7 @@ function fold(page, item, reply, state) {
 
 // Runs in the page. Copies the rail's shadow tree out as light-DOM HTML, plus
 // its CSS split into what may sit inside @scope and what may not.
-function snapshotInPage() {
+function snapshotInPage(only) {
   const tabBody = window.__lahe.rail.tabBody("active");
   const root = tabBody.getRootNode();
   const host = root.host;
@@ -161,7 +161,8 @@ function snapshotInPage() {
   }
 
   for (const s of root.adoptedStyleSheets || []) takeSheet(s);
-  const html = kids(root);
+  root.querySelectorAll("style").forEach((st) => takeSheet(st.sheet));
+  const html = only ? ser(root.querySelector(only)) : kids(root);
   const hostAttrs = attrs(host);
   return { html, css, outside, hostAttrs };
 }
@@ -247,6 +248,27 @@ test("capture the rail as a reviewable mockup", async ({ page }) => {
       document.body.style.background = "";
       window.__lahe.rail.refreshScheme();
     });
+
+    // The status dot, one copy of the head per state. The attributes are the
+    // ones renderStatus sets; the shapes come from the rail's own CSS.
+    const DOT_STATES = [
+      { label: "Stored, agent listening", attrs: { "data-status": "stored", "data-agent": "connected", "data-loud": "" } },
+      { label: "Agent working", attrs: { "data-status": "stored", "data-agent": "working", "data-loud": "" } },
+      { label: "Stored, no agent listening", attrs: { "data-status": "stored", "data-agent": "absent", "data-loud": "" } },
+      { label: "Kept in this browser (helper down)", attrs: { "data-status": "kept_locally", "data-agent": "", "data-loud": "" } },
+      { label: "Waited too long", attrs: { "data-status": "stored", "data-agent": "waiting", "data-loud": "true" } }
+    ];
+    const legend = [];
+    for (const state of DOT_STATES) {
+      await page.evaluate((attrs) => {
+        const dot = window.__lahe.rail.tabBody("active").getRootNode().querySelector(".head .mark");
+        Object.keys(attrs).forEach((k) => dot.setAttribute(k, attrs[k]));
+      }, state.attrs);
+      const s = await page.evaluate(snapshotInPage, ".head");
+      legend.push({ label: state.label, html: s.html });
+    }
+    shots.push({ label: "Status dot", caption: "The dot in the header, in each state. Shape and color both change.", legend: legend, css: shots[0].css, outside: shots[0].outside, hostAttrs: shots[0].hostAttrs });
+    await page.evaluate(() => window.__lahe.rail.refreshScheme());
 
     // Collapsed.
     await rail(() => window.__lahe.rail.collapse(true));
