@@ -875,9 +875,21 @@ Loopback is not a boundary, so the page proves itself on every request. The help
 | `events.append` | POST | `/lahe/v1/events` | per-review token |
 | `review.read` | GET | `/lahe/v1/review` | per-review token |
 | `review.write` | POST | `/lahe/v1/review` | per-review token |
+| `records.read` | GET | `/lahe/v1/records?review=&page_path=<path>` | per-review token |
 | `replies.poll` | GET | `/lahe/v1/replies?review=&since=<seq>` | per-review token |
 | `window.claim` | POST | `/lahe/v1/window` | per-review token |
 | `review.end` | POST | `/lahe/v1/end` | per-review token |
+
+`records.read` is how a comment made at a page's old `127.0.0.1:<port>` address shows at its stable
+address (V31). Browser storage belongs to one origin, so the rail at the new address never held it. The
+answer is this review's records for the asking page, whole: the page's own address, the old origins of
+its site's root (the helper's own page-server records), and for an old Markdown review the rendered
+file's old path (`/<name>-<hash>.html`). Never a draft. A page whose Origin is not a site address gets
+an empty list. The layer asks once at boot, only when its tag carries old origins
+(`data-lahe-aliases`), and `store.adopt` takes in the records this browser does not hold: acknowledged
+at their revision, never into the outbox, so nothing is posted back. An item with an event still
+queued here (a delete on its way) is left out. The tag's `data-lahe-path-aliases` carries the old path,
+and `record.samePage` reads it only together with an old origin.
 
 `review.end` is the reviewer choosing **End review** on the rail (D10). The library drains its outbox
 BEFORE it posts here, so the reviewer's last keystrokes are on the log ahead of the archive event; a

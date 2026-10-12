@@ -289,6 +289,21 @@
       response: "the review.json projection, plus {seq}"
     },
     {
+      name: "records.read",
+      method: "GET",
+      path: BASE + "/records",
+      auth: AUTH.REVIEW_TOKEN,
+      mutating: false,
+      why:
+        "stable addresses, V31: the records this review holds for the asking page, whole, so a comment made at the " +
+        "page's old 127.0.0.1:<port> address shows at its new one. review.read is the projection, which drops the " +
+        "anchor fields a card needs. Only this review, only this page (its own address, the old origins of its " +
+        "site, and for a Markdown review the rendered file's old path), and never a draft. The page's Origin must " +
+        "be a site address; any other gets an empty list",
+      request: "?review=<id>&page_path=<location.pathname>",
+      response: "{records: [record...], seq}"
+    },
+    {
       name: "replies.poll",
       method: "GET",
       path: BASE + "/replies",
@@ -1358,7 +1373,12 @@
     // JSON array. The layer reads a record made on one of them as made on this
     // page, so a review's old comments show at its new address. Written only by
     // the helper, from its own records (page_routes.aliasesFor).
-    ALIASES: "data-lahe-aliases"
+    ALIASES: "data-lahe-aliases",
+    // Stable addresses, V31: the old paths of this page, as a JSON array. Only
+    // an old Markdown review has one: its page was the rendered file
+    // (/<name>-<hash>.html), and its new address is the source (/doc.md). Read
+    // only together with an old origin (record.samePage).
+    PATH_ALIASES: "data-lahe-path-aliases"
   };
 
   // A plain loopback http origin with a port: what a page server registered
@@ -1372,6 +1392,23 @@
 
   // At most this many aliases on one tag, and only plain loopback origins.
   var ALIAS_MAX = 16;
+
+  // An old path: absolute, at most 512 characters, and nothing that could
+  // leave a double-quoted attribute or carry markup.
+  var PATH_ALIAS = /^\/[^"'<>\s\\]{0,511}$/;
+
+  function isPathAlias(value) {
+    return typeof value === "string" && PATH_ALIAS.test(value);
+  }
+
+  function pathAliasesAttribute(paths) {
+    if (!Array.isArray(paths)) throw new Error("scriptTag: pathAliases must be a list");
+    if (paths.length > ALIAS_MAX) throw new Error("scriptTag: at most " + ALIAS_MAX + " path aliases");
+    paths.forEach(function (one) {
+      if (!isPathAlias(one)) throw new Error("scriptTag: a path alias must be an absolute path, not " + JSON.stringify(one));
+    });
+    return JSON.stringify(paths).replace(/&/g, "&amp;").replace(/"/g, "&quot;");
+  }
 
   /** The aliases as an attribute value: JSON, escaped for a double-quoted attribute. */
   function aliasesAttribute(aliases) {
@@ -1430,6 +1467,7 @@
       fallback +
       (o.notes === true ? '        ' + SCRIPT_ATTR.NOTES + '="' + NOTES_ON + '"\n' : "") +
       (o.aliases !== undefined ? '        ' + SCRIPT_ATTR.ALIASES + '="' + aliasesAttribute(o.aliases) + '"\n' : "") +
+      (o.pathAliases !== undefined ? '        ' + SCRIPT_ATTR.PATH_ALIASES + '="' + pathAliasesAttribute(o.pathAliases) + '"\n' : "") +
       '        defer><\/script>'
     );
   }
@@ -1997,6 +2035,7 @@
     SCRIPT_ATTR: SCRIPT_ATTR,
     ALIAS_MAX: ALIAS_MAX,
     isLoopbackPortOrigin: isLoopbackPortOrigin,
+    isPathAlias: isPathAlias,
     FRAMES_ALLOW: FRAMES_ALLOW,
     START_HIDDEN: START_HIDDEN,
     NOTES_ON: NOTES_ON,

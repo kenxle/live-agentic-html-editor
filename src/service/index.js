@@ -353,6 +353,8 @@ async function serve(options) {
   });
 
   var deps = {
+    // The state folder, for a route that asks the page registry (records.read).
+    dir: dir,
     log: log,
     reviews: reviews,
     projection: projection,

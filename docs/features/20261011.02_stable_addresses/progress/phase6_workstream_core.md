@@ -160,7 +160,9 @@ The step test, in stable_addresses_mappers.spec.js, opens a review created on a 
 - An agent's edit reloads the page.
 - The handled check reads the right file.
 
-### Blocked: old comments in the rail (V31)
+### Old comments in the rail (V31)
+
+Built as option A; see "V31 option A" below. What this section found:
 
 The architecture says the alias list makes old comments match "in the rail and in review.json". The review.json half works. The rail half does not fit the code. The layer never reads items back from the helper: its rail is filled only from this browser's storage, which belongs to one origin. A new address starts with empty storage, so the old comments are not there to match.
 
@@ -536,6 +538,52 @@ Browser, Chromium, one spec at a time: stable_addresses_sites 7/7, harness_secon
 
 `lahe.js serve` count: 2 before and 2 after (Ken's two helpers). Nothing from `sa-core` is running.
 
+## V31 option A: old comments at a page's new address
+
+### Summary
+
+A comment made at a page's old `127.0.0.1:<port>` address now shows as a card at its stable address, once, and stays one after a reload. Nothing is posted back. Built as the "V31 options" section's Option A, with the "Either way" path alias.
+
+### What was built
+
+- `records.read` (`src/shared/protocol.js`, `src/service/routes.js`): this review's records for the asking page, whole, off the projector's kept fold (`projection.currentItems`). `page_routes.recordsForPage` filters them with `record.samePage`: the page's own address, the old origins of its site's root, and for an old Markdown review the rendered file's old path and the old origins of the folder it was served from (`page_routes.oldSpellings`). Never a draft. An Origin that is not a site address gets an empty list. Same token, Origin and registry checks as every review route; no new credential.
+- The script tag carries the old path as `data-lahe-path-aliases`, and `record.samePage` reads it only together with an old origin.
+- `sync.readRecords` (`src/layer/sync.js`) and the boot step in `src/layer/index.js`: on a page whose tag names old origins, one read at boot. The records that match this page go to `store.adopt`, then the rail merges again and replay anchors them. A read-only window takes nothing in.
+- `store.adopt` (`src/layer/store.js`): only ids this browser does not hold, never a draft, never an item with an event queued here. Each goes through `merge.mergeLists` unchanged (`ONLY_STORE`), is written as acknowledged at its revision, and never enters the outbox.
+
+### One difference from the plan
+
+The option said the adopt step runs "before the first `merge()`". The first merge draws what browser storage holds, synchronously, at boot; the helper read is a network call. So the read starts at boot and, when it lands, the rail merges again. Waiting for it would hold the whole rail back on a slow helper.
+
+### Rows and tests
+
+| Row | Test |
+| --- | --- |
+| V31 (unit): store-only items arrive; a newer browser revision wins; a withdrawn draft stays out; other pages and other reviews never arrive; nothing reaches the outbox; a pending delete is not undone | `test/unit/adopt_old_records.test.js`, 8 tests, each guard checked by breaking it |
+| V31 (browser): a comment made at an old address shows once as a card at the new one, stays one after a reload, and posts nothing back | `test/browser/stable_addresses_mappers.spec.js`, "V31: a comment made at the old address ..." (fails with the adopt step turned off) |
+| Path alias for an old Markdown review | `adopt_old_records.test.js`, "an old Markdown review's rendered path ..." |
+
+### Screenshots
+
+The card at the new address, from the browser test above:
+
+- [Old comment at the new address, light](screenshots/v31_old_comment_card_light.png)
+- [Old comment at the new address, dark](screenshots/v31_old_comment_card_dark.png)
+
+### Not done
+
+- review.json still groups an old Markdown review's rendered-page items apart from the source's new address: the path alias reaches the rail, not `pageGroups`.
+
+### Runs
+
+- `npm run test:unit`, once at the end: 2649 tests, 2647 pass, 0 fail, 2 todo.
+- Chromium, `stable_addresses_mappers.spec.js`: 4 of 4.
+- `lahe.js serve` count: 2 before and 2 after (Ken's two helpers).
+
+### Next: each page carries its own comments
+
+Ken widened the linked-document fix to every page. The design note is [each_page_its_own_comments.md](../parts/architecture/each_page_its_own_comments.md). It recommends making `records.read` per file rather than per review. Nothing from it is built yet.
+
 ## Cleanup needed
 
 - `test/retired/browser/tmp_spike_lahe_localhost.spec.js`: the Task 1.0 spike, retired in fix round 2.
@@ -544,4 +592,4 @@ Browser, Chromium, one spec at a time: stable_addresses_sites 7/7, harness_secon
 - `src/service/idle_servers.js`: nothing requires it; take its entry out of `src/shared/manifest.js` in the same change (lint needs the entry while the file exists).
 - `test/retired/unit/sites_step3_v34.retired.test.js`: V34, retired in the fix round.
 - `docs/features/20260922.02_linked_docs_rail/linked_page_rail.png` and `docs/features/20260923.01_rebuild_not_the_agents_job/card_not_on_page.png`: rewritten in the working tree by spec runs (not committed). Put them back with `git checkout`.
-- `.claude-commit202610111600-core`, `...1630-core`, `...1645-core`, `...1700-core`, `...1730-core`, `...1800-core`, `...1815-core`, `...1900-core`, `...1930-core`, `...1931-core`, the Step 3 ones (`...2100-core` onward), the fix-round ones (`...202610120100-core` to `...202610120550-core`), and the one this page's commit adds, in the worktree root: commit message scratch files (gitignored).
+- `.claude-commit202610111600-core`, `...1630-core`, `...1645-core`, `...1700-core`, `...1730-core`, `...1800-core`, `...1815-core`, `...1900-core`, `...1930-core`, `...1931-core`, the Step 3 ones (`...2100-core` onward), the fix-round ones (`...202610120100-core` to `...202610120550-core`), and `...202610120700-core` onward, and the one this page's commit adds, in the worktree root: commit message scratch files (gitignored).

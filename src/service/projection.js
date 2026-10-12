@@ -723,6 +723,11 @@ function createProjector(options) {
     };
   }
 
+  /** The items this review's kept fold holds now, drafts included, in first-seen order. */
+  function currentItems(reviewId) {
+    return itemsOf(catchUp(reviewId).fold);
+  }
+
   function tick() {
     counters.ticks += 1;
     return Object.keys(watched).map(function (reviewId) {
@@ -749,6 +754,7 @@ function createProjector(options) {
     tick: tick,
     tickReview: tickReview,
     currentProjection: currentProjection,
+    currentItems: currentItems,
     start: start,
     stop: stop,
     counters: counters,
@@ -815,7 +821,15 @@ function currentProjection(deps, reviewId) {
   return projector.currentProjection(reviewId);
 }
 
+/** The items the projector's kept fold holds for a review, or null with no projector. */
+function currentItems(deps, reviewId) {
+  var projector = attach(deps);
+  if (!projector) return null;
+  return projector.currentItems(reviewId);
+}
+
 module.exports = {
+  currentItems: currentItems,
   createFold: createFold,
   foldEvents: foldEvents,
   itemsOf: itemsOf,
