@@ -808,6 +808,8 @@
     "  justify-content: space-between;",
     "  gap: 8px;",
     "}",
+    // Send always sits at the right, whether or not Delete is beside it.
+    ".lahe-comment-act[data-lahe-act='send'] { margin-left: auto; }",
     ".lahe-comment-act {",
     "  font: inherit;",
     "  font-size: 11.5px;",
