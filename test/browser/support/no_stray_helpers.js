@@ -9,7 +9,7 @@
 
 "use strict";
 
-const { makeRunRoot, reapStrayHelpers } = require("../../helpers/temp_helpers.js");
+const { makeRunRoot, reapStrayHelpers, removeRunRoot } = require("../../helpers/temp_helpers.js");
 
 module.exports = async function globalSetup() {
   // The run's own temp folder. Workers start after this and inherit the
@@ -21,9 +21,13 @@ module.exports = async function globalSetup() {
   process.env.TEMP = runRoot;
   return async function globalTeardown() {
     const left = await reapStrayHelpers(runRoot);
+    // The run folder is scratch: remove it unless a helper survived, in which
+    // case it stays as evidence and the error names it.
+    removeRunRoot(runRoot, left);
     if (left.length) {
       throw new Error(
-        left.length + " helper process" + (left.length === 1 ? "" : "es") +
+        "The run folder was kept: " + runRoot + "\n" +
+          left.length + " helper process" + (left.length === 1 ? "" : "es") +
           " from this run outlived the browser suite. A test that starts a helper stops it " +
           "(test/helpers/temp_helpers.js stopTempHelpers):\n" +
           left.map((p) => "  " + p.pid + (p.stopped ? " (now stopped) " : " (STILL RUNNING) ") + p.command).join("\n")

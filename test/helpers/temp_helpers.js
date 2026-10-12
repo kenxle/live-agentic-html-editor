@@ -229,7 +229,24 @@ async function reapStrayHelpers(runRoot, graceMs) {
   }
 }
 
+/**
+ * Remove the run folder once the run is over. Everything a test made under it
+ * is scratch: one unit run left about 600 MB there, and a few dozen runs filled
+ * a disk. When a helper survived, the folder is kept as evidence of what it was
+ * running on, and its path is returned so the caller can print it.
+ *
+ * @param {string} runRoot the folder from makeRunRoot
+ * @param {Array} left what reapStrayHelpers returned
+ * @returns {{removed: boolean, kept: string|null}}
+ */
+function removeRunRoot(runRoot, left) {
+  if (left && left.length) return { removed: false, kept: runRoot };
+  fs.rmSync(runRoot, { recursive: true, force: true });
+  return { removed: true, kept: null };
+}
+
 module.exports = {
+  removeRunRoot,
   helperPidsFor,
   stopTempHelpers,
   makeRunRoot,
