@@ -1,3 +1,12 @@
+For Ken to decide in review:
+
+::: callout-question
+**When should an open question stop counting?** Today 45 documents have an old unanswered agent question, and most are from work Ken has moved on from. The brief keeps what you agreed: a question counts until it is answered or the card goes away (R5), and only questions from after the install count (R4). The risk: questions you choose not to answer pile up, and there is no Dismiss button yet (board row LAHE-dismiss-card). Two other ways:
+
+- **A.** Keep R5 as written, and build card dismissal soon after. (Recommended: it keeps a question in front of you until you deal with it.)
+- **B.** A question stops counting once you have looked at its page, like an answer does. The count clears more easily, but a question you glanced past stops nagging.
+:::
+
 Settled with Ken in the crucible:
 
 - **Which version?** The icon that says when something is waiting on him, plus recent documents and what is open and who is connected. The running indicator, Library link, and Quit stay in.
@@ -10,12 +19,10 @@ Settled with Ken in the crucible:
 
 Chosen by the brief, for Ken to overrule in review:
 
-- **When an answer counts as seen (R5).** When a page of that review is open in his browser after the answer arrived. Not per card: Lahe cannot know which cards he read, and a per-card rule would need a new gesture on the page. Opening the document is a fact the helper already sees.
-- **The icon shows only the "waiting on you" count (R1).** Open documents and listening agents stay in the menu, so the icon is quiet unless he is needed.
-- **Sessions are named by their document (R8),** because Lahe records no agent name today. When board row LAHE-agent-name-default lands, the menu can show "Claude" or "Codex" too.
-- **"Stop Lahe until next login" can be undone early by an agent (R11).** An agent's `lahe review` already asks the login item for a helper, and stopping it from doing so would break that agent.
-- **How many recent documents (R9).** About eight, then "Show all in the Library". Tuned on the real menu.
-
-Open:
-
-- None blocking. The architecture decides how the app proves its permission to the helper, with a security review.
+- **The icon counts documents, not cards (R1).** Each one is one click.
+- **Looking means the page is the focused tab (R6).** Not per card: Lahe cannot know which cards he read, and a per-card rule would need a new gesture on the page.
+- **Only replies after the install count (R4).** Otherwise the first day shows 45.
+- **The icon shows only the "waiting on you" count (R1).** Open documents and connected agents stay in the menu.
+- **Sessions are named by their Library name or document (R10),** because Lahe records no agent name today. When board row LAHE-agent-name-default lands, the menu can show "Claude" or "Codex" too.
+- **"Stop Lahe until next login" can be undone early by an agent (R14).** An agent's `lahe review` asks for a helper, and refusing would break that agent. The menu says so.
+- **Up to 8 rows per list (R12),** tuned on the real menu.
