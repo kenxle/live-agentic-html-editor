@@ -12,7 +12,19 @@ Nothing right now.
 
 ## Decided
 
-- **Approved (your page note, 20:37):** the design for every page carrying its own comments, one PR instead of five, and retiring the old tests. The core builder is building the design. The retired tests are deleted only in the cleanup batch.
+- **Approved (your page note, 20:37):** the design for every page carrying its own comments, one PR instead of five, and retiring the old tests. The retired tests are deleted only in the cleanup batch.
+- **Every page carries its own comments: built and merged.** What you will notice:
+  - `lahe review` of a file that already has a review opens that review. It never makes a second one, whichever agent runs it.
+  - A link to a document that has its own review opens it at its own address, with its own comments.
+  - Comments already split into another review show on the page in a read-only list, "Filed in another review", naming that review and its agent.
+  - `lahe review retire` ends a review on purpose. Only the agent that owns it can do that.
+  - **One change to how handoff works:** an agent can no longer take over another agent's session from the command line while that agent is still listening. You confirm that handoff from the Library, which already asks first. The second security review asked for this, so an agent cannot quietly take over another live agent's work. A session whose agent is gone still hands over from the command line as before.
+  - Unit suite: 2,677 pass, 0 fail. The Library's Open gets the same one-review-per-file rule next (the Library builder).
+
+  ![Comments filed in another review, shown read-only (light)](progress/screenshots/read_only_card_light.png)
+
+  ![The same, dark](progress/screenshots/read_only_card_dark.png)
+
 - **Every page carries its own comments.** You rejected "a linked document opens with the linking page's rail". Whatever page you are on, the rail shows that page's comments, whichever page you came from. This changes which review answers on a page, so the core builder is writing a design note first. It comes to this page for your OK before it is built.
 - **Old comments at the new address:** you chose A, and it is built and merged. A comment made at a page's old address shows once as a card at its new address, stays one card after a reload, and nothing is sent back. Old Markdown pages are covered too. Unit suite: 2,647 pass, 0 fail.
 
@@ -39,7 +51,8 @@ The Lahe test folders were deleted at your go-ahead, and the disk went from 953 
 
 | Agent or task | Doing | Started | Branch |
 |---|---|---|---|
-| Core builder | One review per file and every page carries its own comments, with both security reviews; the failing Library cross-site test | 2026-10-11 20:37 | `unit/sa-core` |
+| Library builder | The Library's Open follows one review per file | 2026-10-11 21:01 | `unit/sa-library` |
+| Test cleanup builder | Test runs delete their own temp folders (separate small fix off main) | 2026-10-11 20:54 | `fix/test-temp-cleanup` |
 | Orchestrator | Waiting on the core builder, then dist rebuild and the full gate | 2026-10-11 20:42 | `feat/stable-addresses` |
 
 ## Phases
