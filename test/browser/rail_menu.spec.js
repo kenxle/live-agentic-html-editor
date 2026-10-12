@@ -99,9 +99,10 @@ async function chooseMenuItem(page, label) {
       return got.open ? got : null;
     }, { message: "the header menu to open on a click" });
   }
-  // Copy and Export live under "Export review", which opens in place.
-  if (!info.items.some((one) => one.label === label)) {
-    const group = info.items.filter((one) => one.label === "Export review")[0];
+  // Some items live under a group ("Export review", "View") that opens in place.
+  for (const name of ["Export review", "View"]) {
+    if (info.items.some((one) => one.label === label)) break;
+    const group = info.items.filter((one) => one.label === name)[0];
     if (group) {
       const g = centerOf(group.rect);
       await page.mouse.click(g.x, g.y);
@@ -201,10 +202,8 @@ test.describe("the review's actions live in the head's menu", () => {
       // than work for boot.
       expect(info.items.map((one) => one.label)).toEqual([
         "Export review",
-        "Collapse all cards",
-        "Expand all cards",
-        "Keyboard shortcuts",
-        "Hide for presenting (Cmd-Shift-X)"
+        "View",
+        "Keyboard shortcuts"
       ]);
       info.items.forEach((one) => {
         expect(one.rect.width, one.label + " is really on screen").toBeGreaterThan(0);
@@ -328,7 +327,7 @@ test.describe("the review's actions live in the head's menu", () => {
         return got.open ? got : null;
       }, { message: "the shortcuts panel to open from the menu" });
       expect(open.shown, "and to be really on screen").toBe(true);
-      expect(open.rows, "one row per gesture").toBe(require("../../src/shared/gestures.js").hintLines().length);
+      expect(open.rows, "one row per gesture").toBe(require("../../src/shared/gestures.js").panelLines().length);
       expect(open.text).toContain("Cmd-Shift-C");
 
       await page.keyboard.press("Escape");

@@ -155,9 +155,10 @@ async function chooseFromRailMenu(page, label) {
     },
     { message: "the rail's header menu to open on a real click" }
   );
-  // Copy and Export live under "Export review", which opens in place.
-  if (!opened.items.some((one) => one.label === label)) {
-    const group = opened.items.filter((one) => one.label === "Export review")[0];
+  // Some items live under a group ("Export review", "View") that opens in place.
+  for (const name of ["Export review", "View"]) {
+    if (opened.items.some((one) => one.label === label)) break;
+    const group = opened.items.filter((one) => one.label === name)[0];
     if (group) {
       await page.mouse.click(group.rect.x + group.rect.width / 2, group.rect.y + group.rect.height / 2);
       opened = await page.evaluate(() => window.__lahe.rail.menuInfo());

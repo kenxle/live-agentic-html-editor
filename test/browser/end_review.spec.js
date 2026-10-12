@@ -278,10 +278,8 @@ test.describe("the reviewer ends the review from the rail", () => {
     });
     expect(menu.items.map((one) => one.label)).toEqual([
       "Export review",
-      "Collapse all cards",
-      "Expand all cards",
-      "Keyboard shortcuts",
-      "Hide for presenting (Cmd-Shift-X)"
+      "View",
+      "Keyboard shortcuts"
     ]);
     await page.evaluate(() => window.__lahe.rail.closeMenu(false));
 

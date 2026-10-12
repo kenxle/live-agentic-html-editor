@@ -202,6 +202,14 @@ async function chooseMenuItem(page, label) {
       { message: "the header menu to open on a click" }
     );
   }
+  // The fold actions live under the View group, which opens in place.
+  if (!info.items.some((one) => one.label === label)) {
+    const group = info.items.filter((one) => one.label === "View")[0];
+    if (group) {
+      await page.mouse.click(group.rect.x + group.rect.width / 2, group.rect.y + group.rect.height / 2);
+      info = await menuInfo(page);
+    }
+  }
   const item = info.items.filter((one) => one.label === label)[0];
   expect(item, "a menu item labelled " + label).toBeTruthy();
   await page.mouse.click(item.rect.x + item.rect.width / 2, item.rect.y + item.rect.height / 2);

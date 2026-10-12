@@ -1270,7 +1270,7 @@
     LABEL: "Hide for presenting",
     // What the rail's own footer teaches. The chord is the ONLY way back, and
     // the reviewer has to know that before they use it, not after.
-    MENU_LABEL: "Hide for presenting (Cmd-Shift-X)"
+    MENU_LABEL: "Hide rail for presenting (Cmd-Shift-X)"
   };
 
   // What the collapsed pill says on hover. It carries the chord for the same
@@ -1285,6 +1285,7 @@
   // tab that is open, because that is the list the reviewer is looking at.
   var FOLD_ALL = { COLLAPSE: "collapse-cards", EXPAND: "expand-cards" };
   var EXPORT_GROUP = "export-review";
+  var VIEW_GROUP = "view";
 
   // The keyboard shortcuts, behind the menu rather than standing in the pane.
   // The menu item opens a panel that lists every gesture in gestures.js.
@@ -1302,10 +1303,11 @@
     { action: EXPORT_GROUP, label: "Export review", group: true },
     { action: "copy", label: "Copy review to clipboard", parent: EXPORT_GROUP },
     { action: "export", label: "Export review to file", parent: EXPORT_GROUP },
-    { action: FOLD_ALL.COLLAPSE, label: "Collapse all cards" },
-    { action: FOLD_ALL.EXPAND, label: "Expand all cards" },
-    { action: SHORTCUTS.ACTION, label: SHORTCUTS.LABEL },
-    { action: PRESENT.ACTION, label: PRESENT.MENU_LABEL }
+    { action: VIEW_GROUP, label: "View", group: true },
+    { action: FOLD_ALL.COLLAPSE, label: "Collapse all cards", parent: VIEW_GROUP },
+    { action: FOLD_ALL.EXPAND, label: "Expand all cards", parent: VIEW_GROUP },
+    { action: PRESENT.ACTION, label: PRESENT.MENU_LABEL, parent: VIEW_GROUP },
+    { action: SHORTCUTS.ACTION, label: SHORTCUTS.LABEL }
   ];
 
   // The style button's glyph: Heroicons 2.2.0 `swatch`, MIT, vendored under
@@ -2176,7 +2178,7 @@
       keysHead.appendChild(keysClose);
       keysPanel.appendChild(keysHead);
       var keysList = el("ul", "keyspanel__list");
-      gestures.hintLines().forEach(function (line) {
+      gestures.panelLines().forEach(function (line) {
         var row = el("li", "keyspanel__row");
         row.appendChild(el("kbd", null, line.keys));
         row.appendChild(el("span", null, line.hint));
@@ -5245,6 +5247,7 @@
       dom.menuList.hidden = true;
       dom.menuBtn.setAttribute("aria-expanded", "false");
       setMenuGroupOpen(EXPORT_GROUP, false);
+      setMenuGroupOpen(VIEW_GROUP, false);
       if (returnFocus) dom.menuBtn.focus();
       return true;
     }
