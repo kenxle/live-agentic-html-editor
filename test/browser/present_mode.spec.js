@@ -159,6 +159,8 @@ test.describe("present mode: the library hidden, and still working", () => {
       // no selector.
       const item = await page.evaluate(() => {
         window.__lahe.rail.openMenu(0);
+        // Present mode sits under the View group, which opens in place.
+        window.__lahe.rail.tabBody("active").getRootNode().querySelector('.menuitem[data-action="view"]').click();
         const info = window.__lahe.rail.menuInfo();
         return info.items.filter((one) => one.action === "present")[0];
       });

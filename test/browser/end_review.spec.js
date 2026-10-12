@@ -252,7 +252,7 @@ test.describe("the reviewer ends the review from the rail", () => {
 
   // -------------------------------------------------------------------------
 
-  test("the way out is in the footer beside the hints, and the menu is untouched", async ({ page }) => {
+  test("the way out is in the footer beside its column, and the menu is untouched", async ({ page }) => {
     await booted(page);
 
     const info = await endInfo(page);
@@ -263,12 +263,12 @@ test.describe("the reviewer ends the review from the rail", () => {
     expect(info.text, "no label beside the icon: it is a narrow strip, not a submit button").toBe("");
     expect(info.rect.width, "it is really on screen").toBeGreaterThan(0);
 
-    // Beside the hints, not under them, and spanning both hint rows.
-    expect(info.rect.x, "it sits to the right of the hints").toBeGreaterThanOrEqual(info.hintsRect.right - 1);
-    expect(info.rect.height, "a narrow vertical strip as tall as the hints it stands beside").toBeGreaterThanOrEqual(
-      info.hintsRect.height - 1
+    // Beside the footer's column, not under it, and as tall as it.
+    expect(info.rect.x, "it sits to the right of the footer column").toBeGreaterThanOrEqual(info.columnRect.right - 1);
+    expect(info.rect.height, "a narrow vertical strip as tall as the column it stands beside").toBeGreaterThanOrEqual(
+      info.columnRect.height - 1
     );
-    expect(info.rect.width, "narrow").toBeLessThan(info.hintsRect.width);
+    expect(info.rect.width, "narrow").toBeLessThan(info.columnRect.width);
 
     // It is NOT a menu item, and the menu is exactly what it was.
     expect(info.inMenu, "the way out is standing UI, not a menu item").toBe(false);
@@ -277,11 +277,9 @@ test.describe("the reviewer ends the review from the rail", () => {
       return window.__lahe.rail.menuInfo();
     });
     expect(menu.items.map((one) => one.label)).toEqual([
-      "Copy review",
-      "Export review to file",
-      "Collapse all cards",
-      "Expand all cards",
-      "Hide for presenting (Cmd-Shift-X)"
+      "Export review",
+      "View",
+      "Keyboard shortcuts"
     ]);
     await page.evaluate(() => window.__lahe.rail.closeMenu(false));
 

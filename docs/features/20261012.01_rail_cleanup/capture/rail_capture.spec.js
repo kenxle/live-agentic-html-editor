@@ -79,25 +79,29 @@ async function editAppend(page, selector, text) {
   await pollPage(page, () => window.__lahe.editState().open === false, undefined, { message: "edit commit" });
 }
 
-function fold(page, item, reply, state) {
-  return page.evaluate((a) => {
-    window.__lahe.handle.doneTab().applyReplies([
-      {
-        event: "reply.folded",
-        item: a.item.id,
-        rev: a.item.rev,
-        accepted: true,
-        state: a.state,
-        ts: new Date().toISOString(),
-        reply: a.reply
-      }
-    ]);
-  }, { item, reply, state });
+// The real agent path: one reply line, folded by the helper and delivered by
+// the poll loop, so every tab hears about it the way it does in a review.
+async function fold(page, helper, item, reply) {
+  const dir = path.join(helper.stateDir, "reviews", REVIEW);
+  for (let i = 0; i < 200; i += 1) {
+    try {
+      const p = JSON.parse(fs.readFileSync(path.join(dir, "review.json"), "utf8"));
+      if (p.pages.some((pg) => pg.items.some((it) => it.id === item.id))) break;
+    } catch (err) {
+      // not written yet
+    }
+    await page.waitForTimeout(50);
+  }
+  fs.appendFileSync(
+    path.join(dir, "replies-claude.jsonl"),
+    JSON.stringify(Object.assign({ item: item.id, rev: item.rev }, reply)) + "\n"
+  );
+  await pollPage(page, (id) => window.__lahe.itemById(id).reply !== null, item.id, { message: "reply folded" });
 }
 
 // Runs in the page. Copies the rail's shadow tree out as light-DOM HTML, plus
 // its CSS split into what may sit inside @scope and what may not.
-function snapshotInPage() {
+function snapshotInPage(only) {
   const tabBody = window.__lahe.rail.tabBody("active");
   const root = tabBody.getRootNode();
   const host = root.host;
@@ -161,7 +165,8 @@ function snapshotInPage() {
   }
 
   for (const s of root.adoptedStyleSheets || []) takeSheet(s);
-  const html = kids(root);
+  root.querySelectorAll("style").forEach((st) => takeSheet(st.sheet));
+  const html = only ? ser(root.querySelector(only)) : kids(root);
   const hostAttrs = attrs(host);
   return { html, css, outside, hostAttrs };
 }
@@ -186,6 +191,9 @@ test("capture the rail as a reviewable mockup", async ({ page }) => {
 
     const rail = (fn, arg) => page.evaluate(fn, arg);
     const snap = async (label, caption) => {
+      // The fixture page has no document style, so boot hides the style
+      // button. Real documents show it, so the mockup does too.
+      await page.evaluate(() => window.__lahe.rail.setStyleAvailable(true));
       const s = await page.evaluate(snapshotInPage);
       shots.push(Object.assign({ label, caption }, s));
     };
@@ -194,27 +202,43 @@ test("capture the rail as a reviewable mockup", async ({ page }) => {
     await rail(() => { window.__lahe.rail.collapse(false); window.__lahe.rail.selectTab("active"); });
     await snap("Empty rail", "The rail before any comment. Active tab.");
 
+    // The head's menu, open, and the shortcuts panel it opens.
+    await page.evaluate(() => window.__lahe.rail.openMenu(0));
+    await page.evaluate(() => {
+      const root = window.__lahe.rail.tabBody("active").getRootNode();
+      root.querySelector('.menuitem[data-action="export-review"]').click();
+    });
+    await snap("More actions menu", "The menu behind the three dots, open, with the pointer on Export review. View flies out the same way.");
+    await page.evaluate(() => {
+      const root = window.__lahe.rail.tabBody("active").getRootNode();
+      root.querySelector('.menuitem[data-action="shortcuts"]').click();
+    });
+    await snap("Keyboard shortcuts", "What the Keyboard shortcuts item in that menu opens.");
+    await page.keyboard.press("Escape");
+    // Focus back on the page, so the comment hotkey reaches it.
+    await page.mouse.click(40, 600);
+
     // The comments, one per state.
     const waiting = await commentOn(page, "section.focus p:nth-of-type(2)", "Cut the second sentence. It sounds defensive.");
     const asked = await commentOn(page, "p.lede", "Pick one number and use it twice.");
-    await fold(page, asked, {
+    await fold(page, helper, asked, {
       status: "question",
       agent: "claude",
       text: "Do you mean nine check-ins, or the four cards below? They count different things."
-    }, "ready");
+    });
     const refused = await commentOn(page, "#feed-coach-note", "Make this sound warmer.");
-    await fold(page, refused, {
+    await fold(page, helper, refused, {
       status: "not_handled",
       agent: "claude",
       reason: "This note comes from the coach's own message in the app, so I can't reword it from the page source."
-    }, "not_handled");
+    });
     const done = await commentOn(page, "#feed-highlight", "Name the lift and the weight.");
-    await fold(page, done, {
+    await fold(page, helper, done, {
       status: "handled",
       agent: "claude",
       reason: "Named the lift (back squat) and the weight (225 lb).",
       files: ["app/views/dashboard/_feed_highlight.html.erb"]
-    }, "handled");
+    });
     await pollPage(page, (id) => window.__lahe.rail.getCard(id).pane === "done", done.id, { message: "done pane" });
 
     // A hand edit, waiting for the agent.
@@ -231,6 +255,14 @@ test("capture the rail as a reviewable mockup", async ({ page }) => {
     await rail(() => window.__lahe.rail.selectTab("done"));
     await snap("Done tab", "A comment the agent handled, with the file it changed.");
 
+    // Hold on: every send button says Send to queue.
+    const clickHold = () =>
+      page.evaluate(() => window.__lahe.rail.tabBody("active").getRootNode().querySelector(".holdbtn").click());
+    await clickHold();
+    await rail(() => window.__lahe.rail.selectTab("active"));
+    await snap("Hold on", "Hold sending switched on. Every send button says Send to queue; hovering one explains why.");
+    await clickHold();
+
     // Dark, Active tab.
     await rail(() => {
       document.documentElement.style.background = "#12151a";
@@ -245,9 +277,83 @@ test("capture the rail as a reviewable mockup", async ({ page }) => {
       window.__lahe.rail.refreshScheme();
     });
 
+    // The status dot, one copy of the head per state. The attributes are the
+    // ones renderStatus sets; the shapes come from the rail's own CSS.
+    const DOT_STATES = [
+      { label: "Stored, agent listening", tip: "Stored · agent listening", attrs: { "data-status": "stored", "data-agent": "connected", "data-loud": "" } },
+      { label: "Agent working", tip: "Stored · agent is working, 3m", attrs: { "data-status": "stored", "data-agent": "working", "data-loud": "" } },
+      { label: "Stored, no agent listening", tip: "Stored · no agent listening", attrs: { "data-status": "stored", "data-agent": "absent", "data-loud": "" } },
+      { label: "Kept in this browser (helper down)", tip: "Kept in this browser", attrs: { "data-status": "kept_locally", "data-agent": "", "data-loud": "" } },
+      { label: "Waited too long", tip: "Stored · nothing back yet, 12m", attrs: { "data-status": "stored", "data-agent": "waiting", "data-loud": "true" } }
+    ];
+    const legend = [];
+    const realDot = await page.evaluate(() => {
+      const dot = window.__lahe.rail.tabBody("active").getRootNode().querySelector(".head .mark");
+      return { status: dot.getAttribute("data-status"), agent: dot.getAttribute("data-agent"), loud: dot.getAttribute("data-loud"), tip: dot.parentNode.getAttribute("data-lahe-tip") };
+    });
+    for (const state of DOT_STATES) {
+      await page.evaluate((st) => {
+        const dot = window.__lahe.rail.tabBody("active").getRootNode().querySelector(".head .mark");
+        Object.keys(st.attrs).forEach((k) => dot.setAttribute(k, st.attrs[k]));
+        // Only the first line: the sentences under it are in the Hover text section.
+        dot.parentNode.setAttribute("data-lahe-tip", st.tip);
+      }, state);
+      const s = await page.evaluate(snapshotInPage, ".head");
+      legend.push({ label: state.label, tip: state.tip, html: s.html });
+    }
+    // Put the real reading back, so the views after this one show it.
+    await page.evaluate((d) => {
+      const dot = window.__lahe.rail.tabBody("active").getRootNode().querySelector(".head .mark");
+      dot.setAttribute("data-status", d.status || "");
+      dot.setAttribute("data-agent", d.agent || "");
+      dot.setAttribute("data-loud", d.loud || "");
+      if (d.tip) dot.parentNode.setAttribute("data-lahe-tip", d.tip);
+    }, realDot);
+    shots.push({ label: "Status dot", caption: "The dot in the header, in each state. Shape and color both change. Under each label is the first line its hover shows; edit it there. The sentences under that first line are in the Hover text section at the bottom of this page.", legend: legend, css: shots[0].css, outside: shots[0].outside, hostAttrs: shots[0].hostAttrs });
+    await page.evaluate(() => window.__lahe.rail.refreshScheme());
+
     // Collapsed.
     await rail(() => window.__lahe.rail.collapse(true));
     await snap("Collapsed", "The rail folded down to its pill.");
+
+    // THE PROPOSAL: no Edits tab. Drawn on a copy of the rail by moving the
+    // hand edit's card into Active and taking the Edits tab away. Last, because
+    // it rearranges the live rail.
+    await rail(() => window.__lahe.rail.collapse(false));
+    await page.evaluate(() => {
+      const root = window.__lahe.rail.tabBody("active").getRootNode();
+      const active = root.querySelector('.pane[data-pane="active"]');
+      const edits = root.querySelector('.pane[data-pane="edits"]');
+      edits.querySelectorAll("article.card").forEach((card) => {
+        const copy = card.cloneNode(true);
+        copy.style.order = "-2";
+        active.appendChild(copy);
+      });
+      const tab = root.querySelector('.tab[data-tab="edits"]');
+      if (tab) tab.remove();
+      edits.remove();
+    });
+    await rail(() => window.__lahe.rail.selectTab("active"));
+    await page.evaluate(() => {
+      const root = window.__lahe.rail.tabBody("active").getRootNode();
+      const count = root.querySelector('.tab[data-tab="active"] .count');
+      const cards = root.querySelectorAll('.pane[data-pane="active"] article.card').length;
+      if (count) count.textContent = String(cards);
+    });
+    const proposal = await page.evaluate(snapshotInPage);
+    shots.push(Object.assign({
+      label: "Proposal: no Edits tab",
+      top: true,
+      caption: "Drawn on a copy of the rail. Nothing here is built yet.",
+      notes: [
+        "The Edits tab goes away. The rail has two tabs: Active and Done.",
+        "A hand edit that is still waiting for the agent shows in Active as its own card, labelled Edit, with the old and new wording and its Undo button. It is the top card in the copy below.",
+        "Once the agent handles an edit, it moves to Done, the same as it does today.",
+        "The Export edits button, which copies every hand edit as text, moves into the three-dot menu under Export review, as \"Copy hand edits to clipboard\".",
+        "What you would notice: one list of everything waiting, newest first, instead of switching tabs to find your edits.",
+        "Your call: go ahead with this? An optional extra, if the list gets long: a small Comments / Edits filter at the top of Active. I would leave it out unless you want it."
+      ]
+    }, proposal));
 
     await page.screenshot({ path: path.join(__dirname, "..", "capture_reference.png") });
     await rail(() => window.__lahe.rail.collapse(false));

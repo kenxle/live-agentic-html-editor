@@ -521,7 +521,6 @@
     ".lahe-ask-time{margin-left:auto;font-weight:400;letter-spacing:0;text-transform:none}",
     ".lahe-thread-text{display:block}",
     ".lahe-followup{display:flex;flex-direction:column;gap:7px;padding-top:8px}",
-    ".lahe-followup-label{font-size:10px;font-weight:650;text-transform:uppercase;letter-spacing:.07em;color:var(--ink-faint)}",
     ".lahe-followup textarea{box-sizing:border-box;width:100%;min-height:72px;resize:vertical;border:1px solid var(--line);border-radius:7px;padding:8px 9px;background:var(--paper);color:var(--ink);font:inherit;line-height:1.4}",
     ".lahe-followup textarea:focus{outline:2px solid var(--accent);outline-offset:1px}",
     ".lahe-followup .cardacts{justify-content:flex-end}",
@@ -1450,13 +1449,12 @@
       if (!composers[id]) {
         var node = el("section", "lahe-followup");
         node.setAttribute("data-lahe-followup", id);
-        var label = el("label", "lahe-followup-label", "Follow up");
-        node.appendChild(label);
+        // No label above the box: the placeholder says what it is for.
         var input = el("textarea", "lahe-followup-input");
         input.id = "lahe-followup-" + id;
-        label.setAttribute("for", input.id);
+        input.setAttribute("aria-label", "Follow up");
         input.setAttribute("rows", "3");
-        input.setAttribute("placeholder", "Add a new message without changing the earlier exchange");
+        input.setAttribute("placeholder", "Add a new message");
         input.value = store.readFollowupDraft(reviewId, id);
         input.disabled = isReadOnly();
         input.addEventListener("input", function () {
@@ -1471,8 +1469,9 @@
         });
         node.appendChild(input);
         var actions = el("div", "cardacts");
-        var send = el("button", "cardact", "Follow up");
+        var send = el("button", "cardact", "Send");
         send.setAttribute("type", "button");
+        overlayModule.paintSendButton(send, !!(store && typeof store.isHeld === "function" && store.isHeld(reviewId)), "Send");
         send.disabled = isReadOnly();
         send.addEventListener("click", function () {
           submitFollowup(id, input.value);

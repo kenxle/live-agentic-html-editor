@@ -105,7 +105,7 @@ The flows are "Key Flows" in the architecture doc; the hand-over picture is the 
 
 ## Tab icon and brandmark
 
-- The Library's tab icon is a dark rounded square with books on a shelf, set apart from the blue speech bubble every reviewed document gets.
+- The Library's tab icon is a dark rounded square with books on a shelf, set apart from the blue document icon every reviewed document gets.
 - The same image sits beside the "Lahe Library" heading, decorative.
 - Both come from one constant, `LIBRARY_ICON_URI` in `src/service/tab_icon.js`, as an inline SVG that `img-src data:` allows.
 

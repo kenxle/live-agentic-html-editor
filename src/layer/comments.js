@@ -808,6 +808,8 @@
     "  justify-content: space-between;",
     "  gap: 8px;",
     "}",
+    // Send always sits at the right, whether or not Delete is beside it.
+    ".lahe-comment-act[data-lahe-act='send'] { margin-left: auto; }",
     ".lahe-comment-act {",
     "  font: inherit;",
     "  font-size: 11.5px;",
@@ -870,15 +872,6 @@
     "  outline-offset: 1px;",
     "  border-color: transparent;",
     "}",
-    ".lahe-comment-foot {",
-    "  display: flex;",
-    "  align-items: center;",
-    "  justify-content: space-between;",
-    "  gap: 8px;",
-    "  color: rgba(17, 17, 17, 0.5);",
-    "  font-size: 11px;",
-    "}",
-    ".lahe-comment-state[data-state='ready'] { color: rgba(17, 17, 17, 0.72); }",
     // Pick mode is the reviewer choosing something, not the tool warning them,
     // so the outline is the one accent rather than a saturated orange. It was
     // the loudest colour moment anywhere in the product and it meant "normal".
@@ -901,7 +894,6 @@
     "  background: rgba(147, 167, 234, 0.12); }",
     ":host([data-lahe-scheme='dark']) .lahe-comment-quote { color: rgba(242,242,242,0.66);",
     "  border-left-color: rgba(147, 167, 234, 0.8); }",
-    ":host([data-lahe-scheme='dark']) .lahe-comment-foot { color: rgba(242,242,242,0.55); }",
     ":host([data-lahe-scheme='dark']) .lahe-comment-grip {",
     "  background-image: radial-gradient(rgba(255,255,255,0.3) 1px, transparent 1px); }",
     ":host([data-lahe-scheme='dark']) .lahe-comment-act { color: rgba(242,242,242,0.66);",
@@ -909,7 +901,9 @@
     ":host([data-lahe-scheme='dark']) .lahe-comment-act:hover { color: #f2f2f2;",
     "  background: rgba(255,255,255,0.06); }",
     ":host([data-lahe-scheme='dark']) .lahe-comment-act--quiet { border-color: transparent; background: none; }",
-    PILL_STYLE
+    PILL_STYLE,
+    ".lahe-comment-act[hidden] { display: none; }",
+    highlightModule.SEND_TIP_CSS
   ].join("\n");
 
   // ---------------------------------------------------------------------------
@@ -1385,7 +1379,6 @@
       var id = item[record.FIELD.ID];
       var node = null;
       var inputEl = null;
-      var stateEl = null;
       var gripEl = null;
       var sendEl = null;
       var deleteEl = null;
@@ -1473,18 +1466,8 @@
         markers.markChrome(mirrorEl);
         node.appendChild(mirrorEl);
 
-        var foot = doc.createElement("div");
-        foot.className = "lahe-comment-foot";
-        var hint = doc.createElement("span");
-        hint.className = "lahe-comment-hint";
-        hint.textContent = HINT_READY;
-        stateEl = doc.createElement("span");
-        stateEl.className = "lahe-comment-state";
-        stateEl.setAttribute("data-state", item[record.FIELD.STATE]);
-        stateEl.textContent = item[record.FIELD.STATE] === record.STATE.READY ? "Ready" : "Draft";
-        foot.appendChild(hint);
-        foot.appendChild(stateEl);
-        node.appendChild(foot);
+        // No hint line and no Draft/Ready label under the box: Send says how to
+        // finish, and the card's own color says the state.
 
         // The two controls. Neither is a second way of doing anything: Send runs
         // the very function Cmd-Enter runs, and Delete runs the very remove path
@@ -1493,6 +1476,7 @@
         acts.className = "lahe-comment-acts";
         deleteEl = actionButton("Delete", "lahe-comment-act lahe-comment-act--quiet", "delete", discardDraft);
         sendEl = actionButton("Send", "lahe-comment-act", "send", commitFromControl);
+        highlightModule.paintSendButton(sendEl, store.isHeld(requireReview()), "Send");
         acts.appendChild(deleteEl);
         acts.appendChild(sendEl);
         node.appendChild(acts);
@@ -1779,7 +1763,11 @@
        */
       function paintSendable() {
         if (!sendEl) return null;
-        sendEl.disabled = !readInput().trim();
+        var empty = !readInput().trim();
+        sendEl.disabled = empty;
+        // The note on the whole page is a standing box: empty, there is nothing
+        // to delete, so it offers no Delete until it holds words.
+        if (deleteEl && item[record.FIELD.KIND] === record.KIND.NOTE) deleteEl.hidden = empty;
         return sendEl;
       }
 
@@ -1885,7 +1873,6 @@
         // keystroke came from a keyboard or from a caller driving this handle.
         paintSendable();
         grow();
-        paintState(next);
         // Same rule as persist: a keystroke the disk refused posts nothing, so
         // the helper never acknowledges a wording this browser will not have on
         // the next load. The box keeps the words either way.
@@ -1921,7 +1908,6 @@
         var next = record.bumpRev(current, {});
         committedNote = String(next[record.FIELD.NOTE] || "");
         store.write(requireReview(), next);
-        paintState(next);
         emit(next, "reworded");
         return next;
       }
@@ -1938,15 +1924,8 @@
         // same session is a new rewording and takes it back off again.
         committed = true;
         wasReady = true;
-        paintState(next);
         emit(next, "ready");
         return next;
-      }
-
-      function paintState(next) {
-        if (!stateEl) return;
-        stateEl.setAttribute("data-state", next[record.FIELD.STATE]);
-        stateEl.textContent = next[record.FIELD.STATE] === record.STATE.READY ? "Ready" : "Draft";
       }
 
       /**

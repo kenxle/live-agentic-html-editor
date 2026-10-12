@@ -210,13 +210,10 @@ async function expectOneBoxLast(page, id, kind) {
   expect(boxes.add).toBe(want.add);
   expect(boxes.followUp).toBe(want.followUp);
   expect(boxes.boxIsLast, "the box sits under the newest message").toBe(true);
-  if (kind === "add") {
-    expect(boxes.buttons).toContain("Send");
-    expect(boxes.buttons).not.toContain("Follow up");
-  } else {
-    expect(boxes.buttons).toContain("Follow up");
-    expect(boxes.buttons).not.toContain("Send");
-  }
+  // Both boxes send with a button that says Send; the box itself is what
+  // differs, and add/followUp above already say which one is drawn.
+  expect(boxes.buttons).toContain("Send");
+  expect(boxes.buttons).not.toContain("Follow up");
   return boxes;
 }
 

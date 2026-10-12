@@ -260,7 +260,12 @@
   };
   // The word the toggle and the toast both use. One spelling, so the button's
   // accessible name and anything announcing it never drift apart.
-  var HOLD_LABEL = "Hold sending";
+  var HOLD_LABEL = "Hold sending messages";
+  // While held, the same button sends what is queued.
+  function holdReleaseLabel(n) {
+    if (n === 0) return "Send messages live";
+    return "Send " + n + " held message" + (n === 1 ? "" : "s");
+  }
   var HOLD_ZERO_TEXT = "Holding — nothing sends until you release";
   function holdCountText(n) {
     return "Holding, " + n + " queued";
@@ -518,10 +523,39 @@
     // position/z-index so the head's menu can hang over the panes below it.
     ".head{position:relative;z-index:3;display:flex;align-items:center;gap:10px;padding:13px 14px 12px;",
     "border-bottom:1px solid var(--line-soft)}",
-    ".mark{width:8px;height:8px;border-radius:50%;background:var(--accent);flex:none}",
+    // THE STATUS DOT. The head's dot is the status line's dot: one reading of
+    // "is my work stored, and is an agent on it", drawn where the eye starts.
+    // Shape as well as color, so it reads without color vision:
+    //   circle         stored, and an agent is listening or nothing is waiting
+    //   circle + halo  an agent is working on it
+    //   ring           stored, but no agent is listening
+    //   square         kept in this browser, not stored yet
+    //   triangle       work has waited too long; the rail also says so in words
+    // The words live in the dot's title and in the screen-reader status row.
+    // Its words show at once on hover, drawn here rather than as a title,
+    // which the browser shows late.
+    ".markwrap{position:relative;display:flex;align-items:center;justify-content:center;",
+    "width:17px;height:17px;margin:-4px;flex:none}",
+    ".markwrap[data-lahe-tip]:hover::after{content:attr(data-lahe-tip);position:absolute;left:0;",
+    "top:calc(100% + 6px);width:260px;padding:8px 10px;border-radius:7px;background:#15171c;color:#fff;",
+    "font-size:11.5px;font-weight:500;line-height:1.45;white-space:pre-line;z-index:10;",
+    "box-shadow:0 6px 18px rgba(0,0,0,.25);pointer-events:none}",
+    ".mark{width:9px;height:9px;border-radius:50%;background:var(--ink-faint);flex:none;",
+    "box-sizing:border-box;cursor:default}",
+    ".mark[data-status='stored']{background:var(--good)}",
+    ".mark[data-status='kept_locally'],.mark[data-status='kept_unconfirmed']{border-radius:2px;width:8px;height:8px}",
+    ".mark[data-status='kept_locally']{background:var(--warn)}",
+    // Working pulses: a halo that swells and fades while the agent is on it.
+    ".mark[data-agent='working']{background:var(--accent);animation:lahe-mark-pulse 1.6s ease-out infinite}",
+    "@keyframes lahe-mark-pulse{0%{box-shadow:0 0 0 0 color-mix(in srgb,var(--accent) 55%,transparent)}",
+    "70%{box-shadow:0 0 0 6px color-mix(in srgb,var(--accent) 0%,transparent)}",
+    "100%{box-shadow:0 0 0 0 color-mix(in srgb,var(--accent) 0%,transparent)}}",
+    "@media (prefers-reduced-motion:reduce){.mark[data-agent='working']{animation:none;",
+    "box-shadow:0 0 0 3px var(--accent-wash)}}",
+    ".mark[data-agent='absent'],.mark[data-agent='no_agent']{background:transparent;border:1.5px solid var(--ink-faint)}",
+    ".mark[data-loud='true']{background:var(--warn);border:0;border-radius:0;width:11px;height:10px;",
+    "clip-path:polygon(50% 0,100% 100%,0 100%)}",
     ".title{font-size:13px;font-weight:600;letter-spacing:-.005em}",
-    ".review{font-size:11px;color:var(--ink-faint);letter-spacing:.02em;",
-    "overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:11ch}",
     ".head .spacer{flex:1}",
     ".iconbtn{width:26px;height:26px;border-radius:7px;color:var(--ink-soft);",
     "display:flex;align-items:center;justify-content:center;font-size:14px}",
@@ -546,6 +580,17 @@
     ".menuitem{display:block;width:100%;text-align:left;white-space:nowrap;font-size:12.5px;",
     "font-weight:500;color:var(--ink);padding:7px 10px;border-radius:7px}",
     ".menuitem:hover{background:var(--surface)}",
+    ".menuitem[hidden]{display:none}",
+    // A group flies out to the side on hover, the way a desktop menu does. To
+    // the LEFT, because the rail is against the window's right edge.
+    ".menugroup{position:relative}",
+    ".menuitem--group{display:flex;align-items:center;justify-content:space-between;gap:12px}",
+    ".menuitem--group::after{content:'›';font-size:14px;line-height:1;color:var(--ink-faint)}",
+    ".menuitem--group[aria-expanded='true']{background:var(--surface)}",
+    // Fixed, and placed by setMenuGroupOpen from the group's own rect: the rail
+    // clips what overflows it, and a fly-out has to stand outside the rail.
+    ".submenu{position:fixed;top:auto;right:auto;min-width:190px}",
+    ".submenu:not(:has(> .menuitem:not([hidden]))){display:none}",
 
     // --- tabs ---------------------------------------------------------------
     ".tabs{display:flex;gap:2px;padding:8px 10px 0;border-bottom:1px solid var(--line-soft)}",
@@ -696,6 +741,11 @@
     // rather than one per file. It is deliberately small and outlined: these sit
     // under the reviewer's own sentence and must not compete with it.
     ".cardacts{display:flex;align-items:center;gap:7px;flex-wrap:wrap}",
+    ".cardacts:not(:has(> :not([hidden]))){display:none}",
+    ".cardact[hidden]{display:none}",
+    // Send sits at the right end, like every other send in the rail, so its
+    // held tip (anchored right) stays inside the card.
+    ".cardact[data-lahe-act='send']{margin-left:auto}",
     ".cardacts:empty{display:none}",
     ".cardact{font-size:11.5px;font-weight:550;color:var(--ink-soft);border:1px solid var(--line);",
     "border-radius:7px;padding:3px 9px;background:var(--paper)}",
@@ -798,6 +848,9 @@
     "flex-direction:column;gap:9px;padding:11px 12px;",
     "border-radius:var(--radius-sm);background:var(--paper);border:1px solid var(--line);box-shadow:var(--shadow)}",
     ".stylepanel[data-shown='open']{display:flex}",
+    ".keyspanel__list{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:9px}",
+    ".keyspanel__row{display:flex;flex-direction:column;gap:3px;font-size:12px;line-height:1.45;color:var(--ink-soft)}",
+    ".keyspanel__row kbd{align-self:flex-start}",
     ".stylepanel__head{display:flex;align-items:center;justify-content:space-between;gap:8px}",
     ".stylepanel__title{font-size:12.5px;font-weight:700;color:var(--ink)}",
     // A column: the line, then its buttons. The words wrap rather than clip,
@@ -861,22 +914,17 @@
     // in front of the reviewer. Calm by default, because the healthy reading is
     // most of the reviewer's session and a rail that shouts through it is a rail
     // nobody reads by the third comment.
-    ".statusline{display:flex;align-items:center;gap:8px}",
+    // The row is for screen readers now: the head's dot is what the eye reads,
+    // and the row's words are the dot's title. Kept as a live region so a
+    // change is still announced.
+    ".statusline{position:absolute;width:1px;height:1px;margin:-1px;padding:0;overflow:hidden;",
+    "clip:rect(0 0 0 0);white-space:nowrap;border:0}",
     ".status{display:flex;align-items:center;gap:7px;font-size:12px;color:var(--ink-soft);flex:1;min-width:0}",
-    ".status__dot{width:6px;height:6px;border-radius:50%;background:var(--ink-faint);flex:none}",
-    ".status[data-status='stored'] .status__dot{background:var(--good)}",
-    ".status[data-status='kept_locally'] .status__dot{background:var(--warn)}",
-    ".status[data-agent='working'] .status__dot{background:var(--accent)}",
-    // The quiet indicator is a dot's worth of difference, not a colour change
-    // anyone has to decode: connected keeps the stored green, nobody connected
-    // goes grey. Grey is not an alarm; nothing is waiting.
-    ".status[data-agent='absent'] .status__dot{background:var(--ink-faint)}",
     // LOUD IS THE WAIT'S DOING. Last, so it wins over the calm rules above it:
     // an item nobody has answered in ten minutes, or one the machine can see
     // nothing has picked up, is the one thing on this line worth interrupting
     // for.
     ".status[data-loud='true']{color:var(--warn-ink,var(--ink));font-weight:600}",
-    ".status[data-loud='true'] .status__dot{background:var(--warn)}",
     ".status__text{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}",
 
     // THE HOLD TOGGLE (docs/features/20260917.01_hold_toggle). Beside the
@@ -885,15 +933,20 @@
     // switch, drawn with the rail's own neutral tokens: pressed reads as a
     // filled pill on --sunken, the same surface the end-review panel's buttons
     // use for their own pressed state, never a new hue.
-    ".holdrow{display:flex;align-items:center;gap:8px;flex-wrap:wrap}",
-    ".holdbtn{display:flex;align-items:center;gap:6px;font-size:11.5px;font-weight:600;",
-    "color:var(--ink-soft);padding:3px 9px;border-radius:999px;border:1px solid var(--line);flex:none}",
+    // One full-width button that names what pressing it does: "Hold sending
+    // messages", then, while held, "Send N held messages", drawn as the
+    // primary action because that is the thing left to do.
+    ".holdrow{display:flex;align-items:center;gap:6px 8px;flex-wrap:wrap}",
+    ".holdbtn{display:flex;align-items:center;justify-content:center;width:100%;",
+    "font-size:12px;font-weight:600;color:var(--ink-soft);padding:7px 10px;border-radius:var(--radius-sm);",
+    "border:1px solid var(--line);background:var(--paper)}",
     ".holdbtn:hover{background:var(--surface);color:var(--ink)}",
-    ".holdbtn__dot{width:6px;height:6px;border-radius:50%;background:var(--ink-faint);flex:none}",
-    ".holdbtn[aria-pressed='true']{background:var(--sunken);color:var(--ink);border-color:var(--line)}",
-    ".holdbtn[aria-pressed='true'] .holdbtn__dot{background:var(--ink-soft)}",
-    ".holdcount{font-size:11px;color:var(--ink-soft);overflow:hidden;text-overflow:ellipsis;",
-    "white-space:nowrap;flex:1;min-width:0}",
+    ".holdbtn[aria-pressed='true']{background:var(--accent);border-color:var(--accent);color:#fff}",
+    ".holdbtn[aria-pressed='true']:hover{background:var(--accent-ink);border-color:var(--accent-ink);color:#fff}",
+    // The count is said on the button now; this stays as the screen-reader
+    // announcement of a change.
+    ".holdcount{position:absolute;width:1px;height:1px;margin:-1px;overflow:hidden;clip:rect(0 0 0 0);",
+    "white-space:nowrap;border:0}",
     ".holdcount:empty{display:none}",
 
     ".limit{font-size:11.5px;color:var(--ink-faint);line-height:1.4}",
@@ -938,9 +991,6 @@
     ".endpanel__go[disabled],.endpanel__no[disabled]{opacity:.6;cursor:default}",
     ".endpanel__go[hidden],.endpanel__no[hidden]{display:none}",
 
-    // The keyboard hints are readable, not fine print (D10).
-    ".hints{display:flex;flex-wrap:wrap;gap:4px 14px;font-size:11.5px;color:var(--ink-soft)}",
-    ".hint{display:flex;align-items:center;gap:5px}",
     "kbd{font-family:inherit;font-size:11px;font-weight:600;color:var(--ink);",
     "background:var(--sunken);border:1px solid var(--line);border-bottom-width:2px;",
     "border-radius:5px;padding:1px 5px;letter-spacing:.01em}",
@@ -983,7 +1033,8 @@
     ".pill[data-lahe-dragging]{cursor:grabbing;box-shadow:var(--shadow),0 0 0 1px var(--accent)}",
     ".pill[hidden]{display:none}",
     ".pill:hover{background:var(--surface)}",
-    ".pill__dot{width:6px;height:6px;border-radius:50%;background:var(--accent);flex:none}",
+    // The pill's dot is the head's status dot, same shapes and colors (.mark),
+    // so the rail closed says what the rail open says.
     ".pill__count{font-variant-numeric:tabular-nums;color:var(--ink-faint);font-weight:500}",
     ".pill__count[hidden]{display:none}",
     // THE PILL, LATE. The rail can be closed for most of a session, and the
@@ -991,7 +1042,6 @@
     // border and ring, an amber dot, and the wait. No motion and no sound.
     ".pill__wait{display:none;font-variant-numeric:tabular-nums;font-weight:650;color:var(--warn)}",
     ".pill[data-lahe-late='true']{border-color:var(--warn);box-shadow:var(--shadow),0 0 0 1px var(--warn)}",
-    ".pill[data-lahe-late='true'] .pill__dot{background:var(--warn)}",
     ".pill[data-lahe-late='true'] .pill__wait{display:inline}",
     // THE PILL, HELD (docs/features/20260917.01_hold_toggle). Neutral, on the
     // same tokens as the held card, and never at the same time as late above:
@@ -999,7 +1049,6 @@
     // actionable of the two ("you did this on purpose") and a card only ever
     // reads as held while Hold suppresses it from the overdue clock entirely.
     ".pill[data-lahe-held='true']{border-color:var(--line);box-shadow:var(--shadow),0 0 0 1px var(--line)}",
-    ".pill[data-lahe-held='true'] .pill__dot{background:var(--ink-faint)}",
     ".pill[data-lahe-held='true'] .pill__wait{display:inline;color:var(--ink-soft)}",
     // THE JEWEL: the same number the Done tab badge carries, on the one surface
     // that is still on screen once the rail is put away. A reviewer works with
@@ -1232,7 +1281,7 @@
     LABEL: "Hide for presenting",
     // What the rail's own footer teaches. The chord is the ONLY way back, and
     // the reviewer has to know that before they use it, not after.
-    MENU_LABEL: "Hide for presenting (Cmd-Shift-X)"
+    MENU_LABEL: "Hide rail for presenting (Cmd-Shift-X)"
   };
 
   // What the collapsed pill says on hover. It carries the chord for the same
@@ -1246,6 +1295,12 @@
   // register, so these two are handled where they are drawn. They act on the
   // tab that is open, because that is the list the reviewer is looking at.
   var FOLD_ALL = { COLLAPSE: "collapse-cards", EXPAND: "expand-cards" };
+  var EXPORT_GROUP = "export-review";
+  var VIEW_GROUP = "view";
+
+  // The keyboard shortcuts, behind the menu rather than standing in the pane.
+  // The menu item opens a panel that lists every gesture in gestures.js.
+  var SHORTCUTS = { ACTION: "shortcuts", LABEL: "Keyboard shortcuts", CLOSE: "Close" };
 
   // The Document style button (docs/features/20260930.01_style_switcher). It
   // has its own place in the head, beside the menu, and exists only on a page
@@ -1255,11 +1310,15 @@
   var DOCUMENT_STYLE = { LABEL: STYLE_WORDS.TITLE };
 
   var MENU_ITEMS = [
-    { action: "copy", label: "Copy review" },
-    { action: "export", label: "Export review to file" },
-    { action: FOLD_ALL.COLLAPSE, label: "Collapse all cards" },
-    { action: FOLD_ALL.EXPAND, label: "Expand all cards" },
-    { action: PRESENT.ACTION, label: PRESENT.MENU_LABEL }
+    // Copy and Export sit under one "Export review" item that opens in place.
+    { action: EXPORT_GROUP, label: "Export review", group: true },
+    { action: "copy", label: "Copy review to clipboard", parent: EXPORT_GROUP },
+    { action: "export", label: "Export review to file", parent: EXPORT_GROUP },
+    { action: VIEW_GROUP, label: "View", group: true },
+    { action: FOLD_ALL.COLLAPSE, label: "Collapse all cards", parent: VIEW_GROUP },
+    { action: FOLD_ALL.EXPAND, label: "Expand all cards", parent: VIEW_GROUP },
+    { action: PRESENT.ACTION, label: PRESENT.MENU_LABEL, parent: VIEW_GROUP },
+    { action: SHORTCUTS.ACTION, label: SHORTCUTS.LABEL }
   ];
 
   // The style button's glyph: Heroicons 2.2.0 `swatch`, MIT, vendored under
@@ -1675,12 +1734,6 @@
     return END_REVIEW.NOTHING_PENDING;
   }
 
-  var HINTS = [
-    { keys: ["⌘", "⇧", "C"], what: "comment" },
-    { keys: ["⌘", "⇧", "E"], what: "edit" },
-    { keys: ["⌘", "⏎"], what: "send" }
-  ];
-
   /**
    * The page's own setInterval, bound to it, or null when there is no page.
    *
@@ -1854,6 +1907,9 @@
     var pdfOutsideListener = null;
     var pdfShadowListener = null;
     var stylePanelOpen = false;
+    var shortcutsOpen = false;
+    var shortcutsOutsideListener = null;
+    var shortcutsShadowListener = null;
     var styleHandlers = {};
     var styleOutsideListener = null;
     var styleShadowListener = null;
@@ -1890,6 +1946,7 @@
         // the style dropdown.
         closeMenu(false);
         closeStylePanel(false);
+        closeShortcuts(false);
         closePdfTray(false);
         return { rootId: markers.OVERLAY_ROOT_ID, remounted: false };
       }
@@ -1923,7 +1980,7 @@
       highlightModule.fenceTypingKeys(shadow);
 
       var style = doc.createElement("style");
-      style.textContent = CSS;
+      style.textContent = CSS + highlightModule.SEND_TIP_CSS;
       shadow.appendChild(style);
 
       var rail = el("aside", "rail");
@@ -1945,9 +2002,16 @@
       rail.appendChild(grip);
 
       var head = el("div", "head");
-      head.appendChild(el("span", "mark"));
-      head.appendChild(el("span", "title", "Review"));
-      head.appendChild(el("span", "review", reviewId || ""));
+      // The dot sits in a wrap that carries its hover tip: the triangle's
+      // clip-path would cut a tip drawn on the dot itself, and the wrap gives a
+      // 9px dot a hit area a pointer can find.
+      var statusDotWrap = el("span", "markwrap");
+      var statusDot = el("span", "mark");
+      statusDot.setAttribute("aria-hidden", "true");
+      statusDotWrap.appendChild(statusDot);
+      head.appendChild(statusDotWrap);
+      head.appendChild(el("span", "title", "Lahe"));
+      // No review id in the head: it only ever showed a hash, never a name.
       head.appendChild(el("span", "spacer"));
 
       // THE DOCUMENT STYLE BUTTON, and the dropdown that hangs from it. Built
@@ -2066,12 +2130,47 @@
       menuList.setAttribute("role", "menu");
       menuList.setAttribute("aria-label", "More actions");
       menuList.hidden = true;
+      var menuGroups = {};
       var menuItems = MENU_ITEMS.map(function (entry) {
         var item = el("button", "menuitem", entry.label);
         item.setAttribute("type", "button");
         item.setAttribute("role", "menuitem");
         item.setAttribute("data-action", entry.action);
         item.tabIndex = -1;
+        if (entry.group) {
+          item.className = "menuitem menuitem--group";
+          item.setAttribute("aria-expanded", "false");
+          item.setAttribute("aria-haspopup", "menu");
+          var groupWrap = el("div", "menugroup");
+          var sub = el("div", "menu submenu");
+          sub.setAttribute("role", "menu");
+          sub.setAttribute("aria-label", entry.label);
+          groupWrap.appendChild(item);
+          groupWrap.appendChild(sub);
+          menuGroups[entry.action] = sub;
+          // A click opens it rather than toggling: the pointer that clicked
+          // has already opened it by hovering.
+          item.addEventListener("click", function () {
+            setMenuGroupOpen(entry.action, true);
+          });
+          // Hover opens it and leaving the group shuts it. The fly-out is inside
+          // the wrap, so moving onto it does not count as leaving.
+          groupWrap.addEventListener("mouseenter", function () {
+            Object.keys(menuGroups).forEach(function (other) {
+              if (other !== entry.action) setMenuGroupOpen(other, false);
+            });
+            setMenuGroupOpen(entry.action, true);
+          });
+          groupWrap.addEventListener("mouseleave", function () {
+            setMenuGroupOpen(entry.action, false);
+          });
+          menuList.appendChild(groupWrap);
+          return item;
+        }
+        if (entry.parent) {
+          item.setAttribute("data-parent", entry.parent);
+          item.hidden = true;
+        }
         item.addEventListener("click", function () {
           // Closed first, so the reviewer's click leaves nothing hanging over
           // the rail while the work runs, and the focus goes back where they
@@ -2084,15 +2183,41 @@
             setPresenting(true);
             return;
           }
+          if (entry.action === SHORTCUTS.ACTION) {
+            openShortcuts();
+            return;
+          }
           if (entry.action === FOLD_ALL.COLLAPSE || entry.action === FOLD_ALL.EXPAND) {
             setCardsCollapsed(currentTab(), entry.action === FOLD_ALL.COLLAPSE);
             return;
           }
           runAction(entry.action);
         });
-        menuList.appendChild(item);
+        (entry.parent ? menuGroups[entry.parent] : menuList).appendChild(item);
         return item;
       });
+      var keysPanel = el("div", "stylepanel keyspanel");
+      keysPanel.setAttribute("role", "group");
+      keysPanel.setAttribute("aria-label", SHORTCUTS.LABEL);
+      keysPanel.setAttribute("data-shown", "closed");
+      var keysHead = el("div", "stylepanel__head");
+      keysHead.appendChild(el("div", "stylepanel__title", SHORTCUTS.LABEL));
+      var keysClose = el("button", "endpanel__no", SHORTCUTS.CLOSE);
+      keysClose.setAttribute("type", "button");
+      keysClose.addEventListener("click", function () {
+        closeShortcuts(true);
+      });
+      keysHead.appendChild(keysClose);
+      keysPanel.appendChild(keysHead);
+      var keysList = el("ul", "keyspanel__list");
+      gestures.panelLines().forEach(function (line) {
+        var row = el("li", "keyspanel__row");
+        row.appendChild(el("kbd", null, line.keys));
+        row.appendChild(el("span", null, line.hint));
+        keysList.appendChild(row);
+      });
+      keysPanel.appendChild(keysList);
+
       menuBtn.addEventListener("click", function () {
         toggleMenu();
       });
@@ -2108,6 +2233,7 @@
       menuWrap.appendChild(menuBtn);
       menuWrap.appendChild(menuList);
       head.appendChild(menuWrap);
+      head.appendChild(keysPanel);
 
       var collapseBtn = el("button", "iconbtn", "→");
       collapseBtn.setAttribute("aria-label", "Collapse the rail");
@@ -2217,8 +2343,6 @@
       var statusLineWrap = el("div", "statusline");
       var statusRow = el("div", "status");
       statusRow.setAttribute("role", "status");
-      var statusDot = el("span", "status__dot");
-      statusRow.appendChild(statusDot);
       var statusText = el("span", "status__text", "Kept in this browser");
       statusRow.appendChild(statusText);
       statusLineWrap.appendChild(statusRow);
@@ -2235,8 +2359,8 @@
       holdBtn.setAttribute("aria-pressed", "false");
       holdBtn.setAttribute("aria-label", HOLD_LABEL);
       holdBtn.title = HOLD_LABEL;
-      holdBtn.appendChild(el("span", "holdbtn__dot"));
-      holdBtn.appendChild(el("span", null, HOLD_LABEL));
+      var holdLabel = el("span", "holdbtn__label", HOLD_LABEL);
+      holdBtn.appendChild(holdLabel);
       holdBtn.addEventListener("click", function () {
         toggleHeld();
       });
@@ -2288,18 +2412,11 @@
 
       // No action buttons here. Copy and Export moved into the head's menu
       // (D10, revised): they read as submit buttons under the reviewer's own
-      // words, and the footer's job is the status line and the hints.
-      var hints = el("div", "hints");
-      HINTS.forEach(function (hint) {
-        var row = el("span", "hint");
-        hint.keys.forEach(function (key) {
-          row.appendChild(el("kbd", null, key));
-        });
-        row.appendChild(el("span", null, hint.what));
-        hints.appendChild(row);
-      });
+      // words, and the footer's job is the status line. The keycap hints that
+      // sat here are gone too: the "All shortcuts" disclosure in the pane has
+      // them, and the footer copy was noise.
 
-      // The hints keep the row and the door sits beside them. Ken asked for the
+      // The door sits beside the footer's column. Ken asked for the
       // way out here rather than in the menu: it is the control that closes the
       // session, and it should be where the reviewer's eye already is when they
       // are done. Same title and accessible name, because an icon with no label
@@ -2312,7 +2429,6 @@
       endBtn.addEventListener("click", function () {
         askEndReview();
       });
-      footMain.appendChild(hints);
       foot.appendChild(footMain);
       foot.appendChild(endBtn);
       rail.appendChild(foot);
@@ -2322,8 +2438,10 @@
       pill.setAttribute("type", "button");
       pill.setAttribute("aria-label", PILL_TITLE);
       pill.title = PILL_TITLE;
-      pill.appendChild(el("span", "pill__dot"));
-      pill.appendChild(el("span", null, "Review"));
+      var pillDot = el("span", "mark pill__dot");
+      pillDot.setAttribute("aria-hidden", "true");
+      pill.appendChild(pillDot);
+      pill.appendChild(el("span", null, "Lahe"));
       var pillCount = el("span", "pill__count", "0");
       pill.appendChild(pillCount);
       // How long the oldest comment has waited, shown only while that is late.
@@ -2487,10 +2605,12 @@
         lateNote: lateNote,
         lateMessage: lateMessage,
         statusDot: statusDot,
+        statusDotWrap: statusDotWrap,
+        pillDot: pillDot,
         holdBtn: holdBtn,
+        holdLabel: holdLabel,
         holdCount: holdCount,
         limit: limit,
-        hints: hints,
         footMain: footMain,
         endBtn: endBtn,
         endPanel: endPanel,
@@ -2504,6 +2624,7 @@
         refusalBtn: refusalBtn,
         menuBtn: menuBtn,
         menuList: menuList,
+        keysPanel: keysPanel,
         menuItems: menuItems,
         menuWrap: menuWrap,
         styleWrap: styleWrap,
@@ -2619,7 +2740,7 @@
     }
 
     function emptyTextFor(name) {
-      if (name === TAB.ACTIVE) return "Nothing outstanding. Select some text and press Cmd-Shift-C.";
+      if (name === TAB.ACTIVE) return "No unanswered or active threads. Check the done tab, or select some text and press Cmd-Shift-C.";
       if (name === TAB.EDITS) return "No hand edits yet.";
       return "Nothing handled yet.";
     }
@@ -2633,6 +2754,7 @@
       // listeners go the same way.
       closeMenu(false);
       closeStylePanel(false);
+      closeShortcuts(false);
       closePdfTray(false);
       // An unanswered end-review question goes with the rail that asked it, and
       // whoever awaited it is told, rather than left holding a promise that can
@@ -2750,7 +2872,6 @@
       collapsedCards = readCardCollapsePreference();
       loadChips();
       if (dom) {
-        dom.rail.querySelector(".review").textContent = id || "";
         renderChips();
         renderCollapsed();
         renderPresent();
@@ -2869,6 +2990,10 @@
       if (!dom || !dom.holdBtn) return;
       var held = isHeldNow();
       dom.holdBtn.setAttribute("aria-pressed", held ? "true" : "false");
+      var label = held ? holdReleaseLabel(heldQueuedCount()) : HOLD_LABEL;
+      dom.holdLabel.textContent = label;
+      dom.holdBtn.setAttribute("aria-label", label);
+      dom.holdBtn.title = "";
       if (!held) {
         dom.holdCount.textContent = "";
         return;
@@ -2892,6 +3017,12 @@
      */
     function repaintHoldChrome() {
       renderHold();
+      // Every send button, in the rail and in the comment boxes on the page,
+      // says "Send to queue" while Hold is on.
+      var heldNow = isHeldNow();
+      if (dom && dom.shadow) highlightModule.paintSendButtons(dom.shadow, heldNow);
+      var surfaceNow = highlights && highlights.surface ? highlights.surface() : null;
+      if (surfaceNow) highlightModule.paintSendButtons(surfaceNow.root || surfaceNow.host, heldNow);
       if (!dom || !dom.pill) return;
       var heldQueued = isHeldNow() ? heldQueuedCount() : 0;
       // HELD, ON THE COLLAPSED PILL (R10), takes over the late pill's spot
@@ -4605,6 +4736,7 @@
       var view = dom.statusRow.ownerDocument ? dom.statusRow.ownerDocument.defaultView : null;
       var computed = view ? view.getComputedStyle(dom.statusRow) : null;
       var dotComputed = view ? view.getComputedStyle(dom.statusDot) : null;
+      // What a reviewer sees is the head's dot; the row is screen-reader text.
       return {
         present: true,
         status: dom.statusRow.getAttribute("data-status") || "",
@@ -4612,8 +4744,8 @@
         loud: dom.statusRow.getAttribute("data-loud") === "true",
         text: dom.statusText.textContent || "",
         title: dom.statusRow.title || "",
-        display: computed ? computed.display : null,
-        visible: !!computed && computed.display !== "none",
+        display: dotComputed ? dotComputed.display : null,
+        visible: !!dotComputed && dotComputed.display !== "none",
         weight: computed ? computed.fontWeight : null,
         dotColor: dotComputed ? dotComputed.backgroundColor : null
       };
@@ -4813,7 +4945,7 @@
     function endInfo() {
       if (!dom || !dom.endBtn) return { present: false };
       var rect = dom.endBtn.getBoundingClientRect();
-      var hintsRect = dom.hints.getBoundingClientRect();
+      var columnRect = dom.footMain.getBoundingClientRect();
       var panelRect = dom.endPanel.getBoundingClientRect();
       return {
         present: true,
@@ -4825,13 +4957,13 @@
           return node.getAttribute("data-action") === "end";
         }),
         rect: { x: rect.x, y: rect.y, width: rect.width, height: rect.height, right: rect.right, bottom: rect.bottom },
-        hintsRect: {
-          x: hintsRect.x,
-          y: hintsRect.y,
-          width: hintsRect.width,
-          height: hintsRect.height,
-          right: hintsRect.right,
-          bottom: hintsRect.bottom
+        columnRect: {
+          x: columnRect.x,
+          y: columnRect.y,
+          width: columnRect.width,
+          height: columnRect.height,
+          right: columnRect.right,
+          bottom: columnRect.bottom
         },
         running: endRunning,
         panel: {
@@ -4871,6 +5003,12 @@
       dom.statusRow.setAttribute("data-loud", line.loud ? "true" : "");
       dom.statusText.textContent = line.text;
       dom.statusRow.title = line.title;
+      [dom.statusDot, dom.pillDot].forEach(function (dot) {
+        dot.setAttribute("data-status", status || "");
+        dot.setAttribute("data-agent", line.agentState || "");
+        dot.setAttribute("data-loud", line.loud ? "true" : "");
+      });
+      dom.statusDotWrap.setAttribute("data-lahe-tip", line.title ? line.text + "\n\n" + line.title : line.text);
       // The banner and the late cards run off the same clock and the same
       // liveness answer as this line, so they are repainted with it.
       renderWaitBanner(banner);
@@ -5022,10 +5160,59 @@
     // and unmounting. A menu that survives one of those is a menu that hangs
     // over someone's page after they have moved on.
 
+    // The keyboard shortcuts panel. It hangs from the head like the style
+    // dropdown and closes the same ways: Close, Esc, or a click anywhere else.
+    function openShortcuts() {
+      if (!dom) return false;
+      if (shortcutsOpen) return true;
+      closeMenu(false);
+      closeStylePanel(false);
+      closePdfTray(false);
+      shortcutsOpen = true;
+      dom.keysPanel.setAttribute("data-shown", "open");
+      shortcutsOutsideListener = function (event) {
+        if (event.type === "keydown") {
+          if (event.key !== "Escape") return;
+          event.preventDefault();
+          event.stopPropagation();
+          closeShortcuts(true);
+          return;
+        }
+        if (fromOurTree(event)) return;
+        closeShortcuts(false);
+      };
+      shortcutsShadowListener = function (event) {
+        if (dom.keysPanel.contains(event.target)) return;
+        closeShortcuts(false);
+      };
+      doc.addEventListener("pointerdown", shortcutsOutsideListener, true);
+      doc.addEventListener("keydown", shortcutsOutsideListener, true);
+      dom.shadow.addEventListener("pointerdown", shortcutsShadowListener, true);
+      return true;
+    }
+
+    function closeShortcuts(returnFocus) {
+      if (shortcutsOutsideListener) {
+        doc.removeEventListener("pointerdown", shortcutsOutsideListener, true);
+        doc.removeEventListener("keydown", shortcutsOutsideListener, true);
+        shortcutsOutsideListener = null;
+      }
+      if (shortcutsShadowListener) {
+        if (dom) dom.shadow.removeEventListener("pointerdown", shortcutsShadowListener, true);
+        shortcutsShadowListener = null;
+      }
+      if (!shortcutsOpen) return false;
+      shortcutsOpen = false;
+      if (dom) dom.keysPanel.setAttribute("data-shown", "closed");
+      if (returnFocus && dom) dom.menuBtn.focus();
+      return true;
+    }
+
     function openMenu(index) {
       if (!dom || menuOpen) return menuOpen;
       // One thing hangs from the head at a time.
       closeStylePanel(false);
+      closeShortcuts(false);
       closePdfTray(false);
       menuOpen = true;
       dom.menuList.hidden = false;
@@ -5096,8 +5283,31 @@
       if (!dom) return true;
       dom.menuList.hidden = true;
       dom.menuBtn.setAttribute("aria-expanded", "false");
+      setMenuGroupOpen(EXPORT_GROUP, false);
+      setMenuGroupOpen(VIEW_GROUP, false);
       if (returnFocus) dom.menuBtn.focus();
       return true;
+    }
+
+    // Open or shut a group inside the menu: its own items show under it.
+    function setMenuGroupOpen(group, open) {
+      if (!dom) return false;
+      var groupNode = null;
+      dom.menuItems.forEach(function (node) {
+        if (node.getAttribute("data-action") === group) {
+          groupNode = node;
+          node.setAttribute("aria-expanded", open ? "true" : "false");
+        }
+        if (node.getAttribute("data-parent") === group) node.hidden = !open;
+      });
+      var sub = groupNode && groupNode.parentNode ? groupNode.parentNode.querySelector(".submenu") : null;
+      var subView = doc && doc.defaultView;
+      if (open && sub && subView) {
+        var r = groupNode.getBoundingClientRect();
+        sub.style.top = Math.max(8, r.top - 6) + "px";
+        sub.style.right = Math.max(8, subView.innerWidth - r.left + 10) + "px";
+      }
+      return open;
     }
 
     function toggleMenu() {
@@ -5142,6 +5352,19 @@
       } else if (event.key === "End") {
         event.preventDefault();
         focusMenuItem(-1);
+      } else if (event.key === "ArrowRight" || event.key === "ArrowLeft") {
+        // Into and out of a group, the way a submenu works.
+        var focused = visibleMenuItems()[index];
+        if (!focused) return;
+        var group = focused.getAttribute("aria-expanded") !== null ? focused.getAttribute("data-action") : focused.getAttribute("data-parent");
+        if (!group) return;
+        event.preventDefault();
+        setMenuGroupOpen(group, event.key === "ArrowRight");
+        var items = visibleMenuItems();
+        var groupNode = items.filter(function (node) {
+          return node.getAttribute("data-action") === group;
+        })[0];
+        focusMenuItem(items.indexOf(groupNode) + (event.key === "ArrowRight" ? 1 : 0));
       } else if (event.key === "Tab") {
         closeMenu(false);
       }
@@ -5203,6 +5426,7 @@
       // One thing hangs from the head at a time.
       closeMenu(false);
       closeStylePanel(false);
+      closeShortcuts(false);
       pdfTrayOpen = true;
       dom.pdfTray.hidden = false;
       dom.pdfBtn.setAttribute("aria-expanded", "true");
@@ -5754,6 +5978,7 @@
       if (collapsed) {
         closeMenu(false);
         closeStylePanel(false);
+        closeShortcuts(false);
         closePdfTray(false);
       }
       renderCollapsed();
@@ -5788,6 +6013,7 @@
       if (presenting) {
         closeMenu(false);
         closeStylePanel(false);
+        closeShortcuts(false);
         closePdfTray(false);
       }
       if (persist !== false) persistCollapsedPreference();
@@ -7147,6 +7373,7 @@
     CARD_COLLAPSED_ATTR: CARD_COLLAPSED_ATTR,
     CARD_UNSEEN_ATTR: CARD_UNSEEN_ATTR,
     CARD_ASKING_ATTR: CARD_ASKING_ATTR,
+    paintSendButton: highlightModule.paintSendButton,
     COLLAPSED_LINE_MAX: COLLAPSED_LINE_MAX,
     CHEVRON_ICON: CHEVRON_ICON,
     collapsedLineText: collapsedLineText,

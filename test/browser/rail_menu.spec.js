@@ -99,6 +99,16 @@ async function chooseMenuItem(page, label) {
       return got.open ? got : null;
     }, { message: "the header menu to open on a click" });
   }
+  // Some items live under a group ("Export review", "View") that opens in place.
+  for (const name of ["Export review", "View"]) {
+    if (info.items.some((one) => one.label === label)) break;
+    const group = info.items.filter((one) => one.label === name)[0];
+    if (group) {
+      const g = centerOf(group.rect);
+      await page.mouse.click(g.x, g.y);
+      info = await menuInfo(page);
+    }
+  }
   const item = info.items.filter((one) => one.label === label)[0];
   if (!item) {
     throw new Error(
@@ -136,17 +146,17 @@ test.describe("the review's actions live in the head's menu", () => {
       expect(labels, "the footer stopped offering Copy as a submit-looking button").not.toContain("Copy");
       expect(labels, "the footer stopped offering Export as a submit-looking button").not.toContain("Export");
 
-      // The footer's own content is untouched: the keycap hints and the status
-      // line are what it is for.
+      // The footer's own content is untouched: the status line is what it is
+      // for. The keycap hints left the footer on purpose.
       const kept = await page.evaluate(() => {
         const root = window.__lahe.rail.tabBody("active").getRootNode();
         const foot = root.querySelector(".foot");
         return {
-          hints: !!foot.querySelector(".hints kbd"),
+          hints: !!foot.querySelector("kbd"),
           status: !!foot.querySelector(".status .status__text")
         };
       });
-      expect(kept.hints, "the keycap hints stayed in the footer").toBe(true);
+      expect(kept.hints, "no keycap hints in the footer").toBe(false);
       expect(kept.status, "the status line stayed in the footer").toBe(true);
 
       const info = await menuInfo(page);
@@ -185,15 +195,15 @@ test.describe("the review's actions live in the head's menu", () => {
         return got.open ? got : null;
       }, { message: "the menu to open on a real click" });
       expect(info.expanded).toBe("true");
-      // Two review-level actions, plus the three the rail does to ITSELF:
-      // folding every card on the open tab either way, and present mode, which
-      // is the rail putting itself away for a talk rather than work for boot.
+      // The review-level actions behind one Export review item, plus the four
+      // the rail does to ITSELF:
+      // folding every card on the open tab either way, the shortcuts panel, and
+      // present mode, which is the rail putting itself away for a talk rather
+      // than work for boot.
       expect(info.items.map((one) => one.label)).toEqual([
-        "Copy review",
-        "Export review to file",
-        "Collapse all cards",
-        "Expand all cards",
-        "Hide for presenting (Cmd-Shift-X)"
+        "Export review",
+        "View",
+        "Keyboard shortcuts"
       ]);
       info.items.forEach((one) => {
         expect(one.rect.width, one.label + " is really on screen").toBeGreaterThan(0);
@@ -245,6 +255,97 @@ test.describe("the review's actions live in the head's menu", () => {
       info = await menuInfo(page);
       expect(info.open, "a collapsed rail carries no open menu").toBe(false);
       await page.evaluate(() => window.__lahe.rail.collapse(false));
+    } finally {
+      await app.close();
+      await helper.kill9();
+    }
+  });
+
+  test("Export review flies out to Copy review to clipboard and Export review to file, and shuts with the menu", async ({
+    page
+  }) => {
+    const { app, helper, token } = await startBoth();
+    try {
+      await bootedPage(page, app, helper, token);
+      await clickMenuButton(page);
+      let info = await pollUntil(async () => {
+        const got = await menuInfo(page);
+        return got.open ? got : null;
+      }, { message: "the menu to open" });
+      const labels = () => info.items.map((one) => one.label);
+      expect(labels()).toContain("Export review");
+      expect(labels(), "the two export actions wait under the group").not.toContain("Copy review to clipboard");
+
+      const group = info.items.filter((one) => one.label === "Export review")[0];
+      const at = centerOf(group.rect);
+      await page.mouse.click(at.x, at.y);
+      info = await menuInfo(page);
+      expect(info.open, "opening the group keeps the menu open").toBe(true);
+      const at2 = labels().indexOf("Export review");
+      expect(labels().slice(at2 + 1, at2 + 3)).toEqual(["Copy review to clipboard", "Export review to file"]);
+      // Out to the side, not pushed in below: the items sit left of the group.
+      const groupNow = info.items.filter((one) => one.label === "Export review")[0];
+      const copyNow = info.items.filter((one) => one.label === "Copy review to clipboard")[0];
+      expect(copyNow.rect.x + copyNow.rect.width, "the fly-out sits to the left of the menu").toBeLessThanOrEqual(groupNow.rect.x + 1);
+
+      // Moving the pointer onto another item shuts it.
+      const keys = info.items.filter((one) => one.label === "Keyboard shortcuts")[0];
+      const k = centerOf(keys.rect);
+      await page.mouse.move(k.x, k.y);
+      info = await menuInfo(page);
+      expect(labels(), "leaving the group shuts it").not.toContain("Copy review to clipboard");
+
+      await page.keyboard.press("Escape");
+      await clickMenuButton(page);
+      info = await pollUntil(async () => {
+        const got = await menuInfo(page);
+        return got.open ? got : null;
+      }, { message: "the menu to open again" });
+      expect(labels(), "the group is shut again on the next open").not.toContain("Copy review to clipboard");
+    } finally {
+      await app.close();
+      await helper.kill9();
+    }
+  });
+
+  test("Keyboard shortcuts opens a panel listing every gesture, and Esc closes it; the pane keeps no list", async ({
+    page
+  }) => {
+    const { app, helper, token } = await startBoth();
+    try {
+      await bootedPage(page, app, helper, token);
+      const readPanel = () =>
+        page.evaluate(() => {
+          const root = window.__lahe.rail.tabBody("active").getRootNode();
+          const panel = root.querySelector(".keyspanel");
+          const rect = panel ? panel.getBoundingClientRect() : null;
+          return {
+            open: !!panel && panel.getAttribute("data-shown") === "open",
+            shown: !!rect && rect.width > 0 && rect.height > 0,
+            rows: panel ? panel.querySelectorAll(".keyspanel__row").length : 0,
+            text: panel ? panel.textContent : "",
+            paneList: !!root.querySelector(".pane .lahe-rail-hints, .pane .lahe-rail-more")
+          };
+        });
+
+      const before = await readPanel();
+      expect(before.paneList, "the Active pane no longer carries a shortcuts list").toBe(false);
+      expect(before.shown, "the panel is closed until asked for").toBe(false);
+
+      await chooseMenuItem(page, "Keyboard shortcuts");
+      const open = await pollUntil(async () => {
+        const got = await readPanel();
+        return got.open ? got : null;
+      }, { message: "the shortcuts panel to open from the menu" });
+      expect(open.shown, "and to be really on screen").toBe(true);
+      expect(open.rows, "one row per gesture").toBe(require("../../src/shared/gestures.js").panelLines().length);
+      expect(open.text).toContain("Cmd-Shift-C");
+
+      await page.keyboard.press("Escape");
+      await pollUntil(async () => {
+        const got = await readPanel();
+        return got.open ? null : got;
+      }, { message: "Esc to close the shortcuts panel" });
     } finally {
       await app.close();
       await helper.kill9();

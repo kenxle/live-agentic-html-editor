@@ -373,16 +373,17 @@
       panel.appendChild(head);
 
       listEl = el("div", "lahe-rail-list");
-      emptyEl = el("p", "lahe-rail-empty", "Nothing outstanding. Select text and press Cmd-Shift-C.");
+      emptyEl = el("p", "lahe-rail-empty", "No unanswered or active threads. Check the done tab, or select some text and press Cmd-Shift-C.");
       listEl.appendChild(emptyEl);
       panel.appendChild(listEl);
 
       footEl = el("footer", "lahe-rail-foot");
-      footEl.appendChild(el("span", "lahe-rail-footlabel", "A note about the page, tied to nothing"));
+      footEl.appendChild(el("span", "lahe-rail-footlabel", "Add a note on the whole page"));
       panel.appendChild(footEl);
-      footEl.appendChild(hintList());
+      var hints = hintList();
+      if (hints) footEl.appendChild(hints);
 
-      pill = el("button", "lahe-rail-pill", "Review");
+      pill = el("button", "lahe-rail-pill", "Lahe");
       pill.setAttribute("type", "button");
       pill.hidden = true;
       pill.addEventListener("click", function () {
@@ -416,9 +417,10 @@
       // closed root. Without it every class below is a name with nothing behind
       // it, which is exactly what shipped.
       ensureHostedStyle(footEl);
-      footEl.appendChild(el("span", "lahe-rail-footlabel", "A note about the page"));
+      footEl.appendChild(el("span", "lahe-rail-footlabel", "Add a note on the whole page"));
       host.appendChild(footEl);
-      footEl.appendChild(hintList());
+      var hints = hintList();
+      if (hints) footEl.appendChild(hints);
 
       openNoteBox();
       unsubscribe = comments.onChange(function (item, event) {
@@ -491,10 +493,9 @@
         list.appendChild(li);
       });
       if (!hosted) return list;
-      var more = el("details", "lahe-rail-more");
-      more.appendChild(el("summary", null, "All shortcuts"));
-      more.appendChild(list);
-      return more;
+      // In the rail the shortcuts live behind the menu ("Keyboard shortcuts"),
+      // so the pane keeps no list of its own.
+      return null;
     }
 
     function hintText() {
@@ -507,7 +508,14 @@
           })
           .join("\n");
       }
-      return container.querySelector(".lahe-rail-hints").textContent;
+      var list = container.querySelector(".lahe-rail-hints");
+      if (list) return list.textContent;
+      return gestures
+        .hintLines()
+        .map(function (line) {
+          return line.keys + " " + line.hint;
+        })
+        .join("\n");
     }
 
     function onItemChanged(item, event) {
@@ -667,6 +675,10 @@
       return (row && row.keys) || "Cmd-Enter";
     }
 
+    function isHeld() {
+      return !!(store && reviewId && typeof store.isHeld === "function" && store.isHeld(reviewId));
+    }
+
     function keepsDrafts() {
       return !!(store && reviewId && typeof store.readFollowupDraft === "function");
     }
@@ -726,6 +738,7 @@
       send.setAttribute("type", "button");
       send.addEventListener("click", submit);
       send.title = "Send this message (" + sendKeys() + ")";
+      highlightModule.paintSendButton(send, isHeld(), "Send");
       acts.appendChild(send);
 
       box.appendChild(input);
@@ -766,6 +779,34 @@
         if (field) field.disabled = !!item[record.FIELD.REPLY];
         var send = add.querySelector(".lahe-rail-send");
         if (send) send.disabled = !!item[record.FIELD.REPLY];
+      }
+
+      // Once an agent has answered, Delete would take the whole exchange with
+      // it, and it sits above the answer where it reads as deleting that. The
+      // follow-up box is the way on from there.
+      var del = row.querySelector('[data-lahe-act="delete"]');
+      if (del && hosted) del.hidden = !!item[record.FIELD.REPLY];
+      // Send, on a draft with words in it, and only then: the comment box on
+      // the page has its own Send, and this one is for a draft whose box is
+      // closed or out of view. Added and taken away rather than hidden, so a
+      // card that cannot send carries no Send at all.
+      if (hosted) {
+        var wantSend = item[record.FIELD.STATE] === record.STATE.DRAFT && !!String(text || "").trim();
+        var sendBtn = row.querySelector('[data-lahe-act="send"]');
+        if (wantSend && !sendBtn) {
+          var id = item[record.FIELD.ID];
+          sendBtn = el("button", "cardact", "Send");
+          sendBtn.setAttribute("data-lahe-act", "send");
+          sendBtn.setAttribute("type", "button");
+          highlightModule.paintSendButton(sendBtn, isHeld(), "Send");
+          sendBtn.addEventListener("click", function () {
+            var handle = comments.boxFor(id) || comments.editInPlace(id, note);
+            if (handle && typeof handle.commit === "function") handle.commit();
+          });
+          del.parentNode.appendChild(sendBtn);
+        } else if (!wantSend && sendBtn) {
+          sendBtn.parentNode.removeChild(sendBtn);
+        }
       }
 
       var state = row.querySelector(".lahe-rail-state");

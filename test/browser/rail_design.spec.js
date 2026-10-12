@@ -27,7 +27,10 @@
 
 "use strict";
 
-const { test, expect, pollPage, startService, SERVICE_ENTRY } = require("../helpers");
+const fs = require("node:fs");
+const path = require("node:path");
+
+const { test, expect, pollPage, pollUntil, startService, SERVICE_ENTRY } = require("../helpers");
 const { startAppServer } = require("../fixtures/app/server");
 
 const REVIEW = "rail-design-review";
@@ -132,10 +135,11 @@ test.describe("the rail as a shipping surface", () => {
       const styled = await page.evaluate(() => {
         const pane = window.__lahe.rail.tabBody("active");
         const foot = pane.querySelector(".lahe-rail-foot");
-        const keys = pane.querySelector(".lahe-rail-keys");
+        // The keycaps live in the shortcuts panel the head's menu opens.
+        const keys = pane.getRootNode().querySelector(".keyspanel kbd");
         const note = pane.querySelector(".lahe-rail-note");
         const acts = pane.querySelector(".cardacts");
-        const del = pane.querySelector('[data-lahe-act="delete"]');
+        const del = pane.querySelector('.card [data-lahe-act="delete"]');
         const cs = (el) => (el ? window.getComputedStyle(el) : null);
         const keyStyle = cs(keys);
         const actStyle = cs(del);
@@ -152,8 +156,8 @@ test.describe("the rail as a shipping surface", () => {
           keyFontSize: keyStyle ? keyStyle.fontSize : null,
           // ...and they are behind a disclosure rather than being a permanent
           // wall above the footer's own hints.
-          hintsBehindDisclosure: !!pane.querySelector("details.lahe-rail-more .lahe-rail-hints"),
-          hintsHidden: !!pane.querySelector("details.lahe-rail-more:not([open])"),
+          // The shortcuts moved behind the head's menu, so the pane has none.
+          paneShortcuts: !!pane.querySelector(".lahe-rail-more, .lahe-rail-hints"),
           // The note box is a surface, not a form control (F10).
           noteResize: (() => {
             const ta = foot ? foot.querySelector("textarea") : null;
@@ -178,8 +182,7 @@ test.describe("the rail as a shipping surface", () => {
       expect(styled.hasKeycap).toBe(true);
       expect(styled.keyBorder, "the keycap's bottom-weighted border").toBe("2px");
       expect(parseFloat(styled.keyFontSize)).toBeLessThan(13);
-      expect(styled.hintsBehindDisclosure, "one hint system: the keycaps, behind a disclosure").toBe(true);
-      expect(styled.hintsHidden, "and closed, so it is not a wall in an empty rail").toBe(true);
+      expect(styled.paneShortcuts, "no shortcuts list in the pane: the menu carries them").toBe(false);
       expect(styled.noteResize, "no native resize grabber on the note box").toBe("none");
       expect(styled.noteWhiteSpace).toBe("pre-wrap");
       expect(styled.noteEditable, "the reviewer's own words are the input").toBe(true);
@@ -330,6 +333,61 @@ test.describe("the rail as a shipping surface", () => {
   });
 
   // --- a long file path stays inside the card --------------------------------
+
+  // --- Delete goes once an agent answers; Send is on a draft with words ------
+
+  test("an answered card offers no Delete, and a draft card with words offers Send, which sends it", async ({ page }) => {
+    const { app, helper, token } = await startBoth();
+    try {
+      await bootedPage(page, app, helper, token);
+      await commentOn(page, REGION.lede, "Pick one number and use it twice.");
+      const asked = (await page.evaluate(() => window.__lahe.items())).filter((i) => i.state === "ready")[0];
+
+      const acts = (id) =>
+        page.evaluate((cardId) => {
+          const node = window.__lahe.rail.cardNode(cardId);
+          return Array.from(node.querySelectorAll("[data-lahe-act]"))
+            .filter((b) => b.getClientRects().length > 0)
+            .map((b) => b.getAttribute("data-lahe-act"));
+        }, id);
+
+      expect(await acts(asked.id), "a sent, unanswered comment can still be deleted").toContain("delete");
+      // The real agent path: one reply line, folded by the helper, delivered by
+      // the poll loop, which is also what tells the Active row it was answered.
+      const reviewDir = path.join(helper.stateDir, "reviews", REVIEW);
+      await pollUntil(() => {
+        try {
+          const projection = JSON.parse(fs.readFileSync(path.join(reviewDir, "review.json"), "utf8"));
+          return projection.pages.some((pg) => pg.items.some((it) => it.id === asked.id)) || null;
+        } catch (err) {
+          return null;
+        }
+      }, { message: "the comment to reach the helper" });
+      fs.appendFileSync(
+        path.join(reviewDir, "replies-claude.jsonl"),
+        JSON.stringify({ item: asked.id, rev: asked.rev, status: "question", agent: "claude", text: "Which number?" }) + "\n"
+      );
+      await pollPage(page, (id) => window.__lahe.itemById(id).reply !== null, asked.id, {
+        message: "the question to fold onto the record through the poll loop"
+      });
+      expect(await acts(asked.id), "an answered comment has no Delete over the answer").not.toContain("delete");
+
+      await openDraftOn(page, REGION.rest, "Half written, not submitted yet.");
+      const draft = (await page.evaluate(() => window.__lahe.items())).filter((i) => i.state === "draft")[0];
+      expect(await acts(draft.id), "a draft with words offers Send on its card").toContain("send");
+
+      await page.evaluate((id) => {
+        window.__lahe.rail.cardNode(id).querySelector('[data-lahe-act="send"]').click();
+      }, draft.id);
+      await pollPage(page, (id) => window.__lahe.items().some((i) => i.id === id && i.state === "ready"), draft.id, {
+        message: "Send on the card to send the draft"
+      });
+      expect(await acts(draft.id), "and once sent, the card's Send is gone").not.toContain("send");
+    } finally {
+      await helper.stop().catch(() => {});
+      await app.close();
+    }
+  });
 
   test("a very long reply file path wraps inside the card instead of running out of it", async ({ page }) => {
     const { app, helper, token } = await startBoth();

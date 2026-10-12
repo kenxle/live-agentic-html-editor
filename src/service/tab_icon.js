@@ -14,19 +14,20 @@
 //
 // It is an inline data URI rather than a served file because the tool has zero
 // runtime dependencies: this way there is no second asset for the static server
-// to publish and no extra request. The drawing is a speech bubble on a blue
-// rounded square, which is the review layer's own subject rather than the
-// document's, and that is the honest thing for a fallback to say.
+// to publish and no extra request. The drawing is a document on a blue rounded
+// square: a white page with a folded corner, an uppercase L for Lahe, and two
+// lines of text under it. Ken asked for a document rather than the speech
+// bubble it used to be, since what the tab holds is a document.
 
 "use strict";
 
 var LINK =
-  "<link rel=\"icon\" href=\"data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2032%2032'%3E%3Crect%20width='32'%20height='32'%20rx='7'%20fill='%231a73e8'/%3E%3Cpath%20d='M9%208h14a3%203%200%200%201%203%203v8a3%203%200%200%201-3%203h-6l-6%205v-5H9a3%203%200%200%201-3-3v-8a3%203%200%200%201%203-3z'%20fill='%23fff'/%3E%3C/svg%3E\">";
+  "<link rel=\"icon\" href=\"data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2032%2032'%3E%3Crect%20width='32'%20height='32'%20rx='7'%20fill='%231a73e8'/%3E%3Cpath%20d='M9%204.5h10.5l6%206V26a1.5%201.5%200%200%201-1.5%201.5H9A1.5%201.5%200%200%201%207.5%2026V6A1.5%201.5%200%200%201%209%204.5z'%20fill='%23fff'/%3E%3Cpath%20d='M19.5%204.5v4.5a1.5%201.5%200%200%200%201.5%201.5h4.5'%20fill='%23cfe0fb'/%3E%3Cpath%20d='M11.5%208.5v8.5h6'%20fill='none'%20stroke='%231a73e8'%20stroke-width='2.6'%20stroke-linecap='square'/%3E%3Cpath%20d='M11.5%2021h10M11.5%2024.5h6.5'%20stroke='%239bbcf3'%20stroke-width='1.8'%20stroke-linecap='round'/%3E%3C/svg%3E\">";
 
 // The Library page's own icon (itm_1c30f3ece7748d0bab3f9b75). Same family
 // (a 32px rounded square, one white glyph) but told apart from every document
 // tab at a glance: a dark square instead of the blue one, and books on a shelf
-// instead of a speech bubble, one book leaning in blue.
+// instead of a document, one book leaning in blue.
 // One source for the tab icon and the page heading's brandmark, so the two
 // never drift.
 var LIBRARY_ICON_URI =
