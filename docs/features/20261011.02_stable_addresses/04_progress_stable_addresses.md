@@ -6,7 +6,9 @@
 
 ## Needs your attention
 
-- [ ] **Three checks only you can do on this Mac**, once the PR is ready: restart the Mac and see the helper come back on its own (V45, starts at login); open a page with no port in its address (V75, after `lahe install --port-80`); open a `.lahe` page (V73, after `lahe install --lahe-names`). Both install steps ask for your admin password. Steps: [install progress](progress/phase6_workstream_install.md).
+Nothing right now.
+
+**Coming later, once the PR is ready: three checks only you can do on this Mac.** They are restart the Mac and see the helper come back on its own (V45, starts at login); open a page with no port in its address (V75, after `lahe install --port-80`); open a `.lahe` page (V73, after `lahe install --lahe-names`). Both install steps ask for your admin password. Steps: [install progress](progress/phase6_workstream_install.md).
 
 ## Decided
 
