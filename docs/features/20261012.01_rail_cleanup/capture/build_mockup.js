@@ -67,6 +67,78 @@ const sections = shots
   })
   .join("\n\n");
 
+// THE HOVER TEXT, as words to edit. Read from the code, so the page shows what
+// ships: the status dot's tip is assembled from these pieces in this order.
+const REPO = path.join(__dirname, "..", "..", "..", "..");
+const LIVE = require(path.join(REPO, "src", "shared", "protocol.js")).AGENT_LIVENESS;
+const OVERLAY = require(path.join(REPO, "src", "layer", "overlay.js"));
+const HIGHLIGHT = require(path.join(REPO, "src", "layer", "highlight.js"));
+
+function rows(list) {
+  return list
+    .map(function (r) {
+      return "<tr><td class=\"mock-when\">" + esc(r[0]) + "</td><td>" + esc(r[1]) + "</td></tr>";
+    })
+    .join("\n");
+}
+
+const QUIET = LIVE.QUIET_MS % 60000 === 0 ? LIVE.QUIET_MS / 60000 + " minutes" : LIVE.QUIET_MS / 1000 + " seconds";
+const firstLine = [
+  ["Your work is stored", OVERLAY.STATUS_SHORT.stored],
+  ["Kept in the browser, helper not answering", OVERLAY.STATUS_SHORT.kept_locally],
+  ["The page is about to reload onto a new build", OVERLAY.STATUS_SHORT.page_reloading],
+  ["Added after \"Stored ·\" when an agent is listening", LIVE.CONNECTION.connected],
+  ["Added after \"Stored ·\" when no agent is listening", LIVE.CONNECTION.absent],
+  ["Added after \"Stored ·\" while an agent works (after " + QUIET + " waiting)", LIVE.TEXT.working],
+  ["Added after \"Stored ·\" when nothing has come back (after " + QUIET + ")", LIVE.TEXT.waiting],
+  ["Added after \"Stored ·\" when no agent has picked it up (after " + QUIET + ")", LIVE.TEXT.no_agent]
+];
+const detail = [
+  ["1. The helper is up", LIVE.DETAIL.helper_up],
+  ["1. The helper is down", LIVE.DETAIL.helper_down],
+  ["2. An agent is listening (only when stored)", LIVE.DETAIL.agent_connected],
+  ["2. No agent is listening", LIVE.DETAIL.agent_absent],
+  ["2. Listening cannot be checked", LIVE.DETAIL.agent_unknown],
+  ["3. The agent has a name", LIVE.DETAIL.agent_named],
+  ["4. The agent has replied before", LIVE.DETAIL.replied],
+  ["4. The agent has never replied", LIVE.DETAIL.never_replied],
+  ["5. Something is waiting", LIVE.DETAIL.waiting],
+  ["6. Always", LIVE.DETAIL.stored],
+  ["7. When the first line is counting a wait", LIVE.DETAIL.save]
+];
+const otherTips = [
+  ["Any Send button while Hold is on", HIGHLIGHT.SEND_WORDS.HELD_TIP],
+  ["The collapsed pill while Hold is on (N is the count)", "N held. Nothing sends to the agent until you release Hold."]
+];
+const seenTitles = new Set();
+shots.forEach(function (shot) {
+  const pieces = shot.legend ? shot.legend.map((r) => r.html) : [shot.html];
+  pieces.forEach(function (h) {
+    const re = /\stitle="([^"]+)"/g;
+    let m;
+    while ((m = re.exec(h)) !== null) {
+      const t = m[1].replace(/&quot;/g, '"').replace(/&amp;/g, "&");
+      if (/^\d+\/\d+\/\d+/.test(t) || t.indexOf("The helper is") === 0) continue;
+      seenTitles.add(t);
+    }
+  });
+});
+const buttonTips = Array.from(seenTitles).sort().map((t) => ["Button or control", t]);
+
+const hoverSection =
+  '<section class="mock-section mock-words" id="hover-text">\n' +
+  "<h2>Hover text</h2>\n" +
+  "<p>Every hover text on the rail, read from the code. Edit the words in the right column directly. {age}, {name} and {reply} are filled in when shown.</p>\n" +
+  "<h3>Status dot: first line</h3>\n" +
+  "<p>The tip opens with one short line: the first three rows, then for stored work one of the rows after it, joined with a middle dot.</p>\n" +
+  '<table class="mock-table">' + rows(firstLine) + "</table>\n" +
+  "<h3>Status dot: the sentences under it</h3>\n" +
+  "<p>After a blank line, one sentence from each numbered group, in order.</p>\n" +
+  '<table class="mock-table">' + rows(detail) + "</table>\n" +
+  "<h3>Other hover text</h3>\n" +
+  '<table class="mock-table">' + rows(otherTips.concat(buttonTips)) + "</table>\n" +
+  "</section>";
+
 const page = `<!doctype html>
 <html lang="en">
 <head>
@@ -91,6 +163,10 @@ html, body { margin: 0; background: #f4f3ef; }
 .mock-stage { padding: 24px; border-radius: 12px; background: #e9e7e1; display: inline-block; }
 .mock-stage--dark { background: #12151a; }
 .mock-legend { display: flex; flex-direction: column; gap: 10px; }
+.mock-words h3 { font-size: 16px; margin: 22px 0 4px; }
+.mock-table { border-collapse: collapse; width: 100%; max-width: 820px; background: #fff; font-size: 14.5px; }
+.mock-table td { border: 1px solid #dedbd3; padding: 7px 10px; vertical-align: top; }
+.mock-table td.mock-when { width: 34%; color: #55524b; font-size: 13px; }
 .mock-legend__row { display: flex; align-items: center; gap: 18px; }
 .mock-legend__label { font-size: 15px; }
 
@@ -118,6 +194,8 @@ html, body { margin: 0; background: #f4f3ef; }
 </div>
 
 ${sections}
+
+${hoverSection}
 </main>
 <script>
 // The one live control on the copies: Hold sending flips, and the send
