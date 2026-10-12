@@ -35,8 +35,7 @@ function esc(s) {
   return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
-const sections = shots
-  .map(function (shot, i) {
+function section(shot, i) {
     const scheme = /data-mock-scheme="dark"/.test(shot.hostAttrs) ? "dark" : "light";
     if (shot.legend) {
       return (
@@ -56,16 +55,22 @@ const sections = shots
         "\n</div>\n</section>"
       );
     }
+    const notes = shot.notes
+      ? "<ul class=\"mock-notes\">" + shot.notes.map((n) => "<li>" + esc(n) + "</li>").join("") + "</ul>\n"
+      : "";
     return (
       '<section class="mock-section" id="state-' + (i + 1) + '">\n' +
       "<h2>" + esc(shot.label) + "</h2>\n" +
+      notes +
       "<p>" + esc(shot.caption) + "</p>\n" +
       '<div class="mock-stage mock-stage--' + scheme + '">\n' +
       '<div class="mock-frame" data-mock-scheme="' + scheme + '">' + cleanHtml(shot.html) + "</div>\n" +
       "</div>\n</section>"
     );
-  })
-  .join("\n\n");
+}
+
+const topSections = shots.map((shot, i) => (shot.top ? section(shot, i) : "")).join("\n\n");
+const sections = shots.map((shot, i) => (shot.top ? "" : section(shot, i))).join("\n\n");
 
 // THE HOVER TEXT, as words to edit. Read from the code, so the page shows what
 // ships: the status dot's tip is assembled from these pieces in this order.
@@ -163,6 +168,8 @@ html, body { margin: 0; background: #f4f3ef; }
 .mock-stage { padding: 24px; border-radius: 12px; background: #e9e7e1; display: inline-block; }
 .mock-stage--dark { background: #12151a; }
 .mock-legend { display: flex; flex-direction: column; gap: 10px; }
+.mock-notes { max-width: 680px; margin: 0 0 12px; padding-left: 22px; }
+.mock-notes li { margin: 0 0 6px; }
 .mock-words h3 { font-size: 16px; margin: 22px 0 4px; }
 .mock-table { border-collapse: collapse; width: 100%; max-width: 820px; background: #fff; font-size: 14.5px; }
 .mock-table td { border: 1px solid #dedbd3; padding: 7px 10px; vertical-align: top; }
@@ -197,6 +204,8 @@ html, body { margin: 0; background: #f4f3ef; }
 <p>These are copies of the real review rail, taken from the built library with test data. The real rail can't be commented on, so comment here: select any text on a copy, or a nearby label, and say what should change.</p>
 <p>The buttons do nothing. Your own working rail is the one pinned to the right edge of this window.</p>
 </div>
+
+${topSections}
 
 ${sections}
 

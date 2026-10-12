@@ -287,6 +287,10 @@ test("capture the rail as a reviewable mockup", async ({ page }) => {
       { label: "Waited too long", tip: "Stored · nothing back yet, 12m", attrs: { "data-status": "stored", "data-agent": "waiting", "data-loud": "true" } }
     ];
     const legend = [];
+    const realDot = await page.evaluate(() => {
+      const dot = window.__lahe.rail.tabBody("active").getRootNode().querySelector(".head .mark");
+      return { status: dot.getAttribute("data-status"), agent: dot.getAttribute("data-agent"), loud: dot.getAttribute("data-loud"), tip: dot.parentNode.getAttribute("data-lahe-tip") };
+    });
     for (const state of DOT_STATES) {
       await page.evaluate((st) => {
         const dot = window.__lahe.rail.tabBody("active").getRootNode().querySelector(".head .mark");
@@ -297,12 +301,59 @@ test("capture the rail as a reviewable mockup", async ({ page }) => {
       const s = await page.evaluate(snapshotInPage, ".head");
       legend.push({ label: state.label, html: s.html });
     }
+    // Put the real reading back, so the views after this one show it.
+    await page.evaluate((d) => {
+      const dot = window.__lahe.rail.tabBody("active").getRootNode().querySelector(".head .mark");
+      dot.setAttribute("data-status", d.status || "");
+      dot.setAttribute("data-agent", d.agent || "");
+      dot.setAttribute("data-loud", d.loud || "");
+      if (d.tip) dot.parentNode.setAttribute("data-lahe-tip", d.tip);
+    }, realDot);
     shots.push({ label: "Status dot", caption: "The dot in the header, in each state. Shape and color both change.", legend: legend, css: shots[0].css, outside: shots[0].outside, hostAttrs: shots[0].hostAttrs });
     await page.evaluate(() => window.__lahe.rail.refreshScheme());
 
     // Collapsed.
     await rail(() => window.__lahe.rail.collapse(true));
     await snap("Collapsed", "The rail folded down to its pill.");
+
+    // THE PROPOSAL: no Edits tab. Drawn on a copy of the rail by moving the
+    // hand edit's card into Active and taking the Edits tab away. Last, because
+    // it rearranges the live rail.
+    await rail(() => window.__lahe.rail.collapse(false));
+    await page.evaluate(() => {
+      const root = window.__lahe.rail.tabBody("active").getRootNode();
+      const active = root.querySelector('.pane[data-pane="active"]');
+      const edits = root.querySelector('.pane[data-pane="edits"]');
+      edits.querySelectorAll("article.card").forEach((card) => {
+        const copy = card.cloneNode(true);
+        copy.style.order = "-2";
+        active.appendChild(copy);
+      });
+      const tab = root.querySelector('.tab[data-tab="edits"]');
+      if (tab) tab.remove();
+      edits.remove();
+    });
+    await rail(() => window.__lahe.rail.selectTab("active"));
+    await page.evaluate(() => {
+      const root = window.__lahe.rail.tabBody("active").getRootNode();
+      const count = root.querySelector('.tab[data-tab="active"] .count');
+      const cards = root.querySelectorAll('.pane[data-pane="active"] article.card').length;
+      if (count) count.textContent = String(cards);
+    });
+    const proposal = await page.evaluate(snapshotInPage);
+    shots.push(Object.assign({
+      label: "Proposal: no Edits tab",
+      top: true,
+      caption: "Drawn on a copy of the rail. Nothing here is built yet.",
+      notes: [
+        "The Edits tab goes away. The rail has two tabs: Active and Done.",
+        "A hand edit that is still waiting for the agent shows in Active as its own card, labelled Edit, with the old and new wording and its Undo button. It is the top card in the copy below.",
+        "Once the agent handles an edit, it moves to Done, the same as it does today.",
+        "The Export edits button, which copies every hand edit as text, moves into the three-dot menu under Export review, as \"Copy hand edits to clipboard\".",
+        "What you would notice: one list of everything waiting, newest first, instead of switching tabs to find your edits.",
+        "Your call: go ahead with this? An optional extra, if the list gets long: a small Comments / Edits filter at the top of Active. I would leave it out unless you want it."
+      ]
+    }, proposal));
 
     await page.screenshot({ path: path.join(__dirname, "..", "capture_reference.png") });
     await rail(() => window.__lahe.rail.collapse(false));
