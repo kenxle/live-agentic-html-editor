@@ -1661,8 +1661,16 @@
    * The CLI's own usage names it, and the rail's handoff message carries it to
    * a new agent, fully formed, so the reviewer pastes something that runs.
    */
-  function takeoverCommand(sessionId, stateDirPath) {
-    return "lahe session takeover " + String(sessionId) + stateDirFlag(stateDirPath);
+  /**
+   * @param {string} sessionId
+   * @param {string|null} [stateDirPath]
+   * @param {string|null} [requestId] the Library request that asked for this
+   *   handoff, which is what lets the takeover through while the session's
+   *   agent is listening
+   */
+  function takeoverCommand(sessionId, stateDirPath, requestId) {
+    return "lahe session takeover " + String(sessionId) + stateDirFlag(stateDirPath) +
+      (isSafeId(requestId) ? " --request " + requestId : "");
   }
 
   /**
@@ -1974,13 +1982,15 @@
    * @param {string|null} [name] AGENT_LIVENESS.FIELD.NAME, quoted when present
    * @param {boolean} [stateDirFlagNeeded] AGENT_LIVENESS.FIELD.STATE_DIR_FLAG;
    *   the rail's case only, ignored when `options.library` is set
-   * @param {{library?: boolean, stateDir?: string|null}} [options] the
+   * @param {{library?: boolean, stateDir?: string|null, request?: string}} [options] the
    *   Library's case: `stateDir` is the state directory when it is not the
-   *   default one, else null
+   *   default one, else null; `request` is the pending Library request, named
+   *   on the takeover so it goes through while the session's agent listens
    * @returns {string} plain text
    */
   function handoffMessage(sessionId, name, stateDirFlagNeeded, options) {
     var library = !!(options && options.library === true);
+    var requestId = library && options && isSafeId(options.request) ? options.request : null;
     var dirPath = library && typeof options.stateDir === "string" && options.stateDir ? options.stateDir : null;
     var flag = stateDirFlag(dirPath);
     var hasId = typeof sessionId === "string" && isSafeId(sessionId);
@@ -1991,7 +2001,7 @@
         ]
       : [];
     var run = hasId
-      ? ["Run this command:", "", "    " + takeoverCommand(sessionId, dirPath), ""].concat(elsewhere)
+      ? ["Run this command:", "", "    " + takeoverCommand(sessionId, dirPath, requestId), ""].concat(elsewhere)
       : [
           "Run `lahe session list" + flag + "` to find the session for this document, then take it over with:",
           "",

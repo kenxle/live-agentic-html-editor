@@ -21,6 +21,7 @@ const protocol = require("../../src/shared/protocol.js");
 const record = require("../../src/shared/record.js");
 const logModule = require("../../src/service/log.js");
 const agentSessions = require("../../src/service/agent_sessions.js");
+const catalogRequests = require("../../src/service/catalog_requests.js");
 const { freePort } = require("../helpers/free_port.js");
 const { stopTempHelpers } = require("../helpers/temp_helpers.js");
 const { tempRoot, writeFile, raw } = require("../helpers/sites_world.js");
@@ -98,6 +99,8 @@ test("another agent's lahe review of a file with a review opens it, names its se
   assert.equal(first.code, 0, first.stderr);
   const owner = sessionOf(first);
   const sessionsBefore = fs.readdirSync(path.join(w.state, "agent-sessions")).length;
+  const metaFile = path.join(w.state, "reviews", reviewOf(first), "meta.json");
+  const servedBefore = JSON.parse(fs.readFileSync(metaFile, "utf8")).served_at;
 
   const second = run(w, ["review", file]);
   assert.equal(second.code, 0, second.stderr);
@@ -106,6 +109,7 @@ test("another agent's lahe review of a file with a review opens it, names its se
   assert.match(second.stdout, /already has a review/);
   assert.match(second.stdout, new RegExp("lahe session takeover " + owner));
   assert.deepEqual(reviewIds(w), [reviewOf(first)], "no second review");
+  assert.equal(JSON.parse(fs.readFileSync(metaFile, "utf8")).served_at, servedBefore, "another session's review is not re-stamped");
   assert.equal(fs.readdirSync(path.join(w.state, "agent-sessions")).length, sessionsBefore, "no new session either");
 
   // Another agent's own session gets the same answer.
@@ -197,8 +201,100 @@ test("a link alone never claims a file; a linking review with a comment on it do
   run(w, ["review", "retire", farReview, "--session", s2]);
 
   comment(w, reviewOf(hub), hubUrl.origin, mount + "far.md");
+  const metaFile = path.join(w.state, "reviews", reviewOf(hub), "meta.json");
+  const metaBefore = JSON.parse(fs.readFileSync(metaFile, "utf8"));
   const claimed = run(w, ["review", far]);
   assert.equal(claimed.code, 0, claimed.stderr);
   assert.match(claimed.stdout, /already has a review/);
   assert.equal(reviewOf(claimed), reviewOf(hub));
+  // The printed address is where that review's rail is: the link address on
+  // the hub's site.
+  const printed = new URL(openUrl(claimed));
+  assert.equal(printed.host, hubUrl.host);
+  assert.equal(printed.pathname, mount + "far.md");
+  const shown = await raw(Number(printed.port), { path: printed.pathname, headers: { host: printed.host } });
+  assert.match(shown.text, new RegExp('data-lahe-review="' + reviewOf(hub) + '"'));
+  // Opening another session's review changes nothing about it.
+  const metaAfter = JSON.parse(fs.readFileSync(metaFile, "utf8"));
+  assert.equal(metaAfter.served_at, metaBefore.served_at, "not re-stamped");
+  assert.deepEqual(metaAfter.origins, metaBefore.origins, "its origins are untouched");
+});
+
+// A handoff the human confirmed in the Library ends with the agent running
+// the takeover. While the session's agent is listening, the CLI takes it over
+// only with the pending Library request that asked for it.
+test("a takeover of a listened-to session goes through with the Library request that asked for it, and only with it", async (t) => {
+  const w = await cliWorld(t);
+  const file = writeFile(w.home, "ws/repo/docs/page.html", PAGE);
+  const first = review(w, [file]);
+  const owner = sessionOf(first);
+  liveMonitor(w, owner);
+  const caller = agentSessions.createStore({ dir: w.state }).create({ name: "caller" }).id;
+  w.sessions.push(caller);
+  // The agent attached to the Library, listening, as a pending request needs.
+  liveMonitor(w, caller);
+  catalogRequests.writeAttach(w.state, caller, Date.now());
+  const queue = catalogRequests.createQueue({ dir: w.state });
+  const asked = queue.append({ action: catalogRequests.ACTION.PICKUP, review: reviewOf(first), session: owner, for: caller }, Date.now());
+  assert.equal(asked.ok, true);
+  const other = queue.append({ action: catalogRequests.ACTION.PICKUP, review: "r_other_review", session: caller, for: caller }, Date.now());
+  assert.equal(other.ok, true);
+
+  const bare = run(w, ["session", "takeover", owner], false);
+  assert.notEqual(bare.code, 0, "still refused without a request");
+  const wrong = run(w, ["session", "takeover", owner, "--request", other.request.id], false);
+  assert.notEqual(wrong.code, 0, "a request for another session does not count");
+  const made = run(w, ["session", "takeover", owner, "--request", asked.request.id], false);
+  assert.equal(made.code, 0, made.stderr);
+  assert.match(made.stdout, /taken over explicitly/);
+});
+
+// Code review, critical 2: the hub's own session adding the linked file to
+// the hub's review (add --review L --source far.md) must not take the hub's
+// source away.
+test("the hub's session reviewing a linked file it commented on keeps the hub's rail", async (t) => {
+  const w = await cliWorld(t);
+  const notes = path.join(w.home, "ws", "repo", "notes");
+  const far = writeFile(w.home, "ws/other/far.md", "# Far\n\nThe far side.\n");
+  const hubFile = writeFile(notes, "hub.md", "# Hub\n\n[far](../../other/far.md)\n");
+  const hub = review(w, [hubFile]);
+  const owner = sessionOf(hub);
+  const hubUrl = new URL(openUrl(hub));
+  const hubPage = await raw(Number(hubUrl.port), { path: hubUrl.pathname, headers: { host: hubUrl.host } });
+  const mount = /href="(\/\.lahe-source\/[a-f0-9]+\/)far\.md"/.exec(hubPage.text)[1];
+  comment(w, reviewOf(hub), hubUrl.origin, mount + "far.md");
+
+  const farOut = review(w, [far, "--session", owner]);
+  assert.equal(farOut.code, 0, farOut.stderr);
+  assert.equal(reviewOf(farOut), reviewOf(hub), "the linked file joins the hub's review");
+  const meta = JSON.parse(fs.readFileSync(path.join(w.state, "reviews", reviewOf(hub), "meta.json"), "utf8"));
+  assert.equal(meta.source_path, hubFile, "the hub stays the review's first source");
+  const again = await raw(Number(hubUrl.port), { path: hubUrl.pathname, headers: { host: hubUrl.host } });
+  assert.match(again.text, new RegExp('data-lahe-review="' + reviewOf(hub) + '"'), "the hub keeps its rail");
+  const hubAgain = review(w, [hubFile, "--session", owner]);
+  assert.equal(reviewOf(hubAgain), reviewOf(hub), "and a later review of the hub opens the same review");
+  assert.equal(reviewIds(w).length, 1);
+});
+
+// Code review 4: the owner itself, run without --session, is told how to
+// carry on as itself.
+test("run without --session, the message says how to carry on if the session is your own", async (t) => {
+  const w = await cliWorld(t);
+  const file = writeFile(w.home, "ws/repo/docs/page.html", PAGE);
+  const first = review(w, [file]);
+  const owner = sessionOf(first);
+  const idle = run(w, ["review", file]);
+  assert.match(idle.stdout, new RegExp("If agent session " + owner + " is your own, rerun with --session " + owner));
+  liveMonitor(w, owner);
+  const live = run(w, ["review", file]);
+  assert.match(live.stdout, /Ask your human/);
+  assert.match(live.stdout, new RegExp("If agent session " + owner + " is your own, rerun with --session " + owner));
+  const fresh = run(w, ["review", file, "--new"]);
+  assert.notEqual(fresh.code, 0);
+  assert.match(fresh.stderr, new RegExp("If agent session " + owner + " is your own, rerun with --session " + owner));
+  // With --session of another session, there is no such hint.
+  const other = agentSessions.createStore({ dir: w.state }).create({ name: "other" }).id;
+  w.sessions.push(other);
+  const named = run(w, ["review", file, "--session", other]);
+  assert.doesNotMatch(named.stdout, /is your own, rerun/);
 });

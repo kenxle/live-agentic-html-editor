@@ -623,6 +623,9 @@ function touchedSince(meta, item, dir) {
   if (!Number.isFinite(committedAt)) return true;
   var files = pageFilesFor(meta, item, dir);
   if (typeof meta.source_path === "string" && meta.source_path) files.push(meta.source_path);
+  (Array.isArray(meta.source_paths) ? meta.source_paths : []).forEach(function (one) {
+    if (typeof one === "string" && one && files.indexOf(one) === -1) files.push(one);
+  });
   for (var i = 0; i < files.length; i += 1) {
     var stat;
     try {

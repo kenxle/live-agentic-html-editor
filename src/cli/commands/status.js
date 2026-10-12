@@ -722,7 +722,8 @@ function readerDescriber(dir, nowMs) {
       // with the real --state-dir when it is not the default.
       handoff: noTakeover ? null : protocol.AGENT_LIVENESS.handoffMessage(takeable ? sessionId : null, takeable ? name : null, false, {
         library: true,
-        stateDir: stateDirModule.flagFor(dir)
+        stateDir: stateDirModule.flagFor(dir),
+        request: request.id
       })
     };
   };

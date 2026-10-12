@@ -188,9 +188,20 @@ function targetsOf(meta) {
  * source of a Markdown review, which is the page a site serves for it.
  */
 function recordedFiles(meta) {
-  var files = targetsOf(meta);
-  if (typeof meta.source_path === "string" && markdown.isMarkdown(meta.source_path)) files.push(meta.source_path);
-  return files;
+  return targetsOf(meta).concat(markdownSourcesOf(meta));
+}
+
+/**
+ * Every Markdown source a review renders: source_path, and the rest of
+ * source_paths (a review can hold more than one, reviews.recordPaths).
+ */
+function markdownSourcesOf(meta) {
+  var out = [];
+  var all = [meta && meta.source_path].concat(meta && Array.isArray(meta.source_paths) ? meta.source_paths : []);
+  all.forEach(function (one) {
+    if (typeof one === "string" && one && markdown.isMarkdown(one) && out.indexOf(one) === -1) out.push(one);
+  });
+  return out;
 }
 
 /** "Newest" is created or re-served most recently (site.bind stamps served_at). */
@@ -214,9 +225,9 @@ function recordsFile(files, filePaths, realFile) {
 
 /** The folder a review's pages are served out of, as a real path, or null. */
 function servedRootsOf(meta) {
-  if (typeof meta.source_path === "string" && markdown.isMarkdown(meta.source_path)) {
-    var dirOfSource = realOrNull(path.dirname(meta.source_path));
-    return dirOfSource ? [dirOfSource] : [];
+  var sources = markdownSourcesOf(meta);
+  if (sources.length) {
+    return sources.map(function (one) { return realOrNull(path.dirname(one)); }).filter(Boolean);
   }
   return targetsOf(meta).map(function (target) {
     var from = servedFrom(target);
@@ -297,6 +308,7 @@ function pickReview(dir, site, request) {
       at: stampOf(meta),
       notes: meta.notes === true,
       source_path: typeof meta.source_path === "string" ? meta.source_path : null,
+      source_paths: markdownSourcesOf(meta),
       targets: targetsOf(meta)
     };
     var only = meta.only_recorded_pages === true;
@@ -313,7 +325,7 @@ function pickReview(dir, site, request) {
   });
   var best = recorded || backing || linking;
   if (!best) return null;
-  return { review: best.review, token: best.token, notes: best.notes, source_path: best.source_path, targets: best.targets };
+  return { review: best.review, token: best.token, notes: best.notes, source_path: best.source_path, source_paths: best.source_paths, targets: best.targets };
 }
 
 /**
@@ -563,12 +575,26 @@ function fileOfItem(dir, entry, review, item) {
   var onSite = fileForPageIn(entry, origin, pagePath);
   if (onSite) return realOrNull(onSite) || onSite;
   if (!protocol.isLoopbackPortOrigin(origin)) return null;
-  var source = typeof review.source_path === "string" && markdown.isMarkdown(review.source_path) ? review.source_path : null;
-  if (source) {
+  var sources = markdownSourcesOf(review);
+  if (sources.length) {
     var rendered = targetsOf(review).some(function (target) {
       return /\.html?$/i.test(target) && "/" + path.basename(target) === pagePath;
     });
-    if (rendered) return realOrNull(source) || path.resolve(source);
+    if (rendered) {
+      // The source whose artifact this was, when the session can say; else the first.
+      var session = typeof review.agent_session_id === "string" ? review.agent_session_id : null;
+      var named = null;
+      if (session) {
+        sources.some(function (one) {
+          var artifact = null;
+          try { artifact = markdown.artifactPath(dir, session, one); } catch (err) { artifact = null; }
+          if (artifact && "/" + path.basename(artifact) === pagePath) { named = one; return true; }
+          return false;
+        });
+      }
+      var chosen = named || sources[0];
+      return realOrNull(chosen) || path.resolve(chosen);
+    }
   }
   var port = Number(origin.slice(origin.lastIndexOf(":") + 1));
   var decoded = decodePath(pagePath);
@@ -591,6 +617,30 @@ function fileOfItem(dir, entry, review, item) {
     if (!real || !within(real, realOrNull(rec.root) || rec.root)) return false;
     found = real;
     return true;
+  });
+  return found;
+}
+
+/**
+ * The link address where `reviewId`'s rail answers for `file`: a site whose
+ * link table lists the review for the file and that mounts the file's folder.
+ * Null when there is none.
+ *
+ * @returns {{name: string, path: string}|null}
+ */
+function linkAddressFor(dir, reviewId, file) {
+  var target = realOrNull(file) || path.resolve(file);
+  var entry = registryEntry(dir);
+  var found = null;
+  entry.sites.list().some(function (each) {
+    var ids = each.site.linked_files && each.site.linked_files[target];
+    if (!Array.isArray(ids) || ids.indexOf(reviewId) === -1) return false;
+    var mounts = each.site.mounts || {};
+    return Object.keys(mounts).some(function (prefix) {
+      if ((realOrNull(mounts[prefix]) || mounts[prefix]) !== path.dirname(target)) return false;
+      found = { name: each.name, path: prefix + encodeURIComponent(path.basename(target)) };
+      return true;
+    });
   });
   return found;
 }
@@ -837,8 +887,10 @@ function oldSpellings(dir, site, file, review) {
   if (!site) return { origins: [], paths: [] };
   var roots = [site.root];
   var paths = [];
-  var source = review && typeof review.source_path === "string" ? review.source_path : null;
-  if (source && file && markdown.isMarkdown(source) && (realOrNull(source) || path.resolve(source)) === file) {
+  var isSource = !!review && !!file && markdownSourcesOf(review).some(function (one) {
+    return (realOrNull(one) || path.resolve(one)) === file;
+  });
+  if (isSource) {
     (review.targets || []).forEach(function (target) {
       if (typeof target !== "string" || !/\.html?$/i.test(target)) return;
       var old = "/" + path.basename(target);
@@ -878,7 +930,7 @@ function pageRecords(dir, review, origin, pagePath, items) {
   if (!site) return none;
   var found = fileForPage(dir, origin, pagePath);
   var file = found ? (realOrNull(found) || found) : null;
-  var spellings = oldSpellings(dir, site, file, { source_path: review.source_path, targets: targetsOf(review) });
+  var spellings = oldSpellings(dir, site, file, { source_path: review.source_path, source_paths: review.source_paths, targets: targetsOf(review) });
   var page = record.pageFrom(
     { origin: origin, pathname: pagePath, href: origin + pagePath },
     { seq: 1, aliases: spellings.origins, path_aliases: spellings.paths }
@@ -936,7 +988,7 @@ function pageRecords(dir, review, origin, pagePath, items) {
 function spellingsFor(dir, siteName, pagePath, file, match) {
   var entry = activeFor(dir);
   if (!entry || !file || !match) return [];
-  var review = { id: match.review, source_path: match.source_path, target_paths: match.targets || [] };
+  var review = { id: match.review, source_path: match.source_path, source_paths: match.source_paths || [], target_paths: match.targets || [] };
   var own = record.identityOrigin(protocol.siteOrigin(siteName, entry.pagesPort)) + " " + pagePath;
   var out = [];
   committedRecords(dir, entry, match.review).forEach(function (item) {
@@ -1427,8 +1479,10 @@ module.exports = {
   spellingsFor: spellingsFor,
   aliasMap: aliasMap,
   createPageRoutes: createPageRoutes,
+  markdownSourcesOf: markdownSourcesOf,
   fileOfItem: fileOfItem,
   holderOfFile: holderOfFile,
+  linkAddressFor: linkAddressFor,
   registryEntry: registryEntry,
   committedRecords: committedRecords,
   createNoteOnce: logModule.createNoteOnce,

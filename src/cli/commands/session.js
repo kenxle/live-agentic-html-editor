@@ -33,7 +33,9 @@ var USAGE = [
   "  close     end a session, keep its review history",
   "  reopen    reopen a closed session you already own",
   "  takeover  explicitly continue another agent's session, only when the human asks for it.",
-  "            --name \"<name>\" records the human's name for your session at the same time",
+  "            --name \"<name>\" records the human's name for your session at the same time.",
+  "            While the session's agent is listening it is refused, unless --request <id> names",
+  "            the pending Library request (Pick this up, or Launch) that asked for it",
   "  name      lahe session name <id> \"<name>\": the human's name for this session, shown on",
   "            the reviewer's rail so they know which agent to check. \"\" clears it.",
   "            lahe session name <id> --from-review <review> names it after that review's",
@@ -83,6 +85,7 @@ function parse(argv) {
   for (var i = start; i < list.length; i += 1) {
     if (list[i] === "--json") out.json = true;
     else if (list[i] === "--name" && list[i + 1] !== undefined && action === "takeover") out.name = String(list[(i += 1)]);
+    else if (list[i] === "--request" && list[i + 1] !== undefined && action === "takeover") out.request = String(list[(i += 1)]);
     else if (list[i] === "--port" && list[i + 1] !== undefined) out.port = Number(list[(i += 1)]);
     else if (list[i] === "--state-dir" && list[i + 1] !== undefined) out.stateDir = list[(i += 1)];
     else return { error: "unknown or incomplete option " + JSON.stringify(list[i]) };
@@ -460,6 +463,23 @@ function listLine(row, nowMs) {
   );
 }
 
+/**
+ * Is there a pending Library request (pickup or launch) with this id, asking
+ * for this session? The same queue check add.js makes for --adopt.
+ */
+function confirmedByLibrary(dir, sessionId, requestId) {
+  if (!protocol.isSafeId(requestId)) return false;
+  try {
+    var catalogRequests = require("../../service/catalog_requests.js");
+    return catalogRequests.createQueue({ dir: dir }).pending(Date.now()).some(function (request) {
+      return request.id === requestId && request.session === sessionId &&
+        catalogRequests.ACTIONS.indexOf(request.action) !== -1;
+    });
+  } catch (err) {
+    return false;
+  }
+}
+
 var TAKEOVER_HINT = "claim one with: lahe session takeover <id> (requires the human's explicit request)";
 
 async function runList(args, opts) {
@@ -568,11 +588,15 @@ async function run(argv, options) {
       // Library asks the human first, naming the agent that is listening; the
       // CLI has no way to ask, so it refuses. Takeover of a closed session, or
       // one nobody is listening to, cuts nobody off and goes ahead.
-      if (handedOff && sessions.isListening(store, args.id, Date.now())) {
+      // The Library's confirmed handoff ends here: "Pick this up" and "Launch a
+      // new agent" both finish with this command, carrying the pending
+      // request's id. A pending request for THIS session is the human's
+      // confirmation, and only the Library page (its own token) makes one.
+      if (handedOff && sessions.isListening(store, args.id, Date.now()) && !confirmedByLibrary(dir, args.id, args.request)) {
         process.stderr.write(
           "lahe session: agent session " + args.id + " has an agent listening to it right now, so it is not " +
             "taken over from here. A handoff of a session someone is watching is confirmed by your human from the " +
-            "Library page. Ask them.\n"
+            "Library page, and the request it makes names the command to run. Ask them.\n"
         );
         return protocol.CLI_EXIT.BAD_USAGE;
       }

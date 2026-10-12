@@ -83,7 +83,10 @@ test("a page-derived session name never appears in the drain's handoff", async (
   const entry = lines[lines.length - 1].catalog_requests[0];
   assert.equal(entry.title, HOSTILE, "the title field is fenced page text and stays");
   assert.equal(entry.handoff.includes(HOSTILE), false, "the hand-off prompt carries no page text");
-  assert.equal(entry.handoff, protocol.AGENT_LIVENESS.handoffMessage("s_doc", null, false, { library: true, stateDir: stateDir.flagFor(w.dir) }));
+  // The drain's hand-off carries the request's id on the takeover, which is
+  // what lets it through while the session's agent is listening.
+  assert.equal(entry.handoff, protocol.AGENT_LIVENESS.handoffMessage("s_doc", null, false, { library: true, stateDir: stateDir.flagFor(w.dir), request: entry.request }));
+  assert.match(entry.handoff, new RegExp("lahe session takeover s_doc .*--request " + entry.request));
 });
 
 test("the Library's list marks a page-sourced name, and VM.handoffFor leaves it out", async () => {

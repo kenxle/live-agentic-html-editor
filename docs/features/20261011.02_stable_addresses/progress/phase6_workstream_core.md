@@ -671,6 +671,20 @@ Built as the approved design note, with both security passes folded in. Every pa
 
 - The Library's Open (`catalog_sites.planOf`, the library builder's file) does not yet apply one review per file: an Open of a file under an already reviewed folder can bind its own folder.
 
+## Code review of the each-page build: four fixes
+
+| Finding | Fix | Test |
+| --- | --- | --- |
+| A Library-confirmed handoff was refused at its last step | `lahe session takeover <id> --request <request>` goes through while the session's agent listens, when a pending Library request with that id asks for that session. The drain's hand-off command carries the request; the skill, the contract and its copies, CLI.md and session_ownership.md say so | `one_review_per_file.test.js`: with the request it succeeds; bare, or with a request for another session, it is refused |
+| Adding a Markdown file to a review replaced its source | `source_path` stays the first source and `source_paths` lists them all; the page pick, served roots, old-address mapping, the handled check and rebuild read every one | `review_many_sources.test.js`; `one_review_per_file.test.js`: the hub keeps its rail after its session reviews the linked file (fails with the old overwrite) |
+| Opening another session's linking review gave a page with no rail, and re-stamped that review | A linking review prints its link address on the linking page's site and binds nothing; any other foreign open binds with `stamp: false` | `one_review_per_file.test.js`: the printed address shows the hub review's rail, and its `served_at` and origins are unchanged (fails when it re-stamps) |
+| The owner was told to ask the human about its own session | Run without `--session`, with the owning session open, both messages add: if agent session <id> is your own, rerun with `--session <id>` | `one_review_per_file.test.js` |
+
+- `test/helpers/sites_world.js` `raw` opens a fresh connection per request. Node 20's keep-alive agent reused a socket the helper had closed after its idle timeout, which failed a request with ECONNRESET after a few seconds' wait.
+- `npm run test:unit`: 2686 tests, 2684 pass, 0 fail, 2 todo. The first run found two drain tests that expected the old hand-off text; they now expect the request.
+- Chromium: `each_page_comments` 4, `linked_docs_rail` 2, `stable_addresses_mappers` 4.
+- `lahe.js serve` count: 2 before, 2 after.
+
 ## Cleanup needed
 
 - `test/retired/browser/tmp_spike_lahe_localhost.spec.js`: the Task 1.0 spike, retired in fix round 2.

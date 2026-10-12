@@ -284,7 +284,8 @@ async function run(argv, mode) {
           "lahe review: " + path.basename(originalTarget) + " already has a review (" + holder.review + "), and a file has one review. " +
             (own
               ? "To start over, retire it first: lahe review retire " + holder.review + " --session " + opts.session + "\n"
-              : "It belongs to another agent session. Ask your human before doing anything else with it.\n")
+              : "It belongs to another agent session. Ask your human before doing anything else with it.\n" +
+                ownSessionHint(store, owner, opts))
         );
         return protocol.CLI_EXIT.BAD_USAGE;
       }
@@ -507,12 +508,23 @@ async function openOthersReview(dir, opts, store, holder, owner, target) {
   var bound = null;
   try {
     await require("./session.js").startHelper(dir, port);
-    var isFolder = fs.existsSync(target) && fs.statSync(target).isDirectory();
-    var plan = isFolder
-      ? { root: target, mode: "folder", entry: add.folderEntryPage(target), served: "folder" }
-      : { root: path.dirname(target), mode: "folder", entry: path.basename(target), served: "file" };
-    if (isFolder && !plan.entry) throw new Error("there are no pages in " + target + " to open");
-    bound = await bindSite(dir, port, holder.review, plan);
+    // A linking review answers on its link address, on the linking page's
+    // site: print that, and bind nothing.
+    var link = holder.tier === 3 ? pageRoutes.linkAddressFor(dir, holder.review, target) : null;
+    if (link) {
+      var ready = null;
+      try { ready = JSON.parse(fs.readFileSync(stateDir.readyPath(dir), "utf8")); } catch (err) { ready = null; }
+      var pages = ready && ready.pages ? ready.pages : {};
+      var printed = Number.isInteger(pages.printed_port) ? pages.printed_port : Number.isInteger(pages.port) ? pages.port : protocol.PAGES.PORT;
+      bound = { url: protocol.siteOrigin(link.name, printed) + link.path };
+    } else {
+      var isFolder = fs.existsSync(target) && fs.statSync(target).isDirectory();
+      var plan = isFolder
+        ? { root: target, mode: "folder", entry: add.folderEntryPage(target), served: "folder", stamp: false }
+        : { root: path.dirname(target), mode: "folder", entry: path.basename(target), served: "file", stamp: false };
+      if (isFolder && !plan.entry) throw new Error("there are no pages in " + target + " to open");
+      bound = await bindSite(dir, port, holder.review, plan);
+    }
   } catch (err) {
     process.stderr.write("lahe review: " + err.message + "\n");
     return 1;
@@ -543,8 +555,23 @@ async function openOthersReview(dir, opts, store, holder, owner, target) {
       "  lahe session takeover " + owner
     );
   }
+  var hint = ownSessionHint(store, owner, opts);
+  if (hint) lines.push(hint.replace(/\n$/, ""));
   process.stdout.write(lines.join("\n") + "\n");
   return protocol.CLI_EXIT.OK;
+}
+
+/**
+ * The owner may be the caller itself, run without --session. When the caller
+ * named no session and the owning session is open, say how to carry on as
+ * itself. Empty otherwise.
+ */
+function ownSessionHint(store, owner, opts) {
+  if (opts.session || owner === sessions.LEGACY_ID) return "";
+  var session = null;
+  try { session = store.read(owner); } catch (err) { session = null; }
+  if (!session || session.closed_at) return "";
+  return "If agent session " + owner + " is your own, rerun with --session " + owner + ".\n";
 }
 
 /** A notes review is minted as one, and never reuses an ordinary review. */
@@ -576,7 +603,9 @@ async function bindSite(dir, port, reviewId, site) {
     mounts: site.mounts || {},
     linked: site.linked || [],
     // A file goes into the folder site that already holds it, if there is one.
-    containing: site.served === "file"
+    containing: site.served === "file",
+    // Opening another session's review never re-stamps it.
+    stamp: site.stamp !== false
   };
   var res = await fetch("http://" + protocol.DEFAULT_HOST + ":" + helperPort + protocol.route("site.bind").path, {
     method: "POST",
