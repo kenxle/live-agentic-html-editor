@@ -84,6 +84,25 @@ a folder that already has an address gets that folder's name and its path
 there. The same file always gets the same address, and the address keeps
 working after the session closes, for as long as the helper runs.
 
+**One review per file.** A file that already has a review keeps it.
+`lahe review` of that file opens the existing review and never makes a second
+one:
+
+- In your own session's review, it goes on as usual.
+- In another session's review, it prints the address and whose review it is,
+  and makes nothing. When that session's agent is listening, it tells you to
+  ask your human before doing anything else with the page: a handoff is theirs
+  to ask for. Otherwise it names `lahe session takeover <id>`, which you run
+  only when the human asks.
+- `--new` and `--new-session` are refused for a file that has a review. To
+  start over on one of your own reviews, retire it first:
+  `lahe review retire <review-id> --session <agent-session-id>`. A retired
+  review keeps its log, and answers on no page.
+
+A page shows every comment made on it. Comments on it that are filed in
+another review show on the rail read-only, with the agent that holds them; to
+work on those, ask your human to have that agent pick them up from the Library.
+
 **Read the `contract` field at the top of `review.json`** in the review folder
 once, when you start on a review. It is the rules for reading an item, changing
 the source, and replying, and it wins over this skill wherever the two differ.
@@ -683,7 +702,9 @@ monitors, and reopens anything closed. Run the printed catch-up command first: i
 lists every unanswered `ready` item, including work the previous agent saw and
 never finished. Then arm your wake channel.
 
-Take over only when the human explicitly asks.
+Take over only when the human explicitly asks. A takeover of a session whose
+agent is listening right now is refused from the command line: that handoff is
+confirmed by your human from the Library page.
 
 ### The Library
 
@@ -923,7 +944,9 @@ Each of these is a rule that a live review paid for.
     idle-looking process is not permission, and the session is what keeps its
     reviews together.
     When the human does ask, use `lahe session takeover <id>` even though another
-    agent created the session; never silently reuse the old session.
+    agent created the session; never silently reuse the old session. When
+    `lahe review` tells you a file's review belongs to another session, that is
+    not a request: ask your human.
 19. **Serve with `lahe review`, and nothing else.** `lahe wait` is removed. A
     `python3 -m http.server` serves no rail, and a hand-run Pandoc copy of one
     Markdown file drifts from its source. `lahe add` is for the cases in "Other

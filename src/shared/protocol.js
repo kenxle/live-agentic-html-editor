@@ -69,7 +69,11 @@
   // 16: older helpers serve no pages themselves: they have no pages port, no
   // site registry and no site.bind route, so `lahe review` could not give a
   // page its stable address. They must be restarted.
-  var SERVICE_CONTRACT = 16;
+  // 17: older helpers have no review.retire route, take events for a retired
+  // review, answer records.read for one review only, and bind a file into its
+  // own folder site even inside a reviewed folder, so one file could get two
+  // addresses. They must be restarted.
+  var SERVICE_CONTRACT = 17;
 
   // What a CLI or layer makes of the contract a running helper reports. OLDER
   // is refused (the helper is restarted), NEWER means this clone is behind and
@@ -615,6 +619,19 @@
         "holding a review token can neither name a file nor move a rail",
       request: "{review, root, mode: \"folder\"|\"page-only\", entry, mounts?: {prefix: dir}, linked?: [file]}",
       response: "{name, origin, url, printed_ending}"
+    },
+    {
+      name: "review.retire",
+      method: "POST",
+      path: BASE + "/review/retire",
+      auth: AUTH.CLI_SECRET,
+      mutating: true,
+      why:
+        "lahe review retire ends a review on purpose, so `lahe review` of its file makes a new one. Only the " +
+        "owning agent session may retire its review. A retired review no longer answers on any page, fails the " +
+        "Origin check, and takes no events. CLI-only, like site.bind",
+      request: "{review, session}",
+      response: "{review, retired_at}"
     }
   ];
 
@@ -827,6 +844,10 @@
     PROTO_UNKNOWN_REVIEW: 404,
     PROTO_UNKNOWN_ITEM: 404,
     PROTO_STALE_REV: 409,
+    // A review retired on purpose (`lahe review retire`) takes no events.
+    PROTO_REVIEW_RETIRED: 410,
+    // `lahe review retire` of a review another agent session owns.
+    PROTO_NOT_OWNER: 403,
     PROTO_SECOND_WINDOW: 409,
     PROTO_SECOND_INSTANCE: 409,
     // The Library's codes. Messages and remedies are in failures.js, like every
@@ -1382,7 +1403,12 @@
     // an old Markdown review has one: its page was the rendered file
     // (/<name>-<hash>.html), and its new address is the source (/doc.md). Read
     // only together with an old origin (record.samePage).
-    PATH_ALIASES: "data-lahe-path-aliases"
+    PATH_ALIASES: "data-lahe-path-aliases",
+    // Each page carries its own comments (Part 2): this page's other addresses
+    // in the review that answers on it, as a JSON array of "origin path"
+    // strings: a link address on another page's site, an old address. Written
+    // only by the helper, from the review's own records (page_routes.spellingsFor).
+    SPELLINGS: "data-lahe-spellings"
   };
 
   // A plain loopback http origin with a port: what a page server registered
@@ -1403,6 +1429,29 @@
 
   function isPathAlias(value) {
     return typeof value === "string" && PATH_ALIAS.test(value);
+  }
+
+  // The origin half of a spelling: plain http, a lowercase host, an optional port.
+  var SPELLING_ORIGIN = /^http:\/\/[a-z0-9.-]{1,253}(?::\d{1,5})?$/;
+
+  function isSpellingOrigin(value) {
+    return typeof value === "string" && SPELLING_ORIGIN.test(value);
+  }
+
+  /** "origin path", both halves checked. */
+  function isSpelling(value) {
+    if (typeof value !== "string") return false;
+    var at = value.indexOf(" ");
+    return at > 0 && isSpellingOrigin(value.slice(0, at)) && isPathAlias(value.slice(at + 1));
+  }
+
+  function spellingsAttribute(list) {
+    if (!Array.isArray(list)) throw new Error("scriptTag: spellings must be a list");
+    if (list.length > ALIAS_MAX) throw new Error("scriptTag: at most " + ALIAS_MAX + " spellings");
+    list.forEach(function (one) {
+      if (!isSpelling(one)) throw new Error("scriptTag: a spelling is \"origin path\", not " + JSON.stringify(one));
+    });
+    return JSON.stringify(list).replace(/&/g, "&amp;").replace(/"/g, "&quot;");
   }
 
   function pathAliasesAttribute(paths) {
@@ -1472,6 +1521,7 @@
       (o.notes === true ? '        ' + SCRIPT_ATTR.NOTES + '="' + NOTES_ON + '"\n' : "") +
       (o.aliases !== undefined ? '        ' + SCRIPT_ATTR.ALIASES + '="' + aliasesAttribute(o.aliases) + '"\n' : "") +
       (o.pathAliases !== undefined ? '        ' + SCRIPT_ATTR.PATH_ALIASES + '="' + pathAliasesAttribute(o.pathAliases) + '"\n' : "") +
+      (o.spellings !== undefined ? '        ' + SCRIPT_ATTR.SPELLINGS + '="' + spellingsAttribute(o.spellings) + '"\n' : "") +
       '        defer><\/script>'
     );
   }
@@ -2040,6 +2090,8 @@
     ALIAS_MAX: ALIAS_MAX,
     isLoopbackPortOrigin: isLoopbackPortOrigin,
     isPathAlias: isPathAlias,
+    isSpellingOrigin: isSpellingOrigin,
+    isSpelling: isSpelling,
     FRAMES_ALLOW: FRAMES_ALLOW,
     START_HIDDEN: START_HIDDEN,
     NOTES_ON: NOTES_ON,

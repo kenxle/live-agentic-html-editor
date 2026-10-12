@@ -564,6 +564,18 @@ async function run(argv, options) {
       );
     } else {
       var handedOff = args.action === "takeover";
+      // A HANDOFF OF A SESSION SOMEONE IS WATCHING IS THE HUMAN'S CALL. The
+      // Library asks the human first, naming the agent that is listening; the
+      // CLI has no way to ask, so it refuses. Takeover of a closed session, or
+      // one nobody is listening to, cuts nobody off and goes ahead.
+      if (handedOff && sessions.isListening(store, args.id, Date.now())) {
+        process.stderr.write(
+          "lahe session: agent session " + args.id + " has an agent listening to it right now, so it is not " +
+            "taken over from here. A handoff of a session someone is watching is confirmed by your human from the " +
+            "Library page. Ask them.\n"
+        );
+        return protocol.CLI_EXIT.BAD_USAGE;
+      }
       var session = handedOff
         ? store.takeover(args.id, args.name !== undefined ? { name: args.name } : undefined)
         : store.reopen(args.id);

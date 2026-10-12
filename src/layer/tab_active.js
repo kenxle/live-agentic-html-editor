@@ -274,7 +274,20 @@
     ".lahe-rail-send{font-size:11.5px;font-weight:600;padding:3px 10px;border-radius:6px;",
     "border:1px solid var(--line);background:var(--paper);color:var(--ink-soft);cursor:pointer}",
     ".lahe-rail-send:hover{background:var(--surface);color:var(--ink)}",
-    ".lahe-rail-send[disabled]{opacity:.55;cursor:default}"
+    ".lahe-rail-send[disabled]{opacity:.55;cursor:default}",
+    // COMMENTS FILED IN ANOTHER REVIEW (each page carries its own comments,
+    // Part 3). Read-only: no input, no buttons, nothing that writes.
+    ".lahe-rail-others{display:flex;flex-direction:column;gap:10px;padding:4px 0 2px}",
+    ".lahe-rail-others[hidden]{display:none}",
+    ".lahe-rail-othergroup{display:flex;flex-direction:column;gap:8px}",
+    ".lahe-rail-otherfrom{font-size:11.5px;color:var(--ink-soft);line-height:1.4}",
+    ".lahe-rail-othercard{border:1px dashed var(--line);border-radius:8px;padding:8px 10px;",
+    "display:flex;flex-direction:column;gap:5px;background:var(--sunken)}",
+    ".lahe-rail-otherkind{font-size:10px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;",
+    "color:var(--ink-faint);display:flex;justify-content:space-between;gap:8px}",
+    ".lahe-rail-otherquote{font-size:12px;color:var(--ink-soft);border-left:2px solid var(--line);",
+    "padding-left:8px;overflow-wrap:anywhere}",
+    ".lahe-rail-othernote{font-size:12.5px;color:var(--ink);white-space:pre-wrap;overflow-wrap:anywhere}"
   ].join("");
 
   function createActiveTab(options) {
@@ -315,6 +328,11 @@
     var unsubscribe = null;
     // id -> row node. The reason there is no rebuild path.
     var rows = Object.create(null);
+    // COMMENTS FILED IN ANOTHER REVIEW, read-only (Part 3). Kept here, keyed
+    // by the helper's group key and the item id, and never in the store or the
+    // outbox: an own item with the same id is a different card.
+    var othersEl = null;
+    var otherCards = Object.create(null);
 
     function surfaceRoot() {
       // PANEL_STYLE draws the standalone panel, so it is not added when the
@@ -872,6 +890,9 @@
       if (panel && panel.parentNode) panel.parentNode.removeChild(panel);
       if (pill && pill.parentNode) pill.parentNode.removeChild(pill);
       if (footEl && footEl.parentNode) footEl.parentNode.removeChild(footEl);
+      if (othersEl && othersEl.parentNode) othersEl.parentNode.removeChild(othersEl);
+      othersEl = null;
+      otherCards = Object.create(null);
       panel = null;
       pill = null;
       listEl = null;
@@ -884,6 +905,66 @@
       // The sheet lives in the rail's root now, which a remount throws away, so
       // the next mount asks for it again rather than trusting a stale handle.
       hostedStyleNode = null;
+    }
+
+    /** The text a read-only card quotes: the passage it was made on, if any. */
+    function quoteOf(item) {
+      var region = item && item.region;
+      if (region && typeof region.label === "string" && region.label) return region.label;
+      if (typeof item.before === "string" && item.before) return item.before;
+      return "";
+    }
+
+    /**
+     * Show comments on this page that are filed in another review, read-only.
+     * Each group names that review's title and agent, and says to ask your
+     * agent to pick it up from the Library. Every value is set as text.
+     *
+     * @param {{key: string, title: string, agent: string, records: object[]}[]} groups
+     * @returns {number} how many read-only cards are shown
+     */
+    function showOthers(groups) {
+      var host = hosted ? providedHost : listEl;
+      if (!doc || !host) return 0;
+      if (!othersEl) {
+        othersEl = el("section", "lahe-rail-others");
+        othersEl.setAttribute("data-lahe-others", "");
+        othersEl.setAttribute("aria-label", "Comments filed in another review");
+        othersEl.style.order = "8";
+        ensureHostedStyle(othersEl);
+        host.appendChild(othersEl);
+      }
+      while (othersEl.firstChild) othersEl.removeChild(othersEl.firstChild);
+      ensureHostedStyle(othersEl);
+      otherCards = Object.create(null);
+      var shown = 0;
+      (Array.isArray(groups) ? groups : []).forEach(function (group) {
+        var records = Array.isArray(group && group.records) ? group.records : [];
+        if (!records.length) return;
+        var box = el("div", "lahe-rail-othergroup");
+        box.appendChild(el("span", "lahe-rail-footlabel", "Filed in another review"));
+        box.appendChild(el("p", "lahe-rail-otherfrom",
+          "Filed with \u201c" + String(group.title || "another review") + "\u201d, worked by " + String(group.agent || "an agent") +
+            ". To work on these, ask your agent to pick that review up from the Library."));
+        records.forEach(function (item) {
+          if (!item || typeof item.id !== "string") return;
+          var card = el("div", "lahe-rail-othercard");
+          card.setAttribute("data-lahe-other-card", String(group.key) + ":" + item.id);
+          var kind = el("div", "lahe-rail-otherkind");
+          kind.appendChild(el("span", null, String(item.kind || "comment")));
+          kind.appendChild(el("span", null, String(item.state || "")));
+          card.appendChild(kind);
+          var quote = quoteOf(item);
+          if (quote) card.appendChild(el("div", "lahe-rail-otherquote", quote));
+          if (typeof item.note === "string" && item.note) card.appendChild(el("div", "lahe-rail-othernote", item.note));
+          box.appendChild(card);
+          otherCards[String(group.key) + "\u0000" + item.id] = card;
+          shown += 1;
+        });
+        othersEl.appendChild(box);
+      });
+      othersEl.hidden = shown === 0;
+      return shown;
     }
 
     function isMounted() {
@@ -911,7 +992,18 @@
       ensureNoteBox: ensureNoteBox,
       collapse: collapse,
       isCollapsed: isCollapsed,
-      bounds: bounds
+      bounds: bounds,
+      showOthers: showOthers,
+      otherCardCount: function () {
+        return Object.keys(otherCards).length;
+      },
+      // What the read-only list says, and how many controls it holds (none).
+      othersText: function () {
+        return othersEl ? othersEl.textContent : "";
+      },
+      otherControlCount: function () {
+        return othersEl ? othersEl.querySelectorAll("button,textarea,input,[contenteditable='true']").length : 0;
+      }
     };
 
     return api;

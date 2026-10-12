@@ -25,7 +25,13 @@ flowchart TD
     RevA1 -.->|"immutable owner rule"| Refuse
     RevB1 -.->|"immutable owner rule"| Refuse
 
+    OtherAgent["Another agent runs<br/>lahe review on a file of review 1"] --> Opened["review 1 opens at its address;<br/>nothing is made or moved"]
+    Opened --> Listening{"is session A's agent listening?"}
+    Listening -->|"yes"| AskHuman["it says: ask your human"]
+    Listening -->|"no"| Named["it names lahe session takeover A,<br/>run only when the human asks"]
+
     Human["Human explicitly asks for a handoff"] --> Takeover["lahe session takeover A"]
+    Takeover -.->|"A's agent is listening"| RefusedCLI["refused from the CLI:<br/>the human confirms it from the Library"]
     Takeover --> Fence["session A's handoff_rev advances by 1"]
     Fence --> Reopen["the session reopens<br/>if it was closed"]
     Fence --> OldMonitor["any older lahe monitor process<br/>for session A"]
@@ -47,6 +53,17 @@ flowchart TD
   is a review from before sessions, which has no owner: a Library pick-up
   adopts it into the agent's session (a `review.adopted` event), and only
   while that pick-up is pending.
+- One review per file. `lahe review` of a file that already has a review opens
+  that review, whichever session owns it, and never makes a second one. In
+  another session's review it moves nothing: it prints the address and whose
+  review it is. When that session's agent is listening, it says to ask the
+  human; otherwise it names the takeover, which the agent runs only when the
+  human asks. `lahe review retire` ends a review on purpose, and only its own
+  session may retire it.
+- A takeover from the command line is refused while the session's agent is
+  listening (a live monitor, or a lahe command in the last few minutes). That
+  handoff cuts someone off, so the human confirms it from the Library page,
+  which names the agent that is listening.
 - Takeover does not delete anything and does not require the old agent to
   cooperate. It advances a fence number that every running monitor checks on
   its own next look, which is what makes an old monitor for the same session

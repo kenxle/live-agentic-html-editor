@@ -623,6 +623,54 @@ Hidden files get no special handling: they are served and linked like any other 
 - Chromium: `stable_addresses_sites` 7 of 7. `stable_addresses_mappers` 4 of 4. In one run, V27 (an agent's edit reloads only its own page) missed its poll timing; it passed alone and on the next full run.
 - `lahe.js serve` count: 2 before. After: 3, and the third is a helper from the `sa-library` worktree, not this one.
 
+## Each page carries its own comments (built)
+
+### Summary
+
+Built as the approved design note, with both security passes folded in. Every page shows every comment made on it, from wherever the reviewer came, and nothing is ever written into another review from a page.
+
+### What it does
+
+- **One review per file** (`lahe review`, `page_routes.holderOfFile`):
+  - A file that has a review opens it and never gets a second.
+  - In another session's review, the command prints the address and whose it is, and makes nothing. When that agent is listening, it says to ask the human; otherwise it names `lahe session takeover`.
+  - `--new` and `--new-session` are refused for such a file.
+  - A folder or linking review counts only once it holds a committed comment on the file.
+- **`lahe review retire`** (`review.retire`, CLI secret): only the owning session may retire a review. A retired review answers on no page, fails the Origin check, takes no events, and never counts as its file's review.
+- **`lahe session takeover`** is refused from the CLI while the session's agent is listening.
+- **One page, every address:**
+  - The tag carries the page's other addresses in its review (`data-lahe-spellings`), and `records.read` returns those records.
+  - A top-level load of a link address to a file with its own review is redirected (302, `no-store`) to its own address, built from the registry.
+  - Anything else at that link address, or a file with no address of its own, is served read-only.
+- **Old splits:** `records.read` returns them under `others`, and the Active tab shows them in their own read-only list.
+- **Service contract 17.**
+- **The catalog cross-site spec's timeout** was caused by the refusal dedupe (1793ebf): a page's no-cors fetch and its beacon are the same request, and the spec reads one log line per attempt. An identical refusal is now logged up to 8 times. The spec was right; the code changed.
+
+### Tests
+
+- Unit:
+  - `one_review_per_file` 5
+  - `review_retire` 2
+  - `each_page_comments` 10 (each guard checked by breaking it)
+  - `log_caps_round2` 4
+  - updated: `sites_cli`, `review_binds_used_review`, `protocol_wire`
+- Browser, Chromium:
+  - `each_page_comments` 4 of 4
+  - `linked_docs_rail` 2 of 2 (the own-review test restored)
+  - `catalog_cross_site` 2 of 2
+  - `stable_addresses_mappers` 4, `stable_addresses_sites` 7, `library_stable_address` 7
+- `npm run test:unit`: 2679 tests, 2677 pass, 0 fail, 2 todo. The first run found one failure: a Library pick-up of a review from before sessions was only opened, not adopted. It is fixed (b811915), and the second run is the one above.
+- `lahe.js serve` count: 2 before. After: 5, and the three extra helpers belong to the `test-temp-cleanup` worktree, not this one.
+
+### Screenshots
+
+- [Read-only card from another review, light](screenshots/read_only_card_light.png)
+- [Read-only card from another review, dark](screenshots/read_only_card_dark.png)
+
+### Not done
+
+- The Library's Open (`catalog_sites.planOf`, the library builder's file) does not yet apply one review per file: an Open of a file under an already reviewed folder can bind its own folder.
+
 ## Cleanup needed
 
 - `test/retired/browser/tmp_spike_lahe_localhost.spec.js`: the Task 1.0 spike, retired in fix round 2.
@@ -631,4 +679,5 @@ Hidden files get no special handling: they are served and linked like any other 
 - `src/service/idle_servers.js`: nothing requires it; take its entry out of `src/shared/manifest.js` in the same change (lint needs the entry while the file exists).
 - `test/retired/unit/sites_step3_v34.retired.test.js`: V34, retired in the fix round.
 - `docs/features/20260922.02_linked_docs_rail/linked_page_rail.png` and `docs/features/20260923.01_rebuild_not_the_agents_job/card_not_on_page.png`: rewritten in the working tree by spec runs (not committed). Put them back with `git checkout`.
+- `progress/screenshots/file_gone_*.png`, `library_stable_addresses_*.png` and `v31_old_comment_card_*.png`: rewritten in the working tree by spec runs with the screenshot folder set (not committed). Put them back with `git checkout`.
 - `.claude-commit202610111600-core`, `...1630-core`, `...1645-core`, `...1700-core`, `...1730-core`, `...1800-core`, `...1815-core`, `...1900-core`, `...1930-core`, `...1931-core`, the Step 3 ones (`...2100-core` onward), the fix-round ones (`...202610120100-core` to `...202610120550-core`), and `...202610120700-core` onward, and the one this page's commit adds, in the worktree root: commit message scratch files (gitignored).

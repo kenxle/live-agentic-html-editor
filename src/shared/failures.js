@@ -296,6 +296,20 @@
       null
     ),
     PROTO_UNKNOWN_ITEM: def(SEVERITY.BLOCKING, false, SURFACE.CLI, "No such item in this review.", null),
+    PROTO_REVIEW_RETIRED: def(
+      SEVERITY.BLOCKING,
+      false,
+      SURFACE.CLI,
+      "This review was retired, so it takes no more comments.",
+      "Reload the page: it now answers with the file's current review, if it has one."
+    ),
+    PROTO_NOT_OWNER: def(
+      SEVERITY.BLOCKING,
+      false,
+      SURFACE.CLI,
+      "This review belongs to another agent session, so this session cannot retire it.",
+      "Ask your human. A handoff is lahe session takeover, which they ask for."
+    ),
     PROTO_SECOND_WINDOW: def(
       SEVERITY.BLOCKING,
       false,

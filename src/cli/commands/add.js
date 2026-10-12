@@ -514,6 +514,9 @@ function reviewMatchingPath(dir, target, agentSessionId) {
     if (!entry.isDirectory() || !protocol.isSafeId(entry.name)) return;
     var meta = readMetaOnDisk(dir, entry.name);
     if (!meta || typeof meta.token !== "string") return;
+    // A retired review is never reused: `lahe review retire` is how a file
+    // gets a new one.
+    if (typeof meta.retired_at === "string") return;
     var owner = typeof meta.agent_session_id === "string" ? meta.agent_session_id : agentSessionsModule.LEGACY_ID;
     if (agentSessionId && owner !== agentSessionId) return;
     var retainedTargets = Array.isArray(meta.target_paths) ? meta.target_paths : [];
@@ -1038,7 +1041,9 @@ async function run(argv, used) {
     // "A live review" means one whose state is still on disk. A script line
     // pointing at a review whose state is gone is a dead line, and reusing its
     // id would hand the page a token nothing will accept.
-    return !!readMetaOnDisk(dir, reviewId);
+    // A retired review is not live either: it takes no events.
+    var meta = readMetaOnDisk(dir, reviewId);
+    return !!meta && typeof meta.retired_at !== "string";
   }
 
   function pendingPickup(reviewId) {

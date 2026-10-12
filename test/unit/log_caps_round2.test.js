@@ -37,11 +37,18 @@ function badRequest(pathName) {
   };
 }
 
-test("auth logs a repeated refusal once", () => {
+// A refusal repeated exactly is logged a few times, then not again. Once was
+// too few: a page's no-cors fetch and its beacon send the same request, and
+// the cross-site spec reads one line per attempt as the proof each was
+// refused (test/browser/catalog_cross_site.spec.js).
+test("auth logs an identical refusal up to REFUSAL_REPEATS times, then not again", () => {
   const log = fakeLog();
   const auth = authModule.createAuth({ log, reviews: fakeReviews });
-  for (let i = 0; i < 5; i++) assert.equal(auth.check(badRequest("/review?review=r_nope")).ok, false);
-  assert.equal(log.lines.length, 1);
+  for (let i = 0; i < logModule.REFUSAL_REPEATS + 4; i++) {
+    assert.equal(auth.check(badRequest("/review?review=r_nope")).ok, false);
+  }
+  assert.equal(log.lines.length, logModule.REFUSAL_REPEATS);
+  assert.ok(logModule.REFUSAL_REPEATS >= 2);
 });
 
 test("auth stops logging new refusals at the cap, with one line saying so", () => {
@@ -68,7 +75,6 @@ test("two refusals of one check that differ in their headers each get a line", (
   const noToken = badRequest("/review?review=r_nope");
   delete noToken.headers["x-lahe-token"];
   auth.check(badRequest("/review?review=r_nope"));
-  auth.check(noToken);
   auth.check(noToken);
   assert.equal(log.lines.length, 2);
 });
