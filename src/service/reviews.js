@@ -1327,7 +1327,7 @@ function createReviews(options) {
    * unfocused tab counts for as long as the helper still holds its review. A
    * window that said goodbye has no holder and does not count.
    *
-   * The idle sweep (idle_servers.js) asks this. Not liveHolders: that answers
+   * The helper's self-stop (self_stop.js) asks this. Not liveHolders: that answers
    * "is somebody reviewing right now" with one fixed window, which is shorter
    * than a hidden tab's beat.
    *
