@@ -1,18 +1,18 @@
 # Progress: Menu bar app
 
-**Phase 1, Crucible.** The branch and worktree are set up, and the crucible questions are next. Nothing is waiting on you yet. Last updated 2026-10-12 09:29.
+**Phase 1, Crucible.** The crucible page is up with one question for you: what the icon should do. One thing needs your attention. Last updated 2026-10-12 09:31.
 
 **Docs:** [Crucible](00_crucible_menu_bar_app.md) · [Brief](01_brief_menu_bar_app.md) · [Architecture](02_architecture_menu_bar_app.md) · [Plan](03_plan_menu_bar_app.md)
 
 ## Needs your attention
 
-Nothing is waiting on you.
+- [ ] Answer the question at the top of the [crucible page](00_crucible_menu_bar_app.md): a plain status icon, or one that also tells you when something is waiting on you. The brief waits on this.
 
 ## Currently working on
 
 | Agent or task | Doing | Started | Branch |
 |---|---|---|---|
-| Orchestrator | Preparing the crucible questions | 2026-10-12 09:29 | `feat/menu-bar` |
+| Orchestrator | Waiting on your crucible answer | 2026-10-12 09:31 | `feat/menu-bar` |
 
 ## Phases
 
@@ -61,4 +61,5 @@ Not shipped yet.
 
 ## Log
 
+- 2026-10-12 09:31: Crucible page written. The other crucible answers are drafted from the stable addresses discussion, for you to correct.
 - 2026-10-12 09:29: Feature started. Worktree at `../lahe-worktrees/menu-bar`, branch `feat/menu-bar`, cut from main at `761d226d`. The idea comes from the stable addresses work, which settled that the menu bar app would be its own follow-up.
