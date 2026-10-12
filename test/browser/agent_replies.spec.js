@@ -1470,7 +1470,7 @@ test.describe("adding another message before the agent has answered", () => {
           // second one on a gesture the footer already advertises.
           // Not the head's disclosure, which folds the card to one line: it is
           // chrome on every card in every tab, not an action on this comment.
-          buttonsOnCard: Array.from(card.querySelectorAll("button:not(.carddisclose)"))
+          buttonsOnCard: Array.from(card.querySelectorAll("button:not(.carddisclose):not(.statemenu *)"))
             .map((b) => b.textContent)
             .sort(),
           cardActs: Array.from(card.querySelectorAll("[data-lahe-act]")).map((b) =>
