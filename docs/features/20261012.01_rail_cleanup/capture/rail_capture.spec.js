@@ -190,6 +190,10 @@ test("capture the rail as a reviewable mockup", async ({ page }) => {
       shots.push(Object.assign({ label, caption }, s));
     };
 
+    // The fixture page has no document style, so the style button would stay
+    // hidden. Real documents show it, so the mockup does too.
+    await page.evaluate(() => window.__lahe.rail.setStyleAvailable(true));
+
     // An empty rail first.
     await rail(() => { window.__lahe.rail.collapse(false); window.__lahe.rail.selectTab("active"); });
     await snap("Empty rail", "The rail before any comment. Active tab.");
