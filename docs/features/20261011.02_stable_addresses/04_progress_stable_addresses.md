@@ -6,14 +6,11 @@
 
 ## Needs your attention
 
-- [ ] **Every page carries its own comments: approve the design.** The note is revised: [each page carries its own comments](parts/architecture/each_page_its_own_comments.md). Its recommendation is now smaller and safer than the first draft. One review per file: opening a file that already has a review opens that review, whichever agent opens it. Every address a file has had (its own, a link from another page, its old `127.0.0.1` one) counts as the same page in that review. A link to a file that has its own review goes to the file's own address. Comments already split across two reviews show on the page as read-only cards saying where they are filed. Nothing on a page ever writes into another review. It folds in the [security review](parts/reviews/each_page_its_own_comments_security.md) of the first draft; a second security check of the revision is running. Say "build it", or what to change.
-- [ ] **Approve or reverse one change from what the docs said.** Building turned up this. Say "fine", or that you want it changed.
-  - **One pull request instead of five.** The plan split the work into five PRs with an on/off switch between them. The switch is already removed, so splitting now would mean rebuilding it just to tear it down. *Recommend: one PR, with the commits grouped by step.*
-- [ ] **Approve retiring old tests.** 11 test files test behavior this feature removes: page servers that stop when idle, restarting page servers, remembering old ports, and the sweep that closes reopened sessions. 2 files go whole and 9 in part. 26 more get rewritten for the new behavior. Until you approve, the retired tests are moved to `test/retired/` (not deleted) so the suite stays green; they are deleted in one batch at cleanup only with your OK. Lists: "Task 3.0: test retirement list" and the Step 3 moved-test list in the [core progress](progress/phase6_workstream_core.md), and the "Task 4.3" section of the [library progress](progress/phase6_workstream_library.md) (18 Library tests).
 - [ ] **Three checks only you can do on this Mac**, once the PR is ready: restart the Mac and see the helper come back on its own (V45, starts at login); open a page with no port in its address (V75, after `lahe install --port-80`); open a `.lahe` page (V73, after `lahe install --lahe-names`). Both install steps ask for your admin password. Steps: [install progress](progress/phase6_workstream_install.md).
 
 ## Decided
 
+- **Approved (your page note, 20:37):** the design for every page carrying its own comments, one PR instead of five, and retiring the old tests. The core builder is building the design. The retired tests are deleted only in the cleanup batch.
 - **Every page carries its own comments.** You rejected "a linked document opens with the linking page's rail". Whatever page you are on, the rail shows that page's comments, whichever page you came from. This changes which review answers on a page, so the core builder is writing a design note first. It comes to this page for your OK before it is built.
 - **Old comments at the new address:** you chose A, and it is built and merged. A comment made at a page's old address shows once as a card at its new address, stays one card after a reload, and nothing is sent back. Old Markdown pages are covered too. Unit suite: 2,647 pass, 0 fail.
 
@@ -22,7 +19,7 @@
   ![The same card, dark](progress/screenshots/v31_old_comment_card_dark.png)
 
 - **Hidden folders serve like any other folder:** restored, matching your earlier decision on main. A document in a worktree under `.claude/worktrees/` serves and its links work (unit test). Pages also refuse to be framed by other sites now, a gap the security review found. Unit suite: 2,653 pass, 0 fail.
-- **The Library opens from any link.** Another page still cannot frame it, script it, or use its buttons. The Library builder is making the change.
+- **The Library opens from any link,** built and merged. Another page still cannot frame it, script it, or use its buttons (unit and browser tests).
 - **One review per file.** Opening a file that already has a review opens that review, whichever agent opens it. If another agent's session owns it, the command says so and how to take it over. It never starts a second review. Deleting a review is its own command. Handoff between agents stays `lahe session takeover`. This goes into the design note for every page carrying its own comments, and replaces the open-tab item.
 - **Cards name the agent** ("Claude said x", then "Codex said y" after a handoff). On the board as LAHE-agent-name-default, separate from this feature.
 - **Windows does not get `.lahe`:** accepted. Every system uses `.lahe.localhost`.
