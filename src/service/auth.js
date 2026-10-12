@@ -44,7 +44,11 @@ function createAuth(options) {
   var reviews = opts.reviews;
   // One line per distinct refusal, capped: any web page can send requests that
   // are refused, as many and as varied as it likes.
-  var refusals = logModule.createNoteOnce(log, "further refusals are not logged until the helper restarts");
+  // An identical refusal is logged up to REFUSAL_REPEATS times: a page's
+  // no-cors fetch and its beacon are the same request, and each is evidence.
+  var refusals = logModule.createNoteOnce(log, "further refusals are not logged until the helper restarts", {
+    repeats: logModule.REFUSAL_REPEATS
+  });
 
   /**
    * Check one request.
@@ -111,9 +115,9 @@ function createAuth(options) {
     // layer, including in result.log, which carries the review id built upstream.
     var what = field(String(req.method || "-") + " " + String(req.path || req.routeName || "-"));
     var from = field(headerOrNone(req.headers, protocol.HEADER.ORIGIN));
-    // The same request again (same refusal, path, origin and headers) logs
-    // nothing new; a request that differs in any header is its own line. The
-    // key is a hash, so no token is held in memory by it.
+    // The same request again (same refusal, path, origin and headers) is
+    // logged up to REFUSAL_REPEATS times; a request that differs in any header
+    // is its own line. The key is a hash, so no token is held in memory by it.
     refusals.say(
       crypto.createHash("sha256").update(result.log + "\u0000" + what + "\u0000" + from + "\u0000" + headerKey(req.headers)).digest("hex"),
       result.log + " [request " + field(req.requestId) + ", " + what + ", origin " + from + "]"
