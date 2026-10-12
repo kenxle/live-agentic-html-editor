@@ -467,7 +467,11 @@ html, body { margin: 0; background: #f4f3ef; }
 .mock-table { border-collapse: collapse; width: 100%; max-width: 820px; background: #fff; font-size: 14.5px; }
 .mock-table td { border: 1px solid #dedbd3; padding: 7px 10px; vertical-align: top; }
 .mock-table td.mock-when { width: 34%; color: #55524b; font-size: 13px; }
-.mock-legend__row { display: flex; align-items: center; gap: 18px; }
+.mock-legend__row { display: flex; align-items: center; gap: 18px; position: relative; }
+/* Each row is its own copy of the head, so the hovered one has to come forward
+   or the rows below paint over its tip. The real rail has one head. */
+.mock-legend__row:hover, .mock-stage:hover { z-index: 20; }
+.mock-stage { position: relative; }
 .mock-legend__label { font-size: 15px; }
 
 /* Unfix the copy: the real rail is pinned to the window; this one sits in the page,

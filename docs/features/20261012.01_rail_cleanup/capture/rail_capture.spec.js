@@ -280,18 +280,20 @@ test("capture the rail as a reviewable mockup", async ({ page }) => {
     // The status dot, one copy of the head per state. The attributes are the
     // ones renderStatus sets; the shapes come from the rail's own CSS.
     const DOT_STATES = [
-      { label: "Stored, agent listening", attrs: { "data-status": "stored", "data-agent": "connected", "data-loud": "" } },
-      { label: "Agent working", attrs: { "data-status": "stored", "data-agent": "working", "data-loud": "" } },
-      { label: "Stored, no agent listening", attrs: { "data-status": "stored", "data-agent": "absent", "data-loud": "" } },
-      { label: "Kept in this browser (helper down)", attrs: { "data-status": "kept_locally", "data-agent": "", "data-loud": "" } },
-      { label: "Waited too long", attrs: { "data-status": "stored", "data-agent": "waiting", "data-loud": "true" } }
+      { label: "Stored, agent listening", tip: "Stored · agent listening", attrs: { "data-status": "stored", "data-agent": "connected", "data-loud": "" } },
+      { label: "Agent working", tip: "Stored · agent is working, 3m", attrs: { "data-status": "stored", "data-agent": "working", "data-loud": "" } },
+      { label: "Stored, no agent listening", tip: "Stored · no agent listening", attrs: { "data-status": "stored", "data-agent": "absent", "data-loud": "" } },
+      { label: "Kept in this browser (helper down)", tip: "Kept in this browser", attrs: { "data-status": "kept_locally", "data-agent": "", "data-loud": "" } },
+      { label: "Waited too long", tip: "Stored · nothing back yet, 12m", attrs: { "data-status": "stored", "data-agent": "waiting", "data-loud": "true" } }
     ];
     const legend = [];
     for (const state of DOT_STATES) {
-      await page.evaluate((attrs) => {
+      await page.evaluate((st) => {
         const dot = window.__lahe.rail.tabBody("active").getRootNode().querySelector(".head .mark");
-        Object.keys(attrs).forEach((k) => dot.setAttribute(k, attrs[k]));
-      }, state.attrs);
+        Object.keys(st.attrs).forEach((k) => dot.setAttribute(k, st.attrs[k]));
+        // Only the first line: the sentences under it are in the Hover text section.
+        dot.parentNode.setAttribute("data-lahe-tip", st.tip);
+      }, state);
       const s = await page.evaluate(snapshotInPage, ".head");
       legend.push({ label: state.label, html: s.html });
     }
