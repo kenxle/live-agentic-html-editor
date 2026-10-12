@@ -1161,6 +1161,9 @@
     ".stylepanel__note{font-size:11.5px;color:var(--ink-soft);line-height:1.55}",
     ".stylepanel__note code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11px;",
     "color:var(--ink)}",
+    ".stylepanel__link{color:var(--accent-ink);font-weight:600;text-decoration:underline;",
+    "text-underline-offset:2px}",
+    ".stylepanel__link:hover{color:var(--accent)}",
 
     // --- footer -------------------------------------------------------------
     ".foot{border-top:1px solid var(--line-soft);background:var(--paper);",
@@ -6507,7 +6510,15 @@
       notes.forEach(function (parts) {
         var line = el("div", "stylepanel__note");
         (parts || []).forEach(function (part) {
-          if (part.kbd) line.appendChild(el("kbd", null, part.kbd));
+          if (part.link) {
+            // A link out of the rail: the styles page. Opened in a new tab so
+            // the review page stays where it is.
+            var out = el("a", "stylepanel__link", String(part.text || part.link));
+            out.setAttribute("href", part.link);
+            out.setAttribute("target", "_blank");
+            out.setAttribute("rel", "noopener noreferrer");
+            line.appendChild(out);
+          } else if (part.kbd) line.appendChild(el("kbd", null, part.kbd));
           else if (part.code) line.appendChild(el("code", null, part.code));
           else line.appendChild(doc.createTextNode(String(part.text || "")));
         });

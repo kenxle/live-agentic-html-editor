@@ -344,7 +344,7 @@ test.describe("the list, and a rail that says what the page shows (V9, V12, R2, 
     world = await openWorld(page, { styles: [] });
     const info = await openPanel(page);
     expect(info.rows.map((r) => r.id)).toEqual(["international"]);
-    expect(info.notes).toEqual(["Add styles with lahe style add <folder>, or ask your agent to."]);
+    expect(info.notes).toEqual(["Get more styles. Add one with lahe style add <folder>, or ask your agent to."]);
     await shoot(page, "nothing_installed_light");
   });
 
@@ -1251,7 +1251,7 @@ test.describe("a page that no Lahe page server serves (V26)", () => {
     expect((await styleInfo(page)).previewLinks).toBe(0);
     const info = await openPanel(page);
     expect(info.rows.map((r) => r.id)).toEqual(["international"]);
-    expect(info.notes).toContain("Add styles with lahe style add <folder>, or ask your agent to.");
+    expect(info.notes).toContain("Get more styles. Add one with lahe style add <folder>, or ask your agent to.");
   });
 });
 
