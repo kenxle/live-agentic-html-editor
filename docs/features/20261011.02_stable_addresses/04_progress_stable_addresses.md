@@ -20,6 +20,10 @@
 
 - **Old comments at the new address:** you chose A. When a page opens at its new address, the rail fetches that page's earlier comments from the helper and shows them as cards. Old Markdown pages get a path alias too. The core builder is building it now.
 
+## Why the progress page kept going dead
+
+It was not a crash. The helper on main stopped this page's server three times in ten minutes (00:03, 00:05 and 00:12 UTC in `~/.local/state/lahe/helper.log`), each time logging "no browser window open on its pages for 120 seconds" while your tab was open and visible. Each time the page polled again, the helper restarted the server, and about two minutes later it stopped it again. When my edit made the page reload while the server was stopped, you saw ERR_CONNECTION_REFUSED. It happens to every session: in that same 16 minutes the log has 72 page-server stops and 74 restarts. This is the churn the idle baseline measured (51 page-server processes started in 5 minutes). This feature removes page servers and their idle stop, so the bug goes away rather than getting a fix on main.
+
 ## Disk space, cleared
 
 The Lahe test folders were deleted at your go-ahead, and the disk went from 953 MB free to 43 GB free. One unit run, measured after the cleanup, left 618 MB behind. Most of it (465 MB) is the Library test fixture, which writes a 5 MB event log on each of its 74 setups. The wrapper that runs the tests also never removes its own folder. Both are on the board as LAHE-test-runs-fill-disk, outside this feature. The same run passed: 2,639 unit tests, 0 failed, no helpers left running.
