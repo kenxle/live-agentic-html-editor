@@ -809,13 +809,28 @@
     // The kind filter: a small segmented control in the tab strip's quiet
     // register. The picked segment is a paper chip on a sunken track, the rest
     // are plain text.
-    ".filter{flex:none;display:flex;gap:2px;padding:2px;",
-    "background:var(--sunken);border-radius:8px}",
-    ".filter__opt{font-size:11.5px;font-weight:550;color:var(--ink-soft);padding:3px 10px;",
-    "border-radius:6px;line-height:1.3}",
-    ".filter__opt:hover{color:var(--ink)}",
-    ".filter__opt[aria-pressed='true']{background:var(--paper);color:var(--ink);",
-    "box-shadow:0 0 0 1px var(--line),0 1px 1px rgba(18,20,26,.04)}",
+    // The kind filter: one small button beside the search box, so the box
+    // takes most of the row (Ken, 2026-10-12). It opens a popover holding the
+    // three picks; a pick other than All shows its name on the button.
+    ".filterwrap{position:relative;flex:none}",
+    ".filterbtn{display:flex;align-items:center;gap:5px;font:inherit;font-size:11.5px;font-weight:550;",
+    "line-height:1.3;color:var(--ink-soft);background:var(--paper);border:1px solid var(--line);",
+    "border-radius:7px;padding:4px 7px;cursor:pointer}",
+    ".filterbtn svg{width:13px;height:13px;flex:none}",
+    ".filterbtn:hover{color:var(--ink)}",
+    ".filterbtn[data-lahe-filtering='true']{color:var(--accent-ink);border-color:var(--accent);",
+    "background:var(--accent-wash)}",
+    ".filterbtn:focus-visible{outline:2px solid var(--accent);outline-offset:0}",
+    ".filterbtn__label:empty{display:none}",
+    ".filter{position:absolute;right:0;top:calc(100% + 4px);z-index:5;display:flex;flex-direction:column;",
+    "gap:1px;padding:4px;min-width:124px;background:var(--paper);border:1px solid var(--line);",
+    "border-radius:8px;box-shadow:0 6px 18px rgba(18,20,26,.12)}",
+    ".filter[hidden]{display:none}",
+    ".filter__opt{font-size:12px;font-weight:500;color:var(--ink);padding:5px 10px;text-align:left;",
+    "border-radius:5px;line-height:1.3;background:transparent;border:0;font-family:inherit;cursor:pointer}",
+    ".filter__opt:hover,.filter__opt:focus-visible{background:var(--sunken);outline:0}",
+    ".filter__opt[aria-pressed='true']{color:var(--accent-ink);font-weight:600}",
+    ".filter__opt[aria-pressed='true']::before{content:'\\2713\\00a0';}",
     // The search box: the card-action outline at the card-action size, taking
     // whatever the row leaves after the filter.
     ".search{flex:1 1 110px;min-width:0;box-sizing:border-box;font:inherit;font-size:11.5px;",
@@ -2621,37 +2636,19 @@
       });
       rail.appendChild(panes);
 
-      // The Active filter, in the pane head so it reads as the list's header.
-      // Toggle buttons (aria-pressed) rather than a second tab strip: it narrows
-      // one list, it does not switch to another.
-      var filter = el("div", "filter");
-      filter.setAttribute("role", "group");
-      filter.setAttribute("aria-label", "Show");
-      filter.setAttribute("data-lahe-filter-bar", "");
+      // The kind filter: one popover per pane, behind a button beside the
+      // search box. The pick is one value for both panes: Done holds handled
+      // hand edits too, and a reviewer reading only edits wants that on both.
+      var FUNNEL = "M3 5h18l-7 8v5l-4 2v-7L3 5z";
       var filterButtons = Object.create(null);
-      FILTERS.forEach(function (name) {
-        var option = el("button", "filter__opt", FILTER_LABEL[name]);
-        option.setAttribute("type", "button");
-        option.setAttribute("data-lahe-filter-option", name);
-        option.addEventListener("click", function () {
-          setActiveFilter(name);
-        });
-        filter.appendChild(option);
-        filterButtons[name] = option;
-      });
-      var filterEmpty = el("div", "filterempty", "");
-      filterEmpty.setAttribute("data-lahe-filter-empty", "");
-      paneNodes[TAB.ACTIVE].appendChild(filterEmpty);
-
-      // Each pane's head: the kind filter (Active only) and a search box. The
-      // box narrows the cards in its own pane to those whose words contain what
-      // was typed; it combines with the kind filter rather than replacing it.
+      var filterToggles = Object.create(null);
+      var filterPops = Object.create(null);
+      var filterEmpties = Object.create(null);
       var searchInputs = Object.create(null);
       var searchEmpties = Object.create(null);
       TABS.forEach(function (name) {
         var head = el("div", "panehead");
         head.setAttribute("data-lahe-pane-head", name);
-        if (name === TAB.ACTIVE) head.appendChild(filter);
         var input = el("input", "search");
         input.setAttribute("type", "search");
         input.setAttribute("placeholder", SEARCH_PLACEHOLDER);
@@ -2664,6 +2661,53 @@
           setSearch(name, input.value);
         });
         head.appendChild(input);
+
+        var wrap = el("div", "filterwrap");
+        var toggle = el("button", "filterbtn");
+        toggle.setAttribute("type", "button");
+        toggle.setAttribute("aria-haspopup", "true");
+        toggle.setAttribute("aria-expanded", "false");
+        toggle.setAttribute("aria-label", "Filter: show all, comments, or edits");
+        toggle.title = "Show all, only comments, or only hand edits";
+        toggle.setAttribute("data-lahe-filter-toggle", name);
+        toggle.innerHTML =
+          '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="' +
+          FUNNEL +
+          '"></path></svg>';
+        var toggleLabel = el("span", "filterbtn__label", "");
+        toggle.appendChild(toggleLabel);
+        toggle.addEventListener("click", function () {
+          toggleFilterPopover(name);
+        });
+        wrap.appendChild(toggle);
+
+        var filter = el("div", "filter");
+        filter.setAttribute("role", "group");
+        filter.setAttribute("aria-label", "Show");
+        filter.setAttribute("data-lahe-filter-bar", name);
+        filter.hidden = true;
+        filterButtons[name] = Object.create(null);
+        FILTERS.forEach(function (pick) {
+          var option = el("button", "filter__opt", FILTER_LABEL[pick]);
+          option.setAttribute("type", "button");
+          option.setAttribute("data-lahe-filter-option", pick);
+          option.addEventListener("click", function () {
+            setActiveFilter(pick);
+            closeFilterPopover(name, true);
+          });
+          filter.appendChild(option);
+          filterButtons[name][pick] = option;
+        });
+        wrap.appendChild(filter);
+        head.appendChild(wrap);
+        filterToggles[name] = toggle;
+        filterPops[name] = filter;
+
+        var filterEmpty = el("div", "filterempty", "");
+        filterEmpty.setAttribute("data-lahe-filter-empty", name);
+        paneNodes[name].appendChild(filterEmpty);
+        filterEmpties[name] = filterEmpty;
+
         paneNodes[name].insertBefore(head, paneNodes[name].firstChild);
         searchInputs[name] = input;
         var said = el("div", "searchempty", "");
@@ -2964,7 +3008,9 @@
         newmarks: newmarks,
         panes: paneNodes,
         filterButtons: filterButtons,
-        filterEmpty: filterEmpty,
+        filterToggles: filterToggles,
+        filterPops: filterPops,
+        filterEmpties: filterEmpties,
         searchInputs: searchInputs,
         searchEmpties: searchEmpties,
         chipList: chipList,
@@ -3131,14 +3177,87 @@
 
     function paintFilter() {
       if (!dom || !dom.filterButtons) return;
-      dom.panes[TAB.ACTIVE].setAttribute("data-lahe-filter", activeFilter);
-      FILTERS.forEach(function (name) {
-        dom.filterButtons[name].setAttribute("aria-pressed", name === activeFilter ? "true" : "false");
+      TABS.forEach(function (tab) {
+        dom.panes[tab].setAttribute("data-lahe-filter", activeFilter);
+        FILTERS.forEach(function (name) {
+          dom.filterButtons[tab][name].setAttribute("aria-pressed", name === activeFilter ? "true" : "false");
+        });
+        var toggle = dom.filterToggles[tab];
+        var filtering = activeFilter !== FILTER.ALL;
+        toggle.setAttribute("data-lahe-filtering", filtering ? "true" : "false");
+        toggle.querySelector(".filterbtn__label").textContent = filtering ? FILTER_LABEL[activeFilter] : "";
+        dom.filterEmpties[tab].textContent = FILTER_EMPTY[activeFilter] || "";
+        // The kind filter decides what counts as shown, so a search's "nothing
+        // matches" line is checked again with it.
+        applySearch(tab);
       });
-      dom.filterEmpty.textContent = FILTER_EMPTY[activeFilter] || "";
-      // The kind filter decides what counts as shown, so a search's "nothing
-      // matches" line is checked again with it.
-      applySearch(TAB.ACTIVE);
+    }
+
+    var filterPopoverOpen = null;
+    var filterOutsideListener = null;
+    var filterShadowListener = null;
+
+    function filterPopoverIsOpen(tab) {
+      return filterPopoverOpen === tab;
+    }
+
+    /**
+     * Open one pane's filter popover. Closed the way the shortcuts panel is:
+     * a press anywhere outside it, or Escape, puts it away.
+     */
+    function openFilterPopover(tab) {
+      if (!dom || !dom.filterPops) return false;
+      closeFilterPopover(filterPopoverOpen, false);
+      var pop = dom.filterPops[tab];
+      var toggle = dom.filterToggles[tab];
+      pop.hidden = false;
+      toggle.setAttribute("aria-expanded", "true");
+      filterPopoverOpen = tab;
+      filterOutsideListener = function (event) {
+        if (event.type === "keydown") {
+          if (event.key !== "Escape") return;
+          event.preventDefault();
+          event.stopPropagation();
+          closeFilterPopover(tab, true);
+          return;
+        }
+        if (fromOurTree(event)) return;
+        closeFilterPopover(tab, false);
+      };
+      filterShadowListener = function (event) {
+        if (pop.contains(event.target) || toggle.contains(event.target)) return;
+        closeFilterPopover(tab, false);
+      };
+      doc.addEventListener("pointerdown", filterOutsideListener, true);
+      doc.addEventListener("keydown", filterOutsideListener, true);
+      dom.shadow.addEventListener("pointerdown", filterShadowListener, true);
+      var pressed = dom.filterButtons[tab][activeFilter];
+      if (pressed && typeof pressed.focus === "function") pressed.focus();
+      return true;
+    }
+
+    function closeFilterPopover(tab, returnFocus) {
+      if (!tab || filterPopoverOpen !== tab) return false;
+      if (filterOutsideListener) {
+        doc.removeEventListener("pointerdown", filterOutsideListener, true);
+        doc.removeEventListener("keydown", filterOutsideListener, true);
+        filterOutsideListener = null;
+      }
+      if (filterShadowListener) {
+        if (dom) dom.shadow.removeEventListener("pointerdown", filterShadowListener, true);
+        filterShadowListener = null;
+      }
+      filterPopoverOpen = null;
+      if (dom && dom.filterPops) {
+        dom.filterPops[tab].hidden = true;
+        dom.filterToggles[tab].setAttribute("aria-expanded", "false");
+        if (returnFocus) dom.filterToggles[tab].focus();
+      }
+      return true;
+    }
+
+    function toggleFilterPopover(tab) {
+      return filterPopoverIsOpen(tab) ? closeFilterPopover(tab, true) : openFilterPopover(tab);
     }
 
     /**
@@ -3182,7 +3301,7 @@
       if (card.node && card.node.hasAttribute(SEARCH_MISS_ATTR) && TABS.indexOf(card.pane) !== -1) {
         setSearch(card.pane, "");
       }
-      if (card.pane !== TAB.ACTIVE || activeFilter === FILTER.ALL) return activeFilter;
+      if (TABS.indexOf(card.pane) === -1 || activeFilter === FILTER.ALL) return activeFilter;
       var hand = isHandEditKind(card.item);
       if ((activeFilter === FILTER.EDITS && !hand) || (activeFilter === FILTER.COMMENTS && hand)) {
         setActiveFilter(FILTER.ALL);
@@ -3217,7 +3336,7 @@
     }
 
     function passesKindFilter(tab, node) {
-      if (tab !== TAB.ACTIVE || activeFilter === FILTER.ALL) return true;
+      if (TABS.indexOf(tab) === -1 || activeFilter === FILTER.ALL) return true;
       if (!node.classList.contains("card")) return activeFilter !== FILTER.EDITS;
       var hand = node.hasAttribute(HAND_EDIT_ATTR);
       return activeFilter === FILTER.EDITS ? hand : !hand;
@@ -7962,6 +8081,9 @@
       FILTERS: FILTERS,
       setActiveFilter: setActiveFilter,
       currentFilter: currentFilter,
+      openFilterPopover: openFilterPopover,
+      closeFilterPopover: closeFilterPopover,
+      filterPopoverIsOpen: filterPopoverIsOpen,
       revealCard: revealCard,
       setSearch: setSearch,
       searchFor: searchFor,

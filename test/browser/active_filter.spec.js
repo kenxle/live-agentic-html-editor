@@ -61,7 +61,8 @@ function railView(page, ids) {
       tabLabels: tabs.map((t) => t.firstChild.textContent),
       activeCount: tabs.find((t) => t.getAttribute("data-tab") === "active").querySelector(".count").textContent,
       options: options.map((o) => ({ label: o.textContent, pressed: o.getAttribute("aria-pressed") })),
-      filterShown: shown(pane.querySelector("[data-lahe-filter-bar]")),
+      filterShown: shown(pane.querySelector("[data-lahe-filter-toggle]")),
+      filterLabel: pane.querySelector("[data-lahe-filter-toggle] .filterbtn__label").textContent,
       editPane: rail.getCard(editId).pane,
       commentPane: rail.getCard(commentId).pane,
       editShown: shown(rail.cardNode(editId)),
@@ -72,17 +73,31 @@ function railView(page, ids) {
   }, ids);
 }
 
-async function pressFilter(page, name) {
-  const rect = await page.evaluate((want) => {
-    const pane = window.__lahe.rail.tabBody("active");
-    const button = pane.querySelector('[data-lahe-filter-option="' + want + '"]');
+// The picks sit behind one button beside the search box, so the box takes
+// most of the row. Pressing the button opens them; pressing a pick closes it.
+async function pressFilter(page, name, tab) {
+  const pane = tab || "active";
+  const toggle = await page.evaluate((which) => {
+    const r = window.__lahe.rail.tabBody(which).querySelector("[data-lahe-filter-toggle]").getBoundingClientRect();
+    return { x: r.left + r.width / 2, y: r.top + r.height / 2, width: r.width };
+  }, pane);
+  expect(toggle.width, "the filter button is on screen").toBeGreaterThan(0);
+  await page.mouse.click(toggle.x, toggle.y);
+  await pollPage(page, (which) => window.__lahe.rail.filterPopoverIsOpen(which), pane, {
+    message: "the filter popover to open"
+  });
+  const rect = await page.evaluate(({ want, which }) => {
+    const button = window.__lahe.rail.tabBody(which).querySelector('[data-lahe-filter-option="' + want + '"]');
     const r = button.getBoundingClientRect();
     return { x: r.left + r.width / 2, y: r.top + r.height / 2, width: r.width };
-  }, name);
+  }, { want: name, which: pane });
   expect(rect.width, "the " + name + " option is on screen").toBeGreaterThan(0);
   await page.mouse.click(rect.x, rect.y);
   await pollPage(page, (want) => window.__lahe.rail.currentFilter() === want, name, {
     message: "the press to pick " + name
+  });
+  await pollPage(page, (which) => !window.__lahe.rail.filterPopoverIsOpen(which), pane, {
+    message: "the popover to close on a pick"
   });
 }
 
@@ -107,7 +122,8 @@ test.describe("the Active pane's filter", () => {
     expect(all.editPane, "the hand edit is an Active card").toBe("active");
     expect(all.commentPane).toBe("active");
     expect(all.editHasRow, "with the before-and-after row drawn in it").toBe(true);
-    expect(all.filterShown, "the filter sits at the top of a pane with cards").toBe(true);
+    expect(all.filterShown, "the filter button sits at the top of a pane with cards").toBe(true);
+    expect(all.filterLabel, "and names no pick while All is in force").toBe("");
     expect(all.options).toEqual([
       { label: "All", pressed: "true" },
       { label: "Comments", pressed: "false" },
@@ -132,6 +148,7 @@ test.describe("the Active pane's filter", () => {
     expect([edits.editShown, edits.commentShown], "Edits shows only the hand edit").toEqual([true, false]);
     expect(edits.activeCount, "the tab count stays the total").toBe("2");
     expect(edits.options.map((o) => o.pressed)).toEqual(["false", "false", "true"]);
+    expect(edits.filterLabel, "the button names the pick").toBe("Edits");
     expect(edits.filterEmpty, "a pick that shows something says nothing").toBe(null);
 
     for (const scheme of ["light", "dark"]) {
@@ -193,6 +210,47 @@ test.describe("the Active pane's filter", () => {
       pressed: "true",
       paneAttr: "edits"
     });
+  });
+
+  // THE DONE TAB has the same button. One pick for both panes: Done holds
+  // handled hand edits too, and a reviewer reading only edits wants that there.
+  test("the filter button is on Done as well, and one pick narrows both panes", async ({ page }) => {
+    await booted(page, pages);
+    const ids = await oneOfEach(page);
+    await page.evaluate(() => window.__lahe.rail.selectTab("done"));
+    const doneHead = await page.evaluate(() => {
+      const pane = window.__lahe.rail.tabBody("done");
+      const toggle = pane.querySelector("[data-lahe-filter-toggle]");
+      const input = pane.querySelector("[data-lahe-search]");
+      return {
+        hasToggle: !!toggle,
+        options: Array.from(pane.querySelectorAll("[data-lahe-filter-option]")).map((o) => o.textContent),
+        popoverHidden: pane.querySelector("[data-lahe-filter-bar]").hidden,
+        searchWider: input.getBoundingClientRect().width > (toggle ? toggle.getBoundingClientRect().width * 3 : 0)
+      };
+    });
+    expect(doneHead.hasToggle, "Done has the filter button").toBe(true);
+    expect(doneHead.options).toEqual(["All", "Comments", "Edits"]);
+    expect(doneHead.popoverHidden, "the picks are put away until pressed").toBe(true);
+    // Done has no cards yet, so its head is not drawn; the width claim is made
+    // on Active, where the row is on screen.
+    await page.evaluate(() => window.__lahe.rail.selectTab("active"));
+    const widths = await page.evaluate(() => {
+      const pane = window.__lahe.rail.tabBody("active");
+      return {
+        search: pane.querySelector("[data-lahe-search]").getBoundingClientRect().width,
+        toggle: pane.querySelector("[data-lahe-filter-toggle]").getBoundingClientRect().width
+      };
+    });
+    expect(widths.search, "the search box takes most of the row").toBeGreaterThan(widths.toggle * 3);
+    await pressFilter(page, "edits");
+    const both = await page.evaluate(() => ({
+      active: window.__lahe.rail.tabBody("active").getAttribute("data-lahe-filter"),
+      done: window.__lahe.rail.tabBody("done").getAttribute("data-lahe-filter"),
+      doneLabel: window.__lahe.rail.tabBody("done").querySelector(".filterbtn__label").textContent
+    }));
+    expect(both, "the pick is on both panes").toEqual({ active: "edits", done: "edits", doneLabel: "Edits" });
+    void ids;
   });
 
   // THE SEARCH BOX. Typed with the real keyboard into the box at its on-screen
