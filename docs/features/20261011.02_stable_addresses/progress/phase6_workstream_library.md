@@ -150,3 +150,17 @@ Merged `feat/stable-addresses` (core Step 3, then the install leak fix) and fini
 ### Same file, same address (spec check)
 
 Open now binds a file reviewed on its own the way `lahe review` does: into the deepest registered folder site that already holds it, at its path there, using core's `sites.deepestFolderSite` (exported from `sites.js`, one line) and `bind` with `containing`. A row's address follows the same rule, so it shows the outer site's address before Open. A folder review still names its own folder. Tests in [library_open_sites.test.js](../../../../test/unit/library_open_sites.test.js): "a file under a registered folder site, opened from the Library, gets that site's address, and no second site is named" (failed first, on the file's own-folder address), plus the file-first order and the folder-review control. The merge also removed `staticServers.list`, so `catalog_reader.test.js` reads records with `allRecords`. Verified: the unit files named above (285 pass, 0 fail) and `library_stable_address.spec.js` in Chromium (5 pass). I stopped there, because free disk fell under 1 GB (888 MB); the full `gate:unit` and the other three Library specs were not rerun after this change.
+
+### The Library opens from any link
+
+Ken's rule: any top-level navigation to the Library page opens it, from any site, a bookmark, or a link in a document or an email. `auth.checkCatalogRequest` now takes `top_level_navigation` on `catalog.page` only (it replaces the same-site exception): Sec-Fetch-Mode navigate with Sec-Fetch-Dest document passes whatever Sec-Fetch-Site says, and so does a request with no Sec-Fetch headers at all. A fetch, an iframe or an image asking for the page is refused, the assets take no exception, and every API route is unchanged.
+
+Protections, each checked: the page cannot be framed (`X-Frame-Options: DENY`, `frame-ancestors 'none'`, already there); `Cross-Origin-Opener-Policy: same-origin` is added to every Library response; no script on the page reads its URL (a unit test scans `src/layer/catalog/` for it); every API route still needs the token, `Sec-Fetch-Site: same-origin`, the `catalog` client header, and for a POST JSON and the exact Origin. The page does embed its token in the HTML; that is safe under the protections above, and the docs say so.
+
+Tests: [library_link_navigation.test.js](../../../../test/unit/library_link_navigation.test.js) (cross-site navigate gets 200 and a page; no Sec-Fetch headers gets 200; a cross-site fetch or iframe is refused with no token; an API call from another origin is refused, with a positive control; frame-ancestors and COOP are on the page; assets refuse a navigation; no script reads its URL). Browser: "a link to the Library on a page from another origin opens it with its list loaded, in the same tab and in a new one" in `library_stable_address.spec.js`, which fails with the rule off and passes with it on, and checks `window.opener` is null in the new tab. The old "missing Sec-Fetch-Site" case for the page in `catalog_auth.test.js` now expects the exception, and the asset keeps its refusal.
+
+`catalog_cross_site.spec.js` "from another loopback port (127.0.0.1)" times out waiting for the helper to log the form-post refusal of `catalog.open`. It fails the same way on `4d04aeb` and on the merged tip before these changes, so it is not from this rule; the first test in that file passes.
+
+## To delete at cleanup
+
+- Scratch copies of earlier commits under the session scratchpad (`base286`, `base4d`, `base4d2`), not in the repo.

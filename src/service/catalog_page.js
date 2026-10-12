@@ -61,6 +61,9 @@ function securityHeaders() {
   return {
     "Content-Security-Policy": CONTENT_SECURITY_POLICY,
     "X-Frame-Options": "DENY",
+    // An opener (a page that linked to this one with target=_blank, or
+    // window.open) gets no handle on this window.
+    "Cross-Origin-Opener-Policy": "same-origin",
     "Referrer-Policy": "no-referrer",
     "Cache-Control": "no-store",
     "X-Content-Type-Options": "nosniff"

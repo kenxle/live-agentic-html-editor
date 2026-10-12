@@ -768,8 +768,9 @@ function statusPage(title, paragraphs) {
 /**
  * The Library's address as a document page links to it: library.lahe.localhost
  * at the printed port, or with no port through the port-80 forward. From a
- * <name>.lahe.localhost page that click is same-site, which the Library page
- * accepts as a top-level navigation; 127.0.0.1 would be cross-site and refused.
+ * <name>.lahe.localhost page that click is a top-level navigation, which the
+ * Library page accepts from any site; its Host would need the Library's name,
+ * so the address names it.
  *
  * @param {number} printedPort
  */

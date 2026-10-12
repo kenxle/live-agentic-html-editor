@@ -113,6 +113,33 @@ test("V43: the Library loads at library.lahe.localhost with its rows, and at 127
   await expect(rowOf(page, s.a.id)).toBeVisible();
 });
 
+test("a link to the Library on a page from another origin opens it with its list loaded, in the same tab and in a new one", async ({ page, context }) => {
+  const s = scene();
+  const library = libraryUrl();
+  // A page on another site, as a doc or an email's web view would be.
+  await page.route("http://other-site.example/**", (route) =>
+    route.fulfill({
+      contentType: "text/html",
+      body: '<!doctype html><title>Elsewhere</title><p><a id="same" href="' + library + '">Library</a> ' +
+        '<a id="blank" target="_blank" href="' + library + '">Library in a new tab</a></p>'
+    })
+  );
+  await page.goto("http://other-site.example/notes");
+  await page.locator("#same").click();
+  await page.waitForURL(library);
+  await expect(page.locator("#lahe-catalog-main .lib-section").first()).toBeVisible();
+  await expect(rowOf(page, s.a.id)).toBeVisible();
+
+  // target=_blank: the Library opens, and the page that linked to it has no handle on it.
+  await page.goto("http://other-site.example/notes");
+  const [popup] = await Promise.all([context.waitForEvent("page"), page.locator("#blank").click()]);
+  await popup.waitForURL(library);
+  await expect(popup.locator("#lahe-catalog-main .lib-section").first()).toBeVisible();
+  await expect(rowOf(popup, s.a.id)).toBeVisible();
+  expect(await popup.evaluate(() => window.opener), "COOP cuts the opener off").toBeNull();
+  await popup.close();
+});
+
 test("V43: a document's own address never shows the Library", async ({ page }) => {
   const s = scene();
   const named = world.helper.sites.list()[0].name;

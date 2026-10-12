@@ -216,7 +216,12 @@ test("catalog.page and catalog.asset refuse same-site, cross-site, a missing Sec
   const port = helper.port;
   try {
     for (const p of [PAGE.path, ASSET.path + "page.js"]) {
-      for (const site of ["same-site", "cross-site", undefined]) {
+      // The page opens for any top-level navigation and for a request with no
+      // Sec-Fetch headers at all (library_link_navigation.test.js); here the
+      // headers say it is not a navigation, or say nothing about the mode.
+      // The asset takes neither exception.
+      const sites = p === PAGE.path ? ["same-site", "cross-site"] : ["same-site", "cross-site", undefined];
+      for (const site of sites) {
         const res = await raw(port, { path: p, headers: pageHeaders(port, { "sec-fetch-site": site }) });
         assert.equal(res.status, 403, p + " with Sec-Fetch-Site " + site);
         assert.equal(res.json.error.code, "PROTO_CROSS_SITE");

@@ -1080,15 +1080,30 @@ helper's one `auth.check` call site). The page is loaded by navigation and its a
 
 | Route | Method | Host | `Sec-Fetch-Site` | Client header `catalog` + token | JSON body | Origin |
 |---|---|---|---|---|---|---|
-| `catalog.page` | GET | helper's own | `none` or `same-origin`; also `same-site` on a top-level navigation (`Sec-Fetch-Mode: navigate` and `Sec-Fetch-Dest: document`) | not required | no | not read |
+| `catalog.page` | GET | helper's own | `none` or `same-origin`; also any value on a top-level navigation (`Sec-Fetch-Mode: navigate` and `Sec-Fetch-Dest: document`), and a request with no `Sec-Fetch-*` header at all | not required | no | not read |
 | `catalog.asset` | GET | helper's own | `none` or `same-origin` | not required | no | not read |
 | `catalog.list` | GET | helper's own | exactly `same-origin` | required | no | not read |
 | `catalog.open`, `catalog.star`, `catalog.rename`, `catalog.request` | POST | helper's own | exactly `same-origin` | required | required | exactly `http://` + the request's Host |
 
-The page's `same-site` navigation is for the "Open the Library" link on a document's not-found and
-file-gone pages. That link goes to `library.lahe.localhost` at the printed port, so the click is
-same-site. A same-site page can open the Library this way but cannot frame it (`X-Frame-Options: DENY`
-and `frame-ancestors 'none'`), and a fetch or a frame is not a navigation to a document, so it is refused.
+**Any top-level navigation opens the Library page,** from any site: a link in a document or an email, a
+bookmark, a typed address, the "Open the Library" link on a not-found page. The browser says so with
+`Sec-Fetch-Mode: navigate` and `Sec-Fetch-Dest: document`, whatever `Sec-Fetch-Site` says. A request with no
+`Sec-Fetch-*` header at all (a program, an older browser) opens it too. A fetch, an image, a script or a
+frame asking for the page is still refused, so a page cannot pull the Library's HTML into a script. The page
+does not embed its token for anyone who can read it, because the only requests that can read it are the
+ones that pass the checks:
+
+- A cross-site navigation cannot read the page it loads.
+- The page cannot be framed: `X-Frame-Options: DENY` and `frame-ancestors 'none'`.
+- Its `Cross-Origin-Opener-Policy: same-origin` gives a page that opened it (a `target="_blank"` link, or
+  `window.open`) no handle on its window.
+- Nothing on it acts on its URL: no script reads the query or the fragment.
+- The token is not enough on its own. Every API route (list, open, star, rename, request) also needs
+  `Sec-Fetch-Site: same-origin`, the `x-lahe-client: catalog` header, and, for a POST, JSON and the exact
+  Origin. The assets take no navigation exception.
+
+The page does embed the token in its HTML (the `lahe-catalog-token` meta tag). That is safe under the
+protections above, and the Library's residual risk below says what they do not cover.
 
 The checks run in this order, each refusing with the same code its per-review namesake uses, and each
 refusal logs the name of the check that failed:
@@ -1096,7 +1111,7 @@ refusal logs the name of the check that failed:
 | Check | Refuses with | On the Library routes |
 | --- | --- | --- |
 | `host` | `PROTO_BAD_HOST` | Exactly `127.0.0.1:<port>` or `localhost:<port>` at the helper's actual port, on every catalog route. Stricter than the review routes' Host check, because the page carries the token and a DNS-rebinding page must not read it |
-| `sec_fetch_site` | `PROTO_CROSS_SITE` | Set by the browser, never by a script. A missing value is refused. `same-site` is refused on the API routes: a document under review on another loopback port sends `same-site`, and it is the page most likely to run a script the reviewer did not write |
+| `sec_fetch_site` | `PROTO_CROSS_SITE` | Set by the browser, never by a script. A missing value is refused on every route but the page, which also opens for any top-level navigation and for a request with no `Sec-Fetch-*` header at all. `same-site` is refused on the API routes: a document under review on another loopback port sends `same-site`, and it is the page most likely to run a script the reviewer did not write |
 | `custom_header` | `PROTO_MISSING_CUSTOM_HEADER` | `x-lahe-client: catalog`, API routes only |
 | `content_type` | `PROTO_UNSUPPORTED_MEDIA_TYPE` | `application/json`, POSTs only |
 | `token` | `PROTO_UNAUTHORIZED` | The Library token in `x-lahe-token`, compared in constant time, API routes only |
