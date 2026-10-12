@@ -3,7 +3,7 @@
 //
 // LAHE Library plan, Task 1.1. See catalog_state_build.js for why the committed
 // tree needs installing: ${ROOT} placeholders, dot-<name> segments, and modified
-// times git does not keep. The oversized log is extended here too.
+// times git does not keep. The oversized log is made here too.
 //
 // Never the real state dir and never port 7817: every install is its own
 // directory under the OS temp folder, and the fixture's recorded ports are
@@ -44,6 +44,38 @@ function copyTree(from, to, root) {
   });
 }
 
+// The oversized log is written once per process, and each install hard-links it.
+// Writing the 5 MB of padding on every install cost 74 x 5 MB per unit run, and
+// a copy-on-write clone does not help: Node's COPYFILE_FICLONE stored a full
+// copy on APFS here. All installs share the one file, so it is read-only: a
+// test that tries to append to it fails with EACCES instead of changing the log
+// every other install sees. If the link is refused, the install gets a copy.
+var bigMaster = null;
+
+function removeBigMaster() {
+  if (bigMaster) fs.rmSync(path.dirname(bigMaster), { recursive: true, force: true });
+  bigMaster = null;
+}
+
+/** Make `file` (already holding its events) bigger than REPROJECT_MAX_BYTES. */
+function bigLog(file) {
+  if (!bigMaster) {
+    // Padding goes BEFORE the events, as one blank line, so the log's end still
+    // holds real events: the Library reads `last` from the newest one there.
+    var events = fs.readFileSync(file, "utf8");
+    var dir = fs.mkdtempSync(path.join(os.tmpdir(), "lahe-catalog-big-"));
+    bigMaster = path.join(dir, "events.jsonl");
+    fs.writeFileSync(bigMaster, " ".repeat(protocol.CATALOG.REPROJECT_MAX_BYTES + 1024) + "\n" + events, { mode: 0o400 });
+    process.once("exit", removeBigMaster);
+  }
+  fs.unlinkSync(file);
+  try {
+    fs.linkSync(bigMaster, file);
+  } catch (err) {
+    fs.copyFileSync(bigMaster, file);
+  }
+}
+
 /**
  * @returns {{root: string, dir: string, home: string, now: string,
  *            nowMs: number, marker: string, reviewDirs: string[]}}
@@ -61,10 +93,7 @@ function install() {
   fs.chmodSync(dir, 0o700);
 
   var big = path.join(dir, "reviews", BIG_REVIEW, "events.jsonl");
-  // Padding goes BEFORE the events, as one blank line, so the log's end still
-  // holds real events: the Library reads `last` from the newest one there.
-  var events = fs.readFileSync(big, "utf8");
-  fs.writeFileSync(big, " ".repeat(protocol.CATALOG.REPROJECT_MAX_BYTES + 1024) + "\n" + events, { mode: 0o600 });
+  bigLog(big);
 
   var mtimes = JSON.parse(fs.readFileSync(path.join(SOURCE, "mtimes.json"), "utf8"));
   Object.keys(mtimes).forEach(function (rel) {

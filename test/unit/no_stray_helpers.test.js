@@ -10,6 +10,7 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
+const os = require("node:os");
 const path = require("node:path");
 
 const stateDir = require("../../src/service/state_dir.js");
@@ -38,9 +39,63 @@ test("the survivor check counts and stops only its own run's helpers", { skip: p
 
   const inside = await helperIn(ours);
   t.after(() => stopTempHelpers(inside.dir));
+  // Registered last, so the helpers are stopped before their folders go.
+  // (Hooks run in the order registered; a helper whose service.json is gone
+  // can no longer be found and stopped.)
+  t.after(() => {
+    fs.rmSync(ours, { recursive: true, force: true });
+    fs.rmSync(elsewhere, { recursive: true, force: true });
+  });
   assert.deepEqual(strayHelpers(ours).map((p) => p.pid), [inside.pid], "only the run's own helper counts");
   const left = await reapStrayHelpers(ours, 200);
   assert.deepEqual(left.map((p) => [p.pid, p.stopped]), [[inside.pid, true]], "it is reported and stopped");
   assert.equal(alive(inside.pid), false);
   assert.ok(alive(outside.pid), "the other run's helper is still untouched");
+});
+
+// The wrapper (scripts/no_stray_helpers.js) makes the run folder, and removes it
+// at the end. One unit run left about 600 MB in it; a few dozen filled a disk.
+
+const wrapper = require("../../scripts/no_stray_helpers.js");
+
+/** Run the wrapper on a command, with its messages held back. */
+async function wrap(argv, options) {
+  const messages = [];
+  let runRoot = null;
+  const note = (text) => { messages.push(String(text)); };
+  const code = await wrapper.main(argv, Object.assign({ onRunRoot: (r) => { runRoot = r; }, out: note, err: note }, options));
+  return { code, runRoot, output: messages.join("") };
+}
+
+test("the wrapper removes its run folder after a clean run", async () => {
+  const command = "require('fs').writeFileSync(require('path').join(process.env.TMPDIR, 'scratch.txt'), 'x')";
+  const result = await wrap([process.execPath, "-e", command], { graceMs: 200 });
+  assert.equal(result.code, 0);
+  assert.ok(path.basename(result.runRoot).startsWith("lahe-run-"));
+  assert.equal(fs.existsSync(result.runRoot), false, "the run folder and what the command put in it are gone");
+});
+
+test("the wrapper keeps its run folder, and prints it, when a helper survived", { skip: process.platform === "win32" }, async (t) => {
+  const scratch = fs.mkdtempSync(path.join(os.tmpdir(), "lahe-wrap-test-"));
+  const pidFile = path.join(scratch, "fake.pid");
+  let kept = null;
+  t.after(() => {
+    // The fake helper is ours: stop it, then remove the folders we made.
+    try { process.kill(Number(fs.readFileSync(pidFile, "utf8")), "SIGKILL"); } catch (err) { /* already gone */ }
+    if (kept) fs.rmSync(kept, { recursive: true, force: true });
+    fs.rmSync(scratch, { recursive: true, force: true });
+  });
+  // A detached process whose command line looks like a helper on a state dir
+  // under the run folder, and which no state dir record names, so the wrapper
+  // cannot stop it.
+  const keepAlive = "require('net').createServer().listen(0)";
+  const command =
+    "const { spawn } = require('child_process'); const path = require('path');" +
+    "const child = spawn(process.execPath, ['-e', " + JSON.stringify(keepAlive) + ", 'bin/lahe.js', 'serve', '--state-dir', path.join(process.env.TMPDIR, 'fake-state')], { detached: true, stdio: 'ignore' });" +
+    "child.unref(); require('fs').writeFileSync(process.argv[1], String(child.pid));";
+  const result = await wrap([process.execPath, "-e", command, pidFile], { graceMs: 200 });
+  kept = result.runRoot;
+  assert.equal(result.code, 1, "the run fails");
+  assert.ok(fs.existsSync(result.runRoot), "the run folder is kept as evidence");
+  assert.ok(result.output.includes(result.runRoot), "and its path is printed");
 });
