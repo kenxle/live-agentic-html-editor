@@ -1949,7 +1949,7 @@
       var statusDot = el("span", "mark");
       statusDot.setAttribute("aria-hidden", "true");
       head.appendChild(statusDot);
-      head.appendChild(el("span", "title", "Review"));
+      head.appendChild(el("span", "title", "Lahe"));
       // No review id in the head: it only ever showed a hash, never a name.
       head.appendChild(el("span", "spacer"));
 
@@ -2316,7 +2316,7 @@
       pill.setAttribute("aria-label", PILL_TITLE);
       pill.title = PILL_TITLE;
       pill.appendChild(el("span", "pill__dot"));
-      pill.appendChild(el("span", null, "Review"));
+      pill.appendChild(el("span", null, "Lahe"));
       var pillCount = el("span", "pill__count", "0");
       pill.appendChild(pillCount);
       // How long the oldest comment has waited, shown only while that is late.
@@ -2611,7 +2611,7 @@
     }
 
     function emptyTextFor(name) {
-      if (name === TAB.ACTIVE) return "Nothing outstanding. Select some text and press Cmd-Shift-C.";
+      if (name === TAB.ACTIVE) return "No unanswered or active threads. Check the done tab, or select some text and press Cmd-Shift-C.";
       if (name === TAB.EDITS) return "No hand edits yet.";
       return "Nothing handled yet.";
     }

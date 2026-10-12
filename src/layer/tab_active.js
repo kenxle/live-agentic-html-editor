@@ -373,7 +373,7 @@
       panel.appendChild(head);
 
       listEl = el("div", "lahe-rail-list");
-      emptyEl = el("p", "lahe-rail-empty", "Nothing outstanding. Select text and press Cmd-Shift-C.");
+      emptyEl = el("p", "lahe-rail-empty", "No unanswered or active threads. Check the done tab, or select some text and press Cmd-Shift-C.");
       listEl.appendChild(emptyEl);
       panel.appendChild(listEl);
 
