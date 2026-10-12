@@ -1,18 +1,20 @@
 # Progress: Menu bar app
 
-**Phase 4, Plan.** The architecture is done with the security review taken in, and the plan is drafted and with its reviewer. Two questions for you will come with the full set. Nothing is waiting on you yet. Last updated 2026-10-12 10:26.
+**Phase 5, your review.** The full set is ready: brief, architecture and plan, with all three reviews taken in. Three things need your attention: read the set, and answer two questions. No code is written until you say go. Last updated 2026-10-12 10:37.
 
-**Docs:** [Crucible](00_crucible_menu_bar_app.md) · [Brief](01_brief_menu_bar_app.md) · [Brief reviews](01_brief_menu_bar_app_reviews.md) · [Architecture](02_architecture_menu_bar_app.md) · [Architecture reviews](02_architecture_menu_bar_app_reviews.md) · [Plan](03_plan_menu_bar_app.md)
+**Docs:** [Crucible](00_crucible_menu_bar_app.html) · [Brief](01_brief_menu_bar_app.html) · [Architecture](02_architecture_menu_bar_app.html) · [Plan](03_plan_menu_bar_app.html) (each page carries its reviews at the bottom)
 
 ## Needs your attention
 
-Nothing is waiting on you.
+- [ ] **Review the full set:** start with the [brief](01_brief_menu_bar_app.html), then the [architecture](02_architecture_menu_bar_app.html) and the [plan](03_plan_menu_bar_app.html). Comment anywhere. Building waits for your go.
+- [ ] **When should an agent's open question stop counting?** A: only when it is answered or the card goes away, and card dismissal gets built soon after (recommended). B: once you have looked at its page, like an answer. Details at the top of the brief's Questions section.
+- [ ] **Should "Stop Lahe" hold while agents are connected?** A: no, agents can start it again and the menu says so (recommended). B: yes, it holds until next login and agents' commands refuse to start it. Same section.
 
 ## Currently working on
 
 | Agent or task | Doing | Started | Branch |
 |---|---|---|---|
-| Plan reviewer | Reviewing the plan | 2026-10-12 10:26 | `feat/menu-bar` |
+| Orchestrator | Waiting on your review of the full set | 2026-10-12 10:37 | `feat/menu-bar` |
 
 ## Phases
 
@@ -22,8 +24,8 @@ Nothing is waiting on you.
 | 1 Crucible | done | 2026-10-12 |
 | 2 Brief | done | 2026-10-12 |
 | 3 Architecture | done | 2026-10-12 |
-| 4 Plan | in progress | 2026-10-12 |
-| 5 Human review | not started | |
+| 4 Plan | done | 2026-10-12 |
+| 5 Human review | in progress | 2026-10-12 |
 | 6 Implement | not started | |
 | 7 Verify | not started | |
 | 8 Ship and land | not started | |
@@ -61,6 +63,7 @@ Not shipped yet.
 
 ## Log
 
+- 2026-10-12 10:37: Plan review returned 23 findings (6 high), all accepted. The most important: a background tab could have marked answers as seen when it reloaded; a test step would have stopped your live helper (tests now use their own labels and never touch your login items); the signed-request format is now written down exactly, with test vectors, so the Node and Swift halves cannot drift. Full set built and ready for you.
 - 2026-10-12 10:26: Security review returned 7 findings. The one real hole: the app would have sent its secret to any program sitting on the helper's port, which Stop leaves free. Fixed in the design: the app signs requests instead of sending the secret, and trusts only signed answers. The other five fixes are accepted too. One (whether Stop should hold while agents are connected) is now a question for you. The CLI has the same secret weakness today; filed on the board. Plan drafted (3 parallel workstreams, 2 PRs, 34 checks) and sent to the plan reviewer.
 - 2026-10-12 10:17: PM review returned 15 findings (4 high). All accepted: only a focused tab counts as looking, per page; replies before install never count, so day one shows zero; a distinct "can't tell" look; every way a question clears is listed. One question for you came out of it (when an open question stops counting); it waits for the full review. Architecture drafted; security review started.
 - 2026-10-12 10:17: Measured on your real data: building the Library's whole list takes about 150 ms (870 ms cold) over 690 reviews, so the menu reads a per-review cache instead. 45 documents have an old unanswered agent question today.

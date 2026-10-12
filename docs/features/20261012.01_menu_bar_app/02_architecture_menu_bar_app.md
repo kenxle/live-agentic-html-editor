@@ -8,7 +8,7 @@ The helper gains one read-only answer, the **summary**, and one small record, th
 flowchart LR
     subgraph Core["helper (Node, every system)"]
         Reader["catalog reader<br/>(per-review cache)"] --> Summary["summary.read"]
-        Windows["window holders<br/>(focused or quiet)"] --> Seen["seen marks<br/>seen.json"]
+        Windows["window claims<br/>(focused, page)"] --> Seen["seen marks<br/>seen.json"]
         Seen --> Summary
         Sessions["agent sessions<br/>+ monitor heartbeats"] --> Summary
         OpenRoute["summary.open"] --> Actions["catalog open rules"]
@@ -27,7 +27,7 @@ flowchart LR
 ## Analysis of Existing Structure
 
 - **The catalog reader** (`src/service/catalog_reader.js`) already builds, per review, the title, pages, address, last-worked time, waiting count, and its session's liveness. It is read-only and never returns comment text. Building the whole list takes about 150 ms warm and 870 ms cold on Ken's 690 reviews, measured with [scripts/time_catalog.js](scripts/time_catalog.js) on 2026-10-12. Too slow to rebuild every few seconds; fine to rebuild one review at a time.
-- **Window holders** (`src/service/reviews.js`): every review page claims and heartbeats every 10 seconds, and says `quiet: true` when its window loses focus. The helper persists holders to `windows.json`. This is the fact "Ken looked" stands on.
+- **Window holders** (`src/service/reviews.js`): every review page claims and heartbeats every 10 seconds, and says `quiet: true` when its window loses focus, though not on its first claim. The helper persists holders to `windows.json`. A new `focused` field on the same claim is what "Ken looked" stands on.
 - **Replies** carry an `at` time once folded. The helper is the single reader of reply files and the single writer of `events.jsonl`, so every change to a review moves that file.
 - **Agent sessions and monitor heartbeats** (`src/service/agent_sessions.js`) already answer "is this session's agent listening".
 - **The CLI secret** (`<state>/cli-secret`, owner-only) and the `AUTH.CLI_SECRET` mode already exist for `site.bind` and `review.retire`. Those routes refuse any request with an `Origin` header.
@@ -165,8 +165,8 @@ sequenceDiagram
     participant Page as Review page (focused)
     participant H as Helper
     participant S as seen.json
-    Page->>H: claim or heartbeat, quiet: false
-    H->>H: newest agent reply on this review newer than its mark?
+    Page->>H: claim or heartbeat, focused: true, page
+    H->>H: newest agent reply on this page newer than its mark?
     alt yes
         H->>S: mark = now
     else no

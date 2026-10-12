@@ -17,7 +17,7 @@ A SwiftBar script (no real Lahe icon) and a Dock badge on the Library (he keeps 
 
 ### When "looked at" happens
 
-- **Chosen: a focused tab on that page, recorded by the helper.** The page already tells the helper whether it is the focused tab; nothing new is asked of Ken.
+- **Chosen: a focused tab on that page, recorded by the helper.** The page adds `focused` and its page path to the claim it already sends; nothing new is asked of Ken. The existing `quiet` flag was not enough: it is false on every page's first claim (plan review RF1).
 - **Rejected: per card.** Lahe cannot know which cards Ken read without a new gesture.
 - **Rejected: per review.** In a folder review, looking at one page would clear answers on another (PM review RF1).
 - **Rejected: any open window.** Ken keeps tabs open for days, so answers would clear the moment they arrived (PM review RF1).

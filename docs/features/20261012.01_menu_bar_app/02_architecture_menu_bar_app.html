@@ -923,7 +923,7 @@ agent-facing behavior changes.</p>
 <pre class="mermaid"><code>flowchart LR
     subgraph Core[&quot;helper (Node, every system)&quot;]
         Reader[&quot;catalog reader&lt;br/&gt;(per-review cache)&quot;] --&gt; Summary[&quot;summary.read&quot;]
-        Windows[&quot;window holders&lt;br/&gt;(focused or quiet)&quot;] --&gt; Seen[&quot;seen marks&lt;br/&gt;seen.json&quot;]
+        Windows[&quot;window claims&lt;br/&gt;(focused, page)&quot;] --&gt; Seen[&quot;seen marks&lt;br/&gt;seen.json&quot;]
         Seen --&gt; Summary
         Sessions[&quot;agent sessions&lt;br/&gt;+ monitor heartbeats&quot;] --&gt; Summary
         OpenRoute[&quot;summary.open&quot;] --&gt; Actions[&quot;catalog open rules&quot;]
@@ -952,8 +952,9 @@ review at a time.</li>
 <li><strong>Window holders</strong>
 (<code>src/service/reviews.js</code>): every review page claims and
 heartbeats every 10 seconds, and says <code>quiet: true</code> when its
-window loses focus. The helper persists holders to
-<code>windows.json</code>. This is the fact "Ken looked" stands on.</li>
+window loses focus, though not on its first claim. The helper persists
+holders to <code>windows.json</code>. A new <code>focused</code> field
+on the same claim is what "Ken looked" stands on.</li>
 <li><strong>Replies</strong> carry an <code>at</code> time once folded.
 The helper is the single reader of reply files and the single writer of
 <code>events.jsonl</code>, so every change to a review moves that
@@ -1027,10 +1028,21 @@ answers)</td>
 <td>changed</td>
 </tr>
 <tr>
+<td><code>src/service/index.js</code></td>
+<td>Wires the seen store into reviews, the summary into the routes, and
+the menu bar tick into the 15-second timer</td>
+<td>changed</td>
+</tr>
+<tr>
 <td><code>src/service/menubar.js</code></td>
-<td>macOS only: build the app, write its login item, rebuild on
-change</td>
+<td>macOS only: the one build recipe, the app's login item,
+<code>tick</code> (rebuild on change)</td>
 <td>new</td>
+</tr>
+<tr>
+<td><code>docs/CONTRACTS.md</code></td>
+<td>The summary's fields and the signed-request wire</td>
+<td>changed</td>
 </tr>
 <tr>
 <td><code>src/cli/commands/install.js</code></td>
@@ -1090,17 +1102,23 @@ class="sourceCode json"><code class="sourceCode json"><span id="cb2-1"><a href="
 <span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a>  <span class="dt">&quot;reviews&quot;</span><span class="fu">:</span> <span class="fu">{</span> <span class="dt">&quot;r183d18583a43&quot;</span><span class="fu">:</span> <span class="fu">{</span> <span class="dt">&quot;/00_crucible_menu_bar_app.md&quot;</span><span class="fu">:</span> <span class="st">&quot;2026-10-20T15:40:03.120Z&quot;</span> <span class="fu">}</span> <span class="fu">}</span></span>
 <span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a><span class="fu">}</span></span></code></pre></div>
 <ul>
-<li><code>seeded_at</code> is written the first time the helper runs
-with this feature. Any agent reply older than it counts as seen. This is
-what keeps day one from showing every old reply.</li>
+<li><code>seeded_at</code> is written on the first
+<code>summary.read</code>, which is the first time the installed app
+asks. Any agent reply older than it counts as seen. Seeding on helper
+start would count everything between PR 1 landing and the install. Marks
+written before seeding are harmless.</li>
 <li><code>reviews[id][page]</code> is the last time a
-<strong>focused</strong> window on that page claimed or heartbeat. The
-page sends <code>quiet: false</code> only when it is the focused tab of
-a focused window; a background tab or an unfocused window sends
-<code>quiet: true</code> (<code>src/layer/sync.js</code>, attention).
-Claims and heartbeats gain an optional <code>page</code> field. A page
-from an older bundle sends none, and the helper then marks every page of
-that review, which can only clear a count early, never hold one.</li>
+<strong>focused</strong> window on that page claimed or heartbeat.
+Claims and heartbeats gain two optional fields: <code>focused</code>,
+computed at send time as the page's attention being focused (the focused
+tab of a focused window), and <code>page</code>, the same page path the
+layer already stamps on its records, from the same function. The seen
+store reads <code>focused</code>, not <code>quiet</code>:
+<code>quiet</code> is false on every page's first claim, focused or not,
+because the page has not yet learned the quiet interval
+(<code>src/layer/sync.js</code>). A claim from an older bundle carries
+neither field; the helper then marks nothing, so an old tab can hold a
+count until it reloads but never clears one early.</li>
 <li>The helper writes only when the write would change a count: when a
 focused window's time passes the newest agent reply on that page and the
 stored mark is older than that reply. So a focused tab costs one write
@@ -1108,6 +1126,9 @@ per new answer, not one per heartbeat.</li>
 <li>A missing or unreadable file: the helper starts a new one with
 <code>seeded_at = now</code>. Losing marks can only make the count
 smaller, never larger.</li>
+<li>One document reviewed by several reviews (one folded Library row)
+counts once: the summary folds with the Library's own rule after
+building each review.</li>
 </ul>
 <h3 id="what-counts-as-waiting-on-you">What counts as waiting on
 you</h3>
@@ -1145,14 +1166,24 @@ class="sourceCode json"><code class="sourceCode json"><span id="cb3-1"><a href="
 <span id="cb3-9"><a href="#cb3-9" aria-hidden="true" tabindex="-1"></a>    <span class="ot">]</span></span>
 <span id="cb3-10"><a href="#cb3-10" aria-hidden="true" tabindex="-1"></a>  <span class="fu">},</span></span>
 <span id="cb3-11"><a href="#cb3-11" aria-hidden="true" tabindex="-1"></a>  <span class="dt">&quot;waiting_on_agents&quot;</span><span class="fu">:</span> <span class="fu">{</span> <span class="dt">&quot;count&quot;</span><span class="fu">:</span> <span class="dv">4</span><span class="fu">,</span> <span class="dt">&quot;documents&quot;</span><span class="fu">:</span> <span class="ot">[</span> <span class="fu">{</span> <span class="dt">&quot;review&quot;</span><span class="fu">:</span> <span class="st">&quot;...&quot;</span><span class="fu">,</span> <span class="dt">&quot;title&quot;</span><span class="fu">:</span> <span class="st">&quot;...&quot;</span><span class="fu">,</span> <span class="dt">&quot;path_hint&quot;</span><span class="fu">:</span> <span class="st">&quot;...&quot;</span><span class="fu">,</span> <span class="dt">&quot;waiting&quot;</span><span class="fu">:</span> <span class="dv">4</span> <span class="fu">}</span> <span class="ot">]</span> <span class="fu">},</span></span>
-<span id="cb3-12"><a href="#cb3-12" aria-hidden="true" tabindex="-1"></a>  <span class="dt">&quot;open_documents&quot;</span><span class="fu">:</span> <span class="ot">[</span> <span class="fu">{</span> <span class="dt">&quot;review&quot;</span><span class="fu">:</span> <span class="st">&quot;...&quot;</span><span class="fu">,</span> <span class="dt">&quot;title&quot;</span><span class="fu">:</span> <span class="st">&quot;...&quot;</span><span class="fu">,</span> <span class="dt">&quot;path_hint&quot;</span><span class="fu">:</span> <span class="st">&quot;...&quot;</span><span class="fu">,</span> <span class="dt">&quot;focused&quot;</span><span class="fu">:</span> <span class="kw">true</span> <span class="fu">}</span> <span class="ot">]</span><span class="fu">,</span></span>
-<span id="cb3-13"><a href="#cb3-13" aria-hidden="true" tabindex="-1"></a>  <span class="dt">&quot;sessions&quot;</span><span class="fu">:</span> <span class="fu">{</span> <span class="dt">&quot;open&quot;</span><span class="fu">:</span> <span class="dv">5</span><span class="fu">,</span> <span class="dt">&quot;connected&quot;</span><span class="fu">:</span> <span class="ot">[</span> <span class="fu">{</span> <span class="dt">&quot;session&quot;</span><span class="fu">:</span> <span class="st">&quot;s_...&quot;</span><span class="fu">,</span> <span class="dt">&quot;name&quot;</span><span class="fu">:</span> <span class="st">&quot;...&quot;</span><span class="fu">,</span> <span class="dt">&quot;presence&quot;</span><span class="fu">:</span> <span class="st">&quot;listening&quot;</span><span class="fu">,</span> <span class="dt">&quot;last_heard_at&quot;</span><span class="fu">:</span> <span class="st">&quot;...&quot;</span><span class="fu">,</span> <span class="dt">&quot;review&quot;</span><span class="fu">:</span> <span class="st">&quot;...&quot;</span> <span class="fu">}</span> <span class="ot">]</span> <span class="fu">},</span></span>
-<span id="cb3-14"><a href="#cb3-14" aria-hidden="true" tabindex="-1"></a>  <span class="dt">&quot;recent&quot;</span><span class="fu">:</span> <span class="ot">[</span> <span class="fu">{</span> <span class="dt">&quot;review&quot;</span><span class="fu">:</span> <span class="st">&quot;...&quot;</span><span class="fu">,</span> <span class="dt">&quot;title&quot;</span><span class="fu">:</span> <span class="st">&quot;...&quot;</span><span class="fu">,</span> <span class="dt">&quot;path_hint&quot;</span><span class="fu">:</span> <span class="st">&quot;...&quot;</span><span class="fu">,</span> <span class="dt">&quot;last&quot;</span><span class="fu">:</span> <span class="st">&quot;...&quot;</span> <span class="fu">}</span> <span class="ot">]</span><span class="fu">,</span></span>
-<span id="cb3-15"><a href="#cb3-15" aria-hidden="true" tabindex="-1"></a>  <span class="dt">&quot;library_url&quot;</span><span class="fu">:</span> <span class="st">&quot;http://library.lahe.localhost&quot;</span></span>
-<span id="cb3-16"><a href="#cb3-16" aria-hidden="true" tabindex="-1"></a><span class="fu">}</span></span></code></pre></div>
+<span id="cb3-12"><a href="#cb3-12" aria-hidden="true" tabindex="-1"></a>  <span class="dt">&quot;open_documents&quot;</span><span class="fu">:</span> <span class="fu">{</span> <span class="dt">&quot;count&quot;</span><span class="fu">:</span> <span class="dv">3</span><span class="fu">,</span> <span class="dt">&quot;more&quot;</span><span class="fu">:</span> <span class="dv">0</span><span class="fu">,</span> <span class="dt">&quot;items&quot;</span><span class="fu">:</span> <span class="ot">[</span> <span class="fu">{</span> <span class="dt">&quot;review&quot;</span><span class="fu">:</span> <span class="st">&quot;...&quot;</span><span class="fu">,</span> <span class="dt">&quot;title&quot;</span><span class="fu">:</span> <span class="st">&quot;...&quot;</span><span class="fu">,</span> <span class="dt">&quot;path_hint&quot;</span><span class="fu">:</span> <span class="st">&quot;...&quot;</span><span class="fu">,</span> <span class="dt">&quot;focused&quot;</span><span class="fu">:</span> <span class="kw">true</span> <span class="fu">}</span> <span class="ot">]</span> <span class="fu">},</span></span>
+<span id="cb3-13"><a href="#cb3-13" aria-hidden="true" tabindex="-1"></a>  <span class="dt">&quot;sessions&quot;</span><span class="fu">:</span> <span class="fu">{</span></span>
+<span id="cb3-14"><a href="#cb3-14" aria-hidden="true" tabindex="-1"></a>    <span class="dt">&quot;open&quot;</span><span class="fu">:</span> <span class="dv">5</span><span class="fu">,</span></span>
+<span id="cb3-15"><a href="#cb3-15" aria-hidden="true" tabindex="-1"></a>    <span class="dt">&quot;connected&quot;</span><span class="fu">:</span> <span class="fu">{</span> <span class="dt">&quot;count&quot;</span><span class="fu">:</span> <span class="dv">2</span><span class="fu">,</span> <span class="dt">&quot;more&quot;</span><span class="fu">:</span> <span class="dv">0</span><span class="fu">,</span> <span class="dt">&quot;items&quot;</span><span class="fu">:</span> <span class="ot">[</span> <span class="fu">{</span> <span class="dt">&quot;session&quot;</span><span class="fu">:</span> <span class="st">&quot;s_...&quot;</span><span class="fu">,</span> <span class="dt">&quot;name&quot;</span><span class="fu">:</span> <span class="st">&quot;...&quot;</span><span class="fu">,</span> <span class="dt">&quot;presence&quot;</span><span class="fu">:</span> <span class="st">&quot;listening&quot;</span><span class="fu">,</span> <span class="dt">&quot;last_heard_at&quot;</span><span class="fu">:</span> <span class="st">&quot;...&quot;</span><span class="fu">,</span> <span class="dt">&quot;review&quot;</span><span class="fu">:</span> <span class="st">&quot;...&quot;</span> <span class="fu">}</span> <span class="ot">]</span> <span class="fu">}</span></span>
+<span id="cb3-16"><a href="#cb3-16" aria-hidden="true" tabindex="-1"></a>  <span class="fu">},</span></span>
+<span id="cb3-17"><a href="#cb3-17" aria-hidden="true" tabindex="-1"></a>  <span class="dt">&quot;recent&quot;</span><span class="fu">:</span> <span class="fu">{</span> <span class="dt">&quot;more&quot;</span><span class="fu">:</span> <span class="dv">12</span><span class="fu">,</span> <span class="dt">&quot;items&quot;</span><span class="fu">:</span> <span class="ot">[</span> <span class="fu">{</span> <span class="dt">&quot;review&quot;</span><span class="fu">:</span> <span class="st">&quot;...&quot;</span><span class="fu">,</span> <span class="dt">&quot;title&quot;</span><span class="fu">:</span> <span class="st">&quot;...&quot;</span><span class="fu">,</span> <span class="dt">&quot;path_hint&quot;</span><span class="fu">:</span> <span class="st">&quot;...&quot;</span><span class="fu">,</span> <span class="dt">&quot;last&quot;</span><span class="fu">:</span> <span class="st">&quot;...&quot;</span> <span class="fu">}</span> <span class="ot">]</span> <span class="fu">},</span></span>
+<span id="cb3-18"><a href="#cb3-18" aria-hidden="true" tabindex="-1"></a>  <span class="dt">&quot;library_url&quot;</span><span class="fu">:</span> <span class="st">&quot;http://library.lahe.localhost:1483&quot;</span></span>
+<span id="cb3-19"><a href="#cb3-19" aria-hidden="true" tabindex="-1"></a><span class="fu">}</span></span></code></pre></div>
 <ul>
-<li>Open, connected and recent lists are capped at 8, with a
-<code>more</code> count (R12). Waiting on you is not capped.</li>
+<li>Open, connected and recent lists are capped at 8 in
+<code>items</code>, with <code>more</code> for the rest (R12). Waiting
+on you is not capped. <code>sessions.open</code> counts sessions not
+closed. <code>library_url</code> is the Library's printed address, with
+the pages port when the port-80 forward is not proved.</li>
+<li>The exact field list, types, and the signed-request wire below are
+written into <code>docs/CONTRACTS.md</code> before any builder starts,
+and a fixture and proof vectors are committed beside them (plan, Step
+0).</li>
 <li>No comment text, no tokens, no absolute paths, the same rules as the
 Library list. Titles have control characters removed.</li>
 <li>A session is connected when <code>agent_sessions</code> liveness
@@ -1163,6 +1194,34 @@ Library shows (R10).</li>
 or not.</li>
 <li>A session's <code>name</code> is its Library rename if Ken gave one,
 else the title of its most recent review.</li>
+</ul>
+<h3 id="the-signed-request-wire-authcli_proof">The signed-request wire
+(<code>AUTH.CLI_PROOF</code>)</h3>
+<ul>
+<li><strong>Key:</strong> the text of
+<code>&lt;state&gt;/cli-secret</code> with surrounding whitespace
+removed (64 hex characters), used as its UTF-8 bytes.</li>
+<li><strong>Request headers:</strong> <code>x-lahe-proof-ts</code> (Unix
+time in milliseconds, decimal), <code>x-lahe-proof-nonce</code> (16
+random bytes as 32 lowercase hex characters), <code>x-lahe-proof</code>
+(lowercase hex HMAC-SHA256).</li>
+<li><strong>What is signed:</strong> the lines
+<code>lahe-proof-v1</code>, the method, the path with its query string
+exactly as sent, the timestamp, the nonce, and the lowercase hex SHA-256
+of the body (of the empty string for a GET), joined by <code>\n</code>
+with no trailing newline.</li>
+<li><strong>The version</strong> travels as <code>?v=1</code> on
+<code>summary.read</code>, so the signature covers it, and as
+<code>summary_version</code> in <code>summary.open</code>'s JSON
+body.</li>
+<li><strong>The answer</strong> carries <code>x-lahe-proof-reply</code>:
+HMAC-SHA256 with the same key over the lines
+<code>lahe-proof-reply-v1</code>, the request's nonce, the status code,
+and the hex SHA-256 of the response body. Error answers are signed too,
+so the app can tell the helper's 409 from a squatter's.</li>
+<li><strong>The helper</strong> accepts a timestamp within 30 seconds of
+its clock, refuses a nonce it has seen in that window, and compares
+signatures in constant time.</li>
 </ul>
 <h3 id="summaryopen-request"><code>summary.open</code> request</h3>
 <p><code>{ "review": "r..." }</code> returns
@@ -1191,16 +1250,20 @@ Absent when the icon is not installed.</p>
         App-&gt;&gt;App: drop it unless the signature checks
         App-&gt;&gt;App: redraw icon count and menu
     end</code></pre>
-<p>The per-review cache keeps a request to a few stat calls per review.
-The plan sets the budget (R21) and measures it on Ken's state
-folder.</p>
+<p>The per-review cache keeps a request to a few stat calls per review:
+the review's <code>events.jsonl</code>, <code>review.json</code> and
+<code>meta.json</code>, plus the reviewed document itself (so a deleted
+file drops out) and <code>catalog.json</code> once per request (so a
+Library rename shows). A same-size rewrite inside one millisecond is
+caught by comparing size, modified time and inode together. The plan
+sets the budget (R21) and measures it on Ken's state folder.</p>
 <h3 id="ken-looks-at-a-document">Ken looks at a document</h3>
 <pre class="mermaid"><code>sequenceDiagram
     participant Page as Review page (focused)
     participant H as Helper
     participant S as seen.json
-    Page-&gt;&gt;H: claim or heartbeat, quiet: false
-    H-&gt;&gt;H: newest agent reply on this review newer than its mark?
+    Page-&gt;&gt;H: claim or heartbeat, focused: true, page
+    H-&gt;&gt;H: newest agent reply on this page newer than its mark?
     alt yes
         H-&gt;&gt;S: mark = now
     else no
@@ -1219,7 +1282,7 @@ answered (rule 1).</p>
     Item --&gt; Record[&quot;install.json records the app&lt;br/&gt;and its source stamp&quot;]
 
     Timer[&quot;helper timer, every 15 s (macOS, installed)&quot;] --&gt; Stamp{&quot;macos/menubar changed&lt;br/&gt;since the recorded stamp?&quot;}
-    Stamp --&gt;|&quot;yes&quot;| Rebuild[&quot;rebuild in a child process,&lt;br/&gt;then restart the app&quot;]
+    Stamp --&gt;|&quot;yes&quot;| Rebuild[&quot;rebuild in a child process,&lt;br/&gt;swap the app; restart it only&lt;br/&gt;if it was running&quot;]
     Stamp --&gt;|&quot;no&quot;| Idle[&quot;nothing&quot;]
 
     Hide[&quot;menu: Hide the icon&quot;] --&gt; Exit[&quot;app exits cleanly;&lt;br/&gt;launchd leaves it stopped&lt;br/&gt;until login or lahe menubar show&quot;]
@@ -1248,7 +1311,25 @@ refuses with a message to run <code>lahe install</code> if not
 <li><strong>The labels are constants.</strong> The app and the CLI use
 the fixed labels <code>lahe-helper</code> and <code>lahe-menubar</code>
 and their fixed plist paths; nothing reads a label from
-<code>install.json</code> to run <code>launchctl</code> (SR6).</li>
+<code>install.json</code> to run <code>launchctl</code> (SR6). Tests get
+their own labels through a seam that stays a constant: the CLI's
+existing <code>label</code> and <code>home</code> options, and a
+compile-time <code>-D</code> flag for the app. No test ever loads,
+stops, rewrites or removes the real labels.</li>
+<li><strong>A rebuild respects Hide.</strong> After swapping in a
+rebuilt app, the helper restarts it only if <code>launchctl print</code>
+says it was running. A hidden icon stays hidden through a
+<code>git pull</code> (R17).</li>
+<li><strong>The app's Start does not check the plist's
+contents.</strong> It bootstraps only the fixed path in Ken's own
+<code>~/Library/LaunchAgents</code>; anything that can write there can
+already run code at his login, so the check adds nothing for the app.
+The CLI keeps its check because it also covers a stale install.</li>
+<li><strong>One build recipe.</strong>
+<code>src/service/menubar.js</code> holds the only build function, the
+fixed file list and the pinned compiler flags
+(<code>-swift-version 5</code>, the host architecture, a macOS 13
+floor). The build check script calls it.</li>
 <li><strong>What a rebuild compiles.</strong> Only the clone named in
 <code>install.json</code>, never a worktree; a fixed list of files in
 <code>macos/menubar/</code>, copied into a fresh temp folder, hashed
@@ -1300,8 +1381,10 @@ core forever.</li>
 <h3 id="when-looked-at-happens">When "looked at" happens</h3>
 <ul>
 <li><strong>Chosen: a focused tab on that page, recorded by the
-helper.</strong> The page already tells the helper whether it is the
-focused tab; nothing new is asked of Ken.</li>
+helper.</strong> The page adds <code>focused</code> and its page path to
+the claim it already sends; nothing new is asked of Ken. The existing
+<code>quiet</code> flag was not enough: it is false on every page's
+first claim (plan review RF1).</li>
 <li><strong>Rejected: per card.</strong> Lahe cannot know which cards
 Ken read without a new gesture.</li>
 <li><strong>Rejected: per review.</strong> In a folder review, looking
