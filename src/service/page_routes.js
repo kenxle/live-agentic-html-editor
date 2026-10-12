@@ -621,6 +621,30 @@ function fileOfItem(dir, entry, review, item) {
   return found;
 }
 
+/**
+ * The link address where `reviewId`'s rail answers for `file`: a site whose
+ * link table lists the review for the file and that mounts the file's folder.
+ * Null when there is none.
+ *
+ * @returns {{name: string, path: string}|null}
+ */
+function linkAddressFor(dir, reviewId, file) {
+  var target = realOrNull(file) || path.resolve(file);
+  var entry = registryEntry(dir);
+  var found = null;
+  entry.sites.list().some(function (each) {
+    var ids = each.site.linked_files && each.site.linked_files[target];
+    if (!Array.isArray(ids) || ids.indexOf(reviewId) === -1) return false;
+    var mounts = each.site.mounts || {};
+    return Object.keys(mounts).some(function (prefix) {
+      if ((realOrNull(mounts[prefix]) || mounts[prefix]) !== path.dirname(target)) return false;
+      found = { name: each.name, path: prefix + encodeURIComponent(path.basename(target)) };
+      return true;
+    });
+  });
+  return found;
+}
+
 /** Does `review` hold a committed record on `file`? */
 function holdsRecordOn(dir, entry, review, file) {
   return committedRecords(dir, entry, review.id).some(function (item) {
@@ -1458,6 +1482,7 @@ module.exports = {
   markdownSourcesOf: markdownSourcesOf,
   fileOfItem: fileOfItem,
   holderOfFile: holderOfFile,
+  linkAddressFor: linkAddressFor,
   registryEntry: registryEntry,
   committedRecords: committedRecords,
   createNoteOnce: logModule.createNoteOnce,

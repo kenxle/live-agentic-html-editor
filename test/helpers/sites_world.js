@@ -71,7 +71,11 @@ function raw(port, options) {
         path: opts.path || "/",
         // A header given as undefined is left off, so a test can drop one.
         headers: Object.fromEntries(Object.entries(opts.headers || {}).filter((e) => e[1] !== undefined)),
-        setHost: false
+        setHost: false,
+        // A fresh connection each time. Node 20's global agent keeps sockets
+        // alive, and one the helper closed after its idle timeout fails the
+        // next request with ECONNRESET when a test waits a few seconds.
+        agent: false
       },
       (res) => {
         const chunks = [];

@@ -886,7 +886,10 @@ var SITE_HANDLERS = {
         return typeof file === "string" && path.isAbsolute(file);
       }));
     }
-    deps.reviews.stampServedByHelper(review.id, new Date(deps.now()).toISOString());
+    // `lahe review` opening another session's review (stamp: false) only
+    // gives the file an address: it never re-stamps that review or drops its
+    // origins, which are its own session's business.
+    if (body.stamp !== false) deps.reviews.stampServedByHelper(review.id, new Date(deps.now()).toISOString());
     // The port the helper has proved: 80 once the port-80 forward is checked,
     // otherwise the pages port (src/service/addresses.js).
     var port = typeof deps.printedPort === "function" ? deps.printedPort()

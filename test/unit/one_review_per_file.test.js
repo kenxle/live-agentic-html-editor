@@ -99,6 +99,8 @@ test("another agent's lahe review of a file with a review opens it, names its se
   assert.equal(first.code, 0, first.stderr);
   const owner = sessionOf(first);
   const sessionsBefore = fs.readdirSync(path.join(w.state, "agent-sessions")).length;
+  const metaFile = path.join(w.state, "reviews", reviewOf(first), "meta.json");
+  const servedBefore = JSON.parse(fs.readFileSync(metaFile, "utf8")).served_at;
 
   const second = run(w, ["review", file]);
   assert.equal(second.code, 0, second.stderr);
@@ -107,6 +109,7 @@ test("another agent's lahe review of a file with a review opens it, names its se
   assert.match(second.stdout, /already has a review/);
   assert.match(second.stdout, new RegExp("lahe session takeover " + owner));
   assert.deepEqual(reviewIds(w), [reviewOf(first)], "no second review");
+  assert.equal(JSON.parse(fs.readFileSync(metaFile, "utf8")).served_at, servedBefore, "another session's review is not re-stamped");
   assert.equal(fs.readdirSync(path.join(w.state, "agent-sessions")).length, sessionsBefore, "no new session either");
 
   // Another agent's own session gets the same answer.
@@ -198,10 +201,23 @@ test("a link alone never claims a file; a linking review with a comment on it do
   run(w, ["review", "retire", farReview, "--session", s2]);
 
   comment(w, reviewOf(hub), hubUrl.origin, mount + "far.md");
+  const metaFile = path.join(w.state, "reviews", reviewOf(hub), "meta.json");
+  const metaBefore = JSON.parse(fs.readFileSync(metaFile, "utf8"));
   const claimed = run(w, ["review", far]);
   assert.equal(claimed.code, 0, claimed.stderr);
   assert.match(claimed.stdout, /already has a review/);
   assert.equal(reviewOf(claimed), reviewOf(hub));
+  // The printed address is where that review's rail is: the link address on
+  // the hub's site.
+  const printed = new URL(openUrl(claimed));
+  assert.equal(printed.host, hubUrl.host);
+  assert.equal(printed.pathname, mount + "far.md");
+  const shown = await raw(Number(printed.port), { path: printed.pathname, headers: { host: printed.host } });
+  assert.match(shown.text, new RegExp('data-lahe-review="' + reviewOf(hub) + '"'));
+  // Opening another session's review changes nothing about it.
+  const metaAfter = JSON.parse(fs.readFileSync(metaFile, "utf8"));
+  assert.equal(metaAfter.served_at, metaBefore.served_at, "not re-stamped");
+  assert.deepEqual(metaAfter.origins, metaBefore.origins, "its origins are untouched");
 });
 
 // A handoff the human confirmed in the Library ends with the agent running

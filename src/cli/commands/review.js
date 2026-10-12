@@ -507,12 +507,23 @@ async function openOthersReview(dir, opts, store, holder, owner, target) {
   var bound = null;
   try {
     await require("./session.js").startHelper(dir, port);
-    var isFolder = fs.existsSync(target) && fs.statSync(target).isDirectory();
-    var plan = isFolder
-      ? { root: target, mode: "folder", entry: add.folderEntryPage(target), served: "folder" }
-      : { root: path.dirname(target), mode: "folder", entry: path.basename(target), served: "file" };
-    if (isFolder && !plan.entry) throw new Error("there are no pages in " + target + " to open");
-    bound = await bindSite(dir, port, holder.review, plan);
+    // A linking review answers on its link address, on the linking page's
+    // site: print that, and bind nothing.
+    var link = holder.tier === 3 ? pageRoutes.linkAddressFor(dir, holder.review, target) : null;
+    if (link) {
+      var ready = null;
+      try { ready = JSON.parse(fs.readFileSync(stateDir.readyPath(dir), "utf8")); } catch (err) { ready = null; }
+      var pages = ready && ready.pages ? ready.pages : {};
+      var printed = Number.isInteger(pages.printed_port) ? pages.printed_port : Number.isInteger(pages.port) ? pages.port : protocol.PAGES.PORT;
+      bound = { url: protocol.siteOrigin(link.name, printed) + link.path };
+    } else {
+      var isFolder = fs.existsSync(target) && fs.statSync(target).isDirectory();
+      var plan = isFolder
+        ? { root: target, mode: "folder", entry: add.folderEntryPage(target), served: "folder", stamp: false }
+        : { root: path.dirname(target), mode: "folder", entry: path.basename(target), served: "file", stamp: false };
+      if (isFolder && !plan.entry) throw new Error("there are no pages in " + target + " to open");
+      bound = await bindSite(dir, port, holder.review, plan);
+    }
   } catch (err) {
     process.stderr.write("lahe review: " + err.message + "\n");
     return 1;
@@ -576,7 +587,9 @@ async function bindSite(dir, port, reviewId, site) {
     mounts: site.mounts || {},
     linked: site.linked || [],
     // A file goes into the folder site that already holds it, if there is one.
-    containing: site.served === "file"
+    containing: site.served === "file",
+    // Opening another session's review never re-stamps it.
+    stamp: site.stamp !== false
   };
   var res = await fetch("http://" + protocol.DEFAULT_HOST + ":" + helperPort + protocol.route("site.bind").path, {
     method: "POST",
