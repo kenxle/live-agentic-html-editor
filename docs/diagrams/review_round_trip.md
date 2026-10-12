@@ -30,7 +30,7 @@ sequenceDiagram
         Ag->>Ag: edits the .md, and reruns nothing
         Hp->>Hp: notices the source is newer, renders the page again
         Hp->>Lib: page reloads onto the new render
-    else Served page, LAHE watches the file
+    else Served page, the helper serves it at its stable address and watches the file
         Ag->>Ag: edits source, rebuilds
         Ag->>St: verifies the change, is now in the built page
         Hp->>Lib: page reloads onto the new build

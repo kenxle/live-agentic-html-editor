@@ -16,18 +16,24 @@ flowchart TD
     SessA --> RevA2["Review 2"]
     RevA1 --> PageA1["Page(s) of review 1"]
     RevA2 --> PageA2["Page(s) of review 2"]
-    SessA --> StaticA["Static server(s),<br/>owned by session A"]
+    Helper --> Pages["Every page, at its stable address<br/>name.lahe.localhost:1483,<br/>owned by no session"]
 
     SessB --> RevB1["Review 3"]
-    SessB --> StaticB["Static server(s),<br/>owned by session B"]
+    
 
     Refuse["The CLI refuses to attach a page<br/>or a review to a session<br/>that does not already own it"]
     RevA1 -.->|"immutable owner rule"| Refuse
     RevB1 -.->|"immutable owner rule"| Refuse
 
+    OtherAgent["Another agent runs<br/>lahe review on a file of review 1"] --> Opened["review 1 opens at its address;<br/>nothing is made or moved"]
+    Opened --> Listening{"is session A's agent listening?"}
+    Listening -->|"yes"| AskHuman["it says: ask your human"]
+    Listening -->|"no"| Named["it names lahe session takeover A,<br/>run only when the human asks"]
+
     Human["Human explicitly asks for a handoff"] --> Takeover["lahe session takeover A"]
+    Takeover -.->|"A's agent is listening, no --request"| RefusedCLI["refused from the CLI:<br/>the human confirms it from the Library"]
     Takeover --> Fence["session A's handoff_rev advances by 1"]
-    Fence --> Reopen["session and its static servers<br/>reopen if they were closed"]
+    Fence --> Reopen["the session reopens<br/>if it was closed"]
     Fence --> OldMonitor["any older lahe monitor process<br/>for session A"]
     OldMonitor --> Exit6["sees the newer handoff_rev,<br/>exits with code 6, does not relaunch"]
     Fence --> Catchup["lahe status --session A --json<br/>lists every unanswered item first"]
@@ -36,19 +42,31 @@ flowchart TD
 
 ## What to notice
 
-- Ownership nests: a session owns reviews, a review owns pages, and a session
-  separately owns the static servers that serve those pages. Closing session A
-  stops only session A's static servers; session B's keep answering.
-- The helper also stops a session's static servers when no browser window has
-  been open on that session's pages for two minutes. The session stays open,
-  and `lahe review` brings a page back. Session B's open windows never keep
-  session A's servers running.
+- Ownership nests: a session owns reviews, and a review owns the pages its
+  items were made on. No session owns a page's address: the helper serves
+  every page at its stable address, named for its folder. Closing session A
+  closes only session A, and its pages stay at their addresses for as long as
+  the helper runs.
 - The immutable-owner rule is not about people, it is about the session
   record. A review remembers the session that created it, and no later
   command can move it to a different session by accident. The one exception
   is a review from before sessions, which has no owner: a Library pick-up
   adopts it into the agent's session (a `review.adopted` event), and only
   while that pick-up is pending.
+- One review per file. `lahe review` of a file that already has a review opens
+  that review, whichever session owns it, and never makes a second one. In
+  another session's review it moves nothing: it prints the address and whose
+  review it is. When that session's agent is listening, it says to ask the
+  human; otherwise it names the takeover, which the agent runs only when the
+  human asks. `lahe review retire` ends a review on purpose, and only its own
+  session may retire it.
+- A takeover from the command line is refused while the session's agent is
+  listening (a live monitor, or a lahe command in the last few minutes). That
+  handoff cuts someone off, so the human confirms it from the Library page,
+  which names the agent that is listening. The confirmed request then lets the
+  takeover through: Pick this up and Launch a new agent both end with
+  `lahe session takeover <session> --request <id>`, and the pending request
+  for that session is the human's say-so.
 - Takeover does not delete anything and does not require the old agent to
   cooperate. It advances a fence number that every running monitor checks on
   its own next look, which is what makes an old monitor for the same session
@@ -81,13 +99,13 @@ flowchart TD
     Confirm -->|"confirmed"| Queue[("catalog-requests.jsonl<br/>request: ids only")]
     AttachFile -.->|"names who the request is for"| Queue
     Queue -->|"catalog_requests in the drain,<br/>wakes the monitor once"| Agent["attached agent"]
-    Agent -->|"pickup, static row"| Take["lahe session takeover doc-session"]
+    Agent -->|"pickup, static row"| Take["lahe session takeover doc-session --request id"]
     Agent -->|"pickup, pre-session or worktree row"| Serve["lahe library serve request:<br/>adopts a pre-session review into its own session,<br/>or serves the main-repo copy of a worktree"]
     Serve --> Answer
     Take --> Both["lahe monitor --session own<br/>--session doc-session"]
     Agent -->|"launch"| Name["lahe session name doc-session<br/>--from-review review"]
     Name --> NewAgent["new agent in a new Terminal window,<br/>given the hand-off message"]
-    NewAgent --> Take2["it runs lahe session takeover doc-session"]
+    NewAgent --> Take2["it runs lahe session takeover doc-session --request id"]
     Both --> Answer["lahe library answer request<br/>done or refused"]
     NewAgent --> Answer
     Answer --> Row["the Library row shows the answer"]
@@ -105,8 +123,8 @@ flowchart TD
 ## When the helper stops
 
 The Library has to outlive every agent session, so the last close no longer
-always stops the helper. Sessions the Library reopened are closed again when
-they go quiet.
+always stops the helper. Open reopens no session, so there is nothing for the
+Library to close again; it only closes the sessions bare `lahe library` made.
 
 ```mermaid
 flowchart TD
@@ -122,13 +140,12 @@ flowchart TD
     SelfCheck -->|"a session opened"| Cancel["the ask is removed;<br/>the next last close decides"]
     SelfCheck -->|"yes"| Stop
 
-    Timer["helper timer, every 15 seconds:<br/>sweepReopened"] --> Each["each session in catalog.json's<br/>reopened map"]
-    Each --> Moved{"taken over since,<br/>or its monitor live?"}
-    Moved -->|"taken over"| Drop["drop its entry, leave it open"]
-    Moved -->|"monitor live"| Leave["leave it open"]
-    Moved -->|"neither"| Quiet{"30 minutes since the reopen<br/>and since any window of its<br/>reviews was last held?"}
+    Timer["helper timer, every 15 seconds:<br/>sweepLibrarySessions"] --> Each["each open session bare<br/>lahe library started"]
+    Each --> Owns{"owns a review, taken over,<br/>or its monitor live?"}
+    Owns -->|"yes"| Leave["leave it open"]
+    Owns -->|"no"| Quiet{"30 minutes with no<br/>lahe command from its agent?"}
     Quiet -->|"no"| Leave
-    Quiet -->|"yes"| CloseQuiet["closeQuiet: stop its servers,<br/>mark it closed, clear the entry.<br/>The helper stays up"]
+    Quiet -->|"yes"| CloseQuiet["mark it closed.<br/>The helper stays up"]
 ```
 
 - A last close that leaves the helper up asks it to stop once quiet
@@ -137,10 +154,13 @@ flowchart TD
   (`src/service/self_stop.js`). An open session never lets it stop.
 - A new helper clears any old `stop-when-quiet.json`. After a sleep, the two
   minutes start again from the wake.
-- A helper or page server whose state directory is removed stops within 30
+- A helper whose state directory is removed stops within 30
   seconds (two checks in a row), even with a session open. A restored or synced
   copy that still names that process keeps it running.
-- The same sweep closes a session that bare `lahe library` started, once it
-  owns no reviews and its agent has been quiet for 30 minutes.
-- A session reopened with `lahe session reopen` is not in the `reopened` map,
-  so the sweep never closes it.
+- The sweep closes a session that bare `lahe library` started, once it
+  owns no reviews and its agent has been quiet for 30 minutes. A session
+  reopened with `lahe session reopen` was not started that way, so the sweep
+  never closes it.
+- Open from the Library names the document's site and opens its address. It
+  does not reopen a closed session or start anything, so a review of a closed
+  session opens as it is.

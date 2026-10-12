@@ -42,6 +42,8 @@ var ASSETS = {};
 ASSETS["protocol.js"] = { file: path.join(SRC, "shared", "protocol.js"), contentType: JS };
 ASSETS["page.js"] = { file: path.join(SRC, "layer", "catalog", "page.js"), contentType: JS };
 ASSETS["view_model.js"] = { file: path.join(SRC, "layer", "catalog", "view_model.js"), contentType: JS };
+// The shared copy function (clipboard API, with a hidden-field fallback).
+ASSETS["copy_text.js"] = { file: path.join(SRC, "layer", "copy_text.js"), contentType: JS };
 ASSETS[markdown.DOC_STYLE_ASSET] = { file: null, contentType: "text/css; charset=utf-8" };
 markdown.FONT_ASSETS.forEach(function (font) {
   ASSETS[markdown.FONT_ASSET_DIR + "/" + font] = {
@@ -59,6 +61,9 @@ function securityHeaders() {
   return {
     "Content-Security-Policy": CONTENT_SECURITY_POLICY,
     "X-Frame-Options": "DENY",
+    // An opener (a page that linked to this one with target=_blank, or
+    // window.open) gets no handle on this window.
+    "Cross-Origin-Opener-Policy": "same-origin",
     "Referrer-Policy": "no-referrer",
     "Cache-Control": "no-store",
     "X-Content-Type-Options": "nosniff"
@@ -240,6 +245,9 @@ var PAGE_STYLE = [
   ".lib-where{margin:2px 0 0;color:var(--lib-faint);font-family:var(--font-mono);font-size:var(--text-micro);", // px: hugs the name
   "line-height:1.45;overflow-wrap:break-word;max-width:none}",
   ".lib-name{max-width:none}",
+  // The row's stable address: a link in the path's face, under the path.
+  ".lib-address{margin:2px 0 0;font-family:var(--font-mono);font-size:var(--text-micro);line-height:1.45;overflow-wrap:anywhere;max-width:none}",
+  ".lib-address a{color:var(--lib-accent)}",
   // The name line: the name, then a quiet Rename. The original name, after a
   // rename, sits small and muted under it.
   ".lib-name-line{margin:0;display:flex;flex-wrap:wrap;align-items:baseline;gap:0 var(--s2);max-width:none}",
@@ -403,6 +411,7 @@ function renderPage(token) {
     "<style>" + PAGE_STYLE + "</style>",
     '<script src="' + assetUrl("protocol.js") + '" defer></script>',
     '<script src="' + assetUrl("view_model.js") + '" defer></script>',
+    '<script src="' + assetUrl("copy_text.js") + '" defer></script>',
     '<script src="' + assetUrl("page.js") + '" defer></script>',
     "</head><body>",
     // The brandmark is the tab icon's own image, decorative: the heading is

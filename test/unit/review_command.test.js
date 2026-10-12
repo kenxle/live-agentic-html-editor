@@ -146,10 +146,10 @@ test("lahe review on a plain static file prints exactly one openable URL and no 
     assert.equal(run.stdout.indexOf("Fallback:"), -1, "add's own fallback line is suppressed under review");
     assert.doesNotMatch(run.stdout, /likely/, "the served URL review started is not a guess");
 
-    // The static server binds its own ephemeral port, separate from the
-    // helper's --port above, so only the shape (host and basename) is pinned.
+    // The helper serves the page at its stable address, on the pages port
+    // this run's helper bound, so only the shape (name and basename) is pinned.
     const openUrlText = run.stdout.match(/^\s*open\s+(http:\/\/\S+)/m)[1];
-    assert.match(openUrlText, /^http:\/\/127\.0\.0\.1:\d+\/report\.html$/);
+    assert.match(openUrlText, /^http:\/\/[a-z0-9.-]+\.lahe\.localhost:\d+\/report\.html$/);
     const openUrl = new URL(openUrlText);
 
     // A plain static target: nothing was told to this tool about its source, so

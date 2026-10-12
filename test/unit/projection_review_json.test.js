@@ -116,9 +116,10 @@ test("the contract field is in the real projection byte for byte, and names no a
   assert.ok(/<state-dir>\/agent-sessions\/<agent-session-id>\/wake.log/.test(wholeFile), "the file names the wake feed");
   // Claude Code waits with the monitor in a background Bash call. The Monitor
   // tool option the old line named was removed from Claude Code on 2026-09-14.
-  // It asks for the largest timeout (re-arm guard, 20261006.02), since a
-  // background command ends at its timeout.
-  assert.ok(/Claude Code: run lahe monitor --session <agent-session-id> with the Bash tool, run_in_background true and timeout 7200000/.test(wholeFile), "the Claude Code line names the background monitor");
+  // One launch waits until there is work: an interactive session puts no time
+  // limit on a background command (Claude Code 2.1.288).
+  assert.ok(/Claude Code: run lahe monitor --session <agent-session-id> as one Bash call, run_in_background true and timeout 86400000/.test(wholeFile), "the Claude Code line names the background monitor");
+  assert.ok(/reply to every item and run the drain until it prints nothing/.test(wholeFile), "the Claude Code line says to answer every item before launching");
   assert.equal(/persistent/.test(wholeFile), false, "the removed Monitor tool option is named nowhere");
   assert.ok(/Read this contract once, when you start on a review/.test(wholeFile), "the contract is read once, not on every wake");
   assert.ok(/lahe monitor --session <agent-session-id>/.test(wholeFile), "the file names the scoped keep-up command an agent may run");

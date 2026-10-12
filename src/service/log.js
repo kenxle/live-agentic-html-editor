@@ -604,7 +604,52 @@ function createEventLog(options) {
   };
 }
 
+/** How many distinct notes one helper logs of a kind before it stops. */
+var LOG_NOTE_CAP = 256;
+
+/** How many times an auth refusal repeated exactly is logged before it stops. */
+var REFUSAL_REPEATS = 8;
+
+/**
+ * Logs a line once per key (or up to `repeats` times), for at most
+ * LOG_NOTE_CAP keys. Any web page can make the browser ask for random names or
+ * send random Host headers, so an unbounded "once per key" set would let a
+ * page grow the helper's memory and helper.log without end. Past the cap it
+ * logs `fullLine` once and stops.
+ *
+ * @param {{helperLog: function}|null} log
+ * @param {string} fullLine
+ * @param {{repeats?: number}} [options] how many times one key is logged (1)
+ * @returns {{say: function(string, string): void}}
+ */
+function createNoteOnce(log, fullLine, options) {
+  var repeats = options && Number.isInteger(options.repeats) && options.repeats > 0 ? options.repeats : 1;
+  var said = new Map();
+  var full = false;
+  function write(line) {
+    if (!log) return;
+    try { log.helperLog(line); } catch (err) { /* diagnostic only */ }
+  }
+  return {
+    say: function (key, line) {
+      if (full) return;
+      var count = said.get(key) || 0;
+      if (count >= repeats) return;
+      if (count === 0 && said.size >= LOG_NOTE_CAP) {
+        full = true;
+        write(fullLine);
+        return;
+      }
+      said.set(key, count + 1);
+      write(line);
+    }
+  };
+}
+
 module.exports = {
+  LOG_NOTE_CAP: LOG_NOTE_CAP,
+  REFUSAL_REPEATS: REFUSAL_REPEATS,
+  createNoteOnce: createNoteOnce,
   createEventLog: createEventLog,
   repairTornTail: repairTornTail
 };

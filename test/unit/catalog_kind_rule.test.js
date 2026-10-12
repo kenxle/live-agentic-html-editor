@@ -7,9 +7,10 @@
 // refuse a dev-server pickup: the document was stranded. Now dev-server needs a
 // registered origin that no static server record serves, on a target LAHE
 // would not serve itself (a project folder, not a page file). A review with
-// neither a record nor such an origin is `static` and marked unreadable: its
-// record is gone, and a takeover still works. The drain and describeReview carry
-// the dev server's origin, so the refusal can name it.
+// neither a record nor such an origin is `static`, and via-agent: its record is
+// gone, so nothing vouches for serving it, and a takeover still works. The
+// drain and describeReview carry the dev server's origin, so the refusal can
+// name it.
 
 const test = require("node:test");
 const assert = require("node:assert/strict");
@@ -20,7 +21,7 @@ const catalogReader = require("../../src/service/catalog_reader.js");
 const fixture = require("../fixtures/catalog_state.js");
 
 function reader(installed) {
-  return catalogReader.createReader({ dir: installed.dir, home: installed.home, pidAlive: () => true, probe: async () => false });
+  return catalogReader.createReader({ dir: installed.dir, home: installed.home, pidAlive: () => true });
 }
 
 function rowOf(list, id) {
@@ -38,7 +39,7 @@ test("a dev-server review keeps its kind, and describeReview names its origin", 
   assert.equal(d.origin, "http://localhost:3000");
 });
 
-test("a static review whose server record was lost is static and unreadable, not dev-server", async () => {
+test("a static review whose server record was lost is static, not dev-server, and needs an agent to serve it", async () => {
   const installed = fixture.install();
   const record = path.join(installed.dir, "agent-sessions", "s_coach", "static-servers", "ss_alphadocs.json");
   fs.renameSync(record, record + ".lost");
@@ -46,10 +47,10 @@ test("a static review whose server record was lost is static and unreadable, not
   const d = r.describeReview("r_brief", installed.nowMs);
   assert.equal(d.kind, "static");
   assert.equal(d.origin, null);
-  assert.equal(d.openable, "via-agent", "no server to restart: an agent re-serves it");
+  assert.equal(d.openable, "via-agent", "nothing vouches for its folder: an agent re-serves it");
   const row = rowOf(await r.list(installed.nowMs), "r_brief");
   assert.equal(row.kind, "static");
-  assert.equal(row.unreadable, true);
+  assert.equal(row.unreadable, false, "nothing is wrong with the review; only its page server record is gone");
 });
 
 test("a static review keeps origin null", () => {

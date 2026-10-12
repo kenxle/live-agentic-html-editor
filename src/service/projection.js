@@ -56,7 +56,7 @@ var protocol = require("../shared/protocol.js");
 var record = require("../shared/record.js");
 var lifecycle = require("../shared/lifecycle.js");
 var reviewFormat = require("../shared/review_format.js");
-var staticServers = require("./static_servers.js");
+var pageRoutes = require("./page_routes.js");
 var reviewWriter = require("./review_writer.js");
 var stateDir = require("./state_dir.js");
 var replies = require("./replies.js");
@@ -409,7 +409,9 @@ function projectFold(reviewId, state, options) {
     generated_at: opts.generated_at || undefined,
     items: actionableItems(itemsOf(state)),
     source_hint: sourceHintOf(state),
-    linked_files: linkedFilesOf(actionableItems(itemsOf(state)), opts.linkedFileFor)
+    linked_files: linkedFilesOf(actionableItems(itemsOf(state)), opts.linkedFileFor),
+    // Stable addresses: old page-server origins group with the page's site.
+    origin_aliases: opts.originAliases || undefined
   });
 }
 
@@ -544,16 +546,20 @@ function createProjector(options) {
   }
 
   /**
-   * The helper's mount lookup for one review's linked pages: the review's own
-   * agent session is read off its meta.json, and the static servers of that
-   * session are asked (static_servers.linkedFileForPage).
+   * The helper's mount lookup for one review's linked pages: the registry's
+   * site mounts and linked files (page_routes.linkedFileForPage).
    */
   function linkedLookup(reviewId) {
     return function (pagePath) {
-      var meta;
-      try { meta = JSON.parse(fs.readFileSync(stateDir.metaPath(dir, reviewId), "utf8")); } catch (err) { return null; }
-      if (!meta || typeof meta.agent_session_id !== "string") return null;
-      return staticServers.linkedFileForPage(dir, meta.agent_session_id, reviewId, pagePath);
+      return pageRoutes.linkedFileForPage(dir, reviewId, pagePath);
+    };
+  }
+
+  /** What a projection of this review is built with, beyond its events. */
+  function projectOptions(reviewId) {
+    return {
+      linkedFileFor: linkedLookup(reviewId),
+      originAliases: pageRoutes.aliasMap(dir)
     };
   }
 
@@ -680,7 +686,7 @@ function createProjector(options) {
     // ever be skipped by mistake. The baseline is empty when the helper starts,
     // so the first tick always writes (new contract text lands), and a file
     // someone removed is written again.
-    var projected = projectFold(reviewId, entry.fold, { linkedFileFor: linkedLookup(reviewId) });
+    var projected = projectFold(reviewId, entry.fold, projectOptions(reviewId));
     var comparable = comparableBytes(projected);
     if (entry.lastBytes === comparable && fileExists(reviewId)) {
       entry.wroteAt = entry.fold.seq;
@@ -710,11 +716,16 @@ function createProjector(options) {
   function currentProjection(reviewId) {
     var entry = catchUp(reviewId);
     return {
-      projection: projectFold(reviewId, entry.fold, { linkedFileFor: linkedLookup(reviewId) }),
+      projection: projectFold(reviewId, entry.fold, projectOptions(reviewId)),
       draft_count: itemsOf(entry.fold).filter(function (item) {
         return item[F.STATE] === record.STATE.DRAFT;
       }).length
     };
+  }
+
+  /** The items this review's kept fold holds now, drafts included, in first-seen order. */
+  function currentItems(reviewId) {
+    return itemsOf(catchUp(reviewId).fold);
   }
 
   function tick() {
@@ -743,6 +754,7 @@ function createProjector(options) {
     tick: tick,
     tickReview: tickReview,
     currentProjection: currentProjection,
+    currentItems: currentItems,
     start: start,
     stop: stop,
     counters: counters,
@@ -809,7 +821,15 @@ function currentProjection(deps, reviewId) {
   return projector.currentProjection(reviewId);
 }
 
+/** The items the projector's kept fold holds for a review, or null with no projector. */
+function currentItems(deps, reviewId) {
+  var projector = attach(deps);
+  if (!projector) return null;
+  return projector.currentItems(reviewId);
+}
+
 module.exports = {
+  currentItems: currentItems,
   createFold: createFold,
   foldEvents: foldEvents,
   itemsOf: itemsOf,

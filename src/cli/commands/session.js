@@ -13,8 +13,9 @@ var sessions = require("../../service/agent_sessions.js");
 var service = require("../../service/index.js");
 var sourceStamp = require("../../service/source_stamp.js");
 var reviewsModule = require("../../service/reviews.js");
-var staticServers = require("../../service/static_servers.js");
 var catalogReader = require("../../service/catalog_reader.js");
+var loginItem = require("../../service/login_item.js");
+var selfStop = require("../../service/self_stop.js");
 
 var statusCommand = require("./status.js");
 var projection = require("../../service/projection.js");
@@ -32,7 +33,9 @@ var USAGE = [
   "  close     end a session, keep its review history",
   "  reopen    reopen a closed session you already own",
   "  takeover  explicitly continue another agent's session, only when the human asks for it.",
-  "            --name \"<name>\" records the human's name for your session at the same time",
+  "            --name \"<name>\" records the human's name for your session at the same time.",
+  "            While the session's agent is listening it is refused, unless --request <id> names",
+  "            the pending Library request (Pick this up, or Launch) that asked for it",
   "  name      lahe session name <id> \"<name>\": the human's name for this session, shown on",
   "            the reviewer's rail so they know which agent to check. \"\" clears it.",
   "            lahe session name <id> --from-review <review> names it after that review's",
@@ -40,6 +43,9 @@ var USAGE = [
   "",
   "  --json    with list: one JSON object per session, then one summary line"
 ].join("\n");
+
+var BUSY_SENTENCE =
+  "the helper was busy taking a reviewer's changes, so it was left running; the next lahe command replaces it";
 
 function delay(ms) {
   return new Promise(function (resolve) { setTimeout(resolve, ms); });
@@ -79,6 +85,7 @@ function parse(argv) {
   for (var i = start; i < list.length; i += 1) {
     if (list[i] === "--json") out.json = true;
     else if (list[i] === "--name" && list[i + 1] !== undefined && action === "takeover") out.name = String(list[(i += 1)]);
+    else if (list[i] === "--request" && list[i + 1] !== undefined && action === "takeover") out.request = String(list[(i += 1)]);
     else if (list[i] === "--port" && list[i + 1] !== undefined) out.port = Number(list[(i += 1)]);
     else if (list[i] === "--state-dir" && list[i + 1] !== undefined) out.stateDir = list[(i += 1)];
     else return { error: "unknown or incomplete option " + JSON.stringify(list[i]) };
@@ -142,6 +149,13 @@ async function helperStillWanted(dir, nowMs) {
   var ready = readReady(dir);
   if (ready && typeof ready.port === "number") {
     var live = await service.probeHealth(protocol.DEFAULT_HOST, ready.port);
+    // AN ALWAYS-ON HELPER STAYS UP THROUGH EVERY CLOSE. It serves every page
+    // at its stable address, so stopping it would take every page down until
+    // the login item restarted it. Said by the helper itself, or by the
+    // install recorded for this port.
+    if ((live && live.always_on === true) || loginItem.installedFor(dir, ready.port)) {
+      return { keep: true, why: "it is always on", always: true };
+    }
     var seen = live ? Date.parse(live[protocol.HEALTH_FIELD.CATALOG_SEEN_AT]) : NaN;
     if (!Number.isNaN(seen) && nowMs - seen < protocol.CATALOG.LIBRARY_SEEN_MS) {
       return {
@@ -172,6 +186,60 @@ function askStopWhenQuiet(dir, nowMs, why) {
   }
 }
 
+function realOrSame(p) {
+  try { return fs.realpathSync(p); } catch (err) { return path.resolve(p); }
+}
+
+/**
+ * Installed from another clone: the sentence to say instead of restarting.
+ *
+ * The login item runs the clone it was installed from. Restarting it because
+ * THIS clone needs a newer service contract only runs that same older clone
+ * again, after dropping every open page for the restart. So a CLI from another
+ * clone says so and leaves the helper alone. Null when the login item runs
+ * this clone, or when nothing is installed.
+ */
+function otherCloneSentence(installed) {
+  if (!installed || !installed.clone) return null;
+  var here = path.join(__dirname, "..", "..", "..");
+  if (realOrSame(installed.clone) === realOrSame(here)) return null;
+  return "the login item runs " + installed.clone + ", whose helper is older than this clone needs. " +
+    "Run `lahe install` from this clone (" + realOrSame(here) + ") to have the login item run it instead";
+}
+
+/**
+ * Is the running helper older than its code, and if so, may it go now?
+ *
+ * SOMEBODY IS REVIEWING ON IT. Being older than the code on disk is a reason to
+ * replace the helper, not a reason to interrupt a person who is mid-sentence in
+ * a comment box. The stale helper keeps serving them and the caller says so;
+ * `lahe serve --restart` (`force`) is how a human overrules it.
+ *
+ * INSTALLED, the code is the clone the login item runs, and an open window does
+ * not hold the helper back: an always-on helper serves every page all the time,
+ * so some window is nearly always open, and the layer rides out a restart. It
+ * waits only for a quiet moment with no review writes.
+ *
+ * @param {string} dir
+ * @param {object} live the running helper's /health
+ * @param {object|null} installed install.json for this port, or null
+ * @param {{force?: boolean, now?: number, quietMs?: number, quietMaxMs?: number}} [options]
+ * @returns {Promise<{stale: boolean, keep: string|null}>} `keep` is the sentence
+ *   saying why a stale helper was left running
+ */
+async function staleDecision(dir, live, installed, options) {
+  var opts = options || {};
+  var roots = installed && installed.clone ? { roots: loginItem.sourceRoots(installed) } : undefined;
+  if (!sourceStamp.helperPredatesSource(live.started_at, roots).stale) return { stale: false, keep: null };
+  if (opts.force) return { stale: true, keep: null };
+  if (installed) {
+    var quiet = await loginItem.waitForQuiet(dir, { quietMs: opts.quietMs, maxMs: opts.quietMaxMs });
+    return { stale: true, keep: quiet ? null : BUSY_SENTENCE };
+  }
+  var holders = reviewsModule.readLiveHolders(dir, reviewsModule.LIVE_WINDOW_MS, opts.now);
+  return { stale: true, keep: holders.length > 0 ? reviewsModule.liveReviewerSentence(holders) : null };
+}
+
 /**
  * Make sure a helper this clone can talk to is running, and leave a current one
  * exactly where it is.
@@ -199,8 +267,15 @@ function askStopWhenQuiet(dir, nowMs, why) {
 async function startHelper(dir, port, options) {
   var opts = options || {};
   var stale = false;
+  // INSTALLED (lahe install): a login item runs the helper. This never spawns
+  // one; it asks the login item, judges staleness by the clone the login item
+  // runs, and lets an open window wait only for a quiet moment.
+  var installed = loginItem.installedFor(dir, port);
   var live = await service.probeHealth(protocol.DEFAULT_HOST, port);
   if (live) {
+    if (selfStop.stateFolderMismatch(dir, live)) {
+      throw new Error(selfStop.differentFolderSentence(protocol.DEFAULT_HOST, port, dir));
+    }
     var liveContract = Number.isInteger(live.service_contract) ? live.service_contract : 0;
     var verdict = protocol.helperContractVerdict(live);
     if (verdict === protocol.CONTRACT_VERDICT.NEWER) {
@@ -209,34 +284,30 @@ async function startHelper(dir, port, options) {
         "; update this clone before changing the session"
       );
     }
+    if (verdict === protocol.CONTRACT_VERDICT.OLDER && otherCloneSentence(installed)) {
+      throw new Error(otherCloneSentence(installed));
+    }
     if (verdict === protocol.CONTRACT_VERDICT.CURRENT) {
-      stale = sourceStamp.helperPredatesSource(live.started_at).stale;
+      var decision = await staleDecision(dir, live, installed, opts);
+      stale = decision.stale;
       if (!stale) return { started: false, stale: false, keptForReviewer: null };
-      // SOMEBODY IS REVIEWING ON IT. Being older than the code on disk is a
-      // reason to replace the helper, not a reason to interrupt a person who is
-      // mid-sentence in a comment box. The stale helper keeps serving them and
-      // the caller says so; `lahe serve --restart` is how a human overrules it.
-      if (!opts.force) {
-        var holders = reviewsModule.readLiveHolders(dir, reviewsModule.LIVE_WINDOW_MS, opts.now);
-        if (holders.length > 0) {
-          return {
-            started: false,
-            stale: true,
-            keptForReviewer: reviewsModule.liveReviewerSentence(holders)
-          };
-        }
-      }
+      if (decision.keep) return { started: false, stale: true, keptForReviewer: decision.keep };
     }
     if (!(await stopVerifiedHelper(dir))) {
       throw new Error("refusing to replace an older helper whose process identity cannot be verified");
     }
+  }
+  var isUp = function () { return service.probeHealth(protocol.DEFAULT_HOST, port); };
+  if (installed) {
+    await loginItem.startThroughItem(installed, isUp, { runner: opts.runner, waitMs: opts.waitMs });
+    return { started: true, stale: stale, keptForReviewer: null };
   }
   var child = childProcess.spawn(process.execPath, [BIN, "serve", "--port", String(port), "--state-dir", dir], {
     detached: true,
     stdio: "ignore"
   });
   child.unref();
-  var started = await waitFor(function () { return service.probeHealth(protocol.DEFAULT_HOST, port); }, 10000);
+  var started = await waitFor(isUp, 10000);
   if (!started) throw new Error("the helper did not start within 10 seconds");
   return { started: true, stale: stale, keptForReviewer: null };
 }
@@ -392,6 +463,23 @@ function listLine(row, nowMs) {
   );
 }
 
+/**
+ * Is there a pending Library request (pickup or launch) with this id, asking
+ * for this session? The same queue check add.js makes for --adopt.
+ */
+function confirmedByLibrary(dir, sessionId, requestId) {
+  if (!protocol.isSafeId(requestId)) return false;
+  try {
+    var catalogRequests = require("../../service/catalog_requests.js");
+    return catalogRequests.createQueue({ dir: dir }).pending(Date.now()).some(function (request) {
+      return request.id === requestId && request.session === sessionId &&
+        catalogRequests.ACTIONS.indexOf(request.action) !== -1;
+    });
+  } catch (err) {
+    return false;
+  }
+}
+
 var TAKEOVER_HINT = "claim one with: lahe session takeover <id> (requires the human's explicit request)";
 
 async function runList(args, opts) {
@@ -474,7 +562,8 @@ async function run(argv, options) {
           (renamed.name ? " is named " + JSON.stringify(renamed.name) : " has no name now") + "\n"
       );
     } else if (args.action === "close") {
-      var staticStopped = await staticServers.stopAll(dir, args.id);
+      // Only the session closes. Its pages stay at their addresses, served by
+      // the helper, for as long as the helper runs.
       store.close(args.id);
       var stopped = false;
       var kept = null;
@@ -482,33 +571,49 @@ async function run(argv, options) {
         var wanted = await helperStillWanted(dir, typeof opts.now === "number" ? opts.now : Date.now());
         if (wanted.keep) {
           kept = wanted.why;
-          askStopWhenQuiet(dir, typeof opts.now === "number" ? opts.now : Date.now(), wanted.why);
+          // An always-on helper is never asked to stop once quiet either.
+          if (!wanted.always) askStopWhenQuiet(dir, typeof opts.now === "number" ? opts.now : Date.now(), wanted.why);
         } else {
           stopped = await stopVerifiedHelper(dir);
         }
       }
       out(
         "agent session " + args.id + " closed; review history kept" +
-          (staticStopped ? "; static review server" + (staticStopped === 1 ? "" : "s") + " stopped" : "") +
           (stopped ? "; shared helper stopped" : "") +
           (kept ? "; shared helper left running" + (/^for /.test(kept) ? " " : ": ") + kept : "") + "\n"
       );
     } else {
       var handedOff = args.action === "takeover";
+      // A HANDOFF OF A SESSION SOMEONE IS WATCHING IS THE HUMAN'S CALL. The
+      // Library asks the human first, naming the agent that is listening; the
+      // CLI has no way to ask, so it refuses. Takeover of a closed session, or
+      // one nobody is listening to, cuts nobody off and goes ahead.
+      // The Library's confirmed handoff ends here: "Pick this up" and "Launch a
+      // new agent" both finish with this command, carrying the pending
+      // request's id. A pending request for THIS session is the human's
+      // confirmation, and only the Library page (its own token) makes one.
+      if (handedOff && sessions.isListening(store, args.id, Date.now()) && !confirmedByLibrary(dir, args.id, args.request)) {
+        process.stderr.write(
+          "lahe session: agent session " + args.id + " has an agent listening to it right now, so it is not " +
+            "taken over from here. A handoff of a session someone is watching is confirmed by your human from the " +
+            "Library page, and the request it makes names the command to run. Ask them.\n"
+        );
+        return protocol.CLI_EXIT.BAD_USAGE;
+      }
       var session = handedOff
         ? store.takeover(args.id, args.name !== undefined ? { name: args.name } : undefined)
         : store.reopen(args.id);
       var prior = readReady(dir);
       var port = args.port || (prior && prior.port) || protocol.DEFAULT_PORT;
       var helperRun = await startHelper(dir, port);
-      var staticStarted = await staticServers.restartAll(dir, args.id);
       var helperNote = "; shared helper already running";
       if (helperRun.started) helperNote = helperRun.stale ? "; shared helper restarted" : "; shared helper started";
-      else if (helperRun.keptForReviewer) helperNote = "; shared helper left running for an open review page";
+      // The helper line below says why: an open review page, or a busy helper.
+      else if (helperRun.keptForReviewer) helperNote = "; shared helper left running";
       var message =
         "agent session " + args.id + (handedOff ? " taken over explicitly" : " reopened") +
           helperNote +
-          (staticStarted ? "; static review server" + (staticStarted === 1 ? "" : "s") + " restarted" : "") + "\n";
+          "\n";
       // Never a silent bounce: a restart drops every open review page's
       // connection for a moment, and the person watching that page is owed the
       // reason.
@@ -547,5 +652,7 @@ module.exports = {
   stopVerifiedHelper: stopVerifiedHelper,
   helperStillWanted: helperStillWanted,
   startHelper: startHelper,
+  staleDecision: staleDecision,
+  otherCloneSentence: otherCloneSentence,
   run: run
 };

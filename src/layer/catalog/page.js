@@ -19,7 +19,7 @@
 //  2. OPEN'S TAB SEQUENCE. A click opens about:blank synchronously (a pop-up
 //     must come from the click itself), sets its opener to null, and only then
 //     asks the helper. The tab is sent to the answer's URL only if the view
-//     model's check passes (loopback http:), and closed otherwise.
+//     model's check passes (loopback http:, or a Lahe site address), and closed otherwise.
 //  3. HONEST TIMING. The page polls every POLL_MS whether or not its tab is
 //     visible (the helper counts a recent poll as a reason to stay up), polls
 //     again right after each of its own actions, and stops for good on a 401:
@@ -35,8 +35,9 @@
 
   var protocol = window.LAHE && window.LAHE.protocol;
   var VM = window.LAHE && window.LAHE.catalogViewModel;
+  var copyText = window.LAHE && window.LAHE.copyText;
   var statusLine = document.getElementById("lahe-catalog-status");
-  if (!protocol || !VM) {
+  if (!protocol || !VM || !copyText) {
     if (statusLine) statusLine.textContent = "The Library could not load its scripts. Reload this page.";
     return;
   }
@@ -203,7 +204,7 @@
     call(ROUTE.open, d.body).then(function (result) {
       var url = result.ok && result.body ? result.body.url : null;
       if (tab) {
-        if (result.ok && VM.isLoopbackHttpUrl(url)) {
+        if (result.ok && (VM.isLoopbackHttpUrl(url) || VM.isLaheSiteUrl(url))) {
           tab.location.href = url;
         } else {
           tab.close();
@@ -285,21 +286,12 @@
   }
 
   function copyHandoff(reviewId, message) {
-    var done = function (ok) {
+    // The shared copy function: the clipboard API when the page has one, else
+    // a hidden field and the browser's copy command (a page at an address the
+    // browser does not call secure has no clipboard API).
+    copyText(message).then(function (ok) {
       update(VM.withCopied(state, reviewId, ok));
-    };
-    if (!navigator.clipboard || !navigator.clipboard.writeText) {
-      done(false);
-      return;
-    }
-    navigator.clipboard.writeText(message).then(
-      function () {
-        done(true);
-      },
-      function () {
-        done(false);
-      }
-    );
+    });
   }
 
   // One listener for every button the list draws. Buttons carry data-act and
@@ -441,7 +433,19 @@
     var main = h("div", { class: "lib-row-main" }, [
       nameLine,
       row.originalName ? h("p", { class: "lib-original", text: row.originalName }) : null,
-      row.path ? h("p", { class: "lib-where", title: row.pathTitle || null }, slashBreaks(row.path)) : null
+      row.path ? h("p", { class: "lib-where", title: row.pathTitle || null }, slashBreaks(row.path)) : null,
+      row.address
+        ? h("p", { class: "lib-address" }, [
+            h("a", {
+              href: row.address.href,
+              target: "_blank",
+              rel: "noopener noreferrer",
+              "data-act-link": "address",
+              "data-review": row.id,
+              text: row.address.text
+            })
+          ])
+        : null
     ]);
 
     var facts = [h("span", { text: row.lastText })];

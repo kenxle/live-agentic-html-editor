@@ -26,7 +26,7 @@ const markdown = require("../../src/service/markdown.js");
 const logModule = require("../../src/service/log.js");
 const reviewsModule = require("../../src/service/reviews.js");
 const agentSessions = require("../../src/service/agent_sessions.js");
-const staticServers = require("../../src/service/static_servers.js");
+const { writeOldServerRecord } = require("../helpers/old_server_record.js");
 const catalogRequests = require("../../src/service/catalog_requests.js");
 
 const REPO_ROOT = path.join(__dirname, "..", "..");
@@ -56,7 +56,7 @@ async function startHelper(dir) {
 
 /**
  * A helper whose REVIEW every handler accepts, so a request that passes the
- * checks gets 200: the review's page is served by a real static server, its
+ * checks gets 200: its page is in a folder an old page server served, its
  * session is on disk, and an attached agent has a live monitor, so Open,
  * Star and a pick-up all succeed.
  */
@@ -78,12 +78,8 @@ async function openableWorld(t) {
   const log = logModule.createEventLog({ dir });
   const reviews = reviewsModule.createReviews({ dir, log });
   reviews.create({ id: REVIEW, agent_session_id: "s_doc", target_path: page });
-  const served = await staticServers.start({ dir, sessionId: "s_doc", root: site });
-  reviews.registerOrigin(REVIEW, "http://127.0.0.1:" + served.meta.port);
-  reviews.registerOrigin(REVIEW, "http://localhost:" + served.meta.port);
-  t.after(async () => {
-    await staticServers.stopAll(dir, "s_doc").catch(() => {});
-  });
+  // What an old page server left: it vouches for the folder, so Open may bind it.
+  writeOldServerRecord(dir, "s_doc", site);
   const now = Date.now();
   catalogRequests.writeAttach(dir, "s_agent", now);
   store.writeMonitor("s_agent", {
@@ -220,7 +216,12 @@ test("catalog.page and catalog.asset refuse same-site, cross-site, a missing Sec
   const port = helper.port;
   try {
     for (const p of [PAGE.path, ASSET.path + "page.js"]) {
-      for (const site of ["same-site", "cross-site", undefined]) {
+      // The page opens for any top-level navigation and for a request with no
+      // Sec-Fetch headers at all (library_link_navigation.test.js); here the
+      // headers say it is not a navigation, or say nothing about the mode.
+      // The asset takes neither exception.
+      const sites = p === PAGE.path ? ["same-site", "cross-site"] : ["same-site", "cross-site", undefined];
+      for (const site of sites) {
         const res = await raw(port, { path: p, headers: pageHeaders(port, { "sec-fetch-site": site }) });
         assert.equal(res.status, 403, p + " with Sec-Fetch-Site " + site);
         assert.equal(res.json.error.code, "PROTO_CROSS_SITE");
@@ -453,6 +454,11 @@ test("the page has no CORS header, carries the script, frame, referrer and no-st
     assert.equal(res.text.split(token).length - 1, 1, "the token appears once, in the meta tag");
     assert.ok(res.text.indexOf(ASSET.path + "page.js") !== -1, "the page loads page.js from catalog.asset");
     assert.ok(res.text.indexOf(ASSET.path + "protocol.js") !== -1, "the page loads protocol.js from catalog.asset");
+    assert.ok(
+      res.text.indexOf(ASSET.path + "copy_text.js") !== -1 &&
+        res.text.indexOf(ASSET.path + "copy_text.js") < res.text.indexOf(ASSET.path + "page.js"),
+      "the shared copy function loads before the page script that calls it"
+    );
   } finally {
     await helper.close();
   }
@@ -467,7 +473,7 @@ test("catalog.asset serves each allowlisted file with its content type, and noth
     // The allowlist is the architecture's, exactly.
     assert.deepEqual(
       names.slice().sort(),
-      ["page.js", "protocol.js", "view_model.js", markdown.DOC_STYLE_ASSET]
+      ["page.js", "protocol.js", "view_model.js", "copy_text.js", markdown.DOC_STYLE_ASSET]
         .concat(markdown.FONT_ASSETS.map((f) => markdown.FONT_ASSET_DIR + "/" + f))
         .sort()
     );
@@ -475,6 +481,7 @@ test("catalog.asset serves each allowlisted file with its content type, and noth
       "protocol.js": /^application\/javascript/,
       "page.js": /^application\/javascript/,
       "view_model.js": /^application\/javascript/,
+      "copy_text.js": /^application\/javascript/,
       [markdown.DOC_STYLE_ASSET]: /^text\/css/
     };
     markdown.FONT_ASSETS.forEach((f) => (expectType[markdown.FONT_ASSET_DIR + "/" + f] = /^font\/woff2$/));
@@ -555,7 +562,7 @@ function everyFile(dir) {
 
 test("the token changes across a helper restart and is written nowhere: no state file, not the helper log, not health, not catalog.list", async (t) => {
   // The openable world, so the run includes one successful Open (T13): the
-  // path that restarts or reuses a static server and writes its records.
+  // path that names a site and writes the registry.
   const world = await openableWorld(t);
   const dir = world.dir;
   const first = world.helper;

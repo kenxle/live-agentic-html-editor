@@ -10,7 +10,7 @@ when behavior changes, change both.
 
 | File | What it shows | Lives with |
 | --- | --- | --- |
-| `system_overview.md` | What exists and what talks to what: the browser running the library, the session-owned static server, the helper, the store on disk, the Library page with its request queue, and the agent | `README.md`, `skills/lahe/SKILL.md` |
+| `system_overview.md` | What exists and what talks to what: the browser running the library, the helper serving each page at its stable address, the store on disk, the Library page with its request queue, and the agent | `README.md`, `skills/lahe/SKILL.md` |
 | `module_map.md` | The four folders under `src/`, which way dependencies point, and why `layer/` is an ordered list rather than a cloud, and the Library page's own `CATALOG_PAGE` list | `CLAUDE.md`, Directory layout; `docs/ongoing/FREE_WRITING.md` (where its files live) |
 | `item_lifecycle.md` | The four states an item can be in, with the actor on every transition | `docs/CONTRACTS.md` |
 | `review_round_trip.md` | One comment end to end: a shared spine, then a labeled fan for the agent's half | `skills/lahe/SKILL.md`, How to use it |

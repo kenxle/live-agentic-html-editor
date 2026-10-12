@@ -12,6 +12,7 @@ const sessionCommand = require("../../src/cli/commands/session.js");
 const service = require("../../src/service/index.js");
 const agentSessions = require("../../src/service/agent_sessions.js");
 const staticServers = require("../../src/service/static_servers.js");
+const { stopTempHelpers } = require("../helpers/temp_helpers.js");
 
 function tempDir(prefix) {
   return fs.mkdtempSync(path.join(os.tmpdir(), prefix));
@@ -44,21 +45,20 @@ async function capture(run) {
   }
 }
 
-test("review re-entry infers its session, and the final close stops the helper", async (t) => {
+test("review re-entry infers its session, keeps its address, and the final close stops the helper", async (t) => {
   const root = tempDir("lahe-session-command-");
   const state = path.join(root, "state");
   const page = path.join(root, "page.html");
   fs.writeFileSync(page, "<!doctype html><body><p>Review me</p></body>");
   const port = await freePort();
+  t.after(async () => { await stopTempHelpers(state); });
 
   const first = await capture(() => reviewCommand.run([page, "--state-dir", state, "--port", String(port)]));
   assert.equal(first.code, 0, first.stderr);
   const sessionId = first.stdout.match(/^\s*session\s+(s_[a-f0-9]+)/m)[1];
   const reviewId = first.stdout.match(/^\s*review\s+(r[a-f0-9]+)/m)[1];
-  const firstServer = staticServers.list(state, sessionId)[0];
-  assert.ok(firstServer);
-  assert.match(first.stdout, new RegExp("open\\s+http://127\\.0\\.0\\.1:" + firstServer.port + "/page\\.html"));
-  assert.equal(await staticServers.isExactServer(firstServer), true);
+  const open = first.stdout.match(/^\s*open\s+(http:\/\/\S+)/m)[1];
+  assert.match(open, /^http:\/\/[a-z0-9.-]+\.lahe\.localhost:\d+\/page\.html$/);
   t.after(async () => {
     await capture(() => sessionCommand.run(["close", sessionId, "--state-dir", state, "--port", String(port)]));
   });
@@ -67,23 +67,20 @@ test("review re-entry infers its session, and the final close stops the helper",
   assert.equal(second.code, 0, second.stderr);
   assert.match(second.stdout, new RegExp("session\\s+" + sessionId));
   assert.match(second.stdout, new RegExp("review\\s+" + reviewId));
-  assert.match(second.stdout, new RegExp("server\\s+http://127\\.0\\.0\\.1:" + firstServer.port + ".*reused"));
+  assert.equal(second.stdout.match(/^\s*open\s+(http:\/\/\S+)/m)[1], open, "the same file keeps its address");
 
   const closed = await capture(() => sessionCommand.run(["close", sessionId, "--state-dir", state, "--port", String(port)]));
   assert.equal(closed.code, 0, closed.stderr);
   assert.match(closed.stdout, /shared helper stopped/);
-  assert.match(closed.stdout, /static review server stopped/);
+  assert.doesNotMatch(closed.stdout, /static review server/);
   assert.equal(await service.probeHealth("127.0.0.1", port), null);
-  assert.equal(await staticServers.isExactServer(firstServer), false);
 
   const reopened = await capture(() => sessionCommand.run(["reopen", sessionId, "--state-dir", state, "--port", String(port)]));
   assert.equal(reopened.code, 0, reopened.stderr);
   assert.match(reopened.stdout, /shared helper started/);
-  assert.match(reopened.stdout, /static review server restarted/);
+  assert.doesNotMatch(reopened.stdout, /static review server/);
   assert.ok(await service.probeHealth("127.0.0.1", port));
-  const restartedServer = staticServers.list(state, sessionId)[0];
-  assert.notEqual(restartedServer.instance, firstServer.instance);
-  assert.equal(await staticServers.isExactServer(restartedServer), true);
+  assert.equal(staticServers.allRecords(state).length, 0, "no page server was started at any point");
 
   await capture(() => sessionCommand.run(["close", sessionId, "--state-dir", state, "--port", String(port)]));
 });

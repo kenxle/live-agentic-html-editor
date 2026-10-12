@@ -42,6 +42,7 @@ const { execFileSync } = require("node:child_process");
 
 const { test, expect, pollPage, pollUntil, placeCaret } = require("../helpers");
 const { stopTempHelpers } = require("../helpers/temp_helpers.js");
+const { freshReview } = require("./support/fresh_review.js");
 
 const REPO_ROOT = path.join(__dirname, "..", "..");
 const CLI = path.join(REPO_ROOT, "bin", "lahe.js");
@@ -130,6 +131,8 @@ test.describe("an edit's bold and italic, and a rebuild that dropped them", () =
       session: session,
       review: review,
       open: open,
+      port: port,
+      used: false,
       reviewDir: path.join(stateDir, "reviews", review)
     };
   });
@@ -149,6 +152,13 @@ test.describe("an edit's bold and italic, and a rebuild that dropped them", () =
     // The close leaves the helper up while the page is open. Stop it.
     await stopTempHelpers(world.stateDir);
   });
+
+  // Each test starts from an empty rail on a review of its own
+  // (support/fresh_review.js says why).
+  function startClean() {
+    if (world.used) freshReview(world);
+    world.used = true;
+  }
 
   /** The agent's whole API: one appended JSON line. */
   function reply(itemId, rev) {
@@ -284,6 +294,7 @@ test.describe("an edit's bold and italic, and a rebuild that dropped them", () =
   }
 
   test("the words without the italic: the card stays handled and the page shows the file", async ({ page }) => {
+    startClean();
     await page.goto(world.open);
     await booted(page);
 
@@ -331,6 +342,7 @@ test.describe("an edit's bold and italic, and a rebuild that dropped them", () =
     // The same gesture, and this time the agent's source says the emphasis, the
     // way a Markdown source says it with underscores. Nothing is written over
     // the page's own markup and nothing is reopened.
+    startClean();
     rebuild(P_BEFORE);
     await page.goto(world.open);
     await booted(page);

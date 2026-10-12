@@ -40,6 +40,7 @@
           "total": 5,
           "counts_as_of": "2026-09-28T15:40:00.000Z",
           "ended": false,
+          "retired": false,
           "served_url": null,
           "openable": "yes",
           "kind": "static",
@@ -63,7 +64,8 @@
               "source": "docs/brief.html"
             }
           ],
-          "folded_from": []
+          "folded_from": [],
+          "address": null
         },
         {
           "id": "r_spec",
@@ -80,7 +82,8 @@
           "total": 1,
           "counts_as_of": "2026-09-26T16:00:00.000Z",
           "ended": false,
-          "served_url": "http://127.0.0.1:54011/spec.html",
+          "retired": false,
+          "served_url": "http://projects.beta.specs.lahe.localhost:1483/spec.html",
           "openable": "yes",
           "kind": "static",
           "starred": false,
@@ -103,7 +106,8 @@
               "source": "specs/spec.html"
             }
           ],
-          "folded_from": []
+          "folded_from": [],
+          "address": "http://projects.beta.specs.lahe.localhost:1483/spec.html"
         },
         {
           "id": "r_notes",
@@ -120,6 +124,7 @@
           "total": 2,
           "counts_as_of": "2026-09-25T16:00:00.000Z",
           "ended": true,
+          "retired": false,
           "served_url": null,
           "openable": "yes",
           "kind": "static",
@@ -143,7 +148,8 @@
               "source": "docs/notes.md"
             }
           ],
-          "folded_from": []
+          "folded_from": [],
+          "address": null
         },
         {
           "id": "r_mounted",
@@ -160,6 +166,7 @@
           "total": 0,
           "counts_as_of": "2026-09-24T16:00:00.000Z",
           "ended": false,
+          "retired": false,
           "served_url": null,
           "openable": "yes",
           "kind": "static",
@@ -168,7 +175,8 @@
           "unreadable": false,
           "request": null,
           "pages": [],
-          "folded_from": []
+          "folded_from": [],
+          "address": null
         },
         {
           "id": "r_deleted",
@@ -185,6 +193,7 @@
           "total": 1,
           "counts_as_of": "2026-09-22T16:00:00.000Z",
           "ended": false,
+          "retired": false,
           "served_url": null,
           "openable": "missing",
           "kind": "static",
@@ -199,7 +208,8 @@
               "source": "docs/deleted.html"
             }
           ],
-          "folded_from": []
+          "folded_from": [],
+          "address": null
         }
       ]
     },
@@ -230,6 +240,7 @@
           "total": 1,
           "counts_as_of": "2026-09-27T16:00:00.000Z",
           "ended": false,
+          "retired": false,
           "served_url": null,
           "openable": "via-agent",
           "kind": "dev-server",
@@ -244,7 +255,8 @@
               "source": null
             }
           ],
-          "folded_from": []
+          "folded_from": [],
+          "address": null
         }
       ]
     },
@@ -273,6 +285,7 @@
           "total": 0,
           "counts_as_of": "2026-09-26T17:00:00.000Z",
           "ended": false,
+          "retired": false,
           "served_url": null,
           "openable": "yes",
           "kind": "static",
@@ -281,7 +294,8 @@
           "unreadable": true,
           "request": null,
           "pages": [],
-          "folded_from": []
+          "folded_from": [],
+          "address": null
         }
       ]
     },
@@ -310,15 +324,17 @@
           "total": 0,
           "counts_as_of": "2026-09-26T17:00:00.000Z",
           "ended": false,
+          "retired": false,
           "served_url": null,
           "openable": "via-agent",
           "kind": "static",
           "starred": false,
           "custom_name": null,
-          "unreadable": true,
+          "unreadable": false,
           "request": null,
           "pages": [],
-          "folded_from": []
+          "folded_from": [],
+          "address": null
         }
       ]
     },
@@ -354,6 +370,7 @@
           "total": 0,
           "counts_as_of": "2026-09-24T17:00:00.000Z",
           "ended": false,
+          "retired": false,
           "served_url": null,
           "openable": "yes",
           "kind": "static",
@@ -362,7 +379,8 @@
           "unreadable": false,
           "request": null,
           "pages": [],
-          "folded_from": []
+          "folded_from": [],
+          "address": null
         },
         {
           "id": "r_wt_vanished",
@@ -379,6 +397,7 @@
           "total": 0,
           "counts_as_of": "2026-09-23T18:00:00.000Z",
           "ended": false,
+          "retired": false,
           "served_url": null,
           "openable": "missing",
           "kind": "static",
@@ -387,7 +406,8 @@
           "unreadable": false,
           "request": null,
           "pages": [],
-          "folded_from": []
+          "folded_from": [],
+          "address": null
         },
         {
           "id": "r_wt_gone",
@@ -404,6 +424,7 @@
           "total": 1,
           "counts_as_of": "2026-09-23T17:00:00.000Z",
           "ended": false,
+          "retired": false,
           "served_url": null,
           "openable": "via-agent",
           "kind": "worktree",
@@ -427,7 +448,8 @@
               "source": "docs/brief.html"
             }
           ],
-          "folded_from": []
+          "folded_from": [],
+          "address": null
         },
         {
           "id": "r_old4",
@@ -444,6 +466,7 @@
           "total": 1,
           "counts_as_of": "2026-09-20T04:00:00.000Z",
           "ended": false,
+          "retired": false,
           "served_url": null,
           "openable": "yes",
           "kind": "static",
@@ -458,7 +481,8 @@
               "source": "old-pages/p4.html"
             }
           ],
-          "folded_from": []
+          "folded_from": [],
+          "address": null
         },
         {
           "id": "r_old2",
@@ -475,6 +499,7 @@
           "total": 6,
           "counts_as_of": "2026-09-19T04:00:00.000Z",
           "ended": false,
+          "retired": false,
           "served_url": null,
           "openable": "yes",
           "kind": "static",
@@ -492,7 +517,8 @@
           "folded_from": [
             "r_old1",
             "r_old3"
-          ]
+          ],
+          "address": null
         },
         {
           "id": "r_other",
@@ -509,6 +535,7 @@
           "total": 0,
           "counts_as_of": "2026-09-14T05:00:00.000Z",
           "ended": false,
+          "retired": false,
           "served_url": null,
           "openable": "yes",
           "kind": "static",
@@ -517,7 +544,8 @@
           "unreadable": false,
           "request": null,
           "pages": [],
-          "folded_from": []
+          "folded_from": [],
+          "address": null
         },
         {
           "id": "r_oldfolder",
@@ -534,6 +562,7 @@
           "total": 0,
           "counts_as_of": "2026-09-13T05:00:00.000Z",
           "ended": false,
+          "retired": false,
           "served_url": null,
           "openable": "yes",
           "kind": "static",
@@ -542,7 +571,8 @@
           "unreadable": false,
           "request": null,
           "pages": [],
-          "folded_from": []
+          "folded_from": [],
+          "address": null
         }
       ]
     },
@@ -577,6 +607,7 @@
           "total": 2,
           "counts_as_of": "2026-09-20T17:00:00.000Z",
           "ended": false,
+          "retired": false,
           "served_url": null,
           "openable": "yes",
           "kind": "static",
@@ -591,7 +622,8 @@
               "source": "~/loose/stale.html"
             }
           ],
-          "folded_from": []
+          "folded_from": [],
+          "address": null
         },
         {
           "id": "r_big",
@@ -608,6 +640,7 @@
           "total": 1,
           "counts_as_of": "2026-09-19T16:00:00.000Z",
           "ended": false,
+          "retired": false,
           "served_url": null,
           "openable": "yes",
           "kind": "static",
@@ -622,7 +655,8 @@
               "source": "~/loose/big.html"
             }
           ],
-          "folded_from": []
+          "folded_from": [],
+          "address": null
         },
         {
           "id": "r_shared",
@@ -639,6 +673,7 @@
           "total": 1,
           "counts_as_of": "2026-09-19T16:00:00.000Z",
           "ended": false,
+          "retired": false,
           "served_url": null,
           "openable": "yes",
           "kind": "static",
@@ -653,7 +688,8 @@
               "source": "~/loose/shared.html"
             }
           ],
-          "folded_from": []
+          "folded_from": [],
+          "address": null
         },
         {
           "id": "r_badreview",
@@ -670,6 +706,7 @@
           "total": 0,
           "counts_as_of": "2026-09-18T19:00:00.000Z",
           "ended": false,
+          "retired": false,
           "served_url": null,
           "openable": "yes",
           "kind": "static",
@@ -678,7 +715,8 @@
           "unreadable": true,
           "request": null,
           "pages": [],
-          "folded_from": []
+          "folded_from": [],
+          "address": null
         },
         {
           "id": "r_badmeta",
@@ -695,6 +733,7 @@
           "total": 0,
           "counts_as_of": "2026-09-18T18:00:00.000Z",
           "ended": false,
+          "retired": false,
           "served_url": null,
           "openable": "missing",
           "kind": "static",
@@ -703,7 +742,8 @@
           "unreadable": true,
           "request": null,
           "pages": [],
-          "folded_from": []
+          "folded_from": [],
+          "address": null
         },
         {
           "id": "r_notitle",
@@ -720,6 +760,7 @@
           "total": 0,
           "counts_as_of": "2026-09-18T17:00:00.000Z",
           "ended": false,
+          "retired": false,
           "served_url": null,
           "openable": "yes",
           "kind": "static",
@@ -728,7 +769,8 @@
           "unreadable": false,
           "request": null,
           "pages": [],
-          "folded_from": []
+          "folded_from": [],
+          "address": null
         },
         {
           "id": "r_s3page",
@@ -745,6 +787,7 @@
           "total": 0,
           "counts_as_of": "2026-09-15T05:00:00.000Z",
           "ended": false,
+          "retired": false,
           "served_url": null,
           "openable": "yes",
           "kind": "static",
@@ -753,7 +796,8 @@
           "unreadable": false,
           "request": null,
           "pages": [],
-          "folded_from": []
+          "folded_from": [],
+          "address": null
         }
       ]
     },
@@ -782,6 +826,7 @@
           "total": 1,
           "counts_as_of": "2026-09-09T16:00:00.000Z",
           "ended": false,
+          "retired": false,
           "served_url": null,
           "openable": "via-agent",
           "kind": "legacy",
@@ -796,7 +841,8 @@
               "source": null
             }
           ],
-          "folded_from": []
+          "folded_from": [],
+          "address": null
         }
       ]
     }

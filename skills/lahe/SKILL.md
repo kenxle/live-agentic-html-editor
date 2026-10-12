@@ -74,9 +74,35 @@ Then find your row in "Scenarios" and serve:
 lahe review <target>
 ```
 
-The command starts a local server and prints one `open` URL, the agent session
-id, the review folder, and the wake, monitor, drain, and close commands for this
-session.
+The command prints one `open` URL, the agent session id, the review folder, and
+the wake, monitor, drain, and close commands for this session. The URL is the
+document's stable address, served by the Lahe helper:
+`http://<name>.lahe.localhost:1483/<file>`, or with no `:1483` when the
+port-80 forward is set up (`lahe install`). The name is the document's folder
+and its two parent folders, joined by dots (`repo.docs.ongoing`). A file inside
+a folder that already has an address gets that folder's name and its path
+there. The same file always gets the same address, and the address keeps
+working after the session closes, for as long as the helper runs.
+
+**One review per file.** A file that already has a review keeps it.
+`lahe review` of that file opens the existing review and never makes a second
+one:
+
+- In your own session's review, it goes on as usual.
+- In another session's review, it prints the address and whose review it is,
+  and makes nothing. When that session's agent is listening, it tells you to
+  ask your human before doing anything else with the page: a handoff is theirs
+  to ask for. Otherwise it names `lahe session takeover <id>`, which you run
+  only when the human asks. Run without `--session`, it also says: if that session
+  is your own, rerun with `--session <id>`.
+- `--new` and `--new-session` are refused for a file that has a review. To
+  start over on one of your own reviews, retire it first:
+  `lahe review retire <review-id> --session <agent-session-id>`. A retired
+  review keeps its log, and answers on no page.
+
+A page shows every comment made on it. Comments on it that are filed in
+another review show on the rail read-only, with the agent that holds them; to
+work on those, ask your human to have that agent pick them up from the Library.
 
 **Read the `contract` field at the top of `review.json`** in the review folder
 once, when you start on a review. It is the rules for reading an item, changing
@@ -147,10 +173,11 @@ see, and the drain command is the truth the moment it lands.
 
 #### Claude Code
 
-Run the printed monitor command with the Bash tool in the background, with the
-largest timeout the host allows: `run_in_background: true` and `timeout:
-7200000`, or the value of `BASH_MAX_TIMEOUT_MS` when that is larger. A
-background command ends at its timeout, and every timeout is a relaunch.
+One Bash call, and nothing else:
+
+- command: `lahe monitor --session <id>`, exactly as printed
+- `run_in_background: true`
+- `timeout: 86400000`, or the value of `BASH_MAX_TIMEOUT_MS` when that is larger
 
 ```sh
 lahe monitor --session <id>
@@ -158,8 +185,23 @@ lahe monitor --session <id>
 
 It waits in a small local Node process, so it costs no model turns and no model
 tokens. It exits when work lands (code 0), the session closes (5), or another
-agent takes over (6). On 0, drain to empty and launch the same command again in
-the background, with the same timeout. On 5 and 6, stop.
+agent takes over (6). On 0, drain to empty and launch the same command again,
+the same way. On 5 and 6, stop.
+
+**It stays open until there is work.** In a terminal, desktop app or VS Code
+session, Claude Code puts no time limit on a background command (since 2.1.288),
+so one launch can wait all day. Do not relaunch it on a schedule, and do not add
+a timer, `/loop`, a scheduled wakeup, the Monitor tool, or a `tail` of your own.
+The timeout only matters in an unattended run (`-p`, the Agent SDK, CI, cloud),
+where the limit is real; there, relaunch when it is stopped.
+
+**Answer every item before you launch it.** A monitor that starts while any item
+is still unanswered prints that item and exits at once. Launch it with work still
+open and it dies, the Stop hook fires, you launch it again, and it dies again:
+each turn of that loop is a wasted model turn. So reply to everything the drain
+printed, run the drain until it prints nothing, and only then launch the monitor.
+When an item needs long work (a CI run, a build), finish it and reply before you
+launch, rather than launching while you wait.
 
 **A Stop hook reminds you when the watcher is down.** `npm run install-skills`
 installs `lahe hook stop` as a Claude Code Stop hook. When you try to end a turn
@@ -169,11 +211,11 @@ the background, and nothing else: no drain, no message to the reviewer. It
 blocks at most once per turn, so if the session really is not yours, or you are
 holding after three kills (below), say so in one line and end the turn.
 
-**A kill is not work.** Claude Code (since 2.1.193) stops idle background
-commands when it thinks memory is low, and a quiet monitor is exactly what it
-picks. Its memory reading is wrong on macOS, so this happens on machines with
-plenty of room (anthropics/claude-code#90109). The notification says the command
-was stopped, not that it exited with a code. When that happens:
+**A kill is not work.** The one thing that ends a quiet monitor in an
+interactive session is Claude Code's memory killer. Since 2.1.274 it stops an
+idle background command only when the OS reports critically low memory and the
+session has been idle for 30 minutes, so this is now rare. The notification
+says the command was stopped, not that it exited with a code. When that happens:
 
 - Do not drain, and do not write to the reviewer. Just launch the same monitor
   command again in the background.
@@ -453,7 +495,7 @@ legacy command; use `lahe review` for normal work.)
 | A page with images, CSS or fonts beside it | as its row above | as its row above | as its row above; read "Assets" first |
 | A page whose own stack hot-reloads it | as its row above | as its row above | nothing extra |
 
-**The rail follows the reviewer.** The server serves a whole folder: the one you
+**The rail follows the reviewer.** The address serves a whole folder: the one you
 named, or the folder the page you named lives in. Every HTML page in it carries
 the rail, so there is nothing to enroll page by page.
 
@@ -486,12 +528,12 @@ to type.
 - The folder must already exist. It refuses a name that is not `.md` or
   `.markdown`, a directory, any symlink, and a file with more than one hard
   link, and it never overwrites a file.
-- The page gets its own server that serves that one page and nothing else in its
-  folder, so notes in a home or Documents folder are safe to open.
-  `--session <id>` adds it to your session and still starts its own server.
-- To bring a notes page back after its server stopped, run either
+- The page gets its own address that serves that one page and nothing else in
+  its folder, so notes in a home or Documents folder are safe to open.
+  `--session <id>` adds it to your session and still gives it its own address.
+- To hand a notes page over again, run either
   `lahe write <file.md> --session <id>` or `lahe review <file.md> --session <id>`.
-  Both keep the one-page server, because the review is a notes review.
+  Both print the same notes address, because the review is a notes review.
 - The review carries `notes: true` in `review.json`. Each sitting arrives as one
   item with its words in `new_blocks`: place them in the file as written, at the
   top of the file for `start_of_container`. Organize the notes only when your
@@ -612,6 +654,17 @@ page to load with the helper down.
   line. A document with its own format (a spec template, a feature-forge doc)
   and anything the reviewer wrote keep the shape they have.
 
+- **Name another file as a link, not as text.** When a document you write for
+  the reader mentions another file they may want to open (a decision, a spec, a
+  progress page, a report), write it as a link with a path relative to the
+  document: `[the decision](00_decision.md)` in Markdown,
+  `<a href="00_decision.md">` in HTML. LAHE turns that into a page the reader can
+  open, rail included. A file name in backticks is a dead end: the reader is on
+  the rendered page and cannot open it. A file in another folder or worktree
+  gets the same kind of link, with the relative path written out in full. Code
+  names an agent reads in the source, such as a function or a `src/` path in a
+  builder brief, can stay as code.
+
 - **Draw diagrams top to bottom.** Write a Mermaid flowchart as
   `flowchart TD`, never `LR` or `RL`. A wide left-to-right chart shrinks to fit
   the page column, and its words come out too small to read. The one exception is
@@ -677,7 +730,10 @@ monitors, and reopens anything closed. Run the printed catch-up command first: i
 lists every unanswered `ready` item, including work the previous agent saw and
 never finished. Then arm your wake channel.
 
-Take over only when the human explicitly asks.
+Take over only when the human explicitly asks. A takeover of a session whose
+agent is listening right now is refused from the command line: that handoff is
+confirmed by your human from the Library page, and the request it makes is
+what you pass as `--request <request>`.
 
 ### The Library
 
@@ -727,7 +783,7 @@ it expires.
 
 | `kind` | What to do |
 | --- | --- |
-| `static` | `lahe session takeover <session>`, run its catch-up, then watch it (below) |
+| `static` | `lahe session takeover <session> --request <request>`, run its catch-up, then watch it (below) |
 | `legacy` | The review belongs to no session. Run `lahe library serve <request> --session <your-session-id>`: it reads the document's path itself, takes that review into your session with its old comments, and serves it. Then drain it and work any comment still waiting |
 | `worktree` | The worktree is gone. Run `lahe library serve <request> --session <your-session-id>`: it serves the main-repo `candidate`. If `candidate` is null, answer `refused` |
 | `dev-server` | Answer `refused`: "Start the dev server at <origin>, then ask me again.", with the entry's `origin` |
@@ -848,14 +904,15 @@ else: a PDF, a deploy, an email, an attachment.
 
 ```sh
 lahe add path/to/page.html --remove   # takes the script line back out
-lahe session close <agent-session-id> # stops the servers
+lahe session close <agent-session-id> # ends the session; its pages keep their addresses
 ```
 
 `--remove` takes out the script line and a `lahe-layer.js` beside the page that this
 tool put there. A served review put neither there. Closing the last open session
 also stops the shared helper, and any running monitor exits with code 5. The
-helper stays up if the Library page polled it in the last two minutes, or a
-review page is still open. For your
+helper stays up if it is always on (`lahe install`, or `lahe serve --always-on`),
+if the Library page polled it in the last two minutes, or if a review page is
+still open. For your
 own dev app, delete the script line you pasted into its layout.
 
 Delete the state directory only when your human asks. `Removing it` in
@@ -916,7 +973,9 @@ Each of these is a rule that a live review paid for.
     idle-looking process is not permission, and the session is what keeps its
     reviews together.
     When the human does ask, use `lahe session takeover <id>` even though another
-    agent created the session; never silently reuse the old session.
+    agent created the session; never silently reuse the old session. When
+    `lahe review` tells you a file's review belongs to another session, that is
+    not a request: ask your human.
 19. **Serve with `lahe review`, and nothing else.** `lahe wait` is removed. A
     `python3 -m http.server` serves no rail, and a hand-run Pandoc copy of one
     Markdown file drifts from its source. `lahe add` is for the cases in "Other
@@ -929,7 +988,7 @@ Each of these is a rule that a live review paid for.
 22. **Leave framing refused unless the page is meant to be embedded.** A reveal.js
     speaker-notes window embeds the same deck, and the framed copy fought the real
     window over the review.
-23. **End the review in order.** Stopping the servers before the routine leaves you
+23. **End the review in order.** Closing the session before the routine leaves you
     unable to read what you are meant to summarize.
 24. **Write the hand-edit list beside the document.** Nobody reads LAHE's state
     directory.

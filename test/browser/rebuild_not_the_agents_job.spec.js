@@ -203,6 +203,14 @@ test.describe("LAHE rebuilds the page, and a handled claim is checked", () => {
     const edit = await reviewerEdits(page, REVIEWER_WROTE);
     expect(edit, "the reviewer's retyped paragraph is a committed edit").toBeTruthy();
 
+    // The page has to know the source's time before the agent writes, or the
+    // first time it hears is already the new one and there is no change to
+    // reload on. A reviewer's page has always polled long before an agent
+    // replies; this test is quick enough to beat the first poll.
+    await pollPage(page, () => !!window.__lahe.handle.sync.status().targetMtime, undefined, {
+      message: "the first poll to establish the baseline mtime"
+    });
+
     // THE WHOLE POINT. The .md changes and nothing else happens: no review
     // command is rerun, no build, and nobody touches the browser.
     editTheMarkdownOnly(AGENT_WROTE);

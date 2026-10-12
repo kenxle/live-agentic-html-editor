@@ -91,7 +91,8 @@ test("the drain's handoff is the Library's message, with the drained state dir",
   });
   const lines = stdout.join("").split("\n").filter((l) => l.startsWith("{")).map((l) => JSON.parse(l));
   const entry = lines[lines.length - 1].catalog_requests[0];
-  assert.equal(entry.handoff, libraryHandoff("s_doc", null, stateDir.flagFor(dir)));
+  // The command names the request, which lets it through while s_doc's agent listens.
+  assert.equal(entry.handoff, protocol.AGENT_LIVENESS.handoffMessage("s_doc", null, false, { library: true, stateDir: stateDir.flagFor(dir), request: entry.request }));
   assert.ok(entry.handoff.includes(stateDir.flagFor(dir)), "the real folder is in the command");
 });
 

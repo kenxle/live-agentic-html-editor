@@ -23,6 +23,12 @@ const cli = require("../../src/cli/index.js");
 
 const C = protocol.CATALOG;
 
+/** The Library's own address, at the pages port the helper reports (service.json). */
+function libraryAddress(dir) {
+  const ready = JSON.parse(fs.readFileSync(stateDir.readyPath(dir), "utf8"));
+  return "http://library.lahe.localhost:" + ready.pages.printed_port + protocol.CATALOG_PAGE_PATH;
+}
+
 function tempDir() {
   return fs.mkdtempSync(path.join(os.tmpdir(), "lahe-library-command-"));
 }
@@ -58,7 +64,7 @@ test("lahe library rejects bad usage without starting anything", async () => {
   assert.equal(fs.existsSync(stateDir.catalogAttachPath(dir)), false);
 });
 
-test("lahe library starts the helper, attaches the session, and prints the helper's own /catalog URL", async (t) => {
+test("lahe library starts the helper, attaches the session, and prints the Library's own address", async (t) => {
   const dir = tempDir();
   const store = agentSessions.createStore({ dir });
   store.create({ id: "s_agent", name: "document index" });
@@ -78,8 +84,8 @@ test("lahe library starts the helper, attaches the session, and prints the helpe
   assert.deepEqual(Object.keys(printed).sort(), ["attached", "helper_started", "session", "session_created", "url"]);
   assert.equal(printed.session, "s_agent");
   assert.equal(printed.session_created, false);
-  assert.equal(printed.url, "http://127.0.0.1:" + port + protocol.CATALOG_PAGE_PATH);
-  assert.equal(new URL(printed.url).port, String(port));
+  assert.equal(printed.url, libraryAddress(dir));
+  assert.notEqual(new URL(printed.url).port, String(port), "the Library's address is on the pages port, not the API's");
   assert.equal(printed.helper_started, true);
   assert.equal(printed.attached.session, "s_agent");
   assert.equal(printed.attached.name, "document index");
@@ -89,7 +95,7 @@ test("lahe library starts the helper, attaches the session, and prints the helpe
   // The same --session again: nothing new is made, and the command says who it is.
   const second = await run(["--session", "s_agent", "--state-dir", dir, "--port", String(port)]);
   assert.equal(second.code, protocol.CLI_EXIT.OK, second.stderr);
-  assert.match(second.stdout, new RegExp("http://127\\.0\\.0\\.1:" + port + "/catalog"));
+  assert.ok(second.stdout.includes(libraryAddress(dir)));
   assert.match(second.stdout, /attached\s+document index \(s_agent\)/);
   assert.equal(JSON.parse(fs.readFileSync(stateDir.catalogAttachPath(dir), "utf8")).session, "s_agent");
   const json = JSON.parse((await run(["--session", "s_agent", "--state-dir", dir, "--port", String(port), "--json"])).stdout.trim());
@@ -135,7 +141,7 @@ test("lahe library with nobody attached mints a session with no reviews, attache
   assert.ok(fs.existsSync(stateDir.wakeLogPath(dir, id)), "the wake feed exists before its path is printed");
 
   assert.match(out.stdout, new RegExp("session\\s+" + id + "\\s+\\(started for this agent\\)"));
-  assert.match(out.stdout, new RegExp("Library\\s+http://127\\.0\\.0\\.1:" + port + "/catalog"));
+  assert.ok(out.stdout.includes("Library   " + libraryAddress(dir)));
   assert.match(out.stdout, /attached\s+library bot \(/);
   assert.ok(out.stdout.includes(agentSessions.commandBlock({ dir, session: id })), "the same block lahe review prints");
   assert.ok(out.stdout.includes(protocol.monitorCommand(id, stateDir.flagFor(dir))));

@@ -11,6 +11,14 @@ against an archived draft with different decision numbering); where code
 and the architecture doc disagree, the doc wins and the code is what
 changes.
 
+## Priorities for decisions about the project
+
+When a decision is about how the project runs rather than what a feature does (process, testing, review, CI, tooling), weigh it in this order:
+
+1. **Velocity.** Get working changes onto main quickly. The main user is Ken, so a change can merge once lint, the bundle check and the unit suite pass. The slow checks (the full browser suite, all three browsers, idle measurements, walkthroughs) can run after the merge, and a problem they find gets a follow-up fix.
+2. **Dogfooding.** Ken using the tool on his real work is the most valuable test there is. Prefer whatever gets a change in front of him sooner.
+3. **Security.** It still matters, and a real hole still blocks. But a review finding that slows his everyday use (for example, refusing links he clicks all the time) is a trade-off for him to decide, not a default.
+
 ## Zero runtime dependencies (hard rule)
 
 The tool must run from a `git clone` with no install step: no npm install,
@@ -230,10 +238,19 @@ GitHub emails the pusher for every failed or cancelled workflow run, and on
 
 - A stress or bisect workflow never fails the run. Put `continue-on-error: true`
   on the step, write the verdict to the log or an artifact, and read it there.
-- GitHub is not the first place the full suite runs. Before opening a pull
-  request, and before any push to an open one, run `npm run gate` locally on
-  that exact commit and read "0 failed". A builder's narrow spec run is not
-  enough: on 2026-10-01 a PR failed on a spec its builder never ran.
+- **The browser suite runs here, not on GitHub.** CI runs only lint, the bundle
+  check and the unit tests, with no install step: that proves a fresh clone
+  works on a clean Linux machine, which is all only GitHub can prove. Waiting
+  14 minutes on GitHub for the same suite we run locally cost Ken most of a day
+  on 2026-10-11. So:
+  - Before opening a pull request, and before any push to an open one, run
+    `npm run gate` locally on that exact commit and read "0 failed". Put the
+    counts in the PR body ("npm run gate: N passed, 0 failed"). A builder's
+    narrow spec run is not enough: on 2026-10-01 a PR failed on a spec its
+    builder never ran.
+  - After a merge, pull main and run `npm run gate` locally again. Two PRs can
+    each pass and still break together. A failure there is fixed on main
+    before anything else lands.
 - Batch pushes to an open pull request. Each push starts a run, and a red run
   is an email. Progress-page and doc commits wait for the next real push. The
   style switcher PR alone failed six times in a day this way.

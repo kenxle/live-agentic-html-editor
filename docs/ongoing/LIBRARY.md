@@ -7,6 +7,7 @@ Read this before touching `src/service/catalog_*.js`, `src/layer/catalog/`, or `
 - The Library is one page on the helper, `/catalog`, that lists every review on this machine, grouped by agent session.
 - From a row the reviewer can Open a document, star it, rename it, or hand it to an agent (Pick this up, Launch a new agent).
 - The page talks only to the helper, with its own Library token. It never posts to a review and never names a file to serve.
+- The Library has a stable address: `library.lahe.localhost`, at the port addresses print with (the pages port, or none once the port-80 forward is proved). `127.0.0.1:<port>/catalog` and `localhost` still reach it. `lahe library` prints the stable one.
 - The page reaches an agent only through a request queue. The agent sees requests in its normal drain and answers with `lahe library answer`.
 - Everything the list shows is read from files on disk. Nothing the reviewer types on the Library (a rename, a star) is ever put in front of an agent.
 - In the code, and in its routes and URL, the Library is `catalog`. "Library" in older code means the review layer script.
@@ -14,15 +15,19 @@ Read this before touching `src/service/catalog_*.js`, `src/layer/catalog/`, or `
 ## Where it lives
 
 - The page: `src/service/catalog_page.js` renders the HTML, its one inline style and its content policy. The browser code is `src/layer/catalog/view_model.js` (every rule, no DOM) and `src/layer/catalog/page.js` (drawing and clicks only). Both are served from `src/` through the `catalog.asset` route, never from `dist/`.
-- The service: `catalog_reader.js` builds the list, `catalog_actions.js` handles each POST, `catalog_requests.js` is the queue, and `catalog_store.js` is the only code that touches `catalog.json`.
+- The service: `catalog_reader.js` builds the list, `catalog_actions.js` handles each POST, `catalog_sites.js` is the Library's side of the site registry (a row's site and address, and how Open binds), `catalog_requests.js` is the queue, and `catalog_store.js` is the only code that touches `catalog.json`.
+- Copy: the Copy button calls `src/layer/copy_text.js`, the one copy function. It uses the clipboard API when the page has one, and otherwise a hidden field and the browser's copy command, so it works on a page the browser does not call secure.
 - The routes are `catalog.page`, `catalog.asset`, `catalog.list`, `catalog.open`, `catalog.star`, `catalog.rename` and `catalog.request` in `src/shared/protocol.js`. Their handlers are in `src/service/routes.js`.
 - The CLI: `lahe library` (attach), `lahe library serve` and `lahe library answer`, in `src/cli/commands/library.js`. Flags are in `docs/CLI.md`.
 
 ## Auth
 
 - The Library token is minted in memory at each helper start and written into the served page's meta tag. A helper restart makes the page's token stale, and the page says to reload.
-- It is its own auth class, `CATALOG_TOKEN`. It can list, open (restart a server the review already had), star, rename and queue a request. It cannot post to a review or read comment text.
+- It is its own auth class, `CATALOG_TOKEN`. It can list, open (name a site for a folder something already served), star, rename and queue a request. It cannot post to a review or read comment text.
+- The Host is `127.0.0.1` or `localhost` at the helper's port, or `library.lahe.localhost` at the pages port or with no port (the forward). A document's Host and `library.lahe` never reach it.
 - Each route's checks are one table, `CATALOG_ROUTES` in `protocol.js`: `Sec-Fetch-Site: same-origin`, the token, a JSON body for POSTs, and an exact `Origin`. `src/service/auth.js` applies them.
+- **Any top-level navigation opens the page,** from any site: a link in a document or an email, a bookmark, a typed address. That is `Sec-Fetch-Mode: navigate` with `Sec-Fetch-Dest: document`, whatever `Sec-Fetch-Site` says, or a request with no `Sec-Fetch-*` header at all. A fetch or a frame asking for the page is refused, and so is every API route that is not `same-origin`. The assets take no exception.
+- **The page embeds its token in its HTML,** which is safe because only a navigation can load it and a cross-site navigation cannot read what it loads. The page cannot be framed (`X-Frame-Options: DENY`, `frame-ancestors 'none'`), its `Cross-Origin-Opener-Policy: same-origin` cuts off any page that opened it, and no script on it reads its URL. Each API route also needs the token, the `catalog` client header, and for a POST JSON and the exact `Origin`.
 - The content policy is `default-src 'none'`, with self-only scripts, connections, fonts and styles, `img-src 'self' data:`, and the inline style by hash. `test/unit/catalog_page_csp.test.js` pins the whole header.
 - The route table, response shapes and error codes are in `docs/CONTRACTS.md`.
 
@@ -34,6 +39,7 @@ Read this before touching `src/service/catalog_*.js`, `src/layer/catalog/`, or `
 - **Folds.**
   - Old per-page reviews in one folder fold into one row (`fold_kind: "folder"`).
   - Several reviews of one document in one session fold into one row (`fold_kind: "document"`). Star and rename act on the whole fold.
+- **Kinds.** `static` with `openable: yes` is a document Open can bind. `worktree`, `dev-server` and `legacy` are as above. A row with a named site carries `address`, and `served_url` is the same address (the "being served now" badge). Listing never names a site.
 - **Names.**
   - A row is named after its own page (the review's target), else the page with the most comments.
   - With no title recorded, the name comes from the file itself: its `<title>`, else a Markdown file's first heading.
@@ -47,7 +53,7 @@ Read this before touching `src/service/catalog_*.js`, `src/layer/catalog/`, or `
 
 ## Stars and renames
 
-- Both live in `<state>/catalog.json`, written only by the helper through `catalog_store.js`. The file holds `stars`, `names` (per review), `session_names` and the `reopened` map.
+- Both live in `<state>/catalog.json`, written only by the helper through `catalog_store.js`. The file holds `stars`, `names` (per review) and `session_names`. An old file may carry a `reopened` map from before Open stopped reopening sessions; it is ignored and gone from the next write.
 - A corrupt `catalog.json` is never overwritten. Writes are refused with `PROTO_CATALOG_UNREADABLE`, and the list shows no stars with a notice.
 - Renames are cut to 80 characters with control and invisible characters removed, by the session-name rule. The list carries them as `custom_name` beside the unchanged `display_name` or session `name`.
 - On the page the name is the rename control. Enter or clicking outside saves. Escape cancels. An empty or unchanged value changes nothing, and typing the original back clears the rename.
@@ -57,9 +63,15 @@ Read this before touching `src/service/catalog_*.js`, `src/layer/catalog/`, or `
 
 The flows are "Key Flows" in the architecture doc; the hand-over picture is the second diagram in `docs/diagrams/session_ownership.md`.
 
-- **Open** restarts the review's recorded static server if it stopped, and opens the page in a new tab. It never serves a path the helper did not serve before.
+- **Open** names the document's site and opens its stable address in a new tab. It restarts nothing and reopens no session. A review in a closed session opens as it is, and the session stays closed.
+  - One review per file, as `lahe review` has it. A file's review is the one `page_routes.holderOfFile` names (a review that recorded the file, else a folder review or a linking review that holds a committed comment on it; newest within a tier; a retired review never). Open goes to the address where that review answers and never makes a review or a second address for a file that has one.
+  - If the row's review is the file's review, or the file has none, Open stamps it as re-served so it answers on its page. If another review holds the file, in any session, open or closed, Open goes to the address where that review answers, stamps nothing, and the row says which review holds the file (`held_by`). The holder's own site is used when it has one that holds the file.
+  - A retired review answers on no page. Open still opens the file's address, never stamps it, and says it is retired (`retired: true`, and a "review retired" badge on the row). The file's live review, if it has one, is the holder as above.
+  - Same file, same address: a file reviewed on its own is bound the way `lahe review` binds it, into the deepest registered folder site that already holds it, at its path there (`sites.deepestFolderSite`). A folder review names its own folder.
+  - It never serves a path the helper did not serve before. A review's recorded paths are page text, so Open names a site only for a root that something a page cannot write has already served: a site in the registry, an old page server's record, or, for Markdown, the rendered copy the CLI wrote into the state folder (`catalog_sites.js`, `vouched`).
   - With an attached agent it also queues a pick-up.
-  - A row with nothing Open can restart (legacy, worktree, dev server) is `via-agent`: Open queues a pick-up and the agent re-serves it.
+  - A row nothing vouches for (legacy, dev server, a file Lahe cannot serve) is `via-agent`: Open queues a pick-up and the agent re-serves it.
+  - A worktree row whose site recorded its main checkout opens the read-only copy (`worktree`, `openable: yes`). One the registry never saw is `worktree` and `via-agent`.
 - **Pick this up** and **Launch a new agent** queue a request for the agent attached with `lahe library`. Requests carry ids only.
 - **The confirm step.** When another agent is listening on, or working in, the document's session, the page asks first, naming that agent and the reviews that would move. The helper refuses an unconfirmed hand-over with `PROTO_CONFIRM_NEEDED`.
 
@@ -104,8 +116,7 @@ The pictures are "When the helper stops" in `docs/diagrams/session_ownership.md`
 - The last `lahe session close` does not stop the helper while the Library page has polled in the last 2 minutes (`catalog_seen_at` in health), or while a review page is open.
 - That close writes `stop-when-quiet.json`. The helper then stops itself once it has gone 2 minutes with no open session, no open review window and no Library poll. An open session never lets it stop and removes the file. The code is `src/service/self_stop.js`.
 - A new helper removes any old `stop-when-quiet.json` when it starts. After a sleep, the 2 minutes start again from the wake, so an open page gets its first heartbeat in.
-- A helper or page server whose state dir is removed stops within 30 seconds (two 15-second checks in a row), even with a session open. A restored or synced copy of the dir that still names that process keeps it running. The check reads the dir's random token in `state-id`, not the inode, which Linux can reuse.
-- Sessions an Open reopened are closed again by a 15-second sweep once they are quiet for 30 minutes.
+- A helper whose state dir is removed stops within 30 seconds (two 15-second checks in a row), even with a session open. A restored or synced copy of the dir that still names that process keeps it running. The check reads the dir's random token in `state-id`, not the inode, which Linux can reuse.
 - A session that bare `lahe library` created closes itself once it owns no reviews and its agent has been quiet for 30 minutes (no live monitor, no lahe command).
 
 ## Where else to read

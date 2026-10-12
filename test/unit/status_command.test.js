@@ -22,7 +22,7 @@ const status = require("../../src/cli/commands/status.js");
 const reviewFormat = require("../../src/shared/review_format.js");
 const reviewsModule = require("../../src/service/reviews.js");
 const agentSessionsModule = require("../../src/service/agent_sessions.js");
-const staticServersModule = require("../../src/service/static_servers.js");
+const sitesModule = require("../../src/service/sites.js");
 
 function tempState() {
   return fs.mkdtempSync(path.join(os.tmpdir(), "lahe-status-"));
@@ -660,127 +660,165 @@ test("servedViaLine says nothing for a review with no static-page target at all"
   assert.equal(status.servedViaLine(null), null);
 });
 
-test("servedViaLine names the two mechanisms in words a reviewer reads", () => {
-  assert.match(status.servedViaLine("injected"), /static server injects/);
-  assert.match(status.servedViaLine("on_disk"), /on-disk script line only/);
+test("servedViaLine names the address, and the on-disk and unserved cases, in words a reviewer reads", () => {
+  const site = status.servedViaLine({ via: "site", address: "http://a.b.lahe.localhost:1483/page.html" });
+  assert.match(site, /address\s+http:\/\/a\.b\.lahe\.localhost:1483\/page\.html/);
+  assert.match(site, /the helper serves this page/);
+  assert.match(status.servedViaLine({ via: "on_disk", address: null }), /on-disk script line only/);
+  assert.match(status.servedViaLine({ via: "unserved", address: null }), /no address serves that folder/);
+  assert.match(status.servedViaLine({ via: "unserved", address: null }), /lahe review/);
 });
 
-test("servedVia is null for a review with no recorded target (a dev-server review)", async () => {
+/** A state folder whose registry names `root` as a folder site, as the helper would. */
+function siteFor(dir, root, entry) {
+  const reg = sitesModule.createSites({ dir, home: path.dirname(path.dirname(root)) });
+  reg.load();
+  return reg.bind({ root: fs.realpathSync(root), mode: "folder", entry });
+}
+
+test("servedVia is null for a review with no recorded target (a dev-server review)", () => {
   const dir = tempState();
-  assert.equal(await status.servedVia(dir, "s1", []), null);
-  assert.equal(await status.servedVia(dir, "s1", ["/some/project/dir"]), null, "a directory target is a dev server, not a static page");
+  const pages = status.sitePages(dir, null);
+  assert.equal(status.servedVia(dir, { targets: [], source: null, notes: false, session: "s1" }, pages), null);
+  assert.equal(status.servedVia(dir, { targets: ["/some/project/dir"], source: null, notes: false, session: "s1" }, pages), null);
 });
 
-test("servedVia is on_disk when the target is a static page but nothing is serving it", async () => {
+test("servedVia is on_disk for a static page no site serves, and site with its address once one does", () => {
   const dir = tempState();
-  const work = fs.mkdtempSync(path.join(os.tmpdir(), "lahe-status-served-"));
+  const work = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "lahe-status-served-")));
   const page = path.join(work, "page.html");
   fs.writeFileSync(page, "<html></html>");
-  assert.equal(await status.servedVia(dir, "s1", [page]), "on_disk");
+  const review = { targets: [page], source: null, notes: false, session: "s_served" };
+  assert.deepEqual(status.servedVia(dir, review, status.sitePages(dir, null)), { via: "on_disk", address: null });
+  const bound = siteFor(dir, work, "page.html");
+  const ready = { pages: { port: 61483 } };
+  assert.deepEqual(status.servedVia(dir, review, status.sitePages(dir, ready)), {
+    via: "site",
+    address: "http://" + bound.name + ".lahe.localhost:61483/page.html"
+  });
+  // A site is not leased to a session: another session's review of the page reads the same.
+  assert.equal(status.servedVia(dir, Object.assign({}, review, { session: "s_other" }), status.sitePages(dir, ready)).via, "site");
 });
 
-test("servedVia is injected only while this session's static server is actually answering, rooted at the page's own folder", async (t) => {
+test("a folder review reads unserved with no site, and site once its folder has one", () => {
   const dir = tempState();
-  const work = fs.mkdtempSync(path.join(os.tmpdir(), "lahe-status-served-"));
+  const folder = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "lahe-status-folder-")));
+  fs.writeFileSync(path.join(folder, "index.html"), "<html></html>");
+  const review = { targets: [folder], source: null, notes: false, session: "s_folder" };
+  assert.equal(status.servedVia(dir, review, status.sitePages(dir, null)).via, "unserved");
+  siteFor(dir, folder, "index.html");
+  const served = status.servedVia(dir, review, status.sitePages(dir, null));
+  assert.equal(served.via, "site");
+  assert.match(served.address, /\/index\.html$/);
+});
+
+test("the printed status names a review's address, and the on-disk line when it has none", async () => {
+  const dir = tempState();
+  const work = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "lahe-status-served-")));
   const page = path.join(work, "page.html");
   fs.writeFileSync(page, "<html></html>");
-
-  assert.equal(await status.servedVia(dir, "s_served", [page]), "on_disk", "no server yet: on the on-disk line alone");
-
-  const server = await staticServersModule.start({ dir, sessionId: "s_served", root: work });
-  t.after(async () => { await staticServersModule.stopAll(dir, "s_served"); });
-  assert.equal(await status.servedVia(dir, "s_served", [page]), "injected");
-
-  // A server leased to a DIFFERENT session cannot carry this one's page: a
-  // static server is a per-session lease (src/service/static_servers.js).
-  assert.equal(await status.servedVia(dir, "s_other_session", [page]), "on_disk");
-
-  await staticServersModule.stopOne(dir, "s_served", server.meta);
-  assert.equal(await status.servedVia(dir, "s_served", [page]), "on_disk", "a stopped server is back on the on-disk line");
-});
-
-test("a folder review reads injected while its server is up, and unserved once it is down", async (t) => {
-  // `lahe review <folder>` records the FOLDER as the review's target, and its
-  // server is rooted there. Every page in it carries the rail through the
-  // response and none of them has a line on disk, so "on_disk" would be a lie.
-  // "unserved" is the truth when the server is gone: those pages have no rail
-  // at all, and nothing on disk to fall back on.
-  const dir = tempState();
-  const site = fs.mkdtempSync(path.join(os.tmpdir(), "lahe-status-folder-"));
-  fs.writeFileSync(path.join(site, "index.html"), "<html></html>");
-
-  assert.equal(await status.servedVia(dir, "s_folder", [site]), "unserved", "no server yet: no rail anywhere");
-
-  const server = await staticServersModule.start({ dir, sessionId: "s_folder", root: site });
-  t.after(async () => { await staticServersModule.stopAll(dir, "s_folder"); });
-  assert.equal(await status.servedVia(dir, "s_folder", [site]), "injected");
-  assert.equal(
-    await status.servedVia(dir, "s_other_session", [site]),
-    "unserved",
-    "a static server is a per-session lease, so another session's folder is not ours"
-  );
-
-  await staticServersModule.stopOne(dir, "s_folder", server.meta);
-  assert.equal(await status.servedVia(dir, "s_folder", [site]), "unserved");
-});
-
-test("servedViaLine tells a reviewer with a dead folder server what they are looking at", () => {
-  assert.match(status.servedViaLine("unserved"), /no static server/);
-  assert.match(status.servedViaLine("unserved"), /reopen/);
-});
-
-test("the printed status names the mechanism for a static review with a live server", async (t) => {
-  const dir = tempState();
-  const work = fs.mkdtempSync(path.join(os.tmpdir(), "lahe-status-served-"));
-  const page = path.join(work, "page.html");
-  fs.writeFileSync(page, "<html></html>");
-
   const log = logModule.createEventLog({ dir });
   const reviews = reviewsModule.createReviews({ dir, log });
   reviews.create({ id: "r_served", origins: ["null"], target_path: page, agent_session_id: "s_served" });
-
-  const server = await staticServersModule.start({ dir, sessionId: "s_served", root: work });
-  t.after(async () => { await staticServersModule.stopAll(dir, "s_served"); });
-
+  const before = await runStatus([], dir);
+  assert.match(before.stdout, /the on-disk script line only/);
+  const bound = siteFor(dir, work, "page.html");
   const run = await runStatus([], dir);
   assert.equal(run.code, protocol.CLI_EXIT.OK, run.stderr);
-  assert.match(run.stdout, /the static server injects the script line into every response/);
-
-  await staticServersModule.stopOne(dir, "s_served", server.meta);
-  const stopped = await runStatus([], dir);
-  assert.match(stopped.stdout, /the on-disk script line only/);
+  assert.match(run.stdout, new RegExp("address\\s+http://" + bound.name.replace(/\./g, "\\.") + "\\.lahe\\.localhost:\\d+/page\\.html"));
+  assert.match(run.stdout, /the helper serves this page/);
 });
 
-test("the printed status says when a review is limited to the page it was given", async (t) => {
-  // The default is the other way round: our server serves the page's whole
-  // folder and the rail follows the reviewer onto any page in it. An agent that
-  // assumes that of an isolated review would be wrong about where a comment can
-  // come from, so the narrowing is said out loud and the wide case stays quiet.
+test("the printed status says when a review is limited to the page it was given", async () => {
+  // The default is the other way round: the rail follows the reviewer onto any
+  // page in the folder. An agent that assumes that of an isolated review would
+  // be wrong about where a comment can come from, so the narrowing is said out
+  // loud and the wide case stays quiet.
   const dir = tempState();
   const work = fs.mkdtempSync(path.join(os.tmpdir(), "lahe-status-only-"));
   const page = path.join(work, "statement.html");
   fs.writeFileSync(page, "<html></html>");
-
   const log = logModule.createEventLog({ dir });
   const reviews = reviewsModule.createReviews({ dir, log });
-  reviews.create({
-    id: "r_only",
-    origins: ["null"],
-    target_path: page,
-    agent_session_id: "s_only",
-    only_recorded_pages: true
-  });
+  reviews.create({ id: "r_only", origins: ["null"], target_path: page, agent_session_id: "s_only", only_recorded_pages: true });
   reviews.create({ id: "r_wide", origins: ["null"], target_path: page, agent_session_id: "s_only" });
-
-  await staticServersModule.start({ dir, sessionId: "s_only", root: work });
-  t.after(async () => { await staticServersModule.stopAll(dir, "s_only"); });
-
   const run = await runStatus(["--review", "r_only"], dir);
   assert.equal(run.code, protocol.CLI_EXIT.OK, run.stderr);
   assert.match(run.stdout, /scope: only this page/);
-
   const wide = await runStatus(["--review", "r_wide"], dir);
   assert.equal(wide.stdout.indexOf("scope: only this page"), -1, "and says nothing for the ordinary case");
+});
+
+// ---------------------------------------------------------------------------
+// V37: the pages port, the ending and why, the port-free state; a taken port
+// ---------------------------------------------------------------------------
+
+test("V37: with a helper running, status prints the pages port, the ending and why, and why the port is printed", async () => {
+  const ready = {
+    pages: {
+      mode: "sites", port: 61999, printed_ending: "lahe.localhost",
+      printed_ending_reason: protocol.PAGES.PRINTED_ENDING_REASON,
+      port_free: { on: false, verified: false, reason: protocol.PAGES.PORT_FREE_OFF_REASON }
+    }
+  };
+  const text = (await status.pagesLines(ready, true)).join("\n");
+  assert.match(text, /pages\s+port 61999; addresses end in \.lahe\.localhost because every browser treats/);
+  assert.match(text, /addresses print with :61999 \(port-80 forward: the port-80 forward is not set up\)/);
+});
+
+test("V37: status prints each option's on, checked and reason line from service.json", async () => {
+  const ready = {
+    pages: {
+      mode: "sites", port: 1483, printed_ending: "lahe.localhost",
+      port_free: { on: true, verified: false, reason: "port 80 is held by httpd (pid 412)" },
+      lahe_names: { on: true, verified: true, reason: "checked" }
+    }
+  };
+  const text = (await status.pagesLines(ready, true)).join("\n");
+  assert.match(text, /addresses print with :1483 \(port-80 forward: port 80 is held by httpd \(pid 412\)\)/);
+  assert.match(text, /port-80 forward: on, not checked \(port 80 is held by httpd \(pid 412\)\)/);
+  assert.match(text, /\.lahe names: on, checked/);
+  const forwarded = (await status.pagesLines({ pages: Object.assign({}, ready.pages, { port_free: { on: true, verified: true, reason: "checked" } }) }, true)).join("\n");
+  assert.match(forwarded, /addresses print without the port/);
+});
+
+test("V37: with no helper running and the pages port taken, status names the port", async (t) => {
+  const net = require("node:net");
+  const holder = net.createServer();
+  await new Promise((r) => holder.listen(0, "127.0.0.1", r));
+  t.after(() => new Promise((r) => holder.close(() => r())));
+  const port = holder.address().port;
+  const prior = process.env.LAHE_PAGES_PORT;
+  process.env.LAHE_PAGES_PORT = String(port);
+  t.after(() => { if (prior === undefined) delete process.env.LAHE_PAGES_PORT; else process.env.LAHE_PAGES_PORT = prior; });
+  const text = (await status.pagesLines(null, false)).join("\n");
+  assert.match(text, new RegExp("port " + port + " is taken by another program"));
+});
+
+test("the install lines say what runs the helper, and when to reinstall", () => {
+  const dir = tempState();
+  assert.match(status.installLines(dir, { always_on: true, install: { system: "macos", label: "ai.lahe.helper" } }, true).join("\n"),
+    /login item ai\.lahe\.helper \(macos\) runs the helper/);
+  assert.match(status.installLines(dir, { always_on: false }, true).join("\n"), /install\s+none/);
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(path.join(dir, "install.json"), JSON.stringify({ system: "macos", label: "ai.lahe.helper", node: path.join(dir, "no-such-node") }));
+  assert.match(status.installLines(dir, null, false).join("\n"), /no-such-node is gone; run `lahe install` again/);
+});
+
+test("the drain's Library reader names the project folder for a review a site serves", () => {
+  const dir = tempState();
+  const repo = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "lahe-status-launch-")));
+  fs.mkdirSync(path.join(repo, ".git"));
+  const doc = path.join(repo, "docs", "brief.html");
+  fs.mkdirSync(path.dirname(doc), { recursive: true });
+  fs.writeFileSync(doc, "<p>brief</p>");
+  agentSessionsModule.createStore({ dir }).create({ id: "s_doc" });
+  reviewsModule.createReviews({ dir, log: logModule.createEventLog({ dir }) })
+    .create({ id: "r_doc", agent_session_id: "s_doc", target_path: doc });
+  siteFor(dir, path.dirname(doc), "brief.html");
+  const describe = status.readerDescriber(dir, Date.now());
+  const entry = describe({ review: "r_doc", session: "s_doc" });
+  assert.equal(entry.folder, repo);
 });
 
 // ---------------------------------------------------------------------------

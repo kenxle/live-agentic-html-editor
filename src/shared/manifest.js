@@ -244,9 +244,13 @@ var NON_BUNDLE_FILES = [
   { path: "src/service/agent_sessions.js", owner: "1A", why: "durable top-level agent-session routing and lifecycle, plus the monitor heartbeat and liveness rule" },
   { path: "src/service/wake_feed.js", owner: "1A", why: "the per-session append-only wake feed a host tails" },
   { path: "src/service/watchers.js", owner: "1A", why: "asks the machine whether anything holds a session's wake feed open" },
-  { path: "src/service/static_servers.js", owner: "1A", why: "session-owned static HTTP server lifecycle" },
-  { path: "src/service/idle_servers.js", owner: "1A", why: "stop a session's page servers when no window is open" },
+  { path: "src/service/static_servers.js", owner: "1A", why: "read the records of the retired page servers: old origins, the Library, and stopping leftovers on start" },
+  { path: "src/service/sites.js", owner: "stable-addresses", why: "the name registry: one name per served folder or notes page, single writer, rebuilt from its log" },
+  { path: "src/service/page_routes.js", owner: "stable-addresses", why: "serve a site's pages from the helper: path safety, the page rule, injection, Markdown, mounts, unknown and gone pages" },
   { path: "src/service/self_stop.js", owner: "1A", why: "the helper stops itself after a deferred last close once nothing needs it, or when its state dir is gone" },
+  { path: "src/service/addresses.js", owner: "stable-addresses lahe-names", why: "proves the port 80 forward and .lahe before either is used: the printed port and whether .lahe Hosts answer" },
+  { path: "src/service/name_server.js", owner: "stable-addresses lahe-names", why: "the .lahe name server: loopback answers for names under .lahe, REFUSED for the rest, malformed packets dropped" },
+  { path: "src/service/login_item.js", owner: "stable-addresses install", why: "the login item per system (launchd, systemd --user, Task Scheduler) and install.json" },
   { path: "src/service/markdown.js", owner: "1A", why: "deterministic Markdown review artifacts" },
   { path: "src/service/styles.js", owner: "Style switcher 1.1", why: "installed document styles: the store, the checks, and serving their files" },
   { path: "src/service/tab_icon.js", owner: "1A", why: "the fallback tab icon, and the rule that a page declaring its own keeps it. The Markdown renderer and the static server both need it, so it is spelled once" },
@@ -277,7 +281,7 @@ var NON_BUNDLE_FILES = [
   {
     path: "src/service/catalog_store.js",
     owner: "Library 1.1",
-    why: "the only reader and writer of catalog.json (stars, row and session names, and the reopened map). Never overwrites a corrupt file"
+    why: "the only reader and writer of catalog.json (stars, row and session names). Never overwrites a corrupt file"
   },
   {
     path: "src/service/catalog_requests.js",
@@ -287,7 +291,12 @@ var NON_BUNDLE_FILES = [
   {
     path: "src/service/catalog_actions.js",
     owner: "Library 2.1",
-    why: "what list, open, star and request do after the checks, and the reopened-session sweep: joins the reader, store, queue and static-server restart"
+    why: "what list, open, star and request do after the checks, and the sweep of the Library's own idle sessions: joins the reader, store, queue and site tools"
+  },
+  {
+    path: "src/service/catalog_sites.js",
+    owner: "stable addresses 4.1",
+    why: "the Library's side of the site registry: which site a review's document is served from, its address, and how Open names the site and stamps the review"
   },
   {
     path: "src/service/catalog_page.js",
@@ -297,6 +306,7 @@ var NON_BUNDLE_FILES = [
 
   { path: "src/cli/index.js", owner: "1A", why: "the command dispatcher: serve, add, status, reply" },
   { path: "src/cli/commands/serve.js", owner: "1A", why: "serve" },
+  { path: "src/cli/commands/install.js", owner: "stable-addresses install", why: "lahe install and lahe uninstall: the login item and install.json" },
   { path: "src/cli/commands/review.js", owner: "1A", why: "session-owning public review entrypoint" },
   { path: "src/cli/commands/session.js", owner: "1A", why: "agent-session close, reopen, and helper lifetime" },
   { path: "src/cli/commands/add.js", owner: "3B", why: "add" },
@@ -304,7 +314,7 @@ var NON_BUNDLE_FILES = [
   {
     path: "src/cli/commands/write.js",
     owner: "free-writing 2C",
-    why: "lahe write: start a blank notes page on its own one-page server"
+    why: "lahe write: start a blank notes page at its own address"
   },
   { path: "src/cli/commands/reply.js", owner: "3A", why: "reply: the one agent-facing write path, so no shell hand-encodes JSON" },
   { path: "src/cli/commands/monitor.js", owner: "3A", why: "exit-on-work local monitor over session-scoped status" },
@@ -329,6 +339,11 @@ var CATALOG_PAGE = [
     path: "src/layer/catalog/view_model.js",
     owner: "Library 2.2",
     why: "a pure module, no DOM: a list response and the page's state into sections, rows and button states"
+  },
+  {
+    path: "src/layer/copy_text.js",
+    owner: "stable addresses 4.2",
+    why: "the one copy function: the clipboard API, else a hidden field and the browser's copy command. Loaded raw by the Library page; the rail can call it once it joins the bundle list"
   },
   {
     path: "src/layer/catalog/page.js",

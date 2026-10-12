@@ -129,7 +129,7 @@
       from = tag ? "selector" : null;
     }
     if (!tag) return { review: null, token: null, helper: null, frames: null, start: null, notes: null, from: null };
-    return {
+    var config = {
       review: tag.getAttribute(attr.REVIEW) || null,
       token: tag.getAttribute(attr.TOKEN) || null,
       helper: tag.getAttribute(attr.HELPER) || null,
@@ -141,6 +141,48 @@
       notes: tag.getAttribute(attr.NOTES) || null,
       from: from
     };
+    // Only a tag on a stable address carries aliases, so only then is the
+    // key there at all.
+    if (tag.getAttribute(attr.ALIASES)) config.aliases = parseAliases(tag.getAttribute(attr.ALIASES));
+    if (tag.getAttribute(attr.PATH_ALIASES)) config.pathAliases = parsePathAliases(tag.getAttribute(attr.PATH_ALIASES));
+    if (tag.getAttribute(attr.SPELLINGS)) config.spellings = parseSpellings(tag.getAttribute(attr.SPELLINGS));
+    return config;
+  }
+
+  /**
+   * The old origins of this page's stable address (protocol.SCRIPT_ATTR.ALIASES),
+   * or []. Only plain loopback origins, at most protocol.ALIAS_MAX: the helper
+   * writes nothing else, so anything else was not the helper's.
+   */
+  function parseAliases(value) {
+    if (!value) return [];
+    var list;
+    try { list = JSON.parse(value); } catch (err) { return []; }
+    if (!Array.isArray(list) || list.length > protocol.ALIAS_MAX) return [];
+    return list.filter(function (alias) {
+      return typeof alias === "string" && /^http:\/\/(127\.0\.0\.1|localhost):\d{1,5}$/.test(alias);
+    });
+  }
+
+  /**
+   * The old paths of this page (protocol.SCRIPT_ATTR.PATH_ALIASES), or []. Only
+   * absolute paths, at most protocol.ALIAS_MAX, as the helper writes them.
+   */
+  function parsePathAliases(value) {
+    if (!value) return [];
+    var list;
+    try { list = JSON.parse(value); } catch (err) { return []; }
+    if (!Array.isArray(list) || list.length > protocol.ALIAS_MAX) return [];
+    return list.filter(protocol.isPathAlias);
+  }
+
+  /** This page's other addresses in its review ("origin path"), or []. */
+  function parseSpellings(value) {
+    if (!value) return [];
+    var list;
+    try { list = JSON.parse(value); } catch (err) { return []; }
+    if (!Array.isArray(list) || list.length > protocol.ALIAS_MAX) return [];
+    return list.filter(protocol.isSpelling);
   }
 
   /** Explicit options win over the tag; the tag is the default, not the law. */
@@ -156,6 +198,9 @@
       // True only on a notes review (design call 2). Editing reads it to open
       // an empty page for typing; every other empty page stays in reading.
       notes: opts.notes !== undefined ? opts.notes === true : fromTag.notes === protocol.NOTES_ON,
+      aliases: Array.isArray(opts.aliases) ? opts.aliases : fromTag.aliases || [],
+      pathAliases: Array.isArray(opts.pathAliases) ? opts.pathAliases : fromTag.pathAliases || [],
+      spellings: Array.isArray(opts.spellings) ? opts.spellings : fromTag.spellings || [],
       from: opts.review ? "options" : fromTag.from
     };
   }
@@ -385,7 +430,7 @@
     function pageNow() {
       return record.pageFrom(
         { origin: win.location.origin, pathname: win.location.pathname, href: win.location.href, title: doc.title },
-        { seq: 1 }
+        { seq: 1, aliases: config.aliases, path_aliases: config.pathAliases, spellings: config.spellings }
       );
     }
 
@@ -612,7 +657,7 @@
     // revertChecks counts the check having RUN on this load, which is what a
     // test waits on: "the check ran and reopened nothing" is a real result and
     // an arbitrary sleep is the only other way to observe it.
-    var counters = { merges: 0, cardsDrawn: 0, revertChecks: 0, revertReopens: 0, changesPainted: 0 };
+    var counters = { merges: 0, cardsDrawn: 0, revertChecks: 0, revertReopens: 0, changesPainted: 0, adopted: 0, othersShown: 0 };
 
     // The window-session state machine's boot half (D5, findings 1/12, NEW-2). A
     // window that loses the claim goes READ-ONLY: its edit and comment handlers
@@ -1860,6 +1905,47 @@
     // The first pass. Replay is what puts committed edits back on a page that
     // was reloaded, so it runs on boot and not only on a later repaint.
     ns.replay.schedule(ns.replay.REASON.BOOT);
+
+    // V31: COMMENTS FROM THIS PAGE'S OLD ADDRESS. Browser storage belongs to one
+    // origin, so a comment made at 127.0.0.1:<old port> is in that origin's
+    // storage and never in this one's. The helper holds it. On a stable address
+    // whose tag names old origins, the boot asks the helper for this page's
+    // records once (sync.readRecords), and store.adopt takes in the ones this
+    // browser does not hold: as acknowledged, never into the outbox, through
+    // merge.js unchanged. The first merge above drew what browser storage
+    // held; this one draws what came over, and replay anchors it. A read-only
+    // window takes nothing in: it writes nothing.
+    //
+    // EACH PAGE CARRIES ITS OWN COMMENTS. The same read runs on every page at a
+    // stable address: it also brings this page's comments made under its other
+    // addresses in this review (a link address), and, read-only, comments on
+    // this file already filed in another review. Those go to the Active tab's
+    // own list, never into the store or the outbox.
+    var adopting = null;
+    var onSite = !!(win.location && /\.lahe(\.localhost)?$/.test(String(win.location.hostname || "")));
+    var hasOldSpellings = (config.aliases && config.aliases.length) || (config.spellings && config.spellings.length);
+    if (opts.startSync !== false && (hasOldSpellings || onSite) &&
+        typeof sync.readRecords === "function" && typeof store.adopt === "function") {
+      adopting = sync.readRecords().then(function (answer) {
+        if (tab && typeof tab.showOthers === "function") counters.othersShown = tab.showOthers(answer.others);
+        if (readOnlyActive || (typeof sync.isReadOnly === "function" && sync.isReadOnly())) return [];
+        var mine = answer.records.filter(function (item) {
+          return item && record.samePage(item, page);
+        });
+        var adopted = [];
+        failures.tolerateStorageQuota(function () {
+          adopted = store.adopt(reviewId, mine);
+        }, function (failure) {
+          rail.failures.add(failure);
+        });
+        counters.adopted += adopted.length;
+        if (adopted.length) {
+          merge();
+          ns.replay.schedule(ns.replay.REASON.BOOT);
+        }
+        return adopted;
+      });
+    }
 
     // The first reading of this page's blocks, so that a rebuild landing before
     // the settling window closes still has something to compare the reload-time

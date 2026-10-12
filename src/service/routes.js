@@ -18,10 +18,13 @@
 "use strict";
 
 var crypto = require("node:crypto");
+var fs = require("node:fs");
+var path = require("node:path");
 
 var protocol = require("../shared/protocol.js");
 var record = require("../shared/record.js");
 var catalogPage = require("./catalog_page.js");
+var pageRoutes = require("./page_routes.js");
 
 /** A route called without a dependency the helper always passes: a wiring bug. */
 function missingDependency(routeName, dependency) {
@@ -64,6 +67,10 @@ var HANDLERS = {
   // seen acknowledged on every reconnect. Both paths land here, and the second
   // one is why the response names exactly which event_ids are on disk.
   "events.append": function (request, deps) {
+    // A retired review takes no events, whoever holds its token.
+    if (typeof deps.reviews.isRetired === "function" && deps.reviews.isRetired(request.review)) {
+      return { status: 410, error: { code: "PROTO_REVIEW_RETIRED", detail: request.review } };
+    }
     var body = request.body || {};
     var events = body.events;
     if (!Array.isArray(events)) {
@@ -359,6 +366,26 @@ var HANDLERS = {
   // The library's reply poll loop. The cursor is a seq, never a timestamp and
   // never a byte offset: two events in one millisecond are ordinary, and a clock
   // that steps backwards would silently skip work.
+  // The records the asking page shows (V31, and each page carries its own
+  // comments): this review's records on the page's file under any of its
+  // addresses, and, read-only under `others`, comments on the file already
+  // split into other reviews that answer here. Off the projector's kept fold;
+  // drafts never. page_routes.pageRecords holds the rules.
+  "records.read": function (request, deps) {
+    var review = deps.reviews.get(request.review);
+    var items = typeof deps.projection.currentItems === "function"
+      ? deps.projection.currentItems(deps, request.review)
+      : null;
+    if (!items) items = deps.projection.itemsFrom(deps.log.read(request.review));
+    var shown = review
+      ? pageRoutes.pageRecords(deps.dir, review, request.origin || null, request.query.page_path || null, items)
+      : { records: [], others: [] };
+    return {
+      status: 200,
+      body: { records: shown.records, others: shown.others, seq: deps.log.currentSeq(request.review) }
+    };
+  },
+
   "replies.poll": function (request, deps) {
     // Once per request, for both the activity stamp and the liveness answer.
     var owner = ownerSessionOf(request, deps);
@@ -382,7 +409,9 @@ var HANDLERS = {
       body: {
         events: events,
         seq: deps.log.currentSeq(request.review),
-        target_mtime: deps.reviews.targetMtime(request.review, request.query.page_path || null),
+        // The page's own origin rides along: on a stable address it is what
+        // names the site, and so the file, the page was served from.
+        target_mtime: deps.reviews.targetMtime(request.review, request.query.page_path || null, request.origin || null),
         // CAN THE SOURCE BEHIND THIS PAGE HOLD A data-lahe-id AT ALL? The
         // browser cannot work this out: a Markdown review renders to HTML, so
         // the page's own path says .html while the file an agent edits is .md
@@ -425,9 +454,6 @@ var HANDLERS = {
       // down. A boolean and nothing else; the registry owns what it buys.
       quiet: body.quiet === true
     });
-    // A window of this review is open, so its session's page servers stay up,
-    // and come back if the idle sweep had stopped them (idle_servers.js).
-    if (outcome.granted) noteWindow(deps, request.review);
     return {
       status: outcome.granted ? 200 : protocol.statusFor("PROTO_SECOND_WINDOW"),
       body: outcome
@@ -445,8 +471,6 @@ var HANDLERS = {
     var outcome = deps.reviews.releaseWindow(request.review, {
       session_secret: typeof body.session_secret === "string" ? body.session_secret : undefined
     });
-    // The goodbye is where the idle grace starts, not the last sweep.
-    if (outcome.released) noteWindow(deps, request.review);
     return { status: 200, body: outcome };
   },
 
@@ -493,17 +517,6 @@ function ownerSessionOf(request, deps) {
   // has no directory and therefore no feed and no heartbeat.
   if (!owner || owner === "legacy" || !protocol.isSafeId(owner)) return null;
   return owner;
-}
-
-/** Tell the idle sweep a window of this review was active. Never throws. */
-function noteWindow(deps, reviewId) {
-  if (!deps.idleServers || typeof deps.idleServers.windowActivity !== "function") return;
-  try {
-    var pending = deps.idleServers.windowActivity(reviewId);
-    if (pending && typeof pending.catch === "function") pending.catch(function () {});
-  } catch (err) {
-    // The claim's answer matters more than the server bookkeeping.
-  }
 }
 
 /**
@@ -814,6 +827,88 @@ var CATALOG_HANDLERS = {
   }
 };
 
+// ---------------------------------------------------------------------------
+// Stable addresses: binding a review to a site
+// ---------------------------------------------------------------------------
+//
+// Every request here has passed auth.checkSiteRequest: a loopback Host, no
+// Origin header, the CLI client header, JSON, and the CLI secret. The root is
+// taken from the request, never from meta.json, and is realpathed here.
+
+function badSiteRequest(detail) {
+  return { status: 400, error: { code: "PROTO_BAD_REQUEST", detail: detail } };
+}
+
+function encodeEntry(entry) {
+  return String(entry || "").split("/").filter(function (s) { return s.length > 0; }).map(encodeURIComponent).join("/");
+}
+
+var SITE_HANDLERS = {
+  // Only the owning session retires its review: the same rule add.js's
+  // refuseForeign applies. A handoff is `lahe session takeover`, never this.
+  "review.retire": function (request, deps) {
+    var body = request.body || {};
+    if (!protocol.isSafeId(body.review)) return badSiteRequest("review must be a review id");
+    if (!protocol.isSafeId(body.session)) return badSiteRequest("session must be an agent session id");
+    deps.reviews.ensureKnown(body.review);
+    var review = deps.reviews.get(body.review);
+    if (!review) return { status: 404, error: { code: "PROTO_UNKNOWN_REVIEW", detail: body.review } };
+    if (review.agent_session_id !== body.session) {
+      return { status: 403, error: { code: "PROTO_NOT_OWNER", detail: "owned by another agent session" } };
+    }
+    var done = deps.reviews.retire(review.id, new Date(deps.now()).toISOString());
+    return { status: 200, body: { review: done.id, retired_at: done.retired_at } };
+  },
+
+  "site.bind": function (request, deps) {
+    if (!deps.sites) throw missingDependency("site.bind", "sites");
+    var body = request.body || {};
+    if (!protocol.isSafeId(body.review)) return badSiteRequest("review must be a review id");
+    if (typeof body.root !== "string" || !path.isAbsolute(body.root)) return badSiteRequest("root must be an absolute path");
+    if (body.mode !== "folder" && body.mode !== "page-only") return badSiteRequest("mode must be folder or page-only");
+    if (body.entry !== undefined && (typeof body.entry !== "string" || body.entry.split("/").some(function (s) { return s.charAt(0) === "."; }))) {
+      return badSiteRequest("entry must be a plain path under the root");
+    }
+    deps.reviews.ensureKnown(body.review);
+    var review = deps.reviews.get(body.review);
+    if (!review) return { status: 404, error: { code: "PROTO_UNKNOWN_REVIEW", detail: body.review } };
+    var root;
+    try { root = fs.realpathSync.native(body.root); }
+    catch (err) { return badSiteRequest("the root is not there: " + body.root); }
+    var bound;
+    try {
+      bound = deps.sites.bind({ root: root, mode: body.mode, entry: body.entry, mounts: body.mounts, containing: body.containing === true });
+    } catch (err) {
+      return badSiteRequest(err.message);
+    }
+    if (Array.isArray(body.linked)) {
+      deps.sites.addLinked(bound.name, review.id, body.linked.filter(function (file) {
+        return typeof file === "string" && path.isAbsolute(file);
+      }));
+    }
+    // `lahe review` opening another session's review (stamp: false) only
+    // gives the file an address: it never re-stamps that review or drops its
+    // origins, which are its own session's business.
+    if (body.stamp !== false) deps.reviews.stampServedByHelper(review.id, new Date(deps.now()).toISOString());
+    // The port the helper has proved: 80 once the port-80 forward is checked,
+    // otherwise the pages port (src/service/addresses.js).
+    var port = typeof deps.printedPort === "function" ? deps.printedPort()
+      : typeof deps.pagesPort === "function" ? deps.pagesPort() : null;
+    var origin = typeof port === "number" ? protocol.siteOrigin(bound.name, port) : null;
+    deps.log.helperLog("site " + bound.name + (bound.created ? " granted" : " bound") + " for review " + review.id + ": " + root);
+    return {
+      status: 200,
+      body: {
+        name: bound.name,
+        origin: origin,
+        url: origin ? origin + "/" + encodeEntry(typeof bound.entry === "string" ? bound.entry : bound.site.entry) : null,
+        root: bound.site.root,
+        printed_ending: protocol.PAGES.PRINTED_ENDING
+      }
+    };
+  }
+};
+
 // Every route on the wire has a handler, checked at LOAD rather than at request
 // time. A route with no handler is a 500 in front of a reviewer otherwise.
 protocol.ROUTES.forEach(function (r) {
@@ -826,6 +921,21 @@ protocol.CATALOG_ROUTES.forEach(function (r) {
     throw new Error("src/service/routes.js has no handler for catalog route " + r.name);
   }
 });
+
+protocol.SITE_ROUTES.forEach(function (r) {
+  if (typeof SITE_HANDLERS[r.name] !== "function") {
+    throw new Error("src/service/routes.js has no handler for site route " + r.name);
+  }
+});
+
+/** Match a method and a pathname to a site route, or null. */
+function matchSiteRoute(method, pathname) {
+  for (var i = 0; i < protocol.SITE_ROUTES.length; i += 1) {
+    var r = protocol.SITE_ROUTES[i];
+    if (r.path === pathname && r.method === String(method).toUpperCase()) return r;
+  }
+  return null;
+}
 
 /** Match a method and a pathname to a route on the wire, or null. */
 function matchRoute(method, pathname) {
@@ -873,13 +983,16 @@ function isCatalogPath(rawPath) {
 function handlerFor(name) {
   if (Object.prototype.hasOwnProperty.call(HANDLERS, name)) return HANDLERS[name];
   if (Object.prototype.hasOwnProperty.call(CATALOG_HANDLERS, name)) return CATALOG_HANDLERS[name];
+  if (Object.prototype.hasOwnProperty.call(SITE_HANDLERS, name)) return SITE_HANDLERS[name];
   throw new Error("unknown route: " + String(name));
 }
 
 module.exports = {
   HANDLERS: HANDLERS,
   CATALOG_HANDLERS: CATALOG_HANDLERS,
+  SITE_HANDLERS: SITE_HANDLERS,
   handlerFor: handlerFor,
+  matchSiteRoute: matchSiteRoute,
   matchRoute: matchRoute,
   matchCatalogRoute: matchCatalogRoute,
   isCatalogPath: isCatalogPath

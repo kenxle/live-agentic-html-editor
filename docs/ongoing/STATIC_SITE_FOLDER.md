@@ -1,10 +1,10 @@
 # The rail should follow the reviewer through a folder of pages
 
-Board row: `LAHE-static-site-folder` in `docs/BULLETIN.md`. Written 2026-09-16 after an agent reviewing a set of wireframe pages found the rail only on the page it had enrolled, and worked around it by enrolling every page one at a time. Ken read the first draft of this page and left notes; this is the rewrite with his decisions folded in. Nothing is built.
+Board row: `LAHE-static-site-folder` in `docs/BULLETIN.md`. Written 2026-09-16 after an agent reviewing a set of wireframe pages found the rail only on the page it had enrolled, and worked around it by enrolling every page one at a time. Ken read the first draft of this page and left notes; this is the rewrite with his decisions folded in. It is built; since stable addresses (2026-10-11) the helper serves the folder itself, and "Stable addresses" at the end says what that changed.
 
-## What happens today
+## What happened before this was built
 
-- A review remembers the exact file paths it was pointed at. The session's static server puts the rail into a response only when the requested file is one of those paths. Any other file under the same folder is served plain.
+- A review remembers the exact file paths it was pointed at. The page server then put the rail into a response only when the requested file was one of those paths. Any other file under the same folder is served plain.
 - `lahe review <folder>` does not mean "review these pages". A folder target falls into the app-in-dev row, which is built for a running app: it registers the app's origin and prints one script line for you to paste into the app's shared template (a Rails or Next layout), the one file every page is rendered through, so one paste reaches every page. A set of wireframes is separate HTML files with no shared template. There is no single place to paste the line, so that row leaves you pasting it into every file by hand, or doing nothing.
 - One review can already span pages. Items carry the page they were made on, the rail shows each page only its own items, and `review.json` lists them all.
 
@@ -23,7 +23,7 @@ This replaces the "which pages get the rail" question in the first draft. Option
 ## What changes
 
 - **The static server injects into every HTML file it serves**, not only files recorded as review targets. A Markdown file under the root gets the same: a redirect to its own review's page when that review is live in this session, otherwise the root review's rail. Everything else the server does stays the same. It stays read-only against the review store.
-- **Which review an item lands in.** The script line the server injects names a review id and token. For a page no review recorded, the server uses the newest review on that server (a server is one per folder per agent session, so "newest on this server" is "the review this folder was opened for"). No enrollment, no write. The item's own event carries the page path, and that is all the rail and `review.json` need to group by page.
+- **Which review an item lands in.** The script line the server injects names a review id and token. For a page no review recorded, the server uses the newest review whose served folder is this folder, "the review this folder was opened for". No enrollment, no write. The item's own event carries the page path, and that is all the rail and `review.json` need to group by page.
 - **`lahe review <folder>` for a folder of HTML** starts the static server on that folder, creates one review for it, and prints the folder's index (or the first page) as the open link. It stops falling into the dev-server row when the folder holds HTML and no `--origin` was passed.
 - **Docs:** a new row in the serving table in `AGENTS.md`, the lahe skill, and `docs/CLI.md`. The contract text does not change; it is about replies, not serving.
 
@@ -48,24 +48,27 @@ The rule now reaches documents a reviewed Markdown page links to in other
 folders, served under `/.lahe-source/<hash>/` mounts. Spec:
 `docs/features/20260922.02_linked_docs_rail/01_spec_linked_docs_rail.md`.
 
-- The server records which review's page linked to which file
-  (`linked_files` in the static server's metadata). `lahe review`, the helper's
-  re-render, and the server's own render of a linked page all write it.
-- A linked file with its own review in this session redirects to that review's
-  page. Otherwise it carries the newest linking review's rail. A chain (hub
+- The helper records which review's page linked to which file
+  (`linked_files` on the site, in `sites.json`). `lahe review`, the helper's
+  re-render, and the render of a linked page all write it.
+- A linked file carries the newest linking review's rail. There are no
+  redirects between pages. A chain (hub
   links B, B links C) rides the hub's review.
 - Only recorded link targets get the rail, never their neighbours. An `--only`
   review keeps its links read-only.
-- A notes page from `lahe write` is outside all of this. Its one-page server serves that page and nothing else, so no folder, link, or mount rule applies (`docs/ongoing/FREE_WRITING.md`).
-- Hidden (dot-prefixed) files get no special handling. The served folder and a
-  linked folder serve them like any other file, and a link to one translates
-  like any other link. What bounds a request is containment: a path, or a
-  symlink, that resolves outside the served folder or the mount is refused.
-- If the linking review is gone, which should not happen, the page says so and
-  shows the `lahe review` command that would open one. Nothing is created.
+- A notes page from `lahe write` is outside all of this. Its own address serves that page and nothing else, so no folder, link, or mount rule applies (`docs/ongoing/FREE_WRITING.md`).
+- Hidden (dot-prefixed) files and folders get no special handling: the served
+  folder and a linked folder serve them like any other file, and a link to one
+  translates like any other link. Worktrees usually live in hidden folders
+  (`repo/.claude/worktrees/<name>/`). What bounds a request is containment: a
+  path, or a symlink, that resolves outside the served folder or the mount is
+  refused, a mount must be under the home folder, and nothing inside the state
+  folder is served. Lahe's reserved names are never read from the folder.
+- If no review answers for a page, the helper serves it without the rail. Nothing
+  is created.
 - The helper, not the page, names the file an item was made on: review.json's
   `linked_file`, the reload stat, and the handled check all use the same mount
-  lookup (`static_servers.linkedFileForPage`).
+  lookup (`page_routes.linkedFileForPage`).
 
 ## Before building
 
@@ -79,3 +82,19 @@ folders, served under `/.lahe-source/<hash>/` mounts. Spec:
 - 2026-09-16: built on branch `worktree-agent-a1170b7ccd8908d33`, tests first. The static server now serves the rail on every HTML file it hands out: a recorded target keeps its own review, and a page no review recorded rides the newest review of this server's own agent session rooted in this folder. Nothing is written to the review store to make that happen. `lahe review <folder>` is a static site when the folder holds at least one `.html` file of its own and no `--origin` was passed; it starts the server on the folder, mints one review for it, and opens `index.html` or the first page in name order. `target_paths` holds the folder alone: one entry, one meaning, and the same shape the dev-server row has always recorded, so heal.js and the reload poll already handle it. The cost, written down in `SERVING_ARCHITECTURES.md`: a folder review does not auto-reload the reviewer's page, because a directory's modification time is not a fact about any page in it. Docs updated in the same pass: the serving table in `AGENTS.md`, the lahe skill, `docs/CLI.md`, and a variation section here. Not yet reviewed, not merged.
 - 2026-09-16: Ken overruled the narrowing the security pass asked for, and set the rule himself: "if you can navigate to a page from where you currently are, and you currently have the lahe editor, it should follow you across anything you click on... if you want to isolate a single file because you know other things around shouldn't be in there, that should be an option." So the rail follows the reviewer on a single-page review too: its server is rooted at the page's folder, and every page in that folder carries the rail. The isolation case is `lahe review <page> --only`, which records `only_recorded_pages` on the review; the static server never borrows an isolated review for a page it did not record. The narrowing goes one way: the helper route accepts it as true and never as false, because widening a review back out is what a leaked token would ask for. `lahe review` prints the served root and `lahe status` says `scope: only this page`. The nesting fix stands, restated as "a review answers for the folder its own server is rooted at", so two reviews nested one inside the other still do not reach into each other.
 - 2026-09-16: two review passes came back (code lead and security) and the findings are fixed on the same branch. The every-page rule is now scoped to a review whose target IS the served folder, which closes two holes: a nested review taking over its parent's pages, and `lahe review ~/Desktop/x.html` handing a live token to every HTML file on the Desktop. A review of another agent session no longer answers for anything, recorded target or not. Auto-reload was built rather than documented away: a folder review stats the page the poll names, resolved under the folder, so its pages reload like single pages and one page's edit never reloads another; nothing is ever healed into them. The unbacked-server log line no longer fires for pages under a mount, `lahe status` reports a third value, `unserved`, for a folder review whose server is gone, `lahe review` prints the served root, and the helper log says so when a page recorded on its own keeps its own review while the folder review takes the rest. A one-sentence residual was added under D11 in the architecture doc: a folder review's token is readable on every HTML file under the served root.
+
+## Stable addresses (2026-10-11)
+
+The helper now serves every page itself, at `http://<name>.lahe.localhost:1483/<path>`
+(`docs/ongoing/SERVING_ARCHITECTURES.md`, "Stable addresses"). The rule on this
+page holds, with three changes:
+
+- **No session filter.** Which review answers on a page is the same rule,
+  without "of this session": the review that recorded the file, newest first;
+  else the newest review whose served folder is this folder and is not
+  `--only`; else the newest review that linked to the file. "Newest" is created
+  or re-served most recently, and `lahe review` and the Library's Open re-serve.
+- **No redirects.** A linked document, or a Markdown file beside a reviewed
+  page, opens where the link points and carries the rail the rule gives it.
+- **A folder of Markdown works.** A Markdown file in a reviewed folder is
+  rendered from its source on request, like any Markdown page.

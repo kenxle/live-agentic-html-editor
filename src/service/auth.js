@@ -27,6 +27,7 @@
 var crypto = require("node:crypto");
 
 var protocol = require("../shared/protocol.js");
+var logModule = require("./log.js");
 
 /**
  * The check block for one helper.
@@ -41,6 +42,13 @@ function createAuth(options) {
   if (!opts.reviews) throw new Error("createAuth: reviews is required");
   var log = opts.log;
   var reviews = opts.reviews;
+  // One line per distinct refusal, capped: any web page can send requests that
+  // are refused, as many and as varied as it likes.
+  // An identical refusal is logged up to REFUSAL_REPEATS times: a page's
+  // no-cors fetch and its beacon are the same request, and each is evidence.
+  var refusals = logModule.createNoteOnce(log, "further refusals are not logged until the helper restarts", {
+    repeats: logModule.REFUSAL_REPEATS
+  });
 
   /**
    * Check one request.
@@ -62,6 +70,13 @@ function createAuth(options) {
       return refused(req, catalogResult);
     }
 
+    // site.bind (stable addresses): the CLI secret, never a page.
+    if (protocol.route(req.routeName).auth === protocol.AUTH.CLI_SECRET) {
+      var siteResult = checkSiteRequest(req, typeof opts.cliSecret === "function" ? opts.cliSecret() : null);
+      if (siteResult.ok) return siteResult;
+      return refused(req, siteResult);
+    }
+
     // A review this helper does not hold may still be one `add` minted on disk a
     // moment ago, after the helper started. Look for it once before the check
     // block refuses it, so a second review does not cost a restart of a helper
@@ -77,6 +92,16 @@ function createAuth(options) {
     );
 
     if (result.ok) return result;
+    // A PAGE ON A STABLE ADDRESS. Its origin is a site's name, which no review
+    // lists: the registry decides instead, and only for the review the site's
+    // page rule could hand that page (src/service/page_routes.js). Every other
+    // check above has already passed by the time the origin is the one left.
+    if (result.check === protocol.CHECK.ORIGIN && typeof opts.siteOriginAllowed === "function") {
+      var origin = headerOf(req.headers, protocol.HEADER.ORIGIN);
+      if (typeof origin === "string" && opts.siteOriginAllowed(req.review, origin)) {
+        return { ok: true, review: req.review, origin: origin };
+      }
+    }
     return refused(req, result);
   }
 
@@ -88,15 +113,14 @@ function createAuth(options) {
     // attacker-controlled, so each is JSON.stringify'd and capped before it joins
     // the line (finding 8). helperLog neutralizes control characters as a second
     // layer, including in result.log, which carries the review id built upstream.
-    log.helperLog(
-      result.log +
-        " [request " +
-        field(req.requestId) +
-        ", " +
-        field(String(req.method || "-") + " " + String(req.path || req.routeName || "-")) +
-        ", origin " +
-        field(headerOrNone(req.headers, protocol.HEADER.ORIGIN)) +
-        "]"
+    var what = field(String(req.method || "-") + " " + String(req.path || req.routeName || "-"));
+    var from = field(headerOrNone(req.headers, protocol.HEADER.ORIGIN));
+    // The same request again (same refusal, path, origin and headers) is
+    // logged up to REFUSAL_REPEATS times; a request that differs in any header
+    // is its own line. The key is a hash, so no token is held in memory by it.
+    refusals.say(
+      crypto.createHash("sha256").update(result.log + "\u0000" + what + "\u0000" + from + "\u0000" + headerKey(req.headers)).digest("hex"),
+      result.log + " [request " + field(req.requestId) + ", " + what + ", origin " + from + "]"
     );
 
     return {
@@ -106,6 +130,11 @@ function createAuth(options) {
       log: result.log,
       status: protocol.statusFor(result.code)
     };
+  }
+
+  function headerKey(headers) {
+    if (!headers || typeof headers !== "object") return "";
+    return Object.keys(headers).sort().map(function (name) { return name + "=" + String(headers[name]); }).join("\u0000");
   }
 
   function headerOrNone(headers, name) {
@@ -162,6 +191,9 @@ function createCatalogState() {
   return {
     token: crypto.randomBytes(32).toString("hex"),
     port: null,
+    // The pages port, set by serve() once it is bound. Until then
+    // library.lahe.localhost fails the Host check.
+    pagesPort: null,
     /** Task 2.1's list handler calls this on an authenticated list. */
     markSeen: function (now) {
       seenAt = (now instanceof Date ? now : new Date(now)).toISOString();
@@ -206,16 +238,40 @@ function refusal(name, detail, routeName) {
 }
 
 /**
+ * Is this Host one the Library answers to? The loopback names at the helper's
+ * own port, compared in lower case as they always were. The library name is
+ * compared exactly as sent: a Host with capitals never passed dispatch, and
+ * "library" is the only name that reaches the Library.
+ */
+function catalogHostAllowed(host, hostLower, port, catalog) {
+  if (port !== null && (hostLower === "127.0.0.1:" + port || hostLower === "localhost:" + port)) return true;
+  var pagesPort = catalog && typeof catalog.pagesPort === "number" ? catalog.pagesPort : null;
+  var library = protocol.PAGES.LIBRARY_NAME + "." + protocol.PAGES.SUFFIX;
+  // No port is the port-free address: the port 80 forward delivers it to the
+  // pages port. A *.localhost name cannot be rebound, so it is as safe as the
+  // form with the port.
+  return pagesPort !== null && (host === library + ":" + pagesPort || host === library);
+}
+
+/**
  * The Library's check block, one pure function, per the route's `checks`.
  *
  * Order: Host, Sec-Fetch-Site, client header, content type, token, Origin.
  *
  * - Host is exactly 127.0.0.1:<port> or localhost:<port> at the helper's actual
- *   port, on every catalog route. The page carries the token, so a DNS-rebound
- *   name must not be able to load it.
+ *   port, on every catalog route, or library.lahe.localhost:<pages port> (or
+ *   with no port, through the port 80 forward). The page carries the token, so
+ *   a DNS-rebound name must not be able to load it, and no other name, a
+ *   document's included, ever matches.
  * - Sec-Fetch-Site is set by the browser, never by a script. The API routes take
  *   exactly same-origin: a document under review on another loopback port sends
- *   same-site and is refused. A missing value is refused.
+ *   same-site and is refused. A missing value is refused. The Library page
+ *   alone (top_level_navigation) opens for any top-level navigation, from any
+ *   site: Sec-Fetch-Mode navigate with Sec-Fetch-Dest document, whatever
+ *   Sec-Fetch-Site says, or no Sec-Fetch header at all. It is still refused to
+ *   a fetch or an iframe. That is safe because a cross-site navigation cannot
+ *   read the page it loads, and the page cannot be framed, cuts off its opener
+ *   (Cross-Origin-Opener-Policy) and reads nothing from its URL.
  * - The client header must be CLIENT_CATALOG, which the per-review routes do not
  *   accept, and the token is compared in full.
  * - Origin on a POST must equal "http://" + the request's own Host.
@@ -234,12 +290,20 @@ function checkCatalogRequest(request, catalog) {
   var host = headerOf(headers, protocol.HEADER.HOST);
   var hostLower = typeof host === "string" ? host.toLowerCase() : "";
   var port = catalog && typeof catalog.port === "number" ? catalog.port : null;
-  if (port === null || (hostLower !== "127.0.0.1:" + port && hostLower !== "localhost:" + port)) {
+  if (!catalogHostAllowed(host, hostLower, port, catalog)) {
     return refusal(protocol.CHECK.HOST, String(host), r.name);
   }
 
   var site = headerOf(headers, protocol.HEADER.SEC_FETCH_SITE);
-  if (typeof site !== "string" || (checks.sec_fetch_site || []).indexOf(site) === -1) {
+  var siteOk = typeof site === "string" && (checks.sec_fetch_site || []).indexOf(site) !== -1;
+  if (!siteOk && checks.top_level_navigation) {
+    var mode = headerOf(headers, protocol.HEADER.SEC_FETCH_MODE);
+    var dest = headerOf(headers, protocol.HEADER.SEC_FETCH_DEST);
+    var navigation = mode === "navigate" && dest === "document";
+    var noMetadata = site === null && mode === null && dest === null;
+    siteOk = navigation || noMetadata;
+  }
+  if (!siteOk) {
     return refusal(protocol.CHECK.SEC_FETCH_SITE, site ? String(site) : "none", r.name);
   }
 
@@ -279,7 +343,47 @@ function checkCatalogRequest(request, catalog) {
   return { ok: true, review: null, origin: null };
 }
 
+/**
+ * site.bind's check block (stable addresses). Order: Host, Origin, client
+ * header, content type, the CLI secret.
+ *
+ * - Host is a loopback name, as for every API route.
+ * - ANY Origin header is refused. A browser sends one on every cross-origin
+ *   fetch and on every POST, so a page can never reach this route, whatever
+ *   token it holds. The CLI sends none.
+ * - The client header is CLIENT_CLI.
+ * - The secret is read from the state folder's owner-only file, so only a
+ *   process that can read that folder can name a folder to serve.
+ *
+ * The secret never enters a log line or a detail.
+ *
+ * @param {{routeName: string, headers: object}} request
+ * @param {string|null} secret
+ */
+function checkSiteRequest(request, secret) {
+  var req = request || {};
+  var r = protocol.route(req.routeName);
+  var headers = req.headers || {};
+  var host = headerOf(headers, protocol.HEADER.HOST);
+  if (!protocol.hostAllowed(host)) return refusal(protocol.CHECK.HOST, String(host), r.name);
+  var origin = headerOf(headers, protocol.HEADER.ORIGIN);
+  if (origin !== null && origin !== undefined) {
+    return refusal(protocol.CHECK.ORIGIN, String(origin).slice(0, 200), r.name);
+  }
+  if (headerOf(headers, protocol.HEADER.CLIENT) !== protocol.CLIENT_CLI) {
+    return refusal(protocol.CHECK.CUSTOM_HEADER, null, r.name);
+  }
+  var ct = String(headerOf(headers, protocol.HEADER.CONTENT_TYPE) || "").split(";")[0].trim().toLowerCase();
+  if (ct !== protocol.JSON_CONTENT_TYPE) return refusal(protocol.CHECK.CONTENT_TYPE, ct || "none", r.name);
+  var presented = headerOf(headers, protocol.HEADER.CLI_SECRET);
+  if (typeof secret !== "string" || !secret || typeof presented !== "string" || !sameToken(presented, secret)) {
+    return refusal(protocol.CHECK.TOKEN, null, r.name);
+  }
+  return { ok: true, review: null, origin: null };
+}
+
 module.exports = {
+  checkSiteRequest: checkSiteRequest,
   createAuth: createAuth,
   createCatalogState: createCatalogState,
   checkCatalogRequest: checkCatalogRequest

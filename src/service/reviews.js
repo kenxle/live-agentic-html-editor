@@ -54,7 +54,7 @@ var elapsed = require("../shared/elapsed.js");
 var stateDir = require("./state_dir.js");
 var healModule = require("./heal.js");
 var rebuildModule = require("./rebuild.js");
-var staticServersModule = require("./static_servers.js");
+var pageRoutesModule = require("./page_routes.js");
 var reviewFormatModule = require("../shared/review_format.js");
 
 // The owner of a review from before agent sessions existed.
@@ -283,10 +283,16 @@ function createReviews(options) {
           // all of them and the reload watcher does not follow only the last.
           target_paths: Array.isArray(parsed.target_paths) ? parsed.target_paths.slice() : [],
           source_path: typeof parsed.source_path === "string" ? parsed.source_path : null,
+          source_paths: Array.isArray(parsed.source_paths) ? parsed.source_paths.slice() : undefined,
           agent_session_id: typeof parsed.agent_session_id === "string" ? parsed.agent_session_id : "legacy",
           only_recorded_pages: parsed.only_recorded_pages === true,
           notes: parsed.notes === true,
-          created_at: parsed.created_at || new Date().toISOString()
+          created_at: parsed.created_at || new Date().toISOString(),
+          // When site.bind last stamped it: "newest" for the page rule is the
+          // later of this and created_at (src/service/page_routes.js).
+          served_at: typeof parsed.served_at === "string" ? parsed.served_at : null,
+          // `lahe review retire`: the review answers on no page and takes no events.
+          retired_at: typeof parsed.retired_at === "string" ? parsed.retired_at : undefined
         };
       } else {
         loud("review " + entry.name + " has a " + stateDir.FILES.meta + " with no usable token");
@@ -440,10 +446,13 @@ function createReviews(options) {
       target_path: typeof parsed.target_path === "string" ? parsed.target_path : null,
       target_paths: Array.isArray(parsed.target_paths) ? parsed.target_paths.slice() : [],
       source_path: typeof parsed.source_path === "string" ? parsed.source_path : null,
+      source_paths: Array.isArray(parsed.source_paths) ? parsed.source_paths.slice() : undefined,
       agent_session_id: typeof parsed.agent_session_id === "string" ? parsed.agent_session_id : "legacy",
       only_recorded_pages: parsed.only_recorded_pages === true,
       notes: parsed.notes === true,
-      created_at: parsed.created_at || new Date().toISOString()
+      created_at: parsed.created_at || new Date().toISOString(),
+      served_at: typeof parsed.served_at === "string" ? parsed.served_at : null,
+      retired_at: typeof parsed.retired_at === "string" ? parsed.retired_at : undefined
     };
     log.helperLog("review " + reviewId + " learned from disk without a restart");
     // The readiness file is how every CLI command on the machine finds a
@@ -649,7 +658,7 @@ function createReviews(options) {
     var review = get(reviewId);
     if (!review) throw new Error("removeOrigin: no review named " + JSON.stringify(reviewId));
     var value = String(origin);
-    if (!/^http:\/\/(127\.0\.0\.1|localhost):\d{1,5}$/.test(value)) {
+    if (!protocol.isLoopbackPortOrigin(value)) {
       throw new Error("removeOrigin: only a loopback http origin is ever removed, not " + JSON.stringify(value));
     }
     var at = review.origins.indexOf(value);
@@ -722,6 +731,33 @@ function createReviews(options) {
    *
    * @returns {boolean}
    */
+  /**
+   * Stamp a review as re-served (stable addresses): `lahe review`, `lahe
+   * write` and the Library's Open each do it through site.bind, so the most
+   * recent explicit act decides which review a page's rail belongs to.
+   */
+  function stampServed(reviewId, at) {
+    var review = get(reviewId);
+    if (!review) throw new Error("stampServed: no review named " + JSON.stringify(reviewId));
+    review.served_at = typeof at === "string" ? at : new Date(clock()).toISOString();
+    persist(review);
+    return review;
+  }
+
+  /**
+   * The helper serves this review's pages now: stamp it as served, so it is
+   * the review that answers on its page, and drop the page-server origins it
+   * carried, so an old port is no longer a credential. site.bind and the
+   * Library's Open both do this.
+   */
+  function stampServedByHelper(reviewId, at) {
+    var review = stampServed(reviewId, at);
+    review.origins.filter(protocol.isLoopbackPortOrigin).forEach(function (origin) {
+      removeOrigin(reviewId, origin);
+    });
+    return review;
+  }
+
   function isNotes(reviewId) {
     var review = get(reviewId);
     return !!review && review.notes === true;
@@ -743,9 +779,20 @@ function createReviews(options) {
         changed = true;
       }
     }
-    if (typeof p.source_path === "string" && p.source_path && review.source_path !== p.source_path) {
-      review.source_path = p.source_path;
-      changed = true;
+    // EVERY SOURCE IS KEPT. One review per file can add a second Markdown
+    // source to a review (a linked document added to the linking review), and
+    // replacing source_path took the first page's rail and re-render away.
+    // source_path stays the first; source_paths lists them all.
+    if (typeof p.source_path === "string" && p.source_path) {
+      if (!Array.isArray(review.source_paths)) review.source_paths = review.source_path ? [review.source_path] : [];
+      if (!review.source_path) {
+        review.source_path = p.source_path;
+        changed = true;
+      }
+      if (review.source_paths.indexOf(p.source_path) === -1) {
+        review.source_paths.push(p.source_path);
+        changed = true;
+      }
     }
     if (changed) persist(review);
     return review;
@@ -916,9 +963,23 @@ function createReviews(options) {
    * @returns {string|null} null when the request cannot be mapped uniquely, the
    *   file is gone, or the stat failed for any reason at all
    */
-  function targetMtime(reviewId, pagePath) {
+  function targetMtime(reviewId, pagePath, pageOrigin) {
     var review = get(reviewId);
     if (!review) return null;
+    // A PAGE ON A STABLE ADDRESS names its own file: the registry maps its
+    // origin and path the way the server did when it served it, so a sibling
+    // page or a Markdown source reloads on its own file. The re-render still
+    // runs first, so the artifact an older address reads stays current too.
+    // STAT ONLY: a site's page gets its script line in the response.
+    var siteFile = pageRoutesModule.fileForPage(dir, pageOrigin, pagePath);
+    if (siteFile && !reviewFormatModule.isLinkedPage(pagePath)) {
+      try {
+        rebuilder.refresh(review);
+      } catch (error) {
+        log.helperLog("review " + review.id + ": the re-render trigger threw and was ignored: " + error.message);
+      }
+      return healer.consider({ path: siteFile });
+    }
     // A LINKED DOCUMENT RELOADS ON ITS OWN FILE (spec 20260922.02, requirement
     // 7). A page under a /.lahe-source/ mount rides the review of the page that
     // linked to it, and targetForPage below would map it to that review's own
@@ -930,7 +991,7 @@ function createReviews(options) {
     if (reviewFormatModule.isLinkedPage(pagePath)) {
       var linkedFile = null;
       try {
-        linkedFile = staticServersModule.linkedFileForPage(dir, review.agent_session_id, review.id, pagePath);
+        linkedFile = pageRoutesModule.linkedFileForPage(dir, review.id, pagePath);
       } catch (error) {
         linkedFile = null;
       }
@@ -1010,7 +1071,7 @@ function createReviews(options) {
    */
   function servedByStaticServer(review, target) {
     try {
-      return staticServersModule.servesPath(dir, review.agent_session_id, target);
+      return pageRoutesModule.servesFile(dir, target);
     } catch (error) {
       return false;
     }
@@ -1093,7 +1154,13 @@ function createReviews(options) {
 
   function writeReadyFile(details) {
     var d = details || {};
-    lastReadyDetails = { port: d.port, started_at: d.started_at || new Date().toISOString() };
+    lastReadyDetails = {
+      port: d.port,
+      started_at: d.started_at || new Date().toISOString(),
+      pages: d.pages || null,
+      always_on: d.always_on === true,
+      install: d.install || null
+    };
     var payload = {
       port: lastReadyDetails.port,
       pid: process.pid,
@@ -1102,6 +1169,13 @@ function createReviews(options) {
       service_contract: protocol.SERVICE_CONTRACT,
       reviews: {}
     };
+    // Stable addresses: the pages port, the printed ending and why, so the CLI
+    // and `lahe status` report what the running helper is doing.
+    if (lastReadyDetails.pages) payload.pages = lastReadyDetails.pages;
+    // Stable addresses, install: whether a login item runs this helper, and
+    // what it is, for `lahe status` to print.
+    payload.always_on = lastReadyDetails.always_on;
+    if (lastReadyDetails.install) payload.install = lastReadyDetails.install;
     Object.keys(reviews).forEach(function (id) {
       payload.reviews[id] = {
         token: reviews[id].token,
@@ -1253,7 +1327,7 @@ function createReviews(options) {
    * unfocused tab counts for as long as the helper still holds its review. A
    * window that said goodbye has no holder and does not count.
    *
-   * The idle sweep (idle_servers.js) asks this. Not liveHolders: that answers
+   * The helper's self-stop (self_stop.js) asks this. Not liveHolders: that answers
    * "is somebody reviewing right now" with one fixed window, which is shorter
    * than a hidden tab's beat.
    *
@@ -1460,6 +1534,28 @@ function createReviews(options) {
   }
 
   /** The reviewer closed the review. Nothing is truncated; the log is archived. */
+  /**
+   * Retire a review on purpose (`lahe review retire`): archive it, as End
+   * review does, and mark it retired, so it answers on no page, fails the
+   * Origin check and takes no events. The caller checked the owner.
+   */
+  function retire(reviewId, at) {
+    var review = get(reviewId);
+    if (!review) throw new Error("retire: no review named " + JSON.stringify(reviewId));
+    if (typeof review.retired_at === "string") return review;
+    endReview(reviewId);
+    review.retired_at = typeof at === "string" ? at : new Date(clock()).toISOString();
+    persist(review);
+    log.helperLog("review " + reviewId + " retired");
+    if (lastReadyDetails) writeReadyFile(lastReadyDetails);
+    return review;
+  }
+
+  function isRetired(reviewId) {
+    var review = get(reviewId);
+    return !!review && typeof review.retired_at === "string";
+  }
+
   function endReview(reviewId) {
     var review = get(reviewId);
     if (!review) throw new Error("endReview: no review named " + JSON.stringify(reviewId));
@@ -1500,6 +1596,10 @@ function createReviews(options) {
     recordPaths: recordPaths,
     isolate: isolate,
     isNotes: isNotes,
+    stampServed: stampServed,
+    retire: retire,
+    isRetired: isRetired,
+    stampServedByHelper: stampServedByHelper,
     touch: touch,
     lastSeenAt: lastSeenAt,
     targetMtime: targetMtime,
