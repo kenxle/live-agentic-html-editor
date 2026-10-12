@@ -19,7 +19,9 @@ One Bash call, nothing else:
 
 It ran 11.17 hours, from 09:53 to 21:03, and woke once: when your "merge it" note landed. No re-arming, no timer, no tail of a file, no `/loop`.
 
-The skill says "a background command ends at its timeout, and every timeout is a relaunch." That run says otherwise: a 2 hour timeout, and it lived 11 hours. (Your settings also set `BASH_MAX_TIMEOUT_MS` to 24 hours.) That false line tells agents to expect a relaunch on a schedule, so it goes.
+The skill says "a background command ends at its timeout, and every timeout is a relaunch." That was true only from Claude Code 2.1.285 to 2.1.287. Since [2.1.288](https://code.claude.com/docs/en/changelog), an interactive session (terminal, desktop app, VS Code) has [no time limit on background commands](https://code.claude.com/docs/en/tools-reference#time-limit-for-background-commands). The limit applies only to unattended runs: `-p`, the Agent SDK, CI and cloud. That is the "it was deprecated" agents keep citing. The old line tells agents to expect a relaunch on a schedule, so it goes.
+
+The one other thing that ends a quiet watcher is the memory killer. Since 2.1.274 it acts only when memory is critically low and the session has been idle for 30 minutes.
 
 ### What the other agents did
 
