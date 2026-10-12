@@ -536,6 +536,7 @@
     // which the browser shows late.
     ".markwrap{position:relative;display:flex;align-items:center;justify-content:center;",
     "width:17px;height:17px;margin:-4px;flex:none}",
+    ".markwrap[data-lahe-copy='true']{cursor:pointer}",
     ".markwrap[data-lahe-tip]:hover::after{content:attr(data-lahe-tip);position:absolute;left:0;",
     "top:calc(100% + 6px);width:260px;padding:8px 10px;border-radius:7px;background:#15171c;color:#fff;",
     "font-size:11.5px;font-weight:500;line-height:1.45;white-space:pre-line;z-index:10;",
@@ -1295,6 +1296,23 @@
   // register, so these two are handled where they are drawn. They act on the
   // tab that is open, because that is the list the reviewer is looking at.
   var FOLD_ALL = { COLLAPSE: "collapse-cards", EXPAND: "expand-cards" };
+
+  // THE STATUS DOT'S FIRST LINE, in Ken's words (the rail mockup's Status dot
+  // section). The dot's shape already says the work is stored, so these drop
+  // the "Stored ·" the footer line used to lead with. Where something may be
+  // wrong, the dot copies a hand-off message when clicked, and says so.
+  var DOT_COPY_HINT = "Click to copy a message you can send to an agent.";
+  var DOT_WORDS = {
+    connected: "Agent listening",
+    working: "Agent is working, {age}",
+    absent: "No agent listening. " + DOT_COPY_HINT,
+    waiting:
+      "No response, {age}. Your edits are saved in the browser but not in your files. " +
+      "You may need to check your agent isn't stuck. " + DOT_COPY_HINT,
+    no_agent: "Nobody has picked this up, {age}. " + DOT_COPY_HINT
+  };
+  // The states where clicking the dot copies the hand-off message.
+  var DOT_COPIES = { absent: true, waiting: true, no_agent: true };
   var EXPORT_GROUP = "export-review";
   var VIEW_GROUP = "view";
 
@@ -2006,6 +2024,14 @@
       // clip-path would cut a tip drawn on the dot itself, and the wrap gives a
       // 9px dot a hit area a pointer can find.
       var statusDotWrap = el("span", "markwrap");
+      statusDotWrap.addEventListener("click", function () {
+        copyFromDot();
+      });
+      statusDotWrap.addEventListener("mouseleave", function () {
+        if (!dotCopyNote) return;
+        dotCopyNote = null;
+        renderStatus();
+      });
       var statusDot = el("span", "mark");
       statusDot.setAttribute("aria-hidden", "true");
       statusDotWrap.appendChild(statusDot);
@@ -4301,6 +4327,25 @@
       return String(template).replace("{age}", ageLabel(ms));
     }
 
+    /** The dot's first line: DOT_WORDS for the agent state, else the storage word. */
+    function dotHeadline(line) {
+      var words = line && line.agentState ? DOT_WORDS[line.agentState] : null;
+      if (!words) return line ? line.text : "";
+      return words.indexOf("{age}") === -1 ? words : fillAge(words, line.agedMs || 0);
+    }
+
+    // After a click copies the hand-off message, the tip says so until the
+    // pointer leaves the dot.
+    var dotCopyNote = null;
+    function copyFromDot() {
+      if (!dom || dom.statusDotWrap.getAttribute("data-lahe-copy") !== "true") return null;
+      return copyHandoff().then(function (result) {
+        dotCopyNote = result.ok ? AGENT_PROMINENT.COPIED : AGENT_PROMINENT.COPY_FAILED;
+        if (dom) dom.statusDotWrap.setAttribute("data-lahe-tip", dotCopyNote);
+        return result;
+      });
+    }
+
     // -------------------------------------------------------------------------
     // Making an overdue wait prominent
     // -------------------------------------------------------------------------
@@ -4747,7 +4792,13 @@
         display: dotComputed ? dotComputed.display : null,
         visible: !!dotComputed && dotComputed.display !== "none",
         weight: computed ? computed.fontWeight : null,
-        dotColor: dotComputed ? dotComputed.backgroundColor : null
+        dotColor: dotComputed ? dotComputed.backgroundColor : null,
+        dotTip: dom.statusDotWrap.getAttribute("data-lahe-tip") || "",
+        dotCopies: dom.statusDotWrap.getAttribute("data-lahe-copy") === "true",
+        dotRect: (function () {
+          var r = dom.statusDotWrap.getBoundingClientRect();
+          return { x: r.x, y: r.y, width: r.width, height: r.height };
+        })()
       };
     }
 
@@ -5008,7 +5059,9 @@
         dot.setAttribute("data-agent", line.agentState || "");
         dot.setAttribute("data-loud", line.loud ? "true" : "");
       });
-      dom.statusDotWrap.setAttribute("data-lahe-tip", line.title ? line.text + "\n\n" + line.title : line.text);
+      var headline = dotHeadline(line);
+      if (!dotCopyNote) dom.statusDotWrap.setAttribute("data-lahe-tip", line.title ? headline + "\n\n" + line.title : headline);
+      dom.statusDotWrap.setAttribute("data-lahe-copy", DOT_COPIES[line.agentState] ? "true" : "false");
       // The banner and the late cards run off the same clock and the same
       // liveness answer as this line, so they are repainted with it.
       renderWaitBanner(banner);
@@ -7373,6 +7426,7 @@
     CARD_COLLAPSED_ATTR: CARD_COLLAPSED_ATTR,
     CARD_UNSEEN_ATTR: CARD_UNSEEN_ATTR,
     CARD_ASKING_ATTR: CARD_ASKING_ATTR,
+    DOT_WORDS: DOT_WORDS,
     paintSendButton: highlightModule.paintSendButton,
     COLLAPSED_LINE_MAX: COLLAPSED_LINE_MAX,
     CHEVRON_ICON: CHEVRON_ICON,
