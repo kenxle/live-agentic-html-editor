@@ -21,6 +21,8 @@
   - **One change to how handoff works:** an agent can no longer take over another agent's session from the command line while that agent is still listening. You confirm that handoff from the Library, which already asks first. The second security review asked for this, so an agent cannot quietly take over another live agent's work. A session whose agent is gone still hands over from the command line as before.
   - The Library's Open follows the same rule: it opens a file where its review answers, never makes a second review or address, and marks a retired review with a "review retired" badge.
   - Unit suite: 2,680 pass, 0 fail.
+- **Code review of tonight's code: four findings, all fixed.** A handoff you confirm in the Library now completes. Adding a Markdown file to a review no longer replaces its first file. Opening another session's linking review lands where its rail is. The owning agent run without its session id is told how to carry on.
+- **Full gate on the merged branch:** 2,684 unit pass, 0 fail. Browser: 860 pass, 3 fail, all three repeat alone, so they are real. The core builder is finding which change broke each.
 
   ![Comments filed in another review, shown read-only (light)](progress/screenshots/read_only_card_light.png)
 
@@ -52,7 +54,7 @@ The Lahe test folders were deleted at your go-ahead, and the disk went from 953 
 
 | Agent or task | Doing | Started | Branch |
 |---|---|---|---|
-| Core builder | Four code review fixes: Library-confirmed handoff refused, a Markdown file overwriting a review's source, a page with no rail, the owner told to ask the human | 2026-10-11 21:16 | `unit/sa-core` |
+| Core builder | Three browser tests that fail after tonight's merges (formatting rebuild, Shift-Enter line break, undo record count) | 2026-10-11 21:41 | `unit/sa-core` |
 | Orchestrator | Waiting on the core builder, then dist rebuild and the full gate | 2026-10-11 20:42 | `feat/stable-addresses` |
 
 ## Phases
