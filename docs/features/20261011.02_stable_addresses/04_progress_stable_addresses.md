@@ -6,7 +6,7 @@
 
 ## Needs your attention
 
-Nothing right now.
+- [ ] **Approve merging [PR #43](https://github.com/kenxle/live-agentic-html-editor/pull/43): test runs stop filling the disk.** Separate from this feature. Each unit run used to leave 606 MB behind; now it leaves nothing. The test runner deletes its own temp folder when the run ends, and keeps it only when a helper was left running, as evidence. The Library test setup writes its 5 MB log once per run instead of 74 times. The full local gate passed: 2,440 unit and 844 browser tests, 0 failed, no helper left running. Say "merge 43" and I will check CI and merge it.
 
 **Coming later, once the PR is ready: three checks only you can do on this Mac.** They are restart the Mac and see the helper come back on its own (V45, starts at login); open a page with no port in its address (V75, after `lahe install --port-80`); open a `.lahe` page (V73, after `lahe install --lahe-names`). Both install steps ask for your admin password. Steps: [install progress](progress/phase6_workstream_install.md).
 
@@ -52,8 +52,7 @@ The Lahe test folders were deleted at your go-ahead, and the disk went from 953 
 
 | Agent or task | Doing | Started | Branch |
 |---|---|---|---|
-| Code reviewer | Reviewing tonight's new code (old comments, hidden folders, Library links, one review per file) | 2026-10-11 21:02 | `feat/stable-addresses` |
-| Test cleanup builder | Test runs delete their own temp folders (separate small fix off main) | 2026-10-11 20:54 | `fix/test-temp-cleanup` |
+| Core builder | Four code review fixes: Library-confirmed handoff refused, a Markdown file overwriting a review's source, a page with no rail, the owner told to ask the human | 2026-10-11 21:16 | `unit/sa-core` |
 | Orchestrator | Waiting on the core builder, then dist rebuild and the full gate | 2026-10-11 20:42 | `feat/stable-addresses` |
 
 ## Phases
