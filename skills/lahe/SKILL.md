@@ -93,7 +93,8 @@ one:
   and makes nothing. When that session's agent is listening, it tells you to
   ask your human before doing anything else with the page: a handoff is theirs
   to ask for. Otherwise it names `lahe session takeover <id>`, which you run
-  only when the human asks.
+  only when the human asks. Run without `--session`, it also says: if that session
+  is your own, rerun with `--session <id>`.
 - `--new` and `--new-session` are refused for a file that has a review. To
   start over on one of your own reviews, retire it first:
   `lahe review retire <review-id> --session <agent-session-id>`. A retired

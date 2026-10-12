@@ -284,7 +284,8 @@ async function run(argv, mode) {
           "lahe review: " + path.basename(originalTarget) + " already has a review (" + holder.review + "), and a file has one review. " +
             (own
               ? "To start over, retire it first: lahe review retire " + holder.review + " --session " + opts.session + "\n"
-              : "It belongs to another agent session. Ask your human before doing anything else with it.\n")
+              : "It belongs to another agent session. Ask your human before doing anything else with it.\n" +
+                ownSessionHint(store, owner, opts))
         );
         return protocol.CLI_EXIT.BAD_USAGE;
       }
@@ -554,8 +555,23 @@ async function openOthersReview(dir, opts, store, holder, owner, target) {
       "  lahe session takeover " + owner
     );
   }
+  var hint = ownSessionHint(store, owner, opts);
+  if (hint) lines.push(hint.replace(/\n$/, ""));
   process.stdout.write(lines.join("\n") + "\n");
   return protocol.CLI_EXIT.OK;
+}
+
+/**
+ * The owner may be the caller itself, run without --session. When the caller
+ * named no session and the owning session is open, say how to carry on as
+ * itself. Empty otherwise.
+ */
+function ownSessionHint(store, owner, opts) {
+  if (opts.session || owner === sessions.LEGACY_ID) return "";
+  var session = null;
+  try { session = store.read(owner); } catch (err) { session = null; }
+  if (!session || session.closed_at) return "";
+  return "If agent session " + owner + " is your own, rerun with --session " + owner + ".\n";
 }
 
 /** A notes review is minted as one, and never reuses an ordinary review. */

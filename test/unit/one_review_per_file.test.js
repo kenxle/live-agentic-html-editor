@@ -275,3 +275,26 @@ test("the hub's session reviewing a linked file it commented on keeps the hub's 
   assert.equal(reviewOf(hubAgain), reviewOf(hub), "and a later review of the hub opens the same review");
   assert.equal(reviewIds(w).length, 1);
 });
+
+// Code review 4: the owner itself, run without --session, is told how to
+// carry on as itself.
+test("run without --session, the message says how to carry on if the session is your own", async (t) => {
+  const w = await cliWorld(t);
+  const file = writeFile(w.home, "ws/repo/docs/page.html", PAGE);
+  const first = review(w, [file]);
+  const owner = sessionOf(first);
+  const idle = run(w, ["review", file]);
+  assert.match(idle.stdout, new RegExp("If agent session " + owner + " is your own, rerun with --session " + owner));
+  liveMonitor(w, owner);
+  const live = run(w, ["review", file]);
+  assert.match(live.stdout, /Ask your human/);
+  assert.match(live.stdout, new RegExp("If agent session " + owner + " is your own, rerun with --session " + owner));
+  const fresh = run(w, ["review", file, "--new"]);
+  assert.notEqual(fresh.code, 0);
+  assert.match(fresh.stderr, new RegExp("If agent session " + owner + " is your own, rerun with --session " + owner));
+  // With --session of another session, there is no such hint.
+  const other = agentSessions.createStore({ dir: w.state }).create({ name: "other" }).id;
+  w.sessions.push(other);
+  const named = run(w, ["review", file, "--session", other]);
+  assert.doesNotMatch(named.stdout, /is your own, rerun/);
+});
