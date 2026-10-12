@@ -325,7 +325,7 @@ test.describe("the note is the input: rewording without a button", () => {
         return {
           // Not the head's disclosure, which folds the card to one line: it is
           // chrome on every card in every tab, not an action on this comment.
-          onCard: Array.from(card.querySelectorAll("button:not(.carddisclose)")).map((b) => b.textContent),
+          onCard: Array.from(card.querySelectorAll("button:not(.carddisclose):not(.statemenu *)")).map((b) => b.textContent),
           // The card's ACTIONS, which is what this test is about: things that
           // act on the comment, in its action row. A send button belonging to a
           // text box is not one of them, any more than the follow-up composer's
