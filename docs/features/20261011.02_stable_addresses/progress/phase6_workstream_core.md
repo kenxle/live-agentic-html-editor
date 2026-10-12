@@ -574,6 +574,16 @@ The card at the new address, from the browser test above:
 
 - review.json still groups an old Markdown review's rendered-page items apart from the source's new address: the path alias reaches the rail, not `pageGroups`.
 
+### Runs
+
+- `npm run test:unit`, once at the end: 2649 tests, 2647 pass, 0 fail, 2 todo.
+- Chromium, `stable_addresses_mappers.spec.js`: 4 of 4.
+- `lahe.js serve` count: 2 before and 2 after (Ken's two helpers).
+
+### Next: each page carries its own comments
+
+Ken widened the linked-document fix to every page. The design note is [each_page_its_own_comments.md](../parts/architecture/each_page_its_own_comments.md). It recommends making `records.read` per file rather than per review. Nothing from it is built yet.
+
 ## Cleanup needed
 
 - `test/retired/browser/tmp_spike_lahe_localhost.spec.js`: the Task 1.0 spike, retired in fix round 2.
@@ -582,4 +592,4 @@ The card at the new address, from the browser test above:
 - `src/service/idle_servers.js`: nothing requires it; take its entry out of `src/shared/manifest.js` in the same change (lint needs the entry while the file exists).
 - `test/retired/unit/sites_step3_v34.retired.test.js`: V34, retired in the fix round.
 - `docs/features/20260922.02_linked_docs_rail/linked_page_rail.png` and `docs/features/20260923.01_rebuild_not_the_agents_job/card_not_on_page.png`: rewritten in the working tree by spec runs (not committed). Put them back with `git checkout`.
-- `.claude-commit202610111600-core`, `...1630-core`, `...1645-core`, `...1700-core`, `...1730-core`, `...1800-core`, `...1815-core`, `...1900-core`, `...1930-core`, `...1931-core`, the Step 3 ones (`...2100-core` onward), the fix-round ones (`...202610120100-core` to `...202610120550-core`), and the one this page's commit adds, in the worktree root: commit message scratch files (gitignored).
+- `.claude-commit202610111600-core`, `...1630-core`, `...1645-core`, `...1700-core`, `...1730-core`, `...1800-core`, `...1815-core`, `...1900-core`, `...1930-core`, `...1931-core`, the Step 3 ones (`...2100-core` onward), the fix-round ones (`...202610120100-core` to `...202610120550-core`), and `...202610120700-core` onward, and the one this page's commit adds, in the worktree root: commit message scratch files (gitignored).
