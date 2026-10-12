@@ -46,7 +46,9 @@ What stays the same: every existing route, the Library page and its token, the a
 | `src/service/reviews.js` | Tells the seen store when a focused window claims or heartbeats, naming its page | changed |
 | `src/layer/sync.js` | Adds the page's path to its claim and heartbeat (one optional field) | changed |
 | `src/service/routes.js`, `src/shared/protocol.js`, `src/service/auth.js` | Two routes, `summary.read` and `summary.open`, and a new auth mode, `AUTH.CLI_PROOF` (signed requests and answers) | changed |
-| `src/service/menubar.js` | macOS only: build the app, write its login item, rebuild on change | new |
+| `src/service/index.js` | Wires the seen store into reviews, the summary into the routes, and the menu bar tick into the 15-second timer | changed |
+| `src/service/menubar.js` | macOS only: the one build recipe, the app's login item, `tick` (rebuild on change) | new |
+| `docs/CONTRACTS.md` | The summary's fields and the signed-request wire | changed |
 | `src/cli/commands/install.js` | Offers the icon, `--menu-bar` and `--no-menu-bar`; uninstall removes it | changed |
 | `src/cli/commands/menubar.js` | `lahe menubar show` brings a hidden icon back; `lahe menubar rebuild` | new |
 | `src/service/login_item.js` | Starting a helper that the app stopped: bootstrap before kickstart | changed |
@@ -69,10 +71,11 @@ The Swift source lives outside `src/` on purpose. `src/` is Node, and lint and t
 }
 ```
 
-- `seeded_at` is written the first time the helper runs with this feature. Any agent reply older than it counts as seen. This is what keeps day one from showing every old reply.
-- `reviews[id][page]` is the last time a **focused** window on that page claimed or heartbeat. The page sends `quiet: false` only when it is the focused tab of a focused window; a background tab or an unfocused window sends `quiet: true` (`src/layer/sync.js`, attention). Claims and heartbeats gain an optional `page` field. A page from an older bundle sends none, and the helper then marks every page of that review, which can only clear a count early, never hold one.
+- `seeded_at` is written on the first `summary.read`, which is the first time the installed app asks. Any agent reply older than it counts as seen. Seeding on helper start would count everything between PR 1 landing and the install. Marks written before seeding are harmless.
+- `reviews[id][page]` is the last time a **focused** window on that page claimed or heartbeat. Claims and heartbeats gain two optional fields: `focused`, computed at send time as the page's attention being focused (the focused tab of a focused window), and `page`, the same page path the layer already stamps on its records, from the same function. The seen store reads `focused`, not `quiet`: `quiet` is false on every page's first claim, focused or not, because the page has not yet learned the quiet interval (`src/layer/sync.js`). A claim from an older bundle carries neither field; the helper then marks nothing, so an old tab can hold a count until it reloads but never clears one early.
 - The helper writes only when the write would change a count: when a focused window's time passes the newest agent reply on that page and the stored mark is older than that reply. So a focused tab costs one write per new answer, not one per heartbeat.
 - A missing or unreadable file: the helper starts a new one with `seeded_at = now`. Losing marks can only make the count smaller, never larger.
+- One document reviewed by several reviews (one folded Library row) counts once: the summary folds with the Library's own rule after building each review.
 
 ### What counts as waiting on you
 
@@ -99,18 +102,31 @@ The icon counts **documents**, not cards: each one is one click. Today 45 docume
     ]
   },
   "waiting_on_agents": { "count": 4, "documents": [ { "review": "...", "title": "...", "path_hint": "...", "waiting": 4 } ] },
-  "open_documents": [ { "review": "...", "title": "...", "path_hint": "...", "focused": true } ],
-  "sessions": { "open": 5, "connected": [ { "session": "s_...", "name": "...", "presence": "listening", "last_heard_at": "...", "review": "..." } ] },
-  "recent": [ { "review": "...", "title": "...", "path_hint": "...", "last": "..." } ],
-  "library_url": "http://library.lahe.localhost"
+  "open_documents": { "count": 3, "more": 0, "items": [ { "review": "...", "title": "...", "path_hint": "...", "focused": true } ] },
+  "sessions": {
+    "open": 5,
+    "connected": { "count": 2, "more": 0, "items": [ { "session": "s_...", "name": "...", "presence": "listening", "last_heard_at": "...", "review": "..." } ] }
+  },
+  "recent": { "more": 12, "items": [ { "review": "...", "title": "...", "path_hint": "...", "last": "..." } ] },
+  "library_url": "http://library.lahe.localhost:1483"
 }
 ```
 
-- Open, connected and recent lists are capped at 8, with a `more` count (R12). Waiting on you is not capped.
+- Open, connected and recent lists are capped at 8 in `items`, with `more` for the rest (R12). Waiting on you is not capped. `sessions.open` counts sessions not closed. `library_url` is the Library's printed address, with the pages port when the port-80 forward is not proved.
+- The exact field list, types, and the signed-request wire below are written into `docs/CONTRACTS.md` before any builder starts, and a fixture and proof vectors are committed beside them (plan, Step 0).
 - No comment text, no tokens, no absolute paths, the same rules as the Library list. Titles have control characters removed.
 - A session is connected when `agent_sessions` liveness says its agent is listening (a live monitor) or working (a `lahe` command in the last few minutes), the same test the Library shows (R10).
 - An open document is a review whose window holder is current, focused or not.
 - A session's `name` is its Library rename if Ken gave one, else the title of its most recent review.
+
+### The signed-request wire (`AUTH.CLI_PROOF`)
+
+- **Key:** the text of `<state>/cli-secret` with surrounding whitespace removed (64 hex characters), used as its UTF-8 bytes.
+- **Request headers:** `x-lahe-proof-ts` (Unix time in milliseconds, decimal), `x-lahe-proof-nonce` (16 random bytes as 32 lowercase hex characters), `x-lahe-proof` (lowercase hex HMAC-SHA256).
+- **What is signed:** the lines `lahe-proof-v1`, the method, the path with its query string exactly as sent, the timestamp, the nonce, and the lowercase hex SHA-256 of the body (of the empty string for a GET), joined by `\n` with no trailing newline.
+- **The version** travels as `?v=1` on `summary.read`, so the signature covers it, and as `summary_version` in `summary.open`'s JSON body.
+- **The answer** carries `x-lahe-proof-reply`: HMAC-SHA256 with the same key over the lines `lahe-proof-reply-v1`, the request's nonce, the status code, and the hex SHA-256 of the response body. Error answers are signed too, so the app can tell the helper's 409 from a squatter's.
+- **The helper** accepts a timestamp within 30 seconds of its clock, refuses a nonce it has seen in that window, and compares signatures in constant time.
 
 ### `summary.open` request
 
@@ -140,7 +156,7 @@ sequenceDiagram
     end
 ```
 
-The per-review cache keeps a request to a few stat calls per review. The plan sets the budget (R21) and measures it on Ken's state folder.
+The per-review cache keeps a request to a few stat calls per review: the review's `events.jsonl`, `review.json` and `meta.json`, plus the reviewed document itself (so a deleted file drops out) and `catalog.json` once per request (so a Library rename shows). A same-size rewrite inside one millisecond is caught by comparing size, modified time and inode together. The plan sets the budget (R21) and measures it on Ken's state folder.
 
 ### Ken looks at a document
 
@@ -171,7 +187,7 @@ flowchart TD
     Item --> Record["install.json records the app<br/>and its source stamp"]
 
     Timer["helper timer, every 15 s (macOS, installed)"] --> Stamp{"macos/menubar changed<br/>since the recorded stamp?"}
-    Stamp -->|"yes"| Rebuild["rebuild in a child process,<br/>then restart the app"]
+    Stamp -->|"yes"| Rebuild["rebuild in a child process,<br/>swap the app; restart it only<br/>if it was running"]
     Stamp -->|"no"| Idle["nothing"]
 
     Hide["menu: Hide the icon"] --> Exit["app exits cleanly;<br/>launchd leaves it stopped<br/>until login or lahe menubar show"]
@@ -183,7 +199,10 @@ flowchart TD
 - **Stop Lahe** unloads the helper's login item, because a plain kill would be restarted at once. Whether Stop should hold while agents are connected is a question for Ken (the questions leaf); this design assumes it does not, and the menu says so. Today a `lahe` command asks an unloaded item to kickstart and fails. `startThroughItem` gains one step: when kickstart reports the job is not loaded, bootstrap the plist first. That keeps agents working after Ken stops Lahe.
 - **Start Lahe**, shown when the helper is down, does the same bootstrap and kickstart.
 - **Bootstrap checks the plist first.** Before loading `lahe-helper.plist`, the CLI checks its contents are what `login_item.js` would write for the recorded install, and refuses with a message to run `lahe install` if not (SR6).
-- **The labels are constants.** The app and the CLI use the fixed labels `lahe-helper` and `lahe-menubar` and their fixed plist paths; nothing reads a label from `install.json` to run `launchctl` (SR6).
+- **The labels are constants.** The app and the CLI use the fixed labels `lahe-helper` and `lahe-menubar` and their fixed plist paths; nothing reads a label from `install.json` to run `launchctl` (SR6). Tests get their own labels through a seam that stays a constant: the CLI's existing `label` and `home` options, and a compile-time `-D` flag for the app. No test ever loads, stops, rewrites or removes the real labels.
+- **A rebuild respects Hide.** After swapping in a rebuilt app, the helper restarts it only if `launchctl print` says it was running. A hidden icon stays hidden through a `git pull` (R17).
+- **The app's Start does not check the plist's contents.** It bootstraps only the fixed path in Ken's own `~/Library/LaunchAgents`; anything that can write there can already run code at his login, so the check adds nothing for the app. The CLI keeps its check because it also covers a stale install.
+- **One build recipe.** `src/service/menubar.js` holds the only build function, the fixed file list and the pinned compiler flags (`-swift-version 5`, the host architecture, a macOS 13 floor). The build check script calls it.
 - **What a rebuild compiles.** Only the clone named in `install.json`, never a worktree; a fixed list of files in `macos/menubar/`, copied into a fresh temp folder, hashed there, built there with `/usr/bin/xcrun swiftc`, and renamed into place only on success (SR5).
 
 ## Alternatives Considered
