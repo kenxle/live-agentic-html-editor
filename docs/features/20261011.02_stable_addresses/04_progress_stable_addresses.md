@@ -1,17 +1,16 @@
 # Progress: Stable addresses
 
-**Phase 7, Verify. Nothing needs you right now.** Built and merged on `feat/stable-addresses`: every workstream, both review fix rounds, old comments coming over to new addresses, hidden folders serving again, pages refusing to be framed by other sites, and the Library opening from any link. The core builder is now building the design you approved (one review per file, every page carries its own comments) with both security reviews folded in, and fixing one Library browser test that broke in a recent merge. After that: the full test suite in all three browsers, the idle measurement on a copy of your real documents, a browser walkthrough, then the PR and your three Mac checks. Last updated 2026-10-11 20:42.
+**Merged to main. Nothing is blocking you; one step is yours: `lahe install`.** Last updated 2026-10-11 22:17.
 
 **Docs:** [Decisions page](../../ongoing/STABLE_ADDRESSES.md) · [Crucible](00_crucible_stable_addresses.html) · [Brief](01_brief_stable_addresses.html) · [Architecture](02_architecture_stable_addresses.html) · [Plan](03_plan_stable_addresses.html) · [Code survey](parts/architecture/recon.md)
 
 ## Needs your attention
 
-- [ ] **Approve merging [PR #43](https://github.com/kenxle/live-agentic-html-editor/pull/43): test runs stop filling the disk.** Separate from this feature. Each unit run used to leave 606 MB behind; now it leaves nothing. The test runner deletes its own temp folder when the run ends, and keeps it only when a helper was left running, as evidence. The Library test setup writes its 5 MB log once per run instead of 74 times. The full local gate passed: 2,440 unit and 844 browser tests, 0 failed, no helper left running. Say "merge 43" and I will check CI and merge it.
-
-**Coming later, once the PR is ready: three checks only you can do on this Mac.** They are restart the Mac and see the helper come back on its own (V45, starts at login); open a page with no port in its address (V75, after `lahe install --port-80`); open a `.lahe` page (V73, after `lahe install --lahe-names`). Both install steps ask for your admin password. Steps: [install progress](progress/phase6_workstream_install.md).
+- [ ] **Run `! lahe install`** in the Claude prompt, so the helper starts at login. Then, when convenient: restart the Mac and check a Lahe tab still loads (V45). The extras are optional: `lahe install --port-80` drops the `:1483`, and `lahe install --lahe-names` adds a `.lahe` ending. Each asks for your admin password once.
 
 ## Decided
 
+- **Merged.** Stable addresses is on main ([PR #45](https://github.com/kenxle/live-agentic-html-editor/pull/45)), and so is the test temp cleanup ([PR #43](https://github.com/kenxle/live-agentic-html-editor/pull/43)). The helper on your Mac is already running the new code. Post-merge checks (the remaining three-browser failures, the idle measurement, a walkthrough) are on the board as LAHE-stable-addresses-three-browser-followup. The one real failure, the Library link in WebKit, is being fixed on its own branch.
 - **Approved (your page note, 20:37):** the design for every page carrying its own comments, one PR instead of five, and retiring the old tests. The retired tests are deleted only in the cleanup batch.
 - **Every page carries its own comments: built and merged.** What you will notice:
   - `lahe review` of a file that already has a review opens that review. It never makes a second one, whichever agent runs it.
