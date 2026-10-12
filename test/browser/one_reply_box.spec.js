@@ -362,7 +362,9 @@ test.describe("one reply box at the bottom of a long thread", () => {
         const item = await longThread(page, helper, 3);
         await agentAnswers(page, helper, item.id, status, "The newest reply, number 4.");
         const boxes = await expectOneBoxLast(page, item.id, "followUp");
-        expect(boxes.messages).toBeGreaterThanOrEqual(8);
+        // Three finished rounds of two turns, the reviewer's newest note and
+        // the newest reply. A refusal's text and its reason share one bubble.
+        expect(boxes.messages).toBeGreaterThanOrEqual(7);
         // The box is under the newest message only if that message is on the
         // card at all. The reviewer's focus is still inside this card from the
         // follow-up they just sent, which is when a question used to go missing.

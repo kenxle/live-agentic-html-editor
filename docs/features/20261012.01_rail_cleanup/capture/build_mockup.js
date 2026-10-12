@@ -56,6 +56,27 @@ function section(shot, i) {
         "\n</div>\n</section>"
       );
     }
+    if (shot.cards) {
+      // One card per copy, each in a pane at the rail's real width, so the
+      // cards can be compared side by side in both schemes.
+      return (
+        '<section class="mock-section" id="state-' + (i + 1) + '">\n' +
+        "<h2>" + esc(shot.label) + "</h2>\n" +
+        "<p>" + esc(shot.caption) + "</p>\n" +
+        '<div class="mock-cards">\n' +
+        shot.cards
+          .map(function (one) {
+            return (
+              '<figure class="mock-cardfig"><figcaption>' + esc(one.label) + "</figcaption>" +
+              '<div class="mock-stage mock-stage--' + one.scheme + '">' +
+              '<div class="mock-frame" data-mock-scheme="' + one.scheme + '"><aside class="rail"><div class="panes">' +
+              '<div class="pane" data-current="true">' + cleanHtml(one.html) + "</div></div></aside></div></div></figure>"
+            );
+          })
+          .join("\n") +
+        "\n</div>\n</section>"
+      );
+    }
     const notes = shot.notes
       ? "<ul class=\"mock-notes\">" + shot.notes.map((n) => "<li>" + esc(n) + "</li>").join("") + "</ul>\n"
       : "";
@@ -169,6 +190,9 @@ html, body { margin: 0; background: #f4f3ef; }
 .mock-stage { padding: 24px; border-radius: 12px; background: #e9e7e1; display: inline-block; }
 .mock-stage--dark { background: #12151a; }
 .mock-legend { display: flex; flex-direction: column; gap: 10px; }
+.mock-cards { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 20px; }
+.mock-cardfig { margin: 0; }
+.mock-cardfig figcaption { font-size: 13px; color: #55524b; margin: 0 0 6px; }
 .mock-notes { max-width: 680px; margin: 0 0 12px; padding-left: 22px; }
 .mock-notes li { margin: 0 0 6px; }
 .mock-words h3 { font-size: 16px; margin: 22px 0 4px; }

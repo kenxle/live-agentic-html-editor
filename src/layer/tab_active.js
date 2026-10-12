@@ -208,8 +208,10 @@
     ".lahe-rail-note{white-space:pre-wrap;overflow-wrap:anywhere}",
     // Delete is a small x at the right of the comment, not a word under it.
     "[data-lahe-active-row]{position:relative}",
-    "[data-lahe-active-row]:has(> .cardx:not([hidden])) > .lahe-rail-note{padding-right:22px}",
-    ".cardx{position:absolute;top:0;right:0;width:20px;height:20px;border-radius:5px;display:flex;",
+    // The x sits at the right end of the reviewer's caption row, so the
+    // caption makes room for it.
+    "[data-lahe-active-row]:has(> .cardx:not([hidden])) .turn__cap{padding-right:24px}",
+    ".cardx{position:absolute;top:-3px;right:0;width:20px;height:20px;border-radius:5px;display:flex;",
     "align-items:center;justify-content:center;font-size:15px;line-height:1;color:var(--ink-faint);",
     "background:none;border:0;cursor:pointer}",
     // Hovering the x shows what it would delete: the x and the whole comment
@@ -224,14 +226,14 @@
     // yellow and that was how we knew." So the words carry the affordance the
     // button used to: a text cursor, a hover that lifts them off the card, and a
     // focus ring while the reviewer is typing in them.
-    ".lahe-rail-note[data-lahe-note-editor]{cursor:text;border-radius:6px;",
-    "margin:0 -4px;padding:2px 4px;transition:background 90ms ease}",
-    ".lahe-rail-note[data-lahe-note-editor]:hover{background:var(--sunken)}",
-    ".lahe-rail-note[data-lahe-note-editor]:focus{outline:2px solid var(--accent);",
-    "outline-offset:1px;background:var(--paper)}",
+    // The note is the reviewer's bubble, so the hover outlines the bubble
+    // rather than changing its color, and typing gets the accent ring.
+    ".lahe-rail-note[data-lahe-note-editor]{cursor:text;transition:border-color 90ms ease}",
+    ".lahe-rail-note[data-lahe-note-editor]:hover{border-color:var(--line)}",
+    ".lahe-rail-note[data-lahe-note-editor]:focus{outline:2px solid var(--accent);outline-offset:1px}",
     // A window that may not write to the review reads as prose again.
     ".lahe-rail-note[contenteditable='false']{cursor:default}",
-    ".lahe-rail-note[contenteditable='false']:hover{background:transparent}",
+    ".lahe-rail-note[contenteditable='false']:hover{border-color:transparent}",
     // The empty-draft label is drawn, not typed: text inside the node would be
     // text the reviewer has to delete before writing their own sentence.
     ".lahe-rail-note[data-empty='true']::before{content:'Empty draft'}",
@@ -276,8 +278,10 @@
     ".lahe-rail-add[hidden]{display:none}",
     ".lahe-rail-add textarea{resize:none;width:100%;box-sizing:border-box;",
     "font:inherit;font-size:12.5px;line-height:1.45;color:var(--ink);",
-    "background:var(--sunken);border:1px solid var(--line);border-radius:6px;",
-    "padding:5px 7px;transition:background 90ms ease}",
+    // The same paper box as the follow-up composer, so the card has one kind
+    // of text box whether or not the agent has answered yet.
+    "background:var(--paper);border:1px solid var(--line);border-radius:7px;",
+    "padding:5px 8px;transition:background 90ms ease}",
     ".lahe-rail-add textarea::placeholder{color:var(--ink-faint)}",
     ".lahe-rail-add textarea:focus{outline:2px solid var(--accent);outline-offset:1px;",
     "background:var(--paper)}",
@@ -633,7 +637,20 @@
       // Swapping one for a control on click would be the rail rebuilding a row
       // under a caret, which is the revert mechanism this file exists to avoid.
       var note = el("p", "lahe-rail-note", "");
-      row.appendChild(note);
+      // Hosted, the note is the reviewer's own turn: a bubble on the right
+      // under a "You" caption, the same turn every other card draws.
+      if (hosted) {
+        var turn = el("div", "lahe-rail-turn");
+        overlayModule.fillTurn(turn, el, {
+          side: "you",
+          who: "You",
+          at: item[record.FIELD.UPDATED_AT] || item[record.FIELD.CREATED_AT] || null,
+          bubble: note
+        });
+        row.appendChild(turn);
+      } else {
+        row.appendChild(note);
+      }
       comments.attachNoteEditor(id, note);
 
       // Hosted, these are the rail's own quiet card actions (one register for
@@ -825,6 +842,17 @@
         } else if (!wantSend && sendBtn) {
           sendBtn.parentNode.removeChild(sendBtn);
         }
+      }
+
+      var cap = row.querySelector(".lahe-rail-turn .turn__cap");
+      if (cap) {
+        var at = item[record.FIELD.UPDATED_AT] || item[record.FIELD.CREATED_AT] || null;
+        var time = cap.querySelector(".turn__time");
+        if (at && !time) {
+          time = el("time", "turn__time", "");
+          cap.appendChild(time);
+        }
+        overlayModule.setTurnTime(time, at);
       }
 
       var state = row.querySelector(".lahe-rail-state");

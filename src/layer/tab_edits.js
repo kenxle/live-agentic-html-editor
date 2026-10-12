@@ -164,7 +164,8 @@
   // the rail's closed shadow root, so :host's custom properties inherit into
   // them and they cannot drift from the chrome around them.
   var STYLE = [
-    "." + ROW_CLASS + "{display:flex;flex-direction:column;gap:6px}",
+    // The card's own 8px step, the same one between turns of a conversation.
+    "." + ROW_CLASS + "{display:flex;flex-direction:column;gap:8px}",
     // The rule per pair stays, and so does the accent on an edit row. This is
     // the row's new-versus-old signal: scanning a column of cards, the accent
     // rule is what separates the reviewer's own edits from everything else.
@@ -194,7 +195,8 @@
     "." + ROW_CLASS + "__structure{font-size:11.5px;color:var(--ink-soft);",
     "font-family:ui-monospace,SFMono-Regular,Menlo,monospace}",
     "." + ROW_CLASS + "__structure:empty{display:none}",
-    "." + ROW_CLASS + "__said{font-size:12px;color:var(--ink-soft)}",
+    // The change summary heads the pair in the rail's one caption style.
+    "." + ROW_CLASS + "__said{font-size:11px;line-height:1.35;color:var(--ink-faint);margin-bottom:-5px}",
     "." + ROW_CLASS + "__said:empty{display:none}",
     // A run's two pinned lines: where the new text went, then its shape. The
     // first reads as the row's header, the second as its quieter subtitle.
@@ -210,8 +212,7 @@
     "." + ROW_CLASS + "__block{display:flex;flex-direction:column;gap:1px;",
     "border-left:2px solid var(--accent);padding-left:9px}",
     "." + ROW_CLASS + "__block[data-lahe-run-block='moved']{border-left-color:var(--line)}",
-    "." + ROW_CLASS + "__block-label{font-size:10px;font-weight:650;letter-spacing:.06em;",
-    "text-transform:uppercase;color:var(--ink-faint)}",
+    "." + ROW_CLASS + "__block-label{font-size:11px;line-height:1.35;font-weight:600;color:var(--ink-faint)}",
     "." + ROW_CLASS + "__block-words{font-size:12.5px;line-height:1.45;color:var(--ink);white-space:pre-wrap;",
     "display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}",
     "." + ROW_CLASS + "__pair[hidden]{display:none}",

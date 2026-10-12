@@ -455,6 +455,8 @@ test.describe("the rail as a shipping surface", () => {
 
       const box = await page.evaluate((id) => {
         const node = window.__lahe.rail.cardNode(id);
+        // The list sits under the agent's name and shows on hover or focus.
+        node.querySelector(".agent .turn__who--files").focus();
         const files = node.querySelector(".agent__files");
         const cardRect = node.getBoundingClientRect();
         const filesRect = files.getBoundingClientRect();
@@ -514,6 +516,11 @@ test.describe("the rail as a shipping surface", () => {
 
       const card = await page.evaluate((id) => {
         const node = window.__lahe.rail.cardNode(id);
+        // The files sit under the agent's name and show on hover or focus.
+        // Before that they are not drawn at all; once shown, once each.
+        const who = node.querySelector(".agent .turn__who--files");
+        const filesHiddenAtRest = who && window.getComputedStyle(node.querySelector(".agent__files")).display === "none";
+        if (who) who.focus();
         // Rendered at all, ancestors included. A computed display of its own
         // says nothing about a button inside a hidden row.
         const visible = (el) => !!el && el.getClientRects().length > 0;
@@ -537,6 +544,8 @@ test.describe("the rail as a shipping surface", () => {
 
         return {
           text: visibleText(node),
+          filesHiddenAtRest: filesHiddenAtRest,
+          filesNamed: who ? who.getAttribute("aria-describedby") === node.querySelector(".agent__files").id : false,
           // The Active tab's row is still ATTACHED (withdrawing a node from a
           // card the reviewer may be typing in is the rail's own law), and it is
           // not DRAWN on a card that moved to Done.
@@ -558,7 +567,9 @@ test.describe("the rail as a shipping surface", () => {
       const times = (haystack, needle) => haystack.split(needle).length - 1;
       expect(times(card.text, NOTE), "the reviewer's own words, once").toBe(1);
       expect(times(card.text, SAID), "what the agent said, once").toBe(1);
-      expect(times(card.text, FILE), "the file it touched, once").toBe(1);
+      expect(times(card.text, FILE), "the file it touched, once, on hover").toBe(1);
+      expect(card.filesHiddenAtRest, "and the file list is out of the way until then").toBe(true);
+      expect(card.filesNamed, "a screen reader hears the list from the name").toBe(true);
 
       expect(card.activeRowAttached, "the row is never withdrawn from a card").toBe(true);
       expect(card.activeRowVisible, "and it is not drawn on a card in Done").toBe(false);

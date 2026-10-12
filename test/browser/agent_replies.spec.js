@@ -642,8 +642,20 @@ test.describe("3A: an agent answers by appending one line", () => {
           text: text.textContent,
           markupInside: text.querySelectorAll("*").length,
           fontSize: parseFloat(styles.fontSize),
-          ruleWidth: parseFloat(getComputedStyle(ask).borderLeftWidth),
-          askBackground: getComputedStyle(ask).backgroundColor,
+          // The question is the agent's turn; its bubble is what wears the
+          // accent, edge and wash, all the way round.
+          ruleWidth: parseFloat(getComputedStyle(text).borderLeftWidth),
+          ruleTopWidth: parseFloat(getComputedStyle(text).borderTopWidth),
+          ruleColor: getComputedStyle(text).borderLeftColor,
+          accentColor: (function () {
+            var probe = document.createElement("div");
+            probe.style.borderLeft = "3px solid var(--accent)";
+            ask.appendChild(probe);
+            var value = getComputedStyle(probe).borderLeftColor;
+            probe.remove();
+            return value;
+          })(),
+          askBackground: getComputedStyle(text).backgroundColor,
           cardBackground: getComputedStyle(cardNode).backgroundColor,
           // The wash the block is SUPPOSED to wear, read off the same custom
           // property the rule uses, resolved through a real element rather than
@@ -687,14 +699,16 @@ test.describe("3A: an agent answers by appending one line", () => {
       // Loud, as geometry rather than as intent: bigger than the reviewer's own
       // words, a rule of its own, and first in its pane.
       expect(drawn.fontSize).toBeGreaterThan(drawn.bodyFontSize);
-      // Two signals, both asserted. The accent rule down the side is the
+      // Two signals, both asserted. The accent edge round the bubble is the
       // block's attention marker: it is the layer asking the reviewer for
       // something and nothing happens until they answer. The wash behind it
       // is the second. The wash check is pinned to the wash ITSELF, not just
       // "differs from the card": a deleted wash rule would leave the block
       // transparent, which also differs from the card's paper and would pass
       // a weaker check for the wrong reason.
-      expect(drawn.ruleWidth).toBeGreaterThanOrEqual(3);
+      expect(drawn.ruleWidth).toBeGreaterThanOrEqual(2);
+      expect(drawn.ruleTopWidth, "the accent edge runs all the way round the bubble").toBeGreaterThanOrEqual(2);
+      expect(drawn.ruleColor).toBe(drawn.accentColor);
       expect(drawn.askBackground).toBe(drawn.accentWash);
       expect(drawn.askBackground).not.toBe(drawn.cardBackground);
       expect(drawn.askBackground).not.toBe("rgba(0, 0, 0, 0)");
@@ -1385,13 +1399,15 @@ test.describe("3A: an agent answers by appending one line", () => {
 
       const drawn = await page.evaluate((id) => {
         const rail = window.__lahe.rail;
+        // The carrier is a turn now; its bubble is what wears the marker.
         rail.setAgentMessage(id, { status: "handled", agent: "claude", text: "cut it down" });
         const node = rail.cardNode(id).querySelector(".agent");
-        const ordinaryWidth = getComputedStyle(node).borderLeftWidth;
+        const ordinary = getComputedStyle(node.querySelector(".bubble")).borderLeftColor;
 
         rail.setAgentMessage(id, { status: "question", agent: "claude", text: "cut which part?" });
-        const loud = getComputedStyle(node).borderLeftColor;
-        const loudWidth = getComputedStyle(node).borderLeftWidth;
+        const bubble = node.querySelector(".bubble");
+        const loud = getComputedStyle(bubble).borderLeftColor;
+        const loudWidth = getComputedStyle(bubble).borderLeftWidth;
 
         var probe = document.createElement("div");
         probe.style.borderLeft = "3px solid var(--accent)";
@@ -1400,24 +1416,22 @@ test.describe("3A: an agent answers by appending one line", () => {
         probe.remove();
 
         return {
-          ordinaryWidth: ordinaryWidth,
+          ordinary: ordinary,
           loud: loud,
           loudWidth: loudWidth,
           accentColor: accentColor,
         };
       }, item.id);
 
-      // The rule is the attention marker: a loud reply is one the reviewer has
-      // not dealt with yet. Width AND colour, so deleting either goes red.
+      // The accent edge is the attention marker: a loud reply is one the
+      // reviewer has not dealt with yet. Width AND colour, so deleting either
+      // goes red.
       expect(
         parseFloat(drawn.loudWidth),
-        "the loud block carries a real rule, not a zero-width one"
-      ).toBeGreaterThanOrEqual(3);
-      expect(drawn.loud, "the loud rule is the rail's own accent colour").toBe(drawn.accentColor);
-      expect(
-        parseFloat(drawn.ordinaryWidth),
-        "and an ordinary agent message has no rule at all"
-      ).toBe(0);
+        "the loud bubble carries a real edge, not a zero-width one"
+      ).toBeGreaterThanOrEqual(2);
+      expect(drawn.loud, "the loud edge is the rail's own accent colour").toBe(drawn.accentColor);
+      expect(drawn.ordinary, "and an ordinary agent message's edge is not the accent").not.toBe(drawn.accentColor);
     } finally {
       await helper.stop().catch(() => {});
       await app.close();
