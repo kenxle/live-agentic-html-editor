@@ -1,6 +1,6 @@
 /*
  * live-agentic-html-editor review layer
- * version 0.3.0+397f13da44b1
+ * version 0.3.0+1d5de97e5f32
  *
  * GENERATED FILE. Do not edit. Edit the sources under src/ and run
  *   npm run build:layer
@@ -12,7 +12,7 @@
   "use strict";
   var g = typeof globalThis !== "undefined" ? globalThis : window;
   g.LAHE = g.LAHE || {};
-  g.LAHE.version = "0.3.0+397f13da44b1";
+  g.LAHE.version = "0.3.0+1d5de97e5f32";
 })();
 /* ---- src/shared/markers.js  (owner: 0A-kernel) ---- */
 // Markers: the attribute and class names that identify DOM the tool added.
@@ -2946,6 +2946,14 @@
     // item whose claim cannot be checked at all.
     HANDLED_NOT_ON_PAGE: "handled_not_on_page",
 
+    // The reviewer marked this item done themselves ("Mark as done" on the
+    // card's state chip), so no agent retired it. "reviewer" when they did,
+    // absent everywhere else. Lifecycle, not content: the helper sets it from
+    // an item.closed event and never takes it from a record the browser posts.
+    // CLOSED_AT is when they did it.
+    CLOSED_BY: "closed_by",
+    CLOSED_AT: "closed_at",
+
     // Completed reviewer/agent exchanges, oldest first. The current exchange
     // stays in NOTE/CHANGE + REPLY until the reviewer continues it.
     THREAD: "thread",
@@ -3077,6 +3085,9 @@
     // The page check's own bookkeeping. Tool-written, never read as an
     // instruction, and not projected into review.json at all.
     "region.check_reopen": CLASS_DATA,
+    // Who closed it and when. Tool-written lifecycle facts.
+    closed_by: CLASS_DATA,
+    closed_at: CLASS_DATA,
     page_title: CLASS_DATA,
     page_path: CLASS_DATA,
     "reply.reason": CLASS_DATA,
@@ -3927,6 +3938,20 @@
     return !item[FIELD.REPLY];
   }
 
+  // The one value CLOSED_BY carries today.
+  var CLOSED_BY_REVIEWER = "reviewer";
+
+  /**
+   * Did the reviewer mark this item done themselves, at its current revision?
+   *
+   * True only for a handled item carrying closed_by "reviewer". A reworded or
+   * reopened item drops the mark with the revision it was made at, so a stale
+   * mark on a ready record reads as false here rather than as a close.
+   */
+  function isClosedByReviewer(item) {
+    return !!item && item[FIELD.STATE] === STATE.HANDLED && item[FIELD.CLOSED_BY] === CLOSED_BY_REVIEWER;
+  }
+
   // Outstanding for the reviewer: still in front of them. A handled item is
   // kept and reopenable (R38), not outstanding.
   function isOutstanding(item) {
@@ -3979,6 +4004,10 @@
     var next = Object.assign({}, item, changes || {});
     next[FIELD.REV] = item[FIELD.REV] + 1;
     next[FIELD.UPDATED_AT] = nowIso();
+    // A reviewer's close names the revision it closed. A new revision is new
+    // work, so the mark does not travel onto it.
+    delete next[FIELD.CLOSED_BY];
+    delete next[FIELD.CLOSED_AT];
 
     var history = (item[FIELD.AFTER_HISTORY] || []).slice();
     var newAfter = next[FIELD.AFTER];
@@ -5256,6 +5285,8 @@
     isReady: isReady,
     isUnansweredReady: isUnansweredReady,
     isOutstanding: isOutstanding,
+    CLOSED_BY_REVIEWER: CLOSED_BY_REVIEWER,
+    isClosedByReviewer: isClosedByReviewer,
     isReplayable: isReplayable,
     comparisonMode: comparisonMode,
     normalizedBefore: normalizedBefore,
@@ -5275,7 +5306,8 @@
 //   draft        the reviewer is still thinking. Durable, never actionable
 //   ready        the reviewer said an agent may act on it (Cmd-Enter, or an
 //                edit committing)
-//   handled      an agent said it made the change
+//   handled      an agent said it made the change, or the reviewer marked
+//                the card done themselves (record.FIELD.CLOSED_BY says which)
 //   not_handled  an agent said it did not, with a reason the reviewer reads
 //
 //   `question` is a REPLY STATUS, not a state. An agent asking a question
@@ -5289,7 +5321,7 @@
 //
 //  1. EVERY TRANSITION NAMES AN ACTOR. The agent may only move an item out of
 //     ready, and only for the revision it named. Everything else is the
-//     reviewer's. The helper makes no transition on its own initiative; it
+//     reviewer's, including "Mark as done" (ready or not_handled to handled). The helper makes no transition on its own initiative; it
 //     records the ones it is told about. Without the actor column, a builder
 //     writing the reply handler has nothing stopping it from moving a draft
 //     straight to handled, which is silent loss of the reviewer's work with a
@@ -5386,6 +5418,23 @@
       to: STATE.READY,
       actor: ACTOR.REVIEWER,
       why: "REOPENED. R38: handled items are kept, and the reviewer reopens one whose fix did not land"
+    },
+    // MARK AS DONE. The reviewer closes their own outstanding card without
+    // waiting for an agent: a leftover comment, a refused edit they no longer
+    // want, or a handled claim the page check held open. The record says who
+    // did it (record.FIELD.CLOSED_BY), so nothing reads it as an agent's
+    // answer, and no agent reply moves it afterwards (see applyReply).
+    {
+      from: STATE.READY,
+      to: STATE.HANDLED,
+      actor: ACTOR.REVIEWER,
+      why: "MARK AS DONE: the reviewer closes an outstanding card themselves, at its current rev"
+    },
+    {
+      from: STATE.NOT_HANDLED,
+      to: STATE.HANDLED,
+      actor: ACTOR.REVIEWER,
+      why: "MARK AS DONE: the reviewer closes a card the agent said no to, at its current rev"
     }
   ];
 
@@ -5445,6 +5494,42 @@
 
   function canDelete(from, actor) {
     return actor === ACTOR.REVIEWER && DELETABLE_FROM.indexOf(from) !== -1;
+  }
+
+  // ---------------------------------------------------------------------------
+  // Mark as done: the reviewer closes a card themselves
+  // ---------------------------------------------------------------------------
+
+  /**
+   * May the reviewer mark this item done right now?
+   *
+   * Any committed outstanding item: ready (answered or not, a held handled
+   * claim included) or not_handled. Never a draft, which is the reviewer still
+   * typing, and never an item already handled.
+   */
+  function canClose(item) {
+    if (!item) return false;
+    return canTransition(item[FIELD.STATE], STATE.HANDLED, ACTOR.REVIEWER);
+  }
+
+  /**
+   * The item as the reviewer's close leaves it. Pure: a new record, the input
+   * untouched. The revision does not move, so a close names exactly the
+   * wording it closed, and the agent's last reply stays on the card as
+   * history. Throws on an item that cannot be closed, like every transition.
+   *
+   * @param {Object} item the item as it stands
+   * @param {string} [at] ISO time of the close
+   */
+  function closeItem(item, at) {
+    var to = assertTransition(item && item[FIELD.STATE], STATE.HANDLED, ACTOR.REVIEWER);
+    var next = Object.assign({}, item);
+    next[FIELD.STATE] = to;
+    next[FIELD.CLOSED_BY] = record.CLOSED_BY_REVIEWER;
+    next[FIELD.CLOSED_AT] = at || new Date().toISOString();
+    // A held handled claim is answered by the close: nothing is outstanding.
+    next[FIELD.HANDLED_NOT_ON_PAGE] = false;
+    return next;
   }
 
   // Has an agent answered this item, now or in an earlier round?
@@ -5512,6 +5597,16 @@
     var r = reply || {};
     if (record.REPLY_STATUSES.indexOf(r.status) === -1) {
       return { accepted: false, state: item[FIELD.STATE], refusal: "unknown reply status " + String(r.status) };
+    }
+    // THE REVIEWER CLOSED IT. Every reply after that is refused, whatever it
+    // says and whatever revision it names: the reviewer has decided this card
+    // is finished, and a late answer must not reopen it or hold it.
+    if (record.isClosedByReviewer(item)) {
+      return {
+        accepted: false,
+        state: item[FIELD.STATE],
+        refusal: "the reviewer marked this item done; it takes no reply"
+      };
     }
     if (!replyApplies(item, r.rev)) {
       return {
@@ -5593,6 +5688,8 @@
     assertTransition: assertTransition,
     findTransition: findTransition,
     canDelete: canDelete,
+    canClose: canClose,
+    closeItem: closeItem,
     agentReplied: agentReplied,
     undoTakesBack: undoTakesBack,
     replyApplies: replyApplies,
@@ -5615,6 +5712,7 @@
 //
 //   THE BROWSER WINS ON CONTENT for anything the helper has not acknowledged.
 //   THE STORE WINS ON LIFECYCLE, PER REVISION.
+//   EXCEPT THE REVIEWER'S OWN CLOSE ("Mark as done") AT THAT SAME REVISION.
 //
 // The per-revision half is the whole point. A "handled" that names rev 1
 // retires rev 1. A reviewer who reworded to rev 2 while the helper was down
@@ -5759,6 +5857,19 @@
     // Same revision. Lifecycle comes from the store, because a reply naming
     // this revision is exactly what the store knows and the browser does not.
     var merged = Object.assign({}, storeItem);
+
+    // THE REVIEWER'S CLOSE AT THIS REVISION STANDS. "Mark as done" is a
+    // lifecycle fact the browser knows first: its item.closed may still be in
+    // the outbox when this merge runs, and the store's copy then still says
+    // ready or not_handled with the agent's reply on it. Nothing at the same
+    // revision can undo a close (every reply after it is refused), so the
+    // store's older lifecycle does not win over it.
+    if (record.isClosedByReviewer(browserItem) && !record.isClosedByReviewer(storeItem)) {
+      merged[FIELD.STATE] = browserItem[FIELD.STATE];
+      merged[FIELD.CLOSED_BY] = browserItem[FIELD.CLOSED_BY];
+      merged[FIELD.CLOSED_AT] = browserItem[FIELD.CLOSED_AT];
+      merged[FIELD.HANDLED_NOT_ON_PAGE] = false;
+    }
 
     // Content comes from the browser while its work is unacknowledged: it may
     // hold keystrokes the helper never received.
@@ -8245,6 +8356,11 @@
     ITEM_READY: "item.ready",
     ITEM_DELETED: "item.deleted",
     ITEM_REOPENED: "item.reopened",
+    // {item, rev}. The reviewer marked the item done themselves ("Mark as
+    // done"). An explicit act at one revision, never a state claim: it carries
+    // no record, and the projection applies it only when the item is still
+    // outstanding at exactly that revision (lifecycle.canClose).
+    ITEM_CLOSED: "item.closed",
     REPLY_FOLDED: "reply.folded",
     REPLY_REJECTED: "reply.rejected",
     REVIEW_ARCHIVED: "review.archived",
@@ -9522,6 +9638,7 @@
     "If the reviewed page is built from a source file, handled means the reviewer's page now shows the change: edit the source, rebuild, check the change is in the built page, and only then reply. The page reloads itself when the file changes, and the rail comes back on its own if a rebuild leaves it out.",
     "When LAHE renders the page from Markdown, there is nothing for you to rebuild. Edit the .md and the page re-renders and reloads on its own. Do not rerun lahe review for that file, and never tell the reviewer to refresh or clear a cache.",
     "A handled reply for a hand edit is checked against the built page before it retires anything. It is held only when the words in the item's after_full are not in that page and the passage was left alone: the item's before is still on the page, exactly once, or nothing in the source or the page was written since the reviewer typed. An agent that changed the passage is not second-guessed on its wording. new_blocks has no old passage, so each block's words are checked against the built page on every handled reply. A take-back with remove_blocks is checked the other way: it is held while any of those blocks is still after the anchor on the built page. A held item stays ready and carries handled_not_on_page: true, the reviewer is told the change has not reached their page, and your next drain lists the item again. Fix the source so the page really shows the change, then reply again. You cannot close an item by saying it is done.",
+    "The reviewer can close a card themselves. Such an item is handled with closed_by_reviewer: true, it is off your drain list, and any reply to it is refused. Do not work on it.",
     "The check reads the built page, so it can be wrong: the renderer may eat a character the reviewer typed. If the reviewer's text genuinely cannot appear on the page as written, reply not_handled and say why. A not_handled reply is never checked, it retires the item off your drain list, and the reviewer reads your reason on the card and decides. Do not keep replying handled into a check that keeps refusing it.",
     "A break the reviewer typed is part of the edit: a blank line in the after text is a paragraph break, and a single newline is a line break. Markdown does not read a single newline as a new paragraph, so write a blank line between the two paragraphs in the source, or the format's own hard-break form for a line break, then rebuild and check the page really shows the break.",
     "An edit's after is the words; after_html is the same words carrying the reviewer's bold and italic, and that formatting is part of the edit. Apply after_html, not after alone. Bold reaches you as <strong> and italic as <em>; in a Markdown source those are ** and _ (or *). When the reviewer took bold or italic OFF words that a page stylesheet makes bold or italic, HTML has no tag that says so, so the record marks that run <not-bold> or <not-italic>: make that true in the source the way the source says it, and never copy either tag into the source. A handled reply for an edit whose formatting you did not carry is a wrong handled. For an item with new_blocks, after_html is still the whole sitting: anchor_after_html is the anchor's own change and new_blocks is the run.",
@@ -9668,6 +9785,9 @@
     // The helper's own finding about a handled claim, not anything an agent or
     // a page said. A boolean, and data like every other non-intent field.
     handled_not_on_page: record.CLASS_DATA,
+    // The reviewer marked the item done themselves. A boolean the helper
+    // writes from the reviewer's own act, never from page text.
+    closed_by_reviewer: record.CLASS_DATA,
     "thread[].rev": record.CLASS_DATA,
     "thread[].reviewer.note": record.CLASS_DATA,
     "thread[].reviewer.change": record.CLASS_DATA,
@@ -10146,6 +10266,12 @@
     // when it looked at the built page. The item is still ready, so it is on
     // the drain list, and this is the field that says why it came back.
     out.handled_not_on_page = it[F.HANDLED_NOT_ON_PAGE] === true;
+
+    // THE REVIEWER CLOSED IT. A handled item no agent retired: the reviewer
+    // chose "Mark as done" on the card. Beside the reply for the same reason as
+    // the flag above: the reply, if any, is the agent's last answer, and this
+    // says it is not what finished the item.
+    out.closed_by_reviewer = record.isClosedByReviewer(it);
 
     // WHEN THE REVIEWER LAST CHANGED THESE WORDS, and it is the obvious field
     // on purpose. This pair used to be created_at and updated_at, side by side
@@ -19091,6 +19217,19 @@
     // queued in the outbox with Hold on.
     held: "Held"
   };
+  // MARK AS DONE (docs/features/20261012.01_rail_cleanup). The reviewer closes
+  // an outstanding card themselves from its state chip. One spelling for the
+  // menu item, the tip on the chip, and the chip a closed card wears.
+  var MARK_DONE = {
+    ACTION: "done",
+    LABEL: "Mark as done",
+    TIP: "Mark this card as done without waiting for the agent",
+    // The chip on a card the reviewer closed. "Handled" would say an agent did it.
+    CLOSED_CHIP: "Done"
+  };
+  // The display states a card can be closed from. Held is ready waiting on the
+  // reviewer's own Hold, and a refused item never reached the helper.
+  var CLOSEABLE_CHIP_STATES = ["ready", "not_handled"];
   // The word the toggle and the toast both use. One spelling, so the button's
   // accessible name and anything announcing it never drift apart.
   var HOLD_LABEL = "Hold sending messages";
@@ -19756,6 +19895,19 @@
     "border:1px solid currentColor}",
     ".card__state[data-state='not_handled']{color:var(--warn);background:var(--warn-wash)}",
     ".card__state[data-state='refused']{color:var(--warn);background:var(--warn-wash)}",
+    // The chip is a button on an outstanding card: it opens the card's own
+    // one-item menu, "Mark as done". The tip is the status dot's, anchored to
+    // the right because the chip sits at the card's right edge.
+    ".statewrap{position:relative;display:inline-flex;flex:none}",
+    ".card__state[role='button']{cursor:pointer}",
+    ".card__state[role='button']:hover,.card__state[aria-expanded='true']{box-shadow:inset 0 0 0 1px currentColor}",
+    ".card__state[role='button']:focus-visible{outline:2px solid var(--accent);outline-offset:2px}",
+    ".statewrap[data-lahe-tip]:hover::after{content:attr(data-lahe-tip);position:absolute;right:0;",
+    "top:calc(100% + 6px);width:200px;padding:8px 10px;border-radius:7px;background:#15171c;color:#fff;",
+    "font-size:11.5px;font-weight:500;line-height:1.45;white-space:pre-line;z-index:10;text-transform:none;",
+    "letter-spacing:normal;box-shadow:0 6px 18px rgba(0,0,0,.25);pointer-events:none}",
+    ".statewrap[data-lahe-open='true']::after{display:none}",
+    ".statemenu{min-width:150px;z-index:11}",
     // A quote rule, which is what a quote has looked like since print. It is
     // decoration, not a signal: it says "these are the page's words, not the
     // reviewer's," and it never means anything is new or unread.
@@ -20923,6 +21075,15 @@
     // and there for the same reason: EXPANDING A CARD IS READING IT, and the
     // Done tab is the file that knows what that means for a reply.
     var cardCollapseHandlers = [];
+    // Who acts on "Mark as done" from a card's state chip. The rail draws the
+    // chip and its menu; closing the record is the store's and the helper's,
+    // so it belongs to whoever holds them (index.js). With nobody listening
+    // the chip stays a plain label.
+    var cardCloseHandlers = [];
+    // The one open state-chip menu: the card id, or null. One at a time.
+    var stateMenuId = null;
+    var stateMenuOutside = null;
+    var stateMenuShadow = null;
     // id -> true for the cards the reviewer folded to one line. Only the folded
     // ones are held; an absent id is an open card, which is also the right
     // answer for a card that does not exist yet. Read from the review's own
@@ -22128,7 +22289,7 @@
     // Words that are on every card and say nothing about this one: control
     // labels, the time stamp, the state chip. Matching them would make "send"
     // or "oct" find every card.
-    var SEARCH_SKIP = "button,textarea,input,select,style,time,.card__state";
+    var SEARCH_SKIP = "button,textarea,input,select,style,time,.card__state,.statemenu";
 
     function searchTextOf(node) {
       if (!doc || typeof doc.createTreeWalker !== "function") return node.textContent || "";
@@ -22248,6 +22409,7 @@
       // belongs to a menu that is about to stop existing. The style dropdown's
       // listeners go the same way.
       closeMenu(false);
+      closeStateMenu(false);
       closeStylePanel(false);
       closeShortcuts(false);
       closePdfTray(false);
@@ -22869,6 +23031,162 @@
       markQuoteOverflow(quote);
     }
 
+    // -------------------------------------------------------------------------
+    // Mark as done: the state chip's menu
+    // -------------------------------------------------------------------------
+
+    /** Can the reviewer close this card from its chip right now? */
+    function canCloseCard(card) {
+      if (!card || !cards[card.id] || cardCloseHandlers.length === 0) return false;
+      if (refusalOf(card.id)) return false;
+      if (CLOSEABLE_CHIP_STATES.indexOf(card.state) === -1) return false;
+      var item = card.item;
+      if (!item) return false;
+      return record.isOutstanding(item) && record.displayState(item) !== record.STATE.HANDLED;
+    }
+
+    // The chip is a button only on a card that can be closed. Everywhere else it
+    // is the plain label it always was, and a click on it folds the card.
+    function paintStateChip(card) {
+      var p = card.parts;
+      if (!p || !p.stateWrap) return;
+      var can = canCloseCard(card);
+      if (can) {
+        p.state.setAttribute("role", "button");
+        p.state.setAttribute("tabindex", "0");
+        p.state.setAttribute("aria-haspopup", "menu");
+        p.state.setAttribute("aria-expanded", stateMenuId === card.id ? "true" : "false");
+        p.state.setAttribute("aria-label", (p.state.textContent || "") + ": card actions");
+        p.state.setAttribute("data-lahe-no-jump", "");
+        p.stateWrap.setAttribute("data-lahe-tip", MARK_DONE.TIP);
+        return;
+      }
+      ["role", "tabindex", "aria-haspopup", "aria-expanded", "aria-label", "data-lahe-no-jump"].forEach(function (name) {
+        p.state.removeAttribute(name);
+      });
+      p.stateWrap.removeAttribute("data-lahe-tip");
+      if (stateMenuId === card.id) closeStateMenu(false);
+    }
+
+    function openStateMenu(id, focusItem) {
+      closeStateMenu(false);
+      var card = cards[id];
+      if (!dom || !card || !card.parts || !canCloseCard(card)) return false;
+      stateMenuId = id;
+      card.parts.stateMenu.hidden = false;
+      card.parts.state.setAttribute("aria-expanded", "true");
+      card.parts.stateWrap.setAttribute("data-lahe-open", "true");
+      if (focusItem) card.parts.stateDone.focus();
+      // The head menu's two listeners, for the head menu's reason: the root is
+      // closed, so a click inside it reaches the document retargeted.
+      stateMenuOutside = function (event) {
+        if (event.type === "keydown") {
+          if (event.key !== "Escape") return;
+          event.preventDefault();
+          event.stopPropagation();
+          closeStateMenu(true);
+          return;
+        }
+        if (fromOurTree(event)) return;
+        closeStateMenu(false);
+      };
+      stateMenuShadow = function (event) {
+        var open = stateMenuId && cards[stateMenuId];
+        if (open && open.parts && open.parts.stateWrap.contains(event.target)) return;
+        closeStateMenu(false);
+      };
+      doc.addEventListener("pointerdown", stateMenuOutside, true);
+      doc.addEventListener("keydown", stateMenuOutside, true);
+      dom.shadow.addEventListener("pointerdown", stateMenuShadow, true);
+      return true;
+    }
+
+    function closeStateMenu(returnFocus) {
+      if (stateMenuOutside) {
+        doc.removeEventListener("pointerdown", stateMenuOutside, true);
+        doc.removeEventListener("keydown", stateMenuOutside, true);
+        stateMenuOutside = null;
+      }
+      if (stateMenuShadow) {
+        if (dom) dom.shadow.removeEventListener("pointerdown", stateMenuShadow, true);
+        stateMenuShadow = null;
+      }
+      if (!stateMenuId) return false;
+      var card = cards[stateMenuId];
+      stateMenuId = null;
+      if (card && card.parts && card.parts.stateMenu) {
+        card.parts.stateMenu.hidden = true;
+        card.parts.stateWrap.removeAttribute("data-lahe-open");
+        if (card.parts.state.getAttribute("role") === "button") card.parts.state.setAttribute("aria-expanded", "false");
+        if (returnFocus) card.parts.state.focus();
+      }
+      return true;
+    }
+
+    function chooseCardClose(id, action) {
+      var card = cards[id];
+      var can = canCloseCard(card);
+      closeStateMenu(false);
+      if (!can) return false;
+      cardCloseHandlers.slice().forEach(function (fn) {
+        fn(id, action);
+      });
+      return true;
+    }
+
+    /**
+     * Who closes a card when the reviewer chooses "Mark as done" on its chip.
+     * Called as fn(id, action), action being MARK_DONE.ACTION.
+     */
+    function onCardClose(fn) {
+      if (typeof fn !== "function") throw new TypeError("onCardClose: a function is required");
+      cardCloseHandlers.push(fn);
+      if (dom) Object.keys(cards).forEach(function (id) { paintStateChip(cards[id]); });
+      return function () {
+        var at = cardCloseHandlers.indexOf(fn);
+        if (at !== -1) cardCloseHandlers.splice(at, 1);
+        if (dom) Object.keys(cards).forEach(function (id) { paintStateChip(cards[id]); });
+      };
+    }
+
+    /**
+     * Self-report for the closed root: the chip, whether it is a control, the
+     * menu and its items, measured off the real nodes so a test clicks where
+     * the reviewer would.
+     */
+    function cardStateInfo(id) {
+      var card = cards[id];
+      if (!dom || !card || !card.parts) return { present: false };
+      var p = card.parts;
+      function rectOf(node) {
+        var r = node.getBoundingClientRect();
+        return { x: r.x, y: r.y, width: r.width, height: r.height };
+      }
+      return {
+        present: true,
+        label: (p.state.textContent || "").trim(),
+        state: p.state.getAttribute("data-state"),
+        closedBy: p.state.getAttribute("data-lahe-closed-by"),
+        closeable: canCloseCard(card),
+        role: p.state.getAttribute("role"),
+        tip: p.stateWrap.getAttribute("data-lahe-tip"),
+        expanded: p.state.getAttribute("aria-expanded"),
+        focused: dom.shadow.activeElement === p.state,
+        open: stateMenuId === id && !p.stateMenu.hidden,
+        chipRect: rectOf(p.state),
+        items: p.stateMenu.hidden
+          ? []
+          : Array.prototype.map.call(p.stateMenu.querySelectorAll(".menuitem"), function (node) {
+              return {
+                action: node.getAttribute("data-action"),
+                label: (node.textContent || "").trim(),
+                focused: dom.shadow.activeElement === node,
+                rect: rectOf(node)
+              };
+            })
+      };
+    }
+
     function buildCardNode(card) {
       if (!dom || card.node) return card.node;
       var node = el("article", "card");
@@ -22915,8 +23233,37 @@
       top.appendChild(wait);
       var time = el("time", "card__time");
       top.appendChild(time);
+      var stateWrap = el("span", "statewrap");
       var state = el("span", "card__state");
-      top.appendChild(state);
+      stateWrap.appendChild(state);
+      // MARK AS DONE: the chip's menu. Built once with the card, hidden, and
+      // only reachable while paintStateChip says the card can be closed.
+      var stateMenu = el("div", "menu statemenu");
+      stateMenu.setAttribute("role", "menu");
+      stateMenu.hidden = true;
+      var stateDone = el("button", "menuitem", MARK_DONE.LABEL);
+      stateDone.setAttribute("type", "button");
+      stateDone.setAttribute("role", "menuitem");
+      stateDone.setAttribute("data-action", MARK_DONE.ACTION);
+      stateDone.addEventListener("click", function () {
+        chooseCardClose(card.id, MARK_DONE.ACTION);
+      });
+      stateMenu.appendChild(stateDone);
+      stateWrap.appendChild(stateMenu);
+      state.addEventListener("click", function () {
+        if (!canCloseCard(card)) return;
+        if (stateMenuId === card.id) closeStateMenu(false);
+        else openStateMenu(card.id, false);
+      });
+      state.addEventListener("keydown", function (event) {
+        if (event.key !== "Enter" && event.key !== " ") return;
+        if (!canCloseCard(card)) return;
+        event.preventDefault();
+        event.stopPropagation();
+        if (stateMenuId === card.id) closeStateMenu(true);
+        else openStateMenu(card.id, true);
+      });
+      top.appendChild(stateWrap);
       node.appendChild(top);
 
       // The one line a folded card shows. Built once with the card, like every
@@ -22965,6 +23312,9 @@
         wait: wait,
         time: time,
         state: state,
+        stateWrap: stateWrap,
+        stateMenu: stateMenu,
+        stateDone: stateDone,
         quote: quote,
         badges: badges,
         agent: agent,
@@ -23056,8 +23406,16 @@
         p.time.removeAttribute("title");
       }
       var refused = refusalOf(card.id);
-      p.state.textContent = refused ? NOT_SENT_LABEL : STATE_LABEL[card.state] || card.state;
+      var closedByReviewer = card.state === record.STATE.HANDLED && record.isClosedByReviewer(item);
+      p.state.textContent = refused
+        ? NOT_SENT_LABEL
+        : closedByReviewer
+          ? MARK_DONE.CLOSED_CHIP
+          : STATE_LABEL[card.state] || card.state;
       p.state.setAttribute("data-state", refused ? "refused" : card.state);
+      if (closedByReviewer) p.state.setAttribute("data-lahe-closed-by", record.CLOSED_BY_REVIEWER);
+      else p.state.removeAttribute("data-lahe-closed-by");
+      paintStateChip(card);
       // On the card itself too, so anything a tab owner attached can be shown or
       // withdrawn by the card's own state without a second file being told.
       card.node.setAttribute("data-state", card.state);
@@ -23209,6 +23567,7 @@
       // The one guard that matters. A card holding focus is not removed, even
       // when the caller thinks it should be; the caller is told no.
       if (holdsFocus(id)) return false;
+      if (stateMenuId === id) closeStateMenu(false);
       if (cards[id].node && cards[id].node.parentNode) {
         cards[id].node.parentNode.removeChild(cards[id].node);
       }
@@ -26977,6 +27336,8 @@
       setCardsCollapsed: setCardsCollapsed,
       collapsedCardIds: collapsedCardIds,
       onCardCollapse: onCardCollapse,
+      onCardClose: onCardClose,
+      cardStateInfo: cardStateInfo,
       setTabNewCount: setTabNewCount,
       tabNewCount: tabNewCount,
       pillNewCount: pillNewCount,
@@ -27072,6 +27433,7 @@
   return {
     PRESENT: PRESENT,
     PDF: PDF,
+    MARK_DONE: MARK_DONE,
     // Folding a card to one line: the attributes the rule is written in, the
     // icon both disclosures wear, and the pure line builder.
     FOLD_ALL: FOLD_ALL,
@@ -28491,6 +28853,10 @@
       // question coming back answered. A refusal still reaches the reviewer,
       // quietly, as the card's notice (see refresh).
       if (record.toolRoundOf(item)) return;
+      // A CARD THE REVIEWER CLOSED IS READ. Choosing "Mark as done" on it is
+      // the reviewer acting on it, and the agent's last answer it carries is
+      // history, so it never says "1 new" in Done.
+      if (record.isClosedByReviewer(item)) return;
       if (!needsToSeeReply(item[record.FIELD.REPLY])) return;
       if (seen[item[record.FIELD.ID]] !== stamp) out.push(item[record.FIELD.ID]);
     });
@@ -28752,6 +29118,10 @@
   // can see for themselves and stops there: no rebuild, no render, no reply
   // file, nothing about how the page got here. They are looking at a document.
   var NOT_ON_PAGE_NOTICE = "says this is done, but I could not find the change on your page. It is still open.";
+
+  // MARK AS DONE. The Done card of an item the reviewer closed says who closed
+  // it, so it never reads as an agent's work.
+  var CLOSED_NOTICE = "You marked this done.";
 
   // The name this file's sheet answers to inside the rail's closed root.
   var SHEET_KEY = "tab_done";
@@ -29410,6 +29780,8 @@
         seen[id] = true;
         rail.upsertCard(item);
         rail.setCardState(id, record.STATE.HANDLED);
+        // From the record, so a reload says it too.
+        if (record.isClosedByReviewer(item)) rail.setCardNotice(id, CLOSED_NOTICE);
         // R37, the half that is on the PAGE: a handled item loses its highlight.
         // Here rather than only in the fold path, because an item can arrive
         // handled from storage on a fresh load too, and the page it lands on has
@@ -30430,6 +30802,13 @@
       var reply = event.reply || {};
       var replyRev = event[protocol.EVENT_FIELD.REV];
 
+      // A CARD THE REVIEWER CLOSED TAKES NO REPLY. Every load re-delivers the
+      // answers folded before the close, and the helper refuses any after it;
+      // neither may move the card, word it, toast it, or put a notice on it.
+      if (record.isClosedByReviewer(item)) {
+        return { kind: "closed", item: id, state: item[record.FIELD.STATE], toast: false };
+      }
+
       // The refusal, on the card. Two ways to get here: the helper refused the
       // line, or the reviewer reworded in THIS browser while the helper was
       // down, so the fold looked current when it happened and does not now.
@@ -30490,6 +30869,9 @@
       }
       var notOnPage = event.handled_not_on_page === true;
       next[record.FIELD.HANDLED_NOT_ON_PAGE] = notOnPage;
+      // An accepted answer means no close stands at this revision.
+      delete next[record.FIELD.CLOSED_BY];
+      delete next[record.FIELD.CLOSED_AT];
       if (next[record.FIELD.STATE] === record.STATE.HANDLED) forgetLostAnchor(next);
       store.write(reviewId, next);
 
@@ -30870,6 +31252,7 @@
     UNSEEN_ATTR: UNSEEN_ATTR,
     STALE_NOTICE: STALE_NOTICE,
     NOT_ON_PAGE_NOTICE: NOT_ON_PAGE_NOTICE,
+    CLOSED_NOTICE: CLOSED_NOTICE,
     PROOFREAD: PROOFREAD,
     proofreadOffer: proofreadOffer,
     keepMineRecord: keepMineRecord,
@@ -34479,6 +34862,42 @@
     }
 
     /**
+     * MARK AS DONE: the reviewer closed this item themselves.
+     *
+     * An explicit act at one revision, posted as item.closed with the item id
+     * and that revision and nothing else. It carries no record, because the
+     * helper never takes a state the browser claims: the projection applies
+     * the close only when the item is still outstanding at exactly this
+     * revision, and refuses a stale one the way it refuses a stale reply.
+     *
+     * Only for an item the helper has heard of, as with a delete: a ready
+     * event still in the outbox counts, and goes first.
+     *
+     * @param {Object} item the record as the close leaves it (lifecycle.closeItem)
+     */
+    function closeItem(item) {
+      if (readOnly || !item) return null;
+      var id = item[record.FIELD.ID];
+      if (!id || !helperHeardOf(id)) return null;
+      var event = protocol.newEvent({
+        event: protocol.EVENT.ITEM_CLOSED,
+        event_id: record.randomId("evt"),
+        review: requireReview(),
+        item: id,
+        rev: item[record.FIELD.REV],
+        ts: item[record.FIELD.CLOSED_AT] || undefined,
+        page_path: item[record.FIELD.PAGE_PATH],
+        page_title: item[record.FIELD.PAGE_TITLE],
+        page_seq: item[record.FIELD.PAGE_SEQ],
+        source_hint: item[record.FIELD.SOURCE_HINT]
+      });
+      store.queueEvent(requireReview(), event);
+      scheduleFlush(0);
+      recomputeStatus();
+      return event;
+    }
+
+    /**
      * The typing path. SYNCHRONOUS and non-blocking: the event is queued in
      * browser storage in this task, and the network happens later or never.
      *
@@ -36288,6 +36707,7 @@
         return stampCarriable;
       },
       deleteItem: deleteItem,
+      closeItem: closeItem,
       /** The RUN_EVENT_REFUSED failure an item carries, or null. */
       refusalFor: function (itemId) {
         if (refusedRuns[itemId]) return refusedRuns[itemId];
@@ -51500,7 +51920,7 @@
   "use strict";
 
   // Replaced by scripts/build-layer.js at concatenation time.
-  var VERSION = "0.3.0+397f13da44b1";
+  var VERSION = "0.3.0+1d5de97e5f32";
 
   var protocol = ns.protocol;
   var record = ns.record;
@@ -52772,6 +53192,30 @@
       // button goes with it and the Done row is left on a card with no controls
       // at all. Done's own refresh drops the row for a record that is no longer
       // there, which is the whole repair.
+      done.refresh();
+    });
+
+    // MARK AS DONE (docs/features/20261012.01_rail_cleanup). The reviewer
+    // closes an outstanding card from its state chip, without waiting for an
+    // agent: a leftover comment, a refused edit, or a handled claim the page
+    // check held open. The record moves to handled with the reviewer named as
+    // the one who closed it, the helper hears an explicit item.closed for
+    // this revision, and every tab repaints from the record.
+    rail.onCardClose(function (id, action) {
+      if (action !== ns.overlay.MARK_DONE.ACTION) return;
+      if (readOnlyActive) return;
+      var item = scopedStore.readItem(reviewId, id);
+      if (!item || !ns.lifecycle.canClose(item)) return;
+      var closed = ns.lifecycle.closeItem(item, new Date().toISOString());
+      scopedStore.write(reviewId, closed);
+      sync.closeItem(closed);
+      refreshItems();
+      rail.upsertCard(closed);
+      rail.setCardState(id, record.STATE.HANDLED);
+      if (tab && typeof tab.refresh === "function") tab.refresh();
+      if (editsTab && typeof editsTab.refresh === "function") editsTab.refresh();
+      // Done draws the closed card, says the reviewer closed it, and takes the
+      // highlight off the page.
       done.refresh();
     });
 
