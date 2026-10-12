@@ -136,6 +136,26 @@
     comments: "No comments here. Pick All to see your hand edits too.",
     edits: "No hand edits here. Pick All to see your comments too."
   };
+  // The search box at the top of each pane. Case-insensitive "contains", over
+  // the words a card shows (never its button labels), and a view only, like
+  // the filter.
+  var SEARCH_PLACEHOLDER = "Search";
+  var SEARCH_LABEL = "Search the cards in this tab";
+  var SEARCH_MISS_ATTR = "data-lahe-search-miss";
+  function searchEmptyText(query) {
+    return "Nothing here matches “" + query + "”.";
+  }
+
+  /**
+   * Does this text contain the query, ignoring case and runs of whitespace?
+   * Pure, so the matching rule is argued about in a unit test.
+   */
+  function searchMatches(text, query) {
+    var q = String(query || "").replace(/\s+/g, " ").trim().toLowerCase();
+    if (!q) return true;
+    return String(text || "").replace(/\s+/g, " ").toLowerCase().indexOf(q) !== -1;
+  }
+
   // The card attribute the filter reads. paintCard sets it from the record's
   // kind, so no tab file has to say what a card is.
   var HAND_EDIT_ATTR = "data-lahe-hand-edit";
@@ -640,20 +660,35 @@
     ".empty__title{margin:0;font-size:13px;font-weight:600;color:var(--ink)}",
     ".empty__line{margin:0;font-size:12.5px;line-height:1.45;color:var(--ink-soft)}",
 
-    // --- the Active filter ---------------------------------------------------
-    // A small segmented control in the tab strip's quiet register: the picked
-    // segment is a paper chip on a sunken track, the rest are plain text. It
-    // sits above the cards (order -1, so a card placed before it never lands on
-    // top) and is not drawn on a pane with no cards, where it would filter
-    // nothing and push the "how to start" lines down.
-    ".filter{order:-1;flex:none;align-self:flex-start;display:flex;gap:2px;padding:2px;",
+    // --- the pane head: the Active filter and the search box ------------------
+    // One row above the cards (order -1, so a card placed before it never lands
+    // on top). Not drawn on a pane with no cards, where it would narrow nothing
+    // and push the "how to start" lines down.
+    ".panehead{order:-1;flex:none;display:flex;align-items:center;gap:8px;flex-wrap:wrap}",
+    ".pane:not(:has(.card:not([data-lahe-blank]))) .panehead{display:none}",
+    // The kind filter: a small segmented control in the tab strip's quiet
+    // register. The picked segment is a paper chip on a sunken track, the rest
+    // are plain text.
+    ".filter{flex:none;display:flex;gap:2px;padding:2px;",
     "background:var(--sunken);border-radius:8px}",
     ".filter__opt{font-size:11.5px;font-weight:550;color:var(--ink-soft);padding:3px 10px;",
     "border-radius:6px;line-height:1.3}",
     ".filter__opt:hover{color:var(--ink)}",
     ".filter__opt[aria-pressed='true']{background:var(--paper);color:var(--ink);",
     "box-shadow:0 0 0 1px var(--line),0 1px 1px rgba(18,20,26,.04)}",
-    ".pane:not(:has(.card:not([data-lahe-blank]))) .filter{display:none}",
+    // The search box: the card-action outline at the card-action size, taking
+    // whatever the row leaves after the filter.
+    ".search{flex:1 1 110px;min-width:0;box-sizing:border-box;font:inherit;font-size:11.5px;",
+    "line-height:1.3;color:var(--ink);background:var(--paper);border:1px solid var(--line);",
+    "border-radius:7px;padding:4px 8px;margin:0}",
+    ".search::placeholder{color:var(--ink-faint)}",
+    ".search:focus-visible{outline:2px solid var(--accent);outline-offset:0}",
+    // A card whose words do not contain the search is not drawn. Set by the
+    // search pass, never by a tab owner.
+    ".card[data-lahe-search-miss],.lahe-rail-othercard[data-lahe-search-miss]{display:none}",
+    ".searchempty{color:var(--ink-faint);font-size:12px;padding:18px 4px;text-align:center;",
+    "overflow-wrap:anywhere}",
+    ".searchempty[hidden]{display:none}",
     // The pick hides cards and the filed-elsewhere comments with them. It never
     // touches what a card holds, only whether the card is drawn.
     ".pane[data-lahe-filter='edits'] .card:not([" + HAND_EDIT_ATTR + "]),",
@@ -666,6 +701,9 @@
     ":not(:has(.card[" + HAND_EDIT_ATTR + "]:not([data-lahe-blank]))) .filterempty,",
     ".pane[data-lahe-filter='comments']:has(.card:not([data-lahe-blank]))",
     ":not(:has(.card:not([" + HAND_EDIT_ATTR + "]):not([data-lahe-blank]))) .filterempty{display:block}",
+    // While a search is typed, the search's own line speaks for an empty pane,
+    // so the two are never stacked.
+    ".pane[data-lahe-searching] .filterempty{display:none !important}",
 
     // --- cards --------------------------------------------------------------
     ".card{background:var(--paper);border:1px solid var(--line);border-radius:var(--radius-sm);",
@@ -1911,6 +1949,13 @@
     // edits. Per review, in the same preference bucket as the width, so a
     // reload finds the list the reviewer was reading.
     var activeFilter = readFilterPreference();
+    // tab -> what is typed in that pane's search box. In memory only: a search
+    // left over from yesterday that quietly hides cards after a reload is worse
+    // than retyping a word. Kept across a remount, which rebuilds the boxes.
+    var searchQueries = Object.create(null);
+    // Watches the panes while any search is typed, so a card that arrives or
+    // changes its words is matched again. Off when every box is empty.
+    var searchObserver = null;
     // Who wants to know the rail's width changed. The surfaces that keep clear
     // of the rail read the published allowance instead (see publishRailAllowance);
     // this is for a caller that wants to hear about it rather than measure.
@@ -2383,7 +2428,7 @@
       });
       rail.appendChild(panes);
 
-      // The Active filter, first in the pane so it reads as the list's header.
+      // The Active filter, in the pane head so it reads as the list's header.
       // Toggle buttons (aria-pressed) rather than a second tab strip: it narrows
       // one list, it does not switch to another.
       var filter = el("div", "filter");
@@ -2403,8 +2448,37 @@
       });
       var filterEmpty = el("div", "filterempty", "");
       filterEmpty.setAttribute("data-lahe-filter-empty", "");
-      paneNodes[TAB.ACTIVE].insertBefore(filter, paneNodes[TAB.ACTIVE].firstChild);
       paneNodes[TAB.ACTIVE].appendChild(filterEmpty);
+
+      // Each pane's head: the kind filter (Active only) and a search box. The
+      // box narrows the cards in its own pane to those whose words contain what
+      // was typed; it combines with the kind filter rather than replacing it.
+      var searchInputs = Object.create(null);
+      var searchEmpties = Object.create(null);
+      TABS.forEach(function (name) {
+        var head = el("div", "panehead");
+        head.setAttribute("data-lahe-pane-head", name);
+        if (name === TAB.ACTIVE) head.appendChild(filter);
+        var input = el("input", "search");
+        input.setAttribute("type", "search");
+        input.setAttribute("placeholder", SEARCH_PLACEHOLDER);
+        input.setAttribute("aria-label", SEARCH_LABEL);
+        input.setAttribute("data-lahe-search", name);
+        input.setAttribute("autocomplete", "off");
+        input.setAttribute("spellcheck", "false");
+        input.value = searchQueries[name] || "";
+        input.addEventListener("input", function () {
+          setSearch(name, input.value);
+        });
+        head.appendChild(input);
+        paneNodes[name].insertBefore(head, paneNodes[name].firstChild);
+        searchInputs[name] = input;
+        var said = el("div", "searchempty", "");
+        said.setAttribute("data-lahe-search-empty", name);
+        said.hidden = true;
+        paneNodes[name].appendChild(said);
+        searchEmpties[name] = said;
+      });
 
       var foot = el("div", "foot");
       var footMain = el("div", "footmain");
@@ -2698,6 +2772,8 @@
         panes: paneNodes,
         filterButtons: filterButtons,
         filterEmpty: filterEmpty,
+        searchInputs: searchInputs,
+        searchEmpties: searchEmpties,
         chipList: chipList,
         foot: foot,
         statusRow: statusRow,
@@ -2781,6 +2857,9 @@
       // remount and the thing they were telling the reviewer about is still
       // true, so they are drawn again and their clocks start over.
       remountToasts();
+      // A search typed before a remount still narrows the rebuilt panes.
+      syncSearchObserver();
+      applySearchAll();
       // The pill exists now, so the reviewer's own arrangement can go back on it.
       // Read here as well as in setReview because a rail built WITH a review id
       // never goes through setReview at all, which is how the fixture and the
@@ -2864,6 +2943,9 @@
         dom.filterButtons[name].setAttribute("aria-pressed", name === activeFilter ? "true" : "false");
       });
       dom.filterEmpty.textContent = FILTER_EMPTY[activeFilter] || "";
+      // The kind filter decides what counts as shown, so a search's "nothing
+      // matches" line is checked again with it.
+      applySearch(TAB.ACTIVE);
     }
 
     /**
@@ -2902,12 +2984,131 @@
      */
     function revealCard(id) {
       var card = cards[id];
-      if (!card || card.pane !== TAB.ACTIVE || activeFilter === FILTER.ALL) return activeFilter;
+      if (!card) return activeFilter;
+      // A search that hides the card is cleared too, in the card's own pane.
+      if (card.node && card.node.hasAttribute(SEARCH_MISS_ATTR) && TABS.indexOf(card.pane) !== -1) {
+        setSearch(card.pane, "");
+      }
+      if (card.pane !== TAB.ACTIVE || activeFilter === FILTER.ALL) return activeFilter;
       var hand = isHandEditKind(card.item);
       if ((activeFilter === FILTER.EDITS && !hand) || (activeFilter === FILTER.COMMENTS && hand)) {
         setActiveFilter(FILTER.ALL);
       }
       return activeFilter;
+    }
+
+    // -------------------------------------------------------------------------
+    // The search box
+    // -------------------------------------------------------------------------
+    //
+    // Text is not something CSS can match, so this is the one part of the view
+    // painted by a pass: each card in the pane is marked when its words do not
+    // contain the search, and the stylesheet hides marked cards. The kind
+    // filter still hides by kind on top of that, so the two combine.
+
+    // Words that are on every card and say nothing about this one: control
+    // labels, the time stamp, the state chip. Matching them would make "send"
+    // or "oct" find every card.
+    var SEARCH_SKIP = "button,textarea,input,select,style,time,.card__state";
+
+    function searchTextOf(node) {
+      if (!doc || typeof doc.createTreeWalker !== "function") return node.textContent || "";
+      var parts = [];
+      var walker = doc.createTreeWalker(node, 4 /* NodeFilter.SHOW_TEXT */, null);
+      for (var t = walker.nextNode(); t; t = walker.nextNode()) {
+        var parent = t.parentNode;
+        if (parent && typeof parent.closest === "function" && parent.closest(SEARCH_SKIP)) continue;
+        parts.push(t.nodeValue);
+      }
+      return parts.join(" ");
+    }
+
+    function passesKindFilter(tab, node) {
+      if (tab !== TAB.ACTIVE || activeFilter === FILTER.ALL) return true;
+      if (!node.classList.contains("card")) return activeFilter !== FILTER.EDITS;
+      var hand = node.hasAttribute(HAND_EDIT_ATTR);
+      return activeFilter === FILTER.EDITS ? hand : !hand;
+    }
+
+    function applySearch(tab) {
+      if (!dom || !dom.panes || !dom.searchEmpties) return;
+      var pane = dom.panes[tab];
+      var query = searchQueries[tab] || "";
+      // Nothing typed and nothing marked from before: nothing to do. This is
+      // the path every repaint takes while nobody is searching.
+      if (!query && !pane.hasAttribute("data-lahe-searching")) return;
+      var anyCard = false;
+      var shown = 0;
+      Array.prototype.forEach.call(pane.querySelectorAll(".card, .lahe-rail-othercard"), function (node) {
+        var miss = !!query && !searchMatches(searchTextOf(node), query);
+        if (miss) {
+          if (!node.hasAttribute(SEARCH_MISS_ATTR)) node.setAttribute(SEARCH_MISS_ATTR, "true");
+        } else if (node.hasAttribute(SEARCH_MISS_ATTR)) {
+          node.removeAttribute(SEARCH_MISS_ATTR);
+        }
+        var isCard = node.classList.contains("card");
+        if (isCard && node.hasAttribute("data-lahe-blank")) return;
+        if (isCard) anyCard = true;
+        if (!miss && passesKindFilter(tab, node)) shown += 1;
+      });
+      if (query) pane.setAttribute("data-lahe-searching", "true");
+      else pane.removeAttribute("data-lahe-searching");
+      // Written only when it changes: the watcher below sees this node too, and
+      // an unchanged write is what keeps it from calling itself forever.
+      var said = dom.searchEmpties[tab];
+      var want = query && anyCard && shown === 0 ? searchEmptyText(query.trim()) : "";
+      if (said.textContent !== want) said.textContent = want;
+      if (said.hidden !== !want) said.hidden = !want;
+    }
+
+    function applySearchAll() {
+      TABS.forEach(applySearch);
+    }
+
+    function syncSearchObserver() {
+      var wanted = !!dom && TABS.some(function (name) {
+        return !!searchQueries[name];
+      });
+      if (!wanted) {
+        if (searchObserver) searchObserver.disconnect();
+        searchObserver = null;
+        return;
+      }
+      if (searchObserver) return;
+      var view = doc && doc.defaultView;
+      var Observer = view && view.MutationObserver;
+      if (typeof Observer !== "function") return;
+      searchObserver = new Observer(function () {
+        applySearchAll();
+      });
+      TABS.forEach(function (name) {
+        // Attributes are left out on purpose: the pass writes them.
+        searchObserver.observe(dom.panes[name], { childList: true, subtree: true, characterData: true });
+      });
+    }
+
+    /**
+     * Narrow a pane to the cards whose words contain this text, ignoring case.
+     * Empty shows everything. A view only: counts do not change, and the kind
+     * filter still applies on top.
+     *
+     * @param {string} tab one of TABS
+     * @param {string} text what is typed
+     * @returns {string} the search now in force for that tab ("" for none)
+     */
+    function setSearch(tab, text) {
+      if (tab === LEGACY_EDITS_TAB) tab = TAB.ACTIVE;
+      if (TABS.indexOf(tab) === -1) throw new Error("setSearch: unknown tab " + String(tab));
+      var typed = text === null || text === undefined ? "" : String(text);
+      searchQueries[tab] = typed.trim() ? typed : "";
+      if (dom && dom.searchInputs && dom.searchInputs[tab].value !== typed) dom.searchInputs[tab].value = typed;
+      syncSearchObserver();
+      applySearch(tab);
+      return searchQueries[tab];
+    }
+
+    function searchFor(tab) {
+      return searchQueries[tab] || "";
     }
 
     function readFilterPreference() {
@@ -2931,6 +3132,10 @@
       closeStylePanel(false);
       closeShortcuts(false);
       closePdfTray(false);
+      // The search watcher watches panes that are about to go. The typed words
+      // stay in searchQueries, and mount watches the new panes.
+      if (searchObserver) searchObserver.disconnect();
+      searchObserver = null;
       // An unanswered end-review question goes with the rail that asked it, and
       // whoever awaited it is told, rather than left holding a promise that can
       // never settle now the panel is gone.
@@ -6391,13 +6596,13 @@
       return node.getClientRects().length > 0;
     }
 
-    // skipFilter: pass over the Active filter. It is the list's header, like
+    // skipFilter: pass over the pane head (filter, search). It is the header, like
     // the tab strip, and the reviewer opened the rail to reach a card.
     function firstFocusableIn(root, skipFilter) {
       if (!root || typeof root.querySelectorAll !== "function") return null;
       var found = root.querySelectorAll(FOCUSABLE);
       for (var i = 0; i < found.length; i += 1) {
-        if (skipFilter && typeof found[i].closest === "function" && found[i].closest(".filter")) continue;
+        if (skipFilter && typeof found[i].closest === "function" && found[i].closest(".panehead")) continue;
         if (isShown(found[i]) && typeof found[i].focus === "function") return found[i];
       }
       return null;
@@ -7488,6 +7693,8 @@
       setActiveFilter: setActiveFilter,
       currentFilter: currentFilter,
       revealCard: revealCard,
+      setSearch: setSearch,
+      searchFor: searchFor,
       STATUS: STATUS,
       STATUS_TEXT: STATUS_TEXT,
       STATUS_SHORT: STATUS_SHORT,
@@ -7683,6 +7890,9 @@
     FILTER_EMPTY: FILTER_EMPTY,
     HAND_EDIT_ATTR: HAND_EDIT_ATTR,
     isHandEditKind: isHandEditKind,
+    SEARCH_PLACEHOLDER: SEARCH_PLACEHOLDER,
+    searchMatches: searchMatches,
+    searchEmptyText: searchEmptyText,
     STATUS: STATUS,
     STATUS_TEXT: STATUS_TEXT,
     STATUS_SHORT: STATUS_SHORT,

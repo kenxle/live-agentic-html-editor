@@ -194,4 +194,111 @@ test.describe("the Active pane's filter", () => {
       paneAttr: "edits"
     });
   });
+
+  // THE SEARCH BOX. Typed with the real keyboard into the box at its on-screen
+  // place, on Active and on Done, and combined with the kind filter.
+  test("the search box narrows the open tab to cards containing the words, and combines with the filter", async ({
+    page
+  }, testInfo) => {
+    await booted(page, pages);
+    const ids = await oneOfEach(page);
+    // A second comment, answered, so Done has a card to search.
+    const answeredId = await page.evaluate(() => window.__laheEdits.commentOn("one", "trainer", "Name the trainer here."));
+    await page.evaluate((id) => {
+      const P = window.LAHE.protocol;
+      window.__lahe.handle.doneTab().applyReplies([
+        P.newEvent({
+          event: P.EVENT.REPLY_FOLDED,
+          event_id: window.LAHE.record.randomId("evt"),
+          review: window.__lahe.handle.review,
+          item: id,
+          rev: window.__lahe.itemById(id).rev,
+          payload: {
+            accepted: true,
+            state: "handled",
+            file: "replies-claude.jsonl",
+            reply: { status: "handled", agent: "claude", reason: null, text: "Named her.", files: [] }
+          }
+        })
+      ]);
+      window.__lahe.handle.comments.closeAll();
+      const failures = window.__lahe.handle.rail.failures;
+      failures.list().forEach((chip) => failures.dismiss(chip.code));
+      window.__lahe.rail.selectTab("active");
+    }, answeredId);
+    await pollPage(page, (id) => window.__lahe.rail.getCard(id).pane === "done", answeredId, {
+      message: "the answered comment to move to Done"
+    });
+
+    const typeInto = async (tab, text) => {
+      const rect = await page.evaluate((t) => {
+        const box = window.__lahe.rail.tabBody(t).querySelector('[data-lahe-search="' + t + '"]');
+        const r = box.getBoundingClientRect();
+        return { x: r.left + r.width / 2, y: r.top + r.height / 2, width: r.width };
+      }, tab);
+      expect(rect.width, "the " + tab + " search box is on screen").toBeGreaterThan(0);
+      await page.mouse.click(rect.x, rect.y);
+      await page.keyboard.press("ControlOrMeta+KeyA");
+      await page.keyboard.press("Backspace");
+      if (text) await page.keyboard.type(text, { delay: 5 });
+      await pollPage(page, ([t, want]) => window.__lahe.rail.searchFor(t) === want, [tab, text], {
+        message: "the " + tab + " search to read '" + text + "'"
+      });
+    };
+    const seen = (tab) =>
+      page.evaluate(
+        ({ t, all }) => {
+          const rail = window.__lahe.rail;
+          const shown = (node) => !!node && node.getClientRects().length > 0;
+          const said = rail.tabBody(t).querySelector('[data-lahe-search-empty="' + t + '"]');
+          const out = { said: shown(said) ? said.textContent : null, count: null };
+          Object.keys(all).forEach((name) => {
+            out[name] = shown(rail.cardNode(all[name]));
+          });
+          const tabNode = rail.tabBody(t).getRootNode().querySelector('[role="tab"][data-tab="' + t + '"] .count');
+          out.count = tabNode.textContent;
+          return out;
+        },
+        { t: tab, all: { edit: ids.editId, comment: ids.commentId, answered: answeredId } }
+      );
+
+    await typeInto("active", "CONTRADICTS");
+    expect(await seen("active"), "only the comment holds the word, whatever its case").toMatchObject({
+      comment: true,
+      edit: false,
+      said: null,
+      count: "2"
+    });
+
+    await typeInto("active", "paragraph");
+    expect(await seen("active"), "both cards hold 'paragraph'").toMatchObject({ comment: true, edit: true });
+    await pressFilter(page, "edits");
+    expect(await seen("active"), "the search and the Edits filter together").toMatchObject({ comment: false, edit: true });
+    const shot = testInfo.outputPath("active-search-and-filter-light.png");
+    await page.screenshot({ path: shot });
+    await testInfo.attach("active-search-and-filter-light", { path: shot, contentType: "image/png" });
+    await pressFilter(page, "comments");
+    expect(await seen("active"), "and with the Comments filter").toMatchObject({ comment: true, edit: false });
+
+    await pressFilter(page, "all");
+    await typeInto("active", "nothing says this");
+    expect(await seen("active"), "a search that matches nothing says so").toMatchObject({
+      comment: false,
+      edit: false,
+      said: "Nothing here matches “nothing says this”."
+    });
+
+    await typeInto("active", "");
+    expect(await seen("active"), "an empty box shows everything").toMatchObject({ comment: true, edit: true, said: null });
+
+    await page.evaluate(() => window.__lahe.rail.selectTab("done"));
+    await typeInto("done", "trainer");
+    expect(await seen("done"), "Done has its own box").toMatchObject({ answered: true, said: null, count: "1" });
+    await typeInto("done", "lede");
+    expect(await seen("done"), "and it narrows Done").toMatchObject({
+      answered: false,
+      said: "Nothing here matches “lede”."
+    });
+    expect(await page.evaluate(() => window.__lahe.rail.searchFor("active")), "Active's box is untouched").toBe("");
+  });
 });

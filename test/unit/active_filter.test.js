@@ -146,3 +146,28 @@ test("a jump to a card the filter hides puts the filter back to All, and only th
   assert.equal(rail.revealCard(comment.id), "all");
   assert.equal(rail.revealCard("no-such-card"), "all");
 });
+
+// --- the search box ----------------------------------------------------------
+
+test("search matches a card's words case-insensitively, and empty matches everything", () => {
+  assert.equal(overlay.searchMatches("Shorten this HEADING", "heading"), true);
+  assert.equal(overlay.searchMatches("Shorten this heading", "Shorten This"), true);
+  assert.equal(overlay.searchMatches("Shorten   this\nheading", "this heading"), true, "runs of whitespace are one space");
+  assert.equal(overlay.searchMatches("Shorten this heading", "lede"), false);
+  assert.equal(overlay.searchMatches("anything", ""), true);
+  assert.equal(overlay.searchMatches("anything", "   "), true, "only spaces is no search");
+  assert.equal(overlay.searchMatches("", "x"), false);
+});
+
+test("a search is per tab, kept in memory only, and an old Edits caller searches Active", () => {
+  const store = storeModule.createStore({ backing: memoryBacking() });
+  const rail = overlay.createRail({ document: null, store: store, reviewId: REVIEW });
+  assert.equal(rail.searchFor("active"), "");
+  assert.equal(rail.setSearch("active", "Lede"), "Lede");
+  assert.equal(rail.searchFor("done"), "", "the other tab's box is its own");
+  assert.equal(rail.setSearch("edits", "tail"), "tail");
+  assert.equal(rail.searchFor("active"), "tail");
+  assert.equal(rail.setSearch("done", "   "), "", "only spaces is no search");
+  assert.throws(() => rail.setSearch("nowhere", "x"), /unknown tab/);
+  assert.equal(Object.prototype.hasOwnProperty.call(store.readUiPreferences(REVIEW), "search"), false, "nothing is written");
+});
