@@ -91,7 +91,7 @@
       keys: "Cmd-Shift-E",
       when: "the cursor or a selection is in a block",
       hint: "Press Cmd-Shift-E to edit the block you are in. Just that block.",
-      panelHint: "Select text and press Cmd-Shift-E to edit it.",
+      panelHint: "Select text and press Cmd-Shift-E to edit it by hand.",
       passThrough: false,
       preventDefault: true,
       requirement: "R24"
@@ -102,7 +102,7 @@
       when: "the cursor is in no block",
       hint: "Click + Write here to add text. Esc to finish.",
       panelKeys: "Cmd-Shift-E (no selection)",
-      panelHint: "Click an area to hand edit it. Esc to finish.",
+      panelHint: "As you hover, editable areas will be outlined. Click an area to hand edit it. Esc to finish.",
       passThrough: false,
       preventDefault: true,
       requirement: "R1"
@@ -112,7 +112,7 @@
       keys: "Cmd-Enter",
       when: "a comment box is focused",
       hint: "Cmd-Enter when done with this comment.",
-      panelHint: "Cmd-Enter to submit your comment or complete your edit.",
+      panelHint: "Submit your comment or complete your edit.",
       passThrough: false,
       preventDefault: true,
       requirement: "R7"
@@ -132,6 +132,7 @@
       keys: "Esc",
       when: "element-pick mode is open, or a comment box is focused",
       hint: "Esc closes the comment box or cancels picking. Your draft is kept.",
+      panelHint: "Esc closes the comment box or cancels picking. Half-written drafts are kept in the chat bar.",
       passThrough: false,
       preventDefault: true,
       requirement: "R1"
@@ -151,7 +152,7 @@
       keys: "Cmd-Shift-1",
       when: "always, except while the review is hidden for presenting",
       hint: "Press Cmd-Shift-1 to open or close the review panel.",
-      panelHint: "Toggle the chat rail.",
+      panelHint: "Toggle the chat bar.",
       passThrough: false,
       preventDefault: true,
       requirement: "R43"
