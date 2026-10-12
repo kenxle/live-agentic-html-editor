@@ -659,6 +659,8 @@ Built as the approved design note, with both security passes folded in. Every pa
   - `linked_docs_rail` 2 of 2 (the own-review test restored)
   - `catalog_cross_site` 2 of 2
   - `stable_addresses_mappers` 4, `stable_addresses_sites` 7, `library_stable_address` 7
+- `npm run test:unit`: 2679 tests, 2677 pass, 0 fail, 2 todo. The first run found one failure: a Library pick-up of a review from before sessions was only opened, not adopted. It is fixed (b811915), and the second run is the one above.
+- `lahe.js serve` count: 2 before. After: 5, and the three extra helpers belong to the `test-temp-cleanup` worktree, not this one.
 
 ### Screenshots
 
