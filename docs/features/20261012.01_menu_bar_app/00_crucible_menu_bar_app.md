@@ -7,7 +7,7 @@
 You chose B, the icon that tells you when something is waiting on you, and added two things:
 
 - **Recent documents** in the menu, as a quick way to open them.
-- **A "you're doing a lot" signal:** how many documents are open, how many agents are listening, or both. It is a nudge to go clean up and close things out.
+- **What is open, and who is connected:** how many documents are open and how many agents are listening. For you it helps find a stray open session or a forgotten agent, and nudges you to close things out. For others it can be a satisfying sign of how much they have going on.
 
 The running indicator, the Library link and Quit stay in, for completeness.
 
@@ -18,7 +18,7 @@ Agree or disagree with each one. A comment on the line is enough.
 1. **The job is: one glance tells you whether anything needs you, and one click gets you there.** The running dot and the Library link are basics inside that job, not the point of it.
 2. **"Waiting on you" means two things.** An agent asked you a question on a card. Or an agent answered comments you have not looked at since. The Library's existing "waiting" count is the other direction: your comments waiting on an agent. The menu shows both, labeled apart.
 3. **The helper already knows almost all of this.** It has every review, every unanswered comment, every agent reply, which review windows are open, and which agents have a live monitor. The one new thing is a "you looked at it" mark per review, so "answered since you looked" can work.
-4. **The icon shows only the "waiting on you" count.** The busy counts (open documents, listening agents, open sessions) sit in the menu, so the icon stays quiet unless you are actually needed.
+4. **The icon shows only the "waiting on you" count.** The menu shows what is open and who is connected: the counts, and under them the open documents and the agents listening, by name, so a stray session is easy to spot. The icon stays quiet unless you are actually needed.
 5. **A recent document opens the same way the Library's Open does.** Same address, same rules, nothing new about how pages are served.
 6. **The core stays cross-platform.** Everything the menu shows comes from one new helper answer that any program could read. Only the icon itself is Mac code. A Linux or Windows tray icon could later reuse that same answer.
 7. **The icon is optional.** On a Mac, `lahe install` offers it. Nothing else in Lahe needs it.
