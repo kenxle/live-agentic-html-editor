@@ -1403,7 +1403,12 @@
     // an old Markdown review has one: its page was the rendered file
     // (/<name>-<hash>.html), and its new address is the source (/doc.md). Read
     // only together with an old origin (record.samePage).
-    PATH_ALIASES: "data-lahe-path-aliases"
+    PATH_ALIASES: "data-lahe-path-aliases",
+    // Each page carries its own comments (Part 2): this page's other addresses
+    // in the review that answers on it, as a JSON array of "origin path"
+    // strings: a link address on another page's site, an old address. Written
+    // only by the helper, from the review's own records (page_routes.spellingsFor).
+    SPELLINGS: "data-lahe-spellings"
   };
 
   // A plain loopback http origin with a port: what a page server registered
@@ -1424,6 +1429,29 @@
 
   function isPathAlias(value) {
     return typeof value === "string" && PATH_ALIAS.test(value);
+  }
+
+  // The origin half of a spelling: plain http, a lowercase host, an optional port.
+  var SPELLING_ORIGIN = /^http:\/\/[a-z0-9.-]{1,253}(?::\d{1,5})?$/;
+
+  function isSpellingOrigin(value) {
+    return typeof value === "string" && SPELLING_ORIGIN.test(value);
+  }
+
+  /** "origin path", both halves checked. */
+  function isSpelling(value) {
+    if (typeof value !== "string") return false;
+    var at = value.indexOf(" ");
+    return at > 0 && isSpellingOrigin(value.slice(0, at)) && isPathAlias(value.slice(at + 1));
+  }
+
+  function spellingsAttribute(list) {
+    if (!Array.isArray(list)) throw new Error("scriptTag: spellings must be a list");
+    if (list.length > ALIAS_MAX) throw new Error("scriptTag: at most " + ALIAS_MAX + " spellings");
+    list.forEach(function (one) {
+      if (!isSpelling(one)) throw new Error("scriptTag: a spelling is \"origin path\", not " + JSON.stringify(one));
+    });
+    return JSON.stringify(list).replace(/&/g, "&amp;").replace(/"/g, "&quot;");
   }
 
   function pathAliasesAttribute(paths) {
@@ -1493,6 +1521,7 @@
       (o.notes === true ? '        ' + SCRIPT_ATTR.NOTES + '="' + NOTES_ON + '"\n' : "") +
       (o.aliases !== undefined ? '        ' + SCRIPT_ATTR.ALIASES + '="' + aliasesAttribute(o.aliases) + '"\n' : "") +
       (o.pathAliases !== undefined ? '        ' + SCRIPT_ATTR.PATH_ALIASES + '="' + pathAliasesAttribute(o.pathAliases) + '"\n' : "") +
+      (o.spellings !== undefined ? '        ' + SCRIPT_ATTR.SPELLINGS + '="' + spellingsAttribute(o.spellings) + '"\n' : "") +
       '        defer><\/script>'
     );
   }
@@ -2061,6 +2090,8 @@
     ALIAS_MAX: ALIAS_MAX,
     isLoopbackPortOrigin: isLoopbackPortOrigin,
     isPathAlias: isPathAlias,
+    isSpellingOrigin: isSpellingOrigin,
+    isSpelling: isSpelling,
     FRAMES_ALLOW: FRAMES_ALLOW,
     START_HIDDEN: START_HIDDEN,
     NOTES_ON: NOTES_ON,

@@ -112,7 +112,7 @@ function notInjectingNotes(dir) {
   return held;
 }
 
-function injectForMatch(dir, match, target, html, aliases, pathAliases) {
+function injectForMatch(dir, match, target, html, aliases, pathAliases, spellings) {
   var carried = scriptLine.reviewAlreadyInFile(html);
   if (carried === match.review) return null;
   if (carried) {
@@ -134,7 +134,8 @@ function injectForMatch(dir, match, target, html, aliases, pathAliases) {
     notes: typeof match.notes === "boolean" ? match.notes : stateDir.isNotesReview(dir, match.review),
     aliases: Array.isArray(aliases) && aliases.length ? aliases : undefined,
     // Only with an old origin: a path alias alone is never read (samePage).
-    pathAliases: Array.isArray(aliases) && aliases.length && Array.isArray(pathAliases) && pathAliases.length ? pathAliases : undefined
+    pathAliases: Array.isArray(aliases) && aliases.length && Array.isArray(pathAliases) && pathAliases.length ? pathAliases : undefined,
+    spellings: Array.isArray(spellings) && spellings.length ? spellings : undefined
   });
   return scriptLine.placeScriptLine(html, tag).html;
 }
@@ -574,9 +575,16 @@ function fileOfItem(dir, entry, review, item) {
   if (decoded === null) return null;
   var relative = decoded.split("/").filter(function (seg) { return seg.length > 0; }).join("/");
   var records = entry && !entry.transient ? oldServerRecords(dir) : readOldServerRecords(dir);
+  // Only page servers that served THIS review's own folders: ports were reused
+  // across page servers, so another review's old server on the same port is a
+  // different file.
+  var ownRoots = servedRootsOf(review).concat(targetsOf(review).map(function (target) {
+    return realOrNull(path.dirname(target));
+  })).filter(Boolean);
   var found = null;
   records.some(function (rec) {
     if (rec.ports.indexOf(port) === -1 || typeof rec.root !== "string") return false;
+    if (ownRoots.indexOf(realOrNull(rec.root) || rec.root) === -1) return false;
     var candidate = path.resolve(rec.root, relative || "index.html");
     if (!within(candidate, rec.root)) return false;
     var real = realOrNull(candidate);
@@ -843,33 +851,105 @@ function oldSpellings(dir, site, file, review) {
 }
 
 /**
- * V31: the records `items` (one review's fold) that belong to the page at
- * `origin` + `pagePath`, by record.samePage with the page's old spellings.
- * Never a draft: a draft never reached the agent, and one the reviewer
- * withdrew must not come back. An origin that is not a site address gets
- * nothing: the old spellings belong to stable addresses only.
+ * The records the page at `origin` + `pagePath` shows (records.read).
  *
- * @param {string} dir
- * @param {object} review the helper's review ({id, source_path, target_path, target_paths})
- * @param {string|null} origin the page's Origin, as auth passed it
- * @param {string|null} pagePath
- * @param {object[]} items
+ * `records`: this review's committed records made on the page's file, under
+ * any of its addresses: its own, a link address, an old 127.0.0.1 address
+ * (fileOfItem, per review: old ports were reused). Never a draft.
+ *
+ * `others`: comments already split on disk (Part 3), read-only. From another
+ * review, not retired, that holds a committed record on this file and either
+ * answers on this site (the Origin check's own rule, reviewAnswersOnSite), or,
+ * on the file's own site, is listed for the file in a link table. A review
+ * that answers only through a link mount never counts on the linking site.
+ * Each group carries a title and an agent's name, and a key that means
+ * nothing outside this answer: no review id, no session id.
+ *
+ * An Origin that is not a site address gets nothing.
+ *
+ * @returns {{records: object[], others: {key: string, title: string, agent: string, records: object[]}[]}}
  */
-function recordsForPage(dir, review, origin, pagePath, items) {
+function pageRecords(dir, review, origin, pagePath, items) {
+  var none = { records: [], others: [] };
   var entry = activeFor(dir);
-  if (!entry || typeof origin !== "string" || typeof pagePath !== "string" || pagePath.charAt(0) !== "/") return [];
+  if (!entry || typeof origin !== "string" || typeof pagePath !== "string" || pagePath.charAt(0) !== "/") return none;
   var name = protocol.siteNameFromOrigin(origin, entry.pagesPort, typeof entry.laheNames === "function" && entry.laheNames());
   var site = name ? entry.sites.get(name) : null;
-  if (!site) return [];
-  var file = fileForPage(dir, origin, pagePath);
-  var spellings = oldSpellings(dir, site, file ? (realOrNull(file) || file) : null, { source_path: review.source_path, targets: targetsOf(review) });
+  if (!site) return none;
+  var found = fileForPage(dir, origin, pagePath);
+  var file = found ? (realOrNull(found) || found) : null;
+  var spellings = oldSpellings(dir, site, file, { source_path: review.source_path, targets: targetsOf(review) });
   var page = record.pageFrom(
     { origin: origin, pathname: pagePath, href: origin + pagePath },
     { seq: 1, aliases: spellings.origins, path_aliases: spellings.paths }
   );
-  return (items || []).filter(function (item) {
-    return item && !record.isDraft(item) && record.samePage(item, page);
+  var mine = (items || []).filter(function (item) {
+    if (!item || record.isDraft(item)) return false;
+    if (record.samePage(item, page)) return true;
+    return !!file && fileOfItem(dir, entry, review, item) === file;
   });
+  if (!file) return { records: mine, others: [] };
+
+  var mounted = pagePath.indexOf(MOUNT_ROOT) === 0;
+  var linking = Object.create(null);
+  if (!mounted) {
+    entry.sites.list().forEach(function (each) {
+      var ids = each.site.linked_files && each.site.linked_files[file];
+      (Array.isArray(ids) ? ids : []).forEach(function (id) { linking[id] = true; });
+    });
+  }
+  var store = null;
+  var others = [];
+  readReviews(dir).forEach(function (each) {
+    if (each.id === review.id || typeof each.meta.retired_at === "string") return;
+    var other = Object.assign({ id: each.id }, each.meta);
+    if (!reviewAnswersOnSite(site, other) && linking[each.id] !== true) return;
+    var held = committedRecords(dir, entry, each.id).filter(function (item) {
+      return fileOfItem(dir, entry, other, item) === file;
+    });
+    if (!held.length) return;
+    if (!store) store = require("./agent_sessions.js").createStore({ dir: dir });
+    var agent = null;
+    try {
+      var owner = typeof each.meta.agent_session_id === "string" ? store.read(each.meta.agent_session_id) : null;
+      agent = owner && typeof owner.name === "string" && owner.name ? owner.name : null;
+    } catch (err) {
+      agent = null;
+    }
+    var title = typeof each.meta.name === "string" && each.meta.name
+      ? each.meta.name
+      : typeof held[0][record.FIELD.PAGE_TITLE] === "string" && held[0][record.FIELD.PAGE_TITLE]
+        ? held[0][record.FIELD.PAGE_TITLE]
+        : path.basename(file);
+    others.push({ key: "g" + (others.length + 1), title: title, agent: agent || "an agent", records: held });
+  });
+  return { records: mine, others: others };
+}
+
+/**
+ * This page's other addresses in the review that answers on it (Part 2): the
+ * distinct origin and path pairs its committed records on this file were
+ * made under, other than this page's own. At most ALIAS_MAX. They go on the
+ * script tag (data-lahe-spellings), so the rail reads those records as this
+ * page's.
+ */
+function spellingsFor(dir, siteName, pagePath, file, match) {
+  var entry = activeFor(dir);
+  if (!entry || !file || !match) return [];
+  var review = { id: match.review, source_path: match.source_path, target_paths: match.targets || [] };
+  var own = record.identityOrigin(protocol.siteOrigin(siteName, entry.pagesPort)) + " " + pagePath;
+  var out = [];
+  committedRecords(dir, entry, match.review).forEach(function (item) {
+    if (out.length >= protocol.ALIAS_MAX) return;
+    var origin = item[record.FIELD.PAGE_ORIGIN];
+    var itemPath = item[record.FIELD.PAGE_PATH];
+    if (!protocol.isSpellingOrigin(origin) || !protocol.isPathAlias(itemPath)) return;
+    if (record.identityOrigin(origin) + " " + itemPath === own) return;
+    if (fileOfItem(dir, entry, review, item) !== file) return;
+    var pair = origin + " " + itemPath;
+    if (out.indexOf(pair) === -1) out.push(pair);
+  });
+  return out;
 }
 
 /** {old origin: site origin} for every active site, for review.json grouping. */
@@ -1104,7 +1184,8 @@ function createPageRoutes(options) {
     var match = pickReview(dir, ctx.site, { filePaths: filePathsFor(candidate, real), realFile: real, mounted: mounted });
     if (match) {
       var htmlSpellings = oldSpellings(dir, ctx.site, real, match);
-      var injected = injectForMatch(dir, match, candidate, html, htmlSpellings.origins, htmlSpellings.paths);
+      var injected = injectForMatch(dir, match, candidate, html, htmlSpellings.origins, htmlSpellings.paths,
+        spellingsFor(dir, ctx.name, ctx.pagePath, real, match));
       if (injected !== null) html = injected;
     }
     sendHtml(req, res, 200, tabIcon.ensure(html));
@@ -1142,7 +1223,8 @@ function createPageRoutes(options) {
     if (match) {
       if (out.linked.length) sites.addLinked(ctx.name, match.review, out.linked);
       var spellings = oldSpellings(dir, site, real, match);
-      var injected = injectForMatch(dir, match, candidate, html, spellings.origins, spellings.paths);
+      var injected = injectForMatch(dir, match, candidate, html, spellings.origins, spellings.paths,
+        spellingsFor(dir, ctx.name, ctx.pagePath, real, match));
       if (injected !== null) html = injected;
     }
     sendHtml(req, res, 200, html);
@@ -1167,6 +1249,70 @@ function createPageRoutes(options) {
     if (!real || !realMain || !within(real, realMain)) return null;
     try { if (!fs.statSync(real).isFile()) return null; } catch (err) { return null; }
     return real;
+  }
+
+  /** Both Fetch Metadata headers of a top-level page load. Absent on .lahe, so never there. */
+  function topLevel(req) {
+    var dest = req.headers["sec-fetch-dest"];
+    var mode = req.headers["sec-fetch-mode"];
+    return dest === "document" && mode === "navigate";
+  }
+
+  /** A review, not retired, that recorded this exact file: the file's own review. */
+  function ownReviewOf(real) {
+    return readReviews(dir).some(function (each) {
+      if (typeof each.meta.retired_at === "string") return false;
+      return recordedFiles(each.meta).some(function (one) {
+        return (realOrNull(one) || path.resolve(one)) === real;
+      });
+    });
+  }
+
+  /**
+   * The file's own address, from the registry only: the deepest folder site
+   * whose root holds the file (or a notes site that is the file), the printed
+   * port, and the file's path under that root, re-encoded segment by segment.
+   * Null when no site holds it. Never makes a site.
+   */
+  function ownAddressOf(real) {
+    var best = null;
+    sites.list().forEach(function (each) {
+      var root = each.site.root;
+      if (each.site.mode === "page-only") {
+        if (root === real && (!best || root.length > best.root.length)) best = { name: each.name, root: path.dirname(root), rel: path.basename(root) };
+        return;
+      }
+      if (!within(real, root) || real === root) return;
+      if (!best || root.length > best.root.length) best = { name: each.name, root: root, rel: path.relative(root, real) };
+    });
+    if (!best) return null;
+    var port = printedPort();
+    var origin = protocol.siteOrigin(best.name, typeof port === "number" ? port : protocol.PAGES.PORT);
+    return origin + "/" + best.rel.split(path.sep).map(encodeURIComponent).join("/");
+  }
+
+  function redirectTo(res, location) {
+    res.writeHead(302, {
+      location: location,
+      "cache-control": "no-store",
+      "cross-origin-resource-policy": protocol.PAGES.CORP,
+      "content-security-policy": "frame-ancestors 'self'",
+      "content-length": 0
+    });
+    res.end();
+  }
+
+  /** A linked page that has its own review, shown here read-only, with where to comment. */
+  function serveElsewhere(req, res, ctx, candidate, real, urlDir) {
+    var note = "<p class=\"lahe-readonly-note lahe-own-review-note\">This document has its own review. Open it at its own address to comment on it: <code>" +
+      escapeHtml(real) + "</code>.</p>";
+    if (markdown.isMarkdown(candidate)) {
+      return serveMarkdown(req, res, ctx, candidate, real, urlDir, { readOnly: true, mounted: true, note: note });
+    }
+    var html;
+    try { html = fs.readFileSync(candidate, "utf8"); } catch (err) { return notFound(req, res); }
+    var stripped = scriptLine.removeScriptLine(html);
+    sendHtml(req, res, 200, tabIcon.ensure(placeNote(stripped ? stripped.html : html, note)));
   }
 
   function serveGone(req, res, ctx, candidate) {
@@ -1223,7 +1369,7 @@ function createPageRoutes(options) {
     if (servePackaged(req, res, decoded)) return;
     var where = locate(site, decoded, rawPath);
     if (!where) return notFound(req, res);
-    var ctx = { name: name, site: site };
+    var ctx = { name: name, site: site, pagePath: rawPath };
     var candidate = where.page ? site.root : candidateOf(where, decoded);
     if (!candidate || inStateDir(candidate)) return notFound(req, res);
     var stat;
@@ -1234,6 +1380,15 @@ function createPageRoutes(options) {
     var real = realOrNull(candidate);
     var realBase = realOrNull(where.base);
     if (!real || !realBase || !within(real, realBase) || !stat.isFile() || inStateDir(real)) return notFound(req, res);
+    // A LINK ADDRESS TO A FILE WITH ITS OWN REVIEW (each page carries its own
+    // comments, Part 2). A top-level page load goes to the file's own address;
+    // anything else gets the page read-only with no rail, so a new comment is
+    // never filed in the linking review.
+    if (where.mounted && isPage(candidate) && ownReviewOf(real)) {
+      var target = topLevel(req) ? ownAddressOf(real) : null;
+      if (target) return redirectTo(res, target);
+      return serveElsewhere(req, res, ctx, candidate, real, urlDirOf(where.prefix, where.base, candidate));
+    }
     if (markdown.isMarkdown(candidate)) {
       return serveMarkdown(req, res, ctx, candidate, real, urlDirOf(where.prefix, where.base, candidate), { mounted: where.mounted });
     }
@@ -1268,7 +1423,8 @@ module.exports = {
   recordLinkedFor: recordLinkedFor,
   aliasesFor: aliasesFor,
   oldSpellings: oldSpellings,
-  recordsForPage: recordsForPage,
+  pageRecords: pageRecords,
+  spellingsFor: spellingsFor,
   aliasMap: aliasMap,
   createPageRoutes: createPageRoutes,
   fileOfItem: fileOfItem,

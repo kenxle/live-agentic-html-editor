@@ -488,6 +488,16 @@
     if (!item || typeof item !== "object") throw new TypeError("samePage expects an item");
     if (!page || typeof page !== "object") throw new TypeError("samePage expects a page");
     if (pageIdentityKey(item) === pageIdentityKeyFor(page)) return true;
+    // Another address of this page in its review (a link address, an old
+    // address), as the helper named it on the tag.
+    if (Array.isArray(page.spellings) && page.spellings.length) {
+      var mineKey = identityOrigin(item[FIELD.PAGE_ORIGIN]) + " " + String(item[FIELD.PAGE_PATH]);
+      for (var s = 0; s < page.spellings.length; s += 1) {
+        var one = page.spellings[s];
+        var at = one.indexOf(" ");
+        if (identityOrigin(one.slice(0, at)) + " " + one.slice(at + 1) === mineKey) return true;
+      }
+    }
     var itemOrigin = String(item[FIELD.PAGE_ORIGIN]);
     var pageOrigin = String(page.origin);
     // A STABLE ADDRESS'S OLD ORIGINS. A record made when this page was served
@@ -545,6 +555,10 @@
       // read only together with an old origin. Also only what the helper wrote.
       path_aliases: Array.isArray(opts.path_aliases)
         ? opts.path_aliases.filter(function (p) { return typeof p === "string" && p.charAt(0) === "/"; })
+        : [],
+      // This page's other addresses in its review ("origin path"), from the tag.
+      spellings: Array.isArray(opts.spellings)
+        ? opts.spellings.filter(function (one) { return typeof one === "string" && one.indexOf(" ") > 0; })
         : []
     };
   }

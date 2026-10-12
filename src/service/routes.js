@@ -366,25 +366,23 @@ var HANDLERS = {
   // The library's reply poll loop. The cursor is a seq, never a timestamp and
   // never a byte offset: two events in one millisecond are ordinary, and a clock
   // that steps backwards would silently skip work.
-  // V31: the records this review holds for the asking page, whole. The rail
-  // fills from browser storage, which belongs to one origin, so comments made
-  // at a page's old 127.0.0.1:<port> address never reached its stable address.
-  // Read off the projector's kept fold (drafts are in the fold; the filter
-  // keeps them out), filtered to this page by page_routes.recordsForPage.
+  // The records the asking page shows (V31, and each page carries its own
+  // comments): this review's records on the page's file under any of its
+  // addresses, and, read-only under `others`, comments on the file already
+  // split into other reviews that answer here. Off the projector's kept fold;
+  // drafts never. page_routes.pageRecords holds the rules.
   "records.read": function (request, deps) {
     var review = deps.reviews.get(request.review);
     var items = typeof deps.projection.currentItems === "function"
       ? deps.projection.currentItems(deps, request.review)
       : null;
     if (!items) items = deps.projection.itemsFrom(deps.log.read(request.review));
+    var shown = review
+      ? pageRoutes.pageRecords(deps.dir, review, request.origin || null, request.query.page_path || null, items)
+      : { records: [], others: [] };
     return {
       status: 200,
-      body: {
-        records: review
-          ? pageRoutes.recordsForPage(deps.dir, review, request.origin || null, request.query.page_path || null, items)
-          : [],
-        seq: deps.log.currentSeq(request.review)
-      }
+      body: { records: shown.records, others: shown.others, seq: deps.log.currentSeq(request.review) }
     };
   },
 
