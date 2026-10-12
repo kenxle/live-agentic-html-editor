@@ -1,15 +1,16 @@
 # Progress: Stable addresses
 
-**Merged to main. Nothing is blocking you; one step is yours: `lahe install`.** Last updated 2026-10-11 22:17.
+**Done: merged and installed.** Last updated 2026-10-11 22:34.
 
 **Docs:** [Decisions page](../../ongoing/STABLE_ADDRESSES.md) · [Crucible](00_crucible_stable_addresses.html) · [Brief](01_brief_stable_addresses.html) · [Architecture](02_architecture_stable_addresses.html) · [Plan](03_plan_stable_addresses.html) · [Code survey](parts/architecture/recon.md)
 
 ## Needs your attention
 
-- [ ] **Run `! lahe install`** in the Claude prompt, so the helper starts at login. Then, when convenient: restart the Mac and check a Lahe tab still loads (V45). The extras are optional: `lahe install --port-80` drops the `:1483`, and `lahe install --lahe-names` adds a `.lahe` ending. Each asks for your admin password once.
+Nothing. Optional: restart the Mac and check a Lahe tab still loads (V45). An old helper from this morning (pid 93197, old code, port 62840) is still running and unused; `! kill 93197` stops it.
 
 ## Decided
 
+- **Installed.** `lahe install` is done: the login item `lahe-helper` is loaded and serving.
 - **Merged.** Stable addresses is on main ([PR #45](https://github.com/kenxle/live-agentic-html-editor/pull/45)), and so is the test temp cleanup ([PR #43](https://github.com/kenxle/live-agentic-html-editor/pull/43)). The helper on your Mac is already running the new code. Post-merge checks (the remaining three-browser failures, the idle measurement, a walkthrough) are on the board as LAHE-stable-addresses-three-browser-followup. The one real failure, the Library link in WebKit, is being fixed on its own branch.
 - **Approved (your page note, 20:37):** the design for every page carrying its own comments, one PR instead of five, and retiring the old tests. The retired tests are deleted only in the cleanup batch.
 - **Every page carries its own comments: built and merged.** What you will notice:
