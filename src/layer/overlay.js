@@ -520,8 +520,6 @@
     "border-bottom:1px solid var(--line-soft)}",
     ".mark{width:8px;height:8px;border-radius:50%;background:var(--accent);flex:none}",
     ".title{font-size:13px;font-weight:600;letter-spacing:-.005em}",
-    ".review{font-size:11px;color:var(--ink-faint);letter-spacing:.02em;",
-    "overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:11ch}",
     ".head .spacer{flex:1}",
     ".iconbtn{width:26px;height:26px;border-radius:7px;color:var(--ink-soft);",
     "display:flex;align-items:center;justify-content:center;font-size:14px}",
@@ -1947,7 +1945,7 @@
       var head = el("div", "head");
       head.appendChild(el("span", "mark"));
       head.appendChild(el("span", "title", "Review"));
-      head.appendChild(el("span", "review", reviewId || ""));
+      // No review id in the head: it only ever showed a hash, never a name.
       head.appendChild(el("span", "spacer"));
 
       // THE DOCUMENT STYLE BUTTON, and the dropdown that hangs from it. Built
@@ -2750,7 +2748,6 @@
       collapsedCards = readCardCollapsePreference();
       loadChips();
       if (dom) {
-        dom.rail.querySelector(".review").textContent = id || "";
         renderChips();
         renderCollapsed();
         renderPresent();
