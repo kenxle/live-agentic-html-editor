@@ -6,11 +6,6 @@
 
 ## Needs your attention
 
-- [ ] **Urgent: your disk is full (887 MB free of 926 GB, and falling).** Test runs leave their temp folders behind: every unit run creates a `lahe-run-*` folder of about 600 MB and nothing removes it. That is how the test wrapper on main already works (`scripts/no_stray_helpers.js`), and today four builders ran the suite many times, so your temp folder grew to 39 GB. I have stopped all test runs. Your rules say I do not delete, so this one is yours. To clear the Lahe test folders older than ten minutes, type this in the Claude prompt:
-
-  `! find "$TMPDIR" -maxdepth 1 -name 'lahe-*' -mmin +10 -exec rm -rf {} +`
-
-  It touches only test folders in your temp folder, never `~/.local/state/lahe`. I recommend a small fix so this stops happening: the wrapper removes its own `lahe-run-*` folder when the run ends. Say yes and I will make it a separate small change.
 - [ ] **Old comments at the new address: show them (A), or say they exist (B)?** Every document you open after this ships gets its new address once. Comments you made at its old random-port address do not appear on the rail there. The rail only reads this browser's storage, and the browser keeps storage separately for each address. The comments are not lost: they are in `review.json`, grouped under the new address, and agents still see and answer them.
   - **A, show them.** When a page opens, the rail asks the helper for this page's stored comments and adds any it does not have, using the existing merge rules, so you see your old cards and threads. This needs a new read route and changes in four rail files, with tests for duplicates, a withdrawn draft coming back, and comments from other pages or reviews.
   - **B, say so.** The rail shows one line, like "3 earlier comments from this page's old address are with your agent." You cannot read them on the page.
@@ -24,6 +19,11 @@
   - **Links into hidden folders no longer open.** A Markdown link to a file inside a hidden folder in your home folder (for example `~/.config/notes/x.md`) now shows as plain text. Before, Lahe would serve that whole hidden folder, which is how a document could reach `~/.ssh`. *Recommend: accept.*
   - **One pull request instead of five.** The plan split the work into five PRs with an on/off switch between them. The switch is already removed, so splitting now would mean rebuilding it just to tear it down. *Recommend: one PR, with the commits grouped by step.*
 - [ ] **Approve retiring old tests.** 11 test files test behavior this feature removes: page servers that stop when idle, restarting page servers, remembering old ports, and the sweep that closes reopened sessions. 2 files go whole and 9 in part. 26 more get rewritten for the new behavior. Until you approve, the retired tests are moved to `test/retired/` (not deleted) so the suite stays green; they are deleted in one batch at cleanup only with your OK. Lists: "Task 3.0: test retirement list" and the Step 3 moved-test list in the [core progress](progress/phase6_workstream_core.md), and the "Task 4.3" section of the [library progress](progress/phase6_workstream_library.md) (18 Library tests).
+
+
+## Disk space, cleared
+
+The Lahe test folders were deleted at your go-ahead, and the disk went from 953 MB free to 43 GB free. One unit run, measured after the cleanup, left 618 MB behind. Most of it (465 MB) is the Library test fixture, which writes a 5 MB event log on each of its 74 setups. The wrapper that runs the tests also never removes its own folder. Both are on the board as LAHE-test-runs-fill-disk, outside this feature. The same run passed: 2,639 unit tests, 0 failed, no helpers left running.
 
 ## Currently working on
 
