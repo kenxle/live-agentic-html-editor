@@ -242,6 +242,7 @@ test.describe("Hold: queue several comments, release them to the agent at once",
       // TURN HOLD ON, through the real control, the way a reviewer does.
       const beforeToggle = await page.evaluate(() => window.__lahe.rail.holdInfo());
       expect(beforeToggle.pressed, "off by default").toBe(false);
+      expect(beforeToggle.label, "the button names what pressing it does").toBe("Hold sending messages");
       await clickHoldButton(page);
       const onInfo = await page.evaluate(() => window.__lahe.rail.holdInfo());
       expect(onInfo.pressed, "R11: a real pressed state").toBe(true);
@@ -249,12 +250,14 @@ test.describe("Hold: queue several comments, release them to the agent at once",
       expect(onInfo.countText, "R5: zero queued reads a sentence, not a bare 0").toBe(
         "Holding — nothing sends until you release"
       );
+      expect(onInfo.label, "held with nothing queued, the button lets go").toBe("Stop holding messages");
 
       const held = await sendComment(page, "section.focus p:nth-of-type(1)", "Batched while managing turns.");
       const draft = await leaveDraft(page, "section.focus p:nth-of-type(2)", "Half written, not sent yet.");
 
       const afterOne = await page.evaluate(() => window.__lahe.rail.holdInfo());
       expect(afterOne.countText, "R5: past zero it counts").toBe("Holding, 1 queued");
+      expect(afterOne.label, "and the button says what it will send").toBe("Send 1 queued message");
 
       // R4, all three together. wakeBefore/afterward compares the SAME file,
       // so "unchanged" is a real diff, not just "empty because nothing was
@@ -311,6 +314,7 @@ test.describe("Hold: queue several comments, release them to the agent at once",
       const offInfo = await page.evaluate(() => window.__lahe.rail.holdInfo());
       expect(offInfo.pressed).toBe(false);
       expect(offInfo.countText, "nothing left to announce once released").toBe("");
+      expect(offInfo.label, "back to offering a hold").toBe("Hold sending messages");
 
       await pollUntil(() => itemIdsInReviewJson(helper.stateDir).indexOf(held.id) !== -1, {
         message: "the released item to reach review.json in one pass"

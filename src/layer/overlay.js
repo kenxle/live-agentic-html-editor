@@ -260,7 +260,12 @@
   };
   // The word the toggle and the toast both use. One spelling, so the button's
   // accessible name and anything announcing it never drift apart.
-  var HOLD_LABEL = "Hold sending";
+  var HOLD_LABEL = "Hold sending messages";
+  // While held, the same button sends what is queued.
+  function holdReleaseLabel(n) {
+    if (n === 0) return "Stop holding messages";
+    return "Send " + n + " queued message" + (n === 1 ? "" : "s");
+  }
   var HOLD_ZERO_TEXT = "Holding — nothing sends until you release";
   function holdCountText(n) {
     return "Holding, " + n + " queued";
@@ -911,22 +916,20 @@
     // switch, drawn with the rail's own neutral tokens: pressed reads as a
     // filled pill on --sunken, the same surface the end-review panel's buttons
     // use for their own pressed state, never a new hue.
-    // A full-width button with a switch at its right end: the label says what
-    // it does, the switch says whether it is on.
+    // One full-width button that names what pressing it does: "Hold sending
+    // messages", then, while held, "Send N queued messages", drawn as the
+    // primary action because that is the thing left to do.
     ".holdrow{display:flex;align-items:center;gap:6px 8px;flex-wrap:wrap}",
-    ".holdbtn{display:flex;align-items:center;justify-content:space-between;gap:10px;width:100%;",
+    ".holdbtn{display:flex;align-items:center;justify-content:center;width:100%;",
     "font-size:12px;font-weight:600;color:var(--ink-soft);padding:7px 10px;border-radius:var(--radius-sm);",
     "border:1px solid var(--line);background:var(--paper)}",
     ".holdbtn:hover{background:var(--surface);color:var(--ink)}",
-    ".holdbtn__dot{order:2;position:relative;width:28px;height:16px;border-radius:999px;",
-    "background:var(--line);flex:none;transition:background .15s}",
-    ".holdbtn__dot::after{content:'';position:absolute;top:2px;left:2px;width:12px;height:12px;",
-    "border-radius:50%;background:var(--paper);box-shadow:0 1px 2px rgba(0,0,0,.25);transition:left .15s}",
-    ".holdbtn[aria-pressed='true']{color:var(--ink);border-color:var(--line)}",
-    ".holdbtn[aria-pressed='true'] .holdbtn__dot{background:var(--accent)}",
-    ".holdbtn[aria-pressed='true'] .holdbtn__dot::after{left:14px}",
-    ".holdcount{font-size:11px;color:var(--ink-soft);overflow:hidden;text-overflow:ellipsis;",
-    "white-space:nowrap;flex:1 1 100%;min-width:0}",
+    ".holdbtn[aria-pressed='true']{background:var(--accent);border-color:var(--accent);color:#fff}",
+    ".holdbtn[aria-pressed='true']:hover{background:var(--accent-ink);border-color:var(--accent-ink);color:#fff}",
+    // The count is said on the button now; this stays as the screen-reader
+    // announcement of a change.
+    ".holdcount{position:absolute;width:1px;height:1px;margin:-1px;overflow:hidden;clip:rect(0 0 0 0);",
+    "white-space:nowrap;border:0}",
     ".holdcount:empty{display:none}",
 
     ".limit{font-size:11.5px;color:var(--ink-faint);line-height:1.4}",
@@ -2300,8 +2303,8 @@
       holdBtn.setAttribute("aria-pressed", "false");
       holdBtn.setAttribute("aria-label", HOLD_LABEL);
       holdBtn.title = HOLD_LABEL;
-      holdBtn.appendChild(el("span", "holdbtn__dot"));
-      holdBtn.appendChild(el("span", null, HOLD_LABEL));
+      var holdLabel = el("span", "holdbtn__label", HOLD_LABEL);
+      holdBtn.appendChild(holdLabel);
       holdBtn.addEventListener("click", function () {
         toggleHeld();
       });
@@ -2546,6 +2549,7 @@
         statusDot: statusDot,
         statusDotWrap: statusDotWrap,
         holdBtn: holdBtn,
+        holdLabel: holdLabel,
         holdCount: holdCount,
         limit: limit,
         footMain: footMain,
@@ -2927,6 +2931,10 @@
       if (!dom || !dom.holdBtn) return;
       var held = isHeldNow();
       dom.holdBtn.setAttribute("aria-pressed", held ? "true" : "false");
+      var label = held ? holdReleaseLabel(heldQueuedCount()) : HOLD_LABEL;
+      dom.holdLabel.textContent = label;
+      dom.holdBtn.setAttribute("aria-label", label);
+      dom.holdBtn.title = "";
       if (!held) {
         dom.holdCount.textContent = "";
         return;
