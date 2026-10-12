@@ -40,6 +40,27 @@ test("the Library page accepts a top-level navigation from any site, including c
   }
 });
 
+// The header sets real browsers send for a click on the "Open the Library" link
+// from <name>.lahe.localhost to library.lahe.localhost, logged from each lane of
+// the browser spec. WebKit calls the two names cross-site and sends no
+// Sec-Fetch-User; Chromium and Firefox call them same-site.
+const WEBKIT_CLICK = { "sec-fetch-site": "cross-site", "sec-fetch-dest": "document", "sec-fetch-mode": "navigate" };
+const CHROMIUM_CLICK = { "sec-fetch-dest": "document", "sec-fetch-mode": "navigate", "sec-fetch-site": "same-site", "sec-fetch-user": "?1" };
+
+test("the Library page accepts the exact header sets WebKit, Chromium and Firefox send for a click on a link", () => {
+  for (const headers of [WEBKIT_CLICK, CHROMIUM_CLICK]) {
+    assert.equal(auth.checkCatalogRequest(request("catalog.page", headers), CATALOG).ok, true, JSON.stringify(headers));
+  }
+  // The same sets as a fetch or a frame are still refused.
+  for (const headers of [
+    Object.assign({}, WEBKIT_CLICK, { "sec-fetch-dest": "iframe" }),
+    Object.assign({}, WEBKIT_CLICK, { "sec-fetch-mode": "cors", "sec-fetch-dest": "empty" }),
+    Object.assign({}, CHROMIUM_CLICK, { "sec-fetch-dest": "iframe" })
+  ]) {
+    assert.equal(auth.checkCatalogRequest(request("catalog.page", headers), CATALOG).ok, false, JSON.stringify(headers));
+  }
+});
+
 test("the Library page accepts a request with no Sec-Fetch headers at all", () => {
   assert.equal(auth.checkCatalogRequest(request("catalog.page", {}), CATALOG).ok, true);
 });

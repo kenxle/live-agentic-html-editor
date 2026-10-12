@@ -206,7 +206,12 @@ test("Open the Library on the unknown-name and file-gone pages opens the Library
     ]);
     expect(library.status(), "the Library page answered " + start + "'s link").toBe(200);
     expect(library.url()).toBe("http://library.lahe.localhost:" + world.helper.pagesPort + "/catalog");
-    expect((await library.request().allHeaders())["sec-fetch-site"]).toBe("same-site");
+    // A top-level navigation, whatever the browser calls the site: Chromium and
+    // Firefox say same-site, WebKit says cross-site for the same two names.
+    const sent = await library.request().allHeaders();
+    expect(["same-site", "cross-site"], "Sec-Fetch-Site on the click").toContain(sent["sec-fetch-site"]);
+    expect(sent["sec-fetch-mode"]).toBe("navigate");
+    expect(sent["sec-fetch-dest"]).toBe("document");
     await expect(page.locator("#lahe-catalog-main .lib-section").first()).toBeVisible();
     await expect(page.locator('meta[name="lahe-catalog-token"]')).toHaveCount(1);
   }
