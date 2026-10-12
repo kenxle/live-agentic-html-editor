@@ -230,10 +230,19 @@ GitHub emails the pusher for every failed or cancelled workflow run, and on
 
 - A stress or bisect workflow never fails the run. Put `continue-on-error: true`
   on the step, write the verdict to the log or an artifact, and read it there.
-- GitHub is not the first place the full suite runs. Before opening a pull
-  request, and before any push to an open one, run `npm run gate` locally on
-  that exact commit and read "0 failed". A builder's narrow spec run is not
-  enough: on 2026-10-01 a PR failed on a spec its builder never ran.
+- **The browser suite runs here, not on GitHub.** CI runs only lint, the bundle
+  check and the unit tests, with no install step: that proves a fresh clone
+  works on a clean Linux machine, which is all only GitHub can prove. Waiting
+  14 minutes on GitHub for the same suite we run locally cost Ken most of a day
+  on 2026-10-11. So:
+  - Before opening a pull request, and before any push to an open one, run
+    `npm run gate` locally on that exact commit and read "0 failed". Put the
+    counts in the PR body ("npm run gate: N passed, 0 failed"). A builder's
+    narrow spec run is not enough: on 2026-10-01 a PR failed on a spec its
+    builder never ran.
+  - After a merge, pull main and run `npm run gate` locally again. Two PRs can
+    each pass and still break together. A failure there is fixed on main
+    before anything else lands.
 - Batch pushes to an open pull request. Each push starts a run, and a red run
   is an email. Progress-page and doc commits wait for the next real push. The
   style switcher PR alone failed six times in a day this way.
