@@ -1,11 +1,12 @@
 # Progress: Stable addresses
 
-**Phase 7, Verify.** Every workstream and both review fix rounds are merged on `feat/stable-addresses`. The disk is cleared and the unit suite passes on the branch. In progress: the core builder is bringing old comments over to new addresses, and is writing a design note so every page carries its own comments. After that: the full test suite in all three browsers, the idle measurement on a preview of your real documents, and a browser walkthrough. Last updated 2026-10-11 20:24.
+**Phase 7, Verify.** Every workstream and both review fix rounds are merged on `feat/stable-addresses`. The disk is cleared and the unit suite passes on the branch. Old comments now come over to new addresses. Waiting on you: how to build "every page carries its own comments" (first item below). After that: the full test suite in all three browsers, the idle measurement on a preview of your real documents, and a browser walkthrough. Last updated 2026-10-11 20:24.
 
 **Docs:** [Decisions page](../../ongoing/STABLE_ADDRESSES.md) · [Crucible](00_crucible_stable_addresses.html) · [Brief](01_brief_stable_addresses.html) · [Architecture](02_architecture_stable_addresses.html) · [Plan](03_plan_stable_addresses.html) · [Code survey](parts/architecture/recon.md)
 
 ## Needs your attention
 
+- [ ] **Every page carries its own comments: pick how to build it.** The design note is ready: [each page carries its own comments](parts/architecture/each_page_its_own_comments.md). It explains why a page's comments go missing today and gives three ways to fix it. It recommends (c): the rail shows a page's comments from every review that has any, a new comment goes to the page's own review when it has one, and a linked document with its own review opens at its own address. One call is yours: under (c), anything that can open a page can see all of that page's comments, from every review. Say "build c", or what to change. A security review of the note runs in the meantime.
 - [ ] **Approve or reverse four changes from what the docs said.** Building turned up these. Each has my recommendation; say "all fine", or name the ones to change.
   - **A tab you already have open keeps saving comments after a newer review of the same page starts.** Example: the plan is open in your tab, then an agent runs `lahe review` on it again. The plan said the helper would then take comments only for the newest review, so your open tab would stop saving. Now it takes comments for any review that belongs on that page. As a guard, a page at a different document's address still cannot send comments into this review. *Recommend: accept.*
   - **One click from a "no document by that name" page opens the Library.** The Library page now accepts a link from a `.lahe.localhost` page. The security review checked it: the linking page cannot read the Library, frame it, or press its buttons. *Recommend: accept.*
@@ -17,7 +18,12 @@
 ## Decided
 
 - **Every page carries its own comments.** You rejected "a linked document opens with the linking page's rail". Whatever page you are on, the rail shows that page's comments, whichever page you came from. This changes which review answers on a page, so the core builder is writing a design note first. It comes to this page for your OK before it is built.
-- **Old comments at the new address:** you chose A. When a page opens at its new address, the rail fetches that page's earlier comments from the helper and shows them as cards. Old Markdown pages get a path alias too. The core builder is building it now.
+- **Old comments at the new address:** you chose A, and it is built and merged. A comment made at a page's old address shows once as a card at its new address, stays one card after a reload, and nothing is sent back. Old Markdown pages are covered too. Unit suite: 2,647 pass, 0 fail.
+
+  ![A comment made at the old address, shown as a card at the new one (light)](progress/screenshots/v31_old_comment_card_light.png)
+
+  ![The same card, dark](progress/screenshots/v31_old_comment_card_dark.png)
+
 - **Windows does not get `.lahe`:** accepted. Every system uses `.lahe.localhost`.
 - **Disk:** the old test folders are deleted (details below).
 
@@ -33,7 +39,6 @@ The Lahe test folders were deleted at your go-ahead, and the disk went from 953 
 
 | Agent or task | Doing | Started | Branch |
 |---|---|---|---|
-| Core builder | Old comments at the new address (A), then the design note for every page carrying its own comments | 2026-10-11 | `unit/sa-core` |
 | Orchestrator | Waiting on the core builder, then dist rebuild and the full gate | 2026-10-11 20:24 | `feat/stable-addresses` |
 
 ## Phases
