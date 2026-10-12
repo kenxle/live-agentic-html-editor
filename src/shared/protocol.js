@@ -403,12 +403,16 @@
       path: CATALOG_PAGE_PATH,
       auth: AUTH.CATALOG_TOKEN,
       mutating: false,
-      // navigate_same_site: a top-level navigation (Sec-Fetch-Mode navigate,
-      // Sec-Fetch-Dest document) may also come from same-site, so the "Open
-      // the Library" link on a <name>.lahe.localhost page works in one click.
-      // The page sends X-Frame-Options DENY and frame-ancestors 'none', so a
-      // same-site page can open it but never frame it or read it.
-      checks: { sec_fetch_site: ["none", "same-origin"], navigate_same_site: true, token: false, json_body: false, origin: null },
+      // top_level_navigation: any top-level navigation opens the page, from any
+      // site: a link in a document or an email, a bookmark, a typed address.
+      // That is Sec-Fetch-Mode navigate with Sec-Fetch-Dest document, whatever
+      // Sec-Fetch-Site says, or a request with no Sec-Fetch headers at all. A
+      // cross-site navigation cannot read the page it loads. The page sends
+      // X-Frame-Options DENY, frame-ancestors 'none' and a same-origin
+      // Cross-Origin-Opener-Policy, so it can be neither framed nor scripted by
+      // its opener, and no script on it reads its own URL. A fetch or an
+      // iframe asking for it is still refused.
+      checks: { sec_fetch_site: ["none", "same-origin"], top_level_navigation: true, token: false, json_body: false, origin: null },
       why: "the Library page itself, with the Library token in its meta tag",
       response: "text/html"
     },

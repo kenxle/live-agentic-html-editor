@@ -262,9 +262,12 @@ function catalogHostAllowed(host, hostLower, port, catalog) {
  * - Sec-Fetch-Site is set by the browser, never by a script. The API routes take
  *   exactly same-origin: a document under review on another loopback port sends
  *   same-site and is refused. A missing value is refused. The Library page
- *   alone (navigate_same_site) also takes same-site when the request is a
- *   top-level navigation, Sec-Fetch-Mode navigate and Sec-Fetch-Dest document:
- *   the "Open the Library" link on a document's not-found page.
+ *   alone (top_level_navigation) opens for any top-level navigation, from any
+ *   site: Sec-Fetch-Mode navigate with Sec-Fetch-Dest document, whatever
+ *   Sec-Fetch-Site says, or no Sec-Fetch header at all. It is still refused to
+ *   a fetch or an iframe. That is safe because a cross-site navigation cannot
+ *   read the page it loads, and the page cannot be framed, cuts off its opener
+ *   (Cross-Origin-Opener-Policy) and reads nothing from its URL.
  * - The client header must be CLIENT_CATALOG, which the per-review routes do not
  *   accept, and the token is compared in full.
  * - Origin on a POST must equal "http://" + the request's own Host.
@@ -289,10 +292,12 @@ function checkCatalogRequest(request, catalog) {
 
   var site = headerOf(headers, protocol.HEADER.SEC_FETCH_SITE);
   var siteOk = typeof site === "string" && (checks.sec_fetch_site || []).indexOf(site) !== -1;
-  if (!siteOk && checks.navigate_same_site && site === "same-site" &&
-      headerOf(headers, protocol.HEADER.SEC_FETCH_MODE) === "navigate" &&
-      headerOf(headers, protocol.HEADER.SEC_FETCH_DEST) === "document") {
-    siteOk = true;
+  if (!siteOk && checks.top_level_navigation) {
+    var mode = headerOf(headers, protocol.HEADER.SEC_FETCH_MODE);
+    var dest = headerOf(headers, protocol.HEADER.SEC_FETCH_DEST);
+    var navigation = mode === "navigate" && dest === "document";
+    var noMetadata = site === null && mode === null && dest === null;
+    siteOk = navigation || noMetadata;
   }
   if (!siteOk) {
     return refusal(protocol.CHECK.SEC_FETCH_SITE, site ? String(site) : "none", r.name);
