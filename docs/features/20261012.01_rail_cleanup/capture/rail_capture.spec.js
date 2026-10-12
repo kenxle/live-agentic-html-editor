@@ -242,6 +242,38 @@ test("capture the rail as a reviewable mockup", async ({ page }) => {
     });
     await pollPage(page, (id) => window.__lahe.rail.getCard(id).pane === "done", done.id, { message: "done pane" });
 
+    // A two-round conversation: the agent answers, the reviewer follows up, and
+    // the agent answers again with two changed files.
+    const talk = await commentOn(page, "#feed-queue p", "Shorten this to the people who need a call today.");
+    await fold(page, helper, talk, {
+      status: "handled",
+      agent: "claude",
+      text: "Cut it to Devon, Priya and Sam. The other four moved to tomorrow's list."
+    });
+    await page.evaluate((id) => window.__lahe.handle.doneTab().followUp(id, "Good. Put Devon first, he has waited longest."), talk.id);
+    await pollPage(page, (id) => {
+      const it = window.__lahe.itemById(id);
+      return it.thread.length === 1 && it.state === "ready" && !it.reply;
+    }, talk.id, { message: "follow-up sent" });
+    const talk2 = await page.evaluate((id) => window.__lahe.itemById(id), talk.id);
+    for (let i = 0; i < 200; i += 1) {
+      try {
+        const p = JSON.parse(fs.readFileSync(path.join(helper.stateDir, "reviews", REVIEW, "review.json"), "utf8"));
+        if (p.pages.some((pg) => pg.items.some((it) => it.id === talk2.id && it.rev === talk2.rev))) break;
+      } catch (err) {
+        // not written yet
+      }
+      await page.waitForTimeout(50);
+    }
+    await fold(page, helper, talk2, {
+      status: "handled",
+      agent: "claude",
+      user_needs_to_see_reply: true,
+      text: "Moved Devon to the top and added how long he has waited (6 days).",
+      files: ["app/views/dashboard/_feed_queue.html.erb", "app/helpers/queue_helper.rb"]
+    });
+    await pollPage(page, (id) => window.__lahe.rail.getCard(id).pane === "done", talk.id, { message: "thread card in done" });
+
     // A hand edit, waiting for the agent.
     await editAppend(page, "section.focus p:nth-of-type(1)", " Call Devon first.");
     // A comment still being written.
@@ -252,7 +284,64 @@ test("capture the rail as a reviewable mockup", async ({ page }) => {
 
 
     await rail(() => window.__lahe.rail.selectTab("done"));
-    await snap("Done tab", "A comment the agent handled, with the file it changed.");
+    await snap("Done tab", "Two comments the agent handled. The second is a two-round conversation; hover the agent's name to see the files it changed.");
+
+    // Thread cards, redesigned: the same cards one at a time, light and dark,
+    // with the conversation card shown open and folded.
+    const cardShot = (id) => page.evaluate(snapshotInPage, '.card[data-card-id="' + id + '"]');
+    const shootCard = async (id, file) => {
+      const rect = await page.evaluate((cid) => {
+        const n = window.__lahe.rail.cardNode(cid);
+        n.scrollIntoView({ block: "center" });
+        const r = n.getBoundingClientRect();
+        return { x: r.x, y: r.y, width: r.width, height: r.height };
+      }, id);
+      // Hover the newest agent name, so the picture shows the file list too.
+      const who = await page.evaluate((cid) => {
+        const all = window.__lahe.rail.cardNode(cid).querySelectorAll(".turn__who--files");
+        if (!all.length) return null;
+        const r = all[all.length - 1].getBoundingClientRect();
+        return { x: r.x + r.width / 2, y: r.y + r.height / 2 };
+      }, id);
+      if (who) await page.mouse.move(who.x, who.y);
+      await page.screenshot({
+        path: path.join(__dirname, "..", file),
+        clip: { x: rect.x - 12, y: rect.y - 12, width: rect.width + 24, height: rect.height + 24 }
+      });
+      await page.mouse.move(5, 5);
+    };
+    const cardSet = async (scheme) => {
+      const out = [];
+      await rail(() => window.__lahe.rail.selectTab("done"));
+      out.push({ label: "Done, open (" + scheme + ")", scheme, html: (await cardShot(talk.id)).html });
+      await shootCard(talk.id, "cards_redesign_" + scheme + ".png");
+      await rail((id) => window.__lahe.rail.setCardCollapsed(id, true), talk.id);
+      out.push({ label: "Done, folded (" + scheme + ")", scheme, html: (await cardShot(talk.id)).html });
+      await rail((id) => window.__lahe.rail.setCardCollapsed(id, false), talk.id);
+      await rail(() => window.__lahe.rail.selectTab("active"));
+      out.push({ label: "Active, a question from the agent (" + scheme + ")", scheme, html: (await cardShot(asked.id)).html });
+      return out;
+    };
+    const lightCards = await cardSet("light");
+    await rail(() => {
+      document.documentElement.style.background = "#12151a";
+      document.body.style.background = "#12151a";
+      window.__lahe.rail.refreshScheme();
+    });
+    const darkCards = await cardSet("dark");
+    await rail(() => {
+      document.documentElement.style.background = "";
+      document.body.style.background = "";
+      window.__lahe.rail.refreshScheme();
+    });
+    shots.push({
+      label: "Thread cards, redesigned",
+      caption: "Your words sit on the right in a tinted bubble; the agent's sit on the left. Names and times are small captions. Hover the agent's name to see the files it changed. The folded card has no 1 new tag because its reply has been read.",
+      cards: lightCards.concat(darkCards),
+      css: shots[0].css,
+      outside: shots[0].outside,
+      hostAttrs: shots[0].hostAttrs
+    });
 
     // Hold on: every send button says Send to queue.
     const clickHold = () =>

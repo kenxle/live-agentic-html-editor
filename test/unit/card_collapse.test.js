@@ -163,6 +163,37 @@ test("a round that needs an answer is never folded away by a rule about length",
   assert.equal(tabDone.roundStartsExpanded({ reviewer: { note: "a note" }, agent: {} }, 0, 6), false);
 });
 
+test("a long thread folds its older rounds behind one line, and only a leading run of them", () => {
+  const round = (status) => ({ reviewer: { note: "a note" }, agent: { status: status || "handled" } });
+
+  // Nothing to fold on a short thread.
+  assert.equal(tabDone.foldedRoundCount([]), 0);
+  assert.equal(tabDone.foldedRoundCount([round()]), 0);
+  assert.equal(tabDone.foldedRoundCount([round(), round()]), 0);
+
+  // Three or more: everything but the newest goes behind the one line.
+  assert.equal(tabDone.foldedRoundCount([round(), round(), round()]), 2);
+  assert.equal(tabDone.foldedRoundCount([round(), round(), round(), round(), round()]), 4);
+
+  // A round that needs an answer stays on the card, and so does everything
+  // after it, so the line holds one unbroken stretch of the oldest past.
+  const asking = round(record.REPLY_STATUS.QUESTION);
+  assert.equal(tabDone.foldedRoundCount([round(), asking, round(), round()]), 1);
+  assert.equal(tabDone.foldedRoundCount([asking, round(), round()]), 0);
+});
+
+test("a turn's caption says just the time for today and the date as well for older days", () => {
+  const now = new Date(2026, 9, 12, 15, 0, 0);
+  const today = new Date(2026, 9, 12, 11, 38, 0).toISOString();
+  const older = new Date(2026, 9, 10, 11, 38, 0).toISOString();
+  const short = overlay.captionTimeLabel(today, now);
+  assert.ok(short.length > 0);
+  assert.ok(!/Oct/.test(short), "no date on today's caption: " + short);
+  assert.equal(overlay.captionTimeLabel(older, now), overlay.timestampLabel(older));
+  assert.equal(overlay.captionTimeLabel(null, now), "");
+  assert.equal(overlay.captionTimeLabel("not a time", now), "");
+});
+
 // --- the preference ----------------------------------------------------------
 
 test("a folded card is remembered per review and per card id, and only the folded ones are written", () => {

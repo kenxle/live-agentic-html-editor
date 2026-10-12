@@ -326,6 +326,130 @@
     }
   }
 
+  /**
+   * The time on a turn's caption: just the time for today, the date as well
+   * for anything older. The card head keeps the full date; repeating "Oct 12"
+   * over every bubble of a conversation was noise to scan past. The full date
+   * and time are always on the caption's hover.
+   *
+   * @param {string} value ISO time
+   * @param {Date} [now] for tests
+   */
+  function captionTimeLabel(value, now) {
+    if (!value) return "";
+    var date = new Date(value);
+    if (!Number.isFinite(date.getTime())) return "";
+    var today = now instanceof Date ? now : new Date();
+    var sameDay =
+      date.getFullYear() === today.getFullYear() &&
+      date.getMonth() === today.getMonth() &&
+      date.getDate() === today.getDate();
+    if (!sameDay) return timestampLabel(value);
+    try {
+      return new Intl.DateTimeFormat(undefined, { hour: "numeric", minute: "2-digit" }).format(date);
+    } catch (err) {
+      return date.toLocaleTimeString();
+    }
+  }
+
+  // Each file tip gets its own id, so the name that shows it can point at it
+  // with aria-describedby inside the rail's one shadow root.
+  var turnFilesSeq = 0;
+
+  /**
+   * One turn of a card's conversation: a caption (who, then when) over a
+   * bubble. The one builder for every turn on every card, so the reviewer's
+   * words and the agent's look the same wherever they are drawn.
+   *
+   * @param {Element} host the element that becomes the turn
+   * @param {function(string, string=, string=): Element} make the caller's own
+   *   element factory, so the nodes carry that caller's chrome marker
+   * @param {object} opts
+   *   side    "you" (the reviewer, on the right) or "agent" (on the left)
+   *   who     the caption's name
+   *   at      ISO time, or null for none
+   *   text    the words, set as text, never markup
+   *   bubble  an existing node to use as the bubble instead of a new one (the
+   *           Active tab's editable note is its own bubble)
+   *   files   paths the agent changed, shown under a hover on the name
+   *   names   extra class names for {cap, who, time, text, files, file}, so
+   *           older selectors keep finding the parts they always found
+   * @returns {{cap: Element, who: Element, time: Element|null, bubble: Element, files: Element|null}}
+   */
+  function fillTurn(host, make, opts) {
+    var o = opts || {};
+    var names = o.names || {};
+    var withName = function (base, extra) {
+      return extra ? base + " " + extra : base;
+    };
+    var side = o.side === "agent" ? "agent" : "you";
+    host.classList.add("turn");
+    host.setAttribute("data-side", side);
+    var cap = make("div", withName("turn__cap", names.cap));
+    var files = Array.isArray(o.files)
+      ? o.files.filter(function (one) {
+          return typeof one === "string" && one !== "";
+        })
+      : [];
+    var who;
+    if (files.length) {
+      who = make("button", withName("turn__who turn__who--files", names.who), o.who || "");
+      who.setAttribute("type", "button");
+    } else {
+      who = make("span", withName("turn__who", names.who), o.who || "");
+    }
+    cap.appendChild(who);
+    var time = null;
+    if (o.at) {
+      time = make("time", withName("turn__time", names.time), captionTimeLabel(o.at));
+      time.setAttribute("datetime", o.at);
+      var when = new Date(o.at);
+      if (Number.isFinite(when.getTime())) time.setAttribute("title", when.toLocaleString());
+    }
+    if (time) cap.appendChild(time);
+    var list = null;
+    if (files.length) {
+      turnFilesSeq += 1;
+      list = make("div", withName("turn__files", names.files));
+      list.id = "lahe-turn-files-" + turnFilesSeq;
+      list.setAttribute("role", "tooltip");
+      list.appendChild(
+        make("div", "turn__fileshead", files.length === 1 ? "Changed 1 file" : "Changed " + files.length + " files")
+      );
+      files.forEach(function (name) {
+        list.appendChild(make("div", withName("turn__file", names.file), name));
+      });
+      cap.appendChild(list);
+      who.setAttribute("aria-describedby", list.id);
+    }
+    host.appendChild(cap);
+    var bubble = o.bubble || make("div", withName("bubble", names.text), o.text === undefined ? "" : String(o.text));
+    if (o.bubble) {
+      bubble.classList.add("bubble");
+      if (names.text) bubble.classList.add(names.text);
+    }
+    host.appendChild(bubble);
+    return { cap: cap, who: who, time: time, bubble: bubble, files: list };
+  }
+
+  /**
+   * Rewrite a caption's time in place, for a turn whose node outlives one
+   * paint (the Active tab's note is never rebuilt under the reviewer's caret).
+   */
+  function setTurnTime(time, at) {
+    if (!time) return;
+    time.textContent = captionTimeLabel(at);
+    if (at) {
+      time.setAttribute("datetime", at);
+      var when = new Date(at);
+      if (Number.isFinite(when.getTime())) time.setAttribute("title", when.toLocaleString());
+      else time.removeAttribute("title");
+    } else {
+      time.removeAttribute("datetime");
+      time.removeAttribute("title");
+    }
+  }
+
   // The named limit from D5, said on the status line rather than claimed as
   // covered: two windows in separate storage with no helper running cannot be
   // refused by anything, so the rail says so out loud.
@@ -452,11 +576,19 @@
   // child, so one attribute puts away every block the rail and the three tab
   // owners draw inside it, and nothing has to be told.
   var CARD_COLLAPSED_ATTR = "data-lahe-collapsed";
-  // The two marks a folded card still has to show. tab_done.js SETS both of
+  // The marks a folded card still has to show. tab_done.js SETS all three of
   // these; the rail only reads them, which is what lets a folded card say "1
   // new" without this file knowing what a reply is. Spelled here so there is one
   // spelling: tab_done.js takes its own constants from these.
   var CARD_UNSEEN_ATTR = "data-lahe-unseen";
+  // The narrower of the two: a reply nobody has read yet, and nothing else.
+  // CARD_UNSEEN_ATTR also stays on a card for the rest of the visit that
+  // brought the reviewer to it, so the badge's "which ones?" has an answer on
+  // screen. The "1 new" tag reads THIS one, so a card the reviewer opened, read
+  // and folded again never says "1 new" (Ken, 2026-10-12: "I can read
+  // something and then close that card with the accordion and it still says
+  // new").
+  var CARD_UNREAD_ATTR = "data-lahe-unread";
   var CARD_ASKING_ATTR = "data-lahe-asking";
   // A ready card nobody has picked up, past the overdue rule. Set by the rail
   // alone, off the item and the helper's liveness answer.
@@ -485,6 +617,9 @@
     // are washes over the card's paper, not fills: the reviewer's own sentence
     // stays the strongest thing on the card.
     "--draft-wash:#fdf8ef;--draft-line:#ecdcbe;--handled-wash:#f1f8f4;--handled-line:#cee2d6;",
+    // The reviewer's own chat bubble: the accent mixed into the card's paper,
+    // opaque so it reads the same on a draft, a ready and a handled card.
+    "--you-wash:color-mix(in srgb,var(--accent) 9%,var(--paper));",
     "--radius:14px;--radius-sm:10px}",
     // THE PAGE PICKS THE SCHEME, NOT THE OS. highlight.js samples the reviewed
     // page's own background and stamps data-lahe-scheme on this rail's host, so
@@ -507,6 +642,7 @@
     // carried into dark reads as a lit panel; these are the dark paper with the
     // hue mixed into it.
     "--draft-wash:#26221b;--draft-line:#3b3327;--handled-wash:#1a2420;--handled-line:#2a3d34;",
+    "--you-wash:color-mix(in srgb,var(--accent) 17%,var(--paper));",
     "--shadow:0 1px 2px rgba(0,0,0,.4),0 16px 40px rgba(0,0,0,.45)}",
     "*{box-sizing:border-box;margin:0;padding:0;font:inherit;color:inherit}",
     "button{background:none;border:0;cursor:pointer;font:inherit;color:inherit}",
@@ -779,7 +915,7 @@
     "letter-spacing:.06em;text-transform:uppercase;border-radius:999px;padding:3px 6px;",
     "color:#fff;background:var(--accent)}",
     ":host([data-lahe-scheme='dark']) .card__tag{color:#12151a}",
-    ".card[" + CARD_COLLAPSED_ATTR + "='true'][" + CARD_UNSEEN_ATTR + "='true'] .card__tag--new{display:inline-block}",
+    ".card[" + CARD_COLLAPSED_ATTR + "='true'][" + CARD_UNREAD_ATTR + "='true'] .card__tag--new{display:inline-block}",
     ".card[" + CARD_COLLAPSED_ATTR + "='true'][" + CARD_ASKING_ATTR + "='true'] .card__tag--ask{display:inline-block}",
     // A card that is both is a question, which is the louder of the two.
     ".card[" + CARD_COLLAPSED_ATTR + "='true'][" + CARD_ASKING_ATTR + "='true'] .card__tag--new{display:none}",
@@ -851,33 +987,69 @@
     ".card__notice{font-size:12px;color:var(--ink-faint)}",
     ".card__notice:empty{display:none}",
 
-    // The agent's question is the loudest thing on a card: its own block, its
-    // own rule, its own weight. Not a tinted label (D10).
-    // THE AGENT'S WORDS ARE WHAT THE REVIEWER CAME TO READ. Ken, 2026-09-11: the
-    // answer sat at 12.5px on a tinted surface, so it was both smaller and
-    // lower-contrast than his own note above it, "and it's the thing I need to
-    // read." Full ink and the card body's size, the same weight as the note.
-    ".agent{border-radius:8px;padding:9px 11px;background:var(--surface);color:var(--ink);",
-    "font-size:14px;line-height:1.55}",
+    // --- the conversation ------------------------------------------------------
+    //
+    // Ken, 2026-10-12: the threaded cards had been "designed by accretion of
+    // new features". A card's exchange now reads like a chat: the reviewer's
+    // turns sit on the right in a tinted bubble, the agent's on the left in a
+    // plain one, each under one small caption (who, then when). Every turn on
+    // every card is drawn by fillTurn (beside timestampLabel), in the Active and Done tabs alike,
+    // so there is one bubble, one caption and one spacing step.
+    //
+    // THE SPACING SCALE. 3px from a caption to its bubble, and the card's own
+    // 8px between one turn and the next, wherever the two turns live. Nothing
+    // in a turn adds a margin of its own.
+    //
+    // THE GRAY RULE. Gray is for the caption and for the quoted page text, the
+    // two things that are about the words rather than the words. Both the
+    // reviewer's and the agent's words are full ink at the same size.
+    //
+    // A turn is 88% of the card wide and pushed to its own side; the bubble in
+    // it is as wide as its words. The caption stretches the turn's width so the
+    // file tip under the agent's name can be as wide as the card.
+    ".turn{display:flex;flex-direction:column;gap:3px;width:88%;min-width:0}",
+    ".turn[data-side='you']{align-self:flex-end;align-items:flex-end}",
+    ".turn[data-side='agent']{align-self:flex-start;align-items:flex-start}",
+    ".turn__cap{align-self:stretch;position:relative;display:flex;align-items:baseline;gap:6px;",
+    "min-width:0;padding:0 2px;font-size:11px;line-height:1.35;color:var(--ink-faint)}",
+    ".turn[data-side='you'] .turn__cap{justify-content:flex-end}",
+    ".turn__who{font-weight:600;color:var(--ink-soft);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;",
+    "min-width:0}",
+    ".turn__time{flex:none;font-variant-numeric:tabular-nums;white-space:nowrap}",
+    ".bubble{display:block;max-width:100%;min-width:0;padding:7px 11px;border-radius:12px;",
+    "border:1px solid transparent;font-size:13.5px;line-height:1.5;color:var(--ink);",
+    "white-space:pre-wrap;overflow-wrap:anywhere}",
+    // The corner nearest the speaker is the tail, the way chat bubbles point.
+    ".turn[data-side='you'] .bubble{background:var(--you-wash);border-bottom-right-radius:4px}",
+    ".turn[data-side='agent'] .bubble{background:var(--paper);border-color:var(--line);",
+    "border-bottom-left-radius:4px}",
+    // THE FILES ARE ONE HOVER AWAY. The agent's name is a button when it
+    // changed files: hovering it, focusing it, or clicking it (which focuses it,
+    // so a touch screen gets it too) shows the list. The dotted underline is the
+    // only sign that there is something under the name. The list stays in the
+    // DOM, so a screen reader hears it through aria-describedby.
+    ".turn__who--files{font-weight:600;color:var(--ink-soft);cursor:help;padding:0;",
+    "text-decoration:underline dotted;text-decoration-color:var(--ink-faint);text-underline-offset:2px}",
+    ".turn__who--files:hover,.turn__who--files:focus{color:var(--ink)}",
+    ".turn__files{display:none;position:absolute;left:0;top:calc(100% + 4px);z-index:6;",
+    "width:max-content;max-width:calc(100% / .88);flex-direction:column;gap:3px;",
+    "padding:8px 10px;border-radius:7px;background:#15171c;color:#fff;",
+    "box-shadow:0 6px 18px rgba(0,0,0,.25);pointer-events:none;",
+    "font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11px;line-height:1.4}",
+    ":host([data-lahe-scheme='dark']) .turn__files{background:#0b0d11;border:1px solid var(--line)}",
+    ".turn__who--files:hover~.turn__files,.turn__who--files:focus~.turn__files{display:flex}",
+    ".turn__fileshead{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;",
+    "font-size:10.5px;font-weight:600;color:rgba(255,255,255,.65)}",
+    // One path per line, and it breaks: repo paths have no natural break
+    // points, and the longest one still has to fit inside the card.
+    ".turn__file{overflow-wrap:anywhere;word-break:break-word}",
+
+    // The rail's own carrier for the agent's current answer is a turn like
+    // any other. A loud one (an agent message the reviewer has not dealt with)
+    // wears the accent on its bubble, all the way round.
     ".agent:empty{display:none}",
-    ".agent__head{display:flex;align-items:baseline;justify-content:space-between;gap:8px;margin-bottom:3px}",
-    ".agent__who{font-size:10px;font-weight:600;letter-spacing:.07em;text-transform:uppercase;",
-    "color:var(--ink-faint);display:block}",
-    // An attention marker: a loud reply is one the reviewer has not dealt with
-    // yet, so the accent rule down the edge earns its place. Color, size and
-    // line-height are NOT repeated here; they are already set on .agent above,
-    // and this rule only adds to it.
-    ".agent.is-loud{background:var(--accent-wash);border-left:3px solid var(--accent)}",
-    ".agent.is-loud .agent__who{color:var(--accent-ink)}",
-    // ONE PATH PER LINE, AND IT BREAKS. Repo-relative paths are long and have
-    // no natural break points, so joined on one line with normal wrapping they
-    // ran straight out of the card (Ken, Done tab, first real use). A path is a
-    // unit the reviewer scans, so it gets its own line, and anywhere-breaking
-    // keeps the longest one inside the card at rail width.
-    ".agent__files{margin-top:5px;font-size:11px;color:var(--ink-faint);",
-    "font-family:ui-monospace,SFMono-Regular,Menlo,monospace;",
-    "display:flex;flex-direction:column;gap:2px;min-width:0}",
-    ".agent__file{overflow-wrap:anywhere;word-break:break-word;line-height:1.35}",
+    ".agent.is-loud .bubble{background:var(--accent-wash);border:2px solid var(--accent)}",
+    ".agent.is-loud .turn__who{color:var(--accent-ink)}",
 
     // --- the overdue banner ---------------------------------------------------
     //
@@ -3931,32 +4103,24 @@
 
       p.agent.textContent = "";
       p.agent.className = "agent";
+      p.agent.removeAttribute("data-side");
       if (card.agentMessage) {
         var who = card.agentMessage.agent || "agent";
         var label =
           card.agentMessage.status === record.REPLY_STATUS.QUESTION
             ? "Question from " + who
             : who;
-        var agentHead = el("div", "agent__head");
-        agentHead.appendChild(el("span", "agent__who", label));
-        if (card.agentMessage.at) {
-          var agentTime = el("time", "agent__time", timestampLabel(card.agentMessage.at));
-          agentTime.setAttribute("datetime", card.agentMessage.at);
-          agentTime.setAttribute("title", new Date(card.agentMessage.at).toLocaleString());
-          agentHead.appendChild(agentTime);
-        }
-        p.agent.appendChild(agentHead);
-        p.agent.appendChild(
-          el("span", null, card.agentMessage.text || card.agentMessage.reason || "")
-        );
-        if (card.agentMessage.files && card.agentMessage.files.length) {
-          var fileList = el("div", "agent__files");
-          card.agentMessage.files.forEach(function (name) {
-            fileList.appendChild(el("div", "agent__file", name));
-          });
-          p.agent.appendChild(fileList);
-        }
-        if (card.agentMessage.loud) p.agent.className = "agent is-loud";
+        // A turn like every other on the card. The older class names ride
+        // along so anything reading the carrier by them still finds it.
+        fillTurn(p.agent, el, {
+          side: "agent",
+          who: label,
+          at: card.agentMessage.at || null,
+          text: card.agentMessage.text || card.agentMessage.reason || "",
+          files: card.agentMessage.files,
+          names: { cap: "agent__head", who: "agent__who", time: "agent__time", files: "agent__files", file: "agent__file" }
+        });
+        if (card.agentMessage.loud) p.agent.classList.add("is-loud");
       }
 
       p.notice.textContent = card.notice || "";
@@ -7920,6 +8084,7 @@
     FOLD_ALL: FOLD_ALL,
     CARD_COLLAPSED_ATTR: CARD_COLLAPSED_ATTR,
     CARD_UNSEEN_ATTR: CARD_UNSEEN_ATTR,
+    CARD_UNREAD_ATTR: CARD_UNREAD_ATTR,
     CARD_ASKING_ATTR: CARD_ASKING_ATTR,
     DOT_WORDS: DOT_WORDS,
     HELPER_RESTART_MESSAGE: HELPER_RESTART_MESSAGE,
@@ -7977,6 +8142,9 @@
     RAIL_GRIP_LABEL: RAIL_GRIP_LABEL,
     clampRailWidth: clampRailWidth,
     timestampLabel: timestampLabel,
+    captionTimeLabel: captionTimeLabel,
+    fillTurn: fillTurn,
+    setTurnTime: setTurnTime,
     paneForItem: paneForItem,
     createRail: createRail,
     shared: shared,
