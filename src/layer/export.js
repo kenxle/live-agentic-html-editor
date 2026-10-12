@@ -109,7 +109,8 @@
    * Render records as the human-readable review text.
    *
    * Pure, synchronous, and the only place the slice label is attached. 3D's
-   * Edits tab renders through here too, rather than formatting a second time.
+   * hand-edit list renders through here too, rather than formatting a second
+   * time.
    *
    * @param {{records: Array<Object>, scope: string, review?: string}} input
    * @returns {string}
@@ -524,7 +525,7 @@
 
     /**
      * The raw seam: render (and by default download) a caller's own records.
-     * 3D's Edits tab list export calls this rather than formatting a second
+     * 3D's hand-edit list export (run when the review ends) calls this rather than formatting a second
      * time, which is why it takes records instead of reading them.
      *
      * @param {Array<Object>} records

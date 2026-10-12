@@ -219,13 +219,13 @@ test("hidden for presenting: held, not spent, and shown on return", () => {
   assert.equal(shown(rail).length, 1, "waiting for them when they come back");
 });
 
-test("pressing it opens the rail on the Edits tab", () => {
+test("pressing it opens the rail on Active, where the hand edit's card is", () => {
   const world = { flagged: ["a"], revs: { a: 1 } };
   const { rail } = page(world, memoryStorage());
-  rail.selectTab("active");
+  rail.selectTab("done");
   rail.openToast(shown(rail)[0].id);
   assert.equal(rail.isCollapsed(), false);
-  assert.equal(rail.currentTab(), "edits");
+  assert.equal(rail.currentTab(), "active");
   assert.equal(shown(rail).length, 0, "the toast has done its job");
 });
 

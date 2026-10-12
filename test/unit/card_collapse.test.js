@@ -240,20 +240,24 @@ test("Collapse all and Expand all act on one tab, not on the whole rail", () => 
     before: "Our Mission",
     after: "Our mission"
   });
+  const handled = itemOf({ state: record.STATE.HANDLED, note: "already done" });
   rail.upsertCard(comment);
   rail.upsertCard(edit);
+  rail.upsertCard(handled);
   assert.equal(rail.paneForItem(comment), overlay.TAB.ACTIVE);
-  assert.equal(rail.paneForItem(edit), overlay.TAB.EDITS);
+  assert.equal(rail.paneForItem(edit), overlay.TAB.ACTIVE, "a hand edit is a card in Active");
+  assert.equal(rail.paneForItem(handled), overlay.TAB.DONE);
 
   rail.setCardsCollapsed(overlay.TAB.ACTIVE, true);
   assert.equal(rail.isCardCollapsed(comment.id), true);
-  assert.equal(rail.isCardCollapsed(edit.id), false, "the other tab is left alone");
+  assert.equal(rail.isCardCollapsed(edit.id), true, "the hand edit folds with its tab");
+  assert.equal(rail.isCardCollapsed(handled.id), false, "the other tab is left alone");
 
-  rail.setCardsCollapsed(overlay.TAB.EDITS, true);
-  assert.deepEqual(rail.collapsedCardIds().sort(), [comment.id, edit.id].sort());
+  rail.setCardsCollapsed(overlay.TAB.DONE, true);
+  assert.deepEqual(rail.collapsedCardIds().sort(), [comment.id, edit.id, handled.id].sort());
 
   rail.setCardsCollapsed(overlay.TAB.ACTIVE, false);
-  assert.deepEqual(rail.collapsedCardIds(), [edit.id]);
+  assert.deepEqual(rail.collapsedCardIds(), [handled.id]);
 });
 
 test("a folded card is not a card anyone has read", () => {

@@ -174,6 +174,10 @@ test.describe("the rail as a shipping surface", () => {
           actsDisplay: rowActs && actStyle ? window.getComputedStyle(acts).display : null,
           actPadding: actStyle ? actStyle.paddingLeft : null,
           noteToActs: noteRect && delRect ? Math.round(delRect.top - noteRect.bottom) : null,
+          // Delete is a small x at the top right of the comment (Ken).
+          delText: del ? del.textContent : null,
+          delLabel: del ? del.getAttribute("aria-label") : null,
+          delBesideNote: !!(noteRect && delRect && delRect.top < noteRect.bottom && delRect.left > noteRect.left + noteRect.width / 2),
           labels: Array.from(pane.querySelectorAll(".cardacts button")).map((b) => b.textContent)
         };
       });
@@ -187,10 +191,10 @@ test.describe("the rail as a shipping surface", () => {
       expect(styled.noteWhiteSpace).toBe("pre-wrap");
       expect(styled.noteEditable, "the reviewer's own words are the input").toBe(true);
       expect(styled.noteCursor, "and they are drawn as something you type in").toBe("text");
-      expect(styled.actsDisplay).toBe("flex");
-      expect(styled.labels, "one action on the card: Delete. Rewording is the note itself").toEqual(["Delete"]);
-      expect(styled.noteToActs, "the action row is clear of the reviewer's sentence").toBeGreaterThanOrEqual(2);
-      expect(parseFloat(styled.actPadding), "and it is drawn as a button").toBeGreaterThan(0);
+      expect(styled.labels, "no word buttons under the comment: Delete is the x beside it").toEqual([]);
+      expect(styled.delText).toBe("\u00d7");
+      expect(styled.delLabel, "and it still says what it does to a screen reader").toBe("Delete this comment");
+      expect(styled.delBesideNote, "at the right of the comment, not under it").toBe(true);
     } finally {
       await helper.stop().catch(() => {});
       await app.close();
@@ -571,7 +575,7 @@ test.describe("the rail as a shipping surface", () => {
 
   // --- F5b: the same defect on a handled HAND EDIT ---------------------------
   //
-  // A handled edit card carries TWO rows, the Edits tab's and the Done tab's,
+  // A handled edit card carries TWO rows, the hand-edit row and the Done tab's,
   // and both used to print the change summary: once at the top of the card,
   // once under the before-and-after, with the diff itself saying it a third
   // time in between. The two things the reviewer can do about it were at
@@ -684,7 +688,7 @@ test.describe("the rail as a shipping surface", () => {
   // --- F5c: the relocation on a COLD LOAD, not only after a remount ----------
   //
   // Reopen moves into the Edits row's footer only if that row is on the card
-  // when the Done tab paints. The Done tab mounted BEFORE the Edits tab existed,
+  // when the Done tab paints. The Done tab mounted BEFORE the hand-edit rows existed,
   // and nothing refreshed it afterwards, so on an ordinary page load with a
   // handled hand edit already in storage the button stayed at the top of the
   // card. Every test that saw the relocation had remounted the rail first, which
@@ -752,7 +756,7 @@ test.describe("the rail as a shipping surface", () => {
       await pollPage(page, (id) => !!window.__lahe.rail.getCard(id), item.id, {
         message: "the hand edit to get its row"
       });
-      await page.evaluate(() => window.__lahe.rail.selectTab("edits"));
+      await page.evaluate(() => window.__lahe.rail.selectTab("active"));
 
       // The reviewer's own gesture: the Undo button on the card.
       await page.evaluate((id) => {

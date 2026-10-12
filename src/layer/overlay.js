@@ -5,7 +5,8 @@
 // This file holds THE RAIL CHROME ONLY: the tab shell, the status line, the
 // failure chips, and the card API. TAB CONTENTS ARE NOT HERE. They live in
 // three files with one owner each (tab_active.js is 1D's, tab_done.js is 3A's,
-// tab_edits.js is 3D's), so five tasks stop writing one file. A tab owner fills
+// tab_edits.js, the hand-edit rows, is 3D's), so five tasks stop writing one
+// file. A tab owner fills
 // tabBody(tab); a card's contents go in cardBody(id).
 //
 // ---------------------------------------------------------------------------
@@ -114,11 +115,58 @@
 ) {
   "use strict";
 
-  // D10's three tabs. Contents come from the three tab files; the shell is
-  // here, so a tab can be registered before its file exists.
-  var TAB = { ACTIVE: "active", EDITS: "edits", DONE: "done" };
-  var TABS = [TAB.ACTIVE, TAB.EDITS, TAB.DONE];
-  var TAB_LABEL = { active: "Active", edits: "Edits", done: "Done" };
+  // Two tabs: what still needs work, and what is finished. Hand edits sit in
+  // Active as cards beside the comments, and the Active pane's filter is how a
+  // reviewer sees only one or the other.
+  var TAB = { ACTIVE: "active", DONE: "done" };
+  var TABS = [TAB.ACTIVE, TAB.DONE];
+  var TAB_LABEL = { active: "Active", done: "Done" };
+  // The name of the hand-edit tab the rail used to have. selectTab answers it
+  // with Active rather than throwing, so an old caller lands somewhere sensible.
+  var LEGACY_EDITS_TAB = "edits";
+
+  // What the Active pane shows. A view and nothing else: the tab counts, the
+  // pill and every card's place are the same whichever one is picked.
+  var FILTER = { ALL: "all", COMMENTS: "comments", EDITS: "edits" };
+  var FILTERS = [FILTER.ALL, FILTER.COMMENTS, FILTER.EDITS];
+  var FILTER_LABEL = { all: "All", comments: "Comments", edits: "Edits" };
+  // What the pane says when the pick hides every card it holds. Without it the
+  // reviewer sees a blank pane under a count that says there is work.
+  var FILTER_EMPTY = {
+    comments: "No comments here. Pick All to see your hand edits too.",
+    edits: "No hand edits here. Pick All to see your comments too."
+  };
+  // The search box at the top of each pane. Case-insensitive "contains", over
+  // the words a card shows (never its button labels), and a view only, like
+  // the filter.
+  var SEARCH_PLACEHOLDER = "Search";
+  var SEARCH_LABEL = "Search the cards in this tab";
+  var SEARCH_MISS_ATTR = "data-lahe-search-miss";
+  function searchEmptyText(query) {
+    return "Nothing here matches “" + query + "”.";
+  }
+
+  /**
+   * Does this text contain the query, ignoring case and runs of whitespace?
+   * Pure, so the matching rule is argued about in a unit test.
+   */
+  function searchMatches(text, query) {
+    var q = String(query || "").replace(/\s+/g, " ").trim().toLowerCase();
+    if (!q) return true;
+    return String(text || "").replace(/\s+/g, " ").toLowerCase().indexOf(q) !== -1;
+  }
+
+  // The card attribute the filter reads. paintCard sets it from the record's
+  // kind, so no tab file has to say what a card is.
+  var HAND_EDIT_ATTR = "data-lahe-hand-edit";
+
+  // Edit, delete and format_only: what the reviewer made with their hands,
+  // which the Active filter calls "Edits". From the kind alone, so a hand edit
+  // waiting on a proofreading answer filters the same as every other one.
+  function isHandEditKind(item) {
+    var kind = item && item[record.FIELD.KIND];
+    return kind === record.KIND.EDIT || kind === record.KIND.FORMAT_ONLY || kind === record.KIND.DELETE;
+  }
 
   /**
    * Which pane a card belongs in, from the record alone.
@@ -129,35 +177,16 @@
    * how the two drift apart. Pure: item in, tab name out, no card required, so
    * it answers for an item the rail has never been handed.
    */
-  // The agent's proofreading question on a run, not yet answered. The same
-  // test as tab_done's isProofreadQuestion, on the record alone.
-  function isProofreadWaiting(item) {
-    var reply = item && item[record.FIELD.REPLY];
-    return (
-      !!reply &&
-      reply.status === record.REPLY_STATUS.QUESTION &&
-      reply.proofread === true &&
-      item[record.FIELD.STATE] === record.STATE.READY &&
-      record.isRunRecord(item)
-    );
-  }
-
   function paneForItem(item) {
-    var kind = item[record.FIELD.KIND];
     // The state the REVIEWER is shown, which is the state their card is placed
     // by. While a TOOL ROUND is open the record says ready and the reviewer is
     // not part of it, so the card stays in Done where they left it
     // (record.displayState, and Ken on 2026-09-15).
     var state = record.displayState(item);
     if (state === record.STATE.HANDLED) return TAB.DONE;
-    // A proofreading question waits on the reviewer, not the agent, so its
-    // card goes back to Active until they answer (wireframe 06b: "The card is
-    // back on Active because it needs an answer"). Once answered it waits on
-    // the agent again, and goes back to Edits with every other hand edit.
-    if (isProofreadWaiting(item)) return TAB.ACTIVE;
-    if (kind === record.KIND.EDIT || kind === record.KIND.FORMAT_ONLY || kind === record.KIND.DELETE) {
-      return TAB.EDITS;
-    }
+    // Everything else is still work, comments and hand edits alike, so it is
+    // Active. A proofreading question on a run is here too, which is where it
+    // has to be: it waits on the reviewer's answer.
     return TAB.ACTIVE;
   }
 
@@ -634,6 +663,51 @@
     ".pane:not(:has(.card:not([data-lahe-blank]))) .empty[data-lahe-empty='page']{display:flex}",
     ".empty__title{margin:0;font-size:13px;font-weight:600;color:var(--ink)}",
     ".empty__line{margin:0;font-size:12.5px;line-height:1.45;color:var(--ink-soft)}",
+
+    // --- the pane head: the Active filter and the search box ------------------
+    // One row above the cards (order -1, so a card placed before it never lands
+    // on top). Not drawn on a pane with no cards, where it would narrow nothing
+    // and push the "how to start" lines down.
+    ".panehead{order:-1;flex:none;display:flex;align-items:center;gap:8px;flex-wrap:wrap}",
+    ".pane:not(:has(.card:not([data-lahe-blank]))) .panehead{display:none}",
+    // The kind filter: a small segmented control in the tab strip's quiet
+    // register. The picked segment is a paper chip on a sunken track, the rest
+    // are plain text.
+    ".filter{flex:none;display:flex;gap:2px;padding:2px;",
+    "background:var(--sunken);border-radius:8px}",
+    ".filter__opt{font-size:11.5px;font-weight:550;color:var(--ink-soft);padding:3px 10px;",
+    "border-radius:6px;line-height:1.3}",
+    ".filter__opt:hover{color:var(--ink)}",
+    ".filter__opt[aria-pressed='true']{background:var(--paper);color:var(--ink);",
+    "box-shadow:0 0 0 1px var(--line),0 1px 1px rgba(18,20,26,.04)}",
+    // The search box: the card-action outline at the card-action size, taking
+    // whatever the row leaves after the filter.
+    ".search{flex:1 1 110px;min-width:0;box-sizing:border-box;font:inherit;font-size:11.5px;",
+    "line-height:1.3;color:var(--ink);background:var(--paper);border:1px solid var(--line);",
+    "border-radius:7px;padding:4px 8px;margin:0}",
+    ".search::placeholder{color:var(--ink-faint)}",
+    ".search:focus-visible{outline:2px solid var(--accent);outline-offset:0}",
+    // A card whose words do not contain the search is not drawn. Set by the
+    // search pass, never by a tab owner.
+    ".card[data-lahe-search-miss],.lahe-rail-othercard[data-lahe-search-miss]{display:none}",
+    ".searchempty{color:var(--ink-faint);font-size:12px;padding:18px 4px;text-align:center;",
+    "overflow-wrap:anywhere}",
+    ".searchempty[hidden]{display:none}",
+    // The pick hides cards and the filed-elsewhere comments with them. It never
+    // touches what a card holds, only whether the card is drawn.
+    ".pane[data-lahe-filter='edits'] .card:not([" + HAND_EDIT_ATTR + "]),",
+    ".pane[data-lahe-filter='edits'] [data-lahe-others],",
+    ".pane[data-lahe-filter='comments'] .card[" + HAND_EDIT_ATTR + "]{display:none}",
+    // Said only when the pane HAS cards and the pick hides all of them. An empty
+    // pane keeps its own "nothing here" line instead.
+    ".filterempty{display:none;color:var(--ink-faint);font-size:12px;padding:18px 4px;text-align:center}",
+    ".pane[data-lahe-filter='edits']:has(.card:not([data-lahe-blank]))",
+    ":not(:has(.card[" + HAND_EDIT_ATTR + "]:not([data-lahe-blank]))) .filterempty,",
+    ".pane[data-lahe-filter='comments']:has(.card:not([data-lahe-blank]))",
+    ":not(:has(.card:not([" + HAND_EDIT_ATTR + "]):not([data-lahe-blank]))) .filterempty{display:block}",
+    // While a search is typed, the search's own line speaks for an empty pane,
+    // so the two are never stacked.
+    ".pane[data-lahe-searching] .filterempty{display:none !important}",
 
     // --- cards --------------------------------------------------------------
     ".card{background:var(--paper);border:1px solid var(--line);border-radius:var(--radius-sm);",
@@ -1426,7 +1500,7 @@
     // whose first two words restate its own title reads as filler and costs the
     // reviewer the one line that could have told them something (Ken, 2026-08-24).
     ENDED: "Your work is saved.",
-    ENDED_WITH_LIST: "Your hand edits are under Edits, and saved to a file.",
+    ENDED_WITH_LIST: "Your hand edits are listed under Active, and saved to a file.",
     ENDED_NO_EDITS: "You made no hand edits this session.",
     UNSENT:
       "Some of your typing had not reached the helper yet. It is kept in this browser and goes out on the next load.",
@@ -1633,7 +1707,7 @@
   /**
    * A draft that changes nothing yet: the reviewer opened a block and has not
    * typed. Its card showed the whole block struck through, which reads as a
-   * deletion, and moved the Edits count before anything was typed (flow walk,
+   * deletion, and moved the hand-edit count before anything was typed (flow walk,
    * design problem 6). Such a draft is not drawn and not counted, like the
    * blank draft an empty page opens with. It is still a draft in the store;
    * the first keystroke that changes something draws its card.
@@ -1665,8 +1739,8 @@
   }
   //
   // A page with no content blocks (a brand-new notes page from `lahe write`)
-  // has nothing for either tab to list, and "No hand edits yet." says nothing
-  // about what to do. These are the plan's pinned lines. The file name is the
+  // has nothing for the Active tab to list, and a plain "nothing here" says
+  // nothing about what to do. These are the plan's pinned lines. The file name is the
   // text of the marked file-name title; a page without one gets the
   // instruction alone.
   function emptyPageLines(fileName) {
@@ -1881,6 +1955,17 @@
     // gives the reviewer their own width back rather than the one the small
     // window forced.
     var railWidth = readWidthPreference();
+    // What the Active pane is showing: all cards, only comments, or only hand
+    // edits. Per review, in the same preference bucket as the width, so a
+    // reload finds the list the reviewer was reading.
+    var activeFilter = readFilterPreference();
+    // tab -> what is typed in that pane's search box. In memory only: a search
+    // left over from yesterday that quietly hides cards after a reload is worse
+    // than retyping a word. Kept across a remount, which rebuilds the boxes.
+    var searchQueries = Object.create(null);
+    // Watches the panes while any search is typed, so a card that arrives or
+    // changes its words is matched again. Off when every box is empty.
+    var searchObserver = null;
     // Who wants to know the rail's width changed. The surfaces that keep clear
     // of the rail read the published allowance instead (see publishRailAllowance);
     // this is for a caller that wants to hear about it rather than measure.
@@ -2353,6 +2438,58 @@
       });
       rail.appendChild(panes);
 
+      // The Active filter, in the pane head so it reads as the list's header.
+      // Toggle buttons (aria-pressed) rather than a second tab strip: it narrows
+      // one list, it does not switch to another.
+      var filter = el("div", "filter");
+      filter.setAttribute("role", "group");
+      filter.setAttribute("aria-label", "Show");
+      filter.setAttribute("data-lahe-filter-bar", "");
+      var filterButtons = Object.create(null);
+      FILTERS.forEach(function (name) {
+        var option = el("button", "filter__opt", FILTER_LABEL[name]);
+        option.setAttribute("type", "button");
+        option.setAttribute("data-lahe-filter-option", name);
+        option.addEventListener("click", function () {
+          setActiveFilter(name);
+        });
+        filter.appendChild(option);
+        filterButtons[name] = option;
+      });
+      var filterEmpty = el("div", "filterempty", "");
+      filterEmpty.setAttribute("data-lahe-filter-empty", "");
+      paneNodes[TAB.ACTIVE].appendChild(filterEmpty);
+
+      // Each pane's head: the kind filter (Active only) and a search box. The
+      // box narrows the cards in its own pane to those whose words contain what
+      // was typed; it combines with the kind filter rather than replacing it.
+      var searchInputs = Object.create(null);
+      var searchEmpties = Object.create(null);
+      TABS.forEach(function (name) {
+        var head = el("div", "panehead");
+        head.setAttribute("data-lahe-pane-head", name);
+        if (name === TAB.ACTIVE) head.appendChild(filter);
+        var input = el("input", "search");
+        input.setAttribute("type", "search");
+        input.setAttribute("placeholder", SEARCH_PLACEHOLDER);
+        input.setAttribute("aria-label", SEARCH_LABEL);
+        input.setAttribute("data-lahe-search", name);
+        input.setAttribute("autocomplete", "off");
+        input.setAttribute("spellcheck", "false");
+        input.value = searchQueries[name] || "";
+        input.addEventListener("input", function () {
+          setSearch(name, input.value);
+        });
+        head.appendChild(input);
+        paneNodes[name].insertBefore(head, paneNodes[name].firstChild);
+        searchInputs[name] = input;
+        var said = el("div", "searchempty", "");
+        said.setAttribute("data-lahe-search-empty", name);
+        said.hidden = true;
+        paneNodes[name].appendChild(said);
+        searchEmpties[name] = said;
+      });
+
       var foot = el("div", "foot");
       var footMain = el("div", "footmain");
       var chipList = el("div", "chips");
@@ -2643,6 +2780,10 @@
         counts: counts,
         newmarks: newmarks,
         panes: paneNodes,
+        filterButtons: filterButtons,
+        filterEmpty: filterEmpty,
+        searchInputs: searchInputs,
+        searchEmpties: searchEmpties,
         chipList: chipList,
         foot: foot,
         statusRow: statusRow,
@@ -2726,6 +2867,9 @@
       // remount and the thing they were telling the reviewer about is still
       // true, so they are drawn again and their clocks start over.
       remountToasts();
+      // A search typed before a remount still narrows the rebuilt panes.
+      syncSearchObserver();
+      applySearchAll();
       // The pill exists now, so the reviewer's own arrangement can go back on it.
       // Read here as well as in setReview because a rail built WITH a review id
       // never goes through setReview at all, which is how the fixture and the
@@ -2764,12 +2908,12 @@
       return node ? String(node.textContent || "").trim() || null : null;
     }
 
-    // The Active and Edits panes on a page with nothing on it say how to start,
-    // in the plan's pinned lines. Written into the pane's existing empty node.
+    // The Active pane on a page with nothing on it says how to start, in the
+    // plan's pinned lines. Written into the pane's existing empty node.
     function paintEmptyPanes() {
       if (!dom) return;
       var empty = pageIsEmpty();
-      [TAB.ACTIVE, TAB.EDITS].forEach(function (name) {
+      [TAB.ACTIVE].forEach(function (name) {
         var node = dom.panes[name] && dom.panes[name].querySelector(".empty");
         if (!node) return;
         var want = empty ? "page" : "plain";
@@ -2790,8 +2934,201 @@
 
     function emptyTextFor(name) {
       if (name === TAB.ACTIVE) return "No unanswered or active threads. Check the done tab, or select some text and press Cmd-Shift-C.";
-      if (name === TAB.EDITS) return "No hand edits yet.";
       return "Nothing handled yet.";
+    }
+
+    // -------------------------------------------------------------------------
+    // The Active filter
+    // -------------------------------------------------------------------------
+    //
+    // A VIEW, painted from one value. The pane carries the pick as an attribute
+    // and the stylesheet hides the cards it leaves out, so a card arriving while
+    // "Edits" is picked is filtered on the frame it appears, with no list kept
+    // here to fall out of step with the cards.
+
+    function paintFilter() {
+      if (!dom || !dom.filterButtons) return;
+      dom.panes[TAB.ACTIVE].setAttribute("data-lahe-filter", activeFilter);
+      FILTERS.forEach(function (name) {
+        dom.filterButtons[name].setAttribute("aria-pressed", name === activeFilter ? "true" : "false");
+      });
+      dom.filterEmpty.textContent = FILTER_EMPTY[activeFilter] || "";
+      // The kind filter decides what counts as shown, so a search's "nothing
+      // matches" line is checked again with it.
+      applySearch(TAB.ACTIVE);
+    }
+
+    /**
+     * Pick what the Active pane shows: "all", "comments" or "edits".
+     *
+     * Remembered for this review. The tab counts do not change: the count says
+     * how much work is in the tab, and the filter only chooses which of it to
+     * read.
+     *
+     * @param {string} name one of FILTERS
+     * @returns {string} the filter now in force
+     */
+    function setActiveFilter(name) {
+      if (FILTERS.indexOf(name) === -1) throw new Error("setActiveFilter: unknown filter " + String(name));
+      if (activeFilter !== name) {
+        activeFilter = name;
+        persistCollapsedPreference();
+      }
+      paintFilter();
+      return activeFilter;
+    }
+
+    function currentFilter() {
+      return activeFilter;
+    }
+
+    /**
+     * Make sure the filter is not hiding this card.
+     *
+     * For the paths that take the reviewer TO a card (a toast's way in, a
+     * reopen): landing them on a card the filter hides is a jump to nothing.
+     * The filter goes back to All only when it is in the way.
+     *
+     * @param {string} id item id
+     * @returns {string} the filter now in force
+     */
+    function revealCard(id) {
+      var card = cards[id];
+      if (!card) return activeFilter;
+      // A search that hides the card is cleared too, in the card's own pane.
+      if (card.node && card.node.hasAttribute(SEARCH_MISS_ATTR) && TABS.indexOf(card.pane) !== -1) {
+        setSearch(card.pane, "");
+      }
+      if (card.pane !== TAB.ACTIVE || activeFilter === FILTER.ALL) return activeFilter;
+      var hand = isHandEditKind(card.item);
+      if ((activeFilter === FILTER.EDITS && !hand) || (activeFilter === FILTER.COMMENTS && hand)) {
+        setActiveFilter(FILTER.ALL);
+      }
+      return activeFilter;
+    }
+
+    // -------------------------------------------------------------------------
+    // The search box
+    // -------------------------------------------------------------------------
+    //
+    // Text is not something CSS can match, so this is the one part of the view
+    // painted by a pass: each card in the pane is marked when its words do not
+    // contain the search, and the stylesheet hides marked cards. The kind
+    // filter still hides by kind on top of that, so the two combine.
+
+    // Words that are on every card and say nothing about this one: control
+    // labels, the time stamp, the state chip. Matching them would make "send"
+    // or "oct" find every card.
+    var SEARCH_SKIP = "button,textarea,input,select,style,time,.card__state";
+
+    function searchTextOf(node) {
+      if (!doc || typeof doc.createTreeWalker !== "function") return node.textContent || "";
+      var parts = [];
+      var walker = doc.createTreeWalker(node, 4 /* NodeFilter.SHOW_TEXT */, null);
+      for (var t = walker.nextNode(); t; t = walker.nextNode()) {
+        var parent = t.parentNode;
+        if (parent && typeof parent.closest === "function" && parent.closest(SEARCH_SKIP)) continue;
+        parts.push(t.nodeValue);
+      }
+      return parts.join(" ");
+    }
+
+    function passesKindFilter(tab, node) {
+      if (tab !== TAB.ACTIVE || activeFilter === FILTER.ALL) return true;
+      if (!node.classList.contains("card")) return activeFilter !== FILTER.EDITS;
+      var hand = node.hasAttribute(HAND_EDIT_ATTR);
+      return activeFilter === FILTER.EDITS ? hand : !hand;
+    }
+
+    function applySearch(tab) {
+      if (!dom || !dom.panes || !dom.searchEmpties) return;
+      var pane = dom.panes[tab];
+      var query = searchQueries[tab] || "";
+      // Nothing typed and nothing marked from before: nothing to do. This is
+      // the path every repaint takes while nobody is searching.
+      if (!query && !pane.hasAttribute("data-lahe-searching")) return;
+      var anyCard = false;
+      var shown = 0;
+      Array.prototype.forEach.call(pane.querySelectorAll(".card, .lahe-rail-othercard"), function (node) {
+        var miss = !!query && !searchMatches(searchTextOf(node), query);
+        if (miss) {
+          if (!node.hasAttribute(SEARCH_MISS_ATTR)) node.setAttribute(SEARCH_MISS_ATTR, "true");
+        } else if (node.hasAttribute(SEARCH_MISS_ATTR)) {
+          node.removeAttribute(SEARCH_MISS_ATTR);
+        }
+        var isCard = node.classList.contains("card");
+        if (isCard && node.hasAttribute("data-lahe-blank")) return;
+        if (isCard) anyCard = true;
+        if (!miss && passesKindFilter(tab, node)) shown += 1;
+      });
+      if (query) pane.setAttribute("data-lahe-searching", "true");
+      else pane.removeAttribute("data-lahe-searching");
+      // Written only when it changes: the watcher below sees this node too, and
+      // an unchanged write is what keeps it from calling itself forever.
+      var said = dom.searchEmpties[tab];
+      var want = query && anyCard && shown === 0 ? searchEmptyText(query.trim()) : "";
+      if (said.textContent !== want) said.textContent = want;
+      if (said.hidden !== !want) said.hidden = !want;
+    }
+
+    function applySearchAll() {
+      TABS.forEach(applySearch);
+    }
+
+    function syncSearchObserver() {
+      var wanted = !!dom && TABS.some(function (name) {
+        return !!searchQueries[name];
+      });
+      if (!wanted) {
+        if (searchObserver) searchObserver.disconnect();
+        searchObserver = null;
+        return;
+      }
+      if (searchObserver) return;
+      var view = doc && doc.defaultView;
+      var Observer = view && view.MutationObserver;
+      if (typeof Observer !== "function") return;
+      searchObserver = new Observer(function () {
+        applySearchAll();
+      });
+      TABS.forEach(function (name) {
+        // Attributes are left out on purpose: the pass writes them.
+        searchObserver.observe(dom.panes[name], { childList: true, subtree: true, characterData: true });
+      });
+    }
+
+    /**
+     * Narrow a pane to the cards whose words contain this text, ignoring case.
+     * Empty shows everything. A view only: counts do not change, and the kind
+     * filter still applies on top.
+     *
+     * @param {string} tab one of TABS
+     * @param {string} text what is typed
+     * @returns {string} the search now in force for that tab ("" for none)
+     */
+    function setSearch(tab, text) {
+      if (tab === LEGACY_EDITS_TAB) tab = TAB.ACTIVE;
+      if (TABS.indexOf(tab) === -1) throw new Error("setSearch: unknown tab " + String(tab));
+      var typed = text === null || text === undefined ? "" : String(text);
+      searchQueries[tab] = typed.trim() ? typed : "";
+      if (dom && dom.searchInputs && dom.searchInputs[tab].value !== typed) dom.searchInputs[tab].value = typed;
+      syncSearchObserver();
+      applySearch(tab);
+      return searchQueries[tab];
+    }
+
+    function searchFor(tab) {
+      return searchQueries[tab] || "";
+    }
+
+    function readFilterPreference() {
+      if (!reviewId || !store || typeof store.readUiPreferences !== "function") return FILTER.ALL;
+      try {
+        var got = store.readUiPreferences(reviewId).filter;
+        return FILTERS.indexOf(got) === -1 ? FILTER.ALL : got;
+      } catch (err) {
+        return FILTER.ALL;
+      }
     }
 
     // Unmount drops the DOM and keeps every piece of state, which is what makes
@@ -2805,6 +3142,10 @@
       closeStylePanel(false);
       closeShortcuts(false);
       closePdfTray(false);
+      // The search watcher watches panes that are about to go. The typed words
+      // stay in searchQueries, and mount watches the new panes.
+      if (searchObserver) searchObserver.disconnect();
+      searchObserver = null;
       // An unanswered end-review question goes with the rail that asked it, and
       // whoever awaited it is told, rather than left holding a promise that can
       // never settle now the panel is gone.
@@ -2919,11 +3260,14 @@
       // Folds are per review as well, so a rail told it is showing a different
       // review does not carry the last one's folded list onto these cards.
       collapsedCards = readCardCollapsePreference();
+      // And the Active filter, so one review's pick does not hide another's cards.
+      activeFilter = readFilterPreference();
       loadChips();
       if (dom) {
         renderChips();
         renderCollapsed();
         renderPresent();
+        paintFilter();
         Object.keys(cards).forEach(function (id) {
           applyCardCollapsed(cards[id]);
         });
@@ -3507,14 +3851,9 @@
         pendingPlacement[card.id] = true;
         return;
       }
-      // The Edits pane orders its cards with inline flex order. A card that
-      // leaves that pane keeps the inline style, and one stale negative order
-      // beats every DOM position this function chooses: the card renders at
-      // the top while the newest reply sinks below every migrated edit. Clear
-      // it on the way into any other pane; the Edits tab re-stamps its own.
-      if (card.pane !== TAB.EDITS && card.node.style && card.node.style.order) {
-        card.node.style.order = "";
-      }
+      // Order is DOM position in every pane, hand edits included: nothing
+      // stamps an inline flex order on a card, so a hand edit and a comment
+      // sort by the same newest-activity rule below.
       var before = null;
       var at = activityAt(card.item);
       Array.prototype.some.call(pane.children, function (node) {
@@ -3575,6 +3914,10 @@
       card.node.setAttribute("data-state", card.state);
       if (isQuietDraft(item)) card.node.setAttribute("data-lahe-blank", "true");
       else card.node.removeAttribute("data-lahe-blank");
+      // What the Active filter reads. From the kind, every paint, so a card is
+      // filtered correctly however it got into the pane.
+      if (isHandEditKind(item)) card.node.setAttribute(HAND_EDIT_ATTR, "true");
+      else card.node.removeAttribute(HAND_EDIT_ATTR);
       paintCardWait(card);
       var quote = (item[record.FIELD.CONTEXT] && item[record.FIELD.CONTEXT].quote) || "";
       p.quote.textContent = quote;
@@ -3733,9 +4076,9 @@
      * A tab is finished with its own row for this card. The CARD goes only when
      * nobody else owns it.
      *
-     * The card is shared: the Active tab, the Edits tab and the Done tab all
-     * draw their rows inside the same card node, and exactly one of them owns
-     * it at a time (paneForItem says which). A tab that removed the card
+     * The card is shared: the Active tab's comment rows, the hand-edit rows
+     * (tab_edits.js) and the Done tab all draw inside the same card node, and
+     * exactly one pane owns it at a time (paneForItem says which). A tab that removed the card
      * whenever its own row went away deleted a card another tab was still
      * showing. That is how a handled reply vanished: the item folds to handled,
      * its card moves to the Done pane, then closing the still-open comment box
@@ -3938,9 +4281,8 @@
     function countIncomplete() {
       return Object.keys(cards).filter(function (id) {
         if (isQuietDraft(cards[id].item)) return false;
-        // Pane placement and completion are separate. Direct edits stay in the
-        // Edits pane so they do not bury comments, but they are still work for
-        // the agent until a handled reply lands.
+        // Lifecycle, not pane: anything not handled is work for the agent,
+        // hand edits as much as comments, until a handled reply lands.
         return cards[id].state !== record.STATE.HANDLED;
       }).length;
     }
@@ -5138,6 +5480,7 @@
     function renderTabs() {
       if (!dom) return;
       paintEmptyPanes();
+      paintFilter();
       TABS.forEach(function (name) {
         dom.tabButtons[name].setAttribute("aria-selected", name === activeTab ? "true" : "false");
         dom.panes[name].setAttribute("data-current", name === activeTab ? "true" : "false");
@@ -5161,9 +5504,9 @@
       //
       // An empty pill still invites on an untouched page: "Review 0/0" prints
       // the one number that is not information.
-      // The left number is lifecycle truth, not the Active tab's layout count.
-      // In particular, a ready direct edit sits in Edits but remains incomplete
-      // until the agent reports it handled.
+      // The left number is lifecycle truth, not the Active tab's layout count,
+      // and never the filtered view: a ready hand edit stays incomplete until
+      // the agent reports it handled, whichever filter is picked.
       var open = countIncomplete();
       var total = Object.keys(cards).length;
       dom.pillCount.textContent = total ? String(open) + " (" + String(total) + ")" : "";
@@ -5194,6 +5537,9 @@
     }
 
     function selectTab(tab) {
+      // The hand-edit tab is gone; its cards are in Active. An old caller asking
+      // for it gets Active rather than an exception mid-gesture.
+      if (tab === LEGACY_EDITS_TAB) tab = TAB.ACTIVE;
       if (TABS.indexOf(tab) === -1) throw new Error("selectTab: unknown tab " + String(tab));
       activeTab = tab;
       // Handlers run BEFORE the paint, so a listener that clears its own badge
@@ -5980,7 +6326,8 @@
           pill: pillSpot,
           width: railWidth,
           present: presenting,
-          cards: collapsedCardsValue()
+          cards: collapsedCardsValue(),
+          filter: activeFilter
         });
         return true;
       } catch (err) {
@@ -6299,10 +6646,13 @@
       return node.getClientRects().length > 0;
     }
 
-    function firstFocusableIn(root) {
+    // skipFilter: pass over the pane head (filter, search). It is the header, like
+    // the tab strip, and the reviewer opened the rail to reach a card.
+    function firstFocusableIn(root, skipFilter) {
       if (!root || typeof root.querySelectorAll !== "function") return null;
       var found = root.querySelectorAll(FOCUSABLE);
       for (var i = 0; i < found.length; i += 1) {
+        if (skipFilter && typeof found[i].closest === "function" && found[i].closest(".panehead")) continue;
         if (isShown(found[i]) && typeof found[i].focus === "function") return found[i];
       }
       return null;
@@ -6320,7 +6670,7 @@
     function focusFirstControl() {
       if (!dom || collapsed || presenting) return false;
       var pane = dom.panes ? dom.panes[activeTab] : null;
-      var node = firstFocusableIn(pane) || firstFocusableIn(dom.rail);
+      var node = firstFocusableIn(pane, true) || firstFocusableIn(dom.rail);
       if (!node) return false;
       try {
         node.focus();
@@ -7388,6 +7738,13 @@
     return {
       TAB: TAB,
       TABS: TABS,
+      FILTER: FILTER,
+      FILTERS: FILTERS,
+      setActiveFilter: setActiveFilter,
+      currentFilter: currentFilter,
+      revealCard: revealCard,
+      setSearch: setSearch,
+      searchFor: searchFor,
       STATUS: STATUS,
       STATUS_TEXT: STATUS_TEXT,
       STATUS_SHORT: STATUS_SHORT,
@@ -7578,6 +7935,15 @@
     clipAtWord: clipAtWord,
     TAB: TAB,
     TABS: TABS,
+    FILTER: FILTER,
+    FILTERS: FILTERS,
+    FILTER_LABEL: FILTER_LABEL,
+    FILTER_EMPTY: FILTER_EMPTY,
+    HAND_EDIT_ATTR: HAND_EDIT_ATTR,
+    isHandEditKind: isHandEditKind,
+    SEARCH_PLACEHOLDER: SEARCH_PLACEHOLDER,
+    searchMatches: searchMatches,
+    searchEmptyText: searchEmptyText,
     STATUS: STATUS,
     STATUS_TEXT: STATUS_TEXT,
     STATUS_SHORT: STATUS_SHORT,

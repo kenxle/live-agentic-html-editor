@@ -346,7 +346,7 @@ test.describe("the note is the input: rewording without a button", () => {
       expect(buttons.onCardActs, "the card keeps exactly one action: Delete").toEqual(["delete"]);
       // Everything else on the card belongs to a box rather than acting on the
       // comment, and there is exactly one such box before an agent has answered.
-      expect(buttons.onCard.filter((label) => label !== "Delete"), "and one Send, for the box").toEqual(["Send"]);
+      expect(buttons.onCard.filter((label) => label !== "\u00d7"), "and one Send, for the box").toEqual(["Send"]);
       expect(buttons.deleteAct).toBe(true);
     } finally {
       await helper.kill9();
