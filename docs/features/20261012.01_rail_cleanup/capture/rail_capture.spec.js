@@ -79,20 +79,24 @@ async function editAppend(page, selector, text) {
   await pollPage(page, () => window.__lahe.editState().open === false, undefined, { message: "edit commit" });
 }
 
-function fold(page, item, reply, state) {
-  return page.evaluate((a) => {
-    window.__lahe.handle.doneTab().applyReplies([
-      {
-        event: "reply.folded",
-        item: a.item.id,
-        rev: a.item.rev,
-        accepted: true,
-        state: a.state,
-        ts: new Date().toISOString(),
-        reply: a.reply
-      }
-    ]);
-  }, { item, reply, state });
+// The real agent path: one reply line, folded by the helper and delivered by
+// the poll loop, so every tab hears about it the way it does in a review.
+async function fold(page, helper, item, reply) {
+  const dir = path.join(helper.stateDir, "reviews", REVIEW);
+  for (let i = 0; i < 200; i += 1) {
+    try {
+      const p = JSON.parse(fs.readFileSync(path.join(dir, "review.json"), "utf8"));
+      if (p.pages.some((pg) => pg.items.some((it) => it.id === item.id))) break;
+    } catch (err) {
+      // not written yet
+    }
+    await page.waitForTimeout(50);
+  }
+  fs.appendFileSync(
+    path.join(dir, "replies-claude.jsonl"),
+    JSON.stringify(Object.assign({ item: item.id, rev: item.rev }, reply)) + "\n"
+  );
+  await pollPage(page, (id) => window.__lahe.itemById(id).reply !== null, item.id, { message: "reply folded" });
 }
 
 // Runs in the page. Copies the rail's shadow tree out as light-DOM HTML, plus
@@ -213,24 +217,24 @@ test("capture the rail as a reviewable mockup", async ({ page }) => {
     // The comments, one per state.
     const waiting = await commentOn(page, "section.focus p:nth-of-type(2)", "Cut the second sentence. It sounds defensive.");
     const asked = await commentOn(page, "p.lede", "Pick one number and use it twice.");
-    await fold(page, asked, {
+    await fold(page, helper, asked, {
       status: "question",
       agent: "claude",
       text: "Do you mean nine check-ins, or the four cards below? They count different things."
-    }, "ready");
+    });
     const refused = await commentOn(page, "#feed-coach-note", "Make this sound warmer.");
-    await fold(page, refused, {
+    await fold(page, helper, refused, {
       status: "not_handled",
       agent: "claude",
       reason: "This note comes from the coach's own message in the app, so I can't reword it from the page source."
-    }, "not_handled");
+    });
     const done = await commentOn(page, "#feed-highlight", "Name the lift and the weight.");
-    await fold(page, done, {
+    await fold(page, helper, done, {
       status: "handled",
       agent: "claude",
       reason: "Named the lift (back squat) and the weight (225 lb).",
       files: ["app/views/dashboard/_feed_highlight.html.erb"]
-    }, "handled");
+    });
     await pollPage(page, (id) => window.__lahe.rail.getCard(id).pane === "done", done.id, { message: "done pane" });
 
     // A hand edit, waiting for the agent.

@@ -776,6 +776,33 @@
         if (send) send.disabled = !!item[record.FIELD.REPLY];
       }
 
+      // Once an agent has answered, Delete would take the whole exchange with
+      // it, and it sits above the answer where it reads as deleting that. The
+      // follow-up box is the way on from there.
+      var del = row.querySelector('[data-lahe-act="delete"]');
+      if (del && hosted) del.hidden = !!item[record.FIELD.REPLY];
+      // Send, on a draft with words in it, and only then: the comment box on
+      // the page has its own Send, and this one is for a draft whose box is
+      // closed or out of view. Added and taken away rather than hidden, so a
+      // card that cannot send carries no Send at all.
+      if (hosted) {
+        var wantSend = item[record.FIELD.STATE] === record.STATE.DRAFT && !!String(text || "").trim();
+        var sendBtn = row.querySelector('[data-lahe-act="send"]');
+        if (wantSend && !sendBtn) {
+          var id = item[record.FIELD.ID];
+          sendBtn = el("button", "cardact", "Send");
+          sendBtn.setAttribute("data-lahe-act", "send");
+          sendBtn.setAttribute("type", "button");
+          sendBtn.addEventListener("click", function () {
+            var handle = comments.boxFor(id) || comments.editInPlace(id, note);
+            if (handle && typeof handle.commit === "function") handle.commit();
+          });
+          del.parentNode.appendChild(sendBtn);
+        } else if (!wantSend && sendBtn) {
+          sendBtn.parentNode.removeChild(sendBtn);
+        }
+      }
+
       var state = row.querySelector(".lahe-rail-state");
       if (state) state.textContent = stateLabel(item);
       row.setAttribute("data-state", item[record.FIELD.STATE]);

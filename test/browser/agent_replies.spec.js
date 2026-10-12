@@ -853,6 +853,7 @@ test.describe("3A: an agent answers by appending one line", () => {
         const text = thread.querySelector(".lahe-thread-text");
         const composer = done.followup(id);
         const label = composer.querySelector(".lahe-followup-label");
+        const placeholder = composer.querySelector("textarea").getAttribute("placeholder");
         const input = composer.querySelector("textarea");
         return {
           headDisplay: getComputedStyle(head).display,
@@ -861,7 +862,8 @@ test.describe("3A: an agent answers by appending one line", () => {
           composerDirection: getComputedStyle(composer).flexDirection,
           headBottom: head.getBoundingClientRect().bottom,
           textTop: text.getBoundingClientRect().top,
-          labelBottom: label.getBoundingClientRect().bottom,
+          hasLabel: !!label,
+          placeholder: placeholder,
           inputTop: input.getBoundingClientRect().top,
           sheets: thread.getRootNode().querySelectorAll("style[data-lahe-sheet='tab_done']").length,
           words: text.textContent
@@ -877,12 +879,12 @@ test.describe("3A: an agent answers by appending one line", () => {
       expect(laidOut.textDisplay, "the turn's words are their own block").toBe("block");
       expect(laidOut.textTop, "the words start below the head above them").toBeGreaterThanOrEqual(laidOut.headBottom);
 
-      // The follow-up field sits under its label rather than on top of it.
+      // The follow-up box carries no label above it: its placeholder says
+      // what it is for.
       expect(laidOut.composerDisplay).toBe("flex");
       expect(laidOut.composerDirection).toBe("column");
-      expect(laidOut.inputTop, "the follow-up field starts below its label").toBeGreaterThanOrEqual(
-        laidOut.labelBottom
-      );
+      expect(laidOut.hasLabel, "no Follow up heading over the box").toBe(false);
+      expect(laidOut.placeholder).toBe("Add a new message");
 
       // One sheet, not one per remount.
       expect(laidOut.sheets, "two remounts leave one stylesheet in the rail's root").toBe(1);
@@ -913,14 +915,14 @@ test.describe("3A: an agent answers by appending one line", () => {
       const composer = await page.evaluate((id) => {
         const node = window.__lahe.handle.doneTab().followup(id);
         const input = node && node.querySelector("textarea");
-        const label = node && node.querySelector("label");
         return {
           exists: !!node,
           value: input && input.value,
-          associated: !!input && !!label && label.getAttribute("for") === input.id
+          // Named for a screen reader by aria-label, since it has no heading.
+          named: !!input && input.getAttribute("aria-label") === "Follow up"
         };
       }, item.id);
-      expect(composer).toEqual({ exists: true, value: "", associated: true });
+      expect(composer).toEqual({ exists: true, value: "", named: true });
 
       // Draft continuation text is private browser state: durable across a
       // reload, absent from the agent-facing projection until submitted.

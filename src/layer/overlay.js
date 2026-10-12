@@ -711,6 +711,8 @@
     // rather than one per file. It is deliberately small and outlined: these sit
     // under the reviewer's own sentence and must not compete with it.
     ".cardacts{display:flex;align-items:center;gap:7px;flex-wrap:wrap}",
+    ".cardacts:not(:has(> :not([hidden]))){display:none}",
+    ".cardact[hidden]{display:none}",
     ".cardacts:empty{display:none}",
     ".cardact{font-size:11.5px;font-weight:550;color:var(--ink-soft);border:1px solid var(--line);",
     "border-radius:7px;padding:3px 9px;background:var(--paper)}",
@@ -898,15 +900,22 @@
     // switch, drawn with the rail's own neutral tokens: pressed reads as a
     // filled pill on --sunken, the same surface the end-review panel's buttons
     // use for their own pressed state, never a new hue.
-    ".holdrow{display:flex;align-items:center;gap:8px;flex-wrap:wrap}",
-    ".holdbtn{display:flex;align-items:center;gap:6px;font-size:11.5px;font-weight:600;",
-    "color:var(--ink-soft);padding:3px 9px;border-radius:999px;border:1px solid var(--line);flex:none}",
+    // A full-width button with a switch at its right end: the label says what
+    // it does, the switch says whether it is on.
+    ".holdrow{display:flex;align-items:center;gap:6px 8px;flex-wrap:wrap}",
+    ".holdbtn{display:flex;align-items:center;justify-content:space-between;gap:10px;width:100%;",
+    "font-size:12px;font-weight:600;color:var(--ink-soft);padding:7px 10px;border-radius:var(--radius-sm);",
+    "border:1px solid var(--line);background:var(--paper)}",
     ".holdbtn:hover{background:var(--surface);color:var(--ink)}",
-    ".holdbtn__dot{width:6px;height:6px;border-radius:50%;background:var(--ink-faint);flex:none}",
-    ".holdbtn[aria-pressed='true']{background:var(--sunken);color:var(--ink);border-color:var(--line)}",
-    ".holdbtn[aria-pressed='true'] .holdbtn__dot{background:var(--ink-soft)}",
+    ".holdbtn__dot{order:2;position:relative;width:28px;height:16px;border-radius:999px;",
+    "background:var(--line);flex:none;transition:background .15s}",
+    ".holdbtn__dot::after{content:'';position:absolute;top:2px;left:2px;width:12px;height:12px;",
+    "border-radius:50%;background:var(--paper);box-shadow:0 1px 2px rgba(0,0,0,.25);transition:left .15s}",
+    ".holdbtn[aria-pressed='true']{color:var(--ink);border-color:var(--line)}",
+    ".holdbtn[aria-pressed='true'] .holdbtn__dot{background:var(--accent)}",
+    ".holdbtn[aria-pressed='true'] .holdbtn__dot::after{left:14px}",
     ".holdcount{font-size:11px;color:var(--ink-soft);overflow:hidden;text-overflow:ellipsis;",
-    "white-space:nowrap;flex:1;min-width:0}",
+    "white-space:nowrap;flex:1 1 100%;min-width:0}",
     ".holdcount:empty{display:none}",
 
     ".limit{font-size:11.5px;color:var(--ink-faint);line-height:1.4}",
