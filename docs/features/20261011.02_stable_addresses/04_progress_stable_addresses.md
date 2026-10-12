@@ -1,6 +1,6 @@
 # Progress: Stable addresses
 
-**Phase 7, Verify.** Every workstream and both review fix rounds are merged on `feat/stable-addresses`. The disk is cleared and the unit suite passes on the branch. Old comments now come over to new addresses. Waiting on you: how to build "every page carries its own comments" (first item below). After that: the full test suite in all three browsers, the idle measurement on a preview of your real documents, and a browser walkthrough. Last updated 2026-10-11 20:24.
+**Phase 7, Verify. Nothing needs you right now.** Built and merged on `feat/stable-addresses`: every workstream, both review fix rounds, old comments coming over to new addresses, hidden folders serving again, pages refusing to be framed by other sites, and the Library opening from any link. The core builder is now building the design you approved (one review per file, every page carries its own comments) with both security reviews folded in, and fixing one Library browser test that broke in a recent merge. After that: the full test suite in all three browsers, the idle measurement on a copy of your real documents, a browser walkthrough, then the PR and your three Mac checks. Last updated 2026-10-11 20:42.
 
 **Docs:** [Decisions page](../../ongoing/STABLE_ADDRESSES.md) · [Crucible](00_crucible_stable_addresses.html) · [Brief](01_brief_stable_addresses.html) · [Architecture](02_architecture_stable_addresses.html) · [Plan](03_plan_stable_addresses.html) · [Code survey](parts/architecture/recon.md)
 
@@ -39,7 +39,8 @@ The Lahe test folders were deleted at your go-ahead, and the disk went from 953 
 
 | Agent or task | Doing | Started | Branch |
 |---|---|---|---|
-| Orchestrator | Waiting on the core builder, then dist rebuild and the full gate | 2026-10-11 20:24 | `feat/stable-addresses` |
+| Core builder | One review per file and every page carries its own comments, with both security reviews; the failing Library cross-site test | 2026-10-11 20:37 | `unit/sa-core` |
+| Orchestrator | Waiting on the core builder, then dist rebuild and the full gate | 2026-10-11 20:42 | `feat/stable-addresses` |
 
 ## Phases
 
