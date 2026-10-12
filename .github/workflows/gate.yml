@@ -26,19 +26,19 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # Node 20, not the tool's own floor of 18.2: Playwright 1.62 needs 20.
+      # Node 20, not the tool's own floor of 18.2, to match .nvmrc.
       - uses: actions/setup-node@v4
         with:
           node-version: 20
-          cache: npm
 
-      # devDependencies only. The tool itself has no runtime dependencies, so
-      # this installs the test harness and nothing else.
-      - run: npm ci
-
-      - run: npx playwright install --with-deps chromium
-
-      # lint, check:layer, unit, Chromium. check:layer is the reason CI runs
-      # `gate` rather than `gate:builder`: it catches a committed bundle that
-      # no longer matches the sources.
-      - run: npm run gate
+      # No npm ci, on purpose. The tool has no runtime dependencies and these
+      # checks need none, so this run also proves a fresh clone works with no
+      # install step on a clean Linux machine. That is what only CI can prove.
+      #
+      # The browser suite is NOT run here. It runs locally with `npm run gate`
+      # before a pull request and again on main after a merge; the PR body
+      # states the local result. On GitHub's small runner it took 14.3
+      # minutes on 2026-10-11 and was the same command we already run locally.
+      - run: npm run lint
+      - run: npm run check:layer
+      - run: npm run test:unit

@@ -173,10 +173,11 @@ see, and the drain command is the truth the moment it lands.
 
 #### Claude Code
 
-Run the printed monitor command with the Bash tool in the background, with the
-largest timeout the host allows: `run_in_background: true` and `timeout:
-7200000`, or the value of `BASH_MAX_TIMEOUT_MS` when that is larger. A
-background command ends at its timeout, and every timeout is a relaunch.
+One Bash call, and nothing else:
+
+- command: `lahe monitor --session <id>`, exactly as printed
+- `run_in_background: true`
+- `timeout: 86400000`, or the value of `BASH_MAX_TIMEOUT_MS` when that is larger
 
 ```sh
 lahe monitor --session <id>
@@ -184,8 +185,23 @@ lahe monitor --session <id>
 
 It waits in a small local Node process, so it costs no model turns and no model
 tokens. It exits when work lands (code 0), the session closes (5), or another
-agent takes over (6). On 0, drain to empty and launch the same command again in
-the background, with the same timeout. On 5 and 6, stop.
+agent takes over (6). On 0, drain to empty and launch the same command again,
+the same way. On 5 and 6, stop.
+
+**It stays open until there is work.** In a terminal, desktop app or VS Code
+session, Claude Code puts no time limit on a background command (since 2.1.288),
+so one launch can wait all day. Do not relaunch it on a schedule, and do not add
+a timer, `/loop`, a scheduled wakeup, the Monitor tool, or a `tail` of your own.
+The timeout only matters in an unattended run (`-p`, the Agent SDK, CI, cloud),
+where the limit is real; there, relaunch when it is stopped.
+
+**Answer every item before you launch it.** A monitor that starts while any item
+is still unanswered prints that item and exits at once. Launch it with work still
+open and it dies, the Stop hook fires, you launch it again, and it dies again:
+each turn of that loop is a wasted model turn. So reply to everything the drain
+printed, run the drain until it prints nothing, and only then launch the monitor.
+When an item needs long work (a CI run, a build), finish it and reply before you
+launch, rather than launching while you wait.
 
 **A Stop hook reminds you when the watcher is down.** `npm run install-skills`
 installs `lahe hook stop` as a Claude Code Stop hook. When you try to end a turn
@@ -195,11 +211,11 @@ the background, and nothing else: no drain, no message to the reviewer. It
 blocks at most once per turn, so if the session really is not yours, or you are
 holding after three kills (below), say so in one line and end the turn.
 
-**A kill is not work.** Claude Code (since 2.1.193) stops idle background
-commands when it thinks memory is low, and a quiet monitor is exactly what it
-picks. Its memory reading is wrong on macOS, so this happens on machines with
-plenty of room (anthropics/claude-code#90109). The notification says the command
-was stopped, not that it exited with a code. When that happens:
+**A kill is not work.** The one thing that ends a quiet monitor in an
+interactive session is Claude Code's memory killer. Since 2.1.274 it stops an
+idle background command only when the OS reports critically low memory and the
+session has been idle for 30 minutes, so this is now rare. The notification
+says the command was stopped, not that it exited with a code. When that happens:
 
 - Do not drain, and do not write to the reviewer. Just launch the same monitor
   command again in the background.
@@ -637,6 +653,17 @@ page to load with the helper down.
   top still holds only open items; when nothing is open, say so there in one
   line. A document with its own format (a spec template, a feature-forge doc)
   and anything the reviewer wrote keep the shape they have.
+
+- **Name another file as a link, not as text.** When a document you write for
+  the reader mentions another file they may want to open (a decision, a spec, a
+  progress page, a report), write it as a link with a path relative to the
+  document: `[the decision](00_decision.md)` in Markdown,
+  `<a href="00_decision.md">` in HTML. LAHE turns that into a page the reader can
+  open, rail included. A file name in backticks is a dead end: the reader is on
+  the rendered page and cannot open it. A file in another folder or worktree
+  gets the same kind of link, with the relative path written out in full. Code
+  names an agent reads in the source, such as a function or a `src/` path in a
+  builder brief, can stay as code.
 
 - **Draw diagrams top to bottom.** Write a Mermaid flowchart as
   `flowchart TD`, never `LR` or `RL`. A wide left-to-right chart shrinks to fit
