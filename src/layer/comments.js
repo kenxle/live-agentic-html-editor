@@ -870,15 +870,6 @@
     "  outline-offset: 1px;",
     "  border-color: transparent;",
     "}",
-    ".lahe-comment-foot {",
-    "  display: flex;",
-    "  align-items: center;",
-    "  justify-content: space-between;",
-    "  gap: 8px;",
-    "  color: rgba(17, 17, 17, 0.5);",
-    "  font-size: 11px;",
-    "}",
-    ".lahe-comment-state[data-state='ready'] { color: rgba(17, 17, 17, 0.72); }",
     // Pick mode is the reviewer choosing something, not the tool warning them,
     // so the outline is the one accent rather than a saturated orange. It was
     // the loudest colour moment anywhere in the product and it meant "normal".
@@ -901,7 +892,6 @@
     "  background: rgba(147, 167, 234, 0.12); }",
     ":host([data-lahe-scheme='dark']) .lahe-comment-quote { color: rgba(242,242,242,0.66);",
     "  border-left-color: rgba(147, 167, 234, 0.8); }",
-    ":host([data-lahe-scheme='dark']) .lahe-comment-foot { color: rgba(242,242,242,0.55); }",
     ":host([data-lahe-scheme='dark']) .lahe-comment-grip {",
     "  background-image: radial-gradient(rgba(255,255,255,0.3) 1px, transparent 1px); }",
     ":host([data-lahe-scheme='dark']) .lahe-comment-act { color: rgba(242,242,242,0.66);",
@@ -1385,7 +1375,6 @@
       var id = item[record.FIELD.ID];
       var node = null;
       var inputEl = null;
-      var stateEl = null;
       var gripEl = null;
       var sendEl = null;
       var deleteEl = null;
@@ -1473,18 +1462,8 @@
         markers.markChrome(mirrorEl);
         node.appendChild(mirrorEl);
 
-        var foot = doc.createElement("div");
-        foot.className = "lahe-comment-foot";
-        var hint = doc.createElement("span");
-        hint.className = "lahe-comment-hint";
-        hint.textContent = HINT_READY;
-        stateEl = doc.createElement("span");
-        stateEl.className = "lahe-comment-state";
-        stateEl.setAttribute("data-state", item[record.FIELD.STATE]);
-        stateEl.textContent = item[record.FIELD.STATE] === record.STATE.READY ? "Ready" : "Draft";
-        foot.appendChild(hint);
-        foot.appendChild(stateEl);
-        node.appendChild(foot);
+        // No hint line and no Draft/Ready label under the box: Send says how to
+        // finish, and the card's own color says the state.
 
         // The two controls. Neither is a second way of doing anything: Send runs
         // the very function Cmd-Enter runs, and Delete runs the very remove path
@@ -1885,7 +1864,6 @@
         // keystroke came from a keyboard or from a caller driving this handle.
         paintSendable();
         grow();
-        paintState(next);
         // Same rule as persist: a keystroke the disk refused posts nothing, so
         // the helper never acknowledges a wording this browser will not have on
         // the next load. The box keeps the words either way.
@@ -1921,7 +1899,6 @@
         var next = record.bumpRev(current, {});
         committedNote = String(next[record.FIELD.NOTE] || "");
         store.write(requireReview(), next);
-        paintState(next);
         emit(next, "reworded");
         return next;
       }
@@ -1938,15 +1915,8 @@
         // same session is a new rewording and takes it back off again.
         committed = true;
         wasReady = true;
-        paintState(next);
         emit(next, "ready");
         return next;
-      }
-
-      function paintState(next) {
-        if (!stateEl) return;
-        stateEl.setAttribute("data-state", next[record.FIELD.STATE]);
-        stateEl.textContent = next[record.FIELD.STATE] === record.STATE.READY ? "Ready" : "Draft";
       }
 
       /**
