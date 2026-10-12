@@ -11,6 +11,14 @@ against an archived draft with different decision numbering); where code
 and the architecture doc disagree, the doc wins and the code is what
 changes.
 
+## Priorities for decisions about the project
+
+When a decision is about how the project runs rather than what a feature does (process, testing, review, CI, tooling), weigh it in this order:
+
+1. **Velocity.** Get working changes onto main quickly. The main user is Ken, so a change can merge once lint, the bundle check and the unit suite pass. The slow checks (the full browser suite, all three browsers, idle measurements, walkthroughs) can run after the merge, and a problem they find gets a follow-up fix.
+2. **Dogfooding.** Ken using the tool on his real work is the most valuable test there is. Prefer whatever gets a change in front of him sooner.
+3. **Security.** It still matters, and a real hole still blocks. But a review finding that slows his everyday use (for example, refusing links he clicks all the time) is a trade-off for him to decide, not a default.
+
 ## Zero runtime dependencies (hard rule)
 
 The tool must run from a `git clone` with no install step: no npm install,
