@@ -94,7 +94,33 @@ function renderableOf(dir, review) {
   if (!review || typeof review !== "object") return null;
   var source = typeof review.source_path === "string" ? review.source_path : "";
   var target = typeof review.target_path === "string" ? review.target_path : "";
-  if (!source || !target) return null;
+  return pairFor(dir, review, source, [target]);
+}
+
+/**
+ * Every Markdown page this review renders: each of its sources (source_path
+ * and source_paths) whose artifact, minted in this review's session, is one of
+ * its recorded targets. A review can hold more than one (reviews.recordPaths).
+ *
+ * @returns {{source: string, target: string, session: string}[]}
+ */
+function renderablesOf(dir, review) {
+  if (!review || typeof review !== "object") return [];
+  var targets = (Array.isArray(review.target_paths) ? review.target_paths : []).concat(
+    typeof review.target_path === "string" && review.target_path ? [review.target_path] : []
+  );
+  var sources = [review.source_path].concat(Array.isArray(review.source_paths) ? review.source_paths : []);
+  var out = [];
+  sources.forEach(function (source) {
+    if (typeof source !== "string" || !source) return;
+    var pair = pairFor(dir, review, source, targets);
+    if (pair && !out.some(function (one) { return one.source === pair.source; })) out.push(pair);
+  });
+  return out;
+}
+
+function pairFor(dir, review, source, targets) {
+  if (!source || !targets.some(Boolean)) return null;
   if (!markdown.isMarkdown(source)) return null;
   var session = typeof review.agent_session_id === "string" ? review.agent_session_id : "";
   if (!session) return null;
@@ -106,7 +132,10 @@ function renderableOf(dir, review) {
   }
   // Rule 3. Anything that is not the exact artifact this tool minted for this
   // source in this session belongs to somebody else's build.
-  if (path.resolve(target) !== path.resolve(ours)) return null;
+  var mine = targets.some(function (target) {
+    return typeof target === "string" && target && path.resolve(target) === path.resolve(ours);
+  });
+  if (!mine) return null;
   return { source: path.resolve(source), target: path.resolve(ours), session: session };
 }
 
@@ -153,15 +182,22 @@ function createRebuilder(options) {
    */
   function refresh(review) {
     var id = review && typeof review.id === "string" ? review.id : null;
-    var pair = renderableOf(dir, review);
-    if (!pair) return { rendered: false, reason: "not-a-rendered-markdown-review" };
+    var pairs = renderablesOf(dir, review);
+    if (!pairs.length) return { rendered: false, reason: "not-a-rendered-markdown-review" };
 
     var now = clock();
     if (id && askedAt[id] !== undefined && now - askedAt[id] < ttl) {
       return { rendered: false, reason: "asked-within-the-window" };
     }
     if (id) askedAt[id] = now;
+    // Every page of the review, each on its own; the first one that rendered
+    // or said why it did not is the answer.
+    var answers = pairs.map(function (pair) { return refreshPair(review, id, pair); });
+    var rendered = answers.filter(function (one) { return one.rendered; });
+    return rendered.length ? rendered[0] : answers[0];
+  }
 
+  function refreshPair(review, id, pair) {
     var sourceAt = mtimeMs(pair.source);
     if (sourceAt === null) {
       // The source moved or was deleted. The artifact on disk is still a real
@@ -234,5 +270,6 @@ module.exports = {
   REBUILD_TTL_MS: REBUILD_TTL_MS,
   readMeta: readMeta,
   renderableOf: renderableOf,
+  renderablesOf: renderablesOf,
   createRebuilder: createRebuilder
 };

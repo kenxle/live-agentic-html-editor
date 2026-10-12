@@ -232,3 +232,30 @@ test("a takeover of a listened-to session goes through with the Library request 
   assert.equal(made.code, 0, made.stderr);
   assert.match(made.stdout, /taken over explicitly/);
 });
+
+// Code review, critical 2: the hub's own session adding the linked file to
+// the hub's review (add --review L --source far.md) must not take the hub's
+// source away.
+test("the hub's session reviewing a linked file it commented on keeps the hub's rail", async (t) => {
+  const w = await cliWorld(t);
+  const notes = path.join(w.home, "ws", "repo", "notes");
+  const far = writeFile(w.home, "ws/other/far.md", "# Far\n\nThe far side.\n");
+  const hubFile = writeFile(notes, "hub.md", "# Hub\n\n[far](../../other/far.md)\n");
+  const hub = review(w, [hubFile]);
+  const owner = sessionOf(hub);
+  const hubUrl = new URL(openUrl(hub));
+  const hubPage = await raw(Number(hubUrl.port), { path: hubUrl.pathname, headers: { host: hubUrl.host } });
+  const mount = /href="(\/\.lahe-source\/[a-f0-9]+\/)far\.md"/.exec(hubPage.text)[1];
+  comment(w, reviewOf(hub), hubUrl.origin, mount + "far.md");
+
+  const farOut = review(w, [far, "--session", owner]);
+  assert.equal(farOut.code, 0, farOut.stderr);
+  assert.equal(reviewOf(farOut), reviewOf(hub), "the linked file joins the hub's review");
+  const meta = JSON.parse(fs.readFileSync(path.join(w.state, "reviews", reviewOf(hub), "meta.json"), "utf8"));
+  assert.equal(meta.source_path, hubFile, "the hub stays the review's first source");
+  const again = await raw(Number(hubUrl.port), { path: hubUrl.pathname, headers: { host: hubUrl.host } });
+  assert.match(again.text, new RegExp('data-lahe-review="' + reviewOf(hub) + '"'), "the hub keeps its rail");
+  const hubAgain = review(w, [hubFile, "--session", owner]);
+  assert.equal(reviewOf(hubAgain), reviewOf(hub), "and a later review of the hub opens the same review");
+  assert.equal(reviewIds(w).length, 1);
+});

@@ -283,6 +283,7 @@ function createReviews(options) {
           // all of them and the reload watcher does not follow only the last.
           target_paths: Array.isArray(parsed.target_paths) ? parsed.target_paths.slice() : [],
           source_path: typeof parsed.source_path === "string" ? parsed.source_path : null,
+          source_paths: Array.isArray(parsed.source_paths) ? parsed.source_paths.slice() : undefined,
           agent_session_id: typeof parsed.agent_session_id === "string" ? parsed.agent_session_id : "legacy",
           only_recorded_pages: parsed.only_recorded_pages === true,
           notes: parsed.notes === true,
@@ -445,6 +446,7 @@ function createReviews(options) {
       target_path: typeof parsed.target_path === "string" ? parsed.target_path : null,
       target_paths: Array.isArray(parsed.target_paths) ? parsed.target_paths.slice() : [],
       source_path: typeof parsed.source_path === "string" ? parsed.source_path : null,
+      source_paths: Array.isArray(parsed.source_paths) ? parsed.source_paths.slice() : undefined,
       agent_session_id: typeof parsed.agent_session_id === "string" ? parsed.agent_session_id : "legacy",
       only_recorded_pages: parsed.only_recorded_pages === true,
       notes: parsed.notes === true,
@@ -777,9 +779,20 @@ function createReviews(options) {
         changed = true;
       }
     }
-    if (typeof p.source_path === "string" && p.source_path && review.source_path !== p.source_path) {
-      review.source_path = p.source_path;
-      changed = true;
+    // EVERY SOURCE IS KEPT. One review per file can add a second Markdown
+    // source to a review (a linked document added to the linking review), and
+    // replacing source_path took the first page's rail and re-render away.
+    // source_path stays the first; source_paths lists them all.
+    if (typeof p.source_path === "string" && p.source_path) {
+      if (!Array.isArray(review.source_paths)) review.source_paths = review.source_path ? [review.source_path] : [];
+      if (!review.source_path) {
+        review.source_path = p.source_path;
+        changed = true;
+      }
+      if (review.source_paths.indexOf(p.source_path) === -1) {
+        review.source_paths.push(p.source_path);
+        changed = true;
+      }
     }
     if (changed) persist(review);
     return review;
