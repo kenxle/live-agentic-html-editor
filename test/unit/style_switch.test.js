@@ -214,7 +214,10 @@ test("the panel, nothing installed: International alone and the add line (V9, R1
   assert.deepEqual(v.rows.map((r) => r.id), ["international"]);
   assert.equal(v.rows[0].checked, true);
   assert.equal(v.rows[0].inDocument, true);
-  assert.deepEqual(v.notes.map(styleSwitch.noteText), ["Add styles with lahe style add <folder>, or ask your agent to."]);
+  assert.deepEqual(v.notes.map(styleSwitch.noteText), [
+    "Get more styles. Add one with lahe style add <folder>, or ask your agent to."
+  ]);
+  assert.equal(v.notes[0][0].link, "https://www.stclair.ai/lahe-styles.html", "the first part is the link to the styles page");
 });
 
 test("the panel, a missing style: International checked and the missing line (V15, R12)", () => {
