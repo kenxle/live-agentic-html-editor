@@ -2293,7 +2293,7 @@
      * anything but a good answer is an empty list, and the rail stays what
      * browser storage made it.
      *
-     * @returns {Promise<Object[]>}
+     * @returns {Promise<{records: Object[], others: Object[]}>}
      */
     function readRecords() {
       var pagePath =
@@ -2302,15 +2302,18 @@
           : doc && doc.location && typeof doc.location.pathname === "string"
             ? doc.location.pathname
             : null;
-      if (!pagePath) return Promise.resolve([]);
+      if (!pagePath) return Promise.resolve({ records: [], others: [] });
       return request("records.read", { method: "GET", query: { review: requireReview(), page_path: pagePath } }).then(
         function (result) {
-          var list = result && result.ok && result.body && Array.isArray(result.body.records) ? result.body.records : [];
+          var body = result && result.ok && result.body ? result.body : {};
           counters.recordsRead += 1;
-          return list;
+          return {
+            records: Array.isArray(body.records) ? body.records : [],
+            others: Array.isArray(body.others) ? body.others : []
+          };
         },
         function () {
-          return [];
+          return { records: [], others: [] };
         }
       );
     }

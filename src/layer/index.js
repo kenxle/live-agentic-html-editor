@@ -145,6 +145,7 @@
     // key there at all.
     if (tag.getAttribute(attr.ALIASES)) config.aliases = parseAliases(tag.getAttribute(attr.ALIASES));
     if (tag.getAttribute(attr.PATH_ALIASES)) config.pathAliases = parsePathAliases(tag.getAttribute(attr.PATH_ALIASES));
+    if (tag.getAttribute(attr.SPELLINGS)) config.spellings = parseSpellings(tag.getAttribute(attr.SPELLINGS));
     return config;
   }
 
@@ -175,6 +176,15 @@
     return list.filter(protocol.isPathAlias);
   }
 
+  /** This page's other addresses in its review ("origin path"), or []. */
+  function parseSpellings(value) {
+    if (!value) return [];
+    var list;
+    try { list = JSON.parse(value); } catch (err) { return []; }
+    if (!Array.isArray(list) || list.length > protocol.ALIAS_MAX) return [];
+    return list.filter(protocol.isSpelling);
+  }
+
   /** Explicit options win over the tag; the tag is the default, not the law. */
   function resolveConfig(doc, options, script) {
     var opts = options || {};
@@ -190,6 +200,7 @@
       notes: opts.notes !== undefined ? opts.notes === true : fromTag.notes === protocol.NOTES_ON,
       aliases: Array.isArray(opts.aliases) ? opts.aliases : fromTag.aliases || [],
       pathAliases: Array.isArray(opts.pathAliases) ? opts.pathAliases : fromTag.pathAliases || [],
+      spellings: Array.isArray(opts.spellings) ? opts.spellings : fromTag.spellings || [],
       from: opts.review ? "options" : fromTag.from
     };
   }
@@ -419,7 +430,7 @@
     function pageNow() {
       return record.pageFrom(
         { origin: win.location.origin, pathname: win.location.pathname, href: win.location.href, title: doc.title },
-        { seq: 1, aliases: config.aliases, path_aliases: config.pathAliases }
+        { seq: 1, aliases: config.aliases, path_aliases: config.pathAliases, spellings: config.spellings }
       );
     }
 
@@ -646,7 +657,7 @@
     // revertChecks counts the check having RUN on this load, which is what a
     // test waits on: "the check ran and reopened nothing" is a real result and
     // an arbitrary sleep is the only other way to observe it.
-    var counters = { merges: 0, cardsDrawn: 0, revertChecks: 0, revertReopens: 0, changesPainted: 0, adopted: 0 };
+    var counters = { merges: 0, cardsDrawn: 0, revertChecks: 0, revertReopens: 0, changesPainted: 0, adopted: 0, othersShown: 0 };
 
     // The window-session state machine's boot half (D5, findings 1/12, NEW-2). A
     // window that loses the claim goes READ-ONLY: its edit and comment handlers
@@ -1904,12 +1915,21 @@
     // merge.js unchanged. The first merge above drew what browser storage
     // held; this one draws what came over, and replay anchors it. A read-only
     // window takes nothing in: it writes nothing.
+    //
+    // EACH PAGE CARRIES ITS OWN COMMENTS. The same read runs on every page at a
+    // stable address: it also brings this page's comments made under its other
+    // addresses in this review (a link address), and, read-only, comments on
+    // this file already filed in another review. Those go to the Active tab's
+    // own list, never into the store or the outbox.
     var adopting = null;
-    if (opts.startSync !== false && config.aliases && config.aliases.length &&
+    var onSite = !!(win.location && /\.lahe(\.localhost)?$/.test(String(win.location.hostname || "")));
+    var hasOldSpellings = (config.aliases && config.aliases.length) || (config.spellings && config.spellings.length);
+    if (opts.startSync !== false && (hasOldSpellings || onSite) &&
         typeof sync.readRecords === "function" && typeof store.adopt === "function") {
-      adopting = sync.readRecords().then(function (records) {
+      adopting = sync.readRecords().then(function (answer) {
+        if (tab && typeof tab.showOthers === "function") counters.othersShown = tab.showOthers(answer.others);
         if (readOnlyActive || (typeof sync.isReadOnly === "function" && sync.isReadOnly())) return [];
-        var mine = records.filter(function (item) {
+        var mine = answer.records.filter(function (item) {
           return item && record.samePage(item, page);
         });
         var adopted = [];
