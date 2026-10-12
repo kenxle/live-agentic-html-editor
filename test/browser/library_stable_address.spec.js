@@ -198,7 +198,7 @@ test("V40: Open on an older row leaves a newer open review's rail alone, and the
     .toBe(true);
   expect(await popup.evaluate(() => window.__lahe.review), "the rail is the newer review's").toBe(newer.id);
   await popup.close();
-  await expect(row.locator(".lib-note")).toContainText("keeps this page's rail");
+  await expect(row.locator(".lib-note")).toContainText("Open did not move the rail");
 });
 
 test("V44: the Library's Copy button works with the clipboard API removed", async ({ page }) => {

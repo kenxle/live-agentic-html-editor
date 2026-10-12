@@ -301,6 +301,81 @@ test("a folder review is never folded into an outer site: it names its own folde
   assert.equal(w.helper.sites.byRoot(fs.realpathSync(inner), "folder").site.entry, "index.html");
 });
 
+// --- One review per file ---------------------------------------------------------
+
+test("Open of a file inside an already reviewed folder goes to that folder's address, not a new folder of its own, and makes no review", async (t) => {
+  const w = await sitesWorld(t);
+  const outer = docs(w, "outer");
+  writeFile(outer, "index.html", PAGE_HTML);
+  const file = writeFile(path.join(outer, "sub"), "p.html", PAGE_HTML);
+  openSession(w, "s_folder");
+  openSession(w, "s_file");
+  // The folder is reviewed: a review, and the site `lahe review` named for it.
+  const folder = makeReview(w, { id: "r-folder", agent_session_id: "s_folder", target_path: outer });
+  const site = w.helper.sites.bind({ root: fs.realpathSync(outer), mode: "folder", entry: "index.html" });
+  // A later review of one file in it, from another session.
+  const own = makeReview(w, { id: "r-file", agent_session_id: "s_file", target_path: file });
+  const lib = await libraryOf(w);
+  const address = "http://" + site.name + ".lahe.localhost:" + w.helper.pagesPort + "/sub/p.html";
+  assert.equal((await lib.row(own.id)).address, address, "the row shows the folder's address");
+  const res = await lib.open(own.id);
+  assert.equal(res.status, 200, res.text);
+  assert.equal(res.json.url, address);
+  assert.equal(w.helper.sites.list().length, 1, "no site of the file's own folder");
+  assert.deepEqual(w.helper.reviews.list().sort(), [folder.id, own.id].sort(), "Open made no review");
+  assert.match((await getPage(w, site.name, "/sub/p.html")).text, new RegExp('data-lahe-review="' + own.id + '"'), "the file's own review answers there");
+});
+
+test("Open of a file whose review is in a closed session, or the row's own session, still goes to that review's page and stamps nothing", async (t) => {
+  const w = await sitesWorld(t, AHEAD);
+  openSession(w, "s_old");
+  openSession(w, "s_new");
+  const { older, newer, name } = twoReviews(w, "s_new", "s_old");
+  sessions(w).close("s_new");
+  const lib = await libraryOf(w);
+  const closedHolder = await lib.open(older.id);
+  assert.equal(closedHolder.json.held_by.review, newer.id, "a file has one review, whichever session is open");
+  assert.equal(w.helper.reviews.get(older.id).served_at || null, null);
+  assert.match((await getPage(w, name, "/page.html")).text, new RegExp('data-lahe-review="' + newer.id + '"'));
+});
+
+test("Open of a retired review's file: the address opens, no review is stamped or made, and the row says it is retired", async (t) => {
+  const w = await sitesWorld(t, AHEAD);
+  const file = writeFile(docs(w), "page.html", PAGE_HTML);
+  openSession(w, "s_a");
+  oldServer(w, "s_a", fs.realpathSync(docs(w)));
+  const review = makeReview(w, { agent_session_id: "s_a", target_path: file });
+  w.helper.reviews.retire(review.id);
+  const lib = await libraryOf(w);
+  assert.equal((await lib.row(review.id)).retired, true);
+  const res = await lib.open(review.id);
+  assert.equal(res.status, 200, res.text);
+  const site = w.helper.sites.byRoot(fs.realpathSync(docs(w)), "folder");
+  assert.equal(res.json.url, "http://" + site.name + ".lahe.localhost:" + w.helper.pagesPort + "/page.html");
+  assert.equal(res.json.retired, true);
+  assert.equal(res.json.held_by, null);
+  assert.equal(w.helper.reviews.get(review.id).served_at || null, null, "a retired review is never stamped");
+  assert.equal(w.helper.reviews.list().length, 1, "no second review");
+  assert.doesNotMatch((await getPage(w, site.name, "/page.html")).text, /data-lahe-review/, "the page is read-only: nothing answers");
+});
+
+test("a retired review is skipped: it never holds the file, so a live review of the same file opens and answers", async (t) => {
+  const w = await sitesWorld(t, AHEAD);
+  const file = writeFile(docs(w), "page.html", PAGE_HTML);
+  openSession(w, "s_a");
+  openSession(w, "s_b");
+  oldServer(w, "s_a", fs.realpathSync(docs(w)));
+  const gone = makeReview(w, { id: "r-b-retired", agent_session_id: "s_b", target_path: file });
+  const live = makeReview(w, { id: "r-a-live", agent_session_id: "s_a", target_path: file });
+  w.helper.reviews.retire(gone.id);
+  const lib = await libraryOf(w);
+  const res = await lib.open(live.id);
+  assert.equal(res.json.held_by, null);
+  assert.equal(res.json.retired, false);
+  const site = w.helper.sites.list()[0];
+  assert.match((await getPage(w, site.name, "/page.html")).text, new RegExp('data-lahe-review="' + live.id + '"'));
+});
+
 // --- Open serves nothing new ---------------------------------------------------
 
 test("a review of a site the CLI bound is openable with no old server record", async (t) => {
@@ -476,30 +551,6 @@ test("V40: Open on an older row does not move a rail a newer review in another o
   assert.equal(w.helper.reviews.get(older.id).served_at || null, null, "the older review was not re-stamped");
   const after = await getPage(w, name, "/page.html");
   assert.match(after.text, new RegExp('data-lahe-review="' + newer.id + '"'), "the rail is still the newer review's");
-});
-
-test("V40 control: the same Open does move the rail when the newer review's session is closed", async (t) => {
-  const w = await sitesWorld(t, AHEAD);
-  openSession(w, "s_old");
-  openSession(w, "s_new");
-  const { older, newer, name } = twoReviews(w, "s_new", "s_old");
-  sessions(w).close("s_new");
-  const lib = await libraryOf(w);
-  const res = await lib.open(older.id);
-  assert.equal(res.json.held_by, null);
-  const page = await getPage(w, name, "/page.html");
-  assert.match(page.text, new RegExp('data-lahe-review="' + older.id + '"'));
-  assert.doesNotMatch(page.text, new RegExp('data-lahe-review="' + newer.id + '"'));
-});
-
-test("V40 control: the same Open moves the rail when the newer review is in the row's own session", async (t) => {
-  const w = await sitesWorld(t, AHEAD);
-  openSession(w, "s_one");
-  const { older, name } = twoReviews(w, "s_one", "s_one");
-  const lib = await libraryOf(w);
-  const res = await lib.open(older.id);
-  assert.equal(res.json.held_by, null);
-  assert.match((await getPage(w, name, "/page.html")).text, new RegExp('data-lahe-review="' + older.id + '"'));
 });
 
 // --- V42: nothing restarts, nothing reopens -------------------------------------

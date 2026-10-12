@@ -135,7 +135,9 @@
     WORKTREE: "The worktree is gone. An agent will open the main repository's copy, which may differ from what you reviewed.",
     // With stable addresses the helper shows that copy itself, read-only.
     WORKTREE_READONLY: "The worktree is gone. Open shows the main repository's copy, read-only, which may differ from what you reviewed.",
-    OPENED_RAIL_HELD: 'Opened. "{name}" is a newer review in another open session and keeps this page\'s rail. Open did not move it.',
+    OPENED_RAIL_HELD: 'Opened. This file\'s review is "{name}", so the page shows its comments. Open did not move the rail.',
+    OPENED_RETIRED: "Opened. This review was retired, so it answers on no page. The page shows the file's current review, if it has one.",
+    BADGE_RETIRED: "review retired",
     NEEDS_AGENT: "Needs an agent to reopen. No agent is attached.",
     NO_MATCHES: "Nothing matches that search.",
     RESTARTED: "LAHE restarted, reload this page.",
@@ -683,6 +685,7 @@
     }
 
     var badges = [];
+    if (review.retired) badges.push(TEXT.BADGE_RETIRED);
     if (review.ended) badges.push(TEXT.BADGE_ENDED);
     if (review.served_url) badges.push(TEXT.BADGE_SERVED);
     if (session.watching && !sameWatcher(session.watching, cardWatching)) {
@@ -1266,6 +1269,9 @@
       // A newer review in another open session keeps the page's rail. The tab
       // still opened; the row says why the rail is not this review's.
       out = withNote(out, reviewId, { kind: "opened", text: fill(TEXT.OPENED_RAIL_HELD, { name: body.held_by.name }), tone: "info" }, now);
+    }
+    if (body.retired === true && !body.held_by) {
+      out = withNote(out, reviewId, { kind: "opened", text: TEXT.OPENED_RETIRED, tone: "info" }, now);
     }
     if (body.not_asked === "queue_full") return withNote(out, reviewId, { kind: "opened", text: TEXT.OPENED_QUEUE_FULL, tone: "warn" }, now);
     if (body.not_asked === "no_agent") return withNote(out, reviewId, { kind: "opened", text: TEXT.OPENED_NO_AGENT, tone: "warn" }, now);

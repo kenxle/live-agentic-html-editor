@@ -1574,7 +1574,7 @@ test("Open that left a newer review's rail alone says which review holds it", ()
     body: { url: "http://x.lahe.localhost:1483/f.html", request_id: null, not_asked: null, held_by: { review: "r_newer", name: "Figure v2" } }
   }, NOW);
   const note = row(build(list, state), "r_mounted").note;
-  assert.equal(note.text, 'Opened. "Figure v2" is a newer review in another open session and keeps this page\'s rail. Open did not move it.');
+  assert.equal(note.text, 'Opened. This file\'s review is "Figure v2", so the page shows its comments. Open did not move the rail.');
   assert.equal(note.tone, "info");
 });
 
@@ -1600,4 +1600,17 @@ test("a worktree row Open can open says it shows the main copy read-only; one th
   assert.ok(now.notices.some((n) => n.text === "The worktree is gone. Open shows the main repository's copy, read-only, which may differ from what you reviewed."));
   assert.ok(!now.notices.some((n) => /An agent will open/.test(n.text)));
   assert.equal(now.buttons.open.enabled, true);
+});
+
+test("a retired review's row says so, and Open says it answers on no page", () => {
+  const list = freshList();
+  reviewIn(list, "r_mounted").retired = true;
+  const r = row(build(list, okState()), "r_mounted");
+  assert.ok(r.badges.includes("review retired"));
+  let state = vm.beginOpen(okState(), list, "r_mounted", { handoff: false });
+  state = vm.afterOpen(state, list, "r_mounted", {
+    ok: true,
+    body: { url: "http://x.lahe.localhost:1483/f.html", request_id: null, not_asked: null, held_by: null, retired: true }
+  }, NOW);
+  assert.match(row(build(list, state), "r_mounted").note.text, /This review was retired, so it answers on no page/);
 });

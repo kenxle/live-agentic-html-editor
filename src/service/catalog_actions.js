@@ -212,12 +212,20 @@ function createCatalogActions(options) {
    * Nothing is restarted and no session is reopened: Open names the
    * document's site if it has none, and returns the address.
    *
-   * THE RAIL. Stamping the review as re-served is what makes it the one that
-   * answers on its page, so it moves the rail. Open therefore does not stamp
-   * when another open session's review already holds the page: it goes to the
-   * address and says who holds it. A holder in a closed session, or in this
-   * row's own session, is not a reason to keep a reviewer from the review
-   * they chose.
+   * ONE REVIEW PER FILE, as `lahe review` has it. A file has the review
+   * page_routes.holderOfFile names (tiered, a retired review never). Open goes
+   * to the address where that review answers, and never makes a review or a
+   * second address for a file that already has one:
+   *
+   *   - the row's review is the file's review, or the file has none: it is
+   *     stamped as re-served, so it answers on its page;
+   *   - another review holds the file, in any session, open or closed: Open
+   *     goes to the address where that review answers (its own site, when it
+   *     has one nothing else names yet) and says who holds it. Nothing is
+   *     stamped, so the rail stays where it was;
+   *   - the row's review is retired: it answers on no page, so it is never
+   *     stamped, and the answer says it is retired. The file's live review, if
+   *     any, is the holder as above.
    */
   async function openSite(d, handoff, confirmed, nowMs) {
     if (!d.site.worktree && !siteOwnedByUser(d)) return fail("PROTO_NOT_OPENABLE", "not owned by the current user, or not on disk");
@@ -228,22 +236,31 @@ function createCatalogActions(options) {
     var url = d.site.address;
     var heldBy = null;
     if (!d.site.worktree) {
+      var holderId = siteTools.holderOf(d.site.file);
+      var other = holderId && holderId !== d.review ? reader.describeReview(holderId, nowMs) : null;
+      // The holder's own site, when it has one the row's file is under.
+      var plan = d.site;
+      if (other && other.site && !other.site.worktree && siteOwnedByUser(other)) plan = other.site;
       var bound;
       try {
-        bound = siteTools.bindPlan(d.site);
+        bound = siteTools.bindPlan(plan);
       } catch (err) {
         log("Library Open of review " + d.review + " could not name its site: " + err.message, nowMs);
         return fail("PROTO_NOT_OPENABLE", "the document could not be given an address: " + err.message);
       }
-      url = siteTools.addressOf(bound.name, bound.urlPath);
-      var holder = siteTools.railHolder(bound.site, d.site.file);
-      if (holder && holder !== d.review) {
-        var other = reader.describeReview(holder, nowMs);
-        if (other && other.session !== d.session && sessionOpen(other.session)) {
-          heldBy = { review: holder, name: other.display_name || holder };
+      var filePath = plan === d.site ? bound.urlPath : siteTools.pathUnder(bound, d.site.file);
+      if (filePath === null) {
+        // The holder's site does not hold this file: the file's own address.
+        try {
+          bound = siteTools.bindPlan(d.site);
+        } catch (err) {
+          return fail("PROTO_NOT_OPENABLE", "the document could not be given an address: " + err.message);
         }
+        filePath = bound.urlPath;
       }
-      if (!heldBy) siteTools.stamp(d.review, nowMs);
+      url = siteTools.addressOf(bound.name, filePath);
+      if (other) heldBy = { review: holderId, name: other.display_name || holderId };
+      else if (!d.retired) siteTools.stamp(d.review, nowMs);
     }
     if (!url) return fail("PROTO_NOT_OPENABLE", "the helper is not serving pages");
 
@@ -251,7 +268,7 @@ function createCatalogActions(options) {
     logAction(protocol.CATALOG_LOG.ACTION.OPEN, d, nowMs);
     return {
       status: 200,
-      body: { url: url, request_id: handed.requestId, not_asked: handed.notAsked, held_by: heldBy }
+      body: { url: url, request_id: handed.requestId, not_asked: handed.notAsked, held_by: heldBy, retired: !!d.retired }
     };
   }
 
@@ -293,7 +310,7 @@ function createCatalogActions(options) {
       var queuedVia = enqueue(ACTION.PICKUP, d, viaAgent, nowMs);
       if (!queuedVia.ok) return fail(queuedVia.code, queuedVia.detail);
       logAction(protocol.CATALOG_LOG.ACTION.OPEN, d, nowMs);
-      return { status: 200, body: { url: null, request_id: queuedVia.request.id, not_asked: null, held_by: null } };
+      return { status: 200, body: { url: null, request_id: queuedVia.request.id, not_asked: null, held_by: null, retired: !!d.retired } };
     }
 
     return openSite(d, handoff, confirmed, nowMs);

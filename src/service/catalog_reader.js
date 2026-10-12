@@ -795,6 +795,8 @@ function createReader(options) {
     // What stable addresses need to pick the review's site (catalog_sites.js).
     info.sourcePath = source;
     info.notes = !!meta && meta.notes === true;
+    // `lahe review retire`: it answers on no page and no Open stamps it.
+    info.retired = !!meta && typeof meta.retired_at === "string";
     info.origins = meta && Array.isArray(meta.origins)
       ? meta.origins.filter(function (o) { return typeof o === "string" && /^https?:\/\//.test(o); })
       : [];
@@ -1225,6 +1227,7 @@ function createReader(options) {
       total: total,
       counts_as_of: asOf === null ? null : iso(asOf),
       ended: info.summary.ended,
+      retired: info.retired === true,
       served_url: servedUrl || null,
       openable: lead.openable,
       kind: lead.kind,
@@ -1349,6 +1352,7 @@ function createReader(options) {
             // own script line; null otherwise and for every other kind.
             verified_path: part.kind === "legacy" ? ownScriptLineFile(part.info.docPath, reviewId) : null,
             watching: watchingOf(s.id, nowMs),
+            retired: part.info.retired === true,
             last: iso(part.info.lastMs),
             fold: row.parts.map(function (p) { return p.info.id; }).sort()
           };
