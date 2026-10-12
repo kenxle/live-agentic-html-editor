@@ -179,6 +179,7 @@ The rail also shows these as hints, so you do not need this file open to work th
 
 - [AGENTS.md](AGENTS.md): how each agent host connects to the tool. Point your agent here.
 - [skills/lahe/SKILL.md](skills/lahe/SKILL.md): the instructions an agent follows during a review.
+- [docs/UPGRADING.md](docs/UPGRADING.md): what to do when upgrading, including moving older documents to stable addresses (0.2 to 0.3).
 - [docs/INSTALL.md](docs/INSTALL.md): install details, the CLI wrapper, starting at login with `lahe install`, and dev-server setup.
 - [docs/CLI.md](docs/CLI.md): every command and flag.
 - [docs/ongoing/FREE_WRITING.md](docs/ongoing/FREE_WRITING.md): how writing new paragraphs, headings, and lists works, for the next builder.
