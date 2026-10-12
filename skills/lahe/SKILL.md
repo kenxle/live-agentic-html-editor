@@ -704,7 +704,8 @@ never finished. Then arm your wake channel.
 
 Take over only when the human explicitly asks. A takeover of a session whose
 agent is listening right now is refused from the command line: that handoff is
-confirmed by your human from the Library page.
+confirmed by your human from the Library page, and the request it makes is
+what you pass as `--request <request>`.
 
 ### The Library
 
@@ -754,7 +755,7 @@ it expires.
 
 | `kind` | What to do |
 | --- | --- |
-| `static` | `lahe session takeover <session>`, run its catch-up, then watch it (below) |
+| `static` | `lahe session takeover <session> --request <request>`, run its catch-up, then watch it (below) |
 | `legacy` | The review belongs to no session. Run `lahe library serve <request> --session <your-session-id>`: it reads the document's path itself, takes that review into your session with its old comments, and serves it. Then drain it and work any comment still waiting |
 | `worktree` | The worktree is gone. Run `lahe library serve <request> --session <your-session-id>`: it serves the main-repo `candidate`. If `candidate` is null, answer `refused` |
 | `dev-server` | Answer `refused`: "Start the dev server at <origin>, then ask me again.", with the entry's `origin` |

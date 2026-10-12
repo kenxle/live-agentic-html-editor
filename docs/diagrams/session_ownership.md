@@ -31,7 +31,7 @@ flowchart TD
     Listening -->|"no"| Named["it names lahe session takeover A,<br/>run only when the human asks"]
 
     Human["Human explicitly asks for a handoff"] --> Takeover["lahe session takeover A"]
-    Takeover -.->|"A's agent is listening"| RefusedCLI["refused from the CLI:<br/>the human confirms it from the Library"]
+    Takeover -.->|"A's agent is listening, no --request"| RefusedCLI["refused from the CLI:<br/>the human confirms it from the Library"]
     Takeover --> Fence["session A's handoff_rev advances by 1"]
     Fence --> Reopen["the session reopens<br/>if it was closed"]
     Fence --> OldMonitor["any older lahe monitor process<br/>for session A"]
@@ -63,7 +63,10 @@ flowchart TD
 - A takeover from the command line is refused while the session's agent is
   listening (a live monitor, or a lahe command in the last few minutes). That
   handoff cuts someone off, so the human confirms it from the Library page,
-  which names the agent that is listening.
+  which names the agent that is listening. The confirmed request then lets the
+  takeover through: Pick this up and Launch a new agent both end with
+  `lahe session takeover <session> --request <id>`, and the pending request
+  for that session is the human's say-so.
 - Takeover does not delete anything and does not require the old agent to
   cooperate. It advances a fence number that every running monitor checks on
   its own next look, which is what makes an old monitor for the same session
@@ -96,13 +99,13 @@ flowchart TD
     Confirm -->|"confirmed"| Queue[("catalog-requests.jsonl<br/>request: ids only")]
     AttachFile -.->|"names who the request is for"| Queue
     Queue -->|"catalog_requests in the drain,<br/>wakes the monitor once"| Agent["attached agent"]
-    Agent -->|"pickup, static row"| Take["lahe session takeover doc-session"]
+    Agent -->|"pickup, static row"| Take["lahe session takeover doc-session --request id"]
     Agent -->|"pickup, pre-session or worktree row"| Serve["lahe library serve request:<br/>adopts a pre-session review into its own session,<br/>or serves the main-repo copy of a worktree"]
     Serve --> Answer
     Take --> Both["lahe monitor --session own<br/>--session doc-session"]
     Agent -->|"launch"| Name["lahe session name doc-session<br/>--from-review review"]
     Name --> NewAgent["new agent in a new Terminal window,<br/>given the hand-off message"]
-    NewAgent --> Take2["it runs lahe session takeover doc-session"]
+    NewAgent --> Take2["it runs lahe session takeover doc-session --request id"]
     Both --> Answer["lahe library answer request<br/>done or refused"]
     NewAgent --> Answer
     Answer --> Row["the Library row shows the answer"]

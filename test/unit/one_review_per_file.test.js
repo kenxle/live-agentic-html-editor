@@ -21,6 +21,7 @@ const protocol = require("../../src/shared/protocol.js");
 const record = require("../../src/shared/record.js");
 const logModule = require("../../src/service/log.js");
 const agentSessions = require("../../src/service/agent_sessions.js");
+const catalogRequests = require("../../src/service/catalog_requests.js");
 const { freePort } = require("../helpers/free_port.js");
 const { stopTempHelpers } = require("../helpers/temp_helpers.js");
 const { tempRoot, writeFile, raw } = require("../helpers/sites_world.js");
@@ -201,4 +202,33 @@ test("a link alone never claims a file; a linking review with a comment on it do
   assert.equal(claimed.code, 0, claimed.stderr);
   assert.match(claimed.stdout, /already has a review/);
   assert.equal(reviewOf(claimed), reviewOf(hub));
+});
+
+// A handoff the human confirmed in the Library ends with the agent running
+// the takeover. While the session's agent is listening, the CLI takes it over
+// only with the pending Library request that asked for it.
+test("a takeover of a listened-to session goes through with the Library request that asked for it, and only with it", async (t) => {
+  const w = await cliWorld(t);
+  const file = writeFile(w.home, "ws/repo/docs/page.html", PAGE);
+  const first = review(w, [file]);
+  const owner = sessionOf(first);
+  liveMonitor(w, owner);
+  const caller = agentSessions.createStore({ dir: w.state }).create({ name: "caller" }).id;
+  w.sessions.push(caller);
+  // The agent attached to the Library, listening, as a pending request needs.
+  liveMonitor(w, caller);
+  catalogRequests.writeAttach(w.state, caller, Date.now());
+  const queue = catalogRequests.createQueue({ dir: w.state });
+  const asked = queue.append({ action: catalogRequests.ACTION.PICKUP, review: reviewOf(first), session: owner, for: caller }, Date.now());
+  assert.equal(asked.ok, true);
+  const other = queue.append({ action: catalogRequests.ACTION.PICKUP, review: "r_other_review", session: caller, for: caller }, Date.now());
+  assert.equal(other.ok, true);
+
+  const bare = run(w, ["session", "takeover", owner], false);
+  assert.notEqual(bare.code, 0, "still refused without a request");
+  const wrong = run(w, ["session", "takeover", owner, "--request", other.request.id], false);
+  assert.notEqual(wrong.code, 0, "a request for another session does not count");
+  const made = run(w, ["session", "takeover", owner, "--request", asked.request.id], false);
+  assert.equal(made.code, 0, made.stderr);
+  assert.match(made.stdout, /taken over explicitly/);
 });
