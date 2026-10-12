@@ -284,7 +284,7 @@ test("capture the rail as a reviewable mockup", async ({ page }) => {
       { label: "Stored, agent listening", tip: DOT.connected, attrs: { "data-status": "stored", "data-agent": "connected", "data-loud": "" } },
       { label: "Agent working", tip: DOT.working.replace("{age}", "3m"), attrs: { "data-status": "stored", "data-agent": "working", "data-loud": "" } },
       { label: "Stored, no agent listening", tip: DOT.absent, attrs: { "data-status": "stored", "data-agent": "absent", "data-loud": "" } },
-      { label: "Kept in this browser (helper down)", tip: "Kept in this browser", attrs: { "data-status": "kept_locally", "data-agent": "", "data-loud": "" } },
+      { label: "Helper down", tip: DOT.helper_down, attrs: { "data-status": "kept_locally", "data-agent": "", "data-loud": "" } },
       { label: "Waited too long", tip: DOT.waiting.replace("{age}", "12m"), attrs: { "data-status": "stored", "data-agent": "waiting", "data-loud": "true" } }
     ];
     const legend = [];
