@@ -81,9 +81,12 @@ The **wake channel** is per host, because hosts differ in what they can do
 without spending model tokens:
 
 - **Claude Code** runs `lahe monitor --session <id>` with Bash in the background,
-  with `timeout` 7200000 or the value of `BASH_MAX_TIMEOUT_MS` when that is larger.
-  A background command ends at its timeout, and Claude Code's default limit is
-  two hours; `BASH_MAX_TIMEOUT_MS` in the `env` block of settings.json raises it.
+  with `timeout` 86400000 or the value of `BASH_MAX_TIMEOUT_MS` when that is larger.
+  In a terminal, desktop app or VS Code session, Claude Code puts no time limit on
+  a background command (since 2.1.288), so one launch waits until there is work.
+  The timeout matters only in unattended runs (`-p`, Agent SDK, CI, cloud). A
+  monitor started while an item is still unanswered exits at once, so the agent
+  replies to every item before it launches the monitor again.
   It exits when work lands (`0`), the session closes (`5`), or another agent takes
   over (`6`). On `0` the agent drains to empty and launches the same command again
   in the background. A Stop hook catches the relaunch an agent forgets (see "The

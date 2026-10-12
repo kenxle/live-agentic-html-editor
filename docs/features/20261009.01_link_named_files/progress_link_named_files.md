@@ -1,11 +1,9 @@
 # Name another file as a link: progress
 
-**Needs you:** one call, on [how agents wait for your comments](#waiting-for-comments-what-worked-and-what-goes-wrong). Pick one:
+**Needs you:**
 
-- **A. Docs only.** Rewrite the Claude Code part of the skill around the one call that worked, fix the false line about timeouts, and add the rule "reply to every item before you relaunch". Same rule in the contract.
-- **B. Docs plus a small code fix.** A, plus make the watcher wait instead of exiting at once when the only unanswered items are ones it already printed to this agent. That ends the loop even when an agent forgets the rule.
-
-I recommend B. The rule in A is the kind of prose that has failed before, and the loop costs a turn each time it fires.
+- **The watcher code fix, yes or no.** The docs now say "reply to every item before you launch the watcher" (see Progress). The code fix would make the watcher wait instead of exiting at once when the only unanswered items are ones it already printed to this agent. That ends the loop even when an agent forgets the rule. I recommend it.
+- **Skip the repeat CI run after a merge, yes or no.** The PR's run would record a fingerprint of the exact code it tested. The run after the merge skips only when main's code matches it exactly.
 
 ## Waiting for comments: what worked, and what goes wrong
 
@@ -49,6 +47,8 @@ Lahe already turns a relative link into a page you can open, rail included. So t
 
 ## Progress
 
-- **Link rule:** [PR #42](https://github.com/kenxle/live-agentic-html-editor/pull/42) is open. You said merge it. The first CI run failed one browser spec out of 844 (`static_site_folder.spec.js`, a start that died at once). Main's last run also fails one spec, a different one. That spec passes locally on this branch, 4 of 4. I am rerunning only the failed job, and I will merge when it is green.
+- **Watcher docs:** done on branch `docs/watcher-stays-open`. The lahe skill's Claude Code section is rewritten around the one call that worked. It says one launch waits until there is work, and to answer every item before launching. The false timeout line is gone. The contract, `docs/CLI.md`, and the hint `lahe review` prints say the same. Unit gate: 2,438 passed, 0 failed.
+
+- **Link rule:** merged as [PR #42](https://github.com/kenxle/live-agentic-html-editor/pull/42). The first CI run lost a port to a parallel test; the rerun passed. That flaky test is on the board.
 - **Unit gate:** 2,438 passed, 0 failed.
 - **Not touched:** the PDF spec's summary sentence. It can ride in this branch if you want it.
