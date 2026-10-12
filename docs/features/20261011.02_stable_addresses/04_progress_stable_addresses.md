@@ -8,7 +8,7 @@
 
 - [ ] **Approve or reverse six changes from what the docs said.** Building turned up these. Each has my recommendation; say "all fine", or name the ones to change.
   - **Accepted:** Windows does not get `.lahe`. Every system uses `.lahe.localhost`.
-  - **A linked document opens with the linking page's rail, even when it has its own review.** Before, each folder had its own server, so following a link could land on the linked file's own review. Now one address serves the folder, so the page you came from keeps its rail. The linked file's own review still works when you open that file with `lahe review`. *Recommend: accept.*
+  - **Reversed:** a linked document opens with its own review's rail when it has one. You rejected the change, so the core builder restores the old behavior.
   - **A tab stays connected when a newer review takes over its page.** The helper accepts a page's requests from any review that could answer on that site, not only the newest, so a tab opened earlier keeps working. A page from another site is still refused. *Recommend: accept.*
   - **One click from a "no document by that name" page opens the Library.** The Library page now accepts a link from a `.lahe.localhost` page. The security review checked it: the linking page cannot read the Library, frame it, or press its buttons. *Recommend: accept.*
   - **Links into hidden folders no longer open.** A Markdown link to a file inside a hidden folder in your home folder (for example `~/.config/notes/x.md`) now shows as plain text. Before, Lahe would serve that whole hidden folder, which is how a document could reach `~/.ssh`. *Recommend: accept.*
