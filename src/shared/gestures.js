@@ -71,7 +71,7 @@
       when: "nothing selected",
       hint: "Press Cmd-Shift-C with nothing selected, then click any element to comment on the whole thing.",
       panelKeys: "Cmd-Shift-C (no selection)",
-      panelHint: "Press Cmd-Shift-C with nothing selected, then click an element like an image to comment on the element.",
+      panelHint: "As you hover over elements, they will be outlined. Click an element to comment on the element. Useful for images and other hard to highlight elements.",
       passThrough: false,
       preventDefault: true,
       requirement: "R17"
