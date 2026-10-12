@@ -21,6 +21,7 @@ const { test, expect, pollPage, placeCaret, startService, SERVICE_ENTRY } = requ
 const { startAppServer } = require(path.join(REPO, "test", "fixtures", "app", "server"));
 
 const REVIEW = "rail-mockup";
+const DOT = require(path.join(REPO, "src", "layer", "overlay.js")).DOT_WORDS;
 const OUT = path.join(__dirname, "..", "rail_mockup.html");
 
 // Every shadow root opens, so the copy can reach the nested ones too.
@@ -280,11 +281,11 @@ test("capture the rail as a reviewable mockup", async ({ page }) => {
     // The status dot, one copy of the head per state. The attributes are the
     // ones renderStatus sets; the shapes come from the rail's own CSS.
     const DOT_STATES = [
-      { label: "Stored, agent listening", tip: "Stored · agent listening", attrs: { "data-status": "stored", "data-agent": "connected", "data-loud": "" } },
-      { label: "Agent working", tip: "Stored · agent is working, 3m", attrs: { "data-status": "stored", "data-agent": "working", "data-loud": "" } },
-      { label: "Stored, no agent listening", tip: "Stored · no agent listening", attrs: { "data-status": "stored", "data-agent": "absent", "data-loud": "" } },
+      { label: "Stored, agent listening", tip: DOT.connected, attrs: { "data-status": "stored", "data-agent": "connected", "data-loud": "" } },
+      { label: "Agent working", tip: DOT.working.replace("{age}", "3m"), attrs: { "data-status": "stored", "data-agent": "working", "data-loud": "" } },
+      { label: "Stored, no agent listening", tip: DOT.absent, attrs: { "data-status": "stored", "data-agent": "absent", "data-loud": "" } },
       { label: "Kept in this browser (helper down)", tip: "Kept in this browser", attrs: { "data-status": "kept_locally", "data-agent": "", "data-loud": "" } },
-      { label: "Waited too long", tip: "Stored · nothing back yet, 12m", attrs: { "data-status": "stored", "data-agent": "waiting", "data-loud": "true" } }
+      { label: "Waited too long", tip: DOT.waiting.replace("{age}", "12m"), attrs: { "data-status": "stored", "data-agent": "waiting", "data-loud": "true" } }
     ];
     const legend = [];
     const realDot = await page.evaluate(() => {

@@ -90,14 +90,14 @@ function rows(list) {
 
 const QUIET = LIVE.QUIET_MS % 60000 === 0 ? LIVE.QUIET_MS / 60000 + " minutes" : LIVE.QUIET_MS / 1000 + " seconds";
 const firstLine = [
-  ["Your work is stored", OVERLAY.STATUS_SHORT.stored],
+  ["Stored, an agent is listening", OVERLAY.DOT_WORDS.connected],
+  ["Stored, an agent is working on it (after " + QUIET + " waiting)", OVERLAY.DOT_WORDS.working],
+  ["Stored, no agent is listening (click copies a hand-off message)", OVERLAY.DOT_WORDS.absent],
+  ["Stored, nothing has come back (after " + QUIET + "; click copies)", OVERLAY.DOT_WORDS.waiting],
+  ["Stored, no agent has picked it up (after " + QUIET + "; click copies)", OVERLAY.DOT_WORDS.no_agent],
+  ["Stored, nothing to say about an agent", OVERLAY.STATUS_SHORT.stored],
   ["Kept in the browser, helper not answering", OVERLAY.STATUS_SHORT.kept_locally],
-  ["The page is about to reload onto a new build", OVERLAY.STATUS_SHORT.page_reloading],
-  ["Added after \"Stored ·\" when an agent is listening", LIVE.CONNECTION.connected],
-  ["Added after \"Stored ·\" when no agent is listening", LIVE.CONNECTION.absent],
-  ["Added after \"Stored ·\" while an agent works (after " + QUIET + " waiting)", LIVE.TEXT.working],
-  ["Added after \"Stored ·\" when nothing has come back (after " + QUIET + ")", LIVE.TEXT.waiting],
-  ["Added after \"Stored ·\" when no agent has picked it up (after " + QUIET + ")", LIVE.TEXT.no_agent]
+  ["The page is about to reload onto a new build", OVERLAY.STATUS_SHORT.page_reloading]
 ];
 const detail = [
   ["1. The helper is up", LIVE.DETAIL.helper_up],
@@ -136,7 +136,7 @@ const hoverSection =
   "<h2>Hover text</h2>\n" +
   "<p>Every hover text on the rail, read from the code. Edit the words in the right column directly. {age}, {name} and {reply} are filled in when shown.</p>\n" +
   "<h3>Status dot: first line</h3>\n" +
-  "<p>The tip opens with one short line: the first three rows, then for stored work one of the rows after it, joined with a middle dot.</p>\n" +
+  "<p>The tip opens with one of these lines.</p>\n" +
   '<table class="mock-table">' + rows(firstLine) + "</table>\n" +
   "<h3>Status dot: the sentences under it</h3>\n" +
   "<p>After a blank line, one sentence from each numbered group, in order.</p>\n" +

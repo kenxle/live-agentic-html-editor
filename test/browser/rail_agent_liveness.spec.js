@@ -288,6 +288,13 @@ test.describe("the rail says whether anything has come back", () => {
       expect(gone.text, "what a reviewer comes back from a break to check").toBe("Stored · no agent listening");
       expect(gone.loud, "nothing is waiting, so this is news and not an alarm").toBe(false);
       expect(gone.dotColor, "and it looks different from a connected one").not.toBe(connected.dotColor);
+      // The status dot's own words, Ken's: no "Stored ·" (the dot's shape says
+      // that), and a click that copies a hand-off message where something may
+      // be wrong.
+      expect(connected.dotTip.split("\n")[0]).toBe("Agent listening");
+      expect(connected.dotCopies, "nothing to fix, nothing to copy").toBe(false);
+      expect(gone.dotTip.split("\n")[0]).toBe("No agent listening. Click to copy a message you can send to an agent.");
+      expect(gone.dotCopies).toBe(true);
 
       // Forty-five seconds after the reviewer pressed submit, with nothing back.
       // This is where the line starts speaking: they are sitting there wondering
@@ -574,6 +581,20 @@ test.describe("the rail says whether anything has come back", () => {
       expect(copied).not.toContain(helper.tokenFor(REVIEW));
       const afterCopy = await page.evaluate(() => window.__laheRail.waitBanner());
       expect(afterCopy.note).toContain("Copied");
+
+      // The status dot copies the same message when clicked.
+      await page.evaluate(() => {
+        window.__copied = null;
+      });
+      const lateDot = await page.evaluate(() => window.__laheRail.statusLine());
+      expect(lateDot.dotCopies, "a late wait makes the dot a copy button").toBe(true);
+      expect(lateDot.dotTip.split("\n")[0]).toContain("You may need to check your agent isn't stuck.");
+      await page.mouse.click(lateDot.dotRect.x + lateDot.dotRect.width / 2, lateDot.dotRect.y + lateDot.dotRect.height / 2);
+      await pollPage(page, () => typeof window.__copied === "string", undefined, {
+        message: "a click on the dot to copy the handoff message"
+      });
+      expect(await page.evaluate(() => window.__copied)).toContain("lahe session takeover s_amber01");
+      expect((await page.evaluate(() => window.__laheRail.statusLine())).dotTip).toContain("Copied");
 
       // An agent that is working: the same wait, explained, and nothing amber.
       const working = await page.evaluate(
