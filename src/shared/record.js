@@ -493,9 +493,12 @@
     // A STABLE ADDRESS'S OLD ORIGINS. A record made when this page was served
     // on a random port is this page's when its origin is one of the aliases
     // the helper put on the script tag and its path is this path.
-    if (Array.isArray(page.aliases) && page.aliases.indexOf(itemOrigin) !== -1 &&
-        String(item[FIELD.PAGE_PATH]) === String(page.path)) {
-      return true;
+    if (Array.isArray(page.aliases) && page.aliases.indexOf(itemOrigin) !== -1) {
+      var itemPath = String(item[FIELD.PAGE_PATH]);
+      if (itemPath === String(page.path)) return true;
+      // An old Markdown review's page was its rendered file: that old path, at
+      // an old origin, is this page too.
+      if (Array.isArray(page.path_aliases) && page.path_aliases.indexOf(itemPath) !== -1) return true;
     }
     if (itemOrigin !== FILE_ORIGIN && pageOrigin !== FILE_ORIGIN) return false;
     var a = segmentsOf(item[FIELD.PAGE_PATH]);
@@ -537,7 +540,12 @@
       source_hint: opts.source_hint || null,
       // The old origins this page also answers for (stable addresses). Only
       // ever what the helper wrote on the script tag.
-      aliases: Array.isArray(opts.aliases) ? opts.aliases.slice() : []
+      aliases: Array.isArray(opts.aliases) ? opts.aliases.slice() : [],
+      // The old paths of this page (an old Markdown review's rendered file),
+      // read only together with an old origin. Also only what the helper wrote.
+      path_aliases: Array.isArray(opts.path_aliases)
+        ? opts.path_aliases.filter(function (p) { return typeof p === "string" && p.charAt(0) === "/"; })
+        : []
     };
   }
 

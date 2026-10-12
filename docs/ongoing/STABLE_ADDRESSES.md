@@ -150,6 +150,15 @@ Separate addresses stop all of it with one rule the browser already follows. Opt
 
 - Not possible. When nothing listens on a port, the browser shows its own error page, and Lahe never sees the request.
 
+## Old comments at a new address
+
+A page reviewed before stable addresses had comments made at `127.0.0.1:<port>`. Those comments are in
+that origin's browser storage, and the helper's log. When the page opens at its stable address, the
+layer asks the helper once for this page's records (`records.read`) and shows the ones this browser does
+not hold, as cards. They are not posted back. An old Markdown review's page was its rendered file
+(`/<name>-<hash>.html`); the helper names that old path on the tag, so those comments come over too.
+`docs/CONTRACTS.md` has the guards.
+
 ## Side finding
 
 While checking this, I found 63 page-server processes left running from test runs. 60 of them are from the idle-server tests (state folders named `lahe-idle-state-*`). That is a test leak of the kind CLAUDE.md's "Tests leave nothing running" rule forbids, and it costs battery. It should go on the bulletin as its own fix.

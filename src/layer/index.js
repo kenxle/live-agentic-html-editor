@@ -144,6 +144,7 @@
     // Only a tag on a stable address carries aliases, so only then is the
     // key there at all.
     if (tag.getAttribute(attr.ALIASES)) config.aliases = parseAliases(tag.getAttribute(attr.ALIASES));
+    if (tag.getAttribute(attr.PATH_ALIASES)) config.pathAliases = parsePathAliases(tag.getAttribute(attr.PATH_ALIASES));
     return config;
   }
 
@@ -162,6 +163,18 @@
     });
   }
 
+  /**
+   * The old paths of this page (protocol.SCRIPT_ATTR.PATH_ALIASES), or []. Only
+   * absolute paths, at most protocol.ALIAS_MAX, as the helper writes them.
+   */
+  function parsePathAliases(value) {
+    if (!value) return [];
+    var list;
+    try { list = JSON.parse(value); } catch (err) { return []; }
+    if (!Array.isArray(list) || list.length > protocol.ALIAS_MAX) return [];
+    return list.filter(protocol.isPathAlias);
+  }
+
   /** Explicit options win over the tag; the tag is the default, not the law. */
   function resolveConfig(doc, options, script) {
     var opts = options || {};
@@ -176,6 +189,7 @@
       // an empty page for typing; every other empty page stays in reading.
       notes: opts.notes !== undefined ? opts.notes === true : fromTag.notes === protocol.NOTES_ON,
       aliases: Array.isArray(opts.aliases) ? opts.aliases : fromTag.aliases || [],
+      pathAliases: Array.isArray(opts.pathAliases) ? opts.pathAliases : fromTag.pathAliases || [],
       from: opts.review ? "options" : fromTag.from
     };
   }
@@ -405,7 +419,7 @@
     function pageNow() {
       return record.pageFrom(
         { origin: win.location.origin, pathname: win.location.pathname, href: win.location.href, title: doc.title },
-        { seq: 1, aliases: config.aliases }
+        { seq: 1, aliases: config.aliases, path_aliases: config.pathAliases }
       );
     }
 
@@ -632,7 +646,7 @@
     // revertChecks counts the check having RUN on this load, which is what a
     // test waits on: "the check ran and reopened nothing" is a real result and
     // an arbitrary sleep is the only other way to observe it.
-    var counters = { merges: 0, cardsDrawn: 0, revertChecks: 0, revertReopens: 0, changesPainted: 0 };
+    var counters = { merges: 0, cardsDrawn: 0, revertChecks: 0, revertReopens: 0, changesPainted: 0, adopted: 0 };
 
     // The window-session state machine's boot half (D5, findings 1/12, NEW-2). A
     // window that loses the claim goes READ-ONLY: its edit and comment handlers
@@ -1880,6 +1894,38 @@
     // The first pass. Replay is what puts committed edits back on a page that
     // was reloaded, so it runs on boot and not only on a later repaint.
     ns.replay.schedule(ns.replay.REASON.BOOT);
+
+    // V31: COMMENTS FROM THIS PAGE'S OLD ADDRESS. Browser storage belongs to one
+    // origin, so a comment made at 127.0.0.1:<old port> is in that origin's
+    // storage and never in this one's. The helper holds it. On a stable address
+    // whose tag names old origins, the boot asks the helper for this page's
+    // records once (sync.readRecords), and store.adopt takes in the ones this
+    // browser does not hold: as acknowledged, never into the outbox, through
+    // merge.js unchanged. The first merge above drew what browser storage
+    // held; this one draws what came over, and replay anchors it. A read-only
+    // window takes nothing in: it writes nothing.
+    var adopting = null;
+    if (opts.startSync !== false && config.aliases && config.aliases.length &&
+        typeof sync.readRecords === "function" && typeof store.adopt === "function") {
+      adopting = sync.readRecords().then(function (records) {
+        if (readOnlyActive || (typeof sync.isReadOnly === "function" && sync.isReadOnly())) return [];
+        var mine = records.filter(function (item) {
+          return item && record.samePage(item, page);
+        });
+        var adopted = [];
+        failures.tolerateStorageQuota(function () {
+          adopted = store.adopt(reviewId, mine);
+        }, function (failure) {
+          rail.failures.add(failure);
+        });
+        counters.adopted += adopted.length;
+        if (adopted.length) {
+          merge();
+          ns.replay.schedule(ns.replay.REASON.BOOT);
+        }
+        return adopted;
+      });
+    }
 
     // The first reading of this page's blocks, so that a rebuild landing before
     // the settling window closes still has something to compare the reload-time

@@ -1534,7 +1534,7 @@
     var REPLIES_KEPT = 50;
     var seenItems = Object.create(null);
     var lock = { checked: false, acquired: null, holder: null, reason: null, unchecked: false };
-    var counters = { posts: 0, postsFailed: 0, polls: 0, acknowledged: 0, timeouts: 0 };
+    var counters = { posts: 0, postsFailed: 0, polls: 0, acknowledged: 0, timeouts: 0, recordsRead: 0 };
 
     function requireReview() {
       if (!review) throw new Error("sync: a review id is required; browser storage and the wire are both keyed by it");
@@ -2285,6 +2285,35 @@
     // The cursor is a seq from the log (protocol.REPLY_CURSOR_FIELD), never a
     // timestamp: two events in one millisecond are ordinary and a clock that
     // steps backwards silently skips work.
+
+    /**
+     * V31: the records the helper holds for this page, whole, so the boot can
+     * take in comments made at this page's old address. One GET, behind the
+     * same token and Origin checks as every review route. Never throws:
+     * anything but a good answer is an empty list, and the rail stays what
+     * browser storage made it.
+     *
+     * @returns {Promise<Object[]>}
+     */
+    function readRecords() {
+      var pagePath =
+        win && win.location && typeof win.location.pathname === "string"
+          ? win.location.pathname
+          : doc && doc.location && typeof doc.location.pathname === "string"
+            ? doc.location.pathname
+            : null;
+      if (!pagePath) return Promise.resolve([]);
+      return request("records.read", { method: "GET", query: { review: requireReview(), page_path: pagePath } }).then(
+        function (result) {
+          var list = result && result.ok && result.body && Array.isArray(result.body.records) ? result.body.records : [];
+          counters.recordsRead += 1;
+          return list;
+        },
+        function () {
+          return [];
+        }
+      );
+    }
 
     function poll() {
       counters.polls += 1;
@@ -3545,6 +3574,7 @@
         return readOnly;
       },
       poll: poll,
+      readRecords: readRecords,
       noteTargetMtime: noteTargetMtime,
       noteAgentLiveness: noteAgentLiveness,
       agentLiveness: function () { return agentLiveness; },

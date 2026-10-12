@@ -24,6 +24,7 @@ var stream = require("node:stream");
 var path = require("node:path");
 
 var protocol = require("../shared/protocol.js");
+var record = require("../shared/record.js");
 var scriptLine = require("../shared/script_line.js");
 var stateDir = require("./state_dir.js");
 var markdown = require("./markdown.js");
@@ -111,7 +112,7 @@ function notInjectingNotes(dir) {
   return held;
 }
 
-function injectForMatch(dir, match, target, html, aliases) {
+function injectForMatch(dir, match, target, html, aliases, pathAliases) {
   var carried = scriptLine.reviewAlreadyInFile(html);
   if (carried === match.review) return null;
   if (carried) {
@@ -131,7 +132,9 @@ function injectForMatch(dir, match, target, html, aliases) {
     fallback: helperOrigin + protocol.route("library.get").path,
     // pickReview carries the notes flag from the meta.json it already read.
     notes: typeof match.notes === "boolean" ? match.notes : stateDir.isNotesReview(dir, match.review),
-    aliases: Array.isArray(aliases) && aliases.length ? aliases : undefined
+    aliases: Array.isArray(aliases) && aliases.length ? aliases : undefined,
+    // Only with an old origin: a path alias alone is never read (samePage).
+    pathAliases: Array.isArray(aliases) && aliases.length && Array.isArray(pathAliases) && pathAliases.length ? pathAliases : undefined
   });
   return scriptLine.placeScriptLine(html, tag).html;
 }
@@ -272,7 +275,7 @@ function readReviews(dir) {
  * @param {string} dir the state folder
  * @param {object} site the registry entry
  * @param {{filePaths: string[], realFile: string|null, mounted: boolean}} request
- * @returns {{review: string, token: string, notes: boolean}|null}
+ * @returns {{review: string, token: string, notes: boolean, source_path: (string|null), targets: string[]}|null}
  */
 function pickReview(dir, site, request) {
   var filePaths = request.filePaths || [];
@@ -285,7 +288,14 @@ function pickReview(dir, site, request) {
   var linking = null;
   readReviews(dir).forEach(function (entry) {
     var meta = entry.meta;
-    var candidate = { review: entry.id, token: meta.token, at: stampOf(meta), notes: meta.notes === true };
+    var candidate = {
+      review: entry.id,
+      token: meta.token,
+      at: stampOf(meta),
+      notes: meta.notes === true,
+      source_path: typeof meta.source_path === "string" ? meta.source_path : null,
+      targets: targetsOf(meta)
+    };
     var only = meta.only_recorded_pages === true;
     if (!request.mounted && recordsFile(recordedFiles(meta), filePaths, realFile)) {
       if (newer(candidate, recorded)) recorded = candidate;
@@ -300,7 +310,7 @@ function pickReview(dir, site, request) {
   });
   var best = recorded || backing || linking;
   if (!best) return null;
-  return { review: best.review, token: best.token, notes: best.notes };
+  return { review: best.review, token: best.token, notes: best.notes, source_path: best.source_path, targets: best.targets };
 }
 
 /**
@@ -633,9 +643,14 @@ function readOldServerRecords(dir) {
 /** The old origins of this site's root, newest port first, at most ALIAS_MAX. */
 function aliasesFor(dir, site) {
   if (!site) return [];
+  return originsOfRoots(dir, [site.root]);
+}
+
+/** The old origins of page servers that served any of `roots`, newest port first, at most ALIAS_MAX. */
+function originsOfRoots(dir, roots) {
   var ports = [];
   oldServerRecords(dir)
-    .filter(function (rec) { return rec.root === site.root; })
+    .filter(function (rec) { return roots.indexOf(rec.root) !== -1; })
     .sort(function (a, b) { return a.at < b.at ? -1 : a.at > b.at ? 1 : 0; })
     .forEach(function (rec) {
       rec.ports.forEach(function (port) {
@@ -650,6 +665,65 @@ function aliasesFor(dir, site) {
     out.push("http://" + protocol.DEFAULT_HOST + ":" + port, "http://localhost:" + port);
   });
   return out;
+}
+
+/**
+ * Every old spelling of one page, for the review that answers on it (V31):
+ * the old origins of its site's root and, for an old Markdown review whose
+ * page was the rendered file, that file's old path and the origins of the
+ * page server that served the rendered files' folder.
+ *
+ * @param {string} dir
+ * @param {object} site the registry entry
+ * @param {string|null} file the real file the page is
+ * @param {{source_path?: string|null, targets?: string[]}|null} review
+ * @returns {{origins: string[], paths: string[]}}
+ */
+function oldSpellings(dir, site, file, review) {
+  if (!site) return { origins: [], paths: [] };
+  var roots = [site.root];
+  var paths = [];
+  var source = review && typeof review.source_path === "string" ? review.source_path : null;
+  if (source && file && markdown.isMarkdown(source) && (realOrNull(source) || path.resolve(source)) === file) {
+    (review.targets || []).forEach(function (target) {
+      if (typeof target !== "string" || !/\.html?$/i.test(target)) return;
+      var old = "/" + path.basename(target);
+      if (protocol.isPathAlias(old) && paths.indexOf(old) === -1 && paths.length < protocol.ALIAS_MAX) paths.push(old);
+      var folder = realOrNull(path.dirname(target));
+      if (folder && roots.indexOf(folder) === -1) roots.push(folder);
+    });
+  }
+  return { origins: originsOfRoots(dir, roots), paths: paths };
+}
+
+/**
+ * V31: the records `items` (one review's fold) that belong to the page at
+ * `origin` + `pagePath`, by record.samePage with the page's old spellings.
+ * Never a draft: a draft never reached the agent, and one the reviewer
+ * withdrew must not come back. An origin that is not a site address gets
+ * nothing: the old spellings belong to stable addresses only.
+ *
+ * @param {string} dir
+ * @param {object} review the helper's review ({id, source_path, target_path, target_paths})
+ * @param {string|null} origin the page's Origin, as auth passed it
+ * @param {string|null} pagePath
+ * @param {object[]} items
+ */
+function recordsForPage(dir, review, origin, pagePath, items) {
+  var entry = activeFor(dir);
+  if (!entry || typeof origin !== "string" || typeof pagePath !== "string" || pagePath.charAt(0) !== "/") return [];
+  var name = protocol.siteNameFromOrigin(origin, entry.pagesPort, typeof entry.laheNames === "function" && entry.laheNames());
+  var site = name ? entry.sites.get(name) : null;
+  if (!site) return [];
+  var file = fileForPage(dir, origin, pagePath);
+  var spellings = oldSpellings(dir, site, file ? (realOrNull(file) || file) : null, { source_path: review.source_path, targets: targetsOf(review) });
+  var page = record.pageFrom(
+    { origin: origin, pathname: pagePath, href: origin + pagePath },
+    { seq: 1, aliases: spellings.origins, path_aliases: spellings.paths }
+  );
+  return (items || []).filter(function (item) {
+    return item && !record.isDraft(item) && record.samePage(item, page);
+  });
 }
 
 /** {old origin: site origin} for every active site, for review.json grouping. */
@@ -877,7 +951,8 @@ function createPageRoutes(options) {
     try { html = fs.readFileSync(candidate, "utf8"); } catch (err) { return notFound(req, res); }
     var match = pickReview(dir, ctx.site, { filePaths: filePathsFor(candidate, real), realFile: real, mounted: mounted });
     if (match) {
-      var injected = injectForMatch(dir, match, candidate, html, aliasesFor(dir, ctx.site));
+      var htmlSpellings = oldSpellings(dir, ctx.site, real, match);
+      var injected = injectForMatch(dir, match, candidate, html, htmlSpellings.origins, htmlSpellings.paths);
       if (injected !== null) html = injected;
     }
     sendHtml(req, res, 200, tabIcon.ensure(html));
@@ -914,7 +989,8 @@ function createPageRoutes(options) {
     var html = out.html;
     if (match) {
       if (out.linked.length) sites.addLinked(ctx.name, match.review, out.linked);
-      var injected = injectForMatch(dir, match, candidate, html, aliasesFor(dir, site));
+      var spellings = oldSpellings(dir, site, real, match);
+      var injected = injectForMatch(dir, match, candidate, html, spellings.origins, spellings.paths);
       if (injected !== null) html = injected;
     }
     sendHtml(req, res, 200, html);
@@ -1037,6 +1113,8 @@ module.exports = {
   renderForFile: renderForFile,
   recordLinkedFor: recordLinkedFor,
   aliasesFor: aliasesFor,
+  oldSpellings: oldSpellings,
+  recordsForPage: recordsForPage,
   aliasMap: aliasMap,
   createPageRoutes: createPageRoutes,
   createNoteOnce: logModule.createNoteOnce,

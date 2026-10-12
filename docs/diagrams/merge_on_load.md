@@ -24,6 +24,26 @@ sequenceDiagram
     Note over B: merged result: rev 2, READY.<br/>The store's "handled" named a revision that no<br/>longer exists, so it cannot retire anything.<br/>The rewording is not swallowed.
 ```
 
+## A page's old address (stable addresses)
+
+A comment made at a page's old `127.0.0.1:<port>` address lives in that origin's browser storage, so the
+rail at the page's stable address starts without it. On boot, a page whose script tag names old origins
+asks the helper for its records once (`records.read`). Each one this browser does not hold comes in
+through the same `mergeLists`, as `ONLY_STORE`: the store wins on content and lifecycle together. It is
+written as acknowledged at its revision and never queued, so nothing goes back to the helper. An item
+this browser already holds is left as it is, and a draft never comes over.
+
+```mermaid
+sequenceDiagram
+    participant N as Page at its new address
+    participant H as Helper
+    N->>N: first merge: what this origin's storage holds
+    N->>H: records.read (this review, this page, old spellings)
+    H->>N: committed records for this page
+    N->>N: store.adopt: only ids not held, acknowledged, no outbox
+    N->>N: merge again, replay anchors the new cards
+```
+
 ## What to notice
 
 - **Two different fields, two different winners.** Content (the words, the region it is tied to) comes from the browser as long as the helper has not acknowledged that revision. Lifecycle (ready, handled, not_handled) comes from the store, but strictly per revision: a "handled" naming rev 1 can only ever retire rev 1.

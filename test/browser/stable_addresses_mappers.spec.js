@@ -5,10 +5,11 @@
 // that page, and only that page), V29 (a linked document rides the linking
 // review's rail, and review.json names its file), V31 (a review created on a
 // random port carries its old address on the tag, and review.json groups its
-// old comments with the new address), and the Step 2 step test: an agent edit
-// reloads the page, the handled check reads the right file, and no served HTML
-// file changes on disk after a poll. The rail showing the old comments is not
-// proved here: see "Blocked" under Step 2 in the progress file.
+// old comments with the new address), V31 option A (a comment made at the old
+// address shows as one card at the new one, stays one after a reload, and
+// posts nothing back), and the Step 2 step test: an agent edit reloads the
+// page, the handled check reads the right file, and no served HTML file
+// changes on disk after a poll.
 //
 // The helper runs in this worker on free ports and a temp state folder, with
 // the switch on. Teardown closes it even when a test fails.
@@ -16,6 +17,7 @@
 "use strict";
 
 const fs = require("node:fs");
+const http = require("node:http");
 const os = require("node:os");
 const path = require("node:path");
 const { test, expect } = require("@playwright/test");
@@ -26,6 +28,9 @@ const stateDir = require("../../src/service/state_dir.js");
 const handledCheck = require("../../src/service/handled_check.js");
 const protocol = require("../../src/shared/protocol.js");
 const record = require("../../src/shared/record.js");
+const scriptLine = require("../../src/shared/script_line.js");
+
+const SHOT_DIR = process.env.LAHE_SCREENSHOT_DIR || null;
 
 // The id the old page servers gave their record: a hash of the root.
 function oldServerId(root) {
@@ -84,14 +89,15 @@ function bindSite(root, entry) {
   return { name: bound.name, origin: protocol.siteOrigin(bound.name, world.helper.pagesPort) };
 }
 
-/** A page server record from before this feature, naming `root` on OLD_PORT. */
-function oldPageServer(root) {
+/** A page server record from before this feature, naming `root` on OLD_PORT (or `port`). */
+function oldPageServer(root, port) {
+  const at = port || OLD_PORT;
   const session = "s_before";
   const id = oldServerId(root);
   stateDir.ensureStaticServersRoot(world.state, session);
   fs.writeFileSync(stateDir.staticServerPath(world.state, session, id), JSON.stringify({
     schema: 1, id, session_id: session, instance: "old", root, logical_root: root, host: "127.0.0.1",
-    port: OLD_PORT, ports: [OLD_PORT], pid: 999999, started_at: "2026-09-01T00:00:00.000Z",
+    port: at, ports: [at], pid: 999999, started_at: "2026-09-01T00:00:00.000Z",
     stopped_at: "2026-09-01T01:00:00.000Z", stop_reason: "session closed", mounts: {}, linked_files: {}
   }));
 }
@@ -235,4 +241,118 @@ test("V29: a linked document rides the linking review's rail, and review.json na
     const group = json && json.pages.find((p) => p.path === linkedPath);
     return group ? group.linked_file : null;
   }, { message: "review.json to name the linked file", timeout: 20000 }).toBe(fs.realpathSync(far));
+});
+
+// --- V31, option A: the old comment comes over --------------------------------
+
+/**
+ * What an old page server was: a loopback port that served the folder with
+ * the review's script line in each response. Stopped by the caller.
+ */
+async function oldAddress(folder, review) {
+  const helperOrigin = "http://127.0.0.1:" + world.helper.port;
+  const tag = protocol.scriptTag({
+    src: helperOrigin + protocol.route("library.get").path,
+    review: review.id,
+    token: review.token,
+    helper: helperOrigin
+  });
+  const server = http.createServer((req, res) => {
+    const file = path.join(folder, decodeURIComponent(String(req.url).split("?")[0]));
+    if (!file.startsWith(folder) || !fs.existsSync(file)) { res.writeHead(404); res.end(); return; }
+    const html = scriptLine.placeScriptLine(fs.readFileSync(file, "utf8"), tag).html;
+    res.writeHead(200, { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" });
+    res.end(html);
+  });
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+  return { server, origin: "http://127.0.0.1:" + server.address().port, port: server.address().port };
+}
+
+async function commentOn(page, selector, text) {
+  await page.evaluate((sel) => {
+    const range = document.createRange();
+    range.selectNodeContents(document.querySelector(sel));
+    window.getSelection().removeAllRanges();
+    window.getSelection().addRange(range);
+  }, selector);
+  await page.keyboard.press("ControlOrMeta+Shift+KeyC");
+  await expect.poll(() => page.evaluate(() => !!window.__lahe.focusedBoxQuote()), { message: "the comment box to open" }).toBe(true);
+  await page.keyboard.type(text);
+  await page.keyboard.press("ControlOrMeta+Enter");
+}
+
+function eventsFor(reviewId, itemId) {
+  return world.helper.log.read(reviewId).filter((event) => event.item === itemId).length;
+}
+
+test("V31: a comment made at the old address shows once as a card at the new one, stays one after a reload, and posts nothing back", async ({ page }) => {
+  const folder = path.join(world.home, "ws", "repo", "docs");
+  writeFile(folder, "page.html", docHtml("First edition"));
+  const real = fs.realpathSync.native(folder);
+  const session = agentSessions.createStore({ dir: world.state }).create({ name: "v31" }).id;
+  const review = world.helper.reviews.create({ target_path: path.join(real, "page.html"), agent_session_id: session, origins: ["null"] });
+  const old = await oldAddress(real, review);
+  try {
+    world.helper.reviews.registerOrigin(review.id, old.origin);
+
+    // The reviewer comments at the old address, and the helper takes it.
+    await page.goto(old.origin + "/page.html");
+    await booted(page);
+    await commentOn(page, "#body", "a comment made at the old address");
+    await expect.poll(() => page.evaluate(() => window.__lahe.handle.sync.status().counters.acknowledged), {
+      message: "the helper to take the comment"
+    }).toBeGreaterThan(0);
+    const made = await page.evaluate(() => window.__lahe.items().map((item) => item.id));
+    expect(made).toHaveLength(1);
+    const id = made[0];
+    await expect.poll(() => eventsFor(review.id, id), { message: "the comment in the log" }).toBeGreaterThan(0);
+    const before = eventsFor(review.id, id);
+
+    // Stable addresses arrive: the old server is a record, the folder a site.
+    oldPageServer(real, old.port);
+    const site = bindSite(real, "page.html");
+
+    await page.goto(site.origin + "/page.html");
+    await booted(page);
+    await expect.poll(() => page.evaluate((itemId) => !!window.__lahe.rail.getCard(itemId), id), {
+      message: "the old comment to show as a card at the new address"
+    }).toBe(true);
+    expect(await page.evaluate((itemId) => window.__lahe.items().filter((item) => item.id === itemId).length, id)).toBe(1);
+    expect(await page.evaluate(() => window.__lahe.items().length)).toBe(1);
+    const card = await page.evaluate((itemId) => window.__lahe.rail.getCard(itemId).state, id);
+    expect(card).toBe(record.STATE.READY);
+    expect(await page.evaluate((itemId) => window.__lahe.itemById(itemId).note, id)).toBe("a comment made at the old address");
+
+    // A reload shows it once again, from this origin's own storage now.
+    await page.reload();
+    await booted(page);
+    await expect.poll(() => page.evaluate((itemId) => !!window.__lahe.rail.getCard(itemId), id), {
+      message: "the card after a reload"
+    }).toBe(true);
+    expect(await page.evaluate(() => window.__lahe.items().length)).toBe(1);
+
+    // Nothing was posted back: the log holds what it held, and nothing waits.
+    await expect.poll(() => page.evaluate(() => window.__lahe.handle.sync.status().counters.polls), {
+      message: "a few polls to pass"
+    }).toBeGreaterThan(2);
+    expect(eventsFor(review.id, id)).toBe(before);
+    expect(await page.evaluate(() => window.__lahe.handle.store.pendingCount(window.__lahe.review))).toBe(0);
+
+    // The card at the new address, in light and dark, each from a fresh load.
+    if (SHOT_DIR) {
+      for (const scheme of ["light", "dark"]) {
+        await page.emulateMedia({ colorScheme: scheme });
+        await page.reload();
+        await booted(page);
+        await expect.poll(() => page.evaluate((itemId) => !!window.__lahe.rail.getCard(itemId), id), {
+          message: "the card in " + scheme
+        }).toBe(true);
+        await page.screenshot({ path: path.join(SHOT_DIR, "v31_old_comment_card_" + scheme + ".png") });
+      }
+      expect(await page.evaluate(() => window.__lahe.items().length)).toBe(1);
+      expect(eventsFor(review.id, id)).toBe(before);
+    }
+  } finally {
+    await new Promise((resolve) => old.server.close(resolve));
+  }
 });
