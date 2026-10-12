@@ -3,7 +3,6 @@
 **Needs you:**
 
 - **The watcher code fix, yes or no.** The docs now say "reply to every item before you launch the watcher" (see Progress). The code fix would make the watcher wait instead of exiting at once when the only unanswered items are ones it already printed to this agent. That ends the loop even when an agent forgets the rule. I recommend it.
-- **Skip the repeat CI run after a merge, yes or no.** The PR's run would record a fingerprint of the exact code it tested. The run after the merge skips only when main's code matches it exactly.
 
 ## Waiting for comments: what worked, and what goes wrong
 
@@ -46,6 +45,8 @@ Lahe already turns a relative link into a page you can open, rail included. So t
 - your global CLAUDE.md, under "Anything you want Ken to read goes in a LAHE document"
 
 ## Progress
+
+- **CI is fast now:** decided. GitHub runs lint, the bundle check and the unit tests, with no install step. That proves a fresh clone works on Linux. The browser suite runs locally before a PR and again on main after a merge, and the PR body states the local counts. `CLAUDE.md` says so. This makes the repeat-run-after-merge question moot.
 
 - **Watcher docs:** done on branch `docs/watcher-stays-open`. The lahe skill's Claude Code section is rewritten around the one call that worked. It says one launch waits until there is work, and to answer every item before launching. The false timeout line is gone. The contract, `docs/CLI.md`, and the hint `lahe review` prints say the same. Unit gate: 2,438 passed, 0 failed.
 
