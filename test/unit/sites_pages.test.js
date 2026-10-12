@@ -71,16 +71,16 @@ test("the library and the document style come from Lahe, never from the folder",
   assert.match(css.headers["content-type"], /text\/css/);
 });
 
-// --- V14: hidden files and dot segments --------------------------------------
+// --- V14: dot segments and encoded slashes ------------------------------------
+//
+// Hidden files get no special handling: a dotfile under the root is served
+// like any other file (test/unit/hidden_files_served.test.js). What V14 still
+// refuses is a path that climbs out: raw dot segments, their encoded
+// spellings, and encoded slashes.
 
-test("V14: dotfiles, raw dot segments and their encoded spellings are 404 under every site", async (t) => {
+test("V14: raw dot segments and their encoded spellings are 404 under every site, and dotfiles are served", async (t) => {
   const w = await folderWorld(t);
   const refused = [
-    "/.env",
-    "/.git/config",
-    "/sub/.hidden.html",
-    "/%2Eenv",
-    "/%2egit/config",
     "/../outside.html",
     "/sub/../../outside.html",
     "/sub/./inner.html",
@@ -93,23 +93,32 @@ test("V14: dotfiles, raw dot segments and their encoded spellings are 404 under 
   for (const p of refused) {
     const res = await getPage(w, w.name, p);
     assert.equal(res.status, 404, p);
-    assert.doesNotMatch(res.text, /SECRET|\[core\]|hidden|outside the root/, p);
+    assert.doesNotMatch(res.text, /outside the root/, p);
   }
-  // The positive control: the same folder's ordinary files are served.
+  for (const [p, words] of [["/.env", /SECRET=1/], ["/.git/config", /\[core\]/], ["/sub/.hidden.html", /hidden/], ["/%2Eenv", /SECRET=1/]]) {
+    const res = await getPage(w, w.name, p);
+    assert.equal(res.status, 200, p);
+    assert.match(res.text, words, p);
+  }
   assert.equal((await getPage(w, w.name, "/sub/inner.html")).status, 200);
 });
 
-test("V14: a mount refuses dotfiles and dot segments too, and an encoded mount prefix", async (t) => {
+test("V14: a mount refuses dot segments and an encoded mount prefix, and serves its dotfiles", async (t) => {
   const w = await sitesWorld(t);
   const folder = path.join(w.home, "a", "b", "c");
   writeFile(folder, "doc.html", PAGE);
   const other = path.join(w.home, "elsewhere");
   writeFile(other, "linked.html", "<p>linked</p>");
-  writeFile(other, ".secret", "nope");
+  writeFile(other, ".secret", "the dotfile");
   const prefix = "/.lahe-source/0123456789abcdef/";
   const bound = w.helper.sites.bind({ root: folder, mode: "folder", entry: "doc.html", mounts: { [prefix]: other } });
   assert.equal((await getPage(w, bound.name, prefix + "linked.html")).status, 200);
-  for (const p of [prefix + ".secret", prefix + "%2esecret", prefix + "../c/doc.html", "/%2Elahe-source/0123456789abcdef/linked.html"]) {
+  for (const p of [prefix + ".secret", prefix + "%2esecret"]) {
+    const res = await getPage(w, bound.name, p);
+    assert.equal(res.status, 200, p);
+    assert.match(res.text, /the dotfile/, p);
+  }
+  for (const p of [prefix + "../c/doc.html", "/%2Elahe-source/0123456789abcdef/linked.html"]) {
     const res = await getPage(w, bound.name, p);
     assert.equal(res.status, 404, p);
   }

@@ -21,7 +21,7 @@ What stays: review records, tokens, the per-request checks (D11 in the original 
 | Area | Change |
 |---|---|
 | `src/service/sites.js` (new) | The name registry: make a name, keep it unique, resolve a Host to a site, record the worktree's main checkout, the grants log. Single writer. |
-| `src/service/page_routes.js` (new) | Serves a site: path safety, hidden-file refusal, injection, Markdown render, mounts, the "unknown name" and "file is gone" pages. Takes the serving half of `static_servers.js`. |
+| `src/service/page_routes.js` (new) | Serves a site: path safety, injection, Markdown render, mounts, the "unknown name" and "file is gone" pages. Takes the serving half of `static_servers.js`. |
 | `src/service/name_server.js` (new) | Minimal DNS answerer for `*.lahe` on loopback UDP, macOS opt-in only. Node `dgram` only. |
 | `src/service/login_item.js` (new), `src/cli/commands/install.js` (new) | `lahe install`, `lahe uninstall`, `lahe install --lahe-names`: login item per system, macOS resolver, `install.json`. |
 | `src/service/index.js`, `routes.js`, `auth.js` | Host dispatch first; two listeners (`127.0.0.1`, `::1`); the `site.bind` route and its CLI secret; Library Hosts widened to `library.lahe.localhost`; Origin check against the registry; `Cross-Origin-Resource-Policy` on page responses. |
@@ -98,6 +98,7 @@ flowchart TD
 ```
 
 - Every page response carries `Cross-Origin-Resource-Policy: same-origin`. Websites cannot embed or probe it.
+- Every page response carries `Content-Security-Policy: frame-ancestors 'self'`. Only the page's own site may frame it (a reveal.js speaker-notes window frames the same deck); no other page can frame a reviewed page and its token.
 - A page's path is its path under the root, as today. Links and images keep working with no redirects.
 - A GET never writes. Names are only made by `site.bind`.
 
@@ -233,7 +234,7 @@ The forward sends port 80 to 1483. If port 80 is taken, the helper keeps `:1483`
 - **DNS rebinding.** Browsers do not resolve `*.localhost` through DNS, so `.lahe.localhost` cannot be rebound. `.lahe` is answered only after the helper proves its own name server answers `.lahe` lookups on this machine. Everywhere else, a foreign Host is refused, as today.
 - **Binding is CLI-only.** It needs the CLI secret from a 0600 file, and refuses any request carrying `Origin`. A page holding a review token cannot name a file or move a rail.
 - **Origins come from the registry.** Review origins are untouched, so `review.write` still refuses non-loopback origins.
-- **Hidden files and paths.** Dot segments and dotfiles are refused under every site. `page-only` sites serve one file.
+- **Hidden files and paths.** Dot segments, encoded slashes and NUL are refused under every site. Hidden files get no special handling: they are served and linked like any other file, because worktrees usually live in hidden folders. A mount must be under the home folder by real path, and Lahe's reserved names (`/.lahe-source/`, `/.lahe-library/`, `.lahe-doc-style.css`, `.lahe-fonts/`, `.lahe-styles`) are never served from a folder. `page-only` sites serve one file.
 - **The worktree fallback is read-only.** It never injects a token into a file nobody bound.
 - **Always-on exposure.** Websites cannot reach pages: Host checks, `Cross-Origin-Resource-Policy`, and the Origin checks. Other accounts on the same computer, and sandboxed local programs with network access, can. Today they would have to find a short-lived random port first. This feature accepts that, and records it as a new residual under D11. `lahe install` warns when the machine has more than one interactive user.
 - **Old origins.** When a site is bound, the old `127.0.0.1:<port>` origins of its reviews are removed, so they stop being credentials.
@@ -286,7 +287,7 @@ Full prose: [security review](02_architecture_stable_addresses_reviews.md).
 |---|---------|-------------|-----------|
 | SR1 | `.lahe` answered where Lahe does not own lookups | Accepted | `.lahe` only after verifying our own name server; opt-in; `.lahe.localhost` printed |
 | SR2 | `address.bind` reachable from pages | Accepted | CLI secret, no Origin, root from the request |
-| SR3 | Per-file origins did not wall files off | Accepted | Per-site isolation stated plainly; hidden files refused |
+| SR3 | Per-file origins did not wall files off | Accepted | Per-site isolation stated plainly; hidden files are served like any other file |
 | SR4 | Other local users can read pages | Accepted as a residual | Recorded under D11; install warns on multi-user machines |
 | SR5 | No Fetch Metadata on `http://*.lahe` | Accepted | Library never on `.lahe`; no redirects; `.lahe.localhost` printed |
 | SR6 | Port squatting on the name server | Accepted | Verification by a fresh random query the helper must see |

@@ -224,7 +224,7 @@ The rail follows the link (spec `docs/features/20260922.02_linked_docs_rail/`):
   There are no redirects between pages: the link opens where it points.
 - Nothing is created by the click: no review, no enrollment.
 - Only the files a page actually links to get the rail. Their neighbours in the
-  mounted folder, and anything hidden, do not.
+  mounted folder do not.
 - An `--only` review keeps its links read-only.
 
 ## Use case 3: a document built from several sources

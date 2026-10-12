@@ -6,7 +6,7 @@
 // ever rewritten to make a browser page work.
 //
 // A translated link needs a read-only mount for the target's DIRECTORY on the
-// session's static server, so the rules here are the path-safety rules: resolve
+// page's site, so the rules here are the path-safety rules: resolve
 // real paths first, stay inside the user's home directory, and cap how many
 // directories one render may mount. A hidden (dot-prefixed) file or folder is
 // treated like any other. A link that fails any of them is
@@ -55,10 +55,11 @@ function within(candidate, root) {
 
 /**
  * May Lahe serve the files in `dir` under a mount? Only a folder whose real
- * path is under the home folder, with no hidden segment below home. A link
- * like ../../.ssh/id_rsa would otherwise mount ~/.ssh, and every file in it
- * would be served for as long as the site lives. Checked when a link makes a
- * mount, when the registry takes one, and when a mount is served.
+ * path is under the home folder. Hidden folders get no special handling: a
+ * worktree usually lives in one (repo/.claude/worktrees/<name>/), and a
+ * document there links to its neighbours like any other. Checked when a link
+ * makes a mount, when the registry takes one, and when a mount is served, so
+ * a mount whose folder is now outside home serves nothing.
  *
  * @param {string} dir
  * @returns {boolean}
@@ -69,8 +70,7 @@ function mountableDir(dir) {
   var home;
   try { real = fs.realpathSync.native(dir); } catch (err) { return false; }
   try { home = fs.realpathSync.native(homeRoot()); } catch (err) { home = homeRoot(); }
-  if (!within(real, home)) return false;
-  return !path.relative(home, real).split(path.sep).some(function (segment) { return segment.charAt(0) === "."; });
+  return within(real, home);
 }
 
 function mountPrefix(dir) {
@@ -182,7 +182,7 @@ function classify(href, sourceDir, registry) {
   // directory is refused even when the link itself sits inside it.
   if (!within(real, home)) return { kind: "inert", target: candidate, reason: "outside-home" };
   var dir = path.dirname(real);
-  if (!mountableDir(dir)) return { kind: "inert", target: candidate, reason: "hidden" };
+  if (!mountableDir(dir)) return { kind: "inert", target: candidate, reason: "outside-home" };
   var prefix = registry ? registry.add(dir) : mountPrefix(dir);
   if (!prefix) return { kind: "inert", target: candidate, reason: "cap" };
   if (registry && typeof registry.note === "function") registry.note(real);

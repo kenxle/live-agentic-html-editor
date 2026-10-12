@@ -96,7 +96,7 @@ The one verification table. U is a unit test under `test/unit/`; B is a Playwrig
 | V11 | R1, R2 | A bound HTML page loads at `name.lahe.localhost:<port>/<file>` with its rail, and with no agent attached shows "No agent watching" | B |
 | V12 | R8a assets | Relative images, styles, and scripts load, including `../` within the root of a folder review | B |
 | V13 | R8a Markdown | A Markdown page renders from source; its images load; a link to a file outside its folder opens through the site's mount | B |
-| V14 | R4 hidden files | Dotfiles, raw dot segments, and percent-encoded ones (`%2e%2e`, `%2f`) return 404 under every site | U |
+| V14 | R4 path safety | Raw dot segments and percent-encoded ones (`%2e%2e`, `%2f`) return 404 under every site; dotfiles are served like any other file | U |
 | V15 | Notes page-only | A `lahe write` site serves its one page and Lahe's reserved files, and 404s a sibling file | U |
 | V16 | R4 isolation | A page on site A cannot fetch a page or token from site B, while the same fetch from a page on site B succeeds | B |
 | V17 | CORP | Page responses carry `Cross-Origin-Resource-Policy: same-origin` | U |
