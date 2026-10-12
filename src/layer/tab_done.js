@@ -233,6 +233,10 @@
       // question coming back answered. A refusal still reaches the reviewer,
       // quietly, as the card's notice (see refresh).
       if (record.toolRoundOf(item)) return;
+      // A CARD THE REVIEWER CLOSED IS READ. Choosing "Mark as done" on it is
+      // the reviewer acting on it, and the agent's last answer it carries is
+      // history, so it never says "1 new" in Done.
+      if (record.isClosedByReviewer(item)) return;
       if (!needsToSeeReply(item[record.FIELD.REPLY])) return;
       if (seen[item[record.FIELD.ID]] !== stamp) out.push(item[record.FIELD.ID]);
     });
@@ -494,6 +498,10 @@
   // can see for themselves and stops there: no rebuild, no render, no reply
   // file, nothing about how the page got here. They are looking at a document.
   var NOT_ON_PAGE_NOTICE = "says this is done, but I could not find the change on your page. It is still open.";
+
+  // MARK AS DONE. The Done card of an item the reviewer closed says who closed
+  // it, so it never reads as an agent's work.
+  var CLOSED_NOTICE = "You marked this done.";
 
   // The name this file's sheet answers to inside the rail's closed root.
   var SHEET_KEY = "tab_done";
@@ -1152,6 +1160,8 @@
         seen[id] = true;
         rail.upsertCard(item);
         rail.setCardState(id, record.STATE.HANDLED);
+        // From the record, so a reload says it too.
+        if (record.isClosedByReviewer(item)) rail.setCardNotice(id, CLOSED_NOTICE);
         // R37, the half that is on the PAGE: a handled item loses its highlight.
         // Here rather than only in the fold path, because an item can arrive
         // handled from storage on a fresh load too, and the page it lands on has
@@ -2172,6 +2182,13 @@
       var reply = event.reply || {};
       var replyRev = event[protocol.EVENT_FIELD.REV];
 
+      // A CARD THE REVIEWER CLOSED TAKES NO REPLY. Every load re-delivers the
+      // answers folded before the close, and the helper refuses any after it;
+      // neither may move the card, word it, toast it, or put a notice on it.
+      if (record.isClosedByReviewer(item)) {
+        return { kind: "closed", item: id, state: item[record.FIELD.STATE], toast: false };
+      }
+
       // The refusal, on the card. Two ways to get here: the helper refused the
       // line, or the reviewer reworded in THIS browser while the helper was
       // down, so the fold looked current when it happened and does not now.
@@ -2232,6 +2249,9 @@
       }
       var notOnPage = event.handled_not_on_page === true;
       next[record.FIELD.HANDLED_NOT_ON_PAGE] = notOnPage;
+      // An accepted answer means no close stands at this revision.
+      delete next[record.FIELD.CLOSED_BY];
+      delete next[record.FIELD.CLOSED_AT];
       if (next[record.FIELD.STATE] === record.STATE.HANDLED) forgetLostAnchor(next);
       store.write(reviewId, next);
 
@@ -2612,6 +2632,7 @@
     UNSEEN_ATTR: UNSEEN_ATTR,
     STALE_NOTICE: STALE_NOTICE,
     NOT_ON_PAGE_NOTICE: NOT_ON_PAGE_NOTICE,
+    CLOSED_NOTICE: CLOSED_NOTICE,
     PROOFREAD: PROOFREAD,
     proofreadOffer: proofreadOffer,
     keepMineRecord: keepMineRecord,

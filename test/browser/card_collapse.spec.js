@@ -256,14 +256,18 @@ test.describe("a card folds to one line", () => {
 
       // The head, anywhere on it, is the same gesture. This is the half that has
       // to not break the jump: a press on the CONTENTS still goes to the page.
+      // The press lands on the strip's empty middle: the state chip at its
+      // right end is a control of its own on an outstanding card (Mark as
+      // done), so a press there opens the chip's menu instead.
       const headRect = await page.evaluate((id) => {
         const r = window.__lahe.rail
           .cardNode(id)
-          .querySelector("[data-lahe-card-head]")
+          .querySelector("[data-lahe-card-head] .spacer")
           .getBoundingClientRect();
         return { x: r.x, y: r.y, width: r.width, height: r.height };
       }, item.id);
-      await page.mouse.click(headRect.x + headRect.width - 8, headRect.y + headRect.height / 2);
+      expect(headRect.width, "the head strip has empty room to press").toBeGreaterThan(4);
+      await page.mouse.click(headRect.x + headRect.width / 2, headRect.y + headRect.height / 2);
       expect((await cardShape(page, item.id)).folded, "a press on the head strip folds it").toBe(true);
 
       await clickChevron(page, item.id);

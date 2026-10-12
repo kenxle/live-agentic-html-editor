@@ -1743,6 +1743,42 @@
     }
 
     /**
+     * MARK AS DONE: the reviewer closed this item themselves.
+     *
+     * An explicit act at one revision, posted as item.closed with the item id
+     * and that revision and nothing else. It carries no record, because the
+     * helper never takes a state the browser claims: the projection applies
+     * the close only when the item is still outstanding at exactly this
+     * revision, and refuses a stale one the way it refuses a stale reply.
+     *
+     * Only for an item the helper has heard of, as with a delete: a ready
+     * event still in the outbox counts, and goes first.
+     *
+     * @param {Object} item the record as the close leaves it (lifecycle.closeItem)
+     */
+    function closeItem(item) {
+      if (readOnly || !item) return null;
+      var id = item[record.FIELD.ID];
+      if (!id || !helperHeardOf(id)) return null;
+      var event = protocol.newEvent({
+        event: protocol.EVENT.ITEM_CLOSED,
+        event_id: record.randomId("evt"),
+        review: requireReview(),
+        item: id,
+        rev: item[record.FIELD.REV],
+        ts: item[record.FIELD.CLOSED_AT] || undefined,
+        page_path: item[record.FIELD.PAGE_PATH],
+        page_title: item[record.FIELD.PAGE_TITLE],
+        page_seq: item[record.FIELD.PAGE_SEQ],
+        source_hint: item[record.FIELD.SOURCE_HINT]
+      });
+      store.queueEvent(requireReview(), event);
+      scheduleFlush(0);
+      recomputeStatus();
+      return event;
+    }
+
+    /**
      * The typing path. SYNCHRONOUS and non-blocking: the event is queued in
      * browser storage in this task, and the network happens later or never.
      *
@@ -3552,6 +3588,7 @@
         return stampCarriable;
       },
       deleteItem: deleteItem,
+      closeItem: closeItem,
       /** The RUN_EVENT_REFUSED failure an item carries, or null. */
       refusalFor: function (itemId) {
         if (refusedRuns[itemId]) return refusedRuns[itemId];

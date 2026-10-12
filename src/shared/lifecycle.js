@@ -9,7 +9,8 @@
 //   draft        the reviewer is still thinking. Durable, never actionable
 //   ready        the reviewer said an agent may act on it (Cmd-Enter, or an
 //                edit committing)
-//   handled      an agent said it made the change
+//   handled      an agent said it made the change, or the reviewer marked
+//                the card done themselves (record.FIELD.CLOSED_BY says which)
 //   not_handled  an agent said it did not, with a reason the reviewer reads
 //
 //   `question` is a REPLY STATUS, not a state. An agent asking a question
@@ -23,7 +24,7 @@
 //
 //  1. EVERY TRANSITION NAMES AN ACTOR. The agent may only move an item out of
 //     ready, and only for the revision it named. Everything else is the
-//     reviewer's. The helper makes no transition on its own initiative; it
+//     reviewer's, including "Mark as done" (ready or not_handled to handled). The helper makes no transition on its own initiative; it
 //     records the ones it is told about. Without the actor column, a builder
 //     writing the reply handler has nothing stopping it from moving a draft
 //     straight to handled, which is silent loss of the reviewer's work with a
@@ -120,6 +121,23 @@
       to: STATE.READY,
       actor: ACTOR.REVIEWER,
       why: "REOPENED. R38: handled items are kept, and the reviewer reopens one whose fix did not land"
+    },
+    // MARK AS DONE. The reviewer closes their own outstanding card without
+    // waiting for an agent: a leftover comment, a refused edit they no longer
+    // want, or a handled claim the page check held open. The record says who
+    // did it (record.FIELD.CLOSED_BY), so nothing reads it as an agent's
+    // answer, and no agent reply moves it afterwards (see applyReply).
+    {
+      from: STATE.READY,
+      to: STATE.HANDLED,
+      actor: ACTOR.REVIEWER,
+      why: "MARK AS DONE: the reviewer closes an outstanding card themselves, at its current rev"
+    },
+    {
+      from: STATE.NOT_HANDLED,
+      to: STATE.HANDLED,
+      actor: ACTOR.REVIEWER,
+      why: "MARK AS DONE: the reviewer closes a card the agent said no to, at its current rev"
     }
   ];
 
@@ -179,6 +197,42 @@
 
   function canDelete(from, actor) {
     return actor === ACTOR.REVIEWER && DELETABLE_FROM.indexOf(from) !== -1;
+  }
+
+  // ---------------------------------------------------------------------------
+  // Mark as done: the reviewer closes a card themselves
+  // ---------------------------------------------------------------------------
+
+  /**
+   * May the reviewer mark this item done right now?
+   *
+   * Any committed outstanding item: ready (answered or not, a held handled
+   * claim included) or not_handled. Never a draft, which is the reviewer still
+   * typing, and never an item already handled.
+   */
+  function canClose(item) {
+    if (!item) return false;
+    return canTransition(item[FIELD.STATE], STATE.HANDLED, ACTOR.REVIEWER);
+  }
+
+  /**
+   * The item as the reviewer's close leaves it. Pure: a new record, the input
+   * untouched. The revision does not move, so a close names exactly the
+   * wording it closed, and the agent's last reply stays on the card as
+   * history. Throws on an item that cannot be closed, like every transition.
+   *
+   * @param {Object} item the item as it stands
+   * @param {string} [at] ISO time of the close
+   */
+  function closeItem(item, at) {
+    var to = assertTransition(item && item[FIELD.STATE], STATE.HANDLED, ACTOR.REVIEWER);
+    var next = Object.assign({}, item);
+    next[FIELD.STATE] = to;
+    next[FIELD.CLOSED_BY] = record.CLOSED_BY_REVIEWER;
+    next[FIELD.CLOSED_AT] = at || new Date().toISOString();
+    // A held handled claim is answered by the close: nothing is outstanding.
+    next[FIELD.HANDLED_NOT_ON_PAGE] = false;
+    return next;
   }
 
   // Has an agent answered this item, now or in an earlier round?
@@ -246,6 +300,16 @@
     var r = reply || {};
     if (record.REPLY_STATUSES.indexOf(r.status) === -1) {
       return { accepted: false, state: item[FIELD.STATE], refusal: "unknown reply status " + String(r.status) };
+    }
+    // THE REVIEWER CLOSED IT. Every reply after that is refused, whatever it
+    // says and whatever revision it names: the reviewer has decided this card
+    // is finished, and a late answer must not reopen it or hold it.
+    if (record.isClosedByReviewer(item)) {
+      return {
+        accepted: false,
+        state: item[FIELD.STATE],
+        refusal: "the reviewer marked this item done; it takes no reply"
+      };
     }
     if (!replyApplies(item, r.rev)) {
       return {
@@ -327,6 +391,8 @@
     assertTransition: assertTransition,
     findTransition: findTransition,
     canDelete: canDelete,
+    canClose: canClose,
+    closeItem: closeItem,
     agentReplied: agentReplied,
     undoTakesBack: undoTakesBack,
     replyApplies: replyApplies,

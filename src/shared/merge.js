@@ -10,6 +10,7 @@
 //
 //   THE BROWSER WINS ON CONTENT for anything the helper has not acknowledged.
 //   THE STORE WINS ON LIFECYCLE, PER REVISION.
+//   EXCEPT THE REVIEWER'S OWN CLOSE ("Mark as done") AT THAT SAME REVISION.
 //
 // The per-revision half is the whole point. A "handled" that names rev 1
 // retires rev 1. A reviewer who reworded to rev 2 while the helper was down
@@ -154,6 +155,19 @@
     // Same revision. Lifecycle comes from the store, because a reply naming
     // this revision is exactly what the store knows and the browser does not.
     var merged = Object.assign({}, storeItem);
+
+    // THE REVIEWER'S CLOSE AT THIS REVISION STANDS. "Mark as done" is a
+    // lifecycle fact the browser knows first: its item.closed may still be in
+    // the outbox when this merge runs, and the store's copy then still says
+    // ready or not_handled with the agent's reply on it. Nothing at the same
+    // revision can undo a close (every reply after it is refused), so the
+    // store's older lifecycle does not win over it.
+    if (record.isClosedByReviewer(browserItem) && !record.isClosedByReviewer(storeItem)) {
+      merged[FIELD.STATE] = browserItem[FIELD.STATE];
+      merged[FIELD.CLOSED_BY] = browserItem[FIELD.CLOSED_BY];
+      merged[FIELD.CLOSED_AT] = browserItem[FIELD.CLOSED_AT];
+      merged[FIELD.HANDLED_NOT_ON_PAGE] = false;
+    }
 
     // Content comes from the browser while its work is unacknowledged: it may
     // hold keystrokes the helper never received.

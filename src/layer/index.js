@@ -1352,6 +1352,30 @@
       done.refresh();
     });
 
+    // MARK AS DONE (docs/features/20261012.01_rail_cleanup). The reviewer
+    // closes an outstanding card from its state chip, without waiting for an
+    // agent: a leftover comment, a refused edit, or a handled claim the page
+    // check held open. The record moves to handled with the reviewer named as
+    // the one who closed it, the helper hears an explicit item.closed for
+    // this revision, and every tab repaints from the record.
+    rail.onCardClose(function (id, action) {
+      if (action !== ns.overlay.MARK_DONE.ACTION) return;
+      if (readOnlyActive) return;
+      var item = scopedStore.readItem(reviewId, id);
+      if (!item || !ns.lifecycle.canClose(item)) return;
+      var closed = ns.lifecycle.closeItem(item, new Date().toISOString());
+      scopedStore.write(reviewId, closed);
+      sync.closeItem(closed);
+      refreshItems();
+      rail.upsertCard(closed);
+      rail.setCardState(id, record.STATE.HANDLED);
+      if (tab && typeof tab.refresh === "function") tab.refresh();
+      if (editsTab && typeof editsTab.refresh === "function") editsTab.refresh();
+      // Done draws the closed card, says the reviewer closed it, and takes the
+      // highlight off the page.
+      done.refresh();
+    });
+
     comments.onChange(function (item, event, createdOnElement, meta) {
       // The reviewer deleted their own item. The card goes, and so does the
       // helper's copy: an item left in review.json after the browser dropped it
