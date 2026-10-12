@@ -1,15 +1,22 @@
 # Progress: Stable addresses
 
-**Done: merged and installed.** Last updated 2026-10-11 22:34.
+**Merged, installed and released. One test needs you: the `:1483` timeout.** Last updated 2026-10-12 09:28.
 
 **Docs:** [Decisions page](../../ongoing/STABLE_ADDRESSES.md) · [Crucible](00_crucible_stable_addresses.html) · [Brief](01_brief_stable_addresses.html) · [Architecture](02_architecture_stable_addresses.html) · [Plan](03_plan_stable_addresses.html) · [Code survey](parts/architecture/recon.md)
 
 ## Needs your attention
 
-Nothing. Optional: restart the Mac and check a Lahe tab still loads (V45). An old helper from this morning (pid 93197, old code, port 62840) is still running and unused; `! kill 93197` stops it.
+- [ ] **Run one test for the `:1483` timeout.** With the port-80 forward on, `...lahe.localhost:1483/...` times out while the address without the port works. The helper accepts the connection, but the last handshake packet never arrives, so pf (the Mac's firewall, which the port-80 forward switched on) is dropping it. Type this in the Claude prompt. It asks for your password and swaps in a test version of Lahe's forward rules, the same two port-80 rules plus two that let port 1483 through. Nothing on disk changes, and a restart puts the installed rules back:
+
+  `! sudo pfctl -a com.apple/lahe -f ~/Documents/lahe-preview-stable-addresses/pf_test_rules.conf`
+
+  Then reload a `:1483` address and say whether it loads. If it does, I add those rules to `lahe install --port-80`.
+- [ ] **Optional:** an old helper from yesterday (pid 93197, old code, port 62840) may still be running; `! kill 93197` stops it.
 
 ## Decided
 
+- **Released.** [v0.3.0](https://github.com/kenxle/live-agentic-html-editor/releases/tag/v0.3.0) is out, with an upgrade page ([docs/UPGRADING.md](../../UPGRADING.md)) for moving older documents to their new address.
+- **Restart check passed.** After your restart the helper came back on its own and the port-free addresses load.
 - **Installed.** `lahe install` is done: the login item `lahe-helper` is loaded and serving.
 - **Merged.** Stable addresses is on main ([PR #45](https://github.com/kenxle/live-agentic-html-editor/pull/45)), and so is the test temp cleanup ([PR #43](https://github.com/kenxle/live-agentic-html-editor/pull/43)). The helper on your Mac is already running the new code. Post-merge checks (the remaining three-browser failures, the idle measurement, a walkthrough) are on the board as LAHE-stable-addresses-three-browser-followup. The one real failure, the Library link in WebKit, is being fixed on its own branch.
 - **Approved (your page note, 20:37):** the design for every page carrying its own comments, one PR instead of five, and retiring the old tests. The retired tests are deleted only in the cleanup batch.
