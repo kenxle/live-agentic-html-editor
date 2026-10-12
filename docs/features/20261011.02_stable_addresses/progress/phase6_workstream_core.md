@@ -685,6 +685,18 @@ Built as the approved design note, with both security passes folded in. Every pa
 - Chromium: `each_page_comments` 4, `linked_docs_rail` 2, `stable_addresses_mappers` 4.
 - `lahe.js serve` count: 2 before, 2 after.
 
+## The three browser failures in the full gate
+
+All three are the tests, not the code, and all three come from the same change: every page at a stable address reads its records at boot (bc90d57, "each page carries its own comments").
+
+- `formatting_survives`, `paragraph_break` and `undo_reaches_helper` each share one page and one review across their tests, and each test opens a fresh browser context. Before, that context's storage was empty, so each test started with an empty rail. Now the page shows every record its review holds, which is the rule Ken asked for.
+  - `formatting_survives`: the page check reopened the earlier test's handled edit, which the test's rebuild no longer shows.
+  - `paragraph_break` and `undo_reaches_helper`: the new edit on the same block became a rewording of the earlier test's edit.
+- Fix: each test after the first retires the review and starts a new one on the same page (`test/browser/support/fresh_review.js`).
+- Each failure passed alone and failed with its whole file, here as in the gate; the code is the same at b8cb4da and the tip.
+- Chromium, each whole file: `formatting_survives` 2 of 2, `paragraph_break` 6 of 6, `undo_reaches_helper` 3 of 3.
+- `lahe.js serve` count: 2 before; after, 4, and the two extra are from the `link-named-files` worktree.
+
 ## Cleanup needed
 
 - `test/retired/browser/tmp_spike_lahe_localhost.spec.js`: the Task 1.0 spike, retired in fix round 2.
