@@ -248,10 +248,8 @@ test("capture the rail as a reviewable mockup", async ({ page }) => {
     await draftOn(page, "h1", "Should the heading say whose dashboard this is?");
 
     await rail(() => window.__lahe.rail.selectTab("active"));
-    await snap("Active tab, every state", "An agent question, a draft, a refusal, and a comment waiting for the agent. The hand edit is on the Edits tab.");
+    await snap("Active tab, every state", "A hand edit, an agent question, a draft, a refusal, and a comment waiting for the agent, under the All / Comments / Edits filter and the search box.");
 
-    await rail(() => window.__lahe.rail.selectTab("edits"));
-    await snap("Edits tab", "The hand edit, as a before and after.");
 
     await rail(() => window.__lahe.rail.selectTab("done"));
     await snap("Done tab", "A comment the agent handled, with the file it changed.");
@@ -316,45 +314,6 @@ test("capture the rail as a reviewable mockup", async ({ page }) => {
     // Collapsed.
     await rail(() => window.__lahe.rail.collapse(true));
     await snap("Collapsed", "The rail folded down to its pill.");
-
-    // THE PROPOSAL: no Edits tab. Drawn on a copy of the rail by moving the
-    // hand edit's card into Active and taking the Edits tab away. Last, because
-    // it rearranges the live rail.
-    await rail(() => window.__lahe.rail.collapse(false));
-    await page.evaluate(() => {
-      const root = window.__lahe.rail.tabBody("active").getRootNode();
-      const active = root.querySelector('.pane[data-pane="active"]');
-      const edits = root.querySelector('.pane[data-pane="edits"]');
-      edits.querySelectorAll("article.card").forEach((card) => {
-        const copy = card.cloneNode(true);
-        copy.style.order = "-2";
-        active.appendChild(copy);
-      });
-      const tab = root.querySelector('.tab[data-tab="edits"]');
-      if (tab) tab.remove();
-      edits.remove();
-    });
-    await rail(() => window.__lahe.rail.selectTab("active"));
-    await page.evaluate(() => {
-      const root = window.__lahe.rail.tabBody("active").getRootNode();
-      const count = root.querySelector('.tab[data-tab="active"] .count');
-      const cards = root.querySelectorAll('.pane[data-pane="active"] article.card').length;
-      if (count) count.textContent = String(cards);
-    });
-    const proposal = await page.evaluate(snapshotInPage);
-    shots.push(Object.assign({
-      label: "Proposal: no Edits tab",
-      top: true,
-      caption: "Drawn on a copy of the rail. Nothing here is built yet.",
-      notes: [
-        "The Edits tab goes away. The rail has two tabs: Active and Done.",
-        "A hand edit that is still waiting for the agent shows in Active as its own card, labelled Edit, with the old and new wording and its Undo button. It is the top card in the copy below.",
-        "Once the agent handles an edit, it moves to Done, the same as it does today.",
-        "The Export edits button, which copies every hand edit as text, moves into the three-dot menu under Export review, as \"Copy hand edits to clipboard\".",
-        "What you would notice: one list of everything waiting, newest first, instead of switching tabs to find your edits.",
-        "Your call: go ahead with this? An optional extra, if the list gets long: a small Comments / Edits filter at the top of Active. I would leave it out unless you want it."
-      ]
-    }, proposal));
 
     await page.screenshot({ path: path.join(__dirname, "..", "capture_reference.png") });
     await rail(() => window.__lahe.rail.collapse(false));

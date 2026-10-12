@@ -1,6 +1,6 @@
 /*
  * live-agentic-html-editor review layer
- * version 0.3.0+1a8516ca794f
+ * version 0.3.0+1bfef4d2d990
  *
  * GENERATED FILE. Do not edit. Edit the sources under src/ and run
  *   npm run build:layer
@@ -12,7 +12,7 @@
   "use strict";
   var g = typeof globalThis !== "undefined" ? globalThis : window;
   g.LAHE = g.LAHE || {};
-  g.LAHE.version = "0.3.0+1a8516ca794f";
+  g.LAHE.version = "0.3.0+1bfef4d2d990";
 })();
 /* ---- src/shared/markers.js  (owner: 0A-kernel) ---- */
 // Markers: the attribute and class names that identify DOM the tool added.
@@ -2996,8 +2996,8 @@
    *
    * The three kinds that carry a before-and-after. It lives here rather than in
    * a tab file because more than one surface has to agree on the answer: the
-   * Edits tab lists exactly these, and the Done tab has to know that the Edits
-   * row on the same card is already drawing the change summary, so it does not
+   * hand-edit rows draw exactly these, and the Done tab has to know that the
+   * hand-edit row on the same card is already drawing the change summary, so it does not
    * print the same sentence a second time.
    */
   function isHandEdit(item) {
@@ -6357,7 +6357,7 @@
       when: "nothing selected",
       hint: "Press Cmd-Shift-C with nothing selected, then click any element to comment on the whole thing.",
       panelKeys: "Cmd-Shift-C (no selection)",
-      panelHint: "Press Cmd-Shift-C with nothing selected, then click an element like an image to comment on the element.",
+      panelHint: "As you hover over elements, they will be outlined. Click an element to comment on the element. Useful for images and other hard to highlight elements.",
       passThrough: false,
       preventDefault: true,
       requirement: "R17"
@@ -6377,7 +6377,7 @@
       keys: "Cmd-Shift-E",
       when: "the cursor or a selection is in a block",
       hint: "Press Cmd-Shift-E to edit the block you are in. Just that block.",
-      panelHint: "Select text and press Cmd-Shift-E to edit it.",
+      panelHint: "Select text and press Cmd-Shift-E to edit it by hand.",
       passThrough: false,
       preventDefault: true,
       requirement: "R24"
@@ -6388,7 +6388,7 @@
       when: "the cursor is in no block",
       hint: "Click + Write here to add text. Esc to finish.",
       panelKeys: "Cmd-Shift-E (no selection)",
-      panelHint: "Click an area to hand edit it. Esc to finish.",
+      panelHint: "As you hover, editable areas will be outlined. Click an area to hand edit it. Esc to finish.",
       passThrough: false,
       preventDefault: true,
       requirement: "R1"
@@ -6398,7 +6398,7 @@
       keys: "Cmd-Enter",
       when: "a comment box is focused",
       hint: "Cmd-Enter when done with this comment.",
-      panelHint: "Cmd-Enter to submit your comment or complete your edit.",
+      panelHint: "Submit your comment or complete your edit.",
       passThrough: false,
       preventDefault: true,
       requirement: "R7"
@@ -6418,6 +6418,7 @@
       keys: "Esc",
       when: "element-pick mode is open, or a comment box is focused",
       hint: "Esc closes the comment box or cancels picking. Your draft is kept.",
+      panelHint: "Esc closes the comment box or cancels picking. Half-written drafts are kept in the chat bar.",
       passThrough: false,
       preventDefault: true,
       requirement: "R1"
@@ -6437,7 +6438,7 @@
       keys: "Cmd-Shift-1",
       when: "always, except while the review is hidden for presenting",
       hint: "Press Cmd-Shift-1 to open or close the review panel.",
-      panelHint: "Toggle the chat rail.",
+      panelHint: "Toggle the chat bar.",
       passThrough: false,
       preventDefault: true,
       requirement: "R43"
@@ -12937,8 +12938,19 @@
       return out;
     }
 
+    /**
+     * What the Active pane's filter shows: "all", "comments" or "edits".
+     *
+     * Anything else reads as "all", because a filter nobody remembers picking
+     * that hides half the rail is worse than losing the pick.
+     */
+    function readActiveFilter(got) {
+      var value = got && typeof got === "object" ? got.filter : null;
+      return value === "comments" || value === "edits" ? value : "all";
+    }
+
     function emptyUiPreferences() {
-      return { collapsed: false, pill: null, width: null, present: false, cards: {} };
+      return { collapsed: false, pill: null, width: null, present: false, cards: {}, filter: "all" };
     }
 
     function readUiPreferences(reviewId) {
@@ -12955,7 +12967,9 @@
           // reload in the middle of a talk has to keep it hidden.
           present: got.present === true,
           // Which cards are folded to one line. Per review, per card id.
-          cards: readCardStates(got)
+          cards: readCardStates(got),
+          // The Active pane's filter. Per review.
+          filter: readActiveFilter(got)
         };
       } catch (err) {
         return emptyUiPreferences();
@@ -12970,7 +12984,8 @@
         pill: readPillSpot(value),
         width: readRailWidth(value),
         present: !!(value && value.present),
-        cards: readCardStates(value)
+        cards: readCardStates(value),
+        filter: readActiveFilter(value)
       };
       try {
         backing.setItem(uiKey(reviewId), JSON.stringify(next));
@@ -14777,7 +14792,7 @@
   // Both live here because both are read off a node with the same five
   // questions the engine already asks, and because comments.js and editing.js
   // each used to compute their own descriptor. Two copies of a rule is how the
-  // rail and the Edits tab end up naming the same image differently.
+  // rail and the hand-edit rows end up naming the same image differently.
 
   // How much page text rides along as the locating hint. This is a hint, not a
   // passage: the projection bounds it again, and a whole paragraph in a record
@@ -18790,7 +18805,8 @@
 // This file holds THE RAIL CHROME ONLY: the tab shell, the status line, the
 // failure chips, and the card API. TAB CONTENTS ARE NOT HERE. They live in
 // three files with one owner each (tab_active.js is 1D's, tab_done.js is 3A's,
-// tab_edits.js is 3D's), so five tasks stop writing one file. A tab owner fills
+// tab_edits.js, the hand-edit rows, is 3D's), so five tasks stop writing one
+// file. A tab owner fills
 // tabBody(tab); a card's contents go in cardBody(id).
 //
 // ---------------------------------------------------------------------------
@@ -18899,11 +18915,58 @@
 ) {
   "use strict";
 
-  // D10's three tabs. Contents come from the three tab files; the shell is
-  // here, so a tab can be registered before its file exists.
-  var TAB = { ACTIVE: "active", EDITS: "edits", DONE: "done" };
-  var TABS = [TAB.ACTIVE, TAB.EDITS, TAB.DONE];
-  var TAB_LABEL = { active: "Active", edits: "Edits", done: "Done" };
+  // Two tabs: what still needs work, and what is finished. Hand edits sit in
+  // Active as cards beside the comments, and the Active pane's filter is how a
+  // reviewer sees only one or the other.
+  var TAB = { ACTIVE: "active", DONE: "done" };
+  var TABS = [TAB.ACTIVE, TAB.DONE];
+  var TAB_LABEL = { active: "Active", done: "Done" };
+  // The name of the hand-edit tab the rail used to have. selectTab answers it
+  // with Active rather than throwing, so an old caller lands somewhere sensible.
+  var LEGACY_EDITS_TAB = "edits";
+
+  // What the Active pane shows. A view and nothing else: the tab counts, the
+  // pill and every card's place are the same whichever one is picked.
+  var FILTER = { ALL: "all", COMMENTS: "comments", EDITS: "edits" };
+  var FILTERS = [FILTER.ALL, FILTER.COMMENTS, FILTER.EDITS];
+  var FILTER_LABEL = { all: "All", comments: "Comments", edits: "Edits" };
+  // What the pane says when the pick hides every card it holds. Without it the
+  // reviewer sees a blank pane under a count that says there is work.
+  var FILTER_EMPTY = {
+    comments: "No comments here. Pick All to see your hand edits too.",
+    edits: "No hand edits here. Pick All to see your comments too."
+  };
+  // The search box at the top of each pane. Case-insensitive "contains", over
+  // the words a card shows (never its button labels), and a view only, like
+  // the filter.
+  var SEARCH_PLACEHOLDER = "Search";
+  var SEARCH_LABEL = "Search the cards in this tab";
+  var SEARCH_MISS_ATTR = "data-lahe-search-miss";
+  function searchEmptyText(query) {
+    return "Nothing here matches “" + query + "”.";
+  }
+
+  /**
+   * Does this text contain the query, ignoring case and runs of whitespace?
+   * Pure, so the matching rule is argued about in a unit test.
+   */
+  function searchMatches(text, query) {
+    var q = String(query || "").replace(/\s+/g, " ").trim().toLowerCase();
+    if (!q) return true;
+    return String(text || "").replace(/\s+/g, " ").toLowerCase().indexOf(q) !== -1;
+  }
+
+  // The card attribute the filter reads. paintCard sets it from the record's
+  // kind, so no tab file has to say what a card is.
+  var HAND_EDIT_ATTR = "data-lahe-hand-edit";
+
+  // Edit, delete and format_only: what the reviewer made with their hands,
+  // which the Active filter calls "Edits". From the kind alone, so a hand edit
+  // waiting on a proofreading answer filters the same as every other one.
+  function isHandEditKind(item) {
+    var kind = item && item[record.FIELD.KIND];
+    return kind === record.KIND.EDIT || kind === record.KIND.FORMAT_ONLY || kind === record.KIND.DELETE;
+  }
 
   /**
    * Which pane a card belongs in, from the record alone.
@@ -18914,35 +18977,16 @@
    * how the two drift apart. Pure: item in, tab name out, no card required, so
    * it answers for an item the rail has never been handed.
    */
-  // The agent's proofreading question on a run, not yet answered. The same
-  // test as tab_done's isProofreadQuestion, on the record alone.
-  function isProofreadWaiting(item) {
-    var reply = item && item[record.FIELD.REPLY];
-    return (
-      !!reply &&
-      reply.status === record.REPLY_STATUS.QUESTION &&
-      reply.proofread === true &&
-      item[record.FIELD.STATE] === record.STATE.READY &&
-      record.isRunRecord(item)
-    );
-  }
-
   function paneForItem(item) {
-    var kind = item[record.FIELD.KIND];
     // The state the REVIEWER is shown, which is the state their card is placed
     // by. While a TOOL ROUND is open the record says ready and the reviewer is
     // not part of it, so the card stays in Done where they left it
     // (record.displayState, and Ken on 2026-09-15).
     var state = record.displayState(item);
     if (state === record.STATE.HANDLED) return TAB.DONE;
-    // A proofreading question waits on the reviewer, not the agent, so its
-    // card goes back to Active until they answer (wireframe 06b: "The card is
-    // back on Active because it needs an answer"). Once answered it waits on
-    // the agent again, and goes back to Edits with every other hand edit.
-    if (isProofreadWaiting(item)) return TAB.ACTIVE;
-    if (kind === record.KIND.EDIT || kind === record.KIND.FORMAT_ONLY || kind === record.KIND.DELETE) {
-      return TAB.EDITS;
-    }
+    // Everything else is still work, comments and hand edits alike, so it is
+    // Active. A proofreading question on a run is here too, which is where it
+    // has to be: it waits on the reviewer's answer.
     return TAB.ACTIVE;
   }
 
@@ -19419,6 +19463,51 @@
     ".pane:not(:has(.card:not([data-lahe-blank]))) .empty[data-lahe-empty='page']{display:flex}",
     ".empty__title{margin:0;font-size:13px;font-weight:600;color:var(--ink)}",
     ".empty__line{margin:0;font-size:12.5px;line-height:1.45;color:var(--ink-soft)}",
+
+    // --- the pane head: the Active filter and the search box ------------------
+    // One row above the cards (order -1, so a card placed before it never lands
+    // on top). Not drawn on a pane with no cards, where it would narrow nothing
+    // and push the "how to start" lines down.
+    ".panehead{order:-1;flex:none;display:flex;align-items:center;gap:8px;flex-wrap:wrap}",
+    ".pane:not(:has(.card:not([data-lahe-blank]))) .panehead{display:none}",
+    // The kind filter: a small segmented control in the tab strip's quiet
+    // register. The picked segment is a paper chip on a sunken track, the rest
+    // are plain text.
+    ".filter{flex:none;display:flex;gap:2px;padding:2px;",
+    "background:var(--sunken);border-radius:8px}",
+    ".filter__opt{font-size:11.5px;font-weight:550;color:var(--ink-soft);padding:3px 10px;",
+    "border-radius:6px;line-height:1.3}",
+    ".filter__opt:hover{color:var(--ink)}",
+    ".filter__opt[aria-pressed='true']{background:var(--paper);color:var(--ink);",
+    "box-shadow:0 0 0 1px var(--line),0 1px 1px rgba(18,20,26,.04)}",
+    // The search box: the card-action outline at the card-action size, taking
+    // whatever the row leaves after the filter.
+    ".search{flex:1 1 110px;min-width:0;box-sizing:border-box;font:inherit;font-size:11.5px;",
+    "line-height:1.3;color:var(--ink);background:var(--paper);border:1px solid var(--line);",
+    "border-radius:7px;padding:4px 8px;margin:0}",
+    ".search::placeholder{color:var(--ink-faint)}",
+    ".search:focus-visible{outline:2px solid var(--accent);outline-offset:0}",
+    // A card whose words do not contain the search is not drawn. Set by the
+    // search pass, never by a tab owner.
+    ".card[data-lahe-search-miss],.lahe-rail-othercard[data-lahe-search-miss]{display:none}",
+    ".searchempty{color:var(--ink-faint);font-size:12px;padding:18px 4px;text-align:center;",
+    "overflow-wrap:anywhere}",
+    ".searchempty[hidden]{display:none}",
+    // The pick hides cards and the filed-elsewhere comments with them. It never
+    // touches what a card holds, only whether the card is drawn.
+    ".pane[data-lahe-filter='edits'] .card:not([" + HAND_EDIT_ATTR + "]),",
+    ".pane[data-lahe-filter='edits'] [data-lahe-others],",
+    ".pane[data-lahe-filter='comments'] .card[" + HAND_EDIT_ATTR + "]{display:none}",
+    // Said only when the pane HAS cards and the pick hides all of them. An empty
+    // pane keeps its own "nothing here" line instead.
+    ".filterempty{display:none;color:var(--ink-faint);font-size:12px;padding:18px 4px;text-align:center}",
+    ".pane[data-lahe-filter='edits']:has(.card:not([data-lahe-blank]))",
+    ":not(:has(.card[" + HAND_EDIT_ATTR + "]:not([data-lahe-blank]))) .filterempty,",
+    ".pane[data-lahe-filter='comments']:has(.card:not([data-lahe-blank]))",
+    ":not(:has(.card:not([" + HAND_EDIT_ATTR + "]):not([data-lahe-blank]))) .filterempty{display:block}",
+    // While a search is typed, the search's own line speaks for an empty pane,
+    // so the two are never stacked.
+    ".pane[data-lahe-searching] .filterempty{display:none !important}",
 
     // --- cards --------------------------------------------------------------
     ".card{background:var(--paper);border:1px solid var(--line);border-radius:var(--radius-sm);",
@@ -20211,7 +20300,7 @@
     // whose first two words restate its own title reads as filler and costs the
     // reviewer the one line that could have told them something (Ken, 2026-08-24).
     ENDED: "Your work is saved.",
-    ENDED_WITH_LIST: "Your hand edits are under Edits, and saved to a file.",
+    ENDED_WITH_LIST: "Your hand edits are listed under Active, and saved to a file.",
     ENDED_NO_EDITS: "You made no hand edits this session.",
     UNSENT:
       "Some of your typing had not reached the helper yet. It is kept in this browser and goes out on the next load.",
@@ -20418,7 +20507,7 @@
   /**
    * A draft that changes nothing yet: the reviewer opened a block and has not
    * typed. Its card showed the whole block struck through, which reads as a
-   * deletion, and moved the Edits count before anything was typed (flow walk,
+   * deletion, and moved the hand-edit count before anything was typed (flow walk,
    * design problem 6). Such a draft is not drawn and not counted, like the
    * blank draft an empty page opens with. It is still a draft in the store;
    * the first keystroke that changes something draws its card.
@@ -20450,8 +20539,8 @@
   }
   //
   // A page with no content blocks (a brand-new notes page from `lahe write`)
-  // has nothing for either tab to list, and "No hand edits yet." says nothing
-  // about what to do. These are the plan's pinned lines. The file name is the
+  // has nothing for the Active tab to list, and a plain "nothing here" says
+  // nothing about what to do. These are the plan's pinned lines. The file name is the
   // text of the marked file-name title; a page without one gets the
   // instruction alone.
   function emptyPageLines(fileName) {
@@ -20666,6 +20755,17 @@
     // gives the reviewer their own width back rather than the one the small
     // window forced.
     var railWidth = readWidthPreference();
+    // What the Active pane is showing: all cards, only comments, or only hand
+    // edits. Per review, in the same preference bucket as the width, so a
+    // reload finds the list the reviewer was reading.
+    var activeFilter = readFilterPreference();
+    // tab -> what is typed in that pane's search box. In memory only: a search
+    // left over from yesterday that quietly hides cards after a reload is worse
+    // than retyping a word. Kept across a remount, which rebuilds the boxes.
+    var searchQueries = Object.create(null);
+    // Watches the panes while any search is typed, so a card that arrives or
+    // changes its words is matched again. Off when every box is empty.
+    var searchObserver = null;
     // Who wants to know the rail's width changed. The surfaces that keep clear
     // of the rail read the published allowance instead (see publishRailAllowance);
     // this is for a caller that wants to hear about it rather than measure.
@@ -21138,6 +21238,58 @@
       });
       rail.appendChild(panes);
 
+      // The Active filter, in the pane head so it reads as the list's header.
+      // Toggle buttons (aria-pressed) rather than a second tab strip: it narrows
+      // one list, it does not switch to another.
+      var filter = el("div", "filter");
+      filter.setAttribute("role", "group");
+      filter.setAttribute("aria-label", "Show");
+      filter.setAttribute("data-lahe-filter-bar", "");
+      var filterButtons = Object.create(null);
+      FILTERS.forEach(function (name) {
+        var option = el("button", "filter__opt", FILTER_LABEL[name]);
+        option.setAttribute("type", "button");
+        option.setAttribute("data-lahe-filter-option", name);
+        option.addEventListener("click", function () {
+          setActiveFilter(name);
+        });
+        filter.appendChild(option);
+        filterButtons[name] = option;
+      });
+      var filterEmpty = el("div", "filterempty", "");
+      filterEmpty.setAttribute("data-lahe-filter-empty", "");
+      paneNodes[TAB.ACTIVE].appendChild(filterEmpty);
+
+      // Each pane's head: the kind filter (Active only) and a search box. The
+      // box narrows the cards in its own pane to those whose words contain what
+      // was typed; it combines with the kind filter rather than replacing it.
+      var searchInputs = Object.create(null);
+      var searchEmpties = Object.create(null);
+      TABS.forEach(function (name) {
+        var head = el("div", "panehead");
+        head.setAttribute("data-lahe-pane-head", name);
+        if (name === TAB.ACTIVE) head.appendChild(filter);
+        var input = el("input", "search");
+        input.setAttribute("type", "search");
+        input.setAttribute("placeholder", SEARCH_PLACEHOLDER);
+        input.setAttribute("aria-label", SEARCH_LABEL);
+        input.setAttribute("data-lahe-search", name);
+        input.setAttribute("autocomplete", "off");
+        input.setAttribute("spellcheck", "false");
+        input.value = searchQueries[name] || "";
+        input.addEventListener("input", function () {
+          setSearch(name, input.value);
+        });
+        head.appendChild(input);
+        paneNodes[name].insertBefore(head, paneNodes[name].firstChild);
+        searchInputs[name] = input;
+        var said = el("div", "searchempty", "");
+        said.setAttribute("data-lahe-search-empty", name);
+        said.hidden = true;
+        paneNodes[name].appendChild(said);
+        searchEmpties[name] = said;
+      });
+
       var foot = el("div", "foot");
       var footMain = el("div", "footmain");
       var chipList = el("div", "chips");
@@ -21428,6 +21580,10 @@
         counts: counts,
         newmarks: newmarks,
         panes: paneNodes,
+        filterButtons: filterButtons,
+        filterEmpty: filterEmpty,
+        searchInputs: searchInputs,
+        searchEmpties: searchEmpties,
         chipList: chipList,
         foot: foot,
         statusRow: statusRow,
@@ -21511,6 +21667,9 @@
       // remount and the thing they were telling the reviewer about is still
       // true, so they are drawn again and their clocks start over.
       remountToasts();
+      // A search typed before a remount still narrows the rebuilt panes.
+      syncSearchObserver();
+      applySearchAll();
       // The pill exists now, so the reviewer's own arrangement can go back on it.
       // Read here as well as in setReview because a rail built WITH a review id
       // never goes through setReview at all, which is how the fixture and the
@@ -21549,12 +21708,12 @@
       return node ? String(node.textContent || "").trim() || null : null;
     }
 
-    // The Active and Edits panes on a page with nothing on it say how to start,
-    // in the plan's pinned lines. Written into the pane's existing empty node.
+    // The Active pane on a page with nothing on it says how to start, in the
+    // plan's pinned lines. Written into the pane's existing empty node.
     function paintEmptyPanes() {
       if (!dom) return;
       var empty = pageIsEmpty();
-      [TAB.ACTIVE, TAB.EDITS].forEach(function (name) {
+      [TAB.ACTIVE].forEach(function (name) {
         var node = dom.panes[name] && dom.panes[name].querySelector(".empty");
         if (!node) return;
         var want = empty ? "page" : "plain";
@@ -21575,8 +21734,201 @@
 
     function emptyTextFor(name) {
       if (name === TAB.ACTIVE) return "No unanswered or active threads. Check the done tab, or select some text and press Cmd-Shift-C.";
-      if (name === TAB.EDITS) return "No hand edits yet.";
       return "Nothing handled yet.";
+    }
+
+    // -------------------------------------------------------------------------
+    // The Active filter
+    // -------------------------------------------------------------------------
+    //
+    // A VIEW, painted from one value. The pane carries the pick as an attribute
+    // and the stylesheet hides the cards it leaves out, so a card arriving while
+    // "Edits" is picked is filtered on the frame it appears, with no list kept
+    // here to fall out of step with the cards.
+
+    function paintFilter() {
+      if (!dom || !dom.filterButtons) return;
+      dom.panes[TAB.ACTIVE].setAttribute("data-lahe-filter", activeFilter);
+      FILTERS.forEach(function (name) {
+        dom.filterButtons[name].setAttribute("aria-pressed", name === activeFilter ? "true" : "false");
+      });
+      dom.filterEmpty.textContent = FILTER_EMPTY[activeFilter] || "";
+      // The kind filter decides what counts as shown, so a search's "nothing
+      // matches" line is checked again with it.
+      applySearch(TAB.ACTIVE);
+    }
+
+    /**
+     * Pick what the Active pane shows: "all", "comments" or "edits".
+     *
+     * Remembered for this review. The tab counts do not change: the count says
+     * how much work is in the tab, and the filter only chooses which of it to
+     * read.
+     *
+     * @param {string} name one of FILTERS
+     * @returns {string} the filter now in force
+     */
+    function setActiveFilter(name) {
+      if (FILTERS.indexOf(name) === -1) throw new Error("setActiveFilter: unknown filter " + String(name));
+      if (activeFilter !== name) {
+        activeFilter = name;
+        persistCollapsedPreference();
+      }
+      paintFilter();
+      return activeFilter;
+    }
+
+    function currentFilter() {
+      return activeFilter;
+    }
+
+    /**
+     * Make sure the filter is not hiding this card.
+     *
+     * For the paths that take the reviewer TO a card (a toast's way in, a
+     * reopen): landing them on a card the filter hides is a jump to nothing.
+     * The filter goes back to All only when it is in the way.
+     *
+     * @param {string} id item id
+     * @returns {string} the filter now in force
+     */
+    function revealCard(id) {
+      var card = cards[id];
+      if (!card) return activeFilter;
+      // A search that hides the card is cleared too, in the card's own pane.
+      if (card.node && card.node.hasAttribute(SEARCH_MISS_ATTR) && TABS.indexOf(card.pane) !== -1) {
+        setSearch(card.pane, "");
+      }
+      if (card.pane !== TAB.ACTIVE || activeFilter === FILTER.ALL) return activeFilter;
+      var hand = isHandEditKind(card.item);
+      if ((activeFilter === FILTER.EDITS && !hand) || (activeFilter === FILTER.COMMENTS && hand)) {
+        setActiveFilter(FILTER.ALL);
+      }
+      return activeFilter;
+    }
+
+    // -------------------------------------------------------------------------
+    // The search box
+    // -------------------------------------------------------------------------
+    //
+    // Text is not something CSS can match, so this is the one part of the view
+    // painted by a pass: each card in the pane is marked when its words do not
+    // contain the search, and the stylesheet hides marked cards. The kind
+    // filter still hides by kind on top of that, so the two combine.
+
+    // Words that are on every card and say nothing about this one: control
+    // labels, the time stamp, the state chip. Matching them would make "send"
+    // or "oct" find every card.
+    var SEARCH_SKIP = "button,textarea,input,select,style,time,.card__state";
+
+    function searchTextOf(node) {
+      if (!doc || typeof doc.createTreeWalker !== "function") return node.textContent || "";
+      var parts = [];
+      var walker = doc.createTreeWalker(node, 4 /* NodeFilter.SHOW_TEXT */, null);
+      for (var t = walker.nextNode(); t; t = walker.nextNode()) {
+        var parent = t.parentNode;
+        if (parent && typeof parent.closest === "function" && parent.closest(SEARCH_SKIP)) continue;
+        parts.push(t.nodeValue);
+      }
+      return parts.join(" ");
+    }
+
+    function passesKindFilter(tab, node) {
+      if (tab !== TAB.ACTIVE || activeFilter === FILTER.ALL) return true;
+      if (!node.classList.contains("card")) return activeFilter !== FILTER.EDITS;
+      var hand = node.hasAttribute(HAND_EDIT_ATTR);
+      return activeFilter === FILTER.EDITS ? hand : !hand;
+    }
+
+    function applySearch(tab) {
+      if (!dom || !dom.panes || !dom.searchEmpties) return;
+      var pane = dom.panes[tab];
+      var query = searchQueries[tab] || "";
+      // Nothing typed and nothing marked from before: nothing to do. This is
+      // the path every repaint takes while nobody is searching.
+      if (!query && !pane.hasAttribute("data-lahe-searching")) return;
+      var anyCard = false;
+      var shown = 0;
+      Array.prototype.forEach.call(pane.querySelectorAll(".card, .lahe-rail-othercard"), function (node) {
+        var miss = !!query && !searchMatches(searchTextOf(node), query);
+        if (miss) {
+          if (!node.hasAttribute(SEARCH_MISS_ATTR)) node.setAttribute(SEARCH_MISS_ATTR, "true");
+        } else if (node.hasAttribute(SEARCH_MISS_ATTR)) {
+          node.removeAttribute(SEARCH_MISS_ATTR);
+        }
+        var isCard = node.classList.contains("card");
+        if (isCard && node.hasAttribute("data-lahe-blank")) return;
+        if (isCard) anyCard = true;
+        if (!miss && passesKindFilter(tab, node)) shown += 1;
+      });
+      if (query) pane.setAttribute("data-lahe-searching", "true");
+      else pane.removeAttribute("data-lahe-searching");
+      // Written only when it changes: the watcher below sees this node too, and
+      // an unchanged write is what keeps it from calling itself forever.
+      var said = dom.searchEmpties[tab];
+      var want = query && anyCard && shown === 0 ? searchEmptyText(query.trim()) : "";
+      if (said.textContent !== want) said.textContent = want;
+      if (said.hidden !== !want) said.hidden = !want;
+    }
+
+    function applySearchAll() {
+      TABS.forEach(applySearch);
+    }
+
+    function syncSearchObserver() {
+      var wanted = !!dom && TABS.some(function (name) {
+        return !!searchQueries[name];
+      });
+      if (!wanted) {
+        if (searchObserver) searchObserver.disconnect();
+        searchObserver = null;
+        return;
+      }
+      if (searchObserver) return;
+      var view = doc && doc.defaultView;
+      var Observer = view && view.MutationObserver;
+      if (typeof Observer !== "function") return;
+      searchObserver = new Observer(function () {
+        applySearchAll();
+      });
+      TABS.forEach(function (name) {
+        // Attributes are left out on purpose: the pass writes them.
+        searchObserver.observe(dom.panes[name], { childList: true, subtree: true, characterData: true });
+      });
+    }
+
+    /**
+     * Narrow a pane to the cards whose words contain this text, ignoring case.
+     * Empty shows everything. A view only: counts do not change, and the kind
+     * filter still applies on top.
+     *
+     * @param {string} tab one of TABS
+     * @param {string} text what is typed
+     * @returns {string} the search now in force for that tab ("" for none)
+     */
+    function setSearch(tab, text) {
+      if (tab === LEGACY_EDITS_TAB) tab = TAB.ACTIVE;
+      if (TABS.indexOf(tab) === -1) throw new Error("setSearch: unknown tab " + String(tab));
+      var typed = text === null || text === undefined ? "" : String(text);
+      searchQueries[tab] = typed.trim() ? typed : "";
+      if (dom && dom.searchInputs && dom.searchInputs[tab].value !== typed) dom.searchInputs[tab].value = typed;
+      syncSearchObserver();
+      applySearch(tab);
+      return searchQueries[tab];
+    }
+
+    function searchFor(tab) {
+      return searchQueries[tab] || "";
+    }
+
+    function readFilterPreference() {
+      if (!reviewId || !store || typeof store.readUiPreferences !== "function") return FILTER.ALL;
+      try {
+        var got = store.readUiPreferences(reviewId).filter;
+        return FILTERS.indexOf(got) === -1 ? FILTER.ALL : got;
+      } catch (err) {
+        return FILTER.ALL;
+      }
     }
 
     // Unmount drops the DOM and keeps every piece of state, which is what makes
@@ -21590,6 +21942,10 @@
       closeStylePanel(false);
       closeShortcuts(false);
       closePdfTray(false);
+      // The search watcher watches panes that are about to go. The typed words
+      // stay in searchQueries, and mount watches the new panes.
+      if (searchObserver) searchObserver.disconnect();
+      searchObserver = null;
       // An unanswered end-review question goes with the rail that asked it, and
       // whoever awaited it is told, rather than left holding a promise that can
       // never settle now the panel is gone.
@@ -21704,11 +22060,14 @@
       // Folds are per review as well, so a rail told it is showing a different
       // review does not carry the last one's folded list onto these cards.
       collapsedCards = readCardCollapsePreference();
+      // And the Active filter, so one review's pick does not hide another's cards.
+      activeFilter = readFilterPreference();
       loadChips();
       if (dom) {
         renderChips();
         renderCollapsed();
         renderPresent();
+        paintFilter();
         Object.keys(cards).forEach(function (id) {
           applyCardCollapsed(cards[id]);
         });
@@ -22292,14 +22651,9 @@
         pendingPlacement[card.id] = true;
         return;
       }
-      // The Edits pane orders its cards with inline flex order. A card that
-      // leaves that pane keeps the inline style, and one stale negative order
-      // beats every DOM position this function chooses: the card renders at
-      // the top while the newest reply sinks below every migrated edit. Clear
-      // it on the way into any other pane; the Edits tab re-stamps its own.
-      if (card.pane !== TAB.EDITS && card.node.style && card.node.style.order) {
-        card.node.style.order = "";
-      }
+      // Order is DOM position in every pane, hand edits included: nothing
+      // stamps an inline flex order on a card, so a hand edit and a comment
+      // sort by the same newest-activity rule below.
       var before = null;
       var at = activityAt(card.item);
       Array.prototype.some.call(pane.children, function (node) {
@@ -22360,6 +22714,10 @@
       card.node.setAttribute("data-state", card.state);
       if (isQuietDraft(item)) card.node.setAttribute("data-lahe-blank", "true");
       else card.node.removeAttribute("data-lahe-blank");
+      // What the Active filter reads. From the kind, every paint, so a card is
+      // filtered correctly however it got into the pane.
+      if (isHandEditKind(item)) card.node.setAttribute(HAND_EDIT_ATTR, "true");
+      else card.node.removeAttribute(HAND_EDIT_ATTR);
       paintCardWait(card);
       var quote = (item[record.FIELD.CONTEXT] && item[record.FIELD.CONTEXT].quote) || "";
       p.quote.textContent = quote;
@@ -22518,9 +22876,9 @@
      * A tab is finished with its own row for this card. The CARD goes only when
      * nobody else owns it.
      *
-     * The card is shared: the Active tab, the Edits tab and the Done tab all
-     * draw their rows inside the same card node, and exactly one of them owns
-     * it at a time (paneForItem says which). A tab that removed the card
+     * The card is shared: the Active tab's comment rows, the hand-edit rows
+     * (tab_edits.js) and the Done tab all draw inside the same card node, and
+     * exactly one pane owns it at a time (paneForItem says which). A tab that removed the card
      * whenever its own row went away deleted a card another tab was still
      * showing. That is how a handled reply vanished: the item folds to handled,
      * its card moves to the Done pane, then closing the still-open comment box
@@ -22723,9 +23081,8 @@
     function countIncomplete() {
       return Object.keys(cards).filter(function (id) {
         if (isQuietDraft(cards[id].item)) return false;
-        // Pane placement and completion are separate. Direct edits stay in the
-        // Edits pane so they do not bury comments, but they are still work for
-        // the agent until a handled reply lands.
+        // Lifecycle, not pane: anything not handled is work for the agent,
+        // hand edits as much as comments, until a handled reply lands.
         return cards[id].state !== record.STATE.HANDLED;
       }).length;
     }
@@ -23923,6 +24280,7 @@
     function renderTabs() {
       if (!dom) return;
       paintEmptyPanes();
+      paintFilter();
       TABS.forEach(function (name) {
         dom.tabButtons[name].setAttribute("aria-selected", name === activeTab ? "true" : "false");
         dom.panes[name].setAttribute("data-current", name === activeTab ? "true" : "false");
@@ -23946,9 +24304,9 @@
       //
       // An empty pill still invites on an untouched page: "Review 0/0" prints
       // the one number that is not information.
-      // The left number is lifecycle truth, not the Active tab's layout count.
-      // In particular, a ready direct edit sits in Edits but remains incomplete
-      // until the agent reports it handled.
+      // The left number is lifecycle truth, not the Active tab's layout count,
+      // and never the filtered view: a ready hand edit stays incomplete until
+      // the agent reports it handled, whichever filter is picked.
       var open = countIncomplete();
       var total = Object.keys(cards).length;
       dom.pillCount.textContent = total ? String(open) + " (" + String(total) + ")" : "";
@@ -23979,6 +24337,9 @@
     }
 
     function selectTab(tab) {
+      // The hand-edit tab is gone; its cards are in Active. An old caller asking
+      // for it gets Active rather than an exception mid-gesture.
+      if (tab === LEGACY_EDITS_TAB) tab = TAB.ACTIVE;
       if (TABS.indexOf(tab) === -1) throw new Error("selectTab: unknown tab " + String(tab));
       activeTab = tab;
       // Handlers run BEFORE the paint, so a listener that clears its own badge
@@ -24765,7 +25126,8 @@
           pill: pillSpot,
           width: railWidth,
           present: presenting,
-          cards: collapsedCardsValue()
+          cards: collapsedCardsValue(),
+          filter: activeFilter
         });
         return true;
       } catch (err) {
@@ -25084,10 +25446,13 @@
       return node.getClientRects().length > 0;
     }
 
-    function firstFocusableIn(root) {
+    // skipFilter: pass over the pane head (filter, search). It is the header, like
+    // the tab strip, and the reviewer opened the rail to reach a card.
+    function firstFocusableIn(root, skipFilter) {
       if (!root || typeof root.querySelectorAll !== "function") return null;
       var found = root.querySelectorAll(FOCUSABLE);
       for (var i = 0; i < found.length; i += 1) {
+        if (skipFilter && typeof found[i].closest === "function" && found[i].closest(".panehead")) continue;
         if (isShown(found[i]) && typeof found[i].focus === "function") return found[i];
       }
       return null;
@@ -25105,7 +25470,7 @@
     function focusFirstControl() {
       if (!dom || collapsed || presenting) return false;
       var pane = dom.panes ? dom.panes[activeTab] : null;
-      var node = firstFocusableIn(pane) || firstFocusableIn(dom.rail);
+      var node = firstFocusableIn(pane, true) || firstFocusableIn(dom.rail);
       if (!node) return false;
       try {
         node.focus();
@@ -26173,6 +26538,13 @@
     return {
       TAB: TAB,
       TABS: TABS,
+      FILTER: FILTER,
+      FILTERS: FILTERS,
+      setActiveFilter: setActiveFilter,
+      currentFilter: currentFilter,
+      revealCard: revealCard,
+      setSearch: setSearch,
+      searchFor: searchFor,
       STATUS: STATUS,
       STATUS_TEXT: STATUS_TEXT,
       STATUS_SHORT: STATUS_SHORT,
@@ -26363,6 +26735,15 @@
     clipAtWord: clipAtWord,
     TAB: TAB,
     TABS: TABS,
+    FILTER: FILTER,
+    FILTERS: FILTERS,
+    FILTER_LABEL: FILTER_LABEL,
+    FILTER_EMPTY: FILTER_EMPTY,
+    HAND_EDIT_ATTR: HAND_EDIT_ATTR,
+    isHandEditKind: isHandEditKind,
+    SEARCH_PLACEHOLDER: SEARCH_PLACEHOLDER,
+    searchMatches: searchMatches,
+    searchEmptyText: searchEmptyText,
     STATUS: STATUS,
     STATUS_TEXT: STATUS_TEXT,
     STATUS_SHORT: STATUS_SHORT,
@@ -26613,6 +26994,18 @@
     // reviewer clicks into: the click target ended where Delete began.
     "[data-lahe-active-row]{display:flex;flex-direction:column;gap:8px}",
     ".lahe-rail-note{white-space:pre-wrap;overflow-wrap:anywhere}",
+    // Delete is a small x at the right of the comment, not a word under it.
+    "[data-lahe-active-row]{position:relative}",
+    "[data-lahe-active-row]:has(> .cardx:not([hidden])) > .lahe-rail-note{padding-right:22px}",
+    ".cardx{position:absolute;top:0;right:0;width:20px;height:20px;border-radius:5px;display:flex;",
+    "align-items:center;justify-content:center;font-size:15px;line-height:1;color:var(--ink-faint);",
+    "background:none;border:0;cursor:pointer}",
+    // Hovering the x shows what it would delete: the x and the whole comment
+    // turn the rail's stop red.
+    ".cardx:hover{background:color-mix(in srgb,var(--bad) 12%,transparent);color:var(--bad)}",
+    ".card:has([data-lahe-active-row] > .cardx:hover){outline:1.5px solid var(--bad);outline-offset:-1px;",
+    "background:color-mix(in srgb,var(--bad) 6%,var(--paper))}",
+    ".cardx[hidden]{display:none}",
     ".lahe-rail-note[data-empty='true']{color:var(--ink-faint)}",
     // THE NOTE IS THE INPUT. Ken: "do we really need a button for 'reword'?
     // before we could just edit a comment and the color would go from green to
@@ -26953,9 +27346,10 @@
       // the rail's root, and a remount throws that root away.
       ensureHostedStyle(footEl);
       var items = comments.outstanding().filter(function (item) {
-        // The Active thread carries comments and notes only. Hand edits live in
-        // the Edits tab (R32: neither buries the other); rendering a comment row
-        // into an edit's card was the cross-task defect 3D flagged at the stitch.
+        // This file draws comment and note rows only. Hand-edit cards share the
+        // Active pane, but their rows are tab_edits.js's; rendering a comment
+        // row into an edit's card was the cross-task defect 3D flagged at the
+        // stitch.
         var kind = item[record.FIELD.KIND];
         if (kind !== record.KIND.COMMENT && kind !== record.KIND.NOTE) return false;
         return !noteHandle || item[record.FIELD.ID] !== noteHandle.id || !record.isDraft(item);
@@ -27036,13 +27430,18 @@
       var actionClass = hosted ? "cardact cardact--quiet" : "lahe-rail-btn";
       var foot = el("div", hosted ? "cardacts" : "lahe-rail-rowfoot");
       if (!hosted) foot.appendChild(el("span", "lahe-rail-state", ""));
-      var del = el("button", actionClass, "Delete");
+      var del = el("button", hosted ? "cardx" : actionClass, hosted ? "\u00d7" : "Delete");
       del.setAttribute("data-lahe-act", "delete");
       del.setAttribute("type", "button");
+      if (hosted) {
+        del.setAttribute("aria-label", "Delete this comment");
+        del.title = "Delete this comment";
+      }
       del.addEventListener("click", function () {
         comments.remove(id);
       });
-      foot.appendChild(del);
+      if (hosted) row.appendChild(del);
+      else foot.appendChild(del);
       row.appendChild(foot);
 
       // The box for another message, under the row's own actions. It is drawn
@@ -27210,7 +27609,7 @@
             var handle = comments.boxFor(id) || comments.editInPlace(id, note);
             if (handle && typeof handle.commit === "function") handle.commit();
           });
-          del.parentNode.appendChild(sendBtn);
+          row.querySelector(".cardacts").appendChild(sendBtn);
         } else if (!wantSend && sendBtn) {
           sendBtn.parentNode.removeChild(sendBtn);
         }
@@ -27687,7 +28086,7 @@
    * The unseen ids, grouped by the tab their card actually sits in.
    *
    * THE BADGE GOES WHERE THE CARD IS. A question or a refusal keeps its card on
-   * the ACTIVE (or Edits) side, deliberately: the work is not finished, so it
+   * the ACTIVE side, deliberately: the work is not finished, so it
    * stays where unfinished work lives. Badging Done for it sent the reviewer to
    * a tab the thing was not in. The pane rule is not restated here; `paneOf` is
    * the rail's own paneForItem, passed in.
@@ -29009,10 +29408,11 @@
       // this", and there is nothing here for them to look at.
       if (quiet) return next;
       repaintReopened(next[record.FIELD.ID]);
-      // A proofreading answer is made on a hand edit's card, which lives in the
-      // Edits pane; sending the reviewer to Active would take the card away
-      // from under the press.
+      // A proofreading answer is made on a hand edit's card; stayInPane keeps
+      // the reviewer in whichever pane the rail now places that card in,
+      // rather than assuming one.
       rail.selectTab(options && options.stayInPane ? overlayModule.paneForItem(next) : rail.TAB.ACTIVE);
+      if (typeof rail.revealCard === "function") rail.revealCard(next[record.FIELD.ID]);
       var card = rail.cardNode(next[record.FIELD.ID]);
       if (card && typeof card.focus === "function") {
         card.tabIndex = -1;
@@ -29493,6 +29893,9 @@
       var tab = paneOf(item);
       if (typeof rail.collapse === "function") rail.collapse(false);
       if (typeof rail.selectTab === "function") rail.selectTab(tab);
+      // The Active filter may be hiding this card; pressing the toast is asking
+      // to see it.
+      if (typeof rail.revealCard === "function") rail.revealCard(id);
       // A folded card is opened on the way in. Pressing a toast is the reviewer
       // saying "show me that one", and landing them on a one-line card they then
       // have to press again is the trip this path exists to save.
@@ -30051,26 +30454,25 @@
 });
 
 /* ---- src/layer/tab_edits.js  (owner: 3D) ---- */
-// The Edits tab's contents: every hand edit as a before-and-after row.
+// The hand-edit rows: every hand edit as a before-and-after row inside its
+// rail card.
 //
 // Owner: 3D. The rail CHROME (the tab shell, the panes, the status line, the
 // card API) is 1B's, in overlay.js, and nothing here edits that file. This file
-// is only what the Edits tab holds.
+// is only what a hand edit's card holds.
 //
-// Implements D10's Edits tab: R32 (hand edits are kept apart from the comment
-// thread so neither buries the other) and R39 (the end-of-session list of hand
-// edits, worth feeding a style guide).
+// Implements R32 (hand edits do not bury the comment thread) and R39 (the
+// end-of-session list of hand edits, worth feeding a style guide).
 //
 // ---------------------------------------------------------------------------
-// Why a hand edit is not a comment
+// Where the rows live
 // ---------------------------------------------------------------------------
 //
-// A session produces a handful of comments and a great many small hand edits.
-// Mixed into one list, the edits bury the comments, and the reviewer stops
-// reading either. The rail already routes a record by kind (overlay's
-// paneForItem sends edit, delete and format_only to this tab), so the
-// separation is the rail's law and this file never has to re-decide it. What
-// this file owns is what a row SAYS.
+// A hand edit's card sits in the Active pane beside the comments while it is
+// still work, and in Done once handled (overlay's paneForItem decides; this
+// file never re-decides it). The rail used to give hand edits a tab of their
+// own; R32 is now kept by the Active pane's filter (All, Comments, Edits),
+// which is the rail's too. What this file owns is what a row SAYS.
 //
 // Three kinds, three readings, because a row that renders all three the same
 // way is wrong twice:
@@ -30087,20 +30489,20 @@
 // ---------------------------------------------------------------------------
 //
 // There is no render(items) here. Rows are created once, updated where they
-// are, and removed only when their record is gone. Newest first is done with
-// flex `order` on the card the rail already built, never by re-appending:
-// re-parenting a node blurs anything focused inside it, which is the exact
-// revert mechanism the rail's law exists to stop.
+// are, and removed only when their record is gone. Where a card sits in its
+// pane is the rail's job (newest activity first); this file never re-appends
+// a card: re-parenting a node blurs anything focused inside it, which is the
+// exact revert mechanism the rail's law exists to stop.
 //
 // ---------------------------------------------------------------------------
 // Undo lives on the row (R28)
 // ---------------------------------------------------------------------------
 //
 // R28 says every edit can be undone on its own. 2A's editing.undo(id) does the
-// work; this tab is where the reviewer can reach it, because the row is the only
+// work; the row is where the reviewer can reach it, because the row is the only
 // place a hand edit is listed. The button wears the rail's own card-action
 // register (`.cardact.cardact--quiet`), the same one Reword and Delete wear on a
-// comment card, so the two tabs read as one product.
+// comment card, so the two kinds of card read as one product.
 //
 // undo reverts that record's region and retires the record, which drops the row
 // on the next refresh. When it CANNOT (`reverted: false`), the row says why,
@@ -30118,16 +30520,18 @@
 // The export seam
 // ---------------------------------------------------------------------------
 //
-// This tab does not format anything for export. The list-export button calls
-// 3C's `exportRecords(records, options)` in src/layer/export.js, which renders
-// through the frozen human-readable formatter in shared/review_format.js. One
-// formatter, one wording, wherever the same records are read.
+// This file does not format anything for export. exportList, which ending the
+// review calls, hands the records to 3C's `exportRecords(records, options)` in
+// src/layer/export.js, which renders through the frozen human-readable
+// formatter in shared/review_format.js. One formatter, one wording, wherever
+// the same records are read. There is no export button on the rail for this
+// list: the end-review step already saves it.
 //
-// The module is resolved LAZILY, on mount and on click, for a mechanical
+// The module is resolved LAZILY, when exportList runs, for a mechanical
 // reason: export.js loads AFTER this file in the bundle (manifest.js pins the
 // order), so a reference captured when this factory runs would always be
-// undefined. When the module is absent the button renders disabled and says why
-// rather than throwing on click or, worse, doing nothing.
+// undefined. When the module is absent exportList says why in its result
+// rather than throwing.
 //
 // Dual-environment module. See docs/CONTRACTS.md, "How a shared module loads".
 (function (root, factory) {
@@ -30154,17 +30558,11 @@
 })(typeof globalThis !== "undefined" ? globalThis : this, function (root, markers, record, normalize, overlayModule) {
   "use strict";
 
-  // The marker a row carries. It is how a test asks "is an edit row in the
-  // Active pane", which is the honest reading of "kept apart": counting cards
-  // would only prove the rail's routing, not what this file drew.
+  // The marker a row carries. It is how a test asks "is there an edit row in
+  // this card": counting cards would only prove the rail's routing, not what
+  // this file drew.
   var ROW_ATTR = "data-lahe-edit-row";
   var ROW_CLASS = "lahe-edits";
-  var BAR_CLASS = "lahe-edits-bar";
-  // The bar sits above every row. Cards are ordered negatively (newest first,
-  // never more negative than the row count), so one number well below that keeps
-  // the bar first without re-appending it. This is the end-of-session list, and
-  // the way to take it elsewhere should not be six rows down a scroll.
-  var BAR_ORDER = -100000;
 
   var DELETED_TEXT = "Deleted";
   // R28's reviewer-facing half. The row is the only place a hand edit is listed,
@@ -30176,11 +30574,6 @@
   // Undo needs 2A's surface. Without it the button says so rather than sitting
   // there doing nothing when pressed.
   var UNDO_MISSING_TITLE = "Undo needs the editing surface, which is not on this page.";
-  // Shortened from "Export the edit list": it was the widest, heaviest thing in
-  // the pane, opposite an 11.5px count, and on the empty tab it was a large
-  // disabled button over "No hand edits yet." Two words rather than one,
-  // because the rail's footer already holds a button called exactly "Export"
-  // and two of those in one rail is a coin toss for anyone reading it.
   // THE CHANGE, NOT THE START. Before and after share their opening and
   // closing words; long shared stretches are cut to a few words beside the
   // change, with "..." where words were left out, so the card shows what moved.
@@ -30220,20 +30613,18 @@
     };
   }
 
-  var EXPORT_LABEL = "Export edits";
-  var EXPORT_MISSING_TITLE =
-    "Export is arriving with the copy-and-export module; the list export wires up at the Phase 3 stitch.";
-  var EXPORT_TITLE = "The hand edits on this page, as text, for a style guide or a chat window.";
+  // Why exportList could not run: the export module is not on this page.
+  var EXPORT_MISSING = "The export module is not on this page, so the hand-edit list could not be saved.";
 
-  // Quiet neutrals, one accent, and the rail's own tokens: this pane is inside
-  // the rail's closed shadow root, so :host's custom properties inherit into it
-  // and the tab cannot drift from the chrome around it.
+  // Quiet neutrals, one accent, and the rail's own tokens: the rows are inside
+  // the rail's closed shadow root, so :host's custom properties inherit into
+  // them and they cannot drift from the chrome around them.
   var STYLE = [
     "." + ROW_CLASS + "{display:flex;flex-direction:column;gap:6px}",
     // The rule per pair stays, and so does the accent on an edit row. This is
-    // the tab's new-versus-old signal: scanning a column of rows, the accent
+    // the row's new-versus-old signal: scanning a column of cards, the accent
     // rule is what separates the reviewer's own edits from everything else.
-    // Drop it and the tab is one undifferentiated stack.
+    // Drop it and the pane is one undifferentiated stack.
     "." + ROW_CLASS + "__pair{display:flex;flex-direction:column;gap:4px;",
     "border-left:2px solid var(--line);padding-left:9px}",
     "." + ROW_CLASS + "[data-kind='edit'] ." + ROW_CLASS + "__pair{border-left-color:var(--accent)}",
@@ -30284,23 +30675,10 @@
     // on, in the rail's warning color. Never a silent no-op.
     "." + ROW_CLASS + "__failed{font-size:11.5px;color:var(--warn);",
     "background:var(--warn-wash);border-radius:7px;padding:5px 8px;margin:0}",
-    "." + ROW_CLASS + "__failed:empty{display:none}",
-
-    "." + BAR_CLASS + "{display:flex;align-items:center;gap:8px;padding:0 2px 10px;",
-    "border-bottom:1px solid var(--line-soft)}",
-    "." + BAR_CLASS + "__count{font-size:11.5px;color:var(--ink-faint);",
-    "font-variant-numeric:tabular-nums}",
-    // The footer's Copy and Export are the full-size pair; this one is a card-
-    // scale action, so it matches the rail's quiet register instead of being
-    // heavier than the buttons that do more.
-    "." + BAR_CLASS + "__btn{margin-left:auto;font-size:11.5px;font-weight:550;padding:3px 9px;",
-    "border-radius:7px;border:1px solid var(--line);background:var(--paper);color:var(--ink-soft)}",
-    "." + BAR_CLASS + "__btn:hover:not(:disabled){color:var(--ink)}",
-    "." + BAR_CLASS + "__btn:hover:not(:disabled){background:var(--surface)}",
-    "." + BAR_CLASS + "__btn:disabled{color:var(--ink-faint);cursor:default}"
+    "." + ROW_CLASS + "__failed:empty{display:none}"
   ].join("");
 
-  // The three kinds this tab holds. Asked in one place so a fourth kind added
+  // The three kinds this file draws rows for. Asked in one place so a fourth kind added
   // later cannot half-appear.
   // One definition of "the reviewer made this with their hands", in record.js,
   // because the Done tab has to agree with this list to know when its own card
@@ -30436,15 +30814,20 @@
   }
 
   // ---------------------------------------------------------------------------
-  // The tab
+  // The rows
   // ---------------------------------------------------------------------------
 
   /**
+   * The name says "tab" for history: hand edits once had a rail tab of their
+   * own. Today this draws the rows into each hand edit's card, wherever the
+   * rail placed that card.
+   *
    * @param {Object} options
    * @param {Object} options.store      1B's store; the records are read from it
    * @param {string} options.reviewId
    * @param {Object} [options.overlay]  the rail; the shared one otherwise
-   * @param {Element} [options.host]    the rail's Edits pane
+   * @param {Element} [options.host]    the rail's Active pane, where the rows'
+   *   stylesheet goes. Nothing is drawn into it directly
    * @param {Object} [options.editing]  2A's surface. When given, the tab
    *   subscribes to its changes itself, so the boot wiring stays one call
    * @param {Object} [options.exportModule]  3C's module, for a test that wants
@@ -30473,9 +30856,6 @@
     var unsubscribe = null;
     // id -> row node. The reason there is no rebuild path.
     var rows = Object.create(null);
-    var barNode = null;
-    var countNode = null;
-    var buttonNode = null;
     var lastExport = null;
     var lastExportPromise = null;
     var lastUndo = null;
@@ -30527,7 +30907,6 @@
       mounted = true;
       if (!doc || !host) return api;
       addStyle();
-      buildBar();
       if (editing && typeof editing.onChange === "function") {
         unsubscribe = editing.onChange(function (item, event) {
           refresh();
@@ -30550,24 +30929,6 @@
       host.insertBefore(style, host.firstChild);
     }
 
-    function buildBar() {
-      if (barNode) return barNode;
-      barNode = el("div", BAR_CLASS);
-      barNode.style.order = String(BAR_ORDER);
-      countNode = el("span", BAR_CLASS + "__count", "");
-      barNode.appendChild(countNode);
-
-      buttonNode = el("button", BAR_CLASS + "__btn", EXPORT_LABEL);
-      buttonNode.setAttribute("type", "button");
-      buttonNode.addEventListener("click", function () {
-        exportList();
-      });
-      barNode.appendChild(buttonNode);
-      host.appendChild(barNode);
-      paintBar(0);
-      return barNode;
-    }
-
     // -------------------------------------------------------------------------
     // The list, in place
     // -------------------------------------------------------------------------
@@ -30577,7 +30938,7 @@
       var items = handEdits();
       var seen = Object.create(null);
 
-      items.forEach(function (item, index) {
+      items.forEach(function (item) {
         var id = item[record.FIELD.ID];
         seen[id] = true;
         // The rail's own model has to know the card exists before anything can
@@ -30592,24 +30953,13 @@
           rail.attachCardNode(id, rows[id]);
         }
         updateRow(rows[id], item);
-        // Newest first, without moving a node: the pane is a flex column, and
-        // the newest record gets the most negative order.
-        var card = rail.cardNode(id);
-        if (card && card.style) card.style.order = String(index - items.length);
+        // No ordering here: the card sits in Active (or Done) beside the
+        // comments, and the rail places every card there by newest activity.
       });
 
       Object.keys(rows).forEach(function (id) {
         if (!seen[id]) dropRow(id);
       });
-
-      // The empty draft an empty page opens with, and a draft that changes
-      // nothing yet, are not hand edits: the rail does not draw them, so the
-      // count does not claim them either.
-      paintBar(
-        items.filter(function (item) {
-          return !overlayModule.isQuietDraft(item);
-        }).length
-      );
       return api;
     }
 
@@ -30657,8 +31007,8 @@
       row.appendChild(failed);
 
       // R28's one gesture, in the rail's own card-action register: the same
-      // quiet outline Reword and Delete wear on a comment card, so the Edits tab
-      // and the Active tab read as one product rather than two.
+      // quiet outline Reword and Delete wear on a comment card, so a hand-edit
+      // card and a comment card read as one product rather than two.
       var foot = el("div", "cardacts");
       var undoBtn = el("button", "cardact cardact--quiet", UNDO_LABEL);
       undoBtn.setAttribute("type", "button");
@@ -30694,8 +31044,7 @@
      * Undo ONE hand edit, from its own row.
      *
      * editing.undo reverts that record's region and retires the record; the row
-     * then leaves the tab on the next refresh, which the tab already does in
-     * place. A refusal (`reverted: false`) is written onto the row, because an
+     * then goes on the next refresh, which this file already does in place. A refusal (`reverted: false`) is written onto the row, because an
      * undo that quietly does nothing is how a reviewer learns not to trust the
      * button.
      */
@@ -30836,14 +31185,6 @@
       delete rows[id];
     }
 
-    function paintBar(count) {
-      if (!countNode || !buttonNode) return;
-      countNode.textContent = count === 1 ? "1 hand edit" : count + " hand edits";
-      var available = !!exportModule();
-      buttonNode.disabled = !available || count === 0;
-      buttonNode.title = available ? EXPORT_TITLE : EXPORT_MISSING_TITLE;
-    }
-
     // -------------------------------------------------------------------------
     // Export
     // -------------------------------------------------------------------------
@@ -30852,15 +31193,15 @@
      * Hand the list to 3C's export path, newest first, so what a reader sees is
      * what the text says.
      *
-     * It returns the text rather than delivering it: the clipboard grant and the
-     * download are copyReview() and exportReview(), which are 3C's, and the
-     * delivery is wired at the Phase 3 stitch.
+     * There is no button for this on the rail. Ending the review calls it
+     * (index.js surfaceHandEdits), which is when the session's hand edits are
+     * worth reading as one list.
      */
     function exportList() {
       var mod = exportModule();
       var items = handEdits().reverse();
       if (!mod) {
-        lastExport = { ok: false, reason: EXPORT_MISSING_TITLE, text: null, count: items.length };
+        lastExport = { ok: false, reason: EXPORT_MISSING, text: null, count: items.length };
         lastExportPromise = Promise.resolve(lastExport);
         return lastExportPromise;
       }
@@ -30892,10 +31233,6 @@
       Object.keys(rows).forEach(function (id) {
         dropRow(id);
       });
-      if (barNode && barNode.parentNode) barNode.parentNode.removeChild(barNode);
-      barNode = null;
-      countNode = null;
-      buttonNode = null;
       mounted = false;
     }
 
@@ -30911,7 +31248,7 @@
       rowCount: function () {
         return Object.keys(rows).length;
       },
-      // The list as data, newest first: what the tab is showing, without a
+      // The list as data, newest first: what the rows are showing, without a
       // caller reaching into a closed shadow root to read it.
       rows: function () {
         return handEdits()
@@ -30940,15 +31277,6 @@
         return lastUndo;
       },
       exportList: exportList,
-      exportButton: function () {
-        return buttonNode;
-      },
-      exportEnabled: function () {
-        return !!buttonNode && !buttonNode.disabled;
-      },
-      exportTitle: function () {
-        return buttonNode ? buttonNode.title : null;
-      },
       lastExport: function () {
         return lastExport;
       },
@@ -30963,12 +31291,10 @@
   return {
     ROW_ATTR: ROW_ATTR,
     ROW_CLASS: ROW_CLASS,
-    BAR_CLASS: BAR_CLASS,
     STYLE: STYLE,
     DELETED_TEXT: DELETED_TEXT,
-    EXPORT_LABEL: EXPORT_LABEL,
     focusPair: focusPair,
-    EXPORT_MISSING_TITLE: EXPORT_MISSING_TITLE,
+    EXPORT_MISSING: EXPORT_MISSING,
     UNDO_LABEL: UNDO_LABEL,
     UNDO_TITLE: UNDO_TITLE,
     UNDO_MISSING_TITLE: UNDO_MISSING_TITLE,
@@ -31279,6 +31605,9 @@
       if (item && typeof rail.paneForItem === "function" && typeof rail.selectTab === "function") {
         rail.selectTab(rail.paneForItem(item));
       }
+      // The Active filter may be hiding this card; a jump to a hidden card is
+      // a jump to nothing.
+      if (typeof rail.revealCard === "function") rail.revealCard(id);
       if (typeof rail.setCardCollapsed === "function") rail.setCardCollapsed(id, false);
       var node = typeof rail.cardNode === "function" ? rail.cardNode(id) : null;
       if (!node) return true;
@@ -31427,7 +31756,8 @@
    * Render records as the human-readable review text.
    *
    * Pure, synchronous, and the only place the slice label is attached. 3D's
-   * Edits tab renders through here too, rather than formatting a second time.
+   * hand-edit list renders through here too, rather than formatting a second
+   * time.
    *
    * @param {{records: Array<Object>, scope: string, review?: string}} input
    * @returns {string}
@@ -31842,7 +32172,7 @@
 
     /**
      * The raw seam: render (and by default download) a caller's own records.
-     * 3D's Edits tab list export calls this rather than formatting a second
+     * 3D's hand-edit list export (run when the review ends) calls this rather than formatting a second
      * time, which is why it takes records instead of reading them.
      *
      * @param {Array<Object>} records
@@ -50727,7 +51057,7 @@
   "use strict";
 
   // Replaced by scripts/build-layer.js at concatenation time.
-  var VERSION = "0.3.0+1a8516ca794f";
+  var VERSION = "0.3.0+1bfef4d2d990";
 
   var protocol = ns.protocol;
   var record = ns.record;
@@ -51144,7 +51474,7 @@
     // The layer can only act on the ONE document it is loaded into, so anything
     // from another page is filtered out HERE, at the single read boundary, and
     // every surface below is handed the scoped store: replay and anchoring, the
-    // rail's Active/Done/Edits lists, the count pill, and the highlights. A
+    // rail's Active and Done lists, the count pill, and the highlights. A
     // second page attached to a live review otherwise inherited all 78 of the
     // first page's items, tried to re-anchor them here, and listed them in the
     // rail (Ken, live, 2026-08-17).
@@ -51592,10 +51922,11 @@
     });
     zoom.bind();
 
-    // The Edits tab's contents, inside the rail's own Edits pane, the way the
-    // Active tab lives inside the Active one. It is created after the edit
-    // surface because it subscribes to it: a hand edit becomes a row on the
-    // same act that writes the record.
+    // The hand-edit rows, drawn into each hand edit's card. Those cards sit in
+    // the Active pane beside the comments (Done once handled), and the Active
+    // filter separates the two. Created after the edit surface because it
+    // subscribes to it: a hand edit becomes a row on the same act that writes
+    // the record.
     var editsTab = makeEditsTab();
 
     // The Done tab mounted BEFORE this one existed, and its Reopen button moves
@@ -51812,9 +52143,9 @@
     //   3. the hand-edit list is put in front of the reviewer.
     //
     // Step 3 is not decoration. R39's list exists so style-guide patterns can be
-    // spotted, and the Edits tab has held it all along; what it never had was
-    // the MOMENT. A permanently visible tab is one a reviewer stops seeing by
-    // the third comment, so the payoff happens at the close, which is when a
+    // spotted, and the hand-edit cards have held it all along; what they never
+    // had was the MOMENT. A list always on screen is one a reviewer stops seeing
+    // by the third comment, so the payoff happens at the close, which is when a
     // session's worth of edits reads as a pattern rather than as a row.
     rail.onAction("end", function () {
       // The whole review, not this page's slice: ending ends every page of it,
@@ -51853,12 +52184,15 @@
     /**
      * The closing step: the session's hand edits, in front of the reviewer.
      *
-     * It reuses the Edits tab's own export seam rather than formatting a second
-     * list. Two lists of one thing is how the two of them start disagreeing.
+     * It reuses the hand-edit rows' own export seam rather than formatting a
+     * second list. Two lists of one thing is how the two of them start
+     * disagreeing. On screen, the Active pane is filtered to hand edits, so the
+     * list the file holds is the list the reviewer is looking at.
      */
     function surfaceHandEdits() {
       var count = editsTab && typeof editsTab.rowCount === "function" ? editsTab.rowCount() : 0;
-      rail.selectTab(ns.overlay.TAB.EDITS);
+      rail.selectTab(ns.overlay.TAB.ACTIVE);
+      if (count && typeof rail.setActiveFilter === "function") rail.setActiveFilter(ns.overlay.FILTER.EDITS);
       if (!count || !editsTab || typeof editsTab.exportList !== "function") {
         return Promise.resolve({ count: count, saved: false });
       }
@@ -51880,7 +52214,7 @@
         store: scopedStore,
         reviewId: reviewId,
         overlay: rail,
-        host: rail.tabBody(ns.overlay.TAB.EDITS),
+        host: rail.tabBody(ns.overlay.TAB.ACTIVE),
         editing: editing,
         // The commit wash reads these three; named here, not fished out of the
         // page's namespace by the tab.
