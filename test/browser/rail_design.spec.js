@@ -174,6 +174,10 @@ test.describe("the rail as a shipping surface", () => {
           actsDisplay: rowActs && actStyle ? window.getComputedStyle(acts).display : null,
           actPadding: actStyle ? actStyle.paddingLeft : null,
           noteToActs: noteRect && delRect ? Math.round(delRect.top - noteRect.bottom) : null,
+          // Delete is a small x at the top right of the comment (Ken).
+          delText: del ? del.textContent : null,
+          delLabel: del ? del.getAttribute("aria-label") : null,
+          delBesideNote: !!(noteRect && delRect && delRect.top < noteRect.bottom && delRect.left > noteRect.left + noteRect.width / 2),
           labels: Array.from(pane.querySelectorAll(".cardacts button")).map((b) => b.textContent)
         };
       });
@@ -187,10 +191,10 @@ test.describe("the rail as a shipping surface", () => {
       expect(styled.noteWhiteSpace).toBe("pre-wrap");
       expect(styled.noteEditable, "the reviewer's own words are the input").toBe(true);
       expect(styled.noteCursor, "and they are drawn as something you type in").toBe("text");
-      expect(styled.actsDisplay).toBe("flex");
-      expect(styled.labels, "one action on the card: Delete. Rewording is the note itself").toEqual(["Delete"]);
-      expect(styled.noteToActs, "the action row is clear of the reviewer's sentence").toBeGreaterThanOrEqual(2);
-      expect(parseFloat(styled.actPadding), "and it is drawn as a button").toBeGreaterThan(0);
+      expect(styled.labels, "no word buttons under the comment: Delete is the x beside it").toEqual([]);
+      expect(styled.delText).toBe("\u00d7");
+      expect(styled.delLabel, "and it still says what it does to a screen reader").toBe("Delete this comment");
+      expect(styled.delBesideNote, "at the right of the comment, not under it").toBe(true);
     } finally {
       await helper.stop().catch(() => {});
       await app.close();

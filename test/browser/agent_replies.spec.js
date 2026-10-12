@@ -1467,7 +1467,7 @@ test.describe("adding another message before the agent has answered", () => {
       expect(box.there, "a sent comment still has somewhere to type").toBe(true);
       // A box gets a send button, which is what a text input has. What it does
       // not get is a place in the card's action row beside Delete.
-      expect(box.buttonsOnCard, "the box brings its own Send, and nothing else").toEqual(["Delete", "Send"]);
+      expect(box.buttonsOnCard, "the box brings its own Send, and nothing else").toEqual(["Send", "\u00d7"]);
       expect(box.cardActs, "the card still acts on the comment in exactly one way").toEqual(["delete"]);
 
       await page.evaluate((id) => {

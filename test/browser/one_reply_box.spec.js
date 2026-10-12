@@ -263,7 +263,7 @@ test.describe("one reply box per card", () => {
       const item = await commentOnLede(page, "Make this headline shorter.");
       await waitForRevInLog(helper, item.id, 1);
       const boxes = await expectOneBoxLast(page, item.id, "add");
-      expect(boxes.buttons).toEqual(["Delete", "Send"]);
+      expect(boxes.buttons).toEqual(["\u00d7", "Send"]);
       await shoot(page, item.id, "waiting-on-agent");
     } finally {
       await helper.kill9();

@@ -206,6 +206,14 @@
     // reviewer clicks into: the click target ended where Delete began.
     "[data-lahe-active-row]{display:flex;flex-direction:column;gap:8px}",
     ".lahe-rail-note{white-space:pre-wrap;overflow-wrap:anywhere}",
+    // Delete is a small x at the right of the comment, not a word under it.
+    "[data-lahe-active-row]{position:relative}",
+    "[data-lahe-active-row]:has(> .cardx:not([hidden])) > .lahe-rail-note{padding-right:22px}",
+    ".cardx{position:absolute;top:0;right:0;width:20px;height:20px;border-radius:5px;display:flex;",
+    "align-items:center;justify-content:center;font-size:15px;line-height:1;color:var(--ink-faint);",
+    "background:none;border:0;cursor:pointer}",
+    ".cardx:hover{background:var(--surface);color:var(--ink)}",
+    ".cardx[hidden]{display:none}",
     ".lahe-rail-note[data-empty='true']{color:var(--ink-faint)}",
     // THE NOTE IS THE INPUT. Ken: "do we really need a button for 'reword'?
     // before we could just edit a comment and the color would go from green to
@@ -629,13 +637,18 @@
       var actionClass = hosted ? "cardact cardact--quiet" : "lahe-rail-btn";
       var foot = el("div", hosted ? "cardacts" : "lahe-rail-rowfoot");
       if (!hosted) foot.appendChild(el("span", "lahe-rail-state", ""));
-      var del = el("button", actionClass, "Delete");
+      var del = el("button", hosted ? "cardx" : actionClass, hosted ? "\u00d7" : "Delete");
       del.setAttribute("data-lahe-act", "delete");
       del.setAttribute("type", "button");
+      if (hosted) {
+        del.setAttribute("aria-label", "Delete this comment");
+        del.title = "Delete this comment";
+      }
       del.addEventListener("click", function () {
         comments.remove(id);
       });
-      foot.appendChild(del);
+      if (hosted) row.appendChild(del);
+      else foot.appendChild(del);
       row.appendChild(foot);
 
       // The box for another message, under the row's own actions. It is drawn
@@ -803,7 +816,7 @@
             var handle = comments.boxFor(id) || comments.editInPlace(id, note);
             if (handle && typeof handle.commit === "function") handle.commit();
           });
-          del.parentNode.appendChild(sendBtn);
+          row.querySelector(".cardacts").appendChild(sendBtn);
         } else if (!wantSend && sendBtn) {
           sendBtn.parentNode.removeChild(sendBtn);
         }
