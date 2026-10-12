@@ -186,13 +186,12 @@ test("capture the rail as a reviewable mockup", async ({ page }) => {
 
     const rail = (fn, arg) => page.evaluate(fn, arg);
     const snap = async (label, caption) => {
+      // The fixture page has no document style, so boot hides the style
+      // button. Real documents show it, so the mockup does too.
+      await page.evaluate(() => window.__lahe.rail.setStyleAvailable(true));
       const s = await page.evaluate(snapshotInPage);
       shots.push(Object.assign({ label, caption }, s));
     };
-
-    // The fixture page has no document style, so the style button would stay
-    // hidden. Real documents show it, so the mockup does too.
-    await page.evaluate(() => window.__lahe.rail.setStyleAvailable(true));
 
     // An empty rail first.
     await rail(() => { window.__lahe.rail.collapse(false); window.__lahe.rail.selectTab("active"); });
