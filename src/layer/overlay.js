@@ -813,6 +813,9 @@
     "flex-direction:column;gap:9px;padding:11px 12px;",
     "border-radius:var(--radius-sm);background:var(--paper);border:1px solid var(--line);box-shadow:var(--shadow)}",
     ".stylepanel[data-shown='open']{display:flex}",
+    ".keyspanel__list{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:9px}",
+    ".keyspanel__row{display:flex;flex-direction:column;gap:3px;font-size:12px;line-height:1.45;color:var(--ink-soft)}",
+    ".keyspanel__row kbd{align-self:flex-start}",
     ".stylepanel__head{display:flex;align-items:center;justify-content:space-between;gap:8px}",
     ".stylepanel__title{font-size:12.5px;font-weight:700;color:var(--ink)}",
     // A column: the line, then its buttons. The words wrap rather than clip,
@@ -1254,6 +1257,10 @@
   // tab that is open, because that is the list the reviewer is looking at.
   var FOLD_ALL = { COLLAPSE: "collapse-cards", EXPAND: "expand-cards" };
 
+  // The keyboard shortcuts, behind the menu rather than standing in the pane.
+  // The menu item opens a panel that lists every gesture in gestures.js.
+  var SHORTCUTS = { ACTION: "shortcuts", LABEL: "Keyboard shortcuts", CLOSE: "Close" };
+
   // The Document style button (docs/features/20260930.01_style_switcher). It
   // has its own place in the head, beside the menu, and exists only on a page
   // that uses the house style, so it is built hidden and shown by
@@ -1266,6 +1273,7 @@
     { action: "export", label: "Export review to file" },
     { action: FOLD_ALL.COLLAPSE, label: "Collapse all cards" },
     { action: FOLD_ALL.EXPAND, label: "Expand all cards" },
+    { action: SHORTCUTS.ACTION, label: SHORTCUTS.LABEL },
     { action: PRESENT.ACTION, label: PRESENT.MENU_LABEL }
   ];
 
@@ -1855,6 +1863,9 @@
     var pdfOutsideListener = null;
     var pdfShadowListener = null;
     var stylePanelOpen = false;
+    var shortcutsOpen = false;
+    var shortcutsOutsideListener = null;
+    var shortcutsShadowListener = null;
     var styleHandlers = {};
     var styleOutsideListener = null;
     var styleShadowListener = null;
@@ -1891,6 +1902,7 @@
         // the style dropdown.
         closeMenu(false);
         closeStylePanel(false);
+        closeShortcuts(false);
         closePdfTray(false);
         return { rootId: markers.OVERLAY_ROOT_ID, remounted: false };
       }
@@ -2087,6 +2099,10 @@
             setPresenting(true);
             return;
           }
+          if (entry.action === SHORTCUTS.ACTION) {
+            openShortcuts();
+            return;
+          }
           if (entry.action === FOLD_ALL.COLLAPSE || entry.action === FOLD_ALL.EXPAND) {
             setCardsCollapsed(currentTab(), entry.action === FOLD_ALL.COLLAPSE);
             return;
@@ -2096,6 +2112,28 @@
         menuList.appendChild(item);
         return item;
       });
+      var keysPanel = el("div", "stylepanel keyspanel");
+      keysPanel.setAttribute("role", "group");
+      keysPanel.setAttribute("aria-label", SHORTCUTS.LABEL);
+      keysPanel.setAttribute("data-shown", "closed");
+      var keysHead = el("div", "stylepanel__head");
+      keysHead.appendChild(el("div", "stylepanel__title", SHORTCUTS.LABEL));
+      var keysClose = el("button", "endpanel__no", SHORTCUTS.CLOSE);
+      keysClose.setAttribute("type", "button");
+      keysClose.addEventListener("click", function () {
+        closeShortcuts(true);
+      });
+      keysHead.appendChild(keysClose);
+      keysPanel.appendChild(keysHead);
+      var keysList = el("ul", "keyspanel__list");
+      gestures.hintLines().forEach(function (line) {
+        var row = el("li", "keyspanel__row");
+        row.appendChild(el("kbd", null, line.keys));
+        row.appendChild(el("span", null, line.hint));
+        keysList.appendChild(row);
+      });
+      keysPanel.appendChild(keysList);
+
       menuBtn.addEventListener("click", function () {
         toggleMenu();
       });
@@ -2111,6 +2149,7 @@
       menuWrap.appendChild(menuBtn);
       menuWrap.appendChild(menuList);
       head.appendChild(menuWrap);
+      head.appendChild(keysPanel);
 
       var collapseBtn = el("button", "iconbtn", "→");
       collapseBtn.setAttribute("aria-label", "Collapse the rail");
@@ -2496,6 +2535,7 @@
         refusalBtn: refusalBtn,
         menuBtn: menuBtn,
         menuList: menuList,
+        keysPanel: keysPanel,
         menuItems: menuItems,
         menuWrap: menuWrap,
         styleWrap: styleWrap,
@@ -2625,6 +2665,7 @@
       // listeners go the same way.
       closeMenu(false);
       closeStylePanel(false);
+      closeShortcuts(false);
       closePdfTray(false);
       // An unanswered end-review question goes with the rail that asked it, and
       // whoever awaited it is told, rather than left holding a promise that can
@@ -5018,10 +5059,59 @@
     // and unmounting. A menu that survives one of those is a menu that hangs
     // over someone's page after they have moved on.
 
+    // The keyboard shortcuts panel. It hangs from the head like the style
+    // dropdown and closes the same ways: Close, Esc, or a click anywhere else.
+    function openShortcuts() {
+      if (!dom) return false;
+      if (shortcutsOpen) return true;
+      closeMenu(false);
+      closeStylePanel(false);
+      closePdfTray(false);
+      shortcutsOpen = true;
+      dom.keysPanel.setAttribute("data-shown", "open");
+      shortcutsOutsideListener = function (event) {
+        if (event.type === "keydown") {
+          if (event.key !== "Escape") return;
+          event.preventDefault();
+          event.stopPropagation();
+          closeShortcuts(true);
+          return;
+        }
+        if (fromOurTree(event)) return;
+        closeShortcuts(false);
+      };
+      shortcutsShadowListener = function (event) {
+        if (dom.keysPanel.contains(event.target)) return;
+        closeShortcuts(false);
+      };
+      doc.addEventListener("pointerdown", shortcutsOutsideListener, true);
+      doc.addEventListener("keydown", shortcutsOutsideListener, true);
+      dom.shadow.addEventListener("pointerdown", shortcutsShadowListener, true);
+      return true;
+    }
+
+    function closeShortcuts(returnFocus) {
+      if (shortcutsOutsideListener) {
+        doc.removeEventListener("pointerdown", shortcutsOutsideListener, true);
+        doc.removeEventListener("keydown", shortcutsOutsideListener, true);
+        shortcutsOutsideListener = null;
+      }
+      if (shortcutsShadowListener) {
+        if (dom) dom.shadow.removeEventListener("pointerdown", shortcutsShadowListener, true);
+        shortcutsShadowListener = null;
+      }
+      if (!shortcutsOpen) return false;
+      shortcutsOpen = false;
+      if (dom) dom.keysPanel.setAttribute("data-shown", "closed");
+      if (returnFocus && dom) dom.menuBtn.focus();
+      return true;
+    }
+
     function openMenu(index) {
       if (!dom || menuOpen) return menuOpen;
       // One thing hangs from the head at a time.
       closeStylePanel(false);
+      closeShortcuts(false);
       closePdfTray(false);
       menuOpen = true;
       dom.menuList.hidden = false;
@@ -5199,6 +5289,7 @@
       // One thing hangs from the head at a time.
       closeMenu(false);
       closeStylePanel(false);
+      closeShortcuts(false);
       pdfTrayOpen = true;
       dom.pdfTray.hidden = false;
       dom.pdfBtn.setAttribute("aria-expanded", "true");
@@ -5750,6 +5841,7 @@
       if (collapsed) {
         closeMenu(false);
         closeStylePanel(false);
+        closeShortcuts(false);
         closePdfTray(false);
       }
       renderCollapsed();
@@ -5784,6 +5876,7 @@
       if (presenting) {
         closeMenu(false);
         closeStylePanel(false);
+        closeShortcuts(false);
         closePdfTray(false);
       }
       if (persist !== false) persistCollapsedPreference();

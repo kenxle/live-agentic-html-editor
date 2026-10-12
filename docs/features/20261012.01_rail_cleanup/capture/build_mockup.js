@@ -97,7 +97,10 @@ html, body { margin: 0; background: #f4f3ef; }
 /* Unfix the copy: the real rail is pinned to the window; this one sits in the page,
    at its real width, showing every card instead of scrolling. */
 .mock-frame { display: block !important; position: relative !important; inset: auto !important; z-index: auto !important; width: 392px !important; height: auto !important; }
-.mock-frame .rail { position: relative !important; inset: auto !important; width: 392px !important; height: auto !important; }
+.mock-frame .rail { position: relative !important; inset: auto !important; width: 392px !important; height: auto !important; overflow: visible !important; }
+.mock-frame .menu, .mock-frame .stylepanel { max-height: none !important; }
+.mock-section:has(.keyspanel[data-mock-shown="open"]) .mock-stage,
+.mock-section:has(.keyspanel[data-shown="open"]) .mock-stage { padding-bottom: 380px; }
 .mock-frame .panes { overflow: visible !important; flex: none !important; }
 .mock-frame .pane { overflow: visible !important; flex: 1 1 auto !important; min-width: 0 !important; width: 100% !important; }
 .mock-frame .grip { display: none !important; }

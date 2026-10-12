@@ -198,6 +198,18 @@ test("capture the rail as a reviewable mockup", async ({ page }) => {
     await rail(() => { window.__lahe.rail.collapse(false); window.__lahe.rail.selectTab("active"); });
     await snap("Empty rail", "The rail before any comment. Active tab.");
 
+    // The head's menu, open, and the shortcuts panel it opens.
+    await page.evaluate(() => window.__lahe.rail.openMenu(0));
+    await snap("More actions menu", "The menu behind the three dots, open.");
+    await page.evaluate(() => {
+      const root = window.__lahe.rail.tabBody("active").getRootNode();
+      root.querySelector('.menuitem[data-action="shortcuts"]').click();
+    });
+    await snap("Keyboard shortcuts", "What the Keyboard shortcuts item in that menu opens.");
+    await page.keyboard.press("Escape");
+    // Focus back on the page, so the comment hotkey reaches it.
+    await page.mouse.click(40, 600);
+
     // The comments, one per state.
     const waiting = await commentOn(page, "section.focus p:nth-of-type(2)", "Cut the second sentence. It sounds defensive.");
     const asked = await commentOn(page, "p.lede", "Pick one number and use it twice.");

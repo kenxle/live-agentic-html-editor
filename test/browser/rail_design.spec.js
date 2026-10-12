@@ -132,7 +132,8 @@ test.describe("the rail as a shipping surface", () => {
       const styled = await page.evaluate(() => {
         const pane = window.__lahe.rail.tabBody("active");
         const foot = pane.querySelector(".lahe-rail-foot");
-        const keys = pane.querySelector(".lahe-rail-keys");
+        // The keycaps live in the shortcuts panel the head's menu opens.
+        const keys = pane.getRootNode().querySelector(".keyspanel kbd");
         const note = pane.querySelector(".lahe-rail-note");
         const acts = pane.querySelector(".cardacts");
         const del = pane.querySelector('[data-lahe-act="delete"]');
@@ -152,8 +153,8 @@ test.describe("the rail as a shipping surface", () => {
           keyFontSize: keyStyle ? keyStyle.fontSize : null,
           // ...and they are behind a disclosure rather than being a permanent
           // wall above the footer's own hints.
-          hintsBehindDisclosure: !!pane.querySelector("details.lahe-rail-more .lahe-rail-hints"),
-          hintsHidden: !!pane.querySelector("details.lahe-rail-more:not([open])"),
+          // The shortcuts moved behind the head's menu, so the pane has none.
+          paneShortcuts: !!pane.querySelector(".lahe-rail-more, .lahe-rail-hints"),
           // The note box is a surface, not a form control (F10).
           noteResize: (() => {
             const ta = foot ? foot.querySelector("textarea") : null;
@@ -178,8 +179,7 @@ test.describe("the rail as a shipping surface", () => {
       expect(styled.hasKeycap).toBe(true);
       expect(styled.keyBorder, "the keycap's bottom-weighted border").toBe("2px");
       expect(parseFloat(styled.keyFontSize)).toBeLessThan(13);
-      expect(styled.hintsBehindDisclosure, "one hint system: the keycaps, behind a disclosure").toBe(true);
-      expect(styled.hintsHidden, "and closed, so it is not a wall in an empty rail").toBe(true);
+      expect(styled.paneShortcuts, "no shortcuts list in the pane: the menu carries them").toBe(false);
       expect(styled.noteResize, "no native resize grabber on the note box").toBe("none");
       expect(styled.noteWhiteSpace).toBe("pre-wrap");
       expect(styled.noteEditable, "the reviewer's own words are the input").toBe(true);

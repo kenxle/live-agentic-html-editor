@@ -281,6 +281,7 @@ test.describe("the reviewer ends the review from the rail", () => {
       "Export review to file",
       "Collapse all cards",
       "Expand all cards",
+      "Keyboard shortcuts",
       "Hide for presenting (Cmd-Shift-X)"
     ]);
     await page.evaluate(() => window.__lahe.rail.closeMenu(false));

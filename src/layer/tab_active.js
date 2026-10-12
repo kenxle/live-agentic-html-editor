@@ -380,7 +380,8 @@
       footEl = el("footer", "lahe-rail-foot");
       footEl.appendChild(el("span", "lahe-rail-footlabel", "Add a note on the whole page"));
       panel.appendChild(footEl);
-      footEl.appendChild(hintList());
+      var hints = hintList();
+      if (hints) footEl.appendChild(hints);
 
       pill = el("button", "lahe-rail-pill", "Lahe");
       pill.setAttribute("type", "button");
@@ -418,7 +419,8 @@
       ensureHostedStyle(footEl);
       footEl.appendChild(el("span", "lahe-rail-footlabel", "Add a note on the whole page"));
       host.appendChild(footEl);
-      footEl.appendChild(hintList());
+      var hints = hintList();
+      if (hints) footEl.appendChild(hints);
 
       openNoteBox();
       unsubscribe = comments.onChange(function (item, event) {
@@ -491,10 +493,9 @@
         list.appendChild(li);
       });
       if (!hosted) return list;
-      var more = el("details", "lahe-rail-more");
-      more.appendChild(el("summary", null, "All shortcuts"));
-      more.appendChild(list);
-      return more;
+      // In the rail the shortcuts live behind the menu ("Keyboard shortcuts"),
+      // so the pane keeps no list of its own.
+      return null;
     }
 
     function hintText() {
@@ -507,7 +508,14 @@
           })
           .join("\n");
       }
-      return container.querySelector(".lahe-rail-hints").textContent;
+      var list = container.querySelector(".lahe-rail-hints");
+      if (list) return list.textContent;
+      return gestures
+        .hintLines()
+        .map(function (line) {
+          return line.keys + " " + line.hint;
+        })
+        .join("\n");
     }
 
     function onItemChanged(item, event) {

@@ -185,14 +185,16 @@ test.describe("the review's actions live in the head's menu", () => {
         return got.open ? got : null;
       }, { message: "the menu to open on a real click" });
       expect(info.expanded).toBe("true");
-      // Two review-level actions, plus the three the rail does to ITSELF:
-      // folding every card on the open tab either way, and present mode, which
-      // is the rail putting itself away for a talk rather than work for boot.
+      // Two review-level actions, plus the four the rail does to ITSELF:
+      // folding every card on the open tab either way, the shortcuts panel, and
+      // present mode, which is the rail putting itself away for a talk rather
+      // than work for boot.
       expect(info.items.map((one) => one.label)).toEqual([
         "Copy review",
         "Export review to file",
         "Collapse all cards",
         "Expand all cards",
+        "Keyboard shortcuts",
         "Hide for presenting (Cmd-Shift-X)"
       ]);
       info.items.forEach((one) => {
@@ -245,6 +247,50 @@ test.describe("the review's actions live in the head's menu", () => {
       info = await menuInfo(page);
       expect(info.open, "a collapsed rail carries no open menu").toBe(false);
       await page.evaluate(() => window.__lahe.rail.collapse(false));
+    } finally {
+      await app.close();
+      await helper.kill9();
+    }
+  });
+
+  test("Keyboard shortcuts opens a panel listing every gesture, and Esc closes it; the pane keeps no list", async ({
+    page
+  }) => {
+    const { app, helper, token } = await startBoth();
+    try {
+      await bootedPage(page, app, helper, token);
+      const readPanel = () =>
+        page.evaluate(() => {
+          const root = window.__lahe.rail.tabBody("active").getRootNode();
+          const panel = root.querySelector(".keyspanel");
+          const rect = panel ? panel.getBoundingClientRect() : null;
+          return {
+            open: !!panel && panel.getAttribute("data-shown") === "open",
+            shown: !!rect && rect.width > 0 && rect.height > 0,
+            rows: panel ? panel.querySelectorAll(".keyspanel__row").length : 0,
+            text: panel ? panel.textContent : "",
+            paneList: !!root.querySelector(".pane .lahe-rail-hints, .pane .lahe-rail-more")
+          };
+        });
+
+      const before = await readPanel();
+      expect(before.paneList, "the Active pane no longer carries a shortcuts list").toBe(false);
+      expect(before.shown, "the panel is closed until asked for").toBe(false);
+
+      await chooseMenuItem(page, "Keyboard shortcuts");
+      const open = await pollUntil(async () => {
+        const got = await readPanel();
+        return got.open ? got : null;
+      }, { message: "the shortcuts panel to open from the menu" });
+      expect(open.shown, "and to be really on screen").toBe(true);
+      expect(open.rows, "one row per gesture").toBe(require("../../src/shared/gestures.js").hintLines().length);
+      expect(open.text).toContain("Cmd-Shift-C");
+
+      await page.keyboard.press("Escape");
+      await pollUntil(async () => {
+        const got = await readPanel();
+        return got.open ? null : got;
+      }, { message: "Esc to close the shortcuts panel" });
     } finally {
       await app.close();
       await helper.kill9();
