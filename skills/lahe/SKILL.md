@@ -195,13 +195,13 @@ a timer, `/loop`, a scheduled wakeup, the Monitor tool, or a `tail` of your own.
 The timeout only matters in an unattended run (`-p`, the Agent SDK, CI, cloud),
 where the limit is real; there, relaunch when it is stopped.
 
-**Answer every item before you launch it.** A monitor that starts while any item
-is still unanswered prints that item and exits at once. Launch it with work still
-open and it dies, the Stop hook fires, you launch it again, and it dies again:
-each turn of that loop is a wasted model turn. So reply to everything the drain
-printed, run the drain until it prints nothing, and only then launch the monitor.
-When an item needs long work (a CI run, a build), finish it and reply before you
-launch, rather than launching while you wait.
+**It wakes you once per item.** The monitor remembers what it has printed to
+you. Relaunched while those items are still unanswered, it waits; it wakes on
+the first new item, a new revision of one, an ended review, or a Library
+request, and then prints the whole drain. So launch it again as soon as you have
+drained, even while you are still working an item (a CI run, a build): it will
+not exit on work you already have. The drain command is still the full list.
+After a takeover it starts fresh and prints everything unanswered.
 
 **A Stop hook reminds you when the watcher is down.** `npm run install-skills`
 installs `lahe hook stop` as a Claude Code Stop hook. When you try to end a turn
@@ -219,8 +219,8 @@ says the command was stopped, not that it exited with a code. When that happens:
 
 - Do not drain, and do not write to the reviewer. Just launch the same monitor
   command again in the background.
-- That relaunch is the check. The monitor's first poll prints any unanswered
-  work and exits at once, so nothing that landed during the gap is missed.
+- That relaunch is the check. The monitor's first poll prints anything that
+  landed during the gap and exits at once, so nothing is missed.
 - Keep that turn to the one tool call. A drain, a status note, or a "still
   watching" message turns every kill into a full no-op turn.
 

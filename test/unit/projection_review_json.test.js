@@ -119,7 +119,7 @@ test("the contract field is in the real projection byte for byte, and names no a
   // One launch waits until there is work: an interactive session puts no time
   // limit on a background command (Claude Code 2.1.288).
   assert.ok(/Claude Code: run lahe monitor --session <agent-session-id> as one Bash call, run_in_background true and timeout 86400000/.test(wholeFile), "the Claude Code line names the background monitor");
-  assert.ok(/reply to every item and run the drain until it prints nothing/.test(wholeFile), "the Claude Code line says to answer every item before launching");
+  assert.ok(/relaunched while those items are still unanswered, it waits/.test(wholeFile), "the Claude Code line says a relaunch waits on work already printed");
   assert.equal(/persistent/.test(wholeFile), false, "the removed Monitor tool option is named nowhere");
   assert.ok(/Read this contract once, when you start on a review/.test(wholeFile), "the contract is read once, not on every wake");
   assert.ok(/lahe monitor --session <agent-session-id>/.test(wholeFile), "the file names the scoped keep-up command an agent may run");

@@ -257,7 +257,7 @@ test("the canonical skill rejects the retired and cross-session workflows", () =
   assert.match(skill, /`timeout: 86400000`/);
   assert.match(skill, /BASH_MAX_TIMEOUT_MS/);
   assert.match(skill, /It stays open until there is work/);
-  assert.match(skill, /Answer every item before you launch it/);
+  assert.match(skill, /It wakes you once per item/);
   assert.match(skill, /A Stop hook reminds you when the watcher is down/);
   assert.match(skill, /On 0, drain to empty and launch the same command again,\s+the same way/);
   assert.doesNotMatch(skill, /persistent/);

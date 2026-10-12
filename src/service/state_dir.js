@@ -370,6 +370,11 @@ function activityPath(dir, sessionId) {
   return resolveWithin(dir, [AGENT_SESSIONS_DIR, assertSafeReviewId(sessionId), protocol.MONITOR.ACTIVITY_FILE]);
 }
 
+/** The items the monitor has already printed to the agent at this handoff rev. */
+function deliveredPath(dir, sessionId) {
+  return resolveWithin(dir, [AGENT_SESSIONS_DIR, assertSafeReviewId(sessionId), protocol.MONITOR.DELIVERED_FILE]);
+}
+
 function ensureAgentSessionDir(dir, sessionId) {
   ensureDir(dir);
   ensureDir(agentSessionsRoot(dir));
@@ -531,6 +536,7 @@ module.exports = {
   wakeLogPath: wakeLogPath,
   monitorPath: monitorPath,
   activityPath: activityPath,
+  deliveredPath: deliveredPath,
   ensureAgentSessionDir: ensureAgentSessionDir,
   staticServersRoot: staticServersRoot,
   staticServerPath: staticServerPath,

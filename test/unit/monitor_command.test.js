@@ -486,3 +486,84 @@ test("the usage text names every exit code a host has to act on", () => {
   assert.match(monitor.USAGE, new RegExp("\\s" + protocol.CLI_EXIT.SESSION_TAKEN_OVER + "\\s+another agent took"));
   assert.doesNotMatch(monitor.USAGE, /--seen-file/, "the usage no longer teaches a ledger");
 });
+
+// THE RELAUNCH LOOP (2026-10-11). A monitor started while an item it already
+// printed is still unanswered used to print it again and exit at once. An
+// agent still working that item (waiting on CI, say) relaunched, the monitor
+// died, the Stop hook fired, and each round was a wasted model turn: 99 of 109
+// Stop hook alarms in four days came within a minute of a launch. A printed
+// item at the same revision is not new work, so the monitor waits instead.
+function scriptedRun(store, lines, extra) {
+  const stdout = [];
+  const opts = Object.assign({
+    stdout: (text) => stdout.push(text),
+    stderr: () => {},
+    store: () => store,
+    pid: process.pid,
+    wait: async () => {}
+  }, extra || {});
+  let poll = 0;
+  opts.statusRun = async (_args, io) => {
+    const out = lines[Math.min(poll, lines.length - 1)];
+    poll += 1;
+    if (out) io.stdout(out);
+    return protocol.CLI_EXIT.OK;
+  };
+  return { stdout, opts, polls: () => poll };
+}
+
+const ITEM_ONE = '{"review":"r","id":"c_one","rev":1}\n';
+const ITEM_TWO = '{"review":"r","id":"c_two","rev":1}\n';
+const SUMMARY = '{"reviews":1,"unanswered_ready":1,"ended_reviews":[],"catalog_requests":[]}\n';
+
+test("a relaunch waits on work it already printed, and wakes when something new lands", async () => {
+  const dir = tempDir();
+  const store = agentSessions.createStore({ dir: dir });
+  store.create({ id: "s_loop" });
+
+  const first = scriptedRun(store, [ITEM_ONE + SUMMARY]);
+  assert.equal(await monitor.run(["--session", "s_loop"], first.opts), protocol.CLI_EXIT.OK);
+  assert.match(first.stdout.join(""), /c_one/);
+
+  // Relaunched with c_one still unanswered: two quiet polls, then c_two lands.
+  const second = scriptedRun(store, [ITEM_ONE + SUMMARY, ITEM_ONE + SUMMARY, ITEM_ONE + ITEM_TWO + SUMMARY], { pid: process.pid + 1 });
+  assert.equal(await monitor.run(["--session", "s_loop"], second.opts), protocol.CLI_EXIT.OK);
+  assert.equal(second.polls(), 3, "it kept polling past the item it had already printed");
+  const printed = second.stdout.join("");
+  assert.match(printed, /c_two/, "the new item is printed");
+  assert.match(printed, /c_one/, "the drain output is printed whole, old item included");
+});
+
+test("the same item at a new revision is new work", async () => {
+  const dir = tempDir();
+  const store = agentSessions.createStore({ dir: dir });
+  store.create({ id: "s_rev" });
+
+  await monitor.run(["--session", "s_rev"], scriptedRun(store, [ITEM_ONE + SUMMARY]).opts);
+  const reworded = scriptedRun(store, ['{"review":"r","id":"c_one","rev":2}\n' + SUMMARY], { pid: process.pid + 1 });
+  assert.equal(await monitor.run(["--session", "s_rev"], reworded.opts), protocol.CLI_EXIT.OK);
+  assert.equal(reworded.polls(), 1, "a reworded item wakes the agent on the first poll");
+});
+
+test("after a takeover the new agent is woken on everything still unanswered", async () => {
+  const dir = tempDir();
+  const store = agentSessions.createStore({ dir: dir });
+  store.create({ id: "s_handed" });
+
+  await monitor.run(["--session", "s_handed"], scriptedRun(store, [ITEM_ONE + SUMMARY]).opts);
+  store.takeover("s_handed");
+  const fresh = scriptedRun(store, [ITEM_ONE + SUMMARY], { pid: process.pid + 1 });
+  assert.equal(await monitor.run(["--session", "s_handed"], fresh.opts), protocol.CLI_EXIT.OK);
+  assert.equal(fresh.polls(), 1, "the old agent's printed list does not hide work from the new one");
+});
+
+test("an ended review or a Library request is new work even when every item was printed", async () => {
+  const dir = tempDir();
+  const store = agentSessions.createStore({ dir: dir });
+  store.create({ id: "s_ended" });
+
+  await monitor.run(["--session", "s_ended"], scriptedRun(store, [ITEM_ONE + SUMMARY]).opts);
+  const ended = scriptedRun(store, [ITEM_ONE + '{"reviews":1,"unanswered_ready":1,"ended_reviews":[{"review":"r"}],"catalog_requests":[]}\n'], { pid: process.pid + 1 });
+  assert.equal(await monitor.run(["--session", "s_ended"], ended.opts), protocol.CLI_EXIT.OK);
+  assert.equal(ended.polls(), 1);
+});
