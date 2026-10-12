@@ -419,18 +419,18 @@ test.describe("flow walk fixes, replay and rail side", () => {
           const card = rail.cardNode(i.id);
           return !!card && card.getClientRects().length > 0;
         });
-        return { drafts: drafts.length, shown: shown.length, edits: rail.countFor("edits") };
+        return { drafts: drafts.length, shown: shown.length, edits: rail.countFor("active") };
       });
     await page.evaluate(() => {
       window.__lahe.rail.collapse(false);
-      window.__lahe.rail.selectTab("edits");
+      window.__lahe.rail.selectTab("active");
     });
     // Whether or not capture keeps a draft for an untouched block, none is drawn.
     const opened = await view();
     expect(opened.shown, "no draft card for an untouched block").toBe(0);
-    expect(opened.edits, "the Edits count does not move").toBe(0);
+    expect(opened.edits, "the Active count does not move").toBe(0);
     await page.keyboard.type(" More.", { delay: 2 });
-    await pollPage(page, () => window.__lahe.rail.countFor("edits") === 1, undefined, { message: "the typed change to draw its card" });
+    await pollPage(page, () => window.__lahe.rail.countFor("active") === 1, undefined, { message: "the typed change to draw its card" });
     expect((await view()).shown).toBe(1);
   });
 
@@ -454,12 +454,12 @@ test.describe("flow walk fixes, replay and rail side", () => {
     const got = await page.evaluate((id) => {
       const rail = window.__lahe.rail;
       rail.collapse(false);
-      rail.selectTab("edits");
+      rail.selectTab("active");
       const card = rail.cardNode(id);
       return {
         stored: window.__lahe.items().some((i) => i.id === id && i.state === "draft"),
         shown: !!card && card.getClientRects().length > 0,
-        edits: rail.countFor("edits")
+        edits: rail.countFor("active")
       };
     }, draft.id);
     expect(got.stored, "the draft is still in storage").toBe(true);

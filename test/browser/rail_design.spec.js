@@ -571,7 +571,7 @@ test.describe("the rail as a shipping surface", () => {
 
   // --- F5b: the same defect on a handled HAND EDIT ---------------------------
   //
-  // A handled edit card carries TWO rows, the Edits tab's and the Done tab's,
+  // A handled edit card carries TWO rows, the hand-edit row and the Done tab's,
   // and both used to print the change summary: once at the top of the card,
   // once under the before-and-after, with the diff itself saying it a third
   // time in between. The two things the reviewer can do about it were at
@@ -684,7 +684,7 @@ test.describe("the rail as a shipping surface", () => {
   // --- F5c: the relocation on a COLD LOAD, not only after a remount ----------
   //
   // Reopen moves into the Edits row's footer only if that row is on the card
-  // when the Done tab paints. The Done tab mounted BEFORE the Edits tab existed,
+  // when the Done tab paints. The Done tab mounted BEFORE the hand-edit rows existed,
   // and nothing refreshed it afterwards, so on an ordinary page load with a
   // handled hand edit already in storage the button stayed at the top of the
   // card. Every test that saw the relocation had remounted the rail first, which
@@ -752,7 +752,7 @@ test.describe("the rail as a shipping surface", () => {
       await pollPage(page, (id) => !!window.__lahe.rail.getCard(id), item.id, {
         message: "the hand edit to get its row"
       });
-      await page.evaluate(() => window.__lahe.rail.selectTab("edits"));
+      await page.evaluate(() => window.__lahe.rail.selectTab("active"));
 
       // The reviewer's own gesture: the Undo button on the card.
       await page.evaluate((id) => {

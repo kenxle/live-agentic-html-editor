@@ -224,6 +224,9 @@ test.describe("a collision on reload is told on the page until dealt with", () =
   test("pressing the toast opens the rail on the conflict card", async ({ page }) => {
     const { id } = await reachTheConflict(page, pages, "conflict-toast-open");
     const toast = await waitForConflictToast(page);
+    // The reviewer had the Active pane filtered to comments, which hides the
+    // hand edit's card. Pressing the toast has to show it anyway.
+    await page.evaluate(() => window.__lahe.rail.setActiveFilter("comments"));
 
     await page.mouse.click(toast.rect.x + toast.rect.width / 2, toast.rect.y + toast.rect.height / 2);
     await pollPage(page, () => window.__lahe.rail.isCollapsed() === false, undefined, {
@@ -231,9 +234,11 @@ test.describe("a collision on reload is told on the page until dealt with", () =
     });
     const rail = await page.evaluate(() => ({
       tab: window.__lahe.rail.currentTab(),
+      filter: window.__lahe.rail.currentFilter(),
       focused: window.__lahe.rail.focusedCardId()
     }));
-    expect(rail.tab, "on the tab the conflict card is in").toBe("edits");
+    expect(rail.tab, "on the tab the conflict card is in").toBe("active");
+    expect(rail.filter, "with the filter no longer hiding it").toBe("all");
     expect(rail.focused, "with that card focused").toBe(id);
     expect(await conflictToasts(page), "and the toast has done its job").toEqual([]);
   });
@@ -255,7 +260,7 @@ test.describe("a collision on reload is told on the page until dealt with", () =
       () =>
         page.evaluate((itemId) => {
           const rail = window.__lahe.handle.rail;
-          rail.selectTab("edits");
+          rail.selectTab("active");
           const node = rail.cardNode(itemId);
           const button = node ? node.querySelector('[data-lahe-conflict-choice="keep_mine"]') : null;
           if (!button) return null;

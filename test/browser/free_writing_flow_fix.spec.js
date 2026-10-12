@@ -437,7 +437,7 @@ test.describe("+ Write here: a comfortable target, and a near miss still writes"
 test.describe("Cmd-Shift-E right after clicking the rail", () => {
   async function clickRailTab(page, name) {
     const rect = await page.evaluate((label) => {
-      const root = window.__lahe.rail.tabBody("edits").getRootNode();
+      const root = window.__lahe.rail.tabBody("active").getRootNode();
       const tab = Array.from(root.querySelectorAll('[role="tab"]')).find((t) => t.textContent.indexOf(label) !== -1);
       const r = tab.getBoundingClientRect();
       return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
@@ -447,7 +447,7 @@ test.describe("Cmd-Shift-E right after clicking the rail", () => {
     // keyboard user tabbing into the rail gets there anyway. Focus the tab so
     // every engine starts from the same place: the rail holding focus.
     await page.evaluate((label) => {
-      const root = window.__lahe.rail.tabBody("edits").getRootNode();
+      const root = window.__lahe.rail.tabBody("active").getRootNode();
       const tab = Array.from(root.querySelectorAll('[role="tab"]')).find((t) => t.textContent.indexOf(label) !== -1);
       if (root.activeElement !== tab) tab.focus();
     }, name);
@@ -463,7 +463,7 @@ test.describe("Cmd-Shift-E right after clicking the rail", () => {
     await fw.openFixture(page, server, "blog.html", { collapseRail: false });
     await fw.caretAt(page, "#p1", HEAD.length);
     await page.evaluate(() => new Promise((r) => requestAnimationFrame(r)));
-    await clickRailTab(page, "Edits");
+    await clickRailTab(page, "Done");
     await page.keyboard.press("ControlOrMeta+Shift+KeyE");
     await pollPage(page, () => window.__lahe.isEditing() === true, undefined, { message: "the chord to open #p1" });
     expect(await page.evaluate(() => window.__lahe.handle.editing.sessionElements()[0].id)).toBe("p1");
@@ -475,7 +475,7 @@ test.describe("Cmd-Shift-E right after clicking the rail", () => {
   test("with no caret on the page, the chord still enters edit state", async ({ page }) => {
     await fw.openFixture(page, server, "blog.html", { collapseRail: false });
     await page.evaluate(() => window.getSelection().removeAllRanges());
-    await clickRailTab(page, "Edits");
+    await clickRailTab(page, "Done");
     await page.keyboard.press("ControlOrMeta+Shift+KeyE");
     await pollPage(page, () => window.__lahe.editState().editState === true || window.__lahe.isEditing() === true, undefined, {
       message: "the chord to enter edit state"
@@ -484,19 +484,19 @@ test.describe("Cmd-Shift-E right after clicking the rail", () => {
 });
 
 // Flow walk design problem 6: Cmd-Shift-E on a paragraph, nothing typed, drew
-// a Draft card with the whole block struck through and moved the Edits count.
+// a Draft card with the whole block struck through and moved the hand-edit count.
 test.describe("opening a block without changing it shows no card", () => {
   for (const scheme of ["light", "dark"]) {
     test("no card and no count until the first change, and the draft is still stored (" + scheme + ")", async ({ page }) => {
       await fw.openFixture(page, server, scheme === "dark" ? "dark.html" : "blog.html", { collapseRail: false });
-      await page.evaluate(() => window.__lahe.rail.selectTab("edits"));
+      await page.evaluate(() => window.__lahe.rail.selectTab("active"));
       const target = scheme === "dark" ? "main > p" : "#p1";
       await fw.openEdit(page, target);
       const opened = await page.evaluate(() => {
         const h = window.__lahe.handle;
         return {
           cards: window.__lahe.cardIds().length,
-          edits: window.__lahe.rail.tabNewCount ? window.__lahe.rail.tabNewCount("edits") : null,
+          edits: window.__lahe.rail.tabNewCount ? window.__lahe.rail.tabNewCount("active") : null,
           stored: h.store.read(h.review).filter((it) => it.kind === "edit" && it.state === "draft").length
         };
       });
