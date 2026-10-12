@@ -99,6 +99,22 @@ test.describe("the status line tells the truth", () => {
       expect(whileDown.pending, "the backlog is still queued while it says kept-locally").toBeGreaterThan(0);
       expect(whileDown.text).toContain("Nothing is lost");
 
+      // The status dot while the helper is down: a red octagon whose tip says
+      // so in Ken's words, and a click that copies a restart request.
+      const dot = await page.evaluate(() => window.__laheRail.statusLine());
+      expect(dot.dotTip.split("\n")[0]).toMatch(/^Lahe server helper is down\. Page may crash\./);
+      expect(dot.dotCopies).toBe(true);
+      await page.evaluate(() => {
+        window.__copied = null;
+        Object.defineProperty(navigator, "clipboard", {
+          configurable: true,
+          value: { writeText: (text) => { window.__copied = text; return Promise.resolve(); } }
+        });
+      });
+      await page.mouse.click(dot.dotRect.x + dot.dotRect.width / 2, dot.dotRect.y + dot.dotRect.height / 2);
+      await pollPage(page, () => typeof window.__copied === "string", undefined, { message: "the dot to copy" });
+      expect(await page.evaluate(() => window.__copied)).toContain("lahe serve");
+
       second = await startService({
         entry: SERVICE_ENTRY,
         stateDir: stateDir,

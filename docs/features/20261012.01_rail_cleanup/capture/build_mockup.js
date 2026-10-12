@@ -96,7 +96,7 @@ const firstLine = [
   ["Stored, nothing has come back (after " + QUIET + "; click copies)", OVERLAY.DOT_WORDS.waiting],
   ["Stored, no agent has picked it up (after " + QUIET + "; click copies)", OVERLAY.DOT_WORDS.no_agent],
   ["Stored, nothing to say about an agent", OVERLAY.STATUS_SHORT.stored],
-  ["Kept in the browser, helper not answering", OVERLAY.STATUS_SHORT.kept_locally],
+  ["The helper is down (red octagon; click copies a restart request)", OVERLAY.DOT_WORDS.helper_down],
   ["The page is about to reload onto a new build", OVERLAY.STATUS_SHORT.page_reloading]
 ];
 const detail = [
@@ -256,8 +256,22 @@ function stamped(html) {
     pg.items.forEach(function (it) {
       const stamp = it.region && it.region.stamp;
       const words = it.after_full || (it.page && it.page.after_full);
-      if (!stamp || !words || it.kind !== "edit" || words.indexOf("\n") !== -1) return;
+      if (!stamp || !words || it.kind !== "edit") return;
       if (out.indexOf('data-lahe-id="' + stamp + '"') !== -1) return;
+      if (words.indexOf("\n") !== -1) {
+        // A whole list reworded: find it by where it was, its section and its
+        // own tag and class, and stamp the first one there.
+        const where = (it.region && it.region.where) || "";
+        const section = /section#(state-\d+)/.exec(where);
+        const last = /([a-z]+)\.([\w-]+)$/.exec(where);
+        if (!section || !last) return;
+        const from = out.indexOf('id="' + section[1] + '"');
+        const open = "<" + last[1] + ' class="' + last[2];
+        const at = from === -1 ? -1 : out.indexOf(open, from);
+        if (at === -1) return;
+        out = out.slice(0, at) + "<" + last[1] + ' data-lahe-id="' + stamp + '"' + out.slice(at + last[1].length + 1);
+        return;
+      }
       const re = new RegExp("<(p|td|li|span|div)((?:\\s[^>]*)?)>" + esc(words).replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "</\\1>");
       out = out.replace(re, function (all, tag, attrs) {
         return "<" + tag + attrs + ' data-lahe-id="' + stamp + '">' + esc(words) + "</" + tag + ">";
