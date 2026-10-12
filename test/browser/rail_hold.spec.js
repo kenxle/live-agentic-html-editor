@@ -250,7 +250,7 @@ test.describe("Hold: queue several comments, release them to the agent at once",
       expect(onInfo.countText, "R5: zero queued reads a sentence, not a bare 0").toBe(
         "Holding — nothing sends until you release"
       );
-      expect(onInfo.label, "held with nothing queued, the button lets go").toBe("Stop holding messages");
+      expect(onInfo.label, "held with nothing queued, the button lets go").toBe("Send messages live");
 
       const held = await sendComment(page, "section.focus p:nth-of-type(1)", "Batched while managing turns.");
       const draft = await leaveDraft(page, "section.focus p:nth-of-type(2)", "Half written, not sent yet.");

@@ -263,7 +263,7 @@
   var HOLD_LABEL = "Hold sending messages";
   // While held, the same button sends what is queued.
   function holdReleaseLabel(n) {
-    if (n === 0) return "Stop holding messages";
+    if (n === 0) return "Send messages live";
     return "Send " + n + " held message" + (n === 1 ? "" : "s");
   }
   var HOLD_ZERO_TEXT = "Holding — nothing sends until you release";
