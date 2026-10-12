@@ -916,7 +916,10 @@ async function serve(options) {
     sites: sites,
     pagesPort: boundPagesPort,
     printedPort: function () { return addresses ? addresses.printedPort() : boundPagesPort; },
-    laheNames: function () { return !!addresses && addresses.laheNamesVerified(); }
+    laheNames: function () { return !!addresses && addresses.laheNamesVerified(); },
+    // A review's records off the projector's kept fold, for "which file was
+    // this record made on" (page_routes.fileOfItem) without reading the log.
+    items: function (reviewId) { return projection.currentItems(deps, reviewId); }
   });
 
   // Page-server processes from before stable addresses are stopped on every

@@ -67,6 +67,10 @@ var HANDLERS = {
   // seen acknowledged on every reconnect. Both paths land here, and the second
   // one is why the response names exactly which event_ids are on disk.
   "events.append": function (request, deps) {
+    // A retired review takes no events, whoever holds its token.
+    if (typeof deps.reviews.isRetired === "function" && deps.reviews.isRetired(request.review)) {
+      return { status: 410, error: { code: "PROTO_REVIEW_RETIRED", detail: request.review } };
+    }
     var body = request.body || {};
     var events = body.events;
     if (!Array.isArray(events)) {
@@ -842,6 +846,22 @@ function encodeEntry(entry) {
 }
 
 var SITE_HANDLERS = {
+  // Only the owning session retires its review: the same rule add.js's
+  // refuseForeign applies. A handoff is `lahe session takeover`, never this.
+  "review.retire": function (request, deps) {
+    var body = request.body || {};
+    if (!protocol.isSafeId(body.review)) return badSiteRequest("review must be a review id");
+    if (!protocol.isSafeId(body.session)) return badSiteRequest("session must be an agent session id");
+    deps.reviews.ensureKnown(body.review);
+    var review = deps.reviews.get(body.review);
+    if (!review) return { status: 404, error: { code: "PROTO_UNKNOWN_REVIEW", detail: body.review } };
+    if (review.agent_session_id !== body.session) {
+      return { status: 403, error: { code: "PROTO_NOT_OWNER", detail: "owned by another agent session" } };
+    }
+    var done = deps.reviews.retire(review.id, new Date(deps.now()).toISOString());
+    return { status: 200, body: { review: done.id, retired_at: done.retired_at } };
+  },
+
   "site.bind": function (request, deps) {
     if (!deps.sites) throw missingDependency("site.bind", "sites");
     var body = request.body || {};

@@ -248,7 +248,9 @@ test("the same file reviewed again prints the same address", async (t) => {
   const w = await cliWorld(t);
   const file = writeFile(w.home, "ws/repo/docs/page.html", PAGE);
   const first = openUrl(review(w, [file]));
-  const second = openUrl(review(w, [file, "--new-session"]));
+  // Another agent, with no session: one review per file opens the same review,
+  // at the same address (--new-session on a file with a review is refused).
+  const second = openUrl(run(w, ["review", file, "--port", String(w.port)]));
   assert.equal(first, second);
 });
 

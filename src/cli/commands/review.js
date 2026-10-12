@@ -12,9 +12,11 @@ var markdown = require("../../service/markdown.js");
 var sitesModule = require("../../service/sites.js");
 var service = require("../../service/index.js");
 var add = require("./add.js");
+var pageRoutes = require("../../service/page_routes.js");
 
 var USAGE = [
   "usage: lahe review <file-or-directory> [--session <id>] [--new-session] [--name <name>] [add options]",
+  "       lahe review retire <review-id> --session <id>",
   "",
   "Starts a new agent session for a new target, or infers the existing target's session.",
   "Markdown is rendered in the St. Clair AI document style with local Mermaid diagrams.",
@@ -23,7 +25,11 @@ var USAGE = [
   "Use the printed session id for later documents and the status monitor.",
   "--new-session deliberately starts a separate session and review.",
   "--name records the human's name for this agent session (what your host calls it,",
-  "for example after /rename), so the reviewer's rail can say which agent to check."
+  "for example after /rename), so the reviewer's rail can say which agent to check.",
+  "",
+  "One review per file: a file that already has a review opens that review. In another",
+  "session's review, the command says whose it is and makes no second one.",
+  "retire ends one of your own session's reviews on purpose, so the file can get a new one."
 ].join("\n");
 
 /**
@@ -106,6 +112,7 @@ function inferSession(dir, target) {
   metaFiles(dir).forEach(function (file) {
     var meta;
     try { meta = JSON.parse(fs.readFileSync(file, "utf8")); } catch (err) { return; }
+    if (typeof meta.retired_at === "string") return;
     var targets = Array.isArray(meta.target_paths) ? meta.target_paths.slice() : [];
     if (meta.target_path && targets.indexOf(meta.target_path) === -1) targets.push(meta.target_path);
     if (targets.indexOf(resolved) === -1 && meta.source_path !== resolved) return;
@@ -131,7 +138,7 @@ function recordedReviewFor(dir, sessionId, target) {
   metaFiles(dir).forEach(function (file) {
     var meta;
     try { meta = JSON.parse(fs.readFileSync(file, "utf8")); } catch (err) { return; }
-    if (!meta || meta.agent_session_id !== sessionId) return;
+    if (!meta || meta.agent_session_id !== sessionId || typeof meta.retired_at === "string") return;
     var targets = Array.isArray(meta.target_paths) ? meta.target_paths.slice() : [];
     if (meta.target_path && targets.indexOf(meta.target_path) === -1) targets.push(meta.target_path);
     if (targets.indexOf(resolved) === -1) return;
@@ -150,7 +157,71 @@ function recordedReviewFor(dir, sessionId, target) {
  *   src/service/sites.js, served by the helper), no asset mount and no link
  *   mounts, and the review is minted as a notes review. `notesFolder` is the real parent path it prints.
  */
+/**
+ * `lahe review retire <review-id> --session <id>`: end one of this session's
+ * reviews on purpose. The helper checks the owner (review.retire).
+ */
+async function runRetire(argv) {
+  var reviewId = null;
+  var sessionId = null;
+  var port = null;
+  var stateDirArg = null;
+  for (var i = 0; i < argv.length; i += 1) {
+    if (argv[i] === "--session") sessionId = argv[(i += 1)];
+    else if (argv[i] === "--port") port = Number(argv[(i += 1)]);
+    else if (argv[i] === "--state-dir") stateDirArg = argv[(i += 1)];
+    else if (!reviewId) reviewId = argv[i];
+    else {
+      process.stderr.write("lahe review retire: unexpected argument " + JSON.stringify(argv[i]) + "\n");
+      return protocol.CLI_EXIT.BAD_USAGE;
+    }
+  }
+  if (!protocol.isSafeId(reviewId) || !protocol.isSafeId(sessionId)) {
+    process.stderr.write("usage: lahe review retire <review-id> --session <id>\n");
+    return protocol.CLI_EXIT.BAD_USAGE;
+  }
+  var dir;
+  try {
+    dir = stateDirArg ? stateDir.stateDir({ dir: stateDirArg }) : stateDir.stateDir();
+  } catch (err) {
+    process.stderr.write("lahe review retire: " + err.message + "\n");
+    return 1;
+  }
+  var secret = sitesModule.readCliSecret(dir);
+  var ready = null;
+  try { ready = JSON.parse(fs.readFileSync(stateDir.readyPath(dir), "utf8")); } catch (err) { ready = null; }
+  var helperPort = Number.isInteger(port) && port > 0 ? port : ready && typeof ready.port === "number" ? ready.port : protocol.DEFAULT_PORT;
+  if (!secret || !(await service.probeHealth(protocol.DEFAULT_HOST, helperPort))) {
+    process.stderr.write("lahe review retire: no helper is running for " + dir + "; start one with lahe serve\n");
+    return protocol.CLI_EXIT.HELPER_UNREACHABLE;
+  }
+  var headers = {};
+  headers[protocol.HEADER.CLIENT] = protocol.CLIENT_CLI;
+  headers[protocol.HEADER.CONTENT_TYPE] = protocol.JSON_CONTENT_TYPE;
+  headers[protocol.HEADER.CLI_SECRET] = secret;
+  var res = await fetch("http://" + protocol.DEFAULT_HOST + ":" + helperPort + protocol.route("review.retire").path, {
+    method: "POST",
+    headers: headers,
+    body: JSON.stringify({ review: reviewId, session: sessionId })
+  });
+  var answer = null;
+  try { answer = await res.json(); } catch (err) { answer = null; }
+  if (res.status !== 200) {
+    var code = answer && answer.error ? answer.error.code : null;
+    var why = code === "PROTO_NOT_OWNER"
+      ? "review " + reviewId + " belongs to another agent session, so this session cannot retire it. Ask your human."
+      : code === "PROTO_UNKNOWN_REVIEW"
+        ? "there is no review " + reviewId
+        : "the helper refused (status " + res.status + ")";
+    process.stderr.write("lahe review retire: " + why + "\n");
+    return 1;
+  }
+  process.stdout.write("review " + reviewId + " retired at " + answer.retired_at + ". Its log is kept; `lahe review` of its file makes a new review.\n");
+  return protocol.CLI_EXIT.OK;
+}
+
 async function run(argv, mode) {
+  if (argv && argv[0] === "retire" && !(mode && mode.notes)) return runRetire(argv.slice(1));
   var notesMode = !!(mode && mode.notes);
   var notesFolder = mode && mode.notesFolder ? mode.notesFolder : null;
   var list = (argv || []).slice();
@@ -193,6 +264,32 @@ async function run(argv, mode) {
     return 1;
   }
   var store = sessions.createStore({ dir: dir });
+
+  // ONE REVIEW PER FILE (each_page_its_own_comments.md, Part 1). A file that
+  // already has a review opens that review. In this session's own review the
+  // command goes on as before; in another session's it prints the address,
+  // says whose it is, and makes nothing. It never makes a second review.
+  if (!notesMode) {
+    var holder = null;
+    try { holder = pageRoutes.holderOfFile(dir, originalTarget); } catch (err) { holder = null; }
+    if (holder) {
+      var owner = typeof holder.meta.agent_session_id === "string" ? holder.meta.agent_session_id : sessions.LEGACY_ID;
+      var own = !!opts.session && owner === opts.session;
+      if (newSession || opts.isNew) {
+        process.stderr.write(
+          "lahe review: " + path.basename(originalTarget) + " already has a review (" + holder.review + "), and a file has one review. " +
+            (own
+              ? "To start over, retire it first: lahe review retire " + holder.review + " --session " + opts.session + "\n"
+              : "It belongs to another agent session. Ask your human before doing anything else with it.\n")
+        );
+        return protocol.CLI_EXIT.BAD_USAGE;
+      }
+      if (!own) return openOthersReview(dir, opts, store, holder, owner, originalTarget);
+      // This session's folder or linking review holds the file: add it there.
+      if (holder.tier > 1 && !opts.review) list.push("--review", holder.review);
+    }
+  }
+
   var sessionId = opts.session;
   var createdSession = false;
   try {
@@ -392,6 +489,58 @@ function planSite(target, originalTarget, rendered, opts, notesMode) {
     return { root: target, mode: "folder", entry: entry, served: "folder" };
   }
   return { root: path.dirname(target), mode: "folder", entry: path.basename(target), served: "file" };
+}
+
+/**
+ * The file's review belongs to another agent session (or to none, from before
+ * sessions). Open it: the helper serves the file's address with that review's
+ * rail, and nothing is made or moved. What to do next is the human's call when
+ * that session's agent is listening; a closed or unwatched session can be
+ * taken over, which reopens it.
+ */
+async function openOthersReview(dir, opts, store, holder, owner, target) {
+  var port = typeof opts.port === "number" ? opts.port : protocol.DEFAULT_PORT;
+  var bound = null;
+  try {
+    await require("./session.js").startHelper(dir, port);
+    var isFolder = fs.existsSync(target) && fs.statSync(target).isDirectory();
+    var plan = isFolder
+      ? { root: target, mode: "folder", entry: add.folderEntryPage(target), served: "folder" }
+      : { root: path.dirname(target), mode: "folder", entry: path.basename(target), served: "file" };
+    if (isFolder && !plan.entry) throw new Error("there are no pages in " + target + " to open");
+    bound = await bindSite(dir, port, holder.review, plan);
+  } catch (err) {
+    process.stderr.write("lahe review: " + err.message + "\n");
+    return 1;
+  }
+  var legacy = owner === sessions.LEGACY_ID;
+  var session = null;
+  try { session = legacy ? null : store.read(owner); } catch (err) { session = null; }
+  var agentName = session && typeof session.name === "string" && session.name ? session.name : null;
+  var listening = !legacy && sessions.isListening(store, owner, Date.now());
+  var lines = [
+    "",
+    "  open      " + bound.url,
+    "  review    " + holder.review + (legacy ? "  (from before agent sessions)" : "  (agent session " + owner + (agentName ? ", " + agentName : "") + (session && session.closed_at ? ", closed" : "") + ")"),
+    "",
+    "This file already has a review, so this command opened it and made no second one."
+  ];
+  if (legacy) {
+    lines.push("It is from before agent sessions. To work on it, pick it up from the Library.");
+  } else if (listening) {
+    lines.push(
+      "That session's agent is listening right now. Ask your human before doing anything else with this page:",
+      "handing a session to another agent is theirs to ask for."
+    );
+  } else {
+    lines.push(
+      "Nobody is listening to that session. If your human asks you to continue it, take it over (this reopens it",
+      "if it is closed):",
+      "  lahe session takeover " + owner
+    );
+  }
+  process.stdout.write(lines.join("\n") + "\n");
+  return protocol.CLI_EXIT.OK;
 }
 
 /** A notes review is minted as one, and never reuses an ordinary review. */

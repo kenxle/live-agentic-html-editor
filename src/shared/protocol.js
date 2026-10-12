@@ -69,7 +69,11 @@
   // 16: older helpers serve no pages themselves: they have no pages port, no
   // site registry and no site.bind route, so `lahe review` could not give a
   // page its stable address. They must be restarted.
-  var SERVICE_CONTRACT = 16;
+  // 17: older helpers have no review.retire route, take events for a retired
+  // review, answer records.read for one review only, and bind a file into its
+  // own folder site even inside a reviewed folder, so one file could get two
+  // addresses. They must be restarted.
+  var SERVICE_CONTRACT = 17;
 
   // What a CLI or layer makes of the contract a running helper reports. OLDER
   // is refused (the helper is restarted), NEWER means this clone is behind and
@@ -615,6 +619,19 @@
         "holding a review token can neither name a file nor move a rail",
       request: "{review, root, mode: \"folder\"|\"page-only\", entry, mounts?: {prefix: dir}, linked?: [file]}",
       response: "{name, origin, url, printed_ending}"
+    },
+    {
+      name: "review.retire",
+      method: "POST",
+      path: BASE + "/review/retire",
+      auth: AUTH.CLI_SECRET,
+      mutating: true,
+      why:
+        "lahe review retire ends a review on purpose, so `lahe review` of its file makes a new one. Only the " +
+        "owning agent session may retire its review. A retired review no longer answers on any page, fails the " +
+        "Origin check, and takes no events. CLI-only, like site.bind",
+      request: "{review, session}",
+      response: "{review, retired_at}"
     }
   ];
 
@@ -827,6 +844,10 @@
     PROTO_UNKNOWN_REVIEW: 404,
     PROTO_UNKNOWN_ITEM: 404,
     PROTO_STALE_REV: 409,
+    // A review retired on purpose (`lahe review retire`) takes no events.
+    PROTO_REVIEW_RETIRED: 410,
+    // `lahe review retire` of a review another agent session owns.
+    PROTO_NOT_OWNER: 403,
     PROTO_SECOND_WINDOW: 409,
     PROTO_SECOND_INSTANCE: 409,
     // The Library's codes. Messages and remedies are in failures.js, like every

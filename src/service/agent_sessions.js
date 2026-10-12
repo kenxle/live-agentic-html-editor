@@ -635,8 +635,34 @@ function createStore(options) {
   };
 }
 
+/**
+ * Is an agent listening to this session right now: a live monitor heartbeat
+ * for its current handoff, or a lahe command in the last few minutes? The same
+ * question the Library asks before a handoff (catalog_requests.listening). A
+ * closed or missing session is not listening.
+ *
+ * @param {object} store createStore()'s store
+ * @param {string} id
+ * @param {number} [nowMs]
+ */
+function isListening(store, id, nowMs) {
+  var session;
+  try { session = store.read(id); } catch (err) { return false; }
+  if (!session || session.closed_at || session.synthetic) return false;
+  var live = livenessFrom({
+    session: session,
+    monitor: store.readMonitor(id),
+    activity: store.readActivity(id),
+    listening: false,
+    nowMs: typeof nowMs === "number" ? nowMs : Date.now(),
+    pidAlive: pidAlive
+  });
+  return live[protocol.AGENT_LIVENESS.FIELD.LISTENING] === true;
+}
+
 module.exports = {
   SCHEMA: SCHEMA,
+  isListening: isListening,
   LEGACY_ID: LEGACY_ID,
   NAME_MAX: NAME_MAX,
   NAME_SOURCE_PAGE: NAME_SOURCE_PAGE,

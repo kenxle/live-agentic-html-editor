@@ -289,7 +289,9 @@ function createReviews(options) {
           created_at: parsed.created_at || new Date().toISOString(),
           // When site.bind last stamped it: "newest" for the page rule is the
           // later of this and created_at (src/service/page_routes.js).
-          served_at: typeof parsed.served_at === "string" ? parsed.served_at : null
+          served_at: typeof parsed.served_at === "string" ? parsed.served_at : null,
+          // `lahe review retire`: the review answers on no page and takes no events.
+          retired_at: typeof parsed.retired_at === "string" ? parsed.retired_at : undefined
         };
       } else {
         loud("review " + entry.name + " has a " + stateDir.FILES.meta + " with no usable token");
@@ -447,7 +449,8 @@ function createReviews(options) {
       only_recorded_pages: parsed.only_recorded_pages === true,
       notes: parsed.notes === true,
       created_at: parsed.created_at || new Date().toISOString(),
-      served_at: typeof parsed.served_at === "string" ? parsed.served_at : null
+      served_at: typeof parsed.served_at === "string" ? parsed.served_at : null,
+      retired_at: typeof parsed.retired_at === "string" ? parsed.retired_at : undefined
     };
     log.helperLog("review " + reviewId + " learned from disk without a restart");
     // The readiness file is how every CLI command on the machine finds a
@@ -1518,6 +1521,28 @@ function createReviews(options) {
   }
 
   /** The reviewer closed the review. Nothing is truncated; the log is archived. */
+  /**
+   * Retire a review on purpose (`lahe review retire`): archive it, as End
+   * review does, and mark it retired, so it answers on no page, fails the
+   * Origin check and takes no events. The caller checked the owner.
+   */
+  function retire(reviewId, at) {
+    var review = get(reviewId);
+    if (!review) throw new Error("retire: no review named " + JSON.stringify(reviewId));
+    if (typeof review.retired_at === "string") return review;
+    endReview(reviewId);
+    review.retired_at = typeof at === "string" ? at : new Date(clock()).toISOString();
+    persist(review);
+    log.helperLog("review " + reviewId + " retired");
+    if (lastReadyDetails) writeReadyFile(lastReadyDetails);
+    return review;
+  }
+
+  function isRetired(reviewId) {
+    var review = get(reviewId);
+    return !!review && typeof review.retired_at === "string";
+  }
+
   function endReview(reviewId) {
     var review = get(reviewId);
     if (!review) throw new Error("endReview: no review named " + JSON.stringify(reviewId));
@@ -1559,6 +1584,8 @@ function createReviews(options) {
     isolate: isolate,
     isNotes: isNotes,
     stampServed: stampServed,
+    retire: retire,
+    isRetired: isRetired,
     stampServedByHelper: stampServedByHelper,
     touch: touch,
     lastSeenAt: lastSeenAt,

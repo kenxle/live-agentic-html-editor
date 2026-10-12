@@ -288,6 +288,8 @@ function pickReview(dir, site, request) {
   var linking = null;
   readReviews(dir).forEach(function (entry) {
     var meta = entry.meta;
+    // A retired review answers on no page.
+    if (typeof meta.retired_at === "string") return;
     var candidate = {
       review: entry.id,
       token: meta.token,
@@ -324,6 +326,7 @@ function pickReview(dir, site, request) {
  */
 function reviewAnswersOnSite(site, review) {
   if (!site || !review) return false;
+  if (typeof review.retired_at === "string") return false;
   var files = recordedFiles(review);
   var root = site.root;
   var recordedHere = files.some(function (file) {
@@ -459,7 +462,10 @@ function servesFile(dir, file) {
  * file the browser was shown. The file may be gone; the caller stats it.
  */
 function fileForPage(dir, origin, pagePath) {
-  var entry = activeFor(dir);
+  return fileForPageIn(activeFor(dir), origin, pagePath);
+}
+
+function fileForPageIn(entry, origin, pagePath) {
   if (!entry) return null;
   var name = protocol.siteNameFromOrigin(origin, entry.pagesPort, typeof entry.laheNames === "function" && entry.laheNames());
   var site = name ? entry.sites.get(name) : null;
@@ -480,7 +486,10 @@ function fileForPage(dir, origin, pagePath) {
  * null: a page under one of a site's mounts that this review linked to.
  */
 function linkedFileForPage(dir, reviewId, pagePath) {
-  var entry = activeFor(dir);
+  return linkedFileIn(activeFor(dir), reviewId, pagePath);
+}
+
+function linkedFileIn(entry, reviewId, pagePath) {
   if (!entry || typeof pagePath !== "string" || pagePath.indexOf(MOUNT_ROOT) !== 0) return null;
   var decoded = decodePath(pagePath);
   if (decoded === null) return null;
@@ -498,6 +507,147 @@ function linkedFileForPage(dir, reviewId, pagePath) {
     return true;
   });
   return found;
+}
+
+// ---------------------------------------------------------------------------
+// Which file a record was made on, and which review a file has
+// ---------------------------------------------------------------------------
+//
+// ONE REVIEW PER FILE (docs/features/20261011.02_stable_addresses/parts/
+// architecture/each_page_its_own_comments.md). `lahe review` runs in its own
+// process, so these work from the registry on disk when no helper in this
+// process has activated one.
+
+/** The registry for `dir`: the helper's own, or a read-only one off disk. */
+function registryEntry(dir) {
+  var entry = activeFor(dir);
+  if (entry) return entry;
+  var sitesModule = require("./sites.js");
+  var sites = sitesModule.createSites({ dir: dir, reader: true });
+  sites.load();
+  var ready = readJson(stateDir.readyPath(dir));
+  var pages = ready && ready.pages ? ready.pages : null;
+  return {
+    sites: sites,
+    pagesPort: pages && Number.isInteger(pages.port) ? pages.port : protocol.PAGES.PORT,
+    laheNames: function () { return !!(pages && pages.lahe_names && pages.lahe_names.verified === true); },
+    transient: true
+  };
+}
+
+/** A review's committed records (drafts never count), off the helper's fold or off disk. */
+function committedRecords(dir, entry, reviewId) {
+  var items = null;
+  if (entry && typeof entry.items === "function") {
+    try { items = entry.items(reviewId); } catch (err) { items = null; }
+  }
+  if (!items) {
+    var projection = require("./projection.js");
+    try { items = projection.itemsFrom(logModule.createEventLog({ dir: dir }).read(reviewId)); } catch (err) { items = []; }
+  }
+  return (items || []).filter(function (item) { return item && !record.isDraft(item); });
+}
+
+/**
+ * The real file `item` was made on, for `review`, or null when it cannot be
+ * told: at a site address (its own path, or a link address under a mount this
+ * review linked), or at an old 127.0.0.1:<port> address (through the helper's
+ * own page-server records, and an old Markdown review's rendered path).
+ */
+function fileOfItem(dir, entry, review, item) {
+  var origin = item && item[record.FIELD.PAGE_ORIGIN];
+  var pagePath = item && item[record.FIELD.PAGE_PATH];
+  if (typeof origin !== "string" || typeof pagePath !== "string" || pagePath.charAt(0) !== "/") return null;
+  if (pagePath.indexOf(MOUNT_ROOT) === 0) return linkedFileIn(entry, review.id, pagePath);
+  var onSite = fileForPageIn(entry, origin, pagePath);
+  if (onSite) return realOrNull(onSite) || onSite;
+  if (!protocol.isLoopbackPortOrigin(origin)) return null;
+  var source = typeof review.source_path === "string" && markdown.isMarkdown(review.source_path) ? review.source_path : null;
+  if (source) {
+    var rendered = targetsOf(review).some(function (target) {
+      return /\.html?$/i.test(target) && "/" + path.basename(target) === pagePath;
+    });
+    if (rendered) return realOrNull(source) || path.resolve(source);
+  }
+  var port = Number(origin.slice(origin.lastIndexOf(":") + 1));
+  var decoded = decodePath(pagePath);
+  if (decoded === null) return null;
+  var relative = decoded.split("/").filter(function (seg) { return seg.length > 0; }).join("/");
+  var records = entry && !entry.transient ? oldServerRecords(dir) : readOldServerRecords(dir);
+  var found = null;
+  records.some(function (rec) {
+    if (rec.ports.indexOf(port) === -1 || typeof rec.root !== "string") return false;
+    var candidate = path.resolve(rec.root, relative || "index.html");
+    if (!within(candidate, rec.root)) return false;
+    var real = realOrNull(candidate);
+    if (!real || !within(real, realOrNull(rec.root) || rec.root)) return false;
+    found = real;
+    return true;
+  });
+  return found;
+}
+
+/** Does `review` hold a committed record on `file`? */
+function holdsRecordOn(dir, entry, review, file) {
+  return committedRecords(dir, entry, review.id).some(function (item) {
+    return fileOfItem(dir, entry, review, item) === file;
+  });
+}
+
+/**
+ * The review a file has, or null: the one `lahe review` opens instead of
+ * making a second (Part 1). Tiered, newest within a tier, retired reviews
+ * never:
+ *
+ *   1. a review that recorded this file (its target, or a Markdown source);
+ *   2. a folder review whose folder holds the file, not --only, that holds a
+ *      committed comment on it;
+ *   3. a review a site's link table lists for the file, that holds a committed
+ *      comment on it.
+ *
+ * A link alone, or a broad folder review with nothing said about this file,
+ * never claims it: the link table is written from page content on page views.
+ *
+ * @param {string} dir
+ * @param {string} file a real path
+ * @returns {{review: string, meta: object, tier: number}|null}
+ */
+function holderOfFile(dir, file) {
+  var target = realOrNull(file) || path.resolve(file);
+  var entry = registryEntry(dir);
+  var metas = readReviews(dir).filter(function (each) { return typeof each.meta.retired_at !== "string"; });
+  function newestOf(list, tier) {
+    var best = null;
+    list.forEach(function (each) {
+      var at = stampOf(each.meta);
+      if (!best || at > best.at) best = { review: each.id, meta: each.meta, tier: tier, at: at };
+    });
+    if (best) delete best.at;
+    return best;
+  }
+  var tier1 = metas.filter(function (each) {
+    return recordedFiles(each.meta).some(function (one) {
+      return (realOrNull(one) || path.resolve(one)) === target;
+    });
+  });
+  if (tier1.length) return newestOf(tier1, 1);
+  function asReview(each) { return Object.assign({ id: each.id }, each.meta); }
+  var tier2 = metas.filter(function (each) {
+    if (each.meta.only_recorded_pages === true) return false;
+    var holds = servedRootsOf(each.meta).some(function (root) { return within(target, root) && target !== root; });
+    return holds && holdsRecordOn(dir, entry, asReview(each), target);
+  });
+  if (tier2.length) return newestOf(tier2, 2);
+  var linking = {};
+  entry.sites.list().forEach(function (item) {
+    var ids = item.site.linked_files && item.site.linked_files[target];
+    (Array.isArray(ids) ? ids : []).forEach(function (id) { linking[id] = true; });
+  });
+  var tier3 = metas.filter(function (each) {
+    return linking[each.id] === true && holdsRecordOn(dir, entry, asReview(each), target);
+  });
+  if (tier3.length) return newestOf(tier3, 3);
+  return null;
 }
 
 // ---------------------------------------------------------------------------
@@ -1121,6 +1271,10 @@ module.exports = {
   recordsForPage: recordsForPage,
   aliasMap: aliasMap,
   createPageRoutes: createPageRoutes,
+  fileOfItem: fileOfItem,
+  holderOfFile: holderOfFile,
+  registryEntry: registryEntry,
+  committedRecords: committedRecords,
   createNoteOnce: logModule.createNoteOnce,
   LOG_NOTE_CAP: logModule.LOG_NOTE_CAP
 };
