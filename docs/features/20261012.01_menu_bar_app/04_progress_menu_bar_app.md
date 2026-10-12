@@ -1,26 +1,26 @@
 # Progress: Menu bar app
 
-**Phase 1, Crucible.** The approach is B, a small native Mac app, since you ruled out the SwiftBar script and the Dock badge. Five real premises wait on you. One thing needs your attention. Last updated 2026-10-12 10:02.
+**Phase 2, Brief.** The crucible is done: you agreed all five premises, and the approach is a small native Mac app. I am writing the brief, then the architecture and plan, without stopping. Nothing is waiting on you. Last updated 2026-10-12 10:09.
 
 **Docs:** [Crucible](00_crucible_menu_bar_app.md) · [Brief](01_brief_menu_bar_app.md) · [Architecture](02_architecture_menu_bar_app.md) · [Plan](03_plan_menu_bar_app.md)
 
 ## Needs your attention
 
-- [ ] On the [crucible page](00_crucible_menu_bar_app.md): agree or disagree with the five premises. The crucible summary and the brief wait on this.
+Nothing is waiting on you.
 
 ## Currently working on
 
 | Agent or task | Doing | Started | Branch |
 |---|---|---|---|
-| Orchestrator | Waiting on your premises and approach | 2026-10-12 09:35 | `feat/menu-bar` |
+| Orchestrator | Writing the brief | 2026-10-12 10:09 | `feat/menu-bar` |
 
 ## Phases
 
 | Phase | Status | Changed |
 |---|---|---|
 | 0 Setup | done | 2026-10-12 |
-| 1 Crucible | in progress | 2026-10-12 |
-| 2 Brief | not started | |
+| 1 Crucible | done | 2026-10-12 |
+| 2 Brief | in progress | 2026-10-12 |
 | 3 Architecture | not started | |
 | 4 Plan | not started | |
 | 5 Human review | not started | |
@@ -61,6 +61,7 @@ Not shipped yet.
 
 ## Log
 
+- 2026-10-12 10:09: You agreed all five premises. Crucible summary written and marked accepted. Brief started.
 - 2026-10-12 10:02: Eleven comments answered. Requirements moved out of the premises into their own list; the job moved to Jobs to be done. A (SwiftBar) and C (Dock badge) ruled out, so the approach is B. Five new premises posted.
 - 2026-10-12 09:35: You chose option B (waiting-on-you count) and added recent documents and a busy signal. Six comments answered. Premises, the case against, and approaches A (SwiftBar script), B (native Mac app), C (Library badge in the Dock) added to the crucible page.
 - 2026-10-12 09:31: Crucible page written. The other crucible answers are drafted from the stable addresses discussion, for you to correct.
