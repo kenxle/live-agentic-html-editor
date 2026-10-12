@@ -940,8 +940,14 @@
     // A quote rule, which is what a quote has looked like since print. It is
     // decoration, not a signal: it says "these are the page's words, not the
     // reviewer's," and it never means anything is new or unread.
-    ".card__quote{font-size:12px;color:var(--ink-soft);border-left:2px solid var(--line);",
+    ".card__quote{font-size:12px;color:var(--ink-soft);border-left:3px solid var(--ink-faint);",
     "padding-left:9px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}",
+    // A passage longer than two lines can be opened out: the quote itself is
+    // the control, so there is no extra row on a card whose passage is short.
+    ".card__quote[data-lahe-more='true']{cursor:pointer}",
+    ".card__quote[data-lahe-more='true']:hover{color:var(--ink)}",
+    ".card__quote[data-lahe-more='true']:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:3px}",
+    ".card__quote[data-lahe-quote-open='true']{display:block;-webkit-line-clamp:unset;overflow:visible}",
     ".card__body{font-size:13.5px;line-height:1.5;color:var(--ink);display:flex;",
     "flex-direction:column;gap:8px}",
     ".card__body:empty{display:none}",
@@ -1021,7 +1027,9 @@
     "white-space:pre-wrap;overflow-wrap:anywhere}",
     // The corner nearest the speaker is the tail, the way chat bubbles point.
     ".turn[data-side='you'] .bubble{background:var(--you-wash);border-bottom-right-radius:4px}",
-    ".turn[data-side='agent'] .bubble{background:var(--paper);border-color:var(--line);",
+    // Grey, not white: a white bubble reads as a box to type into, and the
+    // follow-up box right below it is white. (Ken, 2026-10-12.)
+    ".turn[data-side='agent'] .bubble{background:var(--sunken);",
     "border-bottom-left-radius:4px}",
     // THE FILES ARE ONE HOVER AWAY. The agent's name is a button when it
     // changed files: hovering it, focusing it, or clicking it (which focuses it,
@@ -1386,7 +1394,10 @@
     ".toast__text{font-size:15px;line-height:1.45;color:var(--ink);overflow-wrap:anywhere;",
     "white-space:pre-line}",
     // One line, quieter: this is what the answer is ABOUT, not the answer.
+    // The passage the reply is about, drawn as the cards draw a quote: the
+    // same rule down its left, so it reads as the page's words and not a dek.
     ".toast__about{font-size:12.5px;line-height:1.35;color:var(--ink-soft);",
+    "border-left:3px solid var(--ink-faint);padding-left:9px;margin-top:2px;",
     "white-space:nowrap;overflow:hidden;text-overflow:ellipsis}",
     ".toast__about:empty{display:none}",
     ".toast__x{flex:none;width:20px;height:20px;border-radius:6px;color:var(--ink-faint);",
@@ -3899,6 +3910,39 @@
       };
     }
 
+    /**
+     * Is the passage longer than its two-line clamp? Sets data-lahe-more so the
+     * quote reads as a control only when there is something more to show.
+     * @param {HTMLElement} quote
+     */
+    function markQuoteOverflow(quote) {
+      if (!quote.isConnected || quote.style.display === "none") return;
+      var open = quote.getAttribute("data-lahe-quote-open") === "true";
+      var more = open || quote.scrollHeight > quote.clientHeight + 1;
+      if (more) {
+        quote.setAttribute("data-lahe-more", "true");
+        quote.setAttribute("role", "button");
+        quote.setAttribute("tabindex", "0");
+        quote.setAttribute("aria-expanded", open ? "true" : "false");
+        quote.setAttribute("title", open ? "Click to shorten the passage" : "Click to show the whole passage");
+      } else {
+        quote.removeAttribute("data-lahe-more");
+        quote.removeAttribute("role");
+        quote.removeAttribute("tabindex");
+        quote.removeAttribute("aria-expanded");
+        quote.removeAttribute("title");
+      }
+    }
+
+    /** Open a clamped passage out to its full length, or clamp it again. */
+    function toggleQuote(quote) {
+      if (quote.getAttribute("data-lahe-more") !== "true") return;
+      var open = quote.getAttribute("data-lahe-quote-open") === "true";
+      if (open) quote.removeAttribute("data-lahe-quote-open");
+      else quote.setAttribute("data-lahe-quote-open", "true");
+      markQuoteOverflow(quote);
+    }
+
     function buildCardNode(card) {
       if (!dom || card.node) return card.node;
       var node = el("article", "card");
@@ -3959,6 +4003,13 @@
       node.appendChild(line);
 
       var quote = el("div", "card__quote");
+      quote.addEventListener("click", function () { toggleQuote(quote); });
+      quote.addEventListener("keydown", function (event) {
+        if (event.key !== "Enter" && event.key !== " ") return;
+        event.preventDefault();
+        toggleQuote(quote);
+      });
+      quote.addEventListener("mouseenter", function () { markQuoteOverflow(quote); });
       node.appendChild(quote);
 
       // What a tab-content owner fills. Nothing in this file writes into it.
@@ -4092,8 +4143,13 @@
       else card.node.removeAttribute(HAND_EDIT_ATTR);
       paintCardWait(card);
       var quote = (item[record.FIELD.CONTEXT] && item[record.FIELD.CONTEXT].quote) || "";
-      p.quote.textContent = quote;
+      if (p.quote.textContent !== quote) {
+        p.quote.textContent = quote;
+        p.quote.removeAttribute("data-lahe-quote-open");
+      }
       p.quote.style.display = quote ? "" : "none";
+      // Measured after layout: at fill time the card may not be drawn yet.
+      requestAnimationFrame(function () { markQuoteOverflow(p.quote); });
 
       p.badges.textContent = "";
       cardBadges(card.id).forEach(function (badge) {
