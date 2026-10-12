@@ -22,7 +22,7 @@
   - The Library's Open follows the same rule: it opens a file where its review answers, never makes a second review or address, and marks a retired review with a "review retired" badge.
   - Unit suite: 2,680 pass, 0 fail.
 - **Code review of tonight's code: four findings, all fixed.** A handoff you confirm in the Library now completes. Adding a Markdown file to a review no longer replaces its first file. Opening another session's linking review lands where its rail is. The owning agent run without its session id is told how to carry on.
-- **Full gate on the merged branch:** 2,684 unit pass, 0 fail. Browser: 860 pass, 3 fail, all three repeat alone, so they are real. The core builder is finding which change broke each.
+- **Full gate on the merged branch is green:** 2,684 unit pass, 0 fail; 867 browser pass, 0 fail, 7 skipped. The three browser failures were tests reusing one page across tests: now that every page loads its own comments, a later test saw the earlier test's comments. Each test now starts with a fresh review of the page.
 
   ![Comments filed in another review, shown read-only (light)](progress/screenshots/read_only_card_light.png)
 
@@ -54,7 +54,7 @@ The Lahe test folders were deleted at your go-ahead, and the disk went from 953 
 
 | Agent or task | Doing | Started | Branch |
 |---|---|---|---|
-| Core builder | Three browser tests that fail after tonight's merges (formatting rebuild, Shift-Enter line break, undo record count) | 2026-10-11 21:41 | `unit/sa-core` |
+| Orchestrator | Full suite in all three browsers (gate:all) | 2026-10-11 21:52 | `feat/stable-addresses` |
 | Orchestrator | Waiting on the core builder, then dist rebuild and the full gate | 2026-10-11 20:42 | `feat/stable-addresses` |
 
 ## Phases
