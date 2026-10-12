@@ -11,7 +11,6 @@
   `! sudo pfctl -a com.apple/lahe -f ~/Documents/lahe-preview-stable-addresses/pf_test_rules.conf`
 
   Then reload a `:1483` address and say whether it loads. If it does, I add those rules to `lahe install --port-80`.
-- [ ] **Optional:** an old helper from yesterday (pid 93197, old code, port 62840) may still be running; `! kill 93197` stops it.
 
 ## Decided
 
