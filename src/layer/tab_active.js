@@ -212,7 +212,11 @@
     ".cardx{position:absolute;top:0;right:0;width:20px;height:20px;border-radius:5px;display:flex;",
     "align-items:center;justify-content:center;font-size:15px;line-height:1;color:var(--ink-faint);",
     "background:none;border:0;cursor:pointer}",
-    ".cardx:hover{background:var(--surface);color:var(--ink)}",
+    // Hovering the x shows what it would delete: the x and the whole comment
+    // turn the rail's stop red.
+    ".cardx:hover{background:color-mix(in srgb,var(--bad) 12%,transparent);color:var(--bad)}",
+    ".card:has([data-lahe-active-row] > .cardx:hover){outline:1.5px solid var(--bad);outline-offset:-1px;",
+    "background:color-mix(in srgb,var(--bad) 6%,var(--paper))}",
     ".cardx[hidden]{display:none}",
     ".lahe-rail-note[data-empty='true']{color:var(--ink-faint)}",
     // THE NOTE IS THE INPUT. Ken: "do we really need a button for 'reword'?
