@@ -19,7 +19,8 @@ Nothing right now.
   - Comments already split into another review show on the page in a read-only list, "Filed in another review", naming that review and its agent.
   - `lahe review retire` ends a review on purpose. Only the agent that owns it can do that.
   - **One change to how handoff works:** an agent can no longer take over another agent's session from the command line while that agent is still listening. You confirm that handoff from the Library, which already asks first. The second security review asked for this, so an agent cannot quietly take over another live agent's work. A session whose agent is gone still hands over from the command line as before.
-  - Unit suite: 2,677 pass, 0 fail. The Library's Open gets the same one-review-per-file rule next (the Library builder).
+  - The Library's Open follows the same rule: it opens a file where its review answers, never makes a second review or address, and marks a retired review with a "review retired" badge.
+  - Unit suite: 2,680 pass, 0 fail.
 
   ![Comments filed in another review, shown read-only (light)](progress/screenshots/read_only_card_light.png)
 
@@ -51,7 +52,7 @@ The Lahe test folders were deleted at your go-ahead, and the disk went from 953 
 
 | Agent or task | Doing | Started | Branch |
 |---|---|---|---|
-| Library builder | The Library's Open follows one review per file | 2026-10-11 21:01 | `unit/sa-library` |
+| Code reviewer | Reviewing tonight's new code (old comments, hidden folders, Library links, one review per file) | 2026-10-11 21:02 | `feat/stable-addresses` |
 | Test cleanup builder | Test runs delete their own temp folders (separate small fix off main) | 2026-10-11 20:54 | `fix/test-temp-cleanup` |
 | Orchestrator | Waiting on the core builder, then dist rebuild and the full gate | 2026-10-11 20:42 | `feat/stable-addresses` |
 
