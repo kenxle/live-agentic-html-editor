@@ -1420,7 +1420,7 @@
   // Both live here because both are read off a node with the same five
   // questions the engine already asks, and because comments.js and editing.js
   // each used to compute their own descriptor. Two copies of a rule is how the
-  // rail and the Edits tab end up naming the same image differently.
+  // rail and the hand-edit rows end up naming the same image differently.
 
   // How much page text rides along as the locating hint. This is a hint, not a
   // passage: the projection bounds it again, and a whole paragraph in a record

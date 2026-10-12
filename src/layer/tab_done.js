@@ -217,7 +217,7 @@
    * The unseen ids, grouped by the tab their card actually sits in.
    *
    * THE BADGE GOES WHERE THE CARD IS. A question or a refusal keeps its card on
-   * the ACTIVE (or Edits) side, deliberately: the work is not finished, so it
+   * the ACTIVE side, deliberately: the work is not finished, so it
    * stays where unfinished work lives. Badging Done for it sent the reviewer to
    * a tab the thing was not in. The pane rule is not restated here; `paneOf` is
    * the rail's own paneForItem, passed in.
@@ -1539,10 +1539,11 @@
       // this", and there is nothing here for them to look at.
       if (quiet) return next;
       repaintReopened(next[record.FIELD.ID]);
-      // A proofreading answer is made on a hand edit's card, which lives in the
-      // Edits pane; sending the reviewer to Active would take the card away
-      // from under the press.
+      // A proofreading answer is made on a hand edit's card; stayInPane keeps
+      // the reviewer in whichever pane the rail now places that card in,
+      // rather than assuming one.
       rail.selectTab(options && options.stayInPane ? overlayModule.paneForItem(next) : rail.TAB.ACTIVE);
+      if (typeof rail.revealCard === "function") rail.revealCard(next[record.FIELD.ID]);
       var card = rail.cardNode(next[record.FIELD.ID]);
       if (card && typeof card.focus === "function") {
         card.tabIndex = -1;
@@ -2023,6 +2024,9 @@
       var tab = paneOf(item);
       if (typeof rail.collapse === "function") rail.collapse(false);
       if (typeof rail.selectTab === "function") rail.selectTab(tab);
+      // The Active filter may be hiding this card; pressing the toast is asking
+      // to see it.
+      if (typeof rail.revealCard === "function") rail.revealCard(id);
       // A folded card is opened on the way in. Pressing a toast is the reviewer
       // saying "show me that one", and landing them on a one-line card they then
       // have to press again is the trip this path exists to save.

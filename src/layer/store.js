@@ -1199,8 +1199,19 @@
       return out;
     }
 
+    /**
+     * What the Active pane's filter shows: "all", "comments" or "edits".
+     *
+     * Anything else reads as "all", because a filter nobody remembers picking
+     * that hides half the rail is worse than losing the pick.
+     */
+    function readActiveFilter(got) {
+      var value = got && typeof got === "object" ? got.filter : null;
+      return value === "comments" || value === "edits" ? value : "all";
+    }
+
     function emptyUiPreferences() {
-      return { collapsed: false, pill: null, width: null, present: false, cards: {} };
+      return { collapsed: false, pill: null, width: null, present: false, cards: {}, filter: "all" };
     }
 
     function readUiPreferences(reviewId) {
@@ -1217,7 +1228,9 @@
           // reload in the middle of a talk has to keep it hidden.
           present: got.present === true,
           // Which cards are folded to one line. Per review, per card id.
-          cards: readCardStates(got)
+          cards: readCardStates(got),
+          // The Active pane's filter. Per review.
+          filter: readActiveFilter(got)
         };
       } catch (err) {
         return emptyUiPreferences();
@@ -1232,7 +1245,8 @@
         pill: readPillSpot(value),
         width: readRailWidth(value),
         present: !!(value && value.present),
-        cards: readCardStates(value)
+        cards: readCardStates(value),
+        filter: readActiveFilter(value)
       };
       try {
         backing.setItem(uiKey(reviewId), JSON.stringify(next));

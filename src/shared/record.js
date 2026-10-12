@@ -143,8 +143,8 @@
    *
    * The three kinds that carry a before-and-after. It lives here rather than in
    * a tab file because more than one surface has to agree on the answer: the
-   * Edits tab lists exactly these, and the Done tab has to know that the Edits
-   * row on the same card is already drawing the change summary, so it does not
+   * hand-edit rows draw exactly these, and the Done tab has to know that the
+   * hand-edit row on the same card is already drawing the change summary, so it does not
    * print the same sentence a second time.
    */
   function isHandEdit(item) {
