@@ -713,6 +713,9 @@
     ".cardacts{display:flex;align-items:center;gap:7px;flex-wrap:wrap}",
     ".cardacts:not(:has(> :not([hidden]))){display:none}",
     ".cardact[hidden]{display:none}",
+    // Send sits at the right end, like every other send in the rail, so its
+    // held tip (anchored right) stays inside the card.
+    ".cardact[data-lahe-act='send']{margin-left:auto}",
     ".cardacts:empty{display:none}",
     ".cardact{font-size:11.5px;font-weight:550;color:var(--ink-soft);border:1px solid var(--line);",
     "border-radius:7px;padding:3px 9px;background:var(--paper)}",
@@ -1945,7 +1948,7 @@
       highlightModule.fenceTypingKeys(shadow);
 
       var style = doc.createElement("style");
-      style.textContent = CSS;
+      style.textContent = CSS + highlightModule.SEND_TIP_CSS;
       shadow.appendChild(style);
 
       var rail = el("aside", "rail");
@@ -2933,6 +2936,12 @@
      */
     function repaintHoldChrome() {
       renderHold();
+      // Every send button, in the rail and in the comment boxes on the page,
+      // says "Send to queue" while Hold is on.
+      var heldNow = isHeldNow();
+      if (dom && dom.shadow) highlightModule.paintSendButtons(dom.shadow, heldNow);
+      var surfaceNow = highlights && highlights.surface ? highlights.surface() : null;
+      if (surfaceNow) highlightModule.paintSendButtons(surfaceNow.root || surfaceNow.host, heldNow);
       if (!dom || !dom.pill) return;
       var heldQueued = isHeldNow() ? heldQueuedCount() : 0;
       // HELD, ON THE COLLAPSED PILL (R10), takes over the late pill's spot
@@ -7245,6 +7254,7 @@
     CARD_COLLAPSED_ATTR: CARD_COLLAPSED_ATTR,
     CARD_UNSEEN_ATTR: CARD_UNSEEN_ATTR,
     CARD_ASKING_ATTR: CARD_ASKING_ATTR,
+    paintSendButton: highlightModule.paintSendButton,
     COLLAPSED_LINE_MAX: COLLAPSED_LINE_MAX,
     CHEVRON_ICON: CHEVRON_ICON,
     collapsedLineText: collapsedLineText,

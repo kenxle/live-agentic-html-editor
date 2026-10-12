@@ -1469,8 +1469,9 @@
         });
         node.appendChild(input);
         var actions = el("div", "cardacts");
-        var send = el("button", "cardact", "Follow up");
+        var send = el("button", "cardact", "Send");
         send.setAttribute("type", "button");
+        overlayModule.paintSendButton(send, !!(store && typeof store.isHeld === "function" && store.isHeld(reviewId)), "Send");
         send.disabled = isReadOnly();
         send.addEventListener("click", function () {
           submitFollowup(id, input.value);

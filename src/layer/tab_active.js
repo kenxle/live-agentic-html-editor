@@ -675,6 +675,10 @@
       return (row && row.keys) || "Cmd-Enter";
     }
 
+    function isHeld() {
+      return !!(store && reviewId && typeof store.isHeld === "function" && store.isHeld(reviewId));
+    }
+
     function keepsDrafts() {
       return !!(store && reviewId && typeof store.readFollowupDraft === "function");
     }
@@ -734,6 +738,7 @@
       send.setAttribute("type", "button");
       send.addEventListener("click", submit);
       send.title = "Send this message (" + sendKeys() + ")";
+      highlightModule.paintSendButton(send, isHeld(), "Send");
       acts.appendChild(send);
 
       box.appendChild(input);
@@ -793,6 +798,7 @@
           sendBtn = el("button", "cardact", "Send");
           sendBtn.setAttribute("data-lahe-act", "send");
           sendBtn.setAttribute("type", "button");
+          highlightModule.paintSendButton(sendBtn, isHeld(), "Send");
           sendBtn.addEventListener("click", function () {
             var handle = comments.boxFor(id) || comments.editInPlace(id, note);
             if (handle && typeof handle.commit === "function") handle.commit();

@@ -899,7 +899,8 @@
     ":host([data-lahe-scheme='dark']) .lahe-comment-act:hover { color: #f2f2f2;",
     "  background: rgba(255,255,255,0.06); }",
     ":host([data-lahe-scheme='dark']) .lahe-comment-act--quiet { border-color: transparent; background: none; }",
-    PILL_STYLE
+    PILL_STYLE,
+    highlightModule.SEND_TIP_CSS
   ].join("\n");
 
   // ---------------------------------------------------------------------------
@@ -1472,6 +1473,7 @@
         acts.className = "lahe-comment-acts";
         deleteEl = actionButton("Delete", "lahe-comment-act lahe-comment-act--quiet", "delete", discardDraft);
         sendEl = actionButton("Send", "lahe-comment-act", "send", commitFromControl);
+        highlightModule.paintSendButton(sendEl, store.isHeld(requireReview()), "Send");
         acts.appendChild(deleteEl);
         acts.appendChild(sendEl);
         node.appendChild(acts);

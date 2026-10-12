@@ -1057,7 +1057,69 @@
 
   var shared = createHighlights();
 
+  // SEND WHILE HELD. With Hold on, nothing a reviewer sends reaches the agent
+  // until they release it, so every send button says where its words go and
+  // explains why on hover, at once rather than after the browser's title delay.
+  // Every button that sends carries SEND_ATTR; whoever builds one paints it,
+  // and the rail repaints them all when Hold flips.
+  var SEND_ATTR = "data-lahe-send";
+  var SEND_WORDS = {
+    LABEL: "Send",
+    HELD_LABEL: "Send to queue",
+    HELD_TIP: "Messages are being held until you release them to the agent in a batch."
+  };
+  var SEND_TIP_CSS =
+    "[" + SEND_ATTR + "]{position:relative}" +
+    "[" + SEND_ATTR + "][data-lahe-held='true']:hover::after{content:attr(data-lahe-tip);position:absolute;" +
+    "right:0;bottom:calc(100% + 6px);width:220px;padding:7px 9px;border-radius:7px;background:#15171c;" +
+    "color:#fff;font-size:11.5px;font-weight:500;line-height:1.4;text-align:left;white-space:normal;" +
+    "letter-spacing:0;text-transform:none;box-shadow:0 6px 18px rgba(0,0,0,.25);z-index:10;pointer-events:none}";
+
+  /**
+   * Label one send button for the Hold state.
+   *
+   * @param {Element} button a button carrying SEND_ATTR
+   * @param {boolean} held whether Hold is on for this review
+   * @param {string} [label] the button's own word when not held ("Send" by default)
+   */
+  function paintSendButton(button, held, label) {
+    if (!button) return;
+    if (label) button.setAttribute("data-lahe-label", label);
+    var own = button.getAttribute("data-lahe-label") || SEND_WORDS.LABEL;
+    button.setAttribute(SEND_ATTR, "");
+    if (held) {
+      if (!button.hasAttribute("data-lahe-title") && button.title) button.setAttribute("data-lahe-title", button.title);
+      button.title = "";
+      button.setAttribute("data-lahe-held", "true");
+      button.setAttribute("data-lahe-tip", SEND_WORDS.HELD_TIP);
+      button.setAttribute("aria-description", SEND_WORDS.HELD_TIP);
+      button.textContent = SEND_WORDS.HELD_LABEL;
+    } else {
+      if (button.hasAttribute("data-lahe-title")) {
+        button.title = button.getAttribute("data-lahe-title");
+        button.removeAttribute("data-lahe-title");
+      }
+      button.removeAttribute("data-lahe-held");
+      button.removeAttribute("data-lahe-tip");
+      button.removeAttribute("aria-description");
+      button.textContent = own;
+    }
+  }
+
+  /** Repaint every send button under a root (a shadow root or a document). */
+  function paintSendButtons(root, held) {
+    if (!root || typeof root.querySelectorAll !== "function") return 0;
+    var buttons = root.querySelectorAll("[" + SEND_ATTR + "]");
+    for (var i = 0; i < buttons.length; i += 1) paintSendButton(buttons[i], held);
+    return buttons.length;
+  }
+
   return {
+    SEND_ATTR: SEND_ATTR,
+    SEND_WORDS: SEND_WORDS,
+    SEND_TIP_CSS: SEND_TIP_CSS,
+    paintSendButton: paintSendButton,
+    paintSendButtons: paintSendButtons,
     refusesWholePaint: refusesWholePaint,
     refusesWholeElement: refusesWholeElement,
     WHOLE_PAINT_MAX_RATIO: WHOLE_PAINT_MAX_RATIO,

@@ -251,6 +251,14 @@ test("capture the rail as a reviewable mockup", async ({ page }) => {
     await rail(() => window.__lahe.rail.selectTab("done"));
     await snap("Done tab", "A comment the agent handled, with the file it changed.");
 
+    // Hold on: every send button says Send to queue.
+    const clickHold = () =>
+      page.evaluate(() => window.__lahe.rail.tabBody("active").getRootNode().querySelector(".holdbtn").click());
+    await clickHold();
+    await rail(() => window.__lahe.rail.selectTab("active"));
+    await snap("Hold on", "Hold sending switched on. Every send button says Send to queue; hovering one explains why.");
+    await clickHold();
+
     // Dark, Active tab.
     await rail(() => {
       document.documentElement.style.background = "#12151a";

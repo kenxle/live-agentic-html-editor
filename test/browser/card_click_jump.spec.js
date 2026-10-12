@@ -320,7 +320,7 @@ test.describe("clicking a card jumps to its place on the page", () => {
       }, item.id);
 
       await toTop(page);
-      await clickCardButton(page, item.id, "Follow up");
+      await clickCardButton(page, item.id, "Send");
 
       expect(await scrollY(page), "a press meant for a control is not a jump").toBe(0);
       expect(await emphasized(page)).toBe("");
