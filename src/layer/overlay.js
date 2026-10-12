@@ -936,9 +936,6 @@
     ".endpanel__go[disabled],.endpanel__no[disabled]{opacity:.6;cursor:default}",
     ".endpanel__go[hidden],.endpanel__no[hidden]{display:none}",
 
-    // The keyboard hints are readable, not fine print (D10).
-    ".hints{display:flex;flex-wrap:wrap;gap:4px 14px;font-size:11.5px;color:var(--ink-soft)}",
-    ".hint{display:flex;align-items:center;gap:5px}",
     "kbd{font-family:inherit;font-size:11px;font-weight:600;color:var(--ink);",
     "background:var(--sunken);border:1px solid var(--line);border-bottom-width:2px;",
     "border-radius:5px;padding:1px 5px;letter-spacing:.01em}",
@@ -1673,12 +1670,6 @@
     return END_REVIEW.NOTHING_PENDING;
   }
 
-  var HINTS = [
-    { keys: ["⌘", "⇧", "C"], what: "comment" },
-    { keys: ["⌘", "⇧", "E"], what: "edit" },
-    { keys: ["⌘", "⏎"], what: "send" }
-  ];
-
   /**
    * The page's own setInterval, bound to it, or null when there is no page.
    *
@@ -2286,18 +2277,11 @@
 
       // No action buttons here. Copy and Export moved into the head's menu
       // (D10, revised): they read as submit buttons under the reviewer's own
-      // words, and the footer's job is the status line and the hints.
-      var hints = el("div", "hints");
-      HINTS.forEach(function (hint) {
-        var row = el("span", "hint");
-        hint.keys.forEach(function (key) {
-          row.appendChild(el("kbd", null, key));
-        });
-        row.appendChild(el("span", null, hint.what));
-        hints.appendChild(row);
-      });
+      // words, and the footer's job is the status line. The keycap hints that
+      // sat here are gone too: the "All shortcuts" disclosure in the pane has
+      // them, and the footer copy was noise.
 
-      // The hints keep the row and the door sits beside them. Ken asked for the
+      // The door sits beside the footer's column. Ken asked for the
       // way out here rather than in the menu: it is the control that closes the
       // session, and it should be where the reviewer's eye already is when they
       // are done. Same title and accessible name, because an icon with no label
@@ -2310,7 +2294,6 @@
       endBtn.addEventListener("click", function () {
         askEndReview();
       });
-      footMain.appendChild(hints);
       foot.appendChild(footMain);
       foot.appendChild(endBtn);
       rail.appendChild(foot);
@@ -2488,7 +2471,6 @@
         holdBtn: holdBtn,
         holdCount: holdCount,
         limit: limit,
-        hints: hints,
         footMain: footMain,
         endBtn: endBtn,
         endPanel: endPanel,
@@ -4810,7 +4792,7 @@
     function endInfo() {
       if (!dom || !dom.endBtn) return { present: false };
       var rect = dom.endBtn.getBoundingClientRect();
-      var hintsRect = dom.hints.getBoundingClientRect();
+      var columnRect = dom.footMain.getBoundingClientRect();
       var panelRect = dom.endPanel.getBoundingClientRect();
       return {
         present: true,
@@ -4822,13 +4804,13 @@
           return node.getAttribute("data-action") === "end";
         }),
         rect: { x: rect.x, y: rect.y, width: rect.width, height: rect.height, right: rect.right, bottom: rect.bottom },
-        hintsRect: {
-          x: hintsRect.x,
-          y: hintsRect.y,
-          width: hintsRect.width,
-          height: hintsRect.height,
-          right: hintsRect.right,
-          bottom: hintsRect.bottom
+        columnRect: {
+          x: columnRect.x,
+          y: columnRect.y,
+          width: columnRect.width,
+          height: columnRect.height,
+          right: columnRect.right,
+          bottom: columnRect.bottom
         },
         running: endRunning,
         panel: {

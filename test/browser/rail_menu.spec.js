@@ -136,17 +136,17 @@ test.describe("the review's actions live in the head's menu", () => {
       expect(labels, "the footer stopped offering Copy as a submit-looking button").not.toContain("Copy");
       expect(labels, "the footer stopped offering Export as a submit-looking button").not.toContain("Export");
 
-      // The footer's own content is untouched: the keycap hints and the status
-      // line are what it is for.
+      // The footer's own content is untouched: the status line is what it is
+      // for. The keycap hints left the footer on purpose.
       const kept = await page.evaluate(() => {
         const root = window.__lahe.rail.tabBody("active").getRootNode();
         const foot = root.querySelector(".foot");
         return {
-          hints: !!foot.querySelector(".hints kbd"),
+          hints: !!foot.querySelector("kbd"),
           status: !!foot.querySelector(".status .status__text")
         };
       });
-      expect(kept.hints, "the keycap hints stayed in the footer").toBe(true);
+      expect(kept.hints, "no keycap hints in the footer").toBe(false);
       expect(kept.status, "the status line stayed in the footer").toBe(true);
 
       const info = await menuInfo(page);
