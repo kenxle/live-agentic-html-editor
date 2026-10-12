@@ -104,14 +104,19 @@ flowchart TD
 
 ### Which review answers on a page
 
-Today's `findReviewForRequest`, minus the session filter:
+Each page carries its own comments ([design note](parts/architecture/each_page_its_own_comments.md)). The rule, tiered, newest within each tier, retired reviews never:
 
-1. A review that recorded this exact file. The newest one wins.
-2. Else the newest review whose served root is this site's root and is not `--only`.
-3. Else the newest review that linked to this file.
+1. A review that recorded this exact file.
+2. Else a review whose served root is this site's root and is not `--only`.
+3. Else a review that linked to this file (a page under a link address).
 4. Else none: the page is served read-only.
 
-"Newest" means created or re-served most recently. `lahe review` and the Library's Open both stamp the review as re-served. So the most recent explicit act decides the rail, and a review created later still wins over an older Open.
+"Newest" means created or re-served most recently. `lahe review` and the Library's Open both stamp the review as re-served.
+
+- **One review per file.** `lahe review` of a file that already has a review opens it and never makes a second. "Has a review" is tiered the same way, except that a folder review or a linking review counts only when it holds a committed comment on the file: a link, or a broad folder, with nothing said about the file never claims it. `lahe review retire` ends a review on purpose; only its own session may retire it.
+- **A link address to a file with its own review.** A top-level page load (`Sec-Fetch-Dest: document` and `Sec-Fetch-Mode: navigate`) is redirected, `no-store`, to the file's own address, built from the registry only. Anything else, and a file whose review has no address of its own, gets the page read-only with no rail, so a comment is never filed in the linking review.
+- **Every address of a file is one page within its review.** The tag names the file's other addresses in its review (`data-lahe-spellings`): a link address, and old `127.0.0.1` addresses, matched per review.
+- **Comments already split on disk show read-only.** `records.read` returns, under `others`, comments on the file from another review that is not retired, holds a committed record on it, and answers on this site (or is listed for the file in a link table, on the file's own site). The rail keeps them in their own list, never in its store or outbox, named by title and agent only.
 
 ### Binding (`lahe review`, `lahe write`, the Library's Open)
 
@@ -270,7 +275,7 @@ Full prose: [architect review](02_architecture_stable_addresses_reviews.md).
 | AR13 | Uninstall breaks `.lahe` addresses | Accepted | `.lahe` is an opt-in alias; `.lahe.localhost` addresses survive uninstall |
 | AR14 | Library Open steals the rail; kinds undefined | Accepted | Library section above |
 | AR15 | Registry loss can repoint a bookmark | Accepted | Grants log; no new names minted on an unreadable registry |
-| AR16 | Redirect on `navigate` catches iframes | Accepted, moot | No redirects between pages in this design |
+| AR16 | Redirect on `navigate` catches iframes | Accepted | One redirect exists: a link address to a file with its own review. It needs both `Sec-Fetch-Dest: document` and `Sec-Fetch-Mode: navigate`, so a frame, a fetch, and a request with no Fetch Metadata are never redirected; they get the page read-only |
 | AR17 | Leftover page servers in clone mode | Accepted | Stopped on every start |
 | AR18 | Fixed name-server port; `::1` bind failure | Accepted | Port from `install.json`; `::1` failure is a log line |
 | AR19 | Incomplete docs and code lists | Accepted | Components table |
@@ -290,7 +295,7 @@ Full prose: [security review](02_architecture_stable_addresses_reviews.md).
 | SR2 | `address.bind` reachable from pages | Accepted | CLI secret, no Origin, root from the request |
 | SR3 | Per-file origins did not wall files off | Accepted | Per-site isolation stated plainly; hidden files are served like any other file |
 | SR4 | Other local users can read pages | Accepted as a residual | Recorded under D11; install warns on multi-user machines |
-| SR5 | No Fetch Metadata on `http://*.lahe` | Accepted | Library never on `.lahe`; no redirects; `.lahe.localhost` printed |
+| SR5 | No Fetch Metadata on `http://*.lahe` | Reopened, accepted | Library never on `.lahe`; `.lahe.localhost` printed. The one redirect needs both Fetch Metadata headers, so it never fires on `.lahe`, which sends none: a link address there is served read-only |
 | SR6 | Port squatting on the name server | Accepted | Verification by a fresh random query the helper must see |
 | SR7 | GET minted names and origins | Accepted | GET never writes |
 | SR8 | No `Cross-Origin-Resource-Policy` | Accepted | Header on every page response |

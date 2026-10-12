@@ -315,7 +315,7 @@ Two blockers. Both are cheap to fix in the design now and expensive after the bu
 | SR2 | blocker | defect | `address.bind` is callable by page script, and its folder check reads page-writable paths |
 | SR3 | important | defect | Per-file origins do not wall documents off: every name serves its whole folder tree, dotfiles included |
 | SR4 | important | risk | Always-on, fixed port, guessable names, no token to read a page: other OS users and sandboxed local code can read documents |
-| SR5 | important | defect | `http://*.lahe` gets no `Sec-Fetch-*` headers, so the Library's checks and the "navigation only" rule cannot work there |
+| SR5 | important | defect | `http://*.lahe` gets no `Sec-Fetch-*` headers, so the Library's checks and the "navigation only" rule cannot work there. Disposition, reopened: the link-address redirect needs both Fetch Metadata headers, so `.lahe` addresses are never redirected and are served read-only |
 | SR6 | important | risk | The name server port can be squatted; the ending check would pass for a squatter; a bad packet can crash the helper |
 | SR7 | important | defect | A plain GET mints permanent names and adds origins, from any link on any website |
 | SR8 | important | risk | No cross-origin resource policy: websites can embed and probe document assets |
