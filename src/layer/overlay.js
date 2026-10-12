@@ -6082,6 +6082,7 @@
       var railBefore = dom && !dom.rail.hidden ? dom.rail.getBoundingClientRect() : null;
       var pillBefore = dom && !dom.pill.hidden ? dom.pill.getBoundingClientRect() : null;
       var ghost = collapsed && !wasCollapsed && railBefore ? dom.rail.cloneNode(true) : null;
+      var opening = !collapsed && wasCollapsed;
       if (persist !== false) {
         preferredCollapsed = collapsed;
         persistCollapsedPreference();
@@ -6095,6 +6096,9 @@
         closePdfTray(false);
       }
       renderCollapsed();
+      // Opening copies the rail once it is laid out, so the copy is what grows
+      // and the real rail is never measured mid-animation at the wrong size.
+      if (opening && dom && !dom.rail.hidden) ghost = dom.rail.cloneNode(true);
       if (collapsed !== wasCollapsed) morphRail(!collapsed, ghost, railBefore, pillBefore);
       collapseHandlers.forEach(function (fn) {
         try {
@@ -6122,21 +6126,7 @@
           "scale(" + to.width / Math.max(1, from.width) + "," + to.height / Math.max(1, from.height) + ")"
         );
       }
-      if (opening && pillBefore) {
-        var railNow = dom.rail.getBoundingClientRect();
-        if (!railNow.width) return false;
-        dom.rail.animate(
-          [
-            { transformOrigin: "0 0", transform: toward(railNow, pillBefore), opacity: 0.3 },
-            { transformOrigin: "0 0", transform: "none", opacity: 1 }
-          ],
-          { duration: MORPH_MS, easing: "cubic-bezier(.2,.8,.2,1)" }
-        );
-        return true;
-      }
-      if (!opening && ghost && railBefore) {
-        var pillNow = dom.pill.getBoundingClientRect();
-        if (!pillNow.width) return false;
+      function placeGhost() {
         ghost.hidden = false;
         ghost.removeAttribute("id");
         Array.prototype.forEach.call(ghost.querySelectorAll("[id],[role]"), function (node) {
@@ -6149,6 +6139,36 @@
         ghost.style.pointerEvents = "none";
         // After the rail, so anything that looks the rail up finds the real one.
         dom.rail.parentNode.insertBefore(ghost, dom.rail.nextSibling);
+      }
+      function dropWhenDone(anim) {
+        var drop = function () {
+          if (ghost.parentNode) ghost.parentNode.removeChild(ghost);
+        };
+        anim.onfinish = drop;
+        anim.oncancel = drop;
+      }
+      if (opening && pillBefore && ghost) {
+        var railNow = dom.rail.getBoundingClientRect();
+        if (!railNow.width) return false;
+        placeGhost();
+        dropWhenDone(
+          ghost.animate(
+            [
+              { transformOrigin: "0 0", transform: toward(railNow, pillBefore), opacity: 0.3 },
+              { transformOrigin: "0 0", transform: "none", opacity: 1 }
+            ],
+            { duration: MORPH_MS, easing: "cubic-bezier(.2,.8,.2,1)" }
+          )
+        );
+        // The real rail is in place and measurable at once; it shows when the
+        // copy arrives.
+        dom.rail.animate([{ opacity: 0 }, { opacity: 0, offset: 0.9 }, { opacity: 1 }], { duration: MORPH_MS });
+        return true;
+      }
+      if (!opening && ghost && railBefore) {
+        var pillNow = dom.pill.getBoundingClientRect();
+        if (!pillNow.width) return false;
+        placeGhost();
         var shrink = ghost.animate(
           [
             { transformOrigin: "0 0", transform: "none", opacity: 1 },
@@ -6156,11 +6176,7 @@
           ],
           { duration: MORPH_MS, easing: "cubic-bezier(.4,0,.2,1)" }
         );
-        var drop = function () {
-          if (ghost.parentNode) ghost.parentNode.removeChild(ghost);
-        };
-        shrink.onfinish = drop;
-        shrink.oncancel = drop;
+        dropWhenDone(shrink);
         dom.pill.animate([{ opacity: 0 }, { opacity: 0, offset: 0.6 }, { opacity: 1 }], { duration: MORPH_MS });
         return true;
       }
