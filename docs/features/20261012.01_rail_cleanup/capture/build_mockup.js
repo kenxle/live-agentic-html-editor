@@ -106,6 +106,7 @@ html, body { margin: 0; background: #f4f3ef; }
 .mock-frame .grip { display: none !important; }
 .mock-frame .pill, .mock-frame .toasts { position: relative !important; inset: auto !important; }
 .mock-frame * { user-select: text !important; -webkit-user-select: text !important; }
+.mock-frame .holdbtn { cursor: pointer; }
 </style>
 </head>
 <body>
@@ -118,6 +119,29 @@ html, body { margin: 0; background: #f4f3ef; }
 
 ${sections}
 </main>
+<script>
+// The one live control on the copies: Hold sending flips, and the send
+// buttons in that copy change with it, as they do in the real rail.
+document.addEventListener("click", function (event) {
+  var hold = event.target.closest(".mock-frame .holdbtn");
+  if (!hold) return;
+  event.preventDefault();
+  var on = hold.getAttribute("aria-pressed") !== "true";
+  hold.setAttribute("aria-pressed", on ? "true" : "false");
+  var tip = "Messages are being held until you release them to the agent in a batch.";
+  hold.closest(".mock-frame").querySelectorAll("[data-mock-send]").forEach(function (b) {
+    if (on) {
+      b.setAttribute("data-mock-held", "true");
+      b.setAttribute("data-mock-tip", tip);
+      b.textContent = "Send to queue";
+    } else {
+      b.removeAttribute("data-mock-held");
+      b.removeAttribute("data-mock-tip");
+      b.textContent = b.getAttribute("data-mock-label") || "Send";
+    }
+  });
+});
+</script>
 </body>
 </html>
 `;

@@ -527,6 +527,14 @@
     //   square         kept in this browser, not stored yet
     //   triangle       work has waited too long; the rail also says so in words
     // The words live in the dot's title and in the screen-reader status row.
+    // Its words show at once on hover, drawn here rather than as a title,
+    // which the browser shows late.
+    ".markwrap{position:relative;display:flex;align-items:center;justify-content:center;",
+    "width:17px;height:17px;margin:-4px;flex:none}",
+    ".markwrap[data-lahe-tip]:hover::after{content:attr(data-lahe-tip);position:absolute;left:0;",
+    "top:calc(100% + 6px);width:260px;padding:8px 10px;border-radius:7px;background:#15171c;color:#fff;",
+    "font-size:11.5px;font-weight:500;line-height:1.45;white-space:pre-line;z-index:10;",
+    "box-shadow:0 6px 18px rgba(0,0,0,.25);pointer-events:none}",
     ".mark{width:9px;height:9px;border-radius:50%;background:var(--ink-faint);flex:none;",
     "box-sizing:border-box;cursor:default}",
     ".mark[data-status='stored']{background:var(--good)}",
@@ -1970,9 +1978,14 @@
       rail.appendChild(grip);
 
       var head = el("div", "head");
+      // The dot sits in a wrap that carries its hover tip: the triangle's
+      // clip-path would cut a tip drawn on the dot itself, and the wrap gives a
+      // 9px dot a hit area a pointer can find.
+      var statusDotWrap = el("span", "markwrap");
       var statusDot = el("span", "mark");
       statusDot.setAttribute("aria-hidden", "true");
-      head.appendChild(statusDot);
+      statusDotWrap.appendChild(statusDot);
+      head.appendChild(statusDotWrap);
       head.appendChild(el("span", "title", "Lahe"));
       // No review id in the head: it only ever showed a hash, never a name.
       head.appendChild(el("span", "spacer"));
@@ -2531,6 +2544,7 @@
         lateNote: lateNote,
         lateMessage: lateMessage,
         statusDot: statusDot,
+        statusDotWrap: statusDotWrap,
         holdBtn: holdBtn,
         holdCount: holdCount,
         limit: limit,
@@ -4925,7 +4939,7 @@
       dom.statusDot.setAttribute("data-status", status || "");
       dom.statusDot.setAttribute("data-agent", line.agentState || "");
       dom.statusDot.setAttribute("data-loud", line.loud ? "true" : "");
-      dom.statusDot.title = line.title ? line.text + "\n\n" + line.title : line.text;
+      dom.statusDotWrap.setAttribute("data-lahe-tip", line.title ? line.text + "\n\n" + line.title : line.text);
       // The banner and the late cards run off the same clock and the same
       // liveness answer as this line, so they are repainted with it.
       renderWaitBanner(banner);

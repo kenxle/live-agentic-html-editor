@@ -900,6 +900,7 @@
     "  background: rgba(255,255,255,0.06); }",
     ":host([data-lahe-scheme='dark']) .lahe-comment-act--quiet { border-color: transparent; background: none; }",
     PILL_STYLE,
+    ".lahe-comment-act[hidden] { display: none; }",
     highlightModule.SEND_TIP_CSS
   ].join("\n");
 
@@ -1760,7 +1761,11 @@
        */
       function paintSendable() {
         if (!sendEl) return null;
-        sendEl.disabled = !readInput().trim();
+        var empty = !readInput().trim();
+        sendEl.disabled = empty;
+        // The note on the whole page is a standing box: empty, there is nothing
+        // to delete, so it offers no Delete until it holds words.
+        if (deleteEl && item[record.FIELD.KIND] === record.KIND.NOTE) deleteEl.hidden = empty;
         return sendEl;
       }
 

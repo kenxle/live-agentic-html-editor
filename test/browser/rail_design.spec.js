@@ -139,7 +139,7 @@ test.describe("the rail as a shipping surface", () => {
         const keys = pane.getRootNode().querySelector(".keyspanel kbd");
         const note = pane.querySelector(".lahe-rail-note");
         const acts = pane.querySelector(".cardacts");
-        const del = pane.querySelector('[data-lahe-act="delete"]');
+        const del = pane.querySelector('.card [data-lahe-act="delete"]');
         const cs = (el) => (el ? window.getComputedStyle(el) : null);
         const keyStyle = cs(keys);
         const actStyle = cs(del);
