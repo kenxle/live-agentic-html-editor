@@ -1,6 +1,6 @@
 /*
  * live-agentic-html-editor review layer
- * version 0.3.0+4ee52acf8f2e
+ * version 0.3.0+a77d1800be13
  *
  * GENERATED FILE. Do not edit. Edit the sources under src/ and run
  *   npm run build:layer
@@ -12,7 +12,7 @@
   "use strict";
   var g = typeof globalThis !== "undefined" ? globalThis : window;
   g.LAHE = g.LAHE || {};
-  g.LAHE.version = "0.3.0+4ee52acf8f2e";
+  g.LAHE.version = "0.3.0+a77d1800be13";
 })();
 /* ---- src/shared/markers.js  (owner: 0A-kernel) ---- */
 // Markers: the attribute and class names that identify DOM the tool added.
@@ -19231,7 +19231,7 @@
     "font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;",
     "--ink:#15171c;--ink-soft:#565e6d;--ink-faint:#868f9f;--paper:#fff;--surface:#f6f7f9;",
     "--sunken:#eef0f4;--line:#e2e5eb;--line-soft:#eceef2;--accent:#3c56a5;--accent-ink:#2c3f7d;",
-    "--accent-wash:rgba(60,86,165,.09);--warn:#8d5715;--warn-wash:rgba(180,120,30,.12);",
+    "--accent-wash:rgba(60,86,165,.09);--warn:#8d5715;--warn-wash:rgba(180,120,30,.12);--bad:#c4372c;",
     "--good:#2c6f52;--shadow:0 1px 2px rgba(18,20,26,.06),0 14px 34px rgba(18,20,26,.13);",
     // THE CARD'S STATE IS A COLOR AS WELL AS A WORD. A draft the reviewer has
     // not submitted wears a quiet warm wash, and a card an agent has HANDLED
@@ -19256,7 +19256,7 @@
     // separable from the card behind it, so the block's loudness rested on the
     // rule alone and D10's promise (a question cannot be scrolled past) was
     // thinner in dark than in light. Same relationship, not the same alpha.
-    "--accent-ink:#b7c4f2;--accent-wash:rgba(147,167,234,.22);--warn:#dfae6a;",
+    "--accent-ink:#b7c4f2;--accent-wash:rgba(147,167,234,.22);--warn:#dfae6a;--bad:#ef7a6f;",
     "--warn-wash:rgba(223,174,106,.14);--good:#7fc4a2;",
     // The same two washes, derived the way every other dark token here is: the
     // same relationship to the card's paper, not the same numbers. A light tint
@@ -19329,8 +19329,12 @@
     ".mark{width:9px;height:9px;border-radius:50%;background:var(--ink-faint);flex:none;",
     "box-sizing:border-box;cursor:default}",
     ".mark[data-status='stored']{background:var(--good)}",
-    ".mark[data-status='kept_locally'],.mark[data-status='kept_unconfirmed']{border-radius:2px;width:8px;height:8px}",
-    ".mark[data-status='kept_locally']{background:var(--warn)}",
+    ".mark[data-status='kept_unconfirmed']{border-radius:2px;width:8px;height:8px}",
+    // The helper is down: a red octagon, the one stop sign on the rail.
+    // A white bar across it, like a stop sign, so it does not read as a dot.
+    ".mark[data-status='kept_locally']{background:linear-gradient(#fff,#fff) center/62% 2px no-repeat,var(--bad);",
+    "border-radius:0;width:12px;height:12px;",
+    "clip-path:polygon(30% 0,70% 0,100% 30%,100% 70%,70% 100%,30% 100%,0 70%,0 30%)}",
     // Working pulses: a halo that swells and fades while the agent is on it.
     ".mark[data-agent='working']{background:var(--accent);animation:lahe-mark-pulse 1.6s ease-out infinite}",
     "@keyframes lahe-mark-pulse{0%{box-shadow:0 0 0 0 color-mix(in srgb,var(--accent) 55%,transparent)}",
@@ -20097,8 +20101,14 @@
     waiting:
       "No response, {age}. Your edits are saved in the browser but not in your files. " +
       "You may need to check your agent isn't stuck. " + DOT_COPY_HINT,
-    no_agent: "Nobody has picked this up, {age}. " + DOT_COPY_HINT
+    no_agent: "Nobody has picked this up, {age}. " + DOT_COPY_HINT,
+    helper_down:
+      "Lahe server helper is down. Page may crash. Please ask an agent to restart the Lahe helper. " + DOT_COPY_HINT
   };
+  // What the dot copies when the helper is down: a request an agent can act on.
+  var HELPER_RESTART_MESSAGE =
+    "The Lahe helper on my computer is down, so my review page cannot save my comments. " +
+    "Please restart it by running: lahe serve";
   // The states where clicking the dot copies the hand-off message.
   var DOT_COPIES = { absent: true, waiting: true, no_agent: true };
   var EXPORT_GROUP = "export-review";
@@ -23127,6 +23137,7 @@
 
     /** The dot's first line: DOT_WORDS for the agent state, else the storage word. */
     function dotHeadline(line) {
+      if (line && line.status === STATUS.KEPT_LOCALLY) return DOT_WORDS.helper_down;
       var words = line && line.agentState ? DOT_WORDS[line.agentState] : null;
       if (!words) return line ? line.text : "";
       return words.indexOf("{age}") === -1 ? words : fillAge(words, line.agedMs || 0);
@@ -23145,7 +23156,8 @@
     var dotCopyNote = null;
     function copyFromDot() {
       if (!dom || dom.statusDotWrap.getAttribute("data-lahe-copy") !== "true") return null;
-      return copyHandoff().then(function (result) {
+      var copying = status === STATUS.KEPT_LOCALLY ? copyText(HELPER_RESTART_MESSAGE) : copyHandoff();
+      return copying.then(function (result) {
         dotCopyNote = result.ok ? copiedNote(result.text) : AGENT_PROMINENT.COPY_FAILED;
         if (dom) dom.statusDotWrap.setAttribute("data-lahe-tip", dotCopyNote);
         return result;
@@ -23397,6 +23409,25 @@
       dom.lateNote.textContent = handoffNote;
       dom.lateMessage.textContent = banner.message;
       dom.lateMessage.setAttribute("data-shown", handoffFailed ? "true" : "");
+    }
+
+    /** Put text on the clipboard; the same no-false-success rule as copyHandoff. */
+    function copyText(text) {
+      var target = clipboardTarget();
+      var write =
+        target && typeof target.writeText === "function"
+          ? Promise.resolve().then(function () {
+              return target.writeText(text);
+            })
+          : Promise.reject(new Error("this browser gave the page no clipboard to write to"));
+      return write.then(
+        function () {
+          return { ok: true, text: text };
+        },
+        function (error) {
+          return { ok: false, text: text, error: String((error && error.message) || error) };
+        }
+      );
     }
 
     function clipboardTarget() {
@@ -23867,7 +23898,10 @@
       });
       var headline = dotHeadline(line);
       if (!dotCopyNote) dom.statusDotWrap.setAttribute("data-lahe-tip", line.title ? headline + "\n\n" + line.title : headline);
-      dom.statusDotWrap.setAttribute("data-lahe-copy", DOT_COPIES[line.agentState] ? "true" : "false");
+      dom.statusDotWrap.setAttribute(
+        "data-lahe-copy",
+        DOT_COPIES[line.agentState] || line.status === STATUS.KEPT_LOCALLY ? "true" : "false"
+      );
       // The banner and the late cards run off the same clock and the same
       // liveness answer as this line, so they are repainted with it.
       renderWaitBanner(banner);
@@ -26300,6 +26334,7 @@
     CARD_UNSEEN_ATTR: CARD_UNSEEN_ATTR,
     CARD_ASKING_ATTR: CARD_ASKING_ATTR,
     DOT_WORDS: DOT_WORDS,
+    HELPER_RESTART_MESSAGE: HELPER_RESTART_MESSAGE,
     paintSendButton: highlightModule.paintSendButton,
     COLLAPSED_LINE_MAX: COLLAPSED_LINE_MAX,
     CHEVRON_ICON: CHEVRON_ICON,
@@ -50676,7 +50711,7 @@
   "use strict";
 
   // Replaced by scripts/build-layer.js at concatenation time.
-  var VERSION = "0.3.0+4ee52acf8f2e";
+  var VERSION = "0.3.0+a77d1800be13";
 
   var protocol = ns.protocol;
   var record = ns.record;
