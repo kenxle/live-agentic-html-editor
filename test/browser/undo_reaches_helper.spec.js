@@ -39,6 +39,7 @@ const { execFileSync } = require("node:child_process");
 
 const { test, expect, pollPage, pollUntil, placeCaret } = require("../helpers");
 const { stopTempHelpers } = require("../helpers/temp_helpers.js");
+const { freshReview } = require("./support/fresh_review.js");
 
 const REPO_ROOT = path.join(__dirname, "..", "..");
 const CLI = path.join(REPO_ROOT, "bin", "lahe.js");
@@ -120,6 +121,8 @@ test.describe("an undo reaches the helper, and reaches the source file", () => {
       session: session,
       review: review,
       open: open,
+      port: port,
+      used: false,
       reviewDir: path.join(stateDir, "reviews", review)
     };
   });
@@ -141,6 +144,19 @@ test.describe("an undo reaches the helper, and reaches the source file", () => {
   });
 
   /** The page as the source stands: every test starts from the same document. */
+  // Each test starts from an empty rail on a review of its own
+  // (support/fresh_review.js says why).
+  async function startClean(page) {
+    if (world.used) freshReview(world);
+    world.used = true;
+    reset();
+    await booted(page);
+  }
+
+  function ownItems(page) {
+    return page.evaluate(() => window.__lahe.items());
+  }
+
   function reset() {
     fs.writeFileSync(world.pagePath, docHtml());
     const later = new Date(Date.now() + 10000);
@@ -197,7 +213,7 @@ test.describe("an undo reaches the helper, and reaches the source file", () => {
     await pollPage(page, () => window.__lahe.isEditing() === false, undefined, {
       message: "Esc to commit the edit"
     });
-    const list = await page.evaluate(() => window.__lahe.items());
+    const list = await ownItems(page);
     expect(list, "the edit is one record").toHaveLength(1);
     expect(list[0].state).toBe("ready");
     return list[0];
@@ -216,8 +232,7 @@ test.describe("an undo reaches the helper, and reaches the source file", () => {
   }
 
   test("an undone edit leaves review.json, not just the rail", async ({ page }) => {
-    reset();
-    await booted(page);
+    await startClean(page);
 
     const item = await editAndCommit(page);
     expect(await blockText(page)).toBe(EDITED);
@@ -234,7 +249,7 @@ test.describe("an undo reaches the helper, and reaches the source file", () => {
 
     // The page is back, and so is the rail.
     expect(await blockText(page)).toBe(ORIGINAL);
-    expect(await page.evaluate(() => window.__lahe.items())).toHaveLength(0);
+    expect(await ownItems(page)).toHaveLength(0);
     expect(await page.evaluate(() => window.__lahe.cardIds())).toHaveLength(0);
 
     // And the helper heard, which is the whole bug. An item left in review.json
@@ -249,8 +264,7 @@ test.describe("an undo reaches the helper, and reaches the source file", () => {
   });
 
   test("undoing a handled edit asks the agent to take it out of the source", async ({ page }) => {
-    reset();
-    await booted(page);
+    await startClean(page);
 
     const item = await editAndCommit(page);
     await inReviewJson(item.id);
@@ -321,8 +335,7 @@ test.describe("an undo reaches the helper, and reaches the source file", () => {
   });
 
   test("the page check does not ask for the change back after the reviewer took it back", async ({ page }) => {
-    reset();
-    await booted(page);
+    await startClean(page);
 
     const item = await editAndCommit(page);
     await inReviewJson(item.id);
@@ -362,7 +375,7 @@ test.describe("an undo reaches the helper, and reaches the source file", () => {
     expect(String(after.note || ""), "and nobody was asked to reapply it").not.toMatch(/Reopened by the page check/);
 
     // The take-back is still the standing ask, and it is the only one.
-    const items = await page.evaluate(() => window.__lahe.items());
+    const items = await ownItems(page);
     const asks = items.filter((it) => it.state === "ready");
     expect(asks).toHaveLength(1);
     expect(asks[0].reverts).toBe(item.id);

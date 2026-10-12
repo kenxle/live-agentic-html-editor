@@ -49,6 +49,7 @@ const { execFileSync } = require("node:child_process");
 
 const { test, expect, pollPage, pollUntil, placeCaret } = require("../helpers");
 const { stopTempHelpers } = require("../helpers/temp_helpers.js");
+const { freshReview } = require("./support/fresh_review.js");
 const record = require("../../src/shared/record.js");
 
 const REPO_ROOT = path.join(__dirname, "..", "..");
@@ -153,6 +154,8 @@ test.describe("a paragraph break the reviewer types is kept", () => {
       session: session,
       review: review,
       open: open,
+      port: port,
+      used: false,
       reviewDir: path.join(stateDir, "reviews", review)
     };
   });
@@ -180,7 +183,11 @@ test.describe("a paragraph break the reviewer types is kept", () => {
     fs.utimesSync(world.pagePath, later, later);
   }
 
+  // Each test starts from an empty rail on a review of its own
+  // (support/fresh_review.js says why).
   function reset() {
+    if (world.used) freshReview(world);
+    world.used = true;
     rebuild(onePara(ONE_PARAGRAPH));
   }
 
