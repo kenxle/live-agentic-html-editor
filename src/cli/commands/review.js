@@ -275,6 +275,10 @@ async function run(argv, mode) {
     if (holder) {
       var owner = typeof holder.meta.agent_session_id === "string" ? holder.meta.agent_session_id : sessions.LEGACY_ID;
       var own = !!opts.session && owner === opts.session;
+      // A Library pick-up of a review from before sessions (lahe library serve
+      // passes --review <id> --adopt): add takes it into this session, and only
+      // while that pick-up is pending (add.js refuseForeign).
+      if (!own && owner === sessions.LEGACY_ID && opts.adopt && opts.review === holder.review) own = true;
       if (newSession || opts.isNew) {
         process.stderr.write(
           "lahe review: " + path.basename(originalTarget) + " already has a review (" + holder.review + "), and a file has one review. " +
