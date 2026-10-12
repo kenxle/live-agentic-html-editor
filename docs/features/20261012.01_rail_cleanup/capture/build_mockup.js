@@ -243,5 +243,29 @@ document.addEventListener("click", function (event) {
 </html>
 `;
 
-fs.writeFileSync(path.join(HERE, "rail_mockup.html"), page);
+// CARRY LAHE'S STAMPS. A hand edit on this page asks for its data-lahe-id to be
+// in the source, and this page is rebuilt from the rail's code every time, so
+// the stamp is put back here: on the element whose words are the edit's words.
+// MOCK_REVIEW_JSON names the review's review.json; without it, nothing is stamped.
+function stamped(html) {
+  const file = process.env.MOCK_REVIEW_JSON;
+  if (!file || !fs.existsSync(file)) return html;
+  const review = JSON.parse(fs.readFileSync(file, "utf8"));
+  let out = html;
+  review.pages.forEach(function (pg) {
+    pg.items.forEach(function (it) {
+      const stamp = it.region && it.region.stamp;
+      const words = it.after_full || (it.page && it.page.after_full);
+      if (!stamp || !words || it.kind !== "edit" || words.indexOf("\n") !== -1) return;
+      if (out.indexOf('data-lahe-id="' + stamp + '"') !== -1) return;
+      const re = new RegExp("<(p|td|li|span|div)((?:\\s[^>]*)?)>" + esc(words).replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "</\\1>");
+      out = out.replace(re, function (all, tag, attrs) {
+        return "<" + tag + attrs + ' data-lahe-id="' + stamp + '">' + esc(words) + "</" + tag + ">";
+      });
+    });
+  });
+  return out;
+}
+
+fs.writeFileSync(path.join(HERE, "rail_mockup.html"), stamped(page));
 console.log("wrote rail_mockup.html, " + shots.length + " states");

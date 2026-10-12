@@ -591,6 +591,9 @@
     // Fixed, and placed by setMenuGroupOpen from the group's own rect: the rail
     // clips what overflows it, and a fly-out has to stand outside the rail.
     ".submenu{position:fixed;top:auto;right:auto;min-width:190px}",
+    // A bridge over the gap between the group and its fly-out, so a pointer
+    // crossing it never counts as leaving.
+    ".submenu::before{content:'';position:absolute;top:0;bottom:0;right:-12px;width:12px}",
     ".submenu:not(:has(> .menuitem:not([hidden]))){display:none}",
 
     // --- tabs ---------------------------------------------------------------
@@ -1305,7 +1308,7 @@
   var DOT_WORDS = {
     connected: "Agent listening",
     working: "Agent is working, {age}",
-    absent: "No agent listening. " + DOT_COPY_HINT,
+    absent: "No agent listening. Your edits are saved in the browser but not in your files. " + DOT_COPY_HINT,
     waiting:
       "No response, {age}. Your edits are saved in the browser but not in your files. " +
       "You may need to check your agent isn't stuck. " + DOT_COPY_HINT,
@@ -1314,6 +1317,7 @@
   // The states where clicking the dot copies the hand-off message.
   var DOT_COPIES = { absent: true, waiting: true, no_agent: true };
   var EXPORT_GROUP = "export-review";
+  var MENU_LEAVE_GRACE_MS = 300;
   var VIEW_GROUP = "view";
 
   // The keyboard shortcuts, behind the menu rather than standing in the pane.
@@ -2181,14 +2185,23 @@
           });
           // Hover opens it and leaving the group shuts it. The fly-out is inside
           // the wrap, so moving onto it does not count as leaving.
+          // Leaving shuts it after a short grace, the way desktop menus do,
+          // so a pointer on its way to the fly-out does not lose it.
+          var leaveTimer = null;
           groupWrap.addEventListener("mouseenter", function () {
+            if (leaveTimer) clearTimeout(leaveTimer);
+            leaveTimer = null;
             Object.keys(menuGroups).forEach(function (other) {
               if (other !== entry.action) setMenuGroupOpen(other, false);
             });
             setMenuGroupOpen(entry.action, true);
           });
           groupWrap.addEventListener("mouseleave", function () {
-            setMenuGroupOpen(entry.action, false);
+            if (leaveTimer) clearTimeout(leaveTimer);
+            leaveTimer = setTimeout(function () {
+              leaveTimer = null;
+              setMenuGroupOpen(entry.action, false);
+            }, MENU_LEAVE_GRACE_MS);
           });
           menuList.appendChild(groupWrap);
           return item;
@@ -4334,13 +4347,21 @@
       return words.indexOf("{age}") === -1 ? words : fillAge(words, line.agedMs || 0);
     }
 
+    // "Message copied to clipboard:" and the message's first words, so the
+    // reviewer sees what they are about to paste.
+    function copiedNote(text) {
+      var words = String(text || "").replace(/\s+/g, " ").trim();
+      var start = words.length > 70 ? words.slice(0, 70).replace(/\s+\S*$/, "") + "..." : words;
+      return "Message copied to clipboard: " + start;
+    }
+
     // After a click copies the hand-off message, the tip says so until the
     // pointer leaves the dot.
     var dotCopyNote = null;
     function copyFromDot() {
       if (!dom || dom.statusDotWrap.getAttribute("data-lahe-copy") !== "true") return null;
       return copyHandoff().then(function (result) {
-        dotCopyNote = result.ok ? AGENT_PROMINENT.COPIED : AGENT_PROMINENT.COPY_FAILED;
+        dotCopyNote = result.ok ? copiedNote(result.text) : AGENT_PROMINENT.COPY_FAILED;
         if (dom) dom.statusDotWrap.setAttribute("data-lahe-tip", dotCopyNote);
         return result;
       });
@@ -5358,7 +5379,7 @@
       if (open && sub && subView) {
         var r = groupNode.getBoundingClientRect();
         sub.style.top = Math.max(8, r.top - 6) + "px";
-        sub.style.right = Math.max(8, subView.innerWidth - r.left + 10) + "px";
+        sub.style.right = Math.max(8, subView.innerWidth - r.left + 2) + "px";
       }
       return open;
     }
@@ -6021,7 +6042,12 @@
     }
 
     function setCollapsed(next, persist) {
+      var wasCollapsed = collapsed;
       collapsed = next === undefined ? !collapsed : !!next;
+      // Measured before the switch, for the morph between rail and pill.
+      var railBefore = dom && !dom.rail.hidden ? dom.rail.getBoundingClientRect() : null;
+      var pillBefore = dom && !dom.pill.hidden ? dom.pill.getBoundingClientRect() : null;
+      var ghost = collapsed && !wasCollapsed && railBefore ? dom.rail.cloneNode(true) : null;
       if (persist !== false) {
         preferredCollapsed = collapsed;
         persistCollapsedPreference();
@@ -6035,6 +6061,7 @@
         closePdfTray(false);
       }
       renderCollapsed();
+      if (collapsed !== wasCollapsed) morphRail(!collapsed, ghost, railBefore, pillBefore);
       collapseHandlers.forEach(function (fn) {
         try {
           fn(collapsed);
@@ -6043,6 +6070,67 @@
         }
       });
       return collapsed;
+    }
+
+    // THE MORPH between the rail and the pill, 0.3 seconds end to end (Ken).
+    // State changes at once: the rail is hidden or shown the moment the call
+    // returns, so nothing waits on the animation. Opening scales the real rail
+    // up out of the pill; closing shrinks a copy of it into the pill while the
+    // pill fades in. Off for anyone who asked their system for less motion.
+    var MORPH_MS = 300;
+    function morphRail(opening, ghost, railBefore, pillBefore) {
+      if (!dom || typeof dom.rail.animate !== "function") return false;
+      var view = doc && doc.defaultView;
+      if (view && view.matchMedia && view.matchMedia("(prefers-reduced-motion: reduce)").matches) return false;
+      function toward(from, to) {
+        return (
+          "translate(" + (to.left - from.left) + "px," + (to.top - from.top) + "px) " +
+          "scale(" + to.width / Math.max(1, from.width) + "," + to.height / Math.max(1, from.height) + ")"
+        );
+      }
+      if (opening && pillBefore) {
+        var railNow = dom.rail.getBoundingClientRect();
+        if (!railNow.width) return false;
+        dom.rail.animate(
+          [
+            { transformOrigin: "0 0", transform: toward(railNow, pillBefore), opacity: 0.3 },
+            { transformOrigin: "0 0", transform: "none", opacity: 1 }
+          ],
+          { duration: MORPH_MS, easing: "cubic-bezier(.2,.8,.2,1)" }
+        );
+        return true;
+      }
+      if (!opening && ghost && railBefore) {
+        var pillNow = dom.pill.getBoundingClientRect();
+        if (!pillNow.width) return false;
+        ghost.hidden = false;
+        ghost.removeAttribute("id");
+        Array.prototype.forEach.call(ghost.querySelectorAll("[id],[role]"), function (node) {
+          node.removeAttribute("id");
+          node.removeAttribute("role");
+        });
+        ghost.setAttribute("aria-hidden", "true");
+        ghost.setAttribute("data-lahe-ghost", "");
+        ghost.inert = true;
+        ghost.style.pointerEvents = "none";
+        // After the rail, so anything that looks the rail up finds the real one.
+        dom.rail.parentNode.insertBefore(ghost, dom.rail.nextSibling);
+        var shrink = ghost.animate(
+          [
+            { transformOrigin: "0 0", transform: "none", opacity: 1 },
+            { transformOrigin: "0 0", transform: toward(railBefore, pillNow), opacity: 0 }
+          ],
+          { duration: MORPH_MS, easing: "cubic-bezier(.4,0,.2,1)" }
+        );
+        var drop = function () {
+          if (ghost.parentNode) ghost.parentNode.removeChild(ghost);
+        };
+        shrink.onfinish = drop;
+        shrink.oncancel = drop;
+        dom.pill.animate([{ opacity: 0 }, { opacity: 0, offset: 0.6 }, { opacity: 1 }], { duration: MORPH_MS });
+        return true;
+      }
+      return false;
     }
 
     /**

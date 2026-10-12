@@ -389,6 +389,47 @@ test.describe("the rail as a shipping surface", () => {
     }
   });
 
+  // --- the rail and the pill morph into each other, 0.3 seconds -------------
+
+  test("closing shrinks a copy of the rail into the pill, opening grows the rail out of it, and state changes at once", async ({
+    page
+  }) => {
+    const { app, helper, token } = await startBoth();
+    try {
+      await bootedPage(page, app, helper, token);
+      const closing = await page.evaluate(() => {
+        const root = window.__lahe.rail.tabBody("active").getRootNode();
+        window.__lahe.rail.collapse(true);
+        const ghost = root.querySelector("[data-lahe-ghost]");
+        return {
+          railHidden: root.querySelector(".rail:not([data-lahe-ghost])").hidden,
+          ghost: !!ghost,
+          ghostAnimated: !!ghost && ghost.getAnimations().length > 0,
+          duration: ghost ? ghost.getAnimations()[0].effect.getTiming().duration : null
+        };
+      });
+      expect(closing.railHidden, "the rail is put away the moment collapse returns").toBe(true);
+      expect(closing.ghost, "a copy of it is what shrinks").toBe(true);
+      expect(closing.ghostAnimated).toBe(true);
+      expect(closing.duration).toBe(300);
+      await pollPage(page, () => !window.__lahe.rail.tabBody("active").getRootNode().querySelector("[data-lahe-ghost]"), undefined, {
+        message: "the copy to be gone once the morph ends"
+      });
+
+      const opening = await page.evaluate(() => {
+        const root = window.__lahe.rail.tabBody("active").getRootNode();
+        window.__lahe.rail.collapse(false);
+        const rail = root.querySelector(".rail");
+        return { shown: !rail.hidden, animated: rail.getAnimations().length > 0 };
+      });
+      expect(opening.shown, "the rail is back the moment expand returns").toBe(true);
+      expect(opening.animated, "and it grows out of the pill").toBe(true);
+    } finally {
+      await helper.stop().catch(() => {});
+      await app.close();
+    }
+  });
+
   test("a very long reply file path wraps inside the card instead of running out of it", async ({ page }) => {
     const { app, helper, token } = await startBoth();
     const LONG = "app/views/dashboard/components/roster/weekly_digest/_client_activity_summary_row.html.erb";

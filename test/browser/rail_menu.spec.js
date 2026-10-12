@@ -288,12 +288,23 @@ test.describe("the review's actions live in the head's menu", () => {
       const copyNow = info.items.filter((one) => one.label === "Copy review to clipboard")[0];
       expect(copyNow.rect.x + copyNow.rect.width, "the fly-out sits to the left of the menu").toBeLessThanOrEqual(groupNow.rect.x + 1);
 
-      // Moving the pointer onto another item shuts it.
+      // Crossing from the group to its fly-out does not lose it: the pointer
+      // passes over the gap between them on the way.
+      const gapX = (groupNow.rect.x + copyNow.rect.x + copyNow.rect.width) / 2;
+      await page.mouse.move(centerOf(groupNow.rect).x, centerOf(groupNow.rect).y);
+      await page.mouse.move(gapX, centerOf(groupNow.rect).y, { steps: 4 });
+      await page.mouse.move(centerOf(copyNow.rect).x, centerOf(copyNow.rect).y, { steps: 4 });
+      info = await menuInfo(page);
+      expect(labels(), "the fly-out survives the trip across the gap").toContain("Copy review to clipboard");
+
+      // Moving the pointer onto another item shuts it, after a short grace.
       const keys = info.items.filter((one) => one.label === "Keyboard shortcuts")[0];
       const k = centerOf(keys.rect);
-      await page.mouse.move(k.x, k.y);
-      info = await menuInfo(page);
-      expect(labels(), "leaving the group shuts it").not.toContain("Copy review to clipboard");
+      await page.mouse.move(k.x, k.y, { steps: 4 });
+      info = await pollUntil(async () => {
+        const got = await menuInfo(page);
+        return got.items.some((one) => one.label === "Copy review to clipboard") ? null : got;
+      }, { message: "leaving the group to shut it" });
 
       await page.keyboard.press("Escape");
       await clickMenuButton(page);
