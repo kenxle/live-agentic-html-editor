@@ -1,24 +1,25 @@
 # Progress: Stable addresses
 
-**Phase 7, Verify, paused on disk space.** Every workstream and both review fix rounds are merged on `feat/stable-addresses`. What is left: clear the disk (first item below), then the full test suite in all three browsers, the idle measurement on a preview of your real documents, and a browser walkthrough. Your other decisions are below. Last updated 2026-10-11 18:37.
+**Phase 7, Verify.** Every workstream and both review fix rounds are merged on `feat/stable-addresses`. The disk is cleared and the unit suite passes on the branch. In progress: the core builder is bringing old comments over to new addresses, and is writing a design note so every page carries its own comments. After that: the full test suite in all three browsers, the idle measurement on a preview of your real documents, and a browser walkthrough. Last updated 2026-10-11 20:24.
 
 **Docs:** [Decisions page](../../ongoing/STABLE_ADDRESSES.md) · [Crucible](00_crucible_stable_addresses.html) · [Brief](01_brief_stable_addresses.html) · [Architecture](02_architecture_stable_addresses.html) · [Plan](03_plan_stable_addresses.html) · [Code survey](parts/architecture/recon.md)
 
 ## Needs your attention
 
-- [ ] **Approve or reverse six changes from what the docs said.** Building turned up these. Each has my recommendation; say "all fine", or name the ones to change.
-  - **Accepted:** Windows does not get `.lahe`. Every system uses `.lahe.localhost`.
-  - **Reversed:** a linked document opens with its own review's rail when it has one. You rejected the change, so the core builder restores the old behavior.
+- [ ] **Approve or reverse four changes from what the docs said.** Building turned up these. Each has my recommendation; say "all fine", or name the ones to change.
   - **A tab stays connected when a newer review takes over its page.** The helper accepts a page's requests from any review that could answer on that site, not only the newest, so a tab opened earlier keeps working. A page from another site is still refused. *Recommend: accept.*
   - **One click from a "no document by that name" page opens the Library.** The Library page now accepts a link from a `.lahe.localhost` page. The security review checked it: the linking page cannot read the Library, frame it, or press its buttons. *Recommend: accept.*
   - **Links into hidden folders no longer open.** A Markdown link to a file inside a hidden folder in your home folder (for example `~/.config/notes/x.md`) now shows as plain text. Before, Lahe would serve that whole hidden folder, which is how a document could reach `~/.ssh`. *Recommend: accept.*
   - **One pull request instead of five.** The plan split the work into five PRs with an on/off switch between them. The switch is already removed, so splitting now would mean rebuilding it just to tear it down. *Recommend: one PR, with the commits grouped by step.*
 - [ ] **Approve retiring old tests.** 11 test files test behavior this feature removes: page servers that stop when idle, restarting page servers, remembering old ports, and the sweep that closes reopened sessions. 2 files go whole and 9 in part. 26 more get rewritten for the new behavior. Until you approve, the retired tests are moved to `test/retired/` (not deleted) so the suite stays green; they are deleted in one batch at cleanup only with your OK. Lists: "Task 3.0: test retirement list" and the Step 3 moved-test list in the [core progress](progress/phase6_workstream_core.md), and the "Task 4.3" section of the [library progress](progress/phase6_workstream_library.md) (18 Library tests).
-
+- [ ] **Three checks only you can do on this Mac**, once the PR is ready: restart the Mac and see the helper come back on its own (V45, starts at login); open a page with no port in its address (V75, after `lahe install --port-80`); open a `.lahe` page (V73, after `lahe install --lahe-names`). Both install steps ask for your admin password. Steps: [install progress](progress/phase6_workstream_install.md).
 
 ## Decided
 
+- **Every page carries its own comments.** You rejected "a linked document opens with the linking page's rail". Whatever page you are on, the rail shows that page's comments, whichever page you came from. This changes which review answers on a page, so the core builder is writing a design note first. It comes to this page for your OK before it is built.
 - **Old comments at the new address:** you chose A. When a page opens at its new address, the rail fetches that page's earlier comments from the helper and shows them as cards. Old Markdown pages get a path alias too. The core builder is building it now.
+- **Windows does not get `.lahe`:** accepted. Every system uses `.lahe.localhost`.
+- **Disk:** the old test folders are deleted (details below).
 
 ## Why the progress page kept going dead
 
@@ -32,7 +33,8 @@ The Lahe test folders were deleted at your go-ahead, and the disk went from 953 
 
 | Agent or task | Doing | Started | Branch |
 |---|---|---|---|
-| Orchestrator | Holding: no test runs or previews until the disk is cleared | 2026-10-11 18:37 | `feat/stable-addresses` |
+| Core builder | Old comments at the new address (A), then the design note for every page carrying its own comments | 2026-10-11 | `unit/sa-core` |
+| Orchestrator | Waiting on the core builder, then dist rebuild and the full gate | 2026-10-11 20:24 | `feat/stable-addresses` |
 
 ## Phases
 
