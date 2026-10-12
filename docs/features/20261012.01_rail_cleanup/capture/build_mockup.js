@@ -209,7 +209,7 @@ document.addEventListener("click", function (event) {
   hold.setAttribute("aria-pressed", on ? "true" : "false");
   // The count here is made up: the copy has no queue behind it.
   var label = hold.querySelector(".holdbtn__label");
-  if (label) label.textContent = on ? "Send 2 queued messages" : "Hold sending messages";
+  if (label) label.textContent = on ? "Send 2 held messages" : "Hold sending messages";
   var tip = "Messages are being held until you release them to the agent in a batch.";
   hold.closest(".mock-frame").querySelectorAll("[data-mock-send]").forEach(function (b) {
     if (on) {
@@ -218,7 +218,7 @@ document.addEventListener("click", function (event) {
       b.textContent = "Send to queue";
     } else {
       b.removeAttribute("data-mock-held");
-      b.removeAttribute("data-mock-tip");
+      b.setAttribute("data-mock-tip", "Cmd-Enter");
       b.textContent = b.getAttribute("data-mock-label") || "Send";
     }
   });

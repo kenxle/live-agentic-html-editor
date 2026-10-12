@@ -257,7 +257,7 @@ test.describe("Hold: queue several comments, release them to the agent at once",
 
       const afterOne = await page.evaluate(() => window.__lahe.rail.holdInfo());
       expect(afterOne.countText, "R5: past zero it counts").toBe("Holding, 1 queued");
-      expect(afterOne.label, "and the button says what it will send").toBe("Send 1 queued message");
+      expect(afterOne.label, "and the button says what it will send").toBe("Send 1 held message");
 
       // R4, all three together. wakeBefore/afterward compares the SAME file,
       // so "unchanged" is a real diff, not just "empty because nothing was
@@ -404,7 +404,7 @@ test.describe("Hold: queue several comments, release them to the agent at once",
       const tip = await page.evaluate(() => {
         const railRoot = window.__lahe.rail.tabBody("active").getRootNode();
         const button = railRoot.querySelector("[data-lahe-send][data-lahe-held='true']");
-        return { title: button.title, rule: !!Array.from(railRoot.querySelectorAll("style")).some((st) => st.textContent.indexOf("[data-lahe-held='true']:hover::after") !== -1) };
+        return { title: button.title, rule: !!Array.from(railRoot.querySelectorAll("style")).some((st) => st.textContent.indexOf("[data-lahe-tip]:hover::after") !== -1) };
       });
       expect(tip.title, "no native title, which would show late and twice").toBe("");
       expect(tip.rule, "the hover tip is a stylesheet rule in the rail").toBe(true);
@@ -413,6 +413,11 @@ test.describe("Hold: queue several comments, release them to the agent at once",
       await pollPage(page, () => window.__lahe.rail.holdInfo().pressed === false, undefined, { message: "Hold off" });
       const after = await readSends();
       expect(after.labels.every((label) => label === "Send"), "back to plain Send after release").toBe(true);
+      const plainTip = await page.evaluate(() => {
+        const railRoot = window.__lahe.rail.tabBody("active").getRootNode();
+        return railRoot.querySelector("[data-lahe-send]").getAttribute("data-lahe-tip");
+      });
+      expect(plainTip, "a plain Send names its key on hover").toBe("Cmd-Enter");
     } finally {
       await helper.stop().catch(() => {});
       await app.close();

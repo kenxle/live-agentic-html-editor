@@ -264,7 +264,7 @@
   // While held, the same button sends what is queued.
   function holdReleaseLabel(n) {
     if (n === 0) return "Stop holding messages";
-    return "Send " + n + " queued message" + (n === 1 ? "" : "s");
+    return "Send " + n + " held message" + (n === 1 ? "" : "s");
   }
   var HOLD_ZERO_TEXT = "Holding — nothing sends until you release";
   function holdCountText(n) {
@@ -928,7 +928,7 @@
     // filled pill on --sunken, the same surface the end-review panel's buttons
     // use for their own pressed state, never a new hue.
     // One full-width button that names what pressing it does: "Hold sending
-    // messages", then, while held, "Send N queued messages", drawn as the
+    // messages", then, while held, "Send N held messages", drawn as the
     // primary action because that is the thing left to do.
     ".holdrow{display:flex;align-items:center;gap:6px 8px;flex-wrap:wrap}",
     ".holdbtn{display:flex;align-items:center;justify-content:center;width:100%;",
