@@ -175,6 +175,7 @@ html, body { margin: 0; background: #f4f3ef; }
 .mock-frame { display: block !important; position: relative !important; inset: auto !important; z-index: auto !important; width: 392px !important; height: auto !important; }
 .mock-frame .rail { position: relative !important; inset: auto !important; width: 392px !important; height: auto !important; overflow: visible !important; }
 .mock-frame .menu, .mock-frame .stylepanel { max-height: none !important; }
+.mock-frame .submenu { position: absolute !important; top: -6px !important; right: calc(100% + 4px) !important; }
 .mock-section:has(.keyspanel[data-mock-shown="open"]) .mock-stage,
 .mock-section:has(.keyspanel[data-shown="open"]) .mock-stage { padding-bottom: 380px; }
 .mock-frame .panes { overflow: visible !important; flex: none !important; }

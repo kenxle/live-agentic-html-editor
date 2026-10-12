@@ -207,9 +207,8 @@ test("capture the rail as a reviewable mockup", async ({ page }) => {
     await page.evaluate(() => {
       const root = window.__lahe.rail.tabBody("active").getRootNode();
       root.querySelector('.menuitem[data-action="export-review"]').click();
-      root.querySelector('.menuitem[data-action="view"]').click();
     });
-    await snap("More actions menu", "The menu behind the three dots, open, with Export review and View both opened.");
+    await snap("More actions menu", "The menu behind the three dots, open, with the pointer on Export review. View flies out the same way.");
     await page.evaluate(() => {
       const root = window.__lahe.rail.tabBody("active").getRootNode();
       root.querySelector('.menuitem[data-action="shortcuts"]').click();

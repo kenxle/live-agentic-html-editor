@@ -261,7 +261,7 @@ test.describe("the review's actions live in the head's menu", () => {
     }
   });
 
-  test("Export review opens in place to Copy review to clipboard and Export review to file, and shuts with the menu", async ({
+  test("Export review flies out to Copy review to clipboard and Export review to file, and shuts with the menu", async ({
     page
   }) => {
     const { app, helper, token } = await startBoth();
@@ -283,6 +283,17 @@ test.describe("the review's actions live in the head's menu", () => {
       expect(info.open, "opening the group keeps the menu open").toBe(true);
       const at2 = labels().indexOf("Export review");
       expect(labels().slice(at2 + 1, at2 + 3)).toEqual(["Copy review to clipboard", "Export review to file"]);
+      // Out to the side, not pushed in below: the items sit left of the group.
+      const groupNow = info.items.filter((one) => one.label === "Export review")[0];
+      const copyNow = info.items.filter((one) => one.label === "Copy review to clipboard")[0];
+      expect(copyNow.rect.x + copyNow.rect.width, "the fly-out sits to the left of the menu").toBeLessThanOrEqual(groupNow.rect.x + 1);
+
+      // Moving the pointer onto another item shuts it.
+      const keys = info.items.filter((one) => one.label === "Keyboard shortcuts")[0];
+      const k = centerOf(keys.rect);
+      await page.mouse.move(k.x, k.y);
+      info = await menuInfo(page);
+      expect(labels(), "leaving the group shuts it").not.toContain("Copy review to clipboard");
 
       await page.keyboard.press("Escape");
       await clickMenuButton(page);

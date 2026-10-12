@@ -112,6 +112,7 @@
       keys: "Cmd-Enter",
       when: "a comment box is focused",
       hint: "Cmd-Enter when done with this comment.",
+      panelHint: "Cmd-Enter to submit your comment or complete your edit.",
       passThrough: false,
       preventDefault: true,
       requirement: "R7"

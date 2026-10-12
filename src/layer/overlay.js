@@ -575,10 +575,16 @@
     "font-weight:500;color:var(--ink);padding:7px 10px;border-radius:7px}",
     ".menuitem:hover{background:var(--surface)}",
     ".menuitem[hidden]{display:none}",
+    // A group flies out to the side on hover, the way a desktop menu does. To
+    // the LEFT, because the rail is against the window's right edge.
+    ".menugroup{position:relative}",
     ".menuitem--group{display:flex;align-items:center;justify-content:space-between;gap:12px}",
-    ".menuitem--group::after{content:'›';font-size:14px;line-height:1;color:var(--ink-faint);transition:transform .12s}",
-    ".menuitem--group[aria-expanded='true']::after{transform:rotate(90deg)}",
-    ".menuitem--sub{padding-left:22px}",
+    ".menuitem--group::after{content:'›';font-size:14px;line-height:1;color:var(--ink-faint)}",
+    ".menuitem--group[aria-expanded='true']{background:var(--surface)}",
+    // Fixed, and placed by setMenuGroupOpen from the group's own rect: the rail
+    // clips what overflows it, and a fly-out has to stand outside the rail.
+    ".submenu{position:fixed;top:auto;right:auto;min-width:190px}",
+    ".submenu:not(:has(> .menuitem:not([hidden]))){display:none}",
 
     // --- tabs ---------------------------------------------------------------
     ".tabs{display:flex;gap:2px;padding:8px 10px 0;border-bottom:1px solid var(--line-soft)}",
@@ -2119,6 +2125,7 @@
       menuList.setAttribute("role", "menu");
       menuList.setAttribute("aria-label", "More actions");
       menuList.hidden = true;
+      var menuGroups = {};
       var menuItems = MENU_ITEMS.map(function (entry) {
         var item = el("button", "menuitem", entry.label);
         item.setAttribute("type", "button");
@@ -2128,14 +2135,34 @@
         if (entry.group) {
           item.className = "menuitem menuitem--group";
           item.setAttribute("aria-expanded", "false");
+          item.setAttribute("aria-haspopup", "menu");
+          var groupWrap = el("div", "menugroup");
+          var sub = el("div", "menu submenu");
+          sub.setAttribute("role", "menu");
+          sub.setAttribute("aria-label", entry.label);
+          groupWrap.appendChild(item);
+          groupWrap.appendChild(sub);
+          menuGroups[entry.action] = sub;
+          // A click opens it rather than toggling: the pointer that clicked
+          // has already opened it by hovering.
           item.addEventListener("click", function () {
-            setMenuGroupOpen(entry.action, item.getAttribute("aria-expanded") !== "true");
+            setMenuGroupOpen(entry.action, true);
           });
-          menuList.appendChild(item);
+          // Hover opens it and leaving the group shuts it. The fly-out is inside
+          // the wrap, so moving onto it does not count as leaving.
+          groupWrap.addEventListener("mouseenter", function () {
+            Object.keys(menuGroups).forEach(function (other) {
+              if (other !== entry.action) setMenuGroupOpen(other, false);
+            });
+            setMenuGroupOpen(entry.action, true);
+          });
+          groupWrap.addEventListener("mouseleave", function () {
+            setMenuGroupOpen(entry.action, false);
+          });
+          menuList.appendChild(groupWrap);
           return item;
         }
         if (entry.parent) {
-          item.className = "menuitem menuitem--sub";
           item.setAttribute("data-parent", entry.parent);
           item.hidden = true;
         }
@@ -2161,7 +2188,7 @@
           }
           runAction(entry.action);
         });
-        menuList.appendChild(item);
+        (entry.parent ? menuGroups[entry.parent] : menuList).appendChild(item);
         return item;
       });
       var keysPanel = el("div", "stylepanel keyspanel");
@@ -5255,10 +5282,21 @@
     // Open or shut a group inside the menu: its own items show under it.
     function setMenuGroupOpen(group, open) {
       if (!dom) return false;
+      var groupNode = null;
       dom.menuItems.forEach(function (node) {
-        if (node.getAttribute("data-action") === group) node.setAttribute("aria-expanded", open ? "true" : "false");
+        if (node.getAttribute("data-action") === group) {
+          groupNode = node;
+          node.setAttribute("aria-expanded", open ? "true" : "false");
+        }
         if (node.getAttribute("data-parent") === group) node.hidden = !open;
       });
+      var sub = groupNode && groupNode.parentNode ? groupNode.parentNode.querySelector(".submenu") : null;
+      var subView = doc && doc.defaultView;
+      if (open && sub && subView) {
+        var r = groupNode.getBoundingClientRect();
+        sub.style.top = Math.max(8, r.top - 6) + "px";
+        sub.style.right = Math.max(8, subView.innerWidth - r.left + 10) + "px";
+      }
       return open;
     }
 
