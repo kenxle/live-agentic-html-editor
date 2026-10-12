@@ -393,7 +393,10 @@ test.describe("the reviewer ends the review from the rail", () => {
 
     // THE CLOSING STEP. The hand-edit list is what the reviewer is looking at,
     // and it left as a file they keep.
-    expect(await page.evaluate(() => window.__lahe.rail.currentTab()), "the Edits tab is in front of them").toBe("edits");
+    expect(
+      await page.evaluate(() => ({ tab: window.__lahe.rail.currentTab(), filter: window.__lahe.rail.currentFilter() })),
+      "Active, filtered to hand edits, is in front of them"
+    ).toEqual({ tab: "active", filter: "edits" });
     const exported = await pollUntil(
       async () => {
         const got = await page.evaluate(() => {

@@ -176,7 +176,7 @@ var LAYER_FILES = [
   {
     path: "src/layer/tab_edits.js",
     owner: "3D",
-    why: "Edits tab contents"
+    why: "Hand-edit rows inside rail cards"
   },
   {
     path: "src/layer/conflict_toast.js",

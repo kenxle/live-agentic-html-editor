@@ -493,7 +493,7 @@ test.describe("the reviewer's words land on the page once", () => {
       page,
       (id) => {
         const rail = window.__lahe.handle.rail;
-        rail.selectTab("edits");
+        rail.selectTab("active");
         const node = rail.cardNode(id);
         const button = node ? node.querySelector('[data-lahe-conflict-choice="keep_mine"]') : null;
         if (!button) return false;

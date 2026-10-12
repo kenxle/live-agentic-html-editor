@@ -296,6 +296,9 @@
       if (item && typeof rail.paneForItem === "function" && typeof rail.selectTab === "function") {
         rail.selectTab(rail.paneForItem(item));
       }
+      // The Active filter may be hiding this card; a jump to a hidden card is
+      // a jump to nothing.
+      if (typeof rail.revealCard === "function") rail.revealCard(id);
       if (typeof rail.setCardCollapsed === "function") rail.setCardCollapsed(id, false);
       var node = typeof rail.cardNode === "function" ? rail.cardNode(id) : null;
       if (!node) return true;

@@ -1728,9 +1728,9 @@ test.describe("free writing: the proofreading question", () => {
       await bootedPage(page, app, helper, token);
       const run = await typeRunAfterLede(page);
       await waitForItemInLog(helper, run.id);
-      // The reviewer is on Edits. The question lands on Active, which is not
+      // The reviewer is on Done. The question lands on Active, which is not
       // on screen, so it toasts (a reply on the tab already open does not).
-      await page.evaluate(() => window.__lahe.rail.selectTab("edits"));
+      await page.evaluate(() => window.__lahe.rail.selectTab("done"));
       await askProofread(helper, page, run, [{ block: 1, from: "place", to: "spot" }]);
 
       // The question's toast names the run in the reviewer's words, never the
@@ -1767,7 +1767,7 @@ test.describe("free writing: the proofreading question", () => {
         Array.from(window.__lahe.rail.cardNode(id).querySelectorAll("[data-lahe-run-words]")).map((n) => n.textContent),
         run.id
       );
-      expect(listed[1], "the Edits row lists the fixed words").toBe("I lost my spot every time I scrolled back.");
+      expect(listed[1], "the hand-edit row lists the fixed words").toBe("I lost my spot every time I scrolled back.");
 
       // The agent reads the fixed words from review.json at the new revision.
       await pollUntil(
@@ -1808,9 +1808,9 @@ test.describe("free writing: the proofreading question", () => {
   });
 
   // Flow walk, design problem 4: the question waits on the reviewer, so the
-  // card goes back to Active (wireframe 06b). Once answered it waits on the
-  // agent, and it goes back to Edits.
-  test("a proofread question sits on the Active tab while it waits on the reviewer, and goes back to Edits once answered", async ({
+  // card is on Active (wireframe 06b). Hand edits are Active cards now, so it
+  // is on Active before the question, while it waits, and once answered.
+  test("a proofread question sits on the Active tab while it waits on the reviewer, and stays there once answered", async ({
     page
   }, testInfo) => {
     const { app, helper, token } = await startBoth();
@@ -1819,15 +1819,15 @@ test.describe("free writing: the proofreading question", () => {
       const run = await typeRunAfterLede(page);
       await waitForItemInLog(helper, run.id);
       const before = await page.evaluate((id) => window.__lahe.rail.getCard(id).pane, run.id);
-      expect(before, "a run waiting on the agent is an Edits card").toBe("edits");
+      expect(before, "a run waiting on the agent is an Active card").toBe("active");
       await askProofread(helper, page, run, [{ block: 1, from: "place", to: "spot" }]);
       const asked = await page.evaluate((id) => {
         const rail = window.__lahe.rail;
         rail.collapse(false);
         rail.selectTab("active");
-        return { pane: rail.getCard(id).pane, active: rail.countFor("active"), edits: rail.countFor("edits") };
+        return { pane: rail.getCard(id).pane, active: rail.countFor("active"), done: rail.countFor("done") };
       }, run.id);
-      expect(asked, "the question is on Active, and Active counts it").toEqual({ pane: "active", active: 1, edits: 0 });
+      expect(asked, "the question is on Active, and Active counts it").toEqual({ pane: "active", active: 1, done: 0 });
       expect((await proofButtons(page, run.id)).use, "the buttons show on Active").toBe("Use the fixes");
 
       await page.setViewportSize({ width: 1280, height: 1100 });
@@ -1848,9 +1848,13 @@ test.describe("free writing: the proofreading question", () => {
       await pollPage(page, (args) => window.__lahe.itemById(args[0]).rev === args[1] + 1, [run.id, run.rev], {
         message: "Keep mine to post the next revision"
       });
-      await pollPage(page, (id) => window.__lahe.rail.getCard(id).pane === "edits", run.id, {
-        message: "the answered card to go back to Edits"
+      await pollPage(page, (id) => window.__lahe.itemById(id).state === "ready", run.id, {
+        message: "the answered card to wait on the agent again"
       });
+      expect(
+        await page.evaluate((id) => window.__lahe.rail.getCard(id).pane, run.id),
+        "waiting on the agent, it is still an Active card"
+      ).toBe("active");
     } finally {
       await helper.kill9();
       await app.close();

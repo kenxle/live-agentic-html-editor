@@ -2,7 +2,7 @@
 // with a button they can actually press.
 //
 // The walk on 2026-08-14 found editing.undo(id) working perfectly and reachable
-// only from the console: the rail's Edits tab drew a before-and-after row and no
+// only from the console: the rail drew a before-and-after row and no
 // way to take it back. This spec presses the row's own Undo, at its on-screen
 // geometry, in a real browser, for each of the three hand-edit kinds.
 //
@@ -80,9 +80,9 @@ async function runSession(page) {
   await boldAWord(page, "format", "ten");
   await page.evaluate(() => window.__laheEdits.deleteBlock("gone"));
   await pollPage(page, () => window.__laheEdits.rowCount() === 3, undefined, {
-    message: "three hand-edit rows in the Edits tab"
+    message: "three hand-edit rows"
   });
-  await page.evaluate(() => window.__laheEdits.showEditsTab());
+  await page.evaluate(() => window.__laheEdits.showHandEdits());
 }
 
 /** The real press: the row's own button, at its on-screen geometry. */
@@ -149,7 +149,7 @@ test.describe("R28 in the rail: every hand edit has its own Undo", () => {
 
     // The record retired, so the row left the tab.
     await pollPage(page, () => window.__laheEdits.rowCount() === 2, undefined, {
-      message: "the undone row to leave the Edits tab"
+      message: "the undone row to go"
     });
     expect(
       (await page.evaluate(() => window.__laheEdits.rows())).map((r) => r.id),
@@ -188,7 +188,7 @@ test.describe("R28 in the rail: every hand edit has its own Undo", () => {
 
     await pressUndo(page, rows.edit.id);
     await pollPage(page, () => window.__laheEdits.rowCount() === 2, undefined, {
-      message: "the undone edit row to leave the Edits tab"
+      message: "the undone edit row to go"
     });
 
     expect(
@@ -212,7 +212,7 @@ test.describe("R28 in the rail: every hand edit has its own Undo", () => {
   test("an undo that cannot revert says so on the row instead of failing quietly", async ({ page }) => {
     await bootAndWait(page, pages);
     await typeEdit(page, "one", ADDED);
-    await page.evaluate(() => window.__laheEdits.showEditsTab());
+    await page.evaluate(() => window.__laheEdits.showHandEdits());
     const row = (await page.evaluate(() => window.__laheEdits.rows()))[0];
 
     // The region this record points at leaves the page under the reviewer's

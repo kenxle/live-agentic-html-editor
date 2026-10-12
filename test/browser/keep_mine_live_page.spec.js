@@ -220,7 +220,7 @@ test.describe("the reviewer's decision on a collision, on a page that keeps repa
     //
     // At the button's on-screen geometry: the rail lives in a closed shadow
     // root, so hit-testing is the only honest way in, and it is what a hand
-    // does. The card is on the Edits tab, and a card in a hidden pane has no
+    // does. The card is on the Active tab, and a card in a hidden pane has no
     // box, so the tab is selected first.
     // The helper is deliberately down in this spec, and its failure chip panel
     // sits over the foot of the card, on top of the buttons. A reviewer waves a
@@ -236,7 +236,7 @@ test.describe("the reviewer's decision on a collision, on a page that keeps repa
       () =>
         page.evaluate((itemId) => {
           const rail = window.__lahe.handle.rail;
-          rail.selectTab("edits");
+          rail.selectTab("active");
           const node = rail.cardNode(itemId);
           const button = node ? node.querySelector('[data-lahe-conflict-choice="keep_mine"]') : null;
           if (!button) return null;

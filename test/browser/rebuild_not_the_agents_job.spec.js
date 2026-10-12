@@ -281,13 +281,13 @@ test.describe("LAHE rebuilds the page, and a handled claim is checked", () => {
     expect(status.indexOf("handled_not_on_page"), "and says why").toBeGreaterThan(-1);
 
     // The picture, light and dark, of the one thing this change draws. A hand
-    // edit's card lives on the Edits tab, so that is the tab the screenshot is
+    // edit's card lives on the Active tab, so that is the tab the screenshot is
     // of, and the note composer the edit gesture left open is closed first so
     // the picture is of the card rather than of an empty box beside it.
     fs.mkdirSync(SHOTS, { recursive: true });
     await page.evaluate(() => {
       window.__lahe.handle.comments.closeAll();
-      window.__lahe.rail.selectTab("edits");
+      window.__lahe.rail.selectTab("active");
     });
     // Taller than the default, because the notice is drawn at the foot of the
     // card and the default viewport cuts the card off above it. A screenshot

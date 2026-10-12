@@ -1,5 +1,5 @@
 // A ONE-FILE STUB of 3C's pinned export API, so 3D's spec can exercise the
-// Edits tab's list-export button before src/layer/export.js exists.
+// hand-edit list export before src/layer/export.js exists.
 //
 // REPLACED AT THE PHASE 3 STITCH. 3C is building the real module in its own
 // clone right now with this API:

@@ -1,7 +1,8 @@
 // 3D's done bar: after a session with six hand edits including one
-// formatting-only change, the Edits tab lists six before-and-after rows, none of
-// them appear in the Active thread, and the list exports through 3C's pinned
-// exportRecords seam.
+// formatting-only change, the rail shows six before-and-after cards in the
+// Active pane beside the comment (the Edits tab is gone; the Active filter is
+// what separates them), no comment row is drawn into them, and the list exports
+// through 3C's pinned exportRecords seam.
 //
 // It is a REAL session on a real page: six hand edits through the real editing
 // surface (four typed edits, one delete, one bold), plus a real comment through
@@ -10,8 +11,8 @@
 //
 // The export half runs against a one-file stub of 3C's pinned API
 // (test/browser/support/export_stub.js), which calls the real frozen formatter.
-// The stub is REPLACED AT THE PHASE 3 STITCH, and the second test here is the
-// one that proves the button is honest when the module is genuinely absent.
+// The last test in the first block proves the export is honest when the module
+// is genuinely absent.
 
 "use strict";
 
@@ -96,7 +97,7 @@ async function runSession(page) {
   return commentId;
 }
 
-test.describe("3D: the Edits tab", () => {
+test.describe("3D: hand-edit cards in Active", () => {
   let pages;
 
   test.beforeAll(async () => {
@@ -107,7 +108,7 @@ test.describe("3D: the Edits tab", () => {
     await pages.close();
   });
 
-  test("six hand edits become six before-and-after rows, apart from the thread, and they export", async ({
+  test("six hand edits become six before-and-after cards in Active, beside the comment, and they export", async ({
     page
   }) => {
     await page.goto(fixtureUrl(pages));
@@ -128,8 +129,8 @@ test.describe("3D: the Edits tab", () => {
     expect(kinds.filter((k) => k === "format_only").length, "one formatting-only change").toBe(1);
     expect(kinds.filter((k) => k === "delete").length, "one deletion").toBe(1);
 
-    // Six rows in the tab.
-    expect(await page.evaluate(() => window.__laheEdits.rowCount()), "six rows in the Edits tab").toBe(6);
+    // Six rows, one per hand edit.
+    expect(await page.evaluate(() => window.__laheEdits.rowCount()), "six hand-edit rows").toBe(6);
 
     const rows = await page.evaluate(() => window.__laheEdits.rows());
     expect(rows.length).toBe(6);
@@ -154,39 +155,38 @@ test.describe("3D: the Edits tab", () => {
     const typedRow = rows.find((r) => r.kind === "edit");
     expect(typedRow.after, "an edit row's after is the reviewer's text").not.toBe(typedRow.before);
 
-    // None of them are in the Active thread. Two readings of the same claim: the
-    // rail's own count for the Active tab, and the rows really in that pane.
-    expect(await page.evaluate(() => window.__laheEdits.rowsInPane("active")), "no edit row in the Active pane").toEqual([]);
-    expect(await page.evaluate(() => window.__laheEdits.countFor("active")), "the Active tab holds the comment and nothing else").toBe(1);
-    expect(await page.evaluate(() => window.__laheEdits.countFor("edits")), "the Edits tab holds the six hand edits").toBe(6);
+    // All of them are Active cards, beside the comment. Two readings of the
+    // same claim: the rail's own count for the Active tab, and the rows really
+    // in that pane. The comment's card carries no edit row.
+    expect(await page.evaluate(() => window.__laheEdits.countFor("active")), "Active holds the comment and the six hand edits").toBe(7);
     expect(
       await page.evaluate(() => window.__laheEdits.pillCount()),
       "all six unimplemented direct edits count as incomplete alongside the comment"
     ).toBe("7 (7)");
 
-    const inEditsPane = await page.evaluate(() => window.__laheEdits.rowsInPane("edits"));
-    expect(inEditsPane.length, "all six rows are in the Edits pane").toBe(6);
-    expect(inEditsPane.map((r) => r.id)).not.toContain(commentId);
+    const inActivePane = await page.evaluate(() => window.__laheEdits.rowsInPane("active"));
+    expect(inActivePane.length, "all six rows are in the Active pane").toBe(6);
+    expect(inActivePane.map((r) => r.id)).not.toContain(commentId);
+    expect(await page.evaluate(() => window.__laheEdits.rowsInPane("done")), "nothing is handled yet").toEqual([]);
 
-    // The list exports through 3C's real seam: the click delivers the file and
-    // hands back the formatter's text, labeled as a slice (the edit list is a
-    // subset of the review, never the whole).
-    expect(await page.evaluate(() => window.__laheEdits.exportEnabled()), "the export button is live").toBe(true);
+    // The list exports through 3C's real seam, the one ending the review runs:
+    // it delivers the file and hands back the formatter's text, labeled as a
+    // slice (the edit list is a subset of the review, never the whole).
     const [download, exported] = await Promise.all([
       page.waitForEvent("download"),
-      page.evaluate(() => window.__laheEdits.clickExport())
+      page.evaluate(() => window.__laheEdits.exportList())
     ]);
     expect(exported.ok, "the export succeeded").toBe(true);
-    expect(typeof exported.text, "the button returns the formatter's text").toBe("string");
+    expect(typeof exported.text, "the export returns the formatter's text").toBe("string");
     expect(exported.count, "the six hand edits went through the seam").toBe(6);
     expect(exported.text).toContain(TYPED[0].add.trim());
-    expect(download.suggestedFilename(), "the click really delivered a file").toMatch(/\.txt$/);
+    expect(download.suggestedFilename(), "the export really delivered a file").toMatch(/\.txt$/);
   });
 
   // THE RULE THAT SAYS WHICH ROW IS THE REVIEWER'S OWN NEW TEXT.
   //
   // Every before-and-after pair carries a left rule, and a `data-kind='edit'`
-  // row's is the accent. That is not decoration: it is how the tab says what is
+  // row's is the accent. That is not decoration: it is how the row says what is
   // new. Scanning a column of rows, the accent is the only thing separating the
   // reviewer's typed edits from a deletion or a formatting-only change, which
   // otherwise draw the same box. Delete either half of it (the rule, or the
@@ -201,7 +201,7 @@ test.describe("3D: the Edits tab", () => {
     await runSession(page);
 
     const drawn = await page.evaluate(() => {
-      const pane = window.__lahe.handle.rail.tabBody("edits");
+      const pane = window.__lahe.handle.rail.tabBody("active");
       const pairFor = (kind) => {
         const row = pane.querySelector('.lahe-edits[data-kind="' + kind + '"]');
         return row ? row.querySelector(".lahe-edits__pair") : null;
@@ -249,23 +249,24 @@ test.describe("3D: the Edits tab", () => {
     await typeEdit(page, "one", " One line is enough to make a row.");
 
     const cardText = await page.evaluate(() => {
-      const pane = window.__lahe.handle.rail.tabBody("edits");
+      const pane = window.__lahe.handle.rail.tabBody("active");
       return pane.querySelector(".card").textContent;
     });
     expect(cardText, "no draft label and no Reword/Delete pair on a hand edit").not.toMatch(/Empty draft|Reword/);
   });
 
-  // A REGRESSION, fixed in ce02c19.
+  // A REGRESSION, fixed in ce02c19, kept now that the Edits pane is gone.
   //
-  // The Edits pane orders its cards with inline flex `order`. A card that got
-  // answered migrated to Done and TOOK THE INLINE STYLE WITH IT, and one stale
-  // negative order beats every DOM position the rail chooses: the old edit sat
-  // pinned at the top of Done while the reply that had just arrived sank below
-  // it. The reviewer's newest answer was the hardest one to find.
+  // The Edits pane used to order its cards with inline flex `order`. A card that
+  // got answered migrated to Done and TOOK THE INLINE STYLE WITH IT, and one
+  // stale negative order beats every DOM position the rail chooses: the old edit
+  // sat pinned at the top of Done while the reply that had just arrived sank
+  // below it. Nothing stamps an inline order on a card any more; this holds the
+  // line on that and on the newest reply being first.
   //
   // Asserted on painted geometry, not DOM order, because flex `order` moves what
   // is on screen without moving anything in the tree.
-  test("a hand edit answered out of the Edits pane drops its inline order, and the newest reply is first in Done", async ({
+  test("a hand edit answered into Done carries no inline order, and the newest reply is first", async ({
     page
   }) => {
     await page.goto(fixtureUrl(pages));
@@ -276,12 +277,14 @@ test.describe("3D: the Edits tab", () => {
     const ids = await page.evaluate(() => window.__lahe.items().map((item) => item.id));
     expect(ids, "two hand edits, each with its own card").toHaveLength(2);
 
-    // Both cards are in Edits, and the pane really does stamp an inline order.
-    const stampedInEdits = await page.evaluate(
-      (all) => all.some((id) => !!window.__lahe.rail.cardNode(id).style.order),
+    // Both cards are in Active, placed by the rail, with no inline order.
+    const inActive = await page.evaluate(
+      (all) => all.map((id) => ({ pane: window.__lahe.rail.getCard(id).pane, order: window.__lahe.rail.cardNode(id).style.order })),
       ids
     );
-    expect(stampedInEdits, "the Edits pane orders its rows with inline flex order").toBe(true);
+    inActive.forEach((card) => {
+      expect(card, "a hand edit is an Active card with no inline order").toEqual({ pane: "active", order: "" });
+    });
 
     // The agent answers the FIRST edit, then the second a minute later. Nothing
     // test-only about the path: it is the real fold the poll loop calls.
@@ -323,7 +326,7 @@ test.describe("3D: the Edits tab", () => {
     }, ids);
 
     laidOut.forEach((card) => {
-      expect(card.order, "no card in Done carries the Edits pane's inline order any more").toBe("");
+      expect(card.order, "no card in Done carries an inline order").toBe("");
     });
     const [older, newer] = laidOut;
     expect(newer.top, "the card whose reply is newest sits above the one answered a minute earlier").toBeLessThan(
@@ -332,9 +335,9 @@ test.describe("3D: the Edits tab", () => {
   });
 
   // The export module ships in the bundle now, so "absent" can only mean the
-  // namespace was lost at runtime. The guard's promise is unchanged: the button
+  // namespace was lost at runtime. The guard's promise is unchanged: the export
   // says so instead of failing quietly.
-  test("with the export namespace gone, the button says so instead of failing quietly", async ({ page }) => {
+  test("with the export namespace gone, the export says so instead of failing quietly", async ({ page }) => {
     await page.goto(fixtureUrl(pages));
     await pollPage(page, () => !!window.__lahe && !!window.__laheEdits, undefined, {
       message: "the real boot to put the library and the fixture's readers on the page"
@@ -346,10 +349,9 @@ test.describe("3D: the Edits tab", () => {
     await typeEdit(page, "one", " One line is enough to make a row.");
 
     expect(await page.evaluate(() => window.__laheEdits.rowCount())).toBe(1);
-    const result = await page.evaluate(() => window.__laheEdits.clickExport());
+    const result = await page.evaluate(() => window.__laheEdits.exportList());
     expect(result.ok, "the export reports failure rather than pretending").toBe(false);
     expect(result.reason).toMatch(/export/i);
-    expect(await page.evaluate(() => window.__laheEdits.exportTitle())).toMatch(/export/i);
   });
 });
 
@@ -431,7 +433,7 @@ async function openRail(page, tab) {
   await page.evaluate((t) => {
     window.__lahe.rail.collapse(false);
     window.__lahe.rail.selectTab(t);
-  }, tab || "edits");
+  }, tab || "active");
 }
 
 test.describe("free writing: the edits row and the card show new blocks", () => {
@@ -634,9 +636,9 @@ test.describe("free writing: the edits row and the card show new blocks", () => 
     expect(drawn.stateAttr).toBe("refused");
   });
 
-  test("an empty notes page shows the pinned lines on both tabs, with the file name", async ({ page }) => {
+  test("an empty notes page shows the pinned lines on Active, with the file name", async ({ page }) => {
     await fw.openFixture(page, server, "empty_notes.html", { notes: true });
-    for (const tab of ["active", "edits"]) {
+    for (const tab of ["active"]) {
       await openRail(page, tab);
       const lines = await pollValue(
         page,
@@ -656,10 +658,8 @@ test.describe("free writing: the edits row and the card show new blocks", () => 
         "The agent only places your words. It organizes the notes when you ask it to."
       ]);
     }
-    const count = await page.evaluate(
-      () => window.__lahe.rail.tabBody("edits").querySelector(".lahe-edits-bar__count").textContent
-    );
-    expect(count, "the empty draft the page opens with is not counted").toBe("0 hand edits");
+    const count = await page.evaluate(() => window.__lahe.rail.countFor("active"));
+    expect(count, "the empty draft the page opens with is not counted").toBe(0);
   });
 
   test("an empty HTML page shows the lines without a file name", async ({ page }) => {
@@ -731,7 +731,7 @@ test.describe("free writing: the edits row and the card show new blocks", () => 
 
   test("a page with content keeps the ordinary empty lines", async ({ page }) => {
     await fw.openFixture(page, server, "blog.html");
-    const text = await page.evaluate(() => window.__lahe.rail.tabBody("edits").querySelector(".empty").textContent);
-    expect(text).toBe("No hand edits yet.");
+    const text = await page.evaluate(() => window.__lahe.rail.tabBody("active").querySelector(".empty").textContent);
+    expect(text).toBe("No unanswered or active threads. Check the done tab, or select some text and press Cmd-Shift-C.");
   });
 });
