@@ -293,7 +293,9 @@ test.describe("the rail says whether anything has come back", () => {
       // be wrong.
       expect(connected.dotTip.split("\n")[0]).toBe("Agent listening");
       expect(connected.dotCopies, "nothing to fix, nothing to copy").toBe(false);
-      expect(gone.dotTip.split("\n")[0]).toBe("No agent listening. Click to copy a message you can send to an agent.");
+      expect(gone.dotTip.split("\n")[0]).toBe(
+        "No agent listening. Your edits are saved in the browser but not in your files. Click to copy a message you can send to an agent."
+      );
       expect(gone.dotCopies).toBe(true);
 
       // Forty-five seconds after the reviewer pressed submit, with nothing back.
@@ -594,7 +596,7 @@ test.describe("the rail says whether anything has come back", () => {
         message: "a click on the dot to copy the handoff message"
       });
       expect(await page.evaluate(() => window.__copied)).toContain("lahe session takeover s_amber01");
-      expect((await page.evaluate(() => window.__laheRail.statusLine())).dotTip).toContain("Copied");
+      expect((await page.evaluate(() => window.__laheRail.statusLine())).dotTip).toMatch(/^Message copied to clipboard: Please take over/);
 
       // An agent that is working: the same wait, explained, and nothing amber.
       const working = await page.evaluate(

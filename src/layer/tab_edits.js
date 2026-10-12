@@ -128,6 +128,45 @@
   // disabled button over "No hand edits yet." Two words rather than one,
   // because the rail's footer already holds a button called exactly "Export"
   // and two of those in one rail is a coin toss for anyone reading it.
+  // THE CHANGE, NOT THE START. Before and after share their opening and
+  // closing words; long shared stretches are cut to a few words beside the
+  // change, with "..." where words were left out, so the card shows what moved.
+  var FOCUS_KEEP_WORDS = 6;
+  var FOCUS_MIN_CUT = 40;
+
+  function focusPair(before, after) {
+    var a = String(before || "");
+    var b = String(after || "");
+    var start = 0;
+    while (start < a.length && start < b.length && a[start] === b[start]) start += 1;
+    var end = 0;
+    while (end < a.length - start && end < b.length - start && a[a.length - 1 - end] === b[b.length - 1 - end]) end += 1;
+    var lead = "";
+    var cutFront = 0;
+    if (start > FOCUS_MIN_CUT) {
+      var head = a.slice(0, start);
+      var words = head.split(/(\s+)/);
+      var kept = words.slice(-FOCUS_KEEP_WORDS * 2).join("");
+      cutFront = start - kept.length;
+      if (cutFront > 0) lead = "...";
+      else cutFront = 0;
+    }
+    var tail = "";
+    var cutBack = 0;
+    if (end > FOCUS_MIN_CUT) {
+      var shared = a.slice(a.length - end);
+      var parts = shared.split(/(\s+)/);
+      var keep = parts.slice(0, FOCUS_KEEP_WORDS * 2).join("");
+      cutBack = end - keep.length;
+      if (cutBack > 0) tail = "...";
+      else cutBack = 0;
+    }
+    return {
+      before: lead + a.slice(cutFront, a.length - cutBack) + tail,
+      after: lead + b.slice(cutFront, b.length - cutBack) + tail
+    };
+  }
+
   var EXPORT_LABEL = "Export edits";
   var EXPORT_MISSING_TITLE =
     "Export is arriving with the copy-and-export module; the list export wires up at the Phase 3 stitch.";
@@ -657,8 +696,11 @@
         after.setAttribute("data-empty", "false");
         pair.hidden = !anchorPair;
       } else {
-        before.textContent = text.before;
-        after.textContent = text.after;
+        // Centered on what changed: a long paragraph with its change at the
+        // end read as two identical lines once the card cut them to three.
+        var focused = focusPair(text.before, text.after);
+        before.textContent = focused.before;
+        after.textContent = focused.after;
         after.setAttribute("data-empty", text.emptyAfter ? "true" : "false");
         pair.hidden = false;
       }
@@ -872,6 +914,7 @@
     STYLE: STYLE,
     DELETED_TEXT: DELETED_TEXT,
     EXPORT_LABEL: EXPORT_LABEL,
+    focusPair: focusPair,
     EXPORT_MISSING_TITLE: EXPORT_MISSING_TITLE,
     UNDO_LABEL: UNDO_LABEL,
     UNDO_TITLE: UNDO_TITLE,

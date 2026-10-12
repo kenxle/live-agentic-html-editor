@@ -122,6 +122,7 @@
       keys: "Cmd-Enter, Esc, or a click outside",
       when: "a block is in edit state",
       hint: "Cmd-Enter, Esc, or click outside to finish the edit and give the page back.",
+      inPanel: false,
       passThrough: false,
       preventDefault: true,
       requirement: "R24"
@@ -140,6 +141,7 @@
       keys: "Cmd-Shift-X",
       when: "always, including while the tool is hidden",
       hint: "Press Cmd-Shift-X to hide the review while you present, and again to bring it back.",
+      panelHint: "Presentation mode. Toggle hiding the rail and the pill.",
       passThrough: false,
       preventDefault: true,
       requirement: "R13"
@@ -149,6 +151,7 @@
       keys: "Cmd-Shift-1",
       when: "always, except while the review is hidden for presenting",
       hint: "Press Cmd-Shift-1 to open or close the review panel.",
+      panelHint: "Toggle the chat rail.",
       passThrough: false,
       preventDefault: true,
       requirement: "R43"
@@ -158,6 +161,8 @@
       keys: "everything else",
       when: "always",
       hint: "Everything else is the page. Links, buttons, and forms work exactly as they do without this.",
+      panelKeys: "page hotkeys",
+      panelHint: "Other page hotkeys should work as normal.",
       passThrough: true,
       preventDefault: false,
       requirement: "R13"

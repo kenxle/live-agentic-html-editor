@@ -446,7 +446,7 @@
     "font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;",
     "--ink:#15171c;--ink-soft:#565e6d;--ink-faint:#868f9f;--paper:#fff;--surface:#f6f7f9;",
     "--sunken:#eef0f4;--line:#e2e5eb;--line-soft:#eceef2;--accent:#3c56a5;--accent-ink:#2c3f7d;",
-    "--accent-wash:rgba(60,86,165,.09);--warn:#8d5715;--warn-wash:rgba(180,120,30,.12);",
+    "--accent-wash:rgba(60,86,165,.09);--warn:#8d5715;--warn-wash:rgba(180,120,30,.12);--bad:#c4372c;",
     "--good:#2c6f52;--shadow:0 1px 2px rgba(18,20,26,.06),0 14px 34px rgba(18,20,26,.13);",
     // THE CARD'S STATE IS A COLOR AS WELL AS A WORD. A draft the reviewer has
     // not submitted wears a quiet warm wash, and a card an agent has HANDLED
@@ -471,7 +471,7 @@
     // separable from the card behind it, so the block's loudness rested on the
     // rule alone and D10's promise (a question cannot be scrolled past) was
     // thinner in dark than in light. Same relationship, not the same alpha.
-    "--accent-ink:#b7c4f2;--accent-wash:rgba(147,167,234,.22);--warn:#dfae6a;",
+    "--accent-ink:#b7c4f2;--accent-wash:rgba(147,167,234,.22);--warn:#dfae6a;--bad:#ef7a6f;",
     "--warn-wash:rgba(223,174,106,.14);--good:#7fc4a2;",
     // The same two washes, derived the way every other dark token here is: the
     // same relationship to the card's paper, not the same numbers. A light tint
@@ -544,8 +544,12 @@
     ".mark{width:9px;height:9px;border-radius:50%;background:var(--ink-faint);flex:none;",
     "box-sizing:border-box;cursor:default}",
     ".mark[data-status='stored']{background:var(--good)}",
-    ".mark[data-status='kept_locally'],.mark[data-status='kept_unconfirmed']{border-radius:2px;width:8px;height:8px}",
-    ".mark[data-status='kept_locally']{background:var(--warn)}",
+    ".mark[data-status='kept_unconfirmed']{border-radius:2px;width:8px;height:8px}",
+    // The helper is down: a red octagon, the one stop sign on the rail.
+    // A white bar across it, like a stop sign, so it does not read as a dot.
+    ".mark[data-status='kept_locally']{background:linear-gradient(#fff,#fff) center/62% 2px no-repeat,var(--bad);",
+    "border-radius:0;width:12px;height:12px;",
+    "clip-path:polygon(30% 0,70% 0,100% 30%,100% 70%,70% 100%,30% 100%,0 70%,0 30%)}",
     // Working pulses: a halo that swells and fades while the agent is on it.
     ".mark[data-agent='working']{background:var(--accent);animation:lahe-mark-pulse 1.6s ease-out infinite}",
     "@keyframes lahe-mark-pulse{0%{box-shadow:0 0 0 0 color-mix(in srgb,var(--accent) 55%,transparent)}",
@@ -591,6 +595,9 @@
     // Fixed, and placed by setMenuGroupOpen from the group's own rect: the rail
     // clips what overflows it, and a fly-out has to stand outside the rail.
     ".submenu{position:fixed;top:auto;right:auto;min-width:190px}",
+    // A bridge over the gap between the group and its fly-out, so a pointer
+    // crossing it never counts as leaving.
+    ".submenu::before{content:'';position:absolute;top:0;bottom:0;right:-12px;width:12px}",
     ".submenu:not(:has(> .menuitem:not([hidden]))){display:none}",
 
     // --- tabs ---------------------------------------------------------------
@@ -1305,15 +1312,22 @@
   var DOT_WORDS = {
     connected: "Agent listening",
     working: "Agent is working, {age}",
-    absent: "No agent listening. " + DOT_COPY_HINT,
+    absent: "No agent listening. Your edits are saved in the browser but not in your files. " + DOT_COPY_HINT,
     waiting:
       "No response, {age}. Your edits are saved in the browser but not in your files. " +
       "You may need to check your agent isn't stuck. " + DOT_COPY_HINT,
-    no_agent: "Nobody has picked this up, {age}. " + DOT_COPY_HINT
+    no_agent: "Nobody has picked this up, {age}. " + DOT_COPY_HINT,
+    helper_down:
+      "Lahe server helper is down. Page may crash. Please ask an agent to restart the Lahe helper. " + DOT_COPY_HINT
   };
+  // What the dot copies when the helper is down: a request an agent can act on.
+  var HELPER_RESTART_MESSAGE =
+    "The Lahe helper on my computer is down, so my review page cannot save my comments. " +
+    "Please restart it by running: lahe serve";
   // The states where clicking the dot copies the hand-off message.
   var DOT_COPIES = { absent: true, waiting: true, no_agent: true };
   var EXPORT_GROUP = "export-review";
+  var MENU_LEAVE_GRACE_MS = 300;
   var VIEW_GROUP = "view";
 
   // The keyboard shortcuts, behind the menu rather than standing in the pane.
@@ -2181,14 +2195,23 @@
           });
           // Hover opens it and leaving the group shuts it. The fly-out is inside
           // the wrap, so moving onto it does not count as leaving.
+          // Leaving shuts it after a short grace, the way desktop menus do,
+          // so a pointer on its way to the fly-out does not lose it.
+          var leaveTimer = null;
           groupWrap.addEventListener("mouseenter", function () {
+            if (leaveTimer) clearTimeout(leaveTimer);
+            leaveTimer = null;
             Object.keys(menuGroups).forEach(function (other) {
               if (other !== entry.action) setMenuGroupOpen(other, false);
             });
             setMenuGroupOpen(entry.action, true);
           });
           groupWrap.addEventListener("mouseleave", function () {
-            setMenuGroupOpen(entry.action, false);
+            if (leaveTimer) clearTimeout(leaveTimer);
+            leaveTimer = setTimeout(function () {
+              leaveTimer = null;
+              setMenuGroupOpen(entry.action, false);
+            }, MENU_LEAVE_GRACE_MS);
           });
           menuList.appendChild(groupWrap);
           return item;
@@ -4329,9 +4352,18 @@
 
     /** The dot's first line: DOT_WORDS for the agent state, else the storage word. */
     function dotHeadline(line) {
+      if (line && line.status === STATUS.KEPT_LOCALLY) return DOT_WORDS.helper_down;
       var words = line && line.agentState ? DOT_WORDS[line.agentState] : null;
       if (!words) return line ? line.text : "";
       return words.indexOf("{age}") === -1 ? words : fillAge(words, line.agedMs || 0);
+    }
+
+    // "Message copied to clipboard:" and the message's first words, so the
+    // reviewer sees what they are about to paste.
+    function copiedNote(text) {
+      var words = String(text || "").replace(/\s+/g, " ").trim();
+      var start = words.length > 70 ? words.slice(0, 70).replace(/\s+\S*$/, "") + "..." : words;
+      return "Message copied to clipboard: " + start;
     }
 
     // After a click copies the hand-off message, the tip says so until the
@@ -4339,8 +4371,9 @@
     var dotCopyNote = null;
     function copyFromDot() {
       if (!dom || dom.statusDotWrap.getAttribute("data-lahe-copy") !== "true") return null;
-      return copyHandoff().then(function (result) {
-        dotCopyNote = result.ok ? AGENT_PROMINENT.COPIED : AGENT_PROMINENT.COPY_FAILED;
+      var copying = status === STATUS.KEPT_LOCALLY ? copyText(HELPER_RESTART_MESSAGE) : copyHandoff();
+      return copying.then(function (result) {
+        dotCopyNote = result.ok ? copiedNote(result.text) : AGENT_PROMINENT.COPY_FAILED;
         if (dom) dom.statusDotWrap.setAttribute("data-lahe-tip", dotCopyNote);
         return result;
       });
@@ -4591,6 +4624,25 @@
       dom.lateNote.textContent = handoffNote;
       dom.lateMessage.textContent = banner.message;
       dom.lateMessage.setAttribute("data-shown", handoffFailed ? "true" : "");
+    }
+
+    /** Put text on the clipboard; the same no-false-success rule as copyHandoff. */
+    function copyText(text) {
+      var target = clipboardTarget();
+      var write =
+        target && typeof target.writeText === "function"
+          ? Promise.resolve().then(function () {
+              return target.writeText(text);
+            })
+          : Promise.reject(new Error("this browser gave the page no clipboard to write to"));
+      return write.then(
+        function () {
+          return { ok: true, text: text };
+        },
+        function (error) {
+          return { ok: false, text: text, error: String((error && error.message) || error) };
+        }
+      );
     }
 
     function clipboardTarget() {
@@ -5061,7 +5113,10 @@
       });
       var headline = dotHeadline(line);
       if (!dotCopyNote) dom.statusDotWrap.setAttribute("data-lahe-tip", line.title ? headline + "\n\n" + line.title : headline);
-      dom.statusDotWrap.setAttribute("data-lahe-copy", DOT_COPIES[line.agentState] ? "true" : "false");
+      dom.statusDotWrap.setAttribute(
+        "data-lahe-copy",
+        DOT_COPIES[line.agentState] || line.status === STATUS.KEPT_LOCALLY ? "true" : "false"
+      );
       // The banner and the late cards run off the same clock and the same
       // liveness answer as this line, so they are repainted with it.
       renderWaitBanner(banner);
@@ -5358,7 +5413,7 @@
       if (open && sub && subView) {
         var r = groupNode.getBoundingClientRect();
         sub.style.top = Math.max(8, r.top - 6) + "px";
-        sub.style.right = Math.max(8, subView.innerWidth - r.left + 10) + "px";
+        sub.style.right = Math.max(8, subView.innerWidth - r.left + 2) + "px";
       }
       return open;
     }
@@ -6021,7 +6076,13 @@
     }
 
     function setCollapsed(next, persist) {
+      var wasCollapsed = collapsed;
       collapsed = next === undefined ? !collapsed : !!next;
+      // Measured before the switch, for the morph between rail and pill.
+      var railBefore = dom && !dom.rail.hidden ? dom.rail.getBoundingClientRect() : null;
+      var pillBefore = dom && !dom.pill.hidden ? dom.pill.getBoundingClientRect() : null;
+      var ghost = collapsed && !wasCollapsed && railBefore ? dom.rail.cloneNode(true) : null;
+      var opening = !collapsed && wasCollapsed;
       if (persist !== false) {
         preferredCollapsed = collapsed;
         persistCollapsedPreference();
@@ -6035,6 +6096,10 @@
         closePdfTray(false);
       }
       renderCollapsed();
+      // Opening copies the rail once it is laid out, so the copy is what grows
+      // and the real rail is never measured mid-animation at the wrong size.
+      if (opening && dom && !dom.rail.hidden) ghost = dom.rail.cloneNode(true);
+      if (collapsed !== wasCollapsed) morphRail(!collapsed, ghost, railBefore, pillBefore);
       collapseHandlers.forEach(function (fn) {
         try {
           fn(collapsed);
@@ -6043,6 +6108,79 @@
         }
       });
       return collapsed;
+    }
+
+    // THE MORPH between the rail and the pill, 0.3 seconds end to end (Ken).
+    // State changes at once: the rail is hidden or shown the moment the call
+    // returns, so nothing waits on the animation. Opening scales the real rail
+    // up out of the pill; closing shrinks a copy of it into the pill while the
+    // pill fades in. Off for anyone who asked their system for less motion.
+    var MORPH_MS = 300;
+    function morphRail(opening, ghost, railBefore, pillBefore) {
+      if (!dom || typeof dom.rail.animate !== "function") return false;
+      var view = doc && doc.defaultView;
+      if (view && view.matchMedia && view.matchMedia("(prefers-reduced-motion: reduce)").matches) return false;
+      function toward(from, to) {
+        return (
+          "translate(" + (to.left - from.left) + "px," + (to.top - from.top) + "px) " +
+          "scale(" + to.width / Math.max(1, from.width) + "," + to.height / Math.max(1, from.height) + ")"
+        );
+      }
+      function placeGhost() {
+        ghost.hidden = false;
+        ghost.removeAttribute("id");
+        Array.prototype.forEach.call(ghost.querySelectorAll("[id],[role]"), function (node) {
+          node.removeAttribute("id");
+          node.removeAttribute("role");
+        });
+        ghost.setAttribute("aria-hidden", "true");
+        ghost.setAttribute("data-lahe-ghost", "");
+        ghost.inert = true;
+        ghost.style.pointerEvents = "none";
+        // After the rail, so anything that looks the rail up finds the real one.
+        dom.rail.parentNode.insertBefore(ghost, dom.rail.nextSibling);
+      }
+      function dropWhenDone(anim) {
+        var drop = function () {
+          if (ghost.parentNode) ghost.parentNode.removeChild(ghost);
+        };
+        anim.onfinish = drop;
+        anim.oncancel = drop;
+      }
+      if (opening && pillBefore && ghost) {
+        var railNow = dom.rail.getBoundingClientRect();
+        if (!railNow.width) return false;
+        placeGhost();
+        dropWhenDone(
+          ghost.animate(
+            [
+              { transformOrigin: "0 0", transform: toward(railNow, pillBefore), opacity: 0.3 },
+              { transformOrigin: "0 0", transform: "none", opacity: 1 }
+            ],
+            { duration: MORPH_MS, easing: "cubic-bezier(.2,.8,.2,1)" }
+          )
+        );
+        // The real rail is in place and measurable at once; it shows when the
+        // copy arrives.
+        dom.rail.animate([{ opacity: 0 }, { opacity: 0, offset: 0.9 }, { opacity: 1 }], { duration: MORPH_MS });
+        return true;
+      }
+      if (!opening && ghost && railBefore) {
+        var pillNow = dom.pill.getBoundingClientRect();
+        if (!pillNow.width) return false;
+        placeGhost();
+        var shrink = ghost.animate(
+          [
+            { transformOrigin: "0 0", transform: "none", opacity: 1 },
+            { transformOrigin: "0 0", transform: toward(railBefore, pillNow), opacity: 0 }
+          ],
+          { duration: MORPH_MS, easing: "cubic-bezier(.4,0,.2,1)" }
+        );
+        dropWhenDone(shrink);
+        dom.pill.animate([{ opacity: 0 }, { opacity: 0, offset: 0.6 }, { opacity: 1 }], { duration: MORPH_MS });
+        return true;
+      }
+      return false;
     }
 
     /**
@@ -7427,6 +7565,7 @@
     CARD_UNSEEN_ATTR: CARD_UNSEEN_ATTR,
     CARD_ASKING_ATTR: CARD_ASKING_ATTR,
     DOT_WORDS: DOT_WORDS,
+    HELPER_RESTART_MESSAGE: HELPER_RESTART_MESSAGE,
     paintSendButton: highlightModule.paintSendButton,
     COLLAPSED_LINE_MAX: COLLAPSED_LINE_MAX,
     CHEVRON_ICON: CHEVRON_ICON,
