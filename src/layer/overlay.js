@@ -545,7 +545,13 @@
     ".mark[data-status='stored']{background:var(--good)}",
     ".mark[data-status='kept_locally'],.mark[data-status='kept_unconfirmed']{border-radius:2px;width:8px;height:8px}",
     ".mark[data-status='kept_locally']{background:var(--warn)}",
-    ".mark[data-agent='working']{background:var(--accent);box-shadow:0 0 0 3px var(--accent-wash)}",
+    // Working pulses: a halo that swells and fades while the agent is on it.
+    ".mark[data-agent='working']{background:var(--accent);animation:lahe-mark-pulse 1.6s ease-out infinite}",
+    "@keyframes lahe-mark-pulse{0%{box-shadow:0 0 0 0 color-mix(in srgb,var(--accent) 55%,transparent)}",
+    "70%{box-shadow:0 0 0 6px color-mix(in srgb,var(--accent) 0%,transparent)}",
+    "100%{box-shadow:0 0 0 0 color-mix(in srgb,var(--accent) 0%,transparent)}}",
+    "@media (prefers-reduced-motion:reduce){.mark[data-agent='working']{animation:none;",
+    "box-shadow:0 0 0 3px var(--accent-wash)}}",
     ".mark[data-agent='absent'],.mark[data-agent='no_agent']{background:transparent;border:1.5px solid var(--ink-faint)}",
     ".mark[data-loud='true']{background:var(--warn);border:0;border-radius:0;width:11px;height:10px;",
     "clip-path:polygon(50% 0,100% 100%,0 100%)}",
@@ -1027,7 +1033,8 @@
     ".pill[data-lahe-dragging]{cursor:grabbing;box-shadow:var(--shadow),0 0 0 1px var(--accent)}",
     ".pill[hidden]{display:none}",
     ".pill:hover{background:var(--surface)}",
-    ".pill__dot{width:6px;height:6px;border-radius:50%;background:var(--accent);flex:none}",
+    // The pill's dot is the head's status dot, same shapes and colors (.mark),
+    // so the rail closed says what the rail open says.
     ".pill__count{font-variant-numeric:tabular-nums;color:var(--ink-faint);font-weight:500}",
     ".pill__count[hidden]{display:none}",
     // THE PILL, LATE. The rail can be closed for most of a session, and the
@@ -1035,7 +1042,6 @@
     // border and ring, an amber dot, and the wait. No motion and no sound.
     ".pill__wait{display:none;font-variant-numeric:tabular-nums;font-weight:650;color:var(--warn)}",
     ".pill[data-lahe-late='true']{border-color:var(--warn);box-shadow:var(--shadow),0 0 0 1px var(--warn)}",
-    ".pill[data-lahe-late='true'] .pill__dot{background:var(--warn)}",
     ".pill[data-lahe-late='true'] .pill__wait{display:inline}",
     // THE PILL, HELD (docs/features/20260917.01_hold_toggle). Neutral, on the
     // same tokens as the held card, and never at the same time as late above:
@@ -1043,7 +1049,6 @@
     // actionable of the two ("you did this on purpose") and a card only ever
     // reads as held while Hold suppresses it from the overdue clock entirely.
     ".pill[data-lahe-held='true']{border-color:var(--line);box-shadow:var(--shadow),0 0 0 1px var(--line)}",
-    ".pill[data-lahe-held='true'] .pill__dot{background:var(--ink-faint)}",
     ".pill[data-lahe-held='true'] .pill__wait{display:inline;color:var(--ink-soft)}",
     // THE JEWEL: the same number the Done tab badge carries, on the one surface
     // that is still on screen once the rail is put away. A reviewer works with
@@ -2433,7 +2438,9 @@
       pill.setAttribute("type", "button");
       pill.setAttribute("aria-label", PILL_TITLE);
       pill.title = PILL_TITLE;
-      pill.appendChild(el("span", "pill__dot"));
+      var pillDot = el("span", "mark pill__dot");
+      pillDot.setAttribute("aria-hidden", "true");
+      pill.appendChild(pillDot);
       pill.appendChild(el("span", null, "Lahe"));
       var pillCount = el("span", "pill__count", "0");
       pill.appendChild(pillCount);
@@ -2599,6 +2606,7 @@
         lateMessage: lateMessage,
         statusDot: statusDot,
         statusDotWrap: statusDotWrap,
+        pillDot: pillDot,
         holdBtn: holdBtn,
         holdLabel: holdLabel,
         holdCount: holdCount,
@@ -4995,9 +5003,11 @@
       dom.statusRow.setAttribute("data-loud", line.loud ? "true" : "");
       dom.statusText.textContent = line.text;
       dom.statusRow.title = line.title;
-      dom.statusDot.setAttribute("data-status", status || "");
-      dom.statusDot.setAttribute("data-agent", line.agentState || "");
-      dom.statusDot.setAttribute("data-loud", line.loud ? "true" : "");
+      [dom.statusDot, dom.pillDot].forEach(function (dot) {
+        dot.setAttribute("data-status", status || "");
+        dot.setAttribute("data-agent", line.agentState || "");
+        dot.setAttribute("data-loud", line.loud ? "true" : "");
+      });
       dom.statusDotWrap.setAttribute("data-lahe-tip", line.title ? line.text + "\n\n" + line.title : line.text);
       // The banner and the late cards run off the same clock and the same
       // liveness answer as this line, so they are repainted with it.
