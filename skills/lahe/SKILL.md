@@ -612,6 +612,17 @@ page to load with the helper down.
   line. A document with its own format (a spec template, a feature-forge doc)
   and anything the reviewer wrote keep the shape they have.
 
+- **Name another file as a link, not as text.** When a document you write for
+  the reader mentions another file they may want to open (a decision, a spec, a
+  progress page, a report), write it as a link with a path relative to the
+  document: `[the decision](00_decision.md)` in Markdown,
+  `<a href="00_decision.md">` in HTML. LAHE turns that into a page the reader can
+  open, rail included. A file name in backticks is a dead end: the reader is on
+  the rendered page and cannot open it. A file in another folder or worktree
+  gets the same kind of link, with the relative path written out in full. Code
+  names an agent reads in the source, such as a function or a `src/` path in a
+  builder brief, can stay as code.
+
 - **Draw diagrams top to bottom.** Write a Mermaid flowchart as
   `flowchart TD`, never `LR` or `RL`. A wide left-to-right chart shrinks to fit
   the page column, and its words come out too small to read. The one exception is
