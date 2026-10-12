@@ -109,6 +109,9 @@ function createFold() {
     // rewording it at the same revision (see "A REWORDING TAKES IT OFF THE
     // DESK" below). Present only while the item is withdrawn.
     withdrawnFrom: Object.create(null),
+    // id -> the revision the reviewer closed it at ("Mark as done"). Present
+    // only while the item stands closed at that revision.
+    closedRev: Object.create(null),
     times: { started_at: null, ended_at: null, agent_session_id: "legacy" },
     sourcePath: null,
     seq: 0
@@ -133,6 +136,10 @@ function foldEvents(state, events, options) {
   var byId = state.byId;
   var replyRev = state.replyRev;
   var withdrawnFrom = state.withdrawnFrom;
+  // A fold made before closes existed (a kept fold, or a test's own value)
+  // simply has none yet.
+  if (!state.closedRev) state.closedRev = Object.create(null);
+  var closedRev = state.closedRev;
 
   (events || []).forEach(function (event) {
     var seq = event[protocol.EVENT_FIELD.SEQ];
@@ -166,6 +173,11 @@ function foldEvents(state, events, options) {
       }
       var prev = byId[next[F.ID]];
       if (!prev) state.order.push(next[F.ID]);
+      // A close is the helper's to record, from item.closed, never the
+      // browser's to claim: the carried record's own mark is not taken.
+      var closedHere = !!prev && closedRev[next[F.ID]] === next[F.REV];
+      delete next[F.CLOSED_BY];
+      delete next[F.CLOSED_AT];
       // A continuation is composed against the reply the browser last saw.
       // Another same-revision reply may have become the helper's deterministic
       // winner before this event arrived. Keep that winner in the archived
@@ -223,7 +235,52 @@ function foldEvents(state, events, options) {
         delete replyRev[next[F.ID]];
         delete withdrawnFrom[next[F.ID]];
       }
+      if (closedHere) {
+        // THE REVIEWER'S CLOSE STANDS AT ITS REVISION. A same-revision re-post
+        // (a reconnect, a late draft batch) takes the browser's content and
+        // leaves the item closed, with the reply it was closed over.
+        next[F.STATE] = record.STATE.HANDLED;
+        next[F.REPLY] = prev[F.REPLY] || null;
+        next[F.HANDLED_NOT_ON_PAGE] = false;
+        next[F.CLOSED_BY] = prev[F.CLOSED_BY];
+        next[F.CLOSED_AT] = prev[F.CLOSED_AT];
+        delete withdrawnFrom[next[F.ID]];
+      } else {
+        // A new revision (reworded, or reopened from Done) is new work.
+        delete closedRev[next[F.ID]];
+      }
       byId[next[F.ID]] = next;
+      return;
+    }
+
+    if (type === EVENT.ITEM_CLOSED) {
+      // MARK AS DONE. Applied only to an item that is outstanding at exactly
+      // the revision the reviewer closed. A close naming an older revision is
+      // refused the way a stale reply is: another window reworded it since,
+      // and that rewording stays outstanding. The line stays in the log, and
+      // the refusal is reported like any other dropped event.
+      var target = id ? byId[id] : null;
+      if (!target) {
+        if (onDropped) onDropped(event, "item.closed names an item this review does not hold");
+        return;
+      }
+      var closeRev = event[protocol.EVENT_FIELD.REV];
+      if (target[F.REV] !== closeRev) {
+        if (onDropped) {
+          onDropped(
+            event,
+            "item.closed names rev " + String(closeRev) + " but the item is at rev " + String(target[F.REV])
+          );
+        }
+        return;
+      }
+      if (!lifecycle.canClose(target)) {
+        if (onDropped) onDropped(event, "item.closed on an item in state " + String(target[F.STATE]));
+        return;
+      }
+      byId[id] = lifecycle.closeItem(target, ts || undefined);
+      closedRev[id] = target[F.REV];
+      delete withdrawnFrom[id];
       return;
     }
 
@@ -232,6 +289,7 @@ function foldEvents(state, events, options) {
       delete byId[id];
       delete replyRev[id];
       delete withdrawnFrom[id];
+      delete closedRev[id];
       state.order = state.order.filter(function (each) {
         return each !== id;
       });
@@ -247,9 +305,12 @@ function foldEvents(state, events, options) {
       reopened[F.STATE] = record.STATE.READY;
       reopened[F.REPLY] = null;
       reopened[F.HANDLED_NOT_ON_PAGE] = false;
+      delete reopened[F.CLOSED_BY];
+      delete reopened[F.CLOSED_AT];
       byId[id] = reopened;
       delete replyRev[id];
       delete withdrawnFrom[id];
+      delete closedRev[id];
       return;
     }
 
@@ -259,6 +320,10 @@ function foldEvents(state, events, options) {
       // A reply only ever owns the revision it named. Anything else was already
       // refused at fold time, and this is the second guard on the same rule.
       if (item[F.REV] !== event[protocol.EVENT_FIELD.REV]) return;
+      // A card the reviewer closed takes no reply. The fold already refuses
+      // one (lifecycle.applyReply); this is the second guard, for a line
+      // written before the close was folded.
+      if (closedRev[id] === item[F.REV]) return;
       var applied = Object.assign({}, item);
       applied[F.STATE] = event.state || item[F.STATE];
       applied[F.REPLY] = Object.assign({}, event.reply, { at: event[protocol.EVENT_FIELD.TS] || null });
@@ -266,6 +331,8 @@ function foldEvents(state, events, options) {
       // the item's own, unchanged, so this is the only thing that says the
       // agent answered and the answer did not arrive.
       applied[F.HANDLED_NOT_ON_PAGE] = event.handled_not_on_page === true;
+      delete applied[F.CLOSED_BY];
+      delete applied[F.CLOSED_AT];
       byId[id] = applied;
       replyRev[id] = item[F.REV];
       delete withdrawnFrom[id];

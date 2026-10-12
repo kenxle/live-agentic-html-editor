@@ -970,6 +970,11 @@
     ITEM_READY: "item.ready",
     ITEM_DELETED: "item.deleted",
     ITEM_REOPENED: "item.reopened",
+    // {item, rev}. The reviewer marked the item done themselves ("Mark as
+    // done"). An explicit act at one revision, never a state claim: it carries
+    // no record, and the projection applies it only when the item is still
+    // outstanding at exactly that revision (lifecycle.canClose).
+    ITEM_CLOSED: "item.closed",
     REPLY_FOLDED: "reply.folded",
     REPLY_REJECTED: "reply.rejected",
     REVIEW_ARCHIVED: "review.archived",

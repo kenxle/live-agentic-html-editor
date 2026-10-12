@@ -287,6 +287,19 @@
     // queued in the outbox with Hold on.
     held: "Held"
   };
+  // MARK AS DONE (docs/features/20261012.01_rail_cleanup). The reviewer closes
+  // an outstanding card themselves from its state chip. One spelling for the
+  // menu item, the tip on the chip, and the chip a closed card wears.
+  var MARK_DONE = {
+    ACTION: "done",
+    LABEL: "Mark as done",
+    TIP: "Mark this card as done without waiting for the agent",
+    // The chip on a card the reviewer closed. "Handled" would say an agent did it.
+    CLOSED_CHIP: "Done"
+  };
+  // The display states a card can be closed from. Held is ready waiting on the
+  // reviewer's own Hold, and a refused item never reached the helper.
+  var CLOSEABLE_CHIP_STATES = ["ready", "not_handled"];
   // The word the toggle and the toast both use. One spelling, so the button's
   // accessible name and anything announcing it never drift apart.
   var HOLD_LABEL = "Hold sending messages";
@@ -937,6 +950,19 @@
     "border:1px solid currentColor}",
     ".card__state[data-state='not_handled']{color:var(--warn);background:var(--warn-wash)}",
     ".card__state[data-state='refused']{color:var(--warn);background:var(--warn-wash)}",
+    // The chip is a button on an outstanding card: it opens the card's own
+    // one-item menu, "Mark as done". The tip is the status dot's, anchored to
+    // the right because the chip sits at the card's right edge.
+    ".statewrap{position:relative;display:inline-flex;flex:none}",
+    ".card__state[role='button']{cursor:pointer}",
+    ".card__state[role='button']:hover,.card__state[aria-expanded='true']{box-shadow:inset 0 0 0 1px currentColor}",
+    ".card__state[role='button']:focus-visible{outline:2px solid var(--accent);outline-offset:2px}",
+    ".statewrap[data-lahe-tip]:hover::after{content:attr(data-lahe-tip);position:absolute;right:0;",
+    "top:calc(100% + 6px);width:200px;padding:8px 10px;border-radius:7px;background:#15171c;color:#fff;",
+    "font-size:11.5px;font-weight:500;line-height:1.45;white-space:pre-line;z-index:10;text-transform:none;",
+    "letter-spacing:normal;box-shadow:0 6px 18px rgba(0,0,0,.25);pointer-events:none}",
+    ".statewrap[data-lahe-open='true']::after{display:none}",
+    ".statemenu{min-width:150px;z-index:11}",
     // A quote rule, which is what a quote has looked like since print. It is
     // decoration, not a signal: it says "these are the page's words, not the
     // reviewer's," and it never means anything is new or unread.
@@ -2101,6 +2127,15 @@
     // and there for the same reason: EXPANDING A CARD IS READING IT, and the
     // Done tab is the file that knows what that means for a reply.
     var cardCollapseHandlers = [];
+    // Who acts on "Mark as done" from a card's state chip. The rail draws the
+    // chip and its menu; closing the record is the store's and the helper's,
+    // so it belongs to whoever holds them (index.js). With nobody listening
+    // the chip stays a plain label.
+    var cardCloseHandlers = [];
+    // The one open state-chip menu: the card id, or null. One at a time.
+    var stateMenuId = null;
+    var stateMenuOutside = null;
+    var stateMenuShadow = null;
     // id -> true for the cards the reviewer folded to one line. Only the folded
     // ones are held; an absent id is an open card, which is also the right
     // answer for a card that does not exist yet. Read from the review's own
@@ -3202,7 +3237,7 @@
     // Words that are on every card and say nothing about this one: control
     // labels, the time stamp, the state chip. Matching them would make "send"
     // or "oct" find every card.
-    var SEARCH_SKIP = "button,textarea,input,select,style,time,.card__state";
+    var SEARCH_SKIP = "button,textarea,input,select,style,time,.card__state,.statemenu";
 
     function searchTextOf(node) {
       if (!doc || typeof doc.createTreeWalker !== "function") return node.textContent || "";
@@ -3322,6 +3357,7 @@
       // belongs to a menu that is about to stop existing. The style dropdown's
       // listeners go the same way.
       closeMenu(false);
+      closeStateMenu(false);
       closeStylePanel(false);
       closeShortcuts(false);
       closePdfTray(false);
@@ -3943,6 +3979,162 @@
       markQuoteOverflow(quote);
     }
 
+    // -------------------------------------------------------------------------
+    // Mark as done: the state chip's menu
+    // -------------------------------------------------------------------------
+
+    /** Can the reviewer close this card from its chip right now? */
+    function canCloseCard(card) {
+      if (!card || !cards[card.id] || cardCloseHandlers.length === 0) return false;
+      if (refusalOf(card.id)) return false;
+      if (CLOSEABLE_CHIP_STATES.indexOf(card.state) === -1) return false;
+      var item = card.item;
+      if (!item) return false;
+      return record.isOutstanding(item) && record.displayState(item) !== record.STATE.HANDLED;
+    }
+
+    // The chip is a button only on a card that can be closed. Everywhere else it
+    // is the plain label it always was, and a click on it folds the card.
+    function paintStateChip(card) {
+      var p = card.parts;
+      if (!p || !p.stateWrap) return;
+      var can = canCloseCard(card);
+      if (can) {
+        p.state.setAttribute("role", "button");
+        p.state.setAttribute("tabindex", "0");
+        p.state.setAttribute("aria-haspopup", "menu");
+        p.state.setAttribute("aria-expanded", stateMenuId === card.id ? "true" : "false");
+        p.state.setAttribute("aria-label", (p.state.textContent || "") + ": card actions");
+        p.state.setAttribute("data-lahe-no-jump", "");
+        p.stateWrap.setAttribute("data-lahe-tip", MARK_DONE.TIP);
+        return;
+      }
+      ["role", "tabindex", "aria-haspopup", "aria-expanded", "aria-label", "data-lahe-no-jump"].forEach(function (name) {
+        p.state.removeAttribute(name);
+      });
+      p.stateWrap.removeAttribute("data-lahe-tip");
+      if (stateMenuId === card.id) closeStateMenu(false);
+    }
+
+    function openStateMenu(id, focusItem) {
+      closeStateMenu(false);
+      var card = cards[id];
+      if (!dom || !card || !card.parts || !canCloseCard(card)) return false;
+      stateMenuId = id;
+      card.parts.stateMenu.hidden = false;
+      card.parts.state.setAttribute("aria-expanded", "true");
+      card.parts.stateWrap.setAttribute("data-lahe-open", "true");
+      if (focusItem) card.parts.stateDone.focus();
+      // The head menu's two listeners, for the head menu's reason: the root is
+      // closed, so a click inside it reaches the document retargeted.
+      stateMenuOutside = function (event) {
+        if (event.type === "keydown") {
+          if (event.key !== "Escape") return;
+          event.preventDefault();
+          event.stopPropagation();
+          closeStateMenu(true);
+          return;
+        }
+        if (fromOurTree(event)) return;
+        closeStateMenu(false);
+      };
+      stateMenuShadow = function (event) {
+        var open = stateMenuId && cards[stateMenuId];
+        if (open && open.parts && open.parts.stateWrap.contains(event.target)) return;
+        closeStateMenu(false);
+      };
+      doc.addEventListener("pointerdown", stateMenuOutside, true);
+      doc.addEventListener("keydown", stateMenuOutside, true);
+      dom.shadow.addEventListener("pointerdown", stateMenuShadow, true);
+      return true;
+    }
+
+    function closeStateMenu(returnFocus) {
+      if (stateMenuOutside) {
+        doc.removeEventListener("pointerdown", stateMenuOutside, true);
+        doc.removeEventListener("keydown", stateMenuOutside, true);
+        stateMenuOutside = null;
+      }
+      if (stateMenuShadow) {
+        if (dom) dom.shadow.removeEventListener("pointerdown", stateMenuShadow, true);
+        stateMenuShadow = null;
+      }
+      if (!stateMenuId) return false;
+      var card = cards[stateMenuId];
+      stateMenuId = null;
+      if (card && card.parts && card.parts.stateMenu) {
+        card.parts.stateMenu.hidden = true;
+        card.parts.stateWrap.removeAttribute("data-lahe-open");
+        if (card.parts.state.getAttribute("role") === "button") card.parts.state.setAttribute("aria-expanded", "false");
+        if (returnFocus) card.parts.state.focus();
+      }
+      return true;
+    }
+
+    function chooseCardClose(id, action) {
+      var card = cards[id];
+      var can = canCloseCard(card);
+      closeStateMenu(false);
+      if (!can) return false;
+      cardCloseHandlers.slice().forEach(function (fn) {
+        fn(id, action);
+      });
+      return true;
+    }
+
+    /**
+     * Who closes a card when the reviewer chooses "Mark as done" on its chip.
+     * Called as fn(id, action), action being MARK_DONE.ACTION.
+     */
+    function onCardClose(fn) {
+      if (typeof fn !== "function") throw new TypeError("onCardClose: a function is required");
+      cardCloseHandlers.push(fn);
+      if (dom) Object.keys(cards).forEach(function (id) { paintStateChip(cards[id]); });
+      return function () {
+        var at = cardCloseHandlers.indexOf(fn);
+        if (at !== -1) cardCloseHandlers.splice(at, 1);
+        if (dom) Object.keys(cards).forEach(function (id) { paintStateChip(cards[id]); });
+      };
+    }
+
+    /**
+     * Self-report for the closed root: the chip, whether it is a control, the
+     * menu and its items, measured off the real nodes so a test clicks where
+     * the reviewer would.
+     */
+    function cardStateInfo(id) {
+      var card = cards[id];
+      if (!dom || !card || !card.parts) return { present: false };
+      var p = card.parts;
+      function rectOf(node) {
+        var r = node.getBoundingClientRect();
+        return { x: r.x, y: r.y, width: r.width, height: r.height };
+      }
+      return {
+        present: true,
+        label: (p.state.textContent || "").trim(),
+        state: p.state.getAttribute("data-state"),
+        closedBy: p.state.getAttribute("data-lahe-closed-by"),
+        closeable: canCloseCard(card),
+        role: p.state.getAttribute("role"),
+        tip: p.stateWrap.getAttribute("data-lahe-tip"),
+        expanded: p.state.getAttribute("aria-expanded"),
+        focused: dom.shadow.activeElement === p.state,
+        open: stateMenuId === id && !p.stateMenu.hidden,
+        chipRect: rectOf(p.state),
+        items: p.stateMenu.hidden
+          ? []
+          : Array.prototype.map.call(p.stateMenu.querySelectorAll(".menuitem"), function (node) {
+              return {
+                action: node.getAttribute("data-action"),
+                label: (node.textContent || "").trim(),
+                focused: dom.shadow.activeElement === node,
+                rect: rectOf(node)
+              };
+            })
+      };
+    }
+
     function buildCardNode(card) {
       if (!dom || card.node) return card.node;
       var node = el("article", "card");
@@ -3989,8 +4181,37 @@
       top.appendChild(wait);
       var time = el("time", "card__time");
       top.appendChild(time);
+      var stateWrap = el("span", "statewrap");
       var state = el("span", "card__state");
-      top.appendChild(state);
+      stateWrap.appendChild(state);
+      // MARK AS DONE: the chip's menu. Built once with the card, hidden, and
+      // only reachable while paintStateChip says the card can be closed.
+      var stateMenu = el("div", "menu statemenu");
+      stateMenu.setAttribute("role", "menu");
+      stateMenu.hidden = true;
+      var stateDone = el("button", "menuitem", MARK_DONE.LABEL);
+      stateDone.setAttribute("type", "button");
+      stateDone.setAttribute("role", "menuitem");
+      stateDone.setAttribute("data-action", MARK_DONE.ACTION);
+      stateDone.addEventListener("click", function () {
+        chooseCardClose(card.id, MARK_DONE.ACTION);
+      });
+      stateMenu.appendChild(stateDone);
+      stateWrap.appendChild(stateMenu);
+      state.addEventListener("click", function () {
+        if (!canCloseCard(card)) return;
+        if (stateMenuId === card.id) closeStateMenu(false);
+        else openStateMenu(card.id, false);
+      });
+      state.addEventListener("keydown", function (event) {
+        if (event.key !== "Enter" && event.key !== " ") return;
+        if (!canCloseCard(card)) return;
+        event.preventDefault();
+        event.stopPropagation();
+        if (stateMenuId === card.id) closeStateMenu(true);
+        else openStateMenu(card.id, true);
+      });
+      top.appendChild(stateWrap);
       node.appendChild(top);
 
       // The one line a folded card shows. Built once with the card, like every
@@ -4039,6 +4260,9 @@
         wait: wait,
         time: time,
         state: state,
+        stateWrap: stateWrap,
+        stateMenu: stateMenu,
+        stateDone: stateDone,
         quote: quote,
         badges: badges,
         agent: agent,
@@ -4130,8 +4354,16 @@
         p.time.removeAttribute("title");
       }
       var refused = refusalOf(card.id);
-      p.state.textContent = refused ? NOT_SENT_LABEL : STATE_LABEL[card.state] || card.state;
+      var closedByReviewer = card.state === record.STATE.HANDLED && record.isClosedByReviewer(item);
+      p.state.textContent = refused
+        ? NOT_SENT_LABEL
+        : closedByReviewer
+          ? MARK_DONE.CLOSED_CHIP
+          : STATE_LABEL[card.state] || card.state;
       p.state.setAttribute("data-state", refused ? "refused" : card.state);
+      if (closedByReviewer) p.state.setAttribute("data-lahe-closed-by", record.CLOSED_BY_REVIEWER);
+      else p.state.removeAttribute("data-lahe-closed-by");
+      paintStateChip(card);
       // On the card itself too, so anything a tab owner attached can be shown or
       // withdrawn by the card's own state without a second file being told.
       card.node.setAttribute("data-state", card.state);
@@ -4283,6 +4515,7 @@
       // The one guard that matters. A card holding focus is not removed, even
       // when the caller thinks it should be; the caller is told no.
       if (holdsFocus(id)) return false;
+      if (stateMenuId === id) closeStateMenu(false);
       if (cards[id].node && cards[id].node.parentNode) {
         cards[id].node.parentNode.removeChild(cards[id].node);
       }
@@ -8040,6 +8273,8 @@
       setCardsCollapsed: setCardsCollapsed,
       collapsedCardIds: collapsedCardIds,
       onCardCollapse: onCardCollapse,
+      onCardClose: onCardClose,
+      cardStateInfo: cardStateInfo,
       setTabNewCount: setTabNewCount,
       tabNewCount: tabNewCount,
       pillNewCount: pillNewCount,
@@ -8135,6 +8370,7 @@
   return {
     PRESENT: PRESENT,
     PDF: PDF,
+    MARK_DONE: MARK_DONE,
     // Folding a card to one line: the attributes the rule is written in, the
     // icon both disclosures wear, and the pure line builder.
     FOLD_ALL: FOLD_ALL,

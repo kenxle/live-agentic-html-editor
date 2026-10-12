@@ -19,6 +19,7 @@ const failures = require("../../src/shared/failures.js");
 
 test("the event type vocabulary is closed and complete", () => {
   assert.deepEqual(protocol.EVENT_TYPES.slice().sort(), [
+    "item.closed",
     "item.content",
     "item.created",
     "item.deleted",

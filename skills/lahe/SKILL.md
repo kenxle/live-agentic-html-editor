@@ -439,6 +439,10 @@ checked, it takes the item off your drain list, and the reviewer reads your
 reason and decides. Do not keep replying `handled` into a check that keeps
 refusing it.
 
+The reviewer can also close a card themselves ("Mark as done" on the card). That
+item is `handled` with `closed_by_reviewer: true`. It is off your drain list,
+and any reply to it is refused. Do not work on it.
+
 ### Step 5. Reply
 
 ```sh
