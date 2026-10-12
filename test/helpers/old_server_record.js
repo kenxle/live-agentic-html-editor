@@ -18,7 +18,7 @@ const staticServers = require("../../src/service/static_servers.js");
  * @param {string} dir the state folder
  * @param {string} sessionId
  * @param {string} root the folder the old server served (a real path)
- * @param {{mounts?: object, id?: string, stopped?: boolean}} [options]
+ * @param {{mounts?: object, id?: string, stopped?: boolean, port?: number}} [options]
  * @returns {string} the record's file
  */
 function writeOldServerRecord(dir, sessionId, root, options) {
@@ -32,7 +32,7 @@ function writeOldServerRecord(dir, sessionId, root, options) {
     id,
     session_id: sessionId,
     root,
-    port: 1,
+    port: typeof opts.port === "number" ? opts.port : 1,
     host: "127.0.0.1",
     started_at: "2026-10-01T00:00:00.000Z",
     stopped_at: opts.stopped === false ? null : "2026-10-02T00:00:00.000Z",

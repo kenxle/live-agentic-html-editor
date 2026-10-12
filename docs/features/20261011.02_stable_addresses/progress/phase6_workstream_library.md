@@ -164,3 +164,9 @@ Tests: [library_link_navigation.test.js](../../../../test/unit/library_link_navi
 ## To delete at cleanup
 
 - Scratch copies of earlier commits under the session scratchpad (`base286`, `base4d`, `base4d2`), not in the repo.
+
+### One review per file
+
+The Library's Open follows `lahe review`'s rule (`page_routes.holderOfFile`, reached through `catalog_sites.holderOf`, not copied). Open goes to the address where the file's review answers and makes no review and no second address. The row's review is stamped only when it is the file's review or the file has none. When another review holds the file, in any session (this replaces the old "another open session" condition), Open stamps nothing, uses the holder's own site when it has one that holds the file, and answers `held_by`. A retired review is never stamped and the answer carries `retired: true`; the reader and the row carry `retired` too, with a badge. The note on the row now reads "This file's review is X, so the page shows its comments."
+
+Tests in `library_open_sites.test.js`: a file under an already reviewed folder opens at the folder's address with no second site and no new review (this one was already green, because the previous task made Open bind the deepest folder site); a holder in a closed session keeps the file (failed first); a retired review's file (failed first, on the missing `retired` flag and the stamp); a retired review is skipped as a holder (failed first). Two older V40 controls that moved the rail off a holder in a closed or same session are removed, since a file has one review. I did not add a browser test that Open lands on the page with its comments beyond V39 and V40, which already check that the opened page's rail is the right review's.

@@ -4,7 +4,7 @@
 // Architecture: docs/features/20261011.02_stable_addresses/02_architecture_stable_addresses.md,
 // "The Library". Open no longer restarts a page
 // server. It finds or names the review's site in the registry (sites.js),
-// stamps the review as re-served unless a newer open review holds the rail,
+// stamps the review as re-served unless another review holds the file,
 // and returns the address. The reader asks this module the same questions to
 // decide a row's kind and to show its address, and it asks them without
 // writing: a list never names a site. Only open() does.
@@ -207,12 +207,25 @@ function createCatalogSites(options) {
   }
 
   /**
-   * The review whose rail the page currently carries, or null: the same pick
-   * the page server makes (page_routes.pickReview).
+   * The review a file has, by the rule `lahe review` follows (one review per
+   * file): tiered, newest within a tier, a retired review never. Null when it
+   * has none. This is page_routes.holderOfFile, so Open and `lahe review`
+   * cannot disagree about which review a file belongs to.
    */
-  function railHolder(site, file) {
-    var pick = pageRoutes.pickReview(dir, site, { filePaths: [file], realFile: file, mounted: false });
-    return pick ? pick.review : null;
+  function holderOf(file) {
+    try {
+      var held = pageRoutes.holderOfFile(dir, file);
+      return held ? held.review : null;
+    } catch (err) {
+      return null;
+    }
+  }
+
+  /** The URL path of `file` under a bound site's root, or null when it is not under it. */
+  function pathUnder(bound, file) {
+    var site = bound.site;
+    if (site.mode !== MODE.FOLDER || !within(file, site.root) || file === site.root) return null;
+    return urlPathUnder(site.root, file);
   }
 
   /**
@@ -250,7 +263,8 @@ function createCatalogSites(options) {
     siteFor: siteFor,
     addressOf: addressOf,
     worktreeSiteFor: worktreeSiteFor,
-    railHolder: railHolder,
+    holderOf: holderOf,
+    pathUnder: pathUnder,
     bindPlan: bindPlan,
     stamp: stamp
   };

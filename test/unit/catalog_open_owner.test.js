@@ -38,7 +38,7 @@ function world(owners, overrides) {
     pages: {
       bindPlan: (plan) => { bound.push(plan.root); return { name: "n", site: {}, urlPath: "/page.html" }; },
       addressOf: (name, urlPath) => "http://" + name + ".lahe.localhost:1" + urlPath,
-      railHolder: () => null,
+      holderOf: () => null,
       stamp: () => {}
     },
     sessions: { read: () => ({ id: "s_doc", closed_at: null }) },

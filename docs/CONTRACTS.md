@@ -1183,7 +1183,7 @@ root or a URL, and fields a route does not list are never read.
 | Route | Body | Answer |
 |---|---|---|
 | `catalog.list` | none | the list response (architecture, "The list response"), plus `notice` and `state_dir` (the state directory when it is not the default, else null, for the hand-off message's takeover command). Marks `catalog_seen_at` |
-| `catalog.open` | `{review, handoff, confirmed}` | `{url, request_id, not_asked, held_by}` |
+| `catalog.open` | `{review, handoff, confirmed}` | `{url, request_id, not_asked, held_by, retired}` |
 | `catalog.star` | `{review, starred}`, `starred` a boolean | `{review, starred}`. On a folded row every review in the fold is starred or unstarred |
 | `catalog.rename` | `{review, name}` or `{session, name}` (one, never both), `name` a string; empty clears | `{review, name}` or `{session, name}` (the name kept, or null). A session name is stored in `catalog.json` `session_names`, by the same rule, and listed as the session's `custom_name`; a pre-session card cannot be renamed. Stored in `catalog.json` `names`, cut to 80 characters with control and invisible characters removed (the session-name rule). Every review in a fold takes it. The list carries it as `custom_name` beside the unchanged `display_name`. It is the reviewer's display text only: it never enters `describeReview`, a drain entry, a request, or a hand-off message |
 | `catalog.request` | `{review, action, confirmed}`, `action` `pickup` or `launch` | `{request_id}` |
@@ -1199,10 +1199,14 @@ root or a URL, and fields a route does not list are never read.
   cannot write has already served: a site in the registry, the record of an old page server of the
   review's session (its root or a mount), or, for Markdown, the rendered copy the CLI wrote into the
   state folder. A review nothing vouches for is `via-agent`.
-- **A newer review keeps its rail.** When the review that answers on the page belongs to another
-  session that is still open, Open goes to the address without stamping and answers
-  `held_by: {review, name}`; the row says so. A holder in a closed session, or in the row's own
-  session, does not hold. `held_by` is null otherwise.
+- **One review per file.** A file's review is the one `lahe review` opens for it (a review that recorded
+  the file, else a folder or linking review that holds a committed comment on it; newest within a
+  tier; a retired review never). When the row's review is the file's review, or the file has none, Open
+  stamps it. When another review holds the file, in any session, Open goes to the address where that
+  review answers without stamping, and answers `held_by: {review, name}`; the row says so. Open never
+  makes a review or a second address for a file that has one. A retired row's review is never
+  stamped: the answer carries `retired: true` and the row shows a "review retired" badge. `held_by` is
+  null when no other review holds the file.
 - **`PROTO_NOT_OPENABLE` carries its reason in `error.detail`:** `missing`, `via-agent` (nothing the
   helper served vouches for the document, and no hand-over was asked), `unknown review`,
   `not owned by the current user, or not on disk`, or `the document could not be given an address`.
