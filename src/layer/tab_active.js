@@ -378,7 +378,7 @@
       panel.appendChild(listEl);
 
       footEl = el("footer", "lahe-rail-foot");
-      footEl.appendChild(el("span", "lahe-rail-footlabel", "Note on the whole page"));
+      footEl.appendChild(el("span", "lahe-rail-footlabel", "Add a note on the whole page"));
       panel.appendChild(footEl);
       footEl.appendChild(hintList());
 
@@ -416,7 +416,7 @@
       // closed root. Without it every class below is a name with nothing behind
       // it, which is exactly what shipped.
       ensureHostedStyle(footEl);
-      footEl.appendChild(el("span", "lahe-rail-footlabel", "Note on the whole page"));
+      footEl.appendChild(el("span", "lahe-rail-footlabel", "Add a note on the whole page"));
       host.appendChild(footEl);
       footEl.appendChild(hintList());
 
