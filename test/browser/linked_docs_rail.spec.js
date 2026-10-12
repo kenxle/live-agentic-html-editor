@@ -6,8 +6,9 @@
 //
 //  - a linked document with no review of its own carries the hub's rail, and a
 //    comment there lands in the hub's review naming the linked file on disk
-//  - a linked document with its own review in this session opens that review's
-//    own page, where its earlier comments live
+//  - a linked document with its own review opens that review's own page, at
+//    its own address (a top-level load is redirected there), where its
+//    comments live
 //  - nothing is created by the click
 //
 // Nothing is simulated: the real `lahe review` walk, the real helper, the real
@@ -173,12 +174,36 @@ test.describe("a link out of a reviewed Markdown page keeps the rail", () => {
     await page.screenshot({ path: path.join(SPEC_FOLDER, "linked_page_rail.png") });
   });
 
-  test("a linked document with its own review opens that review's page", async ({ page }) => {
+  // Each page carries its own comments: a linked document that has its own
+  // review opens that review's page, at its own address, and a comment there
+  // lands in its own review, never in the hub's.
+  test("a linked document with its own review opens that review's page, and a comment there lands in its own review", async ({ page }) => {
     await page.goto(world.open);
     await booted(page);
     await page.click("text=A spec with its own review");
-    await page.waitForURL(/owned-[a-f0-9]+\.html$/);
+    await page.waitForURL(/\/owned\.md$/);
     await booted(page);
-    expect(await page.evaluate(() => window.__lahe.review), "its own review, not the hub's").toBe(world.ownedReview);
+    expect(new URL(page.url()).pathname, "its own address, not the hub's link address").toBe("/owned.md");
+    expect(new URL(page.url()).origin).not.toBe(new URL(world.open).origin);
+    expect(await page.evaluate(() => window.__lahe.review), "its own review's rail").toBe(world.ownedReview);
+
+    const said = "This owned spec needs a date.";
+    await page.evaluate(() => {
+      const el = Array.from(document.querySelectorAll("main p")).find((p) => /already has a review/.test(p.textContent));
+      const range = document.createRange();
+      range.selectNodeContents(el);
+      const selection = window.getSelection();
+      selection.removeAllRanges();
+      selection.addRange(range);
+    });
+    await page.keyboard.press("ControlOrMeta+Shift+KeyC");
+    await pollPage(page, () => !!window.__lahe.focusedBoxQuote(), undefined, { message: "the comment box to open" });
+    await page.keyboard.type(said);
+    await page.keyboard.press("ControlOrMeta+Enter");
+    const logOf = (id) => {
+      try { return fs.readFileSync(path.join(world.stateDir, "reviews", id, "events.jsonl"), "utf8"); } catch (err) { return ""; }
+    };
+    await pollUntil(() => logOf(world.ownedReview).indexOf(said) !== -1, { timeoutMs: 20000, message: "the comment in the owned review's log" });
+    expect(logOf(world.hubReview).indexOf(said), "never in the hub's").toBe(-1);
   });
 });

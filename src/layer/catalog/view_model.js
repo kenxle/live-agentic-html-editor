@@ -133,6 +133,11 @@
     // agent take it into its own session and serve it, old comments and all.
     LEGACY_PICKUP: "From before sessions. Pick this up has the attached agent take it into its session and serve it, with its old comments.",
     WORKTREE: "The worktree is gone. An agent will open the main repository's copy, which may differ from what you reviewed.",
+    // With stable addresses the helper shows that copy itself, read-only.
+    WORKTREE_READONLY: "The worktree is gone. Open shows the main repository's copy, read-only, which may differ from what you reviewed.",
+    OPENED_RAIL_HELD: 'Opened. This file\'s review is "{name}", so the page shows its comments. Open did not move the rail.',
+    OPENED_RETIRED: "Opened. This review was retired, so it answers on no page. The page shows the file's current review, if it has one.",
+    BADGE_RETIRED: "review retired",
     NEEDS_AGENT: "Needs an agent to reopen. No agent is attached.",
     NO_MATCHES: "Nothing matches that search.",
     RESTARTED: "LAHE restarted, reload this page.",
@@ -639,7 +644,9 @@
     var notices = [];
     if (review.unreadable) notices.push({ text: TEXT.UNREADABLE, tone: "warn" });
     if (missing) notices.push({ text: TEXT.MISSING, tone: "quiet" });
-    if (!missing && review.kind === "worktree") notices.push({ text: TEXT.WORKTREE, tone: "info" });
+    if (!missing && review.kind === "worktree") {
+      notices.push({ text: viaAgent ? TEXT.WORKTREE : TEXT.WORKTREE_READONLY, tone: "info" });
+    }
     if (!missing && review.kind === "legacy") notices.push({ text: TEXT.LEGACY_PICKUP, tone: "info" });
     if (viaAgent && !agent) notices.push({ text: TEXT.NEEDS_AGENT, tone: "warn" });
     if (devServer && !missing) notices.push({ text: TEXT.DEV_SERVER_NO_HANDOFF, tone: "quiet" });
@@ -678,6 +685,7 @@
     }
 
     var badges = [];
+    if (review.retired) badges.push(TEXT.BADGE_RETIRED);
     if (review.ended) badges.push(TEXT.BADGE_ENDED);
     if (review.served_url) badges.push(TEXT.BADGE_SERVED);
     if (session.watching && !sameWatcher(session.watching, cardWatching)) {
@@ -714,6 +722,7 @@
       rename: { editing: state.renaming === review.id, value: renamed || original, label: TEXT.RENAME, original: original },
       path: pathText(review),
       pathTitle: fullPath(review),
+      address: addressLink(review.address),
       lastText: "last " + formatTime(review.last, now, opts.timeZone),
       counts: {
         waiting: review.waiting > 0 ? review.waiting + " waiting" : null,
@@ -1256,6 +1265,14 @@
     var found = findReview(list, reviewId);
     var agent = liveAgent(list);
     var name = found ? found.review.display_name || reviewId : reviewId;
+    if (body.held_by && typeof body.held_by.name === "string") {
+      // A newer review in another open session keeps the page's rail. The tab
+      // still opened; the row says why the rail is not this review's.
+      out = withNote(out, reviewId, { kind: "opened", text: fill(TEXT.OPENED_RAIL_HELD, { name: body.held_by.name }), tone: "info" }, now);
+    }
+    if (body.retired === true && !body.held_by) {
+      out = withNote(out, reviewId, { kind: "opened", text: TEXT.OPENED_RETIRED, tone: "info" }, now);
+    }
     if (body.not_asked === "queue_full") return withNote(out, reviewId, { kind: "opened", text: TEXT.OPENED_QUEUE_FULL, tone: "warn" }, now);
     if (body.not_asked === "no_agent") return withNote(out, reviewId, { kind: "opened", text: TEXT.OPENED_NO_AGENT, tone: "warn" }, now);
     if (body.not_asked === "request_pending" && body.url) {
@@ -1338,6 +1355,40 @@
   // there. Only a loopback http: address is followed: anything else closes the
   // tab and says why, so a bad answer can never send the reader off the machine.
 
+  /**
+   * A Lahe site address: http, no credentials, and a host that is one to four
+   * Lahe labels under lahe.localhost. A browser resolves every name under
+   * .localhost to this machine, so such an address cannot lead off it. The
+   * port is the helper's pages port, which this page does not know.
+   */
+  function isLaheSiteUrl(value) {
+    if (typeof value !== "string" || !value) return false;
+    var parsed;
+    try {
+      parsed = new URL(value);
+    } catch (err) {
+      return false;
+    }
+    if (parsed.protocol !== "http:" || parsed.username || parsed.password) return false;
+    var suffix = "." + protocol.PAGES.SUFFIX;
+    var host = parsed.hostname;
+    if (host.length <= suffix.length || host.slice(-suffix.length) !== suffix) return false;
+    return protocol.isSiteName(host.slice(0, -suffix.length));
+  }
+
+  /** The row's link to its stable address, or null: the helper's word is checked first. */
+  function addressLink(value) {
+    if (!isLaheSiteUrl(value)) return null;
+    var parsed = new URL(value);
+    var readable = parsed.pathname;
+    try {
+      readable = decodeURIComponent(parsed.pathname);
+    } catch (err) {
+      readable = parsed.pathname;
+    }
+    return { href: value, text: parsed.host + readable };
+  }
+
   function isLoopbackHttpUrl(value) {
     if (typeof value !== "string" || !value) return false;
     var parsed;
@@ -1379,6 +1430,7 @@
     beginStar: beginStar,
     afterStar: afterStar,
     isLoopbackHttpUrl: isLoopbackHttpUrl,
+    isLaheSiteUrl: isLaheSiteUrl,
     formatTime: formatTime,
     build: build,
     decide: decide

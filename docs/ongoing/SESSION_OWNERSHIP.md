@@ -14,13 +14,13 @@ The shape of ownership and takeover is drawn in
   items it never finished. An item stays listed until a reply lands, so every
   item still unanswered reaches the new agent.
 - **The old app closed or crashed without closing LAHE.** The session and its
-  reviews are on disk and stay there. Takeover reopens the session and its
-  servers if they were closed, and it does not need the old app to take part.
+  reviews are on disk and stay there. Takeover reopens the session if it was
+  closed, and it does not need the old app to take part.
 - **The old agent finished some items.** The catch-up command lists only
   unanswered `ready` items. Handled work stays in the history and is not done
   twice.
 - **The session holds several reviews or documents.** The whole session moves
-  together, with every review, page, token, comment, reply, and server address
+  together, with every review, page, token, comment, reply, and page address
   kept.
 - **An old monitor process is still running.** Takeover raises the session's
   handoff number. The old monitor checks that number on its next look, throws
@@ -29,19 +29,25 @@ The shape of ownership and takeover is drawn in
 - **Feedback arrives during the handoff.** Catch-up reads what is on disk right
   now, and reading an item does not mark it seen, so nothing that lands at the
   boundary is skipped.
-- **Nobody has had a page open for two minutes.** The helper stops the
-  session's page servers and leaves the session open. The monitor keeps
-  running and the wake feed gets nothing. `lahe review <document> --session
-  <id>` brings a page back, on its old port when it is free, and `lahe status`
-  names that command. A takeover restarts the servers as before.
+- **Nobody has had a page open for a while.** Nothing stops. A page's stable
+  address belongs to no session: the helper serves it whenever it is running,
+  after the session closes too. The rail's "no agent listening" line says when
+  nobody is watching.
 - **The last session closed while a page was still open.** The helper stays
   up for that page, and stops itself once nothing needs it: no open session,
   no open review window and no Library poll for two minutes. A session that
   opens in the meantime keeps it up. See `docs/ongoing/LIBRARY.md`, "Helper
   lifetime".
-- **The state directory was removed.** The helper and its page servers stop
-  within 30 seconds, even with a session open, since nothing they write can
+- **The state directory was removed.** The helper stops within 30 seconds, even with a session open, since nothing they write can
   reach anyone.
+- **Lahe is installed (`lahe install`).** A login item runs the helper with
+  `--always-on`, so it never stops itself for being quiet, and closing the
+  last session leaves it running. It still stops if the state directory is
+  removed; the login item then starts it again into a fresh one. A crashed
+  helper is back in about 10 seconds on macOS, 2 on Linux, and up to a minute
+  on Windows. No command starts a second helper beside it: each asks the login
+  item. A helper older than the clone the login item runs is replaced at a
+  quiet moment, even with a page open, and the page reconnects on its own.
 - **Nobody asked for a handoff.** The tool refuses to attach a page or a review
   to a session that does not own it. Takeover is the one way across, and the
   skill tells agents to run it only when a human asks.

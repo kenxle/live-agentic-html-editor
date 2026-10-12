@@ -899,3 +899,21 @@ test("protocol describes quiet on the window.claim route", () => {
   assert.match(route.request, /quiet\?/);
   assert.match(route.response, /quiet_heartbeat_seconds/);
 });
+
+// The helper's first answer on whether anything holds the session's feed can
+// be "cannot tell" (null), because that look runs in the background and its
+// first result lands a few polls later. The later answer has to reach the
+// rail: a key without `listening` raised nothing for that change, and the line
+// stayed on "cannot be checked" while the helper was saying "no agent".
+test("a change in whether an agent is listening reaches the rail, even when nothing else changed", async (t) => {
+  const r = rig(t);
+  r.helper.liveness = { state: "none", monitor_at: null, unanswered: 0, listening: null };
+  await started(r);
+  await r.advance(FAST * 2);
+  const seenBefore = r.livenessSeen.length;
+  r.helper.liveness = { state: "none", monitor_at: null, unanswered: 0, listening: false };
+  await r.advance(FAST * 3);
+  const fresh = r.livenessSeen.slice(seenBefore);
+  assert.ok(fresh.length >= 1, "the change was raised");
+  assert.equal(fresh[fresh.length - 1].value.listening, false);
+});

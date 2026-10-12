@@ -66,7 +66,14 @@
   // catalog_seen_at, so `lahe library` would print a URL they answer with a
   // 404 and a restarted static server's stale origins would come back. They
   // must be restarted.
-  var SERVICE_CONTRACT = 15;
+  // 16: older helpers serve no pages themselves: they have no pages port, no
+  // site registry and no site.bind route, so `lahe review` could not give a
+  // page its stable address. They must be restarted.
+  // 17: older helpers have no review.retire route, take events for a retired
+  // review, answer records.read for one review only, and bind a file into its
+  // own folder site even inside a reviewed folder, so one file could get two
+  // addresses. They must be restarted.
+  var SERVICE_CONTRACT = 17;
 
   // What a CLI or layer makes of the contract a running helper reports. OLDER
   // is refused (the helper is restarted), NEWER means this clone is behind and
@@ -162,7 +169,13 @@
     // Set by the browser, never by a script. The Library's routes read it to
     // tell their own page apart from a document on another loopback port,
     // which sends "same-site" (see CATALOG_ROUTES).
-    SEC_FETCH_SITE: "sec-fetch-site"
+    SEC_FETCH_SITE: "sec-fetch-site",
+    SEC_FETCH_MODE: "sec-fetch-mode",
+    SEC_FETCH_DEST: "sec-fetch-dest",
+    // The CLI secret (stable addresses): read from an owner-only file in the
+    // state folder and sent only by the CLI on site.bind. A page can never read
+    // it, so a page holding a review token still cannot name a file to serve.
+    CLI_SECRET: "x-lahe-cli-secret"
   };
 
   var CLIENT_LAYER = "layer";
@@ -192,7 +205,11 @@
     // (restart recorded servers only), star, and queue a request. It cannot
     // post to a review, read comment text, or name a file to serve. Which
     // checks each catalog route runs is the per-route table in CATALOG_ROUTES.
-    CATALOG_TOKEN: "catalog_token"
+    CATALOG_TOKEN: "catalog_token",
+    // The CLI secret (stable addresses). Only site.bind takes it, and that
+    // route also refuses any request carrying an Origin header, so only a
+    // process that can read the state folder's owner-only file can bind.
+    CLI_SECRET: "cli_secret"
   };
 
   // Review ids and agent names are path components, so they are constrained to
@@ -274,6 +291,21 @@
       why: "the projection the library reconciles against on load and on every reconnect",
       request: "?review=<id>",
       response: "the review.json projection, plus {seq}"
+    },
+    {
+      name: "records.read",
+      method: "GET",
+      path: BASE + "/records",
+      auth: AUTH.REVIEW_TOKEN,
+      mutating: false,
+      why:
+        "stable addresses, V31: the records this review holds for the asking page, whole, so a comment made at the " +
+        "page's old 127.0.0.1:<port> address shows at its new one. review.read is the projection, which drops the " +
+        "anchor fields a card needs. Only this review, only this page (its own address, the old origins of its " +
+        "site, and for a Markdown review the rendered file's old path), and never a draft. The page's Origin must " +
+        "be a site address; any other gets an empty list",
+      request: "?review=<id>&page_path=<location.pathname>",
+      response: "{records: [record...], seq}"
     },
     {
       name: "replies.poll",
@@ -375,7 +407,16 @@
       path: CATALOG_PAGE_PATH,
       auth: AUTH.CATALOG_TOKEN,
       mutating: false,
-      checks: { sec_fetch_site: ["none", "same-origin"], token: false, json_body: false, origin: null },
+      // top_level_navigation: any top-level navigation opens the page, from any
+      // site: a link in a document or an email, a bookmark, a typed address.
+      // That is Sec-Fetch-Mode navigate with Sec-Fetch-Dest document, whatever
+      // Sec-Fetch-Site says, or a request with no Sec-Fetch headers at all. A
+      // cross-site navigation cannot read the page it loads. The page sends
+      // X-Frame-Options DENY, frame-ancestors 'none' and a same-origin
+      // Cross-Origin-Opener-Policy, so it can be neither framed nor scripted by
+      // its opener, and no script on it reads its own URL. A fetch or an
+      // iframe asking for it is still refused.
+      checks: { sec_fetch_site: ["none", "same-origin"], top_level_navigation: true, token: false, json_body: false, origin: null },
       why: "the Library page itself, with the Library token in its meta tag",
       response: "text/html"
     },
@@ -453,8 +494,149 @@
   // forbids an inline script, so a meta tag is where the token can live.
   var CATALOG_TOKEN_META = "lahe-catalog-token";
 
+  // ---------------------------------------------------------------------------
+  // Stable addresses: pages served by the helper itself
+  // ---------------------------------------------------------------------------
+  //
+  // Architecture: docs/features/20261011.02_stable_addresses. A SITE is one
+  // folder (or one notes page) the helper serves at
+  // http://<name>.lahe.localhost:<PAGES.PORT>/<path>. Names are made only by
+  // site.bind, which only the CLI can call.
+  //
+  var PAGES = {
+    PORT: 1483,
+    // Tests (and a person who needs another port) set this; 0 means any.
+    PORT_ENV: "LAHE_PAGES_PORT",
+    SUFFIX: "lahe.localhost",
+    PRINTED_ENDING: "lahe.localhost",
+    // Why: what `lahe status` and the start log line say about the ending.
+    PRINTED_ENDING_REASON: "every browser treats .localhost names as this computer and as secure, with no setup",
+    PORT_FREE_OFF_REASON: "the port-80 forward is not set up",
+    LAHE_NAMES_OFF_REASON: "the .lahe option is not set up",
+    LIBRARY_NAME: "library",
+    MAX_LABELS: 4,
+    LABEL_MAX: 63,
+    NAME_MAX: 150,
+    RESERVED_NAMES: ["library", "lahe", "www", "api"],
+    // service.json's pages.mode: the helper serves pages itself. The only mode.
+    MODE_SITES: "sites",
+    // Every page response carries this, so another website cannot embed it.
+    CORP: "same-origin"
+  };
+
+  /** One DNS label as Lahe makes them: lowercase letters, digits, single dashes. */
+  function isSiteLabel(value) {
+    if (typeof value !== "string" || !value || value.length > PAGES.LABEL_MAX) return false;
+    if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(value)) return false;
+    if (value.slice(0, 4) === "xn--" || value.slice(2, 4) === "--") return false;
+    return true;
+  }
+
+  /** One to four labels, joined by dots, at most NAME_MAX characters. */
+  function isSiteName(value) {
+    if (typeof value !== "string" || !value || value.length > PAGES.NAME_MAX) return false;
+    var labels = value.split(".");
+    if (labels.length > PAGES.MAX_LABELS) return false;
+    return labels.every(isSiteLabel);
+  }
+
+  var HOST_FAMILY = { API: "api", LIBRARY: "library", PAGE: "page", BAD: "bad" };
+  var SITE_HOST = /^([a-z0-9.-]+)\.lahe\.localhost(?::(\d{1,5}))?$/;
+  // The short ending, answered only once the helper has proved its own name
+  // server answers .lahe lookups on this computer (src/service/addresses.js).
+  var SHORT_HOST = /^([a-z0-9.-]+)\.lahe(?::(\d{1,5}))?$/;
+
+  /**
+   * Which route family a Host header belongs to. Checked before anything else
+   * in a request, on both listeners.
+   *
+   *   api      a loopback name (127.0.0.1, localhost, [::1]), as today
+   *   library  library.lahe.localhost
+   *   page     <name>.lahe.localhost with one to four labels, at the pages
+   *            port or with no port; or <name>.lahe the same way, but only
+   *            with `laheNames` (the .lahe check has passed), and never for
+   *            the Library. Whether the name is REGISTERED is the registry's
+   *            question, asked after this.
+   *   bad      anything else: a trailing dot, uppercase, too many labels, a
+   *            wrong port, a foreign name
+   *
+   * @param {string} hostHeader
+   * @param {{pagesPort?: number, laheNames?: boolean}} [options]
+   * @returns {{family: string, name?: string}}
+   */
+  function classifyHost(hostHeader, options) {
+    var opts = options || {};
+    if (typeof hostHeader !== "string" || !hostHeader) return { family: HOST_FAMILY.BAD };
+    if (hostAllowed(hostHeader)) return { family: HOST_FAMILY.API };
+    var match = SITE_HOST.exec(hostHeader);
+    if (!match) {
+      var short = opts.laheNames === true ? SHORT_HOST.exec(hostHeader) : null;
+      if (!short || short[1] === PAGES.LIBRARY_NAME || !isSiteName(short[1])) return { family: HOST_FAMILY.BAD };
+      if (short[2] !== undefined && Number(short[2]) !== opts.pagesPort) return { family: HOST_FAMILY.BAD };
+      return { family: HOST_FAMILY.PAGE, name: short[1] };
+    }
+    var name = match[1];
+    // The port first, for the Library too: it answers at the pages port or
+    // with no port, never at another.
+    if (match[2] !== undefined && Number(match[2]) !== opts.pagesPort) return { family: HOST_FAMILY.BAD };
+    if (name === PAGES.LIBRARY_NAME) return { family: HOST_FAMILY.LIBRARY, name: name };
+    if (!isSiteName(name)) return { family: HOST_FAMILY.BAD };
+    return { family: HOST_FAMILY.PAGE, name: name };
+  }
+
+  /** The origin a site's pages have: http://<name>.lahe.localhost:<port>. */
+  function siteOrigin(name, port) {
+    return "http://" + name + "." + PAGES.SUFFIX + (port === 80 ? "" : ":" + port);
+  }
+
+  /**
+   * The site name an Origin header names, or null.
+   *
+   * `<name>.lahe.localhost` at the pages port, or with no port (the port-80
+   * forward), always: nobody else can answer that name. `<name>.lahe` the same
+   * two ways, only with `laheNames` (the .lahe check has passed), so a website
+   * that answers its own `.lahe` name cannot pass as a page. Never the Library.
+   */
+  function siteNameFromOrigin(origin, pagesPort, laheNames) {
+    if (typeof origin !== "string") return null;
+    var match = /^http:\/\/([a-z0-9.-]+)\.lahe\.localhost(?::(\d{1,5}))?$/.exec(origin) ||
+      (laheNames === true ? /^http:\/\/([a-z0-9.-]+)\.lahe(?::(\d{1,5}))?$/.exec(origin) : null);
+    if (!match || !isSiteName(match[1]) || match[1] === PAGES.LIBRARY_NAME) return null;
+    return match[2] === undefined || Number(match[2]) === pagesPort ? match[1] : null;
+  }
+
+  var SITE_ROUTES = [
+    {
+      name: "site.bind",
+      method: "POST",
+      path: BASE + "/site/bind",
+      auth: AUTH.CLI_SECRET,
+      mutating: true,
+      why:
+        "lahe review and lahe write bind a review to a site: find or make the site's name for a root the CLI names, " +
+        "record its mounts and linked files, stamp the review as re-served, and drop the review's old loopback " +
+        "origins. CLI-only: the CLI secret, and any request carrying an Origin header is refused, so a page " +
+        "holding a review token can neither name a file nor move a rail",
+      request: "{review, root, mode: \"folder\"|\"page-only\", entry, mounts?: {prefix: dir}, linked?: [file]}",
+      response: "{name, origin, url, printed_ending}"
+    },
+    {
+      name: "review.retire",
+      method: "POST",
+      path: BASE + "/review/retire",
+      auth: AUTH.CLI_SECRET,
+      mutating: true,
+      why:
+        "lahe review retire ends a review on purpose, so `lahe review` of its file makes a new one. Only the " +
+        "owning agent session may retire its review. A retired review no longer answers on any page, fails the " +
+        "Origin check, and takes no events. CLI-only, like site.bind",
+      request: "{review, session}",
+      response: "{review, retired_at}"
+    }
+  ];
+
   function route(name) {
-    var lists = [ROUTES, CATALOG_ROUTES];
+    var lists = [ROUTES, CATALOG_ROUTES, SITE_ROUTES];
     for (var l = 0; l < lists.length; l += 1) {
       for (var i = 0; i < lists[l].length; i += 1) {
         if (lists[l][i].name === name) return lists[l][i];
@@ -662,6 +844,10 @@
     PROTO_UNKNOWN_REVIEW: 404,
     PROTO_UNKNOWN_ITEM: 404,
     PROTO_STALE_REV: 409,
+    // A review retired on purpose (`lahe review retire`) takes no events.
+    PROTO_REVIEW_RETIRED: 410,
+    // `lahe review retire` of a review another agent session owns.
+    PROTO_NOT_OWNER: 403,
     PROTO_SECOND_WINDOW: 409,
     PROTO_SECOND_INSTANCE: 409,
     // The Library's codes. Messages and remedies are in failures.js, like every
@@ -713,8 +899,6 @@
     // purpose: that window only withholds an accusation on the rail, while
     // this one decides whether a person is told another agent has the session.
     WORKING_MS: 2 * 60 * 1000,
-    // A quiet Library-reopened session closes.
-    REOPENED_AUTOCLOSE_MS: 30 * 60 * 1000,
     // A session bare `lahe library` started closes once it owns no reviews and
     // its agent has been quiet this long (no live monitor, no lahe command).
     LIBRARY_SESSION_IDLE_MS: 30 * 60 * 1000,
@@ -1209,8 +1393,91 @@
     // A `lahe write` notes review (free writing, design call 2). The layer
     // reads it at boot, before the helper has answered anything, so an empty
     // notes page can open for typing and no other empty page does.
-    NOTES: "data-lahe-notes"
+    NOTES: "data-lahe-notes",
+    // Stable addresses: the old page-server origins of this page's site, as a
+    // JSON array. The layer reads a record made on one of them as made on this
+    // page, so a review's old comments show at its new address. Written only by
+    // the helper, from its own records (page_routes.aliasesFor).
+    ALIASES: "data-lahe-aliases",
+    // Stable addresses, V31: the old paths of this page, as a JSON array. Only
+    // an old Markdown review has one: its page was the rendered file
+    // (/<name>-<hash>.html), and its new address is the source (/doc.md). Read
+    // only together with an old origin (record.samePage).
+    PATH_ALIASES: "data-lahe-path-aliases",
+    // Each page carries its own comments (Part 2): this page's other addresses
+    // in the review that answers on it, as a JSON array of "origin path"
+    // strings: a link address on another page's site, an old address. Written
+    // only by the helper, from the review's own records (page_routes.spellingsFor).
+    SPELLINGS: "data-lahe-spellings"
   };
+
+  // A plain loopback http origin with a port: what a page server registered
+  // before stable addresses. The one spelling of it: a script tag's aliases
+  // are these, and binding a review to a site drops these from it.
+  var LOOPBACK_PORT_ORIGIN = /^http:\/\/(127\.0\.0\.1|localhost):\d{1,5}$/;
+
+  function isLoopbackPortOrigin(value) {
+    return typeof value === "string" && LOOPBACK_PORT_ORIGIN.test(value);
+  }
+
+  // At most this many aliases on one tag, and only plain loopback origins.
+  var ALIAS_MAX = 16;
+
+  // An old path: absolute, at most 512 characters, and nothing that could
+  // leave a double-quoted attribute or carry markup.
+  var PATH_ALIAS = /^\/[^"'<>\s\\]{0,511}$/;
+
+  function isPathAlias(value) {
+    return typeof value === "string" && PATH_ALIAS.test(value);
+  }
+
+  // The origin half of a spelling: plain http, a lowercase host, an optional port.
+  var SPELLING_ORIGIN = /^http:\/\/[a-z0-9.-]{1,253}(?::\d{1,5})?$/;
+
+  function isSpellingOrigin(value) {
+    return typeof value === "string" && SPELLING_ORIGIN.test(value);
+  }
+
+  /** "origin path", both halves checked. */
+  function isSpelling(value) {
+    if (typeof value !== "string") return false;
+    var at = value.indexOf(" ");
+    return at > 0 && isSpellingOrigin(value.slice(0, at)) && isPathAlias(value.slice(at + 1));
+  }
+
+  function spellingsAttribute(list) {
+    if (!Array.isArray(list)) throw new Error("scriptTag: spellings must be a list");
+    if (list.length > ALIAS_MAX) throw new Error("scriptTag: at most " + ALIAS_MAX + " spellings");
+    list.forEach(function (one) {
+      if (!isSpelling(one)) throw new Error("scriptTag: a spelling is \"origin path\", not " + JSON.stringify(one));
+    });
+    return JSON.stringify(list).replace(/&/g, "&amp;").replace(/"/g, "&quot;");
+  }
+
+  function pathAliasesAttribute(paths) {
+    if (!Array.isArray(paths)) throw new Error("scriptTag: pathAliases must be a list");
+    if (paths.length > ALIAS_MAX) throw new Error("scriptTag: at most " + ALIAS_MAX + " path aliases");
+    paths.forEach(function (one) {
+      if (!isPathAlias(one)) throw new Error("scriptTag: a path alias must be an absolute path, not " + JSON.stringify(one));
+    });
+    return JSON.stringify(paths).replace(/&/g, "&amp;").replace(/"/g, "&quot;");
+  }
+
+  /** The aliases as an attribute value: JSON, escaped for a double-quoted attribute. */
+  function aliasesAttribute(aliases) {
+    if (!Array.isArray(aliases)) throw new Error("scriptTag: aliases must be a list");
+    if (aliases.length > ALIAS_MAX) throw new Error("scriptTag: at most " + ALIAS_MAX + " aliases");
+    aliases.forEach(function (alias) {
+      if (!isLoopbackPortOrigin(alias)) {
+        throw new Error("scriptTag: an alias must be a loopback http origin, not " + JSON.stringify(alias));
+      }
+    });
+    return JSON.stringify(aliases)
+      .replace(/&/g, "&amp;")
+      .replace(/"/g, "&quot;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;");
+  }
 
   // The one value each of the two opt-ins takes. Anything else is ignored, so a
   // typo fails to the safe default rather than to a guess.
@@ -1252,6 +1519,9 @@
       '        ' + SCRIPT_ATTR.HELPER + '="' + (o.helper || DEFAULT_HELPER_ORIGIN) + '"\n' +
       fallback +
       (o.notes === true ? '        ' + SCRIPT_ATTR.NOTES + '="' + NOTES_ON + '"\n' : "") +
+      (o.aliases !== undefined ? '        ' + SCRIPT_ATTR.ALIASES + '="' + aliasesAttribute(o.aliases) + '"\n' : "") +
+      (o.pathAliases !== undefined ? '        ' + SCRIPT_ATTR.PATH_ALIASES + '="' + pathAliasesAttribute(o.pathAliases) + '"\n' : "") +
+      (o.spellings !== undefined ? '        ' + SCRIPT_ATTR.SPELLINGS + '="' + spellingsAttribute(o.spellings) + '"\n' : "") +
       '        defer><\/script>'
     );
   }
@@ -1391,14 +1661,21 @@
    * The CLI's own usage names it, and the rail's handoff message carries it to
    * a new agent, fully formed, so the reviewer pastes something that runs.
    */
-  function takeoverCommand(sessionId, stateDirPath) {
-    return "lahe session takeover " + String(sessionId) + stateDirFlag(stateDirPath);
+  /**
+   * @param {string} sessionId
+   * @param {string|null} [stateDirPath]
+   * @param {string|null} [requestId] the Library request that asked for this
+   *   handoff, which is what lets the takeover through while the session's
+   *   agent is listening
+   */
+  function takeoverCommand(sessionId, stateDirPath, requestId) {
+    return "lahe session takeover " + String(sessionId) + stateDirFlag(stateDirPath) +
+      (isSafeId(requestId) ? " --request " + requestId : "");
   }
 
   /**
-   * The one spelling of the command that brings a document's page back: the
-   * session's page server, started again if the helper stopped it because no
-   * window was open (src/service/idle_servers.js). Same state-directory rule.
+   * The one spelling of the command that brings a document's page back.
+   * Same state-directory rule.
    *
    * @param {string} target the document as the agent named it (the Markdown
    *   source for a rendered page)
@@ -1704,13 +1981,15 @@
    * @param {string|null} [name] AGENT_LIVENESS.FIELD.NAME, quoted when present
    * @param {boolean} [stateDirFlagNeeded] AGENT_LIVENESS.FIELD.STATE_DIR_FLAG;
    *   the rail's case only, ignored when `options.library` is set
-   * @param {{library?: boolean, stateDir?: string|null}} [options] the
+   * @param {{library?: boolean, stateDir?: string|null, request?: string}} [options] the
    *   Library's case: `stateDir` is the state directory when it is not the
-   *   default one, else null
+   *   default one, else null; `request` is the pending Library request, named
+   *   on the takeover so it goes through while the session's agent listens
    * @returns {string} plain text
    */
   function handoffMessage(sessionId, name, stateDirFlagNeeded, options) {
     var library = !!(options && options.library === true);
+    var requestId = library && options && isSafeId(options.request) ? options.request : null;
     var dirPath = library && typeof options.stateDir === "string" && options.stateDir ? options.stateDir : null;
     var flag = stateDirFlag(dirPath);
     var hasId = typeof sessionId === "string" && isSafeId(sessionId);
@@ -1721,7 +2000,7 @@
         ]
       : [];
     var run = hasId
-      ? ["Run this command:", "", "    " + takeoverCommand(sessionId, dirPath), ""].concat(elsewhere)
+      ? ["Run this command:", "", "    " + takeoverCommand(sessionId, dirPath, requestId), ""].concat(elsewhere)
       : [
           "Run `lahe session list" + flag + "` to find the session for this document, then take it over with:",
           "",
@@ -1817,12 +2096,26 @@
     splitCompleteLines: splitCompleteLines,
 
     SCRIPT_ATTR: SCRIPT_ATTR,
+    ALIAS_MAX: ALIAS_MAX,
+    isLoopbackPortOrigin: isLoopbackPortOrigin,
+    isPathAlias: isPathAlias,
+    isSpellingOrigin: isSpellingOrigin,
+    isSpelling: isSpelling,
     FRAMES_ALLOW: FRAMES_ALLOW,
     START_HIDDEN: START_HIDDEN,
     NOTES_ON: NOTES_ON,
     SCRIPT_SELECTOR: SCRIPT_SELECTOR,
     SCRIPT_FALLBACK_ONERROR: SCRIPT_FALLBACK_ONERROR,
     scriptTag: scriptTag,
+
+    PAGES: PAGES,
+    isSiteLabel: isSiteLabel,
+    isSiteName: isSiteName,
+    HOST_FAMILY: HOST_FAMILY,
+    classifyHost: classifyHost,
+    siteOrigin: siteOrigin,
+    siteNameFromOrigin: siteNameFromOrigin,
+    SITE_ROUTES: SITE_ROUTES,
 
     CLI_EXIT: CLI_EXIT,
 

@@ -383,6 +383,31 @@
     return String(page.origin) + "|" + String(page.path);
   }
 
+  // ONE PAGE, EVERY SPELLING OF ITS STABLE ADDRESS. A stable address answers
+  // at <name>.lahe.localhost:<pages port>, at <name>.lahe.localhost through the
+  // port-80 forward, and at <name>.lahe when .lahe names work. The name is the
+  // page; the port and the suffix are only how the browser got there. Every
+  // comparison of page identity goes through this, while pageKey keeps the
+  // origin as recorded, for display and for review.json.
+  var SITE_ORIGIN = /^http:\/\/([a-z0-9][a-z0-9.-]*?)\.lahe(?:\.localhost)?(?::\d{1,5})?$/;
+
+  function identityOrigin(origin) {
+    var text = String(origin);
+    var match = SITE_ORIGIN.exec(text);
+    return match ? "lahe-site:" + match[1] : text;
+  }
+
+  // The key two records share exactly when they were made on the same page.
+  function pageIdentityKey(item) {
+    if (!item || typeof item !== "object") throw new TypeError("pageIdentityKey expects an item");
+    return identityOrigin(item[FIELD.PAGE_ORIGIN]) + "|" + String(item[FIELD.PAGE_PATH]);
+  }
+
+  function pageIdentityKeyFor(page) {
+    if (!page || typeof page !== "object") throw new TypeError("pageIdentityKeyFor expects a page");
+    return identityOrigin(page.origin) + "|" + String(page.path);
+  }
+
   // ---------------------------------------------------------------------------
   // Does this record belong to the page in front of us?
   // ---------------------------------------------------------------------------
@@ -462,9 +487,29 @@
   function samePage(item, page) {
     if (!item || typeof item !== "object") throw new TypeError("samePage expects an item");
     if (!page || typeof page !== "object") throw new TypeError("samePage expects a page");
-    if (pageKey(item) === pageKeyFor(page)) return true;
+    if (pageIdentityKey(item) === pageIdentityKeyFor(page)) return true;
+    // Another address of this page in its review (a link address, an old
+    // address), as the helper named it on the tag.
+    if (Array.isArray(page.spellings) && page.spellings.length) {
+      var mineKey = identityOrigin(item[FIELD.PAGE_ORIGIN]) + " " + String(item[FIELD.PAGE_PATH]);
+      for (var s = 0; s < page.spellings.length; s += 1) {
+        var one = page.spellings[s];
+        var at = one.indexOf(" ");
+        if (identityOrigin(one.slice(0, at)) + " " + one.slice(at + 1) === mineKey) return true;
+      }
+    }
     var itemOrigin = String(item[FIELD.PAGE_ORIGIN]);
     var pageOrigin = String(page.origin);
+    // A STABLE ADDRESS'S OLD ORIGINS. A record made when this page was served
+    // on a random port is this page's when its origin is one of the aliases
+    // the helper put on the script tag and its path is this path.
+    if (Array.isArray(page.aliases) && page.aliases.indexOf(itemOrigin) !== -1) {
+      var itemPath = String(item[FIELD.PAGE_PATH]);
+      if (itemPath === String(page.path)) return true;
+      // An old Markdown review's page was its rendered file: that old path, at
+      // an old origin, is this page too.
+      if (Array.isArray(page.path_aliases) && page.path_aliases.indexOf(itemPath) !== -1) return true;
+    }
     if (itemOrigin !== FILE_ORIGIN && pageOrigin !== FILE_ORIGIN) return false;
     var a = segmentsOf(item[FIELD.PAGE_PATH]);
     var b = segmentsOf(page.path);
@@ -502,7 +547,19 @@
       path: path,
       title: typeof l.title === "string" ? l.title : null,
       seq: typeof opts.seq === "number" ? opts.seq : null,
-      source_hint: opts.source_hint || null
+      source_hint: opts.source_hint || null,
+      // The old origins this page also answers for (stable addresses). Only
+      // ever what the helper wrote on the script tag.
+      aliases: Array.isArray(opts.aliases) ? opts.aliases.slice() : [],
+      // The old paths of this page (an old Markdown review's rendered file),
+      // read only together with an old origin. Also only what the helper wrote.
+      path_aliases: Array.isArray(opts.path_aliases)
+        ? opts.path_aliases.filter(function (p) { return typeof p === "string" && p.charAt(0) === "/"; })
+        : [],
+      // This page's other addresses in its review ("origin path"), from the tag.
+      spellings: Array.isArray(opts.spellings)
+        ? opts.spellings.filter(function (one) { return typeof one === "string" && one.indexOf(" ") > 0; })
+        : []
     };
   }
 
@@ -2260,6 +2317,9 @@
     pageFrom: pageFrom,
     pageKey: pageKey,
     pageKeyFor: pageKeyFor,
+    identityOrigin: identityOrigin,
+    pageIdentityKey: pageIdentityKey,
+    pageIdentityKeyFor: pageIdentityKeyFor,
     STAMP_SOURCE_EXTENSIONS: STAMP_SOURCE_EXTENSIONS,
     sourceCanCarryStamp: sourceCanCarryStamp,
     pageCanCarryStamp: pageCanCarryStamp,

@@ -912,6 +912,48 @@
       return { items: cleaned, reasons: got.reasons };
     }
 
+    /**
+     * V31: take in the records the helper holds for this page that this browser
+     * does not, so comments made at the page's old address show at its new one.
+     *
+     * Only ids this browser does not hold: an item it holds is its own, merged
+     * as before, and nothing changes for a page that already has its items.
+     * Never a draft, and never an item this browser has an event queued for (a
+     * delete still on its way, most of all), so nothing the reviewer withdrew
+     * or removed comes back. Each one goes through merge.js unchanged (it is
+     * ONLY_STORE: the store wins on content and lifecycle together), is
+     * written as acknowledged at its revision, and never enters the outbox, so
+     * nothing is posted back.
+     *
+     * @param {string} reviewId
+     * @param {Object[]} helperItems records.read's records
+     * @returns {Object[]} the records taken in
+     */
+    function adopt(reviewId, helperItems) {
+      var held = asSet(readAll(reviewId).map(function (item) {
+        return item[record.FIELD.ID];
+      }));
+      var pending = asSet(pendingEvents(reviewId).map(function (event) {
+        return event && event[protocol.EVENT_FIELD.ITEM];
+      }).filter(Boolean));
+      var seen = Object.create(null);
+      var incoming = (helperItems || []).filter(function (item) {
+        if (!item || typeof item !== "object") return false;
+        var id = item[record.FIELD.ID];
+        if (typeof id !== "string" || !id || held[id] || pending[id] || seen[id]) return false;
+        if (record.isDraft(item)) return false;
+        seen[id] = true;
+        return true;
+      });
+      if (!incoming.length) return [];
+      var got = merge.mergeLists([], incoming);
+      got.items.forEach(function (item) {
+        write(reviewId, item);
+        markAcknowledged(reviewId, item[record.FIELD.ID], item[record.FIELD.REV]);
+      });
+      return got.items;
+    }
+
     // -------------------------------------------------------------------------
     // The outbox
     // -------------------------------------------------------------------------
@@ -1527,6 +1569,7 @@
       remove: remove,
       reviews: reviews,
       mergeWithHelper: mergeWithHelper,
+      adopt: adopt,
       pendingEvents: pendingEvents,
       pendingCount: pendingCount,
       queueEvent: queueEvent,

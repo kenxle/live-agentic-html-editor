@@ -83,9 +83,13 @@ var logModule = require("../../service/log.js");
 var reviewsModule = require("../../service/reviews.js");
 var agentSessionsModule = require("../../service/agent_sessions.js");
 var staticServersModule = require("../../service/static_servers.js");
+var pageRoutesModule = require("../../service/page_routes.js");
 var sourceStamp = require("../../service/source_stamp.js");
 var service = require("../../service/index.js");
 var catalogRequests = require("../../service/catalog_requests.js");
+var loginItem = require("../../service/login_item.js");
+var selfStop = require("../../service/self_stop.js");
+var sessionCommand = require("./session.js");
 
 var REPO_ROOT = path.join(__dirname, "..", "..", "..");
 var BIN = path.join(REPO_ROOT, "bin", "lahe.js");
@@ -209,7 +213,14 @@ function parseArgs(argv) {
     // and serves the bundle from its own reserved route
     // (src/service/static_servers.js). `review` only ever sets this flag in the
     // same block where it starts that server, so the two facts arrive together.
-    underReview: false
+    underReview: false,
+    // Internal only, like --under-review, which it implies: `lahe review` on
+    // stable addresses (docs/features/20261011.02_stable_addresses). The helper
+    // serves the page itself and binds it to a site after this command, so no
+    // loopback origin is registered: only "null", which is what this CLI
+    // presents on its own requests. A page's site origin is checked against
+    // the registry instead of the review's list.
+    servedByHelper: false
   };
   var index = 0;
 
@@ -235,6 +246,9 @@ function parseArgs(argv) {
       if (name === "--help" || name === "-h") return { ok: false, help: true, message: USAGE };
       if (name === "--under-review") {
         options.underReview = true;
+      } else if (name === "--served-by-helper") {
+        options.underReview = true;
+        options.servedByHelper = true;
       } else if (name === "--new") {
         options.isNew = true;
       } else if (name === "--adopt") {
@@ -500,6 +514,9 @@ function reviewMatchingPath(dir, target, agentSessionId) {
     if (!entry.isDirectory() || !protocol.isSafeId(entry.name)) return;
     var meta = readMetaOnDisk(dir, entry.name);
     if (!meta || typeof meta.token !== "string") return;
+    // A retired review is never reused: `lahe review retire` is how a file
+    // gets a new one.
+    if (typeof meta.retired_at === "string") return;
     var owner = typeof meta.agent_session_id === "string" ? meta.agent_session_id : agentSessionsModule.LEGACY_ID;
     if (agentSessionId && owner !== agentSessionId) return;
     var retainedTargets = Array.isArray(meta.target_paths) ? meta.target_paths : [];
@@ -655,7 +672,19 @@ async function stopHelper(ready, host, port, live) {
   );
 }
 
-async function startHelper(host, port, dir) {
+/**
+ * Start the helper, or, when `lahe install` set up a login item for this port,
+ * ask the login item to and never spawn one beside it.
+ *
+ * @param {{runner?: function}} [options] the login item's command runner (tests)
+ */
+async function startHelper(host, port, dir, options) {
+  var isUp = function () { return service.probeHealth(host, port); };
+  var installed = loginItem.installedFor(dir, port);
+  if (installed) {
+    await loginItem.startThroughItem(installed, isUp, { runner: options && options.runner });
+    return isUp();
+  }
   var child = childProcess.spawn(
     process.execPath,
     [BIN, "serve", "--port", String(port), "--state-dir", dir],
@@ -663,9 +692,7 @@ async function startHelper(host, port, dir) {
   );
   child.unref();
   return pollFor(
-    function () {
-      return service.probeHealth(host, port);
-    },
+    isUp,
     15000,
     "the helper to answer on " + host + ":" + port + ". Run `lahe serve` yourself to see why it did not start"
   );
@@ -820,9 +847,11 @@ function classify(targetPath) {
 
 /**
  * @param {string[]} argv the arguments after the command name
+ * @param {{review?: string}} [used] filled with the id of the review this run
+ *   made or reused, so `lahe review` binds that one and not a guess
  * @returns {Promise<number>} the process exit code
  */
-async function run(argv) {
+async function run(argv, used) {
   var parsed = parseArgs(argv);
   if (!parsed.ok) {
     process[parsed.help ? "stdout" : "stderr"].write(parsed.message + "\n");
@@ -978,7 +1007,11 @@ async function run(argv) {
   var namedOrigins = withLoopbackTwins(options.origins);
   var origins;
   var originNote;
-  if (kind === "static") {
+  if (options.servedByHelper) {
+    origins = [FILE_ORIGIN];
+    originNote =
+      FILE_ORIGIN + " (what this command presents; the page's own address is checked against the helper's site registry)";
+  } else if (kind === "static") {
     origins = [FILE_ORIGIN].concat(namedOrigins);
     originNote =
       origins.join(", ") +
@@ -1008,7 +1041,9 @@ async function run(argv) {
     // "A live review" means one whose state is still on disk. A script line
     // pointing at a review whose state is gone is a dead line, and reusing its
     // id would hand the page a token nothing will accept.
-    return !!readMetaOnDisk(dir, reviewId);
+    // A retired review is not live either: it takes no events.
+    var meta = readMetaOnDisk(dir, reviewId);
+    return !!meta && typeof meta.retired_at !== "string";
   }
 
   function pendingPickup(reviewId) {
@@ -1083,6 +1118,10 @@ async function run(argv) {
 
   var ready = readReadyFile(dir);
   var alive = await service.probeHealth(host, port);
+  if (selfStop.stateFolderMismatch(dir, alive)) {
+    process.stderr.write("lahe add: " + selfStop.differentFolderSentence(host, port, dir) + ".\n");
+    return EXIT.FAILED;
+  }
 
   // --- make the helper hold this review --------------------------------------
   //
@@ -1135,18 +1174,27 @@ async function run(argv) {
       );
       return EXIT.FAILED;
     }
+    var fromOtherClone = verdict === protocol.CONTRACT_VERDICT.OLDER
+      ? sessionCommand.otherCloneSentence(loginItem.installedFor(dir, port))
+      : null;
+    if (fromOtherClone) {
+      // A restart would run the login item's older clone again; see
+      // session.js otherCloneSentence.
+      process.stderr.write("lahe add: " + fromOtherClone + ".\n");
+      return EXIT.FAILED;
+    }
     if (verdict === protocol.CONTRACT_VERDICT.OLDER) {
       restartReason =
         "the verified helper uses older service contract " + liveContract +
         "; this clone requires " + protocol.SERVICE_CONTRACT;
-    } else if (sourceStamp.helperPredatesSource(alive.started_at).stale) {
-      // SOMEBODY IS REVIEWING ON IT. Older than the code on disk is worth a
-      // restart; it is not worth throwing a reviewer out of a comment box they
-      // are typing in. See the same fork in `lahe session`.
-      var openPages = reviewsModule.readLiveHolders(dir, reviewsModule.LIVE_WINDOW_MS);
-      if (openPages.length > 0) {
-        keptForReviewer = reviewsModule.liveReviewerSentence(openPages);
-      } else {
+    } else {
+      // Older than the code on disk: replaced, unless a reviewer is on it (or,
+      // installed, unless it is busy taking their changes). The same decision
+      // as `lahe session` (session.js staleDecision).
+      var decision = await sessionCommand.staleDecision(dir, alive, loginItem.installedFor(dir, port));
+      if (decision.keep) {
+        keptForReviewer = decision.keep;
+      } else if (decision.stale) {
         restartReason = sourceStamp.REASON;
         staleRestart = true;
       }
@@ -1385,6 +1433,7 @@ async function run(argv) {
     notes: options.notes === true
   });
 
+  if (used && typeof used === "object") used.review = review.id;
   say("lahe add: " + target);
   say();
   say("  review    " + review.id + (reuseId ? "  (" + reuseWhy + ")" : "  (minted just now)"));
@@ -1394,7 +1443,7 @@ async function run(argv) {
   // review.json: the state directory is derived from environment this command
   // resolved and the agent did not.
   say("  folder    " + stateDirModule.reviewDir(dir, review.id));
-  say("  library   " + (servedInjection ? staticServersModule.LIBRARY_PATH : librarySrc));
+  say("  library   " + (servedInjection ? pageRoutesModule.LIBRARY_PATH : librarySrc));
   say(
     "  fallback  " +
       (servedInjection
@@ -1429,10 +1478,19 @@ async function run(argv) {
       say("  so no review id and no token land in your folder and no page has to be enrolled by hand.");
     } else {
       say("  Nothing was written into " + path.basename(target) + ". The script line goes into the response,");
-      say("  put there by the server this review already owns, so no review id and no token land in your folder.");
+      say(
+        options.servedByHelper
+          ? "  put there by the helper, which serves this page itself, so no review id and no token land in your folder."
+          : "  put there by the server this review already owns, so no review id and no token land in your folder."
+      );
     }
-    say("  That same server publishes the library at " + staticServersModule.LIBRARY_PATH + ", so no copy of it");
-    say("  sits beside the page either, and the page still opens with the helper down.");
+    if (options.servedByHelper) {
+      say("  The helper publishes the library at " + pageRoutesModule.LIBRARY_PATH + " on the page's own address,");
+      say("  so no copy of it sits beside the page either.");
+    } else {
+      say("  That same server publishes the library at " + pageRoutesModule.LIBRARY_PATH + ", so no copy of it");
+      say("  sits beside the page either, and the page still opens with the helper down.");
+    }
     if (carried) {
       say();
       say("  This page still carries a script line on disk from an earlier run. It was left exactly as it is.");
@@ -1558,6 +1616,7 @@ module.exports = {
   removeScriptLine: removeScriptLine,
   reviewAlreadyInFile: reviewAlreadyInFile,
   classify: classify,
+  startHelper: startHelper,
   folderPages: folderPages,
   folderEntryPage: folderEntryPage,
   run: run

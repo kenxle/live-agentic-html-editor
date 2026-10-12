@@ -1,6 +1,6 @@
 # Installed styles
 
-Read this before touching `src/service/styles.js`, `src/cli/commands/style.js`, the `.lahe-styles` route in `src/service/static_servers.js`, or the style line in `src/service/markdown.js`. The feature folder (`docs/features/20260930.01_style_switcher/`) is the history of why; this page is how it works now. Where the two differ, this page and the code win.
+Read this before touching `src/service/styles.js`, `src/cli/commands/style.js`, the `.lahe-styles` route in `src/service/page_routes.js`, or the style line in `src/service/markdown.js`. The feature folder (`docs/features/20260930.01_style_switcher/`) is the history of why; this page is how it works now. Where the two differ, this page and the code win.
 
 This page covers the installed half of the style switcher: installing a style, serving it, and carrying it on a page. The rail's side is summed up in "The style button in the rail" below. Read `src/layer/style_switch.js` (the rules, the words and the page work) and the Document style section of `src/layer/overlay.js` (the drawing) before changing it.
 
@@ -10,7 +10,7 @@ This page covers the installed half of the style switcher: installing a style, s
 - Installed styles live in the state folder, not in any repo or reviewed folder.
 - A page uses a style through one line: a stylesheet link in HTML, or `lahe-style: <id>` in Markdown frontmatter.
 - A style is third-party CSS on a page that carries a review token. So the stylesheet may reach only its own fonts and inline images, and nothing else. That one rule is the security boundary.
-- The rule runs at install and again every time a page server serves the file.
+- The rule runs at install and again every time the helper serves the file.
 
 ## What a style folder is
 
@@ -74,7 +74,7 @@ A backslash inside a string is allowed, so `content: "\00A7"` and a custom prope
 
 ## How the `.lahe-styles` path is served
 
-Both kinds of page server (the folder server and the one-page server) answer any path that has a `.lahe-styles` segment from `styles.js`. They never answer it from the disk under the served root. So a copy of a style in a reviewed folder, or beside an artifact, is never served.
+The helper's pages, a folder site and a notes page alike, answer any path that has a `.lahe-styles` segment from `styles.js`. They never answer it from the disk under the site's root. So a copy of a style in a reviewed folder, or beside an artifact, is never served.
 
 What follows the last `.lahe-styles` segment must be exactly one of:
 
@@ -97,7 +97,7 @@ For Markdown, the renderer puts the same link right after the inlined house styl
 
 A style that is not installed falls back to the house style.
 
-When Lahe writes a rendered Markdown file to disk, it copies the style's checked `style.css` and fonts beside it at `.lahe-styles/<id>/`, so the saved file opened from disk still shows the style. The page server never serves that copy. It answers the reserved segment from the installed styles, so a removed or reinstalled style shows as it is now. A missing or refused style is copied as nothing, and a failed copy never fails the render. The copy goes stale after a reinstall until the next render.
+When Lahe writes a rendered Markdown file to disk, it copies the style's checked `style.css` and fonts beside it at `.lahe-styles/<id>/`, so the saved file opened from disk still shows the style. The helper never serves that copy. It answers the reserved segment from the installed styles, so a removed or reinstalled style shows as it is now. A missing or refused style is copied as nothing, and a failed copy never fails the render. The copy goes stale after a reinstall until the next render.
 
 ## The style button in the rail
 
@@ -125,12 +125,12 @@ The words, the dot's state and the hover line come from `panelView` in `src/laye
 These are recorded, not defended against.
 
 - A style can hide the rail or change what the page shows. The rail sits in a closed shadow root, but its host element is in the page. A style could hide the rail, or hide or add visible text so the reviewer reads something other than the source. The reviewer chose to install it and can delete its folder.
-- Another website can probe the loopback page server for a style's stylesheet and learn which styles are installed. It cannot read the list, because the server sends no CORS header. The list names styles to scripts on pages the server already serves, and it is not secret.
+- Another website can try to load a style's stylesheet from a page's stable address to learn which styles are installed. Every page response carries `Cross-Origin-Resource-Policy: same-origin`, and the helper sends no CORS header, so it cannot read the list. The list names styles to scripts on pages the server already serves, and it is not secret.
 - A page flashes in the document's style for a moment on reload during a preview, because the library loads at the end of the body.
 - Mermaid diagrams keep the house palette under every style.
 - A check-then-open race remains on the serve path. Each folder level is checked with `lstat` before the file is opened, and a folder swapped for a symlink in between could point the open somewhere else. The file itself is opened without following a symlink, checked as a regular file with one link, and its real path must sit inside the styles folder, which narrows it. Winning the race needs write access to the styles folder, which is inside the owner-only (0700) state folder, so anyone who can do it can already change the style's files directly. Accepted, not defended further.
 - The page does not move for the rail. On a wide window, wide tables, code blocks and images can run under the open rail, under every style including the house style. Making the page narrow itself while the rail is open was proposed and declined: the page keeps its own layout whether the rail is open or closed. A style keeps its prose clear of the rail where it can; wide content is left full width.
-- A page on a server that is not a Lahe page server (a dev server, `file://`) cannot fetch the list. The dropdown then shows the house style alone.
+- A page that the helper does not serve (a dev server, `file://`) cannot fetch the list. The dropdown then shows the house style alone.
 
 ## Tests
 

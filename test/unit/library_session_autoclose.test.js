@@ -36,23 +36,21 @@ function tempDir() {
   return fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "lahe-library-autoclose-")));
 }
 
-/** A store whose clock is `clock.at`, and actions over it with a recording closeQuiet. */
+/** A store whose clock is `clock.at`, and actions over it. */
 function world() {
   const dir = tempDir();
   const clock = { at: T0 };
   const store = agentSessions.createStore({ dir, now: () => new Date(clock.at).toISOString() });
-  const closed = [];
   const actions = catalogActions.createCatalogActions({
     dir,
     reader: { describeReview: () => null },
     queue: { readAttached: () => null },
     store: catalogStore.createCatalogStore({ dir }),
-    ops: { closeQuiet: async (id) => { closed.push(id); store.close(id); } },
     sessions: store,
     log: () => {},
     pidAlive: () => true
   });
-  return { dir, clock, store, actions, closed };
+  return { dir, clock, store, actions };
 }
 
 function librarySession(w, id) {

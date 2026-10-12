@@ -460,15 +460,17 @@ test("the drain and monitor commands carry a state directory, quoted when the pa
 // Free writing (docs/features/20260928.01_free_writing, plan Task 1.5)
 // ---------------------------------------------------------------------------
 
-test("the service contract is 15: an old helper has no Library, and one before 14 stores run records unchecked", () => {
-  assert.equal(protocol.SERVICE_CONTRACT, 15);
+test("the service contract is 17: an old helper cannot retire a review, and one before 16 serves no pages itself", () => {
+  assert.equal(protocol.SERVICE_CONTRACT, 17);
 });
 
-test("the version check refuses a helper on contract 14 and accepts 15", () => {
+test("the version check refuses a helper on contract 16 and accepts 17", () => {
   assert.equal(protocol.helperContractVerdict({ service_contract: 13 }), protocol.CONTRACT_VERDICT.OLDER);
   assert.equal(protocol.helperContractVerdict({ service_contract: 14 }), protocol.CONTRACT_VERDICT.OLDER);
-  assert.equal(protocol.helperContractVerdict({ service_contract: 15 }), protocol.CONTRACT_VERDICT.CURRENT);
-  assert.equal(protocol.helperContractVerdict({ service_contract: 16 }), protocol.CONTRACT_VERDICT.NEWER);
+  assert.equal(protocol.helperContractVerdict({ service_contract: 15 }), protocol.CONTRACT_VERDICT.OLDER);
+  assert.equal(protocol.helperContractVerdict({ service_contract: 16 }), protocol.CONTRACT_VERDICT.OLDER);
+  assert.equal(protocol.helperContractVerdict({ service_contract: 17 }), protocol.CONTRACT_VERDICT.CURRENT);
+  assert.equal(protocol.helperContractVerdict({ service_contract: 18 }), protocol.CONTRACT_VERDICT.NEWER);
   assert.equal(protocol.helperContractVerdict({}), protocol.CONTRACT_VERDICT.OLDER, "a helper that names no contract is older");
 });
 

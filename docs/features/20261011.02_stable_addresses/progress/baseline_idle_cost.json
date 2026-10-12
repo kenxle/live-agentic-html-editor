@@ -1,0 +1,216 @@
+{
+ "duration_s": 300,
+ "samples": [
+  {
+   "t": 0,
+   "helpers": 2,
+   "helper_rss_kb": 137328,
+   "pages": 20,
+   "pages_rss_kb": 533952
+  },
+  {
+   "t": 10,
+   "helpers": 2,
+   "helper_rss_kb": 138080,
+   "pages": 20,
+   "pages_rss_kb": 562576
+  },
+  {
+   "t": 20,
+   "helpers": 2,
+   "helper_rss_kb": 144320,
+   "pages": 18,
+   "pages_rss_kb": 489568
+  },
+  {
+   "t": 31,
+   "helpers": 2,
+   "helper_rss_kb": 131856,
+   "pages": 25,
+   "pages_rss_kb": 797792
+  },
+  {
+   "t": 41,
+   "helpers": 2,
+   "helper_rss_kb": 135728,
+   "pages": 27,
+   "pages_rss_kb": 887312
+  },
+  {
+   "t": 51,
+   "helpers": 2,
+   "helper_rss_kb": 137120,
+   "pages": 22,
+   "pages_rss_kb": 667456
+  },
+  {
+   "t": 61,
+   "helpers": 2,
+   "helper_rss_kb": 138336,
+   "pages": 22,
+   "pages_rss_kb": 665936
+  },
+  {
+   "t": 71,
+   "helpers": 2,
+   "helper_rss_kb": 138256,
+   "pages": 22,
+   "pages_rss_kb": 662480
+  },
+  {
+   "t": 81,
+   "helpers": 2,
+   "helper_rss_kb": 137568,
+   "pages": 21,
+   "pages_rss_kb": 627312
+  },
+  {
+   "t": 91,
+   "helpers": 2,
+   "helper_rss_kb": 131328,
+   "pages": 25,
+   "pages_rss_kb": 795392
+  },
+  {
+   "t": 102,
+   "helpers": 2,
+   "helper_rss_kb": 127408,
+   "pages": 25,
+   "pages_rss_kb": 757520
+  },
+  {
+   "t": 112,
+   "helpers": 2,
+   "helper_rss_kb": 122560,
+   "pages": 22,
+   "pages_rss_kb": 606704
+  },
+  {
+   "t": 122,
+   "helpers": 2,
+   "helper_rss_kb": 131616,
+   "pages": 25,
+   "pages_rss_kb": 780416
+  },
+  {
+   "t": 132,
+   "helpers": 2,
+   "helper_rss_kb": 131520,
+   "pages": 25,
+   "pages_rss_kb": 757104
+  },
+  {
+   "t": 142,
+   "helpers": 2,
+   "helper_rss_kb": 125136,
+   "pages": 22,
+   "pages_rss_kb": 629840
+  },
+  {
+   "t": 152,
+   "helpers": 2,
+   "helper_rss_kb": 120976,
+   "pages": 22,
+   "pages_rss_kb": 625280
+  },
+  {
+   "t": 162,
+   "helpers": 2,
+   "helper_rss_kb": 123712,
+   "pages": 24,
+   "pages_rss_kb": 714176
+  },
+  {
+   "t": 172,
+   "helpers": 2,
+   "helper_rss_kb": 131680,
+   "pages": 16,
+   "pages_rss_kb": 410208
+  },
+  {
+   "t": 183,
+   "helpers": 2,
+   "helper_rss_kb": 133040,
+   "pages": 18,
+   "pages_rss_kb": 508496
+  },
+  {
+   "t": 193,
+   "helpers": 2,
+   "helper_rss_kb": 131344,
+   "pages": 18,
+   "pages_rss_kb": 486208
+  },
+  {
+   "t": 203,
+   "helpers": 2,
+   "helper_rss_kb": 126736,
+   "pages": 19,
+   "pages_rss_kb": 532576
+  },
+  {
+   "t": 213,
+   "helpers": 2,
+   "helper_rss_kb": 124064,
+   "pages": 21,
+   "pages_rss_kb": 599648
+  },
+  {
+   "t": 223,
+   "helpers": 2,
+   "helper_rss_kb": 125200,
+   "pages": 23,
+   "pages_rss_kb": 709328
+  },
+  {
+   "t": 233,
+   "helpers": 2,
+   "helper_rss_kb": 132000,
+   "pages": 20,
+   "pages_rss_kb": 586832
+  },
+  {
+   "t": 243,
+   "helpers": 2,
+   "helper_rss_kb": 135456,
+   "pages": 20,
+   "pages_rss_kb": 576880
+  },
+  {
+   "t": 253,
+   "helpers": 2,
+   "helper_rss_kb": 134544,
+   "pages": 21,
+   "pages_rss_kb": 618288
+  },
+  {
+   "t": 264,
+   "helpers": 2,
+   "helper_rss_kb": 128064,
+   "pages": 18,
+   "pages_rss_kb": 470704
+  },
+  {
+   "t": 274,
+   "helpers": 2,
+   "helper_rss_kb": 135872,
+   "pages": 20,
+   "pages_rss_kb": 572944
+  },
+  {
+   "t": 284,
+   "helpers": 2,
+   "helper_rss_kb": 130336,
+   "pages": 21,
+   "pages_rss_kb": 610304
+  },
+  {
+   "t": 294,
+   "helpers": 2,
+   "helper_rss_kb": 136992,
+   "pages": 19,
+   "pages_rss_kb": 527728
+  }
+ ],
+ "distinct_page_server_pids": 51
+}

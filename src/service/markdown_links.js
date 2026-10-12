@@ -6,7 +6,7 @@
 // ever rewritten to make a browser page work.
 //
 // A translated link needs a read-only mount for the target's DIRECTORY on the
-// session's static server, so the rules here are the path-safety rules: resolve
+// page's site, so the rules here are the path-safety rules: resolve
 // real paths first, stay inside the user's home directory, and cap how many
 // directories one render may mount. A hidden (dot-prefixed) file or folder is
 // treated like any other. A link that fails any of them is
@@ -51,6 +51,26 @@ function homeRoot() {
 
 function within(candidate, root) {
   return candidate === root || candidate.indexOf(root + path.sep) === 0;
+}
+
+/**
+ * May Lahe serve the files in `dir` under a mount? Only a folder whose real
+ * path is under the home folder. Hidden folders get no special handling: a
+ * worktree usually lives in one (repo/.claude/worktrees/<name>/), and a
+ * document there links to its neighbours like any other. Checked when a link
+ * makes a mount, when the registry takes one, and when a mount is served, so
+ * a mount whose folder is now outside home serves nothing.
+ *
+ * @param {string} dir
+ * @returns {boolean}
+ */
+function mountableDir(dir) {
+  if (typeof dir !== "string" || !path.isAbsolute(dir)) return false;
+  var real;
+  var home;
+  try { real = fs.realpathSync.native(dir); } catch (err) { return false; }
+  try { home = fs.realpathSync.native(homeRoot()); } catch (err) { home = homeRoot(); }
+  return within(real, home);
 }
 
 function mountPrefix(dir) {
@@ -162,6 +182,7 @@ function classify(href, sourceDir, registry) {
   // directory is refused even when the link itself sits inside it.
   if (!within(real, home)) return { kind: "inert", target: candidate, reason: "outside-home" };
   var dir = path.dirname(real);
+  if (!mountableDir(dir)) return { kind: "inert", target: candidate, reason: "outside-home" };
   var prefix = registry ? registry.add(dir) : mountPrefix(dir);
   if (!prefix) return { kind: "inert", target: candidate, reason: "cap" };
   if (registry && typeof registry.note === "function") registry.note(real);
@@ -179,6 +200,7 @@ module.exports = {
   isPage: isPage,
   homeRoot: homeRoot,
   mountPrefix: mountPrefix,
+  mountableDir: mountableDir,
   createRegistry: createRegistry,
   classify: classify
 };

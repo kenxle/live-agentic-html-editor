@@ -168,6 +168,20 @@ function readReady(dir) {
   }
 }
 
+/**
+ * Where the Library is: its own name, at the port the helper has proved (80
+ * once the port-80 forward is checked, else the pages port), as service.json
+ * reports it, the way `lahe review` prints a page. A helper that reports no
+ * pages block (one started before stable addresses) is reached at its loopback
+ * address. The helper answers at both.
+ */
+function libraryUrl(ready) {
+  var pages = ready.pages;
+  var port = pages && Number.isInteger(pages.printed_port) ? pages.printed_port : pages && pages.port;
+  if (Number.isInteger(port)) return protocol.siteOrigin(protocol.PAGES.LIBRARY_NAME, port) + protocol.CATALOG_PAGE_PATH;
+  return "http://" + protocol.DEFAULT_HOST + ":" + ready.port + protocol.CATALOG_PAGE_PATH;
+}
+
 function attachedLine(attached) {
   if (!attached) return "no agent. Run lahe library to attach one";
   var who = attached.name ? attached.name + " (" + attached.session + ")" : attached.session;
@@ -236,7 +250,7 @@ async function runLibrary(args, opts, out, err) {
   }
 
   catalogRequests.writeAttach(dir, sessionId, nowMs);
-  var url = "http://" + protocol.DEFAULT_HOST + ":" + ready.port + protocol.CATALOG_PAGE_PATH;
+  var url = libraryUrl(ready);
   var attached = catalogRequests.createQueue({ dir: dir }).readAttached(nowMs);
 
   if (args.json) {
@@ -419,4 +433,4 @@ async function run(argv, options) {
   return runLibrary(args, opts, out, err);
 }
 
-module.exports = { USAGE: USAGE, parse: parse, run: run };
+module.exports = { USAGE: USAGE, parse: parse, run: run, libraryUrl: libraryUrl };

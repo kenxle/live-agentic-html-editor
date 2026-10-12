@@ -1,0 +1,3486 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+  <meta charset="utf-8" />
+  <meta name="generator" content="pandoc" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
+  <title>Architecture: Stable addresses</title>
+  <style>
+    /* Default styles provided by pandoc.
+    ** See https://pandoc.org/MANUAL.html#variables-for-html for config info.
+    */
+    html {
+      color: #1a1a1a;
+      background-color: #fdfdfd;
+    }
+    body {
+      margin: 0 auto;
+      max-width: 36em;
+      padding-left: 50px;
+      padding-right: 50px;
+      padding-top: 50px;
+      padding-bottom: 50px;
+      hyphens: auto;
+      overflow-wrap: break-word;
+      text-rendering: optimizeLegibility;
+      font-kerning: normal;
+    }
+    @media (max-width: 600px) {
+      body {
+        font-size: 0.9em;
+        padding: 12px;
+      }
+      h1 {
+        font-size: 1.8em;
+      }
+    }
+    @media print {
+      html {
+        background-color: white;
+      }
+      body {
+        background-color: transparent;
+        color: black;
+        font-size: 12pt;
+      }
+      p, h2, h3 {
+        orphans: 3;
+        widows: 3;
+      }
+      h2, h3, h4 {
+        page-break-after: avoid;
+      }
+    }
+    p {
+      margin: 1em 0;
+    }
+    a {
+      color: #1a1a1a;
+    }
+    a:visited {
+      color: #1a1a1a;
+    }
+    img {
+      max-width: 100%;
+    }
+    svg {
+      height: auto;
+      max-width: 100%;
+    }
+    h1, h2, h3, h4, h5, h6 {
+      margin-top: 1.4em;
+    }
+    h5, h6 {
+      font-size: 1em;
+      font-style: italic;
+    }
+    h6 {
+      font-weight: normal;
+    }
+    ol, ul {
+      padding-left: 1.7em;
+      margin-top: 1em;
+    }
+    li > ol, li > ul {
+      margin-top: 0;
+    }
+    blockquote {
+      margin: 1em 0 1em 1.7em;
+      padding-left: 1em;
+      border-left: 2px solid #e6e6e6;
+      color: #606060;
+    }
+    code {
+      white-space: pre-wrap;
+      font-family: Menlo, Monaco, Consolas, 'Lucida Console', monospace;
+      font-size: 85%;
+      margin: 0;
+      hyphens: manual;
+    }
+    pre {
+      margin: 1em 0;
+      overflow: auto;
+    }
+    pre code {
+      padding: 0;
+      overflow: visible;
+      overflow-wrap: normal;
+    }
+    .sourceCode {
+     background-color: transparent;
+     overflow: visible;
+    }
+    hr {
+      border: none;
+      border-top: 1px solid #1a1a1a;
+      height: 1px;
+      margin: 1em 0;
+    }
+    table {
+      margin: 1em 0;
+      border-collapse: collapse;
+      width: 100%;
+      overflow-x: auto;
+      display: block;
+      font-variant-numeric: lining-nums tabular-nums;
+    }
+    table caption {
+      margin-bottom: 0.75em;
+    }
+    tbody {
+      margin-top: 0.5em;
+      border-top: 1px solid #1a1a1a;
+      border-bottom: 1px solid #1a1a1a;
+    }
+    th {
+      border-top: 1px solid #1a1a1a;
+      padding: 0.25em 0.5em 0.25em 0.5em;
+    }
+    td {
+      padding: 0.125em 0.5em 0.25em 0.5em;
+    }
+    header {
+      margin-bottom: 4em;
+      text-align: center;
+    }
+    #TOC li {
+      list-style: none;
+    }
+    #TOC ul {
+      padding-left: 1.3em;
+    }
+    #TOC > ul {
+      padding-left: 0;
+    }
+    #TOC a:not(:hover) {
+      text-decoration: none;
+    }
+    span.smallcaps{font-variant: small-caps;}
+    div.columns{display: flex; gap: min(4vw, 1.5em);}
+    div.column{flex: auto; overflow-x: auto;}
+    div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+    /* The extra [class] is a hack that increases specificity enough to
+       override a similar rule in reveal.js */
+    ul.task-list[class]{list-style: none;}
+    ul.task-list li input[type="checkbox"] {
+      font-size: inherit;
+      width: 0.8em;
+      margin: 0 0.8em 0.2em -1.6em;
+      vertical-align: middle;
+    }
+    .display.math{display: block; text-align: center; margin: 0.5rem auto;}
+    /* CSS for syntax highlighting */
+    html { -webkit-text-size-adjust: 100%; }
+    pre > code.sourceCode { white-space: pre; position: relative; }
+    pre > code.sourceCode > span { display: inline-block; line-height: 1.25; }
+    pre > code.sourceCode > span:empty { height: 1.2em; }
+    .sourceCode { overflow: visible; }
+    code.sourceCode > span { color: inherit; text-decoration: inherit; }
+    div.sourceCode { margin: 1em 0; }
+    pre.sourceCode { margin: 0; }
+    @media screen {
+    div.sourceCode { overflow: auto; }
+    }
+    @media print {
+    pre > code.sourceCode { white-space: pre-wrap; }
+    pre > code.sourceCode > span { text-indent: -5em; padding-left: 5em; }
+    }
+    pre.numberSource code
+      { counter-reset: source-line 0; }
+    pre.numberSource code > span
+      { position: relative; left: -4em; counter-increment: source-line; }
+    pre.numberSource code > span > a:first-child::before
+      { content: counter(source-line);
+        position: relative; left: -1em; text-align: right; vertical-align: baseline;
+        border: none; display: inline-block;
+        -webkit-touch-callout: none; -webkit-user-select: none;
+        -khtml-user-select: none; -moz-user-select: none;
+        -ms-user-select: none; user-select: none;
+        padding: 0 4px; width: 4em;
+        color: #aaaaaa;
+      }
+    pre.numberSource { margin-left: 3em; border-left: 1px solid #aaaaaa;  padding-left: 4px; }
+    div.sourceCode
+      {   }
+    @media screen {
+    pre > code.sourceCode > span > a:first-child::before { text-decoration: underline; }
+    }
+    code span.al { color: #ff0000; font-weight: bold; } /* Alert */
+    code span.an { color: #60a0b0; font-weight: bold; font-style: italic; } /* Annotation */
+    code span.at { color: #7d9029; } /* Attribute */
+    code span.bn { color: #40a070; } /* BaseN */
+    code span.bu { color: #008000; } /* BuiltIn */
+    code span.cf { color: #007020; font-weight: bold; } /* ControlFlow */
+    code span.ch { color: #4070a0; } /* Char */
+    code span.cn { color: #880000; } /* Constant */
+    code span.co { color: #60a0b0; font-style: italic; } /* Comment */
+    code span.cv { color: #60a0b0; font-weight: bold; font-style: italic; } /* CommentVar */
+    code span.do { color: #ba2121; font-style: italic; } /* Documentation */
+    code span.dt { color: #902000; } /* DataType */
+    code span.dv { color: #40a070; } /* DecVal */
+    code span.er { color: #ff0000; font-weight: bold; } /* Error */
+    code span.ex { } /* Extension */
+    code span.fl { color: #40a070; } /* Float */
+    code span.fu { color: #06287e; } /* Function */
+    code span.im { color: #008000; font-weight: bold; } /* Import */
+    code span.in { color: #60a0b0; font-weight: bold; font-style: italic; } /* Information */
+    code span.kw { color: #007020; font-weight: bold; } /* Keyword */
+    code span.op { color: #666666; } /* Operator */
+    code span.ot { color: #007020; } /* Other */
+    code span.pp { color: #bc7a00; } /* Preprocessor */
+    code span.sc { color: #4070a0; } /* SpecialChar */
+    code span.ss { color: #bb6688; } /* SpecialString */
+    code span.st { color: #4070a0; } /* String */
+    code span.va { color: #19177c; } /* Variable */
+    code span.vs { color: #4070a0; } /* VerbatimString */
+    code span.wa { color: #60a0b0; font-weight: bold; font-style: italic; } /* Warning */
+  </style>
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>%F0%9F%94%A8</text></svg>">
+  <!--
+    St. Clair AI document style for forge docs.
+
+    The palette, type and spacing values below are copied from the St. Clair
+    system tokens (live-agentic-html-editor/vendor/stclair-doc-style/
+    system-tokens.css). This header does NOT link LAHE's ./.lahe-doc-style.css
+    bundle, on purpose: that bundle's document.css styles bare elements and a
+    generic .callout (an ink fill with white text) and puts padding on every body
+    child, and all three collide with the forge structure. So the page is
+    self-contained and reads the same whether or not LAHE is serving it.
+
+    The fonts are the one thing taken from LAHE: it serves the three vendored
+    faces at ./.lahe-fonts/<file>.woff2 from every folder. When that fails, each
+    stack falls back to system-ui and a platform monospace.
+
+    House rules this file keeps: no pills, no shadows, no gradients, no all caps
+    labels, no single-side coloured borders. Colour comes from tints and dots.
+  -->
+  <style>
+    @font-face {
+      font-family: "Schibsted Grotesk"; font-style: normal; font-weight: 500 700; font-display: swap;
+      src: url("./.lahe-fonts/schibsted-grotesk-variable.woff2") format("woff2");
+    }
+    @font-face {
+      font-family: "Hanken Grotesk"; font-style: normal; font-weight: 400 600; font-display: swap;
+      src: url("./.lahe-fonts/hanken-grotesk-variable.woff2") format("woff2");
+    }
+    @font-face {
+      font-family: "JetBrains Mono"; font-style: normal; font-weight: 400 500; font-display: swap;
+      src: url("./.lahe-fonts/jetbrains-mono-variable.woff2") format("woff2");
+    }
+
+    :root {
+      color-scheme: light dark;
+
+      /* St. Clair palette (raw names and values from system-tokens.css) */
+      --white: #ffffff;
+      --paper: #f7f7f5;
+      --ink: #1f1e1a;
+      --ink-soft: #55534b;
+      --ink-faint: #6b6860;
+      --rule: #dcdad6;
+      --purple: #46188c;
+      --purple-tint: #f1ebfa;
+      --link: #6d28d9;
+      --cobalt: #0760c7;
+      --cobalt-tint: #e6effc;
+      --sage-fill: #8fb5a0;
+      --sage: #637a63;
+      --sage-tint: #e7f1ed;
+
+      --font-display: "Schibsted Grotesk", "Hanken Grotesk", system-ui, sans-serif;
+      --font-body: "Hanken Grotesk", system-ui, -apple-system, "Helvetica Neue", sans-serif;
+      --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+
+      --r: 4px;
+
+      /* Forge roles. Prefixed --ff- so none of them can collide with a St. Clair
+         token of the same name if the two ever share a page. Dark mode repoints
+         these and nothing else. */
+      --ff-bg: var(--white);
+      --ff-fg: var(--ink);
+      --ff-soft: var(--ink-soft);
+      --ff-faint: var(--ink-faint);
+      --ff-rule: var(--rule);
+      --ff-divider: var(--ink);
+      --ff-link: var(--link);
+      --ff-accent: var(--cobalt);
+      --ff-panel: var(--paper);
+      --ff-code-bg: var(--cobalt-tint);
+      --ff-bullet: var(--sage);
+      --ff-hl-kw: var(--cobalt);
+      --ff-hl-str: var(--sage);
+      --ff-hl-num: var(--purple);
+
+      /* Callouts: a tint, a dot and a label colour each. */
+      --ff-req-bg: var(--cobalt-tint);      --ff-req-dot: var(--cobalt);    --ff-req-label: var(--cobalt);
+      --ff-nongoal-bg: var(--paper);        --ff-nongoal-dot: var(--ink-faint); --ff-nongoal-label: var(--ink-faint);
+      --ff-metric-bg: var(--sage-tint);     --ff-metric-dot: var(--sage);   --ff-metric-label: var(--ink-soft);
+      --ff-question-bg: var(--purple-tint); --ff-question-dot: var(--purple); --ff-question-label: var(--purple);
+      --ff-suggest-bg: var(--white);        --ff-suggest-dot: var(--sage);  --ff-suggest-label: var(--sage);
+      --ff-flag-bg: var(--ink);             --ff-flag-fg: var(--white);     --ff-flag-dot: var(--sage-fill);
+
+      /* Disposition verdicts */
+      --ff-accepted: var(--sage);
+      --ff-rejected: var(--purple);
+      --ff-deferred: var(--cobalt);
+    }
+
+    /* Dark: the St. Clair on-ink values. Body text is full white on ink, as the
+       system decides; tints are the accent mixed into the ink ground. */
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --ff-bg: var(--ink);
+        --ff-fg: var(--white);
+        --ff-soft: #d9d7d1;   /* --ink-soft-ondark */
+        --ff-faint: #b3b0a8;  /* --ink-faint-ondark */
+        --ff-rule: #4a4842;   /* --rule-ondark */
+        --ff-divider: var(--white);
+        --ff-link: var(--sage-fill);
+        --ff-accent: color-mix(in srgb, var(--cobalt) 45%, var(--white));
+        --ff-panel: color-mix(in srgb, var(--white) 6%, var(--ink));
+        --ff-code-bg: color-mix(in srgb, var(--cobalt) 22%, var(--ink));
+        --ff-bullet: var(--sage-fill);
+        --ff-hl-kw: color-mix(in srgb, var(--cobalt) 40%, var(--white));
+        --ff-hl-str: var(--sage-fill);
+        --ff-hl-num: color-mix(in srgb, var(--purple) 30%, var(--white));
+
+        --ff-req-bg: color-mix(in srgb, var(--cobalt) 22%, var(--ink));
+        --ff-req-dot: color-mix(in srgb, var(--cobalt) 45%, var(--white));
+        --ff-req-label: color-mix(in srgb, var(--cobalt) 35%, var(--white));
+        --ff-nongoal-bg: color-mix(in srgb, var(--white) 6%, var(--ink));
+        --ff-nongoal-dot: #b3b0a8; --ff-nongoal-label: #b3b0a8;
+        --ff-metric-bg: color-mix(in srgb, var(--sage) 30%, var(--ink));
+        --ff-metric-dot: var(--sage-fill); --ff-metric-label: var(--sage-fill);
+        --ff-question-bg: color-mix(in srgb, var(--purple) 45%, var(--ink));
+        --ff-question-dot: color-mix(in srgb, var(--purple) 30%, var(--white));
+        --ff-question-label: color-mix(in srgb, var(--purple) 25%, var(--white));
+        --ff-suggest-bg: var(--ink);
+        --ff-suggest-dot: var(--sage-fill); --ff-suggest-label: var(--sage-fill);
+        --ff-flag-bg: var(--paper); --ff-flag-fg: var(--ink); --ff-flag-dot: var(--sage);
+
+        --ff-accepted: var(--sage-fill);
+        --ff-rejected: color-mix(in srgb, var(--purple) 30%, var(--white));
+        --ff-deferred: color-mix(in srgb, var(--cobalt) 40%, var(--white));
+      }
+    }
+
+    /* Pandoc's own default styles load before this block. The rules marked
+       "pandoc" below undo the ones that fight this look: black table rules,
+       a block-level table, auto hyphens, italic h5/h6, and a:visited in
+       near-black, which outranks a plain a rule. */
+    html { scroll-behavior: smooth; -webkit-print-color-adjust: exact; print-color-adjust: exact; background: var(--ff-bg); }
+    * { box-sizing: border-box; }
+
+    body {
+      font-family: var(--font-body);
+      font-size: 17px;
+      line-height: 1.65;
+      color: var(--ff-fg);
+      background: var(--ff-bg);
+      max-width: 880px;
+      margin: 0 auto;
+      padding: 56px 28px 104px;
+      -webkit-font-smoothing: antialiased;
+      text-rendering: optimizeLegibility;
+      hyphens: manual;   /* pandoc */
+    }
+
+    /* Title block (pandoc emits <header id="title-block-header">) */
+    header#title-block-header { padding-bottom: 8px; margin-bottom: 0; text-align: left; }
+    header#title-block-header h1.title {
+      font-family: var(--font-display);
+      font-size: clamp(34px, 4.6vw, 52px);
+      font-weight: 600;
+      margin: 0 0 12px;
+      letter-spacing: -0.012em;
+      line-height: 1.1;
+    }
+    header#title-block-header p.subtitle,
+    header#title-block-header p.author,
+    header#title-block-header p.date {
+      font-size: 20px;
+      line-height: 1.55;
+      color: var(--ff-soft);
+      margin: 0;
+    }
+
+    /* Cross-doc nav (injected by the build before the TOC). A plain line:
+       "Docs  Crucible · Brief · Architecture", the current doc in ink. */
+    .doc-nav {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: baseline;
+      gap: 4px 0;
+      margin: 20px 0 8px;
+      padding: 12px 0;
+      border-top: 1px solid var(--ff-rule);
+      border-bottom: 1px solid var(--ff-rule);
+      font-size: 15px;
+    }
+    .doc-nav .doc-nav-label {
+      font-family: var(--font-display);
+      font-weight: 600;
+      font-size: 14px;
+      color: var(--ff-faint);
+      margin-right: 14px;
+    }
+    .doc-nav a {
+      color: var(--ff-link);
+      text-decoration: underline;
+      text-decoration-thickness: 1px;
+      text-underline-offset: 3px;
+      border: 0;
+      background: none;
+      padding: 0;
+    }
+    .doc-nav a + a::before {
+      content: "\00B7";
+      display: inline-block;
+      color: var(--ff-faint);
+      margin: 0 10px;
+      text-decoration: none;
+    }
+    .doc-nav a:hover { background: none; text-decoration-thickness: 2px; }
+    .doc-nav a:visited { color: var(--ff-link); }
+    .doc-nav a.current, .doc-nav a.current:visited {
+      color: var(--ff-fg);
+      font-weight: 600;
+      text-decoration: none;
+      cursor: default;
+    }
+
+    /* TOC (pandoc emits <nav id="TOC">) */
+    nav#TOC {
+      margin: 28px 0 44px;
+      font-size: 15px;
+      line-height: 1.5;
+    }
+    nav#TOC::before {
+      content: "Contents";
+      display: block;
+      font-family: var(--font-display);
+      font-weight: 600;
+      font-size: 14px;
+      color: var(--ff-faint);
+      padding-bottom: 8px;
+      margin-bottom: 12px;
+      border-bottom: 2px solid var(--ff-divider);
+    }
+    nav#TOC ul { list-style: none; padding-left: 0; margin: 0; }
+    nav#TOC ul ul { padding-left: 18px; margin-top: 4px; }
+    nav#TOC li { margin-bottom: 4px; }
+    nav#TOC li::marker { content: none; }
+    nav#TOC a, nav#TOC a:visited { color: var(--ff-fg); text-decoration: none; border: 0; }
+    nav#TOC a:hover { color: var(--ff-link); text-decoration: underline; background: none; }
+
+    /* Headings: Schibsted at display weight, sentence case. An h2 hangs under a
+       full-width ink rule, the St. Clair section head. */
+    h1, h2, h3, h4, h5, h6 {
+      font-family: var(--font-display);
+      font-weight: 600;
+      line-height: 1.15;
+      letter-spacing: -0.012em;
+      color: var(--ff-fg);
+    }
+    h2 {
+      font-size: clamp(25px, 3vw, 32px);
+      margin: 64px 0 18px;
+      padding-top: 12px;
+      border-top: 2px solid var(--ff-divider);
+    }
+    h3 { font-size: clamp(19px, 2vw, 23px); margin: 40px 0 12px; }
+    h4 { font-size: 18px; margin: 28px 0 8px; }
+    h5, h6 { font-size: 17px; margin: 24px 0 8px; font-style: normal; font-weight: 600; }   /* pandoc */
+    h6 { color: var(--ff-soft); }
+
+    p { margin: 0 0 18px; }
+    p, li, td, dd { overflow-wrap: anywhere; }
+
+    a {
+      color: var(--ff-link);
+      text-decoration: underline;
+      text-decoration-thickness: 1px;
+      text-underline-offset: 3px;
+    }
+    a:visited { color: var(--ff-link); }   /* pandoc */
+    a:hover { text-decoration-thickness: 2px; }
+    :focus-visible { outline: 2px solid var(--ff-link); outline-offset: 3px; border-radius: var(--r); }
+
+    strong { color: inherit; font-weight: 700; }
+
+    ul, ol { margin: 0 0 18px; padding-left: 1.6em; }
+    li { margin: 0 0 8px; line-height: 1.55; }
+    li > p { margin-bottom: 8px; }
+    ul > li::marker { color: var(--ff-bullet); }
+    .callout ul > li::marker { color: var(--ff-dot); }
+    ol > li::marker { color: var(--ff-fg); font-weight: 600; }
+    li > ul, li > ol { margin-top: 8px; }
+
+    /* Callout boxes (from ::: callout-* fenced divs). A tint holding the text,
+       and a label row generated by CSS: a dot in the callout's colour, then the
+       label in the display face. */
+    .callout {
+      border-radius: var(--r);
+      padding: 16px 22px 18px;
+      margin: 18px 0;
+      background: var(--ff-panel);
+      color: var(--ff-fg);
+      line-height: 1.6;
+    }
+    .callout > :first-child { margin-top: 0; }
+    .callout > :last-child { margin-bottom: 0; }
+    .callout::before {
+      display: flex;
+      align-items: center;
+      gap: 9px;
+      font-family: var(--font-display);
+      font-weight: 600;
+      font-size: 14px;
+      line-height: 1.4;
+      margin-bottom: 6px;
+      padding-left: 16px;   /* room for the dot, which ::after draws */
+    }
+    .callout { position: relative; }
+    .callout::after {
+      content: "";
+      position: absolute;
+      left: 22px;
+      top: 23px;
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: var(--ff-dot, var(--ff-faint));
+    }
+    .callout-req      { background: var(--ff-req-bg);      --ff-dot: var(--ff-req-dot); }
+    .callout-req::before      { content: "Requirement";   color: var(--ff-req-label); }
+    .callout-nongoal  { background: var(--ff-nongoal-bg);  --ff-dot: var(--ff-nongoal-dot); border: 1px solid var(--ff-rule); }
+    .callout-nongoal::before  { content: "Non-goals";     color: var(--ff-nongoal-label); }
+    .callout-metric   { background: var(--ff-metric-bg);   --ff-dot: var(--ff-metric-dot); }
+    .callout-metric::before   { content: "Metrics";       color: var(--ff-metric-label); }
+    .callout-question { background: var(--ff-question-bg); --ff-dot: var(--ff-question-dot); }
+    .callout-question::before { content: "Open question"; color: var(--ff-question-label); }
+    .callout-suggest  { background: var(--ff-suggest-bg);  --ff-dot: var(--ff-suggest-dot); border: 1px solid var(--ff-suggest-dot); }
+    .callout-suggest::before  { content: "Suggestion";    color: var(--ff-suggest-label); }
+    .callout-flag     { background: var(--ff-flag-bg);     --ff-dot: var(--ff-flag-dot); color: var(--ff-flag-fg); }
+    .callout-flag::before     { content: "Red flag";      color: var(--ff-flag-fg); }
+    .callout-flag a, .callout-flag strong, .callout-flag code { color: inherit; }
+    .callout-flag code { background: color-mix(in srgb, currentColor 14%, transparent); }
+    /* The nongoal and suggest boxes carry a 1px border, so their dot moves with it. */
+    .callout-nongoal::after, .callout-suggest::after { left: 21px; top: 22px; }
+
+    /* Reviews section: the _reviews.md files are merged into the HTML below this
+       divider (they stay separate files on disk for agents). The build writes
+       the divider with an inline red rule; this repaints it in the house ink. */
+    hr.reviews-divider {
+      border: 0 !important;
+      border-top: 2px solid var(--ff-divider) !important;
+      margin: 88px 0 6px !important;
+      display: block !important;
+    }
+    hr.reviews-divider + * { margin-top: 0; }
+    .reviews-banner {
+      border-top: 1px solid var(--ff-divider);
+      padding: 14px 0 0;
+      margin: 0 0 32px;
+      font-size: 15px;
+      line-height: 1.55;
+      color: var(--ff-soft);
+    }
+    .reviews-banner::before {
+      display: block;
+      content: "Reviews, full prose";
+      font-family: var(--font-display);
+      font-weight: 600;
+      font-size: clamp(25px, 3vw, 32px);
+      line-height: 1.15;
+      letter-spacing: -0.012em;
+      color: var(--ff-fg);
+      margin-bottom: 8px;
+    }
+    /* Jump target for spec -> review-detail links; offset so the heading clears. */
+    .finding-anchor { display: inline-block; scroll-margin-top: 1.5rem; }
+    td a[href^="#"] { font-weight: 600; }
+
+    /* Inline xref deep-dive (from ::: xref fenced div) */
+    .xref {
+      font-size: 15px;
+      background: var(--ff-code-bg);
+      border-radius: var(--r);
+      padding: 10px 16px;
+      margin: 0 0 18px;
+      color: var(--ff-soft);
+      line-height: 1.5;
+    }
+    .xref::before {
+      content: "\21B3  See";
+      font-family: var(--font-display);
+      font-weight: 600;
+      font-size: 14px;
+      color: var(--ff-accent);
+      margin-right: 8px;
+    }
+    .xref > * { display: inline; margin: 0; }
+    .xref a, .xref a:visited { font-weight: 600; color: var(--ff-fg); }
+
+    /* Tables: the St. Clair naked ruled table. A 2px rule under the head,
+       hairlines between rows, no box, no tint, no shadow. The build wraps every
+       table in .table-scroll; the scrolling itself lives in
+       shared-assets/doc_fixes.css. */
+    .table-scroll { margin: 24px 0 32px; }
+    .table-scroll table { margin: 0; }
+    table {
+      border-collapse: collapse;
+      width: 100%;
+      margin: 24px 0 32px;
+      font-size: 15px;
+      line-height: 1.5;
+      background: none;
+      display: table;   /* pandoc sets block; .table-scroll does the scrolling */
+    }
+    tbody { border: 0; }   /* pandoc */
+    th { border-top: 0; }  /* pandoc */
+    thead th {
+      font-family: var(--font-display);
+      font-weight: 600;
+      font-size: 14px;
+      color: var(--ff-faint);
+      text-align: left;
+      padding: 0 16px 10px 0;
+      border-bottom: 2px solid var(--ff-divider);
+      vertical-align: bottom;
+    }
+    tbody td {
+      padding: 12px 16px 12px 0;
+      border-bottom: 1px solid var(--ff-rule);
+      vertical-align: top;
+    }
+    td:last-child, th:last-child { padding-right: 0; }
+    /* A short id column ("RF 12", "T3") stays on one line beside wide prose. */
+    tbody td:first-child { min-width: 3.4em; }
+    tbody tr:nth-child(even) { background: none; }
+    td > :first-child { margin-top: 0; }
+    td > :last-child { margin-bottom: 0; }
+
+    /* Disposition verdicts rendered by the build (Accepted/Rejected/Deferred).
+       A dot and the word, in the verdict's colour. */
+    td .accepted, span.accepted,
+    td .rejected, span.rejected,
+    td .deferred, span.deferred {
+      font-family: var(--font-display);
+      font-weight: 600;
+      white-space: nowrap;
+    }
+    td .accepted::before, span.accepted::before,
+    td .rejected::before, span.rejected::before,
+    td .deferred::before, span.deferred::before {
+      content: "";
+      display: inline-block;
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: currentColor;
+      margin-right: 7px;
+      vertical-align: 0.12em;
+    }
+    td .accepted, span.accepted { color: var(--ff-accepted); }
+    td .rejected, span.rejected { color: var(--ff-rejected); }
+    td .deferred, span.deferred { color: var(--ff-deferred); }
+
+    /* Inline + block code: JetBrains Mono on the cobalt tint, ink text.
+       Ligatures off, so an arrow in code reads as the two characters it is. */
+    code, pre {
+      font-family: var(--font-mono);
+      font-variant-ligatures: none;
+      font-feature-settings: "liga" 0, "calt" 0;
+    }
+    code {
+      font-size: 0.86em;
+      background: var(--ff-code-bg);
+      color: var(--ff-fg);
+      padding: 0.1em 0.35em;
+      border-radius: 3px;
+    }
+    pre {
+      font-size: 14px;
+      background: var(--ff-code-bg);
+      color: var(--ff-fg);
+      padding: 18px 24px;
+      border-radius: var(--r);
+      overflow-x: auto;
+      margin: 0 0 24px;
+      line-height: 1.55;
+      /* Wrap long lines instead of forcing a horizontal scroll (readability). */
+      white-space: pre-wrap;
+      word-break: break-word;
+      overflow-wrap: anywhere;
+    }
+    pre code { background: none; color: inherit; padding: 0; font-size: inherit; }
+    /* A code chip inside a tinted callout would vanish into the tint. */
+    .callout code { background: color-mix(in srgb, currentColor 9%, transparent); }
+
+    /* Highlighted blocks: pandoc wraps them in div.sourceCode and paints its
+       own transparent ground and a green-and-teal palette. Repaint both in the
+       St. Clair accents. */
+    div.sourceCode { margin: 0 0 24px; }
+    div.sourceCode > pre.sourceCode { background: var(--ff-code-bg); margin: 0; }
+    pre.sourceCode code span.kw, pre.sourceCode code span.cf, pre.sourceCode code span.im,
+    pre.sourceCode code span.op, pre.sourceCode code span.bu { color: var(--ff-hl-kw); font-weight: 500; }
+    pre.sourceCode code span.st, pre.sourceCode code span.ch, pre.sourceCode code span.ss,
+    pre.sourceCode code span.vs, pre.sourceCode code span.sc { color: var(--ff-hl-str); }
+    pre.sourceCode code span.dv, pre.sourceCode code span.fl, pre.sourceCode code span.bn,
+    pre.sourceCode code span.cn, pre.sourceCode code span.dt { color: var(--ff-hl-num); }
+    pre.sourceCode code span.co, pre.sourceCode code span.an, pre.sourceCode code span.cv,
+    pre.sourceCode code span.do, pre.sourceCode code span.in { color: var(--ff-soft); font-style: normal; font-weight: 400; }
+    pre.sourceCode code span.fu, pre.sourceCode code span.va, pre.sourceCode code span.at,
+    pre.sourceCode code span.ot { color: inherit; font-weight: 400; }
+
+    /* Mermaid blocks: pandoc renders ```mermaid as <pre class="mermaid">; the
+       Mermaid script replaces the text with SVG. It is a figure, not code: no
+       tint, a hairline frame, centred. Mermaid source must not wrap before the
+       script swaps it for SVG. */
+    pre.mermaid {
+      white-space: pre;
+      background: none;
+      border: 1px solid var(--ff-rule);
+      border-radius: var(--r);
+      padding: 24px;
+      text-align: center;
+      color: var(--ff-fg);
+      font-family: var(--font-body);
+    }
+    pre.mermaid svg { max-width: 100%; height: auto; }
+
+    blockquote {
+      margin: 18px 0;
+      padding: 2px 0 2px 18px;
+      border-left: 3px solid var(--ff-rule);
+      color: var(--ff-soft);
+    }
+    blockquote p:last-child { margin-bottom: 0; }
+
+    hr { border: none; border-top: 1px solid var(--ff-rule); margin: 44px 0; }
+    hr:has(+ h2) { display: none; }
+
+    img { max-width: 100%; height: auto; }
+
+    /* Task-list checkboxes from "- [ ]" lists */
+    ul.task-list { list-style: none; padding-left: 4px; }
+    ul.task-list li input[type="checkbox"] { margin-right: 8px; accent-color: var(--cobalt); }
+
+    @page { size: letter; margin: 0.7in 0.65in; }
+    @media (max-width: 620px) {
+      body { padding: 32px 16px 64px; font-size: 16px; }
+      .callout { padding: 14px 16px 16px; }
+      .callout::after { left: 16px; top: 22px; }
+      table { font-size: 14px; }
+    }
+    @media print {
+      :root { color-scheme: light; }
+      * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+      html, body { background: #fff; color: var(--ink); }
+      body { max-width: 100%; font-size: 11pt; padding: 0; }
+      .doc-nav { display: none; }
+      a { color: var(--ink); }
+      .callout, table, pre, blockquote { break-inside: avoid; }
+      h2, h3 { break-after: avoid; }
+    }
+  </style>
+  <script type="module">
+    import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.esm.min.mjs";
+    const dark = window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches;
+    mermaid.initialize({
+      startOnLoad: false,
+      theme: dark ? "dark" : "neutral",
+      securityLevel: "loose",
+      themeVariables: { fontFamily: '"Hanken Grotesk", system-ui, sans-serif' },
+    });
+    /* Pandoc emits ```mermaid blocks as <pre class="mermaid"><code>…</code></pre> with the
+       diagram source HTML-entity-encoded. Mermaid 10 reads innerHTML, so it sees the literal
+       <code> tag and &quot;/&gt; entities and throws syntax errors. Flatten each block to a
+       single decoded text node first (textContent decodes entities and drops the wrapper),
+       then render. Same fix as the personal-repo report builds (commit d525c50 there). */
+    function renderMermaid() {
+      document.querySelectorAll("pre.mermaid").forEach(function (el) {
+        if (!el.dataset.mflattened) {
+          el.textContent = el.textContent;
+          el.dataset.mflattened = "1";
+        }
+      });
+      mermaid.run({ querySelector: "pre.mermaid" });
+    }
+    if (document.readyState === "loading") {
+      window.addEventListener("DOMContentLoaded", renderMermaid);
+    } else {
+      renderMermaid();
+    }
+  </script>
+
+  <!-- The review comment module and the shared document fixes are injected here
+       at build time from ~/.claude/skills/shared-assets/ (comment_module.html +
+       doc_fixes.css) by shared_assets.resolve_header(). Do not paste a copy back
+       into this file. -->
+  <style>
+  /* Shared document fixes: one source for both document builds.
+
+     Injected at build time alongside comment_module.html, in place of the
+     <!-- SHARED_ASSETS --> placeholder in each pandoc header. Because it lands
+     last in <head>, these rules win over the same-specificity rules earlier in a
+     header without needing !important.
+
+     Keep this file to fixes that are true for every document we build. Anything
+     that depends on a skill's own look (colors, radius, shadow) belongs in that
+     skill's header. */
+
+  /* --- Tables: never spill past the reading column (plan Task 4.3, defect 1) ---
+     Two halves to the fix, and both are needed.
+     1. A wide table scrolls inside its wrapper. Both builds wrap every table in
+        <div class="table-scroll">.
+     2. Long unbroken strings (URLs, tokens, absolute paths) wrap instead of
+        setting a min-content width that forces the table wider than the page.
+        Without this the table is simply wider than the wrapper and the text is
+        cut off at the wrapper edge. */
+  .table-scroll {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    max-width: 100%;
+  }
+  .table-scroll > table { margin: 0; }
+  table { max-width: 100%; }
+  thead th, tbody td { overflow-wrap: anywhere; word-break: break-word; }
+  thead th code, tbody td code,
+  thead th a, tbody td a { overflow-wrap: anywhere; word-break: break-word; }
+
+  /* Print/PDF has no scrollbars, so show the whole table and let it shrink. */
+  @media print {
+    .table-scroll { overflow: visible; }
+  }
+
+  /* --- Charts: never let a chart set the page width (plan Task 4.3, defect 2) ---
+     The label-truncation fix itself is Plotly's automargin, applied in the
+     report header's render script. This is the CSS guard next to it: a chart
+     that computes a wider layout than its column stays inside the column
+     instead of pushing the whole page sideways. */
+  figure.plotly-chart,
+  figure.plotly-chart > div,
+  figure.chart svg,
+  figure.plotly-chart .main-svg { max-width: 100%; }
+
+  </style>
+</head>
+<body>
+<header id="title-block-header">
+<h1 class="title">Architecture: Stable addresses</h1>
+</header>
+
+<div class="doc-nav"><span class="doc-nav-label">Docs</span><a href="00_crucible_stable_addresses.html">Crucible</a><a href="01_brief_stable_addresses.html">Brief</a><a href="02_architecture_stable_addresses.html" class="current">Architecture</a><a href="03_plan_stable_addresses.html">Plan</a><a href="04_progress_stable_addresses.md">Progress</a></div>
+<nav id="TOC" role="doc-toc">
+<ul>
+<li><a href="#summary" id="toc-summary">Summary</a></li>
+<li><a href="#analysis-of-existing-structure"
+id="toc-analysis-of-existing-structure">Analysis of Existing
+Structure</a></li>
+<li><a href="#components--modules-touched"
+id="toc-components--modules-touched">Components / Modules
+Touched</a></li>
+<li><a href="#data--state-changes" id="toc-data--state-changes">Data /
+State Changes</a></li>
+<li><a href="#key-flows" id="toc-key-flows">Key Flows</a></li>
+<li><a href="#alternatives-considered"
+id="toc-alternatives-considered">Alternatives Considered</a></li>
+<li><a href="#failure-modes--edge-cases"
+id="toc-failure-modes--edge-cases">Failure Modes / Edge Cases</a></li>
+<li><a href="#security--privacy-notes"
+id="toc-security--privacy-notes">Security &amp; Privacy Notes</a></li>
+<li><a href="#test-strategy" id="toc-test-strategy">Test
+Strategy</a></li>
+<li><a href="#open-questions" id="toc-open-questions">Open
+Questions</a></li>
+<li><a href="#architect-review" id="toc-architect-review">Architect
+Review</a></li>
+<li><a href="#security-review" id="toc-security-review">Security
+Review</a></li>
+<li><a href="#reviews-stable-addresses-architecture"
+id="toc-reviews-stable-addresses-architecture">Reviews: Stable addresses
+architecture</a>
+<ul>
+<li><a href="#architect-review-stable-addresses"
+id="toc-architect-review-stable-addresses">Architect review: Stable
+addresses</a></li>
+<li><a href="#summary-1" id="toc-summary-1">Summary</a></li>
+<li><a href="#a-simpler-shape" id="toc-a-simpler-shape">A simpler
+shape</a></li>
+<li><a href="#verified-claims" id="toc-verified-claims">Verified
+claims</a></li>
+<li><a href="#cleanup-needed" id="toc-cleanup-needed">Cleanup
+needed</a></li>
+<li><a href="#security-review-stable-addresses-architecture"
+id="toc-security-review-stable-addresses-architecture">Security review:
+Stable addresses architecture</a></li>
+<li><a href="#summary-2" id="toc-summary-2">Summary</a></li>
+<li><a href="#findings-1" id="toc-findings-1">Findings</a></li>
+<li><a href="#what-holds-up" id="toc-what-holds-up">What holds
+up</a></li>
+<li><a href="#cleanup-needed-1" id="toc-cleanup-needed-1">Cleanup
+needed</a></li>
+</ul></li>
+</ul>
+</nav>
+<h2 id="summary">Summary</h2>
+<p>The helper becomes the always-on Lahe server and serves every page
+itself. Pages answer on port 1483, which reads like "lahe". The API
+stays on 7817, so script lines already written into pages keep working.
+Both listeners are in the same process and use the same Host routing.
+<code>127.0.0.1</code> and <code>localhost</code> reach the API, as they
+do today. <code>library.lahe.localhost</code> reaches the Library.
+<code>&lt;name&gt;.lahe.localhost</code> reaches one named site. A site
+is what one page server serves today: one folder, or one notes page.
+Paths under a site are the same paths a page server uses today. Only the
+origin changes, from <code>127.0.0.1:&lt;random port&gt;</code> to
+<code>&lt;name&gt;.lahe.localhost:1483</code>, or
+<code>&lt;name&gt;.lahe.localhost</code> with the optional port-80
+forward. A name registry, written only by the helper, maps each name to
+its site. The review that answers on a page is chosen per request, by
+today's rule without the session filter. Per-session page-server
+processes are retired. An install command adds a login item on macOS,
+Linux, and Windows, and in that mode the helper does not stop itself.
+<code>lahe review</code> prints <code>.lahe.localhost</code>, which
+browsers treat as secure. The short <code>.lahe</code> ending is an
+opt-in alias, set up by command on macOS and by written steps on Linux
+and Windows, that the helper answers only once it has proved it owns
+<code>.lahe</code> lookups on that machine.</p>
+<h2 id="analysis-of-existing-structure">Analysis of Existing
+Structure</h2>
+<p>Full survey with file and line citations: <a
+href="parts/architecture/recon.md">recon</a>. What matters for the
+design:</p>
+<ul>
+<li><strong>One detached process per folder per session serves pages on
+a random port</strong> (<code>src/service/static_servers.js</code>). The
+helper serves only the API, the Library, and the library script.</li>
+<li><strong>A page server is the unit of isolation today.</strong> Its
+origin is <code>127.0.0.1:&lt;port&gt;</code>, and it serves one root
+folder (or one notes page) for one session.</li>
+<li><strong>Every page-to-file mapper reads an item's
+<code>page_path</code> as "path under the served root"</strong>: the
+healer's stand-down, the reload check, the handled check, linked
+documents, and the projection. Keeping paths unchanged keeps all of them
+working.</li>
+<li><strong>The rail follows rules Ken set</strong>
+(<code>docs/ongoing/STATIC_SITE_FOLDER.md</code>): a single-page review
+lends its rail to its folder's pages, linked documents ride the linking
+review, and <code>--only</code> opts out.
+<code>findReviewForRequest</code> implements them, scoped to the
+server's session.</li>
+<li><strong>Most lifecycle code exists because processes stop and ports
+change:</strong> the idle sweep, the session-close stop, port history
+and origin swaps, <code>SIGHUP</code> mount reloads, and Library Open's
+restart and rollback.</li>
+</ul>
+<p>What stays: review records, tokens, the per-request checks (D11 in
+the original architecture), the layer's cross-origin calls to
+<code>127.0.0.1:&lt;port&gt;</code>, sessions and takeover, the monitor,
+and <code>lahe add</code> for <code>file://</code> and dev-server
+pages.</p>
+<h2 id="components--modules-touched">Components / Modules Touched</h2>
+<div class="table-scroll"><table>
+<thead>
+<tr>
+<th>Area</th>
+<th>Change</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>src/service/sites.js</code> (new)</td>
+<td>The name registry: make a name, keep it unique, resolve a Host to a
+site, record the worktree's main checkout, the grants log. Single
+writer.</td>
+</tr>
+<tr>
+<td><code>src/service/page_routes.js</code> (new)</td>
+<td>Serves a site: path safety, hidden-file refusal, injection, Markdown
+render, mounts, the "unknown name" and "file is gone" pages. Takes the
+serving half of <code>static_servers.js</code>.</td>
+</tr>
+<tr>
+<td><code>src/service/name_server.js</code> (new)</td>
+<td>Minimal DNS answerer for <code>*.lahe</code> on loopback UDP, macOS
+opt-in only. Node <code>dgram</code> only.</td>
+</tr>
+<tr>
+<td><code>src/service/login_item.js</code> (new),
+<code>src/cli/commands/install.js</code> (new)</td>
+<td><code>lahe install</code>, <code>lahe uninstall</code>,
+<code>lahe install --lahe-names</code>: login item per system, macOS
+resolver, <code>install.json</code>.</td>
+</tr>
+<tr>
+<td><code>src/service/index.js</code>, <code>routes.js</code>,
+<code>auth.js</code></td>
+<td>Host dispatch first; two listeners (<code>127.0.0.1</code>,
+<code>::1</code>); the <code>site.bind</code> route and its CLI secret;
+Library Hosts widened to <code>library.lahe.localhost</code>; Origin
+check against the registry; <code>Cross-Origin-Resource-Policy</code> on
+page responses.</td>
+</tr>
+<tr>
+<td><code>src/shared/protocol.js</code></td>
+<td>Host grammar per route family, name rules, <code>site.bind</code>,
+<code>PAGES</code> constants, the <code>data-lahe-aliases</code>
+attribute in <code>scriptTag</code>.</td>
+</tr>
+<tr>
+<td><code>src/shared/record.js</code>,
+<code>src/shared/review_format.js</code></td>
+<td>Page identity and grouping accept a page's aliases.</td>
+</tr>
+<tr>
+<td><code>src/service/reviews.js</code>, <code>heal.js</code>,
+<code>rebuild.js</code>, <code>handled_check.js</code>,
+<code>projection.js</code>, <code>markdown.js</code>,
+<code>markdown_links.js</code></td>
+<td>Ask the registry where they asked page-server records:
+<code>servesPath</code>, linked files, mounts, served roots.</td>
+</tr>
+<tr>
+<td><code>src/service/static_servers.js</code>,
+<code>idle_servers.js</code>, <code>self_stop.js</code></td>
+<td>Spawning retired. Old records stay readable for aliases and the
+one-time migration. Leftover processes stopped on every start. Self-stop
+off in always-on mode.</td>
+</tr>
+<tr>
+<td><code>src/service/catalog_*.js</code>,
+<code>src/layer/catalog/page.js</code></td>
+<td>Kinds redefined; Open binds instead of restarting; rows link to
+stable addresses; copy fallback.</td>
+</tr>
+<tr>
+<td><code>src/cli/index.js</code>, <code>commands/review.js</code>,
+<code>add.js</code>, <code>write.js</code>, <code>library.js</code>,
+<code>status.js</code>, <code>session.js</code></td>
+<td>New order for <code>lahe review</code>; status reports port, ending,
+install, and state folder; session close stops only the session; the CLI
+does not spawn a helper when installed.</td>
+</tr>
+<tr>
+<td><code>src/layer/index.js</code>, <code>export.js</code>,
+<code>overlay.js</code>, <code>store.js</code></td>
+<td>Read aliases; copy fallback.</td>
+</tr>
+<tr>
+<td><code>src/shared/manifest.js</code></td>
+<td>The four new files.</td>
+</tr>
+<tr>
+<td>Docs</td>
+<td><code>skills/lahe/SKILL.md</code>, the contract in
+<code>review_format.js</code> and its copies, <code>docs/CLI.md</code>,
+<code>docs/CONTRACTS.md</code>, <code>docs/INSTALL.md</code>,
+<code>README.md</code>,
+<code>docs/ongoing/SERVING_ARCHITECTURES.md</code>,
+<code>STATIC_SITE_FOLDER.md</code>, <code>FREE_WRITING.md</code>,
+<code>LIBRARY.md</code>, <code>SESSION_OWNERSHIP.md</code>, and
+<code>docs/diagrams/</code> (<code>system_overview</code>,
+<code>session_ownership</code>, <code>review_round_trip</code>,
+<code>module_map</code>).</td>
+</tr>
+</tbody>
+</table></div>
+<h2 id="data--state-changes">Data / State Changes</h2>
+<p><strong><code>&lt;state&gt;/sites.json</code></strong> (new, mode
+0600, written atomically by the helper only), plus
+<strong><code>&lt;state&gt;/sites.log</code></strong>, an append-only
+record of every grant. A registry that cannot be read is rebuilt from
+the log, never started empty; if neither reads, the helper serves known
+names read-only and mints no new name.</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode json"><code class="sourceCode json"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="fu">{</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a>  <span class="dt">&quot;version&quot;</span><span class="fu">:</span> <span class="dv">1</span><span class="fu">,</span></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a>  <span class="dt">&quot;sites&quot;</span><span class="fu">:</span> <span class="fu">{</span></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a>    <span class="dt">&quot;20261011-02-stable-addresses&quot;</span><span class="fu">:</span> <span class="fu">{</span></span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a>      <span class="dt">&quot;root&quot;</span><span class="fu">:</span> <span class="st">&quot;/Users/ken/Documents/workspace/lahe-worktrees/stable-addresses/docs/features/20261011.02_stable_addresses&quot;</span><span class="fu">,</span></span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a>      <span class="dt">&quot;entry&quot;</span><span class="fu">:</span> <span class="st">&quot;04_progress_stable_addresses.md&quot;</span><span class="fu">,</span></span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a>      <span class="dt">&quot;mode&quot;</span><span class="fu">:</span> <span class="st">&quot;folder&quot;</span><span class="fu">,</span></span>
+<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a>      <span class="dt">&quot;mounts&quot;</span><span class="fu">:</span> <span class="fu">{</span> <span class="dt">&quot;9f2c1a&quot;</span><span class="fu">:</span> <span class="st">&quot;/Users/ken/Documents/workspace/lahe-worktrees/stable-addresses/docs/ongoing&quot;</span> <span class="fu">},</span></span>
+<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a>      <span class="dt">&quot;main_checkout&quot;</span><span class="fu">:</span> <span class="st">&quot;/Users/ken/Documents/workspace/live-agentic-html-editor&quot;</span><span class="fu">,</span></span>
+<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a>      <span class="dt">&quot;worktree_root&quot;</span><span class="fu">:</span> <span class="st">&quot;/Users/ken/Documents/workspace/lahe-worktrees/stable-addresses&quot;</span><span class="fu">,</span></span>
+<span id="cb1-11"><a href="#cb1-11" aria-hidden="true" tabindex="-1"></a>      <span class="dt">&quot;created_at&quot;</span><span class="fu">:</span> <span class="st">&quot;2026-10-11T16:40:00Z&quot;</span></span>
+<span id="cb1-12"><a href="#cb1-12" aria-hidden="true" tabindex="-1"></a>    <span class="fu">}</span></span>
+<span id="cb1-13"><a href="#cb1-13" aria-hidden="true" tabindex="-1"></a>  <span class="fu">}</span></span>
+<span id="cb1-14"><a href="#cb1-14" aria-hidden="true" tabindex="-1"></a><span class="fu">}</span></span></code></pre></div>
+<ul>
+<li><strong>What Ken sees:</strong> the name says the folder, and the
+path says the file:
+<code>http://docs.features.20261011-02-stable-addresses.lahe.localhost:1483/01_brief_stable_addresses.md</code>,
+or
+<code>http://live-agentic-html-editor.docs.ongoing.lahe.localhost:1483/STABLE_ADDRESSES.md</code>.
+With the port-80 forward set up and verified, the same addresses print
+without <code>:1483</code>.</li>
+<li><strong>A site is a root plus a mode.</strong> <code>folder</code>
+serves the root's tree, as a page server does today.
+<code>page-only</code> (a <code>lahe write</code> notes page) serves the
+one file plus Lahe's reserved files, and 404s everything else. Roots use
+<code>fs.realpathSync.native</code>.</li>
+<li><strong>For Markdown, the root is the source folder.</strong>
+<code>/&lt;file&gt;.md</code> renders on request from the source, with
+the render cached by file time. <code>rebuild.js</code>, the reload
+check, and the handled check read the same render. The state folder's
+artifact copy is no longer the served page. Links outside the source
+folder use <code>/.lahe-source/&lt;hash&gt;/</code> mounts, stored on
+the site and served only under that site.</li>
+<li><strong><code>entry</code></strong> is the page
+<code>lahe review</code> prints. It is not a binding: any review may
+answer on any page of the site, by the rule below.</li>
+<li><strong>Name rule.</strong> Take the root folder and its two
+parents, in path order, stopping below the home folder. Lowercase each,
+turn each run of other characters into one dash, and join them with dots
+where the <code>/</code> was. Each folder becomes one DNS label of at
+most 63 characters; a name longer than 150 characters drops the
+outermost parent first. A name with nothing left becomes
+<code>doc</code>. Refuse anything starting <code>xn--</code> or with
+<code>--</code> in positions 3 and 4. A name that clashes with a
+different root takes one more parent, then a number. Reserved:
+<code>library</code>, <code>lahe</code>, <code>www</code>,
+<code>api</code>. A name is not reused for another root.</li>
+<li><strong>Worktrees.</strong> At bind time, while the worktree exists,
+the helper reads its <code>.git</code> file to record
+<code>main_checkout</code> and <code>worktree_root</code>. The
+<code>.claude/worktrees/</code> pattern is the fallback for old
+entries.</li>
+</ul>
+<p><strong><code>&lt;state&gt;/install.json</code></strong> (new,
+written by <code>lahe install</code>): system, login item path, Node
+path, clone path, API port, page port, resolved state folder,
+<code>lahe_names</code> (on or off), resolver path, <code>port_80</code>
+(on or off), forward rule path.</p>
+<p><strong><code>&lt;state&gt;/cli-secret</code></strong> (new, mode
+0600): a random secret the CLI sends on <code>site.bind</code>. Pages
+cannot read it.</p>
+<p><strong><code>service.json</code> gains</strong>
+<code>pages: { port, printed_ending, port_free: { on, verified, reason }, lahe_names: { on, verified, reason } }</code>,
+<code>always_on</code>, and a state-folder id that <code>/health</code>
+also reports.</p>
+<p><strong>Script tag gains</strong> <code>data-lahe-aliases</code>: the
+old origins of this site's root, read from old page-server records,
+escaped as JSON and capped at 16 entries. Same paths, so an alias is
+only an origin.</p>
+<p><strong>Review <code>origins</code> do not change.</strong> A request
+whose Origin is a Lahe site name is checked against the registry: the
+site must exist, and the review must be the one this site's rule picks
+for that page. No name origins are added to reviews, so the 16-origin
+cap and the <code>service.json</code> rewrites are untouched.</p>
+<h2 id="key-flows">Key Flows</h2>
+<h3 id="serving-a-request">Serving a request</h3>
+<pre class="mermaid"><code>flowchart TD
+    Req[&quot;request on port 1483 or 7817&lt;br/&gt;(127.0.0.1 or ::1)&quot;] --&gt; Host{&quot;Host header,&lt;br/&gt;checked before anything else&quot;}
+    Host --&gt;|&quot;127.0.0.1 / localhost / [::1]&quot;| Api[&quot;API, library script, health,&lt;br/&gt;and the Library at /catalog:&lt;br/&gt;today&#39;s checks, unchanged&quot;]
+    Host --&gt;|&quot;library.lahe.localhost&quot;| Cat[&quot;the Library: exact Host,&lt;br/&gt;same-origin, Library token&quot;]
+    Host --&gt;|&quot;name.lahe.localhost&lt;br/&gt;(or name.lahe when verified)&quot;| Known{&quot;name in the registry?&quot;}
+    Host --&gt;|&quot;anything else&quot;| Bad[&quot;400 bad host&quot;]
+    Known --&gt;|&quot;no&quot;| Unknown[&quot;404 page: no document by that name,&lt;br/&gt;link to the Library&quot;]
+    Known --&gt;|&quot;yes&quot;| Safe{&quot;path safe? no dot segment,&lt;br/&gt;inside root, mode allows it&quot;}
+    Safe --&gt;|&quot;no&quot;| NotFound[&quot;404&quot;]
+    Safe --&gt;|&quot;yes&quot;| Kind{&quot;what is it?&quot;}
+    Kind --&gt;|&quot;a page (.html, .md)&quot;| Pick[&quot;pick the review for this page&lt;br/&gt;(rule below)&quot;]
+    Pick --&gt; Serve[&quot;serve it, script tag injected&lt;br/&gt;for that review, or read-only if none&quot;]
+    Kind --&gt;|&quot;any other file&quot;| Asset[&quot;bytes, no script tag&quot;]
+    Kind --&gt;|&quot;/.lahe-source/hash/...&quot;| Mount[&quot;this site&#39;s mount only&quot;]
+    Serve --&gt; Gone{&quot;file still there?&quot;}
+    Gone --&gt;|&quot;no, but the worktree&#39;s&lt;br/&gt;main checkout has it&quot;| ReadOnly[&quot;serve that copy read-only,&lt;br/&gt;with a note naming the move&quot;]
+    Gone --&gt;|&quot;no&quot;| GonePage[&quot;410 page: file is gone,&lt;br/&gt;names the path, links to the Library&quot;]</code></pre>
+<ul>
+<li>Every page response carries
+<code>Cross-Origin-Resource-Policy: same-origin</code>. Websites cannot
+embed or probe it.</li>
+<li>A page's path is its path under the root, as today. Links and images
+keep working with no redirects.</li>
+<li>A GET never writes. Names are only made by
+<code>site.bind</code>.</li>
+</ul>
+<h3 id="which-review-answers-on-a-page">Which review answers on a
+page</h3>
+<p>Today's <code>findReviewForRequest</code>, minus the session
+filter:</p>
+<ol type="1">
+<li>A review that recorded this exact file. The newest one wins.</li>
+<li>Else the newest review whose served root is this site's root and is
+not <code>--only</code>.</li>
+<li>Else the newest review that linked to this file.</li>
+<li>Else none: the page is served read-only.</li>
+</ol>
+<p>"Newest" means created or re-served most recently.
+<code>lahe review</code> and the Library's Open both stamp the review as
+re-served. So the most recent explicit act decides the rail, and a
+review created later still wins over an older Open.</p>
+<h3 id="binding-lahe-review-lahe-write-the-librarys-open">Binding
+(<code>lahe review</code>, <code>lahe write</code>, the Library's
+Open)</h3>
+<pre class="mermaid"><code>sequenceDiagram
+    participant C as lahe review (CLI)
+    participant H as Helper
+    participant S as sites.json and sites.log
+    C-&gt;&gt;C: decide the site: root, mode, entry (as page servers do today)
+    C-&gt;&gt;H: add --served-by-helper (no origin, writes nothing to disk)
+    H--&gt;&gt;C: review id and token
+    C-&gt;&gt;H: site.bind {review, root, mode, entry, mounts} + CLI secret
+    H-&gt;&gt;S: find or make the site&#39;s name, append the grant
+    H-&gt;&gt;H: stamp the review as re-served
+    H--&gt;&gt;C: {name, url, printed_ending}
+    C-&gt;&gt;C: print the url on the open line</code></pre>
+<p><code>site.bind</code> refuses any request carrying an
+<code>Origin</code> header, needs the CLI secret, and takes the root
+from the request, never from <code>meta.json</code>.
+<code>lahe review</code> on a stopped or missing helper: if installed,
+it asks the login item to start it; if not, it starts it detached, as
+today.</p>
+<h3 id="the-library">The Library</h3>
+<div class="table-scroll"><table>
+<thead>
+<tr>
+<th>Kind</th>
+<th>Means now</th>
+<th>Open does</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>openable</td>
+<td>the file is on disk, and Lahe can serve it (HTML or Markdown)</td>
+<td>binds the site if needed, stamps the row's review as re-served,
+opens the address</td>
+</tr>
+<tr>
+<td>worktree</td>
+<td>the worktree is gone, and the registry recorded its main
+checkout</td>
+<td>opens the read-only copy, as in the flow above</td>
+</tr>
+<tr>
+<td>via-agent</td>
+<td>a dev-server or <code>--origin</code> review</td>
+<td>queues a pick-up, as today</td>
+</tr>
+<tr>
+<td>legacy</td>
+<td>a <code>lahe add</code> script-line review</td>
+<td>queues a pick-up, as today</td>
+</tr>
+</tbody>
+</table></div>
+<p>If the row's file is the newest review's in an open session that is
+not this row's, Open goes to the address without re-stamping, and the
+row says which review holds the rail. Open no longer restarts processes
+or reopens sessions, so the reopened-session sweep and its rollback are
+removed.</p>
+<h3 id="always-on-lifetime">Always-on lifetime</h3>
+<pre class="mermaid"><code>flowchart TD
+    Login[&quot;login&quot;] --&gt; Mgr[&quot;login item starts:&lt;br/&gt;node bin/lahe.js serve --always-on&lt;br/&gt;--port P --state-dir D&quot;]
+    Mgr --&gt; Up[&quot;helper up: pages, API, Library,&lt;br/&gt;and the name server if .lahe is on&quot;]
+    Up --&gt; Close[&quot;agent: lahe session close&quot;]
+    Close --&gt; Up
+    Up --&gt; Stale[&quot;CLI finds the helper older than&lt;br/&gt;the clone the login item names&quot;]
+    Stale --&gt; Quiet[&quot;wait for a quiet outbox moment,&lt;br/&gt;windows may stay open&quot;]
+    Quiet --&gt; Kick[&quot;CLI restarts it through the login item&quot;]
+    Kick --&gt; Up
+    Up --&gt; Crash[&quot;helper exits or crashes&quot;]
+    Crash --&gt; Mgr</code></pre>
+<ul>
+<li>When installed, the CLI never spawns its own helper. It asks the
+login item, or reports what is wrong.</li>
+<li><code>/health</code> reports the state-folder id. A CLI pointed at a
+different state folder says so, instead of failing on the port.</li>
+<li>Without the install (a plain clone), <code>lahe review</code> starts
+the helper detached, and self-stop works as today.</li>
+<li>Every start stops leftover page-server processes named in old
+records, until none is alive.</li>
+</ul>
+<h3 id="login-item-per-system">Login item per system</h3>
+<div class="table-scroll"><table>
+<thead>
+<tr>
+<th>System</th>
+<th>Mechanism</th>
+<th>Restart if it stops</th>
+<th>Unverified details for a spike</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>macOS</td>
+<td><code>~/Library/LaunchAgents/&lt;label&gt;.plist</code>,
+<code>RunAtLoad</code>, <code>KeepAlive</code>,
+<code>NumberOfFiles</code> raised</td>
+<td><code>launchd</code></td>
+<td>the "Background Items Added" notice names <code>node</code></td>
+</tr>
+<tr>
+<td>Linux</td>
+<td><code>~/.config/systemd/user/lahe.service</code>,
+<code>Restart=always</code></td>
+<td><code>systemd --user</code></td>
+<td>machines without a user systemd: install says so and stays in clone
+mode</td>
+</tr>
+<tr>
+<td>Windows</td>
+<td>Task Scheduler task at logon, imported from XML</td>
+<td>the task's restart-on-failure setting</td>
+<td>a hidden window for <code>node.exe</code></td>
+</tr>
+</tbody>
+</table></div>
+<p><code>lahe install</code> refuses to run without a terminal and
+refuses to run as root. An agent tells the human to run it with
+<code>! lahe install</code>.</p>
+<h3 id="port-free-addresses-and-lahe-on-macos-opt-in">Port-free
+addresses and <code>.lahe</code> on macOS (opt-in)</h3>
+<p>Two separate options, each one admin step.
+<code>lahe install --port-80</code> adds the port forward;
+<code>lahe install --lahe-names</code> adds <code>.lahe</code>. Either
+can be on without the other.</p>
+<ul>
+<li><p><code>lahe install --port-80</code> loads a loopback forward from
+port 80 to 1483, for <code>127.0.0.1</code> and <code>::1</code>, with
+one <code>sudo</code> call, and reloads it at boot. The rule is fixed
+text with a Lahe marker. It is skipped, with a status line naming the
+holder, when something already listens on port 80.</p></li>
+<li><p><strong>Verification before printing without a port:</strong> at
+start and every 5 minutes, the helper sends itself a request with a
+fresh random value through port 80 and accepts only when it sees that
+value arrive. Until then, <code>lahe review</code> prints
+<code>:1483</code>.</p></li>
+<li><p><code>lahe uninstall</code> removes the forward only if it
+carries the marker. <code>:1483</code> addresses keep working
+throughout.</p></li>
+<li><p><code>lahe install --lahe-names</code> writes
+<code>/etc/resolver/lahe</code> with one <code>sudo</code> call. The
+file content is fixed text plus the port number, with no shell
+interpolation, and it carries a Lahe marker.</p></li>
+<li><p>The helper's name server answers on <code>127.0.0.1</code> at the
+recorded port: <code>A 127.0.0.1</code> and <code>AAAA ::1</code> for
+names under <code>.lahe</code>, <code>REFUSED</code> for anything else.
+Malformed packets are dropped.</p></li>
+<li><p><strong>Verification before answering:</strong> at start and
+every 5 minutes, the helper asks the system resolver for a fresh random
+name under <code>.lahe</code>. It accepts only when its own name server
+saw that exact query. Until then, page routes refuse <code>.lahe</code>
+Hosts, and <code>lahe review</code> prints
+<code>.lahe.localhost</code>.</p></li>
+<li><p><code>lahe uninstall</code> removes the resolver file only if it
+carries the marker. After that, <code>.lahe</code> addresses stop
+resolving. The <code>.lahe.localhost</code> addresses keep
+working.</p></li>
+<li><p>The Library is never served on <code>library.lahe</code>, only on
+loopback and <code>library.lahe.localhost</code>.</p></li>
+</ul>
+<h3
+id="lahe-and-a-port-free-address-on-linux-and-windows-written-steps"><code>.lahe</code>
+and a port-free address on Linux and Windows (written steps)</h3>
+<p><code>docs/INSTALL.md</code> gives hand steps for each system. The
+same verification guards <code>.lahe</code> everywhere: the helper
+answers <code>.lahe</code> Hosts only after its own name server saw its
+random test query. The install spike confirms each step before it is
+written down.</p>
+<div class="table-scroll"><table>
+<thead>
+<tr>
+<th>System</th>
+<th><code>.lahe</code> lookups</th>
+<th>Port-free address</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>macOS</td>
+<td><code>/etc/resolver/lahe</code>, done by
+<code>lahe install --lahe-names</code></td>
+<td>a loopback port forward from 80 to 1483, for <code>127.0.0.1</code>
+and <code>::1</code>, loaded at boot, done by
+<code>lahe install --port-80</code></td>
+</tr>
+<tr>
+<td>Linux</td>
+<td>a <code>systemd-resolved</code> drop-in that sends
+<code>~lahe</code> to the helper's name server, where
+<code>systemd-resolved</code> runs. Other setups: the guide says so and
+stops</td>
+<td>a one-time setting that lets normal programs use port 80, then the
+helper also listens on 80</td>
+</tr>
+<tr>
+<td>Windows</td>
+<td>a name-resolution rule for <code>.lahe</code>. It cannot name a
+port, so the name server must also answer on port 53; the spike checks
+this</td>
+<td>the helper also listens on 80 when nothing else holds it; usually no
+admin step</td>
+</tr>
+</tbody>
+</table></div>
+<p>The forward sends port 80 to 1483. If port 80 is taken, the helper
+keeps <code>:1483</code>, and <code>lahe status</code> names what holds
+80. <code>:1483</code> addresses keep working in every case. Page names
+answer only on 1483 (and 80 through the forward), so each document has
+one origin; on 7817 a page name is refused.</p>
+<h2 id="alternatives-considered">Alternatives Considered</h2>
+<h3
+id="chosen-the-helper-serves-pages-one-name-per-site-one-port-lahelocalhost-printed">Chosen:
+the helper serves pages, one name per site, one port,
+<code>.lahe.localhost</code> printed</h3>
+<p>A site is what one page server serves today: a folder, or one notes
+page. The rest of this leaf records what was weighed against it.</p>
+<h3 id="a-port-per-document-held-open-forever">A port per document, held
+open forever</h3>
+<p>Keeps today's origin model exactly. Rejected: 682 reviews already
+exceed the 256 open files macOS gives a login program by default, every
+port can clash with another tool, and the address still says nothing
+about the document. Settled by Ken on the decisions page.</p>
+<h3 id="one-host-paths-per-document-1270017817rreview">One host, paths
+per document (<code>127.0.0.1:7817/r/&lt;review&gt;/</code>)</h3>
+<p>Shortest change. Rejected: every document would share one origin with
+every other and with the Library, so one page's JavaScript could read
+every token and drive the Library. Settled by Ken.</p>
+<h3
+id="one-name-per-file-rooted-at-the-files-folder-with-redirects-between-pages">One
+name per file, rooted at the file's folder, with redirects between
+pages</h3>
+<p>The first draft of this architecture. Each file was its own origin,
+which isolates more than today. Rejected after the architecture and
+security reviews:</p>
+<ul>
+<li>It changed what an item's page path means, and four helper modules
+map that path to the file an agent edits. A comment on one page would
+have been reported against another.</li>
+<li>Markdown links and images go through mounts that a file-folder root
+broke.</li>
+<li>Folder sites that load <code>../</code> files broke.</li>
+<li>Ken's rail rules (a page lends its rail to its folder, linked docs
+ride along, <code>--only</code> opts out) had no place.</li>
+<li>Each file added two origins to its review, which overflows the
+16-origin cap after about seven pages.</li>
+<li>The navigation-only redirect relied on request headers that a plain
+<code>.lahe</code> page never gets.</li>
+</ul>
+<p>Per-site isolation is the same unit as today, so nothing gets weaker.
+The name says the folder and the path says the file.</p>
+<h3 id="name-from-the-review-id-ra192291dfb29lahe">Name from the review
+id (<code>ra192291dfb29.lahe</code>)</h3>
+<p>Unique with no clash rule. Rejected: Ken's complaint is reading dead
+tabs by their address, and an id says nothing. It would also give the
+same file a new address for every new review.</p>
+<h3
+id="keep-per-session-page-servers-add-a-front-proxy-that-routes-names-to-them">Keep
+per-session page servers, add a front proxy that routes names to
+them</h3>
+<p>Reuses <code>static_servers.js</code> as is. Rejected: a page server
+still stops with its session and on idle, so the proxy needs to restart
+processes on demand, keeping the lifecycle code this feature can retire.
+Two hops per request and a process per folder for no gain once the
+helper is always on.</p>
+<h3 id="a-separate-always-on-page-process-beside-the-helper">A separate
+always-on page process beside the helper</h3>
+<p>Keeps page serving out of the API process. Rejected for now: two
+always-on processes, two login items or one supervising the other, and
+the page process needs the review data the helper already holds in
+memory. The helper's request handling is small and asynchronous;
+Markdown rendering is the one CPU step and is cached by file time.</p>
+<h3 id="pages-call-the-api-same-origin-namelahe7817lahev1">Pages call
+the API same-origin (<code>name.lahe:7817/lahe/v1/...</code>)</h3>
+<p>Removes CORS preflights. Rejected for this feature: it changes every
+layer call and the D11 check order, for no user-visible gain. Pages keep
+calling <code>127.0.0.1:&lt;port&gt;</code> as today. Worth revisiting
+if Chrome's local-network rules ever treat a <code>.lahe</code> page as
+less local than loopback.</p>
+<h3 id="lahe-as-the-printed-ending"><code>.lahe</code> as the printed
+ending</h3>
+<p>Ken's first choice on the decisions page. Kept as an opt-in alias
+(set up by command on macOS, by written steps on Linux and Windows), and
+not printed, after review found five costs of a non-secure address: the
+"Not secure" label, no clipboard API, no Web Locks (the duplicate-tab
+guard), no Fetch Metadata headers (the Library's checks), and DNS
+rebinding wherever Lahe does not own <code>.lahe</code> lookups.
+<code>.lahe.localhost</code> has none of them and needs no setup on any
+system. Ken agreed at the review gate.</p>
+<h3 id="local-https-for-lahe">Local HTTPS for <code>.lahe</code></h3>
+<p>Makes <code>.lahe</code> a secure context: no "Not secure" label, the
+clipboard API works. Rejected for this feature: it needs a local
+certificate authority trusted by every browser on every system (the
+<code>mkcert</code> approach), which is an admin step per browser on
+some systems, a new private key to protect, and a renewal story.
+<code>.lahe.localhost</code> already gets a secure context for free.
+Kept as a follow-up; once it lands, printing <code>.lahe</code> can be
+asked again.</p>
+<h3
+id="socket-activation-launchd-or-systemd-starts-the-helper-on-first-connection">Socket
+activation (launchd or systemd starts the helper on first
+connection)</h3>
+<p>The system holds the port and starts Lahe only when a page is opened,
+so nothing runs while idle. Rejected: macOS, Linux, and Windows each do
+it differently and Windows has no equivalent, which breaks the
+cross-platform core rule. The helper's idle cost is small enough to stay
+running.</p>
+<h3 id="editing-etchosts-instead-of-a-resolver">Editing
+<code>/etc/hosts</code> instead of a resolver</h3>
+<p>Ken's first suggestion. Rejected: the hosts file has no wildcard, so
+every new file would need a line and an admin password. A resolver entry
+plus a tiny name server needs one password, once.</p>
+<h3 id="rewriting-old-items-page-fields-to-the-new-address">Rewriting
+old items' page fields to the new address</h3>
+<p>Would make old comments match with no alias list. Rejected: the event
+log is history and is not rewritten, and the browser's own stored drafts
+under the old origin cannot be moved anyway. Aliases cost one small list
+in the script tag.</p>
+<h2 id="failure-modes--edge-cases">Failure Modes / Edge Cases</h2>
+<ul>
+<li><p><strong>The port is taken at start.</strong> The helper exits
+with a log line naming the port. The login item retries.
+<code>lahe review</code> and <code>lahe status</code> say so.</p></li>
+<li><p><strong>No IPv6 loopback.</strong> A failed <code>::1</code> bind
+is a log line, not an exit.</p></li>
+<li><p><strong>The name server port is taken, or another process answers
+<code>.lahe</code>.</strong> Verification fails, <code>.lahe</code>
+Hosts are refused, and <code>.lahe.localhost</code> is printed.</p></li>
+<li><p><strong>A browser skips the system resolver</strong> (custom
+secure DNS). <code>.lahe</code> fails in that browser;
+<code>.lahe.localhost</code> works.</p></li>
+<li><p><strong>Someone types a <code>.lahe</code> address by
+hand.</strong> The page works, without the secure-only features:</p>
+<ul>
+<li>copy falls back to a hidden text field and the browser's copy
+command;</li>
+<li>the duplicate-tab guard falls back to a lease in local storage;</li>
+<li>page-type detection uses <code>Accept: text/html</code> when Fetch
+Metadata headers are missing;</li>
+<li>the "Not secure" label stays.</li>
+</ul>
+<p>The copy fallback ships for the Library page anyway, so copy works
+there too. The tab-guard lease and the <code>Accept</code> fallback are
+not built; a typed <code>.lahe</code> page lets both tabs act, as
+today's code does without a lock.</p></li>
+<li><p><strong>Old comments.</strong> Same path, old origin: the alias
+list makes them match, in the rail and in
+<code>review.json</code>.</p></li>
+<li><p><strong>Old open tabs on random ports.</strong> Dead. Leftover
+page servers are stopped.</p></li>
+<li><p><strong>Two reviews of one file in two sessions.</strong> One
+name. The rail goes to the most recent explicit act, by the rule
+above.</p></li>
+<li><p><strong>A closed session's page.</strong> Served, and comments
+are accepted. The rail's "No agent watching" line says so, as
+today.</p></li>
+<li><p><strong>A stale helper with tabs open.</strong> Replaced at a
+quiet moment. The layer already survives a helper restart.</p></li>
+<li><p><strong>State folder removed.</strong> Self-stop rule 2 still
+stops the helper. The login item restarts it into a fresh folder, with
+no names. A fresh folder means fresh names; a bookmark then says "no
+document by that name" rather than opening another file.</p></li>
+<li><p><strong>Per-origin preferences.</strong> The style choice and
+rail preferences are per site, as they are per page server today. No
+change in practice.</p></li>
+</ul>
+<h2 id="security--privacy-notes">Security &amp; Privacy Notes</h2>
+<ul>
+<li><strong>Isolation is per site,</strong> the same unit as today's
+page server, now without the per-session split. Two files in one folder
+share an origin, as they do today (brief requirement 4, documents stay
+walled off, now says so).</li>
+<li><strong>Host dispatch comes first.</strong> It runs before
+<code>OPTIONS</code> handling and catalog matching. Each route family
+answers a closed set of Hosts: API on loopback; Library on loopback and
+<code>library.lahe.localhost</code>; pages on registered names only. The
+grammar is one to four lowercase labels of letters, digits, and dashes,
+matched as a whole registered name (never a suffix or a parent of one),
+port 1483 or no port (the forward), and no trailing dot. A page's Origin
+may carry either form; both map to the same site.</li>
+<li><strong>Dotted names share parent domains.</strong>
+<code>a.docs.ongoing.lahe.localhost</code> sits under
+<code>docs.ongoing.lahe.localhost</code>. Each full name is still its
+own origin, so storage and scripts stay walled off. The one thing parent
+domains share is cookies. Lahe sets none and reads none, so a cookie a
+page sets on a parent domain reaches no Lahe data.</li>
+<li><strong>DNS rebinding.</strong> Browsers do not resolve
+<code>*.localhost</code> through DNS, so <code>.lahe.localhost</code>
+cannot be rebound. <code>.lahe</code> is answered only after the helper
+proves its own name server answers <code>.lahe</code> lookups on this
+machine. Everywhere else, a foreign Host is refused, as today.</li>
+<li><strong>Binding is CLI-only.</strong> It needs the CLI secret from a
+0600 file, and refuses any request carrying <code>Origin</code>. A page
+holding a review token cannot name a file or move a rail.</li>
+<li><strong>Origins come from the registry.</strong> Review origins are
+untouched, so <code>review.write</code> still refuses non-loopback
+origins.</li>
+<li><strong>Hidden files and paths.</strong> Dot segments and dotfiles
+are refused under every site. <code>page-only</code> sites serve one
+file.</li>
+<li><strong>The worktree fallback is read-only.</strong> It never
+injects a token into a file nobody bound.</li>
+<li><strong>Always-on exposure.</strong> Websites cannot reach pages:
+Host checks, <code>Cross-Origin-Resource-Policy</code>, and the Origin
+checks. Other accounts on the same computer, and sandboxed local
+programs with network access, can. Today they would have to find a
+short-lived random port first. This feature accepts that, and records it
+as a new residual under D11. <code>lahe install</code> warns when the
+machine has more than one interactive user.</li>
+<li><strong>Old origins.</strong> When a site is bound, the old
+<code>127.0.0.1:&lt;port&gt;</code> origins of its reviews are removed,
+so they stop being credentials.</li>
+<li>Full security review: <a
+href="02_architecture_stable_addresses_reviews.md">reviews
+file</a>.</li>
+</ul>
+<h2 id="test-strategy">Test Strategy</h2>
+<p>The plan owns the verification table: <a
+href="03_plan_stable_addresses.md">plan</a>. Each failure mode above has
+a row.</p>
+<h2 id="open-questions">Open Questions</h2>
+<p>Tracked in <a href="parts/brief/questions.md">the brief's questions
+leaf</a>.</p>
+<h2 id="architect-review">Architect Review</h2>
+<p>Full prose: <a
+href="02_architecture_stable_addresses_reviews.md">architect
+review</a>.</p>
+<div class="table-scroll"><table>
+<thead>
+<tr>
+<th>#</th>
+<th>Finding</th>
+<th>Disposition</th>
+<th>Rationale</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>AR1</td>
+<td>Name origins overflow the 16-origin cap</td>
+<td><span class="accepted">Accepted</span></td>
+<td>No origins added to reviews; Origin checked against the
+registry</td>
+</tr>
+<tr>
+<td>AR2</td>
+<td>Per-file paths broke the page-to-file mappers</td>
+<td><span class="accepted">Accepted</span></td>
+<td>A site is a root; paths unchanged</td>
+</tr>
+<tr>
+<td>AR3</td>
+<td>File-folder roots broke Markdown and folder sites</td>
+<td><span class="accepted">Accepted</span></td>
+<td>Site root as today; Markdown keeps mounts, stored on the site</td>
+</tr>
+<tr>
+<td>AR4</td>
+<td>Rail-follows-reviewer rules dropped</td>
+<td><span class="accepted">Accepted</span></td>
+<td>Today's review rule per request, without the session filter</td>
+</tr>
+<tr>
+<td>AR5</td>
+<td>Healer would write tokens into served files</td>
+<td><span class="accepted">Accepted</span></td>
+<td><code>servesPath</code> asks the registry</td>
+</tr>
+<tr>
+<td>AR6</td>
+<td><code>lahe review</code> order undefined</td>
+<td><span class="accepted">Accepted</span></td>
+<td><code>add --served-by-helper</code>, then
+<code>site.bind</code></td>
+</tr>
+<tr>
+<td>AR7</td>
+<td>Notes pages would serve their folder</td>
+<td><span class="accepted">Accepted</span></td>
+<td><code>page-only</code> mode</td>
+</tr>
+<tr>
+<td>AR8</td>
+<td><code>.lahe</code> loses Web Locks</td>
+<td><span class="accepted">Accepted</span></td>
+<td><code>.lahe.localhost</code> printed; no lock fallback built</td>
+</tr>
+<tr>
+<td>AR9</td>
+<td>Stale helper never replaced; CLI double spawn</td>
+<td><span class="accepted">Accepted</span></td>
+<td>Replace at a quiet moment; installed CLI never spawns; compare
+against the login item's clone</td>
+</tr>
+<tr>
+<td>AR10</td>
+<td>Login item does not pin the state folder</td>
+<td><span class="accepted">Accepted</span></td>
+<td><code>--state-dir</code> and <code>--port</code> in the login item;
+state-folder id in <code>/health</code></td>
+</tr>
+<tr>
+<td>AR11</td>
+<td>Aliases missed <code>review.json</code> grouping</td>
+<td><span class="accepted">Accepted</span></td>
+<td>Aliases are origins only, used by the rail and by
+<code>review_format</code></td>
+</tr>
+<tr>
+<td>AR12</td>
+<td>Worktree mapping misses sibling worktrees</td>
+<td><span class="accepted">Accepted</span></td>
+<td>Read the <code>.git</code> file at bind time</td>
+</tr>
+<tr>
+<td>AR13</td>
+<td>Uninstall breaks <code>.lahe</code> addresses</td>
+<td><span class="accepted">Accepted</span></td>
+<td><code>.lahe</code> is an opt-in alias; <code>.lahe.localhost</code>
+addresses survive uninstall</td>
+</tr>
+<tr>
+<td>AR14</td>
+<td>Library Open steals the rail; kinds undefined</td>
+<td><span class="accepted">Accepted</span></td>
+<td>Library section above</td>
+</tr>
+<tr>
+<td>AR15</td>
+<td>Registry loss can repoint a bookmark</td>
+<td><span class="accepted">Accepted</span></td>
+<td>Grants log; no new names minted on an unreadable registry</td>
+</tr>
+<tr>
+<td>AR16</td>
+<td>Redirect on <code>navigate</code> catches iframes</td>
+<td>Accepted, moot</td>
+<td>No redirects between pages in this design</td>
+</tr>
+<tr>
+<td>AR17</td>
+<td>Leftover page servers in clone mode</td>
+<td><span class="accepted">Accepted</span></td>
+<td>Stopped on every start</td>
+</tr>
+<tr>
+<td>AR18</td>
+<td>Fixed name-server port; <code>::1</code> bind failure</td>
+<td><span class="accepted">Accepted</span></td>
+<td>Port from <code>install.json</code>; <code>::1</code> failure is a
+log line</td>
+</tr>
+<tr>
+<td>AR19</td>
+<td>Incomplete docs and code lists</td>
+<td><span class="accepted">Accepted</span></td>
+<td>Components table</td>
+</tr>
+<tr>
+<td>AR20</td>
+<td>Per-document preferences reset</td>
+<td>Accepted, moot</td>
+<td>Per site, as today</td>
+</tr>
+<tr>
+<td>AR21</td>
+<td>CLI header is not an authority</td>
+<td><span class="accepted">Accepted</span></td>
+<td>CLI secret</td>
+</tr>
+<tr>
+<td>AR22</td>
+<td>Install details per system</td>
+<td><span class="accepted">Accepted</span></td>
+<td>Spikes in the plan; no TTY means no install</td>
+</tr>
+<tr>
+<td>AR23</td>
+<td>Name rule gaps</td>
+<td><span class="accepted">Accepted</span></td>
+<td>Fallback stem, <code>realpathSync.native</code></td>
+</tr>
+<tr>
+<td>AR24</td>
+<td>No design note for idle cost</td>
+<td><span class="accepted">Accepted</span></td>
+<td>Cost drivers named in the plan's measurement task</td>
+</tr>
+</tbody>
+</table></div>
+<h2 id="security-review">Security Review</h2>
+<p>Full prose: <a
+href="02_architecture_stable_addresses_reviews.md">security
+review</a>.</p>
+<div class="table-scroll"><table>
+<thead>
+<tr>
+<th>#</th>
+<th>Finding</th>
+<th>Disposition</th>
+<th>Rationale</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>SR1</td>
+<td><code>.lahe</code> answered where Lahe does not own lookups</td>
+<td><span class="accepted">Accepted</span></td>
+<td><code>.lahe</code> only after verifying our own name server; opt-in;
+<code>.lahe.localhost</code> printed</td>
+</tr>
+<tr>
+<td>SR2</td>
+<td><code>address.bind</code> reachable from pages</td>
+<td><span class="accepted">Accepted</span></td>
+<td>CLI secret, no Origin, root from the request</td>
+</tr>
+<tr>
+<td>SR3</td>
+<td>Per-file origins did not wall files off</td>
+<td><span class="accepted">Accepted</span></td>
+<td>Per-site isolation stated plainly; hidden files refused</td>
+</tr>
+<tr>
+<td>SR4</td>
+<td>Other local users can read pages</td>
+<td>Accepted as a residual</td>
+<td>Recorded under D11; install warns on multi-user machines</td>
+</tr>
+<tr>
+<td>SR5</td>
+<td>No Fetch Metadata on <code>http://*.lahe</code></td>
+<td><span class="accepted">Accepted</span></td>
+<td>Library never on <code>.lahe</code>; no redirects;
+<code>.lahe.localhost</code> printed</td>
+</tr>
+<tr>
+<td>SR6</td>
+<td>Port squatting on the name server</td>
+<td><span class="accepted">Accepted</span></td>
+<td>Verification by a fresh random query the helper must see</td>
+</tr>
+<tr>
+<td>SR7</td>
+<td>GET minted names and origins</td>
+<td><span class="accepted">Accepted</span></td>
+<td>GET never writes</td>
+</tr>
+<tr>
+<td>SR8</td>
+<td>No <code>Cross-Origin-Resource-Policy</code></td>
+<td><span class="accepted">Accepted</span></td>
+<td>Header on every page response</td>
+</tr>
+<tr>
+<td>SR9</td>
+<td>A name points to a path</td>
+<td><span class="accepted">Accepted</span></td>
+<td>Worktree fallback is read-only; names are never reused for another
+root</td>
+</tr>
+<tr>
+<td>SR10</td>
+<td>Old port origins stay valid</td>
+<td><span class="accepted">Accepted</span></td>
+<td>Removed at bind</td>
+</tr>
+<tr>
+<td>SR11</td>
+<td>Host routing order and grammar</td>
+<td><span class="accepted">Accepted</span></td>
+<td>Security notes above</td>
+</tr>
+<tr>
+<td>SR12</td>
+<td><code>sudo</code>, resolver, and login item hygiene</td>
+<td><span class="accepted">Accepted</span></td>
+<td>Fixed content, marker, no root runs, no TTY means no install</td>
+</tr>
+<tr>
+<td>SR13</td>
+<td>Alias attribute escaping and size</td>
+<td><span class="accepted">Accepted</span></td>
+<td>JSON-escaped, capped, helper-computed</td>
+</tr>
+<tr>
+<td>SR14</td>
+<td>Browser behavior assumed</td>
+<td><span class="accepted">Accepted</span></td>
+<td>Browser checks in the plan for Chrome, Firefox, and Safari</td>
+</tr>
+</tbody>
+</table></div>
+<hr class="reviews-divider" style="margin:4.5rem 0 1.5rem;border:0;border-top:3px solid #b0463b">
+
+<div class="reviews-banner">
+<p>The sections below are the full verbatim persona + human reviews for
+this document. They live in a separate <code>_reviews.md</code> file (so
+agents read the lean spec), merged here for review.</p>
+</div>
+<h1 id="reviews-stable-addresses-architecture">Reviews: Stable addresses
+architecture</h1>
+<p>Two reviews ran on the first draft of the architecture. Both changed
+it; the summary tables in the architecture say how.</p>
+<h2 id="architect-review-stable-addresses">Architect review: Stable
+addresses</h2>
+<p>Reviewed: <a
+href="02_architecture_stable_addresses.md">02_architecture_stable_addresses.md</a>
+at commit <code>96435da</code>, against the brief, its questions leaf,
+<a href="../../ongoing/STABLE_ADDRESSES.md">the decisions page</a>,
+recon, alternatives, and the code in this worktree. Nothing was run.</p>
+<h2 id="summary-1">Summary</h2>
+<p>The big shape is right: the helper serves every page on one port,
+routes by Host, and a name is its own origin. Ken's settled decisions
+are all honored. The weak part is the serving unit. "One name per file,
+rooted at the file's folder, with a redirect between pages" was written
+against today's HTML single-page case, and it does not fit what the rest
+of the code assumes about Markdown, folders, linked docs, and item page
+paths.</p>
+<p>Needs action before the plan:</p>
+<ul>
+<li><strong>Three blockers.</strong> A folder review bricks its own
+<code>review.write</code> after about seven pages (AR1). The helper's
+page-to-file mapping reads <code>page_path</code> relative to the
+review's folder, and per-file origins change that meaning, so agents get
+told the wrong file (AR2). A per-file root at the file's folder breaks
+Markdown's <code>/.lahe-source/</code> links and images and any folder
+site that uses <code>../</code> or <code>/assets/</code> paths
+(AR3).</li>
+<li><strong>Two settled rules get lost without anyone deciding to drop
+them.</strong> The rail stops following the reviewer to the pages next
+to a single reviewed page, and to linked docs (AR4). Notes pages lose
+their one-page-only serving (AR7).</li>
+<li><strong>Several components that depend on page-server records are
+missing from the components table.</strong> These are the healer, the
+reload stat, the handled check, projection, and rebuild (AR5, AR6).</li>
+<li><strong>A simpler shape fixes most of this.</strong> See "A simpler
+shape" at the end.</li>
+</ul>
+<div class="table-scroll"><table>
+<thead>
+<tr>
+<th>ID</th>
+<th>Severity</th>
+<th>Kind</th>
+<th>One line</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>AR1</td>
+<td>blocker</td>
+<td>defect</td>
+<td>Two origins per bound file overflow the review's 16-origin cap, and
+<code>review.write</code> then refuses every call</td>
+</tr>
+<tr>
+<td>AR2</td>
+<td>blocker</td>
+<td>defect</td>
+<td>Per-file origins change what <code>page_path</code> means; folder,
+multi-page and linked-doc mapping to files breaks</td>
+</tr>
+<tr>
+<td>AR3</td>
+<td>blocker</td>
+<td>defect</td>
+<td>Root = the file's folder breaks Markdown <code>/.lahe-source/</code>
+URLs and folder sites' <code>../</code> and <code>/</code> asset
+paths</td>
+</tr>
+<tr>
+<td>AR4</td>
+<td>important</td>
+<td>defect</td>
+<td>Binding rule drops "the rail follows the reviewer" for siblings and
+linked docs; first-visit binding is sticky; <code>--only</code>
+undefined</td>
+</tr>
+<tr>
+<td>AR5</td>
+<td>important</td>
+<td>defect</td>
+<td>Retiring page servers makes <code>servesPath</code> false, so the
+healer writes tokens into reviewed HTML files</td>
+</tr>
+<tr>
+<td>AR6</td>
+<td>important</td>
+<td>defect</td>
+<td>"Create or reuse the review (unchanged)" is false: <code>add</code>
+needs an origin or it writes the script line to disk</td>
+</tr>
+<tr>
+<td>AR7</td>
+<td>important</td>
+<td>defect</td>
+<td>Notes pages lose the one-page-only rule (FREE_WRITING security
+decision)</td>
+</tr>
+<tr>
+<td>AR8</td>
+<td>important</td>
+<td>defect</td>
+<td>Non-secure <code>.lahe</code> also removes Web Locks, so the
+duplicate-tab guard silently turns off</td>
+</tr>
+<tr>
+<td>AR9</td>
+<td>important</td>
+<td>risk</td>
+<td>Stale helper is never replaced while tabs are open, and the helper
+now carries all serving code</td>
+</tr>
+<tr>
+<td>AR10</td>
+<td>important</td>
+<td>defect</td>
+<td>The login item does not pin the state folder; CLI and login-item
+helper can use different state</td>
+</tr>
+<tr>
+<td>AR11</td>
+<td>important</td>
+<td>risk</td>
+<td>Aliases cover the layer but not <code>review.json</code> grouping;
+built from server records, computed once</td>
+</tr>
+<tr>
+<td>AR12</td>
+<td>important</td>
+<td>defect</td>
+<td>Worktree fallback only knows <code>.claude/worktrees/</code>; Ken's
+<code>lahe-worktrees/</code> docs will not map</td>
+</tr>
+<tr>
+<td>AR13</td>
+<td>important</td>
+<td>challenge</td>
+<td>Uninstall removes the resolver, so <code>.lahe</code> addresses stop
+working, against requirement 6</td>
+</tr>
+<tr>
+<td>AR14</td>
+<td>important</td>
+<td>risk</td>
+<td>Library Open of an older row steals the rail from a live session;
+Library kinds not redefined</td>
+</tr>
+<tr>
+<td>AR15</td>
+<td>minor</td>
+<td>risk</td>
+<td>Losing <code>addresses.json</code> can reassign a clash suffix to a
+different file</td>
+</tr>
+<tr>
+<td>AR16</td>
+<td>minor</td>
+<td>risk</td>
+<td>Redirect keyed on <code>Sec-Fetch-Mode: navigate</code> also catches
+iframes, and misses requests without the header</td>
+</tr>
+<tr>
+<td>AR17</td>
+<td>minor</td>
+<td>defect</td>
+<td>Leftover page servers are stopped only in always-on mode</td>
+</tr>
+<tr>
+<td>AR18</td>
+<td>minor</td>
+<td>risk</td>
+<td>Fixed DNS port and the new <code>::1</code> listener need gating and
+soft failure</td>
+</tr>
+<tr>
+<td>AR19</td>
+<td>minor</td>
+<td>defect</td>
+<td>Docs and code lists are incomplete</td>
+</tr>
+<tr>
+<td>AR20</td>
+<td>minor</td>
+<td>taste</td>
+<td>Rail prefs and style choice become per document</td>
+</tr>
+<tr>
+<td>AR21</td>
+<td>minor</td>
+<td>risk</td>
+<td>"CLI client header" is not a real factor in
+<code>address.bind</code> authority</td>
+</tr>
+<tr>
+<td>AR22</td>
+<td>minor</td>
+<td>risk</td>
+<td>Windows and <code>sudo</code> install details will trip the
+plan</td>
+</tr>
+<tr>
+<td>AR23</td>
+<td>minor</td>
+<td>defect</td>
+<td>Name rule has no answer for an empty name or case-only
+differences</td>
+</tr>
+<tr>
+<td>AR24</td>
+<td>minor</td>
+<td>risk</td>
+<td>No design note for requirement 11 (light when idle)</td>
+</tr>
+</tbody>
+</table></div>
+<h3 id="findings">Findings</h3>
+<h3
+id="ar1-folder-reviews-overflow-the-origin-cap-and-brick-reviewwrite">AR1.
+Folder reviews overflow the origin cap and brick
+<code>review.write</code></h3>
+<ul>
+<li><strong>severity</strong> blocker</li>
+<li><strong>kind</strong> defect</li>
+<li><strong>where</strong> architecture "Data / State Changes", Review
+<code>origins</code> (line 63) and "Folder reviews" (line 99);
+<code>src/service/routes.js:170-194</code>;
+<code>src/shared/protocol.js:118</code></li>
+<li><strong>what</strong> Binding adds two origins (<code>.lahe</code>
+and <code>.lahe.localhost</code>) per bound file to the review's
+<code>origins</code>, and a folder review binds every page it serves on
+first visit.</li>
+<li><strong>why</strong> <code>ORIGIN_LIMIT</code> is 16. The internal
+<code>registerOrigin</code> has no cap, so the list grows past it. But
+<code>review.write</code> checks the total the review already holds
+(<code>wouldHold.length &gt; ORIGIN_LIMIT</code>), even when the call
+adds no new origin. So once a folder review has bound about seven pages,
+every later <code>review.write</code> on it is refused. That includes
+<code>lahe review &lt;folder&gt;</code> run again and
+<code>lahe add</code> on the same review. Each registration also
+rewrites <code>service.json</code>, which holds every review's token,
+and here that happens on a page GET.</li>
+<li><strong>fix</strong> Do not put name origins on the review at all.
+When the Origin is one of Lahe's own names, the helper checks it against
+the registry: is this name's file served with this review right now?
+Keep <code>review.origins</code> for loopback, dev-server, and
+<code>null</code> origins as today. This also removes the
+<code>service.json</code> rewrites and the
+<code>origin.registered</code> event noise.</li>
+</ul>
+<h3
+id="ar2-per-file-origins-change-what-page_path-means-and-the-helpers-page-to-file-mapping-breaks">AR2.
+Per-file origins change what <code>page_path</code> means, and the
+helper's page-to-file mapping breaks</h3>
+<ul>
+<li><p><strong>severity</strong> blocker</p></li>
+<li><p><strong>kind</strong> defect</p></li>
+<li><p><strong>where</strong> architecture "Page identity" (line 71) and
+"Serving a request" (lines 85-86);
+<code>src/service/reviews.js:854-905</code>
+(<code>pageUnderFolder</code>, <code>targetForPage</code>),
+<code>src/service/handled_check.js:542-575</code>
+(<code>pageFilesFor</code>),
+<code>src/service/static_servers.js:1252</code>
+(<code>linkedFileForPage</code>),
+<code>src/service/projection.js:371-395</code></p></li>
+<li><p><strong>what</strong> Today an item's <code>page_path</code> is
+the page's path under the review's served root. The helper uses it to
+name the file an agent edits, to pick which file's mtime reloads the
+page, and to judge "handled". Under the design, a folder review's page
+<code>site/sub/p.html</code> is served at <code>p.lahe:7817/</code> or
+<code>/p.html</code>, so its <code>page_path</code> is <code>/</code> or
+<code>/p.html</code>.</p></li>
+<li><p><strong>why</strong> <code>pageUnderFolder</code> then resolves
+<code>/</code> to <code>site/index.html</code>, so a comment on
+<code>sub/p.html</code> is reported against the index file. The agent
+edits the wrong file. <code>targetForPage</code> suffix-matches on the
+path, so a multi-page review whose page path is <code>/</code> matches
+nothing, and the page never reloads after an edit.
+<code>linkedFileForPage</code> only understands
+<code>/.lahe-source/&lt;hash&gt;/</code> paths read from page-server
+records, which are being retired. None of these modules is in the
+components table. The design also serves one page at two paths
+(<code>/</code> and <code>/&lt;file name&gt;</code>), so one document
+gets two <code>pageKey</code>s.</p></li>
+<li><p><strong>fix</strong> Pick one of these and write it down:</p>
+<ul>
+<li>Keep <code>page_path</code> meaning "path under the serving root"
+(see AR3), so the existing mapping keeps working.</li>
+<li>Or resolve an item's file from its origin through the registry, and
+change all four mappers to use that.</li>
+</ul>
+<p>Either way, give each page exactly one URL path and redirect the
+other spelling to it. Use the file's own path rather than
+<code>/</code>, because <code>targetForPage</code> matches on the name.
+Add <code>reviews.js</code>, <code>handled_check.js</code>,
+<code>projection.js</code> and <code>review_format.js</code> to the
+components table.</p></li>
+</ul>
+<h3
+id="ar3-root--the-files-folder-breaks-markdown-and-folder-sites">AR3.
+"Root = the file's folder" breaks Markdown and folder sites</h3>
+<ul>
+<li><strong>severity</strong> blocker</li>
+<li><strong>kind</strong> defect</li>
+<li><strong>where</strong> architecture line 89 (reserved paths), line
+96 ("the root a name serves from is its file's folder");
+<code>src/service/markdown.js:159-170</code> (<code>assetPrefix</code>,
+<code>rewriteRelativeUrls</code>),
+<code>src/service/markdown_links.js:57-59, 125-172</code></li>
+<li><strong>what</strong> Every relative URL in rendered Markdown is
+rewritten to
+<code>/.lahe-source/&lt;hash of source folder&gt;/...</code>. A link
+outside the source folder
+(<code>../../ongoing/STABLE_ADDRESSES.md</code>,
+<code>../images/x.png</code>) is translated to another folder's mount.
+The reserved paths list leaves out <code>/.lahe-source/</code>, and
+nothing says where mount tables live once page-server records and
+<code>SIGHUP</code> reloads are gone. Separately, a folder review today
+roots at the folder. So <code>site/sub/p.html</code> can load
+<code>../style.css</code> or <code>/assets/app.js</code>. With the root
+at <code>site/sub/</code>, both now point above the root.</li>
+<li><strong>why</strong> Every Markdown review loses its images and its
+links to other files. That is most of what Ken reads, and it breaks
+requirement 8a (links and relative assets keep working). Wireframe sets
+and real site folders lose shared styles and scripts.</li>
+<li><strong>fix</strong> Make the serving root a property of the name,
+recorded once in the registry. For a folder review, it is the review's
+folder, with the page at its path under it
+(<code>p.lahe:7817/sub/p.html</code>). For a single file, it is the
+file's folder. For Markdown, keep
+<code>/.lahe-source/&lt;hash&gt;/</code> mounts. Store each name's mount
+table in the registry (or a helper-owned file beside it), and scope it
+to that name, so one name does not serve another document's mounted
+folders. Then say whether a Markdown name serves the artifact that
+<code>rebuild.js</code> keeps current, or renders the source on request.
+Today the review's target is the artifact
+(<code>review.js:246-252</code>), and the reload stat and the handled
+check both read it, so serving a different render from the source would
+make them disagree.</li>
+</ul>
+<h3 id="ar4-the-binding-rule-drops-the-rail-follows-the-reviewer">AR4.
+The binding rule drops "the rail follows the reviewer"</h3>
+<ul>
+<li><strong>severity</strong> important</li>
+<li><strong>kind</strong> defect</li>
+<li><strong>where</strong> architecture lines 98-99, 166;
+<code>src/service/static_servers.js:829-933</code>
+(<code>backsServer</code>, <code>findReviewForRequest</code>),
+<code>docs/ongoing/STATIC_SITE_FOLDER.md</code> (Ken's 2026-09-16 rule,
+linked documents section)</li>
+<li><strong>what</strong> Only folder reviews bind unbound pages. A
+single-page review's siblings and a Markdown hub's linked documents are
+"served read-only". The first-visit binding is also stored and
+sticky.</li>
+<li><strong>why</strong> Ken set the rule himself: a single-page review
+lends its rail to every page in its folder, linked docs ride the linking
+review (<code>linked_files</code>), and <code>--only</code> opts out.
+The design drops all three without saying so. A sticky binding means a
+later <code>lahe review site/</code> with a new review never takes over
+pages already bound to the old folder review. The rail would stay on an
+old, maybe closed, review. Writing on GET also brings back the
+second-writer worry the static-site doc avoided by having the server
+write nothing.</li>
+<li><strong>fix</strong> Store only name to file (and root) in the
+registry. Pick the review per request, the way
+<code>findReviewForRequest</code> does today: a review that recorded
+this file, else the newest review whose served root covers it and is not
+<code>--only</code>, else the newest review that linked to it. Drop the
+session filter, since sessions no longer own servers. Keep one explicit
+override, set only by a command or by Open, that wins only while it is
+newer than any review created after it. Put this rule in its own short
+section of the architecture.</li>
+</ul>
+<h3
+id="ar5-retiring-page-servers-turns-the-healer-on-for-served-files">AR5.
+Retiring page servers turns the healer on for served files</h3>
+<ul>
+<li><strong>severity</strong> important</li>
+<li><strong>kind</strong> defect</li>
+<li><strong>where</strong> components table line 29;
+<code>src/service/reviews.js:957-967, 1011-1017</code>,
+<code>src/service/static_servers.js:1013-1028</code>
+(<code>servesPath</code>), <code>src/service/heal.js:164</code></li>
+<li><strong>what</strong> The healer writes a stripped script line back
+into a reviewed HTML file unless <code>servesPath</code> says a live or
+idle-stopped page server covers it. With no page-server records,
+<code>servesPath</code> returns false for every file.</li>
+<li><strong>why</strong> On the next poll, the helper writes the review
+id and live token into the reviewer's own working tree, in every
+reviewed HTML file. The design was built to prevent exactly that. The
+page then also carries two script tags.</li>
+<li><strong>fix</strong> Replace <code>servesPath</code> with a registry
+question: does a name serve this file? Keep healing only for
+<code>file://</code> and <code>lahe add</code> reviews. List
+<code>heal.js</code> and <code>reviews.js</code> in the components
+table, with a test that a served file's bytes on disk do not change
+after a poll.</li>
+</ul>
+<h3 id="ar6-lahe-review-is-not-unchanged-before-the-bind">AR6.
+<code>lahe review</code> is not "unchanged" before the bind</h3>
+<ul>
+<li><strong>severity</strong> important</li>
+<li><strong>kind</strong> defect</li>
+<li><strong>where</strong> architecture "Binding a file", line 108;
+<code>src/cli/commands/review.js:239-275</code></li>
+<li><strong>what</strong> Today <code>lahe review</code> passes
+<code>--origin http://127.0.0.1:&lt;page port&gt;</code> and
+<code>--under-review</code> to <code>add</code>. Without an origin,
+<code>add</code> takes the <code>file://</code> path: it writes the
+script line into the HTML file, copies the bundle beside it, and prints
+its own "Open it" and fallback lines.</li>
+<li><strong>why</strong> With no page server there is no origin to pass.
+The name origins are only known after <code>address.bind</code>, which
+needs a review id that <code>add</code> has not minted yet, and
+<code>review.write</code> refuses non-loopback origins.</li>
+<li><strong>fix</strong> Spell out the new order and the new
+<code>add</code> mode. For example: <code>add --served-by-helper</code>
+registers no origin, writes nothing to disk, and prints nothing; then
+<code>address.bind</code> names the file. Also say what
+<code>recordLinks</code> becomes (<code>review.js:276-289</code>). The
+rest of the CLI changes depend on this.</li>
+</ul>
+<h3 id="ar7-notes-pages-lose-their-one-page-only-rule">AR7. Notes pages
+lose their one-page-only rule</h3>
+<ul>
+<li><strong>severity</strong> important</li>
+<li><strong>kind</strong> defect (intersects security)</li>
+<li><strong>where</strong> architecture lines 59, 88;
+<code>src/cli/commands/write.js:17-20</code>,
+<code>docs/ongoing/FREE_WRITING.md:72-75</code></li>
+<li><strong>what</strong> <code>kind: notes</code> exists, but the
+serving flow applies "any other file under the folder: serve it as
+bytes" to every name.</li>
+<li><strong>why</strong> Notes usually sit in <code>~</code>,
+<code>~/Desktop</code> or <code>~/Documents</code>. The one-page server
+exists so a notes file does not serve its whole folder, dotfiles
+included (security review 6 of free writing). Under this design,
+<code>notes.lahe:7817/.zshrc</code> answers.</li>
+<li><strong>fix</strong> Give each name a serving mode in the registry
+(<code>page-only</code> for notes, <code>folder</code> otherwise).
+Page-only answers the page, style, fonts and library, and 404s
+everything else, as today.</li>
+</ul>
+<h3 id="ar8-non-secure-lahe-also-loses-web-locks">AR8. Non-secure
+<code>.lahe</code> also loses Web Locks</h3>
+<ul>
+<li><strong>severity</strong> important</li>
+<li><strong>kind</strong> defect</li>
+<li><strong>where</strong> architecture "Failure Modes", line 163, and
+components line 33; <code>src/layer/store.js:206, 1385-1400</code></li>
+<li><strong>what</strong> The design and the recon only plan for the
+missing clipboard API. <code>navigator.locks</code> is also only
+available in a secure context. Without it, <code>claimWindow</code>
+grants every tab the window ("unchecked").</li>
+<li><strong>why</strong> On the default <code>.lahe</code> ending, the
+duplicate-tab guard (<code>duplicate_tab.spec.js</code>) is silently
+off. Ken keeps many tabs and restores sessions, so two live tabs of one
+document can both act as the holder and write.</li>
+<li><strong>fix</strong> List it as a failure mode. Then choose one: a
+localStorage-based holder lease as the fallback, or accept and document
+it. Add a browser test on a <code>.lahe</code>-style non-secure host (a
+Chromium host-resolver rule makes this possible without the resolver).
+Grep the layer for every secure-context API before the plan is
+written.</li>
+</ul>
+<h3
+id="ar9-a-stale-helper-is-never-replaced-and-it-now-serves-every-page">AR9.
+A stale helper is never replaced, and it now serves every page</h3>
+<ul>
+<li><strong>severity</strong> important</li>
+<li><strong>kind</strong> risk</li>
+<li><strong>where</strong> architecture lines 127-129, 169;
+<code>src/cli/commands/session.js:199-240</code>, and the second copy in
+<code>add.js:658-668</code></li>
+<li><strong>what</strong> The design keeps "replace only when no review
+window is open". It also only covers a stale helper, not a helper that
+is down.</li>
+<li><strong>why</strong> With always-on serving and tabs left open
+overnight, some window is nearly always held, so new code never takes
+over. Before this feature, page servers started fresh with current code;
+now the Markdown render, injection, and page routes all live in the
+stale helper. Second problem: if the login item's helper is down or
+throttled, both <code>startHelper</code> copies spawn a detached helper.
+launchd's restart then hits a taken port and loops. Third: a CLI run
+from a worktree with newer files sees the main clone's helper as stale
+on every command and kickstarts it each time, and the restart still runs
+the main clone's code.</li>
+<li><strong>fix</strong> When installed, the CLI never spawns: it
+kickstarts or reports. Compare source stamps against the clone the login
+item names, not the CLI's own clone. Let a stale always-on helper be
+replaced while windows are open, since the address and port no longer
+change and the layer already survives helper restarts
+(<code>helper_restart_holds.spec.js</code>). Wait for a short quiet
+moment in the outbox, not for zero windows.</li>
+</ul>
+<h3 id="ar10-the-login-item-does-not-pin-the-state-folder">AR10. The
+login item does not pin the state folder</h3>
+<ul>
+<li><strong>severity</strong> important</li>
+<li><strong>kind</strong> defect</li>
+<li><strong>where</strong> architecture line 65
+(<code>install.json</code> fields), line 123;
+<code>src/service/state_dir.js:121-135</code></li>
+<li><strong>what</strong> The state folder comes from
+<code>$LAHE_STATE_DIR</code>, then <code>$XDG_STATE_HOME</code>, then
+the default. launchd, systemd user units, and Task Scheduler do not
+start with the user's shell environment.</li>
+<li><strong>why</strong> If Ken's shell sets either variable, the
+login-item helper and the CLI use different state folders. The CLI finds
+no <code>service.json</code>, tries to start its own helper on 7817,
+fails, and the reviews and registry split in two.</li>
+<li><strong>fix</strong> Record the resolved state folder in
+<code>install.json</code>, and pass <code>--state-dir</code> and
+<code>--port</code> in the login item. Have <code>/health</code> report
+a state-folder id, so the CLI can say "the running helper uses a
+different state folder" instead of failing on the port.</li>
+</ul>
+<h3
+id="ar11-aliases-fix-the-rail-but-not-reviewjson-and-their-source-is-fragile">AR11.
+Aliases fix the rail but not <code>review.json</code>, and their source
+is fragile</h3>
+<ul>
+<li><strong>severity</strong> important</li>
+<li><strong>kind</strong> risk</li>
+<li><strong>where</strong> architecture lines 61, 69, 71;
+<code>src/shared/review_format.js:411-510</code></li>
+<li><strong>what</strong> Aliases go into the script tag and
+<code>samePage</code> in the layer. <code>review_format.js</code> groups
+items for the agent by <code>pageKey</code> and <code>samePage</code>
+with no alias list. Aliases are read once from old page-server records
+(port history times the twin hosts).</li>
+<li><strong>why</strong> The agent sees one document split into an old
+group and a new group, and items posted on <code>.lahe</code> and on
+<code>.lahe.localhost</code> land in two groups as well. Records only
+hold ports that were recorded since port history existed. An install
+that picks another port adds another origin later, but the aliases were
+computed once.</li>
+<li><strong>fix</strong> The simplest identity is the file. The helper
+already resolves an item's file for <code>review.json</code>, so group
+by resolved file in <code>review_format</code>, and send the layer that
+file's known page keys, computed at each serve rather than once. If
+aliases stay, pass the same list to <code>projectReview</code>, and
+derive it from the bound review's own items that map to this file, not
+from server records.</li>
+</ul>
+<h3 id="ar12-worktree-fallback-only-covers-claudeworktrees">AR12.
+Worktree fallback only covers <code>.claude/worktrees/</code></h3>
+<ul>
+<li><strong>severity</strong> important</li>
+<li><strong>kind</strong> defect</li>
+<li><strong>where</strong> architecture lines 23, 91-92; brief
+requirement 13 (a worktree document survives its worktree);
+<code>src/service/catalog_reader.js:76, 885-893</code></li>
+<li><strong>what</strong> The Library's mapping is the regex
+<code>&lt;repo&gt;/.claude/worktrees/&lt;name&gt;/&lt;rest&gt;</code>.
+It is also only trusted when a page-server record's root sits in a
+worktree, and those records are being retired.</li>
+<li><strong>why</strong> Ken's own worktrees for this feature are at
+<code>~/Documents/workspace/lahe-worktrees/&lt;name&gt;</code>, a
+sibling folder the regex never matches. So this feature's own docs would
+get the "file is gone" page. The trust anchor is going away too.</li>
+<li><strong>fix</strong> At bind time, while the worktree still exists,
+read its <code>.git</code> file (gitdir, then commondir) and record the
+main checkout path in the registry entry. The registry is written only
+by the helper, so it replaces the page-server record as the trust
+anchor. Fall back to the regex for old entries.</li>
+</ul>
+<h3
+id="ar13-uninstall-breaks-lahe-addresses-against-requirement-6">AR13.
+Uninstall breaks <code>.lahe</code> addresses, against requirement
+6</h3>
+<ul>
+<li><strong>severity</strong> important</li>
+<li><strong>kind</strong> challenge</li>
+<li><strong>where</strong> brief requirement 6 ("installing,
+uninstalling, or a broken setup never makes an address that worked stop
+working") and requirement 7 ("uninstall removes the <code>.lahe</code>
+setup"); architecture lines 138, 181</li>
+<li><strong>what</strong> The server answers both endings, but once
+<code>/etc/resolver/lahe</code> is removed, nothing resolves
+<code>name.lahe</code>. The name server only runs when the resolver is
+set up.</li>
+<li><strong>why</strong> Every <code>.lahe</code> bookmark and history
+entry dies on uninstall. The two requirements contradict each other, and
+the architecture claims requirement 6 without resolving it.</li>
+<li><strong>fix</strong> Ask Ken. Options: uninstall leaves the resolver
+and the name server in place (the resolver is harmless when nothing
+answers); uninstall keeps the addresses dead and says so; or always
+print <code>.lahe.localhost</code> and treat <code>.lahe</code> as a
+short alias. Write the chosen behavior into the architecture.</li>
+</ul>
+<h3
+id="ar14-library-open-can-steal-the-rail-and-the-librarys-kinds-are-not-redefined">AR14.
+Library Open can steal the rail, and the Library's kinds are not
+redefined</h3>
+<ul>
+<li><p><strong>severity</strong> important</p></li>
+<li><p><strong>kind</strong> risk</p></li>
+<li><p><strong>where</strong> architecture lines 30, 60, 166;
+<code>src/service/catalog_reader.js:866-905</code>,
+<code>src/service/catalog_actions.js:243-298</code></p></li>
+<li><p><strong>what</strong> Open sets the binding. "Openable" today
+means "a recorded page server can be restarted". Worktree rows depend on
+a page-server record. Open reopens closed sessions and swaps
+origins.</p></li>
+<li><p><strong>why</strong> Ken opening an older row for a file that a
+live agent session is reviewing moves the rail off the live review,
+without any warning. The <code>openable</code>, <code>via-agent</code>,
+<code>worktree</code> and <code>legacy</code> rules, the reopen-session
+step, and the sweep that follows it all lose their meaning, and the
+architecture gives one line to all of it.</p></li>
+<li><p><strong>fix</strong> Add a Library section to the
+architecture:</p>
+<ul>
+<li><strong>openable</strong> means the file is on disk and Lahe can
+serve it (HTML or Markdown).</li>
+<li><strong>worktree</strong> comes from the registry's recorded main
+checkout (AR12).</li>
+<li><strong>via-agent</strong> stays for dev-server and
+<code>--origin</code> reviews.</li>
+<li><strong>legacy</strong> means <code>lahe add</code> script-line
+reviews: say whether Open now gives them a name.</li>
+</ul>
+<p>Open of a file already bound to a newer review in an open session
+goes to the address without rebinding, unless Ken confirms. Say whether
+Open still reopens a closed session.</p></li>
+</ul>
+<h3
+id="ar15-registry-loss-can-point-a-bookmark-at-a-different-file">AR15.
+Registry loss can point a bookmark at a different file</h3>
+<ul>
+<li><strong>severity</strong> minor</li>
+<li><strong>kind</strong> risk</li>
+<li><strong>where</strong> architecture lines 39-58, 170</li>
+<li><strong>what</strong> Clash suffixes depend on the order files were
+first named. A corrupt or missing <code>addresses.json</code> (or a
+removed state folder, which the design restarts into fresh) rebuilds
+names in a different order.</li>
+<li><strong>why</strong> <code>readme-personal-2</code> could then name
+another file. A bookmark that opens the wrong document is worse than one
+that says "gone".</li>
+<li><strong>fix</strong> Keep an append-only log of name grants beside
+the file, or a last-good copy. On a file that cannot be read, refuse to
+mint new clash suffixes rather than starting empty.</li>
+</ul>
+<h3 id="ar16-redirect-test-on-sec-fetch-mode-navigate">AR16. Redirect
+test on <code>Sec-Fetch-Mode: navigate</code></h3>
+<ul>
+<li><strong>severity</strong> minor</li>
+<li><strong>kind</strong> risk</li>
+<li><strong>where</strong> architecture line 97</li>
+<li><strong>what</strong> Iframe loads also have mode
+<code>navigate</code>. Some clients send no Sec-Fetch headers at
+all.</li>
+<li><strong>why</strong> A wireframe page that frames its sibling
+screens gets each frame redirected to another origin, which breaks
+same-origin frame access and the layer's frames option. A request with
+no header falls to "bytes", so it gets no redirect and no rail.</li>
+<li><strong>fix</strong> Redirect only on
+<code>Sec-Fetch-Dest: document</code>. Treat a missing header plus
+<code>Accept: text/html</code> as a navigation. Serve iframe requests as
+bytes, read-only.</li>
+</ul>
+<h3 id="ar17-leftover-page-servers-in-clone-mode">AR17. Leftover page
+servers in clone mode</h3>
+<ul>
+<li><strong>severity</strong> minor</li>
+<li><strong>kind</strong> defect</li>
+<li><strong>where</strong> architecture line 165</li>
+<li><strong>what</strong> The one-time stop of old page-server processes
+only runs on the first always-on start. In clone mode,
+<code>session close</code> "stops nothing but the session".</li>
+<li><strong>why</strong> Page servers started before the upgrade keep
+running on a clone with no install. That is the battery cost the
+bulletin row LAHE-idle-battery-cost (finished sessions' page servers
+keep running) is about.</li>
+<li><strong>fix</strong> Run the sweep on every helper start until no
+record names a live pid.</li>
+</ul>
+<h3 id="ar18-name-server-port-and-the-1-listener">AR18. Name server port
+and the <code>::1</code> listener</h3>
+<ul>
+<li><strong>severity</strong> minor</li>
+<li><strong>kind</strong> risk</li>
+<li><strong>where</strong> architecture lines 26, 124, 152, 161</li>
+<li><strong>what</strong> The DNS port (7853) is a constant, and a
+second listener on <code>::1</code> is added.</li>
+<li><strong>why</strong> If test helpers start the name server, they
+collide on 7853. On a Linux box or container with no IPv6 loopback,
+binding <code>::1</code> fails, and if that is treated as fatal the
+helper does not start.</li>
+<li><strong>fix</strong> Start the name server only when
+<code>install.json</code> records a resolver, with the port read from
+it. Treat an <code>::1</code> bind failure as a log line, not an
+exit.</li>
+</ul>
+<h3 id="ar19-docs-and-code-lists-are-incomplete">AR19. Docs and code
+lists are incomplete</h3>
+<ul>
+<li><strong>severity</strong> minor</li>
+<li><strong>kind</strong> defect</li>
+<li><strong>where</strong> components table, lines 21-35</li>
+<li><strong>what</strong> Missing:
+<ul>
+<li><code>docs/ongoing/STATIC_SITE_FOLDER.md</code> and
+<code>docs/ongoing/FREE_WRITING.md</code>, which both describe
+per-session servers</li>
+<li><code>README.md:91</code></li>
+<li><code>src/cli/index.js</code>, the command list, for
+<code>install</code> and <code>uninstall</code></li>
+<li><code>src/service/rebuild.js</code>, <code>projection.js</code>,
+<code>handled_check.js</code>, <code>heal.js</code>,
+<code>markdown.js</code>, <code>markdown_links.js</code>,
+<code>review_format.js</code></li>
+<li>the manifest entries for five new files</li>
+</ul></li>
+<li><strong>why</strong> Requirement 12 (agents are told) says no doc
+may still describe per-session servers. A file missing from the manifest
+fails <code>lint</code>.</li>
+<li><strong>fix</strong> Add them to the table. The protocol change
+should also name the new script-tag attribute in
+<code>protocol.scriptTag</code>, so the wire spelling stays in
+<code>src/shared</code>.</li>
+</ul>
+<h3
+id="ar20-per-document-origins-reset-rail-prefs-and-style-choice">AR20.
+Per-document origins reset rail prefs and style choice</h3>
+<ul>
+<li><strong>severity</strong> minor</li>
+<li><strong>kind</strong> taste</li>
+<li><strong>where</strong> recon section 5;
+<code>src/layer/style_switch.js:87</code></li>
+<li><strong>what</strong> Rail prefs, the hold toggle, and
+<code>lahe.style.v1</code> live in per-origin storage.</li>
+<li><strong>why</strong> Within a folder review, these were shared
+across pages. Now each page starts fresh, so Ken picks a style on one
+page and the next page ignores it.</li>
+<li><strong>fix</strong> Note it as accepted, or keep the style choice
+per review on the helper.</li>
+</ul>
+<h3 id="ar21-cli-client-header-is-not-an-authority-factor">AR21. "CLI
+client header" is not an authority factor</h3>
+<ul>
+<li><strong>severity</strong> minor</li>
+<li><strong>kind</strong> risk (for the security reviewer)</li>
+<li><strong>where</strong> architecture lines 117, 177;
+<code>src/shared/protocol.js:613</code> (CLIENTS is "layer or cli")</li>
+<li><strong>what</strong> Any page with a registered origin can send
+<code>x-lahe-client: cli</code> after a preflight. So
+<code>address.bind</code> rests on the token plus the target check, and
+the target check reads <code>meta.json</code> target paths that
+<code>review.write</code> records.</li>
+<li><strong>why</strong> The architecture's stated authority is stronger
+than the real one.</li>
+<li><strong>fix</strong> State the real factors. Have the security
+review decide whether a page token may mint names for files under its
+folder.</li>
+</ul>
+<h3 id="ar22-install-details-that-will-trip-the-plan">AR22. Install
+details that will trip the plan</h3>
+<ul>
+<li><strong>severity</strong> minor</li>
+<li><strong>kind</strong> risk</li>
+<li><strong>where</strong> architecture lines 140-152</li>
+<li><strong>what</strong>
+<ul>
+<li>Task Scheduler's restart on failure cannot be set with plain
+<code>schtasks</code> flags; it needs a task XML import.</li>
+<li>A task that runs <code>node.exe</code> shows a console window unless
+something wraps it.</li>
+<li>The <code>sudo</code> step needs a person at a terminal; an agent's
+shell will hang on it.</li>
+<li>macOS shows a "Background Items Added" notice that names the
+program, which may be <code>node</code>.</li>
+</ul></li>
+<li><strong>why</strong> Each of these is a surprise for a builder
+partway through a task.</li>
+<li><strong>fix</strong> Mark each as unverified in the architecture,
+and plan one spike per system. Have <code>lahe install</code> refuse to
+run without a TTY, and print the command for the human to run.</li>
+</ul>
+<h3 id="ar23-name-rule-gaps">AR23. Name rule gaps</h3>
+<ul>
+<li><strong>severity</strong> minor</li>
+<li><strong>kind</strong> defect</li>
+<li><strong>where</strong> architecture line 58</li>
+<li><strong>what</strong> A file name with no ASCII letters or digits
+becomes an empty name. On macOS, <code>fs.realpathSync</code> keeps the
+case the caller used, so <code>Docs/A.md</code> and
+<code>docs/a.md</code> can be two files to the registry.</li>
+<li><strong>why</strong> An empty name is an invalid host. Case-only
+differences give one file two names.</li>
+<li><strong>fix</strong> Use a fallback stem (<code>doc</code>) plus a
+clash number. Use <code>fs.realpathSync.native</code> for the registry
+key.</li>
+</ul>
+<h3 id="ar24-requirement-11-has-no-design-note">AR24. Requirement 11 has
+no design note</h3>
+<ul>
+<li><strong>severity</strong> minor</li>
+<li><strong>kind</strong> risk</li>
+<li><strong>where</strong> architecture as a whole;
+<code>src/service/reviews.js:1094-1115</code>,
+<code>src/service/index.js:197</code></li>
+<li><strong>what</strong> The helper loads every review into memory at
+start and rewrites the token file on each origin registration. Serving
+now also runs in the same process.</li>
+<li><strong>why</strong> The plan has to set limits for requirement 11
+(light when idle) before building, with no design input on what drives
+the cost.</li>
+<li><strong>fix</strong> Name the expected cost drivers: review count,
+polling tabs, open sockets, and the Markdown render cache. Note
+launchd's default limit of 256 open files for a login item, and raise
+<code>NumberOfFiles</code> in the plist if the measurement calls for
+it.</li>
+</ul>
+<h2 id="a-simpler-shape">A simpler shape</h2>
+<p>Three changes remove AR1, AR2, AR3, AR4 and most of AR11
+together:</p>
+<ol type="1">
+<li><strong>The registry maps a name to a file, a serving root, a mode,
+and, for Markdown, its mounts. Nothing else.</strong> It does not store
+a bound review or aliases.</li>
+<li><strong>The page's URL path stays its path under the serving
+root,</strong> as today. Only the origin changes. Item
+<code>page_path</code> keeps its meaning, every page-to-file mapper
+keeps working, and an alias is just "old origin, same path".</li>
+<li><strong>The helper decides the review per request and checks Origin
+against the registry.</strong> It uses today's
+<code>findReviewForRequest</code> rule without the session filter, so no
+origins are added to reviews.</li>
+</ol>
+<h2 id="verified-claims">Verified claims</h2>
+<p>Recon citations checked and correct: <code>samePage</code>,
+<code>pageKey</code> and <code>pageFrom</code>
+(<code>src/shared/record.js:372-515</code>),
+<code>isRegisterableOrigin</code> and the 16-origin cap, the
+<code>servesPath</code> heal stand-down,
+<code>findReviewForRequest</code> session scoping and
+<code>--only</code>, <code>linkedFileForPage</code>, Markdown asset
+prefixes, <code>rebuild.js</code> depending on
+<code>staticServers.list</code> and <code>recordLinks</code>, the
+<code>startHelper</code> replace rule, and the Library worktree regex.
+Recon missed <code>navigator.locks</code> (AR8) and the healer flip
+(AR5).</p>
+<h2 id="cleanup-needed">Cleanup needed</h2>
+<p>Nothing created except this file.</p>
+<h2 id="security-review-stable-addresses-architecture">Security review:
+Stable addresses architecture</h2>
+<p>Reviewer: review-security, on <a
+href="02_architecture_stable_addresses.md">the architecture</a>,
+2026-10-11. Read with <a href="parts/architecture/recon.md">recon</a>,
+<a href="parts/architecture/alternatives.md">alternatives</a>, <a
+href="01_brief_stable_addresses.md">the brief</a>, D11 in the <a
+href="../20260812.01_live_agentic_html_editor/02_architecture_live_agentic_html_editor.md">original
+architecture</a>, and the code in <code>src/shared/protocol.js</code>,
+<code>src/service/auth.js</code>,
+<code>src/service/static_servers.js</code>,
+<code>src/service/index.js</code>, <code>src/service/routes.js</code>
+and <code>src/service/catalog_reader.js</code>. Nothing was run.</p>
+<h2 id="summary-2">Summary</h2>
+<p>Two blockers. Both are cheap to fix in the design now and expensive
+after the build.</p>
+<ul>
+<li><strong>SR1:</strong> the server answers <code>*.lahe</code> names
+on machines where Lahe does not control how <code>.lahe</code> resolves.
+Whoever answers DNS for that machine (a hostile Wi-Fi network, a
+squatter on the name server port) can run a DNS rebinding attack under a
+real document name. That reads documents, their tokens and the Library.
+The design says rebinding is stopped by the Host check; for
+<code>.lahe</code> it is not.</li>
+<li><strong>SR2:</strong> <code>address.bind</code> is reachable from
+any page. The "CLI header" is the public string <code>cli</code>, the
+token is on the page's script tag, and the page's origin is registered.
+Its one remaining guard, "a file under the review's folder", rests on
+paths a page can already write through <code>review.write</code>. So a
+page can name arbitrary files and steal other documents' rails.</li>
+</ul>
+<div class="table-scroll"><table>
+<thead>
+<tr>
+<th>#</th>
+<th>Severity</th>
+<th>Kind</th>
+<th>Finding</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>SR1</td>
+<td>blocker</td>
+<td>defect / challenge</td>
+<td><code>.lahe</code> Hosts are answered where Lahe does not own
+<code>.lahe</code> resolution, so DNS rebinding works under a real
+name</td>
+</tr>
+<tr>
+<td>SR2</td>
+<td>blocker</td>
+<td>defect</td>
+<td><code>address.bind</code> is callable by page script, and its folder
+check reads page-writable paths</td>
+</tr>
+<tr>
+<td>SR3</td>
+<td>important</td>
+<td>defect</td>
+<td>Per-file origins do not wall documents off: every name serves its
+whole folder tree, dotfiles included</td>
+</tr>
+<tr>
+<td>SR4</td>
+<td>important</td>
+<td>risk</td>
+<td>Always-on, fixed port, guessable names, no token to read a page:
+other OS users and sandboxed local code can read documents</td>
+</tr>
+<tr>
+<td>SR5</td>
+<td>important</td>
+<td>defect</td>
+<td><code>http://*.lahe</code> gets no <code>Sec-Fetch-*</code> headers,
+so the Library's checks and the "navigation only" rule cannot work
+there</td>
+</tr>
+<tr>
+<td>SR6</td>
+<td>important</td>
+<td>risk</td>
+<td>The name server port can be squatted; the ending check would pass
+for a squatter; a bad packet can crash the helper</td>
+</tr>
+<tr>
+<td>SR7</td>
+<td>important</td>
+<td>defect</td>
+<td>A plain GET mints permanent names and adds origins, from any link on
+any website</td>
+</tr>
+<tr>
+<td>SR8</td>
+<td>important</td>
+<td>risk</td>
+<td>No cross-origin resource policy: websites can embed and probe
+document assets</td>
+</tr>
+<tr>
+<td>SR9</td>
+<td>important</td>
+<td>defect</td>
+<td>A name points to a path, not a file: worktree fallback and path
+reuse put a review token on a file nobody bound</td>
+</tr>
+<tr>
+<td>SR10</td>
+<td>minor</td>
+<td>risk</td>
+<td>Old random-port origins stay valid credentials forever after page
+servers retire</td>
+</tr>
+<tr>
+<td>SR11</td>
+<td>minor</td>
+<td>risk</td>
+<td>Host routing details: order, grammar, IDN names, escaping, listen
+addresses</td>
+</tr>
+<tr>
+<td>SR12</td>
+<td>minor</td>
+<td>risk</td>
+<td><code>sudo</code>, resolver file and login item hygiene</td>
+</tr>
+<tr>
+<td>SR13</td>
+<td>minor</td>
+<td>risk</td>
+<td>The aliases attribute needs escaping, a cap and a trusted
+source</td>
+</tr>
+<tr>
+<td>SR14</td>
+<td>minor</td>
+<td>risk</td>
+<td>Chrome's Local Network Access and browser DNS behaviour are assumed,
+not checked</td>
+</tr>
+</tbody>
+</table></div>
+<h2 id="findings-1">Findings</h2>
+<h3
+id="sr1-lahe-names-are-answered-where-lahe-does-not-own-lahe-resolution">SR1.
+<code>.lahe</code> names are answered where Lahe does not own
+<code>.lahe</code> resolution</h3>
+<pre><code>severity   blocker
+kind       defect (and a challenge to part of requirement 6)
+where      Architecture &quot;Serving a request&quot; (Host routing), &quot;Which ending is printed&quot;,
+           Security &amp; Privacy Notes (&quot;DNS rebinding sends a foreign Host&quot;);
+           brief requirement 6 (both endings always answer) and requirement 10</code></pre>
+<p><strong>What.</strong> The helper serves
+<code>&lt;name&gt;.lahe</code> and <code>library.lahe</code> on every
+system, whether or not this machine's resolver sends <code>.lahe</code>
+to Lahe's own name server.</p>
+<p><strong>Why.</strong> The Host check stops rebinding only when the
+attacker must use a name the server does not know. With
+<code>.lahe</code>, the attacker can use a name the server does know, as
+long as the attacker controls how that name resolves. On Linux, Windows,
+and a Mac without the resolver file (or after
+<code>lahe uninstall</code>), a <code>.lahe</code> lookup goes to
+whatever DNS server the network hands out. A hostile Wi-Fi network, a
+compromised router, or a future real <code>.lahe</code> top-level domain
+can then do this:</p>
+<ol type="1">
+<li>Answer <code>readme.lahe</code> with the attacker's own IP and serve
+a page at <code>http://readme.lahe:7817/</code>. Ken reaches it from a
+link.</li>
+<li>Re-answer <code>readme.lahe</code> with <code>127.0.0.1</code>. The
+attacker's script fetches <code>/</code> from its own origin. The
+request reaches the helper with <code>Host: readme.lahe:7817</code>, a
+registered name.</li>
+<li>The response is the document with its review id and token injected,
+and the script can read it because it is same-origin. Every file under
+the document's folder is readable the same way (SR3).</li>
+<li>The script calls <code>127.0.0.1:7817</code> with
+<code>Origin: http://readme.lahe:7817</code>. That origin is registered
+on the review, so it passes D11's token and origin checks. It can read
+the review and post comments that go to Ken's agent.</li>
+<li>Same for <code>library.lahe</code>: the Library page carries the
+Library token, and <code>Origin</code> equals <code>http://</code> +
+Host, so the Library's own checks pass.</li>
+</ol>
+<p>Names are easy to guess: <code>readme</code>, <code>index</code>,
+<code>notes</code>, <code>site</code>, and Lahe's own document names.
+Chrome's Local Network Access prompt may stop step 2 in Chrome; Firefox
+and Safari have no such step. The <code>.lahe.localhost</code> ending is
+safe only where the browser hard-wires <code>*.localhost</code> to
+loopback and never asks DNS. Chrome and Firefox do this. Safari is not
+established, and the architecture's line "Browsers send
+<code>*.localhost</code> to this computer on every system" is
+unverified.</p>
+<p><strong>Fix.</strong></p>
+<ul>
+<li>Answer <code>*.lahe</code> and <code>library.lahe</code> Hosts only
+while the same test that picks the printed ending passes: the resolver
+is installed, Lahe's own name server holds the port, and a lookup
+returns loopback. Use the nonce check in SR6 so a squatter cannot pass
+it. At every other time, and on Linux and Windows, refuse a
+<code>.lahe</code> Host with a 400.</li>
+<li>This is a challenge to requirement 6's "the server answers both
+endings for every name". It loses Ken nothing. On a machine where Lahe's
+resolver is not in place, the only thing that can send a
+<code>.lahe</code> name to this computer is someone else's DNS, so the
+only visitor that refusal turns away is an attacker. After uninstall,
+Ken's <code>.lahe</code> bookmarks stop resolving whatever the server
+does.</li>
+<li>Add a browser-walk row: in Safari, Chrome and Firefox on macOS,
+<code>x.lahe.localhost</code> resolves to loopback with no DNS query on
+the network (a packet capture, or a hostile resolver in the test). If
+Safari asks the network, also write
+<code>/etc/resolver/lahe.localhost</code> during install, or print
+<code>.lahe</code> only and treat Safari as unsupported for
+<code>.lahe.localhost</code>.</li>
+<li>Rewrite the Security &amp; Privacy line about rebinding to say what
+the Host check covers and what it does not.</li>
+</ul>
+<h3 id="sr2-addressbind-is-callable-by-page-script">SR2.
+<code>address.bind</code> is callable by page script</h3>
+<pre><code>severity   blocker
+kind       defect
+where      Architecture &quot;Binding a file&quot; (address.bind authority), Security &amp; Privacy Notes
+           (&quot;Origins are added by the helper, never by the wire&quot;);
+           src/shared/protocol.js:168-170 (CLIENT_CLI = &quot;cli&quot;, in CLIENTS);
+           src/service/routes.js:233 (review.write records body target_path);
+           src/service/catalog_reader.js:889-892 (&quot;meta.json&#39;s paths alone are page text&quot;)</code></pre>
+<p><strong>What.</strong> The design gives <code>address.bind</code>
+"the same authority as <code>review.write</code>: loopback Host, the CLI
+client header, the review's token". A page on its own origin holds all
+of these.</p>
+<p><strong>Why.</strong></p>
+<ul>
+<li>The Host is <code>127.0.0.1:7817</code> because that is where every
+page sends its API calls.</li>
+<li><code>x-lahe-client: cli</code> is a constant the layer could send
+as easily as <code>layer</code>. It exists to force a preflight, not to
+identify the caller. The preflight passes because the page's origin is
+registered (<code>anyReviewRegistered</code>,
+<code>src/service/index.js</code>).</li>
+<li>The token is on the page's script tag, and <code>checkRequest</code>
+accepts the page's own <code>Origin</code>.</li>
+<li>That leaves one guard: "the target must be the review's own file or
+a file under its folder". The review's recorded paths are page-writable:
+<code>review.write</code> takes <code>target_path</code> from the body
+and appends it to <code>target_paths</code>. The Library's reader
+already treats those paths as page text.</li>
+</ul>
+<p>So a page can:</p>
+<ul>
+<li>record <code>/Users/ken/.ssh/config</code> and bind it. That mints a
+permanent name whose folder, <code>~/.ssh</code>, the always-on server
+then serves (SR3, SR4, SR1).</li>
+<li>re-bind a sibling document's name to its own review. Ken's comments
+on that document then flow into a review the attacker page can read, and
+the real review loses its rail. The design's "only
+<code>address.bind</code> adds origins" stops being a control, because
+<code>address.bind</code> is on the wire.</li>
+</ul>
+<p><strong>Fix.</strong></p>
+<ul>
+<li>Give <code>address.bind</code> a credential no page can hold. Use a
+random CLI secret in an owner-only file in the state folder, minted by
+the helper at start (or a field in <code>service.json</code>, which is
+already 0600). The CLI reads it and sends it; the route compares it in
+constant time.</li>
+<li>Also refuse any <code>address.bind</code> request that carries an
+<code>Origin</code> header or any <code>Sec-Fetch-*</code> header. A
+browser always sends <code>Origin</code> on a cross-origin POST. Confirm
+that Node's <code>fetch</code> in the CLI sends neither.</li>
+<li>Take the target file from the CLI request, never from
+<code>meta.json</code>. Check it on the helper side: realpath, regular
+file, owned by the helper's user, no hidden segment, not inside the
+state folder, and not a folder SR3 refuses as a root.</li>
+<li>Once a name's binding comes from the registry,
+<code>findReviewForRequest</code>-style matching on
+<code>target_paths</code> must not decide which token a page gets. Add
+unit tests: a page-shaped request (with <code>Origin</code>, without the
+secret) to <code>address.bind</code> is refused, and a
+<code>review.write</code> with <code>target_path</code> cannot widen
+what may be bound.</li>
+</ul>
+<h3 id="sr3-per-file-origins-do-not-wall-documents-off">SR3. Per-file
+origins do not wall documents off</h3>
+<pre><code>severity   important
+kind       defect
+where      Architecture &quot;Serving a request&quot; (&quot;any other file under the folder: serve it as bytes&quot;;
+           &quot;A script&#39;s fetch of a sibling HTML file gets the bytes&quot;), Security &amp; Privacy Notes
+           (&quot;Each name is its own origin ... stronger than today&quot;); brief requirement 4;
+           src/service/static_servers.js:749 (hasHiddenSegment, called nowhere),
+           :1637 (root branch serves any file under the root)</code></pre>
+<p><strong>What.</strong> Every name serves every file under its file's
+folder, recursively, as bytes to its own origin. Sibling
+<code>.html</code> and <code>.md</code> files are included, and so are
+dotfiles.</p>
+<p><strong>Why.</strong></p>
+<ul>
+<li>Requirement 4 says script on one document cannot read another
+document's page. Under this design, <code>a.lahe</code> can
+<code>fetch("/b.html")</code> and read <code>b</code>'s source. It
+cannot read <code>b</code>'s injected token or storage, but the document
+content is what Ken wants walled off.</li>
+<li>A document in a broad folder exposes the whole tree.
+<code>~/notes.md</code> gives a name whose root is the home folder.</li>
+<li>Today's serving has no hidden-segment rule outside mounts. The
+helper <code>hasHiddenSegment</code> exists, but its own comment says
+nothing calls it, so <code>.git/config</code>, <code>.env</code> and
+<code>.ssh/</code> under a root are served. Today that is bounded by a
+short-lived random port. After this feature it is a permanent, guessable
+address (SR4, SR1).</li>
+<li>A sibling HTML that <code>lahe add</code> wrote a script line into
+(a <code>file://</code> review) carries that review's token in its
+bytes. Read across origins, that token works for any review that
+registered <code>null</code>, by D11's stated residual.</li>
+</ul>
+<p><strong>Fix.</strong></p>
+<ul>
+<li>Refuse any path with a hidden segment on every page route, checked
+on both the requested path and its realpath.</li>
+<li>For a single-file name, serve as assets only the types a page loads
+(images, styles, scripts, fonts, media), and give other documents only
+the navigation redirect. Keep the wider rule (sibling HTML as bytes) for
+folder reviews, where the reviewer chose the folder, and print the root
+as <code>lahe review</code> does today.</li>
+<li>Refuse to make a name whose root would be the home folder, the
+filesystem root, <code>/Users</code>, <code>/home</code>, or a temp
+root. Point the user at <code>--only</code> or a narrower folder
+instead.</li>
+<li>Correct the Security &amp; Privacy note: per-file origins separate
+storage and tokens, not file contents within a folder.</li>
+</ul>
+<h3
+id="sr4-other-os-users-and-sandboxed-local-code-can-read-documents">SR4.
+Other OS users and sandboxed local code can read documents</h3>
+<pre><code>severity   important
+kind       risk
+where      Security &amp; Privacy Notes (&quot;A local program could load a page and read its token,
+           as it could read the state folder&quot;); brief requirement 10; D11&#39;s
+           &quot;the final boundary is the user account&quot;</code></pre>
+<p><strong>What.</strong> The design makes page serving always on, at a
+fixed port, under names derived from file names, with no credential
+needed to GET a page or its folder's files.</p>
+<p><strong>Why.</strong> D11 draws the line at the user account: a
+process running as Ken can already read the state folder. These local
+readers are not Ken's account, and loopback serves them anyway:</p>
+<ul>
+<li>another OS user on the same Mac or Linux machine;</li>
+<li>a container with host networking;</li>
+<li>a sandboxed app or extension that has network access but no file
+access.</li>
+</ul>
+<p>Today they would need to find a short-lived random port. After this
+feature they connect to 7817, send
+<code>Host: readme.lahe.localhost</code>, and read the document, its
+review token (and so post comments that reach Ken's agent), and the
+folder's files with Ken's file permissions. The Library at
+<code>library.lahe.localhost</code> hands out its token the same way.
+Requirement 10 says "only this computer can reach it", but the review
+should not read that as "only Ken".</p>
+<p><strong>Fix.</strong> Pick one and state it in the doc:</p>
+<ul>
+<li><strong>(a)</strong> Add a browser-held credential.
+<code>lahe review</code> opens the first URL with a one-time code. The
+server swaps it for an <code>HttpOnly; SameSite=Strict</code> cookie:
+scoped to <code>lahe.localhost</code> for that ending, host-only per
+name for <code>.lahe</code>. Page and Library responses then need the
+cookie, and a bookmark still works in the same browser profile. Without
+the cookie, the server shows a "open this from Lahe" page with no
+content.</li>
+<li><strong>(b)</strong> Accept the risk, write it into D11's residuals
+as a new line, and have <code>lahe install</code> refuse or warn on a
+machine with more than one interactive user.</li>
+</ul>
+<p>Either way, fix the Security &amp; Privacy sentence, which is wrong
+for these callers.</p>
+<h3 id="sr5-httplahe-gets-no-fetch-metadata-headers">SR5.
+<code>http://*.lahe</code> gets no Fetch Metadata headers</h3>
+<pre><code>severity   important
+kind       defect
+where      Architecture &quot;Serving a request&quot; (&quot;Only a top-level navigation (Sec-Fetch-Mode:
+           navigate) ... is redirected&quot;), Library routing for library.lahe;
+           src/service/auth.js:247-251 (Library requires Sec-Fetch-Site; missing is refused);
+           src/shared/protocol.js:378-445 (sec_fetch_site per catalog route)</code></pre>
+<p><strong>What.</strong> Browsers send <code>Sec-Fetch-Site</code>,
+<code>Sec-Fetch-Mode</code> and <code>Sec-Fetch-Dest</code> only to
+potentially trustworthy URLs. <code>http://x.lahe</code> is not one,
+which the design already concedes for the clipboard. Treat this as
+needing a browser check, but the Fetch Metadata spec states it.</p>
+<p><strong>Why.</strong></p>
+<ul>
+<li>The Library refuses a request with no <code>Sec-Fetch-Site</code>,
+on every route including the page itself. So <code>library.lahe</code>
+cannot work as specified. The easy fix a builder will reach for is to
+allow a missing header. That reopens the check, which is the Library's
+defence against other pages.</li>
+<li>The page route's navigation test has nothing to read on
+<code>.lahe</code>. If "missing" is treated as "navigate", every script
+fetch of a sibling gets a 302 and mints a name (SR7). If it is treated
+as "not navigate", requirement 8a's links fail on
+<code>.lahe</code>.</li>
+</ul>
+<p><strong>Fix.</strong></p>
+<ul>
+<li>Keep the Library's missing-header refusal exactly as it is. Serve
+the Library only on secure-context Hosts (<code>127.0.0.1</code>,
+<code>localhost</code>, <code>library.lahe.localhost</code>), and answer
+<code>library.lahe</code> with a 302 to
+<code>library.lahe.localhost</code>. That needs a change to requirement
+15's wording; it still gives a stable address.</li>
+<li>For page redirects, use <code>Sec-Fetch-Mode</code> when present.
+When absent, decide by <code>Accept</code> including
+<code>text/html</code> together with no <code>Origin</code> header (a
+same-origin GET navigation sends none), and never mint a name on that
+path (SR7).</li>
+<li>Add a unit test that the Library refuses a request without
+<code>Sec-Fetch-Site</code> on every Host.</li>
+</ul>
+<h3 id="sr6-the-name-server-can-be-squatted-or-crashed">SR6. The name
+server can be squatted or crashed</h3>
+<pre><code>severity   important
+kind       risk
+where      Architecture &quot;`.lahe` on macOS&quot;, &quot;Which ending is printed&quot;, Failure Modes
+           (&quot;The name server&#39;s port is taken. The helper logs it and serves on&quot;)</code></pre>
+<p><strong>What.</strong> <code>/etc/resolver/lahe</code> points every
+<code>.lahe</code> lookup at <code>127.0.0.1:7853</code> permanently.
+Any local process, any user, can bind that UDP port when the helper does
+not hold it: before the login item starts, during a crash loop, or after
+the helper lost the race.</p>
+<p><strong>Why.</strong></p>
+<ul>
+<li>A squatter answers <code>.lahe</code> with any address it likes.
+That is SR1's attack with no hostile network needed. It could also send
+<code>library.lahe</code> to a lookalike Library that collects
+comments.</li>
+<li>The planned ending check (does <code>library.lahe</code> resolve to
+loopback?) passes for a squatter that answers that one name
+honestly.</li>
+<li>If the name server socket sets <code>reuseAddr</code>, libuv on
+macOS sets <code>SO_REUSEPORT</code>, and a second process can share the
+port and receive queries.</li>
+<li>The DNS parser runs inside the helper. One malformed packet that
+throws takes down pages, the API and the Library. A local process can
+repeat it after each restart.</li>
+</ul>
+<p><strong>Fix.</strong></p>
+<ul>
+<li>Bind the socket exclusively, never with <code>reuseAddr</code>.</li>
+<li>Make the ending check prove Lahe answered. At start, mint a random
+nonce. The name server answers <code>check-&lt;nonce&gt;.lahe</code>
+with a loopback address derived from it (for example
+<code>127.83.x.y</code>), and the helper confirms that exact address
+through the system resolver.</li>
+<li>Tie SR1's <code>.lahe</code> Host gate to this check. If the helper
+cannot bind 7853, or the nonce check fails, it refuses
+<code>.lahe</code> Hosts and prints <code>.lahe.localhost</code>. A
+plain "logs it and serves on" is not enough.</li>
+<li>Parse defensively: check bounds on every read, answer only a
+single-question standard query for <code>A</code> or <code>AAAA</code>,
+drop anything else silently, and wrap each packet in try/catch so a bad
+one cannot reach the process. Add fuzz-style unit tests with truncated
+and oversized packets.</li>
+</ul>
+<h3 id="sr7-a-get-mints-permanent-names-and-adds-origins">SR7. A GET
+mints permanent names and adds origins</h3>
+<pre><code>severity   important
+kind       defect
+where      Architecture &quot;Serving a request&quot; (&quot;302 to that file&#39;s own name (named on first
+           visit)&quot;; &quot;A page under it with no binding of its own is bound to the folder review on
+           first visit&quot;); Data (&quot;A name is never reused&quot;); ORIGIN_LIMIT, src/shared/protocol.js:118</code></pre>
+<p><strong>What.</strong> Navigating to
+<code>known.lahe:7817/&lt;any .html or .md under the folder&gt;</code>
+writes a permanent registry entry. For a folder review, it also adds two
+origins to the review.</p>
+<p><strong>Why.</strong></p>
+<ul>
+<li>Any website can cause the write with a link or
+<code>window.open</code>. A top-level navigation needs no permission. On
+<code>.lahe</code>, with no Fetch Metadata (SR5), script fetches may
+trigger it too.</li>
+<li>Names are never removed or reused, so the registry and
+<code>addresses.json</code> grow without bound.</li>
+<li>Each new name widens what the always-on server answers for.</li>
+<li>Folder reviews hit <code>ORIGIN_LIMIT</code> (16) after eight pages.
+If "the helper adds them internally" means past the cap, the cap that
+guards against "a caller quietly accumulating origins" is gone for
+exactly the callers who can trigger it.</li>
+</ul>
+<p><strong>Fix.</strong></p>
+<ul>
+<li>Mint on a request only when it shows it came from the page itself:
+<code>Sec-Fetch-Site: same-origin</code>, or (on <code>.lahe</code>) a
+<code>Referer</code> whose host is the requesting name. Otherwise serve
+the sibling read-only with no name and no rail, or show a short "open
+from Lahe" page.</li>
+<li>Cap new names per folder and per hour, and log each mint, as the
+brief's logging section already asks.</li>
+<li>State the origin cap for folder reviews. Either the internal add
+obeys a cap that is sized for folders and stated in the doc, or
+folder-review pages share the folder review's own origins under a stated
+rule. Never leave internal adds unbounded.</li>
+</ul>
+<h3 id="sr8-websites-can-embed-and-probe-document-assets">SR8. Websites
+can embed and probe document assets</h3>
+<pre><code>severity   important
+kind       risk
+where      Architecture &quot;Serving a request&quot; (assets &quot;as bytes&quot;); page responses today send only
+           cache-control, content-type and nosniff (src/service/static_servers.js:756-763, :1715-1720)</code></pre>
+<p><strong>What.</strong> Page and asset responses carry no
+<code>Cross-Origin-Resource-Policy</code>, and nothing checks where a
+subresource request came from.</p>
+<p><strong>Why.</strong> A website can put
+<code>&lt;img src="http://readme.lahe.localhost:7817/diagram.png"&gt;</code>
+or <code>&lt;script src=".../data.js"&gt;</code> in its page. From
+onload or onerror it learns which names and files exist on Ken's
+machine, and it can run any script file as cross-site script inclusion.
+Firefox and Safari allow public pages to load loopback subresources;
+Chrome's Local Network Access asks first. Today the same is possible,
+but only against short-lived random ports. After this feature the
+address is fixed and the names are guessable.</p>
+<p><strong>Fix.</strong></p>
+<ul>
+<li>Send <code>Cross-Origin-Resource-Policy: same-origin</code> on every
+page-route response, the 404 and 410 pages included.</li>
+<li>Where <code>Sec-Fetch-Site</code> is present, refuse
+<code>cross-site</code> non-navigation requests with a 403.</li>
+<li>Send <code>X-Frame-Options: DENY</code> or
+<code>frame-ancestors 'none'</code> on injected pages, so a website
+cannot frame a reviewed document and use clickjacking to post
+comments.</li>
+</ul>
+<h3 id="sr9-a-name-points-to-a-path-not-a-file">SR9. A name points to a
+path, not a file</h3>
+<pre><code>severity   important
+kind       defect
+where      Architecture &quot;Serving a request&quot; (worktree fallback: &quot;Tree yes -&gt; Page&quot;); Data
+           (&quot;`file` is the real path&quot;); brief requirement 13 (worktree copy);
+           src/service/catalog_reader.js:570-597 (worktreeCandidate checks)</code></pre>
+<p><strong>What.</strong></p>
+<ul>
+<li>When the bound file is gone, the flow serves the main-checkout copy
+under the worktree file's name, with the bound review's token injected,
+and with the main checkout's folder as the asset root.</li>
+<li>Separately, if any bound file is deleted and something else is
+created at the same path, the name serves the new file with the old
+review's token.</li>
+</ul>
+<p><strong>Why.</strong></p>
+<ul>
+<li>The fallback breaks "one name, one file". The main copy may already
+have its own name and review, so the same bytes are served at two
+origins with two tokens. The review's rail lands on content it never
+covered.</li>
+<li>Path reuse is worse in a shared or world-writable folder
+(<code>/tmp</code>, a shared project folder). Another user creates a
+file at the freed path, and their HTML runs with Ken's review token
+injected. It can then post comments into Ken's agent queue. D12 fences
+page text, but these are reviewer-channel items.</li>
+</ul>
+<p><strong>Fix.</strong></p>
+<ul>
+<li>On fallback, 302 to the main copy's own name, minting it if needed,
+and leave its binding to the normal rules. Never inject the worktree
+name's review into another file.</li>
+<li>Reuse <code>worktreeCandidate</code>'s checks as they are: real path
+under the repo, no hidden segment, owned by the current user, a page by
+real extension. Run them per request, not once.</li>
+<li>Record the owner uid, plus device and inode, at bind time. Inject
+the rail only when the served file's owner is the helper's user. When
+the inode changed, serve read-only until the next
+<code>lahe review</code> re-binds.</li>
+</ul>
+<h3 id="sr10-old-random-port-origins-stay-valid-forever">SR10. Old
+random-port origins stay valid forever</h3>
+<pre><code>severity   minor
+kind       risk
+where      Architecture Data (&quot;aliases&quot;), Failure Modes (&quot;Old open tabs on random ports... stops
+           leftover page-server processes&quot;)</code></pre>
+<p><strong>What.</strong> Reviews keep
+<code>http://127.0.0.1:&lt;old port&gt;</code> and
+<code>localhost:&lt;old port&gt;</code> in <code>origins</code> after
+the page servers are retired. The design moves the matching role to
+aliases but does not remove the auth role.</p>
+<p><strong>Why.</strong> Those ports are now free for any program,
+including Ken's next dev server. A page served there passes preflight
+and the origin half of D11 for an old review, leaving the token as the
+only factor. The one-time stop of leftover page servers signals pids
+from records. Without the start-instant check D11 describes, a recycled
+pid kills an unrelated process.</p>
+<p><strong>Fix.</strong> At migration, keep each old port origin as an
+alias (display only) and remove it from <code>origins</code> with
+<code>origin.removed</code>, which is loopback-only and already exists.
+For the leftover-server stop, reuse the health probe with id and
+instance, and signal only a process that answers as that server.</p>
+<h3 id="sr11-host-routing-details">SR11. Host routing details</h3>
+<pre><code>severity   minor
+kind       risk
+where      Architecture &quot;Serving a request&quot;; src/service/index.js (OPTIONS handled before any
+           routing; catalog matched on raw path)</code></pre>
+<p><strong>What and why.</strong> The design names the routing table but
+not these rules, and each has a quiet failure:</p>
+<ul>
+<li><strong>Order.</strong> <code>handle()</code> answers
+<code>OPTIONS</code> and matches catalog paths before anything else
+today. Host dispatch must come first, or a document Host gets CORS
+preflight answers and catalog path matching.</li>
+<li><strong>Grammar.</strong> Accept exactly one label before
+<code>.lahe</code> or <code>.lahe.localhost</code>, lowercase, with port
+equal to the helper's own. Refuse a trailing dot (<code>x.lahe.</code>,
+a separate origin), nested labels (<code>a.library.lahe</code>), and
+labels starting <code>xn--</code> or with <code>--</code> in positions 3
+and 4. The name rule must never produce those last two: a file named
+<code>xn--...</code> would show as a Unicode lookalike of another name
+in the address bar, which the brief calls the UI.</li>
+<li><strong>Escaping.</strong> The 404 page repeats the requested name
+and the 410 page names the path. Both are attacker-influenced (Host via
+SR1, file names on disk), so HTML-escape them.</li>
+<li><strong>Listen addresses.</strong> Listen on <code>127.0.0.1</code>
+and <code>::1</code> exactly. Never <code>::</code> or
+<code>0.0.0.0</code> to get both at once, which would expose every
+document to the local network.</li>
+</ul>
+<p><strong>Fix.</strong> Put these four rules in the architecture and
+pin each with a unit test.</p>
+<h3 id="sr12-sudo-resolver-file-and-login-item-hygiene">SR12.
+<code>sudo</code>, resolver file and login item hygiene</h3>
+<pre><code>severity   minor
+kind       risk
+where      Architecture &quot;`.lahe` on macOS&quot;, &quot;Login item per system&quot;</code></pre>
+<p><strong>What and why.</strong></p>
+<ul>
+<li>The resolver write is the one root step. If it is built with shell
+interpolation, a port or path from config becomes root command
+input.</li>
+<li><code>lahe uninstall</code> deleting <code>/etc/resolver/lahe</code>
+unconditionally removes a file Lahe may not own.</li>
+<li>Run under <code>sudo</code> as a whole, <code>lahe install</code>
+would write root-owned files into the home folder.</li>
+<li>An agent running <code>lahe install</code> in a terminal where Ken
+recently typed his password reuses <code>sudo</code>'s cached credential
+silently.</li>
+<li>Windows <code>schtasks</code> command lines built from a clone path
+with spaces or quotes can break, or be injected into.</li>
+</ul>
+<p><strong>Fix.</strong></p>
+<ul>
+<li>Write the resolver file from a temp file with
+<code>sudo install -m 0644 -o root -g wheel</code>, using fixed text and
+an integer port. Add a marker comment, and have uninstall remove the
+file only when the marker matches.</li>
+<li>Refuse to run <code>lahe install</code> as root.</li>
+<li>Refuse it with no TTY, so agents cannot run it. The skill must say a
+person runs it.</li>
+<li>Quote the Windows task command with a tested quoting helper, and
+refuse clone paths with quote characters, as
+<code>catalog_reader.js</code> already does for candidate paths.</li>
+<li>Put nothing secret in the plist, unit or task.</li>
+</ul>
+<h3 id="sr13-the-aliases-attribute">SR13. The aliases attribute</h3>
+<pre><code>severity   minor
+kind       risk
+where      Architecture Data (&quot;Script tag gains data-lahe-aliases&quot;), &quot;Page identity&quot;</code></pre>
+<p><strong>What and why.</strong></p>
+<ul>
+<li>The aliases are JSON (quotes, file paths) placed in an HTML
+attribute on every injected page. A path holding <code>"</code> or
+<code>&lt;</code> breaks out of the attribute if escaped by hand.</li>
+<li>Aliases come from "old page-server records". If a later change
+sources them from <code>meta.json</code>'s paths instead, a page could
+widen which items show as its own. Those paths are page-writable
+(SR2).</li>
+</ul>
+<p><strong>Fix.</strong></p>
+<ul>
+<li>Build the attribute through the same escaper
+<code>protocol.scriptTag</code> uses.</li>
+<li>Cap the alias count and total length.</li>
+<li>Source aliases only from helper-owned server records.</li>
+<li>Keep aliases strictly a display filter inside one review, never an
+input to any auth check.</li>
+</ul>
+<h3 id="sr14-browser-behaviour-that-is-assumed-not-checked">SR14.
+Browser behaviour that is assumed, not checked</h3>
+<pre><code>severity   minor
+kind       risk
+where      Architecture Failure Modes (browser skips the resolver); alternatives (&quot;Pages call the
+           API same-origin ... worth revisiting if Chrome&#39;s local-network rules&quot;)</code></pre>
+<p><strong>What.</strong> The design assumes these, none of them
+shown:</p>
+<ul>
+<li>a page at a <code>.lahe</code> name that resolved to loopback counts
+as loopback for Chrome's Local Network Access, so its calls to
+<code>127.0.0.1:7817</code> need no prompt and no
+<code>Access-Control-Allow-Private-Network</code> header;</li>
+<li>Chrome's built-in DNS client honours
+<code>/etc/resolver</code>;</li>
+<li><code>.lahe.localhost</code> is a secure context in Safari.</li>
+</ul>
+<p><strong>Why.</strong> If any of these is wrong, a builder will reach
+for a security relaxation to make the page work. Examples: adding
+<code>Access-Control-Allow-Private-Network: true</code> to every
+preflight, or widening which origins pass.</p>
+<p><strong>Fix.</strong> Add browser-walk rows in Chrome, Firefox and
+Safari for each assumption, run before the build commits to
+<code>.lahe</code> as the printed ending. Write down in advance that a
+failure means printing <code>.lahe.localhost</code> for that browser,
+not loosening a check.</p>
+<h2 id="what-holds-up">What holds up</h2>
+<ul>
+<li>Keeping the API on loopback Hosts only, and keeping
+<code>review.write</code>'s loopback-only origin rule, is right. So is
+keeping the Library's exact-Host, same-origin and token checks.</li>
+<li>Moving page serving into the helper removes the per-server
+Host-check gap (<code>LAHE-static-server-host-check</code>) and the
+port-history origin swapping.</li>
+<li>Per-name origins do separate storage and tokens better than shared
+<code>127.0.0.1</code> ports did, including cookies, which ports never
+separated. SR3 is about file contents, not storage.</li>
+</ul>
+<h2 id="cleanup-needed-1">Cleanup needed</h2>
+<p>Nothing. This review created only this file.</p>
+</body>
+</html>

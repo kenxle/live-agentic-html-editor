@@ -150,6 +150,23 @@ Separate addresses stop all of it with one rule the browser already follows. Opt
 
 - Not possible. When nothing listens on a port, the browser shows its own error page, and Lahe never sees the request.
 
+## Old comments at a new address
+
+A page reviewed before stable addresses had comments made at `127.0.0.1:<port>`. Those comments are in
+that origin's browser storage, and the helper's log. When the page opens at its stable address, the
+layer asks the helper once for this page's records (`records.read`) and shows the ones this browser does
+not hold, as cards. They are not posted back. An old Markdown review's page was its rendered file
+(`/<name>-<hash>.html`); the helper names that old path on the tag, so those comments come over too.
+`docs/CONTRACTS.md` has the guards.
+
+## Each page carries its own comments
+
+- **One review per file.** `lahe review` of a file that already has a review opens it and never makes a second. In another agent session's review it says whose it is and makes nothing; `lahe review retire` ends a review on purpose.
+- **One page, every address.** A comment made through a link shows at the file's own address, and a page load of a link to a file with its own review goes to its own address.
+- **Old splits show read-only.** Comments already filed in another review show on the rail as read-only cards, naming that review's title and agent.
+
+The design and its security reviews: [each_page_its_own_comments.md](../features/20261011.02_stable_addresses/parts/architecture/each_page_its_own_comments.md).
+
 ## Side finding
 
 While checking this, I found 63 page-server processes left running from test runs. 60 of them are from the idle-server tests (state folders named `lahe-idle-state-*`). That is a test leak of the kind CLAUDE.md's "Tests leave nothing running" rule forbids, and it costs battery. It should go on the bulletin as its own fix.
