@@ -574,6 +574,11 @@
     ".menuitem{display:block;width:100%;text-align:left;white-space:nowrap;font-size:12.5px;",
     "font-weight:500;color:var(--ink);padding:7px 10px;border-radius:7px}",
     ".menuitem:hover{background:var(--surface)}",
+    ".menuitem[hidden]{display:none}",
+    ".menuitem--group{display:flex;align-items:center;justify-content:space-between;gap:12px}",
+    ".menuitem--group::after{content:'›';font-size:14px;line-height:1;color:var(--ink-faint);transition:transform .12s}",
+    ".menuitem--group[aria-expanded='true']::after{transform:rotate(90deg)}",
+    ".menuitem--sub{padding-left:22px}",
 
     // --- tabs ---------------------------------------------------------------
     ".tabs{display:flex;gap:2px;padding:8px 10px 0;border-bottom:1px solid var(--line-soft)}",
@@ -1279,6 +1284,7 @@
   // register, so these two are handled where they are drawn. They act on the
   // tab that is open, because that is the list the reviewer is looking at.
   var FOLD_ALL = { COLLAPSE: "collapse-cards", EXPAND: "expand-cards" };
+  var EXPORT_GROUP = "export-review";
 
   // The keyboard shortcuts, behind the menu rather than standing in the pane.
   // The menu item opens a panel that lists every gesture in gestures.js.
@@ -1292,8 +1298,10 @@
   var DOCUMENT_STYLE = { LABEL: STYLE_WORDS.TITLE };
 
   var MENU_ITEMS = [
-    { action: "copy", label: "Copy review" },
-    { action: "export", label: "Export review to file" },
+    // Copy and Export sit under one "Export review" item that opens in place.
+    { action: EXPORT_GROUP, label: "Export review", group: true },
+    { action: "copy", label: "Copy review to clipboard", parent: EXPORT_GROUP },
+    { action: "export", label: "Export review to file", parent: EXPORT_GROUP },
     { action: FOLD_ALL.COLLAPSE, label: "Collapse all cards" },
     { action: FOLD_ALL.EXPAND, label: "Expand all cards" },
     { action: SHORTCUTS.ACTION, label: SHORTCUTS.LABEL },
@@ -2115,6 +2123,20 @@
         item.setAttribute("role", "menuitem");
         item.setAttribute("data-action", entry.action);
         item.tabIndex = -1;
+        if (entry.group) {
+          item.className = "menuitem menuitem--group";
+          item.setAttribute("aria-expanded", "false");
+          item.addEventListener("click", function () {
+            setMenuGroupOpen(entry.action, item.getAttribute("aria-expanded") !== "true");
+          });
+          menuList.appendChild(item);
+          return item;
+        }
+        if (entry.parent) {
+          item.className = "menuitem menuitem--sub";
+          item.setAttribute("data-parent", entry.parent);
+          item.hidden = true;
+        }
         item.addEventListener("click", function () {
           // Closed first, so the reviewer's click leaves nothing hanging over
           // the rail while the work runs, and the focus goes back where they
@@ -5222,8 +5244,19 @@
       if (!dom) return true;
       dom.menuList.hidden = true;
       dom.menuBtn.setAttribute("aria-expanded", "false");
+      setMenuGroupOpen(EXPORT_GROUP, false);
       if (returnFocus) dom.menuBtn.focus();
       return true;
+    }
+
+    // Open or shut a group inside the menu: its own items show under it.
+    function setMenuGroupOpen(group, open) {
+      if (!dom) return false;
+      dom.menuItems.forEach(function (node) {
+        if (node.getAttribute("data-action") === group) node.setAttribute("aria-expanded", open ? "true" : "false");
+        if (node.getAttribute("data-parent") === group) node.hidden = !open;
+      });
+      return open;
     }
 
     function toggleMenu() {
@@ -5268,6 +5301,19 @@
       } else if (event.key === "End") {
         event.preventDefault();
         focusMenuItem(-1);
+      } else if (event.key === "ArrowRight" || event.key === "ArrowLeft") {
+        // Into and out of a group, the way a submenu works.
+        var focused = visibleMenuItems()[index];
+        if (!focused) return;
+        var group = focused.getAttribute("aria-expanded") !== null ? focused.getAttribute("data-action") : focused.getAttribute("data-parent");
+        if (!group) return;
+        event.preventDefault();
+        setMenuGroupOpen(group, event.key === "ArrowRight");
+        var items = visibleMenuItems();
+        var groupNode = items.filter(function (node) {
+          return node.getAttribute("data-action") === group;
+        })[0];
+        focusMenuItem(items.indexOf(groupNode) + (event.key === "ArrowRight" ? 1 : 0));
       } else if (event.key === "Tab") {
         closeMenu(false);
       }

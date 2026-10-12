@@ -204,7 +204,11 @@ test("capture the rail as a reviewable mockup", async ({ page }) => {
 
     // The head's menu, open, and the shortcuts panel it opens.
     await page.evaluate(() => window.__lahe.rail.openMenu(0));
-    await snap("More actions menu", "The menu behind the three dots, open.");
+    await page.evaluate(() => {
+      const root = window.__lahe.rail.tabBody("active").getRootNode();
+      root.querySelector('.menuitem[data-action="export-review"]').click();
+    });
+    await snap("More actions menu", "The menu behind the three dots, open, with Export review opened.");
     await page.evaluate(() => {
       const root = window.__lahe.rail.tabBody("active").getRootNode();
       root.querySelector('.menuitem[data-action="shortcuts"]').click();

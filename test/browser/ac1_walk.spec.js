@@ -144,7 +144,7 @@ async function untetheredNote(page, text) {
  * item. The root is closed, so the geometry comes from the rail's own report.
  */
 async function chooseFromRailMenu(page, label) {
-  const opened = await pollUntil(
+  let opened = await pollUntil(
     async () => {
       const info = await page.evaluate(() => window.__lahe.rail.menuInfo());
       if (!info.present) throw new Error("the rail is not mounted, so it has no menu");
@@ -155,6 +155,14 @@ async function chooseFromRailMenu(page, label) {
     },
     { message: "the rail's header menu to open on a real click" }
   );
+  // Copy and Export live under "Export review", which opens in place.
+  if (!opened.items.some((one) => one.label === label)) {
+    const group = opened.items.filter((one) => one.label === "Export review")[0];
+    if (group) {
+      await page.mouse.click(group.rect.x + group.rect.width / 2, group.rect.y + group.rect.height / 2);
+      opened = await page.evaluate(() => window.__lahe.rail.menuInfo());
+    }
+  }
   const item = opened.items.filter((one) => one.label === label)[0];
   if (!item) {
     throw new Error(
@@ -169,7 +177,7 @@ const SENTINEL = "clipboard has not been written yet";
 
 async function copyThroughTheButton(page) {
   await page.evaluate((text) => navigator.clipboard.writeText(text), SENTINEL);
-  await chooseFromRailMenu(page, "Copy review");
+  await chooseFromRailMenu(page, "Copy review to clipboard");
   return pollUntil(
     async () => {
       const got = await page.evaluate(() => navigator.clipboard.readText());

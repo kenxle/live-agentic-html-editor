@@ -277,8 +277,7 @@ test.describe("the reviewer ends the review from the rail", () => {
       return window.__lahe.rail.menuInfo();
     });
     expect(menu.items.map((one) => one.label)).toEqual([
-      "Copy review",
-      "Export review to file",
+      "Export review",
       "Collapse all cards",
       "Expand all cards",
       "Keyboard shortcuts",

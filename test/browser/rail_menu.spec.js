@@ -99,6 +99,15 @@ async function chooseMenuItem(page, label) {
       return got.open ? got : null;
     }, { message: "the header menu to open on a click" });
   }
+  // Copy and Export live under "Export review", which opens in place.
+  if (!info.items.some((one) => one.label === label)) {
+    const group = info.items.filter((one) => one.label === "Export review")[0];
+    if (group) {
+      const g = centerOf(group.rect);
+      await page.mouse.click(g.x, g.y);
+      info = await menuInfo(page);
+    }
+  }
   const item = info.items.filter((one) => one.label === label)[0];
   if (!item) {
     throw new Error(
@@ -185,13 +194,13 @@ test.describe("the review's actions live in the head's menu", () => {
         return got.open ? got : null;
       }, { message: "the menu to open on a real click" });
       expect(info.expanded).toBe("true");
-      // Two review-level actions, plus the four the rail does to ITSELF:
+      // The review-level actions behind one Export review item, plus the four
+      // the rail does to ITSELF:
       // folding every card on the open tab either way, the shortcuts panel, and
       // present mode, which is the rail putting itself away for a talk rather
       // than work for boot.
       expect(info.items.map((one) => one.label)).toEqual([
-        "Copy review",
-        "Export review to file",
+        "Export review",
         "Collapse all cards",
         "Expand all cards",
         "Keyboard shortcuts",
@@ -247,6 +256,42 @@ test.describe("the review's actions live in the head's menu", () => {
       info = await menuInfo(page);
       expect(info.open, "a collapsed rail carries no open menu").toBe(false);
       await page.evaluate(() => window.__lahe.rail.collapse(false));
+    } finally {
+      await app.close();
+      await helper.kill9();
+    }
+  });
+
+  test("Export review opens in place to Copy review to clipboard and Export review to file, and shuts with the menu", async ({
+    page
+  }) => {
+    const { app, helper, token } = await startBoth();
+    try {
+      await bootedPage(page, app, helper, token);
+      await clickMenuButton(page);
+      let info = await pollUntil(async () => {
+        const got = await menuInfo(page);
+        return got.open ? got : null;
+      }, { message: "the menu to open" });
+      const labels = () => info.items.map((one) => one.label);
+      expect(labels()).toContain("Export review");
+      expect(labels(), "the two export actions wait under the group").not.toContain("Copy review to clipboard");
+
+      const group = info.items.filter((one) => one.label === "Export review")[0];
+      const at = centerOf(group.rect);
+      await page.mouse.click(at.x, at.y);
+      info = await menuInfo(page);
+      expect(info.open, "opening the group keeps the menu open").toBe(true);
+      const at2 = labels().indexOf("Export review");
+      expect(labels().slice(at2 + 1, at2 + 3)).toEqual(["Copy review to clipboard", "Export review to file"]);
+
+      await page.keyboard.press("Escape");
+      await clickMenuButton(page);
+      info = await pollUntil(async () => {
+        const got = await menuInfo(page);
+        return got.open ? got : null;
+      }, { message: "the menu to open again" });
+      expect(labels(), "the group is shut again on the next open").not.toContain("Copy review to clipboard");
     } finally {
       await app.close();
       await helper.kill9();
