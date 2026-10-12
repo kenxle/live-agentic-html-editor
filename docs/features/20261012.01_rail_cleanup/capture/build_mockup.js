@@ -48,7 +48,8 @@ function section(shot, i) {
             return (
               '<div class="mock-legend__row"><div class="mock-frame" data-mock-scheme="light"><aside class="rail">' +
               cleanHtml(row.html) +
-              '</aside></div><span class="mock-legend__label">' + esc(row.label) + "</span></div>"
+              '</aside></div><div class="mock-legend__text"><div class="mock-legend__label">' + esc(row.label) + "</div>" +
+              (row.tip ? '<p class="mock-legend__tip">' + esc(row.tip) + "</p>" : "") + "</div></div>"
             );
           })
           .join("\n") +
@@ -179,7 +180,8 @@ html, body { margin: 0; background: #f4f3ef; }
    or the rows below paint over its tip. The real rail has one head. */
 .mock-legend__row:hover, .mock-stage:hover { z-index: 20; }
 .mock-stage { position: relative; }
-.mock-legend__label { font-size: 15px; }
+.mock-legend__label { font-size: 13px; color: #55524b; }
+.mock-legend__tip { margin: 2px 0 0; font-size: 15px; }
 
 /* Unfix the copy: the real rail is pinned to the window; this one sits in the page,
    at its real width, showing every card instead of scrolling. */

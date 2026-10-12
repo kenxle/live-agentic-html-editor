@@ -299,7 +299,7 @@ test("capture the rail as a reviewable mockup", async ({ page }) => {
         dot.parentNode.setAttribute("data-lahe-tip", st.tip);
       }, state);
       const s = await page.evaluate(snapshotInPage, ".head");
-      legend.push({ label: state.label, html: s.html });
+      legend.push({ label: state.label, tip: state.tip, html: s.html });
     }
     // Put the real reading back, so the views after this one show it.
     await page.evaluate((d) => {
@@ -309,7 +309,7 @@ test("capture the rail as a reviewable mockup", async ({ page }) => {
       dot.setAttribute("data-loud", d.loud || "");
       if (d.tip) dot.parentNode.setAttribute("data-lahe-tip", d.tip);
     }, realDot);
-    shots.push({ label: "Status dot", caption: "The dot in the header, in each state. Shape and color both change.", legend: legend, css: shots[0].css, outside: shots[0].outside, hostAttrs: shots[0].hostAttrs });
+    shots.push({ label: "Status dot", caption: "The dot in the header, in each state. Shape and color both change. Under each label is the first line its hover shows; edit it there. The sentences under that first line are in the Hover text section at the bottom of this page.", legend: legend, css: shots[0].css, outside: shots[0].outside, hostAttrs: shots[0].hostAttrs });
     await page.evaluate(() => window.__lahe.rail.refreshScheme());
 
     // Collapsed.
