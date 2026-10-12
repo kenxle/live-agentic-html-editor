@@ -378,11 +378,11 @@
       panel.appendChild(listEl);
 
       footEl = el("footer", "lahe-rail-foot");
-      footEl.appendChild(el("span", "lahe-rail-footlabel", "A note about the page, tied to nothing"));
+      footEl.appendChild(el("span", "lahe-rail-footlabel", "Note on the whole page"));
       panel.appendChild(footEl);
       footEl.appendChild(hintList());
 
-      pill = el("button", "lahe-rail-pill", "Review");
+      pill = el("button", "lahe-rail-pill", "Lahe");
       pill.setAttribute("type", "button");
       pill.hidden = true;
       pill.addEventListener("click", function () {
@@ -416,7 +416,7 @@
       // closed root. Without it every class below is a name with nothing behind
       // it, which is exactly what shipped.
       ensureHostedStyle(footEl);
-      footEl.appendChild(el("span", "lahe-rail-footlabel", "A note about the page"));
+      footEl.appendChild(el("span", "lahe-rail-footlabel", "Note on the whole page"));
       host.appendChild(footEl);
       footEl.appendChild(hintList());
 
