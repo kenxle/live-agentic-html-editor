@@ -31,12 +31,16 @@
 
 var childProcess = require("node:child_process");
 var fs = require("node:fs");
+var os = require("node:os");
 var path = require("node:path");
 
 var LABEL = "lahe-helper";
 var INSTALL_FILE = "install.json";
 var LOG_FILE = "login-item.log";
 var WINDOWS_XML_FILE = "login-item.xml";
+// Written by the menu bar app's Stop; while it stands, no lahe command starts
+// the helper (menu bar brief R14).
+var STOP_FILE = "stopped.json";
 
 /** "macos", "linux", "windows", or null for a system with no login item. */
 function systemFor(platform) {
@@ -90,7 +94,15 @@ function windowsQuote(arg) {
   return out + "\\".repeat(slashes * 2) + '"';
 }
 
-function plist(label, args, logPath) {
+/**
+ * A launchd plist. `keepAliveOnCrash` restarts the program only when it exits
+ * with an error, so a clean exit (the menu bar app's Hide) stays stopped; the
+ * helper's item restarts on any exit.
+ */
+function plist(label, args, logPath, options) {
+  var keepAlive = options && options.keepAliveOnCrash
+    ? ["  <key>KeepAlive</key>", "  <dict>", "    <key>SuccessfulExit</key>", "    <false/>", "  </dict>"]
+    : ["  <key>KeepAlive</key>", "  <true/>"];
   return [
     '<?xml version="1.0" encoding="UTF-8"?>',
     '<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">',
@@ -105,9 +117,10 @@ function plist(label, args, logPath) {
     .concat([
       "  </array>",
       "  <key>RunAtLoad</key>",
-      "  <true/>",
-      "  <key>KeepAlive</key>",
-      "  <true/>",
+      "  <true/>"
+    ])
+    .concat(keepAlive)
+    .concat([
       "  <key>StandardOutPath</key>",
       "  <string>" + xmlEscape(logPath) + "</string>",
       "  <key>StandardErrorPath</key>",
@@ -208,6 +221,24 @@ function checkedLabel(label) {
   return text;
 }
 
+// The labels Lahe's own items use. A test or the spike passes its own label
+// through a seam, and those always start lahe-test or lahe-spike.
+var MENUBAR_LABEL = "lahe-menubar";
+var TEST_LABEL = /^lahe-(test|spike)(-[A-Za-z0-9_-]+)?$/;
+
+/**
+ * A label read back from install.json, before it goes anywhere near launchctl
+ * (menu bar security review SR6). Only Lahe's own two labels and test labels
+ * pass, so an edited install.json cannot point a lahe command at another job.
+ */
+function knownLabel(label) {
+  var text = checkedLabel(label);
+  if (text !== LABEL && text !== MENUBAR_LABEL && !TEST_LABEL.test(text)) {
+    throw new Error("install.json names " + JSON.stringify(text) + ", which is not a label lahe install writes; run `lahe install` again");
+  }
+  return text;
+}
+
 /**
  * Everything about one login item, computed and not yet written: its file,
  * the file's contents, and the service-manager commands for it.
@@ -281,7 +312,7 @@ function describe(spec) {
  * @param {{system: string, label: string, uid?: number}} record
  */
 function startCommands(record) {
-  var label = checkedLabel(record.label);
+  var label = knownLabel(record.label);
   if (record.system === "macos") {
     var uid = typeof record.uid === "number" ? record.uid : process.getuid();
     return [["launchctl", "kickstart", "gui/" + uid + "/" + label]];
@@ -313,6 +344,7 @@ async function runCommands(commands, runner) {
     if (!result || result.status !== 0) {
       return {
         ok: false,
+        notLoaded: notLoaded(result),
         failed: commands[i].join(" ") + " exited " + (result ? result.status : "?") +
           (result && result.output ? ": " + String(result.output).trim().slice(0, 400) : "")
       };
@@ -341,19 +373,135 @@ function defaultRunner(command, args) {
 // a restart soon after a start waits out that throttle.
 var START_WAIT_MS = 20000;
 
+// ---------------------------------------------------------------------------
+// Stop holds (menu bar brief R14)
+// ---------------------------------------------------------------------------
+//
+// The menu bar app's Stop writes <state>/stopped.json and then unloads the
+// helper's login item, because a plain kill would be restarted at once. The
+// file is the hold: startThroughItem refuses while it stands, so an agent's
+// lahe command fails in one line and starts nothing. `lahe install` removes
+// it, and so does the helper on its own start, which is how the next login
+// ends the hold. Nothing else removes it, so a running helper always means a
+// person started it.
+
+function stopPath(dir) {
+  return path.join(dir, STOP_FILE);
+}
+
+/**
+ * The stop marker, or null when Lahe is not stopped. A marker that cannot be
+ * read still stands: the file existing is the hold, and the time is only
+ * what the message says.
+ *
+ * @returns {{by: string, at: string|null}|null}
+ */
+function readStopMarker(dir) {
+  var text;
+  try { text = fs.readFileSync(stopPath(dir), "utf8"); } catch (err) { return err.code === "ENOENT" ? null : { by: "menu bar", at: null }; }
+  try {
+    var parsed = JSON.parse(text);
+    return {
+      by: parsed && typeof parsed.by === "string" && parsed.by ? parsed.by : "menu bar",
+      at: parsed && typeof parsed.at === "string" && !Number.isNaN(Date.parse(parsed.at)) ? parsed.at : null
+    };
+  } catch (err) {
+    return { by: "menu bar", at: null };
+  }
+}
+
+/** End the hold. The helper calls this as it starts; `lahe install` too. */
+function clearStopMarker(dir) {
+  try { fs.unlinkSync(stopPath(dir)); } catch (err) { if (err.code !== "ENOENT") throw err; }
+}
+
+/** "2026-10-12 15:41" in this computer's local time, or "an unknown time". */
+function stopTime(at) {
+  var when = at ? new Date(at) : null;
+  if (!when || Number.isNaN(when.getTime())) return "an unknown time";
+  var pad = function (n) { return String(n).padStart(2, "0"); };
+  return when.getFullYear() + "-" + pad(when.getMonth() + 1) + "-" + pad(when.getDate()) + " " +
+    pad(when.getHours()) + ":" + pad(when.getMinutes());
+}
+
+/** The one line every lahe command prints while the hold stands. */
+function stopMessage(marker) {
+  return "Lahe is stopped: the person using this computer stopped it from the " + marker.by + " at " +
+    stopTime(marker.at) + ". Nothing starts it until they click Start in the Lahe menu or run `lahe install`.";
+}
+
+/**
+ * Is the plist at the fixed path exactly what `lahe install` writes for this
+ * record? Before the CLI loads an unloaded item it checks this (security
+ * review SR6): a stale install, or a file someone else wrote, is refused
+ * rather than loaded.
+ */
+function plistMatchesInstall(record, plistPath, home, label) {
+  if (!record.node || !record.entry || !record.state_dir || typeof record.port !== "number") return false;
+  var expected;
+  try {
+    expected = describe({
+      system: "macos", home: home, label: label, uid: 0,
+      node: record.node, entry: record.entry, port: record.port, stateDir: record.state_dir
+    });
+  } catch (err) {
+    return false;
+  }
+  var actual;
+  try { actual = fs.readFileSync(plistPath, "utf8"); } catch (err) { return false; }
+  return expected.path === plistPath && actual === expected.contents;
+}
+
+/** launchctl's answer for a job it has no record of (kickstart exits 113). */
+function notLoaded(result) {
+  return !!result && (result.status === 113 || /could not find service/i.test(String(result.output || "")));
+}
+
+function didNotStart(record, waitMs, failed, more) {
+  return "the login item " + record.label + " did not start the helper on 127.0.0.1:" + record.port +
+    (waitMs === null ? "" : " within " + Math.round(waitMs / 1000) + " seconds") +
+    (failed ? " (" + failed + ")" : "") + (more ? "; " + more : "");
+}
+
 /**
  * Ask the installed login item to start the helper, and wait for it to answer.
  * The CLI never spawns its own helper when installed: a second copy would hold
  * the port, and the service manager's own restart would then loop on it.
  *
+ * Refuses, starting nothing, while the stop marker stands. On macOS, an item
+ * launchd has no record of (unloaded by hand, or a stale install) is
+ * bootstrapped from its fixed path first, but only when that plist is exactly
+ * what install writes for this record.
+ *
  * @param {object} record install.json
  * @param {function(): Promise<boolean>} isUp whether the helper answers
- * @param {{runner?: function, waitMs?: number}} [options]
+ * @param {{runner?: function, waitMs?: number, home?: string, uid?: number}} [options]
+ *   `home` and `uid` are seams for tests; the plist path comes from them and
+ *   the label, never from the record's login_item
  */
 async function startThroughItem(record, isUp, options) {
   var opts = options || {};
   var waitMs = typeof opts.waitMs === "number" ? opts.waitMs : START_WAIT_MS;
-  var ran = await runCommands(startCommands(record), opts.runner);
+  var marker = record.state_dir ? readStopMarker(record.state_dir) : null;
+  if (marker) {
+    var held = new Error(stopMessage(marker));
+    held.stopped = true;
+    throw held;
+  }
+  var commands = startCommands(record);
+  var ran = await runCommands(commands, opts.runner);
+  if (!ran.ok && record.system === "macos" && ran.notLoaded) {
+    var uid = typeof opts.uid === "number" ? opts.uid : process.getuid();
+    var label = knownLabel(record.label);
+    var plistPath = path.join(opts.home || os.homedir(), "Library", "LaunchAgents", label + ".plist");
+    if (!plistMatchesInstall(record, plistPath, opts.home || os.homedir(), label)) {
+      throw new Error(
+        didNotStart(record, null, ran.failed, "it is not loaded, and " + plistPath +
+          " is not what `lahe install` writes for this install, so it was not loaded; run `lahe install` to write it again")
+      );
+    }
+    ran = await runCommands([["launchctl", "bootstrap", "gui/" + uid, plistPath]].concat(startCommands({ system: "macos", label: label, uid: uid })), opts.runner);
+  }
   var deadline = Date.now() + waitMs;
   for (;;) {
     if (await isUp()) return;
@@ -362,10 +510,7 @@ async function startThroughItem(record, isUp, options) {
   }
   var reason = reinstallReason(record);
   throw new Error(
-    "the login item " + record.label + " did not start the helper on 127.0.0.1:" + record.port +
-      " within " + Math.round(waitMs / 1000) + " seconds" +
-      (ran.failed ? " (" + ran.failed + ")" : "") +
-      (reason ? "; " + reason : "") +
+    didNotStart(record, waitMs, ran.failed, reason) +
       (record.state_dir ? ". Its log is " + path.join(record.state_dir, LOG_FILE) : "") +
       ". `lahe uninstall` goes back to starting the helper on demand."
   );
@@ -664,6 +809,8 @@ module.exports = {
   QUIET_MS: QUIET_MS,
   QUIET_MAX_MS: QUIET_MAX_MS,
   LABEL: LABEL,
+  MENUBAR_LABEL: MENUBAR_LABEL,
+  STOP_FILE: STOP_FILE,
   INSTALL_FILE: INSTALL_FILE,
   LOG_FILE: LOG_FILE,
   systemFor: systemFor,
@@ -673,6 +820,13 @@ module.exports = {
   describe: describe,
   startCommands: startCommands,
   startThroughItem: startThroughItem,
+  knownLabel: knownLabel,
+  plistText: plist,
+  xmlEscape: xmlEscape,
+  readStopMarker: readStopMarker,
+  clearStopMarker: clearStopMarker,
+  stopMessage: stopMessage,
+  stopTime: stopTime,
   sourceRoots: sourceRoots,
   waitForQuiet: waitForQuiet,
   writeItem: writeItem,
