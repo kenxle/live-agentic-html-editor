@@ -914,6 +914,47 @@ var SITE_HANDLERS = {
   }
 };
 
+// ---------------------------------------------------------------------------
+// The menu bar's summary routes
+// ---------------------------------------------------------------------------
+//
+// Every request here has passed auth.checkProofRequest: a loopback Host, no
+// Sec-Fetch header, a proof signed with the CLI secret inside the window and a
+// nonce not seen in it. The helper signs every answer, errors included
+// (src/service/index.js). Neither route is a Library route, and the Library's
+// host never reaches them.
+
+function summaryVersionRefused() {
+  return {
+    status: protocol.statusFor("SUMMARY_VERSION"),
+    error: { code: "SUMMARY_VERSION", detail: "this helper answers summary_version " + protocol.SUMMARY_VERSION }
+  };
+}
+
+var SUMMARY_HANDLERS = {
+  "summary.read": function (request, deps) {
+    if (!deps.summary) throw missingDependency("summary.read", "summary");
+    // ?v= is in the signed path, so the version the app names is proved too.
+    if (request.query.v !== String(protocol.SUMMARY_VERSION)) return summaryVersionRefused();
+    return { status: 200, body: deps.summary.read() };
+  },
+
+  // The address catalog Open would use, found with no hand-off: it never
+  // queues a pick-up for an agent. A row only an agent could serve answers
+  // url null, and the app opens the Library instead.
+  "summary.open": async function (request, deps) {
+    var body = request.body || {};
+    if (body.summary_version !== protocol.SUMMARY_VERSION) return summaryVersionRefused();
+    if (!protocol.isSafeId(body.review)) {
+      return { status: 400, error: { code: "PROTO_BAD_REQUEST", detail: "the body must be {review, summary_version}" } };
+    }
+    var opened = await deps.catalogActions.open({ review: body.review, handoff: false }, deps.now());
+    if (opened.error && opened.error.code === "PROTO_NOT_OPENABLE") return { status: 200, body: { url: null } };
+    if (opened.error) return opened;
+    return { status: 200, body: { url: opened.body && opened.body.url ? opened.body.url : null } };
+  }
+};
+
 // Every route on the wire has a handler, checked at LOAD rather than at request
 // time. A route with no handler is a 500 in front of a reviewer otherwise.
 protocol.ROUTES.forEach(function (r) {
@@ -932,6 +973,28 @@ protocol.SITE_ROUTES.forEach(function (r) {
     throw new Error("src/service/routes.js has no handler for site route " + r.name);
   }
 });
+
+protocol.SUMMARY_ROUTES.forEach(function (r) {
+  if (typeof SUMMARY_HANDLERS[r.name] !== "function") {
+    throw new Error("src/service/routes.js has no handler for summary route " + r.name);
+  }
+});
+
+/** Match a method and a pathname to a summary route, or null. */
+function matchSummaryRoute(method, pathname) {
+  for (var i = 0; i < protocol.SUMMARY_ROUTES.length; i += 1) {
+    var r = protocol.SUMMARY_ROUTES[i];
+    if (r.path === pathname && r.method === String(method).toUpperCase()) return r;
+  }
+  return null;
+}
+
+/** Is this path one of the summary's, for any method? The preflight refuses them. */
+function isSummaryPath(pathname) {
+  return protocol.SUMMARY_ROUTES.some(function (r) {
+    return r.path === pathname;
+  });
+}
 
 /** Match a method and a pathname to a site route, or null. */
 function matchSiteRoute(method, pathname) {
@@ -989,6 +1052,7 @@ function handlerFor(name) {
   if (Object.prototype.hasOwnProperty.call(HANDLERS, name)) return HANDLERS[name];
   if (Object.prototype.hasOwnProperty.call(CATALOG_HANDLERS, name)) return CATALOG_HANDLERS[name];
   if (Object.prototype.hasOwnProperty.call(SITE_HANDLERS, name)) return SITE_HANDLERS[name];
+  if (Object.prototype.hasOwnProperty.call(SUMMARY_HANDLERS, name)) return SUMMARY_HANDLERS[name];
   throw new Error("unknown route: " + String(name));
 }
 
@@ -996,8 +1060,11 @@ module.exports = {
   HANDLERS: HANDLERS,
   CATALOG_HANDLERS: CATALOG_HANDLERS,
   SITE_HANDLERS: SITE_HANDLERS,
+  SUMMARY_HANDLERS: SUMMARY_HANDLERS,
   handlerFor: handlerFor,
   matchSiteRoute: matchSiteRoute,
+  matchSummaryRoute: matchSummaryRoute,
+  isSummaryPath: isSummaryPath,
   matchRoute: matchRoute,
   matchCatalogRoute: matchCatalogRoute,
   isCatalogPath: isCatalogPath

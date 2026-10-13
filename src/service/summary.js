@@ -36,12 +36,13 @@
 var fs = require("node:fs");
 var path = require("node:path");
 
+var protocol = require("../shared/protocol.js");
 var stateDir = require("./state_dir.js");
 var catalogReader = require("./catalog_reader.js");
 
 // The answer's version. The app sends the one it was built for; a mismatch is
 // a signed 409 (routes.js).
-var SUMMARY_VERSION = 1;
+var SUMMARY_VERSION = protocol.SUMMARY_VERSION;
 
 // The day-one cutoff, helper-only writer: {version, seeded_at}.
 var SUMMARY_FILE = "summary.json";
