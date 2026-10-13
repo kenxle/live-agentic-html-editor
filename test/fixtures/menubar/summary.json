@@ -147,5 +147,5 @@
       }
     ]
   },
-  "library_url": "http://library.lahe.localhost:1483"
+  "library_url": "http://library.lahe.localhost:1483/catalog"
 }

@@ -596,6 +596,30 @@ function countItems(projected) {
 // the kept state. The first rebuild after startup still reads the whole log
 // once; after that, never.
 
+/**
+ * Is this run of events something a kept fold can be continued with?
+ *
+ * Only a strictly increasing run of seqs is. Anything else means the log is
+ * not what the fold thinks it is: a second writer on the same directory hands
+ * out a seq the fold has already passed, and a hand-written or legacy line
+ * carries no seq at all. Both used to be skipped, silently, which is a
+ * comment quietly missing from what an agent reads. They are treated as a
+ * reason to start over instead, and starting over is the from-the-top fold,
+ * which is the reference answer by definition.
+ *
+ * @param {object} fold a createFold() value
+ * @param {object[]} events the events after it, in file order
+ */
+function continuesFold(fold, events) {
+  var at = fold.seq;
+  for (var i = 0; i < events.length; i += 1) {
+    var seq = events[i][protocol.EVENT_FIELD.SEQ];
+    if (typeof seq !== "number" || seq <= at) return false;
+    at = seq;
+  }
+  return true;
+}
+
 function createProjector(options) {
   var opts = options || {};
   if (!opts.dir) throw new Error("createProjector: dir is required");
@@ -694,27 +718,6 @@ function createProjector(options) {
   }
 
   /**
-   * Is this run of events something the kept fold can be continued with?
-   *
-   * Only a strictly increasing run of seqs is. Anything else means the log is
-   * not what the fold thinks it is: a second writer on the same directory hands
-   * out a seq the fold has already passed, and a hand-written or legacy line
-   * carries no seq at all. Both used to be skipped, silently, which is a
-   * comment quietly missing from what an agent reads. They are treated as a
-   * reason to start over instead, and starting over is the from-the-top fold,
-   * which is the reference answer by definition.
-   */
-  function continues(fold, events) {
-    var at = fold.seq;
-    for (var i = 0; i < events.length; i += 1) {
-      var seq = events[i][protocol.EVENT_FIELD.SEQ];
-      if (typeof seq !== "number" || seq <= at) return false;
-      at = seq;
-    }
-    return true;
-  }
-
-  /**
    * Fold everything that has landed since this review's fold last looked.
    *
    * The first pass reads the log whole, the way regenerate does, and so does
@@ -731,7 +734,7 @@ function createProjector(options) {
 
     if (entry.started && log.epoch(reviewId) === entry.epoch) {
       var events = log.since(reviewId, entry.fold.seq);
-      if (log.epoch(reviewId) === entry.epoch && continues(entry.fold, events)) {
+      if (log.epoch(reviewId) === entry.epoch && continuesFold(entry.fold, events)) {
         foldEvents(entry.fold, events, { onDropped: dropped });
         return entry;
       }
@@ -939,6 +942,7 @@ module.exports = {
   currentItems: currentItems,
   createFold: createFold,
   foldEvents: foldEvents,
+  continuesFold: continuesFold,
   itemsOf: itemsOf,
   projectFold: projectFold,
   itemsFrom: itemsFrom,
