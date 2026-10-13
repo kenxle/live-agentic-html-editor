@@ -16,7 +16,7 @@ const path = require("node:path");
 
 const loginItem = require("../../src/service/login_item.js");
 const menubar = require("../../src/service/menubar.js");
-const { fakeMac, writeMenubarSources } = require("../helpers/fake_mac.js");
+const { fakeMac, writeMenubarSources, XCRUN } = require("../helpers/fake_mac.js");
 
 const LABEL = "lahe-test-menubar-" + process.pid;
 
@@ -225,11 +225,11 @@ test("V25: removeApp unloads the item, removes its plist, the built app and the 
 // --- Task 3.3: rebuild on change ----------------------------------------------
 
 /** The tick's child process, run in this process with the fake Mac. */
-function inProcess(mac) {
+function inProcess(mac, home) {
   let builds = 0;
   const spawnRebuild = (dir) => {
     builds += 1;
-    return menubar.rebuildNow({ stateDir: dir, uid: 501, label: LABEL, runner: mac.runner, arch: "arm64" });
+    return menubar.rebuildNow({ stateDir: dir, home: home, uid: 501, label: LABEL, runner: mac.runner, arch: "arm64" });
   };
   return { spawnRebuild, builds: () => builds };
 }
@@ -244,8 +244,8 @@ async function installed(t, options) {
 
 test("V24: an unchanged source stamp does nothing", async (t) => {
   const { w, mac } = await installed(t);
-  const child = inProcess(mac);
-  const result = await menubar.tick({ stateDir: w.dir, platform: "darwin", spawnRebuild: child.spawnRebuild });
+  const child = inProcess(mac, w.home);
+  const result = await menubar.tick({ stateDir: w.dir, platform: "darwin", home: w.home, uid: 501, label: LABEL, spawnRebuild: child.spawnRebuild });
   assert.equal(result.rebuilt, false);
   assert.equal(child.builds(), 0);
   assert.deepEqual(mac.calls, []);
@@ -254,8 +254,8 @@ test("V24: an unchanged source stamp does nothing", async (t) => {
 test("V24: a changed stamp in the installed clone rebuilds once, swaps the app in, and restarts it because it was running", async (t) => {
   const { w, mac } = await installed(t);
   writeSources(w.clone, "// version two\n");
-  const child = inProcess(mac);
-  const env = { stateDir: w.dir, platform: "darwin", spawnRebuild: child.spawnRebuild };
+  const child = inProcess(mac, w.home);
+  const env = { stateDir: w.dir, platform: "darwin", home: w.home, uid: 501, label: LABEL, spawnRebuild: child.spawnRebuild };
   // Two ticks while the first build runs: one build.
   const [first, second] = await Promise.all([menubar.tick(env), menubar.tick(env)]);
   assert.equal(child.builds(), 1);
@@ -276,8 +276,8 @@ test("V24: a hidden app is rebuilt but not restarted, so it stays hidden", async
   const { w, mac } = await installed(t);
   mac.job(LABEL).running = false; // Hide: loaded, not running
   writeSources(w.clone, "// version two\n");
-  const child = inProcess(mac);
-  await menubar.tick({ stateDir: w.dir, platform: "darwin", spawnRebuild: child.spawnRebuild });
+  const child = inProcess(mac, w.home);
+  await menubar.tick({ stateDir: w.dir, platform: "darwin", home: w.home, uid: 501, label: LABEL, spawnRebuild: child.spawnRebuild });
   assert.equal(fs.readFileSync(appProgram(w), "utf8"), "// version two\n");
   assert.equal(mac.calls.some((c) => c[1] === "kickstart"), false, "no kickstart");
   assert.equal(mac.job(LABEL).running, false);
@@ -289,8 +289,8 @@ test("V24: a failed build keeps the old app, logs, records last_error, and does 
   writeSources(w.clone, "// broken\n");
   const broken = fakeMac({ compiles: false });
   broken.jobs[LABEL] = { loaded: true, running: true };
-  const child = inProcess(broken);
-  const env = { stateDir: w.dir, platform: "darwin", spawnRebuild: child.spawnRebuild };
+  const child = inProcess(broken, w.home);
+  const env = { stateDir: w.dir, platform: "darwin", home: w.home, uid: 501, label: LABEL, spawnRebuild: child.spawnRebuild };
   await menubar.tick(env);
   assert.equal(child.builds(), 1);
   assert.equal(fs.readFileSync(appProgram(w), "utf8"), "// version one\n", "the old app stays");
@@ -308,8 +308,8 @@ test("V24: a failed build keeps the old app, logs, records last_error, and does 
   writeSources(w.clone, "// fixed\n");
   const fixed = fakeMac();
   fixed.jobs[LABEL] = { loaded: true, running: true };
-  const again = inProcess(fixed);
-  await menubar.tick({ stateDir: w.dir, platform: "darwin", spawnRebuild: again.spawnRebuild });
+  const again = inProcess(fixed, w.home);
+  await menubar.tick({ stateDir: w.dir, platform: "darwin", home: w.home, uid: 501, label: LABEL, spawnRebuild: again.spawnRebuild });
   assert.equal(again.builds(), 1, "a new stamp is built");
   assert.equal(fs.readFileSync(appProgram(w), "utf8"), "// fixed\n");
   assert.equal(loginItem.readInstall(w.dir).menubar.last_error, undefined, "a good build clears the error");
@@ -322,35 +322,162 @@ test("V24 and SR5: only the clone install.json names is compiled, never a worktr
   const worktree = path.join(w.root, "worktree");
   writeSources(worktree, "// worktree copy\n");
   writeSources(w.clone, "// version two\n");
-  const child = inProcess(mac);
-  await menubar.tick({ stateDir: w.dir, platform: "darwin", spawnRebuild: child.spawnRebuild });
+  const child = inProcess(mac, w.home);
+  await menubar.tick({ stateDir: w.dir, platform: "darwin", home: w.home, uid: 501, label: LABEL, spawnRebuild: child.spawnRebuild });
   assert.equal(fs.readFileSync(appProgram(w), "utf8"), "// version two\n");
   assert.equal(mac.calls.some((c) => c.some((a) => String(a).indexOf(worktree) !== -1)), false);
   // A worktree change alone never triggers a build.
   writeSources(worktree, "// worktree copy, edited\n");
-  assert.equal((await menubar.tick({ stateDir: w.dir, platform: "darwin", spawnRebuild: child.spawnRebuild })).rebuilt, false);
+  assert.equal((await menubar.tick({ stateDir: w.dir, platform: "darwin", home: w.home, uid: 501, label: LABEL, spawnRebuild: child.spawnRebuild })).rebuilt, false);
   assert.equal(child.builds(), 1);
 });
 
 test("V24: the tick does nothing off macOS, without the icon, or without the source", async (t) => {
   const w = world(t);
   const child = { spawnRebuild: () => { throw new Error("must not build"); } };
-  assert.equal((await menubar.tick({ stateDir: w.dir, platform: "linux", spawnRebuild: child.spawnRebuild })).rebuilt, false);
-  assert.equal((await menubar.tick({ stateDir: w.dir, platform: "darwin", spawnRebuild: child.spawnRebuild })).rebuilt, false);
+  assert.equal((await menubar.tick({ stateDir: w.dir, platform: "linux", home: w.home, uid: 501, label: LABEL, spawnRebuild: child.spawnRebuild })).rebuilt, false);
+  assert.equal((await menubar.tick({ stateDir: w.dir, platform: "darwin", home: w.home, uid: 501, label: LABEL, spawnRebuild: child.spawnRebuild })).rebuilt, false);
   const record = loginItem.readInstall(w.dir);
   record.menubar = { app: "/x", label: LABEL, login_item: "/y", source_stamp: "0".repeat(64), built_at: "2026-10-12T00:00:00.000Z" };
   loginItem.writeInstall(w.dir, record);
   fs.renameSync(path.join(w.clone, "macos"), path.join(w.root, "macos-moved"));
-  assert.equal((await menubar.tick({ stateDir: w.dir, platform: "darwin", spawnRebuild: child.spawnRebuild })).rebuilt, false);
+  assert.equal((await menubar.tick({ stateDir: w.dir, platform: "darwin", home: w.home, uid: 501, label: LABEL, spawnRebuild: child.spawnRebuild })).rebuilt, false);
 });
 
 test("rebuildNow with the icon not installed says how to install it", async (t) => {
   const w = world(t);
   const mac = fakeMac();
-  const result = await menubar.rebuildNow({ stateDir: w.dir, uid: 501, label: LABEL, runner: mac.runner, arch: "arm64" });
+  const result = await menubar.rebuildNow({ stateDir: w.dir, home: w.home, uid: 501, label: LABEL, runner: mac.runner, arch: "arm64" });
   assert.equal(result.ok, false);
   assert.match(result.message, /lahe install --menu-bar/);
   assert.deepEqual(mac.calls, []);
+});
+
+// --- Fix round 3: a failed build's stamp, a quiet tick, one label -----------------
+
+test("a failed rebuild records the stamp of the source it compiled, so a change that lands during the compile is built on the next tick", async (t) => {
+  const { w } = await installed(t);
+  writeSources(w.clone, "// broken\n");
+  const mac = fakeMac();
+  mac.jobs[LABEL] = { loaded: true, running: true };
+  const swift = path.join(w.clone, "macos", "menubar", "LaheMenuBar.swift");
+  // swiftc fails, and while it runs the person saves a fix in the clone.
+  const racing = (command, args) => {
+    if (command === XCRUN && args[0] === "swiftc") {
+      fs.writeFileSync(swift, "// fixed while it compiled\n");
+      return { status: 1, output: "LaheMenuBar.swift:1:1: error: expected expression" };
+    }
+    return mac.runner(command, args);
+  };
+  let builds = 0;
+  const env = {
+    stateDir: w.dir, platform: "darwin", home: w.home, uid: 501, label: LABEL,
+    spawnRebuild: (dir) => {
+      builds += 1;
+      return menubar.rebuildNow({ stateDir: dir, home: w.home, uid: 501, label: LABEL, runner: builds === 1 ? racing : mac.runner, arch: "arm64" });
+    }
+  };
+  assert.equal((await menubar.tick(env)).rebuilt, false);
+  assert.equal(builds, 1);
+  const failed = loginItem.readInstall(w.dir).menubar.last_error;
+  assert.notEqual(failed.source_stamp, menubar.sourceStamp(w.clone), "the error names the source that failed, not the fix that landed after");
+
+  const next = await menubar.tick(env);
+  assert.notEqual(next.reason, "failed before");
+  assert.equal(builds, 2, "the fix is built");
+  assert.equal(next.rebuilt, true);
+  assert.equal(fs.readFileSync(appProgram(w), "utf8"), "// fixed while it compiled\n");
+});
+
+test("a quiet tick stats the source and reads none of it; a changed file is still hashed and built", async (t) => {
+  const { w, mac } = await installed(t);
+  const child = inProcess(mac, w.home);
+  const env = { stateDir: w.dir, platform: "darwin", home: w.home, uid: 501, label: LABEL, spawnRebuild: child.spawnRebuild };
+  assert.equal((await menubar.tick(env)).reason, "current");
+  const src = path.join(w.clone, "macos", "menubar");
+  const reads = [];
+  const real = fs.readFileSync;
+  fs.readFileSync = function (file) {
+    if (String(file).indexOf(src) === 0) reads.push(String(file));
+    return real.apply(fs, arguments);
+  };
+  let quiet;
+  try {
+    quiet = [await menubar.tick(env), await menubar.tick(env)];
+  } finally {
+    fs.readFileSync = real;
+  }
+  assert.deepEqual(quiet.map((r) => r.reason), ["current", "current"]);
+  assert.deepEqual(reads, [], "no source file opened on a quiet tick");
+  writeSources(w.clone, "// version two, longer\n");
+  assert.equal((await menubar.tick(env)).rebuilt, true);
+  assert.equal(child.builds(), 1);
+});
+
+test("one label, two state folders: a copy's commands run no launchctl and leave the other folder's icon and plist alone", async (t) => {
+  const w = world(t);
+  const mac = fakeMac();
+  assert.equal((await menubar.installApp(base(w, mac, { clone: w.clone }))).ok, true);
+  const plistPath = path.join(w.home, "Library", "LaunchAgents", LABEL + ".plist");
+  const plistA = fs.readFileSync(plistPath, "utf8");
+  // B is a copy of A's state folder: the same install.json and menubar block.
+  const b = path.join(w.root, "state-copy");
+  fs.cpSync(w.dir, b, { recursive: true });
+  const onB = { stateDir: b, home: w.home, uid: 501, label: LABEL, runner: mac.runner, arch: "arm64" };
+  writeSources(w.clone, "// version two\n");
+  mac.calls.length = 0;
+
+  let spawned = 0;
+  const ticked = await menubar.tick({ stateDir: b, platform: "darwin", home: w.home, uid: 501, label: LABEL, spawnRebuild: () => { spawned += 1; return Promise.resolve({ ok: true }); } });
+  assert.equal(ticked.rebuilt, false);
+  assert.equal(spawned, 0, "B's helper does not build A's icon");
+
+  const rebuilt = await menubar.rebuildNow(onB);
+  assert.equal(rebuilt.ok, true, rebuilt.message);
+  assert.equal(rebuilt.restarted, false);
+  assert.equal(rebuilt.owned, false);
+
+  const shown = await menubar.showApp(onB);
+  assert.equal(shown.ok, false);
+  assert.match(shown.message, /lahe install --menu-bar/);
+
+  assert.equal((await menubar.appState(Object.assign({ platform: "darwin" }, onB))).running, false);
+
+  assert.equal((await menubar.removeApp(onB)).ok, true);
+  assert.deepEqual(mac.calls.filter((c) => c[0] === "launchctl"), [], "no launchctl call from B");
+  assert.equal(fs.readFileSync(plistPath, "utf8"), plistA, "A's plist is untouched");
+  assert.deepEqual(mac.job(LABEL), { loaded: true, running: true }, "A's icon still runs");
+  assert.equal(fs.existsSync(menubar.appPath(b)), false, "B's own app is gone");
+  assert.equal(loginItem.readInstall(b).menubar, undefined, "B's own block is gone");
+  assert.ok(loginItem.readInstall(w.dir).menubar, "A's block stays");
+  assert.ok(fs.existsSync(appProgram(w)), "A's app stays");
+});
+
+test("the helper's 15-second beat runs menubar.tick for an always-on helper only", async (t) => {
+  // src/service/index.js calls the module's tick on its one timer; a stand-in
+  // records the calls, and `schedule` hands the test the timer's callback.
+  const service = require("../../src/service/index.js");
+  const real = menubar.tick;
+  const ticked = [];
+  menubar.tick = (env) => { ticked.push(env.stateDir); return Promise.resolve({ rebuilt: false, reason: "test" }); };
+  t.after(() => { menubar.tick = real; });
+  const dirs = {};
+  for (const alwaysOn of [false, true]) {
+    const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "lahe-menubar-beat-")));
+    t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+    fs.mkdirSync(path.join(root, "home"));
+    let beat = null;
+    const helper = await service.serve({
+      port: 0, stateDir: path.join(root, "state"), quiet: true, pagesPort: 0, sitesHome: path.join(root, "home"), alwaysOn: alwaysOn,
+      schedule: (fn) => { beat = fn; return null; }
+    });
+    t.after(() => helper.close());
+    dirs[alwaysOn] = helper.dir;
+    assert.equal(typeof beat, "function", "the helper scheduled its beat");
+    await beat();
+    await beat();
+  }
+  assert.deepEqual(ticked, [dirs[true], dirs[true]], "two beats of the always-on helper tick; the on-demand helper's never do");
 });
 
 // --- Task 3.4's module half: what status prints ---------------------------------
@@ -358,7 +485,7 @@ test("rebuildNow with the icon not installed says how to install it", async (t) 
 test("V26: appState reads installed and running, installed and not running, not installed, a failed rebuild, and stopped", async (t) => {
   const w = world(t);
   const mac = fakeMac();
-  const ask = () => menubar.appState({ stateDir: w.dir, uid: 501, label: LABEL, runner: mac.runner, platform: "darwin" });
+  const ask = () => menubar.appState({ stateDir: w.dir, home: w.home, uid: 501, label: LABEL, runner: mac.runner, platform: "darwin" });
   assert.deepEqual(await ask(), { installed: false, running: false, stopped: null, lastError: null });
   await menubar.installApp(base(w, mac, { clone: w.clone }));
   assert.equal((await ask()).running, true);
@@ -384,7 +511,7 @@ test("labels are constants: the real label is lahe-menubar, and a label read fro
   loginItem.writeInstall(w.dir, record);
   mac.calls.length = 0;
   await menubar.showApp(base(w, mac));
-  await menubar.appState({ stateDir: w.dir, uid: 501, label: LABEL, runner: mac.runner, platform: "darwin" });
+  await menubar.appState({ stateDir: w.dir, home: w.home, uid: 501, label: LABEL, runner: mac.runner, platform: "darwin" });
   await menubar.removeApp(base(w, mac));
   assert.equal(mac.calls.some((c) => c.join(" ").indexOf("com.apple.Finder") !== -1), false);
 });

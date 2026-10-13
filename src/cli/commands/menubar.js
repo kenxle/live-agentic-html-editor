@@ -112,7 +112,11 @@ async function run(argv, deps) {
   }
   out(
     "lahe menubar: rebuilt " + rebuilt.app + "; " +
-      (rebuilt.restarted ? "restarted it." : "it was not running, so it was left as it was.") + "\n"
+      (rebuilt.restarted
+        ? "restarted it."
+        : rebuilt.owned === false
+          ? "the icon's login item belongs to another state folder, so nothing was restarted."
+          : "it was not running, so it was left as it was.") + "\n"
   );
   return protocol.CLI_EXIT.OK;
 }

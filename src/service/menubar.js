@@ -21,6 +21,12 @@
 // install.json to run launchctl. The block install.json records is what
 // `lahe status` prints and what the tick compares, nothing more.
 //
+// ONE LABEL, MANY STATE FOLDERS. The label and plist path are fixed, so a
+// copy of a state folder, or a second one, shares them with the folder that
+// installed the icon. Before any launchctl call on the label, ownsItem checks
+// that the plist at the fixed path is exactly what this folder would write;
+// when it is not, only this folder's own files are touched.
+//
 // A REBUILD RESPECTS HIDE. After swapping a rebuilt app in, it is restarted
 // only if launchctl says it was running, so a hidden icon stays hidden through
 // a `git pull` (brief R17).
@@ -126,8 +132,10 @@ function defaultRunner(command, args) {
   return { status: result.status, output: (result.stdout || "") + (result.stderr || "") };
 }
 
-function failure(code, message) {
-  return { ok: false, code: code, message: message };
+function failure(code, message, stamp) {
+  var out = { ok: false, code: code, message: message };
+  if (stamp) out.stamp = stamp;
+  return out;
 }
 
 function firstLines(text, count) {
@@ -182,7 +190,9 @@ function swapInto(built, dest) {
  *          defines?: string[], now?: function(): number}} options
  *   `defines` adds `-D <name>` per name: the app's test labels, for a test build
  * @returns {Promise<{ok: true, app: string, stamp: string, builtAt: string}|
- *                   {ok: false, code: string, message: string}>}
+ *                   {ok: false, code: string, message: string, stamp?: string}>}
+ *   A failed compile carries the stamp of the copy it compiled, so the caller
+ *   records the source that failed, not whatever the clone holds by then.
  */
 async function build(options) {
   var run = options.runner || defaultRunner;
@@ -227,9 +237,9 @@ async function build(options) {
     var command = compileCommand({ arch: arch, out: program, sources: sources, defines: options.defines });
     var compiled = await run(command[0], command.slice(1));
     if (!compiled || compiled.status !== 0) {
-      return failure(FAILED.COMPILE, "swiftc failed: " + firstLines(compiled && compiled.output, 20));
+      return failure(FAILED.COMPILE, "swiftc failed: " + firstLines(compiled && compiled.output, 20), stamp);
     }
-    if (!fs.existsSync(program)) return failure(FAILED.COMPILE, "swiftc reported success but wrote no program");
+    if (!fs.existsSync(program)) return failure(FAILED.COMPILE, "swiftc reported success but wrote no program", stamp);
     fs.copyFileSync(path.join(src, "Info.plist"), path.join(app, "Contents", "Info.plist"));
 
     var dest = appPath(options.stateDir);
@@ -298,6 +308,19 @@ function appendLog(stateDir, line) {
   } catch (err) { /* the log is a courtesy; the record carries the error too */ }
 }
 
+/**
+ * Is the plist at the fixed path exactly what this state folder writes? The
+ * label and path are shared by every state folder, so a copy of the folder
+ * would otherwise unload, start or restart the icon another folder installed.
+ */
+function ownsItem(item) {
+  try {
+    return fs.readFileSync(item.path, "utf8") === item.contents;
+  } catch (err) {
+    return false;
+  }
+}
+
 /** Is the app running now, by `launchctl print`? False when its item is not loaded. */
 async function isRunning(item, run) {
   var printed = await run(item.print[0], item.print.slice(1));
@@ -348,28 +371,34 @@ async function showApp(options) {
   var record = loginItem.readInstall(options.stateDir);
   if (!record || !record.menubar) return notInstalled();
   var item = describeApp(specOf(options));
+  // Checked before any launchctl call: the plist must be this folder's, or
+  // the kickstart would start the icon another state folder installed.
+  if (!ownsItem(item)) {
+    return failure(
+      FAILED.NOT_INSTALLED,
+      "the menu bar app's login item " + item.path + " is missing or not what Lahe writes for this state folder, so it was not started; run `lahe install --menu-bar`"
+    );
+  }
   var shown = await loginItem.runCommands(item.show, run);
   if (shown.ok) return { ok: true };
   if (!shown.notLoaded) return failure("launchctl", "launchd did not start the menu bar app (" + shown.failed + ")");
-  var actual = null;
-  try { actual = fs.readFileSync(item.path, "utf8"); } catch (err) { actual = null; }
-  if (actual !== item.contents) {
-    return failure(
-      FAILED.NOT_INSTALLED,
-      "the menu bar app's login item " + item.path + " is missing or not what Lahe writes, so it was not loaded; run `lahe install --menu-bar`"
-    );
-  }
   var loaded = await loginItem.runCommands(item.load, run);
   return loaded.ok ? { ok: true } : failure("launchctl", "launchd did not start the menu bar app (" + loaded.failed + ")");
 }
 
-/** Unload the app's item, remove its plist, the built app and the menubar block. */
+/**
+ * Unload the app's item, remove its plist, the built app and the menubar
+ * block. The item and its plist are left alone when the plist is another
+ * state folder's: only this folder's app and block go.
+ */
 async function removeApp(options) {
   var run = options.runner || defaultRunner;
   var item = describeApp(specOf(options));
-  // Not loaded is fine: the goal is that it is not.
-  await loginItem.runCommands(item.unload, run);
-  try { fs.unlinkSync(item.path); } catch (err) { if (err.code !== "ENOENT") throw err; }
+  if (ownsItem(item)) {
+    // Not loaded is fine: the goal is that it is not.
+    await loginItem.runCommands(item.unload, run);
+    try { fs.unlinkSync(item.path); } catch (err) { if (err.code !== "ENOENT") throw err; }
+  }
   removeTree(appPath(options.stateDir));
   writeBlock(options.stateDir, null);
   return { ok: true, item: item };
@@ -386,6 +415,10 @@ async function rebuildNow(options) {
   var record = loginItem.readInstall(options.stateDir);
   if (!record || !record.menubar) return notInstalled();
   if (!record.clone) return failure(FAILED.SOURCE, "install.json names no clone to build from; run `lahe install --menu-bar`");
+  // The stamp before the build: what a failure that compiled nothing (no
+  // command line tools) records. A failed compile records its own copy's.
+  var before = null;
+  try { before = sourceStamp(record.clone); } catch (err) { before = null; }
   var built = await build({
     clone: record.clone,
     stateDir: options.stateDir,
@@ -395,8 +428,7 @@ async function rebuildNow(options) {
     now: options.now
   });
   if (!built.ok) {
-    var stamp = null;
-    try { stamp = sourceStamp(record.clone); } catch (err) { stamp = null; }
+    var stamp = built.stamp || before;
     appendLog(options.stateDir, "rebuild failed (source " + (stamp ? stamp.slice(0, 12) : "unreadable") + "): " + built.message);
     var lastError = { at: new Date((options.now || Date.now)()).toISOString(), message: built.message, source_stamp: stamp };
     writeBlock(options.stateDir, function (block) { return Object.assign({}, block, { last_error: lastError }); });
@@ -410,13 +442,18 @@ async function rebuildNow(options) {
 
   var item = describeApp(specOf(options));
   var restarted = false;
-  if (await isRunning(item, run)) {
+  var owned = ownsItem(item);
+  if (owned && (await isRunning(item, run))) {
     var again = await loginItem.runCommands(item.restart, run);
     restarted = again.ok;
     if (!again.ok) appendLog(options.stateDir, "rebuilt, but the restart failed: " + again.failed);
   }
-  appendLog(options.stateDir, "rebuilt from source " + built.stamp.slice(0, 12) + (restarted ? ", restarted" : ", not running so not restarted"));
-  return { ok: true, app: built.app, stamp: built.stamp, restarted: restarted };
+  appendLog(
+    options.stateDir,
+    "rebuilt from source " + built.stamp.slice(0, 12) +
+      (restarted ? ", restarted" : owned ? ", not running so not restarted" : ", the icon's login item is another state folder's, so not restarted")
+  );
+  return { ok: true, app: built.app, stamp: built.stamp, restarted: restarted, owned: owned };
 }
 
 // ---------------------------------------------------------------------------
@@ -439,14 +476,44 @@ function spawnRebuildChild(stateDir) {
   });
 }
 
+// clone -> {key, stamp}: the source files' stat key and the stamp hashed
+// from them. The tick runs every 15 seconds; hashing about 64 KB of source
+// each time is wasted when nothing moved, so it stats first.
+var stampCache = new Map();
+
+/** size, modified and changed time, and inode of each file on the list, or null when one is missing. */
+function sourceStatKey(clone) {
+  var dir = sourceDir(clone);
+  var parts = [];
+  for (var i = 0; i < SOURCE_FILES.length; i += 1) {
+    var stat = fs.statSync(path.join(dir, SOURCE_FILES[i]), { throwIfNoEntry: false });
+    if (!stat) return null;
+    parts.push(stat.size + ":" + stat.mtimeMs + ":" + stat.ctimeMs + ":" + stat.ino);
+  }
+  return parts.join("|");
+}
+
+/** The clone's source stamp, hashed again only when a file's stat moved. Throws when a file is missing. */
+function currentStamp(clone) {
+  var key = sourceStatKey(clone);
+  var held = stampCache.get(clone);
+  if (key !== null && held && held.key === key) return held.stamp;
+  var stamp = sourceStamp(clone);
+  if (key !== null) stampCache.set(clone, { key: key, stamp: stamp });
+  return stamp;
+}
+
 /**
  * The helper calls this from its 15-second timer. On macOS with the icon
  * installed: when the source stamp in the clone install.json names differs
  * from the recorded one, and is not a stamp that already failed, rebuild.
+ * Nothing is built when the icon's login item is another state folder's (a
+ * copy of this one, say): that folder's helper keeps its own icon current.
  *
- * @param {{stateDir: string, platform?: string,
- *          spawnRebuild?: function(string): Promise}} env
- *   `spawnRebuild` is the tests' stand-in for the child process
+ * @param {{stateDir: string, platform?: string, home?: string, uid?: number,
+ *          label?: string, spawnRebuild?: function(string): Promise}} env
+ *   `spawnRebuild` is the tests' stand-in for the child process; `home`,
+ *   `uid` and `label` are the same seams the other calls take
  * @returns {Promise<{rebuilt: boolean, reason?: string}>}
  */
 function tick(env) {
@@ -457,12 +524,16 @@ function tick(env) {
   var record = loginItem.readInstall(dir);
   if (!record || !record.menubar || !record.clone) return Promise.resolve({ rebuilt: false, reason: FAILED.NOT_INSTALLED });
   var stamp;
-  try { stamp = sourceStamp(record.clone); } catch (err) {
+  try { stamp = currentStamp(record.clone); } catch (err) {
     return Promise.resolve({ rebuilt: false, reason: FAILED.SOURCE });
   }
   if (stamp === record.menubar.source_stamp) return Promise.resolve({ rebuilt: false, reason: "current" });
   var failed = record.menubar.last_error;
   if (failed && failed.source_stamp === stamp) return Promise.resolve({ rebuilt: false, reason: "failed before" });
+  // Read only when a build is due, so a quiet beat reads no file.
+  if (!ownsItem(describeApp(specOf(Object.assign({}, env, { stateDir: dir }))))) {
+    return Promise.resolve({ rebuilt: false, reason: "another state folder's icon" });
+  }
   var spawn = env.spawnRebuild || spawnRebuildChild;
   var running = Promise.resolve()
     .then(function () { return spawn(dir); })
@@ -488,7 +559,10 @@ async function appState(options) {
   var record = loginItem.readInstall(options.stateDir);
   var block = record && record.menubar ? record.menubar : null;
   var running = false;
-  if (block && (options.platform || process.platform) === "darwin") running = await isRunning(describeApp(specOf(options)), run);
+  if (block && (options.platform || process.platform) === "darwin") {
+    var item = describeApp(specOf(options));
+    running = ownsItem(item) && (await isRunning(item, run));
+  }
   return {
     installed: !!block,
     running: running,
@@ -508,6 +582,7 @@ module.exports = {
   FAILED: FAILED,
   targetFor: targetFor,
   sourceStamp: sourceStamp,
+  ownsItem: ownsItem,
   compileCommand: compileCommand,
   appPath: appPath,
   build: build,

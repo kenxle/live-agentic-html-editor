@@ -375,7 +375,7 @@ function installLines(dir, ready, helperRunning) {
  * command that starts or stops the icon (R17).
  *
  * @param {string} dir the state folder
- * @param {{runner?: function, platform?: string, uid?: number, menubarLabel?: string}} [options]
+ * @param {{runner?: function, platform?: string, uid?: number, home?: string, menubarLabel?: string}} [options]
  *   seams for tests; the real label is the menu bar module's constant
  */
 async function menubarLines(dir, options) {
@@ -383,24 +383,26 @@ async function menubarLines(dir, options) {
   if ((opts.platform || process.platform) !== "darwin") return [];
   var state;
   try {
-    state = await menubar.appState({ stateDir: dir, runner: opts.runner, uid: opts.uid, label: opts.menubarLabel, platform: "darwin" });
+    state = await menubar.appState({ stateDir: dir, runner: opts.runner, uid: opts.uid, home: opts.home, label: opts.menubarLabel, platform: "darwin" });
   } catch (err) {
     return [];
   }
-  var line;
-  if (state.stopped) {
-    line = "Lahe stopped by you at " + loginItemModule.localTime(state.stopped.at) + " from the " + state.stopped.by +
-      "; lahe commands will not start the helper until you click Start in the Lahe menu or run `lahe install`";
-  } else if (!state.installed) {
-    line = "not installed; `lahe install --menu-bar` adds the icon";
+  var icon;
+  if (!state.installed) {
+    icon = "not installed; `lahe install --menu-bar` adds the icon";
   } else {
-    line = state.running ? "installed and running" : "installed, not running (hidden); `lahe menubar show` brings it back";
+    icon = state.running ? "installed and running" : "installed, not running (hidden); `lahe menubar show` brings it back";
     if (state.lastError) {
-      line += "; the last rebuild failed at " + loginItemModule.localTime(state.lastError.at) + ": " +
+      icon += "; the last rebuild failed at " + loginItemModule.localTime(state.lastError.at) + ": " +
         clip(String(state.lastError.message || "").split("\n")[0], 160) +
         ". The old app keeps running; the log is " + path.join(dir, menubar.LOG_FILE);
     }
   }
+  // Stopped says so first, and still says how the icon is.
+  var line = state.stopped
+    ? "Lahe stopped by you at " + loginItemModule.localTime(state.stopped.at) + " from the " + state.stopped.by +
+      "; lahe commands will not start the helper until you click Start in the Lahe menu or run `lahe install`. The icon: " + icon
+    : icon;
   return ["menu bar  " + line, ""];
 }
 

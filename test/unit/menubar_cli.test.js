@@ -136,7 +136,11 @@ test("lahe menubar is a command the dispatcher knows", () => {
 
 // --- V23: the agent commands never touch the app's item ------------------------
 
-test("V23: lahe review, lahe monitor and the helper start path never load the menu bar module; lahe status only reads its state", () => {
+// The helper itself (src/service/index.js) does load the menu bar module, for
+// its rebuild tick; what it may do with it is proved by behavior in
+// menubar.test.js: the tick runs on an always-on helper's beat only, and a
+// rebuild restarts the app only when it was already running (V24).
+test("V23: the commands an agent runs (review, monitor, session, add, library, serve) never require the menu bar module themselves; lahe status only reads its state", () => {
   const agentPaths = ["cli/commands/review.js", "cli/commands/monitor.js", "cli/commands/session.js", "cli/commands/add.js", "cli/commands/library.js", "cli/commands/serve.js"];
   agentPaths.forEach((rel) => {
     const text = fs.readFileSync(path.join(SRC, rel), "utf8");
@@ -157,6 +161,7 @@ async function statusOut(w, mac, platform) {
     runner: mac.runner,
     platform: platform || "darwin",
     uid: 501,
+    home: w.home,
     menubarLabel: LABEL
   });
   assert.equal(code, 0);
@@ -203,6 +208,18 @@ test("V26 and V27: lahe status says stopped by you, with the time, while the mar
   assert.match(line, /^menu bar  Lahe stopped by you at /);
   assert.ok(line.indexOf(loginItem.localTime("2026-10-12T15:41:00.000Z")) !== -1);
   assert.match(line, /Start in the Lahe menu/);
+  assert.match(line, /The icon: installed and running$/, "stopped still says how the icon is");
+});
+
+test("V26 and V27: while stopped, the line still names a hidden icon and a failed rebuild", async (t) => {
+  const { w, mac } = await withIcon(t);
+  mac.job(LABEL).running = false;
+  const record = loginItem.readInstall(w.dir);
+  record.menubar.last_error = { at: "2026-10-12T15:00:00.000Z", message: "swiftc failed: error: expected expression", source_stamp: "a".repeat(64) };
+  loginItem.writeInstall(w.dir, record);
+  fs.writeFileSync(path.join(w.dir, loginItem.STOP_FILE), JSON.stringify({ by: "menu bar", at: "2026-10-12T15:41:00.000Z" }));
+  const line = (await statusOut(w, mac)).split("\n").find((l) => l.indexOf("menu bar  ") === 0);
+  assert.match(line, /^menu bar  Lahe stopped by you at .*The icon: installed, not running \(hidden\).*the last rebuild failed at .*expected expression/);
 });
 
 test("V26: off macOS, lahe status prints no menu bar line", async (t) => {
@@ -215,7 +232,7 @@ test("V23: lahe status --json, the form lahe monitor polls with, never asks laun
   const { w, mac } = await withIcon(t);
   const out = [];
   const code = await status.run(["--state-dir", w.dir, "--json"], {
-    stdout: (x) => out.push(x), stderr: () => {}, runner: mac.runner, platform: "darwin", uid: 501, menubarLabel: LABEL
+    stdout: (x) => out.push(x), stderr: () => {}, runner: mac.runner, platform: "darwin", uid: 501, home: w.home, menubarLabel: LABEL
   });
   assert.equal(code, 0);
   assert.match(out.join(""), /"reviews":0/);
