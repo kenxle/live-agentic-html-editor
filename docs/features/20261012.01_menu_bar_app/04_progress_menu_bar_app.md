@@ -91,6 +91,7 @@ Nothing queued.
 
 ## Log
 
+- 2026-10-12 22:53: main's CI run on the PR 1 merge (`85c8be9d`) passed: lint, the bundle check and the unit suite on a clean Linux machine. That is V20 (the new code runs on Linux) proven. The local post-merge gate on main is still running.
 - 2026-10-12 22:52: PR 1 merged into main (#61). The post-merge gate runs on main in its own worktree, and main's CI run is watched. Main carried into the PR 2 branch.
 - 2026-10-12 22:46: the flow walk returned (full notes outside the repo). Two findings: V18 fails on both sides (helper about 47 ms of processor time per poll, app about 10 ms), and a reply to a document no page is polling is never folded, so it never counts (the helper reads reply files only for reviews something has asked about since it started; one `review.read` fixed it). Fix rounds sent to the summary builder (profile the poll, keep the answer in memory and rebuild only what the helper itself wrote; fold unwatched replies within one liveness beat) and to the app builder (skip decoding, menu and icon work when the answer is unchanged). Main merged into PR 1 twice as other work landed; its gate on the latest merge commit is running.
 - 2026-10-12 22:02: PR 1 opened (#61) after the full gate on its final commit: unit 2783 passed, 0 failed; browser 884 passed, 0 failed, 7 skipped; one helper before and after. The follow-up from the spec check is in: no string field is ever null (a session's `review` is the one that may be), and the two missing tests are written.
