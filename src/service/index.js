@@ -196,11 +196,14 @@ function pagesPortFrom(opts) {
  *
  * @param {{port?: number, host?: string, stateDir?: string, reviews?: string[],
  *          origins?: string[], quiet?: boolean, now?: function(): number,
- *          pidAlive?: function, uid?: number, schedule?: function}} [options]
+ *          pidAlive?: function, uid?: number, schedule?: function,
+ *          launch?: {env?: object, ppid?: number}}} [options]
  *   `now`, `pidAlive`, `uid` and `schedule` are for tests of the Library: the
  *   clock every Library action and the sweep of its own sessions read, the
  *   liveness seam for monitor pids, the user a file Open restarts must belong
- *   to, and a stand-in for setInterval that runs the sweep's timer.
+ *   to, and a stand-in for setInterval that runs the sweep's timer. `launch`
+ *   stands in for launchd's environment and parent pid, so a test can start
+ *   the helper the way the login item does (login_item.startedByLoginItem).
  * @returns {Promise<object>} a handle with port, url, close, and the pieces the
  *   tests and `add` reach for: log, reviews, dir.
  */
@@ -225,6 +228,14 @@ async function serve(options) {
   var alwaysOn = opts.alwaysOn === true;
   var stateId = selfStopModule.stateToken(dir);
   var installed = loginItemModule.installedFor(dir, port);
+  // STOP HOLDS (menu bar brief R14, security review SR7). While the menu's
+  // Stop marker stands, no helper starts on this state folder, on any port,
+  // whoever asks: `lahe serve --always-on` and a spawn on another port refuse
+  // here too, not only the CLI's paths. The one start that goes ahead is the
+  // login item's own at login (or launchd's restart of it), and only that
+  // start ends the hold. `opts.launch` is the tests' stand-in for launchd.
+  var atLogin = alwaysOn && loginItemModule.startedByLoginItem(installed, opts.launch);
+  if (!atLogin) loginItemModule.refuseWhileStopped(dir);
   // The two address options install may have set up (port-free, .lahe),
   // each used only once proved (addresses.js). Made once the pages listener
   // is bound; null until then and with no pages listener.
@@ -1173,11 +1184,11 @@ async function serve(options) {
     };
   }
   reviews.writeReadyFile(readyDetails());
-  // A running helper always means the person started it (the menu's Start,
-  // lahe install, or the login item at login), so the hold the menu's Stop
-  // wrote ends here, and not earlier: a start that fails on a taken port must
-  // not end it.
-  loginItemModule.clearStopMarker(dir);
+  // The login item's start at login ends the hold the menu's Stop wrote. It
+  // ends here, and not earlier: a start that fails on a taken port must not
+  // end it. Every other start refused above while the marker stood, and the
+  // menu's Start and `lahe install` remove it themselves.
+  if (atLogin) loginItemModule.clearStopMarker(dir);
   log.helperLog(
     "serving on http://" + host + ":" + boundPort + ", state directory " + dir + ", reviews " + (reviews.list().join(", ") || "none")
   );

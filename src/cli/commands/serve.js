@@ -163,6 +163,26 @@ function installedHere(options) {
   return loginItem.installedFor(dir, options.port === undefined ? protocol.DEFAULT_PORT : options.port);
 }
 
+/**
+ * The stop line while the menu's Stop holds (stopped.json), or null. Checked
+ * before anything is stopped or started, so `--restart` does not stop a
+ * helper it then may not start. The login item's own start at login is the
+ * one that goes ahead; service.serve applies the same rule as it starts.
+ */
+function stopHold(options) {
+  var dir;
+  try {
+    dir = options.stateDir ? stateDirModule.stateDir({ dir: options.stateDir }) : stateDirModule.stateDir();
+  } catch (err) {
+    return null;
+  }
+  var marker = loginItem.readStopMarker(dir);
+  if (!marker) return null;
+  var record = loginItem.installedFor(dir, options.port === undefined ? protocol.DEFAULT_PORT : options.port);
+  if (options.alwaysOn && loginItem.startedByLoginItem(record)) return null;
+  return loginItem.stopMessage(marker);
+}
+
 async function serveInstalled(options, installed, deps) {
   var out = deps.stdout || function (text) { process.stdout.write(text); };
   var err = deps.stderr || function (text) { process.stderr.write(text); };
@@ -199,6 +219,12 @@ async function run(argv, deps) {
   if (!parsed.ok) {
     process[parsed.help ? "stdout" : "stderr"].write(parsed.message + "\n");
     return parsed.help ? protocol.CLI_EXIT.OK : protocol.CLI_EXIT.BAD_USAGE;
+  }
+
+  var held = stopHold(parsed.options);
+  if (held) {
+    process.stderr.write("lahe serve: " + held + "\n");
+    return 1;
   }
 
   // INSTALLED (lahe install): the login item owns this port. A helper bound by

@@ -7,8 +7,13 @@
 // plist is exactly what lahe install writes for the recorded install.
 //
 // No real login item is touched: the home is a temp folder, the label is
-// lahe-test-<pid>, and the service manager is a runner the test records. No
-// helper is started, so there is nothing to stop in teardown.
+// lahe-test-<pid>, and the service manager is a runner the test records.
+//
+// The last tests ("the hold covers every start") start real processes: `lahe
+// add` and `lahe serve` on a free port, and one helper in this process the way
+// the login item starts it (launchd's environment and parent pid passed in,
+// never a real launchd job). Each test stops every process it started in
+// teardown, by pid and by its own temp state folder, even when it fails.
 
 "use strict";
 
@@ -224,4 +229,134 @@ test("V27: a stop marker's `by` that is not plain words is not repeated, so the 
   const marker = loginItem.readStopMarker(w.dir);
   assert.equal(marker.by, "menu bar");
   assert.equal(loginItem.stopMessage(marker).split("\n").length, 1);
+});
+
+// ---------------------------------------------------------------------------
+// The hold covers every start, not only the login item's (security review,
+// fix round 3): `lahe serve --always-on` skipped the "installed here?" check,
+// and `lahe add --port <another>` spawned `serve` directly, and every helper
+// start removed the marker. Now the helper refuses as it starts, and only the
+// login item's own start at login removes it.
+// ---------------------------------------------------------------------------
+
+const childProcess = require("node:child_process");
+const protocol = require("../../src/shared/protocol.js");
+const service = require("../../src/service/index.js");
+const { freePort } = require("../helpers/free_port.js");
+const { stopTempHelpers } = require("../helpers/temp_helpers.js");
+
+const BIN = path.join(__dirname, "..", "..", "bin", "lahe.js");
+
+/** A state folder installed for port P, with the menu's Stop marker standing. */
+async function stoppedWorld(t) {
+  const w = world(t);
+  const port = await freePort();
+  w.record = Object.assign({}, w.record, { port: port });
+  loginItem.writeInstall(w.dir, w.record);
+  writeMarker(w.dir, "2026-10-12T15:41:00.000Z");
+  t.after(() => stopTempHelpers(w.dir));
+  return w;
+}
+
+/**
+ * A lahe command as its own process, the way an agent runs it, with no
+ * launchd in its environment. Resolves with its exit code and stderr; a
+ * command still running after `ms` is killed and resolves with code null.
+ */
+function runLahe(t, args, ms) {
+  const env = Object.assign({}, process.env, { LAHE_PAGES_PORT: "0" });
+  delete env.XPC_SERVICE_NAME;
+  const child = childProcess.spawn(process.execPath, [BIN].concat(args), { env, stdio: ["ignore", "pipe", "pipe"] });
+  t.after(() => { try { child.kill("SIGKILL"); } catch (err) { /* already gone */ } });
+  let stderr = "";
+  child.stderr.setEncoding("utf8");
+  child.stderr.on("data", (text) => { stderr += text; });
+  child.stdout.resume();
+  return new Promise((resolve) => {
+    // harness-allow-timer: the limit on a command that should exit at once.
+    const timer = setTimeout(() => { child.kill("SIGKILL"); }, ms);
+    child.once("close", (code) => {
+      clearTimeout(timer);
+      resolve({ code, stderr });
+    });
+  });
+}
+
+function assertStillStopped(w, port) {
+  assert.equal(fs.existsSync(path.join(w.dir, loginItem.STOP_FILE)), true, "stopped.json is still there");
+  return service.probeHealth(protocol.DEFAULT_HOST, port).then((up) => assert.equal(up, null, "nothing answers on " + port));
+}
+
+test("the hold covers every start: lahe add on another port exits 1 with the stop line and spawns no helper", async (t) => {
+  const w = await stoppedWorld(t);
+  const other = await freePort();
+  const page = path.join(w.root, "page.html");
+  fs.writeFileSync(page, "<!doctype html><html><head><title>P</title></head><body><p>x</p></body></html>\n");
+  const ran = await runLahe(t, ["add", page, "--port", String(other), "--state-dir", w.dir], 30000);
+  assert.notEqual(ran.code, 0, ran.stderr);
+  assert.match(ran.stderr, /Lahe is stopped: .*from the menu bar/);
+  await assertStillStopped(w, other);
+});
+
+test("the hold covers every start: lahe serve --always-on on another port exits 1 with the stop line and binds nothing", async (t) => {
+  const w = await stoppedWorld(t);
+  const other = await freePort();
+  const ran = await runLahe(t, ["serve", "--always-on", "--port", String(other), "--state-dir", w.dir], 15000);
+  assert.equal(ran.code, 1, "exited 1, and did not keep serving: " + ran.stderr);
+  assert.match(ran.stderr, /^lahe serve: Lahe is stopped: .*from the menu bar/m);
+  await assertStillStopped(w, other);
+});
+
+test("the hold covers every start: lahe serve --always-on on the installed port, run by hand, refuses too", async (t) => {
+  const w = await stoppedWorld(t);
+  const ran = await runLahe(t, ["serve", "--always-on", "--port", String(w.record.port), "--state-dir", w.dir], 15000);
+  assert.equal(ran.code, 1, ran.stderr);
+  assert.match(ran.stderr, /Lahe is stopped/);
+  await assertStillStopped(w, w.record.port);
+});
+
+/** The helper in this process, started the way `launch` says it was. */
+function serveIn(t, w, launch, extra) {
+  return service.serve(Object.assign({
+    port: w.record.port, stateDir: w.dir, quiet: true, pagesPort: 0, sitesHome: w.home, alwaysOn: true, launch: launch
+  }, extra || {})).then((helper) => {
+    t.after(() => helper.close());
+    return helper;
+  });
+}
+
+test("the hold covers every start: the helper itself refuses unless the login item started it, whatever the caller", async (t) => {
+  const w = await stoppedWorld(t);
+  const cases = [
+    ["a terminal", { env: {}, ppid: 4242 }],
+    ["the login item's label but not launchd's child", { env: { XPC_SERVICE_NAME: w.record.label }, ppid: 4242 }],
+    ["launchd's child under another label", { env: { XPC_SERVICE_NAME: "lahe-test-other" }, ppid: 1 }]
+  ];
+  for (const [what, launch] of cases) {
+    await assert.rejects(serveIn(t, w, launch), (err) => {
+      assert.equal(err.stopped, true, what);
+      assert.match(err.message, /Lahe is stopped/, what);
+      return true;
+    });
+  }
+  // Not always on: the login item always passes --always-on.
+  await assert.rejects(serveIn(t, w, { env: { XPC_SERVICE_NAME: w.record.label }, ppid: 1 }, { alwaysOn: false }), /Lahe is stopped/);
+  await assertStillStopped(w, w.record.port);
+});
+
+test("the hold covers every start: the login item's own start at login does start, and it alone clears the marker", async (t) => {
+  const w = await stoppedWorld(t);
+  const helper = await serveIn(t, w, { env: { XPC_SERVICE_NAME: w.record.label }, ppid: 1 });
+  assert.equal(helper.port, w.record.port);
+  assert.ok(await service.probeHealth(protocol.DEFAULT_HOST, w.record.port), "the helper answers");
+  assert.equal(fs.existsSync(path.join(w.dir, loginItem.STOP_FILE)), false, "the marker is gone");
+});
+
+test("startedByLoginItem: launchd's label and parent pid on a macOS install, nothing else", () => {
+  const record = { system: "macos", label: "lahe-helper" };
+  assert.equal(loginItem.startedByLoginItem(record, { env: { XPC_SERVICE_NAME: "lahe-helper" }, ppid: 1 }), true);
+  assert.equal(loginItem.startedByLoginItem(record, { env: { XPC_SERVICE_NAME: "lahe-helper" }, ppid: 2 }), false);
+  assert.equal(loginItem.startedByLoginItem(record, { env: { XPC_SERVICE_NAME: "0" }, ppid: 1 }), false);
+  assert.equal(loginItem.startedByLoginItem(null, { env: { XPC_SERVICE_NAME: "lahe-helper" }, ppid: 1 }), false);
+  assert.equal(loginItem.startedByLoginItem({ system: "linux", label: "lahe-helper" }, { env: { XPC_SERVICE_NAME: "lahe-helper" }, ppid: 1 }), false);
 });

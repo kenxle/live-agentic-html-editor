@@ -685,6 +685,9 @@ async function startHelper(host, port, dir, options) {
     await loginItem.startThroughItem(installed, isUp, { runner: options && options.runner });
     return isUp();
   }
+  // Not installed for this port: the menu's Stop still holds the whole state
+  // folder, so no helper is spawned on another port either.
+  loginItem.refuseWhileStopped(dir);
   var child = childProcess.spawn(
     process.execPath,
     [BIN, "serve", "--port", String(port), "--state-dir", dir],
@@ -1201,6 +1204,7 @@ async function run(argv, used) {
     }
     if (restartReason) {
       try {
+        loginItem.refuseWhileStopped(dir);
         await stopHelper(Object.assign({ dir: dir }, ready || {}), host, port, alive);
         restarted = true;
         await startHelper(host, port, dir);
@@ -1321,6 +1325,7 @@ async function run(argv, used) {
       // bouncing for no stated cause.
       restartReason = "the running helper did not accept the writes for this review over " + protocol.route("review.write").path;
       try {
+        loginItem.refuseWhileStopped(dir);
         await stopHelper(Object.assign({ dir: dir }, ready), host, port, alive);
       } catch (err) {
         process.stderr.write("lahe add: " + err.message + "\n");
@@ -1371,6 +1376,7 @@ async function run(argv, used) {
         // output rather than a restart happening for no stated cause.
         restartReason = "the helper that was already running did not pick this review up from disk";
         try {
+          loginItem.refuseWhileStopped(dir);
           await stopHelper(Object.assign({ dir: dir }, ready), host, port, alive);
           restarted = true;
           await startHelper(host, port, dir);

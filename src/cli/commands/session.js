@@ -293,6 +293,9 @@ async function startHelper(dir, port, options) {
       if (!stale) return { started: false, stale: false, keptForReviewer: null };
       if (decision.keep) return { started: false, stale: true, keptForReviewer: decision.keep };
     }
+    // A replacement is a start: while the menu's Stop holds, refuse before
+    // stopping anything.
+    loginItem.refuseWhileStopped(dir);
     if (!(await stopVerifiedHelper(dir))) {
       throw new Error("refusing to replace an older helper whose process identity cannot be verified");
     }
@@ -302,6 +305,9 @@ async function startHelper(dir, port, options) {
     await loginItem.startThroughItem(installed, isUp, { runner: opts.runner, waitMs: opts.waitMs });
     return { started: true, stale: stale, keptForReviewer: null };
   }
+  // Not installed for this port: the menu's Stop still holds the whole state
+  // folder, so no helper is spawned on another port either.
+  loginItem.refuseWhileStopped(dir);
   var child = childProcess.spawn(process.execPath, [BIN, "serve", "--port", String(port), "--state-dir", dir], {
     detached: true,
     stdio: "ignore"

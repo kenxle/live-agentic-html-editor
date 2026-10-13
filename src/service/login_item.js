@@ -379,11 +379,14 @@ var START_WAIT_MS = 20000;
 //
 // The menu bar app's Stop writes <state>/stopped.json and then unloads the
 // helper's login item, because a plain kill would be restarted at once. The
-// file is the hold: startThroughItem refuses while it stands, so an agent's
-// lahe command fails in one line and starts nothing. `lahe install` removes
-// it, and so does the helper on its own start, which is how the next login
-// ends the hold. Nothing else removes it, so a running helper always means a
-// person started it.
+// file is the hold, for every port on this state folder: startThroughItem,
+// the CLI's own spawn of `lahe serve`, and the helper's start itself
+// (service/index.js serve) all refuse while it stands, so an agent's lahe
+// command fails in one line and starts nothing. Three things end it: the
+// menu's Start and `lahe install`, which remove the file, and the login item
+// starting the helper at login, which is the one helper start that removes
+// it (startedByLoginItem). Nothing else removes it, so a running helper
+// always means a person started it.
 
 function stopPath(dir) {
   return path.join(dir, STOP_FILE);
@@ -411,9 +414,39 @@ function readStopMarker(dir) {
   }
 }
 
-/** End the hold. The helper calls this as it starts; `lahe install` too. */
+/**
+ * End the hold. `lahe install` and `lahe uninstall` call this, and the helper
+ * does only when the login item started it (startedByLoginItem).
+ */
 function clearStopMarker(dir) {
   try { fs.unlinkSync(stopPath(dir)); } catch (err) { if (err.code !== "ENOENT") throw err; }
+}
+
+/**
+ * Did the installed login item itself start this process? On macOS launchd
+ * starts every job as its own child (parent pid 1) and sets XPC_SERVICE_NAME
+ * to the job's label, so both together name the login item. A lahe command
+ * run from a terminal has neither. Only macOS: the stop marker is written by
+ * the Mac menu bar app, and on other systems only `lahe install` ends it.
+ *
+ * @param {object|null} record install.json for the port being served
+ * @param {{env?: object, ppid?: number}} [launch] seams for tests: the
+ *   environment and parent pid to judge instead of this process's own
+ */
+function startedByLoginItem(record, launch) {
+  if (!record || record.system !== "macos" || typeof record.label !== "string" || !record.label) return false;
+  var env = launch && launch.env ? launch.env : process.env;
+  var ppid = launch && typeof launch.ppid === "number" ? launch.ppid : process.ppid;
+  return env.XPC_SERVICE_NAME === record.label && ppid === 1;
+}
+
+/** Throw the one-line stop message, marked `stopped`, while the hold stands. */
+function refuseWhileStopped(dir) {
+  var marker = dir ? readStopMarker(dir) : null;
+  if (!marker) return;
+  var held = new Error(stopMessage(marker));
+  held.stopped = true;
+  throw held;
 }
 
 /** "2026-10-12 15:41" in this computer's local time, or "an unknown time". */
@@ -483,12 +516,7 @@ function didNotStart(record, waitMs, failed, more) {
 async function startThroughItem(record, isUp, options) {
   var opts = options || {};
   var waitMs = typeof opts.waitMs === "number" ? opts.waitMs : START_WAIT_MS;
-  var marker = record.state_dir ? readStopMarker(record.state_dir) : null;
-  if (marker) {
-    var held = new Error(stopMessage(marker));
-    held.stopped = true;
-    throw held;
-  }
+  refuseWhileStopped(record.state_dir);
   var commands = startCommands(record);
   var ran = await runCommands(commands, opts.runner);
   if (!ran.ok && record.system === "macos" && ran.notLoaded) {
@@ -826,6 +854,8 @@ module.exports = {
   xmlEscape: xmlEscape,
   readStopMarker: readStopMarker,
   clearStopMarker: clearStopMarker,
+  startedByLoginItem: startedByLoginItem,
+  refuseWhileStopped: refuseWhileStopped,
   stopMessage: stopMessage,
   localTime: localTime,
   sourceRoots: sourceRoots,
