@@ -96,10 +96,10 @@ The icon counts **documents**, not cards: each one is one click. Today 45 docume
     "count": 2,
     "documents": [
       { "review": "r183d18583a43", "title": "Crucible: Menu bar app", "path_hint": "~/Documents/...",
-        "questions": 1, "unread": 3, "newest_at": "..." }
+        "open": true, "questions": 1, "unread": 3, "newest_at": "..." }
     ]
   },
-  "waiting_on_agents": { "count": 4, "documents": [ { "review": "...", "title": "...", "path_hint": "...", "waiting": 4 } ] },
+  "waiting_on_agents": { "count": 4, "more": 0, "documents": [ { "review": "...", "title": "...", "path_hint": "...", "waiting": 4 } ] },
   "open_documents": { "count": 3, "more": 0, "items": [ { "review": "...", "title": "...", "path_hint": "...", "focused": true } ] },
   "sessions": {
     "open": 5,

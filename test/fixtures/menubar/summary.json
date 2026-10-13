@@ -1,0 +1,151 @@
+{
+  "summary_version": 1,
+  "generated_at": "2026-10-20T15:41:00.000Z",
+  "helper": {
+    "version": "0.4.0",
+    "started_at": "2026-10-20T08:00:00.000Z",
+    "always_on": true
+  },
+  "waiting_on_you": {
+    "count": 2,
+    "documents": [
+      {
+        "review": "r183d18583a43",
+        "title": "Crucible: Menu bar app",
+        "path_hint": "~/Documents/workspace/project/docs/doc_0.md",
+        "open": true,
+        "questions": 1,
+        "unread": 3,
+        "newest_at": "2026-10-20T15:40:03.120Z"
+      },
+      {
+        "review": "r183d18583a44",
+        "title": "Stable addresses: the plan",
+        "path_hint": "~/Documents/workspace/project/docs/doc_1.md",
+        "open": false,
+        "questions": 0,
+        "unread": 2,
+        "newest_at": "2026-10-20T14:02:11.000Z"
+      }
+    ]
+  },
+  "waiting_on_agents": {
+    "count": 4,
+    "more": 0,
+    "documents": [
+      {
+        "review": "r183d18583a45",
+        "title": "Rail cleanup",
+        "path_hint": "~/Documents/workspace/project/docs/rail.md",
+        "waiting": 3
+      },
+      {
+        "review": "r183d18583a46",
+        "title": "Free writing notes",
+        "path_hint": "~/Documents/notes/free_writing.md",
+        "waiting": 1
+      }
+    ]
+  },
+  "open_documents": {
+    "count": 3,
+    "more": 0,
+    "items": [
+      {
+        "review": "r183d18583a43",
+        "title": "Crucible: Menu bar app",
+        "path_hint": "~/Documents/workspace/project/docs/doc_0.md",
+        "focused": true
+      },
+      {
+        "review": "r183d18583a45",
+        "title": "Rail cleanup",
+        "path_hint": "~/Documents/workspace/project/docs/rail.md",
+        "focused": false
+      },
+      {
+        "review": "r183d18583a46",
+        "title": "Free writing notes",
+        "path_hint": "~/Documents/notes/free_writing.md",
+        "focused": false
+      }
+    ]
+  },
+  "sessions": {
+    "open": 5,
+    "connected": {
+      "count": 2,
+      "more": 0,
+      "items": [
+        {
+          "session": "s_b4276f2e1d343291",
+          "name": "menu bar icon",
+          "presence": "listening",
+          "last_heard_at": "2026-10-20T15:40:50.000Z",
+          "review": "r183d18583a43"
+        },
+        {
+          "session": "s_0d6c3a8b1e2f4a5b",
+          "name": "Rail cleanup",
+          "presence": "working",
+          "last_heard_at": "2026-10-20T15:39:12.000Z",
+          "review": "r183d18583a45"
+        }
+      ]
+    }
+  },
+  "recent": {
+    "more": 12,
+    "items": [
+      {
+        "review": "r183d18583a43",
+        "title": "Crucible: Menu bar app",
+        "path_hint": "~/Documents/workspace/project/docs/doc_0.md",
+        "last": "2026-10-20T15:40:03.120Z"
+      },
+      {
+        "review": "r183d18583a45",
+        "title": "Rail cleanup",
+        "path_hint": "~/Documents/workspace/project/docs/rail.md",
+        "last": "2026-10-20T15:12:00.000Z"
+      },
+      {
+        "review": "r183d18583a46",
+        "title": "Free writing notes",
+        "path_hint": "~/Documents/notes/free_writing.md",
+        "last": "2026-10-20T14:50:00.000Z"
+      },
+      {
+        "review": "r183d18583a44",
+        "title": "Stable addresses: the plan",
+        "path_hint": "~/Documents/workspace/project/docs/doc_1.md",
+        "last": "2026-10-20T14:02:11.000Z"
+      },
+      {
+        "review": "r183d18583a47",
+        "title": "Weekly plan",
+        "path_hint": "~/Documents/personal/weekly.md",
+        "last": "2026-10-19T22:10:00.000Z"
+      },
+      {
+        "review": "r183d18583a48",
+        "title": "Research: tray icons",
+        "path_hint": "~/Documents/reports/tray.md",
+        "last": "2026-10-19T18:00:00.000Z"
+      },
+      {
+        "review": "r183d18583a49",
+        "title": "Brief: style switcher",
+        "path_hint": "~/Documents/workspace/project/docs/style.md",
+        "last": "2026-10-18T09:00:00.000Z"
+      },
+      {
+        "review": "r183d18583a4a",
+        "title": "Notes page",
+        "path_hint": "~/Documents/notes/notes.md",
+        "last": "2026-10-17T09:00:00.000Z"
+      }
+    ]
+  },
+  "library_url": "http://library.lahe.localhost:1483"
+}

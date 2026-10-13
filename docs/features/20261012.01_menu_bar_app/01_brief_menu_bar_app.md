@@ -108,7 +108,7 @@ This is not a new flag, and it has no logic of its own. It is the rail's "1 new"
 :::
 
 ::: callout-req
-**R12. Long lists stay short.** The open, connected and recent sections show up to 8 rows and say how many more there are. Recent ends with "Open the Library". Waiting on you is never cut short.
+**R12. Long lists stay short.** The waiting on agents, open, connected and recent sections show up to 8 rows and say how many more there are. Recent ends with "Open the Library". Waiting on you is never cut short.
 :::
 
 ::: callout-req

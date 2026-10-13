@@ -1,0 +1,92 @@
+{
+  "about": "Test vectors for the AUTH.CLI_PROOF wire (docs/CONTRACTS.md, 'The summary routes and the signed-request wire'). The key is the trimmed cli-secret as UTF-8 bytes. Lines are joined by a single newline with no trailing newline. All hex is lowercase. Node's auth.js, the fake helper and the Swift app's --self-test each assert every case.",
+  "secret": "9f2c7a1e4b8d3c6f0a5e2d7b9c4f1a8e3d6b0c7f2a9e5d1b4c8f3a7e0d2b6c9f",
+  "requests": [
+    {
+      "name": "get summary",
+      "method": "GET",
+      "path": "/lahe/v1/summary?v=1",
+      "ts": "1760000000000",
+      "nonce": "0123456789abcdef0123456789abcdef",
+      "body": "",
+      "body_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "signed_string": "lahe-proof-v1\nGET\n/lahe/v1/summary?v=1\n1760000000000\n0123456789abcdef0123456789abcdef\ne3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "proof": "670dcc1207fbc8fdc9e31fc80408d3169faaa7bd6fe86f79b706f87542221a18",
+      "headers": {
+        "x-lahe-proof-ts": "1760000000000",
+        "x-lahe-proof-nonce": "0123456789abcdef0123456789abcdef",
+        "x-lahe-proof": "670dcc1207fbc8fdc9e31fc80408d3169faaa7bd6fe86f79b706f87542221a18"
+      }
+    },
+    {
+      "name": "post open",
+      "method": "POST",
+      "path": "/lahe/v1/summary/open",
+      "ts": "1760000001234",
+      "nonce": "fedcba9876543210fedcba9876543210",
+      "body": "{\"review\":\"r183d18583a43\",\"summary_version\":1}",
+      "body_sha256": "3aa30f6d1ce4894f8e9120803e3746e5b6f7bfca993063482138c28133b1749d",
+      "signed_string": "lahe-proof-v1\nPOST\n/lahe/v1/summary/open\n1760000001234\nfedcba9876543210fedcba9876543210\n3aa30f6d1ce4894f8e9120803e3746e5b6f7bfca993063482138c28133b1749d",
+      "proof": "44f2fe52486572bb49706eb5e7c96887373aae3957d17cae6bfcd278aae74c93",
+      "headers": {
+        "x-lahe-proof-ts": "1760000001234",
+        "x-lahe-proof-nonce": "fedcba9876543210fedcba9876543210",
+        "x-lahe-proof": "44f2fe52486572bb49706eb5e7c96887373aae3957d17cae6bfcd278aae74c93"
+      }
+    },
+    {
+      "name": "post open with a space in the body",
+      "method": "POST",
+      "path": "/lahe/v1/summary/open",
+      "ts": "1760000002000",
+      "nonce": "00000000000000000000000000000001",
+      "body": "{\"review\": \"r183d18583a43\", \"summary_version\": 1}",
+      "body_sha256": "7484b188ee504a4f93f9da571bca68b70ba96e8a8a8e0325ddf506a661e5d6e8",
+      "signed_string": "lahe-proof-v1\nPOST\n/lahe/v1/summary/open\n1760000002000\n00000000000000000000000000000001\n7484b188ee504a4f93f9da571bca68b70ba96e8a8a8e0325ddf506a661e5d6e8",
+      "proof": "ab991b3bcf668579ab4e3472dec60b12a8b51f92a6d7727db3956deede3c1e73",
+      "headers": {
+        "x-lahe-proof-ts": "1760000002000",
+        "x-lahe-proof-nonce": "00000000000000000000000000000001",
+        "x-lahe-proof": "ab991b3bcf668579ab4e3472dec60b12a8b51f92a6d7727db3956deede3c1e73"
+      }
+    }
+  ],
+  "replies": [
+    {
+      "name": "200 summary",
+      "nonce": "0123456789abcdef0123456789abcdef",
+      "status": 200,
+      "body": "{\"summary_version\":1}",
+      "body_sha256": "84d08d8c899bde734ce678ae9af504b3e907c3376cbbed55dd42fa42848f7663",
+      "signed_string": "lahe-proof-reply-v1\n0123456789abcdef0123456789abcdef\n200\n84d08d8c899bde734ce678ae9af504b3e907c3376cbbed55dd42fa42848f7663",
+      "proof": "24ed80c7c37a18297efd9726746699628ca2604875c1dcacb1c8687c5eafc8ce",
+      "headers": {
+        "x-lahe-proof-reply": "24ed80c7c37a18297efd9726746699628ca2604875c1dcacb1c8687c5eafc8ce"
+      }
+    },
+    {
+      "name": "409 version mismatch",
+      "nonce": "0123456789abcdef0123456789abcdef",
+      "status": 409,
+      "body": "{\"error\":{\"code\":\"SUMMARY_VERSION\",\"detail\":\"this helper answers summary_version 1\"}}",
+      "body_sha256": "11e87871ef6d3d90b03d9dfe6c52a927269db6b0a80602e9cdbd3558074065c3",
+      "signed_string": "lahe-proof-reply-v1\n0123456789abcdef0123456789abcdef\n409\n11e87871ef6d3d90b03d9dfe6c52a927269db6b0a80602e9cdbd3558074065c3",
+      "proof": "c8da748d94f84482fee958d6ebce3f54e0afff96fb24c66d7f805db9cb5e5853",
+      "headers": {
+        "x-lahe-proof-reply": "c8da748d94f84482fee958d6ebce3f54e0afff96fb24c66d7f805db9cb5e5853"
+      }
+    },
+    {
+      "name": "401 refused",
+      "nonce": "fedcba9876543210fedcba9876543210",
+      "status": 401,
+      "body": "{\"error\":{\"code\":\"AUTH_REFUSED\",\"detail\":\"the proof did not check\"}}",
+      "body_sha256": "2979e52195aba99de298d53595ccf94f4f68169438d1ddaa151706118adfa9ce",
+      "signed_string": "lahe-proof-reply-v1\nfedcba9876543210fedcba9876543210\n401\n2979e52195aba99de298d53595ccf94f4f68169438d1ddaa151706118adfa9ce",
+      "proof": "74dcb7e395fd9825aa1bfbeb72f6f49115fa34f76d9e0e97de4c34a5166166db",
+      "headers": {
+        "x-lahe-proof-reply": "74dcb7e395fd9825aa1bfbeb72f6f49115fa34f76d9e0e97de4c34a5166166db"
+      }
+    }
+  ]
+}
