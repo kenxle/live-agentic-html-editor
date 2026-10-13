@@ -42,7 +42,7 @@ What stays the same: every existing route, the Library page and its token, the a
 | Where | What | New or changed |
 |---|---|---|
 | `src/service/summary.js` | Builds the summary from the reader, window holders and sessions, with a per-review cache; owns `summary.json` (the day-one cutoff) | new |
-| `src/service/catalog_reader.js` | Exposes a one-review summary, and adds two counts to it: open questions and unread replies, by the shared rule | changed |
+| `src/service/catalog_reader.js` | Exposes a one-review summary, and adds the unread count to it by the shared rule, with how many of those are questions | changed |
 | `src/shared/record.js` | The unread rule, moved here from `tab_done.js` so the page and the helper run the same code | changed |
 | `src/service/projection.js` | Folds a `reply.seen` event onto its item as `reply_seen` | changed |
 | `src/layer/tab_done.js`, `src/layer/sync.js` | When the rail marks a reply read, the page posts `reply.seen`; a `reply_seen` on a polled record is adopted into the local marks | changed |
@@ -80,14 +80,11 @@ One document reviewed by several reviews (one folded Library row) counts once: t
 
 ### What counts as waiting on you
 
-A document waits on you when either holds:
-
-1. **An open question (R5):** an item in `ready` whose reply, for its current revision, is a `question`, and whose reply arrived after `seeded_at`. It stops counting when the item no longer carries that reply (Ken answers, which moves the revision; an agent replies again; the card is deleted).
-2. **An unread reply (R6):** an item the shared unread rule names, whose reply arrived after `seeded_at`.
+A document waits on you when it holds an item the shared unread rule names (R5), whose reply arrived after `seeded_at`. There is no second rule: a question is unread until its card is opened, like any other reply the rail tags "1 new", and the rail's "question" tag on an opened card is the rail's business.
 
 Neither counts for a retired review, a review with `ended_at`, or a document the reader marks missing (R7).
 
-The icon counts **documents**, not cards: each one is one click. Today 45 documents have an old open question (64 questions; 34 from the last month), counted by [scripts/count_questions.py](scripts/count_questions.py) on 2026-10-12. The `seeded_at` rule keeps all of them out. Whether an open question should stop counting once Ken has read its card is a question for Ken (see the questions leaf).
+The icon counts **documents**, not cards: each one is one click. Today 45 documents have an old open question (64 questions; 34 from the last month), counted by [scripts/count_questions.py](scripts/count_questions.py) on 2026-10-12. The `seeded_at` rule keeps all of them out.
 
 ### `summary.read` response
 
@@ -175,7 +172,7 @@ sequenceDiagram
     H-->>App: the document's unread count is one lower
 ```
 
-The outbox posts at once, and the next summary comes within 5 seconds, so the count drops inside R3's 10 seconds. An open question stays until it is answered or the card is closed (rule 1), whether or not its card was opened.
+The outbox posts at once, and the next summary comes within 5 seconds, so the count drops inside R3's 10 seconds. A question opened and not yet answered is read; the rail still shows it as asking.
 
 ### Install, rebuild, and Quit
 

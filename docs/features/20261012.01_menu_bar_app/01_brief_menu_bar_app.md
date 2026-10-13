@@ -2,7 +2,7 @@
 
 ## Summary
 
-A Lahe icon in the Mac menu bar. It shows a number when something is waiting on Ken: the cards the rail already marks for him, an agent's question or a reply he has not read yet. Clicking it opens a menu with those documents, what is open and who is connected, recent documents, the Library, and Quit. It is an optional Mac extra on top of the cross-platform helper. Agents do not change how they work.
+A Lahe icon in the Mac menu bar. It shows a number when something is waiting on Ken: the cards the rail already tags "1 new", counted across every document. Clicking it opens a menu with those documents, what is open and who is connected, recent documents, the Library, and Quit. It is an optional Mac extra on top of the cross-platform helper. Agents do not change how they work.
 
 ## Problem, User, and Context
 
@@ -35,7 +35,7 @@ Prior work: [the crucible](00_crucible_menu_bar_app.md), and the stable addresse
 - Not a change to how agents work. No new command for an agent, and nothing new in the contract.
 - Not naming agents ("Claude", "Codex"). Lahe does not record an agent's name today (board row LAHE-agent-name-default). The menu names each session by what it is working on.
 - Not a replacement for the Library. The menu is a short list; the Library stays the full one.
-- Not a way to dismiss a card. That is board row LAHE-dismiss-card, and it affects when a question stops counting (R5).
+- Not a new way to close a card. Mark as done, on the card's state chip, already does that, and it reads the card too (R5).
 :::
 
 ## Solution Outline
@@ -66,23 +66,23 @@ flowchart LR
 :::
 
 ::: callout-req
-**R3. The count is quick and right.** A new question or reply shows within 10 seconds. A reply clears within 10 seconds of Ken reading it on the rail. A count that never clears, or counts something already handled, is a bug.
+**R3. The count is quick and right.** A new question or reply shows within 10 seconds. A reply clears within 10 seconds of Ken opening its card. A count that never clears, or counts something already handled, is a bug.
 :::
 
 ### What "waiting on you" means
 
-This is not a new flag. It is the rail's own two marks, counted across every document instead of only on the page you have open: a card tagged "question" (R5) and a card tagged "1 new" (R6). The rules for both stay the rail's, written once and shared by the page and the helper, so the icon and the rail never disagree. The Library's "N waiting" is the other direction: your comments waiting on an agent. In the menu that is R9.
+This is not a new flag, and it has no logic of its own. It is the rail's "1 new" mark, counted across every document instead of only on the page you have open (R5). What counts as unread, and what counts as read, is the rail's one rule, written once and shared by the page and the helper, so the icon and the rail never disagree. If that rule needs revisiting, it is revisited in one place. The Library's "N waiting" is the other direction: your comments waiting on an agent. In the menu that is R9.
 
 ::: callout-req
 **R4. Only replies from after the icon was installed count.** On day one the count is zero. Today 45 documents have an old unanswered question; none of them count.
 :::
 
 ::: callout-req
-**R5. An agent asked Ken a question on a card.** The card the rail tags "question". The document counts until one of these happens: Ken answers on the card, an agent replies to the card again, Ken marks the card done, the card is deleted, the review is retired or ended, or the document's file is gone.
+**R5. A document counts while it has a reply Ken has not read.** By the rail's own rule: a reply is unread when the rail would tag its card "1 new" (a question, a refusal, or an answer the agent marked as worth reading; routine replies arrive already read). It is read when Ken opens the card, or marks it done. The icon has no rule of its own, and a question is not a special case: an unanswered question he has opened is read, and the rail still shows it as asking.
 :::
 
 ::: callout-req
-**R6. An agent reply Ken has not read.** The card the rail tags "1 new", by the rail's own rule: a question, a refusal, or an answer the agent marked as worth reading. Routine replies arrive already read and never count. The document counts until Ken opens the card on the rail, or marks it done. Reading it in any browser clears it everywhere.
+**R6. Reading it anywhere clears it everywhere.** A card opened in one browser is read in every browser and on the icon. A review's retired, ended or missing-file documents never count (R7).
 :::
 
 ::: callout-req
@@ -192,10 +192,10 @@ Full prose in [01_brief_menu_bar_app_reviews.md](01_brief_menu_bar_app_reviews.m
 
 | # | Finding | Disposition | Rationale |
 |---|---------|-------------|-----------|
-| RF1 | A background tab counted as looking | Accepted | R6: only the focused tab counts, per page. The page already reports a background tab as not focused. |
+| RF1 | A background tab counted as looking | Accepted, then superseded | The focused-tab rule is gone. R5: read means the card was opened, the rail's own mark, in any browser. |
 | RF2 | Day one would count every old reply | Accepted | R4 (cutoff at install) and R7 (retired, ended, gone never count). |
 | RF3 | No "can't tell" look | Accepted | R2 now has a distinct "can't tell" look. |
-| RF4 | A question had no way to clear | Accepted | R5 lists every clearing event; dismissal is a non-goal and a question for Ken. |
+| RF4 | A question had no way to clear | Accepted, then superseded | A question clears like any reply: opening its card, or Mark as done, which has since shipped. Ken: one rule for read, not two. |
 | RF5 | Documents or cards? | Accepted | R1: documents. |
 | RF6 | Permission design leaked into the brief | Accepted | Removed from the outline; the architecture owns it. |
 | RF7 | "Show all in the Library" pointed nowhere useful | Accepted | R12: only Recent links to the Library; waiting on you is never cut. |

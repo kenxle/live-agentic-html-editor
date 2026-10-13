@@ -1338,11 +1338,12 @@ count neither as questions nor as unread</td>
 </tr>
 <tr>
 <td>V2</td>
-<td>R5 question</td>
-<td>A ready item whose current reply is a question counts, opened card
-or not; it stops counting when Ken answers (revision moves), an agent
-replies again, Ken marks it done, the card is deleted, the review is
-retired or ended, or the file is gone</td>
+<td>R5 one rule</td>
+<td>A question counts exactly as any other unread reply: it stops
+counting when its card is opened, Ken answers (revision moves), an agent
+replies again, Ken marks it done, or the card is deleted; the icon's
+count for a fixture review equals the rail's badge total for the same
+records</td>
 <td>U</td>
 </tr>
 <tr>
@@ -1486,10 +1487,9 @@ summary's warm median request time is 10 ms or less. Battery from
 <td>V19</td>
 <td>R3 timing</td>
 <td>With a real page, at the summary: an agent question shows within 5
-s; opening its card drops the unread count within 10 s and the question
-still counts; a routine handled reply never shows; a page left open
-without its card opened holds the count. Run on a Markdown review and on
-a multi-page site review</td>
+s; opening its card clears it within 10 s; a routine handled reply never
+shows; a page left open without its card opened holds the count. Run on
+a Markdown review and on a multi-page site review</td>
 <td>B</td>
 </tr>
 <tr>

@@ -847,11 +847,11 @@ needed</a></li>
 </nav>
 <h2 id="summary">Summary</h2>
 <p>A Lahe icon in the Mac menu bar. It shows a number when something is
-waiting on Ken: the cards the rail already marks for him, an agent's
-question or a reply he has not read yet. Clicking it opens a menu with
-those documents, what is open and who is connected, recent documents,
-the Library, and Quit. It is an optional Mac extra on top of the
-cross-platform helper. Agents do not change how they work.</p>
+waiting on Ken: the cards the rail already tags "1 new", counted across
+every document. Clicking it opens a menu with those documents, what is
+open and who is connected, recent documents, the Library, and Quit. It
+is an optional Mac extra on top of the cross-platform helper. Agents do
+not change how they work.</p>
 <h2 id="problem-user-and-context">Problem, User, and Context</h2>
 <p>Ken runs several coding agents at once and reviews their work in
 Lahe. When an agent asks him a question on a card, or finishes answering
@@ -899,8 +899,8 @@ agent's name today (board row LAHE-agent-name-default). The menu names
 each session by what it is working on.</li>
 <li>Not a replacement for the Library. The menu is a short list; the
 Library stays the full one.</li>
-<li>Not a way to dismiss a card. That is board row LAHE-dismiss-card,
-and it affects when a question stops counting (R5).</li>
+<li>Not a new way to close a card. Mark as done, on the card's state
+chip, already does that, and it reads the card too (R5).</li>
 </ul>
 </div>
 <h2 id="solution-outline">Solution Outline</h2>
@@ -947,36 +947,36 @@ number.</p>
 <div class="callout callout-req">
 <p><strong>R3. The count is quick and right.</strong> A new question or
 reply shows within 10 seconds. A reply clears within 10 seconds of Ken
-reading it on the rail. A count that never clears, or counts something
-already handled, is a bug.</p>
+opening its card. A count that never clears, or counts something already
+handled, is a bug.</p>
 </div>
 <h3 id="what-waiting-on-you-means">What "waiting on you" means</h3>
-<p>This is not a new flag. It is the rail's own two marks, counted
-across every document instead of only on the page you have open: a card
-tagged "question" (R5) and a card tagged "1 new" (R6). The rules for
-both stay the rail's, written once and shared by the page and the
-helper, so the icon and the rail never disagree. The Library's "N
-waiting" is the other direction: your comments waiting on an agent. In
-the menu that is R9.</p>
+<p>This is not a new flag, and it has no logic of its own. It is the
+rail's "1 new" mark, counted across every document instead of only on
+the page you have open (R5). What counts as unread, and what counts as
+read, is the rail's one rule, written once and shared by the page and
+the helper, so the icon and the rail never disagree. If that rule needs
+revisiting, it is revisited in one place. The Library's "N waiting" is
+the other direction: your comments waiting on an agent. In the menu that
+is R9.</p>
 <div class="callout callout-req">
 <p><strong>R4. Only replies from after the icon was installed
 count.</strong> On day one the count is zero. Today 45 documents have an
 old unanswered question; none of them count.</p>
 </div>
 <div class="callout callout-req">
-<p><strong>R5. An agent asked Ken a question on a card.</strong> The
-card the rail tags "question". The document counts until one of these
-happens: Ken answers on the card, an agent replies to the card again,
-Ken marks the card done, the card is deleted, the review is retired or
-ended, or the document's file is gone.</p>
+<p><strong>R5. A document counts while it has a reply Ken has not
+read.</strong> By the rail's own rule: a reply is unread when the rail
+would tag its card "1 new" (a question, a refusal, or an answer the
+agent marked as worth reading; routine replies arrive already read). It
+is read when Ken opens the card, or marks it done. The icon has no rule
+of its own, and a question is not a special case: an unanswered question
+he has opened is read, and the rail still shows it as asking.</p>
 </div>
 <div class="callout callout-req">
-<p><strong>R6. An agent reply Ken has not read.</strong> The card the
-rail tags "1 new", by the rail's own rule: a question, a refusal, or an
-answer the agent marked as worth reading. Routine replies arrive already
-read and never count. The document counts until Ken opens the card on
-the rail, or marks it done. Reading it in any browser clears it
-everywhere.</p>
+<p><strong>R6. Reading it anywhere clears it everywhere.</strong> A card
+opened in one browser is read in every browser and on the icon. A
+review's retired, ended or missing-file documents never count (R7).</p>
 </div>
 <div class="callout callout-req">
 <p><strong>R7. Retired reviews, ended reviews, and documents whose file
@@ -1126,31 +1126,18 @@ This is a minor version bump.</p>
 <h2 id="questions-and-decisions">Questions and Decisions</h2>
 <p>For Ken to decide in review:</p>
 <div class="callout callout-question">
-<p><strong>When should an open question stop counting?</strong> Today 45
-documents have an old unanswered agent question, and most are from work
-Ken has moved on from. The brief keeps what you agreed: a question
-counts until it is answered or the card goes away (R5), and only
-questions from after the install count (R4). The risk was that questions
-you choose not to answer pile up with no way to clear them. That way now
-exists: Mark as done, on the card's state chip, shipped on main and
-closes any outstanding card. So:</p>
+<p><strong>Should the count include documents you do not have
+open?</strong> Ken, in review: he had pictured counting only open
+documents, and finds flagging closed ones interesting. As written, every
+document counts (R5).</p>
 <ul>
-<li><strong>A.</strong> Keep R5 as written: a question counts until you
-answer it or mark it done. Nothing more to build. (Recommended: it keeps
-a question in front of you until you deal with it, and Mark as done is
-one click when you decide not to.)</li>
-<li><strong>B.</strong> A question stops counting once you have read its
-card, the same as any other reply. The count clears more easily, but a
-question you read and walked past stops nagging.</li>
-<li><strong>C.</strong> Count a question only while its document is open
-in a browser. A question on a closed document waits until you open the
-document. The number stays small, but a closed document with a question
-is the one thing nothing else tells you about. (Ken, in review: he had
-pictured open documents only, and finds flagging closed ones
-interesting.)</li>
+<li><strong>A.</strong> Count every document, open or not. A closed
+document with an unread reply is the one thing nothing else tells you
+about. (Recommended, with the menu marking which waiting documents are
+open right now.)</li>
+<li><strong>C.</strong> Count only documents open in a browser. The
+number stays small; a closed document waits until you open it.</li>
 </ul>
-<p>A and C can be combined: count everything, and in the menu show which
-waiting documents are open right now and which are not.</p>
 </div>
 <div class="callout callout-question">
 <p><strong>Should "Stop Lahe" hold while agents are connected?</strong>
@@ -1189,11 +1176,13 @@ another way of seeing and reaching what the helper already
 records.</p></li>
 <li><p><strong>Quit has two items:</strong> hide the icon, or stop Lahe
 until next login.</p></li>
-<li><p><strong>"Read" is the rail's own read mark (R6), not a new
-rule.</strong> A reply counts until its card is opened, exactly when the
-rail drops its "1 new" tag. An earlier draft invented its own rule (the
-page was the focused tab); Ken asked for the existing mechanism
-instead.</p></li>
+<li><p><strong>"Read" is the rail's own read mark (R5), and a question
+is not a special case.</strong> A reply counts until its card is opened,
+exactly when the rail drops its "1 new" tag. Two earlier drafts gave the
+icon rules of its own (the page was the focused tab; a question counts
+until answered). Ken: it should follow the logic we already have, not
+have its own; the existing logic may need revisiting, but there are not
+two paths for what counts as read.</p></li>
 </ul>
 <p>Chosen by the brief, for Ken to overrule in review:</p>
 <ul>
@@ -1230,9 +1219,9 @@ href="01_brief_menu_bar_app_reviews.md">01_brief_menu_bar_app_reviews.md</a>.</p
 <tr>
 <td>RF1</td>
 <td>A background tab counted as looking</td>
-<td><span class="accepted">Accepted</span></td>
-<td>R6: only the focused tab counts, per page. The page already reports
-a background tab as not focused.</td>
+<td>Accepted, then superseded</td>
+<td>The focused-tab rule is gone. R5: read means the card was opened,
+the rail's own mark, in any browser.</td>
 </tr>
 <tr>
 <td>RF2</td>
@@ -1250,9 +1239,9 @@ count).</td>
 <tr>
 <td>RF4</td>
 <td>A question had no way to clear</td>
-<td><span class="accepted">Accepted</span></td>
-<td>R5 lists every clearing event; dismissal is a non-goal and a
-question for Ken.</td>
+<td>Accepted, then superseded</td>
+<td>A question clears like any reply: opening its card, or Mark as done,
+which has since shipped. Ken: one rule for read, not two.</td>
 </tr>
 <tr>
 <td>RF5</td>

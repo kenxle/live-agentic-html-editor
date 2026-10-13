@@ -7,7 +7,7 @@
 ## Needs your attention
 
 - [ ] **Review the full set:** start with the [brief](01_brief_menu_bar_app.html), then the [architecture](02_architecture_menu_bar_app.html) and the [plan](03_plan_menu_bar_app.html). Comment anywhere. Building waits for your go.
-- [ ] **When should an agent's open question stop counting?** A: only when you answer it or mark the card done, which shipped on main today (recommended). B: once you have opened its card, like any other reply. C: only while its document is open in a browser. Details at the top of the brief's Questions section.
+- [ ] **Should the count include documents you do not have open?** A: every document, with the menu marking which are open (recommended). C: only documents open in a browser. Details at the top of the brief's Questions section.
 - [ ] **Should "Stop Lahe" hold while agents are connected?** A: no, agents can start it again and the menu says so (recommended). B: yes, it holds until next login and agents' commands refuse to start it. Same section.
 
 ## Currently working on

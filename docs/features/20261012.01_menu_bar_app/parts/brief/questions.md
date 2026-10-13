@@ -1,13 +1,10 @@
 For Ken to decide in review:
 
 ::: callout-question
-**When should an open question stop counting?** Today 45 documents have an old unanswered agent question, and most are from work Ken has moved on from. The brief keeps what you agreed: a question counts until it is answered or the card goes away (R5), and only questions from after the install count (R4). The risk was that questions you choose not to answer pile up with no way to clear them. That way now exists: Mark as done, on the card's state chip, shipped on main and closes any outstanding card. So:
+**Should the count include documents you do not have open?** Ken, in review: he had pictured counting only open documents, and finds flagging closed ones interesting. As written, every document counts (R5).
 
-- **A.** Keep R5 as written: a question counts until you answer it or mark it done. Nothing more to build. (Recommended: it keeps a question in front of you until you deal with it, and Mark as done is one click when you decide not to.)
-- **B.** A question stops counting once you have read its card, the same as any other reply. The count clears more easily, but a question you read and walked past stops nagging.
-- **C.** Count a question only while its document is open in a browser. A question on a closed document waits until you open the document. The number stays small, but a closed document with a question is the one thing nothing else tells you about. (Ken, in review: he had pictured open documents only, and finds flagging closed ones interesting.)
-
-A and C can be combined: count everything, and in the menu show which waiting documents are open right now and which are not.
+- **A.** Count every document, open or not. A closed document with an unread reply is the one thing nothing else tells you about. (Recommended, with the menu marking which waiting documents are open right now.)
+- **C.** Count only documents open in a browser. The number stays small; a closed document waits until you open it.
 :::
 
 ::: callout-question
@@ -27,7 +24,7 @@ Settled with Ken in the crucible:
 - **Agents do not change how they work.** The icon is another way of seeing and reaching what the helper already records.
 - **Quit has two items:** hide the icon, or stop Lahe until next login.
 
-- **"Read" is the rail's own read mark (R6), not a new rule.** A reply counts until its card is opened, exactly when the rail drops its "1 new" tag. An earlier draft invented its own rule (the page was the focused tab); Ken asked for the existing mechanism instead.
+- **"Read" is the rail's own read mark (R5), and a question is not a special case.** A reply counts until its card is opened, exactly when the rail drops its "1 new" tag. Two earlier drafts gave the icon rules of its own (the page was the focused tab; a question counts until answered). Ken: it should follow the logic we already have, not have its own; the existing logic may need revisiting, but there are not two paths for what counts as read.
 
 Chosen by the brief, for Ken to overrule in review:
 

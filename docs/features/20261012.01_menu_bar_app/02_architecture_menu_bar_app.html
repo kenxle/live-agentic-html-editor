@@ -1019,8 +1019,8 @@ cutoff)</td>
 </tr>
 <tr>
 <td><code>src/service/catalog_reader.js</code></td>
-<td>Exposes a one-review summary, and adds two counts to it: open
-questions and unread replies, by the shared rule</td>
+<td>Exposes a one-review summary, and adds the unread count to it by the
+shared rule, with how many of those are questions</td>
 <td>changed</td>
 </tr>
 <tr>
@@ -1161,26 +1161,18 @@ counts once: the summary folds with the Library's own rule after
 building each review.</p>
 <h3 id="what-counts-as-waiting-on-you">What counts as waiting on
 you</h3>
-<p>A document waits on you when either holds:</p>
-<ol type="1">
-<li><strong>An open question (R5):</strong> an item in
-<code>ready</code> whose reply, for its current revision, is a
-<code>question</code>, and whose reply arrived after
-<code>seeded_at</code>. It stops counting when the item no longer
-carries that reply (Ken answers, which moves the revision; an agent
-replies again; the card is deleted).</li>
-<li><strong>An unread reply (R6):</strong> an item the shared unread
-rule names, whose reply arrived after <code>seeded_at</code>.</li>
-</ol>
+<p>A document waits on you when it holds an item the shared unread rule
+names (R5), whose reply arrived after <code>seeded_at</code>. There is
+no second rule: a question is unread until its card is opened, like any
+other reply the rail tags "1 new", and the rail's "question" tag on an
+opened card is the rail's business.</p>
 <p>Neither counts for a retired review, a review with
 <code>ended_at</code>, or a document the reader marks missing (R7).</p>
 <p>The icon counts <strong>documents</strong>, not cards: each one is
 one click. Today 45 documents have an old open question (64 questions;
 34 from the last month), counted by <a
 href="scripts/count_questions.py">scripts/count_questions.py</a> on
-2026-10-12. The <code>seeded_at</code> rule keeps all of them out.
-Whether an open question should stop counting once Ken has read its card
-is a question for Ken (see the questions leaf).</p>
+2026-10-12. The <code>seeded_at</code> rule keeps all of them out.</p>
 <h3 id="summaryread-response"><code>summary.read</code> response</h3>
 <div class="sourceCode" id="cb2"><pre
 class="sourceCode json"><code class="sourceCode json"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="fu">{</span></span>
@@ -1298,9 +1290,8 @@ sets the budget (R21) and measures it on Ken's state folder.</p>
     H-&gt;&gt;St: that review&#39;s files changed: rebuild its summary
     H--&gt;&gt;App: the document&#39;s unread count is one lower</code></pre>
 <p>The outbox posts at once, and the next summary comes within 5
-seconds, so the count drops inside R3's 10 seconds. An open question
-stays until it is answered or the card is closed (rule 1), whether or
-not its card was opened.</p>
+seconds, so the count drops inside R3's 10 seconds. A question opened
+and not yet answered is read; the rail still shows it as asking.</p>
 <h3 id="install-rebuild-and-quit">Install, rebuild, and Quit</h3>
 <pre class="mermaid"><code>flowchart TD
     Install[&quot;lahe install on a Mac&lt;br/&gt;(asks: add the menu bar icon?)&quot;] --&gt; Tools{&quot;xcrun finds swiftc?&quot;}
