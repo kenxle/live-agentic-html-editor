@@ -1252,6 +1252,11 @@ if let name = argument("--action", in: args) {
     }
     RunLoop.main.run()
 }
+#else
+if args.contains("--action") {
+    FileHandle.standardError.write(Data("--action is for test builds only\n".utf8))
+    exit(2)
+}
 #endif
 
 if args.contains("--watch") {
