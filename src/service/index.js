@@ -374,9 +374,11 @@ async function serve(options) {
     version: VERSION,
     startedAt: startedAt,
     alwaysOn: alwaysOn,
+    // Always an address: before the pages listener is bound (a request that
+    // lands in that moment), the port it is about to bind.
     libraryUrl: function () {
       var printed = addresses ? addresses.printedPort() : boundPagesPort;
-      return typeof printed === "number" ? pageRoutesModule.libraryAddress(printed) : null;
+      return pageRoutesModule.libraryAddress(typeof printed === "number" ? printed : pagesPortWanted);
     }
   });
 

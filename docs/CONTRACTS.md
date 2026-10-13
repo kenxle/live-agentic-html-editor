@@ -1139,10 +1139,17 @@ compares nested key paths and value types with the fixture in both directions.
 | `helper` | `{version, started_at, always_on}` | the helper's version string, its start time, and whether it runs from a login item |
 | `waiting_on_you` | `{count, documents}` | `count` is `documents.length`, never capped. Each document: `review`, `title`, `path_hint`, `open` (a window holder is current), `questions` (unread replies whose status is `question`), `unread` (every unread reply, questions included), `newest_at` (the newest unread reply's time). Open documents first, then newest first |
 | `waiting_on_agents` | `{count, more, documents}` | `count` is the sum of `waiting` over every document not retired, the Library's own total less retired reviews (a retired review is in no section); `documents` is at most 8, newest first, with `more` the rest. Each: `review`, `title`, `path_hint`, `waiting` |
-| `open_documents` | `{count, more, items}` | reviews with a current window holder, `focused` from the holder's own quiet flag; at most 8 items, `more` the rest |
-| `sessions` | `{open, connected: {count, more, items}}` | `open` counts sessions not closed. `connected` lists sessions whose agent is `listening` (a live monitor) or `working` (a `lahe` command in the last few minutes), the Library's test; at most 8 items, most recently heard first, `more` the rest. Each: `session`, `name` (the Library rename, else the newest review's title, else the session's own name, else null), `presence`, `last_heard_at`, `review` (its most recent review, or null) |
+| `open_documents` | `{count, more, items}` | reviews with a current window holder; at most 8 items, `more` the rest. Each: `review`, `title`, `path_hint`, `focused` (from the holder's own quiet flag) |
+| `sessions` | `{open, connected: {count, more, items}}` | `open` counts sessions not closed. `connected` lists sessions whose agent is `listening` (a live monitor) or `working` (a `lahe` command in the last few minutes), the Library's test; at most 8 items, most recently heard first, `more` the rest. Each: `session`, `name` (the Library rename, else the newest review's title, else the session's own name, else the session id), `presence`, `last_heard_at`, `review` (its most recent review, or null) |
 | `recent` | `{more, items}` | the Library's order, at most 8 items, `more` the rest. Each: `review`, `title`, `path_hint`, `last` |
 | `library_url` | string | the Library's printed address, with the pages port when the port-80 forward is not proved, and its page path: `http://library.lahe.localhost:1483/catalog`. The Library's host answers no other path |
+
+Every string field is always a string; only a session's `review` may be null. The fallbacks: a
+document's `title` is its file's name when it has no title or its title cleans to nothing (then the
+review id), and its `path_hint` is its file's name when the path is outside the home folder (an empty
+string when no file is on record); a session's `name` falls back to its own name, then its id, and
+its `last_heard_at` to the time the session was created; `helper.version` is the helper's version as
+it serves it, and `library_url` is always the printed address.
 
 Every `title` and `path_hint` has control characters (category Cc: U+0000 to U+001F, U+007F, and
 U+0080 to U+009F), Unicode format characters (category Cf, the bidirectional overrides among them),
