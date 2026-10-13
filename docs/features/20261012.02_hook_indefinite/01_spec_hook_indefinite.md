@@ -2,17 +2,23 @@
 
 ## Progress
 
-**Where it stands:** built and reviewed, waiting on the full gate before the
-PR opens. Last updated 2026-10-12, 9:12 PM.
+**Where it stands:** PR open, waiting on Ken's approval. Last updated
+2026-10-12, 9:20 PM.
 
+- PR: [#59 on GitHub](https://github.com/kenxle/live-agentic-html-editor/pull/59).
+- Full gate on the code commit: lint passed, bundle check passed, unit 2724
+  passed and 0 failed, Chromium 878 passed and 1 failed. The one failure was
+  the install walk asserting `node_modules` exists in the repo root, which a
+  fresh worktree lacks; after `npm install` in the worktree it passed alone
+  (2 passed). Not caused by this change.
 - Done: spec approved on this page; hook, test, diagram, CLI doc and skill
-  pitfall changed; skill reinstalled; unit suite 2724 passed, 0 failed; code
-  review said merge; branch `hook-indefinite` pushed; board row added.
-- Running: `npm run gate` (lint, bundle check, unit, Chromium) on the branch.
-- Next: read the gate counts, open the PR with them in the body, wait for
-  Ken's approval on the PR, merge, rerun the gate on main, then
+  pitfall changed; skill reinstalled; code review said merge; board row added.
+- Next: Ken approves the PR, then merge, pull main, rerun the gate there, and
   `npm run install-skills` from the main clone so the installed hook points at
-  the new code (the worktree run skipped the hook step on purpose).
+  the merged code (the worktree run skips the hook step on purpose).
+
+**To delete at cleanup:** `.claude-pr-body-202610122118.md` in the worktree
+root (the PR body scratch file; `.gitignore` covers `.claude-commit*` only).
 
 **Summary.** The Stop hook still tells a Claude Code agent to relaunch the
 monitor with a two-hour timeout. The skill, the contract and `docs/CLI.md` were
