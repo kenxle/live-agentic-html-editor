@@ -104,6 +104,10 @@ test/
   unit/      node:test unit tests
   browser/   Playwright tests (Chromium by default, three lanes on gate:all)
   fixtures/  Static HTML pages used as review targets in tests
+macos/
+  menubar/   The optional Mac menu bar app: one Swift file and its plist,
+             built on the Mac by `lahe install --menu-bar`. Nothing here is
+             required; see docs/ongoing/MENU_BAR.md
 ```
 
 Put new code in the directory that matches its job in the architecture doc,

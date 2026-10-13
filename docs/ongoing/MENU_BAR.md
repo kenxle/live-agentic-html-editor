@@ -1,0 +1,80 @@
+# The menu bar app
+
+Read this before touching `src/service/summary.js`, `src/service/menubar.js`, the `reply.seen` event, the `AUTH.CLI_PROOF` auth mode, or anything under `macos/menubar/`. The feature folder (`docs/features/20261012.01_menu_bar_app/`) is the history of why; this page is how it works now. Where the two differ, this page and the code win.
+
+## Summary
+
+- A Lahe icon in the Mac menu bar shows how many documents are waiting on the reviewer, and its menu lists them, the comments waiting on agents, what is open, who is connected, recent documents, the Library, and Quit.
+- It is an optional Mac extra. The helper's half (the summary, the read marks, the routes) is plain Node and runs everywhere; only the app is Swift, built on the Mac by `lahe install --menu-bar`.
+- "Waiting on you" has no logic of its own. It is the rail's "1 new" mark, counted across every document. One function decides what is unread, and the page and the helper both call it.
+- The app never sends the CLI secret. It signs each request, and trusts only answers the helper signs back.
+- Agents do not change how they work. Nothing an agent does starts, stops or reloads the icon.
+
+## What counts as waiting on you
+
+A document waits on the reviewer while one of its items is unread, by the one rule in `src/shared/record.js`: the reply needs reading (`needsToSeeReply`: a `question`, a `not_handled`, or a reply flagged `user_needs_to_see_reply` with words in `text` or `reason`), it is not a tool round, the reviewer has not closed the card, and the recorded read mark is not the current reply's stamp (`replyStamp`: the reply's `at`, `@`, the revision it answered). A routine `handled` reply arrives already read and never counts. A question is not a special case: opening its card reads it, and the rail still shows it as asking.
+
+Only replies newer than `seeded_at` in `<state>/summary.json` count. That file is written the first time the installed app asks, so the day the icon is installed it shows zero, not the dozens of old unanswered questions a long-running state folder holds. A missing or unreadable file starts fresh, which can only make the count smaller.
+
+Retired reviews, ended reviews and documents whose file is gone never count. Every other document counts, open in a browser or not; the menu lists the open ones first and marks them.
+
+## How the read mark travels
+
+The rail already decided when a reply is read: the card is opened and the "1 new" tag drops. At that moment `src/layer/tab_done.js` writes its local mark and `src/layer/sync.js` posts one `reply.seen` event, `{item, stamp}`, through the outbox, the same path Mark as done uses for `item.closed`. It carries no `rev` on purpose: an accepted event with a revision marks the item acknowledged, which could drop a follow-up the reviewer is typing at that revision.
+
+The projection (`src/service/projection.js`) records it on the item as `reply_seen` only when the stamp names the item's current reply. A stamp for another reply, an item the review does not hold, a non-string, or anything over 64 characters is dropped and reported, like a stale reply. A new reply or a new revision drops the mark. `review.json` carries `reply_seen` on every item, null when none, and the reply poll carries `reply.seen` events, so a page adopts a mark made in another browser and its own "1 new" clears too. A page from an older bundle posts nothing, so its count holds until the page reloads and never clears early.
+
+## The summary
+
+`src/service/summary.js` builds the answer `docs/CONTRACTS.md` spells ("The summary routes and the signed-request wire (menu bar)"). It leans on `src/service/catalog_reader.js`, which exposes one review's part (`reviewPart`: unread count, how many are questions, the newest unread time) by folding that review's log with the helper's own projection, the Library's fold rule (`foldParts`, which the Library list now uses too), and each session's liveness (`sessionsAt`). Comment text never leaves the reader. Titles and path hints lose control and format characters and are cut at 120 and 200 characters; a path outside the home folder shows only the file name.
+
+The cache is per review, keyed on the review folder's change time (where `review.json` and `meta.json` always land by rename) plus `events.jsonl`, with `catalog.json` read once per request so a Library rename shows. The reviewed document is checked only while the review has an unread reply, so a deleted file drops out at once. On a made-up state folder of 700 reviews an idle request answers in about 8 to 9 ms; the plan's original four-file key cost 37 ms. One gap, accepted: a review with no page title whose document heading changes keeps its old title until the review changes.
+
+Caps: waiting on you is never cut short. Waiting on agents, open documents, connected sessions and recent show at most 8 rows with `more` for the rest. `library_url` ends in `/catalog`, because the Library host refuses `/`.
+
+## The routes and the proof
+
+`summary.read` (GET `/lahe/v1/summary?v=1`) and `summary.open` (POST `/lahe/v1/summary/open`) are the first routes on `AUTH.CLI_PROOF`. The key is the trimmed `cli-secret`. Each request carries a timestamp, a 32-hex nonce and an HMAC-SHA256 over the route, timestamp, nonce and body hash; every answer, errors included, carries an HMAC over the nonce, status and body hash. The helper accepts a timestamp within 30 seconds, refuses a replayed nonce, compares in constant time, and refuses a proof moved from one route to the other. Both routes refuse any `Sec-Fetch-*` header, the raw secret header and the Library token; `summary.open` also refuses `Origin`; neither is a Library route. Every refusal is a signed `401 AUTH_REFUSED` whose detail names the check; a version mismatch is a signed `409 SUMMARY_VERSION`.
+
+`test/fixtures/menubar/proof_vectors.json` holds a secret, three requests and three answers with every intermediate value. `src/service/auth.js`, the fake helper and the app's self-test each assert all of them, so the Node and Swift halves cannot drift.
+
+`summary.open` runs catalog Open with `handoff: false` and answers `{url}`; a row only an agent could serve answers `{url: null}` and the app opens the Library instead. The app opens an address only after it passes its allowlist: `http`, no user part, `library.lahe.localhost` or a site name plus `.lahe.localhost`, a port absent or equal to the pages port, rebuilt from the parsed parts.
+
+## The app
+
+`macos/menubar/LaheMenuBar.swift` is the whole app: AppKit, Foundation and CryptoKit, no packages. `Info.plist` sets `LSUIElement` (no Dock icon) and `CFBundleExecutable` `LaheMenuBar`, which is what Activity Monitor shows. It takes `--state-dir`, reads `cli-secret` and `service.json` from there, connects to `127.0.0.1` at the API port, polls every 5 seconds and when the menu opens, and logs to `<state>/menubar.log` at most once a minute for a repeating error.
+
+Four looks: the plain speech bubble (nothing waiting), the bubble with a count (to 99, then 99+), not running, and can't tell. Can't tell covers a timeout, a 401, a 409 (with "Lahe was updated; rebuilding"), an unsigned or badly signed answer, an unreadable answer, and the time after a wake until the first fresh answer; it is never the plain mark and never the last number. The app rereads the secret after a 401 and after a bad signature, because a replaced secret makes the helper sign its 401 with the new key.
+
+Quit has two items. **Hide the icon** exits with status 0; the login item restarts the app only after a crash, so Hide holds until the next login or `lahe menubar show`. **Stop Lahe** holds: the app writes `<state>/stopped.json` (`{by: "menu bar", at}`) and then unloads the helper's login item. While that file stands, `login_item.startThroughItem` refuses with one line (who stopped it, when, and how to start it) and starts nothing, so an agent's `lahe review` exits 1 and the helper stays down. The menu shows "Stopped by you at <time>" and **Start Lahe**, which removes the marker, bootstraps the helper's plist and kickstarts it, without checking the plist's contents (anything that can write `~/Library/LaunchAgents` can already run code at login). `lahe install` removes the marker too, and the helper removes it on its own start, so a running helper always means the person started it. The labels `lahe-helper` and `lahe-menubar` and their plist paths are constants in the app; a test build (`-D LAHE_TEST_LABELS`) uses `lahe-test-<id>` and a plist inside the state folder.
+
+Debug modes, none needing a macOS permission: `--self-test` (the allowlist, count formatting, every proof vector, `--decode <file>`), `--snapshot <dir>` (every look on light and dark as PNGs), `--dump-menu` (the menu for a summary file as JSON), `--watch` (reads `wake`, `poll`, `quit` on stdin; `wake` posts the real wake notification), and `--action` on test builds. `macos/menubar/README.md` has the exact build command.
+
+## Install, rebuild and status
+
+`src/service/menubar.js` holds the one build recipe: `/usr/bin/xcrun --find swiftc`, copy the fixed file list (`LaheMenuBar.swift`, `Info.plist`) from the clone `install.json` names into `<state>/menubar/.build-*`, hash the copies and the pinned flags (the source stamp), compile with `-swift-version 5 -target <arch>-apple-macosx13.0 -O`, assemble `Lahe.app`, and rename it into place only on success. The build folder is inside the state folder so the final rename stays on one volume. The app's login item (`~/Library/LaunchAgents/lahe-menubar.plist`) runs it at login with `--state-dir` and `KeepAlive` only on a crash. `install.json` records a `menubar` block: the app, label, plist, source stamp, build time, and `last_error` when a build failed.
+
+`lahe install` on a Mac asks once whether to add the icon; `--menu-bar` and `--no-menu-bar` answer without asking (`--no-menu-bar` also removes an icon already installed). An existing install plus `--menu-bar` adds only the icon. Without the command line tools it prints `xcode-select --install` and the rest of the install completes. `lahe uninstall` removes the icon. `lahe menubar show` brings a hidden icon back; `lahe menubar rebuild` builds now. `lahe status` prints one `menu bar` line. The commands and flags are in `docs/CLI.md`.
+
+`menubar.tick` runs on the helper's 15-second beat, after the Library sweep, only for an always-on helper. When the source stamp of the clone's `macos/menubar/` differs from the recorded one, it rebuilds in a child process (one at a time per state folder), swaps the app in, and restarts it only if `launchctl print` says it was running, so a hidden icon stays hidden through a `git pull`. A failed build keeps the old app, writes `menubar.log` and `last_error`, and is not retried until the stamp changes again.
+
+`scripts/check_menubar.js` (`npm run check:menubar`, part of `npm run gate`) builds the app with the same recipe into a temp state folder and runs its self-test. It skips with one line off macOS and without the command line tools.
+
+## Tests
+
+- `test/unit/reply_seen.test.js`: the event's bounds, the projection, one post per stamp, adoption of a polled mark.
+- `test/unit/menubar_summary.test.js`: the rules, the cutoff, the fold, the caps, the cache, and the fixtures' key paths and types in both directions.
+- `test/unit/summary_routes.test.js`: the auth mode against every proof vector, the refusals, replay, a proof moved between routes, `summary.open`.
+- `test/browser/menubar_summary.spec.js`: a question shows at the summary within 5 s and clears within 10 s of opening its card; a routine reply never shows; a second browser context's read clears the first.
+- `test/unit/menubar.test.js`, `menubar_cli.test.js`, `stop_holds.test.js`, and the menu bar cases in `install_command.test.js`: the recipe, the login item, install and uninstall, rebuild on change, Stop holds, the status line, all with the system runner mocked (`test/helpers/fake_mac.js`) so they run on every system.
+- `test/unit/menubar_fake_helper.test.js`: the fake helper (`test/fixtures/menubar/fake_helper.js`) in every mode.
+- `test/unit/menubar_app.test.js`: the built app against the fake helper; runs only with `LAHE_MENUBAR_APP` naming a test build, and the Stop and Start case only with `LAHE_MENUBAR_LAUNCHD=1`.
+
+No test touches the real labels, `~/Library/LaunchAgents`, port 7817 or `~/.local/state/lahe`.
+
+## Known limits
+
+- An agent cannot capture the real menu bar on this Mac (no screen recording permission), so the pictures in the feature folder are the app's own `--snapshot` drawings.
+- `launchctl bootout` can return while the job's process is still closing, so a poll in the next moment may briefly show the count after Stop; the next poll corrects it. Stop and Start run `launchctl` on the main thread, so the app freezes for that moment.
+- The helper's kickstart still reads the helper's label from `install.json`, as it did before this feature, now limited to the four known label shapes; the icon's label and the bootstrap path never read a label from a file.
+- The CLI's two older secret routes (`site.bind`, `review.retire`) still send the raw secret. Moving them to the proof is on the board.
