@@ -245,17 +245,19 @@ function createReader(options) {
   // Sessions, heartbeats and servers
   // ---------------------------------------------------------------------------
 
-  // A session's three files, each resolved once per reader. Resolving checks
+  // A session's three files, each resolved once per reader: resolving checks
   // every folder on the way for a symlink, and the menu bar's summary asks
-  // about every session every five seconds. A resolution that throws is not
-  // kept, so it throws again next time.
+  // about every session every five seconds. The file itself is checked again
+  // on every read (one lstat), so a file swapped for a symlink after the first
+  // read is refused, not followed. A refusal throws, and every caller reads
+  // a throw as an unreadable file.
   var SESSION_FILES = { session: stateDir.agentSessionPath, monitor: stateDir.monitorPath, activity: stateDir.activityPath };
   var sessionPaths = Object.create(null);
 
   function sessionFile(kind, sessionId) {
     var key = kind + ":" + sessionId;
     if (!sessionPaths[key]) sessionPaths[key] = SESSION_FILES[kind](dir, sessionId);
-    return sessionPaths[key];
+    return stateDir.assertNotSymlink(sessionPaths[key]);
   }
 
   function readSession(sessionId) {
@@ -1565,13 +1567,16 @@ function createReader(options) {
 }
 
 // What the menu bar shows of a title and a path. Page-derived text, so it
-// loses every control character and every Unicode format character (the
-// bidirectional overrides among them, which can make one name read as
-// another), and it is cut, by characters rather than UTF-16 units.
+// loses every control character (C0 and C1), every Unicode format character
+// (the bidirectional overrides among them, which can make one name read as
+// another), the line and paragraph separators (which break a menu row), and
+// every lone surrogate half (which JSON carries as a bare \ud800 escape that
+// the Mac app's decoder refuses, failing the whole answer). With the u flag,
+// \p{Cs} matches only a lone half, never a real pair. It is cut by
+// characters rather than UTF-16 units.
 var MENU_TITLE_MAX = 120;
 var MENU_PATH_HINT_MAX = 200;
-// eslint-disable-next-line no-control-regex
-var MENU_UNSAFE_CHARS = /[\u0000-\u001f\u007f]|\p{Cf}/gu;
+var MENU_UNSAFE_CHARS = /[\p{Cc}\p{Cf}\p{Cs}\p{Zl}\p{Zp}]/gu;
 
 /**
  * Page-derived text made safe to set as a menu title.
@@ -1582,7 +1587,10 @@ var MENU_UNSAFE_CHARS = /[\u0000-\u001f\u007f]|\p{Cf}/gu;
  */
 function menuText(value, max) {
   if (typeof value !== "string") return null;
-  var clean = Array.from(value.replace(MENU_UNSAFE_CHARS, "")).slice(0, max).join("").trim();
+  var clean = value.replace(MENU_UNSAFE_CHARS, "");
+  // Never more characters than UTF-16 units, so only a long one is split.
+  if (clean.length > max) clean = Array.from(clean).slice(0, max).join("");
+  clean = clean.trim();
   return clean || null;
 }
 

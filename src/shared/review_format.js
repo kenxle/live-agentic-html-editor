@@ -259,8 +259,6 @@
     // The reviewer marked the item done themselves. A boolean the helper
     // writes from the reviewer's own act, never from page text.
     closed_by_reviewer: record.CLASS_DATA,
-    // The stamp of the reply the reviewer read, written from their own act.
-    reply_seen: record.CLASS_DATA,
     "thread[].rev": record.CLASS_DATA,
     "thread[].reviewer.note": record.CLASS_DATA,
     "thread[].reviewer.change": record.CLASS_DATA,
@@ -745,12 +743,6 @@
     // the flag above: the reply, if any, is the agent's last answer, and this
     // says it is not what finished the item.
     out.closed_by_reviewer = record.isClosedByReviewer(it);
-
-    // THE REVIEWER READ THIS REPLY: the stamp a reply.seen event recorded, or
-    // null. The helper's own bookkeeping of the reviewer's act, so the menu bar
-    // counts what the rail counts (record.isUnreadReply). Not work for the
-    // agent: nothing about the item changes because of it.
-    out.reply_seen = typeof it[F.REPLY_SEEN] === "string" ? it[F.REPLY_SEEN] : null;
 
     // WHEN THE REVIEWER LAST CHANGED THESE WORDS, and it is the obvious field
     // on purpose. This pair used to be created_at and updated_at, side by side
