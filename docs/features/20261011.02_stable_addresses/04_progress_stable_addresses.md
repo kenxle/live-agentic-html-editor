@@ -207,7 +207,7 @@ Windows restarts through the once-a-minute trigger, so a crashed helper there ca
 
 ## Log
 
-- 2026-10-12 21:22: Cleanup. Stable addresses shipped in v0.3.0 and runs on Ken's Mac from the login item. Ken accepted the `:1483` timeout under the port-80 forward for now; what was found is on the board. The build taught two things with no owning task: a merged change can wait on the slow checks (now in CLAUDE.md), and a builder that departs from the docs asks at that moment, not in its report.
+- 2026-10-12 21:22: Cleanup. Stable addresses shipped in v0.3.0 and runs on Ken's Mac from the login item. Ken accepted the `:1483` timeout under the port-80 forward for now; what was found is on the board. The build taught one thing with no owning task: a merged change can wait on the slow checks (now in CLAUDE.md).
 
 - 2026-10-11 18:37: Library fix merged (Open gives one address per file). Free disk fell to 887 MB, so all test runs and previews are on hold. What is left after the disk is cleared: full `gate` and `gate:all`, the idle measurement against the limits (at most 100 MB and 120 wakeups a minute with nothing open; at most 250 MB and 400 with about 20 pages open), a preview on your real documents, and a browser walkthrough.
 - 2026-10-11 18:35: Core fix round 2 merged: hidden folders cannot be mounted, the helper refuses to start if another program holds its IPv6 address, the worktree fallback checks git's own link, one address per file for `lahe review`, docs and skill current. The Library's Open gets the same one-address rule next.
