@@ -71,6 +71,8 @@ flowchart LR
 
 ### What "waiting on you" means
 
+This is not a new flag. A question card (R5) is the card the rail already shows in the accent, its agent block marked as the thing you need to answer. Today you see it only on a page you have open. The icon counts those same cards across every document. Answered comments on a page you have not looked at (R6) are the one new signal; the rail has no mark for them. The Library's "N waiting" is the other direction: your comments waiting on an agent. In the menu that is R9.
+
 ::: callout-req
 **R4. Only replies from after the icon was installed count.** On day one the count is zero. Today 45 documents have an old unanswered question; none of them count.
 :::

@@ -312,13 +312,21 @@
       line-height: 1.65;
       color: var(--ff-fg);
       background: var(--ff-bg);
-      max-width: 880px;
+      max-width: 1080px;   /* --maxw */
       margin: 0 auto;
-      padding: 56px 28px 104px;
+      padding: 56px 28px 104px;   /* 28px: --gutter */
       -webkit-font-smoothing: antialiased;
       text-rendering: optimizeLegibility;
       hyphens: manual;   /* pandoc */
     }
+
+    /* The reading measure, as in the International Style: prose stops at 68ch
+       (--read) and sits flush left in the wider column, so lines stay short and
+       the right side stays open. Tables, code, diagrams and callout boxes keep
+       the full column. */
+    p, ul, ol, blockquote { max-width: 68ch; }
+    :is(table, pre) :is(p, ul, ol, blockquote),
+    p:has(> img:only-child) { max-width: none; }
 
     /* Title block (pandoc emits <header id="title-block-header">) */
     header#title-block-header { padding-bottom: 8px; margin-bottom: 0; text-align: left; }
@@ -941,6 +949,13 @@ Ken focusing the page it is on. A count that never clears, or counts
 something already handled, is a bug.</p>
 </div>
 <h3 id="what-waiting-on-you-means">What "waiting on you" means</h3>
+<p>This is not a new flag. A question card (R5) is the card the rail
+already shows in the accent, its agent block marked as the thing you
+need to answer. Today you see it only on a page you have open. The icon
+counts those same cards across every document. Answered comments on a
+page you have not looked at (R6) are the one new signal; the rail has no
+mark for them. The Library's "N waiting" is the other direction: your
+comments waiting on an agent. In the menu that is R9.</p>
 <div class="callout callout-req">
 <p><strong>R4. Only replies from after the icon was installed
 count.</strong> On day one the count is zero. Today 45 documents have an

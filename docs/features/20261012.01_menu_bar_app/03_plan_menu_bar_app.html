@@ -312,13 +312,21 @@
       line-height: 1.65;
       color: var(--ff-fg);
       background: var(--ff-bg);
-      max-width: 880px;
+      max-width: 1080px;   /* --maxw */
       margin: 0 auto;
-      padding: 56px 28px 104px;
+      padding: 56px 28px 104px;   /* 28px: --gutter */
       -webkit-font-smoothing: antialiased;
       text-rendering: optimizeLegibility;
       hyphens: manual;   /* pandoc */
     }
+
+    /* The reading measure, as in the International Style: prose stops at 68ch
+       (--read) and sits flush left in the wider column, so lines stay short and
+       the right side stays open. Tables, code, diagrams and callout boxes keep
+       the full column. */
+    p, ul, ol, blockquote { max-width: 68ch; }
+    :is(table, pre) :is(p, ul, ol, blockquote),
+    p:has(> img:only-child) { max-width: none; }
 
     /* Title block (pandoc emits <header id="title-block-header">) */
     header#title-block-header { padding-bottom: 8px; margin-bottom: 0; text-align: left; }
