@@ -47,8 +47,12 @@ var protocol = require("../../shared/protocol.js");
 var agentSessions = require("../../service/agent_sessions.js");
 var stateDir = require("../../service/state_dir.js");
 
-// Claude Code's background Bash limit when BASH_MAX_TIMEOUT_MS is not set.
-var DEFAULT_MAX_TIMEOUT_MS = 2 * 60 * 60 * 1000;
+// The timeout the block reason names when BASH_MAX_TIMEOUT_MS does not allow
+// more: 24 hours, the skill's number. It is not a Claude Code limit: since
+// 2.1.288 an interactive session puts no time limit on a background command,
+// so one launch waits until there is work. The number only matters in an
+// unattended run (-p, the Agent SDK, CI, cloud), where the limit is real.
+var DEFAULT_MAX_TIMEOUT_MS = 24 * 60 * 60 * 1000;
 
 // How much of a transcript is read, from its end. A long session's transcript
 // runs to tens of megabytes; ids are re-printed on every relaunch, so the recent
@@ -92,8 +96,8 @@ var USAGE = [
 ].join("\n");
 
 /**
- * The largest timeout a background Bash call may ask for: two hours, or
- * BASH_MAX_TIMEOUT_MS when that allows more.
+ * The timeout the block reason names: 24 hours, or BASH_MAX_TIMEOUT_MS when
+ * that allows more.
  */
 function maxTimeoutMs(env) {
   var raw = env && env.BASH_MAX_TIMEOUT_MS;
@@ -269,6 +273,7 @@ function blockReason(sessions, timeoutMs) {
     commands.join("\n") + "\n\n" +
     (commands.length === 1 ? "Run only that one command" : "Run only those commands") +
     "; there is no need to drain or to message the reviewer first. " +
+    "One launch waits until there is work, so add no timer or loop. " +
     (sessions.length === 1
       ? "If the human has said this review is over, close the session instead with lahe session close " +
         sessions[0].id + protocol.stateDirFlag(sessions[0].stateDir) + ". "

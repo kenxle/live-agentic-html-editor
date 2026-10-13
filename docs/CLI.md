@@ -149,8 +149,10 @@ is that hook:
   then would start a second one. A default state directory that is refused
   only drops the default from the search.
 - **What it prints.** For those sessions, one block whose reason names the
-  monitor command (one command per state directory, every session in it) and
-  says to run it with Bash `run_in_background` and the largest timeout allowed.
+  monitor command (one command per state directory, every session in it),
+  says to run it with Bash `run_in_background` and `timeout` 86400000 (or
+  `BASH_MAX_TIMEOUT_MS` when that is larger), and says one launch waits until
+  there is work, so no timer or loop is added.
   Nothing when `stop_hook_active` is true, so it blocks at most once per turn.
   Nothing on any error. It always exits `0`.
 
