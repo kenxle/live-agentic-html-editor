@@ -32,17 +32,20 @@ diagram and the skill to know what his agents are doing.
 1. **The hook's default timeout is 24 hours.** `lahe hook stop` names
    86400000, or `BASH_MAX_TIMEOUT_MS` when that is larger, the same number the
    skill and the contract name.
-2. **The hook's reason says one launch waits until there is work.** It tells
-   the agent not to add a timer, a scheduled wakeup or a loop. It stays short:
-   the reason is read on every block, and repeated agent-facing text steers
-   behavior.
+2. **The hook's reason says one launch waits until there is work.** It adds
+   one short sentence saying so, and that no timer or loop is added. It stays
+   short: the reason is read on every block, and repeated agent-facing text
+   steers behavior.
 3. **The diagram matches.** `docs/diagrams/agent_workflow.md` names 86400000,
    says one launch waits until there is work in an interactive session, and
-   describes the timeout as mattering only in an unattended run. Its "What to
-   notice" text says the same.
+   describes the timeout as mattering only in an unattended run. Both prose
+   spots change too: the paragraph before the Stop hook diagram ("also ends
+   when it hits its timeout") and the "What to notice" bullet ("largest
+   timeout allowed").
 4. **The CLI doc's hook section matches.** The "What it prints" bullet in
-   `docs/CLI.md` says the reason tells the agent one launch waits until there
-   is work, instead of "the largest timeout allowed".
+   `docs/CLI.md` says the reason names the timeout (86400000, or
+   `BASH_MAX_TIMEOUT_MS` when larger) and says one launch waits until there is
+   work, instead of "the largest timeout allowed".
 5. **The skill's pitfall 10 matches.** It says one launch waits until there is
    work, not "the largest timeout allowed". The installed copy is refreshed
    with `npm run install-skills`.
@@ -61,8 +64,8 @@ Done directly in this worktree, no builder dispatched.
 
 | # | Task | Verification |
 |---|---|---|
-| 1 | `src/cli/commands/hook.js`: raise `DEFAULT_MAX_TIMEOUT_MS` to 24 hours, reword the two comments that call it Claude Code's two-hour limit, reword `blockReason` so it says one launch waits until there is work | `test/unit/hook_stop.test.js`: the default-timeout cases expect 86400000; a lower `BASH_MAX_TIMEOUT_MS` leaves the 24-hour default; the `blockReason` fixture matches the new wording |
-| 2 | `docs/diagrams/agent_workflow.md`: the Claude Code node and the paragraph after the second diagram | read-through against the skill's Claude Code section |
+| 1 | `src/cli/commands/hook.js`: raise `DEFAULT_MAX_TIMEOUT_MS` to 24 hours, reword the two comments that call it Claude Code's two-hour limit (the number is the skill's, not a Claude Code limit), reword `blockReason` so it says one launch waits until there is work | `test/unit/hook_stop.test.js`: the default-timeout cases expect 86400000; a lower `BASH_MAX_TIMEOUT_MS` leaves the 24-hour default; the test titled "more than two hours" is renamed; the `blockReason` fixture matches the new wording |
+| 2 | `docs/diagrams/agent_workflow.md`: the Claude Code node, the paragraph before the Stop hook diagram, and the "What to notice" bullet | read-through against the skill's Claude Code section |
 | 3 | `docs/CLI.md`, "What it prints" | read-through |
 | 4 | `skills/lahe/SKILL.md`, pitfall 10, then `npm run install-skills` | `diff` of the installed copy against the repo copy |
 | 5 | `npm run gate:unit` | lint and the unit suite pass; counts in the PR body |
@@ -71,7 +74,9 @@ Done directly in this worktree, no builder dispatched.
 
 The verification column above is the list. In one line: a fresh machine's
 Stop hook prints 86400000 and says one launch waits until there is work, and
-no doc in the repo still says the monitor ends at a two-hour timeout.
+no living doc (the skill, `docs/CLI.md`, `docs/diagrams/`, `docs/CONTRACTS.md`)
+still says the monitor ends at a two-hour timeout. Feature folders under
+`docs/features/` are history and keep their old wording.
 
 No analytics, no flag: the hook runs on every turn or not at all, and the
 installer already handles adding and removing it.
@@ -81,4 +86,9 @@ indefinite for claude".
 
 ## Review
 
-Pending.
+One architecture review (Sonnet). Accepted: name both prose spots in the
+diagram, keep the timeout number in the reason (an unattended run has a real
+limit and the hook cannot tell which kind of run it is in) but cut the added
+sentence to one short line, narrow the acceptance line to living docs, and say
+in the hook's comment that 24 hours is the skill's number rather than a Claude
+Code limit. Rejected: nothing.

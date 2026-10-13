@@ -950,9 +950,10 @@ Each of these is a rule that a live review paid for.
 9. **Wait with the wake channel for your host.** Tailing `review.json` goes deaf,
    because it is written atomically and a tail follows a deleted inode.
    `events.jsonl` has no session routing.
-10. **On Claude Code, wait with `lahe monitor` in a background Bash call with the
-    largest timeout allowed.** A watch with a short timeout wakes the model every
-    few minutes on nothing. When Claude Code stops it for low memory, relaunch
+10. **On Claude Code, wait with `lahe monitor` in one background Bash call.** One
+    launch waits until there is work; a watch with a short timeout, or a timer
+    of your own, wakes the model every few minutes on nothing. When Claude Code
+    stops it for low memory, relaunch
     it and do nothing else; after three such kills in a row with nothing new
     landing, stop and tell the reviewer.
 11. **In Codex, keep the turn pending on the monitor's exec call, with no Codex
