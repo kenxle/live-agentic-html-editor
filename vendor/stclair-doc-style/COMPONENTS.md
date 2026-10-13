@@ -193,6 +193,55 @@ An unnumbered section stamped with a time.
 </div>
 ```
 
+## Document links and references
+
+### Links row
+A line of links to the sibling documents of one piece of work, above the first
+section. The current page is a `span` with `aria-current="page"`; a page that
+does not exist yet is a `span` with `class="disabled"`.
+
+```html
+<nav class="toplinks" aria-label="Documents">
+  <span class="toplinks-label">Docs</span>
+  <a href="00_crucible_x.html">Crucible</a>
+  <span aria-current="page">Brief</span>
+  <a href="02_architecture_x.html">Architecture</a>
+  <span class="disabled">Plan</span>
+</nav>
+```
+
+### Contents list
+The table of contents, inside a folded section. It styles only the list; the
+fold is the folded section above.
+
+```html
+<details class="fold contents">
+  <summary class="fold-head"><span class="fold-arrow" aria-hidden="true"></span><h2>Contents</h2></summary>
+  <div class="fold-body">
+    <nav id="TOC" class="contents-list"><ul><li><a href="#a">Summary</a><ul><li><a href="#b">Sub</a></li></ul></li></ul></nav>
+  </div>
+</details>
+```
+
+### Cross-reference line
+One line that sends the reader to the place a point is argued in full.
+
+```html
+<div class="xref"><p><a href="02_architecture_x.html#data-model">Architecture: data model</a></p></div>
+```
+
+### Status dot
+A dot and one short word for a verdict, in a table cell or a line. Colours:
+`status-dot--sage` (accepted), `status-dot--purple` (rejected),
+`status-dot--faint` (deferred); no variant is body ink. Each is at least 4.5:1
+as text on white.
+
+```html
+<span class="status-dot status-dot--sage">Accepted</span>
+<span class="status-dot status-dot--purple">Rejected</span>
+<span class="status-dot status-dot--faint">Deferred</span>
+```
+
 ## Lists
 
 ```html
@@ -409,3 +458,6 @@ A page with no problem shows neither colour.
 - A screenshot with its explanation: image beside text. A framed figure with a
   number: plate. Several thumbnails: gallery or image cards.
 - Status words in a table or list: badges.
+- Sibling documents of one piece of work: links row. A table of contents: contents
+  list inside a folded section. A pointer to the full argument elsewhere: cross-reference
+  line. A verdict word (accepted, rejected, deferred): status dot.

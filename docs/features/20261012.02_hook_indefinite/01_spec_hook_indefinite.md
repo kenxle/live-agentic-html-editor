@@ -2,9 +2,9 @@
 
 ## Progress
 
-**Where it stands:** done. Merged to main (PR #59, d80cb2de), the installed
-hook runs the new code, and the post-merge gate on main is green. Last updated
-2026-10-12, 9:47 PM.
+**Where it stands:** done, and the close-out needs three answers from you.
+They are in [Cleanup decisions](#cleanup-decisions) at the bottom: two
+proposed lessons and one CLAUDE.md line. Last updated 2026-10-12, 10:35 PM.
 
 - Post-merge `npm run gate` on main: lint passed, bundle check passed, unit
   2724 passed and 0 failed, Chromium 882 passed and 0 failed.
@@ -16,7 +16,8 @@ hook runs the new code, and the post-merge gate on main is green. Last updated
 - The Library "Open" test that failed once in CI was a same-millisecond race
   that another agent fixed in PR #58 (d36f7624); its board row is marked done.
 - Lesson proposed: `docs/lessons/proposed/a-fresh-worktree-under-the-clone-runs-the-suite-without-its-own-node-modules.md`.
-- Review session closed.
+- Review session closed. Ken's comments and the replies are in the
+  [review log](01_spec_hook_indefinite_review_log.md).
 
 **To delete at cleanup:** `.claude-pr-body-202610122118.md` in the worktree
 root (the PR body scratch file), and the worktree
@@ -115,3 +116,56 @@ limit and the hook cannot tell which kind of run it is in) but cut the added
 sentence to one short line, narrow the acceptance line to living docs, and say
 in the hook's comment that 24 hours is the skill's number rather than a Claude
 Code limit. Rejected: nothing.
+
+## Cleanup decisions
+
+Answer on each card: promote, discard, or merge for a lesson; yes or no for
+the CLAUDE.md line. Nothing is deleted until you approve the batch at the end.
+
+### Lesson 1: a fresh worktree under the clone runs the suite without its own node_modules
+
+**The trap.** A worktree made under `.claude/worktrees/` has no `node_modules`,
+yet `npm run gate` runs the whole browser suite there, because Node walks up
+to the clone's `node_modules`. One spec, the install walk, checks the repo
+root itself and fails with "npm install has been run: expected true, received
+false". It looks like the change under test broke something. It did not.
+
+**Recommendation: promote, unless you take the CLAUDE.md line below.** It is a
+real trap (the suite runs, so nothing hints at a missing install), the symptoms
+are the words an agent holds ("npm install has been run", "1 failed 878
+passed"), and the fix is one command. If the CLAUDE.md line is accepted, the
+lesson is redundant and should be discarded instead: CLAUDE.md is always
+loaded, and a rule there needs no lesson.
+
+File: [proposed lesson](../../lessons/proposed/a-fresh-worktree-under-the-clone-runs-the-suite-without-its-own-node-modules.md).
+
+### Lesson 2: the browser suite rewrites committed screenshots under docs/features
+
+**The trap.** Three specs save their screenshots straight into feature folders
+so progress pages show the real thing. Every full run re-renders them, and a
+pixel of difference leaves committed PNG files modified in a branch that never
+touched them. A broad `git add docs` then commits them by accident.
+
+**Recommendation: promote.** It bit this change twice tonight (four PNGs
+modified after each gate), it is on the board as LAHE-gate-rewrites-doc-screenshots
+and LAHE-gate-rewrites-mark-done-shots, and the lesson's "what to do instead"
+(put them back with `git checkout --`, never delete) is exactly right. The board
+rows stay open for the real fix, which is writing them to `test-results/`.
+
+File: [proposed lesson](../../lessons/proposed/the-browser-suite-rewrites-committed-screenshots-under-docs-features.md).
+
+### CLAUDE.md line: install devDependencies in a fresh worktree before the gate
+
+**What to add,** in the "Running the gate" section after the paragraph on
+installing browsers:
+
+> A fresh worktree under the clone has no `node_modules`, and the suite still
+> runs there because Node walks up to the clone's. Run `npm install` in the
+> worktree before its first `npm run gate`, then `git checkout -- package-lock.json`.
+> Without it, `install_walk_3b.spec.js` fails on its precondition and nothing else does.
+
+**Why.** It cost one full gate run and a rerun tonight. Every whetstone and
+feature-forge change starts in a worktree, so every builder will meet it.
+
+**Recommendation: yes.** Then discard Lesson 1, since CLAUDE.md is always
+loaded and a trap that becomes a rule there gets no matching lesson.
