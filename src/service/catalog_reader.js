@@ -1251,7 +1251,8 @@ function createReader(options) {
    * else null). A closed or unreadable session is never watching.
    *
    * @param {number|string} [now]
-   * @returns {{id: string, closed: boolean, name: string|null, watching: object|null}[]}
+   * @returns {{id: string, closed: boolean, name: string|null, started_at: string|null,
+   *            watching: object|null}[]}
    */
   function sessionsAt(now) {
     var nowMs = toMs(now);
@@ -1271,6 +1272,7 @@ function createReader(options) {
           id: entry.name,
           closed: !open,
           name: got.state === "ok" ? agentSessions.cleanName(got.value.name) : null,
+          started_at: got.state === "ok" && typeof got.value.created_at === "string" ? got.value.created_at : null,
           watching: open ? watchingOf(entry.name, nowMs) : null
         };
       })
