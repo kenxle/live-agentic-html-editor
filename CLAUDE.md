@@ -160,6 +160,12 @@ Browsers install once: `npx playwright install chromium`, plus
 is Chromium only, so the inner loop stays one browser wide; `--project=webkit`
 runs a single lane by name.
 
+A fresh worktree under the clone has no `node_modules`, and the suite still
+runs there because Node walks up to the clone's. Run `npm install` in the
+worktree before its first `npm run gate`, then `git checkout -- package-lock.json`.
+Without it, `install_walk_3b.spec.js` fails on its precondition and nothing
+else does.
+
 ## Tests leave nothing running
 
 On 2026-10-07 Ken's Mac had 1,892 Lahe helpers left over from test runs. They

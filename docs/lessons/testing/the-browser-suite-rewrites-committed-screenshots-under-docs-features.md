@@ -4,7 +4,7 @@ category: testing
 symptoms: [worktree dirty after the gate, modified png files, png changed but I touched no images, git status shows docs/features images, unexpected diff after playwright test]
 applies_to: [test/browser/**, docs/features/**]
 first_seen: 2026-10-12
-confirmed: 2026-10-12
+confirmed: 2026-10-13
 status: live
 ---
 

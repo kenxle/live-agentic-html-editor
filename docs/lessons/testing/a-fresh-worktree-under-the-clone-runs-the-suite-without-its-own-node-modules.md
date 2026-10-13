@@ -4,7 +4,7 @@ category: testing
 symptoms: ["npm install has been run", "install_walk_3b", "expected true received false node_modules", "gate fails in a new worktree", "1 failed 878 passed"]
 applies_to: ["test/browser/install_walk_3b.spec.js", ".claude/worktrees/**"]
 first_seen: 2026-10-12
-confirmed: 2026-10-12
+confirmed: 2026-10-13
 status: live
 ---
 
