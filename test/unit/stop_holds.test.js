@@ -266,19 +266,15 @@ async function stoppedWorld(t) {
 function runLahe(t, args, ms) {
   const env = Object.assign({}, process.env, { LAHE_PAGES_PORT: "0" });
   delete env.XPC_SERVICE_NAME;
-  const child = childProcess.spawn(process.execPath, [BIN].concat(args), { env, stdio: ["ignore", "pipe", "pipe"] });
+  // `timeout` is spawn's own limit: a command still running after `ms` is killed.
+  const child = childProcess.spawn(process.execPath, [BIN].concat(args), { env, stdio: ["ignore", "pipe", "pipe"], timeout: ms, killSignal: "SIGKILL" });
   t.after(() => { try { child.kill("SIGKILL"); } catch (err) { /* already gone */ } });
   let stderr = "";
   child.stderr.setEncoding("utf8");
   child.stderr.on("data", (text) => { stderr += text; });
   child.stdout.resume();
   return new Promise((resolve) => {
-    // harness-allow-timer: the limit on a command that should exit at once.
-    const timer = setTimeout(() => { child.kill("SIGKILL"); }, ms);
-    child.once("close", (code) => {
-      clearTimeout(timer);
-      resolve({ code, stderr });
-    });
+    child.once("close", (code) => resolve({ code, stderr }));
   });
 }
 
