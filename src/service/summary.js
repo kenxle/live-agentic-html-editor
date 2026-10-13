@@ -20,8 +20,9 @@
 // rule (catalog_reader.foldParts), so a document reviewed twice counts once.
 //
 // LIGHT WHEN IDLE (R21). The app asks every five seconds. The answer's rows
-// are kept in memory and an idle poll reads no file but a stat of
-// catalog.json; what moved is rebuilt (see "What is kept between polls").
+// are kept in memory and an idle poll reads no file: it stats catalog.json
+// and the reply files of reviews with a ready item; what moved is rebuilt
+// (see "What is kept between polls").
 // When a review's part is looked at, it is keyed on the size, modified time
 // and inode of its events.jsonl, review.json and meta.json, plus the reviewed
 // document while it has an unread reply. Inode is in the key because a
@@ -300,8 +301,10 @@ function createSummary(options) {
   // What is kept between polls
   // -------------------------------------------------------------------------
   //
-  // AN IDLE POLL TOUCHES NO FILE BUT catalog.json. The app asks every five
-  // seconds, and on a real state folder (690 reviews, 93 sessions) a poll that
+  // AN IDLE POLL READS NO FILE. It stats catalog.json, and the folder and
+  // reply files of each review with an item an agent can still answer (13 of
+  // 690 on Ken's state folder), and reads nothing unless a stat moved. The
+  // app asks every five seconds, and on a real state folder (690 reviews, 93 sessions) a poll that
   // stat'ed every review and folded every row cost the helper about 40 ms of
   // processor time each, spaced five seconds apart, which was more than an
   // open review tab costs. So the answer's rows are kept, and a poll rebuilds
@@ -309,13 +312,14 @@ function createSummary(options) {
   //
   //   a review the helper  the event log tells the summary (touched), and the
   //   itself wrote to      next poll rebuilds that review alone
-  //   anything else        a beat at most once per BEAT_MS: reply files no
-  //                        page is folding checked, sessions and their agents
-  //                        read again, waiting documents and the cutoff file
+  //   an agent's reply     the reply files of reviews with a ready item,
+  //   on a closed document stat'ed on every poll and folded when they move
+  //   anything else        a beat at most once per BEAT_MS: sessions and
+  //                        their agents read again, waiting documents and the cutoff file
   //                        checked, and a slice of the reviews' own files
   //                        stat'ed (all of them every FULL_PASS_BEATS beats).
-  //                        An agent's reply line, a monitor heartbeat or a
-  //                        deleted waiting document shows within one beat
+  //                        A monitor heartbeat or a deleted waiting
+  //                        document shows within one beat
   //   a Library rename     catalog.json, stat'ed on every poll
   //   window holders       read from the helper's own memory on every poll
 
@@ -356,6 +360,9 @@ function createSummary(options) {
   var readyIds = Object.create(null);
   // review id -> its reply files at the last look (replySignature).
   var replyState = Object.create(null);
+  // review id -> its folder, resolved once: resolving lstats the folders on
+  // the way, and the reply check runs on every poll.
+  var folderOf = Object.create(null);
   var foldReplies = typeof opts.foldReplies === "function" ? opts.foldReplies : null;
 
   function noteSets(reviewId, part) {
@@ -371,16 +378,21 @@ function createSummary(options) {
     delete waitingIds[reviewId];
     delete readyIds[reviewId];
     delete replyState[reviewId];
+    delete folderOf[reviewId];
   }
 
   /**
-   * A folder's key, or null when it moved in the last two seconds or is not
-   * there: a coarse folder clock can stamp a second new entry with the same
-   * time as the look before it, so an unsettled folder is listed again.
+   * A folder's key, or null when it moved in the last two seconds, is not
+   * there, or is not a real folder (a symlink is not followed): a coarse
+   * folder clock can stamp a second new entry with the same time as the look
+   * before it, so an unsettled folder is listed again.
    */
   function settledKey(folder) {
-    var stat = fs.statSync(folder, { throwIfNoEntry: false });
-    if (!stat || Date.now() - stat.mtimeMs <= 2000) return null;
+    return keyOfFolder(fs.lstatSync(folder, { throwIfNoEntry: false }));
+  }
+
+  function keyOfFolder(stat) {
+    if (!stat || !stat.isDirectory() || Date.now() - stat.mtimeMs <= 2000) return null;
     return stat.size + ":" + stat.mtimeMs + ":" + stat.ino;
   }
 
@@ -399,10 +411,13 @@ function createSummary(options) {
    * Reply files the helper has not folded, on a review an agent can still
    * answer. Nothing else folds them while no page has the document open, so
    * an agent's question on a closed document would never reach the icon.
-   * Checked on the beat, only for a review with an item in state ready (a
-   * reply to any other item is refused anyway). On the first look the files
-   * are folded when one is newer than the log, which is what a reply written
-   * while no helper ran looks like; after that, when their signature moves.
+   * Checked on every poll, not only on the beat, so a question shows within
+   * one poll (brief R3: 10 seconds), and only for a review with an item in
+   * state ready (a reply to any other item is refused anyway): a stat of the
+   * review's folder and of each reply file it holds, and nothing read unless
+   * one moved. On the first look the files are folded when one is newer than
+   * the log, which is what a reply written while no helper ran looks like;
+   * after that, when their signature moves.
    */
   function foldWaitingReplies() {
     if (!foldReplies) return;
@@ -428,11 +443,17 @@ function createSummary(options) {
    * {folderKey, names, key, newestMs} over a review's reply files. The
    * folder is listed again only when it moved (a new reply file is a new
    * entry in it); otherwise only the reply files already known are stat'ed,
-   * because a line appended to one does not move the folder.
+   * because a line appended to one does not move the folder. A symlink or
+   * anything else that is not a regular file is skipped and never followed,
+   * the rule replies.discover applies: a reply-named link to a busy file
+   * would otherwise fold the review on every poll.
    */
   function replySignature(reviewId, held) {
-    var folder = stateDir.reviewDir(dir, reviewId);
-    var folderKey = settledKey(folder);
+    var folder = folderOf[reviewId] || (folderOf[reviewId] = stateDir.reviewDir(dir, reviewId));
+    var folderStat = fs.lstatSync(folder, { throwIfNoEntry: false });
+    // A review folder swapped for a link is not listed through it.
+    if (folderStat && !folderStat.isDirectory()) return { folderKey: null, names: [], key: "", newestMs: 0 };
+    var folderKey = keyOfFolder(folderStat);
     var names = folderKey && held && held.folderKey === folderKey ? held.names : null;
     if (!names) {
       try {
@@ -444,8 +465,8 @@ function createSummary(options) {
     var key = [];
     var newestMs = 0;
     names.forEach(function (name) {
-      var stat = fs.statSync(path.join(folder, name), { throwIfNoEntry: false });
-      if (!stat) return;
+      var stat = fs.lstatSync(path.join(folder, name), { throwIfNoEntry: false });
+      if (!stat || !stat.isFile()) return;
       key.push(name + ":" + stat.size + ":" + stat.mtimeMs + ":" + stat.ino);
       if (stat.mtimeMs > newestMs) newestMs = stat.mtimeMs;
     });
@@ -453,8 +474,8 @@ function createSummary(options) {
   }
 
   function statMtime(file) {
-    var stat = fs.statSync(file, { throwIfNoEntry: false });
-    return stat ? stat.mtimeMs : 0;
+    var stat = fs.lstatSync(file, { throwIfNoEntry: false });
+    return stat && stat.isFile() ? stat.mtimeMs : 0;
   }
 
   /**
@@ -542,14 +563,15 @@ function createSummary(options) {
         forget(id);
         changed = true;
       });
-      // Folding writes reply.folded events, which come back through touched;
-      // those reviews are rebuilt here, in this same poll.
-      foldWaitingReplies();
-      Object.keys(touchedIds).forEach(function (id) {
-        partOf(id, sinceMs, rebuilt);
-      });
-      touchedIds = Object.create(null);
     }
+    // Every poll: the reply files of reviews an agent can still answer.
+    // Folding writes reply.folded events, which come back through touched;
+    // those reviews are rebuilt here, in this same poll.
+    foldWaitingReplies();
+    Object.keys(touchedIds).forEach(function (id) {
+      partOf(id, sinceMs, rebuilt);
+    });
+    touchedIds = Object.create(null);
     if (rebuilt.length) changed = true;
     lastRebuilt = rebuilt;
 

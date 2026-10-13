@@ -88,7 +88,8 @@ function setup(options) {
     version: "0.4.0",
     startedAt: "2026-10-20T08:00:00.000Z",
     alwaysOn: true,
-    libraryUrl: () => "http://library.lahe.localhost:1483/catalog"
+    libraryUrl: () => "http://library.lahe.localhost:1483/catalog",
+    foldReplies: o.foldReplies
   });
   // The helper's own wiring: its event log tells the summary what it wrote.
   state.listen(summary.touched);
@@ -726,33 +727,100 @@ test("V12: connected sessions cap at 8 with a correct more", () => {
 // Fix round 2: an idle poll costs almost nothing
 // ---------------------------------------------------------------------------
 
-test("V18: an idle poll between beats stats one file, catalog.json, and reads none", () => {
-  const { state, summary, clock } = setup();
-  for (let n = 0; n < 20; n += 1) {
-    state.review("r_" + n, { session: "s_one", title: "Doc " + n });
-    state.item("r_" + n, { page_title: "Doc " + n });
-  }
-  summary.read();
+/** Back-date a review's folder, so it reads as settled (no new entry in two seconds). */
+function settle(state, reviewId) {
+  const past = new Date(Date.now() - MINUTE);
+  fs.utimesSync(stateDir.reviewDir(state.dir, reviewId), past, past);
+}
+
+/** Every stat, lstat, read and listing the summary makes during `fn`. */
+function watchFiles(fn) {
   const stats = [];
   const reads = [];
-  const realStat = fs.statSync;
-  const realRead = fs.readFileSync;
-  const realDir = fs.readdirSync;
-  fs.statSync = function (file) { stats.push(String(file)); return realStat.apply(fs, arguments); };
-  fs.readFileSync = function (file) { reads.push(String(file)); return realRead.apply(fs, arguments); };
-  fs.readdirSync = function (file) { reads.push(String(file)); return realDir.apply(fs, arguments); };
+  const real = { statSync: fs.statSync, lstatSync: fs.lstatSync, readFileSync: fs.readFileSync, readdirSync: fs.readdirSync, openSync: fs.openSync };
+  fs.statSync = function (file) { stats.push(String(file)); return real.statSync.apply(fs, arguments); };
+  fs.lstatSync = function (file) { stats.push(String(file)); return real.lstatSync.apply(fs, arguments); };
+  fs.readFileSync = function (file) { reads.push(String(file)); return real.readFileSync.apply(fs, arguments); };
+  fs.readdirSync = function (file) { reads.push(String(file)); return real.readdirSync.apply(fs, arguments); };
+  fs.openSync = function (file) { reads.push(String(file)); return real.openSync.apply(fs, arguments); };
   try {
-    clock.ms += 5 * SECOND;
-    summary.read();
-    clock.ms += 5 * SECOND;
-    summary.read();
+    fn();
   } finally {
-    fs.statSync = realStat;
-    fs.readFileSync = realRead;
-    fs.readdirSync = realDir;
+    Object.assign(fs, real);
   }
-  assert.deepEqual(stats.map((f) => path.basename(f)), ["catalog.json", "catalog.json"], "one stat per poll");
-  assert.deepEqual(reads, [], "nothing read, nothing listed");
+  return { stats, reads };
+}
+
+test("V18: an idle poll between beats stats catalog.json and the reply files of reviews with a ready item, and reads none", () => {
+  const folds = [];
+  const { state, summary, clock } = setup({ foldReplies: (id) => folds.push(id) });
+  // Ten reviews with a comment an agent can still answer, ten whose comment
+  // is answered (handled): only the first ten are looked at between beats.
+  for (let n = 0; n < 20; n += 1) {
+    state.review("r_" + n, { session: "s_one", title: "Doc " + n });
+    const it = state.item("r_" + n, { page_title: "Doc " + n });
+    if (n >= 10) state.reply("r_" + n, it, { status: "handled" });
+  }
+  const replyFile = path.join(stateDir.reviewDir(state.dir, "r_0"), "replies-claude.jsonl");
+  fs.writeFileSync(replyFile, "");
+  for (let n = 0; n < 20; n += 1) settle(state, "r_" + n);
+  summary.read();
+  folds.length = 0;
+  const seen = watchFiles(() => {
+    clock.ms += 5 * SECOND;
+    summary.read();
+    clock.ms += 5 * SECOND;
+    summary.read();
+  });
+  assert.deepEqual(seen.reads, [], "nothing read, nothing listed");
+  assert.deepEqual(folds, [], "nothing moved, so nothing folded");
+  const ready = new Set();
+  for (let n = 0; n < 10; n += 1) ready.add(stateDir.reviewDir(state.dir, "r_" + n));
+  const allowed = (file) => path.basename(file) === "catalog.json" || ready.has(file) || ready.has(path.dirname(file));
+  assert.deepEqual(seen.stats.filter((f) => !allowed(f)), [], "no other file stat'ed");
+  assert.equal(seen.stats.filter((f) => path.basename(f) === "catalog.json").length, 2, "catalog.json once a poll");
+  assert.equal(seen.stats.filter((f) => f === replyFile).length, 2, "the reply file once a poll");
+  for (let n = 10; n < 20; n += 1) {
+    assert.equal(seen.stats.some((f) => f.indexOf(stateDir.reviewDir(state.dir, "r_" + n)) === 0), false, "r_" + n + " has no ready item");
+  }
+});
+
+test("R3: an agent's reply line on a document no page has open folds on the next poll, with no beat between", () => {
+  const folds = [];
+  const { state, summary, clock } = setup({ foldReplies: (id) => folds.push(id) });
+  state.review("r_a", { session: "s_one", title: "A" });
+  state.item("r_a", { page_title: "A" });
+  settle(state, "r_a");
+  const replyFile = path.join(stateDir.reviewDir(state.dir, "r_a"), "replies-claude.jsonl");
+  fs.writeFileSync(replyFile, "");
+  summary.read();
+  folds.length = 0;
+  clock.ms += 5 * SECOND;
+  summary.read();
+  assert.deepEqual(folds, [], "nothing new yet");
+  fs.appendFileSync(replyFile, "{\"item\":\"x\"}\n");
+  clock.ms += 5 * SECOND;
+  summary.read();
+  assert.deepEqual(folds, ["r_a"], "folded on the very next poll");
+});
+
+test("a reply-named symlink is never followed: touching its target folds nothing, on a poll or a beat", () => {
+  const folds = [];
+  const { state, summary, clock } = setup({ foldReplies: (id) => folds.push(id) });
+  state.review("r_a", { session: "s_one", title: "A" });
+  state.item("r_a", { page_title: "A" });
+  const busy = path.join(state.root, "busy.log");
+  fs.writeFileSync(busy, "one\n");
+  fs.symlinkSync(busy, path.join(stateDir.reviewDir(state.dir, "r_a"), "replies-claude.jsonl"));
+  summary.read();
+  fs.appendFileSync(busy, "two\n");
+  const later = new Date(Date.now() + MINUTE);
+  fs.utimesSync(busy, later, later);
+  clock.ms += 5 * SECOND;
+  summary.read();
+  clock.ms += BEAT;
+  summary.read();
+  assert.deepEqual(folds, []);
 });
 
 test("a write the helper did not make shows on the next beat; one it made shows on the next poll", () => {

@@ -419,6 +419,8 @@ test("a real helper's summary carries the Library's printed address, ending in /
 
 const replyCommand = require("../../src/cli/commands/reply.js");
 const record = require("../../src/shared/record.js");
+// The app asks every five seconds; a beat is fifteen.
+const APP_POLL_MS = 5000;
 const BEAT = protocol.CATALOG.POLL_MS;
 
 /** A review with one ready comment, on a document no page has open. */
@@ -443,7 +445,7 @@ function waitingDoc(res, reviewId) {
   return res.json.waiting_on_you.documents.find((d) => d.review === reviewId) || null;
 }
 
-test("R3: a question on a document nobody has read since the helper started counts within one beat, and on a fresh helper's first read", async (t) => {
+test("R3: a question on a document nobody has read since the helper started counts on the app's next poll, with no beat between, and on a fresh helper's first read", async (t) => {
   const w = await world(t);
   const { review, item } = closedDocument(w, "closed");
   const before = await read(w);
@@ -452,7 +454,9 @@ test("R3: a question on a document nobody has read since the helper started coun
   assert.equal(before.json.waiting_on_agents.count, 1, "the comment waits on an agent");
 
   await agentAsks(w, review, item);
-  w.clock.ms += BEAT;
+  // One app poll later: well inside a beat, so only the every-poll check of
+  // reply files can find it.
+  w.clock.ms += APP_POLL_MS;
   const after = await read(w);
   const shown = waitingDoc(after, review.id);
   assert.ok(shown, "the question counts: " + JSON.stringify(after.json.waiting_on_you));
