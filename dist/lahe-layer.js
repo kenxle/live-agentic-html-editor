@@ -1,6 +1,6 @@
 /*
  * live-agentic-html-editor review layer
- * version 0.3.0+51f16a17b24a
+ * version 0.3.0+01839af970f9
  *
  * GENERATED FILE. Do not edit. Edit the sources under src/ and run
  *   npm run build:layer
@@ -12,7 +12,7 @@
   "use strict";
   var g = typeof globalThis !== "undefined" ? globalThis : window;
   g.LAHE = g.LAHE || {};
-  g.LAHE.version = "0.3.0+51f16a17b24a";
+  g.LAHE.version = "0.3.0+01839af970f9";
 })();
 /* ---- src/shared/markers.js  (owner: 0A-kernel) ---- */
 // Markers: the attribute and class names that identify DOM the tool added.
@@ -10014,8 +10014,6 @@
     // The reviewer marked the item done themselves. A boolean the helper
     // writes from the reviewer's own act, never from page text.
     closed_by_reviewer: record.CLASS_DATA,
-    // The stamp of the reply the reviewer read, written from their own act.
-    reply_seen: record.CLASS_DATA,
     "thread[].rev": record.CLASS_DATA,
     "thread[].reviewer.note": record.CLASS_DATA,
     "thread[].reviewer.change": record.CLASS_DATA,
@@ -10500,12 +10498,6 @@
     // the flag above: the reply, if any, is the agent's last answer, and this
     // says it is not what finished the item.
     out.closed_by_reviewer = record.isClosedByReviewer(it);
-
-    // THE REVIEWER READ THIS REPLY: the stamp a reply.seen event recorded, or
-    // null. The helper's own bookkeeping of the reviewer's act, so the menu bar
-    // counts what the rail counts (record.isUnreadReply). Not work for the
-    // agent: nothing about the item changes because of it.
-    out.reply_seen = typeof it[F.REPLY_SEEN] === "string" ? it[F.REPLY_SEEN] : null;
 
     // WHEN THE REVIEWER LAST CHANGED THESE WORDS, and it is the obvious field
     // on purpose. This pair used to be created_at and updated_at, side by side
@@ -35148,14 +35140,12 @@
         event_id: record.randomId("evt"),
         review: requireReview(),
         item: id,
-        // NO REVISION on the envelope: the stamp already names the reply, and
-        // an accepted event carrying a rev marks the item acknowledged at it
-        // (flush), which would let the store's copy win over a follow-up the
-        // reviewer is typing at that same revision.
-        page_path: item[record.FIELD.PAGE_PATH],
-        page_title: item[record.FIELD.PAGE_TITLE],
-        page_seq: item[record.FIELD.PAGE_SEQ],
-        source_hint: item[record.FIELD.SOURCE_HINT],
+        // THE ITEM AND THE STAMP, NOTHING ELSE. No revision: the stamp already
+        // names the reply, and an accepted event carrying a rev marks the item
+        // acknowledged at it (flush), which would let the store's copy win
+        // over a follow-up the reviewer is typing at that same revision. No
+        // page fields either: every window's reply poll receives this event,
+        // and the helper refuses one that carries more (log.js).
         payload: { stamp: stamp }
       });
       store.queueEvent(requireReview(), event);
@@ -35400,9 +35390,11 @@
       // two callers who must get past the gate ask for that: drainOutbox, so
       // ending a review with items held still flushes them first (R6), and
       // releasing Hold itself, which flushes immediately, in one pass (R3).
-      if (!fo.force && typeof store.isHeld === "function" && store.isHeld(requireReview())) {
-        return Promise.resolve({ sent: 0, remaining: pendingCount(), held: true });
-      }
+      // A READ MARK IS NOT HELD. reply.seen is not work for an agent and wakes
+      // nothing; holding it back only keeps the menu bar counting a reply the
+      // reviewer has read. So a held flush posts the read marks and leaves
+      // everything else where it is.
+      var held = !fo.force && typeof store.isHeld === "function" && store.isHeld(requireReview());
       // ONCE THE DOCUMENT IS LEAVING, EVERY FLUSH IS AN UNLOAD FLUSH.
       //
       // The cap and the keepalive header belong to the MOMENT, not to the
@@ -35425,6 +35417,12 @@
       var leaving = !!fo.unload || unloading;
 
       var queued = store.pendingEvents(requireReview());
+      if (held) {
+        queued = queued.filter(function (event) {
+          return event[protocol.EVENT_FIELD.EVENT] === protocol.EVENT.REPLY_SEEN;
+        });
+        if (!queued.length) return Promise.resolve({ sent: 0, remaining: pendingCount(), held: true });
+      }
       if (!queued.length) {
         recomputeStatus();
         return Promise.resolve({ sent: 0, remaining: 0 });
@@ -35524,7 +35522,9 @@
           // helper about once a second (DRAFT_PERSISTENCE.md section 4).
           var again = rerun;
           rerun = null;
-          if ((remaining > 0 || again) && !leaving) scheduleFlush(0, again);
+          // A held review's other events stay queued on purpose: posting its
+          // read marks is not a reason to come straight back for them.
+          if (((remaining > 0 && !held) || again) && !leaving) scheduleFlush(0, again);
           return { sent: accepted.length, remaining: remaining };
         }
 
@@ -52188,7 +52188,7 @@
   "use strict";
 
   // Replaced by scripts/build-layer.js at concatenation time.
-  var VERSION = "0.3.0+51f16a17b24a";
+  var VERSION = "0.3.0+01839af970f9";
 
   var protocol = ns.protocol;
   var record = ns.record;

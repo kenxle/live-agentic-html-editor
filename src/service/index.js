@@ -70,6 +70,10 @@ var VERSION = require("../../package.json").version;
 // backlog and still bounded.
 var MAX_BODY_BYTES = 8 * 1024 * 1024;
 
+// summary.open's body is {review, summary_version}: a few dozen bytes. Its cap
+// is small so no caller, a page included, can make the helper hold more.
+var SUMMARY_BODY_MAX_BYTES = 4 * 1024;
+
 // The built library, which the helper serves at GET /lahe-layer.js so the
 // script line on a page can be one absolute URL rather than a relative path
 // that 404s the moment the page is served from another folder.
@@ -147,13 +151,6 @@ function envMs(name) {
 }
 
 function readBody(req, limit) {
-  return readBodyBytes(req, limit).then(function (bytes) {
-    return bytes.toString("utf8");
-  });
-}
-
-/** The body's raw bytes, under the cap: what a signed request's hash covers. */
-function readBodyBytes(req, limit) {
   return new Promise(function (resolve, reject) {
     var chunks = [];
     var size = 0;
@@ -170,7 +167,7 @@ function readBodyBytes(req, limit) {
       chunks.push(chunk);
     });
     req.on("end", function () {
-      if (!done) resolve(Buffer.concat(chunks));
+      if (!done) resolve(Buffer.concat(chunks).toString("utf8"));
     });
     req.on("error", function (err) {
       if (!done) reject(err);
@@ -366,7 +363,11 @@ async function serve(options) {
   // The menu bar's summary (docs/features/20261012.01_menu_bar_app): the same
   // reader the Library lists with, this helper's window holders, and the
   // Library's printed address.
+  // How many summary bodies were read: a test's proof that a refused post is
+  // turned away before its body is.
+  var summaryCounters = { bodiesRead: 0 };
   var summary = summaryModule.createSummary({
+    log: function (line) { log.helperLog(line); },
     dir: dir,
     reader: catalogReaderInstance,
     reviews: reviews,
@@ -847,33 +848,60 @@ async function serve(options) {
     res.end(bytes);
   }
 
-  // One summary request: the raw body (the proof covers its bytes), the one
-  // auth.check call site's proof branch, then the handler. Every answer goes
-  // out through respondSigned, refusals included.
+  /**
+   * At most `cap` bytes of a summary request's body: {bytes}, or {tooLarge}
+   * without buffering more than the cap. A declared length past it is refused
+   * unread; a longer stream is read to its end and dropped, so the answer
+   * still reaches the caller on the same connection.
+   */
+  function readCappedBody(req, cap) {
+    summaryCounters.bodiesRead += 1;
+    var declared = Number(req.headers["content-length"]);
+    if (Number.isFinite(declared) && declared > cap) return Promise.resolve({ tooLarge: true });
+    return new Promise(function (resolve, reject) {
+      var chunks = [];
+      var size = 0;
+      var over = false;
+      req.on("data", function (chunk) {
+        if (over) return;
+        size += chunk.length;
+        if (size > cap) {
+          over = true;
+          chunks = null;
+          resolve({ tooLarge: true });
+          return;
+        }
+        chunks.push(chunk);
+      });
+      req.on("end", function () {
+        if (!over) resolve({ bytes: Buffer.concat(chunks) });
+      });
+      req.on("error", function (err) {
+        if (!over) reject(err);
+      });
+    });
+  }
+
+  // One summary request. The header checks run before the body is read, so a
+  // page's post is refused without the helper buffering a byte of it; then
+  // the body, capped (the proof covers its bytes); then the whole check,
+  // proof included, at the one auth.check call site; then the handler. Every
+  // answer goes out through respondSigned, refusals included, and a 5xx says
+  // only that it failed: the reason, which can name a path, stays in the log.
   async function handleSummary(req, res, route, url, requestId) {
     var given = req.headers[protocol.HEADER.PROOF_NONCE];
     var nonce = typeof given === "string" && protocol.PROOF.NONCE_PATTERN.test(given) ? given : "";
-    var bytes = Buffer.alloc(0);
-    if (req.method === "POST") {
-      try {
-        bytes = await readBodyBytes(req, MAX_BODY_BYTES);
-      } catch (err) {
-        auth.refuse({ routeName: route.name, requestId: requestId }, "PROTO_BAD_REQUEST", err.message);
-        respondSigned(res, 400, { error: { code: "PROTO_BAD_REQUEST", detail: err.message } }, nonce, requestId);
-        return;
-      }
-    }
-    var checked = auth.check({
+    var request = {
       routeName: route.name,
       headers: req.headers,
       review: null,
       method: req.method,
       path: url.pathname,
       target: req.url,
-      body: bytes,
+      body: Buffer.alloc(0),
       requestId: requestId
-    });
-    if (!checked.ok) {
+    };
+    function refused(checked) {
       respondSigned(
         res,
         protocol.statusFor("AUTH_REFUSED"),
@@ -881,12 +909,33 @@ async function serve(options) {
         nonce,
         requestId
       );
-      return;
     }
-    var body = null;
-    if (bytes.length) {
+    function failed(err) {
+      log.helperLog("route " + route.name + " failed: " + err.message + " [request " + requestId + "]");
+      respondSigned(res, 500, { error: { code: "PROTO_BAD_REQUEST", detail: "the helper could not answer; its log says why" } }, nonce, requestId);
+    }
+    var headersChecked = auth.check(Object.assign({}, request, { headersOnly: true }));
+    if (!headersChecked.ok) return refused(headersChecked);
+    if (req.method === "POST") {
+      var read;
       try {
-        body = JSON.parse(bytes.toString("utf8"));
+        read = await readCappedBody(req, SUMMARY_BODY_MAX_BYTES);
+      } catch (err) {
+        return failed(err);
+      }
+      if (read.tooLarge) {
+        auth.refuse({ routeName: route.name, requestId: requestId }, "BODY_TOO_LARGE", "over " + SUMMARY_BODY_MAX_BYTES + " bytes");
+        respondSigned(res, 413, { error: { code: "BODY_TOO_LARGE", detail: "the body is over " + SUMMARY_BODY_MAX_BYTES + " bytes" } }, nonce, requestId);
+        return;
+      }
+      request.body = read.bytes;
+    }
+    var checked = auth.check(request);
+    if (!checked.ok) return refused(checked);
+    var body = null;
+    if (request.body.length) {
+      try {
+        body = JSON.parse(request.body.toString("utf8"));
       } catch (err) {
         body = null;
       }
@@ -899,9 +948,7 @@ async function serve(options) {
     try {
       outcome = await routes.handlerFor(route.name)({ routeName: route.name, query: query, body: body, requestId: requestId }, deps);
     } catch (err) {
-      log.helperLog("route " + route.name + " failed: " + err.message + " [request " + requestId + "]");
-      respondSigned(res, 500, { error: { code: "PROTO_BAD_REQUEST", detail: err.message } }, nonce, requestId);
-      return;
+      return failed(err);
     }
     if (outcome && outcome.error) {
       respondSigned(res, outcome.status || protocol.statusFor(outcome.error.code), { error: { code: outcome.error.code, detail: outcome.error.detail } }, nonce, requestId);
@@ -1167,6 +1214,8 @@ async function serve(options) {
     // The Library state (token, port, last list). Tests and Task 2.1 reach it
     // here; it is never written anywhere.
     catalog: catalog,
+    // The summary routes' body reads, for tests.
+    summaryCounters: summaryCounters,
     // The sweep, run by hand: the helper runs it every POLL_MS on its own, and
     // tests drive it with the time they choose.
     sweepLibrarySessions: sweepLibrarySessions,
