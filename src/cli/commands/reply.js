@@ -65,7 +65,7 @@ var USAGE = [
   "                   `-` reads it from stdin",
   "  --file <path>    a file you changed. Repeat the flag for each one",
   "  --needs-see      the reviewer should read this reply. Needs --text or --reason",
-  "  --agent <name>   your name. It goes on the card and names replies-<name>.jsonl",
+  "  --agent <name>   the kind of agent you are (claude, codex). It goes on the card and names replies-<name>.jsonl",
   "  --session <id>   your agent session, stamped as activity so the reviewer's rail",
   "                   says an agent is working without waiting for the next fold",
   "  --state-dir <p>  where the helper keeps its data, the same flag every command takes",

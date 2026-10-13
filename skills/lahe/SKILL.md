@@ -447,7 +447,7 @@ and any reply to it is refused. Do not work on it.
 
 ```sh
 lahe reply --review <id> --item <item-id> --rev <n> --status handled \
-  --agent <your-name> --file path/you/changed
+  --agent claude --file path/you/changed
 ```
 
 `--text -` reads a long answer from stdin. The command encodes the line, so a
@@ -464,7 +464,8 @@ Reply checklist:
 - **A `not_handled` reason names what you checked.** Say which file or page you
   looked at and what it said. A blank reason is refused by the command, and the
   card's age is not a reason.
-- **Pass `--agent <your-name>`.** The card shows it.
+- **Pass `--agent` with the kind of agent you are**: `claude`, `codex`, and so on.
+  The card says "claude is asking", so a session or task name reads wrong there.
 - **Flag with `--needs-see` only** an answer, a caveat, or a change made
   differently than asked, and put the words on the same line with `--text` or
   `--reason`. Leave it off routine confirmations and off bookkeeping about their
