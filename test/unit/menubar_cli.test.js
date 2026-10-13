@@ -210,3 +210,14 @@ test("V26: off macOS, lahe status prints no menu bar line", async (t) => {
   const mac = fakeMac();
   assert.doesNotMatch(await statusOut(w, mac, "linux"), /^menu bar/m);
 });
+
+test("V23: lahe status --json, the form lahe monitor polls with, never asks launchd about the icon", async (t) => {
+  const { w, mac } = await withIcon(t);
+  const out = [];
+  const code = await status.run(["--state-dir", w.dir, "--json"], {
+    stdout: (x) => out.push(x), stderr: () => {}, runner: mac.runner, platform: "darwin", uid: 501, menubarLabel: LABEL
+  });
+  assert.equal(code, 0);
+  assert.match(out.join(""), /"reviews":0/);
+  assert.deepEqual(mac.calls, []);
+});
