@@ -153,15 +153,7 @@ All open follow-ups are on the board (`docs/BULLETIN.md`): LAHE-port-1483-timeou
 
 ### Cleanup queue
 
-Waiting on Ken's OK, removed in one batch:
-
-- Worktrees under `../lahe-worktrees/`: `sa-spike`, `sa-ci-dispatch`, `sa-core`, `sa-library`, `sa-install`, `stable-addresses`, `test-temp-cleanup`, `release-0.3.0`, `library-link-webkit`. All their work is merged; what is uncommitted in them is test-rerun screenshots and PR-body scratch files.
-- Local branches: `chore/spike-dispatch-workflow`, `fix/spike-workflow-yaml`, `spike/localhost-names`, `unit/sa-core`, `unit/sa-library`, `unit/sa-install`, `feat/stable-addresses`, `fix/test-temp-cleanup`, `release/v0.3.0`, `fix/library-link-webkit`.
-- Branches on GitHub: `spike/localhost-names`, `release/v0.3.0`.
-- `docs/features/20261011.02_stable_addresses/02_architecture_stable_addresses_reviews_security.html`: stale build output from before the review files were combined.
-- `docs/features/20261011.02_stable_addresses/parts/reviews/architecture_architect.md` and `architecture_security.md`: copied into `02_architecture_stable_addresses_reviews.md`. The two each-page-its-own-comments security passes stay.
-- `~/Documents/lahe-preview-stable-addresses/`: the preview's copied state folder and the pf test scripts and outputs.
-- Done already: `.github/workflows/spike.yml` was removed before PR #45 merged.
+Done 2026-10-12 at Ken's go-ahead: the nine merged worktrees, their ten local branches, `spike/localhost-names` and `release/v0.3.0` on GitHub (the v0.3.0 tag stays), the stale `02_architecture_stable_addresses_reviews_security.html`, the two architecture review copies in `parts/reviews/`, and `~/Documents/lahe-preview-stable-addresses/`. `spike.yml` was removed before PR #45 merged.
 
 ### Test results
 
