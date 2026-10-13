@@ -25,6 +25,7 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const crypto = require("node:crypto");
+const http = require("node:http");
 const fs = require("node:fs");
 const path = require("node:path");
 
@@ -335,15 +336,46 @@ test("a proof signed before the helper started is refused, so a capture replays 
   assert.equal((await send(fresh)).status, 200, "the app's next poll, signed after the start, is answered");
 });
 
+/**
+ * A POST that sends only `partial` of its declared body, then reads the
+ * answer. The helper may answer, and close the connection, before the rest
+ * arrives; that is the point, so a broken pipe on the unsent rest is expected.
+ */
+function postEarly(w, req, partial) {
+  return new Promise((resolve, reject) => {
+    const sent = http.request(
+      { host: "127.0.0.1", port: w.helper.port, method: "POST", path: req.options.path, headers: req.options.headers, agent: false },
+      (res) => {
+        const chunks = [];
+        res.on("data", (c) => chunks.push(c));
+        res.on("end", () => {
+          const text = Buffer.concat(chunks).toString("utf8");
+          sent.destroy();
+          resolve({ status: res.statusCode, headers: res.headers, text, json: JSON.parse(text), nonce: req.nonce });
+        });
+      }
+    );
+    sent.on("error", (err) => {
+      if (err.code !== "EPIPE" && err.code !== "ECONNRESET") reject(err);
+    });
+    sent.write(partial);
+  });
+}
+
 test("summary.open checks its headers before reading the body, and caps the body", async (t) => {
   const w = await world(t);
   const before = w.helper.summaryCounters.bodiesRead;
-  const big = "x".repeat(1024 * 1024);
-  const fromPage = await open(w, big, { headers: { "sec-fetch-site": "cross-site" } });
+  // A page's 1 MB post: only the first 16 KB is sent, and the answer comes
+  // back without the rest, because the headers alone refuse it.
+  const req = signed(w, "POST", OPEN.path, "", { headers: { "sec-fetch-site": "cross-site", "content-length": String(1024 * 1024) } });
+  const fromPage = await postEarly(w, req, "x".repeat(16 * 1024));
   assertRefused(w, fromPage, "a page's 1 MB post");
   assert.equal(w.helper.summaryCounters.bodiesRead, before, "the body was never read");
 
-  const tooBig = await open(w, JSON.stringify({ review: "r1", summary_version: 1, pad: "x".repeat(64 * 1024) }));
+  const padded = JSON.stringify({ review: "r1", summary_version: 1, pad: "x".repeat(64 * 1024) });
+  const tooBigReq = signed(w, "POST", OPEN.path, padded);
+  tooBigReq.options.headers["content-length"] = String(Buffer.byteLength(padded));
+  const tooBig = await postEarly(w, tooBigReq, padded.slice(0, 16 * 1024));
   assert.equal(tooBig.status, 413, tooBig.text);
   assert.ok(signedByHelper(w, tooBig), "the 413 is signed");
 });
@@ -364,6 +396,8 @@ test("one unreadable review does not fail summary.read, and no 5xx body names th
   // A summary that cannot be built at all: its cutoff file is a folder.
   fs.unlinkSync(path.join(w.state, "summary.json"));
   fs.mkdirSync(path.join(w.state, "summary.json"));
+  // The cutoff file is checked on the beat.
+  w.clock.ms += BEAT;
   const broken = await read(w);
   assert.equal(broken.status, 500);
   assert.ok(signedByHelper(w, broken));
@@ -377,4 +411,90 @@ test("a real helper's summary carries the Library's printed address, ending in /
   assert.equal(res.status, 200, res.text);
   assert.equal(res.json.library_url, "http://library.lahe.localhost:" + w.helper.pagesPort + "/catalog");
   assert.equal(typeof res.json.helper.version, "string");
+});
+
+// ---------------------------------------------------------------------------
+// Fix round 2: a reply to a document no page has open
+// ---------------------------------------------------------------------------
+
+const replyCommand = require("../../src/cli/commands/reply.js");
+const record = require("../../src/shared/record.js");
+const BEAT = protocol.CATALOG.POLL_MS;
+
+/** A review with one ready comment, on a document no page has open. */
+function closedDocument(w, name) {
+  const folder = path.join(w.home, "ws", "repo", "docs");
+  const review = w.helper.reviews.create({ origins: ["null"], agent_session_id: "s_a", target_path: writeFile(folder, name + ".html", PAGE_HTML) });
+  const item = record.newItem({ id: "itm_" + name, kind: record.KIND.COMMENT, state: record.STATE.READY, note: "which week?", page_origin: "null", page_path: "/" + name + ".html", page_seq: 1 });
+  w.helper.log.append(review.id, [protocol.newEvent({ event: protocol.EVENT.ITEM_READY, event_id: "evt_" + name, review: review.id, item: item.id, rev: item.rev, page_path: item.page_path, page_seq: 1, payload: { draft: false, record: item } })]);
+  return { review, item };
+}
+
+/** `lahe reply`, the way an agent runs it. */
+async function agentAsks(w, review, item) {
+  const code = await replyCommand.run(
+    ["--review", review.id, "--item", item.id, "--rev", String(item.rev), "--status", "question", "--text", "The race week or the week after?", "--agent", "claude"],
+    { stateDir: w.state, stdout: () => {}, stderr: () => {} }
+  );
+  assert.equal(code, 0, "lahe reply wrote the line");
+}
+
+function waitingDoc(res, reviewId) {
+  return res.json.waiting_on_you.documents.find((d) => d.review === reviewId) || null;
+}
+
+test("R3: a question on a document nobody has read since the helper started counts within one beat, and on a fresh helper's first read", async (t) => {
+  const w = await world(t);
+  const { review, item } = closedDocument(w, "closed");
+  const before = await read(w);
+  assert.equal(before.status, 200, before.text);
+  assert.equal(waitingDoc(before, review.id), null);
+  assert.equal(before.json.waiting_on_agents.count, 1, "the comment waits on an agent");
+
+  await agentAsks(w, review, item);
+  w.clock.ms += BEAT;
+  const after = await read(w);
+  const shown = waitingDoc(after, review.id);
+  assert.ok(shown, "the question counts: " + JSON.stringify(after.json.waiting_on_you));
+  assert.equal(shown.questions, 1);
+  assert.equal(after.json.waiting_on_agents.count, 0, "and no longer waits on an agent");
+
+  await w.helper.close();
+  const later = w.clock.ms + 60000;
+  const second = await service.serve({ port: 0, stateDir: w.state, quiet: true, pagesPort: 0, sitesHome: w.home, now: () => later });
+  t.after(() => second.close());
+  w.clock.ms = later;
+  const fresh = await read(w, { port: second.port, headers: { host: "127.0.0.1:" + second.port } });
+  assert.equal(fresh.status, 200, fresh.text);
+  assert.equal(waitingDoc(fresh, review.id).questions, 1, "a fresh helper answers the same on its first read");
+  assert.equal(fresh.json.waiting_on_agents.count, 0);
+});
+
+test("R3: a question written while no helper ran counts on the next helper's first read", async (t) => {
+  const w = await world(t);
+  const { review, item } = closedDocument(w, "offline");
+  await w.helper.close();
+  await agentAsks(w, review, item);
+  const later = w.clock.ms + 60000;
+  const second = await service.serve({ port: 0, stateDir: w.state, quiet: true, pagesPort: 0, sitesHome: w.home, now: () => later });
+  t.after(() => second.close());
+  w.clock.ms = later;
+  const fresh = await read(w, { port: second.port, headers: { host: "127.0.0.1:" + second.port } });
+  assert.equal(fresh.status, 200, fresh.text);
+  const shown = waitingDoc(fresh, review.id);
+  assert.ok(shown, JSON.stringify(fresh.json.waiting_on_you));
+  assert.equal(shown.questions, 1);
+});
+
+test("a replaced cli-secret is used from the next request on", async (t) => {
+  const w = await world(t);
+  assert.equal((await read(w)).status, 200);
+  const fresh = crypto.randomBytes(32).toString("hex");
+  stateDirModule.writeAtomic(path.join(w.state, "cli-secret"), fresh + "\n");
+  const old = await read(w);
+  assert.equal(old.status, 401, "the old key no longer checks");
+  w.secret = fresh;
+  const res = await read(w);
+  assert.equal(res.status, 200, res.text);
+  assert.ok(signedByHelper(w, res), "and the answer is signed with the new key");
 });
