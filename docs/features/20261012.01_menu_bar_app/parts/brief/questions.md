@@ -1,10 +1,10 @@
 For Ken to decide in review:
 
 ::: callout-question
-**When should an open question stop counting?** Today 45 documents have an old unanswered agent question, and most are from work Ken has moved on from. The brief keeps what you agreed: a question counts until it is answered or the card goes away (R5), and only questions from after the install count (R4). The risk: questions you choose not to answer pile up, and there is no Dismiss button yet (board row LAHE-dismiss-card). Two other ways:
+**When should an open question stop counting?** Today 45 documents have an old unanswered agent question, and most are from work Ken has moved on from. The brief keeps what you agreed: a question counts until it is answered or the card goes away (R5), and only questions from after the install count (R4). The risk was that questions you choose not to answer pile up with no way to clear them. That way now exists: Mark as done, on the card's state chip, shipped on main and closes any outstanding card. So:
 
-- **A.** Keep R5 as written, and build card dismissal soon after. (Recommended: it keeps a question in front of you until you deal with it.)
-- **B.** A question stops counting once you have looked at its page, like an answer does. The count clears more easily, but a question you glanced past stops nagging.
+- **A.** Keep R5 as written: a question counts until you answer it or mark it done. Nothing more to build. (Recommended: it keeps a question in front of you until you deal with it, and Mark as done is one click when you decide not to.)
+- **B.** A question stops counting once you have read its card, the same as any other reply. The count clears more easily, but a question you read and walked past stops nagging.
 :::
 
 ::: callout-question
@@ -24,10 +24,11 @@ Settled with Ken in the crucible:
 - **Agents do not change how they work.** The icon is another way of seeing and reaching what the helper already records.
 - **Quit has two items:** hide the icon, or stop Lahe until next login.
 
+- **"Read" is the rail's own read mark (R6), not a new rule.** A reply counts until its card is opened, exactly when the rail drops its "1 new" tag. An earlier draft invented its own rule (the page was the focused tab); Ken asked for the existing mechanism instead.
+
 Chosen by the brief, for Ken to overrule in review:
 
 - **The icon counts documents, not cards (R1).** Each one is one click.
-- **Looking means the page is the focused tab (R6).** Not per card: Lahe cannot know which cards he read, and a per-card rule would need a new gesture on the page.
 - **Only replies after the install count (R4).** Otherwise the first day shows 45.
 - **The icon shows only the "waiting on you" count (R1).** Open documents and connected agents stay in the menu.
 - **Sessions are named by their Library name or document (R10),** because Lahe records no agent name today. When board row LAHE-agent-name-default lands, the menu can show "Claude" or "Codex" too.

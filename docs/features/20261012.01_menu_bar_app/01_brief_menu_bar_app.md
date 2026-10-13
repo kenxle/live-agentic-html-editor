@@ -2,7 +2,7 @@
 
 ## Summary
 
-A Lahe icon in the Mac menu bar. It shows a number when something is waiting on Ken: an agent asked him a question, or an agent answered comments he has not looked at yet. Clicking it opens a menu with those documents, what is open and who is connected, recent documents, the Library, and Quit. It is an optional Mac extra on top of the cross-platform helper. Agents do not change how they work.
+A Lahe icon in the Mac menu bar. It shows a number when something is waiting on Ken: the cards the rail already marks for him, an agent's question or a reply he has not read yet. Clicking it opens a menu with those documents, what is open and who is connected, recent documents, the Library, and Quit. It is an optional Mac extra on top of the cross-platform helper. Agents do not change how they work.
 
 ## Problem, User, and Context
 
@@ -41,7 +41,7 @@ Prior work: [the crucible](00_crucible_menu_bar_app.md), and the stable addresse
 ## Solution Outline
 
 1. **The helper gets one new answer: a summary of what needs Ken and what is running.** It holds the "waiting on you" documents, the documents waiting on agents, the open documents, the connected sessions, and the recent documents. Only Ken's own programs can read it.
-2. **The helper notes when Ken has looked at a page.** When a page is the focused tab in his browser after an agent's answer on that page arrived, that answer counts as seen.
+2. **The page tells the helper which replies Ken has read.** The rail already keeps that mark: a reply shows "1 new" on its card until Ken opens the card. Today the mark stays in his browser. The page now also sends it to the helper, so the icon and the rail agree.
 3. **A small Mac app draws the icon and menu.** It asks the helper for the summary every few seconds and shows it. It is Swift with no outside packages.
 4. **`lahe install` offers the icon on a Mac.** It builds the app with Apple's compiler, which comes with the Xcode command line tools, and starts it at login next to the helper. When Lahe is updated, the app is rebuilt.
 
@@ -66,23 +66,23 @@ flowchart LR
 :::
 
 ::: callout-req
-**R3. The count is quick and right.** A new question or answer shows within 10 seconds. An answer clears within 15 seconds of Ken focusing the page it is on. A count that never clears, or counts something already handled, is a bug.
+**R3. The count is quick and right.** A new question or reply shows within 10 seconds. A reply clears within 10 seconds of Ken reading it on the rail. A count that never clears, or counts something already handled, is a bug.
 :::
 
 ### What "waiting on you" means
 
-This is not a new flag. A question card (R5) is the card the rail already shows in the accent, its agent block marked as the thing you need to answer. Today you see it only on a page you have open. The icon counts those same cards across every document. Answered comments on a page you have not looked at (R6) are the one new signal; the rail has no mark for them. The Library's "N waiting" is the other direction: your comments waiting on an agent. In the menu that is R9.
+This is not a new flag. It is the rail's own two marks, counted across every document instead of only on the page you have open: a card tagged "question" (R5) and a card tagged "1 new" (R6). The rules for both stay the rail's, written once and shared by the page and the helper, so the icon and the rail never disagree. The Library's "N waiting" is the other direction: your comments waiting on an agent. In the menu that is R9.
 
 ::: callout-req
 **R4. Only replies from after the icon was installed count.** On day one the count is zero. Today 45 documents have an old unanswered question; none of them count.
 :::
 
 ::: callout-req
-**R5. An agent asked Ken a question on a card.** The document counts until one of these happens: Ken answers on the card, an agent replies to the card again, the card is deleted, the review is retired or ended, or the document's file is gone. There is no other way to clear a question until card dismissal is built.
+**R5. An agent asked Ken a question on a card.** The card the rail tags "question". The document counts until one of these happens: Ken answers on the card, an agent replies to the card again, Ken marks the card done, the card is deleted, the review is retired or ended, or the document's file is gone.
 :::
 
 ::: callout-req
-**R6. An agent answered comments on a page Ken has not looked at since.** The document counts until that page is the focused tab in his browser after the answer arrived. A tab open in the background does not count as looking. In a review of several pages, looking at one page clears only that page's answers.
+**R6. An agent reply Ken has not read.** The card the rail tags "1 new", by the rail's own rule: a question, a refusal, or an answer the agent marked as worth reading. Routine replies arrive already read and never count. The document counts until Ken opens the card on the rail, or marks it done. Reading it in any browser clears it everywhere.
 :::
 
 ::: callout-req
@@ -92,7 +92,7 @@ This is not a new flag. A question card (R5) is the card the rail already shows 
 ### The menu
 
 ::: callout-req
-**R8. Waiting on you comes first.** Every waiting document is listed by its name, with a short reason ("1 question", "3 answered"). Clicking one opens it in the browser at its address.
+**R8. Waiting on you comes first.** Every waiting document is listed by its name, with a short reason ("1 question", "3 unread"). Clicking one opens it in the browser at its address.
 :::
 
 ::: callout-req
@@ -156,7 +156,7 @@ This is not a new flag. A question card (R5) is the card the rail already shows 
 :::
 
 ::: callout-req
-**R23. The core stays cross-platform.** The helper's summary and the "looked at" record are plain helper code that runs on Mac, Linux and Windows and passes the unit suite there. Only the app itself is Mac code. The tool still runs from a `git clone` with no packages to install.
+**R23. The core stays cross-platform.** The helper's summary and the read marks it keeps are plain helper code that runs on Mac, Linux and Windows and passes the unit suite there. Only the app itself is Mac code. The tool still runs from a `git clone` with no packages to install.
 :::
 
 ## How we know it worked
@@ -180,7 +180,7 @@ No new analytics: Lahe is a local tool and sends nothing anywhere. The app write
 
 ## Rollout / Flags
 
-No feature flag. The icon is opt-in at `lahe install`, which already needs a terminal. Ken already ran `lahe install` for stable addresses, so he gets the icon by running it again. Nothing changes for anyone who does not opt in. The helper's summary ships to everyone and costs nothing until something asks for it. The "looked at" record starts the first time the new helper runs, which is also the day-one cutoff (R4). This is a minor version bump.
+No feature flag. The icon is opt-in at `lahe install`, which already needs a terminal. Ken already ran `lahe install` for stable addresses, so he gets the icon by running it again. Nothing changes for anyone who does not opt in. The helper's summary ships to everyone and costs nothing until something asks for it. The helper starts keeping read marks the first time the new helper runs. The day-one cutoff (R4) is set the first time the app asks. This is a minor version bump.
 
 ## Questions and Decisions
 

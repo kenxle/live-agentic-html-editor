@@ -847,10 +847,10 @@ needed</a></li>
 </nav>
 <h2 id="summary">Summary</h2>
 <p>A Lahe icon in the Mac menu bar. It shows a number when something is
-waiting on Ken: an agent asked him a question, or an agent answered
-comments he has not looked at yet. Clicking it opens a menu with those
-documents, what is open and who is connected, recent documents, the
-Library, and Quit. It is an optional Mac extra on top of the
+waiting on Ken: the cards the rail already marks for him, an agent's
+question or a reply he has not read yet. Clicking it opens a menu with
+those documents, what is open and who is connected, recent documents,
+the Library, and Quit. It is an optional Mac extra on top of the
 cross-platform helper. Agents do not change how they work.</p>
 <h2 id="problem-user-and-context">Problem, User, and Context</h2>
 <p>Ken runs several coding agents at once and reviews their work in
@@ -910,9 +910,11 @@ and what is running.</strong> It holds the "waiting on you" documents,
 the documents waiting on agents, the open documents, the connected
 sessions, and the recent documents. Only Ken's own programs can read
 it.</li>
-<li><strong>The helper notes when Ken has looked at a page.</strong>
-When a page is the focused tab in his browser after an agent's answer on
-that page arrived, that answer counts as seen.</li>
+<li><strong>The page tells the helper which replies Ken has
+read.</strong> The rail already keeps that mark: a reply shows "1 new"
+on its card until Ken opens the card. Today the mark stays in his
+browser. The page now also sends it to the helper, so the icon and the
+rail agree.</li>
 <li><strong>A small Mac app draws the icon and menu.</strong> It asks
 the helper for the summary every few seconds and shows it. It is Swift
 with no outside packages.</li>
@@ -944,18 +946,18 @@ number.</p>
 </div>
 <div class="callout callout-req">
 <p><strong>R3. The count is quick and right.</strong> A new question or
-answer shows within 10 seconds. An answer clears within 15 seconds of
-Ken focusing the page it is on. A count that never clears, or counts
-something already handled, is a bug.</p>
+reply shows within 10 seconds. A reply clears within 10 seconds of Ken
+reading it on the rail. A count that never clears, or counts something
+already handled, is a bug.</p>
 </div>
 <h3 id="what-waiting-on-you-means">What "waiting on you" means</h3>
-<p>This is not a new flag. A question card (R5) is the card the rail
-already shows in the accent, its agent block marked as the thing you
-need to answer. Today you see it only on a page you have open. The icon
-counts those same cards across every document. Answered comments on a
-page you have not looked at (R6) are the one new signal; the rail has no
-mark for them. The Library's "N waiting" is the other direction: your
-comments waiting on an agent. In the menu that is R9.</p>
+<p>This is not a new flag. It is the rail's own two marks, counted
+across every document instead of only on the page you have open: a card
+tagged "question" (R5) and a card tagged "1 new" (R6). The rules for
+both stay the rail's, written once and shared by the page and the
+helper, so the icon and the rail never disagree. The Library's "N
+waiting" is the other direction: your comments waiting on an agent. In
+the menu that is R9.</p>
 <div class="callout callout-req">
 <p><strong>R4. Only replies from after the icon was installed
 count.</strong> On day one the count is zero. Today 45 documents have an
@@ -963,17 +965,18 @@ old unanswered question; none of them count.</p>
 </div>
 <div class="callout callout-req">
 <p><strong>R5. An agent asked Ken a question on a card.</strong> The
-document counts until one of these happens: Ken answers on the card, an
-agent replies to the card again, the card is deleted, the review is
-retired or ended, or the document's file is gone. There is no other way
-to clear a question until card dismissal is built.</p>
+card the rail tags "question". The document counts until one of these
+happens: Ken answers on the card, an agent replies to the card again,
+Ken marks the card done, the card is deleted, the review is retired or
+ended, or the document's file is gone.</p>
 </div>
 <div class="callout callout-req">
-<p><strong>R6. An agent answered comments on a page Ken has not looked
-at since.</strong> The document counts until that page is the focused
-tab in his browser after the answer arrived. A tab open in the
-background does not count as looking. In a review of several pages,
-looking at one page clears only that page's answers.</p>
+<p><strong>R6. An agent reply Ken has not read.</strong> The card the
+rail tags "1 new", by the rail's own rule: a question, a refusal, or an
+answer the agent marked as worth reading. Routine replies arrive already
+read and never count. The document counts until Ken opens the card on
+the rail, or marks it done. Reading it in any browser clears it
+everywhere.</p>
 </div>
 <div class="callout callout-req">
 <p><strong>R7. Retired reviews, ended reviews, and documents whose file
@@ -984,7 +987,7 @@ from a page.</p>
 <div class="callout callout-req">
 <p><strong>R8. Waiting on you comes first.</strong> Every waiting
 document is listed by its name, with a short reason ("1 question", "3
-answered"). Clicking one opens it in the browser at its address.</p>
+unread"). Clicking one opens it in the browser at its address.</p>
 </div>
 <div class="callout callout-req">
 <p><strong>R9. Waiting on agents is shown separately.</strong> The
@@ -1076,7 +1079,7 @@ protection as the rest of the helper's private data.</p>
 </div>
 <div class="callout callout-req">
 <p><strong>R23. The core stays cross-platform.</strong> The helper's
-summary and the "looked at" record are plain helper code that runs on
+summary and the read marks it keeps are plain helper code that runs on
 Mac, Linux and Windows and passes the unit suite there. Only the app
 itself is Mac code. The tool still runs from a <code>git clone</code>
 with no packages to install.</p>
@@ -1117,9 +1120,9 @@ which already needs a terminal. Ken already ran
 <code>lahe install</code> for stable addresses, so he gets the icon by
 running it again. Nothing changes for anyone who does not opt in. The
 helper's summary ships to everyone and costs nothing until something
-asks for it. The "looked at" record starts the first time the new helper
-runs, which is also the day-one cutoff (R4). This is a minor version
-bump.</p>
+asks for it. The helper starts keeping read marks the first time the new
+helper runs. The day-one cutoff (R4) is set the first time the app asks.
+This is a minor version bump.</p>
 <h2 id="questions-and-decisions">Questions and Decisions</h2>
 <p>For Ken to decide in review:</p>
 <div class="callout callout-question">
@@ -1127,16 +1130,18 @@ bump.</p>
 documents have an old unanswered agent question, and most are from work
 Ken has moved on from. The brief keeps what you agreed: a question
 counts until it is answered or the card goes away (R5), and only
-questions from after the install count (R4). The risk: questions you
-choose not to answer pile up, and there is no Dismiss button yet (board
-row LAHE-dismiss-card). Two other ways:</p>
+questions from after the install count (R4). The risk was that questions
+you choose not to answer pile up with no way to clear them. That way now
+exists: Mark as done, on the card's state chip, shipped on main and
+closes any outstanding card. So:</p>
 <ul>
-<li><strong>A.</strong> Keep R5 as written, and build card dismissal
-soon after. (Recommended: it keeps a question in front of you until you
-deal with it.)</li>
-<li><strong>B.</strong> A question stops counting once you have looked
-at its page, like an answer does. The count clears more easily, but a
-question you glanced past stops nagging.</li>
+<li><strong>A.</strong> Keep R5 as written: a question counts until you
+answer it or mark it done. Nothing more to build. (Recommended: it keeps
+a question in front of you until you deal with it, and Mark as done is
+one click when you decide not to.)</li>
+<li><strong>B.</strong> A question stops counting once you have read its
+card, the same as any other reply. The count clears more easily, but a
+question you read and walked past stops nagging.</li>
 </ul>
 </div>
 <div class="callout callout-question">
@@ -1158,30 +1163,34 @@ the menu, or a command you run, brings it back.</li>
 </div>
 <p>Settled with Ken in the crucible:</p>
 <ul>
-<li><strong>Which version?</strong> The icon that says when something is
-waiting on him, plus recent documents and what is open and who is
-connected. The running indicator, Library link, and Quit stay in.</li>
-<li><strong>A real Lahe icon in the menu bar.</strong> A SwiftBar script
-was ruled out (no Lahe icon), and so was a Dock badge (he keeps the Dock
-hidden).</li>
-<li><strong>Native Mac code is fine</strong> as long as it is optional
-and the core stays cross-platform.</li>
-<li><strong>Built on his Mac with Apple's command line tools</strong> is
-fine. A Mac without them gets a message and no icon.</li>
-<li><strong>A wrong count is worse than no count.</strong> The first
-version counts only what Lahe knows for certain.</li>
-<li><strong>Agents do not change how they work.</strong> The icon is
-another way of seeing and reaching what the helper already records.</li>
-<li><strong>Quit has two items:</strong> hide the icon, or stop Lahe
-until next login.</li>
+<li><p><strong>Which version?</strong> The icon that says when something
+is waiting on him, plus recent documents and what is open and who is
+connected. The running indicator, Library link, and Quit stay
+in.</p></li>
+<li><p><strong>A real Lahe icon in the menu bar.</strong> A SwiftBar
+script was ruled out (no Lahe icon), and so was a Dock badge (he keeps
+the Dock hidden).</p></li>
+<li><p><strong>Native Mac code is fine</strong> as long as it is
+optional and the core stays cross-platform.</p></li>
+<li><p><strong>Built on his Mac with Apple's command line tools</strong>
+is fine. A Mac without them gets a message and no icon.</p></li>
+<li><p><strong>A wrong count is worse than no count.</strong> The first
+version counts only what Lahe knows for certain.</p></li>
+<li><p><strong>Agents do not change how they work.</strong> The icon is
+another way of seeing and reaching what the helper already
+records.</p></li>
+<li><p><strong>Quit has two items:</strong> hide the icon, or stop Lahe
+until next login.</p></li>
+<li><p><strong>"Read" is the rail's own read mark (R6), not a new
+rule.</strong> A reply counts until its card is opened, exactly when the
+rail drops its "1 new" tag. An earlier draft invented its own rule (the
+page was the focused tab); Ken asked for the existing mechanism
+instead.</p></li>
 </ul>
 <p>Chosen by the brief, for Ken to overrule in review:</p>
 <ul>
 <li><strong>The icon counts documents, not cards (R1).</strong> Each one
 is one click.</li>
-<li><strong>Looking means the page is the focused tab (R6).</strong> Not
-per card: Lahe cannot know which cards he read, and a per-card rule
-would need a new gesture on the page.</li>
 <li><strong>Only replies after the install count (R4).</strong>
 Otherwise the first day shows 45.</li>
 <li><strong>The icon shows only the "waiting on you" count

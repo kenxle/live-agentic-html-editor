@@ -4,7 +4,7 @@
 
 Three workstreams, run side by side, landing as two PRs.
 
-- **summary** builds the helper's summary, its signed auth mode, and the seen marks (plain Node, every system). It lands first, on its own, as PR 1. Nothing on screen changes yet.
+- **summary** builds the helper's summary, its signed auth mode, and the read mark's round trip (plain Node, plus the page's post of a mark it already keeps). It lands first, on its own, as PR 1. Nothing on screen changes yet.
 - **macapp** builds the Swift app against a committed sample summary and proof vectors, so it does not wait for the helper.
 - **install** builds, installs, rebuilds and removes the app, and teaches the CLI to start a stopped helper.
 
@@ -26,10 +26,10 @@ flowchart LR
 
 Done by the orchestrator before any builder starts, and committed to the feature branch.
 
-- **The wire, written once.** Add to `docs/CONTRACTS.md`: the routes' paths, the summary's every field and type (the architecture's "`summary.read` response" made exact), and the signed-request wire (the architecture's "The signed-request wire").
+- **The wire, written once.** Add to `docs/CONTRACTS.md`: the `reply.seen` event row and the `reply_seen` field (the architecture's "Read marks"), the routes' paths, the summary's every field and type (the architecture's "`summary.read` response" made exact), and the signed-request wire (the architecture's "The signed-request wire").
 - **Fixtures.** `test/fixtures/menubar/summary.json` (every section filled), `summary_empty.json`, `summary_many.json` (120 waiting documents, long titles, a bidirectional-override title). After Step 0 the summary workstream owns these files and every change to them.
 - **Proof vectors.** `test/fixtures/menubar/proof_vectors.json`: a secret, and for a GET with an empty body, a POST with a JSON body, and a signed 409 answer, every input and the expected signature in hex. Node, the fake helper, and the Swift self-test each assert them.
-- **Manifest.** Add `src/service/summary.js`, `src/service/seen_store.js`, `src/service/menubar.js`, `src/cli/commands/menubar.js` to `src/shared/manifest.js` with `planned: true`, so lint passes before the files exist.
+- **Manifest.** Add `src/service/summary.js`, `src/service/menubar.js`, `src/cli/commands/menubar.js` to `src/shared/manifest.js` with `planned: true`, so lint passes before the files exist.
 - **npm script.** Add `check:menubar` (`node scripts/check_menubar.js`) to `package.json`, and add it to `npm run gate`. It skips with a line on systems other than macOS. No builder edits `package.json`.
 - **Capture probe.** Try one small `screencapture` region and record on the progress page whether it is blank. That decides whether V29 and V32 screenshots come from an agent or from Ken.
 - **Starting counts.** Record the counts V33 uses: helpers, menu bar app processes, `fake_helper.js` processes, `launchctl list | grep lahe-test`, and `lahe-test*` plists in `~/Library/LaunchAgents`.
@@ -87,7 +87,7 @@ Every packet carries this block, near the top:
 
 | Workstream | Tasks | Agent and model | Reuses | Owns | Depends on | PR |
 |---|---|---|---|---|---|---|
-| summary | 1.1 to 1.4 | new agent, Opus | none | `src/service/summary.js`, `seen_store.js`, `catalog_reader.js`, `reviews.js` (claim and heartbeat only), `routes.js`, `auth.js`, `index.js`, `src/shared/protocol.js`, `src/layer/sync.js` (claim body only), the menubar fixtures after Step 0, their tests | Step 0 | 1 |
+| summary | 1.1 to 1.4 | new agent, Opus | none | `src/service/summary.js`, `catalog_reader.js`, `projection.js`, `routes.js`, `auth.js`, `index.js`, `src/shared/protocol.js`, `src/shared/record.js` (the unread rule), `src/layer/tab_done.js` and `sync.js` (the mark's post and adoption only), the menubar fixtures after Step 0, their tests | Step 0 | 1 |
 | macapp | 2.1 to 2.3 | new agent, Opus | none | `macos/menubar/`, `test/fixtures/menubar/fake_helper.js` | Step 0 | 2 |
 | install | 3.1 to 3.4 | new agent, Opus | none | `src/service/menubar.js`, `src/service/login_item.js`, `src/cli/commands/install.js`, `src/cli/commands/menubar.js`, `src/cli/commands/status.js`, `src/cli/index.js`, `scripts/check_menubar.js`, their tests | Step 0 | 2 |
 
@@ -95,7 +95,7 @@ Every packet carries this block, near the top:
 - **Agent reuse.** Fix rounds go back to the builder that owns the file. The summary builder takes any later change to the summary's shape or the wire, so the app and the helper never disagree.
 - **Token plan.** Three agents in parallel is worth it: they share no files, and each packet is small. Packets do not include the alternatives leaf, the reviews, or the crucible.
 - **Packet sources.** summary: brief R1 to R13, R21 to R23; architecture "Data / State Changes", "Key Flows" (first two), "Failure Modes", "Security & Privacy Notes"; `docs/CONTRACTS.md`. macapp: brief R1 to R14, R17, R18, UX Notes; architecture "`summary.read` response", "The signed-request wire", "`summary.open` request", "Install, rebuild, and Quit", "Failure Modes", "Security & Privacy Notes"; `docs/CONTRACTS.md`. install: brief R14 to R20; architecture "`install.json` gains a `menubar` block", "Install, rebuild, and Quit", "Failure Modes", "Security & Privacy Notes"; `docs/ongoing/STABLE_ADDRESSES.md` for the existing login item.
-- **PR 1** (summary): the summary routes and their signed auth mode, seen marks, the claim's `focused` and `page` fields, and the rebuilt bundle. Before opening: a code review (`feature-dev:code-reviewer`) and a security review (`review-security`) of the integrated diff, both owned by the orchestrator, then `npm run gate` locally with "0 failed" in the PR body. After merge: `npm run gate` on main. Proof: V1 to V17, V19, V20, V34 (helper half). Every surface stays as it was; nothing reads the summary yet.
+- **PR 1** (summary): the summary routes and their signed auth mode, the `reply.seen` event and the shared unread rule, and the rebuilt bundle. Before opening: a code review (`feature-dev:code-reviewer`) and a security review (`review-security`) of the integrated diff, both owned by the orchestrator, then `npm run gate` locally with "0 failed" in the PR body. After merge: `npm run gate` on main. Proof: V1 to V17, V19, V20, V34 (helper half). Every surface stays as it was; nothing reads the summary yet.
 - **PR 2** (macapp and install): the app, `lahe install --menu-bar`, `lahe menubar`, Stop and Start, status, docs. Before opening: a code review, an independent check of the brief's requirements on the integrated code (a fresh `general-purpose` agent), a design review of the snapshot images and the menu dump (a `general-purpose` agent prompted as a staff designer), the walkthrough, then `npm run gate` locally. After merge: `npm run gate` on main. Proof: V18, V21 to V34.
 
 ## Test List
@@ -105,13 +105,13 @@ The one verification table. U is a unit test under `test/unit/` (runs on every s
 
 | Row | Requirement or failure | Behavior to prove | Kind |
 |---|---|---|---|
-| V1 | R4 cutoff | `seeded_at` is written on the first `summary.read`, not on helper start; replies older than it count neither as questions nor as answers; marks written before seeding change nothing | U |
-| V2 | R5 question | A ready item whose current reply is a question counts; it stops counting when Ken answers (revision moves), an agent replies again, the card is deleted, the review is retired or ended, or the file is gone | U |
-| V3 | R6 answer | An agent reply on page P counts until a claim or heartbeat with `focused: true` on P after it; `focused: false` does not clear it; a focused one on page Q of the same review does not clear P; a focused second window refused the rail still clears its own page | U |
-| V4 | R6 old bundle | A claim with neither `focused` nor `page` marks nothing | U |
-| V5 | Seen writes | A hundred focused heartbeats with no new reply write `seen.json` zero times; one new reply then one focused heartbeat writes it once | U |
-| V6 | Seen loss | A corrupt or missing `seen.json` starts fresh with `seeded_at = now`; no count goes up | U |
-| V7 | Page field (SR3) | A `page` the review does not know, one with no agent reply, one past 1024 characters, and `__proto__` each mark nothing and store nothing | U |
+| V1 | R4 cutoff | `seeded_at` is written on the first `summary.read`, not on helper start; replies older than it count neither as questions nor as unread | U |
+| V2 | R5 question | A ready item whose current reply is a question counts, opened card or not; it stops counting when Ken answers (revision moves), an agent replies again, Ken marks it done, the card is deleted, the review is retired or ended, or the file is gone | U |
+| V3 | R6 unread | The helper and the rail call one function in `src/shared/record.js`; a reply it names counts until a `reply.seen` naming its stamp is projected; a routine handled reply, a tool round, and a card the reviewer closed never count; a mark for an older reply does not clear a newer one | U |
+| V4 | R6 old bundle | A review with no `reply.seen` events counts every reply the rule names, so an old page holds the count and never clears it early | U |
+| V5 | Mark round trip | Opening a card posts one `reply.seen` per stamp, not one per paint; a `reply_seen` on a polled record clears that card's "1 new" in a second browser context | B |
+| V6 | Seed loss | A corrupt or missing `summary.json` starts fresh with `seeded_at = now`; no count goes up | U |
+| V7 | `reply.seen` bounds (SR3) | An item the review does not hold, a stamp over 64 characters, a stamp that is not the item's current reply, and a non-string each are dropped and reported, and store nothing | U |
 | V8 | R7 | Retired, ended, and missing-file reviews never appear under waiting on you | U |
 | V9 | R1 | Three answered cards on one document count as one; two reviews folded into one Library row count as one; `count` equals the number of listed documents | U |
 | V10 | R9 | `waiting_on_agents.count` equals the Library's waiting total for the same state folder | U |
@@ -123,7 +123,7 @@ The one verification table. U is a unit test under `test/unit/` (runs on every s
 | V16 | Version | A request naming another version gets a signed `409 SUMMARY_VERSION` | U |
 | V17 | R21 cache | A second summary with nothing changed rebuilds no review; touching one review's `events.jsonl` rebuilds only that review; a same-size rewrite in the same millisecond still rebuilds; deleting the reviewed document drops it from waiting on you on the next summary; a Library rename shows on the next summary | U |
 | V18 | R21 measured | On a copy of Ken's state folder, over 10 idle minutes each: the helper's processor time (`ps -o time=`) with the app running minus with it stopped; the app's own processor time; one review tab's renderer processor time in a Playwright Chromium with only that page open. Pass: the first two together are no more than the third, and the summary's warm median request time is 10 ms or less. Battery from `top -stats pid,power` samples is recorded beside them | M |
-| V19 | R3 timing | With a real page, at the summary: an agent reply shows within 5 s; focusing the page clears it within 10 s; a background tab does not clear it, including a page forced unfocused before its first claim that reloads after the reply. Run on a Markdown review and on a multi-page site review whose page path needs encoding | B |
+| V19 | R3 timing | With a real page, at the summary: an agent question shows within 5 s; opening its card drops the unread count within 10 s and the question still counts; a routine handled reply never shows; a page left open without its card opened holds the count. Run on a Markdown review and on a multi-page site review | B |
 | V20 | R23 | The unit suite passes on Linux in CI with the new modules loaded | U |
 | V21 | R15 install | On macOS (runner mocked, test labels): `--menu-bar` builds, writes the app's plist, and records the `menubar` block; `--no-menu-bar` skips it; with neither, a terminal is asked once; an existing install plus `--menu-bar` leaves the helper's plist, its process and the rest of `install.json` untouched. On Linux and Windows the flag says it is macOS only and the install goes on | U |
 | V22 | R16 | No `swiftc`: the message names `xcode-select --install`, no plist is written, and the rest of the install completes | U |
@@ -181,7 +181,7 @@ Full prose in [03_plan_menu_bar_app_reviews.md](03_plan_menu_bar_app_reviews.md)
 
 | # | Finding | Disposition | Rationale |
 |---|---------|-------------|-----------|
-| RF1 | A background tab's first claim says not quiet | Accepted | The claim carries an explicit `focused`; the architecture is corrected; V19 covers a background reload. |
+| RF1 | A background tab's first claim says not quiet | Accepted, then superseded | The focused-tab rule is gone (Ken, in review: use the rail's existing read mark). V3 to V7 and V19 now prove the `reply.seen` round trip instead. |
 | RF2 | The cache misses a deleted document and a rename | Accepted | The document's stat and `catalog.json` join the cache key; V17 cases. |
 | RF3 | PR 1 would seed before the install | Accepted | Seed on the first `summary.read`; V1, V32. |
 | RF4 | A rebuild brings a hidden icon back | Accepted | Restart only if it was running; V24. |

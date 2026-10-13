@@ -855,8 +855,9 @@ needed</a></li>
 <p>Three workstreams, run side by side, landing as two PRs.</p>
 <ul>
 <li><strong>summary</strong> builds the helper's summary, its signed
-auth mode, and the seen marks (plain Node, every system). It lands
-first, on its own, as PR 1. Nothing on screen changes yet.</li>
+auth mode, and the read mark's round trip (plain Node, plus the page's
+post of a mark it already keeps). It lands first, on its own, as PR 1.
+Nothing on screen changes yet.</li>
 <li><strong>macapp</strong> builds the Swift app against a committed
 sample summary and proof vectors, so it does not wait for the
 helper.</li>
@@ -878,10 +879,11 @@ app, and teaches the CLI to start a stopped helper.</li>
 the feature branch.</p>
 <ul>
 <li><strong>The wire, written once.</strong> Add to
-<code>docs/CONTRACTS.md</code>: the routes' paths, the summary's every
-field and type (the architecture's "<code>summary.read</code> response"
-made exact), and the signed-request wire (the architecture's "The
-signed-request wire").</li>
+<code>docs/CONTRACTS.md</code>: the <code>reply.seen</code> event row
+and the <code>reply_seen</code> field (the architecture's "Read marks"),
+the routes' paths, the summary's every field and type (the
+architecture's "<code>summary.read</code> response" made exact), and the
+signed-request wire (the architecture's "The signed-request wire").</li>
 <li><strong>Fixtures.</strong>
 <code>test/fixtures/menubar/summary.json</code> (every section filled),
 <code>summary_empty.json</code>, <code>summary_many.json</code> (120
@@ -894,7 +896,6 @@ a GET with an empty body, a POST with a JSON body, and a signed 409
 answer, every input and the expected signature in hex. Node, the fake
 helper, and the Swift self-test each assert them.</li>
 <li><strong>Manifest.</strong> Add <code>src/service/summary.js</code>,
-<code>src/service/seen_store.js</code>,
 <code>src/service/menubar.js</code>,
 <code>src/cli/commands/menubar.js</code> to
 <code>src/shared/manifest.js</code> with <code>planned: true</code>, so
@@ -952,33 +953,40 @@ line. Do not document around it.</li>
 <h2 id="step-1-the-summary-workstream-summary-pr-1">Step 1: The summary
 (workstream summary, PR 1)</h2>
 <div class="xref">
-<p>Architecture: "Data / State Changes" (<code>seen.json</code>, what
-counts as waiting on you, the <code>summary.read</code> response, the
-<code>summary.open</code> request), "Key Flows" (the first two),
-"Failure Modes", "Security &amp; Privacy Notes".</p>
+<p>Architecture: "Data / State Changes" (the <code>reply.seen</code>
+event, <code>summary.json</code>, what counts as waiting on you, the
+<code>summary.read</code> response, the <code>summary.open</code>
+request), "Key Flows" (the first two), "Failure Modes", "Security &amp;
+Privacy Notes".</p>
 </div>
-<h3 id="task-11-seen-marks">Task 1.1: Seen marks</h3>
-<p><strong>Spec:</strong> <code>seen_store.js</code> owns
-<code>seen.json</code>: <code>seeded_at</code> on first run, per-review
-per-page marks in prototype-free objects, writes only when a write would
-change a count, a fresh file on loss. A <code>page</code> over 1024
-characters, or one that is not a page of that review carrying an agent
-reply, marks nothing. <code>seeded_at</code> is written on the first
-<code>summary.read</code>. <code>reviews.js</code> calls the store on
-every claim and heartbeat that carries a valid review token and
-<code>focused: true</code>, whether or not the window gets the rail.
-<code>src/layer/sync.js</code> adds two fields to its claim and
-heartbeat bodies: <code>focused</code> (the page's attention is focused,
-computed at send time) and <code>page</code> (the same page path the
-layer stamps on its records, from the same function). Nothing else in
-the layer changes. <strong>Files:</strong>
-<code>src/service/seen_store.js</code>,
-<code>src/service/reviews.js</code> (claim and heartbeat handlers only),
-<code>src/layer/sync.js</code> (claim body only),
-<code>src/shared/protocol.js</code> (the claim's request description),
-tests. <strong>Acceptance:</strong> V1, V3 to V7. <strong>Don't
-touch:</strong> the rail, replay, anything in <code>src/layer/</code>
-but the claim body.</p>
+<h3 id="task-11-the-read-marks-round-trip">Task 1.1: The read mark's
+round trip</h3>
+<p><strong>Spec:</strong> Move the unread rule
+(<code>needsToSeeReply</code>, <code>unseenReplyIds</code> and what they
+lean on) from <code>src/layer/tab_done.js</code> into
+<code>src/shared/record.js</code>, with <code>tab_done.js</code> calling
+it there; the rail's behaviour does not change. Add the
+<code>reply.seen</code> event to the closed vocabulary in
+<code>src/shared/protocol.js</code>, exactly as
+<code>docs/CONTRACTS.md</code> spells it. The projection folds it onto
+the item as <code>reply_seen</code> only when the stamp names the item's
+current reply, and drops and reports anything else. The page posts it
+through the outbox the way <code>item.closed</code> is posted, once per
+stamp, at the moment the rail writes its local mark; and a
+<code>reply_seen</code> on a polled record that matches the current
+reply is adopted into the local marks. <code>summary.js</code> owns
+<code>summary.json</code> with <code>seeded_at</code>, written on the
+first <code>summary.read</code>, and a fresh file on loss.
+<strong>Files:</strong> <code>src/shared/record.js</code>,
+<code>src/shared/protocol.js</code>,
+<code>src/service/projection.js</code>,
+<code>src/layer/tab_done.js</code> (the rule's home and the post),
+<code>src/layer/sync.js</code> (the post and the adoption),
+<code>docs/CONTRACTS.md</code> (the event row and the field, written by
+Step 0; the builder corrects it if the code has to differ), tests.
+<strong>Acceptance:</strong> V1, V3 to V7. <strong>Don't touch:</strong>
+how the rail draws a card or its "1 new" tag, replay, anything else in
+<code>src/layer/</code>.</p>
 <h3 id="task-12-the-one-review-summary">Task 1.2: The one-review
 summary</h3>
 <p><strong>Spec:</strong> The catalog reader exposes one review's
@@ -997,14 +1005,13 @@ from one-review summaries (cached per review on size, modified time and
 inode of <code>events.jsonl</code>, <code>review.json</code>,
 <code>meta.json</code> and the reviewed document, plus
 <code>catalog.json</code> once per request), folded with the Library's
-rule, plus the window holders, the seen marks, and session liveness.
-Fields exactly as <code>docs/CONTRACTS.md</code>. Wire the seen store
-and the summary in <code>src/service/index.js</code>.
-<strong>Files:</strong> <code>src/service/summary.js</code>,
-<code>src/service/index.js</code>, the menubar fixtures, tests. A test
-compares nested key paths and value types with
-<code>test/fixtures/menubar/summary.json</code> in both directions.
-<strong>Acceptance:</strong> V9 to V13, V17.</p>
+rule, plus the window holders and session liveness. Fields exactly as
+<code>docs/CONTRACTS.md</code>. Wire the summary in
+<code>src/service/index.js</code>. <strong>Files:</strong>
+<code>src/service/summary.js</code>, <code>src/service/index.js</code>,
+the menubar fixtures, tests. A test compares nested key paths and value
+types with <code>test/fixtures/menubar/summary.json</code> in both
+directions. <strong>Acceptance:</strong> V9 to V13, V17.</p>
 <h3 id="task-14-the-routes">Task 1.4: The routes</h3>
 <p><strong>Spec:</strong> A new auth mode, <code>AUTH.CLI_PROOF</code>,
 exactly as the wire in <code>docs/CONTRACTS.md</code>: signed requests,
@@ -1224,12 +1231,13 @@ labels, and his helper was never interrupted by a test.</p>
 <td>1.1 to 1.4</td>
 <td>new agent, Opus</td>
 <td>none</td>
-<td><code>src/service/summary.js</code>, <code>seen_store.js</code>,
-<code>catalog_reader.js</code>, <code>reviews.js</code> (claim and
-heartbeat only), <code>routes.js</code>, <code>auth.js</code>,
-<code>index.js</code>, <code>src/shared/protocol.js</code>,
-<code>src/layer/sync.js</code> (claim body only), the menubar fixtures
-after Step 0, their tests</td>
+<td><code>src/service/summary.js</code>, <code>catalog_reader.js</code>,
+<code>projection.js</code>, <code>routes.js</code>,
+<code>auth.js</code>, <code>index.js</code>,
+<code>src/shared/protocol.js</code>, <code>src/shared/record.js</code>
+(the unread rule), <code>src/layer/tab_done.js</code> and
+<code>sync.js</code> (the mark's post and adoption only), the menubar
+fixtures after Step 0, their tests</td>
 <td>Step 0</td>
 <td>1</td>
 </tr>
@@ -1284,9 +1292,9 @@ rebuild, and Quit", "Failure Modes", "Security &amp; Privacy Notes";
 Notes"; <code>docs/ongoing/STABLE_ADDRESSES.md</code> for the existing
 login item.</li>
 <li><strong>PR 1</strong> (summary): the summary routes and their signed
-auth mode, seen marks, the claim's <code>focused</code> and
-<code>page</code> fields, and the rebuilt bundle. Before opening: a code
-review (<code>feature-dev:code-reviewer</code>) and a security review
+auth mode, the <code>reply.seen</code> event and the shared unread rule,
+and the rebuilt bundle. Before opening: a code review
+(<code>feature-dev:code-reviewer</code>) and a security review
 (<code>review-security</code>) of the integrated diff, both owned by the
 orchestrator, then <code>npm run gate</code> locally with "0 failed" in
 the PR body. After merge: <code>npm run gate</code> on main. Proof: V1
@@ -1325,57 +1333,57 @@ launchd job a test starts is stopped in teardown.</p>
 <td>R4 cutoff</td>
 <td><code>seeded_at</code> is written on the first
 <code>summary.read</code>, not on helper start; replies older than it
-count neither as questions nor as answers; marks written before seeding
-change nothing</td>
+count neither as questions nor as unread</td>
 <td>U</td>
 </tr>
 <tr>
 <td>V2</td>
 <td>R5 question</td>
-<td>A ready item whose current reply is a question counts; it stops
-counting when Ken answers (revision moves), an agent replies again, the
-card is deleted, the review is retired or ended, or the file is
-gone</td>
+<td>A ready item whose current reply is a question counts, opened card
+or not; it stops counting when Ken answers (revision moves), an agent
+replies again, Ken marks it done, the card is deleted, the review is
+retired or ended, or the file is gone</td>
 <td>U</td>
 </tr>
 <tr>
 <td>V3</td>
-<td>R6 answer</td>
-<td>An agent reply on page P counts until a claim or heartbeat with
-<code>focused: true</code> on P after it; <code>focused: false</code>
-does not clear it; a focused one on page Q of the same review does not
-clear P; a focused second window refused the rail still clears its own
-page</td>
+<td>R6 unread</td>
+<td>The helper and the rail call one function in
+<code>src/shared/record.js</code>; a reply it names counts until a
+<code>reply.seen</code> naming its stamp is projected; a routine handled
+reply, a tool round, and a card the reviewer closed never count; a mark
+for an older reply does not clear a newer one</td>
 <td>U</td>
 </tr>
 <tr>
 <td>V4</td>
 <td>R6 old bundle</td>
-<td>A claim with neither <code>focused</code> nor <code>page</code>
-marks nothing</td>
+<td>A review with no <code>reply.seen</code> events counts every reply
+the rule names, so an old page holds the count and never clears it
+early</td>
 <td>U</td>
 </tr>
 <tr>
 <td>V5</td>
-<td>Seen writes</td>
-<td>A hundred focused heartbeats with no new reply write
-<code>seen.json</code> zero times; one new reply then one focused
-heartbeat writes it once</td>
-<td>U</td>
+<td>Mark round trip</td>
+<td>Opening a card posts one <code>reply.seen</code> per stamp, not one
+per paint; a <code>reply_seen</code> on a polled record clears that
+card's "1 new" in a second browser context</td>
+<td>B</td>
 </tr>
 <tr>
 <td>V6</td>
-<td>Seen loss</td>
-<td>A corrupt or missing <code>seen.json</code> starts fresh with
+<td>Seed loss</td>
+<td>A corrupt or missing <code>summary.json</code> starts fresh with
 <code>seeded_at = now</code>; no count goes up</td>
 <td>U</td>
 </tr>
 <tr>
 <td>V7</td>
-<td>Page field (SR3)</td>
-<td>A <code>page</code> the review does not know, one with no agent
-reply, one past 1024 characters, and <code>__proto__</code> each mark
-nothing and store nothing</td>
+<td><code>reply.seen</code> bounds (SR3)</td>
+<td>An item the review does not hold, a stamp over 64 characters, a
+stamp that is not the item's current reply, and a non-string each are
+dropped and reported, and store nothing</td>
 <td>U</td>
 </tr>
 <tr>
@@ -1477,11 +1485,11 @@ summary's warm median request time is 10 ms or less. Battery from
 <tr>
 <td>V19</td>
 <td>R3 timing</td>
-<td>With a real page, at the summary: an agent reply shows within 5 s;
-focusing the page clears it within 10 s; a background tab does not clear
-it, including a page forced unfocused before its first claim that
-reloads after the reply. Run on a Markdown review and on a multi-page
-site review whose page path needs encoding</td>
+<td>With a real page, at the summary: an agent question shows within 5
+s; opening its card drops the unread count within 10 s and the question
+still counts; a routine handled reply never shows; a page left open
+without its card opened holds the count. Run on a Markdown review and on
+a multi-page site review</td>
 <td>B</td>
 </tr>
 <tr>
@@ -1708,9 +1716,10 @@ All findings accepted.</p>
 <tr>
 <td>RF1</td>
 <td>A background tab's first claim says not quiet</td>
-<td><span class="accepted">Accepted</span></td>
-<td>The claim carries an explicit <code>focused</code>; the architecture
-is corrected; V19 covers a background reload.</td>
+<td>Accepted, then superseded</td>
+<td>The focused-tab rule is gone (Ken, in review: use the rail's
+existing read mark). V3 to V7 and V19 now prove the
+<code>reply.seen</code> round trip instead.</td>
 </tr>
 <tr>
 <td>RF2</td>

@@ -7,7 +7,7 @@
 ## Needs your attention
 
 - [ ] **Review the full set:** start with the [brief](01_brief_menu_bar_app.html), then the [architecture](02_architecture_menu_bar_app.html) and the [plan](03_plan_menu_bar_app.html). Comment anywhere. Building waits for your go.
-- [ ] **When should an agent's open question stop counting?** A: only when it is answered or the card goes away, and card dismissal gets built soon after (recommended). B: once you have looked at its page, like an answer. Details at the top of the brief's Questions section.
+- [ ] **When should an agent's open question stop counting?** A: only when you answer it or mark the card done, which shipped on main today (recommended). B: once you have opened its card, like any other reply. Details at the top of the brief's Questions section.
 - [ ] **Should "Stop Lahe" hold while agents are connected?** A: no, agents can start it again and the menu says so (recommended). B: yes, it holds until next login and agents' commands refuse to start it. Same section.
 
 ## Currently working on

@@ -1,15 +1,15 @@
 ## Step 1: The summary (workstream summary, PR 1)
 
 ::: xref
-Architecture: "Data / State Changes" (`seen.json`, what counts as waiting on you, the `summary.read` response, the `summary.open` request), "Key Flows" (the first two), "Failure Modes", "Security & Privacy Notes".
+Architecture: "Data / State Changes" (the `reply.seen` event, `summary.json`, what counts as waiting on you, the `summary.read` response, the `summary.open` request), "Key Flows" (the first two), "Failure Modes", "Security & Privacy Notes".
 :::
 
-### Task 1.1: Seen marks
+### Task 1.1: The read mark's round trip
 
-**Spec:** `seen_store.js` owns `seen.json`: `seeded_at` on first run, per-review per-page marks in prototype-free objects, writes only when a write would change a count, a fresh file on loss. A `page` over 1024 characters, or one that is not a page of that review carrying an agent reply, marks nothing. `seeded_at` is written on the first `summary.read`. `reviews.js` calls the store on every claim and heartbeat that carries a valid review token and `focused: true`, whether or not the window gets the rail. `src/layer/sync.js` adds two fields to its claim and heartbeat bodies: `focused` (the page's attention is focused, computed at send time) and `page` (the same page path the layer stamps on its records, from the same function). Nothing else in the layer changes.
-**Files:** `src/service/seen_store.js`, `src/service/reviews.js` (claim and heartbeat handlers only), `src/layer/sync.js` (claim body only), `src/shared/protocol.js` (the claim's request description), tests.
+**Spec:** Move the unread rule (`needsToSeeReply`, `unseenReplyIds` and what they lean on) from `src/layer/tab_done.js` into `src/shared/record.js`, with `tab_done.js` calling it there; the rail's behaviour does not change. Add the `reply.seen` event to the closed vocabulary in `src/shared/protocol.js`, exactly as `docs/CONTRACTS.md` spells it. The projection folds it onto the item as `reply_seen` only when the stamp names the item's current reply, and drops and reports anything else. The page posts it through the outbox the way `item.closed` is posted, once per stamp, at the moment the rail writes its local mark; and a `reply_seen` on a polled record that matches the current reply is adopted into the local marks. `summary.js` owns `summary.json` with `seeded_at`, written on the first `summary.read`, and a fresh file on loss.
+**Files:** `src/shared/record.js`, `src/shared/protocol.js`, `src/service/projection.js`, `src/layer/tab_done.js` (the rule's home and the post), `src/layer/sync.js` (the post and the adoption), `docs/CONTRACTS.md` (the event row and the field, written by Step 0; the builder corrects it if the code has to differ), tests.
 **Acceptance:** V1, V3 to V7.
-**Don't touch:** the rail, replay, anything in `src/layer/` but the claim body.
+**Don't touch:** how the rail draws a card or its "1 new" tag, replay, anything else in `src/layer/`.
 
 ### Task 1.2: The one-review summary
 
@@ -19,7 +19,7 @@ Architecture: "Data / State Changes" (`seen.json`, what counts as waiting on you
 
 ### Task 1.3: The summary and its cache
 
-**Spec:** `summary.js` builds the response from one-review summaries (cached per review on size, modified time and inode of `events.jsonl`, `review.json`, `meta.json` and the reviewed document, plus `catalog.json` once per request), folded with the Library's rule, plus the window holders, the seen marks, and session liveness. Fields exactly as `docs/CONTRACTS.md`. Wire the seen store and the summary in `src/service/index.js`.
+**Spec:** `summary.js` builds the response from one-review summaries (cached per review on size, modified time and inode of `events.jsonl`, `review.json`, `meta.json` and the reviewed document, plus `catalog.json` once per request), folded with the Library's rule, plus the window holders and session liveness. Fields exactly as `docs/CONTRACTS.md`. Wire the summary in `src/service/index.js`.
 **Files:** `src/service/summary.js`, `src/service/index.js`, the menubar fixtures, tests. A test compares nested key paths and value types with `test/fixtures/menubar/summary.json` in both directions.
 **Acceptance:** V9 to V13, V17.
 
