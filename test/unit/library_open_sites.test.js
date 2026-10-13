@@ -529,6 +529,12 @@ const AHEAD = { helper: { now: () => Date.now() + 60 * 1000 } };
 function twoReviews(w, newerSession, olderSession) {
   const file = writeFile(docs(w), "page.html", PAGE_HTML);
   const older = makeReview(w, { id: "r-a-older", agent_session_id: olderSession, target_path: file });
+  // A review's created_at is the wall clock to the millisecond, and two creates
+  // in a row can share one on a fast machine. The holder is then whichever the
+  // folder listing names first, so "newer" is only newer once the clock moves.
+  const olderAt = older.created_at;
+  assert.equal(typeof olderAt, "string", "a review carries its created_at");
+  while (new Date().toISOString() <= olderAt) { /* wait one millisecond */ }
   const newer = makeReview(w, { id: "r-b-newer", agent_session_id: newerSession, target_path: file });
   w.helper.sites.bind({ root: fs.realpathSync(docs(w)), mode: "folder", entry: "page.html" });
   return { older, newer, name: w.helper.sites.list()[0].name };

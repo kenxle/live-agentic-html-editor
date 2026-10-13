@@ -1,6 +1,6 @@
 /*
  * live-agentic-html-editor review layer
- * version 0.3.0+1d5de97e5f32
+ * version 0.3.0+9196e3e44fbe
  *
  * GENERATED FILE. Do not edit. Edit the sources under src/ and run
  *   npm run build:layer
@@ -12,7 +12,7 @@
   "use strict";
   var g = typeof globalThis !== "undefined" ? globalThis : window;
   g.LAHE = g.LAHE || {};
-  g.LAHE.version = "0.3.0+1d5de97e5f32";
+  g.LAHE.version = "0.3.0+9196e3e44fbe";
 })();
 /* ---- src/shared/markers.js  (owner: 0A-kernel) ---- */
 // Markers: the attribute and class names that identify DOM the tool added.
@@ -9607,7 +9607,7 @@
     "Do not rewrite a whole document. Make the change the item asks for, where it points. Then scan the rest of the document for other places the same change clearly applies, and use your judgment: apply it there too, or leave the instances that should stay. Never restructure, re-voice, or change things no item asked about.",
     "A doc-wide change stays welcome: when an item names a change that applies in several places, find and apply every instance. The one exception is text a handled edit placed. Handled edits are the reviewer's own decisions, listed in this file with their after text. If a sweep would change or remove a handled edit's after text, apply the rest of the sweep, leave that one spot alone, and reply question naming the conflict.",
     "An item with a reverts field is a take-back: the reviewer undid a change you had already made, and reverts names the handled item they undid. Its before is what the source says now and its after_full is what it should say again. Take the change out of the source so the next rebuild does not bring it back, and stop treating the item it names as a handled edit to protect.",
-    "To answer, run: lahe reply --review <review-id> --item <item-id> --rev <n> --status handled|not_handled|question, adding --text or --reason for what you want to say, --file for each file you changed, --needs-see when the reviewer should read it, and --agent <your-name> so the card carries your name. It encodes the JSON and appends the line to your reply file in this folder, which is replies.jsonl alone or replies-<your-name>.jsonl when you pass --agent.",
+    "To answer, run: lahe reply --review <review-id> --item <item-id> --rev <n> --status handled|not_handled|question, adding --text or --reason for what you want to say, --file for each file you changed, --needs-see when the reviewer should read it, and --agent <agent> naming the kind of agent you are (claude, codex, and so on), never a session or task name, so the card says who answered. It encodes the JSON and appends the line to your reply file in this folder, which is replies.jsonl alone or replies-<agent>.jsonl when you pass --agent.",
     "If you append by hand instead of running lahe reply, the whole object goes on ONE physical line and every newline inside text or reason is the two characters backslash n. A raw newline splits the object across lines and the helper rejects every one of them, which puts a malformed-line warning on the reviewer's rail. Only append. Never edit this file and never rewrite a reply file.",
     "A reply line looks like this: {\"item\":\"c_7fa2\",\"rev\":2,\"status\":\"handled\",\"agent\":\"claude\",\"files\":[\"app/views/home.html.erb\"]}",
     "Every reply line names the item id, the item's rev, and your own agent name. The reviewer sees that name on the card.",
@@ -51920,7 +51920,7 @@
   "use strict";
 
   // Replaced by scripts/build-layer.js at concatenation time.
-  var VERSION = "0.3.0+1d5de97e5f32";
+  var VERSION = "0.3.0+9196e3e44fbe";
 
   var protocol = ns.protocol;
   var record = ns.record;
