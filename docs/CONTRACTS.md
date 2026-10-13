@@ -1162,22 +1162,23 @@ text, no token, no session secret, anywhere in the answer. The day-one cutoff li
 than `seeded_at` is never unread.
 
 **How fresh the answer is.** The helper keeps the answer's rows in memory, and an idle poll reads no
-file but a stat of `catalog.json` (so a Library rename shows on the next poll). A change the helper
-writes itself (an event any page posts, a reply it folds, a review it creates) shows on the next
-poll: its event log tells the summary which review to rebuild. What else a reviewer waits on shows
-within one beat, `CATALOG.POLL_MS` (15 seconds): at most once a beat a poll reads every open
-session's agent again, checks `summary.json` and every waiting document, folds reply files no page is
-folding, and lists the reviews and the sessions again when their folders moved. The same beat stats
-the `events.jsonl`, `review.json` and `meta.json` of a fortieth of the reviews, and reads a fortieth
-of the closed sessions, in turn, so a write to those files the helper did not make (a command run
-while no helper held the review) shows within forty beats, ten minutes; while the helper runs it
-writes those files itself. A session's three files are read again only when its folder moved: each is
-written by a rename into it. Folding reply files is how an agent's reply to a document nobody has open reaches the
-count: for a review with an item in state ready, a reply file whose size, time or
-inode moved since the last beat is folded once (`projection.foldOnce`), without putting the review on
-the watch list. On a helper's first beat a reply file newer than the review's log is folded, which is
-what a reply written while no helper ran looks like. Window holders are read from the helper's memory
-on every poll.
+file. It stats `catalog.json` (so a Library rename shows on the next poll), and the folder and reply
+files of each review with an item in state ready, and reads nothing unless one of those stats moved.
+A change the helper writes itself (an event any page posts, a reply it folds, a review it creates)
+shows on the next poll: its event log tells the summary which review to rebuild. An agent's reply to
+a document nobody has open also shows on the next poll: for a review with an item in state ready, a
+reply file whose size, time or inode moved since the last poll is folded once (`projection.foldOnce`),
+without putting the review on the watch list. Only regular files count; a symlink is never followed.
+On a helper's first poll a reply file newer than the review's log is folded, which is what a reply
+written while no helper ran looks like. What else a reviewer waits on shows within one beat,
+`CATALOG.POLL_MS` (15 seconds): at most once a beat a poll reads every open session's agent again,
+checks `summary.json` and every waiting document, and lists the reviews and the sessions again when
+their folders moved. The same beat stats the `events.jsonl`, `review.json` and `meta.json` of a
+fortieth of the reviews, and reads a fortieth of the closed sessions, in turn, so a write to those
+files the helper did not make (a command run while no helper held the review) shows within forty
+beats, ten minutes; while the helper runs it writes those files itself. A session's three files are
+read again only when its folder moved: each is written by a rename into it. Window holders are read
+from the helper's memory on every poll.
 
 **`summary.open`** takes `{review, summary_version}` and answers `{url}`: the address catalog Open
 would use, found with `handoff: false`, so it never queues a request for an agent. A row only an agent
@@ -1185,11 +1186,16 @@ can serve answers `{url: null}`, as does any review catalog Open refuses as not 
 file, a review the Library does not list). It writes nothing but what catalog Open writes.
 
 **Stop holds.** The menu's Stop writes `<state>/stopped.json`, `{by: "menu bar", at}`, then unloads the
-helper's login item. While that file stands, `login_item.startThroughItem` throws with one line naming
-who stopped Lahe, when, and that Start in the menu or `lahe install` brings it back, and starts
-nothing, so every `lahe` command that needs the helper exits 1 with that line. `lahe install` removes
-the file; the helper removes it on its own start, which ends the hold at the next login. `lahe status`
-says "stopped by you" with the time while it stands.
+helper's login item. While that file stands, no helper starts on that state folder, on any port.
+`login_item.startThroughItem`, the CLI's own spawn of `lahe serve` (`lahe add`, `lahe session`, and a
+replacement of a running helper), `lahe serve` itself and the helper's start (`service.serve`) each
+refuse with one line naming who stopped Lahe, when, and that Start in the menu or `lahe install`
+brings it back, and start nothing, so every `lahe` command that needs a helper exits 1 with that line.
+The one start that goes ahead is the login item's own: `--always-on`, launched by launchd (parent pid
+1, `XPC_SERVICE_NAME` equal to the label `install.json` records for that port). Only that start
+removes the file, which ends the hold at the next login. The menu's Start and `lahe install` remove it
+themselves. `lahe status` says "stopped by you" with the time while it stands, and still says how the
+icon is.
 
 ### The Library routes and the Library token (D11 amendment)
 
