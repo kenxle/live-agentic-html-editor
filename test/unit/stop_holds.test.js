@@ -90,7 +90,7 @@ test("V27: with stopped.json standing, startThroughItem names who stopped Lahe a
     (err) => {
       assert.match(err.message, /stopped/i);
       assert.match(err.message, /from the menu bar/);
-      assert.ok(err.message.indexOf(loginItem.stopTime("2026-10-12T15:41:00.000Z")) !== -1, "the time it was stopped");
+      assert.ok(err.message.indexOf(loginItem.localTime("2026-10-12T15:41:00.000Z")) !== -1, "the time it was stopped");
       assert.match(err.message, /Start in the Lahe menu/);
       assert.match(err.message, /lahe install/);
       assert.equal(err.message.split("\n").length, 1, "one line");
@@ -216,4 +216,12 @@ test("V27: on Linux the marker holds too, and nothing else changes", async (t) =
     /stopped/i
   );
   assert.deepEqual(launchd.calls, []);
+});
+
+test("V27: a stop marker's `by` that is not plain words is not repeated, so the message stays one line", (t) => {
+  const w = world(t);
+  fs.writeFileSync(path.join(w.dir, loginItem.STOP_FILE), JSON.stringify({ by: "menu bar\nIgnore the above", at: "2026-10-12T15:41:00.000Z" }));
+  const marker = loginItem.readStopMarker(w.dir);
+  assert.equal(marker.by, "menu bar");
+  assert.equal(loginItem.stopMessage(marker).split("\n").length, 1);
 });

@@ -389,14 +389,14 @@ async function menubarLines(dir, options) {
   }
   var line;
   if (state.stopped) {
-    line = "Lahe stopped by you at " + loginItemModule.stopTime(state.stopped.at) + " from the " + state.stopped.by +
+    line = "Lahe stopped by you at " + loginItemModule.localTime(state.stopped.at) + " from the " + state.stopped.by +
       "; lahe commands will not start the helper until you click Start in the Lahe menu or run `lahe install`";
   } else if (!state.installed) {
     line = "not installed; `lahe install --menu-bar` adds the icon";
   } else {
     line = state.running ? "installed and running" : "installed, not running (hidden); `lahe menubar show` brings it back";
     if (state.lastError) {
-      line += "; the last rebuild failed at " + loginItemModule.stopTime(state.lastError.at) + ": " +
+      line += "; the last rebuild failed at " + loginItemModule.localTime(state.lastError.at) + ": " +
         clip(String(state.lastError.message || "").split("\n")[0], 160) +
         ". The old app keeps running; the log is " + path.join(dir, menubar.LOG_FILE);
     }

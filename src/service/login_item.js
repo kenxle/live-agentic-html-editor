@@ -402,7 +402,8 @@ function readStopMarker(dir) {
   try {
     var parsed = JSON.parse(text);
     return {
-      by: parsed && typeof parsed.by === "string" && parsed.by ? parsed.by : "menu bar",
+      // Plain words only: it goes into a one-line message an agent reads.
+      by: parsed && typeof parsed.by === "string" && /^[A-Za-z0-9 ._-]{1,40}$/.test(parsed.by) ? parsed.by : "menu bar",
       at: parsed && typeof parsed.at === "string" && !Number.isNaN(Date.parse(parsed.at)) ? parsed.at : null
     };
   } catch (err) {
@@ -416,7 +417,7 @@ function clearStopMarker(dir) {
 }
 
 /** "2026-10-12 15:41" in this computer's local time, or "an unknown time". */
-function stopTime(at) {
+function localTime(at) {
   var when = at ? new Date(at) : null;
   if (!when || Number.isNaN(when.getTime())) return "an unknown time";
   var pad = function (n) { return String(n).padStart(2, "0"); };
@@ -427,7 +428,7 @@ function stopTime(at) {
 /** The one line every lahe command prints while the hold stands. */
 function stopMessage(marker) {
   return "Lahe is stopped: the person using this computer stopped it from the " + marker.by + " at " +
-    stopTime(marker.at) + ". Nothing starts it until they click Start in the Lahe menu or run `lahe install`.";
+    localTime(marker.at) + ". Nothing starts it until they click Start in the Lahe menu or run `lahe install`.";
 }
 
 /**
@@ -826,7 +827,7 @@ module.exports = {
   readStopMarker: readStopMarker,
   clearStopMarker: clearStopMarker,
   stopMessage: stopMessage,
-  stopTime: stopTime,
+  localTime: localTime,
   sourceRoots: sourceRoots,
   waitForQuiet: waitForQuiet,
   writeItem: writeItem,

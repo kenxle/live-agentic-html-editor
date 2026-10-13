@@ -190,7 +190,7 @@ test("V26: lahe status names a failed rebuild, its time and its error", async (t
   const text = await statusOut(w, mac);
   const line = text.split("\n").find((l) => l.indexOf("menu bar  ") === 0);
   assert.match(line, /installed and running; the last rebuild failed at /);
-  assert.ok(line.indexOf(loginItem.stopTime("2026-10-12T15:00:00.000Z")) !== -1);
+  assert.ok(line.indexOf(loginItem.localTime("2026-10-12T15:00:00.000Z")) !== -1);
   assert.match(line, /expected expression/);
   assert.match(line, /old app keeps running/);
   assert.ok(line.indexOf(path.join(w.dir, "menubar.log")) !== -1);
@@ -201,7 +201,7 @@ test("V26 and V27: lahe status says stopped by you, with the time, while the mar
   fs.writeFileSync(path.join(w.dir, loginItem.STOP_FILE), JSON.stringify({ by: "menu bar", at: "2026-10-12T15:41:00.000Z" }));
   const line = (await statusOut(w, mac)).split("\n").find((l) => l.indexOf("menu bar  ") === 0);
   assert.match(line, /^menu bar  Lahe stopped by you at /);
-  assert.ok(line.indexOf(loginItem.stopTime("2026-10-12T15:41:00.000Z")) !== -1);
+  assert.ok(line.indexOf(loginItem.localTime("2026-10-12T15:41:00.000Z")) !== -1);
   assert.match(line, /Start in the Lahe menu/);
 });
 
