@@ -92,11 +92,16 @@ function createSummary(options) {
   if (!opts.dir) throw new Error("summary.createSummary: dir is required");
   if (!opts.reader) throw new Error("summary.createSummary: reader is required");
   if (!opts.reviews) throw new Error("summary.createSummary: reviews is required");
+  // Strings the app decodes as strings: never null in the answer.
+  if (typeof opts.version !== "string" || typeof opts.startedAt !== "string") {
+    throw new Error("summary.createSummary: version and startedAt are required strings");
+  }
+  if (typeof opts.libraryUrl !== "function") throw new Error("summary.createSummary: libraryUrl is required");
   var dir = opts.dir;
   var reader = opts.reader;
   var reviews = opts.reviews;
   var now = typeof opts.now === "function" ? opts.now : function () { return Date.now(); };
-  var libraryUrl = typeof opts.libraryUrl === "function" ? opts.libraryUrl : function () { return null; };
+  var libraryUrl = opts.libraryUrl;
   var log = typeof opts.log === "function" ? opts.log : function () {};
   // review id -> true while it cannot be read, so the log says so once.
   var unreadable = Object.create(null);
@@ -202,9 +207,14 @@ function createSummary(options) {
   /** A row's path for the menu: ~ for the home folder, else just its name. */
   function hintOf(row) {
     var hint = row.docHint;
-    if (typeof hint === "string" && hint.charAt(0) === "~") return catalogReader.menuText(hint, PATH_HINT_MAX);
+    var shownHint = typeof hint === "string" && hint.charAt(0) === "~" ? catalogReader.menuText(hint, PATH_HINT_MAX) : null;
+    return shownHint || baseNameOf(row) || "";
+  }
+
+  /** The row's file (or folded folder) by name, cleaned, or null with none on record. */
+  function baseNameOf(row) {
     var own = row.folder || row.lead.info.docPath;
-    return catalogReader.menuText(own ? path.basename(own) : null, PATH_HINT_MAX);
+    return own ? catalogReader.menuText(path.basename(own), TITLE_MAX) : null;
   }
 
   /**
@@ -214,8 +224,10 @@ function createSummary(options) {
    */
   function shown(r) {
     if (!r.shown) {
+      // Never null: the app decodes both as strings. A title that cleans to
+      // nothing falls back to the file's name, then to the review id.
       r.shown = {
-        title: catalogReader.menuText(r.row.customName || r.row.displayName, TITLE_MAX),
+        title: catalogReader.menuText(r.row.customName || r.row.displayName, TITLE_MAX) || baseNameOf(r.row) || r.review,
         path_hint: hintOf(r.row)
       };
     }
@@ -311,13 +323,13 @@ function createSummary(options) {
     return {
       summary_version: SUMMARY_VERSION,
       generated_at: iso(nowMs),
-      helper: { version: opts.version || null, started_at: opts.startedAt || null, always_on: opts.alwaysOn === true },
+      helper: { version: opts.version, started_at: opts.startedAt, always_on: opts.alwaysOn === true },
       waiting_on_you: waitingOnYou(rows),
       waiting_on_agents: waitingOnAgents(rows),
       open_documents: openDocuments(rows),
       sessions: sessionsSection(rows, folded.sessionNames, nowMs),
       recent: recent(rows),
-      library_url: libraryUrl()
+      library_url: String(libraryUrl())
     };
   }
 
@@ -376,8 +388,9 @@ function createSummary(options) {
   /**
    * `open` counts sessions not closed. `connected` is the open ones whose agent
    * the Library calls listening or working. A session is named by its Library
-   * rename, else its newest document's title, else its own name, and points at
-   * its newest document.
+   * rename, else its newest document's title, else its own name, else its id,
+   * and points at its newest document, or null: a session's review is the one
+   * field in the answer that may be null.
    */
   function sessionsSection(rows, sessionNames, nowMs) {
     var newestRow = Object.create(null);
@@ -393,9 +406,9 @@ function createSummary(options) {
         var renamed = Object.prototype.hasOwnProperty.call(sessionNames || {}, s.id) ? String(sessionNames[s.id]) : null;
         return {
           session: s.id,
-          name: catalogReader.menuText(renamed || (row && shown(row).title) || s.name, TITLE_MAX),
+          name: catalogReader.menuText(renamed, TITLE_MAX) || (row && shown(row).title) || catalogReader.menuText(s.name, TITLE_MAX) || s.id,
           presence: s.watching.state,
-          last_heard_at: s.watching.last_active || null,
+          last_heard_at: s.watching.last_active || s.started_at || iso(nowMs),
           review: row ? row.review : null
         };
       })

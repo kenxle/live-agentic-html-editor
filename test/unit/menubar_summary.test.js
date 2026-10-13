@@ -641,3 +641,62 @@ test("a session file swapped for a symlink after the first read reads as bad, an
   const sessions = reader.sessionsAt(Date.now());
   assert.equal(JSON.stringify(sessions).includes("OUTSIDE NAME"), false);
 });
+
+// ---------------------------------------------------------------------------
+// Spec check follow-up: the app decodes every string field as a string
+// ---------------------------------------------------------------------------
+
+/** Every path in the answer whose value is null. */
+function nullPaths(value, at, out) {
+  const list = out || [];
+  const here = at || "$";
+  if (value === null) list.push(here);
+  else if (Array.isArray(value)) value.forEach((v) => nullPaths(v, here + "[]", list));
+  else if (typeof value === "object") Object.keys(value).forEach((k) => nullPaths(value[k], here + "." + k, list));
+  return list;
+}
+
+test("no null anywhere but a session's review, over a sparse state folder", () => {
+  const { state, summary, T } = setup({ holders: { r_untitled: { quiet: false }, r_blank: {}, r_nodoc: {} } });
+  state.clock.iso = iso(T);
+  // A live session with no name, no Library name, no monitor ever, and no review.
+  state.sessions.create({ id: "s_bare" });
+  state.sessions.touchActivity("s_bare");
+  // A review whose page has no title and whose file has no heading.
+  const untitled = path.join(state.home, "notes", "untitled.html");
+  fs.mkdirSync(path.dirname(untitled), { recursive: true });
+  fs.writeFileSync(untitled, "<p>no title here</p>\n");
+  state.review("r_untitled", { session: "s_bare_two", file: untitled });
+  const it = state.item("r_untitled", { page_title: null });
+  state.reply("r_untitled", it, { status: "question", ts: iso(T - 5 * SECOND) });
+  // A page title made only of characters the menu removes.
+  state.review("r_blank", { session: "s_bare_two", doc: "notes/blank.md", title: "Blank" });
+  const b = state.item("r_blank", { page_title: "‮\u0007" });
+  state.reply("r_blank", b, { status: "question", ts: iso(T - 4 * SECOND) });
+  // A review with no document on record at all.
+  state.review("r_nodoc", { session: "s_bare_two", title: "No doc" });
+  fs.writeFileSync(stateDir.metaPath(state.dir, "r_nodoc"), JSON.stringify(Object.assign(JSON.parse(fs.readFileSync(stateDir.metaPath(state.dir, "r_nodoc"), "utf8")), { target_path: null, target_paths: [] })));
+
+  const answer = summary.read();
+  assert.deepEqual(nullPaths(answer), ["$.sessions.connected.items[].review"], JSON.stringify(answer, null, 2));
+  const bare = answer.sessions.connected.items.find((s) => s.session === "s_bare");
+  assert.equal(bare.name, "s_bare", "a session with no name is named by its id");
+  assert.equal(typeof bare.last_heard_at, "string");
+  assert.equal(doc(answer, "r_untitled").title, "untitled.html", "a document with no title is named by its file");
+  assert.equal(doc(answer, "r_blank").title, "blank.md", "and so is one whose title cleans to nothing");
+  assert.equal(typeof answer.helper.version, "string");
+  assert.equal(typeof answer.library_url, "string");
+});
+
+test("V12: connected sessions cap at 8 with a correct more", () => {
+  const { state, summary, T } = setup();
+  state.clock.iso = iso(T);
+  for (let n = 0; n < 10; n += 1) {
+    state.sessions.create({ id: "s_live_" + n });
+    state.sessions.touchActivity("s_live_" + n);
+  }
+  const connected = summary.read().sessions.connected;
+  assert.equal(connected.count, 10);
+  assert.equal(connected.items.length, 8);
+  assert.equal(connected.more, 2);
+});

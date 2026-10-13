@@ -370,3 +370,11 @@ test("one unreadable review does not fail summary.read, and no 5xx body names th
   assert.equal(broken.text.includes(w.state), false, "the state folder's path stays in the log: " + broken.text);
   assert.equal(broken.text.includes(w.root), false);
 });
+
+test("a real helper's summary carries the Library's printed address, ending in /catalog", async (t) => {
+  const w = await world(t);
+  const res = await read(w);
+  assert.equal(res.status, 200, res.text);
+  assert.equal(res.json.library_url, "http://library.lahe.localhost:" + w.helper.pagesPort + "/catalog");
+  assert.equal(typeof res.json.helper.version, "string");
+});
