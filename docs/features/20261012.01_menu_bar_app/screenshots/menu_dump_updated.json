@@ -1,0 +1,48 @@
+{
+  "look" : "cant-tell",
+  "rows" : [
+    {
+      "enabled" : false,
+      "kind" : "header",
+      "title" : "Can't tell what is waiting"
+    },
+    {
+      "enabled" : false,
+      "kind" : "note",
+      "title" : "Lahe was updated; rebuilding"
+    },
+    {
+      "kind" : "separator"
+    },
+    {
+      "action" : "open library",
+      "enabled" : true,
+      "kind" : "item",
+      "title" : "Open the Library",
+      "tooltip" : "Every review, in the browser."
+    },
+    {
+      "kind" : "separator"
+    },
+    {
+      "action" : "hide",
+      "enabled" : true,
+      "kind" : "item",
+      "title" : "Hide the icon",
+      "tooltip" : "Closes this icon only. Lahe keeps running. `lahe menubar show` brings it back."
+    },
+    {
+      "action" : "stop",
+      "enabled" : true,
+      "kind" : "item",
+      "title" : "Stop Lahe",
+      "tooltip" : "Stops the Lahe helper until you start it again."
+    },
+    {
+      "enabled" : false,
+      "kind" : "note",
+      "title" : "Agents' lahe commands will fail until you start it again"
+    }
+  ],
+  "text" : "?"
+}

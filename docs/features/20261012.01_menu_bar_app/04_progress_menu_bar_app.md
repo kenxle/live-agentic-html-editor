@@ -8,13 +8,25 @@
 
 Nothing right now. The one thing coming later: the menu bar screenshots. The capture probe below shows an agent cannot take them on this Mac, so when the app is built, you will be asked for one picture of the icon and its open menu.
 
+## What it looks like
+
+Drawn by the app itself (`--snapshot`), on made-up data, since an agent cannot capture the real menu bar on this Mac. The real picture comes at the end, from you.
+
+![The icon with a count of 3, light](screenshots/icon_count_3_light.png) ![The icon with a count of 3, dark](screenshots/icon_count_3_dark.png)
+
+![The open menu on the full sample summary, light](screenshots/menu_summary_light.png)
+
+![The menu while Lahe is stopped by you, dark](screenshots/menu_stopped_dark.png)
+
+The icon keeps the review layer's speech bubble. Main changed the browser tab's icon to a document mark on 2026-10-12 (`e5397fda`); the bubble stays here because the count is about replies. Say so on this page if you want the document mark instead. Every look and every menu dump is under [screenshots/](screenshots/).
+
 ## Currently working on
 
 | Agent or task | Doing | Started | Branch |
 |---|---|---|---|
 | Orchestrator | Watching the three builders; integrates and runs the browser suite at the checkpoint | 2026-10-12 20:44 | `feat/menu-bar` |
 | Builder: summary (Opus) | Step 1: the read mark's round trip, the one-review summary, the summary and its cache, the two routes and the signed auth mode | 2026-10-12 20:44 | `feat/menu-bar-summary` |
-| Builder: macapp (Opus) | Step 2: the Swift app, its debug modes, the fake helper | 2026-10-12 20:44 | `feat/menu-bar-macapp` |
+| Builder: macapp (Opus) | Done: returned at 2026-10-12 21:10. Waiting for summary before the merge | 2026-10-12 20:44 | `feat/menu-bar-macapp` |
 | Builder: install (Opus) | Done: returned at 2026-10-12 21:06. Waiting for the other two before the merge | 2026-10-12 20:44 | `feat/menu-bar-install` |
 
 ## Phases
@@ -39,7 +51,7 @@ Nothing right now. The one thing coming later: the menu bar screenshots. The cap
 | Workstream | Tasks | Branch | Status |
 |---|---|---|---|
 | summary | 1.1 to 1.4 | `feat/menu-bar-summary` | building |
-| macapp | 2.1 to 2.3 | `feat/menu-bar-macapp` | building |
+| macapp | 2.1 to 2.3 | `feat/menu-bar-macapp` | built, `02503610`; waits for integration |
 | install | 3.1 to 3.4 | `feat/menu-bar-install` | built, `efe79a40`; waits for integration |
 
 ### Passes
@@ -48,6 +60,7 @@ No passes yet.
 
 ### Changes from plan
 
+- **macapp:** the executable inside the bundle is `LaheMenuBar` (what Activity Monitor shows), while the install recipe wrote `Lahe`; reconciled at integration to `LaheMenuBar`. The app rereads the secret after a bad signature as well as after a 401, because a replaced secret makes the helper sign its 401 with the new key. Waiting on you is never cut short (brief R12), where the builder's prompt had said otherwise.
 - **install:** the app is built under `<state>/menubar/.build-*` rather than the system temp folder, so the final rename stays on one volume. The source stamp also hashes the compiler flags, so a recipe change rebuilds too. The stop message reads "the person using this computer stopped it from the menu bar at <time>" rather than naming Ken, because the repo is public; `lahe status` says "stopped by you". SR6 (labels are constants) is met for the icon and for the new bootstrap path, but kickstart still reads the helper's label from `install.json` as it did before this feature, now limited to the four known label shapes; the three callers are outside this workstream. Noted for the integration review.
 
 ### Follow-ups
@@ -72,6 +85,7 @@ Not shipped yet.
 
 ## Log
 
+- 2026-10-12 21:10: Mac app builder returned: one Swift file (AppKit, Foundation, CryptoKit), `Info.plist`, a README with the exact build command, the fake helper and its unit test. Self-test 87 passed, 0 failed; gate:unit 2727 passed, 0 failed, 4 skipped on purpose (the app tests run only against a test build); no helper, fake helper or launchd job left behind. Ten icon snapshots and seven menu dumps in the feature folder; three are shown above.
 - 2026-10-12 21:06: install builder returned: `src/service/menubar.js` (the one build recipe, the app's login item, rebuild on change), `lahe install --menu-bar` and `--no-menu-bar`, `lahe menubar show` and `rebuild`, Stop holds through `stopped.json`, the status line, `docs/CLI.md`. 59 new unit tests; gate:unit 2783 passed, 0 failed; no helper leaked. A throwaway Swift file compiled through the real recipe and ran. Two wiring points left for integration (`tick` in the 15-second timer, the stop-marker clear after the listener binds).
 - 2026-10-12 20:44: Step 0 committed (`13833038`). Three builders dispatched, one per workstream, each in its own worktree cut from that commit.
 - 2026-10-12 20:40: Plan approved. Your review changed three rules: "read" is the rail's own "1 new" mark, posted to the store, with no logic of its own and a question treated like any reply; Stop Lahe holds until you start it, and agents' commands fail plainly meanwhile; every document counts, open or not, with open ones marked in the menu. Main merged into the branch (Mark as done and the read mark are what the design now builds on). Step 0 started.

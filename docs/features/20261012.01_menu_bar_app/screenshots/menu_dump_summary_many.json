@@ -1,0 +1,1038 @@
+{
+  "look" : "count",
+  "rows" : [
+    {
+      "enabled" : false,
+      "kind" : "header",
+      "title" : "Waiting on you: 120"
+    },
+    {
+      "action" : "open r183d18583a43",
+      "enabled" : true,
+      "kind" : "item",
+      "title" : "Document 0 with a title of ordinary length (open, 1 question)",
+      "tooltip" : "Document 0 with a title of ordinary length\n~/Documents/workspace/project/docs/doc_0.md\nOpen in a browser window now."
+    },
+    {
+      "action" : "open r183d18583a44",
+      "enabled" : true,
+      "kind" : "item",
+      "title" : "Document 1 with a title of ordinary length (2 unread)",
+      "tooltip" : "Document 1 with a title of ordinary length\n~/Documents/workspace/project/docs/doc_1.md"
+    },
+    {
+      "action" : "open r183d18583a45",
+      "enabled" : true,
+      "kind" : "item",
+      "title" : "Document 2 with a title of ordinary length (2 unread)",
+      "tooltip" : "Document 2 with a title of ordinary length\n~/Documents/workspace/project/docs/doc_2.md"
+    },
+    {
+      "action" : "open r183d18583a46",
+      "enabled" : true,
+      "kind" : "item",
+      "title" : "Document 3 with a title of ordinary length (1 question)",
+      "tooltip" : "Document 3 with a title of ordinary length\n~/Documents/workspace/project/docs/doc_3.md"
+    },
+    {
+      "action" : "open r183d18583a47",
+      "enabled" : true,
+      "kind" : "item",
+      "title" : "Document 4 with a title of ordinary length (2 unread)",
+      "tooltip" : "Document 4 with a title of ordinary length\n~/Documents/workspace/project/docs/doc_4.md"
+    },
+    {
+      "action" : "open r183d18583a48",
+      "enabled" : true,
+      "kind" : "item",
+      "title" : "A very long document title that keeps going well … (2 unread)",
+      "tooltip" : "A very long document title that keeps going well past what a menu row can show, A very long document title that keeps go\n~/Documents/workspace/project/docs/doc_5.md"
+    },
+    {
+      "action" : "open r183d18583a49",
+      "enabled" : true,
+      "kind" : "item",
+      "title" : "Title with an override  here and back  (1 question)",
+      "tooltip" : "Title with an override  here and back \n~/Documents/workspace/project/docs/doc_6.md"
+    },
+    {
+      "action" : "open r183d18583a4a",
+      "enabled" : true,
+      "kind" : "item",
+      "title" : "Document 7 with a title of ordinary length (open, 2 unread)",
+      "tooltip" : "Document 7 with a title of ordinary length\n~/Documents/workspace/project/docs/doc_7.md\nOpen in a browser window now."
+    },
+    {
+      "action" : "open r183d18583a4b",
+      "enabled" : true,
+      "kind" : "item",
+      "title" : "Document 8 with a title of ordinary length (2 unread)",
+      "tooltip" : "Document 8 with a title of ordinary length\n~/Documents/workspace/project/docs/doc_8.md"
+    },
+    {
+      "action" : "open r183d18583a4c",
+      "enabled" : true,
+      "kind" : "item",
+      "title" : "Document 9 with a title of ordinary length (1 question)",
+      "tooltip" : "Document 9 with a title of ordinary length\n~/Documents/workspace/project/docs/doc_9.md"
+    },
+    {
+      "action" : "open r183d18583a4d",
+      "enabled" : true,
+      "kind" : "item",
+      "title" : "Document 10 with a title of ordinary length (2 unread)",
+      "tooltip" : "Document 10 with a title of ordinary length\n~/Documents/workspace/project/docs/doc_10.md"
+    },
+    {
+      "action" : "open r183d18583a4e",
+      "enabled" : true,
+      "kind" : "item",
+      "title" : "Document 11 with a title of ordinary length (2 unread)",
+      "tooltip" : "Document 11 with a title of ordinary length\n~/Documents/workspace/project/docs/doc_11.md"
+    },
+    {
+      "action" : "open r183d18583a4f",
+      "enabled" : true,
+      "kind" : "item",
+      "title" : "Document 12 with a title of ordinary length (1 question)",
+      "tooltip" : "Document 12 with a title of ordinary length\n~/Documents/workspace/project/docs/doc_12.md"
+    },
+    {
+      "action" : "open r183d18583a50",
+      "enabled" : true,
+      "kind" : "item",
+      "title" : "Document 13 with a title of ordinary length (2 unread)",
+      "tooltip" : "Document 13 with a title of ordinary length\n~/Documents/workspace/project/docs/doc_13.md"
+    },
+    {
+      "action" : "open r183d18583a51",
+      "enabled" : true,
+      "kind" : "item",
+      "title" : "Document 14 with a title of ordinary length (open, 2 unread)",
+      "tooltip" : "Document 14 with a title of ordinary length\n~/Documents/workspace/project/docs/doc_14.md\nOpen in a browser window now."
+    },
+    {
+      "action" : "open r183d18583a52",
+      "enabled" : true,
+      "kind" : "item",
+      "title" : "Document 15 with a title of ordinary length (1 question)",
+      "tooltip" : "Document 15 with a title of ordinary length\n~/Documents/workspace/project/docs/doc_15.md"
+    },
+    {
+      "action" : "open r183d18583a53",
+      "enabled" : true,
+      "kind" : "item",
+      "title" : "Document 16 with a title of ordinary length (2 unread)",
+      "tooltip" : "Document 16 with a title of ordinary length\n~/Documents/workspace/project/docs/doc_16.md"
+    },
+    {
+      "action" : "open r183d18583a54",
+      "enabled" : true,
+      "kind" : "item",
+      "title" : "Document 17 with a title of ordinary length (2 unread)",
+      "tooltip" : "Document 17 with a title of ordinary length\n~/Documents/workspace/project/docs/doc_17.md"
+    },
+    {
+      "action" : "open r183d18583a55",
+      "enabled" : true,
+      "kind" : "item",
+      "title" : "Document 18 with a title of ordinary length (1 question)",
+      "tooltip" : "Document 18 with a title of ordinary length\n~/Documents/workspace/project/docs/doc_18.md"
+    },
+    {
+      "action" : "open r183d18583a56",
+      "enabled" : true,
+      "kind" : "item",
+      "title" : "Document 19 with a title of ordinary length (2 unread)",
+      "tooltip" : "Document 19 with a title of ordinary length\n~/Documents/workspace/project/docs/doc_19.md"
+    },
+    {
+      "action" : "open r183d18583a57",
+      "enabled" : true,
+      "kind" : "item",
+      "title" : "Document 20 with a title of ordinary length (2 unread)",
+      "tooltip" : "Document 20 with a title of ordinary length\n~/Documents/workspace/project/docs/doc_20.md"
+    },
+    {
+      "action" : "open r183d18583a58",
+      "enabled" : true,
+      "kind" : "item",
+      "title" : "Document 21 with a title of ordinary length (open, 1 question)",
+      "tooltip" : "Document 21 with a title of ordinary length\n~/Documents/workspace/project/docs/doc_21.md\nOpen in a browser window now."
+    },
+    {
+      "action" : "open r183d18583a59",
+      "enabled" : true,
+      "kind" : "item",
+      "title" : "Document 22 with a title of ordinary length (2 unread)",
+      "tooltip" : "Document 22 with a title of ordinary length\n~/Documents/workspace/project/docs/doc_22.md"
+    },
+    {
+      "action" : "open r183d18583a5a",
+      "enabled" : true,
+      "kind" : "item",
+      "title" : "Document 23 with a title of ordinary length (2 unread)",
+      "tooltip" : "Document 23 with a title of ordinary length\n~/Documents/workspace/project/docs/doc_23.md"
+    },
+    {
+      "action" : "open r183d18583a5b",
+      "enabled" : true,
+      "kind" : "item",
+      "title" : "Document 24 with a title of ordinary length (1 question)",
+      "tooltip" : "Document 24 with a title of ordinary length\n~/Documents/workspace/project/docs/doc_24.md"
+    },
+    {
+      "action" : "open r183d18583a5c",
+      "enabled" : true,
+      "kind" : "item",
+      "title" : "Document 25 with a title of ordinary length (2 unread)",
+      "tooltip" : "Document 25 with a title of ordinary length\n~/Documents/workspace/project/docs/doc_25.md"
+    },
+    {
+      "action" : "open r183d18583a5d",
+      "enabled" : true,
+      "kind" : "item",
+      "title" : "Document 26 with a title of ordinary length (2 unread)",
+      "tooltip" : "Document 26 with a title of ordinary length\n~/Documents/workspace/project/docs/doc_26.md"
+    },
+    {
+      "action" : "open r183d18583a5e",
+      "enabled" : true,
+      "kind" : "item",
+      "title" : "Document 27 with a title of ordinary length (1 question)",
+      "tooltip" : "Document 27 with a title of ordinary length\n~/Documents/workspace/project/docs/doc_27.md"
+    },
+    {
+      "action" : "open r183d18583a5f",
+      "enabled" : true,
+      "kind" : "item",
+      "title" : "Document 28 with a title of ordinary length (open, 2 unread)",
+      "tooltip" : "Document 28 with a title of ordinary length\n~/Documents/workspace/project/docs/doc_28.md\nOpen in a browser window now."
+    },
+    {
+      "action" : "open r183d18583a60",
+      "enabled" : true,
+      "kind" : "item",
+      "title" : "Document 29 with a title of ordinary length (2 unread)",
+      "tooltip" : "Document 29 with a title of ordinary length\n~/Documents/workspace/project/docs/doc_29.md"
+    },
+    {
+      "action" : "open r183d18583a61",
+      "enabled" : true,
+      "kind" : "item",
+      "title" : "Document 30 with a title of ordinary length (1 question)",
+      "tooltip" : "Document 30 with a title of ordinary length\n~/Documents/workspace/project/docs/doc_30.md"
+    },
+    {
+      "action" : "open r183d18583a62",
+      "enabled" : true,
+      "kind" : "item",
+      "title" : "Document 31 with a title of ordinary length (2 unread)",
+      "tooltip" : "Document 31 with a title of ordinary length\n~/Documents/workspace/project/docs/doc_31.md"
+    },
+    {
+      "action" : "open r183d18583a63",
+      "enabled" : true,
+      "kind" : "item",
+      "title" : "Document 32 with a title of ordinary length (2 unread)",
+      "tooltip" : "Document 32 with a title of ordinary length\n~/Documents/workspace/project/docs/doc_32.md"
+    },
+    {
+      "action" : "open r183d18583a64",
+      "enabled" : true,
+      "kind" : "item",
+      "title" : "Document 33 with a title of ordinary length (1 question)",
+      "tooltip" : "Document 33 with a title of ordinary length\n~/Documents/workspace/project/docs/doc_33.md"
+    },
+    {
+      "action" : "open r183d18583a65",
+      "enabled" : true,
+      "kind" : "item",
+      "title" : "Document 34 with a title of ordinary length (2 unread)",
+      "tooltip" : "Document 34 with a title of ordinary length\n~/Documents/workspace/project/docs/doc_34.md"
+    },
+    {
+      "action" : "open r183d18583a66",
+      "enabled" : true,
+      "kind" : "item",
+      "title" : "Document 35 with a title of ordinary length (open, 2 unread)",
+      "tooltip" : "Document 35 with a title of ordinary length\n~/Documents/workspace/project/docs/doc_35.md\nOpen in a browser window now."
+    },
+    {
+      "action" : "open r183d18583a67",
+      "enabled" : true,
+      "kind" : "item",
+      "title" : "Document 36 with a title of ordinary length (1 question)",
+      "tooltip" : "Document 36 with a title of ordinary length\n~/Documents/workspace/project/docs/doc_36.md"
+    },
+    {
+      "action" : "open r183d18583a68",
+      "enabled" : true,
+      "kind" : "item",
+      "title" : "Document 37 with a title of ordinary length (2 unread)",
+      "tooltip" : "Document 37 with a title of ordinary length\n~/Documents/workspace/project/docs/doc_37.md"
+    },
+    {
+      "action" : "open r183d18583a69",
+      "enabled" : true,
+      "kind" : "item",
+      "title" : "Document 38 with a title of ordinary length (2 unread)",
+      "tooltip" : "Document 38 with a title of ordinary length\n~/Documents/workspace/project/docs/doc_38.md"
+    },
+    {
+      "action" : "open r183d18583a6a",
+      "enabled" : true,
+      "kind" : "item",
+      "title" : "Document 39 with a title of ordinary length (1 question)",
+      "tooltip" : "Document 39 with a title of ordinary length\n~/Documents/workspace/project/docs/doc_39.md"
+    },
+    {
+      "action" : "open r183d18583a6b",
+      "enabled" : true,
+      "kind" : "item",
+      "title" : "Document 40 with a title of ordinary length (2 unread)",
+      "tooltip" : "Document 40 with a title of ordinary length\n~/Documents/workspace/project/docs/doc_40.md"
+    },
+    {
+      "action" : "open r183d18583a6c",
+      "enabled" : true,
+      "kind" : "item",
+      "title" : "Document 41 with a title of ordinary length (2 unread)",
+      "tooltip" : "Document 41 with a title of ordinary length\n~/Documents/workspace/project/docs/doc_41.md"
+    },
+    {
+      "action" : "open r183d18583a6d",
+      "enabled" : true,
+      "kind" : "item",
+      "title" : "Document 42 with a title of ordinary length (open, 1 question)",
+      "tooltip" : "Document 42 with a title of ordinary length\n~/Documents/workspace/project/docs/doc_42.md\nOpen in a browser window now."
+    },
+    {
+      "action" : "open r183d18583a6e",
+      "enabled" : true,
+      "kind" : "item",
+      "title" : "Document 43 with a title of ordinary length (2 unread)",
+      "tooltip" : "Document 43 with a title of ordinary length\n~/Documents/workspace/project/docs/doc_43.md"
+    },
+    {
+      "action" : "open r183d18583a6f",
+      "enabled" : true,
+      "kind" : "item",
+      "title" : "Document 44 with a title of ordinary length (2 unread)",
+      "tooltip" : "Document 44 with a title of ordinary length\n~/Documents/workspace/project/docs/doc_44.md"
+    },
+    {
+      "action" : "open r183d18583a70",
+      "enabled" : true,
+      "kind" : "item",
+      "title" : "Document 45 with a title of ordinary length (1 question)",
+      "tooltip" : "Document 45 with a title of ordinary length\n~/Documents/workspace/project/docs/doc_45.md"
+    },
+    {
+      "action" : "open r183d18583a71",
+      "enabled" : true,
+      "kind" : "item",
+      "title" : "Document 46 with a title of ordinary length (2 unread)",
+      "tooltip" : "Document 46 with a title of ordinary length\n~/Documents/workspace/project/docs/doc_46.md"
+    },
+    {
+      "action" : "open r183d18583a72",
+      "enabled" : true,
+      "kind" : "item",
+      "title" : "Document 47 with a title of ordinary length (2 unread)",
+      "tooltip" : "Document 47 with a title of ordinary length\n~/Documents/workspace/project/docs/doc_47.md"
+    },
+    {
+      "action" : "open r183d18583a73",
+      "enabled" : true,
+      "kind" : "item",
+      "title" : "Document 48 with a title of ordinary length (1 question)",
+      "tooltip" : "Document 48 with a title of ordinary length\n~/Documents/workspace/project/docs/doc_48.md"
+    },
+    {
+      "action" : "open r183d18583a74",
+      "enabled" : true,
+      "kind" : "item",
+      "title" : "Document 49 with a title of ordinary length (open, 2 unread)",
+      "tooltip" : "Document 49 with a title of ordinary length\n~/Documents/workspace/project/docs/doc_49.md\nOpen in a browser window now."
+    },
+    {
+      "action" : "open r183d18583a75",
+      "enabled" : true,
+      "kind" : "item",
+      "title" : "Document 50 with a title of ordinary length (2 unread)",
+      "tooltip" : "Document 50 with a title of ordinary length\n~/Documents/workspace/project/docs/doc_50.md"
+    },
+    {
+      "action" : "open r183d18583a76",
+      "enabled" : true,
+      "kind" : "item",
+      "title" : "Document 51 with a title of ordinary length (1 question)",
+      "tooltip" : "Document 51 with a title of ordinary length\n~/Documents/workspace/project/docs/doc_51.md"
+    },
+    {
+      "action" : "open r183d18583a77",
+      "enabled" : true,
+      "kind" : "item",
+      "title" : "Document 52 with a title of ordinary length (2 unread)",
+      "tooltip" : "Document 52 with a title of ordinary length\n~/Documents/workspace/project/docs/doc_52.md"
+    },
+    {
+      "action" : "open r183d18583a78",
+      "enabled" : true,
+      "kind" : "item",
+      "title" : "Document 53 with a title of ordinary length (2 unread)",
+      "tooltip" : "Document 53 with a title of ordinary length\n~/Documents/workspace/project/docs/doc_53.md"
+    },
+    {
+      "action" : "open r183d18583a79",
+      "enabled" : true,
+      "kind" : "item",
+      "title" : "Document 54 with a title of ordinary length (1 question)",
+      "tooltip" : "Document 54 with a title of ordinary length\n~/Documents/workspace/project/docs/doc_54.md"
+    },
+    {
+      "action" : "open r183d18583a7a",
+      "enabled" : true,
+      "kind" : "item",
+      "title" : "Document 55 with a title of ordinary length (2 unread)",
+      "tooltip" : "Document 55 with a title of ordinary length\n~/Documents/workspace/project/docs/doc_55.md"
+    },
+    {
+      "action" : "open r183d18583a7b",
+      "enabled" : true,
+      "kind" : "item",
+      "title" : "Document 56 with a title of ordinary length (open, 2 unread)",
+      "tooltip" : "Document 56 with a title of ordinary length\n~/Documents/workspace/project/docs/doc_56.md\nOpen in a browser window now."
+    },
+    {
+      "action" : "open r183d18583a7c",
+      "enabled" : true,
+      "kind" : "item",
+      "title" : "Document 57 with a title of ordinary length (1 question)",
+      "tooltip" : "Document 57 with a title of ordinary length\n~/Documents/workspace/project/docs/doc_57.md"
+    },
+    {
+      "action" : "open r183d18583a7d",
+      "enabled" : true,
+      "kind" : "item",
+      "title" : "Document 58 with a title of ordinary length (2 unread)",
+      "tooltip" : "Document 58 with a title of ordinary length\n~/Documents/workspace/project/docs/doc_58.md"
+    },
+    {
+      "action" : "open r183d18583a7e",
+      "enabled" : true,
+      "kind" : "item",
+      "title" : "Document 59 with a title of ordinary length (2 unread)",
+      "tooltip" : "Document 59 with a title of ordinary length\n~/Documents/workspace/project/docs/doc_59.md"
+    },
+    {
+      "action" : "open r183d18583a7f",
+      "enabled" : true,
+      "kind" : "item",
+      "title" : "Document 60 with a title of ordinary length (1 question)",
+      "tooltip" : "Document 60 with a title of ordinary length\n~/Documents/workspace/project/docs/doc_60.md"
+    },
+    {
+      "action" : "open r183d18583a80",
+      "enabled" : true,
+      "kind" : "item",
+      "title" : "Document 61 with a title of ordinary length (2 unread)",
+      "tooltip" : "Document 61 with a title of ordinary length\n~/Documents/workspace/project/docs/doc_61.md"
+    },
+    {
+      "action" : "open r183d18583a81",
+      "enabled" : true,
+      "kind" : "item",
+      "title" : "Document 62 with a title of ordinary length (2 unread)",
+      "tooltip" : "Document 62 with a title of ordinary length\n~/Documents/workspace/project/docs/doc_62.md"
+    },
+    {
+      "action" : "open r183d18583a82",
+      "enabled" : true,
+      "kind" : "item",
+      "title" : "Document 63 with a title of ordinary length (open, 1 question)",
+      "tooltip" : "Document 63 with a title of ordinary length\n~/Documents/workspace/project/docs/doc_63.md\nOpen in a browser window now."
+    },
+    {
+      "action" : "open r183d18583a83",
+      "enabled" : true,
+      "kind" : "item",
+      "title" : "Document 64 with a title of ordinary length (2 unread)",
+      "tooltip" : "Document 64 with a title of ordinary length\n~/Documents/workspace/project/docs/doc_64.md"
+    },
+    {
+      "action" : "open r183d18583a84",
+      "enabled" : true,
+      "kind" : "item",
+      "title" : "Document 65 with a title of ordinary length (2 unread)",
+      "tooltip" : "Document 65 with a title of ordinary length\n~/Documents/workspace/project/docs/doc_65.md"
+    },
+    {
+      "action" : "open r183d18583a85",
+      "enabled" : true,
+      "kind" : "item",
+      "title" : "Document 66 with a title of ordinary length (1 question)",
+      "tooltip" : "Document 66 with a title of ordinary length\n~/Documents/workspace/project/docs/doc_66.md"
+    },
+    {
+      "action" : "open r183d18583a86",
+      "enabled" : true,
+      "kind" : "item",
+      "title" : "Document 67 with a title of ordinary length (2 unread)",
+      "tooltip" : "Document 67 with a title of ordinary length\n~/Documents/workspace/project/docs/doc_67.md"
+    },
+    {
+      "action" : "open r183d18583a87",
+      "enabled" : true,
+      "kind" : "item",
+      "title" : "Document 68 with a title of ordinary length (2 unread)",
+      "tooltip" : "Document 68 with a title of ordinary length\n~/Documents/workspace/project/docs/doc_68.md"
+    },
+    {
+      "action" : "open r183d18583a88",
+      "enabled" : true,
+      "kind" : "item",
+      "title" : "Document 69 with a title of ordinary length (1 question)",
+      "tooltip" : "Document 69 with a title of ordinary length\n~/Documents/workspace/project/docs/doc_69.md"
+    },
+    {
+      "action" : "open r183d18583a89",
+      "enabled" : true,
+      "kind" : "item",
+      "title" : "Document 70 with a title of ordinary length (open, 2 unread)",
+      "tooltip" : "Document 70 with a title of ordinary length\n~/Documents/workspace/project/docs/doc_70.md\nOpen in a browser window now."
+    },
+    {
+      "action" : "open r183d18583a8a",
+      "enabled" : true,
+      "kind" : "item",
+      "title" : "Document 71 with a title of ordinary length (2 unread)",
+      "tooltip" : "Document 71 with a title of ordinary length\n~/Documents/workspace/project/docs/doc_71.md"
+    },
+    {
+      "action" : "open r183d18583a8b",
+      "enabled" : true,
+      "kind" : "item",
+      "title" : "Document 72 with a title of ordinary length (1 question)",
+      "tooltip" : "Document 72 with a title of ordinary length\n~/Documents/workspace/project/docs/doc_72.md"
+    },
+    {
+      "action" : "open r183d18583a8c",
+      "enabled" : true,
+      "kind" : "item",
+      "title" : "Document 73 with a title of ordinary length (2 unread)",
+      "tooltip" : "Document 73 with a title of ordinary length\n~/Documents/workspace/project/docs/doc_73.md"
+    },
+    {
+      "action" : "open r183d18583a8d",
+      "enabled" : true,
+      "kind" : "item",
+      "title" : "Document 74 with a title of ordinary length (2 unread)",
+      "tooltip" : "Document 74 with a title of ordinary length\n~/Documents/workspace/project/docs/doc_74.md"
+    },
+    {
+      "action" : "open r183d18583a8e",
+      "enabled" : true,
+      "kind" : "item",
+      "title" : "Document 75 with a title of ordinary length (1 question)",
+      "tooltip" : "Document 75 with a title of ordinary length\n~/Documents/workspace/project/docs/doc_75.md"
+    },
+    {
+      "action" : "open r183d18583a8f",
+      "enabled" : true,
+      "kind" : "item",
+      "title" : "Document 76 with a title of ordinary length (2 unread)",
+      "tooltip" : "Document 76 with a title of ordinary length\n~/Documents/workspace/project/docs/doc_76.md"
+    },
+    {
+      "action" : "open r183d18583a90",
+      "enabled" : true,
+      "kind" : "item",
+      "title" : "Document 77 with a title of ordinary length (open, 2 unread)",
+      "tooltip" : "Document 77 with a title of ordinary length\n~/Documents/workspace/project/docs/doc_77.md\nOpen in a browser window now."
+    },
+    {
+      "action" : "open r183d18583a91",
+      "enabled" : true,
+      "kind" : "item",
+      "title" : "Document 78 with a title of ordinary length (1 question)",
+      "tooltip" : "Document 78 with a title of ordinary length\n~/Documents/workspace/project/docs/doc_78.md"
+    },
+    {
+      "action" : "open r183d18583a92",
+      "enabled" : true,
+      "kind" : "item",
+      "title" : "Document 79 with a title of ordinary length (2 unread)",
+      "tooltip" : "Document 79 with a title of ordinary length\n~/Documents/workspace/project/docs/doc_79.md"
+    },
+    {
+      "action" : "open r183d18583a93",
+      "enabled" : true,
+      "kind" : "item",
+      "title" : "Document 80 with a title of ordinary length (2 unread)",
+      "tooltip" : "Document 80 with a title of ordinary length\n~/Documents/workspace/project/docs/doc_80.md"
+    },
+    {
+      "action" : "open r183d18583a94",
+      "enabled" : true,
+      "kind" : "item",
+      "title" : "Document 81 with a title of ordinary length (1 question)",
+      "tooltip" : "Document 81 with a title of ordinary length\n~/Documents/workspace/project/docs/doc_81.md"
+    },
+    {
+      "action" : "open r183d18583a95",
+      "enabled" : true,
+      "kind" : "item",
+      "title" : "Document 82 with a title of ordinary length (2 unread)",
+      "tooltip" : "Document 82 with a title of ordinary length\n~/Documents/workspace/project/docs/doc_82.md"
+    },
+    {
+      "action" : "open r183d18583a96",
+      "enabled" : true,
+      "kind" : "item",
+      "title" : "Document 83 with a title of ordinary length (2 unread)",
+      "tooltip" : "Document 83 with a title of ordinary length\n~/Documents/workspace/project/docs/doc_83.md"
+    },
+    {
+      "action" : "open r183d18583a97",
+      "enabled" : true,
+      "kind" : "item",
+      "title" : "Document 84 with a title of ordinary length (open, 1 question)",
+      "tooltip" : "Document 84 with a title of ordinary length\n~/Documents/workspace/project/docs/doc_84.md\nOpen in a browser window now."
+    },
+    {
+      "action" : "open r183d18583a98",
+      "enabled" : true,
+      "kind" : "item",
+      "title" : "Document 85 with a title of ordinary length (2 unread)",
+      "tooltip" : "Document 85 with a title of ordinary length\n~/Documents/workspace/project/docs/doc_85.md"
+    },
+    {
+      "action" : "open r183d18583a99",
+      "enabled" : true,
+      "kind" : "item",
+      "title" : "Document 86 with a title of ordinary length (2 unread)",
+      "tooltip" : "Document 86 with a title of ordinary length\n~/Documents/workspace/project/docs/doc_86.md"
+    },
+    {
+      "action" : "open r183d18583a9a",
+      "enabled" : true,
+      "kind" : "item",
+      "title" : "Document 87 with a title of ordinary length (1 question)",
+      "tooltip" : "Document 87 with a title of ordinary length\n~/Documents/workspace/project/docs/doc_87.md"
+    },
+    {
+      "action" : "open r183d18583a9b",
+      "enabled" : true,
+      "kind" : "item",
+      "title" : "Document 88 with a title of ordinary length (2 unread)",
+      "tooltip" : "Document 88 with a title of ordinary length\n~/Documents/workspace/project/docs/doc_88.md"
+    },
+    {
+      "action" : "open r183d18583a9c",
+      "enabled" : true,
+      "kind" : "item",
+      "title" : "Document 89 with a title of ordinary length (2 unread)",
+      "tooltip" : "Document 89 with a title of ordinary length\n~/Documents/workspace/project/docs/doc_89.md"
+    },
+    {
+      "action" : "open r183d18583a9d",
+      "enabled" : true,
+      "kind" : "item",
+      "title" : "Document 90 with a title of ordinary length (1 question)",
+      "tooltip" : "Document 90 with a title of ordinary length\n~/Documents/workspace/project/docs/doc_90.md"
+    },
+    {
+      "action" : "open r183d18583a9e",
+      "enabled" : true,
+      "kind" : "item",
+      "title" : "Document 91 with a title of ordinary length (open, 2 unread)",
+      "tooltip" : "Document 91 with a title of ordinary length\n~/Documents/workspace/project/docs/doc_91.md\nOpen in a browser window now."
+    },
+    {
+      "action" : "open r183d18583a9f",
+      "enabled" : true,
+      "kind" : "item",
+      "title" : "Document 92 with a title of ordinary length (2 unread)",
+      "tooltip" : "Document 92 with a title of ordinary length\n~/Documents/workspace/project/docs/doc_92.md"
+    },
+    {
+      "action" : "open r183d18583aa0",
+      "enabled" : true,
+      "kind" : "item",
+      "title" : "Document 93 with a title of ordinary length (1 question)",
+      "tooltip" : "Document 93 with a title of ordinary length\n~/Documents/workspace/project/docs/doc_93.md"
+    },
+    {
+      "action" : "open r183d18583aa1",
+      "enabled" : true,
+      "kind" : "item",
+      "title" : "Document 94 with a title of ordinary length (2 unread)",
+      "tooltip" : "Document 94 with a title of ordinary length\n~/Documents/workspace/project/docs/doc_94.md"
+    },
+    {
+      "action" : "open r183d18583aa2",
+      "enabled" : true,
+      "kind" : "item",
+      "title" : "Document 95 with a title of ordinary length (2 unread)",
+      "tooltip" : "Document 95 with a title of ordinary length\n~/Documents/workspace/project/docs/doc_95.md"
+    },
+    {
+      "action" : "open r183d18583aa3",
+      "enabled" : true,
+      "kind" : "item",
+      "title" : "Document 96 with a title of ordinary length (1 question)",
+      "tooltip" : "Document 96 with a title of ordinary length\n~/Documents/workspace/project/docs/doc_96.md"
+    },
+    {
+      "action" : "open r183d18583aa4",
+      "enabled" : true,
+      "kind" : "item",
+      "title" : "Document 97 with a title of ordinary length (2 unread)",
+      "tooltip" : "Document 97 with a title of ordinary length\n~/Documents/workspace/project/docs/doc_97.md"
+    },
+    {
+      "action" : "open r183d18583aa5",
+      "enabled" : true,
+      "kind" : "item",
+      "title" : "Document 98 with a title of ordinary length (open, 2 unread)",
+      "tooltip" : "Document 98 with a title of ordinary length\n~/Documents/workspace/project/docs/doc_98.md\nOpen in a browser window now."
+    },
+    {
+      "action" : "open r183d18583aa6",
+      "enabled" : true,
+      "kind" : "item",
+      "title" : "Document 99 with a title of ordinary length (1 question)",
+      "tooltip" : "Document 99 with a title of ordinary length\n~/Documents/workspace/project/docs/doc_99.md"
+    },
+    {
+      "action" : "open r183d18583aa7",
+      "enabled" : true,
+      "kind" : "item",
+      "title" : "Document 100 with a title of ordinary length (2 unread)",
+      "tooltip" : "Document 100 with a title of ordinary length\n~/Documents/workspace/project/docs/doc_100.md"
+    },
+    {
+      "action" : "open r183d18583aa8",
+      "enabled" : true,
+      "kind" : "item",
+      "title" : "Document 101 with a title of ordinary length (2 unread)",
+      "tooltip" : "Document 101 with a title of ordinary length\n~/Documents/workspace/project/docs/doc_101.md"
+    },
+    {
+      "action" : "open r183d18583aa9",
+      "enabled" : true,
+      "kind" : "item",
+      "title" : "Document 102 with a title of ordinary length (1 question)",
+      "tooltip" : "Document 102 with a title of ordinary length\n~/Documents/workspace/project/docs/doc_102.md"
+    },
+    {
+      "action" : "open r183d18583aaa",
+      "enabled" : true,
+      "kind" : "item",
+      "title" : "Document 103 with a title of ordinary length (2 unread)",
+      "tooltip" : "Document 103 with a title of ordinary length\n~/Documents/workspace/project/docs/doc_103.md"
+    },
+    {
+      "action" : "open r183d18583aab",
+      "enabled" : true,
+      "kind" : "item",
+      "title" : "Document 104 with a title of ordinary length (2 unread)",
+      "tooltip" : "Document 104 with a title of ordinary length\n~/Documents/workspace/project/docs/doc_104.md"
+    },
+    {
+      "action" : "open r183d18583aac",
+      "enabled" : true,
+      "kind" : "item",
+      "title" : "Document 105 with a title of ordinary length (open, 1 question)",
+      "tooltip" : "Document 105 with a title of ordinary length\n~/Documents/workspace/project/docs/doc_105.md\nOpen in a browser window now."
+    },
+    {
+      "action" : "open r183d18583aad",
+      "enabled" : true,
+      "kind" : "item",
+      "title" : "Document 106 with a title of ordinary length (2 unread)",
+      "tooltip" : "Document 106 with a title of ordinary length\n~/Documents/workspace/project/docs/doc_106.md"
+    },
+    {
+      "action" : "open r183d18583aae",
+      "enabled" : true,
+      "kind" : "item",
+      "title" : "Document 107 with a title of ordinary length (2 unread)",
+      "tooltip" : "Document 107 with a title of ordinary length\n~/Documents/workspace/project/docs/doc_107.md"
+    },
+    {
+      "action" : "open r183d18583aaf",
+      "enabled" : true,
+      "kind" : "item",
+      "title" : "Document 108 with a title of ordinary length (1 question)",
+      "tooltip" : "Document 108 with a title of ordinary length\n~/Documents/workspace/project/docs/doc_108.md"
+    },
+    {
+      "action" : "open r183d18583ab0",
+      "enabled" : true,
+      "kind" : "item",
+      "title" : "Document 109 with a title of ordinary length (2 unread)",
+      "tooltip" : "Document 109 with a title of ordinary length\n~/Documents/workspace/project/docs/doc_109.md"
+    },
+    {
+      "action" : "open r183d18583ab1",
+      "enabled" : true,
+      "kind" : "item",
+      "title" : "Document 110 with a title of ordinary length (2 unread)",
+      "tooltip" : "Document 110 with a title of ordinary length\n~/Documents/workspace/project/docs/doc_110.md"
+    },
+    {
+      "action" : "open r183d18583ab2",
+      "enabled" : true,
+      "kind" : "item",
+      "title" : "Document 111 with a title of ordinary length (1 question)",
+      "tooltip" : "Document 111 with a title of ordinary length\n~/Documents/workspace/project/docs/doc_111.md"
+    },
+    {
+      "action" : "open r183d18583ab3",
+      "enabled" : true,
+      "kind" : "item",
+      "title" : "Document 112 with a title of ordinary length (open, 2 unread)",
+      "tooltip" : "Document 112 with a title of ordinary length\n~/Documents/workspace/project/docs/doc_112.md\nOpen in a browser window now."
+    },
+    {
+      "action" : "open r183d18583ab4",
+      "enabled" : true,
+      "kind" : "item",
+      "title" : "Document 113 with a title of ordinary length (2 unread)",
+      "tooltip" : "Document 113 with a title of ordinary length\n~/Documents/workspace/project/docs/doc_113.md"
+    },
+    {
+      "action" : "open r183d18583ab5",
+      "enabled" : true,
+      "kind" : "item",
+      "title" : "Document 114 with a title of ordinary length (1 question)",
+      "tooltip" : "Document 114 with a title of ordinary length\n~/Documents/workspace/project/docs/doc_114.md"
+    },
+    {
+      "action" : "open r183d18583ab6",
+      "enabled" : true,
+      "kind" : "item",
+      "title" : "Document 115 with a title of ordinary length (2 unread)",
+      "tooltip" : "Document 115 with a title of ordinary length\n~/Documents/workspace/project/docs/doc_115.md"
+    },
+    {
+      "action" : "open r183d18583ab7",
+      "enabled" : true,
+      "kind" : "item",
+      "title" : "Document 116 with a title of ordinary length (2 unread)",
+      "tooltip" : "Document 116 with a title of ordinary length\n~/Documents/workspace/project/docs/doc_116.md"
+    },
+    {
+      "action" : "open r183d18583ab8",
+      "enabled" : true,
+      "kind" : "item",
+      "title" : "Document 117 with a title of ordinary length (1 question)",
+      "tooltip" : "Document 117 with a title of ordinary length\n~/Documents/workspace/project/docs/doc_117.md"
+    },
+    {
+      "action" : "open r183d18583ab9",
+      "enabled" : true,
+      "kind" : "item",
+      "title" : "Document 118 with a title of ordinary length (2 unread)",
+      "tooltip" : "Document 118 with a title of ordinary length\n~/Documents/workspace/project/docs/doc_118.md"
+    },
+    {
+      "action" : "open r183d18583aba",
+      "enabled" : true,
+      "kind" : "item",
+      "title" : "Document 119 with a title of ordinary length (open, 2 unread)",
+      "tooltip" : "Document 119 with a title of ordinary length\n~/Documents/workspace/project/docs/doc_119.md\nOpen in a browser window now."
+    },
+    {
+      "kind" : "separator"
+    },
+    {
+      "enabled" : false,
+      "kind" : "header",
+      "title" : "Your comments waiting on agents: 4"
+    },
+    {
+      "action" : "open r183d18583a45",
+      "enabled" : true,
+      "kind" : "item",
+      "title" : "Rail cleanup (3 waiting)",
+      "tooltip" : "Rail cleanup\n~/Documents/workspace/project/docs/rail.md"
+    },
+    {
+      "action" : "open r183d18583a46",
+      "enabled" : true,
+      "kind" : "item",
+      "title" : "Free writing notes (1 waiting)",
+      "tooltip" : "Free writing notes\n~/Documents/notes/free_writing.md"
+    },
+    {
+      "enabled" : false,
+      "kind" : "note",
+      "title" : "2 more",
+      "tooltip" : "The Library lists every one."
+    },
+    {
+      "kind" : "separator"
+    },
+    {
+      "enabled" : false,
+      "kind" : "header",
+      "title" : "Open documents: 3"
+    },
+    {
+      "action" : "open r183d18583a43",
+      "enabled" : true,
+      "kind" : "item",
+      "title" : "Crucible: Menu bar app (focused)",
+      "tooltip" : "Crucible: Menu bar app\n~/Documents/workspace/project/docs/doc_0.md"
+    },
+    {
+      "action" : "open r183d18583a45",
+      "enabled" : true,
+      "kind" : "item",
+      "title" : "Rail cleanup",
+      "tooltip" : "Rail cleanup\n~/Documents/workspace/project/docs/rail.md"
+    },
+    {
+      "action" : "open r183d18583a46",
+      "enabled" : true,
+      "kind" : "item",
+      "title" : "Free writing notes",
+      "tooltip" : "Free writing notes\n~/Documents/notes/free_writing.md"
+    },
+    {
+      "enabled" : false,
+      "kind" : "note",
+      "title" : "14 more",
+      "tooltip" : "The Library lists every one."
+    },
+    {
+      "enabled" : false,
+      "kind" : "header",
+      "title" : "Connected sessions: 2 (23 open)"
+    },
+    {
+      "action" : "open r183d18583a43",
+      "enabled" : true,
+      "kind" : "item",
+      "title" : "menu bar icon (listening, last heard 10 sec ago)",
+      "tooltip" : "menu bar icon\ns_b4276f2e1d343291\nOpens its most recent document."
+    },
+    {
+      "action" : "open r183d18583a45",
+      "enabled" : true,
+      "kind" : "item",
+      "title" : "Rail cleanup (working, last heard 1 min ago)",
+      "tooltip" : "Rail cleanup\ns_0d6c3a8b1e2f4a5b\nOpens its most recent document."
+    },
+    {
+      "enabled" : false,
+      "kind" : "note",
+      "title" : "3 more",
+      "tooltip" : "The Library lists every one."
+    },
+    {
+      "kind" : "separator"
+    },
+    {
+      "enabled" : false,
+      "kind" : "header",
+      "title" : "Recent documents"
+    },
+    {
+      "action" : "open r183d18583a43",
+      "enabled" : true,
+      "kind" : "item",
+      "title" : "Crucible: Menu bar app",
+      "tooltip" : "Crucible: Menu bar app\n~/Documents/workspace/project/docs/doc_0.md"
+    },
+    {
+      "action" : "open r183d18583a45",
+      "enabled" : true,
+      "kind" : "item",
+      "title" : "Rail cleanup",
+      "tooltip" : "Rail cleanup\n~/Documents/workspace/project/docs/rail.md"
+    },
+    {
+      "action" : "open r183d18583a46",
+      "enabled" : true,
+      "kind" : "item",
+      "title" : "Free writing notes",
+      "tooltip" : "Free writing notes\n~/Documents/notes/free_writing.md"
+    },
+    {
+      "action" : "open r183d18583a44",
+      "enabled" : true,
+      "kind" : "item",
+      "title" : "Stable addresses: the plan",
+      "tooltip" : "Stable addresses: the plan\n~/Documents/workspace/project/docs/doc_1.md"
+    },
+    {
+      "action" : "open r183d18583a47",
+      "enabled" : true,
+      "kind" : "item",
+      "title" : "Weekly plan",
+      "tooltip" : "Weekly plan\n~/Documents/personal/weekly.md"
+    },
+    {
+      "action" : "open r183d18583a48",
+      "enabled" : true,
+      "kind" : "item",
+      "title" : "Research: tray icons",
+      "tooltip" : "Research: tray icons\n~/Documents/reports/tray.md"
+    },
+    {
+      "action" : "open r183d18583a49",
+      "enabled" : true,
+      "kind" : "item",
+      "title" : "Brief: style switcher",
+      "tooltip" : "Brief: style switcher\n~/Documents/workspace/project/docs/style.md"
+    },
+    {
+      "action" : "open r183d18583a4a",
+      "enabled" : true,
+      "kind" : "item",
+      "title" : "Notes page",
+      "tooltip" : "Notes page\n~/Documents/notes/notes.md"
+    },
+    {
+      "enabled" : false,
+      "kind" : "note",
+      "title" : "650 more",
+      "tooltip" : "The Library lists every one."
+    },
+    {
+      "action" : "open library",
+      "enabled" : true,
+      "kind" : "item",
+      "title" : "Open the Library",
+      "tooltip" : "Every review, in the browser."
+    },
+    {
+      "kind" : "separator"
+    },
+    {
+      "action" : "hide",
+      "enabled" : true,
+      "kind" : "item",
+      "title" : "Hide the icon",
+      "tooltip" : "Closes this icon only. Lahe keeps running. `lahe menubar show` brings it back."
+    },
+    {
+      "action" : "stop",
+      "enabled" : true,
+      "kind" : "item",
+      "title" : "Stop Lahe",
+      "tooltip" : "Stops the Lahe helper until you start it again."
+    },
+    {
+      "enabled" : false,
+      "kind" : "note",
+      "title" : "Agents' lahe commands will fail until you start it again"
+    }
+  ],
+  "text" : "99+"
+}
