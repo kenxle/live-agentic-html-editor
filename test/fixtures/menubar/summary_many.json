@@ -1,0 +1,1213 @@
+{
+  "summary_version": 1,
+  "generated_at": "2026-10-20T15:41:00.000Z",
+  "helper": {
+    "version": "0.4.0",
+    "started_at": "2026-10-20T08:00:00.000Z",
+    "always_on": true
+  },
+  "waiting_on_you": {
+    "count": 120,
+    "documents": [
+      {
+        "review": "r183d18583a43",
+        "title": "Document 0 with a title of ordinary length",
+        "path_hint": "~/Documents/workspace/project/docs/doc_0.md",
+        "open": true,
+        "questions": 1,
+        "unread": 1,
+        "newest_at": "2026-10-20T15:40:03.120Z"
+      },
+      {
+        "review": "r183d18583a44",
+        "title": "Document 1 with a title of ordinary length",
+        "path_hint": "~/Documents/workspace/project/docs/doc_1.md",
+        "open": false,
+        "questions": 0,
+        "unread": 2,
+        "newest_at": "2026-10-20T15:40:03.120Z"
+      },
+      {
+        "review": "r183d18583a45",
+        "title": "Document 2 with a title of ordinary length",
+        "path_hint": "~/Documents/workspace/project/docs/doc_2.md",
+        "open": false,
+        "questions": 0,
+        "unread": 2,
+        "newest_at": "2026-10-20T15:40:03.120Z"
+      },
+      {
+        "review": "r183d18583a46",
+        "title": "Document 3 with a title of ordinary length",
+        "path_hint": "~/Documents/workspace/project/docs/doc_3.md",
+        "open": false,
+        "questions": 1,
+        "unread": 1,
+        "newest_at": "2026-10-20T15:40:03.120Z"
+      },
+      {
+        "review": "r183d18583a47",
+        "title": "Document 4 with a title of ordinary length",
+        "path_hint": "~/Documents/workspace/project/docs/doc_4.md",
+        "open": false,
+        "questions": 0,
+        "unread": 2,
+        "newest_at": "2026-10-20T15:40:03.120Z"
+      },
+      {
+        "review": "r183d18583a48",
+        "title": "A very long document title that keeps going well past what a menu row can show, A very long document title that keeps go",
+        "path_hint": "~/Documents/workspace/project/docs/doc_5.md",
+        "open": false,
+        "questions": 0,
+        "unread": 2,
+        "newest_at": "2026-10-20T15:40:03.120Z"
+      },
+      {
+        "review": "r183d18583a49",
+        "title": "Title with an override ‮ here and back ‬",
+        "path_hint": "~/Documents/workspace/project/docs/doc_6.md",
+        "open": false,
+        "questions": 1,
+        "unread": 1,
+        "newest_at": "2026-10-20T15:40:03.120Z"
+      },
+      {
+        "review": "r183d18583a4a",
+        "title": "Title with a lone surrogate half  here",
+        "path_hint": "~/Documents/workspace/project/docs/doc_7.md",
+        "open": true,
+        "questions": 0,
+        "unread": 2,
+        "newest_at": "2026-10-20T15:40:03.120Z"
+      },
+      {
+        "review": "r183d18583a4b",
+        "title": "Document 8 with a title of ordinary length",
+        "path_hint": "~/Documents/workspace/project/docs/doc_8.md",
+        "open": false,
+        "questions": 0,
+        "unread": 2,
+        "newest_at": "2026-10-20T15:40:03.120Z"
+      },
+      {
+        "review": "r183d18583a4c",
+        "title": "Document 9 with a title of ordinary length",
+        "path_hint": "~/Documents/workspace/project/docs/doc_9.md",
+        "open": false,
+        "questions": 1,
+        "unread": 1,
+        "newest_at": "2026-10-20T15:40:03.120Z"
+      },
+      {
+        "review": "r183d18583a4d",
+        "title": "Document 10 with a title of ordinary length",
+        "path_hint": "~/Documents/workspace/project/docs/doc_10.md",
+        "open": false,
+        "questions": 0,
+        "unread": 2,
+        "newest_at": "2026-10-20T15:40:03.120Z"
+      },
+      {
+        "review": "r183d18583a4e",
+        "title": "Document 11 with a title of ordinary length",
+        "path_hint": "~/Documents/workspace/project/docs/doc_11.md",
+        "open": false,
+        "questions": 0,
+        "unread": 2,
+        "newest_at": "2026-10-20T15:40:03.120Z"
+      },
+      {
+        "review": "r183d18583a4f",
+        "title": "Document 12 with a title of ordinary length",
+        "path_hint": "~/Documents/workspace/project/docs/doc_12.md",
+        "open": false,
+        "questions": 1,
+        "unread": 1,
+        "newest_at": "2026-10-20T15:40:03.120Z"
+      },
+      {
+        "review": "r183d18583a50",
+        "title": "Document 13 with a title of ordinary length",
+        "path_hint": "~/Documents/workspace/project/docs/doc_13.md",
+        "open": false,
+        "questions": 0,
+        "unread": 2,
+        "newest_at": "2026-10-20T15:40:03.120Z"
+      },
+      {
+        "review": "r183d18583a51",
+        "title": "Document 14 with a title of ordinary length",
+        "path_hint": "~/Documents/workspace/project/docs/doc_14.md",
+        "open": true,
+        "questions": 0,
+        "unread": 2,
+        "newest_at": "2026-10-20T15:40:03.120Z"
+      },
+      {
+        "review": "r183d18583a52",
+        "title": "Document 15 with a title of ordinary length",
+        "path_hint": "~/Documents/workspace/project/docs/doc_15.md",
+        "open": false,
+        "questions": 1,
+        "unread": 1,
+        "newest_at": "2026-10-20T15:40:03.120Z"
+      },
+      {
+        "review": "r183d18583a53",
+        "title": "Document 16 with a title of ordinary length",
+        "path_hint": "~/Documents/workspace/project/docs/doc_16.md",
+        "open": false,
+        "questions": 0,
+        "unread": 2,
+        "newest_at": "2026-10-20T15:40:03.120Z"
+      },
+      {
+        "review": "r183d18583a54",
+        "title": "Document 17 with a title of ordinary length",
+        "path_hint": "~/Documents/workspace/project/docs/doc_17.md",
+        "open": false,
+        "questions": 0,
+        "unread": 2,
+        "newest_at": "2026-10-20T15:40:03.120Z"
+      },
+      {
+        "review": "r183d18583a55",
+        "title": "Document 18 with a title of ordinary length",
+        "path_hint": "~/Documents/workspace/project/docs/doc_18.md",
+        "open": false,
+        "questions": 1,
+        "unread": 1,
+        "newest_at": "2026-10-20T15:40:03.120Z"
+      },
+      {
+        "review": "r183d18583a56",
+        "title": "Document 19 with a title of ordinary length",
+        "path_hint": "~/Documents/workspace/project/docs/doc_19.md",
+        "open": false,
+        "questions": 0,
+        "unread": 2,
+        "newest_at": "2026-10-20T15:40:03.120Z"
+      },
+      {
+        "review": "r183d18583a57",
+        "title": "Document 20 with a title of ordinary length",
+        "path_hint": "~/Documents/workspace/project/docs/doc_20.md",
+        "open": false,
+        "questions": 0,
+        "unread": 2,
+        "newest_at": "2026-10-20T15:40:03.120Z"
+      },
+      {
+        "review": "r183d18583a58",
+        "title": "Document 21 with a title of ordinary length",
+        "path_hint": "~/Documents/workspace/project/docs/doc_21.md",
+        "open": true,
+        "questions": 1,
+        "unread": 1,
+        "newest_at": "2026-10-20T15:40:03.120Z"
+      },
+      {
+        "review": "r183d18583a59",
+        "title": "Document 22 with a title of ordinary length",
+        "path_hint": "~/Documents/workspace/project/docs/doc_22.md",
+        "open": false,
+        "questions": 0,
+        "unread": 2,
+        "newest_at": "2026-10-20T15:40:03.120Z"
+      },
+      {
+        "review": "r183d18583a5a",
+        "title": "Document 23 with a title of ordinary length",
+        "path_hint": "~/Documents/workspace/project/docs/doc_23.md",
+        "open": false,
+        "questions": 0,
+        "unread": 2,
+        "newest_at": "2026-10-20T15:40:03.120Z"
+      },
+      {
+        "review": "r183d18583a5b",
+        "title": "Document 24 with a title of ordinary length",
+        "path_hint": "~/Documents/workspace/project/docs/doc_24.md",
+        "open": false,
+        "questions": 1,
+        "unread": 1,
+        "newest_at": "2026-10-20T15:40:03.120Z"
+      },
+      {
+        "review": "r183d18583a5c",
+        "title": "Document 25 with a title of ordinary length",
+        "path_hint": "~/Documents/workspace/project/docs/doc_25.md",
+        "open": false,
+        "questions": 0,
+        "unread": 2,
+        "newest_at": "2026-10-20T15:40:03.120Z"
+      },
+      {
+        "review": "r183d18583a5d",
+        "title": "Document 26 with a title of ordinary length",
+        "path_hint": "~/Documents/workspace/project/docs/doc_26.md",
+        "open": false,
+        "questions": 0,
+        "unread": 2,
+        "newest_at": "2026-10-20T15:40:03.120Z"
+      },
+      {
+        "review": "r183d18583a5e",
+        "title": "Document 27 with a title of ordinary length",
+        "path_hint": "~/Documents/workspace/project/docs/doc_27.md",
+        "open": false,
+        "questions": 1,
+        "unread": 1,
+        "newest_at": "2026-10-20T15:40:03.120Z"
+      },
+      {
+        "review": "r183d18583a5f",
+        "title": "Document 28 with a title of ordinary length",
+        "path_hint": "~/Documents/workspace/project/docs/doc_28.md",
+        "open": true,
+        "questions": 0,
+        "unread": 2,
+        "newest_at": "2026-10-20T15:40:03.120Z"
+      },
+      {
+        "review": "r183d18583a60",
+        "title": "Document 29 with a title of ordinary length",
+        "path_hint": "~/Documents/workspace/project/docs/doc_29.md",
+        "open": false,
+        "questions": 0,
+        "unread": 2,
+        "newest_at": "2026-10-20T15:40:03.120Z"
+      },
+      {
+        "review": "r183d18583a61",
+        "title": "Document 30 with a title of ordinary length",
+        "path_hint": "~/Documents/workspace/project/docs/doc_30.md",
+        "open": false,
+        "questions": 1,
+        "unread": 1,
+        "newest_at": "2026-10-20T15:40:03.120Z"
+      },
+      {
+        "review": "r183d18583a62",
+        "title": "Document 31 with a title of ordinary length",
+        "path_hint": "~/Documents/workspace/project/docs/doc_31.md",
+        "open": false,
+        "questions": 0,
+        "unread": 2,
+        "newest_at": "2026-10-20T15:40:03.120Z"
+      },
+      {
+        "review": "r183d18583a63",
+        "title": "Document 32 with a title of ordinary length",
+        "path_hint": "~/Documents/workspace/project/docs/doc_32.md",
+        "open": false,
+        "questions": 0,
+        "unread": 2,
+        "newest_at": "2026-10-20T15:40:03.120Z"
+      },
+      {
+        "review": "r183d18583a64",
+        "title": "Document 33 with a title of ordinary length",
+        "path_hint": "~/Documents/workspace/project/docs/doc_33.md",
+        "open": false,
+        "questions": 1,
+        "unread": 1,
+        "newest_at": "2026-10-20T15:40:03.120Z"
+      },
+      {
+        "review": "r183d18583a65",
+        "title": "Document 34 with a title of ordinary length",
+        "path_hint": "~/Documents/workspace/project/docs/doc_34.md",
+        "open": false,
+        "questions": 0,
+        "unread": 2,
+        "newest_at": "2026-10-20T15:40:03.120Z"
+      },
+      {
+        "review": "r183d18583a66",
+        "title": "Document 35 with a title of ordinary length",
+        "path_hint": "~/Documents/workspace/project/docs/doc_35.md",
+        "open": true,
+        "questions": 0,
+        "unread": 2,
+        "newest_at": "2026-10-20T15:40:03.120Z"
+      },
+      {
+        "review": "r183d18583a67",
+        "title": "Document 36 with a title of ordinary length",
+        "path_hint": "~/Documents/workspace/project/docs/doc_36.md",
+        "open": false,
+        "questions": 1,
+        "unread": 1,
+        "newest_at": "2026-10-20T15:40:03.120Z"
+      },
+      {
+        "review": "r183d18583a68",
+        "title": "Document 37 with a title of ordinary length",
+        "path_hint": "~/Documents/workspace/project/docs/doc_37.md",
+        "open": false,
+        "questions": 0,
+        "unread": 2,
+        "newest_at": "2026-10-20T15:40:03.120Z"
+      },
+      {
+        "review": "r183d18583a69",
+        "title": "Document 38 with a title of ordinary length",
+        "path_hint": "~/Documents/workspace/project/docs/doc_38.md",
+        "open": false,
+        "questions": 0,
+        "unread": 2,
+        "newest_at": "2026-10-20T15:40:03.120Z"
+      },
+      {
+        "review": "r183d18583a6a",
+        "title": "Document 39 with a title of ordinary length",
+        "path_hint": "~/Documents/workspace/project/docs/doc_39.md",
+        "open": false,
+        "questions": 1,
+        "unread": 1,
+        "newest_at": "2026-10-20T15:40:03.120Z"
+      },
+      {
+        "review": "r183d18583a6b",
+        "title": "Document 40 with a title of ordinary length",
+        "path_hint": "~/Documents/workspace/project/docs/doc_40.md",
+        "open": false,
+        "questions": 0,
+        "unread": 2,
+        "newest_at": "2026-10-20T15:40:03.120Z"
+      },
+      {
+        "review": "r183d18583a6c",
+        "title": "Document 41 with a title of ordinary length",
+        "path_hint": "~/Documents/workspace/project/docs/doc_41.md",
+        "open": false,
+        "questions": 0,
+        "unread": 2,
+        "newest_at": "2026-10-20T15:40:03.120Z"
+      },
+      {
+        "review": "r183d18583a6d",
+        "title": "Document 42 with a title of ordinary length",
+        "path_hint": "~/Documents/workspace/project/docs/doc_42.md",
+        "open": true,
+        "questions": 1,
+        "unread": 1,
+        "newest_at": "2026-10-20T15:40:03.120Z"
+      },
+      {
+        "review": "r183d18583a6e",
+        "title": "Document 43 with a title of ordinary length",
+        "path_hint": "~/Documents/workspace/project/docs/doc_43.md",
+        "open": false,
+        "questions": 0,
+        "unread": 2,
+        "newest_at": "2026-10-20T15:40:03.120Z"
+      },
+      {
+        "review": "r183d18583a6f",
+        "title": "Document 44 with a title of ordinary length",
+        "path_hint": "~/Documents/workspace/project/docs/doc_44.md",
+        "open": false,
+        "questions": 0,
+        "unread": 2,
+        "newest_at": "2026-10-20T15:40:03.120Z"
+      },
+      {
+        "review": "r183d18583a70",
+        "title": "Document 45 with a title of ordinary length",
+        "path_hint": "~/Documents/workspace/project/docs/doc_45.md",
+        "open": false,
+        "questions": 1,
+        "unread": 1,
+        "newest_at": "2026-10-20T15:40:03.120Z"
+      },
+      {
+        "review": "r183d18583a71",
+        "title": "Document 46 with a title of ordinary length",
+        "path_hint": "~/Documents/workspace/project/docs/doc_46.md",
+        "open": false,
+        "questions": 0,
+        "unread": 2,
+        "newest_at": "2026-10-20T15:40:03.120Z"
+      },
+      {
+        "review": "r183d18583a72",
+        "title": "Document 47 with a title of ordinary length",
+        "path_hint": "~/Documents/workspace/project/docs/doc_47.md",
+        "open": false,
+        "questions": 0,
+        "unread": 2,
+        "newest_at": "2026-10-20T15:40:03.120Z"
+      },
+      {
+        "review": "r183d18583a73",
+        "title": "Document 48 with a title of ordinary length",
+        "path_hint": "~/Documents/workspace/project/docs/doc_48.md",
+        "open": false,
+        "questions": 1,
+        "unread": 1,
+        "newest_at": "2026-10-20T15:40:03.120Z"
+      },
+      {
+        "review": "r183d18583a74",
+        "title": "Document 49 with a title of ordinary length",
+        "path_hint": "~/Documents/workspace/project/docs/doc_49.md",
+        "open": true,
+        "questions": 0,
+        "unread": 2,
+        "newest_at": "2026-10-20T15:40:03.120Z"
+      },
+      {
+        "review": "r183d18583a75",
+        "title": "Document 50 with a title of ordinary length",
+        "path_hint": "~/Documents/workspace/project/docs/doc_50.md",
+        "open": false,
+        "questions": 0,
+        "unread": 2,
+        "newest_at": "2026-10-20T15:40:03.120Z"
+      },
+      {
+        "review": "r183d18583a76",
+        "title": "Document 51 with a title of ordinary length",
+        "path_hint": "~/Documents/workspace/project/docs/doc_51.md",
+        "open": false,
+        "questions": 1,
+        "unread": 1,
+        "newest_at": "2026-10-20T15:40:03.120Z"
+      },
+      {
+        "review": "r183d18583a77",
+        "title": "Document 52 with a title of ordinary length",
+        "path_hint": "~/Documents/workspace/project/docs/doc_52.md",
+        "open": false,
+        "questions": 0,
+        "unread": 2,
+        "newest_at": "2026-10-20T15:40:03.120Z"
+      },
+      {
+        "review": "r183d18583a78",
+        "title": "Document 53 with a title of ordinary length",
+        "path_hint": "~/Documents/workspace/project/docs/doc_53.md",
+        "open": false,
+        "questions": 0,
+        "unread": 2,
+        "newest_at": "2026-10-20T15:40:03.120Z"
+      },
+      {
+        "review": "r183d18583a79",
+        "title": "Document 54 with a title of ordinary length",
+        "path_hint": "~/Documents/workspace/project/docs/doc_54.md",
+        "open": false,
+        "questions": 1,
+        "unread": 1,
+        "newest_at": "2026-10-20T15:40:03.120Z"
+      },
+      {
+        "review": "r183d18583a7a",
+        "title": "Document 55 with a title of ordinary length",
+        "path_hint": "~/Documents/workspace/project/docs/doc_55.md",
+        "open": false,
+        "questions": 0,
+        "unread": 2,
+        "newest_at": "2026-10-20T15:40:03.120Z"
+      },
+      {
+        "review": "r183d18583a7b",
+        "title": "Document 56 with a title of ordinary length",
+        "path_hint": "~/Documents/workspace/project/docs/doc_56.md",
+        "open": true,
+        "questions": 0,
+        "unread": 2,
+        "newest_at": "2026-10-20T15:40:03.120Z"
+      },
+      {
+        "review": "r183d18583a7c",
+        "title": "Document 57 with a title of ordinary length",
+        "path_hint": "~/Documents/workspace/project/docs/doc_57.md",
+        "open": false,
+        "questions": 1,
+        "unread": 1,
+        "newest_at": "2026-10-20T15:40:03.120Z"
+      },
+      {
+        "review": "r183d18583a7d",
+        "title": "Document 58 with a title of ordinary length",
+        "path_hint": "~/Documents/workspace/project/docs/doc_58.md",
+        "open": false,
+        "questions": 0,
+        "unread": 2,
+        "newest_at": "2026-10-20T15:40:03.120Z"
+      },
+      {
+        "review": "r183d18583a7e",
+        "title": "Document 59 with a title of ordinary length",
+        "path_hint": "~/Documents/workspace/project/docs/doc_59.md",
+        "open": false,
+        "questions": 0,
+        "unread": 2,
+        "newest_at": "2026-10-20T15:40:03.120Z"
+      },
+      {
+        "review": "r183d18583a7f",
+        "title": "Document 60 with a title of ordinary length",
+        "path_hint": "~/Documents/workspace/project/docs/doc_60.md",
+        "open": false,
+        "questions": 1,
+        "unread": 1,
+        "newest_at": "2026-10-20T15:40:03.120Z"
+      },
+      {
+        "review": "r183d18583a80",
+        "title": "Document 61 with a title of ordinary length",
+        "path_hint": "~/Documents/workspace/project/docs/doc_61.md",
+        "open": false,
+        "questions": 0,
+        "unread": 2,
+        "newest_at": "2026-10-20T15:40:03.120Z"
+      },
+      {
+        "review": "r183d18583a81",
+        "title": "Document 62 with a title of ordinary length",
+        "path_hint": "~/Documents/workspace/project/docs/doc_62.md",
+        "open": false,
+        "questions": 0,
+        "unread": 2,
+        "newest_at": "2026-10-20T15:40:03.120Z"
+      },
+      {
+        "review": "r183d18583a82",
+        "title": "Document 63 with a title of ordinary length",
+        "path_hint": "~/Documents/workspace/project/docs/doc_63.md",
+        "open": true,
+        "questions": 1,
+        "unread": 1,
+        "newest_at": "2026-10-20T15:40:03.120Z"
+      },
+      {
+        "review": "r183d18583a83",
+        "title": "Document 64 with a title of ordinary length",
+        "path_hint": "~/Documents/workspace/project/docs/doc_64.md",
+        "open": false,
+        "questions": 0,
+        "unread": 2,
+        "newest_at": "2026-10-20T15:40:03.120Z"
+      },
+      {
+        "review": "r183d18583a84",
+        "title": "Document 65 with a title of ordinary length",
+        "path_hint": "~/Documents/workspace/project/docs/doc_65.md",
+        "open": false,
+        "questions": 0,
+        "unread": 2,
+        "newest_at": "2026-10-20T15:40:03.120Z"
+      },
+      {
+        "review": "r183d18583a85",
+        "title": "Document 66 with a title of ordinary length",
+        "path_hint": "~/Documents/workspace/project/docs/doc_66.md",
+        "open": false,
+        "questions": 1,
+        "unread": 1,
+        "newest_at": "2026-10-20T15:40:03.120Z"
+      },
+      {
+        "review": "r183d18583a86",
+        "title": "Document 67 with a title of ordinary length",
+        "path_hint": "~/Documents/workspace/project/docs/doc_67.md",
+        "open": false,
+        "questions": 0,
+        "unread": 2,
+        "newest_at": "2026-10-20T15:40:03.120Z"
+      },
+      {
+        "review": "r183d18583a87",
+        "title": "Document 68 with a title of ordinary length",
+        "path_hint": "~/Documents/workspace/project/docs/doc_68.md",
+        "open": false,
+        "questions": 0,
+        "unread": 2,
+        "newest_at": "2026-10-20T15:40:03.120Z"
+      },
+      {
+        "review": "r183d18583a88",
+        "title": "Document 69 with a title of ordinary length",
+        "path_hint": "~/Documents/workspace/project/docs/doc_69.md",
+        "open": false,
+        "questions": 1,
+        "unread": 1,
+        "newest_at": "2026-10-20T15:40:03.120Z"
+      },
+      {
+        "review": "r183d18583a89",
+        "title": "Document 70 with a title of ordinary length",
+        "path_hint": "~/Documents/workspace/project/docs/doc_70.md",
+        "open": true,
+        "questions": 0,
+        "unread": 2,
+        "newest_at": "2026-10-20T15:40:03.120Z"
+      },
+      {
+        "review": "r183d18583a8a",
+        "title": "Document 71 with a title of ordinary length",
+        "path_hint": "~/Documents/workspace/project/docs/doc_71.md",
+        "open": false,
+        "questions": 0,
+        "unread": 2,
+        "newest_at": "2026-10-20T15:40:03.120Z"
+      },
+      {
+        "review": "r183d18583a8b",
+        "title": "Document 72 with a title of ordinary length",
+        "path_hint": "~/Documents/workspace/project/docs/doc_72.md",
+        "open": false,
+        "questions": 1,
+        "unread": 1,
+        "newest_at": "2026-10-20T15:40:03.120Z"
+      },
+      {
+        "review": "r183d18583a8c",
+        "title": "Document 73 with a title of ordinary length",
+        "path_hint": "~/Documents/workspace/project/docs/doc_73.md",
+        "open": false,
+        "questions": 0,
+        "unread": 2,
+        "newest_at": "2026-10-20T15:40:03.120Z"
+      },
+      {
+        "review": "r183d18583a8d",
+        "title": "Document 74 with a title of ordinary length",
+        "path_hint": "~/Documents/workspace/project/docs/doc_74.md",
+        "open": false,
+        "questions": 0,
+        "unread": 2,
+        "newest_at": "2026-10-20T15:40:03.120Z"
+      },
+      {
+        "review": "r183d18583a8e",
+        "title": "Document 75 with a title of ordinary length",
+        "path_hint": "~/Documents/workspace/project/docs/doc_75.md",
+        "open": false,
+        "questions": 1,
+        "unread": 1,
+        "newest_at": "2026-10-20T15:40:03.120Z"
+      },
+      {
+        "review": "r183d18583a8f",
+        "title": "Document 76 with a title of ordinary length",
+        "path_hint": "~/Documents/workspace/project/docs/doc_76.md",
+        "open": false,
+        "questions": 0,
+        "unread": 2,
+        "newest_at": "2026-10-20T15:40:03.120Z"
+      },
+      {
+        "review": "r183d18583a90",
+        "title": "Document 77 with a title of ordinary length",
+        "path_hint": "~/Documents/workspace/project/docs/doc_77.md",
+        "open": true,
+        "questions": 0,
+        "unread": 2,
+        "newest_at": "2026-10-20T15:40:03.120Z"
+      },
+      {
+        "review": "r183d18583a91",
+        "title": "Document 78 with a title of ordinary length",
+        "path_hint": "~/Documents/workspace/project/docs/doc_78.md",
+        "open": false,
+        "questions": 1,
+        "unread": 1,
+        "newest_at": "2026-10-20T15:40:03.120Z"
+      },
+      {
+        "review": "r183d18583a92",
+        "title": "Document 79 with a title of ordinary length",
+        "path_hint": "~/Documents/workspace/project/docs/doc_79.md",
+        "open": false,
+        "questions": 0,
+        "unread": 2,
+        "newest_at": "2026-10-20T15:40:03.120Z"
+      },
+      {
+        "review": "r183d18583a93",
+        "title": "Document 80 with a title of ordinary length",
+        "path_hint": "~/Documents/workspace/project/docs/doc_80.md",
+        "open": false,
+        "questions": 0,
+        "unread": 2,
+        "newest_at": "2026-10-20T15:40:03.120Z"
+      },
+      {
+        "review": "r183d18583a94",
+        "title": "Document 81 with a title of ordinary length",
+        "path_hint": "~/Documents/workspace/project/docs/doc_81.md",
+        "open": false,
+        "questions": 1,
+        "unread": 1,
+        "newest_at": "2026-10-20T15:40:03.120Z"
+      },
+      {
+        "review": "r183d18583a95",
+        "title": "Document 82 with a title of ordinary length",
+        "path_hint": "~/Documents/workspace/project/docs/doc_82.md",
+        "open": false,
+        "questions": 0,
+        "unread": 2,
+        "newest_at": "2026-10-20T15:40:03.120Z"
+      },
+      {
+        "review": "r183d18583a96",
+        "title": "Document 83 with a title of ordinary length",
+        "path_hint": "~/Documents/workspace/project/docs/doc_83.md",
+        "open": false,
+        "questions": 0,
+        "unread": 2,
+        "newest_at": "2026-10-20T15:40:03.120Z"
+      },
+      {
+        "review": "r183d18583a97",
+        "title": "Document 84 with a title of ordinary length",
+        "path_hint": "~/Documents/workspace/project/docs/doc_84.md",
+        "open": true,
+        "questions": 1,
+        "unread": 1,
+        "newest_at": "2026-10-20T15:40:03.120Z"
+      },
+      {
+        "review": "r183d18583a98",
+        "title": "Document 85 with a title of ordinary length",
+        "path_hint": "~/Documents/workspace/project/docs/doc_85.md",
+        "open": false,
+        "questions": 0,
+        "unread": 2,
+        "newest_at": "2026-10-20T15:40:03.120Z"
+      },
+      {
+        "review": "r183d18583a99",
+        "title": "Document 86 with a title of ordinary length",
+        "path_hint": "~/Documents/workspace/project/docs/doc_86.md",
+        "open": false,
+        "questions": 0,
+        "unread": 2,
+        "newest_at": "2026-10-20T15:40:03.120Z"
+      },
+      {
+        "review": "r183d18583a9a",
+        "title": "Document 87 with a title of ordinary length",
+        "path_hint": "~/Documents/workspace/project/docs/doc_87.md",
+        "open": false,
+        "questions": 1,
+        "unread": 1,
+        "newest_at": "2026-10-20T15:40:03.120Z"
+      },
+      {
+        "review": "r183d18583a9b",
+        "title": "Document 88 with a title of ordinary length",
+        "path_hint": "~/Documents/workspace/project/docs/doc_88.md",
+        "open": false,
+        "questions": 0,
+        "unread": 2,
+        "newest_at": "2026-10-20T15:40:03.120Z"
+      },
+      {
+        "review": "r183d18583a9c",
+        "title": "Document 89 with a title of ordinary length",
+        "path_hint": "~/Documents/workspace/project/docs/doc_89.md",
+        "open": false,
+        "questions": 0,
+        "unread": 2,
+        "newest_at": "2026-10-20T15:40:03.120Z"
+      },
+      {
+        "review": "r183d18583a9d",
+        "title": "Document 90 with a title of ordinary length",
+        "path_hint": "~/Documents/workspace/project/docs/doc_90.md",
+        "open": false,
+        "questions": 1,
+        "unread": 1,
+        "newest_at": "2026-10-20T15:40:03.120Z"
+      },
+      {
+        "review": "r183d18583a9e",
+        "title": "Document 91 with a title of ordinary length",
+        "path_hint": "~/Documents/workspace/project/docs/doc_91.md",
+        "open": true,
+        "questions": 0,
+        "unread": 2,
+        "newest_at": "2026-10-20T15:40:03.120Z"
+      },
+      {
+        "review": "r183d18583a9f",
+        "title": "Document 92 with a title of ordinary length",
+        "path_hint": "~/Documents/workspace/project/docs/doc_92.md",
+        "open": false,
+        "questions": 0,
+        "unread": 2,
+        "newest_at": "2026-10-20T15:40:03.120Z"
+      },
+      {
+        "review": "r183d18583aa0",
+        "title": "Document 93 with a title of ordinary length",
+        "path_hint": "~/Documents/workspace/project/docs/doc_93.md",
+        "open": false,
+        "questions": 1,
+        "unread": 1,
+        "newest_at": "2026-10-20T15:40:03.120Z"
+      },
+      {
+        "review": "r183d18583aa1",
+        "title": "Document 94 with a title of ordinary length",
+        "path_hint": "~/Documents/workspace/project/docs/doc_94.md",
+        "open": false,
+        "questions": 0,
+        "unread": 2,
+        "newest_at": "2026-10-20T15:40:03.120Z"
+      },
+      {
+        "review": "r183d18583aa2",
+        "title": "Document 95 with a title of ordinary length",
+        "path_hint": "~/Documents/workspace/project/docs/doc_95.md",
+        "open": false,
+        "questions": 0,
+        "unread": 2,
+        "newest_at": "2026-10-20T15:40:03.120Z"
+      },
+      {
+        "review": "r183d18583aa3",
+        "title": "Document 96 with a title of ordinary length",
+        "path_hint": "~/Documents/workspace/project/docs/doc_96.md",
+        "open": false,
+        "questions": 1,
+        "unread": 1,
+        "newest_at": "2026-10-20T15:40:03.120Z"
+      },
+      {
+        "review": "r183d18583aa4",
+        "title": "Document 97 with a title of ordinary length",
+        "path_hint": "~/Documents/workspace/project/docs/doc_97.md",
+        "open": false,
+        "questions": 0,
+        "unread": 2,
+        "newest_at": "2026-10-20T15:40:03.120Z"
+      },
+      {
+        "review": "r183d18583aa5",
+        "title": "Document 98 with a title of ordinary length",
+        "path_hint": "~/Documents/workspace/project/docs/doc_98.md",
+        "open": true,
+        "questions": 0,
+        "unread": 2,
+        "newest_at": "2026-10-20T15:40:03.120Z"
+      },
+      {
+        "review": "r183d18583aa6",
+        "title": "Document 99 with a title of ordinary length",
+        "path_hint": "~/Documents/workspace/project/docs/doc_99.md",
+        "open": false,
+        "questions": 1,
+        "unread": 1,
+        "newest_at": "2026-10-20T15:40:03.120Z"
+      },
+      {
+        "review": "r183d18583aa7",
+        "title": "Document 100 with a title of ordinary length",
+        "path_hint": "~/Documents/workspace/project/docs/doc_100.md",
+        "open": false,
+        "questions": 0,
+        "unread": 2,
+        "newest_at": "2026-10-20T15:40:03.120Z"
+      },
+      {
+        "review": "r183d18583aa8",
+        "title": "Document 101 with a title of ordinary length",
+        "path_hint": "~/Documents/workspace/project/docs/doc_101.md",
+        "open": false,
+        "questions": 0,
+        "unread": 2,
+        "newest_at": "2026-10-20T15:40:03.120Z"
+      },
+      {
+        "review": "r183d18583aa9",
+        "title": "Document 102 with a title of ordinary length",
+        "path_hint": "~/Documents/workspace/project/docs/doc_102.md",
+        "open": false,
+        "questions": 1,
+        "unread": 1,
+        "newest_at": "2026-10-20T15:40:03.120Z"
+      },
+      {
+        "review": "r183d18583aaa",
+        "title": "Document 103 with a title of ordinary length",
+        "path_hint": "~/Documents/workspace/project/docs/doc_103.md",
+        "open": false,
+        "questions": 0,
+        "unread": 2,
+        "newest_at": "2026-10-20T15:40:03.120Z"
+      },
+      {
+        "review": "r183d18583aab",
+        "title": "Document 104 with a title of ordinary length",
+        "path_hint": "~/Documents/workspace/project/docs/doc_104.md",
+        "open": false,
+        "questions": 0,
+        "unread": 2,
+        "newest_at": "2026-10-20T15:40:03.120Z"
+      },
+      {
+        "review": "r183d18583aac",
+        "title": "Document 105 with a title of ordinary length",
+        "path_hint": "~/Documents/workspace/project/docs/doc_105.md",
+        "open": true,
+        "questions": 1,
+        "unread": 1,
+        "newest_at": "2026-10-20T15:40:03.120Z"
+      },
+      {
+        "review": "r183d18583aad",
+        "title": "Document 106 with a title of ordinary length",
+        "path_hint": "~/Documents/workspace/project/docs/doc_106.md",
+        "open": false,
+        "questions": 0,
+        "unread": 2,
+        "newest_at": "2026-10-20T15:40:03.120Z"
+      },
+      {
+        "review": "r183d18583aae",
+        "title": "Document 107 with a title of ordinary length",
+        "path_hint": "~/Documents/workspace/project/docs/doc_107.md",
+        "open": false,
+        "questions": 0,
+        "unread": 2,
+        "newest_at": "2026-10-20T15:40:03.120Z"
+      },
+      {
+        "review": "r183d18583aaf",
+        "title": "Document 108 with a title of ordinary length",
+        "path_hint": "~/Documents/workspace/project/docs/doc_108.md",
+        "open": false,
+        "questions": 1,
+        "unread": 1,
+        "newest_at": "2026-10-20T15:40:03.120Z"
+      },
+      {
+        "review": "r183d18583ab0",
+        "title": "Document 109 with a title of ordinary length",
+        "path_hint": "~/Documents/workspace/project/docs/doc_109.md",
+        "open": false,
+        "questions": 0,
+        "unread": 2,
+        "newest_at": "2026-10-20T15:40:03.120Z"
+      },
+      {
+        "review": "r183d18583ab1",
+        "title": "Document 110 with a title of ordinary length",
+        "path_hint": "~/Documents/workspace/project/docs/doc_110.md",
+        "open": false,
+        "questions": 0,
+        "unread": 2,
+        "newest_at": "2026-10-20T15:40:03.120Z"
+      },
+      {
+        "review": "r183d18583ab2",
+        "title": "Document 111 with a title of ordinary length",
+        "path_hint": "~/Documents/workspace/project/docs/doc_111.md",
+        "open": false,
+        "questions": 1,
+        "unread": 1,
+        "newest_at": "2026-10-20T15:40:03.120Z"
+      },
+      {
+        "review": "r183d18583ab3",
+        "title": "Document 112 with a title of ordinary length",
+        "path_hint": "~/Documents/workspace/project/docs/doc_112.md",
+        "open": true,
+        "questions": 0,
+        "unread": 2,
+        "newest_at": "2026-10-20T15:40:03.120Z"
+      },
+      {
+        "review": "r183d18583ab4",
+        "title": "Document 113 with a title of ordinary length",
+        "path_hint": "~/Documents/workspace/project/docs/doc_113.md",
+        "open": false,
+        "questions": 0,
+        "unread": 2,
+        "newest_at": "2026-10-20T15:40:03.120Z"
+      },
+      {
+        "review": "r183d18583ab5",
+        "title": "Document 114 with a title of ordinary length",
+        "path_hint": "~/Documents/workspace/project/docs/doc_114.md",
+        "open": false,
+        "questions": 1,
+        "unread": 1,
+        "newest_at": "2026-10-20T15:40:03.120Z"
+      },
+      {
+        "review": "r183d18583ab6",
+        "title": "Document 115 with a title of ordinary length",
+        "path_hint": "~/Documents/workspace/project/docs/doc_115.md",
+        "open": false,
+        "questions": 0,
+        "unread": 2,
+        "newest_at": "2026-10-20T15:40:03.120Z"
+      },
+      {
+        "review": "r183d18583ab7",
+        "title": "Document 116 with a title of ordinary length",
+        "path_hint": "~/Documents/workspace/project/docs/doc_116.md",
+        "open": false,
+        "questions": 0,
+        "unread": 2,
+        "newest_at": "2026-10-20T15:40:03.120Z"
+      },
+      {
+        "review": "r183d18583ab8",
+        "title": "Document 117 with a title of ordinary length",
+        "path_hint": "~/Documents/workspace/project/docs/doc_117.md",
+        "open": false,
+        "questions": 1,
+        "unread": 1,
+        "newest_at": "2026-10-20T15:40:03.120Z"
+      },
+      {
+        "review": "r183d18583ab9",
+        "title": "Document 118 with a title of ordinary length",
+        "path_hint": "~/Documents/workspace/project/docs/doc_118.md",
+        "open": false,
+        "questions": 0,
+        "unread": 2,
+        "newest_at": "2026-10-20T15:40:03.120Z"
+      },
+      {
+        "review": "r183d18583aba",
+        "title": "Document 119 with a title of ordinary length",
+        "path_hint": "~/Documents/workspace/project/docs/doc_119.md",
+        "open": true,
+        "questions": 0,
+        "unread": 2,
+        "newest_at": "2026-10-20T15:40:03.120Z"
+      }
+    ]
+  },
+  "waiting_on_agents": {
+    "count": 4,
+    "more": 2,
+    "documents": [
+      {
+        "review": "r183d18583a45",
+        "title": "Rail cleanup",
+        "path_hint": "~/Documents/workspace/project/docs/rail.md",
+        "waiting": 3
+      },
+      {
+        "review": "r183d18583a46",
+        "title": "Free writing notes",
+        "path_hint": "~/Documents/notes/free_writing.md",
+        "waiting": 1
+      }
+    ]
+  },
+  "open_documents": {
+    "count": 3,
+    "more": 14,
+    "items": [
+      {
+        "review": "r183d18583a43",
+        "title": "Crucible: Menu bar app",
+        "path_hint": "~/Documents/workspace/project/docs/doc_0.md",
+        "focused": true
+      },
+      {
+        "review": "r183d18583a45",
+        "title": "Rail cleanup",
+        "path_hint": "~/Documents/workspace/project/docs/rail.md",
+        "focused": false
+      },
+      {
+        "review": "r183d18583a46",
+        "title": "Free writing notes",
+        "path_hint": "~/Documents/notes/free_writing.md",
+        "focused": false
+      }
+    ]
+  },
+  "sessions": {
+    "open": 23,
+    "connected": {
+      "count": 2,
+      "more": 3,
+      "items": [
+        {
+          "session": "s_b4276f2e1d343291",
+          "name": "menu bar icon",
+          "presence": "listening",
+          "last_heard_at": "2026-10-20T15:40:50.000Z",
+          "review": "r183d18583a43"
+        },
+        {
+          "session": "s_0d6c3a8b1e2f4a5b",
+          "name": "Rail cleanup",
+          "presence": "working",
+          "last_heard_at": "2026-10-20T15:39:12.000Z",
+          "review": "r183d18583a45"
+        }
+      ]
+    }
+  },
+  "recent": {
+    "more": 650,
+    "items": [
+      {
+        "review": "r183d18583a43",
+        "title": "Crucible: Menu bar app",
+        "path_hint": "~/Documents/workspace/project/docs/doc_0.md",
+        "last": "2026-10-20T15:40:03.120Z"
+      },
+      {
+        "review": "r183d18583a45",
+        "title": "Rail cleanup",
+        "path_hint": "~/Documents/workspace/project/docs/rail.md",
+        "last": "2026-10-20T15:12:00.000Z"
+      },
+      {
+        "review": "r183d18583a46",
+        "title": "Free writing notes",
+        "path_hint": "~/Documents/notes/free_writing.md",
+        "last": "2026-10-20T14:50:00.000Z"
+      },
+      {
+        "review": "r183d18583a44",
+        "title": "Stable addresses: the plan",
+        "path_hint": "~/Documents/workspace/project/docs/doc_1.md",
+        "last": "2026-10-20T14:02:11.000Z"
+      },
+      {
+        "review": "r183d18583a47",
+        "title": "Weekly plan",
+        "path_hint": "~/Documents/personal/weekly.md",
+        "last": "2026-10-19T22:10:00.000Z"
+      },
+      {
+        "review": "r183d18583a48",
+        "title": "Research: tray icons",
+        "path_hint": "~/Documents/reports/tray.md",
+        "last": "2026-10-19T18:00:00.000Z"
+      },
+      {
+        "review": "r183d18583a49",
+        "title": "Brief: style switcher",
+        "path_hint": "~/Documents/workspace/project/docs/style.md",
+        "last": "2026-10-18T09:00:00.000Z"
+      },
+      {
+        "review": "r183d18583a4a",
+        "title": "Notes page",
+        "path_hint": "~/Documents/notes/notes.md",
+        "last": "2026-10-17T09:00:00.000Z"
+      }
+    ]
+  },
+  "library_url": "http://library.lahe.localhost:1483/catalog"
+}

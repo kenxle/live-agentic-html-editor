@@ -1779,6 +1779,42 @@
     }
 
     /**
+     * The reviewer read an agent's reply: its card was opened.
+     *
+     * Posted as reply.seen with the item id and the reply's stamp
+     * (record.replyStamp) and nothing else, the way a close is posted: no
+     * record, because the helper never takes a mark the browser claims. The
+     * projection records it only when it names the item's current reply. The
+     * Done tab calls this once per stamp, when it writes its own mark; another
+     * browser adopts it from the reply poll.
+     *
+     * @param {Object} item the record whose current reply was read
+     */
+    function markReplySeen(item) {
+      if (readOnly || !item) return null;
+      var id = item[record.FIELD.ID];
+      var stamp = record.replyStamp(item);
+      if (!id || !stamp) return null;
+      var event = protocol.newEvent({
+        event: protocol.EVENT.REPLY_SEEN,
+        event_id: record.randomId("evt"),
+        review: requireReview(),
+        item: id,
+        // THE ITEM AND THE STAMP, NOTHING ELSE. No revision: the stamp already
+        // names the reply, and an accepted event carrying a rev marks the item
+        // acknowledged at it (flush), which would let the store's copy win
+        // over a follow-up the reviewer is typing at that same revision. No
+        // page fields either: every window's reply poll receives this event,
+        // and the helper refuses one that carries more (log.js).
+        payload: { stamp: stamp }
+      });
+      store.queueEvent(requireReview(), event);
+      scheduleFlush(0);
+      recomputeStatus();
+      return event;
+    }
+
+    /**
      * The typing path. SYNCHRONOUS and non-blocking: the event is queued in
      * browser storage in this task, and the network happens later or never.
      *
@@ -2014,9 +2050,11 @@
       // two callers who must get past the gate ask for that: drainOutbox, so
       // ending a review with items held still flushes them first (R6), and
       // releasing Hold itself, which flushes immediately, in one pass (R3).
-      if (!fo.force && typeof store.isHeld === "function" && store.isHeld(requireReview())) {
-        return Promise.resolve({ sent: 0, remaining: pendingCount(), held: true });
-      }
+      // A READ MARK IS NOT HELD. reply.seen is not work for an agent and wakes
+      // nothing; holding it back only keeps the menu bar counting a reply the
+      // reviewer has read. So a held flush posts the read marks and leaves
+      // everything else where it is.
+      var held = !fo.force && typeof store.isHeld === "function" && store.isHeld(requireReview());
       // ONCE THE DOCUMENT IS LEAVING, EVERY FLUSH IS AN UNLOAD FLUSH.
       //
       // The cap and the keepalive header belong to the MOMENT, not to the
@@ -2039,6 +2077,12 @@
       var leaving = !!fo.unload || unloading;
 
       var queued = store.pendingEvents(requireReview());
+      if (held) {
+        queued = queued.filter(function (event) {
+          return event[protocol.EVENT_FIELD.EVENT] === protocol.EVENT.REPLY_SEEN;
+        });
+        if (!queued.length) return Promise.resolve({ sent: 0, remaining: pendingCount(), held: true });
+      }
       if (!queued.length) {
         recomputeStatus();
         return Promise.resolve({ sent: 0, remaining: 0 });
@@ -2138,7 +2182,9 @@
           // helper about once a second (DRAFT_PERSISTENCE.md section 4).
           var again = rerun;
           rerun = null;
-          if ((remaining > 0 || again) && !leaving) scheduleFlush(0, again);
+          // A held review's other events stay queued on purpose: posting its
+          // read marks is not a reason to come straight back for them.
+          if (((remaining > 0 && !held) || again) && !leaving) scheduleFlush(0, again);
           return { sent: accepted.length, remaining: remaining };
         }
 
@@ -3589,6 +3635,7 @@
       },
       deleteItem: deleteItem,
       closeItem: closeItem,
+      markReplySeen: markReplySeen,
       /** The RUN_EVENT_REFUSED failure an item carries, or null. */
       refusalFor: function (itemId) {
         if (refusedRuns[itemId]) return refusedRuns[itemId];

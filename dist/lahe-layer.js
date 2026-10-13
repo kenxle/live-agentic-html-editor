@@ -1,6 +1,6 @@
 /*
  * live-agentic-html-editor review layer
- * version 0.3.0+9196e3e44fbe
+ * version 0.3.0+ebce4dbe3acc
  *
  * GENERATED FILE. Do not edit. Edit the sources under src/ and run
  *   npm run build:layer
@@ -12,7 +12,7 @@
   "use strict";
   var g = typeof globalThis !== "undefined" ? globalThis : window;
   g.LAHE = g.LAHE || {};
-  g.LAHE.version = "0.3.0+9196e3e44fbe";
+  g.LAHE.version = "0.3.0+ebce4dbe3acc";
 })();
 /* ---- src/shared/markers.js  (owner: 0A-kernel) ---- */
 // Markers: the attribute and class names that identify DOM the tool added.
@@ -2954,6 +2954,13 @@
     CLOSED_BY: "closed_by",
     CLOSED_AT: "closed_at",
 
+    // The reply the reviewer has read: its replyStamp, from a reply.seen event
+    // the page posts when the card is opened. Absent when nothing was read.
+    // Lifecycle bookkeeping, not content: the helper sets it from the event and
+    // never takes it from a record the browser posts, and it names one reply,
+    // so a newer reply is unread again whatever this says.
+    REPLY_SEEN: "reply_seen",
+
     // Completed reviewer/agent exchanges, oldest first. The current exchange
     // stays in NOTE/CHANGE + REPLY until the reviewer continues it.
     THREAD: "thread",
@@ -3088,6 +3095,7 @@
     // Who closed it and when. Tool-written lifecycle facts.
     closed_by: CLASS_DATA,
     closed_at: CLASS_DATA,
+    reply_seen: CLASS_DATA,
     page_title: CLASS_DATA,
     page_path: CLASS_DATA,
     "reply.reason": CLASS_DATA,
@@ -3950,6 +3958,117 @@
    */
   function isClosedByReviewer(item) {
     return !!item && item[FIELD.STATE] === STATE.HANDLED && item[FIELD.CLOSED_BY] === CLOSED_BY_REVIEWER;
+  }
+
+  // ---------------------------------------------------------------------------
+  // THE UNREAD RULE: which replies the reviewer has not read
+  // ---------------------------------------------------------------------------
+  //
+  // One rule, here, because two surfaces count with it: the rail's "1 new" tag
+  // and the menu bar's "waiting on you". It lived in the Done tab while the
+  // rail was its only reader. A second copy in the helper would be a count
+  // that disagrees with the rail the first time either one changes.
+
+  // The longest reply stamp a reply.seen event may carry. A replyStamp is an
+  // ISO time, an @ and a revision, so a real one is far shorter.
+  var REPLY_STAMP_MAX = 64;
+
+  /** Is there anything here for a person to actually read? */
+  function hasWords(value) {
+    return typeof value === "string" && value.trim() !== "";
+  }
+
+  /**
+   * Is this a reply the reviewer actually has to read?
+   *
+   * The badge used to count every folded reply, which meant "claude carried this
+   * change into the source" interrupted the reviewer exactly as loudly as an
+   * open question did. Two things count now:
+   *
+   *   THE AGENT SAID SO   user_needs_to_see_reply on the reply line, which the
+   *                       contract asks for on an answer, a caveat, or a change
+   *                       made differently than asked, AND words to read in
+   *                       text or reason
+   *   THE STATUS SAYS SO  question and not_handled, always, flag or no flag: a
+   *                       question needs an answer and a refusal needs its
+   *                       reason read, and neither is the agent's call
+   *
+   * Everything else still lands on its card in Done, whole, with its text and
+   * its timestamp. It simply arrives already read.
+   *
+   * THE FLAG NEEDS WORDS BEHIND IT. All three things the contract asks the flag
+   * for, an answer, a caveat, a change made differently than asked, are things
+   * an agent says in words. A flagged reply carrying neither text nor reason
+   * has nothing to read, so the card falls through to the wordless line
+   * "claude handled this." Counting that is a badge that sends the reviewer to
+   * a card to learn nothing, and it happens in runs: an agent that flags one
+   * wordless confirmation flags twelve, and the number on the rail stops
+   * meaning anything. Ken hit exactly this (2026-09-04). The agent asked for
+   * attention it had no use for, so the ask is refused here rather than
+   * trusted; the reply is not hidden, only already read.
+   *
+   * `question` and `not_handled` are deliberately NOT held to this. A refusal
+   * with no reason and a question with no text are both worth fixing, but the
+   * status alone is the signal there, and swallowing a wordless refusal would
+   * leave the reviewer thinking their item was done.
+   *
+   * @param {object} reply the reply as it sits on a record
+   */
+  function needsToSeeReply(reply) {
+    if (!reply) return false;
+    if (reply.status === REPLY_STATUS.QUESTION) return true;
+    if (reply.status === REPLY_STATUS.NOT_HANDLED) return true;
+    if (reply.user_needs_to_see_reply !== true) return false;
+    return hasWords(reply.text) || hasWords(reply.reason);
+  }
+
+  /**
+   * Has the reviewer still to read this item's current reply?
+   *
+   * Read means one of two marks names the reply's stamp: `reply_seen` on the
+   * record (the helper's, from a reply.seen event any browser posted) or
+   * `mark`, a browser's own mark for it. The helper passes no mark. A mark for
+   * an older reply names an older stamp, so it never clears a newer one.
+   *
+   * @param {object} item a record
+   * @param {string} [mark] this browser's stamp for the reply it read
+   */
+  function isUnreadReply(item, mark) {
+    var stamp = replyStamp(item);
+    if (!stamp) return false;
+    // AN ANSWER TO A TOOL ROUND IS ROUTINE BY DEFINITION, whatever the agent
+    // put on it. Nobody is badged, marked or toasted for the tool's own
+    // question coming back answered. A refusal still reaches the reviewer,
+    // quietly, as the card's notice.
+    if (toolRoundOf(item)) return false;
+    // A CARD THE REVIEWER CLOSED IS READ. Choosing "Mark as done" on it is
+    // the reviewer acting on it, and the agent's last answer it carries is
+    // history, so it never says "1 new" in Done.
+    if (isClosedByReviewer(item)) return false;
+    if (!needsToSeeReply(item[FIELD.REPLY])) return false;
+    if (item[FIELD.REPLY_SEEN] === stamp) return false;
+    return mark !== stamp;
+  }
+
+  /**
+   * The ids whose reply the reviewer has not read.
+   *
+   * Pure: items in, marks in, ids out. Nothing here touches the DOM or storage,
+   * which is what makes the rule testable without a browser.
+   *
+   * @param {object[]} items every record this review holds
+   * @param {object} [marks] id -> the stamp of the reply this browser read
+   * @returns {string[]}
+   */
+  function unseenReplyIds(items, marks) {
+    var seen = marks && typeof marks === "object" ? marks : {};
+    var out = [];
+    (items || []).forEach(function (item) {
+      var id = item && item[FIELD.ID];
+      var mark = Object.prototype.hasOwnProperty.call(seen, id) ? seen[id] : undefined;
+      if (isUnreadReply(item, mark)) out.push(id);
+    });
+    return out;
   }
 
   // Outstanding for the reviewer: still in front of them. A handled item is
@@ -5287,6 +5406,11 @@
     isOutstanding: isOutstanding,
     CLOSED_BY_REVIEWER: CLOSED_BY_REVIEWER,
     isClosedByReviewer: isClosedByReviewer,
+    REPLY_STAMP_MAX: REPLY_STAMP_MAX,
+    hasWords: hasWords,
+    needsToSeeReply: needsToSeeReply,
+    isUnreadReply: isUnreadReply,
+    unseenReplyIds: unseenReplyIds,
     isReplayable: isReplayable,
     comparisonMode: comparisonMode,
     normalizedBefore: normalizedBefore,
@@ -7561,7 +7685,13 @@
     // The CLI secret (stable addresses): read from an owner-only file in the
     // state folder and sent only by the CLI on site.bind. A page can never read
     // it, so a page holding a review token still cannot name a file to serve.
-    CLI_SECRET: "x-lahe-cli-secret"
+    CLI_SECRET: "x-lahe-cli-secret",
+    // The signed-request wire (AUTH.CLI_PROOF): the menu bar app proves it can
+    // read the CLI secret without ever sending it. See PROOF below.
+    PROOF_TS: "x-lahe-proof-ts",
+    PROOF_NONCE: "x-lahe-proof-nonce",
+    PROOF: "x-lahe-proof",
+    PROOF_REPLY: "x-lahe-proof-reply"
   };
 
   var CLIENT_LAYER = "layer";
@@ -7578,7 +7708,7 @@
   // Auth
   // ---------------------------------------------------------------------------
   //
-  // Two modes, and that is the whole model. There is no session exchange and no
+  // These modes are the whole model. There is no session exchange and no
   // machine-wide run token: both belonged to the archived send model.
 
   var AUTH = {
@@ -7595,8 +7725,38 @@
     // The CLI secret (stable addresses). Only site.bind takes it, and that
     // route also refuses any request carrying an Origin header, so only a
     // process that can read the state folder's owner-only file can bind.
-    CLI_SECRET: "cli_secret"
+    CLI_SECRET: "cli_secret",
+    // The CLI proof (the menu bar app): a request signed with HMAC-SHA256
+    // keyed by the CLI secret, within PROOF.WINDOW_MS, with a nonce never seen
+    // before, and an answer signed back. The secret itself never travels, so
+    // a program squatting on the port learns one used proof and nothing else.
+    // No browser can send one: the routes refuse any Sec-Fetch header.
+    CLI_PROOF: "cli_proof"
   };
+
+  // The signed-request wire, spelled once (docs/CONTRACTS.md, "The summary
+  // routes and the signed-request wire"). The signed string is these lines
+  // joined by a single newline, no trailing newline:
+  //
+  //   request  REQUEST_PREFIX, method, path with its query exactly as sent,
+  //            timestamp (Unix ms, decimal), nonce, hex SHA-256 of the body
+  //   answer   REPLY_PREFIX, the request's nonce, status code, hex SHA-256 of
+  //            the response body
+  var PROOF = {
+    REQUEST_PREFIX: "lahe-proof-v1",
+    REPLY_PREFIX: "lahe-proof-reply-v1",
+    // A timestamp this far from the helper's clock, either way, is refused.
+    WINDOW_MS: 30 * 1000,
+    TS_PATTERN: /^[0-9]{1,16}$/,
+    // 16 random bytes, as lowercase hex.
+    NONCE_PATTERN: /^[0-9a-f]{32}$/,
+    // A lowercase hex HMAC-SHA256.
+    MAC_PATTERN: /^[0-9a-f]{64}$/
+  };
+
+  // The version of the summary.read answer. The app sends the one it was
+  // built for; any other is a signed 409 SUMMARY_VERSION.
+  var SUMMARY_VERSION = 1;
 
   // Review ids and agent names are path components, so they are constrained to
   // a plain safe set. One regex, used for both.
@@ -8021,8 +8181,39 @@
     }
   ];
 
+  // The menu bar's two routes (docs/features/20261012.01_menu_bar_app). Read by
+  // a program the person runs, never by a page: the CLI proof, every Sec-Fetch
+  // header refused, never on the Library's host. `refuse_origin` turns away
+  // any Origin header as well.
+  var SUMMARY_ROUTES = [
+    {
+      name: "summary.read",
+      method: "GET",
+      path: BASE + "/summary",
+      auth: AUTH.CLI_PROOF,
+      mutating: false,
+      why:
+        "the menu bar app's poll: what is waiting on the reviewer, what is waiting on agents, open documents, " +
+        "connected sessions and recent documents, with titles and ~ paths and never comment text. ?v=<summary_version>",
+      response: "docs/CONTRACTS.md, the summary.read table; test/fixtures/menubar/summary.json"
+    },
+    {
+      name: "summary.open",
+      method: "POST",
+      path: BASE + "/summary/open",
+      auth: AUTH.CLI_PROOF,
+      mutating: true,
+      refuse_origin: true,
+      why:
+        "a click on a menu row: the address catalog Open would use, found with no hand-off, so it never queues " +
+        "a request for an agent",
+      request: "{review, summary_version}",
+      response: "{url} or {url: null} for a row only an agent can serve"
+    }
+  ];
+
   function route(name) {
-    var lists = [ROUTES, CATALOG_ROUTES, SITE_ROUTES];
+    var lists = [ROUTES, CATALOG_ROUTES, SITE_ROUTES, SUMMARY_ROUTES];
     for (var l = 0; l < lists.length; l += 1) {
       for (var i = 0; i < lists[l].length; i += 1) {
         if (lists[l][i].name === name) return lists[l][i];
@@ -8068,7 +8259,10 @@
     TOKEN: "token",
     ORIGIN: "origin",
     // Catalog routes only (see CATALOG_ROUTES[].checks.sec_fetch_site).
-    SEC_FETCH_SITE: "sec_fetch_site"
+    SEC_FETCH_SITE: "sec_fetch_site",
+    // The summary routes only (AUTH.CLI_PROOF).
+    SEC_FETCH: "sec_fetch",
+    PROOF: "proof"
   };
 
   var CHECKS = [
@@ -8108,6 +8302,20 @@
       why:
         "catalog routes only. A document under review on another loopback port sends same-site, and it is the page " +
         "most likely to run a script the reviewer did not write, so the Library's API takes exactly same-origin"
+    },
+    {
+      name: CHECK.SEC_FETCH,
+      code: "AUTH_REFUSED",
+      why:
+        "summary routes only. Current browsers send Sec-Fetch-Site, -Mode or -Dest on every request to a loopback " +
+        "address and the menu bar app sends none, so any of them means a page is asking"
+    },
+    {
+      name: CHECK.PROOF,
+      code: "AUTH_REFUSED",
+      why:
+        "summary routes only. A request signed with the CLI secret, within the window, with a nonce not seen in " +
+        "it, compared in constant time. The raw secret header is refused: it must never travel"
     }
   ];
 
@@ -8245,7 +8453,10 @@
     PROTO_NO_AGENT: 409,
     PROTO_CONFIRM_NEEDED: 409,
     PROTO_NO_LAUNCH: 409,
-    PROTO_CATALOG_UNREADABLE: 500
+    PROTO_CATALOG_UNREADABLE: 500,
+    // The summary routes' two refusals, both signed.
+    AUTH_REFUSED: 401,
+    SUMMARY_VERSION: 409
   };
 
   function statusFor(code) {
@@ -8361,6 +8572,11 @@
     // no record, and the projection applies it only when the item is still
     // outstanding at exactly that revision (lifecycle.canClose).
     ITEM_CLOSED: "item.closed",
+    // {item, stamp}. The rail marked an agent reply read (its card was
+    // opened), naming the reply by record.replyStamp. No record, and not a
+    // lifecycle move: the projection records it on the item as reply_seen only
+    // when it names the item's current reply, and no agent acts on it.
+    REPLY_SEEN: "reply.seen",
     REPLY_FOLDED: "reply.folded",
     REPLY_REJECTED: "reply.rejected",
     REVIEW_ARCHIVED: "review.archived",
@@ -8371,9 +8587,16 @@
   };
   // The Library's `last` is the time inside the newest event that is work on
   // the document, by the reviewer or the agent. These are not: an Open's
-  // origin swap, and a reviewer's visit. Compaction rewrites the log without
-  // adding an event, so the file's modified time is never read for `last`.
-  CATALOG.NOT_WORK_EVENTS = [EVENT.ORIGIN_REGISTERED, EVENT.ORIGIN_REMOVED, EVENT.PAGE_VISITED, EVENT.REVIEW_ADOPTED];
+  // origin swap, a reviewer's visit, and a reviewer reading a reply.
+  // Compaction rewrites the log without adding an event, so the file's
+  // modified time is never read for `last`.
+  CATALOG.NOT_WORK_EVENTS = [
+    EVENT.ORIGIN_REGISTERED,
+    EVENT.ORIGIN_REMOVED,
+    EVENT.PAGE_VISITED,
+    EVENT.REVIEW_ADOPTED,
+    EVENT.REPLY_SEEN
+  ];
 
 
   // Closed. The projector, the merge rule, and reply folding all switch on this
@@ -9511,6 +9734,9 @@
     siteOrigin: siteOrigin,
     siteNameFromOrigin: siteNameFromOrigin,
     SITE_ROUTES: SITE_ROUTES,
+    SUMMARY_ROUTES: SUMMARY_ROUTES,
+    PROOF: PROOF,
+    SUMMARY_VERSION: SUMMARY_VERSION,
 
     CLI_EXIT: CLI_EXIT,
 
@@ -28726,54 +28952,11 @@
     return record.replyStamp(item);
   }
 
-  /**
-   * Is this a reply the reviewer actually has to read?
-   *
-   * The badge used to count every folded reply, which meant "claude carried this
-   * change into the source" interrupted the reviewer exactly as loudly as an
-   * open question did. Two things count now:
-   *
-   *   THE AGENT SAID SO   user_needs_to_see_reply on the reply line, which the
-   *                       contract asks for on an answer, a caveat, or a change
-   *                       made differently than asked, AND words to read in
-   *                       text or reason
-   *   THE STATUS SAYS SO  question and not_handled, always, flag or no flag: a
-   *                       question needs an answer and a refusal needs its
-   *                       reason read, and neither is the agent's call
-   *
-   * Everything else still lands on its card in Done, whole, with its text and
-   * its timestamp. It simply arrives already read.
-   *
-   * THE FLAG NEEDS WORDS BEHIND IT. All three things the contract asks the flag
-   * for, an answer, a caveat, a change made differently than asked, are things
-   * an agent says in words. A flagged reply carrying neither text nor reason
-   * has nothing to read, so the card falls through to the wordless line
-   * `agentMessageFor` writes: "claude handled this." Counting that is a badge
-   * that sends the reviewer to a card to learn nothing, and it happens in runs:
-   * an agent that flags one wordless confirmation flags twelve, and the number
-   * on the rail stops meaning anything. Ken hit exactly this (2026-09-04). The
-   * agent asked for attention it had no use for, so the ask is refused here
-   * rather than trusted; the reply is not hidden, only already read.
-   *
-   * `question` and `not_handled` are deliberately NOT held to this. A refusal
-   * with no reason and a question with no text are both worth fixing, but the
-   * status alone is the signal there, and swallowing a wordless refusal would
-   * leave the reviewer thinking their item was done.
-   *
-   * @param {object} reply the reply as it sits on a record
-   */
-  function needsToSeeReply(reply) {
-    if (!reply) return false;
-    if (reply.status === record.REPLY_STATUS.QUESTION) return true;
-    if (reply.status === record.REPLY_STATUS.NOT_HANDLED) return true;
-    if (reply.user_needs_to_see_reply !== true) return false;
-    return hasWords(reply.text) || hasWords(reply.reason);
-  }
-
-  /** Is there anything here for a person to actually read? */
-  function hasWords(value) {
-    return typeof value === "string" && value.trim() !== "";
-  }
+  // THE UNREAD RULE lives in record.js (needsToSeeReply, unseenReplyIds), so
+  // the rail's "1 new" and the menu bar's "waiting on you" are one function
+  // over the same records. These names stay here for this file's call sites.
+  var needsToSeeReply = record.needsToSeeReply;
+  var hasWords = record.hasWords;
 
   /**
    * Does this round of a thread start open?
@@ -28833,35 +29016,16 @@
   };
 
   /**
-   * The ids whose reply the reviewer has not read.
-   *
-   * Pure: items in, marks in, ids out. Nothing here touches the DOM or storage,
-   * which is what makes the rule testable without a browser.
+   * The ids whose reply the reviewer has not read: record.unseenReplyIds, with
+   * this browser's marks. A record carrying the helper's reply_seen for its
+   * current reply reads as read here too, so a reply read in another browser
+   * clears in this one.
    *
    * @param {object[]} items every record this review holds
    * @param {object} marks id -> the stamp of the reply already read
    * @returns {string[]}
    */
-  function unseenReplyIds(items, marks) {
-    var seen = marks && typeof marks === "object" ? marks : {};
-    var out = [];
-    (items || []).forEach(function (item) {
-      var stamp = replyStamp(item);
-      if (!stamp) return;
-      // AN ANSWER TO A TOOL ROUND IS ROUTINE BY DEFINITION, whatever the agent
-      // put on it. Nobody is badged, marked or toasted for the tool's own
-      // question coming back answered. A refusal still reaches the reviewer,
-      // quietly, as the card's notice (see refresh).
-      if (record.toolRoundOf(item)) return;
-      // A CARD THE REVIEWER CLOSED IS READ. Choosing "Mark as done" on it is
-      // the reviewer acting on it, and the agent's last answer it carries is
-      // history, so it never says "1 new" in Done.
-      if (record.isClosedByReviewer(item)) return;
-      if (!needsToSeeReply(item[record.FIELD.REPLY])) return;
-      if (seen[item[record.FIELD.ID]] !== stamp) out.push(item[record.FIELD.ID]);
-    });
-    return out;
-  }
+  var unseenReplyIds = record.unseenReplyIds;
 
   /**
    * The unseen ids, grouped by the tab their card actually sits in.
@@ -29522,17 +29686,69 @@
     // An agent's reply used to move an item to Done and say nothing. The
     // reviewer, who is on the Active tab writing the next comment, got no signal
     // that an answer had arrived, and no way to tell the answers they had read
-    // from the ones they had not. The mark below is that signal, and it is
-    // reviewer-side only: it lives in browser storage, never in review.json, and
-    // no agent sees it or can set it.
+    // from the ones they had not. The mark below is that signal. It lives in
+    // browser storage, and each reply it newly marks read is also posted to the
+    // helper as a reply.seen event, so the menu bar's count and a second
+    // browser clear with it (see postReadMarks). No agent acts on it.
 
     function readSeen() {
       return typeof store.readSeenReplies === "function" ? store.readSeenReplies(reviewId) : {};
     }
 
     function writeSeen(marks) {
+      var before = readSeen();
       if (typeof store.writeSeenReplies === "function") store.writeSeenReplies(reviewId, marks);
+      postReadMarks(before, marks);
       return marks;
+    }
+
+    /**
+     * Tell the helper which replies were just read.
+     *
+     * ONCE PER STAMP, at the moment the mark is written, never per paint. A
+     * reply counts only when the rule called it unread a moment ago and the new
+     * marks name its stamp: a routine reply stamped read as it folded was never
+     * unread, and a mark already standing is not news. A reply only exists on an
+     * item the helper holds, so there is no "has the helper heard of it" check.
+     *
+     * @param {object} before the marks as they stood
+     * @param {object} after the marks just written
+     * @returns {number} how many reply.seen events were queued
+     */
+    function postReadMarks(before, after) {
+      var client = typeof sync === "function" ? sync() : sync;
+      if (!client || typeof client.markReplySeen !== "function") return 0;
+      var posted = 0;
+      itemsNow().forEach(function (item) {
+        var id = item[record.FIELD.ID];
+        var stamp = after[id];
+        if (!stamp || before[id] === stamp) return;
+        if (!record.isUnreadReply(item, before[id])) return;
+        if (client.markReplySeen(item)) posted += 1;
+      });
+      return posted;
+    }
+
+    /**
+     * A reply read in another browser, as the reply poll reports it: the
+     * reply.seen event the helper holds. It is taken into this browser's marks
+     * only when it names the reply this record holds now, and written straight
+     * to storage, so nothing is posted back.
+     *
+     * @param {object} event a reply.seen event, {item, stamp}
+     * @returns {object|null} what was adopted, or null
+     */
+    function adoptReadMark(event) {
+      var id = event[protocol.EVENT_FIELD.ITEM];
+      var item = id ? itemById(id) : null;
+      var stamp = event.stamp;
+      if (!item || typeof stamp !== "string" || replyStamp(item) !== stamp) return null;
+      var marks = readSeen();
+      if (marks[id] === stamp) return null;
+      marks[id] = stamp;
+      if (typeof store.writeSeenReplies === "function") store.writeSeenReplies(reviewId, marks);
+      delete life.neglected[id];
+      return { kind: "seen", item: id, toast: false };
     }
 
     /**
@@ -30348,13 +30564,14 @@
     // -------------------------------------------------------------------------
 
     /**
-     * Apply folded replies and rejected lines from 1B's poll loop.
+     * Apply folded replies, rejected lines and other browsers' read marks from
+     * 1B's poll loop.
      *
      * This file never reads a reply file and never edits sync.js: the helper is
      * the single reader of reply files, and the library sees only what it
      * folded.
      *
-     * @param {object[]} events reply.folded and reply.rejected events
+     * @param {object[]} events reply.folded, reply.rejected and reply.seen events
      */
     function applyReplies(events) {
       var applied = [];
@@ -30362,6 +30579,10 @@
         var type = event[protocol.EVENT_FIELD.EVENT];
         if (type === protocol.EVENT.REPLY_REJECTED) {
           applied.push(rejectedLine(event));
+          return;
+        }
+        if (type === protocol.EVENT.REPLY_SEEN) {
+          applied.push(adoptReadMark(event));
           return;
         }
         if (type !== protocol.EVENT.REPLY_FOLDED) return;
@@ -34898,6 +35119,42 @@
     }
 
     /**
+     * The reviewer read an agent's reply: its card was opened.
+     *
+     * Posted as reply.seen with the item id and the reply's stamp
+     * (record.replyStamp) and nothing else, the way a close is posted: no
+     * record, because the helper never takes a mark the browser claims. The
+     * projection records it only when it names the item's current reply. The
+     * Done tab calls this once per stamp, when it writes its own mark; another
+     * browser adopts it from the reply poll.
+     *
+     * @param {Object} item the record whose current reply was read
+     */
+    function markReplySeen(item) {
+      if (readOnly || !item) return null;
+      var id = item[record.FIELD.ID];
+      var stamp = record.replyStamp(item);
+      if (!id || !stamp) return null;
+      var event = protocol.newEvent({
+        event: protocol.EVENT.REPLY_SEEN,
+        event_id: record.randomId("evt"),
+        review: requireReview(),
+        item: id,
+        // THE ITEM AND THE STAMP, NOTHING ELSE. No revision: the stamp already
+        // names the reply, and an accepted event carrying a rev marks the item
+        // acknowledged at it (flush), which would let the store's copy win
+        // over a follow-up the reviewer is typing at that same revision. No
+        // page fields either: every window's reply poll receives this event,
+        // and the helper refuses one that carries more (log.js).
+        payload: { stamp: stamp }
+      });
+      store.queueEvent(requireReview(), event);
+      scheduleFlush(0);
+      recomputeStatus();
+      return event;
+    }
+
+    /**
      * The typing path. SYNCHRONOUS and non-blocking: the event is queued in
      * browser storage in this task, and the network happens later or never.
      *
@@ -35133,9 +35390,11 @@
       // two callers who must get past the gate ask for that: drainOutbox, so
       // ending a review with items held still flushes them first (R6), and
       // releasing Hold itself, which flushes immediately, in one pass (R3).
-      if (!fo.force && typeof store.isHeld === "function" && store.isHeld(requireReview())) {
-        return Promise.resolve({ sent: 0, remaining: pendingCount(), held: true });
-      }
+      // A READ MARK IS NOT HELD. reply.seen is not work for an agent and wakes
+      // nothing; holding it back only keeps the menu bar counting a reply the
+      // reviewer has read. So a held flush posts the read marks and leaves
+      // everything else where it is.
+      var held = !fo.force && typeof store.isHeld === "function" && store.isHeld(requireReview());
       // ONCE THE DOCUMENT IS LEAVING, EVERY FLUSH IS AN UNLOAD FLUSH.
       //
       // The cap and the keepalive header belong to the MOMENT, not to the
@@ -35158,6 +35417,12 @@
       var leaving = !!fo.unload || unloading;
 
       var queued = store.pendingEvents(requireReview());
+      if (held) {
+        queued = queued.filter(function (event) {
+          return event[protocol.EVENT_FIELD.EVENT] === protocol.EVENT.REPLY_SEEN;
+        });
+        if (!queued.length) return Promise.resolve({ sent: 0, remaining: pendingCount(), held: true });
+      }
       if (!queued.length) {
         recomputeStatus();
         return Promise.resolve({ sent: 0, remaining: 0 });
@@ -35257,7 +35522,9 @@
           // helper about once a second (DRAFT_PERSISTENCE.md section 4).
           var again = rerun;
           rerun = null;
-          if ((remaining > 0 || again) && !leaving) scheduleFlush(0, again);
+          // A held review's other events stay queued on purpose: posting its
+          // read marks is not a reason to come straight back for them.
+          if (((remaining > 0 && !held) || again) && !leaving) scheduleFlush(0, again);
           return { sent: accepted.length, remaining: remaining };
         }
 
@@ -36708,6 +36975,7 @@
       },
       deleteItem: deleteItem,
       closeItem: closeItem,
+      markReplySeen: markReplySeen,
       /** The RUN_EVENT_REFUSED failure an item carries, or null. */
       refusalFor: function (itemId) {
         if (refusedRuns[itemId]) return refusedRuns[itemId];
@@ -51920,7 +52188,7 @@
   "use strict";
 
   // Replaced by scripts/build-layer.js at concatenation time.
-  var VERSION = "0.3.0+9196e3e44fbe";
+  var VERSION = "0.3.0+ebce4dbe3acc";
 
   var protocol = ns.protocol;
   var record = ns.record;

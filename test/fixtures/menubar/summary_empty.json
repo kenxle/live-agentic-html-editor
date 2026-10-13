@@ -1,0 +1,36 @@
+{
+  "summary_version": 1,
+  "generated_at": "2026-10-20T15:41:00.000Z",
+  "helper": {
+    "version": "0.4.0",
+    "started_at": "2026-10-20T08:00:00.000Z",
+    "always_on": true
+  },
+  "waiting_on_you": {
+    "count": 0,
+    "documents": []
+  },
+  "waiting_on_agents": {
+    "count": 0,
+    "more": 0,
+    "documents": []
+  },
+  "open_documents": {
+    "count": 0,
+    "more": 0,
+    "items": []
+  },
+  "sessions": {
+    "open": 0,
+    "connected": {
+      "count": 0,
+      "more": 0,
+      "items": []
+    }
+  },
+  "recent": {
+    "more": 0,
+    "items": []
+  },
+  "library_url": "http://library.lahe.localhost:1483/catalog"
+}

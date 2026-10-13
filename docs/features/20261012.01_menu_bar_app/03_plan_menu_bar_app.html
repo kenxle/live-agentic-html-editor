@@ -1,0 +1,2455 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+  <meta charset="utf-8" />
+  <meta name="generator" content="pandoc" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
+  <title>Plan: Menu bar app</title>
+  <style>
+    /* Default styles provided by pandoc.
+    ** See https://pandoc.org/MANUAL.html#variables-for-html for config info.
+    */
+    html {
+      color: #1a1a1a;
+      background-color: #fdfdfd;
+    }
+    body {
+      margin: 0 auto;
+      max-width: 36em;
+      padding-left: 50px;
+      padding-right: 50px;
+      padding-top: 50px;
+      padding-bottom: 50px;
+      hyphens: auto;
+      overflow-wrap: break-word;
+      text-rendering: optimizeLegibility;
+      font-kerning: normal;
+    }
+    @media (max-width: 600px) {
+      body {
+        font-size: 0.9em;
+        padding: 12px;
+      }
+      h1 {
+        font-size: 1.8em;
+      }
+    }
+    @media print {
+      html {
+        background-color: white;
+      }
+      body {
+        background-color: transparent;
+        color: black;
+        font-size: 12pt;
+      }
+      p, h2, h3 {
+        orphans: 3;
+        widows: 3;
+      }
+      h2, h3, h4 {
+        page-break-after: avoid;
+      }
+    }
+    p {
+      margin: 1em 0;
+    }
+    a {
+      color: #1a1a1a;
+    }
+    a:visited {
+      color: #1a1a1a;
+    }
+    img {
+      max-width: 100%;
+    }
+    svg {
+      height: auto;
+      max-width: 100%;
+    }
+    h1, h2, h3, h4, h5, h6 {
+      margin-top: 1.4em;
+    }
+    h5, h6 {
+      font-size: 1em;
+      font-style: italic;
+    }
+    h6 {
+      font-weight: normal;
+    }
+    ol, ul {
+      padding-left: 1.7em;
+      margin-top: 1em;
+    }
+    li > ol, li > ul {
+      margin-top: 0;
+    }
+    blockquote {
+      margin: 1em 0 1em 1.7em;
+      padding-left: 1em;
+      border-left: 2px solid #e6e6e6;
+      color: #606060;
+    }
+    code {
+      white-space: pre-wrap;
+      font-family: Menlo, Monaco, Consolas, 'Lucida Console', monospace;
+      font-size: 85%;
+      margin: 0;
+      hyphens: manual;
+    }
+    pre {
+      margin: 1em 0;
+      overflow: auto;
+    }
+    pre code {
+      padding: 0;
+      overflow: visible;
+      overflow-wrap: normal;
+    }
+    .sourceCode {
+     background-color: transparent;
+     overflow: visible;
+    }
+    hr {
+      border: none;
+      border-top: 1px solid #1a1a1a;
+      height: 1px;
+      margin: 1em 0;
+    }
+    table {
+      margin: 1em 0;
+      border-collapse: collapse;
+      width: 100%;
+      overflow-x: auto;
+      display: block;
+      font-variant-numeric: lining-nums tabular-nums;
+    }
+    table caption {
+      margin-bottom: 0.75em;
+    }
+    tbody {
+      margin-top: 0.5em;
+      border-top: 1px solid #1a1a1a;
+      border-bottom: 1px solid #1a1a1a;
+    }
+    th {
+      border-top: 1px solid #1a1a1a;
+      padding: 0.25em 0.5em 0.25em 0.5em;
+    }
+    td {
+      padding: 0.125em 0.5em 0.25em 0.5em;
+    }
+    header {
+      margin-bottom: 4em;
+      text-align: center;
+    }
+    #TOC li {
+      list-style: none;
+    }
+    #TOC ul {
+      padding-left: 1.3em;
+    }
+    #TOC > ul {
+      padding-left: 0;
+    }
+    #TOC a:not(:hover) {
+      text-decoration: none;
+    }
+    span.smallcaps{font-variant: small-caps;}
+    div.columns{display: flex; gap: min(4vw, 1.5em);}
+    div.column{flex: auto; overflow-x: auto;}
+    div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+    /* The extra [class] is a hack that increases specificity enough to
+       override a similar rule in reveal.js */
+    ul.task-list[class]{list-style: none;}
+    ul.task-list li input[type="checkbox"] {
+      font-size: inherit;
+      width: 0.8em;
+      margin: 0 0.8em 0.2em -1.6em;
+      vertical-align: middle;
+    }
+    .display.math{display: block; text-align: center; margin: 0.5rem auto;}
+  </style>
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>%F0%9F%94%A8</text></svg>">
+  <!--
+    St. Clair AI document style for forge docs.
+
+    The palette, type and spacing values below are copied from the St. Clair
+    system tokens (live-agentic-html-editor/vendor/stclair-doc-style/
+    system-tokens.css). This header does NOT link LAHE's ./.lahe-doc-style.css
+    bundle, on purpose: that bundle's document.css styles bare elements and a
+    generic .callout (an ink fill with white text) and puts padding on every body
+    child, and all three collide with the forge structure. So the page is
+    self-contained and reads the same whether or not LAHE is serving it.
+
+    The fonts are the one thing taken from LAHE: it serves the three vendored
+    faces at ./.lahe-fonts/<file>.woff2 from every folder. When that fails, each
+    stack falls back to system-ui and a platform monospace.
+
+    House rules this file keeps: no pills, no shadows, no gradients, no all caps
+    labels, no single-side coloured borders. Colour comes from tints and dots.
+  -->
+  <style>
+    @font-face {
+      font-family: "Schibsted Grotesk"; font-style: normal; font-weight: 500 700; font-display: swap;
+      src: url("./.lahe-fonts/schibsted-grotesk-variable.woff2") format("woff2");
+    }
+    @font-face {
+      font-family: "Hanken Grotesk"; font-style: normal; font-weight: 400 600; font-display: swap;
+      src: url("./.lahe-fonts/hanken-grotesk-variable.woff2") format("woff2");
+    }
+    @font-face {
+      font-family: "JetBrains Mono"; font-style: normal; font-weight: 400 500; font-display: swap;
+      src: url("./.lahe-fonts/jetbrains-mono-variable.woff2") format("woff2");
+    }
+
+    :root {
+      color-scheme: light dark;
+
+      /* St. Clair palette (raw names and values from system-tokens.css) */
+      --white: #ffffff;
+      --paper: #f7f7f5;
+      --ink: #1f1e1a;
+      --ink-soft: #55534b;
+      --ink-faint: #6b6860;
+      --rule: #dcdad6;
+      --purple: #46188c;
+      --purple-tint: #f1ebfa;
+      --link: #6d28d9;
+      --cobalt: #0760c7;
+      --cobalt-tint: #e6effc;
+      --sage-fill: #8fb5a0;
+      --sage: #637a63;
+      --sage-tint: #e7f1ed;
+
+      --font-display: "Schibsted Grotesk", "Hanken Grotesk", system-ui, sans-serif;
+      --font-body: "Hanken Grotesk", system-ui, -apple-system, "Helvetica Neue", sans-serif;
+      --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+
+      --r: 4px;
+
+      /* Forge roles. Prefixed --ff- so none of them can collide with a St. Clair
+         token of the same name if the two ever share a page. Dark mode repoints
+         these and nothing else. */
+      --ff-bg: var(--white);
+      --ff-fg: var(--ink);
+      --ff-soft: var(--ink-soft);
+      --ff-faint: var(--ink-faint);
+      --ff-rule: var(--rule);
+      --ff-divider: var(--ink);
+      --ff-link: var(--link);
+      --ff-accent: var(--cobalt);
+      --ff-panel: var(--paper);
+      --ff-code-bg: var(--cobalt-tint);
+      --ff-bullet: var(--sage);
+      --ff-hl-kw: var(--cobalt);
+      --ff-hl-str: var(--sage);
+      --ff-hl-num: var(--purple);
+
+      /* Callouts: a tint, a dot and a label colour each. */
+      --ff-req-bg: var(--cobalt-tint);      --ff-req-dot: var(--cobalt);    --ff-req-label: var(--cobalt);
+      --ff-nongoal-bg: var(--paper);        --ff-nongoal-dot: var(--ink-faint); --ff-nongoal-label: var(--ink-faint);
+      --ff-metric-bg: var(--sage-tint);     --ff-metric-dot: var(--sage);   --ff-metric-label: var(--ink-soft);
+      --ff-question-bg: var(--purple-tint); --ff-question-dot: var(--purple); --ff-question-label: var(--purple);
+      --ff-suggest-bg: var(--white);        --ff-suggest-dot: var(--sage);  --ff-suggest-label: var(--sage);
+      --ff-flag-bg: var(--ink);             --ff-flag-fg: var(--white);     --ff-flag-dot: var(--sage-fill);
+
+      /* Disposition verdicts */
+      --ff-accepted: var(--sage);
+      --ff-rejected: var(--purple);
+      --ff-deferred: var(--cobalt);
+    }
+
+    /* Dark: the St. Clair on-ink values. Body text is full white on ink, as the
+       system decides; tints are the accent mixed into the ink ground. */
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --ff-bg: var(--ink);
+        --ff-fg: var(--white);
+        --ff-soft: #d9d7d1;   /* --ink-soft-ondark */
+        --ff-faint: #b3b0a8;  /* --ink-faint-ondark */
+        --ff-rule: #4a4842;   /* --rule-ondark */
+        --ff-divider: var(--white);
+        --ff-link: var(--sage-fill);
+        --ff-accent: color-mix(in srgb, var(--cobalt) 45%, var(--white));
+        --ff-panel: color-mix(in srgb, var(--white) 6%, var(--ink));
+        --ff-code-bg: color-mix(in srgb, var(--cobalt) 22%, var(--ink));
+        --ff-bullet: var(--sage-fill);
+        --ff-hl-kw: color-mix(in srgb, var(--cobalt) 40%, var(--white));
+        --ff-hl-str: var(--sage-fill);
+        --ff-hl-num: color-mix(in srgb, var(--purple) 30%, var(--white));
+
+        --ff-req-bg: color-mix(in srgb, var(--cobalt) 22%, var(--ink));
+        --ff-req-dot: color-mix(in srgb, var(--cobalt) 45%, var(--white));
+        --ff-req-label: color-mix(in srgb, var(--cobalt) 35%, var(--white));
+        --ff-nongoal-bg: color-mix(in srgb, var(--white) 6%, var(--ink));
+        --ff-nongoal-dot: #b3b0a8; --ff-nongoal-label: #b3b0a8;
+        --ff-metric-bg: color-mix(in srgb, var(--sage) 30%, var(--ink));
+        --ff-metric-dot: var(--sage-fill); --ff-metric-label: var(--sage-fill);
+        --ff-question-bg: color-mix(in srgb, var(--purple) 45%, var(--ink));
+        --ff-question-dot: color-mix(in srgb, var(--purple) 30%, var(--white));
+        --ff-question-label: color-mix(in srgb, var(--purple) 25%, var(--white));
+        --ff-suggest-bg: var(--ink);
+        --ff-suggest-dot: var(--sage-fill); --ff-suggest-label: var(--sage-fill);
+        --ff-flag-bg: var(--paper); --ff-flag-fg: var(--ink); --ff-flag-dot: var(--sage);
+
+        --ff-accepted: var(--sage-fill);
+        --ff-rejected: color-mix(in srgb, var(--purple) 30%, var(--white));
+        --ff-deferred: color-mix(in srgb, var(--cobalt) 40%, var(--white));
+      }
+    }
+
+    /* Pandoc's own default styles load before this block. The rules marked
+       "pandoc" below undo the ones that fight this look: black table rules,
+       a block-level table, auto hyphens, italic h5/h6, and a:visited in
+       near-black, which outranks a plain a rule. */
+    html { scroll-behavior: smooth; -webkit-print-color-adjust: exact; print-color-adjust: exact; background: var(--ff-bg); }
+    * { box-sizing: border-box; }
+
+    body {
+      font-family: var(--font-body);
+      font-size: 17px;
+      line-height: 1.65;
+      color: var(--ff-fg);
+      background: var(--ff-bg);
+      max-width: 1080px;   /* --maxw */
+      margin: 0 auto;
+      padding: 56px 28px 104px;   /* 28px: --gutter */
+      -webkit-font-smoothing: antialiased;
+      text-rendering: optimizeLegibility;
+      hyphens: manual;   /* pandoc */
+    }
+
+    /* The reading measure, as in the International Style: prose stops at 68ch
+       (--read) and sits flush left in the wider column, so lines stay short and
+       the right side stays open. Tables, code, diagrams and callout boxes keep
+       the full column. */
+    p, ul, ol, blockquote { max-width: 68ch; }
+    :is(table, pre) :is(p, ul, ol, blockquote),
+    p:has(> img:only-child) { max-width: none; }
+
+    /* Title block (pandoc emits <header id="title-block-header">) */
+    header#title-block-header { padding-bottom: 8px; margin-bottom: 0; text-align: left; }
+    header#title-block-header h1.title {
+      font-family: var(--font-display);
+      font-size: clamp(34px, 4.6vw, 52px);
+      font-weight: 600;
+      margin: 0 0 12px;
+      letter-spacing: -0.012em;
+      line-height: 1.1;
+    }
+    header#title-block-header p.subtitle,
+    header#title-block-header p.author,
+    header#title-block-header p.date {
+      font-size: 20px;
+      line-height: 1.55;
+      color: var(--ff-soft);
+      margin: 0;
+    }
+
+    /* Cross-doc nav (injected by the build before the TOC). A plain line:
+       "Docs  Crucible · Brief · Architecture", the current doc in ink. */
+    .doc-nav {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: baseline;
+      gap: 4px 0;
+      margin: 20px 0 8px;
+      padding: 12px 0;
+      border-top: 1px solid var(--ff-rule);
+      border-bottom: 1px solid var(--ff-rule);
+      font-size: 15px;
+    }
+    .doc-nav .doc-nav-label {
+      font-family: var(--font-display);
+      font-weight: 600;
+      font-size: 14px;
+      color: var(--ff-faint);
+      margin-right: 14px;
+    }
+    .doc-nav a {
+      color: var(--ff-link);
+      text-decoration: underline;
+      text-decoration-thickness: 1px;
+      text-underline-offset: 3px;
+      border: 0;
+      background: none;
+      padding: 0;
+    }
+    .doc-nav a + a::before {
+      content: "\00B7";
+      display: inline-block;
+      color: var(--ff-faint);
+      margin: 0 10px;
+      text-decoration: none;
+    }
+    .doc-nav a:hover { background: none; text-decoration-thickness: 2px; }
+    .doc-nav a:visited { color: var(--ff-link); }
+    .doc-nav a.current, .doc-nav a.current:visited {
+      color: var(--ff-fg);
+      font-weight: 600;
+      text-decoration: none;
+      cursor: default;
+    }
+
+    /* TOC (pandoc emits <nav id="TOC">) */
+    nav#TOC {
+      margin: 28px 0 44px;
+      font-size: 15px;
+      line-height: 1.5;
+    }
+    nav#TOC::before {
+      content: "Contents";
+      display: block;
+      font-family: var(--font-display);
+      font-weight: 600;
+      font-size: 14px;
+      color: var(--ff-faint);
+      padding-bottom: 8px;
+      margin-bottom: 12px;
+      border-bottom: 2px solid var(--ff-divider);
+    }
+    nav#TOC ul { list-style: none; padding-left: 0; margin: 0; }
+    nav#TOC ul ul { padding-left: 18px; margin-top: 4px; }
+    nav#TOC li { margin-bottom: 4px; }
+    nav#TOC li::marker { content: none; }
+    nav#TOC a, nav#TOC a:visited { color: var(--ff-fg); text-decoration: none; border: 0; }
+    nav#TOC a:hover { color: var(--ff-link); text-decoration: underline; background: none; }
+
+    /* Headings: Schibsted at display weight, sentence case. An h2 hangs under a
+       full-width ink rule, the St. Clair section head. */
+    h1, h2, h3, h4, h5, h6 {
+      font-family: var(--font-display);
+      font-weight: 600;
+      line-height: 1.15;
+      letter-spacing: -0.012em;
+      color: var(--ff-fg);
+    }
+    h2 {
+      font-size: clamp(25px, 3vw, 32px);
+      margin: 64px 0 18px;
+      padding-top: 12px;
+      border-top: 2px solid var(--ff-divider);
+    }
+    h3 { font-size: clamp(19px, 2vw, 23px); margin: 40px 0 12px; }
+    h4 { font-size: 18px; margin: 28px 0 8px; }
+    h5, h6 { font-size: 17px; margin: 24px 0 8px; font-style: normal; font-weight: 600; }   /* pandoc */
+    h6 { color: var(--ff-soft); }
+
+    p { margin: 0 0 18px; }
+    p, li, td, dd { overflow-wrap: anywhere; }
+
+    a {
+      color: var(--ff-link);
+      text-decoration: underline;
+      text-decoration-thickness: 1px;
+      text-underline-offset: 3px;
+    }
+    a:visited { color: var(--ff-link); }   /* pandoc */
+    a:hover { text-decoration-thickness: 2px; }
+    :focus-visible { outline: 2px solid var(--ff-link); outline-offset: 3px; border-radius: var(--r); }
+
+    strong { color: inherit; font-weight: 700; }
+
+    ul, ol { margin: 0 0 18px; padding-left: 1.6em; }
+    li { margin: 0 0 8px; line-height: 1.55; }
+    li > p { margin-bottom: 8px; }
+    ul > li::marker { color: var(--ff-bullet); }
+    .callout ul > li::marker { color: var(--ff-dot); }
+    ol > li::marker { color: var(--ff-fg); font-weight: 600; }
+    li > ul, li > ol { margin-top: 8px; }
+
+    /* Callout boxes (from ::: callout-* fenced divs). A tint holding the text,
+       and a label row generated by CSS: a dot in the callout's colour, then the
+       label in the display face. */
+    .callout {
+      border-radius: var(--r);
+      padding: 16px 22px 18px;
+      margin: 18px 0;
+      background: var(--ff-panel);
+      color: var(--ff-fg);
+      line-height: 1.6;
+    }
+    .callout > :first-child { margin-top: 0; }
+    .callout > :last-child { margin-bottom: 0; }
+    .callout::before {
+      display: flex;
+      align-items: center;
+      gap: 9px;
+      font-family: var(--font-display);
+      font-weight: 600;
+      font-size: 14px;
+      line-height: 1.4;
+      margin-bottom: 6px;
+      padding-left: 16px;   /* room for the dot, which ::after draws */
+    }
+    .callout { position: relative; }
+    .callout::after {
+      content: "";
+      position: absolute;
+      left: 22px;
+      top: 23px;
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: var(--ff-dot, var(--ff-faint));
+    }
+    .callout-req      { background: var(--ff-req-bg);      --ff-dot: var(--ff-req-dot); }
+    .callout-req::before      { content: "Requirement";   color: var(--ff-req-label); }
+    .callout-nongoal  { background: var(--ff-nongoal-bg);  --ff-dot: var(--ff-nongoal-dot); border: 1px solid var(--ff-rule); }
+    .callout-nongoal::before  { content: "Non-goals";     color: var(--ff-nongoal-label); }
+    .callout-metric   { background: var(--ff-metric-bg);   --ff-dot: var(--ff-metric-dot); }
+    .callout-metric::before   { content: "Metrics";       color: var(--ff-metric-label); }
+    .callout-question { background: var(--ff-question-bg); --ff-dot: var(--ff-question-dot); }
+    .callout-question::before { content: "Open question"; color: var(--ff-question-label); }
+    .callout-suggest  { background: var(--ff-suggest-bg);  --ff-dot: var(--ff-suggest-dot); border: 1px solid var(--ff-suggest-dot); }
+    .callout-suggest::before  { content: "Suggestion";    color: var(--ff-suggest-label); }
+    .callout-flag     { background: var(--ff-flag-bg);     --ff-dot: var(--ff-flag-dot); color: var(--ff-flag-fg); }
+    .callout-flag::before     { content: "Red flag";      color: var(--ff-flag-fg); }
+    .callout-flag a, .callout-flag strong, .callout-flag code { color: inherit; }
+    .callout-flag code { background: color-mix(in srgb, currentColor 14%, transparent); }
+    /* The nongoal and suggest boxes carry a 1px border, so their dot moves with it. */
+    .callout-nongoal::after, .callout-suggest::after { left: 21px; top: 22px; }
+
+    /* Reviews section: the _reviews.md files are merged into the HTML below this
+       divider (they stay separate files on disk for agents). The build writes
+       the divider with an inline red rule; this repaints it in the house ink. */
+    hr.reviews-divider {
+      border: 0 !important;
+      border-top: 2px solid var(--ff-divider) !important;
+      margin: 88px 0 6px !important;
+      display: block !important;
+    }
+    hr.reviews-divider + * { margin-top: 0; }
+    .reviews-banner {
+      border-top: 1px solid var(--ff-divider);
+      padding: 14px 0 0;
+      margin: 0 0 32px;
+      font-size: 15px;
+      line-height: 1.55;
+      color: var(--ff-soft);
+    }
+    .reviews-banner::before {
+      display: block;
+      content: "Reviews, full prose";
+      font-family: var(--font-display);
+      font-weight: 600;
+      font-size: clamp(25px, 3vw, 32px);
+      line-height: 1.15;
+      letter-spacing: -0.012em;
+      color: var(--ff-fg);
+      margin-bottom: 8px;
+    }
+    /* Jump target for spec -> review-detail links; offset so the heading clears. */
+    .finding-anchor { display: inline-block; scroll-margin-top: 1.5rem; }
+    td a[href^="#"] { font-weight: 600; }
+
+    /* Inline xref deep-dive (from ::: xref fenced div) */
+    .xref {
+      font-size: 15px;
+      background: var(--ff-code-bg);
+      border-radius: var(--r);
+      padding: 10px 16px;
+      margin: 0 0 18px;
+      color: var(--ff-soft);
+      line-height: 1.5;
+    }
+    .xref::before {
+      content: "\21B3  See";
+      font-family: var(--font-display);
+      font-weight: 600;
+      font-size: 14px;
+      color: var(--ff-accent);
+      margin-right: 8px;
+    }
+    .xref > * { display: inline; margin: 0; }
+    .xref a, .xref a:visited { font-weight: 600; color: var(--ff-fg); }
+
+    /* Tables: the St. Clair naked ruled table. A 2px rule under the head,
+       hairlines between rows, no box, no tint, no shadow. The build wraps every
+       table in .table-scroll; the scrolling itself lives in
+       shared-assets/doc_fixes.css. */
+    .table-scroll { margin: 24px 0 32px; }
+    .table-scroll table { margin: 0; }
+    table {
+      border-collapse: collapse;
+      width: 100%;
+      margin: 24px 0 32px;
+      font-size: 15px;
+      line-height: 1.5;
+      background: none;
+      display: table;   /* pandoc sets block; .table-scroll does the scrolling */
+    }
+    tbody { border: 0; }   /* pandoc */
+    th { border-top: 0; }  /* pandoc */
+    thead th {
+      font-family: var(--font-display);
+      font-weight: 600;
+      font-size: 14px;
+      color: var(--ff-faint);
+      text-align: left;
+      padding: 0 16px 10px 0;
+      border-bottom: 2px solid var(--ff-divider);
+      vertical-align: bottom;
+    }
+    tbody td {
+      padding: 12px 16px 12px 0;
+      border-bottom: 1px solid var(--ff-rule);
+      vertical-align: top;
+    }
+    td:last-child, th:last-child { padding-right: 0; }
+    /* A short id column ("RF 12", "T3") stays on one line beside wide prose. */
+    tbody td:first-child { min-width: 3.4em; }
+    tbody tr:nth-child(even) { background: none; }
+    td > :first-child { margin-top: 0; }
+    td > :last-child { margin-bottom: 0; }
+
+    /* Disposition verdicts rendered by the build (Accepted/Rejected/Deferred).
+       A dot and the word, in the verdict's colour. */
+    td .accepted, span.accepted,
+    td .rejected, span.rejected,
+    td .deferred, span.deferred {
+      font-family: var(--font-display);
+      font-weight: 600;
+      white-space: nowrap;
+    }
+    td .accepted::before, span.accepted::before,
+    td .rejected::before, span.rejected::before,
+    td .deferred::before, span.deferred::before {
+      content: "";
+      display: inline-block;
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: currentColor;
+      margin-right: 7px;
+      vertical-align: 0.12em;
+    }
+    td .accepted, span.accepted { color: var(--ff-accepted); }
+    td .rejected, span.rejected { color: var(--ff-rejected); }
+    td .deferred, span.deferred { color: var(--ff-deferred); }
+
+    /* Inline + block code: JetBrains Mono on the cobalt tint, ink text.
+       Ligatures off, so an arrow in code reads as the two characters it is. */
+    code, pre {
+      font-family: var(--font-mono);
+      font-variant-ligatures: none;
+      font-feature-settings: "liga" 0, "calt" 0;
+    }
+    code {
+      font-size: 0.86em;
+      background: var(--ff-code-bg);
+      color: var(--ff-fg);
+      padding: 0.1em 0.35em;
+      border-radius: 3px;
+    }
+    pre {
+      font-size: 14px;
+      background: var(--ff-code-bg);
+      color: var(--ff-fg);
+      padding: 18px 24px;
+      border-radius: var(--r);
+      overflow-x: auto;
+      margin: 0 0 24px;
+      line-height: 1.55;
+      /* Wrap long lines instead of forcing a horizontal scroll (readability). */
+      white-space: pre-wrap;
+      word-break: break-word;
+      overflow-wrap: anywhere;
+    }
+    pre code { background: none; color: inherit; padding: 0; font-size: inherit; }
+    /* A code chip inside a tinted callout would vanish into the tint. */
+    .callout code { background: color-mix(in srgb, currentColor 9%, transparent); }
+
+    /* Highlighted blocks: pandoc wraps them in div.sourceCode and paints its
+       own transparent ground and a green-and-teal palette. Repaint both in the
+       St. Clair accents. */
+    div.sourceCode { margin: 0 0 24px; }
+    div.sourceCode > pre.sourceCode { background: var(--ff-code-bg); margin: 0; }
+    pre.sourceCode code span.kw, pre.sourceCode code span.cf, pre.sourceCode code span.im,
+    pre.sourceCode code span.op, pre.sourceCode code span.bu { color: var(--ff-hl-kw); font-weight: 500; }
+    pre.sourceCode code span.st, pre.sourceCode code span.ch, pre.sourceCode code span.ss,
+    pre.sourceCode code span.vs, pre.sourceCode code span.sc { color: var(--ff-hl-str); }
+    pre.sourceCode code span.dv, pre.sourceCode code span.fl, pre.sourceCode code span.bn,
+    pre.sourceCode code span.cn, pre.sourceCode code span.dt { color: var(--ff-hl-num); }
+    pre.sourceCode code span.co, pre.sourceCode code span.an, pre.sourceCode code span.cv,
+    pre.sourceCode code span.do, pre.sourceCode code span.in { color: var(--ff-soft); font-style: normal; font-weight: 400; }
+    pre.sourceCode code span.fu, pre.sourceCode code span.va, pre.sourceCode code span.at,
+    pre.sourceCode code span.ot { color: inherit; font-weight: 400; }
+
+    /* Mermaid blocks: pandoc renders ```mermaid as <pre class="mermaid">; the
+       Mermaid script replaces the text with SVG. It is a figure, not code: no
+       tint, a hairline frame, centred. Mermaid source must not wrap before the
+       script swaps it for SVG. */
+    pre.mermaid {
+      white-space: pre;
+      background: none;
+      border: 1px solid var(--ff-rule);
+      border-radius: var(--r);
+      padding: 24px;
+      text-align: center;
+      color: var(--ff-fg);
+      font-family: var(--font-body);
+    }
+    pre.mermaid svg { max-width: 100%; height: auto; }
+
+    blockquote {
+      margin: 18px 0;
+      padding: 2px 0 2px 18px;
+      border-left: 3px solid var(--ff-rule);
+      color: var(--ff-soft);
+    }
+    blockquote p:last-child { margin-bottom: 0; }
+
+    hr { border: none; border-top: 1px solid var(--ff-rule); margin: 44px 0; }
+    hr:has(+ h2) { display: none; }
+
+    img { max-width: 100%; height: auto; }
+
+    /* Task-list checkboxes from "- [ ]" lists */
+    ul.task-list { list-style: none; padding-left: 4px; }
+    ul.task-list li input[type="checkbox"] { margin-right: 8px; accent-color: var(--cobalt); }
+
+    @page { size: letter; margin: 0.7in 0.65in; }
+    @media (max-width: 620px) {
+      body { padding: 32px 16px 64px; font-size: 16px; }
+      .callout { padding: 14px 16px 16px; }
+      .callout::after { left: 16px; top: 22px; }
+      table { font-size: 14px; }
+    }
+    @media print {
+      :root { color-scheme: light; }
+      * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+      html, body { background: #fff; color: var(--ink); }
+      body { max-width: 100%; font-size: 11pt; padding: 0; }
+      .doc-nav { display: none; }
+      a { color: var(--ink); }
+      .callout, table, pre, blockquote { break-inside: avoid; }
+      h2, h3 { break-after: avoid; }
+    }
+  </style>
+  <script type="module">
+    import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.esm.min.mjs";
+    const dark = window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches;
+    mermaid.initialize({
+      startOnLoad: false,
+      theme: dark ? "dark" : "neutral",
+      securityLevel: "loose",
+      themeVariables: { fontFamily: '"Hanken Grotesk", system-ui, sans-serif' },
+    });
+    /* Pandoc emits ```mermaid blocks as <pre class="mermaid"><code>…</code></pre> with the
+       diagram source HTML-entity-encoded. Mermaid 10 reads innerHTML, so it sees the literal
+       <code> tag and &quot;/&gt; entities and throws syntax errors. Flatten each block to a
+       single decoded text node first (textContent decodes entities and drops the wrapper),
+       then render. Same fix as the personal-repo report builds (commit d525c50 there). */
+    function renderMermaid() {
+      document.querySelectorAll("pre.mermaid").forEach(function (el) {
+        if (!el.dataset.mflattened) {
+          el.textContent = el.textContent;
+          el.dataset.mflattened = "1";
+        }
+      });
+      mermaid.run({ querySelector: "pre.mermaid" });
+    }
+    if (document.readyState === "loading") {
+      window.addEventListener("DOMContentLoaded", renderMermaid);
+    } else {
+      renderMermaid();
+    }
+  </script>
+
+  <!-- The review comment module and the shared document fixes are injected here
+       at build time from ~/.claude/skills/shared-assets/ (comment_module.html +
+       doc_fixes.css) by shared_assets.resolve_header(). Do not paste a copy back
+       into this file. -->
+  <style>
+  /* Shared document fixes: one source for both document builds.
+
+     Injected at build time alongside comment_module.html, in place of the
+     <!-- SHARED_ASSETS --> placeholder in each pandoc header. Because it lands
+     last in <head>, these rules win over the same-specificity rules earlier in a
+     header without needing !important.
+
+     Keep this file to fixes that are true for every document we build. Anything
+     that depends on a skill's own look (colors, radius, shadow) belongs in that
+     skill's header. */
+
+  /* --- Tables: never spill past the reading column (plan Task 4.3, defect 1) ---
+     Two halves to the fix, and both are needed.
+     1. A wide table scrolls inside its wrapper. Both builds wrap every table in
+        <div class="table-scroll">.
+     2. Long unbroken strings (URLs, tokens, absolute paths) wrap instead of
+        setting a min-content width that forces the table wider than the page.
+        Without this the table is simply wider than the wrapper and the text is
+        cut off at the wrapper edge. */
+  .table-scroll {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    max-width: 100%;
+  }
+  .table-scroll > table { margin: 0; }
+  table { max-width: 100%; }
+  thead th, tbody td { overflow-wrap: anywhere; word-break: break-word; }
+  thead th code, tbody td code,
+  thead th a, tbody td a { overflow-wrap: anywhere; word-break: break-word; }
+
+  /* Print/PDF has no scrollbars, so show the whole table and let it shrink. */
+  @media print {
+    .table-scroll { overflow: visible; }
+  }
+
+  /* --- Charts: never let a chart set the page width (plan Task 4.3, defect 2) ---
+     The label-truncation fix itself is Plotly's automargin, applied in the
+     report header's render script. This is the CSS guard next to it: a chart
+     that computes a wider layout than its column stays inside the column
+     instead of pushing the whole page sideways. */
+  figure.plotly-chart,
+  figure.plotly-chart > div,
+  figure.chart svg,
+  figure.plotly-chart .main-svg { max-width: 100%; }
+
+  </style>
+</head>
+<body>
+<header id="title-block-header">
+<h1 class="title">Plan: Menu bar app</h1>
+</header>
+
+<div class="doc-nav"><span class="doc-nav-label">Docs</span><a href="00_crucible_menu_bar_app.html">Crucible</a><a href="01_brief_menu_bar_app.html">Brief</a><a href="02_architecture_menu_bar_app.html">Architecture</a><a href="03_plan_menu_bar_app.html" class="current">Plan</a><a href="04_progress_menu_bar_app.md">Progress</a></div>
+<nav id="TOC" role="doc-toc">
+<ul>
+<li><a href="#summary" id="toc-summary">Summary</a></li>
+<li><a href="#step-0-orchestrator-setup"
+id="toc-step-0-orchestrator-setup">Step 0: Orchestrator setup</a></li>
+<li><a href="#every-builders-contract"
+id="toc-every-builders-contract">Every builder's contract</a></li>
+<li><a href="#steps" id="toc-steps">Steps</a></li>
+<li><a href="#step-1-the-summary-workstream-summary-pr-1"
+id="toc-step-1-the-summary-workstream-summary-pr-1">Step 1: The summary
+(workstream summary, PR 1)</a></li>
+<li><a href="#step-2-the-mac-app-workstream-macapp-pr-2"
+id="toc-step-2-the-mac-app-workstream-macapp-pr-2">Step 2: The Mac app
+(workstream macapp, PR 2)</a></li>
+<li><a
+href="#step-3-installing-and-keeping-it-working-workstream-install-pr-2"
+id="toc-step-3-installing-and-keeping-it-working-workstream-install-pr-2">Step
+3: Installing and keeping it working (workstream install, PR 2)</a></li>
+<li><a href="#step-4-integrate-and-prove"
+id="toc-step-4-integrate-and-prove">Step 4: Integrate and prove</a></li>
+<li><a href="#workstreams-and-prs"
+id="toc-workstreams-and-prs">Workstreams and PRs</a></li>
+<li><a href="#test-list" id="toc-test-list">Test List</a></li>
+<li><a href="#acceptance-criteria"
+id="toc-acceptance-criteria">Acceptance Criteria</a></li>
+<li><a href="#plan-review" id="toc-plan-review">Plan Review</a></li>
+<li><a href="#plan-review-menu-bar-app"
+id="toc-plan-review-menu-bar-app">Plan review: Menu bar app</a>
+<ul>
+<li><a href="#summary-1" id="toc-summary-1">Summary</a></li>
+<li><a href="#cleanup-needed" id="toc-cleanup-needed">Cleanup
+needed</a></li>
+</ul></li>
+</ul>
+</nav>
+<h2 id="summary">Summary</h2>
+<p>Three workstreams, run side by side, landing as two PRs.</p>
+<ul>
+<li><strong>summary</strong> builds the helper's summary, its signed
+auth mode, and the read mark's round trip (plain Node, plus the page's
+post of a mark it already keeps). It lands first, on its own, as PR 1.
+Nothing on screen changes yet.</li>
+<li><strong>macapp</strong> builds the Swift app against a committed
+sample summary and proof vectors, so it does not wait for the
+helper.</li>
+<li><strong>install</strong> builds, installs, rebuilds and removes the
+app, and teaches the CLI to start a stopped helper.</li>
+</ul>
+<p>macapp and install land together as PR 2, the change Ken sees.</p>
+<pre class="mermaid"><code>flowchart LR
+    S0[&quot;Step 0&lt;br/&gt;orchestrator: wire contract,&lt;br/&gt;fixtures, proof vectors,&lt;br/&gt;manifest, npm script&quot;] --&gt; A[&quot;summary&quot;]
+    S0 --&gt; B[&quot;macapp&quot;]
+    S0 --&gt; C[&quot;install&quot;]
+    A --&gt; R1[&quot;reviews, gate&quot;] --&gt; P1[&quot;PR 1&quot;]
+    P1 --&gt; I[&quot;Step 4: integrate,&lt;br/&gt;measure, snapshots&quot;]
+    B --&gt; I
+    C --&gt; I
+    I --&gt; R2[&quot;reviews, gate,&lt;br/&gt;walkthrough&quot;] --&gt; P2[&quot;PR 2&quot;]</code></pre>
+<h2 id="step-0-orchestrator-setup">Step 0: Orchestrator setup</h2>
+<p>Done by the orchestrator before any builder starts, and committed to
+the feature branch.</p>
+<ul>
+<li><strong>The wire, written once.</strong> Add to
+<code>docs/CONTRACTS.md</code>: the <code>reply.seen</code> event row
+and the <code>reply_seen</code> field (the architecture's "Read marks"),
+the routes' paths, the summary's every field and type (the
+architecture's "<code>summary.read</code> response" made exact), and the
+signed-request wire (the architecture's "The signed-request wire").</li>
+<li><strong>Fixtures.</strong>
+<code>test/fixtures/menubar/summary.json</code> (every section filled),
+<code>summary_empty.json</code>, <code>summary_many.json</code> (120
+waiting documents, long titles, a bidirectional-override title). After
+Step 0 the summary workstream owns these files and every change to
+them.</li>
+<li><strong>Proof vectors.</strong>
+<code>test/fixtures/menubar/proof_vectors.json</code>: a secret, and for
+a GET with an empty body, a POST with a JSON body, and a signed 409
+answer, every input and the expected signature in hex. Node, the fake
+helper, and the Swift self-test each assert them.</li>
+<li><strong>Manifest.</strong> Add <code>src/service/summary.js</code>,
+<code>src/service/menubar.js</code>,
+<code>src/cli/commands/menubar.js</code> to
+<code>src/shared/manifest.js</code> with <code>planned: true</code>, so
+lint passes before the files exist.</li>
+<li><strong>npm script.</strong> Add <code>check:menubar</code>
+(<code>node scripts/check_menubar.js</code>) to
+<code>package.json</code>, and add it to <code>npm run gate</code>. It
+skips with a line on systems other than macOS. No builder edits
+<code>package.json</code>.</li>
+<li><strong>Capture probe.</strong> Try one small
+<code>screencapture</code> region and record on the progress page
+whether it is blank. That decides whether V29 and V32 screenshots come
+from an agent or from Ken.</li>
+<li><strong>Starting counts.</strong> Record the counts V33 uses:
+helpers, menu bar app processes, <code>fake_helper.js</code> processes,
+<code>launchctl list | grep lahe-test</code>, and
+<code>lahe-test*</code> plists in
+<code>~/Library/LaunchAgents</code>.</li>
+</ul>
+<h2 id="every-builders-contract">Every builder's contract</h2>
+<p>Every packet carries this block, near the top:</p>
+<ul>
+<li><strong>Never remove a file.</strong> No <code>rm</code>, no
+<code>git clean</code>, no deleting temp specs, screenshots,
+<code>.bak</code> files or <code>test-results/</code>. Put a rebuilt
+<code>dist/lahe-layer.js</code> back with
+<code>git checkout -- dist/lahe-layer.js</code>. List anything you would
+remove under "To delete at cleanup" in your progress file.</li>
+<li><strong>Never touch Ken's real login items.</strong> No command you
+run loads, stops, rewrites or removes <code>lahe-helper</code> or
+<code>lahe-menubar</code>, or anything in
+<code>~/.local/state/lahe</code>. Tests use
+<code>lahe-test-&lt;pid&gt;</code> labels, a temp <code>home</code>, and
+a temp state folder.</li>
+<li>Work in your own worktree on your own branch. Never commit
+<code>dist/</code>. Never edit <code>package.json</code> or
+<code>src/shared/manifest.js</code>; ask the orchestrator.</li>
+<li>Run <code>npm run gate:unit</code>. Run one named browser spec only
+when your change is browser behavior. Never the whole browser
+suite.</li>
+<li>Every process and launchd job a test starts is stopped in teardown.
+Report the V33 counts before and after your test runs.</li>
+<li>Read first: your leaf, the brief requirements and architecture
+sections it names, <code>docs/CONTRACTS.md</code> (the summary and the
+wire), and <code>CLAUDE.md</code>.</li>
+<li>Write <code>progress/phase6_workstream_&lt;name&gt;.md</code>: what
+you built, the tests, anything that differs from this plan, and
+screenshots for anything on screen. Screenshots there use fixture data
+only, never Ken's real documents.</li>
+<li>Hit a limit or find the plan wrong: ask the orchestrator in one
+line. Do not document around it.</li>
+<li>No em dashes anywhere.</li>
+</ul>
+<h2 id="steps">Steps</h2>
+<h2 id="step-1-the-summary-workstream-summary-pr-1">Step 1: The summary
+(workstream summary, PR 1)</h2>
+<div class="xref">
+<p>Architecture: "Data / State Changes" (the <code>reply.seen</code>
+event, <code>summary.json</code>, what counts as waiting on you, the
+<code>summary.read</code> response, the <code>summary.open</code>
+request), "Key Flows" (the first two), "Failure Modes", "Security &amp;
+Privacy Notes".</p>
+</div>
+<h3 id="task-11-the-read-marks-round-trip">Task 1.1: The read mark's
+round trip</h3>
+<p><strong>Spec:</strong> Move the unread rule
+(<code>needsToSeeReply</code>, <code>unseenReplyIds</code> and what they
+lean on) from <code>src/layer/tab_done.js</code> into
+<code>src/shared/record.js</code>, with <code>tab_done.js</code> calling
+it there; the rail's behaviour does not change. Add the
+<code>reply.seen</code> event to the closed vocabulary in
+<code>src/shared/protocol.js</code>, exactly as
+<code>docs/CONTRACTS.md</code> spells it. The projection folds it onto
+the item as <code>reply_seen</code> only when the stamp names the item's
+current reply, and drops and reports anything else. The page posts it
+through the outbox the way <code>item.closed</code> is posted, once per
+stamp, at the moment the rail writes its local mark; and a
+<code>reply_seen</code> on a polled record that matches the current
+reply is adopted into the local marks. <code>summary.js</code> owns
+<code>summary.json</code> with <code>seeded_at</code>, written on the
+first <code>summary.read</code>, and a fresh file on loss.
+<strong>Files:</strong> <code>src/shared/record.js</code>,
+<code>src/shared/protocol.js</code>,
+<code>src/service/projection.js</code>,
+<code>src/layer/tab_done.js</code> (the rule's home and the post),
+<code>src/layer/sync.js</code> (the post and the adoption),
+<code>docs/CONTRACTS.md</code> (the event row and the field, written by
+Step 0; the builder corrects it if the code has to differ), tests.
+<strong>Acceptance:</strong> V1, V3 to V7. <strong>Don't touch:</strong>
+how the rail draws a card or its "1 new" tag, replay, anything else in
+<code>src/layer/</code>.</p>
+<h3 id="task-12-the-one-review-summary">Task 1.2: The one-review
+summary</h3>
+<p><strong>Spec:</strong> The catalog reader exposes one review's
+summary on its own, and the Library's fold rule so the summary can count
+a folded document once, and the summary gains two things: open questions
+after the cutoff, and per-page newest agent reply times. Comment text
+still never leaves the reader. Titles lose control and Unicode format
+characters and are capped. <strong>Files:</strong>
+<code>src/service/catalog_reader.js</code>, tests.
+<strong>Acceptance:</strong> V2, V8, and the Library's own tests still
+pass unchanged.</p>
+<h3 id="task-13-the-summary-and-its-cache">Task 1.3: The summary and its
+cache</h3>
+<p><strong>Spec:</strong> <code>summary.js</code> builds the response
+from one-review summaries (cached per review on size, modified time and
+inode of <code>events.jsonl</code>, <code>review.json</code>,
+<code>meta.json</code> and the reviewed document, plus
+<code>catalog.json</code> once per request), folded with the Library's
+rule, plus the window holders and session liveness. Fields exactly as
+<code>docs/CONTRACTS.md</code>. Wire the summary in
+<code>src/service/index.js</code>. <strong>Files:</strong>
+<code>src/service/summary.js</code>, <code>src/service/index.js</code>,
+the menubar fixtures, tests. A test compares nested key paths and value
+types with <code>test/fixtures/menubar/summary.json</code> in both
+directions. <strong>Acceptance:</strong> V9 to V13, V17.</p>
+<h3 id="task-14-the-routes">Task 1.4: The routes</h3>
+<p><strong>Spec:</strong> A new auth mode, <code>AUTH.CLI_PROOF</code>,
+exactly as the wire in <code>docs/CONTRACTS.md</code>: signed requests,
+a 30-second window on an injected clock, a nonce cache, constant-time
+comparison, and signed answers (errors included). It passes
+<code>test/fixtures/menubar/proof_vectors.json</code>.
+<code>summary.read</code> (GET) and <code>summary.open</code> (POST,
+JSON) use it, refuse any <code>Sec-Fetch-*</code> header, sit behind the
+Host check, are never catalog routes, and <code>summary.open</code> also
+refuses an <code>Origin</code> header. <code>summary.read</code> takes
+the app's <code>summary_version</code> and answers a mismatch with
+<code>409 SUMMARY_VERSION</code>. <code>summary.open</code> runs catalog
+Open with <code>handoff: false</code>. <strong>Files:</strong>
+<code>src/shared/protocol.js</code>, <code>src/service/routes.js</code>,
+<code>src/service/auth.js</code>, tests. <strong>Acceptance:</strong>
+V14 to V16, V19, V20, V34.</p>
+<p><strong>Step test:</strong> <code>npm run gate:unit</code> green, and
+V19's browser spec green alone. The orchestrator rebuilds
+<code>dist/</code> once and opens PR 1.</p>
+<h2 id="step-2-the-mac-app-workstream-macapp-pr-2">Step 2: The Mac app
+(workstream macapp, PR 2)</h2>
+<div class="xref">
+<p>Architecture: "<code>summary.read</code> response",
+"<code>summary.open</code> request", "Install, rebuild, and Quit",
+"Failure Modes", "Security &amp; Privacy Notes". Brief: R1 to R14, R17,
+R18, UX Notes.</p>
+</div>
+<h3 id="task-21-the-app">Task 2.1: The app</h3>
+<p><strong>Spec:</strong> One Swift file,
+<code>macos/menubar/LaheMenuBar.swift</code>, using AppKit only, and an
+<code>Info.plist</code> with <code>LSUIElement</code> so it has no Dock
+icon. Arguments: <code>--state-dir</code>, passed by the login item; the
+port comes from <code>service.json</code>. It reads
+<code>cli-secret</code> and <code>service.json</code> from the state
+folder, connects to <code>127.0.0.1</code> at the port
+<code>service.json</code> names, signs every request with the
+<code>AUTH.CLI_PROOF</code> wire in <code>docs/CONTRACTS.md</code>
+(CryptoKit HMAC), drops any answer whose signature does not check, asks
+<code>summary.read</code> every 5 seconds and when the menu opens, and
+draws the icon and the menu in the brief's order. The icon is a template
+image drawn in code from the review layer's speech-bubble mark
+(<code>src/service/tab_icon.js</code>), with the count beside it. Four
+looks: nothing waiting, a count (to 99, then 99+), not running, can't
+tell. <strong>Files:</strong>
+<code>macos/menubar/LaheMenuBar.swift</code>,
+<code>macos/menubar/Info.plist</code>,
+<code>macos/menubar/README.md</code> (what it is, how it is built, that
+nothing here is required). <strong>Acceptance:</strong> V28, V29.</p>
+<h3 id="task-22-opening-quit-stop-start">Task 2.2: Opening, Quit, Stop,
+Start</h3>
+<p><strong>Spec:</strong> A click calls <code>summary.open</code> and
+opens the returned address only when it passes the allowlist
+(<code>http</code>, no user part, <code>library.lahe.localhost</code> or
+a site name plus <code>.lahe.localhost</code>, port absent or the pages
+port), rebuilt from its parsed parts; <code>url: null</code> opens the
+Library. Hide exits with status 0. Stop writes <code>stopped.json</code>
+in the state folder, then runs <code>launchctl bootout</code> on the
+helper's label; while the file stands the menu shows "Stopped by you at
+<time>" and Start. Start removes the file, then runs bootstrap and
+kickstart. The line under Stop says agents' commands will fail until he
+starts it again. Labels and plist paths are constants in the app, never
+read from a file; tests set their own through a compile-time
+<code>-D</code> flag. Start does not check the plist's contents
+(architecture, "Install, rebuild, and Quit"). Errors go to
+<code>menubar.log</code> in the state folder.</p>
+<p>Debug modes, none of which need any macOS permission:
+<code>--self-test</code> (the allowlist, count formatting,
+<code>proof_vectors.json</code>, and <code>--decode &lt;file&gt;</code>
+for a captured summary; non-zero on a failure),
+<code>--snapshot &lt;dir&gt;</code> (each icon look drawn on a light and
+a dark background, as PNGs), <code>--dump-menu</code> (the built menu's
+titles, order, enabled state and tooltips as JSON), and a flag that
+posts the wake notification so V29 can test it. <strong>Files:</strong>
+the same. <strong>Acceptance:</strong> V30, V31.</p>
+<h3 id="task-23-build-check-and-fake-helper">Task 2.3: Build check and
+fake helper</h3>
+<p><strong>Spec:</strong>
+<code>test/fixtures/menubar/fake_helper.js</code> serves the sample
+summaries on a temp port, signs its answers by the wire (and checks
+<code>proof_vectors.json</code> at start), and can answer 401, a signed
+409, a timeout, an unsigned answer, or nothing, so every look and every
+change between looks can be shown. While building, compile the app with
+a throwaway local command; the committed build recipe is install's. Hand
+back the exact file list and compiler flags you used.
+<strong>Files:</strong>
+<code>test/fixtures/menubar/fake_helper.js</code>.
+<strong>Acceptance:</strong> V29 snapshot images and menu dumps on the
+progress page; the file list and flags in the hand-back.</p>
+<p><strong>Step test:</strong> the app builds, passes
+<code>--self-test</code>, and shows every V29 look and change against
+the fake helper.</p>
+<h2
+id="step-3-installing-and-keeping-it-working-workstream-install-pr-2">Step
+3: Installing and keeping it working (workstream install, PR 2)</h2>
+<div class="xref">
+<p>Architecture: "<code>install.json</code> gains a <code>menubar</code>
+block", "Install, rebuild, and Quit", "Failure Modes", "Security &amp;
+Privacy Notes". Brief: R14 to R20. The existing login item:
+<code>docs/ongoing/STABLE_ADDRESSES.md</code> and
+<code>src/service/login_item.js</code>.</p>
+</div>
+<h3 id="task-31-build-and-the-apps-login-item">Task 3.1: Build and the
+app's login item</h3>
+<p><strong>Spec:</strong> <code>src/service/menubar.js</code>, macOS
+only, holds the one build recipe: find <code>swiftc</code> with
+<code>xcrun</code>, copy the fixed file list from the installed clone's
+<code>macos/menubar/</code> into a fresh temp folder, hash it there,
+compile it there with <code>/usr/bin/xcrun swiftc</code> and pinned
+flags (<code>-swift-version 5</code>, the host architecture, a macOS 13
+floor; argument arrays, never a shell), and rename the result into
+<code>&lt;state&gt;/menubar/Lahe.app</code> only on success, write
+<code>~/Library/LaunchAgents/lahe-menubar.plist</code> (RunAtLoad;
+KeepAlive only on a crash; the app's arguments pinned as absolute
+values), record the <code>menubar</code> block in
+<code>install.json</code> with the source stamp. Every system call goes
+through the injectable runner <code>login_item.js</code> already uses,
+so tests run on every system, and the label and home are seams so tests
+use <code>lahe-test-&lt;pid&gt;</code> and a temp home.
+<code>scripts/check_menubar.js</code> calls the same build function and
+runs the app's <code>--self-test</code>; it skips elsewhere than macOS.
+The file list starts as <code>LaheMenuBar.swift</code> and
+<code>Info.plist</code>; the orchestrator reconciles it with macapp's
+hand-back. <strong>Files:</strong> <code>src/service/menubar.js</code>,
+<code>scripts/check_menubar.js</code>, tests.
+<strong>Acceptance:</strong> V21, V22 (logic), V25.</p>
+<h3 id="task-32-install-uninstall-show-rebuild">Task 3.2: Install,
+uninstall, show, rebuild</h3>
+<p><strong>Spec:</strong> <code>lahe install</code> on a Mac asks once
+whether to add the icon; <code>--menu-bar</code> and
+<code>--no-menu-bar</code> answer without asking; an existing install
+plus <code>--menu-bar</code> adds only the icon. On Linux and Windows
+the flag prints that it is macOS only. <code>lahe uninstall</code>
+removes the icon. New <code>lahe menubar show</code> (kickstart the
+app's item) and <code>lahe menubar rebuild</code>.
+<strong>Files:</strong> <code>src/cli/commands/install.js</code>,
+<code>src/cli/commands/menubar.js</code>, <code>src/cli/index.js</code>,
+tests. <strong>Acceptance:</strong> V21, V22, V23, V25.</p>
+<h3 id="task-33-rebuild-on-change">Task 3.3: Rebuild on change</h3>
+<p><strong>Spec:</strong> <code>menubar.tick(env)</code>: on macOS with
+the icon installed, compare the source stamp of the fixed file list in
+the clone named in <code>install.json</code> (never a worktree) with the
+recorded one and, when it changed, rebuild in a child process, swap the
+app in, and restart it only if <code>launchctl print</code> says it was
+running. Confirm in your hand-back that the always-on helper runs its
+15-second timer; the orchestrator wires the call in
+<code>src/service/index.js</code>. A failed build keeps the old app,
+writes the error to <code>menubar.log</code> and records it in
+<code>install.json</code>, and is not retried until the stamp changes
+again. <strong>Files:</strong> <code>src/service/menubar.js</code>,
+tests. <strong>Acceptance:</strong> V24.</p>
+<h3 id="task-34-starting-a-stopped-helper-and-status">Task 3.4: Starting
+a stopped helper, and status</h3>
+<p><strong>Spec:</strong> <code>startThroughItem</code> first looks for
+<code>&lt;state&gt;/stopped.json</code>: if it stands, it throws the
+stop message (who, when, how to start it) and starts nothing, so the
+command exits 1. Otherwise, when kickstart reports the job is not
+loaded, it bootstraps the helper's plist and then kickstarts, after
+checking the plist's contents are what <code>login_item.js</code> would
+write for the recorded install. <code>lahe install</code> removes
+<code>stopped.json</code>; the helper removes it on its own start.
+Labels and paths are constants. <code>lahe status</code> prints one line
+on the icon, and says "stopped by you" when the marker stands.
+<strong>Files:</strong> <code>src/service/login_item.js</code>,
+<code>src/cli/commands/status.js</code>, tests.
+<strong>Acceptance:</strong> V26, V27.</p>
+<p><strong>Step test:</strong> <code>npm run gate:unit</code> green with
+the runner mocked. The real build against macapp's source happens at
+Task 4.1.</p>
+<h2 id="step-4-integrate-and-prove">Step 4: Integrate and prove</h2>
+<h3 id="task-41-integrate">Task 4.1: Integrate</h3>
+<p><strong>Spec:</strong> Merge macapp and install into the feature
+branch over PR 1. Wire <code>menubar.tick</code> into the helper's
+15-second timer in <code>src/service/index.js</code>. Clear
+<code>planned: true</code> on the two install files. Check macapp's file
+list and flags against the build recipe's constant. Build the app with
+the real recipe and run it against a real helper on a temp state folder
+with test labels (not only the fake helper), and decode a summary
+captured from the real <code>summary.js</code>
+(<code>--self-test --decode</code>). <strong>Acceptance:</strong> V28 to
+V31, V34 green; snapshot images of every look on the progress page.</p>
+<h3 id="task-42-measure">Task 4.2: Measure</h3>
+<p><strong>Spec:</strong> Run V18 by its written method on a copy of
+Ken's state folder, and record the numbers and method on the progress
+page. <strong>Acceptance:</strong> V18 passes its rule.</p>
+<h3 id="task-43-walk-on-real-data">Task 4.3: Walk on real data</h3>
+<p><strong>Spec:</strong> On a copy of Ken's state folder (pids
+neutralized, other ports, test labels), where PR 1's helper has already
+run, walk V32 and time it at the icon. Real-data screenshots go in
+<code>~/Documents/lahe-menubar-review/</code>, outside the repo, and are
+linked from the review page, never committed.
+<strong>Acceptance:</strong> V32 green.</p>
+<h3 id="task-44-docs">Task 4.4: Docs</h3>
+<p><strong>Spec:</strong> Write <code>docs/ongoing/MENU_BAR.md</code>
+(how it works now). Update <code>docs/CLI.md</code>
+(<code>lahe install --menu-bar</code>, <code>lahe menubar</code>),
+<code>docs/INSTALL.md</code>, <code>CLAUDE.md</code> (directory layout:
+<code>macos/</code>; <code>check:menubar</code> in the gate), and
+<code>docs/diagrams/system_overview.md</code> (the app as a reader of
+the helper). The agent contract and the skill do not change: agents work
+as before. <strong>Acceptance:</strong> Each doc says what the code
+does; a reader at zero can install the icon from
+<code>docs/INSTALL.md</code> alone.</p>
+<h3 id="task-45-kens-real-install">Task 4.5: Ken's real install</h3>
+<p><strong>Spec:</strong> With Ken's go-ahead, he runs
+<code>lahe install --menu-bar</code> on his real setup. The orchestrator
+checks the result against V32's steps and screenshots outside the repo.
+<strong>Acceptance:</strong> The icon runs on Ken's Mac under the real
+labels, and his helper was never interrupted by a test.</p>
+<h2 id="workstreams-and-prs">Workstreams and PRs</h2>
+<div class="table-scroll"><table>
+<thead>
+<tr>
+<th>Workstream</th>
+<th>Tasks</th>
+<th>Agent and model</th>
+<th>Reuses</th>
+<th>Owns</th>
+<th>Depends on</th>
+<th>PR</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>summary</td>
+<td>1.1 to 1.4</td>
+<td>new agent, Opus</td>
+<td>none</td>
+<td><code>src/service/summary.js</code>, <code>catalog_reader.js</code>,
+<code>projection.js</code>, <code>routes.js</code>,
+<code>auth.js</code>, <code>index.js</code>,
+<code>src/shared/protocol.js</code>, <code>src/shared/record.js</code>
+(the unread rule), <code>src/layer/tab_done.js</code> and
+<code>sync.js</code> (the mark's post and adoption only), the menubar
+fixtures after Step 0, their tests</td>
+<td>Step 0</td>
+<td>1</td>
+</tr>
+<tr>
+<td>macapp</td>
+<td>2.1 to 2.3</td>
+<td>new agent, Opus</td>
+<td>none</td>
+<td><code>macos/menubar/</code>,
+<code>test/fixtures/menubar/fake_helper.js</code></td>
+<td>Step 0</td>
+<td>2</td>
+</tr>
+<tr>
+<td>install</td>
+<td>3.1 to 3.4</td>
+<td>new agent, Opus</td>
+<td>none</td>
+<td><code>src/service/menubar.js</code>,
+<code>src/service/login_item.js</code>,
+<code>src/cli/commands/install.js</code>,
+<code>src/cli/commands/menubar.js</code>,
+<code>src/cli/commands/status.js</code>, <code>src/cli/index.js</code>,
+<code>scripts/check_menubar.js</code>, their tests</td>
+<td>Step 0</td>
+<td>2</td>
+</tr>
+</tbody>
+</table></div>
+<ul>
+<li><strong>Models.</strong> All three are Opus. summary carries the
+counting rules, which are the feature. macapp is the repo's first native
+code. install carries real launchd behavior with no pattern in this
+repo, the build recipe, and the hide-respecting restart.</li>
+<li><strong>Agent reuse.</strong> Fix rounds go back to the builder that
+owns the file. The summary builder takes any later change to the
+summary's shape or the wire, so the app and the helper never
+disagree.</li>
+<li><strong>Token plan.</strong> Three agents in parallel is worth it:
+they share no files, and each packet is small. Packets do not include
+the alternatives leaf, the reviews, or the crucible.</li>
+<li><strong>Packet sources.</strong> summary: brief R1 to R13, R21 to
+R23; architecture "Data / State Changes", "Key Flows" (first two),
+"Failure Modes", "Security &amp; Privacy Notes";
+<code>docs/CONTRACTS.md</code>. macapp: brief R1 to R14, R17, R18, UX
+Notes; architecture "<code>summary.read</code> response", "The
+signed-request wire", "<code>summary.open</code> request", "Install,
+rebuild, and Quit", "Failure Modes", "Security &amp; Privacy Notes";
+<code>docs/CONTRACTS.md</code>. install: brief R14 to R20; architecture
+"<code>install.json</code> gains a <code>menubar</code> block",
+"Install, rebuild, and Quit", "Failure Modes", "Security &amp; Privacy
+Notes"; <code>docs/ongoing/STABLE_ADDRESSES.md</code> for the existing
+login item.</li>
+<li><strong>PR 1</strong> (summary): the summary routes and their signed
+auth mode, the <code>reply.seen</code> event and the shared unread rule,
+and the rebuilt bundle. Before opening: a code review
+(<code>feature-dev:code-reviewer</code>) and a security review
+(<code>review-security</code>) of the integrated diff, both owned by the
+orchestrator, then <code>npm run gate</code> locally with "0 failed" in
+the PR body. After merge: <code>npm run gate</code> on main. Proof: V1
+to V17, V19, V20, V34 (helper half). Every surface stays as it was;
+nothing reads the summary yet.</li>
+<li><strong>PR 2</strong> (macapp and install): the app,
+<code>lahe install --menu-bar</code>, <code>lahe menubar</code>, Stop
+and Start, status, docs. Before opening: a code review, an independent
+check of the brief's requirements on the integrated code (a fresh
+<code>general-purpose</code> agent), a design review of the snapshot
+images and the menu dump (a <code>general-purpose</code> agent prompted
+as a staff designer), the walkthrough, then <code>npm run gate</code>
+locally. After merge: <code>npm run gate</code> on main. Proof: V18, V21
+to V34.</li>
+</ul>
+<h2 id="test-list">Test List</h2>
+<div class="callout callout-req">
+<p>The one verification table. U is a unit test under
+<code>test/unit/</code> (runs on every system). B is a Playwright spec
+under <code>test/browser/</code>. M is a Mac-only check or a measured or
+walked check, with its evidence on the progress page. Times in unit
+tests use an injected clock, never real waiting. Every process and
+launchd job a test starts is stopped in teardown.</p>
+<div class="table-scroll"><table>
+<thead>
+<tr>
+<th>Row</th>
+<th>Requirement or failure</th>
+<th>Behavior to prove</th>
+<th>Kind</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>V1</td>
+<td>R4 cutoff</td>
+<td><code>seeded_at</code> is written on the first
+<code>summary.read</code>, not on helper start; replies older than it
+count neither as questions nor as unread</td>
+<td>U</td>
+</tr>
+<tr>
+<td>V2</td>
+<td>R5 one rule</td>
+<td>A question counts exactly as any other unread reply: it stops
+counting when its card is opened, Ken answers (revision moves), an agent
+replies again, Ken marks it done, or the card is deleted; the icon's
+count for a fixture review equals the rail's badge total for the same
+records</td>
+<td>U</td>
+</tr>
+<tr>
+<td>V3</td>
+<td>R6 unread</td>
+<td>The helper and the rail call one function in
+<code>src/shared/record.js</code>; a reply it names counts until a
+<code>reply.seen</code> naming its stamp is projected; a routine handled
+reply, a tool round, and a card the reviewer closed never count; a mark
+for an older reply does not clear a newer one</td>
+<td>U</td>
+</tr>
+<tr>
+<td>V4</td>
+<td>R6 old bundle</td>
+<td>A review with no <code>reply.seen</code> events counts every reply
+the rule names, so an old page holds the count and never clears it
+early</td>
+<td>U</td>
+</tr>
+<tr>
+<td>V5</td>
+<td>Mark round trip</td>
+<td>Opening a card posts one <code>reply.seen</code> per stamp, not one
+per paint; a <code>reply_seen</code> on a polled record clears that
+card's "1 new" in a second browser context</td>
+<td>B</td>
+</tr>
+<tr>
+<td>V6</td>
+<td>Seed loss</td>
+<td>A corrupt or missing <code>summary.json</code> starts fresh with
+<code>seeded_at = now</code>; no count goes up</td>
+<td>U</td>
+</tr>
+<tr>
+<td>V7</td>
+<td><code>reply.seen</code> bounds (SR3)</td>
+<td>An item the review does not hold, a stamp over 64 characters, a
+stamp that is not the item's current reply, and a non-string each are
+dropped and reported, and store nothing</td>
+<td>U</td>
+</tr>
+<tr>
+<td>V8</td>
+<td>R7</td>
+<td>Retired, ended, and missing-file reviews never appear under waiting
+on you</td>
+<td>U</td>
+</tr>
+<tr>
+<td>V9</td>
+<td>R1</td>
+<td>Three answered cards on one document count as one; two reviews
+folded into one Library row count as one; <code>count</code> equals the
+number of listed documents</td>
+<td>U</td>
+</tr>
+<tr>
+<td>V10</td>
+<td>R9</td>
+<td><code>waiting_on_agents.count</code> equals the Library's waiting
+total for the same state folder</td>
+<td>U</td>
+</tr>
+<tr>
+<td>V11</td>
+<td>R10</td>
+<td>Open documents are the current window holders, focused or not;
+connected sessions are those the liveness test calls listening or
+working; a session's name is its Library rename, else its newest
+review's title; a session row's review is its most recent document</td>
+<td>U</td>
+</tr>
+<tr>
+<td>V12</td>
+<td>R11, R12</td>
+<td>Recent follows the Library's order; open, connected and recent cap
+at 8 items with a correct <code>more</code>; waiting on you is never
+capped</td>
+<td>U</td>
+</tr>
+<tr>
+<td>V13</td>
+<td>Privacy</td>
+<td>The summary of a fixture state folder holds no comment text, no
+token, no absolute path, no control or Unicode format character, and no
+title past the cap</td>
+<td>U</td>
+</tr>
+<tr>
+<td>V14</td>
+<td>R22 auth (SR2)</td>
+<td>No proof: 401. A wrong key: 401. A proof older than 30 s: 401. A
+repeated nonce: 401. A good proof with any <code>Sec-Fetch-*</code>
+header: refused, including a GET with no <code>Origin</code>.
+<code>summary.open</code> with an <code>Origin</code> header: refused. A
+non-loopback Host, or the path at <code>library.lahe.localhost</code>:
+refused. The raw CLI secret header or the Library token: refused.
+<code>auth.js</code> matches <code>proof_vectors.json</code></td>
+<td>U</td>
+</tr>
+<tr>
+<td>V15</td>
+<td>R11 open</td>
+<td><code>summary.open</code> returns the address catalog Open returns,
+never writes to the request queue, and returns <code>url: null</code>
+for a row only an agent can serve</td>
+<td>U</td>
+</tr>
+<tr>
+<td>V16</td>
+<td>Version</td>
+<td>A request naming another version gets a signed
+<code>409 SUMMARY_VERSION</code></td>
+<td>U</td>
+</tr>
+<tr>
+<td>V17</td>
+<td>R21 cache</td>
+<td>A second summary with nothing changed rebuilds no review; touching
+one review's <code>events.jsonl</code> rebuilds only that review; a
+same-size rewrite in the same millisecond still rebuilds; deleting the
+reviewed document drops it from waiting on you on the next summary; a
+Library rename shows on the next summary</td>
+<td>U</td>
+</tr>
+<tr>
+<td>V18</td>
+<td>R21 measured</td>
+<td>On a copy of Ken's state folder, over 10 idle minutes each: the
+helper's processor time (<code>ps -o time=</code>) with the app running
+minus with it stopped; the app's own processor time; one review tab's
+renderer processor time in a Playwright Chromium with only that page
+open. Pass: the first two together are no more than the third, and the
+summary's warm median request time is 10 ms or less. Battery from
+<code>top -stats pid,power</code> samples is recorded beside them</td>
+<td>M</td>
+</tr>
+<tr>
+<td>V19</td>
+<td>R3 timing</td>
+<td>With a real page, at the summary: an agent question shows within 5
+s; opening its card clears it within 10 s; a routine handled reply never
+shows; a page left open without its card opened holds the count. Run on
+a Markdown review and on a multi-page site review</td>
+<td>B</td>
+</tr>
+<tr>
+<td>V20</td>
+<td>R23</td>
+<td>The unit suite passes on Linux in CI with the new modules
+loaded</td>
+<td>U</td>
+</tr>
+<tr>
+<td>V21</td>
+<td>R15 install</td>
+<td>On macOS (runner mocked, test labels): <code>--menu-bar</code>
+builds, writes the app's plist, and records the <code>menubar</code>
+block; <code>--no-menu-bar</code> skips it; with neither, a terminal is
+asked once; an existing install plus <code>--menu-bar</code> leaves the
+helper's plist, its process and the rest of <code>install.json</code>
+untouched. On Linux and Windows the flag says it is macOS only and the
+install goes on</td>
+<td>U</td>
+</tr>
+<tr>
+<td>V22</td>
+<td>R16</td>
+<td>No <code>swiftc</code>: the message names
+<code>xcode-select --install</code>, no plist is written, and the rest
+of the install completes</td>
+<td>U</td>
+</tr>
+<tr>
+<td>V23</td>
+<td>R17</td>
+<td>The plist restarts the app only on a crash;
+<code>lahe menubar show</code> starts it; <code>lahe review</code>,
+<code>lahe status</code> and <code>lahe monitor</code> never touch the
+app's item</td>
+<td>U</td>
+</tr>
+<tr>
+<td>V24</td>
+<td>R18 rebuild (SR5)</td>
+<td>A changed source stamp in the installed clone rebuilds once in a
+fresh temp folder and renames into place; it restarts the app only if it
+was running, so a hidden app stays hidden; a failed build keeps the old
+app, logs, and does not retry until the stamp changes again; a
+worktree's copy is never compiled</td>
+<td>U</td>
+</tr>
+<tr>
+<td>V25</td>
+<td>R19</td>
+<td><code>lahe uninstall</code> removes the app's plist, the built app,
+and the <code>menubar</code> block, and leaves nothing loaded</td>
+<td>U</td>
+</tr>
+<tr>
+<td>V26</td>
+<td>R20</td>
+<td><code>lahe status</code> says installed and running, installed and
+not running, not installed, or names the failed rebuild</td>
+<td>U</td>
+</tr>
+<tr>
+<td>V27</td>
+<td>R14 Stop holds (SR6, SR7)</td>
+<td>With <code>stopped.json</code> standing,
+<code>startThroughItem</code> throws the stop message naming the time
+and starts nothing, so <code>lahe review</code> exits 1;
+<code>lahe install</code> removes the marker; the helper removes it on
+start. Without it, when kickstart reports the job not loaded, the CLI
+checks the plist's contents, bootstraps, then kickstarts; a plist that
+differs is refused with a message to run <code>lahe install</code></td>
+<td>U</td>
+</tr>
+<tr>
+<td>V28</td>
+<td>Build</td>
+<td><code>npm run check:menubar</code> builds the app through the one
+recipe and runs its self-test on a Mac, and says it skipped
+elsewhere</td>
+<td>M</td>
+</tr>
+<tr>
+<td>V29</td>
+<td>R1, R2, R8 to R14</td>
+<td>Against the fake helper: <code>--snapshot</code> renders every look
+(nothing waiting, 3, 99+, not running, can't tell) on a light and a dark
+background; <code>--dump-menu</code> prints the menu's titles, order,
+enabled state and tooltips for each fixture, matching the brief's order.
+In sequence: from 3 to a timeout, a 401, a 409, and an unsigned answer,
+the icon leaves "3" within one poll; a simulated wake shows can't tell
+until a fresh answer; a replaced secret file recovers on the next poll.
+Real menu-bar screenshots when the Step 0 probe allows, else Ken's at
+the walkthrough</td>
+<td>M</td>
+</tr>
+<tr>
+<td>V30</td>
+<td>Allowlist (SR4)</td>
+<td>The app's self-test rejects <code>javascript:</code>,
+<code>file:</code>, <code>https://</code>, a user part,
+<code>localhost</code>, <code>127.0.0.1</code>,
+<code>&lt;name&gt;.lahe</code>, and a wrong port; accepts
+<code>library.lahe.localhost</code> and
+<code>&lt;name&gt;.lahe.localhost</code> with no port or the pages port;
+and passes <code>proof_vectors.json</code></td>
+<td>M</td>
+</tr>
+<tr>
+<td>V31</td>
+<td>R14, R17 Quit</td>
+<td>With test labels and a test state folder: Hide exits and stays
+hidden through a crash test of the helper; Stop writes the marker and
+unloads the helper, the menu reads "Stopped by you" with the time, and a
+<code>lahe status</code> against that state folder says so and exits 1
+on start; Start removes the marker, bootstraps and kickstarts without a
+contents check</td>
+<td>M</td>
+</tr>
+<tr>
+<td>V32</td>
+<td>Walkthrough</td>
+<td>On a copy of Ken's state folder where PR 1's helper already ran,
+timed at the icon: install, day one shows no number, an agent asks a
+question and the icon shows 1 within 10 s, clicking opens the page at
+its address, answering clears it within 15 s, a stray session shows
+under connected</td>
+<td>M</td>
+</tr>
+<tr>
+<td>V33</td>
+<td>Leaks</td>
+<td>After the full run, the five Step 0 counts (helpers, app processes,
+fake helpers, <code>lahe-test</code> launchd jobs,
+<code>lahe-test</code> plists) equal their starting values</td>
+<td>M</td>
+</tr>
+<tr>
+<td>V34</td>
+<td>Squatter (SR1)</td>
+<td>A fake server on the helper's port receives only proofs, never the
+secret; replaying a captured proof to the real helper is refused; the
+app drops the fake server's unsigned answer and shows can't tell</td>
+<td>U and M</td>
+</tr>
+</tbody>
+</table></div>
+</div>
+<h2 id="acceptance-criteria">Acceptance Criteria</h2>
+<div class="callout callout-metric">
+<p><strong>Standard (every feature inherits these; keep them
+verbatim):</strong></p>
+<ul class="task-list">
+<li><label><input type="checkbox" />Full test suite green, not just the
+new tests.</label></li>
+<li><label><input type="checkbox" />Design and lint gates green (the
+project's gate command).</label></li>
+<li><label><input type="checkbox" />Every requirement in the brief
+walked end to end in the browser, on the running app.</label></li>
+<li><label><input type="checkbox" />Nothing punted: no TODOs, no stubbed
+tests, no "out of scope" that was in scope.</label></li>
+<li><label><input type="checkbox" />Implementation matches brief and
+architecture; any deviation is deliberate and written down under Changes
+from plan on the progress page.</label></li>
+<li><label><input type="checkbox" /><strong>It looks like a staff
+designer built it.</strong> The whole surface holds up at that level,
+and includes at least:</label>
+<ul>
+<li>Clear visual hierarchy and information architecture. You know where
+to look, and the page's organization makes sense.</li>
+<li>Consistency with the rest of the app. Buttons look like our other
+buttons, hover states follow the same convention, primary and secondary
+carry the same color meaning they carry elsewhere.</li>
+<li>Honest feedback. Toasts and status messages report what actually
+happened. Never an optimistic "done" for something still in flight, or
+something that failed.</li>
+<li>Micro-animations that mean something. Motion signals state or
+direction; it isn't decoration.</li>
+<li>Copy in the brand voice (the project's brand or voice doc).</li>
+<li>Existing components reused and the style guide followed. Nothing
+reads as a stock framework default.</li>
+</ul></li>
+<li><label><input type="checkbox" />It reads as one feature, not several
+agents' work stitched together: consistent components, spacing, and
+interaction patterns across every surface it touches.</label></li>
+</ul>
+<p><strong>This feature:</strong></p>
+<ul class="task-list">
+<li><p><label><input type="checkbox" />The count is right: V1 to V9,
+V17, V19 green.</label></p></li>
+<li><p><label><input type="checkbox" />The menu shows what the brief
+lists, in its order: V10 to V12, V29 green.</label></p></li>
+<li><p><label><input type="checkbox" />Only Ken's programs can read the
+summary, the secret never travels, and the app opens only Lahe
+addresses: V13 to V15, V30, V34 green, and the security review of PR 1
+has no open blocker.</label></p></li>
+<li><p><label><input type="checkbox" />Installing, updating, hiding,
+stopping and removing work, and no test touched Ken's real login items:
+V21 to V28, V31 green.</label></p></li>
+<li><p><label><input type="checkbox" />Light when idle: V18 passes its
+rule.</label></p></li>
+<li><p><label><input type="checkbox" />The core stays cross-platform:
+V20 green; <code>dependencies</code> in <code>package.json</code> is
+still <code>{}</code>.</label></p></li>
+<li><p><label><input type="checkbox" />Walked on a copy of Ken's real
+state folder, timed at the icon: V32, screenshots outside the
+repo.</label></p></li>
+<li><p><label><input type="checkbox" />Design review of the snapshots
+and the menu dump has no open finding.</label></p></li>
+<li><p><label><input type="checkbox" />Nothing left running:
+V33.</label></p></li>
+<li><p><label><input type="checkbox" />Human has reviewed and approved
+(single consolidated gate after Plan)</label></p></li>
+</ul>
+</div>
+<h2 id="plan-review">Plan Review</h2>
+<p>Full prose in <a
+href="03_plan_menu_bar_app_reviews.md">03_plan_menu_bar_app_reviews.md</a>.
+All findings accepted.</p>
+<div class="table-scroll"><table>
+<thead>
+<tr>
+<th>#</th>
+<th>Finding</th>
+<th>Disposition</th>
+<th>Rationale</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>RF1</td>
+<td>A background tab's first claim says not quiet</td>
+<td>Accepted, then superseded</td>
+<td>The focused-tab rule is gone (Ken, in review: use the rail's
+existing read mark). V3 to V7 and V19 now prove the
+<code>reply.seen</code> round trip instead.</td>
+</tr>
+<tr>
+<td>RF2</td>
+<td>The cache misses a deleted document and a rename</td>
+<td><span class="accepted">Accepted</span></td>
+<td>The document's stat and <code>catalog.json</code> join the cache
+key; V17 cases.</td>
+</tr>
+<tr>
+<td>RF3</td>
+<td>PR 1 would seed before the install</td>
+<td><span class="accepted">Accepted</span></td>
+<td>Seed on the first <code>summary.read</code>; V1, V32.</td>
+</tr>
+<tr>
+<td>RF4</td>
+<td>A rebuild brings a hidden icon back</td>
+<td><span class="accepted">Accepted</span></td>
+<td>Restart only if it was running; V24.</td>
+</tr>
+<tr>
+<td>RF5</td>
+<td>Tests would hit Ken's real login items</td>
+<td><span class="accepted">Accepted</span></td>
+<td>Test-label seam; builder contract rule; Ken's real install is its
+own task (4.5).</td>
+</tr>
+<tr>
+<td>RF6</td>
+<td>The proof written three times from prose</td>
+<td><span class="accepted">Accepted</span></td>
+<td>Exact wire in <code>docs/CONTRACTS.md</code> and proof vectors in
+Step 0; three checks assert them.</td>
+</tr>
+<tr>
+<td>RF7</td>
+<td>The summary shape had gaps</td>
+<td><span class="accepted">Accepted</span></td>
+<td>Every field decided in the architecture and
+<code>docs/CONTRACTS.md</code>; real output decoded by the app in Task
+4.1.</td>
+</tr>
+<tr>
+<td>RF8</td>
+<td>Two builders wrote the build recipe</td>
+<td><span class="accepted">Accepted</span></td>
+<td>One recipe in <code>src/service/menubar.js</code>; the check script
+calls it; install owns both.</td>
+</tr>
+<tr>
+<td>RF9</td>
+<td>Shared files with no owner</td>
+<td><span class="accepted">Accepted</span></td>
+<td><code>index.js</code> and <code>auth.js</code> to summary;
+<code>menubar.tick</code> wired at integration;
+<code>package.json</code> by the orchestrator.</td>
+</tr>
+<tr>
+<td>RF10</td>
+<td>Manifest entries need <code>planned: true</code></td>
+<td><span class="accepted">Accepted</span></td>
+<td>Step 0 and Task 4.1.</td>
+</tr>
+<tr>
+<td>RF11</td>
+<td>Screenshots need permissions</td>
+<td><span class="accepted">Accepted</span></td>
+<td><code>--snapshot</code>, <code>--dump-menu</code>, a capture probe,
+and Ken's screenshot as the fallback.</td>
+</tr>
+<tr>
+<td>RF12</td>
+<td>Real-data screenshots in a public repo</td>
+<td><span class="accepted">Accepted</span></td>
+<td>Kept in <code>~/Documents/lahe-menubar-review/</code>, never
+committed.</td>
+</tr>
+<tr>
+<td>RF13</td>
+<td>No transitions tested</td>
+<td><span class="accepted">Accepted</span></td>
+<td>V29 sequence: timeout, 401, 409, unsigned, wake, replaced
+secret.</td>
+</tr>
+<tr>
+<td>RF14</td>
+<td>Timing left no room for the poll</td>
+<td><span class="accepted">Accepted</span></td>
+<td>V19 at 5 s and 10 s; V32 timed at the icon.</td>
+</tr>
+<tr>
+<td>RF15</td>
+<td>One document reviewed twice counted twice</td>
+<td><span class="accepted">Accepted</span></td>
+<td>Fold with the Library's rule; V9.</td>
+</tr>
+<tr>
+<td>RF16</td>
+<td>Page key mismatch</td>
+<td><span class="accepted">Accepted</span></td>
+<td>The layer sends the path it stamps on records; V19 on encoded
+paths.</td>
+</tr>
+<tr>
+<td>RF17</td>
+<td>V18 had no method</td>
+<td><span class="accepted">Accepted</span></td>
+<td>Method and pass rule written into V18.</td>
+</tr>
+<tr>
+<td>RF18</td>
+<td>No review owners or gate runs per PR</td>
+<td><span class="accepted">Accepted</span></td>
+<td>Named per PR; <code>check:menubar</code> in
+<code>npm run gate</code>.</td>
+</tr>
+<tr>
+<td>RF19</td>
+<td>The leak check counted only helpers</td>
+<td><span class="accepted">Accepted</span></td>
+<td>Five counts in V33.</td>
+</tr>
+<tr>
+<td>RF20</td>
+<td>install on Sonnet with gaps</td>
+<td><span class="accepted">Accepted</span></td>
+<td>Gaps closed and install moved to Opus.</td>
+</tr>
+<tr>
+<td>RF21</td>
+<td>The app's Start skipped the plist check</td>
+<td><span class="accepted">Accepted</span></td>
+<td>Recorded in the architecture with the reason; V31 tests it.</td>
+</tr>
+<tr>
+<td>RF22</td>
+<td>No design review</td>
+<td><span class="accepted">Accepted</span></td>
+<td>Before PR 2, owned by a staff-designer agent.</td>
+</tr>
+<tr>
+<td>RF23</td>
+<td>Small gaps</td>
+<td><span class="accepted">Accepted</span></td>
+<td>Cases added to V3, V11, V14, V17, V21.</td>
+</tr>
+</tbody>
+</table></div>
+<hr class="reviews-divider" style="margin:4.5rem 0 1.5rem;border:0;border-top:3px solid #b0463b">
+
+<div class="reviews-banner">
+<p>The sections below are the full verbatim persona + human reviews for
+this document. They live in a separate <code>_reviews.md</code> file (so
+agents read the lean spec), merged here for review.</p>
+</div>
+<h1 id="plan-review-menu-bar-app">Plan review: Menu bar app</h1>
+<p>Reviewer: review-plan (orchestration and test plan). Read: the plan
+and its three leaves, the brief, the architecture,
+<code>CLAUDE.md</code>, and the code named below.</p>
+<h2 id="summary-1">Summary</h2>
+<p>The three-workstream shape is right. The PR split mostly works, with
+one exception: the plan as written breaks the day-one promise (RF3). The
+biggest risks sit where two builders implement one thing from prose. The
+signed proof is written three times, the build recipe twice, and the
+summary shape is held only by a hand-written fixture. The code also
+shows two ways the count goes wrong that no row would catch. A
+background tab clears answers on its first claim (RF1). The summary's
+cache misses a deleted document (RF2). Two tests would run against Ken's
+real login items, and one of them stops his live helper (RF5). The Mac
+screenshots need a stated fallback for when the machine refuses
+permission (RF11).</p>
+<p>Six high, fourteen medium, three low.</p>
+<hr />
+<h3
+id="rf1-high-a-background-tabs-first-claim-marks-the-page-as-seen">RF1
+(high): a background tab's first claim marks the page as seen</h3>
+<ul>
+<li><strong>Kind / area / where:</strong> defect, test plan. Task 1.1,
+rows V3 and V19.</li>
+<li><strong>Problem:</strong> In <code>src/layer/sync.js</code>
+(<code>claimRequest</code>), <code>quiet</code> is
+<code>attention !== FOCUSED &amp;&amp; quietHeartbeatMs !== null</code>,
+and <code>quietHeartbeatMs</code> starts as <code>null</code> on every
+page load. So the first claim of every page says
+<code>quiet: false</code>, whether or not the tab is focused. The page
+also reloads itself in the background when its file is rebuilt (the
+reload path near line 2501). The common flow is: an agent edits the
+document and replies, the background tab reloads, and its first claim
+says "focused". The answer is then marked seen without Ken ever looking
+at it. Task 1.1 says "nothing else in the layer changes", which rules
+out the fix. V3 takes <code>quiet</code> at face value. V19's background
+case only covers a tab that was already loaded before the reply.</li>
+<li><strong>Why it matters:</strong> This is the failure Ken named: the
+count clears for something he never saw (R6, R3).</li>
+<li><strong>Change to the plan:</strong> Let Task 1.1 add an explicit
+<code>focused</code> field to the claim body, computed as
+<code>attentionOf(doc) === FOCUSED</code> at send time. The seen store
+reads that field, not <code>quiet</code>. A claim without it (an old
+bundle) falls back to V4's rule. Correct the architecture's sentence
+about <code>quiet</code> first, since the architecture is binding. Add a
+V19 case that follows
+<code>test/browser/quiet_tab_polling.spec.js</code>: force the page
+unfocused with <code>addInitScript</code> before its first claim, land
+an agent reply, trigger a background reload, and assert that the count
+stays.</li>
+</ul>
+<h3
+id="rf2-high-the-summarys-cache-cannot-see-a-deleted-document-or-a-library-rename">RF2
+(high): the summary's cache cannot see a deleted document or a Library
+rename</h3>
+<ul>
+<li><strong>Kind / area / where:</strong> defect, test plan. Task 1.3,
+row V17.</li>
+<li><strong>Problem:</strong> Task 1.3 caches each review on the stat of
+<code>events.jsonl</code>, <code>review.json</code> and
+<code>meta.json</code>. But the reader decides "missing" from the
+document on disk (<code>placeRow</code> in
+<code>src/service/catalog_reader.js</code> calls
+<code>exists(info.docPath)</code>), and renames live in the catalog
+store, not in the review folder. Deleting the document, or renaming a
+row in the Library, touches none of the three cached files.</li>
+<li><strong>Why it matters:</strong> A deleted document stays under
+"waiting on you" until something else touches that review. That breaks
+R5 and R7, and makes a count that never clears (R3). A rename keeps
+showing the old name.</li>
+<li><strong>Change to the plan:</strong> Have Task 1.3 recheck file
+existence and the catalog store's names on every request, or add their
+stats to the cache key. Add three V17 cases: delete the reviewed
+document with no other change, and the next summary drops it; rename in
+the Library, and the next summary shows the new name; rewrite
+<code>events.jsonl</code> with the same size inside the same
+millisecond, and the cache still rebuilds.</li>
+</ul>
+<h3
+id="rf3-high-splitting-into-two-prs-breaks-day-one-shows-no-number">RF3
+(high): splitting into two PRs breaks "day one shows no number"</h3>
+<ul>
+<li><strong>Kind / area / where:</strong> defect, orchestration. PR
+slicing, rows V1 and V32.</li>
+<li><strong>Problem:</strong> The architecture writes
+<code>seeded_at</code> the first time the new helper runs. That happens
+when PR 1 lands, which is before Ken installs the icon from PR 2. Every
+question and answer between the two landings counts on install day. V32
+walks a copy of Ken's state folder, and that copy will already hold PR
+1's <code>seen.json</code>. So V32 either fails, or the walker resets
+the file and hides the problem.</li>
+<li><strong>Why it matters:</strong> It breaks R4 and the brief's first
+success line ("On the day it is installed, the icon shows no
+number").</li>
+<li><strong>Change to the plan:</strong> Seed on the first
+<code>summary.read</code>, not on helper start. Marks written before
+that are harmless. Update the architecture's <code>seen.json</code>
+section before the code. V1 asserts that seeding happens on the first
+summary request. V32 starts from a state folder where PR 1's helper has
+already been running, and the walkthrough states that.</li>
+</ul>
+<h3 id="rf4-high-a-rebuild-brings-a-hidden-icon-back">RF4 (high): a
+rebuild brings a hidden icon back</h3>
+<ul>
+<li><strong>Kind / area / where:</strong> defect, test plan. Task 3.3,
+rows V23 and V24.</li>
+<li><strong>Problem:</strong> Task 3.3 rebuilds and then "restarts the
+app". A kickstart starts the app even after a clean exit, so a hidden
+icon reappears. A <code>git pull</code> in Ken's main checkout, often
+run by an agent, triggers that rebuild.</li>
+<li><strong>Why it matters:</strong> R17 says nothing an agent runs
+brings the icon back. No row catches this.</li>
+<li><strong>Change to the plan:</strong> After a rebuild, restart the
+app only if it was running (check the job's state with
+<code>launchctl print</code>). Otherwise swap the bundle and leave it
+stopped. Add to V24: with the app hidden, a stamp change rebuilds the
+app and does not start it.</li>
+</ul>
+<h3
+id="rf5-high-the-mac-checks-run-against-kens-real-login-items-and-one-stops-his-live-helper">RF5
+(high): the Mac checks run against Ken's real login items, and one stops
+his live helper</h3>
+<ul>
+<li><strong>Kind / area / where:</strong> risk, orchestration. Task 4.1,
+the Step 3 step test, rows V31 and V32.</li>
+<li><strong>Problem:</strong> SR6 compiles the labels
+<code>lahe-helper</code> and <code>lahe-menubar</code> in as constants.
+Task 4.1 runs <code>lahe install --menu-bar</code> on a copy of Ken's
+state folder. That rewrites
+<code>~/Library/LaunchAgents/lahe-helper.plist</code> to point at the
+copy, and loads it under Ken's real label. V31's "Stop unloads the
+helper" runs <code>launchctl bootout gui/&lt;uid&gt;/lahe-helper</code>
+from inside the app. That is Ken's live helper, which every running
+agent and open review depends on. The Step 3 step test ends with
+<code>lahe uninstall</code>, which removes the real items.</li>
+<li><strong>Why it matters:</strong> An agent's test run stops Ken's
+working tool partway through his day, and it may leave his login item
+pointing at a scratch folder.</li>
+<li><strong>Change to the plan:</strong> Add a test-only label seam.
+<code>install.js</code> already accepts <code>d.label</code> and
+<code>d.home</code> (the earlier spike's unique label). The Swift app
+takes its labels from a compile-time <code>-D</code> flag: still
+constants, never read from a file, so SR6 holds. Test builds use
+<code>lahe-test-&lt;pid&gt;</code> labels and a temp <code>home</code>.
+State in the builder contract: no agent bootouts, rewrites or uninstalls
+<code>lahe-helper</code> or <code>lahe-menubar</code> under the real
+labels. The real-label install happens once, by Ken or with his
+go-ahead, at the end.</li>
+</ul>
+<h3
+id="rf6-high-the-signed-proof-is-implemented-three-times-from-prose-with-no-test-vectors">RF6
+(high): the signed proof is implemented three times from prose, with no
+test vectors</h3>
+<ul>
+<li><p><strong>Kind / area / where:</strong> risk, orchestration and
+test plan. Step 0, Tasks 1.4, 2.1 and 2.3, row V34.</p></li>
+<li><p><strong>Problem:</strong> The summary builder writes the scheme
+in Node, the macapp builder writes it in Swift, and the macapp builder's
+<code>fake_helper.js</code> writes it a third time, in parallel and from
+one paragraph. The prose leaves many choices open:</p>
+<ul>
+<li>the exact string that is signed: route name or path, separators, and
+the timestamp's unit and format</li>
+<li>how the nonce is encoded</li>
+<li>the hash of an empty GET body</li>
+<li>header names</li>
+<li>how <code>summary_version</code> travels on a GET, and whether the
+signature covers it</li>
+<li>whether the key is the secret file's raw bytes or decoded text, and
+how a trailing newline is handled</li>
+<li>what the answer's signature covers</li>
+</ul>
+<p>The macapp builder's Swift and fake helper will agree with each
+other, because one person wrote both. The first time anyone checks them
+against the real helper is Task 4.1.</p></li>
+<li><p><strong>Why it matters:</strong> One mismatch means the app shows
+"can't tell" forever. It surfaces only at integration, after both
+builders have finished.</p></li>
+<li><p><strong>Change to the plan:</strong> In Step 0, write the exact
+wire into <code>docs/CONTRACTS.md</code>: route paths, headers, the
+canonical string, encodings and the version transport. Commit
+<code>test/fixtures/menubar/proof_vectors.json</code> with a secret,
+inputs, and the expected request and answer signatures in hex, including
+a GET with an empty body. Three checks assert those vectors: a Node unit
+test against <code>auth.js</code>, the fake helper's own start-up check,
+and the Swift <code>--self-test</code>. In Task 4.1, run the app once
+against the real helper on a temp state folder, not only against the
+fake one.</p></li>
+</ul>
+<h3
+id="rf7-medium-the-summarys-shape-is-held-by-a-hand-written-fixture-and-a-shallow-key-check">RF7
+(medium): the summary's shape is held by a hand-written fixture and a
+shallow key check</h3>
+<ul>
+<li><p><strong>Kind / area / where:</strong> risk, test plan. Step 0,
+Task 1.3.</p></li>
+<li><p><strong>Problem:</strong> The architecture's sample response
+leaves gaps the Step 0 fixture has to invent:</p>
+<ul>
+<li>where <code>more</code> sits for the lists that are arrays
+(<code>open_documents</code>, <code>recent</code>,
+<code>sessions.connected</code>)</li>
+<li>what <code>sessions.open</code> counts</li>
+<li>where the count of open documents lives (R10 says each section
+"shows its count")</li>
+<li>whether <code>library_url</code> carries the pages port when the
+port-80 forward is not installed. The app's allowlist depends on
+this.</li>
+</ul>
+<p>"Check its real output has the same keys" can pass on top-level keys
+alone. The Swift decoder is only ever tested against the hand-written
+file.</p></li>
+<li><p><strong>Why it matters:</strong> A drift between Swift and Node
+shows up as "can't tell", or as an empty menu section, at
+integration.</p></li>
+<li><p><strong>Change to the plan:</strong> Decide every field in Step 0
+and write it in <code>docs/CONTRACTS.md</code> beside the proof. The
+summary test compares nested key paths and value types in both
+directions: nothing missing, nothing extra. After Step 0 the summary
+builder owns the fixture and every change to it. In Task 4.1, capture a
+summary from the real <code>summary.js</code> on a fixture state folder
+and have the app decode it
+(<code>--self-test --decode &lt;file&gt;</code>).</p></li>
+</ul>
+<h3 id="rf8-medium-two-builders-write-the-apps-build-recipe">RF8
+(medium): two builders write the app's build recipe</h3>
+<ul>
+<li><strong>Kind / area / where:</strong> risk, orchestration. Tasks 2.3
+and 3.1, the Step 3 step test.</li>
+<li><strong>Problem:</strong> <code>scripts/check_menubar.js</code>
+(macapp) and <code>src/service/menubar.js</code> (install) each compile
+the app, so the swiftc flags, bundle layout, <code>Info.plist</code>
+placement and fixed file list each get written twice. The file list is a
+constant in install's code, but macapp decides which files exist. This
+Mac has Swift 6.3, so an unpinned language mode or target can change
+between Xcode releases. The Step 3 step test also builds "against the
+macapp branch", which the install builder does not have.</li>
+<li><strong>Why it matters:</strong> <code>check:menubar</code> passes
+while <code>lahe install --menu-bar</code> fails, or the reverse. A file
+macapp adds is left out of the stamp and the build.</li>
+<li><strong>Change to the plan:</strong> Put one
+<code>buildApp({source, out, runner})</code> in
+<code>src/service/menubar.js</code>, with the file list and pinned flags
+(<code>-swift-version 5</code>, an explicit <code>-target</code>).
+<code>check_menubar.js</code> calls it. macapp returns its file list and
+flags in its hand-back, and the orchestrator checks them against
+install's constant at Task 4.1. Move the Step 3 step test that needs
+macapp source into Task 4.1.</li>
+</ul>
+<h3 id="rf9-medium-shared-files-with-no-owner">RF9 (medium): shared
+files with no owner</h3>
+<ul>
+<li><strong>Kind / area / where:</strong> defect, orchestration. The
+Workstreams table.</li>
+<li><strong>Problem:</strong>
+<ul>
+<li>The summary builder has to wire the seen store into
+<code>createReviews</code> and the summary into the routes. Both are
+built in <code>src/service/index.js</code>.</li>
+<li>Install's Task 3.3 edits "the timer's call site in the helper". That
+is <code>index.js</code> or <code>self_stop.js</code>
+(<code>SWEEP_MS = 15 * 1000</code>). Neither file is owned by
+anyone.</li>
+<li>Task 1.4 edits <code>src/service/auth.js</code>, but the table
+leaves it out of the summary row.</li>
+<li>The table says install owns the <code>package.json</code> scripts,
+while Task 2.3 says the orchestrator adds
+<code>check:menubar</code>.</li>
+</ul></li>
+<li><strong>Why it matters:</strong> Two parallel branches edit
+<code>index.js</code>, and the merge conflict appears at integration.
+Builders also stop to ask who owns a file.</li>
+<li><strong>Change to the plan:</strong> Give <code>index.js</code> to
+the summary workstream. Install exposes one function (for example
+<code>menubar.tick(env)</code>), and the orchestrator adds its call when
+it integrates. Ask install to confirm that the always-on helper runs the
+15-second sweep at all. Add <code>auth.js</code> to the summary row. The
+orchestrator adds <code>check:menubar</code> to
+<code>package.json</code> in Step 0, and no builder edits
+<code>package.json</code>.</li>
+</ul>
+<h3
+id="rf10-medium-manifest-entries-need-planned-true-or-every-builders-first-gate-fails">RF10
+(medium): manifest entries need <code>planned: true</code>, or every
+builder's first gate fails</h3>
+<ul>
+<li><strong>Kind / area / where:</strong> defect, orchestration. Step
+0.</li>
+<li><strong>Problem:</strong> <code>scripts/lint.js</code> fails on any
+manifest entry with no file on disk unless it carries
+<code>planned: true</code>. Step 0 adds four entries for files that do
+not exist yet, and does not mention the flag.</li>
+<li><strong>Why it matters:</strong> <code>npm run gate:unit</code> goes
+red in all three worktrees before anyone writes code.</li>
+<li><strong>Change to the plan:</strong> Step 0 marks all four entries
+<code>planned: true</code>. PR 1 clears the flag on
+<code>summary.js</code> and <code>seen_store.js</code>. The two install
+files stay planned on main until PR 2, and Task 4.1 clears them. Say
+this in Step 0 and in Task 4.1.</li>
+</ul>
+<h3
+id="rf11-medium-the-mac-screenshots-need-permissions-an-agent-may-not-have-and-the-plan-has-no-fallback">RF11
+(medium): the Mac screenshots need permissions an agent may not have,
+and the plan has no fallback</h3>
+<ul>
+<li><strong>Kind / area / where:</strong> risk, test plan. Rows V29,
+V31, V32, Task 4.1.</li>
+<li><strong>Problem:</strong> Capturing the menu bar with
+<code>screencapture</code> needs Screen Recording permission for the
+terminal or host app. Opening another app's status menu with a synthetic
+click needs Accessibility. Switching between a light and a dark menu bar
+through System Events needs Automation, and it flips Ken's whole Mac
+while he works. An agent cannot grant any of these to itself.</li>
+<li><strong>Why it matters:</strong> V29 and the "light and dark"
+acceptance line cannot be done, or they get done with a mockup, which
+<code>CLAUDE.md</code> rules out ("a real screenshot from the built
+page").</li>
+<li><strong>Change to the plan:</strong>
+<ul>
+<li>Step 0 probes once whether a capture works (take one small region
+and check that it is not blank) and records the result on the progress
+page.</li>
+<li>Give the app a debug <code>--snapshot &lt;dir&gt;</code> mode. It
+renders each icon look onto a light and a dark background inside the
+app, which needs no permission.</li>
+<li>Add <code>--dump-menu</code>, which prints the built menu's titles,
+order, enabled state and tooltips as JSON from a fixture. That makes R8
+to R13's order a real assertion instead of a picture.</li>
+<li>When a real capture is possible, open the menu from inside the app
+(<code>button.performClick</code>).</li>
+<li>When it is not, the row reads "Ken's screenshot at the walkthrough"
+and shows on the progress page as waiting on Ken.</li>
+</ul></li>
+</ul>
+<h3
+id="rf12-medium-real-data-screenshots-would-land-in-a-public-repo">RF12
+(medium): real-data screenshots would land in a public repo</h3>
+<ul>
+<li><strong>Kind / area / where:</strong> risk, orchestration. Task 4.1,
+row V32.</li>
+<li><strong>Problem:</strong> V32 and Task 4.1 take screenshots on a
+copy of Ken's state folder. Those pictures show real document titles and
+<code>~</code> paths, and the plan puts them on the progress page, which
+is committed to this public repo.</li>
+<li><strong>Why it matters:</strong> Ken's real document names would be
+published.</li>
+<li><strong>Change to the plan:</strong> Keep real-data screenshots
+outside the repo (under <code>~/Documents</code>, not <code>/tmp</code>)
+and link them from the review page. The repo's progress page carries
+only the fixture screenshots from V29.</li>
+</ul>
+<h3
+id="rf13-medium-r2s-real-failure-is-a-stale-number-and-no-row-tests-the-change-from-one-look-to-another">RF13
+(medium): R2's real failure is a stale number, and no row tests the
+change from one look to another</h3>
+<ul>
+<li><strong>Kind / area / where:</strong> gap, test plan. Row V29.</li>
+<li><strong>Problem:</strong> V29 shows each look on its own. The bug R2
+guards against is the icon still showing "3" after the helper stops
+answering. "Just after wake" has no way to trigger it in a test. The
+architecture's "secret missing or changed: the app rereads it on each
+401" has no row.</li>
+<li><strong>Why it matters:</strong> The app could keep the last number
+on a timeout, or never recover after the secret changes, and every V29
+screenshot would still look right.</li>
+<li><strong>Change to the plan:</strong> Extend V29 with changes in
+sequence against the fake helper:
+<ul>
+<li>from 3 to a timeout, a 401, a 409 and an unsigned answer: the icon
+leaves "3" within one poll</li>
+<li>a simulated wake, through a debug flag that posts the wake
+notification: "can't tell" until a fresh answer arrives</li>
+<li>the secret file replaced: the app recovers on its next poll</li>
+</ul></li>
+</ul>
+<h3
+id="rf14-medium-v19s-time-limits-leave-no-room-for-the-apps-5-second-poll">RF14
+(medium): V19's time limits leave no room for the app's 5-second
+poll</h3>
+<ul>
+<li><strong>Kind / area / where:</strong> defect, test plan. Row
+V19.</li>
+<li><strong>Problem:</strong> V19 allows 10 s for a reply to reach the
+summary and 15 s for it to clear. The app asks every 5 s, so the icon
+itself could take 15 s and 20 s.</li>
+<li><strong>Why it matters:</strong> V19 passes while R3 fails at the
+icon.</li>
+<li><strong>Change to the plan:</strong> Hold the summary to 5 s for a
+new reply and 10 s for clearing. Time V32 at the icon, from end to
+end.</li>
+</ul>
+<h3 id="rf15-medium-one-document-reviewed-twice-would-count-twice">RF15
+(medium): one document reviewed twice would count twice</h3>
+<ul>
+<li><strong>Kind / area / where:</strong> gap, test plan. Task 1.2, rows
+V9 and V10.</li>
+<li><strong>Problem:</strong> The Library folds several reviews of one
+document into one row (<code>folded_from</code> in
+<code>catalog_reader.js</code>). Task 1.2 builds the summary one review
+at a time. Two reviews of the same document would then count as two
+documents.</li>
+<li><strong>Why it matters:</strong> It breaks R1 (count documents).
+V10's equality with the Library's total would then fail, or be quietly
+loosened.</li>
+<li><strong>Change to the plan:</strong> Fold with the Library's own
+rule after building each review. Add to V9: two reviews folded into one
+Library row count as one waiting document.</li>
+</ul>
+<h3
+id="rf16-medium-the-page-key-the-layer-sends-may-not-match-the-key-replies-are-grouped-by">RF16
+(medium): the page key the layer sends may not match the key replies are
+grouped by</h3>
+<ul>
+<li><strong>Kind / area / where:</strong> risk, test plan. Task 1.1,
+rows V3, V7 and V19.</li>
+<li><strong>Problem:</strong> Task 1.1 sends "the page's path", meaning
+<code>location.pathname</code>. Records are grouped by
+<code>page_origin</code> plus <code>page_path</code>, and
+<code>record.js</code> says <code>page_path</code> can be the source's
+path when the review knows it. V7 says an unknown page marks
+nothing.</li>
+<li><strong>Why it matters:</strong> If the two strings differ, focusing
+a page never clears its answers. Unit tests with hand-written strings
+would still pass.</li>
+<li><strong>Change to the plan:</strong> The layer sends the same page
+path it already stamps on records, computed by the same function. V19
+runs on a Markdown review and on a multi-page site review whose path
+needs encoding (a space, or a mount).</li>
+</ul>
+<h3
+id="rf17-medium-v18s-measurement-has-no-stated-method-so-it-cannot-be-called-red">RF17
+(medium): V18's measurement has no stated method, so it cannot be called
+red</h3>
+<ul>
+<li><p><strong>Kind / area / where:</strong> defect, test plan. Row V18,
+Task 4.2.</p></li>
+<li><p><strong>Problem:</strong> The plan does not say how to isolate
+one browser tab's processor time, or the helper's share spent on
+summaries. "Measured the same way" leaves the method to whoever runs the
+check.</p></li>
+<li><p><strong>Why it matters:</strong> Any number can be read as a
+pass.</p></li>
+<li><p><strong>Change to the plan:</strong> Write the method into the
+plan:</p>
+<ul>
+<li>the helper's processor time, from <code>ps -o time=</code>, over 10
+idle minutes with the app running and again with it stopped. The
+difference is the summary's cost.</li>
+<li>the app's own processor time over the same 10 minutes</li>
+<li>one review tab's renderer process, in a Playwright Chromium with
+only that page open</li>
+<li>battery, from <code>top -stats pid,power</code> samples</li>
+</ul>
+<p>State the pass rule as a comparison of those numbers.</p></li>
+</ul>
+<h3
+id="rf18-medium-no-named-review-owners-or-local-gate-runs-per-pr">RF18
+(medium): no named review owners or local gate runs per PR</h3>
+<ul>
+<li><strong>Kind / area / where:</strong> gap, orchestration.
+Workstreams and PRs.</li>
+<li><strong>Problem:</strong>
+<ul>
+<li>PR 1 carries the new auth mode, but the plan does not say who runs
+the security and code reviews on it, or when.</li>
+<li>Neither PR names <code>npm run gate</code> locally before opening,
+or again on main after merging. <code>CLAUDE.md</code> requires
+both.</li>
+<li><code>check:menubar</code> is in no gate, so a Swift break on main
+shows up only when Ken's helper fails to rebuild.</li>
+</ul></li>
+<li><strong>Why it matters:</strong> The acceptance line about "no open
+blocker in the security review" has no owner. Swift regressions land on
+main unseen.</li>
+<li><strong>Change to the plan:</strong> Before PR 1: one code review
+and one security review of the integrated diff, each with a named owner.
+Before PR 2: a code review and an independent check of the requirements
+on the integrated code. Run <code>npm run gate</code> locally before
+each PR and again on main after each merge. Add
+<code>check:menubar</code> to <code>npm run gate</code>, where it skips
+on systems other than macOS.</li>
+</ul>
+<h3 id="rf19-medium-the-leak-check-counts-only-helpers">RF19 (medium):
+the leak check counts only helpers</h3>
+<ul>
+<li><strong>Kind / area / where:</strong> gap, test plan. Row V33, the
+builder contract.</li>
+<li><strong>Problem:</strong> The macapp and install work starts other
+things that keep running: the Swift app, <code>fake_helper.js</code>,
+launchd jobs, and plist files in <code>~/Library/LaunchAgents</code>. A
+menu bar app left behind asks for a summary every 5 seconds,
+indefinitely.</li>
+<li><strong>Why it matters:</strong> This is the same battery drain
+<code>CLAUDE.md</code> describes, from a new kind of process.</li>
+<li><strong>Change to the plan:</strong> Extend the before-and-after
+count to app processes, <code>fake_helper.js</code>,
+<code>launchctl list | grep lahe-test</code>, and test plists. V33
+asserts that all four end where they started.</li>
+</ul>
+<h3
+id="rf20-medium-install-runs-on-sonnet-against-a-contract-with-gaps">RF20
+(medium): install runs on Sonnet against a contract with gaps</h3>
+<ul>
+<li><strong>Kind / area / where:</strong> challenge, orchestration.
+Workstreams table, the install model choice.</li>
+<li><strong>Problem:</strong> The plan calls install an extension of
+existing code. But it carries SR5 (build in a temp folder, then rename
+into place), SR6 (check the plist before bootstrap), the hide-respecting
+restart (RF4), a new helper timer, and real launchd behavior that has no
+pattern in this repo. RF5, RF8 and RF9 land on it too.</li>
+<li><strong>Why it matters:</strong> Ken's policy uses Sonnet only
+against a complete contract.</li>
+<li><strong>Change to the plan:</strong> Close RF4, RF5, RF8 and RF9 in
+the install packet before dispatch. If any of them stays open, run
+install on Opus.</li>
+</ul>
+<h3
+id="rf21-low-the-apps-start-skips-the-plist-check-the-clis-start-makes">RF21
+(low): the app's Start skips the plist check the CLI's start makes</h3>
+<ul>
+<li><strong>Kind / area / where:</strong> risk, test plan. Task 2.2,
+rows V27 and V31.</li>
+<li><strong>Problem:</strong> Task 2.2's Start runs bootstrap and then
+kickstart. The SR6 check of the plist's contents exists only in the
+CLI.</li>
+<li><strong>Change to the plan:</strong> Pick one behavior. Either the
+app makes the same check, or the plan records that the app does not and
+says why. Test whichever it is in V31.</li>
+</ul>
+<h3
+id="rf22-low-the-design-review-the-brief-promised-is-not-in-the-plan">RF22
+(low): the design review the brief promised is not in the plan</h3>
+<ul>
+<li><strong>Kind / area / where:</strong> gap, orchestration. Acceptance
+criteria.</li>
+<li><strong>Problem:</strong> The brief's PM review (RF15) says "the
+design review is in the plan". The plan has none, and the "staff
+designer" line has no owner.</li>
+<li><strong>Change to the plan:</strong> Add a design review of the V29
+snapshots and the menu dump before PR 2, with a named owner.</li>
+</ul>
+<h3 id="rf23-low-small-coverage-gaps">RF23 (low): small coverage
+gaps</h3>
+<ul>
+<li><strong>Kind / area / where:</strong> gap, test plan. Rows V21, V3,
+V14 and V17.</li>
+<li><strong>Change to the plan:</strong>
+<ul>
+<li>V21: an existing install plus <code>--menu-bar</code> leaves the
+helper's plist, its process and the rest of <code>install.json</code>
+untouched (R15).</li>
+<li>V3: a focused second window that is refused the rail still clears
+its own page (architecture failure mode "Two windows on one
+review").</li>
+<li>Add a check that clicking a session row opens that session's most
+recent document (R10).</li>
+<li>V14 and V17: use an injected clock for the 30-second window and the
+expiry of the nonce cache. No real waiting.</li>
+</ul></li>
+</ul>
+<h2 id="cleanup-needed">Cleanup needed</h2>
+<p>None.</p>
+</body>
+</html>

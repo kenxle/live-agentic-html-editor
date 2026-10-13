@@ -251,6 +251,8 @@ var NON_BUNDLE_FILES = [
   { path: "src/service/addresses.js", owner: "stable-addresses lahe-names", why: "proves the port 80 forward and .lahe before either is used: the printed port and whether .lahe Hosts answer" },
   { path: "src/service/name_server.js", owner: "stable-addresses lahe-names", why: "the .lahe name server: loopback answers for names under .lahe, REFUSED for the rest, malformed packets dropped" },
   { path: "src/service/login_item.js", owner: "stable-addresses install", why: "the login item per system (launchd, systemd --user, Task Scheduler) and install.json" },
+  { path: "src/service/summary.js", owner: "menu-bar summary", why: "the menu bar summary: waiting on you, waiting on agents, open documents, connected sessions, recent; a per-review cache; summary.json holds the day-one cutoff" },
+  { path: "src/service/menubar.js", owner: "menu-bar install", planned: true, why: "macOS only: the one build recipe for the menu bar app, its login item, and the rebuild-on-change tick" },
   { path: "src/service/markdown.js", owner: "1A", why: "deterministic Markdown review artifacts" },
   { path: "src/service/styles.js", owner: "Style switcher 1.1", why: "installed document styles: the store, the checks, and serving their files" },
   { path: "src/service/tab_icon.js", owner: "1A", why: "the fallback tab icon, and the rule that a page declaring its own keeps it. The Markdown renderer and the static server both need it, so it is spelled once" },
@@ -311,6 +313,7 @@ var NON_BUNDLE_FILES = [
   { path: "src/cli/commands/session.js", owner: "1A", why: "agent-session close, reopen, and helper lifetime" },
   { path: "src/cli/commands/add.js", owner: "3B", why: "add" },
   { path: "src/cli/commands/status.js", owner: "3A", why: "status: the one agent-facing read path" },
+  { path: "src/cli/commands/menubar.js", owner: "menu-bar install", planned: true, why: "lahe menubar show and lahe menubar rebuild" },
   {
     path: "src/cli/commands/write.js",
     owner: "free-writing 2C",

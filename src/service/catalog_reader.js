@@ -138,7 +138,7 @@ function createReader(options) {
   var store = catalogStore.createCatalogStore({ dir: dir, readFile: readFile });
 
   // ---------------------------------------------------------------------------
-  // Reading files, cached per file on modified time plus size
+  // Reading files, cached per file on modified time, size and inode
   // ---------------------------------------------------------------------------
 
   var fileCache = Object.create(null);
@@ -152,7 +152,9 @@ function createReader(options) {
       delete fileCache[file];
       return { state: "missing" };
     }
-    var key = stat.mtimeMs + ":" + stat.size;
+    // The inode too: an atomic rewrite of the same size in the same
+    // millisecond changes nothing else.
+    var key = stat.mtimeMs + ":" + stat.size + ":" + stat.ino;
     var hit = fileCache[file];
     if (hit && hit.key === key) return hit.result;
     var result;
@@ -188,7 +190,7 @@ function createReader(options) {
 
   /** The newest work event's time in ms, or null when none was found. */
   function newestWorkEvent(file, stat) {
-    var key = stat.mtimeMs + ":" + stat.size;
+    var key = stat.mtimeMs + ":" + stat.size + ":" + stat.ino;
     var hit = tailCache[file];
     if (hit && hit.key === key) return hit.value;
     var value = null;
@@ -243,12 +245,27 @@ function createReader(options) {
   // Sessions, heartbeats and servers
   // ---------------------------------------------------------------------------
 
+  // A session's three files, each resolved once per reader: resolving checks
+  // every folder on the way for a symlink, and the menu bar's summary asks
+  // about every session every five seconds. The file itself is checked again
+  // on every read (one lstat), so a file swapped for a symlink after the first
+  // read is refused, not followed. A refusal throws, and every caller reads
+  // a throw as an unreadable file.
+  var SESSION_FILES = { session: stateDir.agentSessionPath, monitor: stateDir.monitorPath, activity: stateDir.activityPath };
+  var sessionPaths = Object.create(null);
+
+  function sessionFile(kind, sessionId) {
+    var key = kind + ":" + sessionId;
+    if (!sessionPaths[key]) sessionPaths[key] = SESSION_FILES[kind](dir, sessionId);
+    return stateDir.assertNotSymlink(sessionPaths[key]);
+  }
+
   function readSession(sessionId) {
     if (sessionId === LEGACY) return { state: "ok", value: { id: LEGACY, synthetic: true } };
     if (!protocol.isSafeId(sessionId)) return { state: "bad" };
     var got;
     try {
-      got = cachedJson(stateDir.agentSessionPath(dir, sessionId));
+      got = cachedJson(sessionFile("session", sessionId));
     } catch (err) {
       return { state: "bad" };
     }
@@ -284,13 +301,13 @@ function createReader(options) {
     var beat = null;
     var activity = null;
     try {
-      var got = cachedJson(stateDir.monitorPath(dir, sessionId));
+      var got = cachedJson(sessionFile("monitor", sessionId));
       beat = got.state === "ok" ? got.value : null;
     } catch (err) {
       beat = null;
     }
     try {
-      var act = cachedJson(stateDir.activityPath(dir, sessionId));
+      var act = cachedJson(sessionFile("activity", sessionId));
       activity = act.state === "ok" ? act.value : null;
     } catch (err) {
       activity = null;
@@ -623,6 +640,96 @@ function createReader(options) {
       }
     });
     return events;
+  }
+
+  // ---------------------------------------------------------------------------
+  // Unread replies: the menu bar's "waiting on you"
+  // ---------------------------------------------------------------------------
+  //
+  // review.json cannot answer this: it does not carry a tool round's mark or
+  // who closed a card, and the unread rule reads both. So the log is folded
+  // with the helper's own projection, and only for a log written since the
+  // cutoff (an older log cannot hold a reply after it). The fold is kept per
+  // file and continued from where it stopped when the log grows, the way the
+  // helper's projector does, so a review being typed in costs its new lines
+  // and not its whole log. What leaves here is counts and times, never text.
+
+  var unreadFolds = Object.create(null);
+
+  /** Bytes [from, to) of a file. */
+  function readRange(file, from, to) {
+    var buf = Buffer.alloc(to - from);
+    var fd = fs.openSync(file, "r");
+    try {
+      fs.readSync(fd, buf, 0, buf.length, from);
+    } finally {
+      fs.closeSync(fd);
+    }
+    return buf;
+  }
+
+  /**
+   * The kept fold for one log, brought up to the file. Only whole lines are
+   * folded: a line still being written is read on the next call.
+   */
+  function keptFold(file, stat) {
+    var kept = unreadFolds[file];
+    if (kept && kept.ino === stat.ino && kept.size === stat.size && kept.mtimeMs === stat.mtimeMs) return kept;
+    if (kept && kept.ino === stat.ino && stat.size >= kept.consumed) {
+      var tail = readRange(file, kept.consumed, stat.size);
+      var cut = tail.lastIndexOf(0x0a) + 1;
+      var events = parseEvents(tail.slice(0, cut).toString("utf8"));
+      if (projection.continuesFold(kept.fold, events)) {
+        projection.foldEvents(kept.fold, events);
+        kept.consumed += cut;
+        kept.size = stat.size;
+        kept.mtimeMs = stat.mtimeMs;
+        return kept;
+      }
+    }
+    // From the top: a new file, a rewrite, or a tail that does not continue.
+    var whole = fs.readFileSync(file);
+    var end = whole.lastIndexOf(0x0a) + 1;
+    var fold = projection.foldEvents(projection.createFold(), parseEvents(whole.slice(0, end).toString("utf8")));
+    kept = { ino: stat.ino, size: stat.size, mtimeMs: stat.mtimeMs, consumed: end, fold: fold };
+    unreadFolds[file] = kept;
+    return kept;
+  }
+
+  /**
+   * One review's unread replies by the shared rule (record.isUnreadReply),
+   * counting only replies that arrived at or after `sinceMs`.
+   *
+   * @param {string} reviewId
+   * @param {number} [sinceMs] the cutoff; a reply older than it, or with no
+   *   time, is never unread
+   * @returns {{count: number, questions: number, newest_at: string|null}}
+   */
+  function unreadOf(reviewId, sinceMs) {
+    var out = { count: 0, questions: 0, newest_at: null };
+    var file = stateDir.eventsPath(dir, reviewId);
+    var stat = statOrNull(file);
+    var cutoff = typeof sinceMs === "number" ? sinceMs : null;
+    if (!stat || (cutoff !== null && stat.mtimeMs < cutoff)) return out;
+    var items;
+    try {
+      items = projection.itemsOf(keptFold(file, stat).fold);
+    } catch (err) {
+      delete unreadFolds[file];
+      return out;
+    }
+    var newestMs = null;
+    items.forEach(function (item) {
+      if (!record.isUnreadReply(item)) return;
+      var reply = item[record.FIELD.REPLY];
+      var atMs = typeof reply.at === "string" ? Date.parse(reply.at) : NaN;
+      if (cutoff !== null && (Number.isNaN(atMs) || atMs < cutoff)) return;
+      out.count += 1;
+      if (reply.status === record.REPLY_STATUS.QUESTION) out.questions += 1;
+      if (!Number.isNaN(atMs) && (newestMs === null || atMs > newestMs)) newestMs = atMs;
+    });
+    out.newest_at = newestMs === null ? null : iso(newestMs);
+    return out;
   }
 
   /** What a projection says about a review, and nothing else (no comment text). */
@@ -1020,32 +1127,56 @@ function createReader(options) {
     return null;
   }
 
-  function scan(nowMs) {
-    var starsRead = store.read();
-    var stars = starsRead.ok ? starsRead.data.stars : {};
-    var names = starsRead.ok ? starsRead.data.names || {} : {};
-    var sessionCache = Object.create(null);
-    function sessionContext(sessionId) {
-      if (!sessionCache[sessionId]) {
-        sessionCache[sessionId] = {
+  /**
+   * A session's state and server records, read once per scan however many of
+   * its reviews ask.
+   */
+  function sessionContexts() {
+    var cache = Object.create(null);
+    return function (sessionId) {
+      if (!cache[sessionId]) {
+        cache[sessionId] = {
           state: readSession(sessionId).state,
           servers: serversOf(sessionId)
         };
       }
-      return sessionCache[sessionId];
-    }
+      return cache[sessionId];
+    };
+  }
+
+  /** One review, read and placed: what a row is made of. */
+  function placeReview(reviewId, contextOf) {
+    var info = readReview(reviewId);
+    var ctx = contextOf(info.sessionId);
+    return placeRow(info, ctx.state, ctx.servers);
+  }
+
+  /**
+   * Placed reviews into the Library's rows: grouped by session, folded with
+   * the Library's rule (foldSession), and named, with catalog.json read once.
+   * The list and the menu bar's summary both fold with this, so a document
+   * the Library shows as one row counts once in both.
+   *
+   * @param {object[]} parts placeReview results, in any order
+   * @param {function} [contextOf] a sessionContexts() lookup to share
+   * @returns {{sessions: object[], notice: string|null, sessionNames: object}}
+   */
+  function foldParts(parts, contextOf) {
+    var context = contextOf || sessionContexts();
+    var starsRead = store.read();
+    var stars = starsRead.ok ? starsRead.data.stars : {};
+    var names = starsRead.ok ? starsRead.data.names || {} : {};
 
     var bySession = Object.create(null);
-    reviewIds().forEach(function (reviewId) {
-      var info = readReview(reviewId);
-      var ctx = sessionContext(info.sessionId);
-      (bySession[info.sessionId] = bySession[info.sessionId] || []).push(placeRow(info, ctx.state, ctx.servers));
+    (parts || []).forEach(function (placed) {
+      var sessionId = placed.info.sessionId;
+      (bySession[sessionId] = bySession[sessionId] || []).push(placed);
     });
 
     var sessions = Object.keys(bySession).map(function (sessionId) {
       return {
         id: sessionId,
-        state: sessionContext(sessionId).state,
+        state: context(sessionId).state,
         rows: foldSession(bySession[sessionId])
       };
     });
@@ -1060,7 +1191,8 @@ function createReader(options) {
         var folderPath = row.folder || (lead.docPath ? path.dirname(lead.docPath) : null);
         row.folderName = folderPath ? path.basename(folderPath) : null;
         row.pathHint = pathHint(folderPath);
-        row.projectPath = projectPath(row.folder || lead.docPath);
+        // The document itself (or the folded folder), ~ for the home folder.
+        row.docHint = pathHint(row.folder || lead.docPath);
         allRows.push(row);
       });
     });
@@ -1082,7 +1214,69 @@ function createReader(options) {
     sessions.forEach(function (s) {
       s.customName = Object.prototype.hasOwnProperty.call(sessionNames, s.id) ? String(sessionNames[s.id]) : null;
     });
-    return { sessions: sessions, notice: starsRead.ok ? null : starsRead.code, nowMs: nowMs };
+    // `sessionNames` is every Library rename, including a session with no
+    // review left to make a row.
+    return { sessions: sessions, notice: starsRead.ok ? null : starsRead.code, sessionNames: sessionNames };
+  }
+
+  function scan(nowMs) {
+    var context = sessionContexts();
+    var parts = reviewIds().map(function (reviewId) {
+      return placeReview(reviewId, context);
+    });
+    var folded = foldParts(parts, context);
+    return { sessions: folded.sessions, notice: folded.notice, nowMs: nowMs };
+  }
+
+  /**
+   * One review on its own, placed the way a list row's part is, with its
+   * unread replies (the menu bar's summary, src/service/summary.js). The
+   * summary caches these per review and folds them with foldParts, so it
+   * never builds the whole list to answer.
+   *
+   * @param {string} reviewId
+   * @param {{since?: number}} [options] `since` is the unread cutoff in ms
+   * @returns {object} the placed part, plus `unread` ({count, questions,
+   *   newest_at}); no comment text
+   */
+  function reviewPart(reviewId, options) {
+    var placed = placeReview(reviewId, sessionContexts());
+    placed.unread = unreadOf(reviewId, options && options.since);
+    return placed;
+  }
+
+  /**
+   * Every agent session on disk: whether it is closed, its own name, and its
+   * agent by the Library's liveness test (`watching`: listening or working,
+   * else null). A closed or unreadable session is never watching.
+   *
+   * @param {number|string} [now]
+   * @returns {{id: string, closed: boolean, name: string|null, started_at: string|null,
+   *            watching: object|null}[]}
+   */
+  function sessionsAt(now) {
+    var nowMs = toMs(now);
+    var root = stateDir.agentSessionsRoot(dir);
+    var entries;
+    try {
+      entries = fs.readdirSync(root, { withFileTypes: true });
+    } catch (err) {
+      return [];
+    }
+    return entries
+      .filter(function (entry) { return entry.isDirectory() && protocol.isSafeId(entry.name) && entry.name !== LEGACY; })
+      .map(function (entry) {
+        var got = readSession(entry.name);
+        var open = got.state === "ok" && !got.value.closed_at;
+        return {
+          id: entry.name,
+          closed: !open,
+          name: got.state === "ok" ? agentSessions.cleanName(got.value.name) : null,
+          started_at: got.state === "ok" && typeof got.value.created_at === "string" ? got.value.created_at : null,
+          watching: open ? watchingOf(entry.name, nowMs) : null
+        };
+      })
+      .sort(function (a, b) { return a.id < b.id ? -1 : 1; });
   }
 
   // ---------------------------------------------------------------------------
@@ -1216,8 +1410,10 @@ function createReader(options) {
       folder: row.folderName,
       path_hint: row.pathHint,
       // The document's path from its project root (worktree root, ~/.claude),
-      // else its ~ path: the row's second line.
-      project_path: row.projectPath || null,
+      // else its ~ path: the row's second line. Worked out here rather than
+      // when rows are folded, because finding the project root walks up the
+      // folders and only the list shows it.
+      project_path: projectPath(row.folder || info.docPath) || null,
       // "folder" for old per-page reviews folded by folder, "document" for
       // several reviews of one document; null for a single review.
       fold_kind: row.parts.length > 1 ? row.foldKind || "folder" : null,
@@ -1364,8 +1560,40 @@ function createReader(options) {
 
   return {
     list: list,
-    describeReview: describeReview
+    describeReview: describeReview,
+    reviewIds: reviewIds,
+    reviewPart: reviewPart,
+    foldParts: foldParts,
+    sessionsAt: sessionsAt
   };
+}
+
+// What the menu bar shows of a title and a path. Page-derived text, so it
+// loses every control character (C0 and C1), every Unicode format character
+// (the bidirectional overrides among them, which can make one name read as
+// another), the line and paragraph separators (which break a menu row), and
+// every lone surrogate half (which JSON carries as a bare \ud800 escape that
+// the Mac app's decoder refuses, failing the whole answer). With the u flag,
+// \p{Cs} matches only a lone half, never a real pair. It is cut by
+// characters rather than UTF-16 units.
+var MENU_TITLE_MAX = 120;
+var MENU_PATH_HINT_MAX = 200;
+var MENU_UNSAFE_CHARS = /[\p{Cc}\p{Cf}\p{Cs}\p{Zl}\p{Zp}]/gu;
+
+/**
+ * Page-derived text made safe to set as a menu title.
+ *
+ * @param {*} value
+ * @param {number} max the most characters kept
+ * @returns {string|null} null for anything that is not a string with something left in it
+ */
+function menuText(value, max) {
+  if (typeof value !== "string") return null;
+  var clean = value.replace(MENU_UNSAFE_CHARS, "");
+  // Never more characters than UTF-16 units, so only a long one is split.
+  if (clean.length > max) clean = Array.from(clean).slice(0, max).join("");
+  clean = clean.trim();
+  return clean || null;
 }
 
 /**
@@ -1384,5 +1612,8 @@ function queueInputs(queue) {
 
 module.exports = {
   createReader: createReader,
-  queueInputs: queueInputs
+  queueInputs: queueInputs,
+  MENU_TITLE_MAX: MENU_TITLE_MAX,
+  MENU_PATH_HINT_MAX: MENU_PATH_HINT_MAX,
+  menuText: menuText
 };

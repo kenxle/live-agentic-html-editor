@@ -1,0 +1,2054 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+  <meta charset="utf-8" />
+  <meta name="generator" content="pandoc" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
+  <title>Architecture: Menu bar app</title>
+  <style>
+    /* Default styles provided by pandoc.
+    ** See https://pandoc.org/MANUAL.html#variables-for-html for config info.
+    */
+    html {
+      color: #1a1a1a;
+      background-color: #fdfdfd;
+    }
+    body {
+      margin: 0 auto;
+      max-width: 36em;
+      padding-left: 50px;
+      padding-right: 50px;
+      padding-top: 50px;
+      padding-bottom: 50px;
+      hyphens: auto;
+      overflow-wrap: break-word;
+      text-rendering: optimizeLegibility;
+      font-kerning: normal;
+    }
+    @media (max-width: 600px) {
+      body {
+        font-size: 0.9em;
+        padding: 12px;
+      }
+      h1 {
+        font-size: 1.8em;
+      }
+    }
+    @media print {
+      html {
+        background-color: white;
+      }
+      body {
+        background-color: transparent;
+        color: black;
+        font-size: 12pt;
+      }
+      p, h2, h3 {
+        orphans: 3;
+        widows: 3;
+      }
+      h2, h3, h4 {
+        page-break-after: avoid;
+      }
+    }
+    p {
+      margin: 1em 0;
+    }
+    a {
+      color: #1a1a1a;
+    }
+    a:visited {
+      color: #1a1a1a;
+    }
+    img {
+      max-width: 100%;
+    }
+    svg {
+      height: auto;
+      max-width: 100%;
+    }
+    h1, h2, h3, h4, h5, h6 {
+      margin-top: 1.4em;
+    }
+    h5, h6 {
+      font-size: 1em;
+      font-style: italic;
+    }
+    h6 {
+      font-weight: normal;
+    }
+    ol, ul {
+      padding-left: 1.7em;
+      margin-top: 1em;
+    }
+    li > ol, li > ul {
+      margin-top: 0;
+    }
+    blockquote {
+      margin: 1em 0 1em 1.7em;
+      padding-left: 1em;
+      border-left: 2px solid #e6e6e6;
+      color: #606060;
+    }
+    code {
+      white-space: pre-wrap;
+      font-family: Menlo, Monaco, Consolas, 'Lucida Console', monospace;
+      font-size: 85%;
+      margin: 0;
+      hyphens: manual;
+    }
+    pre {
+      margin: 1em 0;
+      overflow: auto;
+    }
+    pre code {
+      padding: 0;
+      overflow: visible;
+      overflow-wrap: normal;
+    }
+    .sourceCode {
+     background-color: transparent;
+     overflow: visible;
+    }
+    hr {
+      border: none;
+      border-top: 1px solid #1a1a1a;
+      height: 1px;
+      margin: 1em 0;
+    }
+    table {
+      margin: 1em 0;
+      border-collapse: collapse;
+      width: 100%;
+      overflow-x: auto;
+      display: block;
+      font-variant-numeric: lining-nums tabular-nums;
+    }
+    table caption {
+      margin-bottom: 0.75em;
+    }
+    tbody {
+      margin-top: 0.5em;
+      border-top: 1px solid #1a1a1a;
+      border-bottom: 1px solid #1a1a1a;
+    }
+    th {
+      border-top: 1px solid #1a1a1a;
+      padding: 0.25em 0.5em 0.25em 0.5em;
+    }
+    td {
+      padding: 0.125em 0.5em 0.25em 0.5em;
+    }
+    header {
+      margin-bottom: 4em;
+      text-align: center;
+    }
+    #TOC li {
+      list-style: none;
+    }
+    #TOC ul {
+      padding-left: 1.3em;
+    }
+    #TOC > ul {
+      padding-left: 0;
+    }
+    #TOC a:not(:hover) {
+      text-decoration: none;
+    }
+    span.smallcaps{font-variant: small-caps;}
+    div.columns{display: flex; gap: min(4vw, 1.5em);}
+    div.column{flex: auto; overflow-x: auto;}
+    div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+    /* The extra [class] is a hack that increases specificity enough to
+       override a similar rule in reveal.js */
+    ul.task-list[class]{list-style: none;}
+    ul.task-list li input[type="checkbox"] {
+      font-size: inherit;
+      width: 0.8em;
+      margin: 0 0.8em 0.2em -1.6em;
+      vertical-align: middle;
+    }
+    .display.math{display: block; text-align: center; margin: 0.5rem auto;}
+    /* CSS for syntax highlighting */
+    html { -webkit-text-size-adjust: 100%; }
+    pre > code.sourceCode { white-space: pre; position: relative; }
+    pre > code.sourceCode > span { display: inline-block; line-height: 1.25; }
+    pre > code.sourceCode > span:empty { height: 1.2em; }
+    .sourceCode { overflow: visible; }
+    code.sourceCode > span { color: inherit; text-decoration: inherit; }
+    div.sourceCode { margin: 1em 0; }
+    pre.sourceCode { margin: 0; }
+    @media screen {
+    div.sourceCode { overflow: auto; }
+    }
+    @media print {
+    pre > code.sourceCode { white-space: pre-wrap; }
+    pre > code.sourceCode > span { text-indent: -5em; padding-left: 5em; }
+    }
+    pre.numberSource code
+      { counter-reset: source-line 0; }
+    pre.numberSource code > span
+      { position: relative; left: -4em; counter-increment: source-line; }
+    pre.numberSource code > span > a:first-child::before
+      { content: counter(source-line);
+        position: relative; left: -1em; text-align: right; vertical-align: baseline;
+        border: none; display: inline-block;
+        -webkit-touch-callout: none; -webkit-user-select: none;
+        -khtml-user-select: none; -moz-user-select: none;
+        -ms-user-select: none; user-select: none;
+        padding: 0 4px; width: 4em;
+        color: #aaaaaa;
+      }
+    pre.numberSource { margin-left: 3em; border-left: 1px solid #aaaaaa;  padding-left: 4px; }
+    div.sourceCode
+      {   }
+    @media screen {
+    pre > code.sourceCode > span > a:first-child::before { text-decoration: underline; }
+    }
+    code span.al { color: #ff0000; font-weight: bold; } /* Alert */
+    code span.an { color: #60a0b0; font-weight: bold; font-style: italic; } /* Annotation */
+    code span.at { color: #7d9029; } /* Attribute */
+    code span.bn { color: #40a070; } /* BaseN */
+    code span.bu { color: #008000; } /* BuiltIn */
+    code span.cf { color: #007020; font-weight: bold; } /* ControlFlow */
+    code span.ch { color: #4070a0; } /* Char */
+    code span.cn { color: #880000; } /* Constant */
+    code span.co { color: #60a0b0; font-style: italic; } /* Comment */
+    code span.cv { color: #60a0b0; font-weight: bold; font-style: italic; } /* CommentVar */
+    code span.do { color: #ba2121; font-style: italic; } /* Documentation */
+    code span.dt { color: #902000; } /* DataType */
+    code span.dv { color: #40a070; } /* DecVal */
+    code span.er { color: #ff0000; font-weight: bold; } /* Error */
+    code span.ex { } /* Extension */
+    code span.fl { color: #40a070; } /* Float */
+    code span.fu { color: #06287e; } /* Function */
+    code span.im { color: #008000; font-weight: bold; } /* Import */
+    code span.in { color: #60a0b0; font-weight: bold; font-style: italic; } /* Information */
+    code span.kw { color: #007020; font-weight: bold; } /* Keyword */
+    code span.op { color: #666666; } /* Operator */
+    code span.ot { color: #007020; } /* Other */
+    code span.pp { color: #bc7a00; } /* Preprocessor */
+    code span.sc { color: #4070a0; } /* SpecialChar */
+    code span.ss { color: #bb6688; } /* SpecialString */
+    code span.st { color: #4070a0; } /* String */
+    code span.va { color: #19177c; } /* Variable */
+    code span.vs { color: #4070a0; } /* VerbatimString */
+    code span.wa { color: #60a0b0; font-weight: bold; font-style: italic; } /* Warning */
+  </style>
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>%F0%9F%94%A8</text></svg>">
+  <!--
+    St. Clair AI document style for forge docs.
+
+    The palette, type and spacing values below are copied from the St. Clair
+    system tokens (live-agentic-html-editor/vendor/stclair-doc-style/
+    system-tokens.css). This header does NOT link LAHE's ./.lahe-doc-style.css
+    bundle, on purpose: that bundle's document.css styles bare elements and a
+    generic .callout (an ink fill with white text) and puts padding on every body
+    child, and all three collide with the forge structure. So the page is
+    self-contained and reads the same whether or not LAHE is serving it.
+
+    The fonts are the one thing taken from LAHE: it serves the three vendored
+    faces at ./.lahe-fonts/<file>.woff2 from every folder. When that fails, each
+    stack falls back to system-ui and a platform monospace.
+
+    House rules this file keeps: no pills, no shadows, no gradients, no all caps
+    labels, no single-side coloured borders. Colour comes from tints and dots.
+  -->
+  <style>
+    @font-face {
+      font-family: "Schibsted Grotesk"; font-style: normal; font-weight: 500 700; font-display: swap;
+      src: url("./.lahe-fonts/schibsted-grotesk-variable.woff2") format("woff2");
+    }
+    @font-face {
+      font-family: "Hanken Grotesk"; font-style: normal; font-weight: 400 600; font-display: swap;
+      src: url("./.lahe-fonts/hanken-grotesk-variable.woff2") format("woff2");
+    }
+    @font-face {
+      font-family: "JetBrains Mono"; font-style: normal; font-weight: 400 500; font-display: swap;
+      src: url("./.lahe-fonts/jetbrains-mono-variable.woff2") format("woff2");
+    }
+
+    :root {
+      color-scheme: light dark;
+
+      /* St. Clair palette (raw names and values from system-tokens.css) */
+      --white: #ffffff;
+      --paper: #f7f7f5;
+      --ink: #1f1e1a;
+      --ink-soft: #55534b;
+      --ink-faint: #6b6860;
+      --rule: #dcdad6;
+      --purple: #46188c;
+      --purple-tint: #f1ebfa;
+      --link: #6d28d9;
+      --cobalt: #0760c7;
+      --cobalt-tint: #e6effc;
+      --sage-fill: #8fb5a0;
+      --sage: #637a63;
+      --sage-tint: #e7f1ed;
+
+      --font-display: "Schibsted Grotesk", "Hanken Grotesk", system-ui, sans-serif;
+      --font-body: "Hanken Grotesk", system-ui, -apple-system, "Helvetica Neue", sans-serif;
+      --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+
+      --r: 4px;
+
+      /* Forge roles. Prefixed --ff- so none of them can collide with a St. Clair
+         token of the same name if the two ever share a page. Dark mode repoints
+         these and nothing else. */
+      --ff-bg: var(--white);
+      --ff-fg: var(--ink);
+      --ff-soft: var(--ink-soft);
+      --ff-faint: var(--ink-faint);
+      --ff-rule: var(--rule);
+      --ff-divider: var(--ink);
+      --ff-link: var(--link);
+      --ff-accent: var(--cobalt);
+      --ff-panel: var(--paper);
+      --ff-code-bg: var(--cobalt-tint);
+      --ff-bullet: var(--sage);
+      --ff-hl-kw: var(--cobalt);
+      --ff-hl-str: var(--sage);
+      --ff-hl-num: var(--purple);
+
+      /* Callouts: a tint, a dot and a label colour each. */
+      --ff-req-bg: var(--cobalt-tint);      --ff-req-dot: var(--cobalt);    --ff-req-label: var(--cobalt);
+      --ff-nongoal-bg: var(--paper);        --ff-nongoal-dot: var(--ink-faint); --ff-nongoal-label: var(--ink-faint);
+      --ff-metric-bg: var(--sage-tint);     --ff-metric-dot: var(--sage);   --ff-metric-label: var(--ink-soft);
+      --ff-question-bg: var(--purple-tint); --ff-question-dot: var(--purple); --ff-question-label: var(--purple);
+      --ff-suggest-bg: var(--white);        --ff-suggest-dot: var(--sage);  --ff-suggest-label: var(--sage);
+      --ff-flag-bg: var(--ink);             --ff-flag-fg: var(--white);     --ff-flag-dot: var(--sage-fill);
+
+      /* Disposition verdicts */
+      --ff-accepted: var(--sage);
+      --ff-rejected: var(--purple);
+      --ff-deferred: var(--cobalt);
+    }
+
+    /* Dark: the St. Clair on-ink values. Body text is full white on ink, as the
+       system decides; tints are the accent mixed into the ink ground. */
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --ff-bg: var(--ink);
+        --ff-fg: var(--white);
+        --ff-soft: #d9d7d1;   /* --ink-soft-ondark */
+        --ff-faint: #b3b0a8;  /* --ink-faint-ondark */
+        --ff-rule: #4a4842;   /* --rule-ondark */
+        --ff-divider: var(--white);
+        --ff-link: var(--sage-fill);
+        --ff-accent: color-mix(in srgb, var(--cobalt) 45%, var(--white));
+        --ff-panel: color-mix(in srgb, var(--white) 6%, var(--ink));
+        --ff-code-bg: color-mix(in srgb, var(--cobalt) 22%, var(--ink));
+        --ff-bullet: var(--sage-fill);
+        --ff-hl-kw: color-mix(in srgb, var(--cobalt) 40%, var(--white));
+        --ff-hl-str: var(--sage-fill);
+        --ff-hl-num: color-mix(in srgb, var(--purple) 30%, var(--white));
+
+        --ff-req-bg: color-mix(in srgb, var(--cobalt) 22%, var(--ink));
+        --ff-req-dot: color-mix(in srgb, var(--cobalt) 45%, var(--white));
+        --ff-req-label: color-mix(in srgb, var(--cobalt) 35%, var(--white));
+        --ff-nongoal-bg: color-mix(in srgb, var(--white) 6%, var(--ink));
+        --ff-nongoal-dot: #b3b0a8; --ff-nongoal-label: #b3b0a8;
+        --ff-metric-bg: color-mix(in srgb, var(--sage) 30%, var(--ink));
+        --ff-metric-dot: var(--sage-fill); --ff-metric-label: var(--sage-fill);
+        --ff-question-bg: color-mix(in srgb, var(--purple) 45%, var(--ink));
+        --ff-question-dot: color-mix(in srgb, var(--purple) 30%, var(--white));
+        --ff-question-label: color-mix(in srgb, var(--purple) 25%, var(--white));
+        --ff-suggest-bg: var(--ink);
+        --ff-suggest-dot: var(--sage-fill); --ff-suggest-label: var(--sage-fill);
+        --ff-flag-bg: var(--paper); --ff-flag-fg: var(--ink); --ff-flag-dot: var(--sage);
+
+        --ff-accepted: var(--sage-fill);
+        --ff-rejected: color-mix(in srgb, var(--purple) 30%, var(--white));
+        --ff-deferred: color-mix(in srgb, var(--cobalt) 40%, var(--white));
+      }
+    }
+
+    /* Pandoc's own default styles load before this block. The rules marked
+       "pandoc" below undo the ones that fight this look: black table rules,
+       a block-level table, auto hyphens, italic h5/h6, and a:visited in
+       near-black, which outranks a plain a rule. */
+    html { scroll-behavior: smooth; -webkit-print-color-adjust: exact; print-color-adjust: exact; background: var(--ff-bg); }
+    * { box-sizing: border-box; }
+
+    body {
+      font-family: var(--font-body);
+      font-size: 17px;
+      line-height: 1.65;
+      color: var(--ff-fg);
+      background: var(--ff-bg);
+      max-width: 1080px;   /* --maxw */
+      margin: 0 auto;
+      padding: 56px 28px 104px;   /* 28px: --gutter */
+      -webkit-font-smoothing: antialiased;
+      text-rendering: optimizeLegibility;
+      hyphens: manual;   /* pandoc */
+    }
+
+    /* The reading measure, as in the International Style: prose stops at 68ch
+       (--read) and sits flush left in the wider column, so lines stay short and
+       the right side stays open. Tables, code, diagrams and callout boxes keep
+       the full column. */
+    p, ul, ol, blockquote { max-width: 68ch; }
+    :is(table, pre) :is(p, ul, ol, blockquote),
+    p:has(> img:only-child) { max-width: none; }
+
+    /* Title block (pandoc emits <header id="title-block-header">) */
+    header#title-block-header { padding-bottom: 8px; margin-bottom: 0; text-align: left; }
+    header#title-block-header h1.title {
+      font-family: var(--font-display);
+      font-size: clamp(34px, 4.6vw, 52px);
+      font-weight: 600;
+      margin: 0 0 12px;
+      letter-spacing: -0.012em;
+      line-height: 1.1;
+    }
+    header#title-block-header p.subtitle,
+    header#title-block-header p.author,
+    header#title-block-header p.date {
+      font-size: 20px;
+      line-height: 1.55;
+      color: var(--ff-soft);
+      margin: 0;
+    }
+
+    /* Cross-doc nav (injected by the build before the TOC). A plain line:
+       "Docs  Crucible · Brief · Architecture", the current doc in ink. */
+    .doc-nav {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: baseline;
+      gap: 4px 0;
+      margin: 20px 0 8px;
+      padding: 12px 0;
+      border-top: 1px solid var(--ff-rule);
+      border-bottom: 1px solid var(--ff-rule);
+      font-size: 15px;
+    }
+    .doc-nav .doc-nav-label {
+      font-family: var(--font-display);
+      font-weight: 600;
+      font-size: 14px;
+      color: var(--ff-faint);
+      margin-right: 14px;
+    }
+    .doc-nav a {
+      color: var(--ff-link);
+      text-decoration: underline;
+      text-decoration-thickness: 1px;
+      text-underline-offset: 3px;
+      border: 0;
+      background: none;
+      padding: 0;
+    }
+    .doc-nav a + a::before {
+      content: "\00B7";
+      display: inline-block;
+      color: var(--ff-faint);
+      margin: 0 10px;
+      text-decoration: none;
+    }
+    .doc-nav a:hover { background: none; text-decoration-thickness: 2px; }
+    .doc-nav a:visited { color: var(--ff-link); }
+    .doc-nav a.current, .doc-nav a.current:visited {
+      color: var(--ff-fg);
+      font-weight: 600;
+      text-decoration: none;
+      cursor: default;
+    }
+
+    /* TOC (pandoc emits <nav id="TOC">) */
+    nav#TOC {
+      margin: 28px 0 44px;
+      font-size: 15px;
+      line-height: 1.5;
+    }
+    nav#TOC::before {
+      content: "Contents";
+      display: block;
+      font-family: var(--font-display);
+      font-weight: 600;
+      font-size: 14px;
+      color: var(--ff-faint);
+      padding-bottom: 8px;
+      margin-bottom: 12px;
+      border-bottom: 2px solid var(--ff-divider);
+    }
+    nav#TOC ul { list-style: none; padding-left: 0; margin: 0; }
+    nav#TOC ul ul { padding-left: 18px; margin-top: 4px; }
+    nav#TOC li { margin-bottom: 4px; }
+    nav#TOC li::marker { content: none; }
+    nav#TOC a, nav#TOC a:visited { color: var(--ff-fg); text-decoration: none; border: 0; }
+    nav#TOC a:hover { color: var(--ff-link); text-decoration: underline; background: none; }
+
+    /* Headings: Schibsted at display weight, sentence case. An h2 hangs under a
+       full-width ink rule, the St. Clair section head. */
+    h1, h2, h3, h4, h5, h6 {
+      font-family: var(--font-display);
+      font-weight: 600;
+      line-height: 1.15;
+      letter-spacing: -0.012em;
+      color: var(--ff-fg);
+    }
+    h2 {
+      font-size: clamp(25px, 3vw, 32px);
+      margin: 64px 0 18px;
+      padding-top: 12px;
+      border-top: 2px solid var(--ff-divider);
+    }
+    h3 { font-size: clamp(19px, 2vw, 23px); margin: 40px 0 12px; }
+    h4 { font-size: 18px; margin: 28px 0 8px; }
+    h5, h6 { font-size: 17px; margin: 24px 0 8px; font-style: normal; font-weight: 600; }   /* pandoc */
+    h6 { color: var(--ff-soft); }
+
+    p { margin: 0 0 18px; }
+    p, li, td, dd { overflow-wrap: anywhere; }
+
+    a {
+      color: var(--ff-link);
+      text-decoration: underline;
+      text-decoration-thickness: 1px;
+      text-underline-offset: 3px;
+    }
+    a:visited { color: var(--ff-link); }   /* pandoc */
+    a:hover { text-decoration-thickness: 2px; }
+    :focus-visible { outline: 2px solid var(--ff-link); outline-offset: 3px; border-radius: var(--r); }
+
+    strong { color: inherit; font-weight: 700; }
+
+    ul, ol { margin: 0 0 18px; padding-left: 1.6em; }
+    li { margin: 0 0 8px; line-height: 1.55; }
+    li > p { margin-bottom: 8px; }
+    ul > li::marker { color: var(--ff-bullet); }
+    .callout ul > li::marker { color: var(--ff-dot); }
+    ol > li::marker { color: var(--ff-fg); font-weight: 600; }
+    li > ul, li > ol { margin-top: 8px; }
+
+    /* Callout boxes (from ::: callout-* fenced divs). A tint holding the text,
+       and a label row generated by CSS: a dot in the callout's colour, then the
+       label in the display face. */
+    .callout {
+      border-radius: var(--r);
+      padding: 16px 22px 18px;
+      margin: 18px 0;
+      background: var(--ff-panel);
+      color: var(--ff-fg);
+      line-height: 1.6;
+    }
+    .callout > :first-child { margin-top: 0; }
+    .callout > :last-child { margin-bottom: 0; }
+    .callout::before {
+      display: flex;
+      align-items: center;
+      gap: 9px;
+      font-family: var(--font-display);
+      font-weight: 600;
+      font-size: 14px;
+      line-height: 1.4;
+      margin-bottom: 6px;
+      padding-left: 16px;   /* room for the dot, which ::after draws */
+    }
+    .callout { position: relative; }
+    .callout::after {
+      content: "";
+      position: absolute;
+      left: 22px;
+      top: 23px;
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: var(--ff-dot, var(--ff-faint));
+    }
+    .callout-req      { background: var(--ff-req-bg);      --ff-dot: var(--ff-req-dot); }
+    .callout-req::before      { content: "Requirement";   color: var(--ff-req-label); }
+    .callout-nongoal  { background: var(--ff-nongoal-bg);  --ff-dot: var(--ff-nongoal-dot); border: 1px solid var(--ff-rule); }
+    .callout-nongoal::before  { content: "Non-goals";     color: var(--ff-nongoal-label); }
+    .callout-metric   { background: var(--ff-metric-bg);   --ff-dot: var(--ff-metric-dot); }
+    .callout-metric::before   { content: "Metrics";       color: var(--ff-metric-label); }
+    .callout-question { background: var(--ff-question-bg); --ff-dot: var(--ff-question-dot); }
+    .callout-question::before { content: "Open question"; color: var(--ff-question-label); }
+    .callout-suggest  { background: var(--ff-suggest-bg);  --ff-dot: var(--ff-suggest-dot); border: 1px solid var(--ff-suggest-dot); }
+    .callout-suggest::before  { content: "Suggestion";    color: var(--ff-suggest-label); }
+    .callout-flag     { background: var(--ff-flag-bg);     --ff-dot: var(--ff-flag-dot); color: var(--ff-flag-fg); }
+    .callout-flag::before     { content: "Red flag";      color: var(--ff-flag-fg); }
+    .callout-flag a, .callout-flag strong, .callout-flag code { color: inherit; }
+    .callout-flag code { background: color-mix(in srgb, currentColor 14%, transparent); }
+    /* The nongoal and suggest boxes carry a 1px border, so their dot moves with it. */
+    .callout-nongoal::after, .callout-suggest::after { left: 21px; top: 22px; }
+
+    /* Reviews section: the _reviews.md files are merged into the HTML below this
+       divider (they stay separate files on disk for agents). The build writes
+       the divider with an inline red rule; this repaints it in the house ink. */
+    hr.reviews-divider {
+      border: 0 !important;
+      border-top: 2px solid var(--ff-divider) !important;
+      margin: 88px 0 6px !important;
+      display: block !important;
+    }
+    hr.reviews-divider + * { margin-top: 0; }
+    .reviews-banner {
+      border-top: 1px solid var(--ff-divider);
+      padding: 14px 0 0;
+      margin: 0 0 32px;
+      font-size: 15px;
+      line-height: 1.55;
+      color: var(--ff-soft);
+    }
+    .reviews-banner::before {
+      display: block;
+      content: "Reviews, full prose";
+      font-family: var(--font-display);
+      font-weight: 600;
+      font-size: clamp(25px, 3vw, 32px);
+      line-height: 1.15;
+      letter-spacing: -0.012em;
+      color: var(--ff-fg);
+      margin-bottom: 8px;
+    }
+    /* Jump target for spec -> review-detail links; offset so the heading clears. */
+    .finding-anchor { display: inline-block; scroll-margin-top: 1.5rem; }
+    td a[href^="#"] { font-weight: 600; }
+
+    /* Inline xref deep-dive (from ::: xref fenced div) */
+    .xref {
+      font-size: 15px;
+      background: var(--ff-code-bg);
+      border-radius: var(--r);
+      padding: 10px 16px;
+      margin: 0 0 18px;
+      color: var(--ff-soft);
+      line-height: 1.5;
+    }
+    .xref::before {
+      content: "\21B3  See";
+      font-family: var(--font-display);
+      font-weight: 600;
+      font-size: 14px;
+      color: var(--ff-accent);
+      margin-right: 8px;
+    }
+    .xref > * { display: inline; margin: 0; }
+    .xref a, .xref a:visited { font-weight: 600; color: var(--ff-fg); }
+
+    /* Tables: the St. Clair naked ruled table. A 2px rule under the head,
+       hairlines between rows, no box, no tint, no shadow. The build wraps every
+       table in .table-scroll; the scrolling itself lives in
+       shared-assets/doc_fixes.css. */
+    .table-scroll { margin: 24px 0 32px; }
+    .table-scroll table { margin: 0; }
+    table {
+      border-collapse: collapse;
+      width: 100%;
+      margin: 24px 0 32px;
+      font-size: 15px;
+      line-height: 1.5;
+      background: none;
+      display: table;   /* pandoc sets block; .table-scroll does the scrolling */
+    }
+    tbody { border: 0; }   /* pandoc */
+    th { border-top: 0; }  /* pandoc */
+    thead th {
+      font-family: var(--font-display);
+      font-weight: 600;
+      font-size: 14px;
+      color: var(--ff-faint);
+      text-align: left;
+      padding: 0 16px 10px 0;
+      border-bottom: 2px solid var(--ff-divider);
+      vertical-align: bottom;
+    }
+    tbody td {
+      padding: 12px 16px 12px 0;
+      border-bottom: 1px solid var(--ff-rule);
+      vertical-align: top;
+    }
+    td:last-child, th:last-child { padding-right: 0; }
+    /* A short id column ("RF 12", "T3") stays on one line beside wide prose. */
+    tbody td:first-child { min-width: 3.4em; }
+    tbody tr:nth-child(even) { background: none; }
+    td > :first-child { margin-top: 0; }
+    td > :last-child { margin-bottom: 0; }
+
+    /* Disposition verdicts rendered by the build (Accepted/Rejected/Deferred).
+       A dot and the word, in the verdict's colour. */
+    td .accepted, span.accepted,
+    td .rejected, span.rejected,
+    td .deferred, span.deferred {
+      font-family: var(--font-display);
+      font-weight: 600;
+      white-space: nowrap;
+    }
+    td .accepted::before, span.accepted::before,
+    td .rejected::before, span.rejected::before,
+    td .deferred::before, span.deferred::before {
+      content: "";
+      display: inline-block;
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: currentColor;
+      margin-right: 7px;
+      vertical-align: 0.12em;
+    }
+    td .accepted, span.accepted { color: var(--ff-accepted); }
+    td .rejected, span.rejected { color: var(--ff-rejected); }
+    td .deferred, span.deferred { color: var(--ff-deferred); }
+
+    /* Inline + block code: JetBrains Mono on the cobalt tint, ink text.
+       Ligatures off, so an arrow in code reads as the two characters it is. */
+    code, pre {
+      font-family: var(--font-mono);
+      font-variant-ligatures: none;
+      font-feature-settings: "liga" 0, "calt" 0;
+    }
+    code {
+      font-size: 0.86em;
+      background: var(--ff-code-bg);
+      color: var(--ff-fg);
+      padding: 0.1em 0.35em;
+      border-radius: 3px;
+    }
+    pre {
+      font-size: 14px;
+      background: var(--ff-code-bg);
+      color: var(--ff-fg);
+      padding: 18px 24px;
+      border-radius: var(--r);
+      overflow-x: auto;
+      margin: 0 0 24px;
+      line-height: 1.55;
+      /* Wrap long lines instead of forcing a horizontal scroll (readability). */
+      white-space: pre-wrap;
+      word-break: break-word;
+      overflow-wrap: anywhere;
+    }
+    pre code { background: none; color: inherit; padding: 0; font-size: inherit; }
+    /* A code chip inside a tinted callout would vanish into the tint. */
+    .callout code { background: color-mix(in srgb, currentColor 9%, transparent); }
+
+    /* Highlighted blocks: pandoc wraps them in div.sourceCode and paints its
+       own transparent ground and a green-and-teal palette. Repaint both in the
+       St. Clair accents. */
+    div.sourceCode { margin: 0 0 24px; }
+    div.sourceCode > pre.sourceCode { background: var(--ff-code-bg); margin: 0; }
+    pre.sourceCode code span.kw, pre.sourceCode code span.cf, pre.sourceCode code span.im,
+    pre.sourceCode code span.op, pre.sourceCode code span.bu { color: var(--ff-hl-kw); font-weight: 500; }
+    pre.sourceCode code span.st, pre.sourceCode code span.ch, pre.sourceCode code span.ss,
+    pre.sourceCode code span.vs, pre.sourceCode code span.sc { color: var(--ff-hl-str); }
+    pre.sourceCode code span.dv, pre.sourceCode code span.fl, pre.sourceCode code span.bn,
+    pre.sourceCode code span.cn, pre.sourceCode code span.dt { color: var(--ff-hl-num); }
+    pre.sourceCode code span.co, pre.sourceCode code span.an, pre.sourceCode code span.cv,
+    pre.sourceCode code span.do, pre.sourceCode code span.in { color: var(--ff-soft); font-style: normal; font-weight: 400; }
+    pre.sourceCode code span.fu, pre.sourceCode code span.va, pre.sourceCode code span.at,
+    pre.sourceCode code span.ot { color: inherit; font-weight: 400; }
+
+    /* Mermaid blocks: pandoc renders ```mermaid as <pre class="mermaid">; the
+       Mermaid script replaces the text with SVG. It is a figure, not code: no
+       tint, a hairline frame, centred. Mermaid source must not wrap before the
+       script swaps it for SVG. */
+    pre.mermaid {
+      white-space: pre;
+      background: none;
+      border: 1px solid var(--ff-rule);
+      border-radius: var(--r);
+      padding: 24px;
+      text-align: center;
+      color: var(--ff-fg);
+      font-family: var(--font-body);
+    }
+    pre.mermaid svg { max-width: 100%; height: auto; }
+
+    blockquote {
+      margin: 18px 0;
+      padding: 2px 0 2px 18px;
+      border-left: 3px solid var(--ff-rule);
+      color: var(--ff-soft);
+    }
+    blockquote p:last-child { margin-bottom: 0; }
+
+    hr { border: none; border-top: 1px solid var(--ff-rule); margin: 44px 0; }
+    hr:has(+ h2) { display: none; }
+
+    img { max-width: 100%; height: auto; }
+
+    /* Task-list checkboxes from "- [ ]" lists */
+    ul.task-list { list-style: none; padding-left: 4px; }
+    ul.task-list li input[type="checkbox"] { margin-right: 8px; accent-color: var(--cobalt); }
+
+    @page { size: letter; margin: 0.7in 0.65in; }
+    @media (max-width: 620px) {
+      body { padding: 32px 16px 64px; font-size: 16px; }
+      .callout { padding: 14px 16px 16px; }
+      .callout::after { left: 16px; top: 22px; }
+      table { font-size: 14px; }
+    }
+    @media print {
+      :root { color-scheme: light; }
+      * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+      html, body { background: #fff; color: var(--ink); }
+      body { max-width: 100%; font-size: 11pt; padding: 0; }
+      .doc-nav { display: none; }
+      a { color: var(--ink); }
+      .callout, table, pre, blockquote { break-inside: avoid; }
+      h2, h3 { break-after: avoid; }
+    }
+  </style>
+  <script type="module">
+    import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.esm.min.mjs";
+    const dark = window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches;
+    mermaid.initialize({
+      startOnLoad: false,
+      theme: dark ? "dark" : "neutral",
+      securityLevel: "loose",
+      themeVariables: { fontFamily: '"Hanken Grotesk", system-ui, sans-serif' },
+    });
+    /* Pandoc emits ```mermaid blocks as <pre class="mermaid"><code>…</code></pre> with the
+       diagram source HTML-entity-encoded. Mermaid 10 reads innerHTML, so it sees the literal
+       <code> tag and &quot;/&gt; entities and throws syntax errors. Flatten each block to a
+       single decoded text node first (textContent decodes entities and drops the wrapper),
+       then render. Same fix as the personal-repo report builds (commit d525c50 there). */
+    function renderMermaid() {
+      document.querySelectorAll("pre.mermaid").forEach(function (el) {
+        if (!el.dataset.mflattened) {
+          el.textContent = el.textContent;
+          el.dataset.mflattened = "1";
+        }
+      });
+      mermaid.run({ querySelector: "pre.mermaid" });
+    }
+    if (document.readyState === "loading") {
+      window.addEventListener("DOMContentLoaded", renderMermaid);
+    } else {
+      renderMermaid();
+    }
+  </script>
+
+  <!-- The review comment module and the shared document fixes are injected here
+       at build time from ~/.claude/skills/shared-assets/ (comment_module.html +
+       doc_fixes.css) by shared_assets.resolve_header(). Do not paste a copy back
+       into this file. -->
+  <style>
+  /* Shared document fixes: one source for both document builds.
+
+     Injected at build time alongside comment_module.html, in place of the
+     <!-- SHARED_ASSETS --> placeholder in each pandoc header. Because it lands
+     last in <head>, these rules win over the same-specificity rules earlier in a
+     header without needing !important.
+
+     Keep this file to fixes that are true for every document we build. Anything
+     that depends on a skill's own look (colors, radius, shadow) belongs in that
+     skill's header. */
+
+  /* --- Tables: never spill past the reading column (plan Task 4.3, defect 1) ---
+     Two halves to the fix, and both are needed.
+     1. A wide table scrolls inside its wrapper. Both builds wrap every table in
+        <div class="table-scroll">.
+     2. Long unbroken strings (URLs, tokens, absolute paths) wrap instead of
+        setting a min-content width that forces the table wider than the page.
+        Without this the table is simply wider than the wrapper and the text is
+        cut off at the wrapper edge. */
+  .table-scroll {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    max-width: 100%;
+  }
+  .table-scroll > table { margin: 0; }
+  table { max-width: 100%; }
+  thead th, tbody td { overflow-wrap: anywhere; word-break: break-word; }
+  thead th code, tbody td code,
+  thead th a, tbody td a { overflow-wrap: anywhere; word-break: break-word; }
+
+  /* Print/PDF has no scrollbars, so show the whole table and let it shrink. */
+  @media print {
+    .table-scroll { overflow: visible; }
+  }
+
+  /* --- Charts: never let a chart set the page width (plan Task 4.3, defect 2) ---
+     The label-truncation fix itself is Plotly's automargin, applied in the
+     report header's render script. This is the CSS guard next to it: a chart
+     that computes a wider layout than its column stays inside the column
+     instead of pushing the whole page sideways. */
+  figure.plotly-chart,
+  figure.plotly-chart > div,
+  figure.chart svg,
+  figure.plotly-chart .main-svg { max-width: 100%; }
+
+  </style>
+</head>
+<body>
+<header id="title-block-header">
+<h1 class="title">Architecture: Menu bar app</h1>
+</header>
+
+<div class="doc-nav"><span class="doc-nav-label">Docs</span><a href="00_crucible_menu_bar_app.html">Crucible</a><a href="01_brief_menu_bar_app.html">Brief</a><a href="02_architecture_menu_bar_app.html" class="current">Architecture</a><a href="03_plan_menu_bar_app.html">Plan</a><a href="04_progress_menu_bar_app.md">Progress</a></div>
+<nav id="TOC" role="doc-toc">
+<ul>
+<li><a href="#summary" id="toc-summary">Summary</a></li>
+<li><a href="#analysis-of-existing-structure"
+id="toc-analysis-of-existing-structure">Analysis of Existing
+Structure</a></li>
+<li><a href="#components--modules-touched"
+id="toc-components--modules-touched">Components / Modules
+Touched</a></li>
+<li><a href="#data--state-changes" id="toc-data--state-changes">Data /
+State Changes</a></li>
+<li><a href="#key-flows" id="toc-key-flows">Key Flows</a></li>
+<li><a href="#alternatives-considered"
+id="toc-alternatives-considered">Alternatives Considered</a></li>
+<li><a href="#failure-modes--edge-cases"
+id="toc-failure-modes--edge-cases">Failure Modes / Edge Cases</a></li>
+<li><a href="#security--privacy-notes"
+id="toc-security--privacy-notes">Security &amp; Privacy Notes</a></li>
+<li><a href="#test-strategy" id="toc-test-strategy">Test
+Strategy</a></li>
+<li><a href="#open-questions" id="toc-open-questions">Open
+Questions</a></li>
+<li><a href="#architect-review" id="toc-architect-review">Architect
+Review</a></li>
+<li><a href="#security-review" id="toc-security-review">Security
+Review</a></li>
+<li><a href="#architecture-reviews-menu-bar-app"
+id="toc-architecture-reviews-menu-bar-app">Architecture reviews: Menu
+bar app</a>
+<ul>
+<li><a href="#security-review-1" id="toc-security-review-1">Security
+review</a></li>
+</ul></li>
+</ul>
+</nav>
+<h2 id="summary">Summary</h2>
+<p>The helper gains one read-only answer, the <strong>summary</strong>,
+plain Node in <code>src/service/</code> that runs on every system. The
+rail's own read mark, the one behind a card's "1 new" tag, is posted to
+the review's store as an event, so the helper knows what Ken has read
+without a rule of its own. A Swift program in a new top-level
+<code>macos/</code> folder draws the icon and menu from the summary.
+<code>lahe install</code> builds that program on the Mac with
+<code>swiftc</code>, puts it in the state folder as a small app, and
+starts it at login with its own login item. The helper rebuilds the app
+when its source changes. The app proves its permission with a signed
+request keyed by the CLI secret, so the secret itself never travels, and
+it trusts only answers the helper signs back. No agent-facing behavior
+changes.</p>
+<pre class="mermaid"><code>flowchart LR
+    subgraph Core[&quot;helper (Node, every system)&quot;]
+        Reader[&quot;catalog reader&lt;br/&gt;(per-review cache)&quot;] --&gt; Summary[&quot;summary.read&quot;]
+        Marks[&quot;reply.seen events&lt;br/&gt;(the rail&#39;s read mark)&quot;] --&gt; Reader
+        Sessions[&quot;agent sessions&lt;br/&gt;+ monitor heartbeats&quot;] --&gt; Summary
+        OpenRoute[&quot;summary.open&quot;] --&gt; Actions[&quot;catalog open rules&quot;]
+    end
+    subgraph Mac[&quot;macOS only&quot;]
+        App[&quot;Lahe menu bar app&lt;br/&gt;(Swift, built on the Mac)&quot;]
+        Item[&quot;login item&lt;br/&gt;lahe-menubar&quot;]
+    end
+    App --&gt;|&quot;every 5 s, signed request&quot;| Summary
+    App --&gt;|&quot;click a row&quot;| OpenRoute
+    App --&gt;|&quot;opens the returned address&quot;| Browser[&quot;browser&quot;]
+    Item --&gt; App
+    Helper2[&quot;helper timer&quot;] -.-&gt;|&quot;source changed: rebuild, restart&quot;| App</code></pre>
+<h2 id="analysis-of-existing-structure">Analysis of Existing
+Structure</h2>
+<ul>
+<li><strong>The catalog reader</strong>
+(<code>src/service/catalog_reader.js</code>) already builds, per review,
+the title, pages, address, last-worked time, waiting count, and its
+session's liveness. It is read-only and never returns comment text.
+Building the whole list takes about 150 ms warm and 870 ms cold on Ken's
+690 reviews, measured with <a
+href="scripts/time_catalog.js">scripts/time_catalog.js</a> on
+2026-10-12. Too slow to rebuild every few seconds; fine to rebuild one
+review at a time.</li>
+<li><strong>The rail's read mark</strong>
+(<code>src/layer/tab_done.js</code>, <code>src/layer/store.js</code>): a
+card shows "1 new" until Ken opens it. The rule for which replies need
+reading (<code>needsToSeeReply</code>: a question, a refusal, or an
+answer the agent flagged with words behind it; never a tool round or a
+card he closed) and the mark itself (item id to
+<code>record.replyStamp</code>, the reply's time plus the revision it
+answered) live in the browser's storage only. The helper never hears
+about them.</li>
+<li><strong>Mark as done</strong> (<code>item.closed</code>) shows the
+shape to copy: an explicit event the page posts through its outbox,
+naming an item and a revision, that the projection folds onto the item
+in <code>review.json</code> and the merge rule treats as the
+store's.</li>
+<li><strong>Window holders</strong>
+(<code>src/service/reviews.js</code>): every review page claims and
+heartbeats every 10 seconds. The helper persists holders to
+<code>windows.json</code>. That is what "open documents" stands on.</li>
+<li><strong>Replies</strong> carry an <code>at</code> time once folded.
+The helper is the single reader of reply files and the single writer of
+<code>events.jsonl</code>, so every change to a review moves that
+file.</li>
+<li><strong>Agent sessions and monitor heartbeats</strong>
+(<code>src/service/agent_sessions.js</code>) already answer "is this
+session's agent listening".</li>
+<li><strong>The CLI secret</strong>
+(<code>&lt;state&gt;/cli-secret</code>, owner-only) and the
+<code>AUTH.CLI_SECRET</code> mode already exist for
+<code>site.bind</code> and <code>review.retire</code>. Those routes
+refuse any request with an <code>Origin</code> header.</li>
+<li><strong>The login item</strong>
+(<code>src/service/login_item.js</code>,
+<code>src/cli/commands/install.js</code>) writes
+<code>~/Library/LaunchAgents/lahe-helper.plist</code> and records
+<code>install.json</code>. The CLI starts an installed helper with
+<code>launchctl kickstart</code>.</li>
+<li><strong>Catalog Open</strong>
+(<code>src/service/catalog_actions.js</code>) binds a document's site
+and returns its address.</li>
+</ul>
+<p>What stays the same: every existing route, the Library page and its
+token, the agent contract, the review layer bundle.</p>
+<h2 id="components--modules-touched">Components / Modules Touched</h2>
+<div class="table-scroll"><table>
+<thead>
+<tr>
+<th>Where</th>
+<th>What</th>
+<th>New or changed</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>src/service/summary.js</code></td>
+<td>Builds the summary from the reader, window holders and sessions,
+with a per-review cache; owns <code>summary.json</code> (the day-one
+cutoff)</td>
+<td>new</td>
+</tr>
+<tr>
+<td><code>src/service/catalog_reader.js</code></td>
+<td>Exposes a one-review summary, and adds the unread count to it by the
+shared rule, with how many of those are questions</td>
+<td>changed</td>
+</tr>
+<tr>
+<td><code>src/shared/record.js</code></td>
+<td>The unread rule, moved here from <code>tab_done.js</code> so the
+page and the helper run the same code</td>
+<td>changed</td>
+</tr>
+<tr>
+<td><code>src/service/projection.js</code></td>
+<td>Folds a <code>reply.seen</code> event onto its item as
+<code>reply_seen</code></td>
+<td>changed</td>
+</tr>
+<tr>
+<td><code>src/layer/tab_done.js</code>,
+<code>src/layer/sync.js</code></td>
+<td>When the rail marks a reply read, the page posts
+<code>reply.seen</code>; a <code>reply_seen</code> on a polled record is
+adopted into the local marks</td>
+<td>changed</td>
+</tr>
+<tr>
+<td><code>src/service/routes.js</code>,
+<code>src/shared/protocol.js</code>,
+<code>src/service/auth.js</code></td>
+<td>Two routes, <code>summary.read</code> and <code>summary.open</code>,
+and a new auth mode, <code>AUTH.CLI_PROOF</code> (signed requests and
+answers)</td>
+<td>changed</td>
+</tr>
+<tr>
+<td><code>src/service/index.js</code></td>
+<td>Wires the summary into the routes, and the menu bar tick into the
+15-second timer</td>
+<td>changed</td>
+</tr>
+<tr>
+<td><code>src/service/menubar.js</code></td>
+<td>macOS only: the one build recipe, the app's login item,
+<code>tick</code> (rebuild on change)</td>
+<td>new</td>
+</tr>
+<tr>
+<td><code>docs/CONTRACTS.md</code></td>
+<td>The <code>reply.seen</code> event, the <code>reply_seen</code>
+field, the summary's fields and the signed-request wire</td>
+<td>changed</td>
+</tr>
+<tr>
+<td><code>src/cli/commands/install.js</code></td>
+<td>Offers the icon, <code>--menu-bar</code> and
+<code>--no-menu-bar</code>; uninstall removes it</td>
+<td>changed</td>
+</tr>
+<tr>
+<td><code>src/cli/commands/menubar.js</code></td>
+<td><code>lahe menubar show</code> brings a hidden icon back;
+<code>lahe menubar rebuild</code></td>
+<td>new</td>
+</tr>
+<tr>
+<td><code>src/service/login_item.js</code></td>
+<td><code>startThroughItem</code> refuses while
+<code>stopped.json</code> stands, and bootstraps before kickstart when
+the item is unloaded for any other reason</td>
+<td>changed</td>
+</tr>
+<tr>
+<td><code>src/cli/commands/status.js</code></td>
+<td>One line on the menu bar app (R20)</td>
+<td>changed</td>
+</tr>
+<tr>
+<td><code>macos/menubar/</code></td>
+<td><code>LaheMenuBar.swift</code>, <code>Info.plist</code>,
+<code>README.md</code></td>
+<td>new</td>
+</tr>
+<tr>
+<td><code>src/shared/manifest.js</code></td>
+<td>The new <code>src/</code> files</td>
+<td>changed</td>
+</tr>
+<tr>
+<td><code>docs/ongoing/MENU_BAR.md</code>, <code>docs/CLI.md</code>,
+<code>docs/INSTALL.md</code>, <code>CLAUDE.md</code> (directory
+layout)</td>
+<td>How it works now</td>
+<td>new and changed</td>
+</tr>
+</tbody>
+</table></div>
+<p>The Swift source lives outside <code>src/</code> on purpose.
+<code>src/</code> is Node, and lint and the manifest check every file
+there as JavaScript. <code>macos/</code> is the place for code that only
+one system builds, the way <code>vendor/</code> is the place for code we
+did not write.</p>
+<h2 id="data--state-changes">Data / State Changes</h2>
+<h3 id="read-marks-the-replyseen-event">Read marks: the
+<code>reply.seen</code> event</h3>
+<p>The page already decides when a reply is read: the card is opened,
+and the rail drops its "1 new" tag. At that moment it also posts one
+event through its outbox, the same path Mark as done uses:</p>
+<p><code>reply.seen</code>, <code>{item, stamp}</code>, no record.
+<code>stamp</code> is <code>record.replyStamp(item)</code>, the reply's
+time plus the revision it answered, at most 64 characters. The
+projection records it on the item as <code>reply_seen</code> only when
+it names the item's current reply; a stamp for an older reply is dropped
+and reported, like a stale reply. <code>review.json</code> does not
+carry it: agents read that file on every wake, and a read mark is not
+for them. The mark travels on <code>records.read</code> and on the reply
+poll, and the summary reads it by folding <code>events.jsonl</code>.
+Nothing else about the item moves: it is not a lifecycle transition, and
+the agent never sees it.</p>
+<p>Both sides run one rule, moved from
+<code>src/layer/tab_done.js</code> into
+<code>src/shared/record.js</code>: a reply is unread when
+<code>needsToSeeReply</code> says it needs reading (a question, a
+refusal, or an answer the agent flagged and put words behind), it is not
+a tool round, the reviewer has not closed the card, and the recorded
+stamp is not the current reply's. The rail's "1 new" and the icon's
+count are that one function over the same records.</p>
+<p>The page adopts marks too: a <code>reply_seen</code> on a polled
+record that matches the current reply is written into the browser's own
+marks. So a reply read in one browser stops saying "1 new" in another,
+which it does not today. A page from an older bundle posts nothing, so
+its count holds until the page reloads, and never clears early.</p>
+<h3
+id="summaryjson-state-folder-helper-only-writer"><code>summary.json</code>
+(state folder, helper-only writer)</h3>
+<p><code>{ "version": 1, "seeded_at": "2026-10-20T14:02:11.000Z" }</code>.
+<code>seeded_at</code> is written on the first
+<code>summary.read</code>, which is the first time the installed app
+asks. Any agent reply older than it counts as read. Seeding on helper
+start would count everything between PR 1 landing and the install. A
+missing or unreadable file starts fresh with
+<code>seeded_at = now</code>, which can only make the count smaller.</p>
+<p>One document reviewed by several reviews (one folded Library row)
+counts once: the summary folds with the Library's own rule after
+building each review.</p>
+<h3 id="what-counts-as-waiting-on-you">What counts as waiting on
+you</h3>
+<p>A document waits on you when it holds an item the shared unread rule
+names (R5), whose reply arrived after <code>seeded_at</code>. There is
+no second rule: a question is unread until its card is opened, like any
+other reply the rail tags "1 new", and the rail's "question" tag on an
+opened card is the rail's business.</p>
+<p>Neither counts for a retired review, a review with
+<code>ended_at</code>, or a document the reader marks missing (R7).</p>
+<p>The icon counts <strong>documents</strong>, not cards: each one is
+one click. Today 45 documents have an old open question (64 questions;
+34 from the last month), counted by <a
+href="scripts/count_questions.py">scripts/count_questions.py</a> on
+2026-10-12. The <code>seeded_at</code> rule keeps all of them out.</p>
+<h3 id="summaryread-response"><code>summary.read</code> response</h3>
+<div class="sourceCode" id="cb2"><pre
+class="sourceCode json"><code class="sourceCode json"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="fu">{</span></span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a>  <span class="dt">&quot;summary_version&quot;</span><span class="fu">:</span> <span class="dv">1</span><span class="fu">,</span></span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a>  <span class="dt">&quot;helper&quot;</span><span class="fu">:</span> <span class="fu">{</span> <span class="dt">&quot;version&quot;</span><span class="fu">:</span> <span class="st">&quot;0.4.0&quot;</span><span class="fu">,</span> <span class="dt">&quot;started_at&quot;</span><span class="fu">:</span> <span class="st">&quot;...&quot;</span><span class="fu">,</span> <span class="dt">&quot;always_on&quot;</span><span class="fu">:</span> <span class="kw">true</span> <span class="fu">},</span></span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a>  <span class="dt">&quot;waiting_on_you&quot;</span><span class="fu">:</span> <span class="fu">{</span></span>
+<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a>    <span class="dt">&quot;count&quot;</span><span class="fu">:</span> <span class="dv">2</span><span class="fu">,</span></span>
+<span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a>    <span class="dt">&quot;documents&quot;</span><span class="fu">:</span> <span class="ot">[</span></span>
+<span id="cb2-7"><a href="#cb2-7" aria-hidden="true" tabindex="-1"></a>      <span class="fu">{</span> <span class="dt">&quot;review&quot;</span><span class="fu">:</span> <span class="st">&quot;r183d18583a43&quot;</span><span class="fu">,</span> <span class="dt">&quot;title&quot;</span><span class="fu">:</span> <span class="st">&quot;Crucible: Menu bar app&quot;</span><span class="fu">,</span> <span class="dt">&quot;path_hint&quot;</span><span class="fu">:</span> <span class="st">&quot;~/Documents/...&quot;</span><span class="fu">,</span></span>
+<span id="cb2-8"><a href="#cb2-8" aria-hidden="true" tabindex="-1"></a>        <span class="dt">&quot;open&quot;</span><span class="fu">:</span> <span class="kw">true</span><span class="fu">,</span> <span class="dt">&quot;questions&quot;</span><span class="fu">:</span> <span class="dv">1</span><span class="fu">,</span> <span class="dt">&quot;unread&quot;</span><span class="fu">:</span> <span class="dv">3</span><span class="fu">,</span> <span class="dt">&quot;newest_at&quot;</span><span class="fu">:</span> <span class="st">&quot;...&quot;</span> <span class="fu">}</span></span>
+<span id="cb2-9"><a href="#cb2-9" aria-hidden="true" tabindex="-1"></a>    <span class="ot">]</span></span>
+<span id="cb2-10"><a href="#cb2-10" aria-hidden="true" tabindex="-1"></a>  <span class="fu">},</span></span>
+<span id="cb2-11"><a href="#cb2-11" aria-hidden="true" tabindex="-1"></a>  <span class="dt">&quot;waiting_on_agents&quot;</span><span class="fu">:</span> <span class="fu">{</span> <span class="dt">&quot;count&quot;</span><span class="fu">:</span> <span class="dv">4</span><span class="fu">,</span> <span class="dt">&quot;more&quot;</span><span class="fu">:</span> <span class="dv">0</span><span class="fu">,</span> <span class="dt">&quot;documents&quot;</span><span class="fu">:</span> <span class="ot">[</span> <span class="fu">{</span> <span class="dt">&quot;review&quot;</span><span class="fu">:</span> <span class="st">&quot;...&quot;</span><span class="fu">,</span> <span class="dt">&quot;title&quot;</span><span class="fu">:</span> <span class="st">&quot;...&quot;</span><span class="fu">,</span> <span class="dt">&quot;path_hint&quot;</span><span class="fu">:</span> <span class="st">&quot;...&quot;</span><span class="fu">,</span> <span class="dt">&quot;waiting&quot;</span><span class="fu">:</span> <span class="dv">4</span> <span class="fu">}</span> <span class="ot">]</span> <span class="fu">},</span></span>
+<span id="cb2-12"><a href="#cb2-12" aria-hidden="true" tabindex="-1"></a>  <span class="dt">&quot;open_documents&quot;</span><span class="fu">:</span> <span class="fu">{</span> <span class="dt">&quot;count&quot;</span><span class="fu">:</span> <span class="dv">3</span><span class="fu">,</span> <span class="dt">&quot;more&quot;</span><span class="fu">:</span> <span class="dv">0</span><span class="fu">,</span> <span class="dt">&quot;items&quot;</span><span class="fu">:</span> <span class="ot">[</span> <span class="fu">{</span> <span class="dt">&quot;review&quot;</span><span class="fu">:</span> <span class="st">&quot;...&quot;</span><span class="fu">,</span> <span class="dt">&quot;title&quot;</span><span class="fu">:</span> <span class="st">&quot;...&quot;</span><span class="fu">,</span> <span class="dt">&quot;path_hint&quot;</span><span class="fu">:</span> <span class="st">&quot;...&quot;</span><span class="fu">,</span> <span class="dt">&quot;focused&quot;</span><span class="fu">:</span> <span class="kw">true</span> <span class="fu">}</span> <span class="ot">]</span> <span class="fu">},</span></span>
+<span id="cb2-13"><a href="#cb2-13" aria-hidden="true" tabindex="-1"></a>  <span class="dt">&quot;sessions&quot;</span><span class="fu">:</span> <span class="fu">{</span></span>
+<span id="cb2-14"><a href="#cb2-14" aria-hidden="true" tabindex="-1"></a>    <span class="dt">&quot;open&quot;</span><span class="fu">:</span> <span class="dv">5</span><span class="fu">,</span></span>
+<span id="cb2-15"><a href="#cb2-15" aria-hidden="true" tabindex="-1"></a>    <span class="dt">&quot;connected&quot;</span><span class="fu">:</span> <span class="fu">{</span> <span class="dt">&quot;count&quot;</span><span class="fu">:</span> <span class="dv">2</span><span class="fu">,</span> <span class="dt">&quot;more&quot;</span><span class="fu">:</span> <span class="dv">0</span><span class="fu">,</span> <span class="dt">&quot;items&quot;</span><span class="fu">:</span> <span class="ot">[</span> <span class="fu">{</span> <span class="dt">&quot;session&quot;</span><span class="fu">:</span> <span class="st">&quot;s_...&quot;</span><span class="fu">,</span> <span class="dt">&quot;name&quot;</span><span class="fu">:</span> <span class="st">&quot;...&quot;</span><span class="fu">,</span> <span class="dt">&quot;presence&quot;</span><span class="fu">:</span> <span class="st">&quot;listening&quot;</span><span class="fu">,</span> <span class="dt">&quot;last_heard_at&quot;</span><span class="fu">:</span> <span class="st">&quot;...&quot;</span><span class="fu">,</span> <span class="dt">&quot;review&quot;</span><span class="fu">:</span> <span class="st">&quot;...&quot;</span> <span class="fu">}</span> <span class="ot">]</span> <span class="fu">}</span></span>
+<span id="cb2-16"><a href="#cb2-16" aria-hidden="true" tabindex="-1"></a>  <span class="fu">},</span></span>
+<span id="cb2-17"><a href="#cb2-17" aria-hidden="true" tabindex="-1"></a>  <span class="dt">&quot;recent&quot;</span><span class="fu">:</span> <span class="fu">{</span> <span class="dt">&quot;more&quot;</span><span class="fu">:</span> <span class="dv">12</span><span class="fu">,</span> <span class="dt">&quot;items&quot;</span><span class="fu">:</span> <span class="ot">[</span> <span class="fu">{</span> <span class="dt">&quot;review&quot;</span><span class="fu">:</span> <span class="st">&quot;...&quot;</span><span class="fu">,</span> <span class="dt">&quot;title&quot;</span><span class="fu">:</span> <span class="st">&quot;...&quot;</span><span class="fu">,</span> <span class="dt">&quot;path_hint&quot;</span><span class="fu">:</span> <span class="st">&quot;...&quot;</span><span class="fu">,</span> <span class="dt">&quot;last&quot;</span><span class="fu">:</span> <span class="st">&quot;...&quot;</span> <span class="fu">}</span> <span class="ot">]</span> <span class="fu">},</span></span>
+<span id="cb2-18"><a href="#cb2-18" aria-hidden="true" tabindex="-1"></a>  <span class="dt">&quot;library_url&quot;</span><span class="fu">:</span> <span class="st">&quot;http://library.lahe.localhost:1483&quot;</span></span>
+<span id="cb2-19"><a href="#cb2-19" aria-hidden="true" tabindex="-1"></a><span class="fu">}</span></span></code></pre></div>
+<ul>
+<li>Open, connected and recent lists are capped at 8 in
+<code>items</code>, with <code>more</code> for the rest (R12). Waiting
+on you is not capped. <code>sessions.open</code> counts sessions not
+closed. <code>library_url</code> is the Library's printed address, with
+the pages port when the port-80 forward is not proved.</li>
+<li>The exact field list, types, and the signed-request wire below are
+written into <code>docs/CONTRACTS.md</code> before any builder starts,
+and a fixture and proof vectors are committed beside them (plan, Step
+0).</li>
+<li>No comment text, no tokens, no absolute paths, the same rules as the
+Library list. Titles have control characters removed.</li>
+<li>A session is connected when <code>agent_sessions</code> liveness
+says its agent is listening (a live monitor) or working (a
+<code>lahe</code> command in the last few minutes), the same test the
+Library shows (R10).</li>
+<li>An open document is a review whose window holder is current, focused
+or not.</li>
+<li>A session's <code>name</code> is its Library rename if Ken gave one,
+else the title of its most recent review.</li>
+</ul>
+<h3 id="the-signed-request-wire-authcli_proof">The signed-request wire
+(<code>AUTH.CLI_PROOF</code>)</h3>
+<ul>
+<li><strong>Key:</strong> the text of
+<code>&lt;state&gt;/cli-secret</code> with surrounding whitespace
+removed (64 hex characters), used as its UTF-8 bytes.</li>
+<li><strong>Request headers:</strong> <code>x-lahe-proof-ts</code> (Unix
+time in milliseconds, decimal), <code>x-lahe-proof-nonce</code> (16
+random bytes as 32 lowercase hex characters), <code>x-lahe-proof</code>
+(lowercase hex HMAC-SHA256).</li>
+<li><strong>What is signed:</strong> the lines
+<code>lahe-proof-v1</code>, the method, the path with its query string
+exactly as sent, the timestamp, the nonce, and the lowercase hex SHA-256
+of the body (of the empty string for a GET), joined by <code>\n</code>
+with no trailing newline.</li>
+<li><strong>The version</strong> travels as <code>?v=1</code> on
+<code>summary.read</code>, so the signature covers it, and as
+<code>summary_version</code> in <code>summary.open</code>'s JSON
+body.</li>
+<li><strong>The answer</strong> carries <code>x-lahe-proof-reply</code>:
+HMAC-SHA256 with the same key over the lines
+<code>lahe-proof-reply-v1</code>, the request's nonce, the status code,
+and the hex SHA-256 of the response body. Error answers are signed too,
+so the app can tell the helper's 409 from a squatter's.</li>
+<li><strong>The helper</strong> accepts a timestamp within 30 seconds of
+its clock, refuses a nonce it has seen in that window, and compares
+signatures in constant time.</li>
+</ul>
+<h3 id="summaryopen-request"><code>summary.open</code> request</h3>
+<p><code>{ "review": "r..." }</code> returns
+<code>{ "url": "http://&lt;name&gt;.lahe.localhost/&lt;path&gt;" }</code>.
+It runs catalog Open with <code>handoff: false</code>, so it opens at
+the address the Library would use and never queues a pick-up for an
+agent (R11). A row that only an agent could serve
+(<code>PROTO_NOT_OPENABLE</code>) returns <code>{ "url": null }</code>,
+and the app opens the Library instead.</p>
+<h3 id="installjson-gains-a-menubar-block"><code>install.json</code>
+gains a <code>menubar</code> block</h3>
+<p><code>{ "app": "&lt;state&gt;/menubar/Lahe.app", "label": "lahe-menubar", "login_item": "...", "source_stamp": "&lt;sha256 of macos/menubar/*&gt;", "built_at": "..." }</code>.
+Absent when the icon is not installed.</p>
+<h2 id="key-flows">Key Flows</h2>
+<h3 id="the-menu-stays-current">The menu stays current</h3>
+<pre class="mermaid"><code>sequenceDiagram
+    participant App as Menu bar app
+    participant H as Helper
+    participant Cache as per-review cache
+    loop every 5 seconds, and when the menu opens
+        App-&gt;&gt;H: GET summary.read (signed proof, no Sec-Fetch headers)
+        H-&gt;&gt;Cache: stat events.jsonl and review.json per review
+        Cache--&gt;&gt;H: rebuild only reviews whose files changed
+        H-&gt;&gt;H: add window holders, sessions
+        H--&gt;&gt;App: summary, signed
+        App-&gt;&gt;App: drop it unless the signature checks
+        App-&gt;&gt;App: redraw icon count and menu
+    end</code></pre>
+<p>The per-review cache keeps a request to a few stat calls per review:
+the review's <code>events.jsonl</code>, <code>review.json</code> and
+<code>meta.json</code>, plus the reviewed document itself (so a deleted
+file drops out) and <code>catalog.json</code> once per request (so a
+Library rename shows). A same-size rewrite inside one millisecond is
+caught by comparing size, modified time and inode together. The plan
+sets the budget (R21) and measures it on Ken's state folder.</p>
+<h3 id="ken-reads-a-reply">Ken reads a reply</h3>
+<pre class="mermaid"><code>sequenceDiagram
+    participant Rail as Rail (in the page)
+    participant H as Helper
+    participant St as Store (events.jsonl, review.json)
+    participant App as Menu bar app
+    Rail-&gt;&gt;Rail: card opened: &quot;1 new&quot; drops, local mark written
+    Rail-&gt;&gt;H: reply.seen {item, stamp} through the outbox
+    H-&gt;&gt;St: append; project reply_seen onto the item
+    App-&gt;&gt;H: summary.read (within 5 s)
+    H-&gt;&gt;St: that review&#39;s files changed: rebuild its summary
+    H--&gt;&gt;App: the document&#39;s unread count is one lower</code></pre>
+<p>The outbox posts at once, and the next summary comes within 5
+seconds, so the count drops inside R3's 10 seconds. A question opened
+and not yet answered is read; the rail still shows it as asking.</p>
+<h3 id="install-rebuild-and-quit">Install, rebuild, and Quit</h3>
+<pre class="mermaid"><code>flowchart TD
+    Install[&quot;lahe install on a Mac&lt;br/&gt;(asks: add the menu bar icon?)&quot;] --&gt; Tools{&quot;xcrun finds swiftc?&quot;}
+    Tools --&gt;|&quot;no&quot;| Msg[&quot;prints: run xcode-select --install,&lt;br/&gt;then lahe install again.&lt;br/&gt;The rest of install completes.&quot;]
+    Tools --&gt;|&quot;yes&quot;| Build[&quot;swiftc builds Lahe.app&lt;br/&gt;in the state folder&quot;]
+    Build --&gt; Item[&quot;writes lahe-menubar.plist:&lt;br/&gt;RunAtLoad, restart only on a crash&quot;]
+    Item --&gt; Record[&quot;install.json records the app&lt;br/&gt;and its source stamp&quot;]
+
+    Timer[&quot;helper timer, every 15 s (macOS, installed)&quot;] --&gt; Stamp{&quot;macos/menubar changed&lt;br/&gt;since the recorded stamp?&quot;}
+    Stamp --&gt;|&quot;yes&quot;| Rebuild[&quot;rebuild in a child process,&lt;br/&gt;swap the app; restart it only&lt;br/&gt;if it was running&quot;]
+    Stamp --&gt;|&quot;no&quot;| Idle[&quot;nothing&quot;]
+
+    Hide[&quot;menu: Hide the icon&quot;] --&gt; Exit[&quot;app exits cleanly;&lt;br/&gt;launchd leaves it stopped&lt;br/&gt;until login or lahe menubar show&quot;]
+    Stop[&quot;menu: Stop Lahe&quot;] --&gt; Mark[&quot;write stopped.json,&lt;br/&gt;then launchctl bootout lahe-helper&quot;]
+    Mark --&gt; Held[&quot;an agent&#39;s lahe command sees&lt;br/&gt;stopped.json and fails plainly&quot;]
+    Mark --&gt; Back[&quot;Start in the menu, lahe install,&lt;br/&gt;or the next login clears it&lt;br/&gt;and loads the item again&quot;]</code></pre>
+<ul>
+<li><strong>Hide</strong> exits with status 0. The login item restarts
+the app only on a crash (<code>KeepAlive</code> with
+<code>SuccessfulExit: false</code>), so Hide holds until the next login
+or <code>lahe menubar show</code>.</li>
+<li><strong>Stop Lahe holds (R14).</strong> The app writes
+<code>&lt;state&gt;/stopped.json</code>
+(<code>{"by": "menu bar", "at": "..."}</code>) and then unloads the
+helper's login item, because a plain kill would be restarted at once.
+The marker is the hold: <code>startThroughItem</code>, the path every
+<code>lahe</code> command takes to start an installed helper, refuses
+while the file exists, with "Ken stopped Lahe from the menu bar at
+<time>. Click Start in the menu, or run <code>lahe install</code>." and
+a non-zero exit, so an agent's <code>lahe review</code> fails in one
+line and starts nothing. Without the marker (an item unloaded by hand,
+or a stale install), <code>startThroughItem</code> bootstraps the plist
+and then kickstarts, which today's code cannot do.</li>
+<li><strong>Start Lahe</strong>, shown while stopped with "Stopped by
+you at <time>", removes the marker, bootstraps and kickstarts.
+<code>lahe install</code> removes it too. The helper removes it on its
+own start, so the login item loading at the next login ends the hold;
+since nothing else can start the helper while the marker stands, a
+running helper always means Ken started it.</li>
+<li><strong>Bootstrap checks the plist first.</strong> Before loading
+<code>lahe-helper.plist</code>, the CLI checks its contents are what
+<code>login_item.js</code> would write for the recorded install, and
+refuses with a message to run <code>lahe install</code> if not
+(SR6).</li>
+<li><strong>The labels are constants.</strong> The app and the CLI use
+the fixed labels <code>lahe-helper</code> and <code>lahe-menubar</code>
+and their fixed plist paths; nothing reads a label from
+<code>install.json</code> to run <code>launchctl</code> (SR6). Tests get
+their own labels through a seam that stays a constant: the CLI's
+existing <code>label</code> and <code>home</code> options, and a
+compile-time <code>-D</code> flag for the app. No test ever loads,
+stops, rewrites or removes the real labels.</li>
+<li><strong>A rebuild respects Hide.</strong> After swapping in a
+rebuilt app, the helper restarts it only if <code>launchctl print</code>
+says it was running. A hidden icon stays hidden through a
+<code>git pull</code> (R17).</li>
+<li><strong>The app's Start does not check the plist's
+contents.</strong> It bootstraps only the fixed path in Ken's own
+<code>~/Library/LaunchAgents</code>; anything that can write there can
+already run code at his login, so the check adds nothing for the app.
+The CLI keeps its check because it also covers a stale install.</li>
+<li><strong>One build recipe.</strong>
+<code>src/service/menubar.js</code> holds the only build function, the
+fixed file list and the pinned compiler flags
+(<code>-swift-version 5</code>, the host architecture, a macOS 13
+floor). The build check script calls it.</li>
+<li><strong>What a rebuild compiles.</strong> Only the clone named in
+<code>install.json</code>, never a worktree; a fixed list of files in
+<code>macos/menubar/</code>, copied into a fresh temp folder, hashed
+there, built there with <code>/usr/bin/xcrun swiftc</code>, and renamed
+into place only on success (SR5).</li>
+</ul>
+<h2 id="alternatives-considered">Alternatives Considered</h2>
+<h3 id="approaches-ken-ruled-out-in-the-crucible">Approaches Ken ruled
+out in the crucible</h3>
+<p>A SwiftBar script (no real Lahe icon) and a Dock badge on the Library
+(he keeps the Dock hidden). See <a
+href="../../00_crucible_menu_bar_app.md">the crucible</a>.</p>
+<h3 id="how-the-app-gets-its-data">How the app gets its data</h3>
+<ul>
+<li><strong>Chosen: a helper route with the CLI secret.</strong> One
+place computes "waiting on you", with the helper's own projection,
+liveness, and window holders. Any future tray icon on Linux or Windows
+reads the same answer.</li>
+<li><strong>Rejected: the app reads the state folder itself.</strong> No
+route to secure, but the Swift app would reimplement the projection, the
+liveness test, and the waiting rules in a second language. The two would
+drift, and a drifted count is the wrong count Ken said is worse than
+none.</li>
+<li><strong>Rejected: the app runs <code>lahe status --json</code> every
+few seconds.</strong> No new route, but it starts a Node process every
+poll (tens of milliseconds and real memory each time, against R21), and
+<code>lahe status</code> does not know about windows.</li>
+<li><strong>Rejected: the Library token.</strong> It is minted in memory
+at each helper start and handed only to the Library page, so the app
+could not get it without a new handout route, which is a new way to leak
+it.</li>
+</ul>
+<h3 id="how-the-app-learns-something-changed">How the app learns
+something changed</h3>
+<ul>
+<li><strong>Chosen: poll every 5 seconds, with a per-review cache in the
+helper.</strong> Simple, recovers on its own after the helper restarts,
+and the cache keeps each poll to a stat per review file. The plan
+measures it against R21.</li>
+<li><strong>Rejected for now: a long-poll that the helper answers only
+on change.</strong> Fewer requests, but liveness ages with time (a
+monitor going stale changes the answer with no event), so the helper
+would still need its own timer. It can replace polling later without
+changing the summary's shape.</li>
+<li><strong>Rejected: rebuilding the Library list per poll.</strong> 150
+ms warm on Ken's 690 reviews, every 5 seconds, is about 3 percent of a
+core forever.</li>
+</ul>
+<h3 id="when-read-happens">When "read" happens</h3>
+<ul>
+<li><strong>Chosen: the rail's own read mark, posted to the
+store.</strong> The card's "1 new" tag already knows exactly which reply
+Ken opened, and the rule for which replies need reading already exists.
+The page posts that mark as a <code>reply.seen</code> event, the shape
+Mark as done uses, and the rule moves to <code>src/shared/</code> so the
+helper runs the same one. Nothing new is asked of Ken, and the icon and
+the rail cannot disagree.</li>
+<li><strong>Rejected: the page is the focused tab, recorded by the
+helper.</strong> The first draft. It was a second rule for "read",
+beside the rail's, so the icon could say 2 while the rail said "1 new"
+on three cards, or the reverse. Ken, in review: use the existing
+mechanism, do not make a new one. It also needed a new
+<code>focused</code> claim field and a cap on a new <code>page</code>
+field (SR3).</li>
+<li><strong>Rejected: per review.</strong> In a folder review, reading
+one page would clear replies on another (PM review RF1).</li>
+<li><strong>Rejected: any open window.</strong> Ken keeps tabs open for
+days, so replies would clear the moment they arrived (PM review
+RF1).</li>
+</ul>
+<h3 id="where-the-app-is-built-and-kept">Where the app is built and
+kept</h3>
+<ul>
+<li><strong>Chosen: built on the Mac by <code>lahe install</code> into
+the state folder.</strong> A program built locally carries no quarantine
+flag, so no Apple developer account or signing is needed, and nothing
+binary goes into the repo.</li>
+<li><strong>Rejected: a ready-built app in the repo or a
+release.</strong> Needs signing and notarization to open without
+warnings, and a binary in a public repo is hard to review.</li>
+<li><strong>Rejected: <code>swift LaheMenuBar.swift</code> as a script
+at each login.</strong> Compiles on every start, slow and heavy at
+login.</li>
+<li><strong>Rejected: AppleScript or JavaScript for Automation with
+AppKit.</strong> Runs without a compiler, but a long-lived menu bar item
+from <code>osascript</code> is fragile, shows as "osascript" in Activity
+Monitor, and is hard to test.</li>
+</ul>
+<h3 id="how-stop-works">How Stop works</h3>
+<ul>
+<li><strong>Chosen: a <code>stopped.json</code> marker plus unloading
+the helper's login item.</strong> A plain kill is restarted at once by
+<code>KeepAlive</code>, so the item is unloaded; the marker is what
+makes the stop hold, because the CLI refuses to load the item again
+while it stands. Ken, in review: a Stop that restarts itself would make
+him mad.</li>
+<li><strong>Rejected: unload the item and let any <code>lahe</code>
+command load it again.</strong> The first draft, with a warning line in
+the menu. With an agent listening, Stop lasted seconds (SR7, and Ken's
+answer above).</li>
+<li><strong>Rejected: a "paused" flag the helper reads at start and then
+exits.</strong> It would fight launchd, which restarts the helper every
+ten seconds, and agents would see a helper that keeps dying. The marker
+chosen is read by the CLI before anything is loaded, so launchd never
+sees a dying helper.</li>
+</ul>
+<h2 id="failure-modes--edge-cases">Failure Modes / Edge Cases</h2>
+<ul>
+<li><strong>Helper down.</strong> Nothing answers on the port. The app
+shows the not-running look and a Start item (R2). It keeps asking every
+5 s, so it recovers on its own.</li>
+<li><strong>Can't tell (R2).</strong> A refused request, a timeout, an
+answer the app cannot parse, a version mismatch, or the first seconds
+after the Mac wakes: the app shows the "can't tell" look, never the
+plain mark and never the last number. After a wake it shows "can't tell"
+until its first fresh answer.</li>
+<li><strong>App older than the helper.</strong> The app sends the
+<code>summary_version</code> it was built for. The helper answers a
+mismatch with <code>409 SUMMARY_VERSION</code>, and the app shows "can't
+tell" with "Lahe was updated; rebuilding" (R18). The rebuild timer
+usually gets there first.</li>
+<li><strong>App newer than the helper</strong> (pulled, helper not yet
+restarted). The route does not exist, so the request gets a 400 and the
+app shows "can't tell". The helper's own staleness check replaces it at
+a quiet moment, as today.</li>
+<li><strong>Rebuild fails</strong> (tools removed, compile error). The
+helper keeps the old app, records the error in <code>menubar.log</code>,
+and <code>lahe status</code> names it. It retries only when the source
+stamp changes again, so a broken build does not compile every 15 s.</li>
+<li><strong>CLI secret missing or changed.</strong> The app rereads the
+file on each 401. A missing file shows "can't tell" with the reason in
+the log.</li>
+<li><strong>An answer the app cannot verify.</strong> A missing or wrong
+signature, from a squatter or a bug, is dropped: "can't tell", logged
+once per minute at most.</li>
+<li><strong>Clock skew.</strong> The helper and the app read the same
+Mac clock, so the 30-second window only matters across a sleep. A
+refused proof after a wake is retried with a fresh timestamp on the next
+poll.</li>
+<li><strong>A review whose file is gone, or an unreadable
+review.</strong> Never waiting on you (R7). It can still appear under
+recent, and Open goes wherever catalog Open sends it, which for a gone
+file is the plain "file is gone" page.</li>
+<li><strong>A worktree review.</strong> Open follows catalog Open, which
+already serves a gone worktree file from the main checkout.</li>
+<li><strong>Many documents waiting.</strong> The icon shows the number
+up to 99, then "99+". The waiting list is not cut (R12); in practice the
+install cutoff (R4) keeps it short.</li>
+<li><strong>Two browsers on one review.</strong> A mark posted from
+either lands in the store, and the other adopts it on its next poll, so
+"1 new" clears in both. A second window refused the rail has no cards to
+open, so it marks nothing.</li>
+<li><strong>The page is offline when the card is opened.</strong> The
+mark sits in the outbox like any other record and posts when the helper
+is back. The count stays up until then, which is the honest answer.</li>
+<li><strong>An agent while Lahe is stopped.</strong> Its
+<code>lahe</code> command fails with the stop message and exit code 1; a
+<code>lahe monitor</code> already running sees the helper down and
+reports it as it does today. The agent tells its human, and only Ken's
+Start, <code>lahe install</code> or login brings the helper back.</li>
+<li><strong>Another user on the Mac.</strong> Their app reads their own
+state folder and their own helper port. The secret file is
+owner-only.</li>
+<li><strong>Ken renames or retires a review.</strong> Retired reviews
+are dropped from every section. A rename shows on the next summary.</li>
+</ul>
+<h2 id="security--privacy-notes">Security &amp; Privacy Notes</h2>
+<ul>
+<li><strong>Signed requests, so the secret never travels (SR1).</strong>
+The app does not send the CLI secret. It sends a proof: a timestamp, a
+random nonce, and HMAC-SHA256 keyed with the secret over the route name,
+timestamp, nonce, and a hash of the body. The helper accepts a proof
+within 30 seconds of its own clock and refuses a nonce it has seen in
+that window. The helper signs its answer the same way, over the nonce
+and a hash of the response body, and the app drops any answer whose
+signature does not check and shows "can't tell". A program squatting on
+the port while the helper is stopped learns one used proof for one
+route, nothing it can replay or use on <code>site.bind</code>. Node has
+HMAC in <code>node:crypto</code> and Swift in CryptoKit, so no packages
+are added. The app connects to <code>127.0.0.1</code> at the port in
+<code>service.json</code>, never <code>localhost</code>.</li>
+<li><strong>Who can reach the routes.</strong> The proof is the control:
+a web page cannot read the secret file. Two more checks stand behind it.
+Both routes refuse any request carrying a <code>Sec-Fetch-Site</code>,
+<code>Sec-Fetch-Mode</code> or <code>Sec-Fetch-Dest</code> header, which
+current browsers send on every request to a loopback address and the app
+never sends (SR2). <code>summary.open</code> is a POST with a JSON body,
+so it also refuses any <code>Origin</code> header. Neither route is a
+catalog route, the Library host never routes to them, and the Library
+token is never accepted. The helper's Host check still applies, which
+stops DNS rebinding.</li>
+<li><strong>The <code>reply.seen</code> event (SR3).</strong>
+<code>item</code> must be an item of the review the token names,
+<code>stamp</code> a string of at most 64 characters naming that item's
+current reply; a malformed event (anything but a string
+<code>item</code> and a 1 to 64 character <code>stamp</code>, with no
+other keys) is refused at <code>events.append</code> and never written;
+a well-formed mark naming another reply lands in the log and is dropped
+by the projection, like a stale reply, so nothing is projected. It
+carries no reviewer text. Accepted risk: a page holding a review's token
+can mark that review's replies read, and only that review's. A page's
+token already lets it close the item outright with
+<code>item.closed</code>.</li>
+<li><strong>What it holds.</strong> Titles, <code>~</code> paths,
+counts, times, session names. No comment text, no review tokens, no
+absolute paths. Same exposure as <code>lahe status</code>, which any
+process running as Ken can already run.</li>
+<li><strong><code>summary.open</code> opens nothing itself
+(SR4).</strong> It returns an address. The app opens it only when it
+parses as <code>http</code>, with no user or password part, a host of
+<code>library.lahe.localhost</code> or a valid site name followed by
+<code>.lahe.localhost</code>, and a port that is absent or equal to the
+pages port in <code>service.json</code>. It opens the URL rebuilt from
+those parsed parts, not the original string. The same check applies to
+<code>library_url</code>. Anything else is dropped and logged. Titles
+are page-derived: the helper strips control characters and Unicode
+format characters (such as bidirectional overrides) and caps the length,
+and the app sets them as plain menu text.</li>
+<li><strong>Building code on the user's machine.</strong>
+<code>swiftc</code> compiles only the fixed file list from the installed
+clone, in a fresh temp folder, invoked as an argument array, never
+through a shell (SR5). The app is not signed. A program built locally
+carries no quarantine flag, so Gatekeeper does not block it.</li>
+<li><strong>launchctl calls from the app and CLI</strong> use the fixed
+labels and paths, never values read from a file (SR6).</li>
+<li><strong>Follow-up, not in this feature:</strong> the CLI's two
+existing secret routes (<code>site.bind</code>,
+<code>review.retire</code>) still send the raw secret after an
+unauthenticated <code>/health</code> probe. They should move to the same
+signed proof. Filed on the board.</li>
+</ul>
+<h2 id="test-strategy">Test Strategy</h2>
+<p>The plan owns the one verification table: <a
+href="03_plan_menu_bar_app.md">03_plan_menu_bar_app.md</a>. Every
+failure mode above is a row there. In short: unit tests cover the
+summary rules, the read mark's round trip, the routes' auth, and the
+install and rebuild logic on every system; a Mac-only check builds the
+Swift app; screenshots and a walkthrough cover the icon and menu.</p>
+<h2 id="open-questions">Open Questions</h2>
+<p>In the brief's <a href="parts/brief/questions.md">questions
+leaf</a>.</p>
+<h2 id="architect-review">Architect Review</h2>
+<p>Not run. The orchestrator chose the security review for this design
+(a new reader of private data) and judged the rest an established
+pattern: a new read route on the existing auth mode, and a second login
+item beside the first.</p>
+<h2 id="security-review">Security Review</h2>
+<p>Full prose in <a
+href="02_architecture_menu_bar_app_reviews.md">02_architecture_menu_bar_app_reviews.md</a>.</p>
+<div class="table-scroll"><table>
+<thead>
+<tr>
+<th>#</th>
+<th>Finding</th>
+<th>Disposition</th>
+<th>Rationale</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>SR1</td>
+<td>The app would send the secret to anything on the helper's port, open
+for hours after Stop</td>
+<td><span class="accepted">Accepted</span></td>
+<td>Signed requests and signed answers; the secret never travels. The
+CLI's routes move later (board).</td>
+</tr>
+<tr>
+<td>SR2</td>
+<td>Browsers send no Origin on a GET</td>
+<td><span class="accepted">Accepted</span></td>
+<td>Corrected text; Sec-Fetch headers refused; <code>summary.open</code>
+is a POST; never a catalog route.</td>
+</tr>
+<tr>
+<td>SR3</td>
+<td>The <code>page</code> field was unbounded</td>
+<td>Accepted, then superseded</td>
+<td>The <code>page</code> field is gone with the focused-tab rule (Ken,
+in review: use the rail's existing read mark). The
+<code>reply.seen</code> event is bounded the same way: a known item, a
+capped stamp naming its current reply.</td>
+</tr>
+<tr>
+<td>SR4</td>
+<td>The URL allowlist was wider than needed</td>
+<td><span class="accepted">Accepted</span></td>
+<td>Only <code>*.lahe.localhost</code> at the pages port or none; URL
+rebuilt from parsed parts; titles cleaned.</td>
+</tr>
+<tr>
+<td>SR5</td>
+<td>Which clone and which files a rebuild compiles</td>
+<td><span class="accepted">Accepted</span></td>
+<td>Installed clone only, fixed file list, temp folder, rename on
+success, full path to <code>xcrun</code>.</td>
+</tr>
+<tr>
+<td>SR6</td>
+<td>launchctl labels read from a file</td>
+<td><span class="accepted">Accepted</span></td>
+<td>Fixed labels and paths; bootstrap checks the plist's contents.</td>
+</tr>
+<tr>
+<td>SR7</td>
+<td>Agents restart a stopped helper within seconds</td>
+<td><span class="accepted">Accepted</span></td>
+<td>Ken chose a Stop that holds: <code>stopped.json</code> blocks every
+<code>lahe</code> command from starting the helper until he starts it,
+logs in, or reinstalls.</td>
+</tr>
+</tbody>
+</table></div>
+<hr class="reviews-divider" style="margin:4.5rem 0 1.5rem;border:0;border-top:3px solid #b0463b">
+
+<div class="reviews-banner">
+<p>The sections below are the full verbatim persona + human reviews for
+this document. They live in a separate <code>_reviews.md</code> file (so
+agents read the lean spec), merged here for review.</p>
+</div>
+<h1 id="architecture-reviews-menu-bar-app">Architecture reviews: Menu
+bar app</h1>
+<h2 id="security-review-1">Security review</h2>
+<p>Reviewed: <a
+href="02_architecture_menu_bar_app.md">02_architecture_menu_bar_app.md</a>,
+<a
+href="parts/architecture/alternatives.md">parts/architecture/alternatives.md</a>,
+and the brief's requirements R14 to R23. Claims were checked against the
+code in this worktree (<code>src/shared/protocol.js</code>,
+<code>src/service/auth.js</code>, <code>src/service/index.js</code>,
+<code>src/service/routes.js</code>, <code>src/service/sites.js</code>,
+<code>src/service/catalog_actions.js</code>,
+<code>src/service/login_item.js</code>,
+<code>src/service/reviews.js</code>,
+<code>src/cli/commands/review.js</code>).</p>
+<h3 id="summary-1">Summary</h3>
+<ul>
+<li>No web page can read <code>summary.read</code> or call
+<code>summary.open</code>. The CLI secret is what stops them, and it
+holds: no served path reaches the state folder, a page cannot send the
+secret header across origins without a preflight the helper never
+approves, and the Host check stops DNS rebinding. One sentence in the
+design about why is wrong (SR2), but there is no hole there.</li>
+<li>The one real hole: the app sends the machine-wide CLI secret every 5
+seconds to whatever program answers on the helper's port, and "Stop
+Lahe" leaves that port free for hours. On a Mac with a second account,
+or with any program that can open a local port but not read Ken's files,
+that program collects the secret and can then make Ken's helper serve
+any folder Ken can read (SR1). The fix is small and costs Ken nothing
+day to day.</li>
+<li>The new <code>page</code> field on window claims needs a length cap
+and a check against the review's known pages before it becomes a key in
+<code>seen.json</code> (SR3).</li>
+<li>The rest are small tightenings: the app's URL allowlist, which clone
+gets compiled, and how the app runs <code>launchctl</code> (SR4 to SR6).
+SR7 is a challenge to what "Stop" promises.</li>
+</ul>
+<p>Privacy (focus 5) has no finding: the summary shows less than
+<code>lahe status</code> already prints (no comment text, <code>~</code>
+paths instead of absolute ones), and only processes that can read the
+owner-only state folder can fetch it. Those processes can already read
+everything in it. The one new fact it reveals is which Lahe tab is
+focused right now, and that is held to the same readers.</p>
+<h3
+id="sr1-the-app-hands-the-cli-secret-to-anything-listening-on-the-helpers-port">SR1.
+The app hands the CLI secret to anything listening on the helper's
+port</h3>
+<ul>
+<li><strong>Severity:</strong> medium</li>
+<li><strong>Blocks or trade-off:</strong> blocks. It is a real hole on a
+shared Mac, and the fix does not slow Ken down.</li>
+<li><strong>Where:</strong> Security &amp; Privacy Notes, "Who can read
+the summary"; Key Flows, "The menu stays current" and "Install, rebuild,
+and Quit" (Stop).</li>
+</ul>
+<p><strong>The attack.</strong> The app sends
+<code>x-lahe-cli-secret</code> on every poll, every 5 seconds, to
+127.0.0.1 at the helper's port. It does not check who answers. Any local
+program can listen on a loopback port above 1024, including programs
+that cannot read Ken's state folder: another macOS account on the same
+Mac, a sandboxed App Store app with the network-server permission, or a
+container started with <code>-p 127.0.0.1:7817:...</code>. Today the
+helper's port is free only for the seconds of a crash or a staleness
+restart, because launchd's <code>KeepAlive</code> brings it straight
+back. "Stop Lahe until next login" changes that. It unloads the login
+item on purpose, so the port can sit free for hours while the app keeps
+polling with the secret.</p>
+<p>A squatter that collects the secret can then:</p>
+<ol type="1">
+<li>Wait for the real helper to come back, and call
+<code>site.bind</code> with the secret, naming a root such as
+<code>/Users/&lt;ken&gt;/Documents</code>. <code>rootProblem</code> in
+<code>src/service/sites.js</code> refuses only the filesystem root and
+the state folder.</li>
+<li>Read files from that site over the pages port. Pages carry no
+credential, the pages port listens on loopback where every local account
+can connect, and a non-browser client can send any Host header it
+likes.</li>
+<li>In the meantime, answer the app's polls with made-up counts and
+made-up <code>summary.open</code> addresses.</li>
+</ol>
+<p>The CLI has the same weakness today
+(<code>src/cli/commands/review.js</code> sends the secret after an
+unauthenticated <code>/health</code> probe). The original architecture
+names this residual and narrows it by matching <code>started_at</code>
+against the owner-only <code>service.json</code>. But
+<code>started_at</code> is public through <code>/health</code>, so a
+squatter that polled once while the helper was up can echo it. The app
+turns a rare, seconds-long window into a constant one.</p>
+<p><strong>The change to the design.</strong> The secret should never
+travel. Pick one of these; the first is preferred.</p>
+<ul>
+<li><strong>Signed requests (preferred).</strong> The app sends a proof
+instead of the secret: a timestamp, a random nonce, and an HMAC-SHA256
+keyed with the secret over the route name, timestamp, nonce, and a hash
+of the body. The helper accepts a proof only within about 30 seconds of
+its own clock and refuses a repeated nonce. The helper signs its answer
+the same way (HMAC over the nonce and a hash of the response body), and
+the app ignores any answer whose signature does not check, showing
+"can't tell". Node has HMAC in <code>node:crypto</code> and Swift has it
+in CryptoKit, so the zero-dependency rule holds. A squatter then learns
+a one-time proof for one route and nothing it can use on
+<code>site.bind</code>. The CLI's two existing secret routes should move
+to the same proof in a later change.</li>
+<li><strong>Minimum, if the plan wants less code.</strong> The app sends
+the secret only when all of these hold: <code>service.json</code>
+exists, the pid it names is alive and owned by Ken
+(<code>kill(pid, 0)</code> returns 0, which it does not for another
+account's process), and <code>/health</code> reports the same
+<code>started_at</code> as <code>service.json</code>. While the helper
+is down, or after Stop, the app probes only <code>/health</code>, which
+carries no credential, and sends nothing secret until those checks pass
+again. This stops another account and a sandboxed app, but not a
+same-user process, which is the account boundary the project already
+accepts.</li>
+</ul>
+<p>Either way, the app connects to <code>127.0.0.1</code> at the port
+named in <code>service.json</code>, never to <code>localhost</code>, so
+it never reaches a different program on <code>::1</code>. The plan
+should carry a test row: a fake server on the port receives no
+secret.</p>
+<h3
+id="sr2-a-browser-always-sends-origin-is-not-true-for-get-so-the-secret-is-the-only-control-on-summaryread">SR2.
+"A browser always sends Origin" is not true for GET, so the secret is
+the only control on <code>summary.read</code></h3>
+<ul>
+<li><strong>Severity:</strong> low</li>
+<li><strong>Blocks or trade-off:</strong> neither. It is a design-text
+fix and a cheap second check, at no cost to Ken.</li>
+<li><strong>Where:</strong> Security &amp; Privacy Notes, "Who can read
+the summary".</li>
+</ul>
+<p><strong>The failure.</strong> <code>site.bind</code> and
+<code>review.retire</code> are POSTs, and browsers do send
+<code>Origin</code> on every POST, so "refuse any Origin" is a real
+second check there. <code>summary.read</code> is the first GET on this
+auth mode. Browsers do not send <code>Origin</code> on a
+<code>no-cors</code> GET, on a navigation, or on an
+<code>&lt;img&gt;</code> or <code>&lt;script&gt;</code> load. So a page
+can reach the route with no <code>Origin</code> header. It cannot send
+the secret header that way, and the helper sends no CORS headers, so it
+reads nothing. The secret still holds. But the design's reason is wrong,
+and a plan that tests only "a request with Origin is refused" would pass
+while proving nothing about GET.</p>
+<p><strong>The change to the design.</strong></p>
+<ul>
+<li>Correct the sentence: the secret is the control, and Origin refusal
+is a second check that only applies to POST.</li>
+<li>Add a second check that does apply to GET: refuse any request
+carrying a <code>Sec-Fetch-Site</code>, <code>Sec-Fetch-Mode</code> or
+<code>Sec-Fetch-Dest</code> header. Current Chrome, Firefox and Safari
+send these on every request to a loopback address. URLSession and Node's
+<code>fetch</code> send none.</li>
+<li>Make <code>summary.open</code> a POST with a JSON body, so it gets
+the Origin check too and no simple request can reach it.</li>
+<li>Keep both routes out of the Library's catalog routes and out of
+<code>routes.isCatalogPath</code>, so the Library host never routes to
+them, and never accept the Library token on them.</li>
+<li>Plan test rows: a no-Origin GET with Sec-Fetch headers is refused; a
+request with the Library token is refused; a request to the summary path
+at <code>library.lahe.localhost</code> is refused.</li>
+</ul>
+<h3
+id="sr3-the-page-field-needs-bounds-before-it-becomes-a-key-in-seenjson">SR3.
+The <code>page</code> field needs bounds before it becomes a key in
+<code>seen.json</code></h3>
+<ul>
+<li><strong>Severity:</strong> medium</li>
+<li><strong>Blocks or trade-off:</strong> blocks, in the sense that the
+plan must include the checks. They cost Ken nothing.</li>
+<li><strong>Where:</strong> Data / State Changes,
+<code>seen.json</code>; Failure Modes, "Two windows on one review".</li>
+</ul>
+<p><strong>What is already safe.</strong> A window claim is checked
+against the review's own token and origin list
+(<code>protocol.checkRequest</code>). So a page can only ever touch seen
+marks for its own review. It cannot clear Ken's count on another
+review.</p>
+<p><strong>The failures.</strong></p>
+<ol type="1">
+<li><strong>Unbounded writes.</strong> <code>page</code> is a string the
+page chooses. The helper accepts bodies up to 8 MB
+(<code>MAX_BODY_BYTES</code> in <code>src/service/index.js</code>). The
+design says the helper writes only when "a focused window's time passes
+the newest agent reply on that page". If an unknown page falls back to
+"the newest reply on the review", or the mark is stored before that
+test, every distinct <code>page</code> value adds a key. A script can
+send thousands of claims with different long strings and grow
+<code>seen.json</code> without limit. That file is read on every
+summary.</li>
+<li><strong>Object keys.</strong> <code>reviews[id][page]</code> as a
+plain object lets <code>page</code> be <code>__proto__</code>,
+<code>constructor</code> or <code>toString</code>. A lookup then returns
+a function, not a time, and the count for that review goes wrong.</li>
+<li><strong>Anyone holding the review token can clear that review's
+unseen answers.</strong> <code>quiet: false</code> is the page's own
+claim. The design also counts a refused claim (a second window) as
+looking. Anything that can read the token from the page's script tag can
+send <code>quiet: false</code> with any <code>page</code>, or with no
+<code>page</code> at all, which marks every page. That includes a
+third-party script on a reviewed page, such as a local app under review
+that loads analytics. Ken then misses an agent's answer on that review.
+Open questions are not affected, because rule 1 does not use seen
+marks.</li>
+</ol>
+<p><strong>The change to the design.</strong></p>
+<ul>
+<li><code>page</code> must be a string of at most 1024 characters,
+normalized the same way the helper names pages when it records replies.
+A claim with a bad <code>page</code> is treated as having none.</li>
+<li>Look <code>page</code> up in the set of pages that carry an agent
+reply on this review, using <code>Map</code> or
+<code>Object.create(null)</code> and own-property checks. If it is not
+in that set, write nothing. That bounds <code>seen.json</code> by pages
+with replies, not by what pages send.</li>
+<li>State item 3 as an accepted residual risk in the design: a token
+holder can clear its own review's unseen answers, and nothing else.
+Making a refused claim count is a fair trade for two-window use. Ken
+should know it is a trade.</li>
+<li>Plan test rows: a 1 MB <code>page</code> writes nothing;
+<code>__proto__</code> writes nothing and does not change any count; a
+page path with no replies writes nothing; review A's token cannot change
+review B's marks.</li>
+</ul>
+<h3
+id="sr4-the-apps-url-allowlist-is-wider-than-anything-the-helper-returns">SR4.
+The app's URL allowlist is wider than anything the helper returns</h3>
+<ul>
+<li><strong>Severity:</strong> low</li>
+<li><strong>Blocks or trade-off:</strong> neither. The helper never
+returns the extra forms, so tightening costs nothing.</li>
+<li><strong>Where:</strong> Security &amp; Privacy Notes,
+"<code>summary.open</code> opens nothing itself".</li>
+</ul>
+<p><strong>The failure.</strong> catalog Open always builds its address
+with <code>protocol.siteOrigin</code>, which gives
+<code>http://&lt;name&gt;.lahe.localhost</code> with either no port (the
+port-80 forward) or the pages port
+(<code>catalog_sites.addressOf</code>). The Library address is
+<code>library.lahe.localhost</code>. The allowlist also lets through
+<code>&lt;name&gt;.lahe</code>, <code>127.0.0.1</code> and
+<code>localhost</code> at any port. If the helper is ever impersonated
+(SR1) or a bug puts the wrong value there, the app would open, say,
+<code>http://localhost:631/...</code> or a local dev server's endpoint
+that acts on a GET. <code>&lt;name&gt;.lahe</code> without the verified
+resolver goes to the system's DNS, which on some networks answers for
+unknown names.</p>
+<p><strong>The change to the design.</strong></p>
+<ul>
+<li>Accept only scheme <code>http</code>; a host of
+<code>library.lahe.localhost</code> or one matching the site-name rule
+followed by <code>.lahe.localhost</code>; a port that is absent or equal
+to the pages port in <code>service.json</code>; no user or password
+part.</li>
+<li>Parse with <code>URLComponents</code> and open the URL rebuilt from
+those parts, not the original string, so the app and the browser cannot
+read the same string two ways.</li>
+<li>Apply the same check to <code>library_url</code> from the
+summary.</li>
+<li>Titles: besides control characters, strip Unicode format characters
+(the bidirectional overrides such as U+202E), and cap the length, so a
+page title cannot make one row look like another document.</li>
+</ul>
+<h3
+id="sr5-which-clone-gets-compiled-and-what-exactly-gets-compiled-should-be-pinned">SR5.
+Which clone gets compiled, and what exactly gets compiled, should be
+pinned</h3>
+<ul>
+<li><strong>Severity:</strong> low</li>
+<li><strong>Blocks or trade-off:</strong> neither. It needs a few
+sentences in the design and a test row.</li>
+<li><strong>Where:</strong> Components
+(<code>src/service/menubar.js</code>,
+<code>src/cli/commands/menubar.js</code>); Security &amp; Privacy Notes,
+"Building code on the user's machine"; Install, rebuild flow.</li>
+</ul>
+<p><strong>The failure.</strong> The helper compiles native code that
+launchd then starts at every login. Using argument arrays with no shell
+is right. Three gaps remain:</p>
+<ol type="1">
+<li>The design does not say which clone
+<code>lahe menubar rebuild</code> compiles. If it compiles the clone the
+CLI runs from, then an agent running it from a worktree installs that
+worktree's unreviewed Swift as Ken's login item.</li>
+<li>"Files in <code>macos/menubar/</code>" read as a glob would also
+compile any extra <code>.swift</code> file, or a symlink to a file
+outside the folder.</li>
+<li>The helper hashes the folder and then compiles it. If the files
+change in between, the recorded stamp describes code that was not built.
+A half-written app can also be started by launchd if the build writes in
+place.</li>
+</ol>
+<p><strong>The change to the design.</strong></p>
+<ul>
+<li>Only ever compile from <code>install.json</code>'s
+<code>clone</code>, the same clone the helper's login item runs. The
+helper timer and <code>lahe menubar rebuild</code> both follow it, never
+the CLI's own clone. This matches how <code>sourceRoots</code> already
+judges staleness.</li>
+<li>Compile a fixed list of file names, and refuse symlinks.</li>
+<li>Copy those files into a fresh build folder inside the state folder,
+hash the copies, compile the copies, build to <code>Lahe.app.new</code>,
+then rename it over <code>Lahe.app</code> and restart the app. The stamp
+then always matches the binary.</li>
+<li>Run <code>/usr/bin/xcrun swiftc</code> by absolute path with a small
+fixed environment, not whatever PATH launchd gave the helper.</li>
+<li>Keep the app inside the owner-only state folder, as designed. It
+must never move somewhere another account can write.</li>
+</ul>
+<h3
+id="sr6-the-app-should-not-read-launchctl-targets-from-installjson">SR6.
+The app should not read <code>launchctl</code> targets from
+<code>install.json</code></h3>
+<ul>
+<li><strong>Severity:</strong> low</li>
+<li><strong>Blocks or trade-off:</strong> neither.</li>
+<li><strong>Where:</strong> Security &amp; Privacy Notes, "launchctl
+calls from the app"; Key Flows, Stop and Start;
+<code>src/service/login_item.js</code>
+<code>startThroughItem</code>.</li>
+</ul>
+<p><strong>The failure.</strong> The labels are fixed:
+<code>lahe-helper</code> (<code>login_item.LABEL</code>) and
+<code>lahe-menubar</code>. Reading them, and the <code>login_item</code>
+path in the new <code>menubar</code> block, from
+<code>install.json</code> adds a file to trust for no gain. The new
+bootstrap step loads whatever plist sits at the path it is given. Only a
+same-user process can change either file, so this is defense in depth
+and not a hole.</p>
+<p><strong>The change to the design.</strong></p>
+<ul>
+<li>The app uses the two labels as constants in its Swift source, and
+runs <code>/usr/bin/launchctl</code> by absolute path with an argument
+array.</li>
+<li>The bootstrap step, in the app and in <code>startThroughItem</code>,
+builds the plist path from the home folder plus the checked label, the
+way <code>describe()</code> already does. It never reads the path from
+<code>install.json</code>.</li>
+<li>Before bootstrapping, check that the plist's contents are what
+<code>describe()</code> would write for this install. If they differ,
+refuse, and say "run <code>lahe install</code> again".</li>
+</ul>
+<h3
+id="sr7-stop-lahe-is-undone-by-the-next-agent-command-challenge">SR7.
+"Stop Lahe" is undone by the next agent command (challenge)</h3>
+<ul>
+<li><strong>Severity:</strong> low</li>
+<li><strong>Kind:</strong> challenge to R14, which Ken asked for</li>
+<li><strong>Blocks or trade-off:</strong> trade-off for Ken.</li>
+<li><strong>Where:</strong> Key Flows, "Stop Lahe"; brief R14.</li>
+</ul>
+<p><strong>The failure.</strong> With bootstrap-before-kickstart, any
+<code>lahe</code> command that needs the helper loads it again, and a
+live monitor runs such commands all the time. So Stop may last only
+seconds. R14's help line says agents will start it again, so this is
+known. The security angle: people reach for a stop control when
+something looks wrong, or before sharing their screen. A stop that
+automation quietly reverses fails open, and the stopped window is also
+the window SR1 is about.</p>
+<p><strong>The change to the design, if Ken wants it.</strong> Stop
+writes a <code>stopped_until_login</code> marker in the state folder
+(cleared by the login item at load). While it is there, agent commands
+do not bootstrap the helper on their own. They print a line telling the
+agent the human stopped Lahe. Only Start in the menu, or a command Ken
+runs, loads it again. If Ken prefers today's behavior, the menu line
+should say plainly that a running agent will start Lahe again within
+seconds.</p>
+<h3 id="cleanup-needed">Cleanup needed</h3>
+<p>None. This review created only this file.</p>
+</body>
+</html>

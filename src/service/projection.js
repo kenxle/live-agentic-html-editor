@@ -235,6 +235,12 @@ function foldEvents(state, events, options) {
         delete replyRev[next[F.ID]];
         delete withdrawnFrom[next[F.ID]];
       }
+      // The read mark is the helper's, from reply.seen, never the carried
+      // record's. It stays while the reply it names is still the item's reply.
+      delete next[F.REPLY_SEEN];
+      if (prev && prev[F.REPLY_SEEN] && next[F.REPLY] && next[F.REPLY] === prev[F.REPLY]) {
+        next[F.REPLY_SEEN] = prev[F.REPLY_SEEN];
+      }
       if (closedHere) {
         // THE REVIEWER'S CLOSE STANDS AT ITS REVISION. A same-revision re-post
         // (a reconnect, a late draft batch) takes the browser's content and
@@ -284,6 +290,37 @@ function foldEvents(state, events, options) {
       return;
     }
 
+    if (type === EVENT.REPLY_SEEN) {
+      // THE REVIEWER READ A REPLY. Recorded only when the stamp names the
+      // reply the item holds now: a mark for an older reply, for an item this
+      // review does not hold, or that is not a short string is dropped and
+      // reported the way a stale reply is, and stores nothing. Not a lifecycle
+      // move: state, revision and reply are untouched.
+      var seenTarget = id ? byId[id] : null;
+      var stamp = event.stamp;
+      if (!seenTarget) {
+        if (onDropped) onDropped(event, "reply.seen names an item this review does not hold");
+        return;
+      }
+      if (typeof stamp !== "string" || !stamp || stamp.length > record.REPLY_STAMP_MAX) {
+        if (onDropped) {
+          onDropped(event, "reply.seen needs a stamp of 1 to " + record.REPLY_STAMP_MAX + " characters");
+        }
+        return;
+      }
+      var current = record.replyStamp(seenTarget);
+      if (stamp !== current) {
+        if (onDropped) {
+          onDropped(event, "reply.seen names reply " + JSON.stringify(stamp) + " but the item's reply is " + JSON.stringify(current));
+        }
+        return;
+      }
+      var marked = Object.assign({}, seenTarget);
+      marked[F.REPLY_SEEN] = stamp;
+      byId[id] = marked;
+      return;
+    }
+
     if (type === EVENT.ITEM_DELETED) {
       if (!id || !byId[id]) return;
       delete byId[id];
@@ -307,6 +344,7 @@ function foldEvents(state, events, options) {
       reopened[F.HANDLED_NOT_ON_PAGE] = false;
       delete reopened[F.CLOSED_BY];
       delete reopened[F.CLOSED_AT];
+      delete reopened[F.REPLY_SEEN];
       byId[id] = reopened;
       delete replyRev[id];
       delete withdrawnFrom[id];
@@ -333,6 +371,8 @@ function foldEvents(state, events, options) {
       applied[F.HANDLED_NOT_ON_PAGE] = event.handled_not_on_page === true;
       delete applied[F.CLOSED_BY];
       delete applied[F.CLOSED_AT];
+      // A new reply is unread until a reply.seen names it.
+      delete applied[F.REPLY_SEEN];
       byId[id] = applied;
       replyRev[id] = item[F.REV];
       delete withdrawnFrom[id];
@@ -556,6 +596,30 @@ function countItems(projected) {
 // the kept state. The first rebuild after startup still reads the whole log
 // once; after that, never.
 
+/**
+ * Is this run of events something a kept fold can be continued with?
+ *
+ * Only a strictly increasing run of seqs is. Anything else means the log is
+ * not what the fold thinks it is: a second writer on the same directory hands
+ * out a seq the fold has already passed, and a hand-written or legacy line
+ * carries no seq at all. Both used to be skipped, silently, which is a
+ * comment quietly missing from what an agent reads. They are treated as a
+ * reason to start over instead, and starting over is the from-the-top fold,
+ * which is the reference answer by definition.
+ *
+ * @param {object} fold a createFold() value
+ * @param {object[]} events the events after it, in file order
+ */
+function continuesFold(fold, events) {
+  var at = fold.seq;
+  for (var i = 0; i < events.length; i += 1) {
+    var seq = events[i][protocol.EVENT_FIELD.SEQ];
+    if (typeof seq !== "number" || seq <= at) return false;
+    at = seq;
+  }
+  return true;
+}
+
 function createProjector(options) {
   var opts = options || {};
   if (!opts.dir) throw new Error("createProjector: dir is required");
@@ -654,27 +718,6 @@ function createProjector(options) {
   }
 
   /**
-   * Is this run of events something the kept fold can be continued with?
-   *
-   * Only a strictly increasing run of seqs is. Anything else means the log is
-   * not what the fold thinks it is: a second writer on the same directory hands
-   * out a seq the fold has already passed, and a hand-written or legacy line
-   * carries no seq at all. Both used to be skipped, silently, which is a
-   * comment quietly missing from what an agent reads. They are treated as a
-   * reason to start over instead, and starting over is the from-the-top fold,
-   * which is the reference answer by definition.
-   */
-  function continues(fold, events) {
-    var at = fold.seq;
-    for (var i = 0; i < events.length; i += 1) {
-      var seq = events[i][protocol.EVENT_FIELD.SEQ];
-      if (typeof seq !== "number" || seq <= at) return false;
-      at = seq;
-    }
-    return true;
-  }
-
-  /**
    * Fold everything that has landed since this review's fold last looked.
    *
    * The first pass reads the log whole, the way regenerate does, and so does
@@ -691,7 +734,7 @@ function createProjector(options) {
 
     if (entry.started && log.epoch(reviewId) === entry.epoch) {
       var events = log.since(reviewId, entry.fold.seq);
-      if (log.epoch(reviewId) === entry.epoch && continues(entry.fold, events)) {
+      if (log.epoch(reviewId) === entry.epoch && continuesFold(entry.fold, events)) {
         foldEvents(entry.fold, events, { onDropped: dropped });
         return entry;
       }
@@ -899,6 +942,7 @@ module.exports = {
   currentItems: currentItems,
   createFold: createFold,
   foldEvents: foldEvents,
+  continuesFold: continuesFold,
   itemsOf: itemsOf,
   projectFold: projectFold,
   itemsFrom: itemsFrom,

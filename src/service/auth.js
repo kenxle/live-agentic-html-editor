@@ -42,6 +42,14 @@ function createAuth(options) {
   if (!opts.reviews) throw new Error("createAuth: reviews is required");
   var log = opts.log;
   var reviews = opts.reviews;
+  var now = typeof opts.now === "function" ? opts.now : function () { return Date.now(); };
+  // The CLI proof's nonces, each until its timestamp leaves the window. They
+  // are in memory only, so a proof signed before this helper started is
+  // refused outright: a proof captured just before a restart cannot replay
+  // against the new helper's empty cache. The app's first poll after a start
+  // may be refused once; its next one is signed after the start.
+  var proofNonces = createNonceCache();
+  var proofNotBefore = now();
   // One line per distinct refusal, capped: any web page can send requests that
   // are refused, as many and as varied as it likes.
   // An identical refusal is logged up to REFUSAL_REPEATS times: a page's
@@ -68,6 +76,19 @@ function createAuth(options) {
       var catalogResult = checkCatalogRequest(req, opts.catalog || null);
       if (catalogResult.ok) return catalogResult;
       return refused(req, catalogResult);
+    }
+
+    // The menu bar's summary routes: a signed request, never a page.
+    if (protocol.route(req.routeName).auth === protocol.AUTH.CLI_PROOF) {
+      var proofResult = checkProofRequest(
+        req,
+        typeof opts.cliSecret === "function" ? opts.cliSecret() : null,
+        now(),
+        proofNonces,
+        proofNotBefore
+      );
+      if (proofResult.ok) return proofResult;
+      return refused(req, proofResult);
     }
 
     // site.bind (stable addresses): the CLI secret, never a page.
@@ -382,8 +403,128 @@ function checkSiteRequest(request, secret) {
   return { ok: true, review: null, origin: null };
 }
 
+// ---------------------------------------------------------------------------
+// The CLI proof (the menu bar app)
+// ---------------------------------------------------------------------------
+//
+// The wire is docs/CONTRACTS.md's, and test/fixtures/menubar/proof_vectors.json
+// pins every intermediate value: the fake helper and the Swift app assert the
+// same vectors, so the three cannot drift apart.
+
+/** Lowercase hex SHA-256 of bytes (a Buffer) or of a string's UTF-8. */
+function sha256Hex(bytes) {
+  return crypto.createHash("sha256").update(bytes === undefined || bytes === null ? "" : bytes).digest("hex");
+}
+
+/** Lowercase hex HMAC-SHA256 of `text`, keyed by the secret's UTF-8 bytes. */
+function hmacHex(secret, text) {
+  return crypto.createHmac("sha256", Buffer.from(secret, "utf8")).update(text, "utf8").digest("hex");
+}
+
+/** What a request's proof signs. */
+function proofSignedString(method, target, ts, nonce, bodySha256) {
+  return [protocol.PROOF.REQUEST_PREFIX, String(method), String(target), String(ts), String(nonce), bodySha256].join("\n");
+}
+
+/** What an answer's proof signs. */
+function replySignedString(nonce, status, bodySha256) {
+  return [protocol.PROOF.REPLY_PREFIX, String(nonce), String(status), bodySha256].join("\n");
+}
+
+/** The x-lahe-proof-reply value for an answer. */
+function replyProof(secret, nonce, status, bodyBytes) {
+  return hmacHex(secret, replySignedString(nonce, status, sha256Hex(bodyBytes)));
+}
+
+/**
+ * Nonces seen inside the window, each kept until its own timestamp leaves the
+ * window, after which the timestamp check refuses a replay anyway. Only a
+ * proof that checked is ever added, so nobody without the key can fill it.
+ */
+function createNonceCache() {
+  var held = new Map();
+  return {
+    seen: function (nonce, nowMs) {
+      held.forEach(function (until, key) {
+        if (until < nowMs) held.delete(key);
+      });
+      return held.has(nonce);
+    },
+    add: function (nonce, tsMs) {
+      held.set(nonce, tsMs + protocol.PROOF.WINDOW_MS);
+    }
+  };
+}
+
+/**
+ * The summary routes' check block, one function. Order: Host, Sec-Fetch,
+ * Origin (where the route refuses one), the raw secret, content type, then
+ * the proof: well formed, not signed before the helper started, within the
+ * window, signed by the key, and a nonce not seen in the window.
+ *
+ * `headersOnly` stops before the proof. The helper asks that first, so a
+ * request a header refuses is turned away before its body is read.
+ *
+ * The secret never enters a log line or a detail.
+ *
+ * @param {{routeName: string, headers: object, method: string, target: string,
+ *          body?: Buffer, headersOnly?: boolean}} request `target` is the path
+ *   with its query exactly as sent; `body` the raw bytes
+ * @param {string|null} secret the trimmed cli-secret
+ * @param {number} nowMs
+ * @param {object} nonces a createNonceCache()
+ * @param {number} [notBeforeMs] the helper's start: an earlier proof is refused
+ */
+function checkProofRequest(request, secret, nowMs, nonces, notBeforeMs) {
+  var req = request || {};
+  var r = protocol.route(req.routeName);
+  var headers = req.headers || {};
+  var host = headerOf(headers, protocol.HEADER.HOST);
+  if (!protocol.hostAllowed(host)) return refusal(protocol.CHECK.HOST, String(host), r.name);
+  var fetchHeader = [protocol.HEADER.SEC_FETCH_SITE, protocol.HEADER.SEC_FETCH_MODE, protocol.HEADER.SEC_FETCH_DEST].filter(function (name) {
+    return headerOf(headers, name) !== null;
+  })[0];
+  if (fetchHeader) return refusal(protocol.CHECK.SEC_FETCH, fetchHeader + " is a browser's", r.name);
+  var origin = headerOf(headers, protocol.HEADER.ORIGIN);
+  if (r.refuse_origin && origin !== null) return refusal(protocol.CHECK.ORIGIN, String(origin).slice(0, 200), r.name);
+  if (headerOf(headers, protocol.HEADER.CLI_SECRET) !== null) {
+    return refusal(protocol.CHECK.PROOF, "the raw secret is refused here", r.name);
+  }
+  if (r.mutating) {
+    var ct = String(headerOf(headers, protocol.HEADER.CONTENT_TYPE) || "").split(";")[0].trim().toLowerCase();
+    if (ct !== protocol.JSON_CONTENT_TYPE) return refusal(protocol.CHECK.CONTENT_TYPE, ct || "none", r.name);
+  }
+  if (req.headersOnly === true) return { ok: true, review: null, origin: null };
+  var ts = headerOf(headers, protocol.HEADER.PROOF_TS);
+  var nonce = headerOf(headers, protocol.HEADER.PROOF_NONCE);
+  var mac = headerOf(headers, protocol.HEADER.PROOF);
+  if (
+    typeof ts !== "string" || !protocol.PROOF.TS_PATTERN.test(ts) ||
+    typeof nonce !== "string" || !protocol.PROOF.NONCE_PATTERN.test(nonce) ||
+    typeof mac !== "string" || !protocol.PROOF.MAC_PATTERN.test(mac)
+  ) {
+    return refusal(protocol.CHECK.PROOF, "no proof", r.name);
+  }
+  if (typeof secret !== "string" || !secret) return refusal(protocol.CHECK.PROOF, "no cli-secret to check against", r.name);
+  var tsMs = Number(ts);
+  if (typeof notBeforeMs === "number" && tsMs < notBeforeMs) return refusal(protocol.CHECK.PROOF, "signed before the helper started", r.name);
+  if (Math.abs(nowMs - tsMs) > protocol.PROOF.WINDOW_MS) return refusal(protocol.CHECK.PROOF, "outside the window", r.name);
+  var expected = hmacHex(secret, proofSignedString(req.method, req.target, ts, nonce, sha256Hex(req.body)));
+  if (!sameToken(mac, expected)) return refusal(protocol.CHECK.PROOF, "the signature does not check", r.name);
+  if (nonces.seen(nonce, nowMs)) return refusal(protocol.CHECK.PROOF, "a nonce already used", r.name);
+  nonces.add(nonce, tsMs);
+  return { ok: true, review: null, origin: null };
+}
+
 module.exports = {
   checkSiteRequest: checkSiteRequest,
+  checkProofRequest: checkProofRequest,
+  createNonceCache: createNonceCache,
+  sha256Hex: sha256Hex,
+  hmacHex: hmacHex,
+  proofSignedString: proofSignedString,
+  replySignedString: replySignedString,
+  replyProof: replyProof,
   createAuth: createAuth,
   createCatalogState: createCatalogState,
   checkCatalogRequest: checkCatalogRequest

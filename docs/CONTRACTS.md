@@ -404,6 +404,7 @@ work.
 | `item.deleted` | The reviewer deleted their own outstanding work |
 | `item.reopened` | `handled` back to `ready` (R38) |
 | `item.closed` | `{item, rev}`, no record. The reviewer chose "Mark as done" on the card's state chip. The projection moves the item to `handled` with `closed_by: "reviewer"` only when it is still `ready` or `not_handled` at exactly that `rev`; a stale or misplaced close is dropped and reported, like a stale reply. The page check never runs on it, and every later reply to the item is refused. review.json shows it as `closed_by_reviewer: true` |
+| `reply.seen` | `{item, stamp}`, no record. The rail marked an agent reply read: the card was opened, so its "1 new" tag dropped. `stamp` is `record.replyStamp(item)` (the reply's `at`, then `@`, then the revision it answered), a string of at most 64 characters. The projection records it on the item as `reply_seen` only when it names the item's current reply; a stamp for another reply, an item the review does not hold, or a non-string is dropped and reported, like a stale reply. Not a lifecycle move: the item's state, revision and reply are untouched, the drain does not list it, and no agent acts on it. The event carries its item and stamp and nothing else: no `rev` (an accepted event with a rev marks the item acknowledged at it, which a follow-up typed at that revision must not lose to) and no page fields. `events.append` refuses one whose item is not a string, whose stamp is not a string of 1 to 64 characters, or that carries any other field, and it is never written. Hold does not hold it: a held review still posts its read marks. `replies.poll` hands the page every `reply.seen` beside the folds, and the page adopts one that names its record's current reply into its own marks, posting nothing back, so a reply read in one browser reads as read in every browser. Reading a reply is not work on the document: the Library's `last` skips it (`CATALOG.NOT_WORK_EVENTS`) |
 | `reply.folded` | An agent's reply line was folded into the log |
 | `reply.rejected` | A reply line could not be read. Names the file, the line number, and the reason |
 | `review.archived` | End review |
@@ -668,6 +669,17 @@ is `true` only on a `handled` item the reviewer closed with "Mark as done" (the 
 above), and `false` everywhere else. The item's `reply`, if any, is the agent's last answer before
 the close, kept as history; it is not what finished the item. Such an item is never on the drain
 and takes no reply.
+
+**A reply the reviewer read.** The projection keeps `reply_seen` on an item: the stamp of the reply
+the reviewer has read (the `reply.seen` event above). review.json does not carry it: no agent acts on
+it, and the file is read on every wake. It travels on `records.read`'s records and as the `reply.seen`
+events `replies.poll` hands the page, and the menu bar's summary folds it from `events.jsonl`. There is
+one unread rule, and it lives in
+`src/shared/record.js` so the rail's "1 new" tag and the menu bar's "waiting on you" count call the
+same function: an item is unread when `record.needsToSeeReply(reply)` holds (a `question`, a
+`not_handled`, or a reply flagged `user_needs_to_see_reply` with words in `text` or `reason`), the
+reply is not a tool round, `closed_by_reviewer` is false, and `reply_seen` is not
+`record.replyStamp(item)`. Nothing outside that function decides what is read.
 
 **The `contract` field, verbatim.** This is the exact value of the file's top-level `contract` field,
 and it is the entire implementation of R4 (an agent never rewrites the whole document) and R45 (text
@@ -1074,6 +1086,92 @@ no status. So after a network-level failure the library asks `health`, which is 
 therefore unpreflighted: if health answers, the helper is up and the ORIGIN is what is being refused,
 and the chip says so and names this page's origin (`sync.decideFailureCode`). `add` also warns before
 it happens, whenever a static file registers `"null"` alone.
+
+### The summary routes and the signed-request wire (menu bar)
+
+Two routes feed the Mac menu bar app (`docs/features/20261012.01_menu_bar_app/`). They are read by a
+program Ken runs, never by a page, and they are the first routes on a third auth mode, `AUTH.CLI_PROOF`.
+
+| Route | Method | Path | Auth |
+| --- | --- | --- | --- |
+| `summary.read` | GET | `/lahe/v1/summary?v=1` | CLI proof |
+| `summary.open` | POST | `/lahe/v1/summary/open` | CLI proof |
+
+Both sit behind the Host check, are never Library routes (the Library host does not route to them and
+the Library token is refused), and refuse any request carrying `Sec-Fetch-Site`, `Sec-Fetch-Mode` or
+`Sec-Fetch-Dest`, which current browsers send on every request to a loopback address and the app never
+sends. `summary.open` also refuses any `Origin` header. The raw CLI secret header is refused on both.
+
+**The proof.** The key is the text of `<state>/cli-secret` with surrounding whitespace removed, as
+UTF-8 bytes. The request carries three headers: `x-lahe-proof-ts` (Unix time in milliseconds,
+decimal), `x-lahe-proof-nonce` (16 random bytes as 32 lowercase hex characters), and `x-lahe-proof`
+(lowercase hex HMAC-SHA256). The signed string is these lines joined by a single `\n`, no trailing
+newline: `lahe-proof-v1`, the method, the path with its query string exactly as sent, the timestamp,
+the nonce, and the lowercase hex SHA-256 of the body (of the empty string for a GET). The helper
+accepts a timestamp within 30 seconds of its clock and not earlier than its own start (the nonce cache
+is in memory, so a proof captured before a restart must not replay against the new helper; the app's
+first poll after a start may get one 401), refuses a nonce it has seen in that window, and compares in
+constant time. It runs the header checks before it reads a body, and `summary.open`'s body is capped
+at 4 KB, past which it answers a signed `413 {error: {code: "BODY_TOO_LARGE", detail}}`. A 5xx says
+only that the helper could not answer; the reason stays in the helper log. Every answer, errors included, carries `x-lahe-proof-reply`: HMAC-SHA256
+with the same key over `lahe-proof-reply-v1`, the request's nonce, the status code in decimal, and the
+hex SHA-256 of the response body, joined the same way. The app drops any answer whose proof does not
+check. `test/fixtures/menubar/proof_vectors.json` holds the secret, three requests and three answers
+with every intermediate value; `auth.js`, the fake helper and the Swift self-test each assert them all.
+
+**Versioning.** The app sends the `summary_version` it was built for, as `?v=1` on `summary.read` (so
+the signature covers it) and as `summary_version` in `summary.open`'s body. A mismatch answers
+`409 {error: {code: "SUMMARY_VERSION", detail}}`, signed. A refused proof answers `401
+{error: {code: "AUTH_REFUSED", detail}}`, signed with the key when the helper has one; so does every
+other refusal on these routes (a Sec-Fetch header, an Origin on `summary.open`, the raw secret, a
+preflight), with a `detail` naming the check, and the helper log names it too. A Host that is not a
+loopback name never reaches them: Host dispatch answers 400 first. Error bodies are the helper's usual
+`{error: {code, detail}}`, exactly those two fields.
+
+**`summary.read` answers** this shape, and `test/fixtures/menubar/summary.json` is its reference
+(`summary_empty.json` and `summary_many.json` are the empty and the overflowing cases). A test
+compares nested key paths and value types with the fixture in both directions.
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `summary_version` | integer | `1` |
+| `generated_at` | ISO time | when this answer was built |
+| `helper` | `{version, started_at, always_on}` | the helper's version string, its start time, and whether it runs from a login item |
+| `waiting_on_you` | `{count, documents}` | `count` is `documents.length`, never capped. Each document: `review`, `title`, `path_hint`, `open` (a window holder is current), `questions` (unread replies whose status is `question`), `unread` (every unread reply, questions included), `newest_at` (the newest unread reply's time). Open documents first, then newest first |
+| `waiting_on_agents` | `{count, more, documents}` | `count` is the sum of `waiting` over every document not retired, the Library's own total less retired reviews (a retired review is in no section); `documents` is at most 8, newest first, with `more` the rest. Each: `review`, `title`, `path_hint`, `waiting` |
+| `open_documents` | `{count, more, items}` | reviews with a current window holder; at most 8 items, `more` the rest. Each: `review`, `title`, `path_hint`, `focused` (from the holder's own quiet flag) |
+| `sessions` | `{open, connected: {count, more, items}}` | `open` counts sessions not closed. `connected` lists sessions whose agent is `listening` (a live monitor) or `working` (a `lahe` command in the last few minutes), the Library's test; at most 8 items, most recently heard first, `more` the rest. Each: `session`, `name` (the Library rename, else the newest review's title, else the session's own name, else the session id), `presence`, `last_heard_at`, `review` (its most recent review, or null) |
+| `recent` | `{more, items}` | the Library's order, at most 8 items, `more` the rest. Each: `review`, `title`, `path_hint`, `last` |
+| `library_url` | string | the Library's printed address, with the pages port when the port-80 forward is not proved, and its page path: `http://library.lahe.localhost:1483/catalog`. The Library's host answers no other path |
+
+Every string field is always a string; only a session's `review` may be null. The fallbacks: a
+document's `title` is its file's name when it has no title or its title cleans to nothing (then the
+review id), and its `path_hint` is its file's name when the path is outside the home folder (an empty
+string when no file is on record); a session's `name` falls back to its own name, then its id, and
+its `last_heard_at` to the time the session was created; `helper.version` is the helper's version as
+it serves it, and `library_url` is always the printed address.
+
+Every `title` and `path_hint` has control characters (category Cc: U+0000 to U+001F, U+007F, and
+U+0080 to U+009F), Unicode format characters (category Cf, the bidirectional overrides among them),
+lone surrogate halves (Cs, which the app's JSON decoder refuses, failing the whole answer), and the
+line and paragraph separators U+2028 and U+2029 removed, and is cut at 120 and 200 characters. A
+review that cannot be read is left out of the answer, with one line in the helper log, never the
+whole answer. `path_hint` is the document's path (or a folded folder's) with the home folder written as `~`; a document outside the home folder shows only its file name. Never an absolute path. Retired reviews are in no section; ended reviews and reviews whose file is gone never wait on you. No comment
+text, no token, no session secret, anywhere in the answer. The day-one cutoff lives in
+`<state>/summary.json`, `{version: 1, seeded_at}`, written on the first `summary.read`; a reply older
+than `seeded_at` is never unread.
+
+**`summary.open`** takes `{review, summary_version}` and answers `{url}`: the address catalog Open
+would use, found with `handoff: false`, so it never queues a request for an agent. A row only an agent
+can serve answers `{url: null}`, as does any review catalog Open refuses as not openable (a missing
+file, a review the Library does not list). It writes nothing but what catalog Open writes.
+
+**Stop holds.** The menu's Stop writes `<state>/stopped.json`, `{by: "menu bar", at}`, then unloads the
+helper's login item. While that file stands, `login_item.startThroughItem` throws with one line naming
+who stopped Lahe, when, and that Start in the menu or `lahe install` brings it back, and starts
+nothing, so every `lahe` command that needs the helper exits 1 with that line. `lahe install` removes
+the file; the helper removes it on its own start, which ends the hold at the next login. `lahe status`
+says "stopped by you" with the time while it stands.
 
 ### The Library routes and the Library token (D11 amendment)
 

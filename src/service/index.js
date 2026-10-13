@@ -50,6 +50,7 @@ var catalogReader = require("./catalog_reader.js");
 var catalogStore = require("./catalog_store.js");
 var catalogRequests = require("./catalog_requests.js");
 var catalogActions = require("./catalog_actions.js");
+var summaryModule = require("./summary.js");
 var catalogSites = require("./catalog_sites.js");
 var staticServers = require("./static_servers.js");
 var selfStopModule = require("./self_stop.js");
@@ -67,6 +68,10 @@ var VERSION = require("../../package.json").version;
 // (protocol.FLUSH.KEEPALIVE_MAX_BYTES); a megabyte is generous for a re-post
 // backlog and still bounded.
 var MAX_BODY_BYTES = 8 * 1024 * 1024;
+
+// summary.open's body is {review, summary_version}: a few dozen bytes. Its cap
+// is small so no caller, a page included, can make the helper hold more.
+var SUMMARY_BODY_MAX_BYTES = 4 * 1024;
 
 // The built library, which the helper serves at GET /lahe-layer.js so the
 // script line on a page can be one absolute URL rather than a relative path
@@ -272,12 +277,15 @@ async function serve(options) {
   // life only. Its port is filled in once the listener is bound, and until then
   // every catalog request fails the Host check.
   var catalog = authModule.createCatalogState();
+  // The clock every Library action, the sweep and the CLI proof's window read.
+  var now = typeof opts.now === "function" ? opts.now : function () { return Date.now(); };
   var auth = authModule.createAuth({
     log: log,
     reviews: reviews,
     catalog: catalog,
     cliSecret: function () { return sitesModule.readCliSecret(dir); },
-    siteOriginAllowed: siteOriginAllowed
+    siteOriginAllowed: siteOriginAllowed,
+    now: now
   });
   // Created here rather than down with the rest of `deps` (below) because the
   // review-creation loop right after this needs it too: a review named on the
@@ -319,7 +327,6 @@ async function serve(options) {
   //   the site tools  the Library's side of the site registry: a row's address,
   //                   and Open binding a site and stamping the review
   //   the reader      joined with the queue's attach and per-review requests
-  var now = typeof opts.now === "function" ? opts.now : function () { return Date.now(); };
   var catalogQueue = catalogRequests.createQueue({
     dir: dir,
     writeExpired: true,
@@ -352,6 +359,29 @@ async function serve(options) {
     log: function (line, atMs) { log.helperLog(line, atMs); }
   });
 
+  // The menu bar's summary (docs/features/20261012.01_menu_bar_app): the same
+  // reader the Library lists with, this helper's window holders, and the
+  // Library's printed address.
+  // How many summary bodies were read: a test's proof that a refused post is
+  // turned away before its body is.
+  var summaryCounters = { bodiesRead: 0 };
+  var summary = summaryModule.createSummary({
+    log: function (line) { log.helperLog(line); },
+    dir: dir,
+    reader: catalogReaderInstance,
+    reviews: reviews,
+    now: now,
+    version: VERSION,
+    startedAt: startedAt,
+    alwaysOn: alwaysOn,
+    // Always an address: before the pages listener is bound (a request that
+    // lands in that moment), the port it is about to bind.
+    libraryUrl: function () {
+      var printed = addresses ? addresses.printedPort() : boundPagesPort;
+      return pageRoutesModule.libraryAddress(typeof printed === "number" ? printed : pagesPortWanted);
+    }
+  });
+
   var deps = {
     // The state folder, for a route that asks the page registry (records.read).
     dir: dir,
@@ -366,6 +396,7 @@ async function serve(options) {
     catalog: catalog,
     catalogActions: catalogActionsInstance,
     catalogQueue: catalogQueue,
+    summary: summary,
     sites: sites,
     pagesPort: function () { return boundPagesPort; },
     now: now,
@@ -587,6 +618,11 @@ async function serve(options) {
     // origin. It grants the browser permission to SEND the real request; the
     // real request is then checked in full, which is where a refusal happens.
     if (req.method === "OPTIONS") {
+      // Nor a summary route: a program the person runs never preflights.
+      if (routes.isSummaryPath(url.pathname)) {
+        respondSigned(res, protocol.statusFor("AUTH_REFUSED"), { error: { code: "AUTH_REFUSED", detail: "a preflight is refused" } }, "", requestId);
+        return;
+      }
       // The preflight never approves a catalog route, whatever origin asks. The
       // Library's own page is same-origin and never preflights; anything that
       // does is another page, including a document on another loopback port
@@ -622,6 +658,13 @@ async function serve(options) {
         Vary: "Origin"
       });
       res.end();
+      return;
+    }
+
+    // The menu bar's summary: a signed request, and a signed answer.
+    var summaryRoute = routes.matchSummaryRoute(req.method, url.pathname);
+    if (summaryRoute) {
+      await handleSummary(req, res, summaryRoute, url, requestId);
       return;
     }
 
@@ -790,6 +833,131 @@ async function serve(options) {
     respond(res, (outcome && outcome.status) || 200, outcome ? outcome.body : null, null, requestId);
   }
 
+  /**
+   * A summary answer, always signed: x-lahe-proof-reply over the request's
+   * nonce, the status and the body, keyed by the CLI secret, so the app can
+   * tell the helper's answer (a 409 included) from a squatter's. No CORS
+   * header: no page may read it.
+   */
+  function respondSigned(res, status, body, nonce, requestId) {
+    var bytes = Buffer.from(JSON.stringify(body), "utf8");
+    var headers = { "Content-Type": protocol.JSON_CONTENT_TYPE, "Cache-Control": "no-store" };
+    if (requestId) headers[protocol.HEADER.REQUEST_ID] = requestId;
+    var secret = sitesModule.readCliSecret(dir);
+    if (secret) headers[protocol.HEADER.PROOF_REPLY] = authModule.replyProof(secret, nonce, status, bytes);
+    res.writeHead(status, headers);
+    res.end(bytes);
+  }
+
+  /**
+   * At most `cap` bytes of a summary request's body: {bytes}, or {tooLarge}
+   * without buffering more than the cap. A declared length past it is refused
+   * unread; a longer stream is read to its end and dropped, so the answer
+   * still reaches the caller on the same connection.
+   */
+  function readCappedBody(req, cap) {
+    summaryCounters.bodiesRead += 1;
+    var declared = Number(req.headers["content-length"]);
+    if (Number.isFinite(declared) && declared > cap) return Promise.resolve({ tooLarge: true });
+    return new Promise(function (resolve, reject) {
+      var chunks = [];
+      var size = 0;
+      var over = false;
+      req.on("data", function (chunk) {
+        if (over) return;
+        size += chunk.length;
+        if (size > cap) {
+          over = true;
+          chunks = null;
+          resolve({ tooLarge: true });
+          return;
+        }
+        chunks.push(chunk);
+      });
+      req.on("end", function () {
+        if (!over) resolve({ bytes: Buffer.concat(chunks) });
+      });
+      req.on("error", function (err) {
+        if (!over) reject(err);
+      });
+    });
+  }
+
+  // One summary request. The header checks run before the body is read, so a
+  // page's post is refused without the helper buffering a byte of it; then
+  // the body, capped (the proof covers its bytes); then the whole check,
+  // proof included, at the one auth.check call site; then the handler. Every
+  // answer goes out through respondSigned, refusals included, and a 5xx says
+  // only that it failed: the reason, which can name a path, stays in the log.
+  async function handleSummary(req, res, route, url, requestId) {
+    var given = req.headers[protocol.HEADER.PROOF_NONCE];
+    var nonce = typeof given === "string" && protocol.PROOF.NONCE_PATTERN.test(given) ? given : "";
+    var request = {
+      routeName: route.name,
+      headers: req.headers,
+      review: null,
+      method: req.method,
+      path: url.pathname,
+      target: req.url,
+      body: Buffer.alloc(0),
+      requestId: requestId
+    };
+    function refused(checked) {
+      respondSigned(
+        res,
+        protocol.statusFor("AUTH_REFUSED"),
+        { error: { code: "AUTH_REFUSED", detail: checked.check === protocol.CHECK.PROOF ? "the proof did not check" : "check " + checked.check + " failed" } },
+        nonce,
+        requestId
+      );
+    }
+    function failed(err) {
+      log.helperLog("route " + route.name + " failed: " + err.message + " [request " + requestId + "]");
+      respondSigned(res, 500, { error: { code: "PROTO_BAD_REQUEST", detail: "the helper could not answer; its log says why" } }, nonce, requestId);
+    }
+    var headersChecked = auth.check(Object.assign({}, request, { headersOnly: true }));
+    if (!headersChecked.ok) return refused(headersChecked);
+    if (req.method === "POST") {
+      var read;
+      try {
+        read = await readCappedBody(req, SUMMARY_BODY_MAX_BYTES);
+      } catch (err) {
+        return failed(err);
+      }
+      if (read.tooLarge) {
+        auth.refuse({ routeName: route.name, requestId: requestId }, "BODY_TOO_LARGE", "over " + SUMMARY_BODY_MAX_BYTES + " bytes");
+        respondSigned(res, 413, { error: { code: "BODY_TOO_LARGE", detail: "the body is over " + SUMMARY_BODY_MAX_BYTES + " bytes" } }, nonce, requestId);
+        return;
+      }
+      request.body = read.bytes;
+    }
+    var checked = auth.check(request);
+    if (!checked.ok) return refused(checked);
+    var body = null;
+    if (request.body.length) {
+      try {
+        body = JSON.parse(request.body.toString("utf8"));
+      } catch (err) {
+        body = null;
+      }
+    }
+    var query = {};
+    url.searchParams.forEach(function (value, key) {
+      query[key] = value;
+    });
+    var outcome;
+    try {
+      outcome = await routes.handlerFor(route.name)({ routeName: route.name, query: query, body: body, requestId: requestId }, deps);
+    } catch (err) {
+      return failed(err);
+    }
+    if (outcome && outcome.error) {
+      respondSigned(res, outcome.status || protocol.statusFor(outcome.error.code), { error: { code: outcome.error.code, detail: outcome.error.detail } }, nonce, requestId);
+      return;
+    }
+    respondSigned(res, (outcome && outcome.status) || 200, outcome ? outcome.body : null, nonce, requestId);
+  }
+
   // One catalog request: body, the one auth.check call site's catalog branch,
   // then the handler. Every response goes out through respondCatalog, so no
   // path here can send a CORS header or leave off the page's policies.
@@ -940,7 +1108,9 @@ async function serve(options) {
     return catalogActionsInstance.sweepLibrarySessions(typeof atMs === "number" ? atMs : now());
   }
   // `opts.schedule` stands in for setInterval in a test, which then runs the
-  // tick itself instead of waiting POLL_MS.
+  // tick itself instead of waiting POLL_MS. This is the helper's one
+  // 15-second timer; any other work on that beat joins the callback below,
+  // after the sweep.
   var schedule = typeof opts.schedule === "function" ? opts.schedule : setInterval;
   var sweepTimer = schedule(function () {
     if (sweeping) return Promise.resolve();
@@ -1030,6 +1200,8 @@ async function serve(options) {
     // The Library state (token, port, last list). Tests and Task 2.1 reach it
     // here; it is never written anywhere.
     catalog: catalog,
+    // The summary routes' body reads, for tests.
+    summaryCounters: summaryCounters,
     // The sweep, run by hand: the helper runs it every POLL_MS on its own, and
     // tests drive it with the time they choose.
     sweepLibrarySessions: sweepLibrarySessions,

@@ -1,0 +1,194 @@
+{
+  "look" : "count",
+  "rows" : [
+    {
+      "enabled" : false,
+      "kind" : "header",
+      "title" : "Waiting on you: 2"
+    },
+    {
+      "action" : "open r183d18583a43",
+      "enabled" : true,
+      "kind" : "item",
+      "title" : "Crucible: Menu bar app (open, 1 question, 3 unread)",
+      "tooltip" : "Crucible: Menu bar app\n~/Documents/workspace/project/docs/doc_0.md\nOpen in a browser window now."
+    },
+    {
+      "action" : "open r183d18583a44",
+      "enabled" : true,
+      "kind" : "item",
+      "title" : "Stable addresses: the plan (2 unread)",
+      "tooltip" : "Stable addresses: the plan\n~/Documents/workspace/project/docs/doc_1.md"
+    },
+    {
+      "kind" : "separator"
+    },
+    {
+      "enabled" : false,
+      "kind" : "header",
+      "title" : "Your comments waiting on agents: 4"
+    },
+    {
+      "action" : "open r183d18583a45",
+      "enabled" : true,
+      "kind" : "item",
+      "title" : "Rail cleanup (3 waiting)",
+      "tooltip" : "Rail cleanup\n~/Documents/workspace/project/docs/rail.md"
+    },
+    {
+      "action" : "open r183d18583a46",
+      "enabled" : true,
+      "kind" : "item",
+      "title" : "Free writing notes (1 waiting)",
+      "tooltip" : "Free writing notes\n~/Documents/notes/free_writing.md"
+    },
+    {
+      "kind" : "separator"
+    },
+    {
+      "enabled" : false,
+      "kind" : "header",
+      "title" : "Open documents: 3"
+    },
+    {
+      "action" : "open r183d18583a43",
+      "enabled" : true,
+      "kind" : "item",
+      "title" : "Crucible: Menu bar app (focused)",
+      "tooltip" : "Crucible: Menu bar app\n~/Documents/workspace/project/docs/doc_0.md"
+    },
+    {
+      "action" : "open r183d18583a45",
+      "enabled" : true,
+      "kind" : "item",
+      "title" : "Rail cleanup",
+      "tooltip" : "Rail cleanup\n~/Documents/workspace/project/docs/rail.md"
+    },
+    {
+      "action" : "open r183d18583a46",
+      "enabled" : true,
+      "kind" : "item",
+      "title" : "Free writing notes",
+      "tooltip" : "Free writing notes\n~/Documents/notes/free_writing.md"
+    },
+    {
+      "enabled" : false,
+      "kind" : "header",
+      "title" : "Connected sessions: 2 (5 open)"
+    },
+    {
+      "action" : "open r183d18583a43",
+      "enabled" : true,
+      "kind" : "item",
+      "title" : "menu bar icon (listening, last heard 10 sec ago)",
+      "tooltip" : "menu bar icon\ns_b4276f2e1d343291\nOpens its most recent document."
+    },
+    {
+      "action" : "open r183d18583a45",
+      "enabled" : true,
+      "kind" : "item",
+      "title" : "Rail cleanup (working, last heard 1 min ago)",
+      "tooltip" : "Rail cleanup\ns_0d6c3a8b1e2f4a5b\nOpens its most recent document."
+    },
+    {
+      "kind" : "separator"
+    },
+    {
+      "enabled" : false,
+      "kind" : "header",
+      "title" : "Recent documents"
+    },
+    {
+      "action" : "open r183d18583a43",
+      "enabled" : true,
+      "kind" : "item",
+      "title" : "Crucible: Menu bar app",
+      "tooltip" : "Crucible: Menu bar app\n~/Documents/workspace/project/docs/doc_0.md"
+    },
+    {
+      "action" : "open r183d18583a45",
+      "enabled" : true,
+      "kind" : "item",
+      "title" : "Rail cleanup",
+      "tooltip" : "Rail cleanup\n~/Documents/workspace/project/docs/rail.md"
+    },
+    {
+      "action" : "open r183d18583a46",
+      "enabled" : true,
+      "kind" : "item",
+      "title" : "Free writing notes",
+      "tooltip" : "Free writing notes\n~/Documents/notes/free_writing.md"
+    },
+    {
+      "action" : "open r183d18583a44",
+      "enabled" : true,
+      "kind" : "item",
+      "title" : "Stable addresses: the plan",
+      "tooltip" : "Stable addresses: the plan\n~/Documents/workspace/project/docs/doc_1.md"
+    },
+    {
+      "action" : "open r183d18583a47",
+      "enabled" : true,
+      "kind" : "item",
+      "title" : "Weekly plan",
+      "tooltip" : "Weekly plan\n~/Documents/personal/weekly.md"
+    },
+    {
+      "action" : "open r183d18583a48",
+      "enabled" : true,
+      "kind" : "item",
+      "title" : "Research: tray icons",
+      "tooltip" : "Research: tray icons\n~/Documents/reports/tray.md"
+    },
+    {
+      "action" : "open r183d18583a49",
+      "enabled" : true,
+      "kind" : "item",
+      "title" : "Brief: style switcher",
+      "tooltip" : "Brief: style switcher\n~/Documents/workspace/project/docs/style.md"
+    },
+    {
+      "action" : "open r183d18583a4a",
+      "enabled" : true,
+      "kind" : "item",
+      "title" : "Notes page",
+      "tooltip" : "Notes page\n~/Documents/notes/notes.md"
+    },
+    {
+      "enabled" : false,
+      "kind" : "note",
+      "title" : "12 more",
+      "tooltip" : "The Library lists every one."
+    },
+    {
+      "action" : "open library",
+      "enabled" : true,
+      "kind" : "item",
+      "title" : "Open the Library",
+      "tooltip" : "Every review, in the browser."
+    },
+    {
+      "kind" : "separator"
+    },
+    {
+      "action" : "hide",
+      "enabled" : true,
+      "kind" : "item",
+      "title" : "Hide the icon",
+      "tooltip" : "Closes this icon only. Lahe keeps running. `lahe menubar show` brings it back."
+    },
+    {
+      "action" : "stop",
+      "enabled" : true,
+      "kind" : "item",
+      "title" : "Stop Lahe",
+      "tooltip" : "Stops the Lahe helper until you start it again."
+    },
+    {
+      "enabled" : false,
+      "kind" : "note",
+      "title" : "Agents' lahe commands will fail until you start it again"
+    }
+  ],
+  "text" : "2"
+}

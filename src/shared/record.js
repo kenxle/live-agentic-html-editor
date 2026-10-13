@@ -101,6 +101,13 @@
     CLOSED_BY: "closed_by",
     CLOSED_AT: "closed_at",
 
+    // The reply the reviewer has read: its replyStamp, from a reply.seen event
+    // the page posts when the card is opened. Absent when nothing was read.
+    // Lifecycle bookkeeping, not content: the helper sets it from the event and
+    // never takes it from a record the browser posts, and it names one reply,
+    // so a newer reply is unread again whatever this says.
+    REPLY_SEEN: "reply_seen",
+
     // Completed reviewer/agent exchanges, oldest first. The current exchange
     // stays in NOTE/CHANGE + REPLY until the reviewer continues it.
     THREAD: "thread",
@@ -235,6 +242,7 @@
     // Who closed it and when. Tool-written lifecycle facts.
     closed_by: CLASS_DATA,
     closed_at: CLASS_DATA,
+    reply_seen: CLASS_DATA,
     page_title: CLASS_DATA,
     page_path: CLASS_DATA,
     "reply.reason": CLASS_DATA,
@@ -1097,6 +1105,117 @@
    */
   function isClosedByReviewer(item) {
     return !!item && item[FIELD.STATE] === STATE.HANDLED && item[FIELD.CLOSED_BY] === CLOSED_BY_REVIEWER;
+  }
+
+  // ---------------------------------------------------------------------------
+  // THE UNREAD RULE: which replies the reviewer has not read
+  // ---------------------------------------------------------------------------
+  //
+  // One rule, here, because two surfaces count with it: the rail's "1 new" tag
+  // and the menu bar's "waiting on you". It lived in the Done tab while the
+  // rail was its only reader. A second copy in the helper would be a count
+  // that disagrees with the rail the first time either one changes.
+
+  // The longest reply stamp a reply.seen event may carry. A replyStamp is an
+  // ISO time, an @ and a revision, so a real one is far shorter.
+  var REPLY_STAMP_MAX = 64;
+
+  /** Is there anything here for a person to actually read? */
+  function hasWords(value) {
+    return typeof value === "string" && value.trim() !== "";
+  }
+
+  /**
+   * Is this a reply the reviewer actually has to read?
+   *
+   * The badge used to count every folded reply, which meant "claude carried this
+   * change into the source" interrupted the reviewer exactly as loudly as an
+   * open question did. Two things count now:
+   *
+   *   THE AGENT SAID SO   user_needs_to_see_reply on the reply line, which the
+   *                       contract asks for on an answer, a caveat, or a change
+   *                       made differently than asked, AND words to read in
+   *                       text or reason
+   *   THE STATUS SAYS SO  question and not_handled, always, flag or no flag: a
+   *                       question needs an answer and a refusal needs its
+   *                       reason read, and neither is the agent's call
+   *
+   * Everything else still lands on its card in Done, whole, with its text and
+   * its timestamp. It simply arrives already read.
+   *
+   * THE FLAG NEEDS WORDS BEHIND IT. All three things the contract asks the flag
+   * for, an answer, a caveat, a change made differently than asked, are things
+   * an agent says in words. A flagged reply carrying neither text nor reason
+   * has nothing to read, so the card falls through to the wordless line
+   * "claude handled this." Counting that is a badge that sends the reviewer to
+   * a card to learn nothing, and it happens in runs: an agent that flags one
+   * wordless confirmation flags twelve, and the number on the rail stops
+   * meaning anything. Ken hit exactly this (2026-09-04). The agent asked for
+   * attention it had no use for, so the ask is refused here rather than
+   * trusted; the reply is not hidden, only already read.
+   *
+   * `question` and `not_handled` are deliberately NOT held to this. A refusal
+   * with no reason and a question with no text are both worth fixing, but the
+   * status alone is the signal there, and swallowing a wordless refusal would
+   * leave the reviewer thinking their item was done.
+   *
+   * @param {object} reply the reply as it sits on a record
+   */
+  function needsToSeeReply(reply) {
+    if (!reply) return false;
+    if (reply.status === REPLY_STATUS.QUESTION) return true;
+    if (reply.status === REPLY_STATUS.NOT_HANDLED) return true;
+    if (reply.user_needs_to_see_reply !== true) return false;
+    return hasWords(reply.text) || hasWords(reply.reason);
+  }
+
+  /**
+   * Has the reviewer still to read this item's current reply?
+   *
+   * Read means one of two marks names the reply's stamp: `reply_seen` on the
+   * record (the helper's, from a reply.seen event any browser posted) or
+   * `mark`, a browser's own mark for it. The helper passes no mark. A mark for
+   * an older reply names an older stamp, so it never clears a newer one.
+   *
+   * @param {object} item a record
+   * @param {string} [mark] this browser's stamp for the reply it read
+   */
+  function isUnreadReply(item, mark) {
+    var stamp = replyStamp(item);
+    if (!stamp) return false;
+    // AN ANSWER TO A TOOL ROUND IS ROUTINE BY DEFINITION, whatever the agent
+    // put on it. Nobody is badged, marked or toasted for the tool's own
+    // question coming back answered. A refusal still reaches the reviewer,
+    // quietly, as the card's notice.
+    if (toolRoundOf(item)) return false;
+    // A CARD THE REVIEWER CLOSED IS READ. Choosing "Mark as done" on it is
+    // the reviewer acting on it, and the agent's last answer it carries is
+    // history, so it never says "1 new" in Done.
+    if (isClosedByReviewer(item)) return false;
+    if (!needsToSeeReply(item[FIELD.REPLY])) return false;
+    if (item[FIELD.REPLY_SEEN] === stamp) return false;
+    return mark !== stamp;
+  }
+
+  /**
+   * The ids whose reply the reviewer has not read.
+   *
+   * Pure: items in, marks in, ids out. Nothing here touches the DOM or storage,
+   * which is what makes the rule testable without a browser.
+   *
+   * @param {object[]} items every record this review holds
+   * @param {object} [marks] id -> the stamp of the reply this browser read
+   * @returns {string[]}
+   */
+  function unseenReplyIds(items, marks) {
+    var seen = marks && typeof marks === "object" ? marks : {};
+    var out = [];
+    (items || []).forEach(function (item) {
+      var id = item && item[FIELD.ID];
+      var mark = Object.prototype.hasOwnProperty.call(seen, id) ? seen[id] : undefined;
+      if (isUnreadReply(item, mark)) out.push(id);
+    });
+    return out;
   }
 
   // Outstanding for the reviewer: still in front of them. A handled item is
@@ -2434,6 +2553,11 @@
     isOutstanding: isOutstanding,
     CLOSED_BY_REVIEWER: CLOSED_BY_REVIEWER,
     isClosedByReviewer: isClosedByReviewer,
+    REPLY_STAMP_MAX: REPLY_STAMP_MAX,
+    hasWords: hasWords,
+    needsToSeeReply: needsToSeeReply,
+    isUnreadReply: isUnreadReply,
+    unseenReplyIds: unseenReplyIds,
     isReplayable: isReplayable,
     comparisonMode: comparisonMode,
     normalizedBefore: normalizedBefore,

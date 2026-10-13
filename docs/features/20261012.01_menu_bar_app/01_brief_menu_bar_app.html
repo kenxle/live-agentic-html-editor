@@ -1,0 +1,1662 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+  <meta charset="utf-8" />
+  <meta name="generator" content="pandoc" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
+  <title>Feature Brief: Menu bar app</title>
+  <style>
+    /* Default styles provided by pandoc.
+    ** See https://pandoc.org/MANUAL.html#variables-for-html for config info.
+    */
+    html {
+      color: #1a1a1a;
+      background-color: #fdfdfd;
+    }
+    body {
+      margin: 0 auto;
+      max-width: 36em;
+      padding-left: 50px;
+      padding-right: 50px;
+      padding-top: 50px;
+      padding-bottom: 50px;
+      hyphens: auto;
+      overflow-wrap: break-word;
+      text-rendering: optimizeLegibility;
+      font-kerning: normal;
+    }
+    @media (max-width: 600px) {
+      body {
+        font-size: 0.9em;
+        padding: 12px;
+      }
+      h1 {
+        font-size: 1.8em;
+      }
+    }
+    @media print {
+      html {
+        background-color: white;
+      }
+      body {
+        background-color: transparent;
+        color: black;
+        font-size: 12pt;
+      }
+      p, h2, h3 {
+        orphans: 3;
+        widows: 3;
+      }
+      h2, h3, h4 {
+        page-break-after: avoid;
+      }
+    }
+    p {
+      margin: 1em 0;
+    }
+    a {
+      color: #1a1a1a;
+    }
+    a:visited {
+      color: #1a1a1a;
+    }
+    img {
+      max-width: 100%;
+    }
+    svg {
+      height: auto;
+      max-width: 100%;
+    }
+    h1, h2, h3, h4, h5, h6 {
+      margin-top: 1.4em;
+    }
+    h5, h6 {
+      font-size: 1em;
+      font-style: italic;
+    }
+    h6 {
+      font-weight: normal;
+    }
+    ol, ul {
+      padding-left: 1.7em;
+      margin-top: 1em;
+    }
+    li > ol, li > ul {
+      margin-top: 0;
+    }
+    blockquote {
+      margin: 1em 0 1em 1.7em;
+      padding-left: 1em;
+      border-left: 2px solid #e6e6e6;
+      color: #606060;
+    }
+    code {
+      white-space: pre-wrap;
+      font-family: Menlo, Monaco, Consolas, 'Lucida Console', monospace;
+      font-size: 85%;
+      margin: 0;
+      hyphens: manual;
+    }
+    pre {
+      margin: 1em 0;
+      overflow: auto;
+    }
+    pre code {
+      padding: 0;
+      overflow: visible;
+      overflow-wrap: normal;
+    }
+    .sourceCode {
+     background-color: transparent;
+     overflow: visible;
+    }
+    hr {
+      border: none;
+      border-top: 1px solid #1a1a1a;
+      height: 1px;
+      margin: 1em 0;
+    }
+    table {
+      margin: 1em 0;
+      border-collapse: collapse;
+      width: 100%;
+      overflow-x: auto;
+      display: block;
+      font-variant-numeric: lining-nums tabular-nums;
+    }
+    table caption {
+      margin-bottom: 0.75em;
+    }
+    tbody {
+      margin-top: 0.5em;
+      border-top: 1px solid #1a1a1a;
+      border-bottom: 1px solid #1a1a1a;
+    }
+    th {
+      border-top: 1px solid #1a1a1a;
+      padding: 0.25em 0.5em 0.25em 0.5em;
+    }
+    td {
+      padding: 0.125em 0.5em 0.25em 0.5em;
+    }
+    header {
+      margin-bottom: 4em;
+      text-align: center;
+    }
+    #TOC li {
+      list-style: none;
+    }
+    #TOC ul {
+      padding-left: 1.3em;
+    }
+    #TOC > ul {
+      padding-left: 0;
+    }
+    #TOC a:not(:hover) {
+      text-decoration: none;
+    }
+    span.smallcaps{font-variant: small-caps;}
+    div.columns{display: flex; gap: min(4vw, 1.5em);}
+    div.column{flex: auto; overflow-x: auto;}
+    div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+    /* The extra [class] is a hack that increases specificity enough to
+       override a similar rule in reveal.js */
+    ul.task-list[class]{list-style: none;}
+    ul.task-list li input[type="checkbox"] {
+      font-size: inherit;
+      width: 0.8em;
+      margin: 0 0.8em 0.2em -1.6em;
+      vertical-align: middle;
+    }
+    .display.math{display: block; text-align: center; margin: 0.5rem auto;}
+  </style>
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>%F0%9F%94%A8</text></svg>">
+  <!--
+    St. Clair AI document style for forge docs.
+
+    The palette, type and spacing values below are copied from the St. Clair
+    system tokens (live-agentic-html-editor/vendor/stclair-doc-style/
+    system-tokens.css). This header does NOT link LAHE's ./.lahe-doc-style.css
+    bundle, on purpose: that bundle's document.css styles bare elements and a
+    generic .callout (an ink fill with white text) and puts padding on every body
+    child, and all three collide with the forge structure. So the page is
+    self-contained and reads the same whether or not LAHE is serving it.
+
+    The fonts are the one thing taken from LAHE: it serves the three vendored
+    faces at ./.lahe-fonts/<file>.woff2 from every folder. When that fails, each
+    stack falls back to system-ui and a platform monospace.
+
+    House rules this file keeps: no pills, no shadows, no gradients, no all caps
+    labels, no single-side coloured borders. Colour comes from tints and dots.
+  -->
+  <style>
+    @font-face {
+      font-family: "Schibsted Grotesk"; font-style: normal; font-weight: 500 700; font-display: swap;
+      src: url("./.lahe-fonts/schibsted-grotesk-variable.woff2") format("woff2");
+    }
+    @font-face {
+      font-family: "Hanken Grotesk"; font-style: normal; font-weight: 400 600; font-display: swap;
+      src: url("./.lahe-fonts/hanken-grotesk-variable.woff2") format("woff2");
+    }
+    @font-face {
+      font-family: "JetBrains Mono"; font-style: normal; font-weight: 400 500; font-display: swap;
+      src: url("./.lahe-fonts/jetbrains-mono-variable.woff2") format("woff2");
+    }
+
+    :root {
+      color-scheme: light dark;
+
+      /* St. Clair palette (raw names and values from system-tokens.css) */
+      --white: #ffffff;
+      --paper: #f7f7f5;
+      --ink: #1f1e1a;
+      --ink-soft: #55534b;
+      --ink-faint: #6b6860;
+      --rule: #dcdad6;
+      --purple: #46188c;
+      --purple-tint: #f1ebfa;
+      --link: #6d28d9;
+      --cobalt: #0760c7;
+      --cobalt-tint: #e6effc;
+      --sage-fill: #8fb5a0;
+      --sage: #637a63;
+      --sage-tint: #e7f1ed;
+
+      --font-display: "Schibsted Grotesk", "Hanken Grotesk", system-ui, sans-serif;
+      --font-body: "Hanken Grotesk", system-ui, -apple-system, "Helvetica Neue", sans-serif;
+      --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+
+      --r: 4px;
+
+      /* Forge roles. Prefixed --ff- so none of them can collide with a St. Clair
+         token of the same name if the two ever share a page. Dark mode repoints
+         these and nothing else. */
+      --ff-bg: var(--white);
+      --ff-fg: var(--ink);
+      --ff-soft: var(--ink-soft);
+      --ff-faint: var(--ink-faint);
+      --ff-rule: var(--rule);
+      --ff-divider: var(--ink);
+      --ff-link: var(--link);
+      --ff-accent: var(--cobalt);
+      --ff-panel: var(--paper);
+      --ff-code-bg: var(--cobalt-tint);
+      --ff-bullet: var(--sage);
+      --ff-hl-kw: var(--cobalt);
+      --ff-hl-str: var(--sage);
+      --ff-hl-num: var(--purple);
+
+      /* Callouts: a tint, a dot and a label colour each. */
+      --ff-req-bg: var(--cobalt-tint);      --ff-req-dot: var(--cobalt);    --ff-req-label: var(--cobalt);
+      --ff-nongoal-bg: var(--paper);        --ff-nongoal-dot: var(--ink-faint); --ff-nongoal-label: var(--ink-faint);
+      --ff-metric-bg: var(--sage-tint);     --ff-metric-dot: var(--sage);   --ff-metric-label: var(--ink-soft);
+      --ff-question-bg: var(--purple-tint); --ff-question-dot: var(--purple); --ff-question-label: var(--purple);
+      --ff-suggest-bg: var(--white);        --ff-suggest-dot: var(--sage);  --ff-suggest-label: var(--sage);
+      --ff-flag-bg: var(--ink);             --ff-flag-fg: var(--white);     --ff-flag-dot: var(--sage-fill);
+
+      /* Disposition verdicts */
+      --ff-accepted: var(--sage);
+      --ff-rejected: var(--purple);
+      --ff-deferred: var(--cobalt);
+    }
+
+    /* Dark: the St. Clair on-ink values. Body text is full white on ink, as the
+       system decides; tints are the accent mixed into the ink ground. */
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --ff-bg: var(--ink);
+        --ff-fg: var(--white);
+        --ff-soft: #d9d7d1;   /* --ink-soft-ondark */
+        --ff-faint: #b3b0a8;  /* --ink-faint-ondark */
+        --ff-rule: #4a4842;   /* --rule-ondark */
+        --ff-divider: var(--white);
+        --ff-link: var(--sage-fill);
+        --ff-accent: color-mix(in srgb, var(--cobalt) 45%, var(--white));
+        --ff-panel: color-mix(in srgb, var(--white) 6%, var(--ink));
+        --ff-code-bg: color-mix(in srgb, var(--cobalt) 22%, var(--ink));
+        --ff-bullet: var(--sage-fill);
+        --ff-hl-kw: color-mix(in srgb, var(--cobalt) 40%, var(--white));
+        --ff-hl-str: var(--sage-fill);
+        --ff-hl-num: color-mix(in srgb, var(--purple) 30%, var(--white));
+
+        --ff-req-bg: color-mix(in srgb, var(--cobalt) 22%, var(--ink));
+        --ff-req-dot: color-mix(in srgb, var(--cobalt) 45%, var(--white));
+        --ff-req-label: color-mix(in srgb, var(--cobalt) 35%, var(--white));
+        --ff-nongoal-bg: color-mix(in srgb, var(--white) 6%, var(--ink));
+        --ff-nongoal-dot: #b3b0a8; --ff-nongoal-label: #b3b0a8;
+        --ff-metric-bg: color-mix(in srgb, var(--sage) 30%, var(--ink));
+        --ff-metric-dot: var(--sage-fill); --ff-metric-label: var(--sage-fill);
+        --ff-question-bg: color-mix(in srgb, var(--purple) 45%, var(--ink));
+        --ff-question-dot: color-mix(in srgb, var(--purple) 30%, var(--white));
+        --ff-question-label: color-mix(in srgb, var(--purple) 25%, var(--white));
+        --ff-suggest-bg: var(--ink);
+        --ff-suggest-dot: var(--sage-fill); --ff-suggest-label: var(--sage-fill);
+        --ff-flag-bg: var(--paper); --ff-flag-fg: var(--ink); --ff-flag-dot: var(--sage);
+
+        --ff-accepted: var(--sage-fill);
+        --ff-rejected: color-mix(in srgb, var(--purple) 30%, var(--white));
+        --ff-deferred: color-mix(in srgb, var(--cobalt) 40%, var(--white));
+      }
+    }
+
+    /* Pandoc's own default styles load before this block. The rules marked
+       "pandoc" below undo the ones that fight this look: black table rules,
+       a block-level table, auto hyphens, italic h5/h6, and a:visited in
+       near-black, which outranks a plain a rule. */
+    html { scroll-behavior: smooth; -webkit-print-color-adjust: exact; print-color-adjust: exact; background: var(--ff-bg); }
+    * { box-sizing: border-box; }
+
+    body {
+      font-family: var(--font-body);
+      font-size: 17px;
+      line-height: 1.65;
+      color: var(--ff-fg);
+      background: var(--ff-bg);
+      max-width: 1080px;   /* --maxw */
+      margin: 0 auto;
+      padding: 56px 28px 104px;   /* 28px: --gutter */
+      -webkit-font-smoothing: antialiased;
+      text-rendering: optimizeLegibility;
+      hyphens: manual;   /* pandoc */
+    }
+
+    /* The reading measure, as in the International Style: prose stops at 68ch
+       (--read) and sits flush left in the wider column, so lines stay short and
+       the right side stays open. Tables, code, diagrams and callout boxes keep
+       the full column. */
+    p, ul, ol, blockquote { max-width: 68ch; }
+    :is(table, pre) :is(p, ul, ol, blockquote),
+    p:has(> img:only-child) { max-width: none; }
+
+    /* Title block (pandoc emits <header id="title-block-header">) */
+    header#title-block-header { padding-bottom: 8px; margin-bottom: 0; text-align: left; }
+    header#title-block-header h1.title {
+      font-family: var(--font-display);
+      font-size: clamp(34px, 4.6vw, 52px);
+      font-weight: 600;
+      margin: 0 0 12px;
+      letter-spacing: -0.012em;
+      line-height: 1.1;
+    }
+    header#title-block-header p.subtitle,
+    header#title-block-header p.author,
+    header#title-block-header p.date {
+      font-size: 20px;
+      line-height: 1.55;
+      color: var(--ff-soft);
+      margin: 0;
+    }
+
+    /* Cross-doc nav (injected by the build before the TOC). A plain line:
+       "Docs  Crucible · Brief · Architecture", the current doc in ink. */
+    .doc-nav {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: baseline;
+      gap: 4px 0;
+      margin: 20px 0 8px;
+      padding: 12px 0;
+      border-top: 1px solid var(--ff-rule);
+      border-bottom: 1px solid var(--ff-rule);
+      font-size: 15px;
+    }
+    .doc-nav .doc-nav-label {
+      font-family: var(--font-display);
+      font-weight: 600;
+      font-size: 14px;
+      color: var(--ff-faint);
+      margin-right: 14px;
+    }
+    .doc-nav a {
+      color: var(--ff-link);
+      text-decoration: underline;
+      text-decoration-thickness: 1px;
+      text-underline-offset: 3px;
+      border: 0;
+      background: none;
+      padding: 0;
+    }
+    .doc-nav a + a::before {
+      content: "\00B7";
+      display: inline-block;
+      color: var(--ff-faint);
+      margin: 0 10px;
+      text-decoration: none;
+    }
+    .doc-nav a:hover { background: none; text-decoration-thickness: 2px; }
+    .doc-nav a:visited { color: var(--ff-link); }
+    .doc-nav a.current, .doc-nav a.current:visited {
+      color: var(--ff-fg);
+      font-weight: 600;
+      text-decoration: none;
+      cursor: default;
+    }
+
+    /* TOC (pandoc emits <nav id="TOC">) */
+    nav#TOC {
+      margin: 28px 0 44px;
+      font-size: 15px;
+      line-height: 1.5;
+    }
+    nav#TOC::before {
+      content: "Contents";
+      display: block;
+      font-family: var(--font-display);
+      font-weight: 600;
+      font-size: 14px;
+      color: var(--ff-faint);
+      padding-bottom: 8px;
+      margin-bottom: 12px;
+      border-bottom: 2px solid var(--ff-divider);
+    }
+    nav#TOC ul { list-style: none; padding-left: 0; margin: 0; }
+    nav#TOC ul ul { padding-left: 18px; margin-top: 4px; }
+    nav#TOC li { margin-bottom: 4px; }
+    nav#TOC li::marker { content: none; }
+    nav#TOC a, nav#TOC a:visited { color: var(--ff-fg); text-decoration: none; border: 0; }
+    nav#TOC a:hover { color: var(--ff-link); text-decoration: underline; background: none; }
+
+    /* Headings: Schibsted at display weight, sentence case. An h2 hangs under a
+       full-width ink rule, the St. Clair section head. */
+    h1, h2, h3, h4, h5, h6 {
+      font-family: var(--font-display);
+      font-weight: 600;
+      line-height: 1.15;
+      letter-spacing: -0.012em;
+      color: var(--ff-fg);
+    }
+    h2 {
+      font-size: clamp(25px, 3vw, 32px);
+      margin: 64px 0 18px;
+      padding-top: 12px;
+      border-top: 2px solid var(--ff-divider);
+    }
+    h3 { font-size: clamp(19px, 2vw, 23px); margin: 40px 0 12px; }
+    h4 { font-size: 18px; margin: 28px 0 8px; }
+    h5, h6 { font-size: 17px; margin: 24px 0 8px; font-style: normal; font-weight: 600; }   /* pandoc */
+    h6 { color: var(--ff-soft); }
+
+    p { margin: 0 0 18px; }
+    p, li, td, dd { overflow-wrap: anywhere; }
+
+    a {
+      color: var(--ff-link);
+      text-decoration: underline;
+      text-decoration-thickness: 1px;
+      text-underline-offset: 3px;
+    }
+    a:visited { color: var(--ff-link); }   /* pandoc */
+    a:hover { text-decoration-thickness: 2px; }
+    :focus-visible { outline: 2px solid var(--ff-link); outline-offset: 3px; border-radius: var(--r); }
+
+    strong { color: inherit; font-weight: 700; }
+
+    ul, ol { margin: 0 0 18px; padding-left: 1.6em; }
+    li { margin: 0 0 8px; line-height: 1.55; }
+    li > p { margin-bottom: 8px; }
+    ul > li::marker { color: var(--ff-bullet); }
+    .callout ul > li::marker { color: var(--ff-dot); }
+    ol > li::marker { color: var(--ff-fg); font-weight: 600; }
+    li > ul, li > ol { margin-top: 8px; }
+
+    /* Callout boxes (from ::: callout-* fenced divs). A tint holding the text,
+       and a label row generated by CSS: a dot in the callout's colour, then the
+       label in the display face. */
+    .callout {
+      border-radius: var(--r);
+      padding: 16px 22px 18px;
+      margin: 18px 0;
+      background: var(--ff-panel);
+      color: var(--ff-fg);
+      line-height: 1.6;
+    }
+    .callout > :first-child { margin-top: 0; }
+    .callout > :last-child { margin-bottom: 0; }
+    .callout::before {
+      display: flex;
+      align-items: center;
+      gap: 9px;
+      font-family: var(--font-display);
+      font-weight: 600;
+      font-size: 14px;
+      line-height: 1.4;
+      margin-bottom: 6px;
+      padding-left: 16px;   /* room for the dot, which ::after draws */
+    }
+    .callout { position: relative; }
+    .callout::after {
+      content: "";
+      position: absolute;
+      left: 22px;
+      top: 23px;
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: var(--ff-dot, var(--ff-faint));
+    }
+    .callout-req      { background: var(--ff-req-bg);      --ff-dot: var(--ff-req-dot); }
+    .callout-req::before      { content: "Requirement";   color: var(--ff-req-label); }
+    .callout-nongoal  { background: var(--ff-nongoal-bg);  --ff-dot: var(--ff-nongoal-dot); border: 1px solid var(--ff-rule); }
+    .callout-nongoal::before  { content: "Non-goals";     color: var(--ff-nongoal-label); }
+    .callout-metric   { background: var(--ff-metric-bg);   --ff-dot: var(--ff-metric-dot); }
+    .callout-metric::before   { content: "Metrics";       color: var(--ff-metric-label); }
+    .callout-question { background: var(--ff-question-bg); --ff-dot: var(--ff-question-dot); }
+    .callout-question::before { content: "Open question"; color: var(--ff-question-label); }
+    .callout-suggest  { background: var(--ff-suggest-bg);  --ff-dot: var(--ff-suggest-dot); border: 1px solid var(--ff-suggest-dot); }
+    .callout-suggest::before  { content: "Suggestion";    color: var(--ff-suggest-label); }
+    .callout-flag     { background: var(--ff-flag-bg);     --ff-dot: var(--ff-flag-dot); color: var(--ff-flag-fg); }
+    .callout-flag::before     { content: "Red flag";      color: var(--ff-flag-fg); }
+    .callout-flag a, .callout-flag strong, .callout-flag code { color: inherit; }
+    .callout-flag code { background: color-mix(in srgb, currentColor 14%, transparent); }
+    /* The nongoal and suggest boxes carry a 1px border, so their dot moves with it. */
+    .callout-nongoal::after, .callout-suggest::after { left: 21px; top: 22px; }
+
+    /* Reviews section: the _reviews.md files are merged into the HTML below this
+       divider (they stay separate files on disk for agents). The build writes
+       the divider with an inline red rule; this repaints it in the house ink. */
+    hr.reviews-divider {
+      border: 0 !important;
+      border-top: 2px solid var(--ff-divider) !important;
+      margin: 88px 0 6px !important;
+      display: block !important;
+    }
+    hr.reviews-divider + * { margin-top: 0; }
+    .reviews-banner {
+      border-top: 1px solid var(--ff-divider);
+      padding: 14px 0 0;
+      margin: 0 0 32px;
+      font-size: 15px;
+      line-height: 1.55;
+      color: var(--ff-soft);
+    }
+    .reviews-banner::before {
+      display: block;
+      content: "Reviews, full prose";
+      font-family: var(--font-display);
+      font-weight: 600;
+      font-size: clamp(25px, 3vw, 32px);
+      line-height: 1.15;
+      letter-spacing: -0.012em;
+      color: var(--ff-fg);
+      margin-bottom: 8px;
+    }
+    /* Jump target for spec -> review-detail links; offset so the heading clears. */
+    .finding-anchor { display: inline-block; scroll-margin-top: 1.5rem; }
+    td a[href^="#"] { font-weight: 600; }
+
+    /* Inline xref deep-dive (from ::: xref fenced div) */
+    .xref {
+      font-size: 15px;
+      background: var(--ff-code-bg);
+      border-radius: var(--r);
+      padding: 10px 16px;
+      margin: 0 0 18px;
+      color: var(--ff-soft);
+      line-height: 1.5;
+    }
+    .xref::before {
+      content: "\21B3  See";
+      font-family: var(--font-display);
+      font-weight: 600;
+      font-size: 14px;
+      color: var(--ff-accent);
+      margin-right: 8px;
+    }
+    .xref > * { display: inline; margin: 0; }
+    .xref a, .xref a:visited { font-weight: 600; color: var(--ff-fg); }
+
+    /* Tables: the St. Clair naked ruled table. A 2px rule under the head,
+       hairlines between rows, no box, no tint, no shadow. The build wraps every
+       table in .table-scroll; the scrolling itself lives in
+       shared-assets/doc_fixes.css. */
+    .table-scroll { margin: 24px 0 32px; }
+    .table-scroll table { margin: 0; }
+    table {
+      border-collapse: collapse;
+      width: 100%;
+      margin: 24px 0 32px;
+      font-size: 15px;
+      line-height: 1.5;
+      background: none;
+      display: table;   /* pandoc sets block; .table-scroll does the scrolling */
+    }
+    tbody { border: 0; }   /* pandoc */
+    th { border-top: 0; }  /* pandoc */
+    thead th {
+      font-family: var(--font-display);
+      font-weight: 600;
+      font-size: 14px;
+      color: var(--ff-faint);
+      text-align: left;
+      padding: 0 16px 10px 0;
+      border-bottom: 2px solid var(--ff-divider);
+      vertical-align: bottom;
+    }
+    tbody td {
+      padding: 12px 16px 12px 0;
+      border-bottom: 1px solid var(--ff-rule);
+      vertical-align: top;
+    }
+    td:last-child, th:last-child { padding-right: 0; }
+    /* A short id column ("RF 12", "T3") stays on one line beside wide prose. */
+    tbody td:first-child { min-width: 3.4em; }
+    tbody tr:nth-child(even) { background: none; }
+    td > :first-child { margin-top: 0; }
+    td > :last-child { margin-bottom: 0; }
+
+    /* Disposition verdicts rendered by the build (Accepted/Rejected/Deferred).
+       A dot and the word, in the verdict's colour. */
+    td .accepted, span.accepted,
+    td .rejected, span.rejected,
+    td .deferred, span.deferred {
+      font-family: var(--font-display);
+      font-weight: 600;
+      white-space: nowrap;
+    }
+    td .accepted::before, span.accepted::before,
+    td .rejected::before, span.rejected::before,
+    td .deferred::before, span.deferred::before {
+      content: "";
+      display: inline-block;
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: currentColor;
+      margin-right: 7px;
+      vertical-align: 0.12em;
+    }
+    td .accepted, span.accepted { color: var(--ff-accepted); }
+    td .rejected, span.rejected { color: var(--ff-rejected); }
+    td .deferred, span.deferred { color: var(--ff-deferred); }
+
+    /* Inline + block code: JetBrains Mono on the cobalt tint, ink text.
+       Ligatures off, so an arrow in code reads as the two characters it is. */
+    code, pre {
+      font-family: var(--font-mono);
+      font-variant-ligatures: none;
+      font-feature-settings: "liga" 0, "calt" 0;
+    }
+    code {
+      font-size: 0.86em;
+      background: var(--ff-code-bg);
+      color: var(--ff-fg);
+      padding: 0.1em 0.35em;
+      border-radius: 3px;
+    }
+    pre {
+      font-size: 14px;
+      background: var(--ff-code-bg);
+      color: var(--ff-fg);
+      padding: 18px 24px;
+      border-radius: var(--r);
+      overflow-x: auto;
+      margin: 0 0 24px;
+      line-height: 1.55;
+      /* Wrap long lines instead of forcing a horizontal scroll (readability). */
+      white-space: pre-wrap;
+      word-break: break-word;
+      overflow-wrap: anywhere;
+    }
+    pre code { background: none; color: inherit; padding: 0; font-size: inherit; }
+    /* A code chip inside a tinted callout would vanish into the tint. */
+    .callout code { background: color-mix(in srgb, currentColor 9%, transparent); }
+
+    /* Highlighted blocks: pandoc wraps them in div.sourceCode and paints its
+       own transparent ground and a green-and-teal palette. Repaint both in the
+       St. Clair accents. */
+    div.sourceCode { margin: 0 0 24px; }
+    div.sourceCode > pre.sourceCode { background: var(--ff-code-bg); margin: 0; }
+    pre.sourceCode code span.kw, pre.sourceCode code span.cf, pre.sourceCode code span.im,
+    pre.sourceCode code span.op, pre.sourceCode code span.bu { color: var(--ff-hl-kw); font-weight: 500; }
+    pre.sourceCode code span.st, pre.sourceCode code span.ch, pre.sourceCode code span.ss,
+    pre.sourceCode code span.vs, pre.sourceCode code span.sc { color: var(--ff-hl-str); }
+    pre.sourceCode code span.dv, pre.sourceCode code span.fl, pre.sourceCode code span.bn,
+    pre.sourceCode code span.cn, pre.sourceCode code span.dt { color: var(--ff-hl-num); }
+    pre.sourceCode code span.co, pre.sourceCode code span.an, pre.sourceCode code span.cv,
+    pre.sourceCode code span.do, pre.sourceCode code span.in { color: var(--ff-soft); font-style: normal; font-weight: 400; }
+    pre.sourceCode code span.fu, pre.sourceCode code span.va, pre.sourceCode code span.at,
+    pre.sourceCode code span.ot { color: inherit; font-weight: 400; }
+
+    /* Mermaid blocks: pandoc renders ```mermaid as <pre class="mermaid">; the
+       Mermaid script replaces the text with SVG. It is a figure, not code: no
+       tint, a hairline frame, centred. Mermaid source must not wrap before the
+       script swaps it for SVG. */
+    pre.mermaid {
+      white-space: pre;
+      background: none;
+      border: 1px solid var(--ff-rule);
+      border-radius: var(--r);
+      padding: 24px;
+      text-align: center;
+      color: var(--ff-fg);
+      font-family: var(--font-body);
+    }
+    pre.mermaid svg { max-width: 100%; height: auto; }
+
+    blockquote {
+      margin: 18px 0;
+      padding: 2px 0 2px 18px;
+      border-left: 3px solid var(--ff-rule);
+      color: var(--ff-soft);
+    }
+    blockquote p:last-child { margin-bottom: 0; }
+
+    hr { border: none; border-top: 1px solid var(--ff-rule); margin: 44px 0; }
+    hr:has(+ h2) { display: none; }
+
+    img { max-width: 100%; height: auto; }
+
+    /* Task-list checkboxes from "- [ ]" lists */
+    ul.task-list { list-style: none; padding-left: 4px; }
+    ul.task-list li input[type="checkbox"] { margin-right: 8px; accent-color: var(--cobalt); }
+
+    @page { size: letter; margin: 0.7in 0.65in; }
+    @media (max-width: 620px) {
+      body { padding: 32px 16px 64px; font-size: 16px; }
+      .callout { padding: 14px 16px 16px; }
+      .callout::after { left: 16px; top: 22px; }
+      table { font-size: 14px; }
+    }
+    @media print {
+      :root { color-scheme: light; }
+      * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+      html, body { background: #fff; color: var(--ink); }
+      body { max-width: 100%; font-size: 11pt; padding: 0; }
+      .doc-nav { display: none; }
+      a { color: var(--ink); }
+      .callout, table, pre, blockquote { break-inside: avoid; }
+      h2, h3 { break-after: avoid; }
+    }
+  </style>
+  <script type="module">
+    import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.esm.min.mjs";
+    const dark = window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches;
+    mermaid.initialize({
+      startOnLoad: false,
+      theme: dark ? "dark" : "neutral",
+      securityLevel: "loose",
+      themeVariables: { fontFamily: '"Hanken Grotesk", system-ui, sans-serif' },
+    });
+    /* Pandoc emits ```mermaid blocks as <pre class="mermaid"><code>…</code></pre> with the
+       diagram source HTML-entity-encoded. Mermaid 10 reads innerHTML, so it sees the literal
+       <code> tag and &quot;/&gt; entities and throws syntax errors. Flatten each block to a
+       single decoded text node first (textContent decodes entities and drops the wrapper),
+       then render. Same fix as the personal-repo report builds (commit d525c50 there). */
+    function renderMermaid() {
+      document.querySelectorAll("pre.mermaid").forEach(function (el) {
+        if (!el.dataset.mflattened) {
+          el.textContent = el.textContent;
+          el.dataset.mflattened = "1";
+        }
+      });
+      mermaid.run({ querySelector: "pre.mermaid" });
+    }
+    if (document.readyState === "loading") {
+      window.addEventListener("DOMContentLoaded", renderMermaid);
+    } else {
+      renderMermaid();
+    }
+  </script>
+
+  <!-- The review comment module and the shared document fixes are injected here
+       at build time from ~/.claude/skills/shared-assets/ (comment_module.html +
+       doc_fixes.css) by shared_assets.resolve_header(). Do not paste a copy back
+       into this file. -->
+  <style>
+  /* Shared document fixes: one source for both document builds.
+
+     Injected at build time alongside comment_module.html, in place of the
+     <!-- SHARED_ASSETS --> placeholder in each pandoc header. Because it lands
+     last in <head>, these rules win over the same-specificity rules earlier in a
+     header without needing !important.
+
+     Keep this file to fixes that are true for every document we build. Anything
+     that depends on a skill's own look (colors, radius, shadow) belongs in that
+     skill's header. */
+
+  /* --- Tables: never spill past the reading column (plan Task 4.3, defect 1) ---
+     Two halves to the fix, and both are needed.
+     1. A wide table scrolls inside its wrapper. Both builds wrap every table in
+        <div class="table-scroll">.
+     2. Long unbroken strings (URLs, tokens, absolute paths) wrap instead of
+        setting a min-content width that forces the table wider than the page.
+        Without this the table is simply wider than the wrapper and the text is
+        cut off at the wrapper edge. */
+  .table-scroll {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    max-width: 100%;
+  }
+  .table-scroll > table { margin: 0; }
+  table { max-width: 100%; }
+  thead th, tbody td { overflow-wrap: anywhere; word-break: break-word; }
+  thead th code, tbody td code,
+  thead th a, tbody td a { overflow-wrap: anywhere; word-break: break-word; }
+
+  /* Print/PDF has no scrollbars, so show the whole table and let it shrink. */
+  @media print {
+    .table-scroll { overflow: visible; }
+  }
+
+  /* --- Charts: never let a chart set the page width (plan Task 4.3, defect 2) ---
+     The label-truncation fix itself is Plotly's automargin, applied in the
+     report header's render script. This is the CSS guard next to it: a chart
+     that computes a wider layout than its column stays inside the column
+     instead of pushing the whole page sideways. */
+  figure.plotly-chart,
+  figure.plotly-chart > div,
+  figure.chart svg,
+  figure.plotly-chart .main-svg { max-width: 100%; }
+
+  </style>
+</head>
+<body>
+<header id="title-block-header">
+<h1 class="title">Feature Brief: Menu bar app</h1>
+</header>
+
+<div class="doc-nav"><span class="doc-nav-label">Docs</span><a href="00_crucible_menu_bar_app.html">Crucible</a><a href="01_brief_menu_bar_app.html" class="current">Brief</a><a href="02_architecture_menu_bar_app.html">Architecture</a><a href="03_plan_menu_bar_app.html">Plan</a><a href="04_progress_menu_bar_app.md">Progress</a></div>
+<nav id="TOC" role="doc-toc">
+<ul>
+<li><a href="#summary" id="toc-summary">Summary</a></li>
+<li><a href="#problem-user-and-context"
+id="toc-problem-user-and-context">Problem, User, and Context</a></li>
+<li><a href="#non-goals" id="toc-non-goals">Non-Goals</a></li>
+<li><a href="#solution-outline" id="toc-solution-outline">Solution
+Outline</a></li>
+<li><a href="#requirements" id="toc-requirements">Requirements</a></li>
+<li><a href="#how-we-know-it-worked" id="toc-how-we-know-it-worked">How
+we know it worked</a></li>
+<li><a href="#ux-notes" id="toc-ux-notes">UX Notes</a></li>
+<li><a href="#analytics--logging" id="toc-analytics--logging">Analytics
+/ Logging</a></li>
+<li><a href="#rollout--flags" id="toc-rollout--flags">Rollout /
+Flags</a></li>
+<li><a href="#questions-and-decisions"
+id="toc-questions-and-decisions">Questions and Decisions</a></li>
+<li><a href="#pm-review" id="toc-pm-review">PM Review</a></li>
+<li><a href="#pm-review-menu-bar-app-brief"
+id="toc-pm-review-menu-bar-app-brief">PM review: Menu bar app brief</a>
+<ul>
+<li><a href="#summary-1" id="toc-summary-1">Summary</a></li>
+<li><a href="#findings" id="toc-findings">Findings</a></li>
+<li><a href="#cleanup-needed" id="toc-cleanup-needed">Cleanup
+needed</a></li>
+</ul></li>
+</ul>
+</nav>
+<h2 id="summary">Summary</h2>
+<p>A Lahe icon in the Mac menu bar. It shows a number when something is
+waiting on Ken: the cards the rail already tags "1 new", counted across
+every document. Clicking it opens a menu with those documents, what is
+open and who is connected, recent documents, the Library, and Quit. It
+is an optional Mac extra on top of the cross-platform helper. Agents do
+not change how they work.</p>
+<h2 id="problem-user-and-context">Problem, User, and Context</h2>
+<p>Ken runs several coding agents at once and reviews their work in
+Lahe. When an agent asks him a question on a card, or finishes answering
+his comments, nothing tells him. He finds out only when he happens to
+open that document. The board shows it happening: on review
+r03fdeebe1fb6, comments sat unanswered while the agent worked elsewhere,
+and the page could not tell him.</p>
+<p>He also cannot see what is running. Open documents and listening
+agents pile up across a day. A stray session or a forgotten agent stays
+invisible until he runs <code>lahe status</code> or opens the
+Library.</p>
+<pre class="mermaid"><code>flowchart TD
+    Agent[&quot;an agent asks a question,&lt;br/&gt;or answers Ken&#39;s comments&quot;] --&gt; Silent[&quot;nothing on screen changes&quot;]
+    Silent --&gt; Later{&quot;does Ken open&lt;br/&gt;that document?&quot;}
+    Later --&gt;|&quot;by chance, later&quot;| Sees[&quot;he sees the answer&quot;]
+    Later --&gt;|&quot;no&quot;| Stuck[&quot;the agent waits,&lt;br/&gt;or the answer goes unread&quot;]</code></pre>
+<p>Ken works at his desk with terminal windows and many browser tabs
+open, and keeps review tabs open for days. He keeps the Dock hidden. The
+menu bar is the one place he can see without switching windows.</p>
+<p>The user is Ken today, on a Mac. Later, other developers who run
+coding agents on a Mac. For some of them, seeing how much is open is a
+satisfying sign of how much they have going on.</p>
+<p>Prior work: <a href="00_crucible_menu_bar_app.md">the crucible</a>,
+and the stable addresses work, which deferred this icon as its own
+follow-up (<a href="../../ongoing/STABLE_ADDRESSES.md">decisions
+page</a>). Since stable addresses, <code>lahe install</code> starts the
+helper at login, and the Library has its own address,
+<code>library.lahe.localhost</code>.</p>
+<h2 id="non-goals">Non-Goals</h2>
+<div class="callout callout-nongoal">
+<ul>
+<li>Not a menu bar icon on Linux or Windows. The helper's new summary is
+plain cross-platform code, so a tray icon there could come later.</li>
+<li>Not macOS notifications, sounds, or pop-ups. The icon changes; it
+does not interrupt.</li>
+<li>Not a way to act on a card from the menu. Answering, dismissing, or
+reopening still happens on the page.</li>
+<li>Not a ready-built, signed app download. The icon is built on the
+user's Mac.</li>
+<li>Not a Dock icon or a Dock badge.</li>
+<li>Not a change to how agents work. No new command for an agent, and
+nothing new in the contract.</li>
+<li>Not naming agents ("Claude", "Codex"). Lahe does not record an
+agent's name today (board row LAHE-agent-name-default). The menu names
+each session by what it is working on.</li>
+<li>Not a replacement for the Library. The menu is a short list; the
+Library stays the full one.</li>
+<li>Not a new way to close a card. Mark as done, on the card's state
+chip, already does that, and it reads the card too (R5).</li>
+</ul>
+</div>
+<h2 id="solution-outline">Solution Outline</h2>
+<ol type="1">
+<li><strong>The helper gets one new answer: a summary of what needs Ken
+and what is running.</strong> It holds the "waiting on you" documents,
+the documents waiting on agents, the open documents, the connected
+sessions, and the recent documents. Only Ken's own programs can read
+it.</li>
+<li><strong>The page tells the helper which replies Ken has
+read.</strong> The rail already keeps that mark: a reply shows "1 new"
+on its card until Ken opens the card. Today the mark stays in his
+browser. The page now also sends it to the helper, so the icon and the
+rail agree.</li>
+<li><strong>A small Mac app draws the icon and menu.</strong> It asks
+the helper for the summary every few seconds and shows it. It is Swift
+with no outside packages.</li>
+<li><strong><code>lahe install</code> offers the icon on a Mac.</strong>
+It builds the app with Apple's compiler, which comes with the Xcode
+command line tools, and starts it at login next to the helper. When Lahe
+is updated, the app is rebuilt.</li>
+</ol>
+<pre class="mermaid"><code>flowchart LR
+    Helper[&quot;Lahe helper&lt;br/&gt;(already records reviews,&lt;br/&gt;replies, windows, monitors)&quot;] --&gt;|&quot;summary every few seconds&quot;| App[&quot;menu bar app&quot;]
+    App --&gt; Icon[&quot;icon: waiting-on-you count&quot;]
+    App --&gt; Menu[&quot;menu: waiting documents,&lt;br/&gt;open and connected,&lt;br/&gt;recent, Library, Quit&quot;]
+    Menu --&gt;|&quot;click a document&quot;| Browser[&quot;opens its address&lt;br/&gt;in the browser&quot;]</code></pre>
+<h2 id="requirements">Requirements</h2>
+<h3 id="the-icon">The icon</h3>
+<div class="callout callout-req">
+<p><strong>R1. The icon shows how many documents are waiting on Ken, and
+nothing else.</strong> It counts documents, not cards, because each one
+is one click. With nothing waiting it is the plain Lahe mark. Above 99
+it shows "99+". It looks right in a light and a dark menu bar.</p>
+</div>
+<div class="callout callout-req">
+<p><strong>R2. The icon never shows a number it is not sure of.</strong>
+It has three looks besides the count: nothing waiting (the plain mark),
+the helper is not running (the menu offers Start Lahe), and "can't tell"
+(the helper did not answer, refused, is a different version, or the Mac
+just woke). "Can't tell" never shows the plain mark or the last
+number.</p>
+</div>
+<div class="callout callout-req">
+<p><strong>R3. The count is quick and right.</strong> A new question or
+reply shows within 10 seconds. A reply clears within 10 seconds of Ken
+opening its card. A count that never clears, or counts something already
+handled, is a bug.</p>
+</div>
+<h3 id="what-waiting-on-you-means">What "waiting on you" means</h3>
+<p>This is not a new flag, and it has no logic of its own. It is the
+rail's "1 new" mark, counted across every document instead of only on
+the page you have open (R5). What counts as unread, and what counts as
+read, is the rail's one rule, written once and shared by the page and
+the helper, so the icon and the rail never disagree. If that rule needs
+revisiting, it is revisited in one place. The Library's "N waiting" is
+the other direction: your comments waiting on an agent. In the menu that
+is R9.</p>
+<div class="callout callout-req">
+<p><strong>R4. Only replies from after the icon was installed
+count.</strong> On day one the count is zero. Today 45 documents have an
+old unanswered question; none of them count.</p>
+</div>
+<div class="callout callout-req">
+<p><strong>R5. A document counts while it has a reply Ken has not
+read.</strong> By the rail's own rule: a reply is unread when the rail
+would tag its card "1 new" (a question, a refusal, or an answer the
+agent marked as worth reading; routine replies arrive already read). It
+is read when Ken opens the card, or marks it done. The icon has no rule
+of its own, and a question is not a special case: an unanswered question
+he has opened is read, and the rail still shows it as asking.</p>
+</div>
+<div class="callout callout-req">
+<p><strong>R6. Reading it anywhere clears it everywhere.</strong> A card
+opened in one browser is read in every browser and on the icon. A
+review's retired, ended or missing-file documents never count (R7).</p>
+</div>
+<div class="callout callout-req">
+<p><strong>R7. Retired reviews, ended reviews, and documents whose file
+is gone never count</strong> as waiting on Ken. They cannot be acted on
+from a page.</p>
+</div>
+<h3 id="the-menu">The menu</h3>
+<div class="callout callout-req">
+<p><strong>R8. Waiting on you comes first.</strong> Every waiting
+document is listed by its name, with a short reason ("1 question", "3
+unread"). Clicking one opens it in the browser at its address.</p>
+</div>
+<div class="callout callout-req">
+<p><strong>R9. Waiting on agents is shown separately.</strong> The
+number of Ken's comments no agent has answered yet, labeled apart from
+"waiting on you" so the two are never confused, with its documents
+listed.</p>
+</div>
+<div class="callout callout-req">
+<p><strong>R10. What is open and who is connected.</strong> An open
+document is a review page open in a browser window right now, focused or
+not. A connected session is one whose agent has a live monitor or ran a
+<code>lahe</code> command in the last few minutes, the same test the
+Library uses. Each shows its count and its list. A session is named by
+its Library name, else the document it is working on, and shows when it
+was last heard from. Clicking a document opens it. Clicking a session
+opens its most recent document.</p>
+</div>
+<div class="callout callout-req">
+<p><strong>R11. Recent documents.</strong> The documents Ken worked on
+most recently, newest first, as the Library orders them. Clicking one
+opens it at the address the Library's Open would use. Opening from the
+menu never asks an agent to pick a document up; a document only an agent
+can serve opens the Library instead.</p>
+</div>
+<div class="callout callout-req">
+<p><strong>R12. Long lists stay short.</strong> The waiting on agents,
+open, connected and recent sections show up to 8 rows and say how many
+more there are. Recent ends with "Open the Library". Waiting on you is
+never cut short.</p>
+</div>
+<div class="callout callout-req">
+<p><strong>R13. Open the Library.</strong> One item opens the Library in
+the browser.</p>
+</div>
+<div class="callout callout-req">
+<p><strong>R14. Quit has two items, and Stop holds.</strong> "Hide the
+icon" closes the menu bar app only; the helper keeps running. "Stop
+Lahe" stops the helper and keeps it stopped until Ken clicks Start in
+the menu, runs <code>lahe install</code>, or logs in again. While it is
+stopped, an agent's <code>lahe</code> commands fail with a plain message
+that Ken stopped Lahe and when, and nothing an agent does starts it. The
+menu shows "Stopped by you" with the time, and Start. A line under Stop
+says agents' commands will fail until he starts it again.</p>
+</div>
+<h3 id="installing-and-keeping-it-working">Installing and keeping it
+working</h3>
+<div class="callout callout-req">
+<p><strong>R15. The icon is optional and Mac-only.</strong> On a Mac,
+<code>lahe install</code> asks whether to add it; a flag answers without
+asking. Saying no, or a Linux or Windows computer, changes nothing else
+about Lahe. Someone already installed adds just the icon by running
+<code>lahe install</code> again.</p>
+</div>
+<div class="callout callout-req">
+<p><strong>R16. A Mac without Apple's command line tools gets a clear
+message,</strong> naming the one command that installs them, and no
+icon. The rest of <code>lahe install</code> still completes.</p>
+</div>
+<div class="callout callout-req">
+<p><strong>R17. The icon starts at login. After Hide, it stays hidden
+until the next login or until Ken runs one named command</strong> to
+show it. No other command, and nothing an agent runs, brings it
+back.</p>
+</div>
+<div class="callout callout-req">
+<p><strong>R18. Updating Lahe keeps the icon working.</strong> When a
+<code>git pull</code> changes the app, the helper rebuilds and restarts
+it on its own. If the rebuild fails, the old app keeps running and
+<code>lahe status</code> says why. An app and a helper that do not match
+show "can't tell" (R2), never wrong numbers.</p>
+</div>
+<div class="callout callout-req">
+<p><strong>R19. <code>lahe uninstall</code> removes the icon</strong>
+and its login item, along with everything else it already removes.</p>
+</div>
+<div class="callout callout-req">
+<p><strong>R20. <code>lahe status</code> says whether the icon is
+installed and running,</strong> and names a failed rebuild.</p>
+</div>
+<h3 id="cost-and-safety">Cost and safety</h3>
+<div class="callout callout-req">
+<p><strong>R21. Light when idle.</strong> With nothing changing, the app
+and the helper's new answer add no more battery and processor cost than
+one open review tab does today. Measured on a copy of Ken's real state
+folder, not assumed.</p>
+</div>
+<div class="callout callout-req">
+<p><strong>R22. Only Ken's own programs can read the summary.</strong> A
+web page open in the browser cannot read it, from any address, including
+Lahe's own pages. It names documents and paths, so it gets the same
+protection as the rest of the helper's private data.</p>
+</div>
+<div class="callout callout-req">
+<p><strong>R23. The core stays cross-platform.</strong> The helper's
+summary and the read marks it keeps are plain helper code that runs on
+Mac, Linux and Windows and passes the unit suite there. Only the app
+itself is Mac code. The tool still runs from a <code>git clone</code>
+with no packages to install.</p>
+</div>
+<h2 id="how-we-know-it-worked">How we know it worked</h2>
+<div class="callout callout-metric">
+<ul>
+<li>On the day it is installed, the icon shows no number.</li>
+<li>In a week of Ken's normal use, he never clicks the icon and finds
+nothing waiting, and never finds an agent's question the icon missed. He
+reports either one on the progress page as a bug.</li>
+<li>Finding a stray session takes one click instead of
+<code>lahe status</code> or the Library.</li>
+</ul>
+</div>
+<h2 id="ux-notes">UX Notes</h2>
+<ul>
+<li>The menu reads top to bottom in order of urgency: waiting on you,
+waiting on agents, open and connected, recent, then the Library and
+Quit.</li>
+<li>The icon is a template image, so macOS colors it for a light or dark
+menu bar and for a highlighted state.</li>
+<li>Long names are cut short with an ellipsis; the full name and path
+show on hover.</li>
+<li>The menu uses the Lahe mark, not a generic symbol, so it is
+recognizable at a glance.</li>
+</ul>
+<h2 id="analytics--logging">Analytics / Logging</h2>
+<p>No new analytics: Lahe is a local tool and sends nothing anywhere.
+The app writes its own errors (cannot reach the helper, cannot read its
+permission, rejected address) to a log file in the Lahe state folder. A
+failed rebuild is logged there too, so <code>lahe status</code> can name
+it. The helper logs nothing per summary request, because the app asks
+every few seconds and that would flood the log.</p>
+<h2 id="rollout--flags">Rollout / Flags</h2>
+<p>No feature flag. The icon is opt-in at <code>lahe install</code>,
+which already needs a terminal. Ken already ran
+<code>lahe install</code> for stable addresses, so he gets the icon by
+running it again. Nothing changes for anyone who does not opt in. The
+helper's summary ships to everyone and costs nothing until something
+asks for it. The helper starts keeping read marks the first time the new
+helper runs. The day-one cutoff (R4) is set the first time the app asks.
+This is a minor version bump.</p>
+<h2 id="questions-and-decisions">Questions and Decisions</h2>
+<p>All questions are settled. The history of each is below.</p>
+<p>Settled with Ken in review:</p>
+<ul>
+<li><strong>Every document counts, open or not (R5).</strong> Ken had
+pictured open documents only, then: closed ones only if it is not really
+complicated, since counting on closed documents felt like a can of
+worms. It is not more work: the helper reads every review the same way
+for the recent and waiting-on-agents lists, so counting all of them is
+the same loop, and open-only would be the extra filter. The worms are
+the old questions, and the day-one cutoff (R4) plus Mark as done handle
+those. The menu lists open waiting documents first and marks them.</li>
+</ul>
+<p>Settled with Ken in the crucible:</p>
+<ul>
+<li><p><strong>Which version?</strong> The icon that says when something
+is waiting on him, plus recent documents and what is open and who is
+connected. The running indicator, Library link, and Quit stay
+in.</p></li>
+<li><p><strong>A real Lahe icon in the menu bar.</strong> A SwiftBar
+script was ruled out (no Lahe icon), and so was a Dock badge (he keeps
+the Dock hidden).</p></li>
+<li><p><strong>Native Mac code is fine</strong> as long as it is
+optional and the core stays cross-platform.</p></li>
+<li><p><strong>Built on his Mac with Apple's command line tools</strong>
+is fine. A Mac without them gets a message and no icon.</p></li>
+<li><p><strong>A wrong count is worse than no count.</strong> The first
+version counts only what Lahe knows for certain.</p></li>
+<li><p><strong>Agents do not change how they work.</strong> The icon is
+another way of seeing and reaching what the helper already
+records.</p></li>
+<li><p><strong>Quit has two items:</strong> hide the icon, or stop
+Lahe.</p></li>
+<li><p><strong>Stop holds (R14).</strong> Ken, in review: if he clicks
+Stop and it immediately restarts, he would be mad. So the helper stays
+stopped until he clicks Start, runs <code>lahe install</code>, or logs
+in again, and an agent's <code>lahe</code> commands fail plainly until
+then. The earlier draft let agents restart it, with a warning line; the
+security review had flagged the same thing (SR7).</p></li>
+<li><p><strong>"Read" is the rail's own read mark (R5), and a question
+is not a special case.</strong> A reply counts until its card is opened,
+exactly when the rail drops its "1 new" tag. Two earlier drafts gave the
+icon rules of its own (the page was the focused tab; a question counts
+until answered). Ken: it should follow the logic we already have, not
+have its own; the existing logic may need revisiting, but there are not
+two paths for what counts as read.</p></li>
+</ul>
+<p>Chosen by the brief, for Ken to overrule in review:</p>
+<ul>
+<li><strong>The icon counts documents, not cards (R1).</strong> Each one
+is one click.</li>
+<li><strong>Only replies after the install count (R4).</strong>
+Otherwise the first day shows 45.</li>
+<li><strong>The icon shows only the "waiting on you" count
+(R1).</strong> Open documents and connected agents stay in the
+menu.</li>
+<li><strong>Sessions are named by their Library name or document
+(R10),</strong> because Lahe records no agent name today. When board row
+LAHE-agent-name-default lands, the menu can show "Claude" or "Codex"
+too.</li>
+<li><strong>Up to 8 rows per list (R12),</strong> tuned on the real
+menu.</li>
+</ul>
+<h2 id="pm-review">PM Review</h2>
+<p>Full prose in <a
+href="01_brief_menu_bar_app_reviews.md">01_brief_menu_bar_app_reviews.md</a>.</p>
+<div class="table-scroll"><table>
+<thead>
+<tr>
+<th>#</th>
+<th>Finding</th>
+<th>Disposition</th>
+<th>Rationale</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>RF1</td>
+<td>A background tab counted as looking</td>
+<td>Accepted, then superseded</td>
+<td>The focused-tab rule is gone. R5: read means the card was opened,
+the rail's own mark, in any browser.</td>
+</tr>
+<tr>
+<td>RF2</td>
+<td>Day one would count every old reply</td>
+<td><span class="accepted">Accepted</span></td>
+<td>R4 (cutoff at install) and R7 (retired, ended, gone never
+count).</td>
+</tr>
+<tr>
+<td>RF3</td>
+<td>No "can't tell" look</td>
+<td><span class="accepted">Accepted</span></td>
+<td>R2 now has a distinct "can't tell" look.</td>
+</tr>
+<tr>
+<td>RF4</td>
+<td>A question had no way to clear</td>
+<td>Accepted, then superseded</td>
+<td>A question clears like any reply: opening its card, or Mark as done,
+which has since shipped. Ken: one rule for read, not two.</td>
+</tr>
+<tr>
+<td>RF5</td>
+<td>Documents or cards?</td>
+<td><span class="accepted">Accepted</span></td>
+<td>R1: documents.</td>
+</tr>
+<tr>
+<td>RF6</td>
+<td>Permission design leaked into the brief</td>
+<td><span class="accepted">Accepted</span></td>
+<td>Removed from the outline; the architecture owns it.</td>
+</tr>
+<tr>
+<td>RF7</td>
+<td>"Show all in the Library" pointed nowhere useful</td>
+<td><span class="accepted">Accepted</span></td>
+<td>R12: only Recent links to the Library; waiting on you is never
+cut.</td>
+</tr>
+<tr>
+<td>RF8</td>
+<td>Open could ask an agent to pick a document up</td>
+<td><span class="accepted">Accepted</span></td>
+<td>R11: the menu's open never does.</td>
+</tr>
+<tr>
+<td>RF9</td>
+<td>Any command could undo Hide</td>
+<td><span class="accepted">Accepted</span></td>
+<td>R17: one named command a person runs.</td>
+</tr>
+<tr>
+<td>RF10</td>
+<td>Rebuild had no trigger or failure story</td>
+<td><span class="accepted">Accepted</span></td>
+<td>R18: the helper rebuilds on change; a failure keeps the old
+app.</td>
+</tr>
+<tr>
+<td>RF11</td>
+<td>Stop does not hold while agents are connected</td>
+<td>Accepted, then reversed</td>
+<td>Ken, in review: a Stop that restarts itself would make him mad. R14:
+Stop holds until he starts it, and agents' commands fail plainly
+meanwhile.</td>
+</tr>
+<tr>
+<td>RF12</td>
+<td>No success criteria</td>
+<td><span class="accepted">Accepted</span></td>
+<td>New "How we know it worked" section.</td>
+</tr>
+<tr>
+<td>RF13</td>
+<td>"Connected" and "open" undefined</td>
+<td><span class="accepted">Accepted</span></td>
+<td>R10 defines both.</td>
+</tr>
+<tr>
+<td>RF14</td>
+<td>"A few seconds" needs a number; measure on real data</td>
+<td><span class="accepted">Accepted</span></td>
+<td>R3 (10 s and 15 s) and R21.</td>
+</tr>
+<tr>
+<td>RF15</td>
+<td>Leftovers: icon-only install, design review, an unsupported
+claim</td>
+<td><span class="accepted">Accepted</span></td>
+<td>R15 settles the install; the design review is in the plan; the claim
+is removed.</td>
+</tr>
+</tbody>
+</table></div>
+<hr class="reviews-divider" style="margin:4.5rem 0 1.5rem;border:0;border-top:3px solid #b0463b">
+
+<div class="reviews-banner">
+<p>The sections below are the full verbatim persona + human reviews for
+this document. They live in a separate <code>_reviews.md</code> file (so
+agents read the lean spec), merged here for review.</p>
+</div>
+<h1 id="pm-review-menu-bar-app-brief">PM review: Menu bar app brief</h1>
+<p>Reviewed: <a
+href="01_brief_menu_bar_app.md">01_brief_menu_bar_app.md</a> and its
+leaf <a href="parts/brief/questions.md">parts/brief/questions.md</a>,
+against <a href="00_crucible_menu_bar_app.md">the crucible</a>.</p>
+<h2 id="summary-1">Summary</h2>
+<p>The brief is faithful to the crucible and mostly the right size. The
+menu half (what is open and who is connected) is close to ready. The
+icon half is not: the count it promises can be wrong in the most common
+case, and on the first day.</p>
+<p>Four things to fix before architecture:</p>
+<ul>
+<li>RF1: "looked at" counts a background tab as looking, so the count
+would mostly read zero for the very case it exists for.</li>
+<li>RF2: on the day it is installed, the count would include every old
+review on the machine.</li>
+<li>RF3: when the app cannot get an answer, it shows the plain mark,
+which reads as "nothing waiting". That is a wrong count.</li>
+<li>RF4: a question Ken does not want to answer has no way to
+clear.</li>
+</ul>
+<p>Scope against the crucible is fine. The small additions (listing the
+documents behind "waiting on agents", offering to start a stopped
+helper, clicking a session to open its document) are cheap and fit the
+two jobs. No settled decision is reopened here.</p>
+<h2 id="findings">Findings</h2>
+<p>Ranked worst first.</p>
+<h3 id="rf1-looked-at-counts-a-background-tab-as-looking">RF1. "Looked
+at" counts a background tab as looking</h3>
+<ul>
+<li><strong>severity</strong> high</li>
+<li><strong>kind</strong> defect</li>
+<li><strong>where</strong> R5 (answered since you looked), Solution
+Outline step 2, questions.md "When an answer counts as seen"</li>
+<li><strong>what</strong> An answer counts as seen when a page of that
+review is open in the browser after it arrives, and an open background
+tab meets that rule.</li>
+<li><strong>why</strong> Ken keeps many tabs open, and since stable
+addresses a review tab stays open for days. When an agent answers into a
+tab that is already open, the rule is met the moment the answer lands,
+so the count rises and clears within seconds without Ken seeing
+anything. The count stays at zero in exactly the case the feature is
+for. The brief's own evidence (review r5c67aef9754a, where Ken missed an
+answer) may well have been this case, and the brief does not check it. A
+smaller hole sits beside it: for a review that covers a folder, opening
+any page clears answers that arrived on a different page.</li>
+<li><strong>fix</strong> Define "looked at" as: the page that holds the
+answer was the visible tab, in the window in front, after the answer
+arrived. Say "the page that holds the answer", not "a page of that
+review". Add a check that the rule would have caught both reviews named
+in the Problem section. If the architecture finds Lahe cannot know this
+for certain, then by the crucible's own premise (a wrong count is worse
+than none) the answered half of the count should not ship in the first
+version, and the brief should say that fallback now.</li>
+</ul>
+<h3 id="rf2-the-first-day-count-includes-every-old-review">RF2. The
+first-day count includes every old review</h3>
+<ul>
+<li><strong>severity</strong> high</li>
+<li><strong>kind</strong> defect</li>
+<li><strong>where</strong> R4 (an unanswered question), R5 (answered
+since you looked), R3 (the count is right)</li>
+<li><strong>what</strong> Neither rule says which reviews are in scope,
+so every agent answer and every question ever recorded on the machine
+counts.</li>
+<li><strong>why</strong> No "looked at" mark exists for any answer
+before this ships. The first count Ken sees would include months of old
+answers and old questions from closed sessions, retired reviews, and
+files that have since been deleted. A first count of dozens teaches him
+to ignore the number, which is the failure the crucible names ("ignored
+within a week").</li>
+<li><strong>fix</strong> Add a requirement that sets the scope. A
+suggested rule: only answers and questions that arrive after the icon is
+installed count, and nothing counts from a retired review or a review
+whose file is gone. Say separately what happens to a question in a
+closed session (counts, or does not), since the agent that asked it may
+be gone. Say how a waiting document whose file is gone appears in the
+menu: listed with "file gone", and a click opens it in the Library
+rather than a broken page.</li>
+</ul>
+<h3 id="rf3-an-error-must-never-look-like-nothing-waiting">RF3. An error
+must never look like "nothing waiting"</h3>
+<ul>
+<li><strong>severity</strong> high</li>
+<li><strong>kind</strong> defect</li>
+<li><strong>where</strong> R1 (the icon shows the count), R2 (the helper
+is not running)</li>
+<li><strong>what</strong> The plain Lahe mark means "nothing waiting",
+and the brief gives a different look only to "helper not running".</li>
+<li><strong>why</strong> Many failures are not "not running": the helper
+refuses the app's request, the app's permission is stale after a helper
+restart, the helper and app are different versions, the Mac just woke
+and the last answer is old. In each of those, an app that falls back to
+the plain mark, or keeps showing an old number, is showing a wrong
+count, and nothing tells Ken.</li>
+<li><strong>fix</strong> Add a requirement: whenever the app does not
+have a fresh answer from the helper, the icon shows a distinct "don't
+know" look, never the plain mark and never the last number. The menu
+says why in one line. Give "fresh" a number, for example an answer from
+the last 15 seconds. Keep R2 (not running) as one case of this.</li>
+</ul>
+<h3 id="rf4-a-question-ken-will-not-answer-cannot-be-cleared">RF4. A
+question Ken will not answer cannot be cleared</h3>
+<ul>
+<li><strong>severity</strong> high</li>
+<li><strong>kind</strong> defect</li>
+<li><strong>where</strong> R4 (an unanswered question): "until he
+answers or the card moves on"</li>
+<li><strong>what</strong> "The card moves on" is not defined, and
+dismissing a card is a board item that has not been built.</li>
+<li><strong>why</strong> R3 (the count is right) calls a count that
+never clears a bug. A question Ken has decided to ignore, or one asked
+by an agent that has since gone, has no way off the count except
+answering it. That builds a permanent floor under the number.</li>
+<li><strong>fix</strong> List every event that clears a question, in
+plain words: Ken replies on the card, Ken rewords it, Ken deletes it,
+the agent replies on it again, or the review is retired. Then decide
+what Ken does with a question he will not answer. Either it stays and
+the brief says so, or the brief names card dismissal (board row for
+dismissing a card) as something this feature needs first. That second
+option is Ken's call, since he ranked dismissal below this work.</li>
+</ul>
+<h3 id="rf5-what-the-icons-number-counts-is-not-defined">RF5. What the
+icon's number counts is not defined</h3>
+<ul>
+<li><strong>severity</strong> medium</li>
+<li><strong>kind</strong> defect</li>
+<li><strong>where</strong> R1 (the icon shows the count), R6 (waiting on
+you comes first)</li>
+<li><strong>what</strong> The brief calls it "a count" but does not say
+whether it counts documents or individual questions and answers.</li>
+<li><strong>why</strong> The menu row shows "1 question" or "3
+answered", so a document with three answers could make the icon read 1
+or 3. A tester cannot pass or fail R1 without knowing which, and two
+builders will pick differently.</li>
+<li><strong>fix</strong> State it. Recommended: the number is how many
+documents are waiting on Ken, which matches one row per document in the
+menu. The reasons stay on the rows.</li>
+</ul>
+<h3
+id="rf6-architecture-decisions-are-in-the-brief-including-one-assigned-to-the-security-review">RF6.
+Architecture decisions are in the brief, including one assigned to the
+security review</h3>
+<ul>
+<li><strong>severity</strong> medium</li>
+<li><strong>kind</strong> defect</li>
+<li><strong>where</strong> Solution Outline step 1 ("with the same proof
+of permission the <code>lahe</code> command already uses"), steps 3 and
+4, UX Notes ("template image"), Analytics, questions.md "Open"</li>
+<li><strong>what</strong> The brief decides how the app proves its
+permission, while the crucible and the brief's own open question leave
+that to the architecture and a security review.</li>
+<li><strong>why</strong> The architecture starts with the answer already
+written down, so the security review is reviewing a choice rather than
+making one. Step 1's wording, "any program on the computer could read
+it", also reads as the opposite of R19 (only Ken's own programs can read
+the summary). The other leaks are smaller but have the same effect:
+asking "every few seconds", "a few hundred lines of Swift with no
+outside packages", "Apple's compiler", "template image", and the
+helper's per-request logging policy are all choices about how to build
+it.</li>
+<li><strong>fix</strong> Rewrite step 1 as "Only programs Ken runs can
+read it; how they prove that is decided in the architecture, with a
+security review." Move the polling interval, the Swift size, the
+compiler, the template image and the logging policy to the architecture.
+Keep the product facts they stand for: the app is built on Ken's Mac
+with no outside packages, it adapts to a light or dark menu bar, and it
+adds no noise to the helper's log.</li>
+</ul>
+<h3
+id="rf7-show-all-in-the-library-leads-to-a-page-that-does-not-show-the-list">RF7.
+"Show all in the Library" leads to a page that does not show the
+list</h3>
+<ul>
+<li><strong>severity</strong> medium</li>
+<li><strong>kind</strong> defect</li>
+<li><strong>where</strong> UX Notes ("a 'Show all in the Library' item
+when there are more"), R6 (waiting on you), R8 (what is open and who is
+connected)</li>
+<li><strong>what</strong> The Library has no "waiting on you" view (its
+"waiting" is comments waiting on agents) and does not list open review
+pages.</li>
+<li><strong>why</strong> With many documents, the most urgent list is
+cut short and the overflow link sends Ken to a page where those
+documents are not marked. That breaks the first job ("one click gets him
+there").</li>
+<li><strong>fix</strong> Never cut the "waiting on you" list. Offer
+"Show all in the Library" only for sections the Library actually shows:
+recent documents and sessions. For open documents, show the count and
+say "and N more" without a link. Adding a waiting-on-you view to the
+Library would be new scope and belongs on the board, not in this
+brief.</li>
+</ul>
+<h3
+id="rf8-clicking-a-document-from-the-menu-can-send-work-to-an-agent">RF8.
+Clicking a document from the menu can send work to an agent</h3>
+<ul>
+<li><strong>severity</strong> medium</li>
+<li><strong>kind</strong> risk</li>
+<li><strong>where</strong> R6, R7, R8 ("opens it at its address")
+against R9 ("the same way the Library's Open does: same address, same
+rules")</li>
+<li><strong>what</strong> The brief uses two different rules for a
+click, and the Library's Open, which R9 adopts, asks an attached agent
+to pick up a document Lahe cannot open by itself.</li>
+<li><strong>why</strong> A click in a glance menu could quietly queue
+work for an agent. That sits uneasily with "agents do not change how
+they work" and will surprise Ken.</li>
+<li><strong>fix</strong> Use one rule for every click in the menu: open
+the document the way the Library's Open does, but never ask an agent to
+do anything. A row Lahe cannot open directly opens the Library at that
+row instead. Also say plainly that a click opens a new tab even if the
+document is already open in one, so that is a known limit rather than a
+bug report.</li>
+</ul>
+<h3
+id="rf9-one-lahe-command-brings-back-a-hidden-icon-but-which-one">RF9.
+"One lahe command" brings back a hidden icon, but which one?</h3>
+<ul>
+<li><strong>severity</strong> medium</li>
+<li><strong>kind</strong> defect</li>
+<li><strong>where</strong> R14 (the icon starts at login and comes back
+after Hide)</li>
+<li><strong>what</strong> "Running <code>lahe install</code> again, or
+one <code>lahe</code> command, brings a hidden icon back" can be read as
+any command.</li>
+<li><strong>why</strong> Agents run <code>lahe</code> commands all the
+time. If any of them restores the icon, Hide is undone within seconds
+and Ken cannot keep it hidden.</li>
+<li><strong>fix</strong> Name the one command Ken runs to bring it back.
+Say Hide lasts until the next login or that command, and that no agent
+command brings it back.</li>
+</ul>
+<h3
+id="rf10-updating-lahe-no-trigger-and-only-one-direction-of-mismatch-is-covered">RF10.
+Updating Lahe: no trigger, and only one direction of mismatch is
+covered</h3>
+<ul>
+<li><strong>severity</strong> medium</li>
+<li><strong>kind</strong> defect</li>
+<li><strong>where</strong> R15 (updating Lahe keeps the icon
+working)</li>
+<li><strong>what</strong> The brief says the app is rebuilt after a
+<code>git pull</code> "without Ken having to remember" but not what sets
+it off, and it covers only an app older than the helper.</li>
+<li><strong>why</strong> A pull does not run anything by itself, so the
+requirement cannot be tested as written. The common case after a pull is
+the reverse one: a new app talking to a helper still running the old
+code until it restarts. A rebuild can also fail, for example if Apple's
+command line tools were removed.</li>
+<li><strong>fix</strong> State the trigger in Ken's terms, for example
+"the next time the helper starts after an update, it rebuilds and
+restarts the app". Say both mismatches (older app, older helper) show
+the "don't know" look from RF3 with a one-line reason, and that a failed
+rebuild keeps the old app showing that reason and writes the error to
+the log.</li>
+</ul>
+<h3
+id="rf11-stop-lahe-until-next-login-will-not-stop-it-while-agents-are-connected">RF11.
+"Stop Lahe until next login" will not stop it while agents are
+connected</h3>
+<ul>
+<li><strong>severity</strong> medium</li>
+<li><strong>kind</strong> risk</li>
+<li><strong>where</strong> R11 (Quit has two items), questions.md "can
+be undone early by an agent"</li>
+<li><strong>what</strong> The brief keeps Ken's label but lets any
+agent's <code>lahe</code> command start the helper again.</li>
+<li><strong>why</strong> A listening agent checks in constantly, so with
+any agent connected the helper comes back within seconds. Ken clicks a
+menu item that says it stops Lahe and sees it running again, which reads
+as a bug.</li>
+<li><strong>fix</strong> Keep the label Ken chose. When agents are
+connected, show one line under it: "2 agents are connected and will
+start Lahe again." Add that to R11 so it is tested.</li>
+</ul>
+<h3 id="rf12-no-way-to-tell-whether-it-worked">RF12. No way to tell
+whether it worked</h3>
+<ul>
+<li><strong>severity</strong> medium</li>
+<li><strong>kind</strong> defect</li>
+<li><strong>where</strong> Missing section (no success criteria)</li>
+<li><strong>what</strong> The brief has requirements but no success
+measure, and the crucible's main risk (a wrong count gets ignored) has
+no check.</li>
+<li><strong>why</strong> Without a stated test of success, nobody
+decides later whether the count earned its place or should be pulled
+back to the plain menu.</li>
+<li><strong>fix</strong> Add a short success section. Suggested: over
+the first two weeks of Ken's use, every wrong count he sees is logged as
+a bug, and the target is none; Ken no longer learns about an agent's
+answer by chance. Add a fallback: if the count is wrong more than once
+in that window and the cause is not fixed, the icon stops showing a
+number and the menu stays.</li>
+</ul>
+<h3
+id="rf13-who-is-connected-leaves-out-working-agents-and-open-is-not-defined">RF13.
+"Who is connected" leaves out working agents, and "open" is not
+defined</h3>
+<ul>
+<li><strong>severity</strong> medium</li>
+<li><strong>kind</strong> defect</li>
+<li><strong>where</strong> R8 (what is open and who is connected)</li>
+<li><strong>what</strong> The menu lists only listening sessions, and
+"open documents" has no definition.</li>
+<li><strong>why</strong> The Library already treats an agent with no
+monitor but a recent command as working, and that agent is connected
+too. Leaving it out hides some of the strays the second job is meant to
+find. Without a definition of "open", the count cannot be tested.</li>
+<li><strong>fix</strong> List listening and working sessions, marked the
+way the Library marks them. Define an open document as a review page
+open in a browser right now, as the helper sees it.</li>
+</ul>
+<h3 id="rf14-two-requirements-need-numbers-to-be-testable">RF14. Two
+requirements need numbers to be testable</h3>
+<ul>
+<li><strong>severity</strong> low</li>
+<li><strong>kind</strong> defect</li>
+<li><strong>where</strong> R3 (the count is right), R18 (light when
+idle)</li>
+<li><strong>what</strong> "Within a few seconds" has no number, and R18
+does not say what state to measure against.</li>
+<li><strong>why</strong> A tester cannot fail "a few seconds". An idle
+measurement on a test folder with three reviews would pass easily and
+say nothing about Ken's machine, which holds hundreds.</li>
+<li><strong>fix</strong> Give R3 a number, for example 10 seconds to
+rise and to clear. Say R18 is measured on a copy of Ken's real state
+folder.</li>
+</ul>
+<h3 id="rf15-small-leftovers">RF15. Small leftovers</h3>
+<ul>
+<li><strong>severity</strong> low</li>
+<li><strong>kind</strong> taste</li>
+<li><strong>where</strong> Rollout ("or a flag that adds only the
+icon"), UX Notes (staff design eye line), Problem section second
+paragraph</li>
+<li><strong>what</strong> One undecided choice, one process step, and
+one claim with no evidence.</li>
+<li><strong>why</strong> The flag is left half-decided, the design
+review step is plan material, and "open documents and listening agents
+pile up across a day" is stated as observed pain when the crucible found
+no evidence for it.</li>
+<li><strong>fix</strong> Decide the flag (yes or no). Move the design
+review line to the plan. Reword the Problem paragraph to say the second
+job is Ken's request, not something the board shows.</li>
+</ul>
+<h2 id="cleanup-needed">Cleanup needed</h2>
+<p>None.</p>
+</body>
+</html>
