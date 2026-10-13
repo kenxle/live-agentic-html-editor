@@ -97,14 +97,30 @@ struct Summary: Decodable {
 // MARK: - The proof wire (AUTH.CLI_PROOF)
 
 enum Proof {
+    private static let digits = Array("0123456789abcdef".utf8)
+
+    /// Lowercase hex. A table, not String(format:): a poll encodes about a
+    /// hundred bytes, and formatting each one was a visible share of idle cost.
     static func hex<S: Sequence>(_ bytes: S) -> String where S.Element == UInt8 {
-        return bytes.map { String(format: "%02x", $0) }.joined()
+        var out: [UInt8] = []
+        out.reserveCapacity(64)
+        for byte in bytes {
+            out.append(digits[Int(byte >> 4)])
+            out.append(digits[Int(byte & 0x0f)])
+        }
+        return String(decoding: out, as: UTF8.self)
     }
 
     static func sha256Hex(_ data: Data) -> String { return hex(SHA256.hash(data: data)) }
 
+    private static var keyCache: (secret: String, key: SymmetricKey)?
+
+    /// The key for a secret, kept while the secret stays the same. Main thread only.
     static func key(_ secret: String) -> SymmetricKey {
-        return SymmetricKey(data: Data(secret.utf8))
+        if let cached = keyCache, cached.secret == secret { return cached.key }
+        let key = SymmetricKey(data: Data(secret.utf8))
+        keyCache = (secret, key)
+        return key
     }
 
     static func hmacHex(secret: String, message: String) -> String {
@@ -120,7 +136,9 @@ enum Proof {
     }
 
     static func newNonce() -> String {
-        return SymmetricKey(size: .bits128).withUnsafeBytes { hex($0) }
+        var bytes = [UInt8](repeating: 0, count: 16)
+        arc4random_buf(&bytes, bytes.count)  // the system's cryptographic random source
+        return hex(bytes)
     }
 
     static func fromHex(_ text: String) -> Data? {
@@ -528,19 +546,131 @@ enum Answer {
     case failed(String)     // can't tell, with the reason
 }
 
-final class HelperClient: NSObject, URLSessionTaskDelegate {
+/// One request to the helper over a plain socket to 127.0.0.1.
+///
+/// Why not URLSession: each URLSession task hops across several threads and
+/// queues, and that alone cost about 5 ms of processor time per poll, which put
+/// the idle app over the plan's budget. This is a few system calls.
+///
+/// It speaks HTTP/1.0, so the helper answers with the plain body and closes the
+/// connection: the answer is everything up to the end of the stream, with no
+/// chunked encoding to undo. A new connection per poll is a few system calls on
+/// loopback; a kept-open one would race the helper's own 5-second idle close.
+enum Wire {
+    enum Result {
+        case answer(status: Int, headers: [String: String], body: Data)
+        case refused, timedOut
+        case failed(String)
+    }
+
+    static let maxAnswer = 4 << 20
+
+    /// Blocking; call it off the main thread.
+    static func exchange(port: Int, request: Data, timeout: TimeInterval) -> Result {
+        let deadline = Date().addingTimeInterval(timeout)
+        let fd = socket(AF_INET, SOCK_STREAM, 0)
+        guard fd >= 0 else { return .failed("socket") }
+        defer { close(fd) }
+        var on: Int32 = 1
+        setsockopt(fd, SOL_SOCKET, SO_NOSIGPIPE, &on, socklen_t(MemoryLayout<Int32>.size))
+        _ = fcntl(fd, F_SETFL, fcntl(fd, F_GETFL) | O_NONBLOCK)
+
+        var address = sockaddr_in()
+        address.sin_len = UInt8(MemoryLayout<sockaddr_in>.size)
+        address.sin_family = sa_family_t(AF_INET)
+        address.sin_port = in_port_t(UInt16(port).bigEndian)
+        address.sin_addr.s_addr = inet_addr("127.0.0.1")
+        let connected = withUnsafePointer(to: &address) {
+            $0.withMemoryRebound(to: sockaddr.self, capacity: 1) { connect(fd, $0, socklen_t(MemoryLayout<sockaddr_in>.size)) }
+        }
+        if connected != 0 {
+            if errno == ECONNREFUSED { return .refused }
+            guard errno == EINPROGRESS else { return .failed("connect: \(errno)") }
+            guard wait(fd, Int16(POLLOUT), deadline) else { return .timedOut }
+            var error: Int32 = 0
+            var length = socklen_t(MemoryLayout<Int32>.size)
+            getsockopt(fd, SOL_SOCKET, SO_ERROR, &error, &length)
+            if error == ECONNREFUSED { return .refused }
+            if error != 0 { return .failed("connect: \(error)") }
+        }
+
+        var sent = 0
+        while sent < request.count {
+            guard wait(fd, Int16(POLLOUT), deadline) else { return .timedOut }
+            let n = request.withUnsafeBytes { send(fd, $0.baseAddress! + sent, request.count - sent, 0) }
+            if n < 0 {
+                if errno == EAGAIN || errno == EINTR { continue }
+                return .failed("send: \(errno)")
+            }
+            sent += n
+        }
+
+        var answer = Data()
+        var buffer = [UInt8](repeating: 0, count: 16384)
+        while true {
+            guard wait(fd, Int16(POLLIN), deadline) else { return .timedOut }
+            let n = recv(fd, &buffer, buffer.count, 0)
+            if n == 0 { break }
+            if n < 0 {
+                if errno == EAGAIN || errno == EINTR { continue }
+                return .failed("recv: \(errno)")
+            }
+            answer.append(buffer, count: n)
+            if answer.count > maxAnswer { return .failed("answer too large") }
+        }
+        return parse(answer)
+    }
+
+    private static func wait(_ fd: Int32, _ events: Int16, _ deadline: Date) -> Bool {
+        while true {
+            let left = Int32(max(0, deadline.timeIntervalSinceNow * 1000))
+            if left <= 0 { return false }
+            var entry = pollfd(fd: fd, events: events, revents: 0)
+            let ready = poll(&entry, 1, left)
+            if ready > 0 { return true }
+            if ready == 0 { return false }
+            if errno != EINTR { return true }  // let the next call report the error
+        }
+    }
+
+    /// Status line, headers (names lowercased), and the body as sent.
+    static func parse(_ answer: Data) -> Result {
+        guard let split = answer.range(of: Data("\r\n\r\n".utf8)),
+              let head = String(data: answer[..<split.lowerBound], encoding: .utf8) else {
+            return .failed("no header")
+        }
+        let lines = head.components(separatedBy: "\r\n")
+        let statusParts = lines[0].split(separator: " ")
+        guard statusParts.count >= 2, statusParts[0].hasPrefix("HTTP/1."), let status = Int(statusParts[1]) else {
+            return .failed("bad status line")
+        }
+        var headers: [String: String] = [:]
+        for line in lines.dropFirst() {
+            guard let colon = line.firstIndex(of: ":") else { continue }
+            let name = line[..<colon].lowercased()
+            headers[name] = line[line.index(after: colon)...].trimmingCharacters(in: .whitespaces)
+        }
+        if headers["transfer-encoding"] != nil { return .failed("chunked answer to an HTTP/1.0 request") }
+        var body = Data(answer[split.upperBound...])
+        if let declared = headers["content-length"].flatMap(Int.init) {
+            guard declared <= body.count else { return .failed("short answer") }
+            body = body.prefix(declared)
+        }
+        return .answer(status: status, headers: headers, body: body)
+    }
+}
+
+final class HelperClient {
     let stateDir: URL
     let log: Log
     private var secret: String?
-    private lazy var session: URLSession = {
-        let config = URLSessionConfiguration.ephemeral
-        config.timeoutIntervalForRequest = requestTimeout
-        config.timeoutIntervalForResource = requestTimeout
-        config.connectionProxyDictionary = [:]
-        config.httpCookieStorage = nil
-        config.urlCache = nil
-        return URLSession(configuration: config, delegate: self, delegateQueue: OperationQueue.main)
-    }()
+    // service.json lists every review with its token, so on a busy machine it
+    // runs to hundreds of KB. It is parsed again only when its size, modified
+    // time or inode change; a stat per poll is all an unchanged file costs.
+    private struct Stamp: Equatable { let size: Int64; let modified: Int; let inode: UInt64 }
+    private var serviceStamp: Stamp?
+    private var serviceCache: ServiceInfo?
+    private let queue = DispatchQueue(label: "lahe.menubar.wire")
 
     init(stateDir: URL, log: Log) {
         self.stateDir = stateDir
@@ -548,11 +678,24 @@ final class HelperClient: NSObject, URLSessionTaskDelegate {
     }
 
     func service() -> ServiceInfo? {
-        guard let data = try? Data(contentsOf: stateDir.appendingPathComponent("service.json")),
+        let url = stateDir.appendingPathComponent("service.json")
+        var info = stat()
+        guard stat(url.path, &info) == 0 else {
+            serviceStamp = nil
+            serviceCache = nil
+            return nil
+        }
+        let modified = Int(info.st_mtimespec.tv_sec) * 1_000_000_000 + Int(info.st_mtimespec.tv_nsec)
+        let stamp = Stamp(size: Int64(info.st_size), modified: modified, inode: UInt64(info.st_ino))
+        if stamp == serviceStamp { return serviceCache }
+        serviceStamp = stamp
+        serviceCache = nil
+        guard let data = try? Data(contentsOf: url),
               let json = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
               let port = json["port"] as? Int, port > 0, port < 65536 else { return nil }
         let pages = (json["pages"] as? [String: Any])?["port"] as? Int
-        return ServiceInfo(port: port, pagesPort: pages)
+        serviceCache = ServiceInfo(port: port, pagesPort: pages)
+        return serviceCache
     }
 
     private func readSecret() -> String? {
@@ -562,15 +705,9 @@ final class HelperClient: NSObject, URLSessionTaskDelegate {
         return trimmed.isEmpty ? nil : trimmed
     }
 
-    /// Never follow a redirect: an answer from anywhere but the helper is dropped.
-    func urlSession(_ session: URLSession, task: URLSessionTask, willPerformHTTPRedirection response: HTTPURLResponse,
-                    newRequest request: URLRequest, completionHandler: @escaping (URLRequest?) -> Void) {
-        completionHandler(nil)
-    }
-
+    /// Sign and send one request; `completion` runs on the main thread.
     func send(method: String, path: String, body: Data, completion: @escaping (Answer) -> Void) {
-        guard let service = service(),
-              let url = URL(string: "http://127.0.0.1:\(service.port)" + path) else {
+        guard let service = service() else {
             completion(.refused)
             return
         }
@@ -582,45 +719,43 @@ final class HelperClient: NSObject, URLSessionTaskDelegate {
         }
         let ts = String(Int64(Date().timeIntervalSince1970 * 1000))
         let nonce = Proof.newNonce()
-        var request = URLRequest(url: url)
-        request.httpMethod = method
-        request.httpShouldHandleCookies = false
-        request.setValue(ts, forHTTPHeaderField: "x-lahe-proof-ts")
-        request.setValue(nonce, forHTTPHeaderField: "x-lahe-proof-nonce")
-        request.setValue(Proof.hmacHex(secret: key, message: Proof.requestString(method: method, path: path, ts: ts, nonce: nonce, body: body)),
-                         forHTTPHeaderField: "x-lahe-proof")
-        if method == "POST" {
-            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-            request.httpBody = body
+        let proof = Proof.hmacHex(secret: key, message: Proof.requestString(method: method, path: path, ts: ts, nonce: nonce, body: body))
+        var head = "\(method) \(path) HTTP/1.0\r\n"
+        head += "Host: 127.0.0.1:\(service.port)\r\n"
+        head += "x-lahe-proof-ts: \(ts)\r\nx-lahe-proof-nonce: \(nonce)\r\nx-lahe-proof: \(proof)\r\n"
+        if method == "POST" { head += "Content-Type: application/json\r\nContent-Length: \(body.count)\r\n" }
+        let request = Data((head + "\r\n").utf8) + body
+
+        queue.async { [weak self] in
+            let result = Wire.exchange(port: service.port, request: request, timeout: requestTimeout)
+            DispatchQueue.main.async {
+                guard let self = self else { return }
+                completion(self.check(result, key: key, nonce: nonce))
+            }
         }
-        session.dataTask(with: request) { [weak self] data, response, error in
-            guard let self = self else { return }
-            if let error = error as? URLError {
-                if error.code == .cannotConnectToHost || error.code == .cannotFindHost {
-                    completion(.refused)
-                } else {
-                    let reason = error.code == .timedOut ? "Lahe did not answer in time" : "Lahe's answer failed"
-                    self.log.write("net:\(error.code.rawValue)", reason + ": " + error.localizedDescription)
-                    completion(.failed(reason))
-                }
-                return
-            }
-            guard let http = response as? HTTPURLResponse else {
-                completion(.failed("Lahe's answer failed"))
-                return
-            }
-            let bytes = data ?? Data()
-            let header = http.value(forHTTPHeaderField: "x-lahe-proof-reply")
-            guard Proof.replyChecks(secret: key, nonce: nonce, status: http.statusCode, body: bytes, header: header) else {
+    }
+
+    /// Drop anything the helper did not sign for this request.
+    private func check(_ result: Wire.Result, key: String, nonce: String) -> Answer {
+        switch result {
+        case .refused:
+            return .refused
+        case .timedOut:
+            log.write("net:timeout", "Lahe did not answer in time")
+            return .failed("Lahe did not answer in time")
+        case .failed(let why):
+            log.write("net:" + why, "Lahe's answer failed: " + why)
+            return .failed("Lahe's answer failed")
+        case .answer(let status, let headers, let body):
+            guard Proof.replyChecks(secret: key, nonce: nonce, status: status, body: body, header: headers["x-lahe-proof-reply"]) else {
                 // The key may have changed under us; read it again for the next poll.
-                self.secret = nil
-                self.log.write("signature", "dropped an answer whose x-lahe-proof-reply did not check (status \(http.statusCode))")
-                completion(.failed("An answer on Lahe's port was not signed by Lahe"))
-                return
+                secret = nil
+                log.write("signature", "dropped an answer whose x-lahe-proof-reply did not check (status \(status))")
+                return .failed("An answer on Lahe's port was not signed by Lahe")
             }
-            if http.statusCode == 401 { self.secret = nil }
-            completion(.verified(status: http.statusCode, body: bytes))
-        }.resume()
+            if status == 401 { secret = nil }
+            return .verified(status: status, body: body)
+        }
     }
 }
 
@@ -634,6 +769,7 @@ final class Controller {
     private(set) var libraryURL: String?
     private var generation = 0      // bumped by a wake; older answers are ignored
     private var inFlight = false
+    private var lastBody: Data?     // the last summary answer, to skip an unchanged one
     private var timer: Timer?
     var onChange: (() -> Void)?
 
@@ -657,6 +793,7 @@ final class Controller {
             self?.woke()
         }
         let timer = Timer(timeInterval: pollSeconds, repeats: true) { [weak self] _ in self?.poll() }
+        timer.tolerance = 1  // lets macOS fold this wakeup in with others
         RunLoop.main.add(timer, forMode: .common)  // keeps firing while the menu is open
         self.timer = timer
         poll()
@@ -666,6 +803,7 @@ final class Controller {
     func woke() {
         generation += 1
         inFlight = false
+        lastBody = nil
         set(.cantTell("The Mac just woke"))
         poll()
     }
@@ -677,6 +815,8 @@ final class Controller {
         client.send(method: "GET", path: "/lahe/v1/summary?v=\(builtSummaryVersion)", body: Data()) { [weak self] answer in
             guard let self = self, asked == self.generation else { return }
             self.inFlight = false
+            // The same bytes as the last summary: nothing to decode, draw or rebuild.
+            if case .verified(200, let body) = answer, case .summary = self.status, body == self.lastBody { return }
             self.set(self.status(for: answer))
         }
     }
@@ -690,6 +830,7 @@ final class Controller {
         case .verified(let code, let body):
             if code == 200, let summary = Summary.decode(body) {
                 libraryURL = summary.libraryUrl
+                lastBody = body
                 return .summary(summary)
             }
             if code == 200 {
@@ -839,6 +980,7 @@ final class MenuBarApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
     let menu = NSMenu()
     private var shownLook: Look?
     private var shownRows: [Row] = []
+    private var menuOpen = false
 
     init(controller: Controller) { self.controller = controller }
 
@@ -850,12 +992,21 @@ final class MenuBarApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
         statusItem = item
         controller.onChange = { [weak self] in self?.redraw() }
         redraw()
+        rebuildMenu()  // an empty status menu may not open at all, so start with rows
         controller.start()
     }
 
-    func menuWillOpen(_ menu: NSMenu) { controller.poll() }
+    // The menu is built just before it opens and kept current while it is
+    // open. A closed menu costs nothing per poll, which matters because the
+    // "last heard" times change on almost every answer.
+    func menuNeedsUpdate(_ menu: NSMenu) { rebuildMenu() }
+    func menuWillOpen(_ menu: NSMenu) {
+        menuOpen = true
+        controller.poll()
+    }
+    func menuDidClose(_ menu: NSMenu) { menuOpen = false }
 
-    /// Redraws only what changed, so an idle poll costs no drawing.
+    /// Redraws the icon only when its look changes, and the menu only while open.
     func redraw() {
         let current = look(of: controller.status)
         if current != shownLook {
@@ -863,6 +1014,10 @@ final class MenuBarApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
             statusItem?.button?.image = iconImage(current)
             statusItem?.button?.setAccessibilityLabel(accessibilityText(current))
         }
+        if menuOpen { rebuildMenu() }
+    }
+
+    private func rebuildMenu() {
         let rows = controller.rows()
         if rows == shownRows { return }
         shownRows = rows
@@ -1173,6 +1328,18 @@ func selfTest(_ args: [String]) -> Int32 {
     } else {
         t.check(false, "proof vectors not found; pass --vectors <proof_vectors.json>")
     }
+    // The answer parser: the body exactly as sent, cut at a declared length.
+    func parsed(_ text: String) -> (Int, String?, String)? {
+        guard case .answer(let status, let headers, let body) = Wire.parse(Data(text.utf8)) else { return nil }
+        return (status, headers["x-lahe-proof-reply"], String(data: body, encoding: .utf8) ?? "")
+    }
+    let plainAnswer = parsed("HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nX-Lahe-Proof-Reply: ab\r\n\r\n{\"a\": 1}\n")
+    t.check(plainAnswer?.0 == 200 && plainAnswer?.1 == "ab" && plainAnswer?.2 == "{\"a\": 1}\n", "an answer read to its end, header names in any case")
+    t.check(parsed("HTTP/1.0 409 Conflict\r\nContent-Length: 2\r\n\r\n{}extra")?.2 == "{}", "a declared length cuts the body")
+    t.check(parsed("HTTP/1.1 200 OK\r\nContent-Length: 9\r\n\r\n{}") == nil, "a short body is refused")
+    t.check(parsed("HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n2\r\n{}\r\n0\r\n\r\n") == nil, "a chunked answer is refused")
+    t.check(parsed("garbage") == nil && parsed("SSH-2.0\r\n\r\n") == nil, "a non-HTTP answer is refused")
+
     let nonce = Proof.newNonce()
     t.check(nonce.count == 32 && Proof.fromHex(nonce) != nil, "a nonce is 32 lowercase hex characters")
 

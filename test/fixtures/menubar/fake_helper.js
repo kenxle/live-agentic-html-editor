@@ -3,7 +3,7 @@
 // app without a real helper. Node core modules only.
 //
 //   node test/fixtures/menubar/fake_helper.js --state-dir <dir>
-//        [--fixture summary.json] [--mode ok] [--port 0] [--pages-port 1483] [--no-stdin]
+//        [--fixture summary.json] [--mode ok] [--port 0] [--pages-port 1483] [--no-stdin] [--tick]
 //
 // It speaks the wire in docs/CONTRACTS.md, "The summary routes and the
 // signed-request wire (menu bar)": it checks every request's proof, signs every
@@ -11,6 +11,10 @@
 // code before it listens. It writes cli-secret (when missing) and service.json
 // into the state folder, the two files the app reads, then prints one line:
 // {"ready": true, "port": ..., "pages_port": ..., "pid": ...}.
+//
+// --tick stamps generated_at and each connected session's last_heard_at with
+// the time of each answer, the way a real helper's answer changes on every
+// poll even when nothing a person would notice has.
 //
 // It reads cli-secret again on every request, the way a helper whose secret
 // was replaced would answer with the new key.
@@ -131,7 +135,9 @@ async function start(options) {
 
   function send(res, nonce, status, body, signature) {
     const bytes = Buffer.from(body, "utf8");
-    const headers = { "Content-Type": "application/json", "Content-Length": bytes.length };
+    // No Content-Length, as the real helper writes it (respondSigned in
+    // src/service/index.js): an HTTP/1.1 client gets a chunked body.
+    const headers = { "Content-Type": "application/json", "Cache-Control": "no-store" };
     if (signature === undefined) headers["x-lahe-proof-reply"] = hmacHex(secret(), replyString(nonce, status, bytes));
     else if (signature !== null) headers["x-lahe-proof-reply"] = signature;
     res.writeHead(status, headers);
@@ -185,7 +191,7 @@ async function start(options) {
       if (url.searchParams.get("v") !== String(SUMMARY_VERSION)) {
         return refuse(res, nonce, 409, "SUMMARY_VERSION", "this helper answers summary_version " + SUMMARY_VERSION);
       }
-      return send(res, nonce, 200, fixture.toString("utf8"));
+      return send(res, nonce, 200, options.tick ? ticked() : fixture.toString("utf8"));
     }
     if (req.method === "POST" && url.pathname === "/lahe/v1/summary/open") {
       let asked = null;
@@ -209,6 +215,17 @@ async function start(options) {
     req.on("data", (chunk) => chunks.push(chunk));
     req.on("end", () => handle(req, res, Buffer.concat(chunks)));
   });
+
+  function ticked() {
+    const summary = JSON.parse(fixture.toString("utf8"));
+    const now = Date.now();
+    summary.generated_at = new Date(now).toISOString();
+    summary.sessions.connected.items.forEach((item) => {
+      // Heard at the top of the minute, so "N sec ago" moves on every poll.
+      item.last_heard_at = new Date(now - (now % 60000)).toISOString();
+    });
+    return JSON.stringify(summary, null, 2) + "\n";
+  }
 
   function listen() {
     return new Promise((resolve, reject) => {
@@ -276,7 +293,8 @@ async function main(argv) {
     fixture: argValue(argv, "--fixture", "summary.json"),
     mode: argValue(argv, "--mode", "ok"),
     port: Number(argValue(argv, "--port", "0")),
-    pagesPort: Number(argValue(argv, "--pages-port", "1483"))
+    pagesPort: Number(argValue(argv, "--pages-port", "1483")),
+    tick: argv.includes("--tick")
   });
   const say = (object) => process.stdout.write(JSON.stringify(object) + "\n");
   say({ ready: true, port: helper.port(), pages_port: helper.pagesPort, pid: process.pid });
