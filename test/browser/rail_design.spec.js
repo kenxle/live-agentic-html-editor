@@ -27,7 +27,10 @@
 
 "use strict";
 
-const { test, expect, pollPage, startService, SERVICE_ENTRY } = require("../helpers");
+const fs = require("node:fs");
+const path = require("node:path");
+
+const { test, expect, pollPage, pollUntil, startService, SERVICE_ENTRY } = require("../helpers");
 const { startAppServer } = require("../fixtures/app/server");
 
 const REVIEW = "rail-design-review";
@@ -132,10 +135,11 @@ test.describe("the rail as a shipping surface", () => {
       const styled = await page.evaluate(() => {
         const pane = window.__lahe.rail.tabBody("active");
         const foot = pane.querySelector(".lahe-rail-foot");
-        const keys = pane.querySelector(".lahe-rail-keys");
+        // The keycaps live in the shortcuts panel the head's menu opens.
+        const keys = pane.getRootNode().querySelector(".keyspanel kbd");
         const note = pane.querySelector(".lahe-rail-note");
         const acts = pane.querySelector(".cardacts");
-        const del = pane.querySelector('[data-lahe-act="delete"]');
+        const del = pane.querySelector('.card [data-lahe-act="delete"]');
         const cs = (el) => (el ? window.getComputedStyle(el) : null);
         const keyStyle = cs(keys);
         const actStyle = cs(del);
@@ -152,8 +156,8 @@ test.describe("the rail as a shipping surface", () => {
           keyFontSize: keyStyle ? keyStyle.fontSize : null,
           // ...and they are behind a disclosure rather than being a permanent
           // wall above the footer's own hints.
-          hintsBehindDisclosure: !!pane.querySelector("details.lahe-rail-more .lahe-rail-hints"),
-          hintsHidden: !!pane.querySelector("details.lahe-rail-more:not([open])"),
+          // The shortcuts moved behind the head's menu, so the pane has none.
+          paneShortcuts: !!pane.querySelector(".lahe-rail-more, .lahe-rail-hints"),
           // The note box is a surface, not a form control (F10).
           noteResize: (() => {
             const ta = foot ? foot.querySelector("textarea") : null;
@@ -170,6 +174,10 @@ test.describe("the rail as a shipping surface", () => {
           actsDisplay: rowActs && actStyle ? window.getComputedStyle(acts).display : null,
           actPadding: actStyle ? actStyle.paddingLeft : null,
           noteToActs: noteRect && delRect ? Math.round(delRect.top - noteRect.bottom) : null,
+          // Delete is a small x at the top right of the comment (Ken).
+          delText: del ? del.textContent : null,
+          delLabel: del ? del.getAttribute("aria-label") : null,
+          delBesideNote: !!(noteRect && delRect && delRect.top < noteRect.bottom && delRect.left > noteRect.left + noteRect.width / 2),
           labels: Array.from(pane.querySelectorAll(".cardacts button")).map((b) => b.textContent)
         };
       });
@@ -178,16 +186,15 @@ test.describe("the rail as a shipping surface", () => {
       expect(styled.hasKeycap).toBe(true);
       expect(styled.keyBorder, "the keycap's bottom-weighted border").toBe("2px");
       expect(parseFloat(styled.keyFontSize)).toBeLessThan(13);
-      expect(styled.hintsBehindDisclosure, "one hint system: the keycaps, behind a disclosure").toBe(true);
-      expect(styled.hintsHidden, "and closed, so it is not a wall in an empty rail").toBe(true);
+      expect(styled.paneShortcuts, "no shortcuts list in the pane: the menu carries them").toBe(false);
       expect(styled.noteResize, "no native resize grabber on the note box").toBe("none");
       expect(styled.noteWhiteSpace).toBe("pre-wrap");
       expect(styled.noteEditable, "the reviewer's own words are the input").toBe(true);
       expect(styled.noteCursor, "and they are drawn as something you type in").toBe("text");
-      expect(styled.actsDisplay).toBe("flex");
-      expect(styled.labels, "one action on the card: Delete. Rewording is the note itself").toEqual(["Delete"]);
-      expect(styled.noteToActs, "the action row is clear of the reviewer's sentence").toBeGreaterThanOrEqual(2);
-      expect(parseFloat(styled.actPadding), "and it is drawn as a button").toBeGreaterThan(0);
+      expect(styled.labels, "no word buttons under the comment: Delete is the x beside it").toEqual([]);
+      expect(styled.delText).toBe("\u00d7");
+      expect(styled.delLabel, "and it still says what it does to a screen reader").toBe("Delete this comment");
+      expect(styled.delBesideNote, "at the right of the comment, not under it").toBe(true);
     } finally {
       await helper.stop().catch(() => {});
       await app.close();
@@ -331,6 +338,102 @@ test.describe("the rail as a shipping surface", () => {
 
   // --- a long file path stays inside the card --------------------------------
 
+  // --- Delete goes once an agent answers; Send is on a draft with words ------
+
+  test("an answered card offers no Delete, and a draft card with words offers Send, which sends it", async ({ page }) => {
+    const { app, helper, token } = await startBoth();
+    try {
+      await bootedPage(page, app, helper, token);
+      await commentOn(page, REGION.lede, "Pick one number and use it twice.");
+      const asked = (await page.evaluate(() => window.__lahe.items())).filter((i) => i.state === "ready")[0];
+
+      const acts = (id) =>
+        page.evaluate((cardId) => {
+          const node = window.__lahe.rail.cardNode(cardId);
+          return Array.from(node.querySelectorAll("[data-lahe-act]"))
+            .filter((b) => b.getClientRects().length > 0)
+            .map((b) => b.getAttribute("data-lahe-act"));
+        }, id);
+
+      expect(await acts(asked.id), "a sent, unanswered comment can still be deleted").toContain("delete");
+      // The real agent path: one reply line, folded by the helper, delivered by
+      // the poll loop, which is also what tells the Active row it was answered.
+      const reviewDir = path.join(helper.stateDir, "reviews", REVIEW);
+      await pollUntil(() => {
+        try {
+          const projection = JSON.parse(fs.readFileSync(path.join(reviewDir, "review.json"), "utf8"));
+          return projection.pages.some((pg) => pg.items.some((it) => it.id === asked.id)) || null;
+        } catch (err) {
+          return null;
+        }
+      }, { message: "the comment to reach the helper" });
+      fs.appendFileSync(
+        path.join(reviewDir, "replies-claude.jsonl"),
+        JSON.stringify({ item: asked.id, rev: asked.rev, status: "question", agent: "claude", text: "Which number?" }) + "\n"
+      );
+      await pollPage(page, (id) => window.__lahe.itemById(id).reply !== null, asked.id, {
+        message: "the question to fold onto the record through the poll loop"
+      });
+      expect(await acts(asked.id), "an answered comment has no Delete over the answer").not.toContain("delete");
+
+      await openDraftOn(page, REGION.rest, "Half written, not submitted yet.");
+      const draft = (await page.evaluate(() => window.__lahe.items())).filter((i) => i.state === "draft")[0];
+      expect(await acts(draft.id), "a draft with words offers Send on its card").toContain("send");
+
+      await page.evaluate((id) => {
+        window.__lahe.rail.cardNode(id).querySelector('[data-lahe-act="send"]').click();
+      }, draft.id);
+      await pollPage(page, (id) => window.__lahe.items().some((i) => i.id === id && i.state === "ready"), draft.id, {
+        message: "Send on the card to send the draft"
+      });
+      expect(await acts(draft.id), "and once sent, the card's Send is gone").not.toContain("send");
+    } finally {
+      await helper.stop().catch(() => {});
+      await app.close();
+    }
+  });
+
+  // --- the rail and the pill morph into each other, 0.3 seconds -------------
+
+  test("closing shrinks a copy of the rail into the pill, opening grows the rail out of it, and state changes at once", async ({
+    page
+  }) => {
+    const { app, helper, token } = await startBoth();
+    try {
+      await bootedPage(page, app, helper, token);
+      const closing = await page.evaluate(() => {
+        const root = window.__lahe.rail.tabBody("active").getRootNode();
+        window.__lahe.rail.collapse(true);
+        const ghost = root.querySelector("[data-lahe-ghost]");
+        return {
+          railHidden: root.querySelector(".rail:not([data-lahe-ghost])").hidden,
+          ghost: !!ghost,
+          ghostAnimated: !!ghost && ghost.getAnimations().length > 0,
+          duration: ghost ? ghost.getAnimations()[0].effect.getTiming().duration : null
+        };
+      });
+      expect(closing.railHidden, "the rail is put away the moment collapse returns").toBe(true);
+      expect(closing.ghost, "a copy of it is what shrinks").toBe(true);
+      expect(closing.ghostAnimated).toBe(true);
+      expect(closing.duration).toBe(300);
+      await pollPage(page, () => !window.__lahe.rail.tabBody("active").getRootNode().querySelector("[data-lahe-ghost]"), undefined, {
+        message: "the copy to be gone once the morph ends"
+      });
+
+      const opening = await page.evaluate(() => {
+        const root = window.__lahe.rail.tabBody("active").getRootNode();
+        window.__lahe.rail.collapse(false);
+        const rail = root.querySelector(".rail");
+        return { shown: !rail.hidden, animated: rail.getAnimations().length > 0 };
+      });
+      expect(opening.shown, "the rail is back the moment expand returns").toBe(true);
+      expect(opening.animated, "and it grows out of the pill").toBe(true);
+    } finally {
+      await helper.stop().catch(() => {});
+      await app.close();
+    }
+  });
+
   test("a very long reply file path wraps inside the card instead of running out of it", async ({ page }) => {
     const { app, helper, token } = await startBoth();
     const LONG = "app/views/dashboard/components/roster/weekly_digest/_client_activity_summary_row.html.erb";
@@ -352,6 +455,8 @@ test.describe("the rail as a shipping surface", () => {
 
       const box = await page.evaluate((id) => {
         const node = window.__lahe.rail.cardNode(id);
+        // The list sits under the agent's name and shows on hover or focus.
+        node.querySelector(".agent .turn__who--files").focus();
         const files = node.querySelector(".agent__files");
         const cardRect = node.getBoundingClientRect();
         const filesRect = files.getBoundingClientRect();
@@ -411,6 +516,11 @@ test.describe("the rail as a shipping surface", () => {
 
       const card = await page.evaluate((id) => {
         const node = window.__lahe.rail.cardNode(id);
+        // The files sit under the agent's name and show on hover or focus.
+        // Before that they are not drawn at all; once shown, once each.
+        const who = node.querySelector(".agent .turn__who--files");
+        const filesHiddenAtRest = who && window.getComputedStyle(node.querySelector(".agent__files")).display === "none";
+        if (who) who.focus();
         // Rendered at all, ancestors included. A computed display of its own
         // says nothing about a button inside a hidden row.
         const visible = (el) => !!el && el.getClientRects().length > 0;
@@ -434,6 +544,8 @@ test.describe("the rail as a shipping surface", () => {
 
         return {
           text: visibleText(node),
+          filesHiddenAtRest: filesHiddenAtRest,
+          filesNamed: who ? who.getAttribute("aria-describedby") === node.querySelector(".agent__files").id : false,
           // The Active tab's row is still ATTACHED (withdrawing a node from a
           // card the reviewer may be typing in is the rail's own law), and it is
           // not DRAWN on a card that moved to Done.
@@ -455,7 +567,9 @@ test.describe("the rail as a shipping surface", () => {
       const times = (haystack, needle) => haystack.split(needle).length - 1;
       expect(times(card.text, NOTE), "the reviewer's own words, once").toBe(1);
       expect(times(card.text, SAID), "what the agent said, once").toBe(1);
-      expect(times(card.text, FILE), "the file it touched, once").toBe(1);
+      expect(times(card.text, FILE), "the file it touched, once, on hover").toBe(1);
+      expect(card.filesHiddenAtRest, "and the file list is out of the way until then").toBe(true);
+      expect(card.filesNamed, "a screen reader hears the list from the name").toBe(true);
 
       expect(card.activeRowAttached, "the row is never withdrawn from a card").toBe(true);
       expect(card.activeRowVisible, "and it is not drawn on a card in Done").toBe(false);
@@ -472,7 +586,7 @@ test.describe("the rail as a shipping surface", () => {
 
   // --- F5b: the same defect on a handled HAND EDIT ---------------------------
   //
-  // A handled edit card carries TWO rows, the Edits tab's and the Done tab's,
+  // A handled edit card carries TWO rows, the hand-edit row and the Done tab's,
   // and both used to print the change summary: once at the top of the card,
   // once under the before-and-after, with the diff itself saying it a third
   // time in between. The two things the reviewer can do about it were at
@@ -585,7 +699,7 @@ test.describe("the rail as a shipping surface", () => {
   // --- F5c: the relocation on a COLD LOAD, not only after a remount ----------
   //
   // Reopen moves into the Edits row's footer only if that row is on the card
-  // when the Done tab paints. The Done tab mounted BEFORE the Edits tab existed,
+  // when the Done tab paints. The Done tab mounted BEFORE the hand-edit rows existed,
   // and nothing refreshed it afterwards, so on an ordinary page load with a
   // handled hand edit already in storage the button stayed at the top of the
   // card. Every test that saw the relocation had remounted the rail first, which
@@ -653,7 +767,7 @@ test.describe("the rail as a shipping surface", () => {
       await pollPage(page, (id) => !!window.__lahe.rail.getCard(id), item.id, {
         message: "the hand edit to get its row"
       });
-      await page.evaluate(() => window.__lahe.rail.selectTab("edits"));
+      await page.evaluate(() => window.__lahe.rail.selectTab("active"));
 
       // The reviewer's own gesture: the Undo button on the card.
       await page.evaluate((id) => {

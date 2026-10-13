@@ -691,16 +691,17 @@ test("a refusal badges Active too: it is unfinished work, and its card sits with
   assert.equal(rail.tabNewCount(overlay.TAB.DONE), 0);
 });
 
-test("a question on a hand edit badges the Edits tab, which is where that card lives", () => {
+test("a question on a hand edit badges Active, which is where that card lives", () => {
   const { store, rail, done } = setup();
   const item = store.write(REVIEW, readyItem({ kind: record.KIND.EDIT, before: "a", after: "b" }));
   rail.upsertCard(item);
+  // Put away, so no tab is being read as the answer lands.
+  rail.collapse(true);
 
   done.applyReplies([questionFoldEvent(item)]);
 
-  assert.equal(rail.getCard(item.id).pane, overlay.TAB.EDITS);
-  assert.equal(rail.tabNewCount(overlay.TAB.EDITS), 1);
-  assert.equal(rail.tabNewCount(overlay.TAB.ACTIVE), 0);
+  assert.equal(rail.getCard(item.id).pane, overlay.TAB.ACTIVE);
+  assert.equal(rail.tabNewCount(overlay.TAB.ACTIVE), 1);
   assert.equal(rail.tabNewCount(overlay.TAB.DONE), 0);
 });
 
@@ -723,7 +724,7 @@ test("opening Active clears Active's badge and leaves Done's standing", () => {
   rail.upsertCard(asking);
   rail.upsertCard(finished);
   // Neither answer lands on the tab the reviewer is looking at.
-  rail.selectTab(overlay.TAB.EDITS);
+  rail.collapse(true); // put away: no tab is being read as the answers land
 
   done.applyReplies([questionFoldEvent(asking), flaggedFoldEvent(finished)]);
   assert.equal(rail.tabNewCount(overlay.TAB.ACTIVE), 1);
@@ -743,7 +744,7 @@ test("a card that moves tabs while unseen carries its badge with it", () => {
   const { store, rail, done } = setup();
   const item = store.write(REVIEW, readyItem());
   rail.upsertCard(item);
-  rail.selectTab(overlay.TAB.EDITS);
+  rail.collapse(true); // put away: no tab is being read as the answers land
 
   // The agent asks. The card is in Active, and so is the badge.
   done.applyReplies([questionFoldEvent(item)]);
@@ -902,7 +903,7 @@ test("the fresh set is per tab: reading Active points out Active's cards, not Do
   const finished = store.write(REVIEW, readyItem({ note: "shorten the lede" }));
   rail.upsertCard(asking);
   rail.upsertCard(finished);
-  rail.selectTab(overlay.TAB.EDITS);
+  rail.collapse(true); // put away: no tab is being read as the answers land
 
   done.applyReplies([questionFoldEvent(asking), flaggedFoldEvent(finished)]);
 
@@ -948,7 +949,7 @@ test("the jewel is the total across tabs, so a question in Active counts on the 
   const finished = store.write(REVIEW, readyItem({ note: "shorten the lede" }));
   rail.upsertCard(asking);
   rail.upsertCard(finished);
-  rail.selectTab(overlay.TAB.EDITS);
+  rail.collapse(true); // put away: no tab is being read as the answers land
 
   done.applyReplies([questionFoldEvent(asking), flaggedFoldEvent(finished)]);
   assert.equal(rail.tabNewCount(overlay.TAB.ACTIVE), 1);

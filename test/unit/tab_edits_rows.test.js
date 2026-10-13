@@ -90,3 +90,27 @@ test("taking a format off is said in words, because the reviewer never typed the
     "removed <em>, took the italic off"
   );
 });
+
+// Ken, on the rail mockup: "there is crossed out text and new text but in this
+// view they are exactly the same." The card cut both to three lines, and the
+// change sat at the end of a long paragraph. focusPair keeps the words beside
+// the change and drops the long shared stretches.
+test("focusPair: a change at the end of a long paragraph shows the change, not the opening", () => {
+  const before =
+    "The two people to reach before lunch are Devon, who has missed two easy runs in a row, and Priya, who asked a real question and got a thumbs up instead of an answer.";
+  const got = tabEdits.focusPair(before, before + " Call Devon first.");
+  assert.equal(got.after.endsWith("instead of an answer. Call Devon first."), true);
+  assert.equal(got.before.startsWith("..."), true, "the shared opening is cut, and says so");
+  assert.notEqual(got.before, got.after);
+});
+
+test("focusPair: short text is left whole, and a change in the middle keeps both ends trimmed", () => {
+  assert.deepEqual(tabEdits.focusPair("Short one.", "Short two."), { before: "Short one.", after: "Short two." });
+  const long = (w) =>
+    "A long opening sentence that keeps on going for a while before the word " +
+    w +
+    " appears and then the sentence carries on for many more words after it until the end.";
+  const got = tabEdits.focusPair(long("cat"), long("dog"));
+  assert.match(got.before, /^\.\.\. .*cat.* \.\.\.$/);
+  assert.match(got.after, /^\.\.\. .*dog.* \.\.\.$/);
+});

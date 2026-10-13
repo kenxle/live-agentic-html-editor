@@ -70,6 +70,8 @@
       keys: "Cmd-Shift-C",
       when: "nothing selected",
       hint: "Press Cmd-Shift-C with nothing selected, then click any element to comment on the whole thing.",
+      panelKeys: "Cmd-Shift-C (no selection)",
+      panelHint: "As you hover over elements, they will be outlined. Click an element to comment on the element. Useful for images and other hard to highlight elements.",
       passThrough: false,
       preventDefault: true,
       requirement: "R17"
@@ -79,6 +81,7 @@
       keys: "click",
       when: "element-pick mode is open",
       hint: "Click the outlined element to comment on it. Esc cancels.",
+      inPanel: false,
       passThrough: false,
       preventDefault: true,
       requirement: "R17"
@@ -88,6 +91,7 @@
       keys: "Cmd-Shift-E",
       when: "the cursor or a selection is in a block",
       hint: "Press Cmd-Shift-E to edit the block you are in. Just that block.",
+      panelHint: "Select text and press Cmd-Shift-E to edit it by hand.",
       passThrough: false,
       preventDefault: true,
       requirement: "R24"
@@ -97,6 +101,8 @@
       keys: "Cmd-Shift-E",
       when: "the cursor is in no block",
       hint: "Click + Write here to add text. Esc to finish.",
+      panelKeys: "Cmd-Shift-E (no selection)",
+      panelHint: "As you hover, editable areas will be outlined. Click an area to hand edit it. Esc to finish.",
       passThrough: false,
       preventDefault: true,
       requirement: "R1"
@@ -106,6 +112,7 @@
       keys: "Cmd-Enter",
       when: "a comment box is focused",
       hint: "Cmd-Enter when done with this comment.",
+      panelHint: "Submit your comment or complete your edit.",
       passThrough: false,
       preventDefault: true,
       requirement: "R7"
@@ -115,6 +122,7 @@
       keys: "Cmd-Enter, Esc, or a click outside",
       when: "a block is in edit state",
       hint: "Cmd-Enter, Esc, or click outside to finish the edit and give the page back.",
+      inPanel: false,
       passThrough: false,
       preventDefault: true,
       requirement: "R24"
@@ -124,6 +132,7 @@
       keys: "Esc",
       when: "element-pick mode is open, or a comment box is focused",
       hint: "Esc closes the comment box or cancels picking. Your draft is kept.",
+      panelHint: "Esc closes the comment box or cancels picking. Half-written drafts are kept in the chat bar.",
       passThrough: false,
       preventDefault: true,
       requirement: "R1"
@@ -133,6 +142,7 @@
       keys: "Cmd-Shift-X",
       when: "always, including while the tool is hidden",
       hint: "Press Cmd-Shift-X to hide the review while you present, and again to bring it back.",
+      panelHint: "Presentation mode. Toggle hiding the rail and the pill.",
       passThrough: false,
       preventDefault: true,
       requirement: "R13"
@@ -142,6 +152,7 @@
       keys: "Cmd-Shift-1",
       when: "always, except while the review is hidden for presenting",
       hint: "Press Cmd-Shift-1 to open or close the review panel.",
+      panelHint: "Toggle the chat bar.",
       passThrough: false,
       preventDefault: true,
       requirement: "R43"
@@ -151,6 +162,8 @@
       keys: "everything else",
       when: "always",
       hint: "Everything else is the page. Links, buttons, and forms work exactly as they do without this.",
+      panelKeys: "page hotkeys",
+      panelHint: "Other page hotkeys should work as normal.",
       passThrough: true,
       preventDefault: false,
       requirement: "R13"
@@ -669,7 +682,20 @@
     });
   }
 
+  // The rail's Keyboard shortcuts panel. Its wording is Ken's, written for a
+  // reader who opened the panel to learn the keys: a row may name its keys and
+  // say its hint differently there (panelKeys, panelHint), and a step inside
+  // another gesture (picking the outlined element) is left out (inPanel).
+  function panelLines() {
+    return TABLE.filter(function (row) {
+      return row.inPanel !== false;
+    }).map(function (row) {
+      return { keys: row.panelKeys || row.keys, hint: row.panelHint || row.hint };
+    });
+  }
+
   var api = {
+    panelLines: panelLines,
     GESTURE: GESTURE,
     BREAK: BREAK,
     FORMAT: FORMAT,

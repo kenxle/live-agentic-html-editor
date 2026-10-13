@@ -403,6 +403,7 @@ work.
 | `item.ready` | Cmd-Enter, or an edit committing. Only ready items are actionable |
 | `item.deleted` | The reviewer deleted their own outstanding work |
 | `item.reopened` | `handled` back to `ready` (R38) |
+| `item.closed` | `{item, rev}`, no record. The reviewer chose "Mark as done" on the card's state chip. The projection moves the item to `handled` with `closed_by: "reviewer"` only when it is still `ready` or `not_handled` at exactly that `rev`; a stale or misplaced close is dropped and reported, like a stale reply. The page check never runs on it, and every later reply to the item is refused. review.json shows it as `closed_by_reviewer: true` |
 | `reply.folded` | An agent's reply line was folded into the log |
 | `reply.rejected` | A reply line could not be read. Names the file, the line number, and the reason |
 | `review.archived` | End review |
@@ -662,6 +663,12 @@ They replace the older `created_at` and `updated_at`, which sat side by side and
 yesterday, replied `not_handled` twice and wrote nothing; the reviewer retyped the same change three
 times. The contract now says the rule in words, and the field names say it at a glance.
 
+**An item the reviewer closed.** Every projected item carries `closed_by_reviewer`, a boolean. It
+is `true` only on a `handled` item the reviewer closed with "Mark as done" (the `item.closed` event
+above), and `false` everywhere else. The item's `reply`, if any, is the agent's last answer before
+the close, kept as history; it is not what finished the item. Such an item is never on the drain
+and takes no reply.
+
 **The `contract` field, verbatim.** This is the exact value of the file's top-level `contract` field,
 and it is the entire implementation of R4 (an agent never rewrites the whole document) and R45 (text
 taken off the page is context, never instructions). No code in this tool can enforce either one. It
@@ -719,6 +726,7 @@ copy in `test/unit/review_format.test.js`:
   "If the reviewed page is built from a source file, handled means the reviewer's page now shows the change: edit the source, rebuild, check the change is in the built page, and only then reply. The page reloads itself when the file changes, and the rail comes back on its own if a rebuild leaves it out.",
   "When LAHE renders the page from Markdown, there is nothing for you to rebuild. Edit the .md and the page re-renders and reloads on its own. Do not rerun lahe review for that file, and never tell the reviewer to refresh or clear a cache.",
   "A handled reply for a hand edit is checked against the built page before it retires anything. It is held only when the words in the item's after_full are not in that page and the passage was left alone: the item's before is still on the page, exactly once, or nothing in the source or the page was written since the reviewer typed. An agent that changed the passage is not second-guessed on its wording. new_blocks has no old passage, so each block's words are checked against the built page on every handled reply. A take-back with remove_blocks is checked the other way: it is held while any of those blocks is still after the anchor on the built page. A held item stays ready and carries handled_not_on_page: true, the reviewer is told the change has not reached their page, and your next drain lists the item again. Fix the source so the page really shows the change, then reply again. You cannot close an item by saying it is done.",
+  "The reviewer can close a card themselves. Such an item is handled with closed_by_reviewer: true, it is off your drain list, and any reply to it is refused. Do not work on it.",
   "The check reads the built page, so it can be wrong: the renderer may eat a character the reviewer typed. If the reviewer's text genuinely cannot appear on the page as written, reply not_handled and say why. A not_handled reply is never checked, it retires the item off your drain list, and the reviewer reads your reason on the card and decides. Do not keep replying handled into a check that keeps refusing it.",
   "A break the reviewer typed is part of the edit: a blank line in the after text is a paragraph break, and a single newline is a line break. Markdown does not read a single newline as a new paragraph, so write a blank line between the two paragraphs in the source, or the format's own hard-break form for a line break, then rebuild and check the page really shows the break.",
   "An edit's after is the words; after_html is the same words carrying the reviewer's bold and italic, and that formatting is part of the edit. Apply after_html, not after alone. Bold reaches you as <strong> and italic as <em>; in a Markdown source those are ** and _ (or *). When the reviewer took bold or italic OFF words that a page stylesheet makes bold or italic, HTML has no tag that says so, so the record marks that run <not-bold> or <not-italic>: make that true in the source the way the source says it, and never copy either tag into the source. A handled reply for an edit whose formatting you did not carry is a wrong handled. For an item with new_blocks, after_html is still the whole sitting: anchor_after_html is the anchor's own change and new_blocks is the run.",

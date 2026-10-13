@@ -242,6 +242,7 @@ test.describe("Hold: queue several comments, release them to the agent at once",
       // TURN HOLD ON, through the real control, the way a reviewer does.
       const beforeToggle = await page.evaluate(() => window.__lahe.rail.holdInfo());
       expect(beforeToggle.pressed, "off by default").toBe(false);
+      expect(beforeToggle.label, "the button names what pressing it does").toBe("Hold sending messages");
       await clickHoldButton(page);
       const onInfo = await page.evaluate(() => window.__lahe.rail.holdInfo());
       expect(onInfo.pressed, "R11: a real pressed state").toBe(true);
@@ -249,12 +250,14 @@ test.describe("Hold: queue several comments, release them to the agent at once",
       expect(onInfo.countText, "R5: zero queued reads a sentence, not a bare 0").toBe(
         "Holding — nothing sends until you release"
       );
+      expect(onInfo.label, "held with nothing queued, the button lets go").toBe("Send messages live");
 
       const held = await sendComment(page, "section.focus p:nth-of-type(1)", "Batched while managing turns.");
       const draft = await leaveDraft(page, "section.focus p:nth-of-type(2)", "Half written, not sent yet.");
 
       const afterOne = await page.evaluate(() => window.__lahe.rail.holdInfo());
       expect(afterOne.countText, "R5: past zero it counts").toBe("Holding, 1 queued");
+      expect(afterOne.label, "and the button says what it will send").toBe("Send 1 held message");
 
       // R4, all three together. wakeBefore/afterward compares the SAME file,
       // so "unchanged" is a real diff, not just "empty because nothing was
@@ -311,6 +314,7 @@ test.describe("Hold: queue several comments, release them to the agent at once",
       const offInfo = await page.evaluate(() => window.__lahe.rail.holdInfo());
       expect(offInfo.pressed).toBe(false);
       expect(offInfo.countText, "nothing left to announce once released").toBe("");
+      expect(offInfo.label, "back to offering a hold").toBe("Hold sending messages");
 
       await pollUntil(() => itemIdsInReviewJson(helper.stateDir).indexOf(held.id) !== -1, {
         message: "the released item to reach review.json in one pass"
@@ -350,6 +354,70 @@ test.describe("Hold: queue several comments, release them to the agent at once",
       await pollUntil(() => itemIdsInReviewJson(helper.stateDir).indexOf(held.id) !== -1, {
         message: "ending the review to flush the held item first, no confirm dialog"
       });
+    } finally {
+      await helper.stop().catch(() => {});
+      await app.close();
+    }
+  });
+
+  test("while Hold is on, every send button says Send to queue and explains at once on hover", async ({ page }) => {
+    const { app, helper } = await bootApp();
+    try {
+      await openApp(page, app);
+      const sent = await sendComment(page, "h1", "One sent before Hold.");
+      expect(sent).toBeTruthy();
+
+      // Send buttons in the rail's root and in the comment box on the page.
+      const readSends = () =>
+        page.evaluate(() => {
+          const railRoot = window.__lahe.rail.tabBody("active").getRootNode();
+          const host = document.getElementById("lahe-surface-root");
+          const roots = [railRoot];
+          const boxes = Array.from(document.querySelectorAll("*")).filter((n) => n.shadowRoot);
+          boxes.forEach((n) => roots.push(n.shadowRoot));
+          const buttons = [];
+          roots.forEach((r) => r.querySelectorAll("[data-lahe-send]").forEach((b) => buttons.push(b)));
+          return {
+            hostFound: !!host,
+            labels: buttons.filter((b) => b.getClientRects().length > 0).map((b) => b.textContent),
+            tips: buttons.filter((b) => b.getAttribute("data-lahe-held") === "true").map((b) => b.getAttribute("data-lahe-tip"))
+          };
+        });
+
+      const before = await readSends();
+      expect(before.labels.length, "a sent comment's card carries a send button").toBeGreaterThan(0);
+      expect(before.labels.every((label) => label === "Send"), "plain Send while nothing is held").toBe(true);
+
+      await clickHoldButton(page);
+      await pollPage(page, () => window.__lahe.rail.holdInfo().pressed === true, undefined, { message: "Hold on" });
+      const held = await readSends();
+      expect(held.labels.length).toBe(before.labels.length);
+      expect(held.labels.every((label) => label === "Send to queue"), "every visible send button says Send to queue").toBe(true);
+      expect(held.tips[0]).toBe("Messages are being held until you release them to the agent in a batch.");
+
+      // A box opened while held is labelled from the start.
+      await selectAndOpen(page, "p.lede");
+      const box = await readSends();
+      expect(box.labels.filter((label) => label === "Send").length, "no plain Send anywhere while held").toBe(0);
+
+      // The tip is drawn on hover with no delay: a pseudo-element, not a title.
+      const tip = await page.evaluate(() => {
+        const railRoot = window.__lahe.rail.tabBody("active").getRootNode();
+        const button = railRoot.querySelector("[data-lahe-send][data-lahe-held='true']");
+        return { title: button.title, rule: !!Array.from(railRoot.querySelectorAll("style")).some((st) => st.textContent.indexOf("[data-lahe-tip]:hover::after") !== -1) };
+      });
+      expect(tip.title, "no native title, which would show late and twice").toBe("");
+      expect(tip.rule, "the hover tip is a stylesheet rule in the rail").toBe(true);
+
+      await clickHoldButton(page);
+      await pollPage(page, () => window.__lahe.rail.holdInfo().pressed === false, undefined, { message: "Hold off" });
+      const after = await readSends();
+      expect(after.labels.every((label) => label === "Send"), "back to plain Send after release").toBe(true);
+      const plainTip = await page.evaluate(() => {
+        const railRoot = window.__lahe.rail.tabBody("active").getRootNode();
+        return railRoot.querySelector("[data-lahe-send]").getAttribute("data-lahe-tip");
+      });
+      expect(plainTip, "a plain Send names its key on hover").toBe("Cmd-Enter");
     } finally {
       await helper.stop().catch(() => {});
       await app.close();

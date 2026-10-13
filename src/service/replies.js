@@ -332,8 +332,12 @@ function createReplyFolder(options) {
     // still refused as stale. A DRAFT is never judged as ready: a draft that
     // carries a reply at its own revision is the reviewer rewording an
     // answered item, and lifecycle refuses every reply to it.
+    // A card the reviewer closed is judged as it stands, so lifecycle refuses
+    // the reply (it takes none) rather than seeing the rival rule's ready.
+    var closed = record.isClosedByReviewer(item);
     var against = item;
     if (
+      !closed &&
       item[record.FIELD.REPLY] &&
       item[record.FIELD.REV] === reply[protocol.REPLY_FIELD.REV] &&
       !record.isDraft(item)
@@ -347,7 +351,8 @@ function createReplyFolder(options) {
     // left out of the decision entirely rather than passed as a doubt: the tool
     // never holds an item open on a guess.
     var shows = null;
-    if (pageShows && reply[protocol.REPLY_FIELD.STATUS] === record.REPLY_STATUS.HANDLED) {
+    // Never for a card the reviewer closed: there is nothing left to hold.
+    if (!closed && pageShows && reply[protocol.REPLY_FIELD.STATUS] === record.REPLY_STATUS.HANDLED) {
       try {
         shows = pageShows(reviewId, item);
       } catch (error) {

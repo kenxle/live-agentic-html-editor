@@ -121,7 +121,7 @@ async function commentOnSelection(page, selector, text) {
  * whole of the path the reviewer's own click takes.
  */
 async function chooseFromRailMenu(page, label) {
-  const opened = await pollUntil(
+  let opened = await pollUntil(
     async () => {
       const info = await page.evaluate(() => window.__lahe.rail.menuInfo());
       if (!info.present) throw new Error("the rail is not mounted, so it has no menu");
@@ -132,6 +132,15 @@ async function chooseFromRailMenu(page, label) {
     },
     { message: "the rail's header menu to open on a real click" }
   );
+  // Some items live under a group ("Export review", "View") that opens in place.
+  for (const name of ["Export review", "View"]) {
+    if (opened.items.some((one) => one.label === label)) break;
+    const group = opened.items.filter((one) => one.label === name)[0];
+    if (group) {
+      await page.mouse.click(group.rect.x + group.rect.width / 2, group.rect.y + group.rect.height / 2);
+      opened = await page.evaluate(() => window.__lahe.rail.menuInfo());
+    }
+  }
   const item = opened.items.filter((one) => one.label === label)[0];
   if (!item) {
     throw new Error(
@@ -147,7 +156,7 @@ const SENTINEL = "clipboard has not been written yet";
 /** Choose Copy review and read what actually landed on the system clipboard. */
 async function copyThroughTheButton(page) {
   await page.evaluate((text) => navigator.clipboard.writeText(text), SENTINEL);
-  await chooseFromRailMenu(page, "Copy review");
+  await chooseFromRailMenu(page, "Copy review to clipboard");
   return pollUntil(
     async () => {
       const got = await page.evaluate(() => navigator.clipboard.readText());

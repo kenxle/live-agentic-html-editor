@@ -325,7 +325,7 @@ test.describe("the note is the input: rewording without a button", () => {
         return {
           // Not the head's disclosure, which folds the card to one line: it is
           // chrome on every card in every tab, not an action on this comment.
-          onCard: Array.from(card.querySelectorAll("button:not(.carddisclose)")).map((b) => b.textContent),
+          onCard: Array.from(card.querySelectorAll("button:not(.carddisclose):not(.statemenu *)")).map((b) => b.textContent),
           // The card's ACTIONS, which is what this test is about: things that
           // act on the comment, in its action row. A send button belonging to a
           // text box is not one of them, any more than the follow-up composer's
@@ -346,7 +346,7 @@ test.describe("the note is the input: rewording without a button", () => {
       expect(buttons.onCardActs, "the card keeps exactly one action: Delete").toEqual(["delete"]);
       // Everything else on the card belongs to a box rather than acting on the
       // comment, and there is exactly one such box before an agent has answered.
-      expect(buttons.onCard.filter((label) => label !== "Delete"), "and one Send, for the box").toEqual(["Send"]);
+      expect(buttons.onCard.filter((label) => label !== "\u00d7"), "and one Send, for the box").toEqual(["Send"]);
       expect(buttons.deleteAct).toBe(true);
     } finally {
       await helper.kill9();

@@ -494,7 +494,7 @@
     // The layer can only act on the ONE document it is loaded into, so anything
     // from another page is filtered out HERE, at the single read boundary, and
     // every surface below is handed the scoped store: replay and anchoring, the
-    // rail's Active/Done/Edits lists, the count pill, and the highlights. A
+    // rail's Active and Done lists, the count pill, and the highlights. A
     // second page attached to a live review otherwise inherited all 78 of the
     // first page's items, tried to re-anchor them here, and listed them in the
     // rail (Ken, live, 2026-08-17).
@@ -942,10 +942,11 @@
     });
     zoom.bind();
 
-    // The Edits tab's contents, inside the rail's own Edits pane, the way the
-    // Active tab lives inside the Active one. It is created after the edit
-    // surface because it subscribes to it: a hand edit becomes a row on the
-    // same act that writes the record.
+    // The hand-edit rows, drawn into each hand edit's card. Those cards sit in
+    // the Active pane beside the comments (Done once handled), and the Active
+    // filter separates the two. Created after the edit surface because it
+    // subscribes to it: a hand edit becomes a row on the same act that writes
+    // the record.
     var editsTab = makeEditsTab();
 
     // The Done tab mounted BEFORE this one existed, and its Reopen button moves
@@ -1162,9 +1163,9 @@
     //   3. the hand-edit list is put in front of the reviewer.
     //
     // Step 3 is not decoration. R39's list exists so style-guide patterns can be
-    // spotted, and the Edits tab has held it all along; what it never had was
-    // the MOMENT. A permanently visible tab is one a reviewer stops seeing by
-    // the third comment, so the payoff happens at the close, which is when a
+    // spotted, and the hand-edit cards have held it all along; what they never
+    // had was the MOMENT. A list always on screen is one a reviewer stops seeing
+    // by the third comment, so the payoff happens at the close, which is when a
     // session's worth of edits reads as a pattern rather than as a row.
     rail.onAction("end", function () {
       // The whole review, not this page's slice: ending ends every page of it,
@@ -1203,12 +1204,15 @@
     /**
      * The closing step: the session's hand edits, in front of the reviewer.
      *
-     * It reuses the Edits tab's own export seam rather than formatting a second
-     * list. Two lists of one thing is how the two of them start disagreeing.
+     * It reuses the hand-edit rows' own export seam rather than formatting a
+     * second list. Two lists of one thing is how the two of them start
+     * disagreeing. On screen, the Active pane is filtered to hand edits, so the
+     * list the file holds is the list the reviewer is looking at.
      */
     function surfaceHandEdits() {
       var count = editsTab && typeof editsTab.rowCount === "function" ? editsTab.rowCount() : 0;
-      rail.selectTab(ns.overlay.TAB.EDITS);
+      rail.selectTab(ns.overlay.TAB.ACTIVE);
+      if (count && typeof rail.setActiveFilter === "function") rail.setActiveFilter(ns.overlay.FILTER.EDITS);
       if (!count || !editsTab || typeof editsTab.exportList !== "function") {
         return Promise.resolve({ count: count, saved: false });
       }
@@ -1230,7 +1234,7 @@
         store: scopedStore,
         reviewId: reviewId,
         overlay: rail,
-        host: rail.tabBody(ns.overlay.TAB.EDITS),
+        host: rail.tabBody(ns.overlay.TAB.ACTIVE),
         editing: editing,
         // The commit wash reads these three; named here, not fished out of the
         // page's namespace by the tab.
@@ -1345,6 +1349,30 @@
       // button goes with it and the Done row is left on a card with no controls
       // at all. Done's own refresh drops the row for a record that is no longer
       // there, which is the whole repair.
+      done.refresh();
+    });
+
+    // MARK AS DONE (docs/features/20261012.01_rail_cleanup). The reviewer
+    // closes an outstanding card from its state chip, without waiting for an
+    // agent: a leftover comment, a refused edit, or a handled claim the page
+    // check held open. The record moves to handled with the reviewer named as
+    // the one who closed it, the helper hears an explicit item.closed for
+    // this revision, and every tab repaints from the record.
+    rail.onCardClose(function (id, action) {
+      if (action !== ns.overlay.MARK_DONE.ACTION) return;
+      if (readOnlyActive) return;
+      var item = scopedStore.readItem(reviewId, id);
+      if (!item || !ns.lifecycle.canClose(item)) return;
+      var closed = ns.lifecycle.closeItem(item, new Date().toISOString());
+      scopedStore.write(reviewId, closed);
+      sync.closeItem(closed);
+      refreshItems();
+      rail.upsertCard(closed);
+      rail.setCardState(id, record.STATE.HANDLED);
+      if (tab && typeof tab.refresh === "function") tab.refresh();
+      if (editsTab && typeof editsTab.refresh === "function") editsTab.refresh();
+      // Done draws the closed card, says the reviewer closed it, and takes the
+      // highlight off the page.
       done.refresh();
     });
 

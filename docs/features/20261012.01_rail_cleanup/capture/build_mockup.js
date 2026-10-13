@@ -1,0 +1,309 @@
+// Turn capture.json (written by rail_capture.spec.js) into rail_mockup.html.
+//
+//   node docs/features/20261012.01_rail_cleanup/capture/build_mockup.js
+//
+// The rail's own stylesheet is wrapped in @scope (.mock-frame), with :host
+// read as the frame, so the copy looks like the rail and nothing leaks out.
+// The page links no document style on purpose: a page-wide stylesheet would
+// reach into the copy, which the real rail's shadow root never lets happen.
+
+"use strict";
+
+const fs = require("node:fs");
+const path = require("node:path");
+
+const HERE = path.join(__dirname, "..");
+const shots = JSON.parse(fs.readFileSync(path.join(HERE, "capture.json"), "utf8"));
+
+function scopeRule(text) {
+  return text
+    .replace(/:host\(([^()]*)\)/g, ":scope$1")
+    .replace(/:host\b/g, ":scope")
+    .replace(/data-lahe-/g, "data-mock-")
+    .replace(/\[data-lahe(?=[\]=])/g, "[data-mock");
+}
+
+function cleanHtml(html) {
+  return html.replace(/\sdata-lahe="[^"]*"/g, "");
+}
+
+const first = shots[0];
+const scoped = first.css.map(scopeRule).join("\n");
+const outside = first.outside.join("\n");
+
+function esc(s) {
+  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
+function section(shot, i) {
+    const scheme = /data-mock-scheme="dark"/.test(shot.hostAttrs) ? "dark" : "light";
+    if (shot.legend) {
+      return (
+        '<section class="mock-section" id="state-' + (i + 1) + '">\n' +
+        "<h2>" + esc(shot.label) + "</h2>\n" +
+        "<p>" + esc(shot.caption) + "</p>\n" +
+        '<div class="mock-stage mock-legend">\n' +
+        shot.legend
+          .map(function (row) {
+            return (
+              '<div class="mock-legend__row"><div class="mock-frame" data-mock-scheme="light"><aside class="rail">' +
+              cleanHtml(row.html) +
+              '</aside></div><div class="mock-legend__text"><div class="mock-legend__label">' + esc(row.label) + "</div>" +
+              (row.tip ? '<p class="mock-legend__tip">' + esc(row.tip) + "</p>" : "") + "</div></div>"
+            );
+          })
+          .join("\n") +
+        "\n</div>\n</section>"
+      );
+    }
+    if (shot.cards) {
+      // One card per copy, each in a pane at the rail's real width, so the
+      // cards can be compared side by side in both schemes.
+      return (
+        '<section class="mock-section" id="state-' + (i + 1) + '">\n' +
+        "<h2>" + esc(shot.label) + "</h2>\n" +
+        "<p>" + esc(shot.caption) + "</p>\n" +
+        '<div class="mock-cards">\n' +
+        shot.cards
+          .map(function (one) {
+            return (
+              '<figure class="mock-cardfig"><figcaption>' + esc(one.label) + "</figcaption>" +
+              '<div class="mock-stage mock-stage--' + one.scheme + '">' +
+              '<div class="mock-frame" data-mock-scheme="' + one.scheme + '"><aside class="rail"><div class="panes">' +
+              '<div class="pane" data-current="true">' + cleanHtml(one.html) + "</div></div></aside></div></div></figure>"
+            );
+          })
+          .join("\n") +
+        "\n</div>\n</section>"
+      );
+    }
+    const notes = shot.notes
+      ? "<ul class=\"mock-notes\">" + shot.notes.map((n) => "<li>" + esc(n) + "</li>").join("") + "</ul>\n"
+      : "";
+    return (
+      '<section class="mock-section" id="state-' + (i + 1) + '">\n' +
+      "<h2>" + esc(shot.label) + "</h2>\n" +
+      notes +
+      "<p>" + esc(shot.caption) + "</p>\n" +
+      '<div class="mock-stage mock-stage--' + scheme + '">\n' +
+      '<div class="mock-frame" data-mock-scheme="' + scheme + '">' + cleanHtml(shot.html) + "</div>\n" +
+      "</div>\n</section>"
+    );
+}
+
+const topSections = shots.map((shot, i) => (shot.top ? section(shot, i) : "")).join("\n\n");
+const sections = shots.map((shot, i) => (shot.top ? "" : section(shot, i))).join("\n\n");
+
+// THE HOVER TEXT, as words to edit. Read from the code, so the page shows what
+// ships: the status dot's tip is assembled from these pieces in this order.
+const REPO = path.join(__dirname, "..", "..", "..", "..");
+const LIVE = require(path.join(REPO, "src", "shared", "protocol.js")).AGENT_LIVENESS;
+const OVERLAY = require(path.join(REPO, "src", "layer", "overlay.js"));
+const HIGHLIGHT = require(path.join(REPO, "src", "layer", "highlight.js"));
+
+function rows(list) {
+  return list
+    .map(function (r) {
+      return "<tr><td class=\"mock-when\">" + esc(r[0]) + "</td><td>" + esc(r[1]) + "</td></tr>";
+    })
+    .join("\n");
+}
+
+const QUIET = LIVE.QUIET_MS % 60000 === 0 ? LIVE.QUIET_MS / 60000 + " minutes" : LIVE.QUIET_MS / 1000 + " seconds";
+const firstLine = [
+  ["Stored, an agent is listening", OVERLAY.DOT_WORDS.connected],
+  ["Stored, an agent is working on it (after " + QUIET + " waiting)", OVERLAY.DOT_WORDS.working],
+  ["Stored, no agent is listening (click copies a hand-off message)", OVERLAY.DOT_WORDS.absent],
+  ["Stored, nothing has come back (after " + QUIET + "; click copies)", OVERLAY.DOT_WORDS.waiting],
+  ["Stored, no agent has picked it up (after " + QUIET + "; click copies)", OVERLAY.DOT_WORDS.no_agent],
+  ["Stored, nothing to say about an agent", OVERLAY.STATUS_SHORT.stored],
+  ["The helper is down (red octagon; click copies a restart request)", OVERLAY.DOT_WORDS.helper_down],
+  ["The page is about to reload onto a new build", OVERLAY.STATUS_SHORT.page_reloading]
+];
+const detail = [
+  ["1. The helper is up", LIVE.DETAIL.helper_up],
+  ["1. The helper is down", LIVE.DETAIL.helper_down],
+  ["2. An agent is listening (only when stored)", LIVE.DETAIL.agent_connected],
+  ["2. No agent is listening", LIVE.DETAIL.agent_absent],
+  ["2. Listening cannot be checked", LIVE.DETAIL.agent_unknown],
+  ["3. The agent has a name", LIVE.DETAIL.agent_named],
+  ["4. The agent has replied before", LIVE.DETAIL.replied],
+  ["4. The agent has never replied", LIVE.DETAIL.never_replied],
+  ["5. Something is waiting", LIVE.DETAIL.waiting],
+  ["6. Always", LIVE.DETAIL.stored],
+  ["7. When the first line is counting a wait", LIVE.DETAIL.save]
+];
+const otherTips = [
+  ["Any Send button while Hold is on", HIGHLIGHT.SEND_WORDS.HELD_TIP],
+  ["The collapsed pill while Hold is on (N is the count)", "N held. Nothing sends to the agent until you release Hold."]
+];
+const seenTitles = new Set();
+shots.forEach(function (shot) {
+  const pieces = shot.legend ? shot.legend.map((r) => r.html) : [shot.html];
+  pieces.forEach(function (h) {
+    const re = /\stitle="([^"]+)"/g;
+    let m;
+    while ((m = re.exec(h)) !== null) {
+      const t = m[1].replace(/&quot;/g, '"').replace(/&amp;/g, "&");
+      if (/^\d+\/\d+\/\d+/.test(t) || t.indexOf("The helper is") === 0) continue;
+      seenTitles.add(t);
+    }
+  });
+});
+const buttonTips = Array.from(seenTitles).sort().map((t) => ["Button or control", t]);
+
+const hoverSection =
+  '<section class="mock-section mock-words" id="hover-text">\n' +
+  "<h2>Hover text</h2>\n" +
+  "<p>Every hover text on the rail, read from the code. Edit the words in the right column directly. {age}, {name} and {reply} are filled in when shown.</p>\n" +
+  "<h3>Status dot: first line</h3>\n" +
+  "<p>The tip opens with one of these lines.</p>\n" +
+  '<table class="mock-table">' + rows(firstLine) + "</table>\n" +
+  "<h3>Status dot: the sentences under it</h3>\n" +
+  "<p>After a blank line, one sentence from each numbered group, in order.</p>\n" +
+  '<table class="mock-table">' + rows(detail) + "</table>\n" +
+  "<h3>Other hover text</h3>\n" +
+  '<table class="mock-table">' + rows(otherTips.concat(buttonTips)) + "</table>\n" +
+  "</section>";
+
+const page = `<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Rail mockup</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>%F0%9F%A7%B9</text></svg>">
+<style>
+${outside}
+@scope (.mock-frame) {
+${scoped}
+}
+
+/* The page around the copies. Class-scoped only, so none of it reaches in. */
+html, body { margin: 0; background: #f4f3ef; }
+.mock-page { font: 16px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; color: #1c1c1a; max-width: 900px; padding: 32px 48px 120px; }
+.mock-page h1 { font-size: 28px; margin: 0 0 8px; }
+.mock-page .mock-intro p { margin: 0 0 10px; max-width: 640px; }
+.mock-section { margin-top: 48px; }
+.mock-section > h2 { font-size: 20px; margin: 0 0 4px; }
+.mock-section > p { margin: 0 0 14px; color: #55524b; }
+.mock-stage { padding: 24px; border-radius: 12px; background: #e9e7e1; display: inline-block; }
+.mock-stage--dark { background: #12151a; }
+.mock-legend { display: flex; flex-direction: column; gap: 10px; }
+.mock-cards { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 20px; }
+.mock-cardfig { margin: 0; }
+.mock-cardfig figcaption { font-size: 13px; color: #55524b; margin: 0 0 6px; }
+.mock-notes { max-width: 680px; margin: 0 0 12px; padding-left: 22px; }
+.mock-notes li { margin: 0 0 6px; }
+.mock-words h3 { font-size: 16px; margin: 22px 0 4px; }
+.mock-table { border-collapse: collapse; width: 100%; max-width: 820px; background: #fff; font-size: 14.5px; }
+.mock-table td { border: 1px solid #dedbd3; padding: 7px 10px; vertical-align: top; }
+.mock-table td.mock-when { width: 34%; color: #55524b; font-size: 13px; }
+.mock-legend__row { display: flex; align-items: center; gap: 18px; position: relative; }
+/* Each row is its own copy of the head, so the hovered one has to come forward
+   or the rows below paint over its tip. The real rail has one head. */
+.mock-legend__row:hover, .mock-stage:hover { z-index: 20; }
+.mock-stage { position: relative; }
+.mock-legend__label { font-size: 13px; color: #55524b; }
+.mock-legend__tip { margin: 2px 0 0; font-size: 15px; }
+
+/* Unfix the copy: the real rail is pinned to the window; this one sits in the page,
+   at its real width, showing every card instead of scrolling. */
+.mock-frame { display: block !important; position: relative !important; inset: auto !important; z-index: auto !important; width: 392px !important; height: auto !important; }
+.mock-frame .rail { position: relative !important; inset: auto !important; width: 392px !important; height: auto !important; overflow: visible !important; }
+.mock-frame .menu, .mock-frame .stylepanel { max-height: none !important; }
+.mock-frame .submenu { position: absolute !important; top: -6px !important; right: calc(100% + 4px) !important; }
+.mock-section:has(.keyspanel[data-mock-shown="open"]) .mock-stage,
+.mock-section:has(.keyspanel[data-shown="open"]) .mock-stage { padding-bottom: 380px; }
+.mock-frame .panes { overflow: visible !important; flex: none !important; }
+.mock-frame .pane { overflow: visible !important; flex: 1 1 auto !important; min-width: 0 !important; width: 100% !important; }
+.mock-frame .grip { display: none !important; }
+.mock-frame .pill, .mock-frame .toasts { position: relative !important; inset: auto !important; }
+.mock-frame * { user-select: text !important; -webkit-user-select: text !important; }
+.mock-frame .holdbtn { cursor: pointer; }
+</style>
+</head>
+<body>
+<main class="mock-page">
+<div class="mock-intro">
+<h1>Rail mockup</h1>
+<p>These are copies of the real review rail, taken from the built library with test data. The real rail can't be commented on, so comment here: select any text on a copy, or a nearby label, and say what should change.</p>
+<p>The buttons do nothing. Your own working rail is the one pinned to the right edge of this window.</p>
+</div>
+
+${topSections}
+
+${sections}
+
+${hoverSection}
+</main>
+<script>
+// The one live control on the copies: Hold sending flips, and the send
+// buttons in that copy change with it, as they do in the real rail.
+document.addEventListener("click", function (event) {
+  var hold = event.target.closest(".mock-frame .holdbtn");
+  if (!hold) return;
+  event.preventDefault();
+  var on = hold.getAttribute("aria-pressed") !== "true";
+  hold.setAttribute("aria-pressed", on ? "true" : "false");
+  // The count here is made up: the copy has no queue behind it.
+  var label = hold.querySelector(".holdbtn__label");
+  if (label) label.textContent = on ? "Send 2 held messages" : "Hold sending messages";
+  var tip = "Messages are being held until you release them to the agent in a batch.";
+  hold.closest(".mock-frame").querySelectorAll("[data-mock-send]").forEach(function (b) {
+    if (on) {
+      b.setAttribute("data-mock-held", "true");
+      b.setAttribute("data-mock-tip", tip);
+      b.textContent = "Send to queue";
+    } else {
+      b.removeAttribute("data-mock-held");
+      b.setAttribute("data-mock-tip", "Cmd-Enter");
+      b.textContent = b.getAttribute("data-mock-label") || "Send";
+    }
+  });
+});
+</script>
+</body>
+</html>
+`;
+
+// CARRY LAHE'S STAMPS. A hand edit on this page asks for its data-lahe-id to be
+// in the source, and this page is rebuilt from the rail's code every time, so
+// the stamp is put back here: on the element whose words are the edit's words.
+// MOCK_REVIEW_JSON names the review's review.json; without it, nothing is stamped.
+function stamped(html) {
+  const file = process.env.MOCK_REVIEW_JSON;
+  if (!file || !fs.existsSync(file)) return html;
+  const review = JSON.parse(fs.readFileSync(file, "utf8"));
+  let out = html;
+  review.pages.forEach(function (pg) {
+    pg.items.forEach(function (it) {
+      const stamp = it.region && it.region.stamp;
+      const words = it.after_full || (it.page && it.page.after_full);
+      if (!stamp || !words || it.kind !== "edit") return;
+      if (out.indexOf('data-lahe-id="' + stamp + '"') !== -1) return;
+      if (words.indexOf("\n") !== -1) {
+        // A whole list reworded: find it by where it was, its section and its
+        // own tag and class, and stamp the first one there.
+        const where = (it.region && it.region.where) || "";
+        const section = /section#(state-\d+)/.exec(where);
+        const last = /([a-z]+)\.([\w-]+)$/.exec(where);
+        if (!section || !last) return;
+        const from = out.indexOf('id="' + section[1] + '"');
+        const open = "<" + last[1] + ' class="' + last[2];
+        const at = from === -1 ? -1 : out.indexOf(open, from);
+        if (at === -1) return;
+        out = out.slice(0, at) + "<" + last[1] + ' data-lahe-id="' + stamp + '"' + out.slice(at + last[1].length + 1);
+        return;
+      }
+      const re = new RegExp("<(p|td|li|span|div)((?:\\s[^>]*)?)>" + esc(words).replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "</\\1>");
+      out = out.replace(re, function (all, tag, attrs) {
+        return "<" + tag + attrs + ' data-lahe-id="' + stamp + '">' + esc(words) + "</" + tag + ">";
+      });
+    });
+  });
+  return out;
+}
+
+fs.writeFileSync(path.join(HERE, "rail_mockup.html"), stamped(page));
+console.log("wrote rail_mockup.html, " + shots.length + " states");

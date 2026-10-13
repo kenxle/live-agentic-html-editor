@@ -99,6 +99,10 @@
     BACK: "Back to the document's style",
     CLOSE: "Close",
     ADD_COMMAND: "lahe style add <folder>",
+    // Where the paid styles are. A reviewer with International alone is shown
+    // the way to more, as a link (Ken, 2026-10-12).
+    MORE_URL: "https://www.stclair.ai/lahe-styles.html",
+    MORE: "Get more styles",
     previewing: function (name, documentName) {
       return "Previewing " + name + ". The document uses " + documentName + ".";
     },
@@ -331,7 +335,7 @@
       ]);
     }
     if (s.listLoaded && list.length === 0) {
-      notes.push([{ text: "Add styles with " }, { kbd: WORDS.ADD_COMMAND }, { text: ", or ask your agent to." }]);
+      notes.push([{ link: WORDS.MORE_URL, text: WORDS.MORE }, { text: ". Add one with " }, { kbd: WORDS.ADD_COMMAND }, { text: ", or ask your agent to." }]);
     }
 
     var indicator = null;

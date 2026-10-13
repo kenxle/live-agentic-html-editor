@@ -642,8 +642,20 @@ test.describe("3A: an agent answers by appending one line", () => {
           text: text.textContent,
           markupInside: text.querySelectorAll("*").length,
           fontSize: parseFloat(styles.fontSize),
-          ruleWidth: parseFloat(getComputedStyle(ask).borderLeftWidth),
-          askBackground: getComputedStyle(ask).backgroundColor,
+          // The question is the agent's turn; its bubble is what wears the
+          // accent, edge and wash, all the way round.
+          ruleWidth: parseFloat(getComputedStyle(text).borderLeftWidth),
+          ruleTopWidth: parseFloat(getComputedStyle(text).borderTopWidth),
+          ruleColor: getComputedStyle(text).borderLeftColor,
+          accentColor: (function () {
+            var probe = document.createElement("div");
+            probe.style.borderLeft = "3px solid var(--accent)";
+            ask.appendChild(probe);
+            var value = getComputedStyle(probe).borderLeftColor;
+            probe.remove();
+            return value;
+          })(),
+          askBackground: getComputedStyle(text).backgroundColor,
           cardBackground: getComputedStyle(cardNode).backgroundColor,
           // The wash the block is SUPPOSED to wear, read off the same custom
           // property the rule uses, resolved through a real element rather than
@@ -687,14 +699,16 @@ test.describe("3A: an agent answers by appending one line", () => {
       // Loud, as geometry rather than as intent: bigger than the reviewer's own
       // words, a rule of its own, and first in its pane.
       expect(drawn.fontSize).toBeGreaterThan(drawn.bodyFontSize);
-      // Two signals, both asserted. The accent rule down the side is the
+      // Two signals, both asserted. The accent edge round the bubble is the
       // block's attention marker: it is the layer asking the reviewer for
       // something and nothing happens until they answer. The wash behind it
       // is the second. The wash check is pinned to the wash ITSELF, not just
       // "differs from the card": a deleted wash rule would leave the block
       // transparent, which also differs from the card's paper and would pass
       // a weaker check for the wrong reason.
-      expect(drawn.ruleWidth).toBeGreaterThanOrEqual(3);
+      expect(drawn.ruleWidth).toBeGreaterThanOrEqual(2);
+      expect(drawn.ruleTopWidth, "the accent edge runs all the way round the bubble").toBeGreaterThanOrEqual(2);
+      expect(drawn.ruleColor).toBe(drawn.accentColor);
       expect(drawn.askBackground).toBe(drawn.accentWash);
       expect(drawn.askBackground).not.toBe(drawn.cardBackground);
       expect(drawn.askBackground).not.toBe("rgba(0, 0, 0, 0)");
@@ -853,6 +867,7 @@ test.describe("3A: an agent answers by appending one line", () => {
         const text = thread.querySelector(".lahe-thread-text");
         const composer = done.followup(id);
         const label = composer.querySelector(".lahe-followup-label");
+        const placeholder = composer.querySelector("textarea").getAttribute("placeholder");
         const input = composer.querySelector("textarea");
         return {
           headDisplay: getComputedStyle(head).display,
@@ -861,7 +876,8 @@ test.describe("3A: an agent answers by appending one line", () => {
           composerDirection: getComputedStyle(composer).flexDirection,
           headBottom: head.getBoundingClientRect().bottom,
           textTop: text.getBoundingClientRect().top,
-          labelBottom: label.getBoundingClientRect().bottom,
+          hasLabel: !!label,
+          placeholder: placeholder,
           inputTop: input.getBoundingClientRect().top,
           sheets: thread.getRootNode().querySelectorAll("style[data-lahe-sheet='tab_done']").length,
           words: text.textContent
@@ -877,12 +893,12 @@ test.describe("3A: an agent answers by appending one line", () => {
       expect(laidOut.textDisplay, "the turn's words are their own block").toBe("block");
       expect(laidOut.textTop, "the words start below the head above them").toBeGreaterThanOrEqual(laidOut.headBottom);
 
-      // The follow-up field sits under its label rather than on top of it.
+      // The follow-up box carries no label above it: its placeholder says
+      // what it is for.
       expect(laidOut.composerDisplay).toBe("flex");
       expect(laidOut.composerDirection).toBe("column");
-      expect(laidOut.inputTop, "the follow-up field starts below its label").toBeGreaterThanOrEqual(
-        laidOut.labelBottom
-      );
+      expect(laidOut.hasLabel, "no Follow up heading over the box").toBe(false);
+      expect(laidOut.placeholder).toBe("Add a new message");
 
       // One sheet, not one per remount.
       expect(laidOut.sheets, "two remounts leave one stylesheet in the rail's root").toBe(1);
@@ -913,14 +929,14 @@ test.describe("3A: an agent answers by appending one line", () => {
       const composer = await page.evaluate((id) => {
         const node = window.__lahe.handle.doneTab().followup(id);
         const input = node && node.querySelector("textarea");
-        const label = node && node.querySelector("label");
         return {
           exists: !!node,
           value: input && input.value,
-          associated: !!input && !!label && label.getAttribute("for") === input.id
+          // Named for a screen reader by aria-label, since it has no heading.
+          named: !!input && input.getAttribute("aria-label") === "Follow up"
         };
       }, item.id);
-      expect(composer).toEqual({ exists: true, value: "", associated: true });
+      expect(composer).toEqual({ exists: true, value: "", named: true });
 
       // Draft continuation text is private browser state: durable across a
       // reload, absent from the agent-facing projection until submitted.
@@ -1383,13 +1399,15 @@ test.describe("3A: an agent answers by appending one line", () => {
 
       const drawn = await page.evaluate((id) => {
         const rail = window.__lahe.rail;
+        // The carrier is a turn now; its bubble is what wears the marker.
         rail.setAgentMessage(id, { status: "handled", agent: "claude", text: "cut it down" });
         const node = rail.cardNode(id).querySelector(".agent");
-        const ordinaryWidth = getComputedStyle(node).borderLeftWidth;
+        const ordinary = getComputedStyle(node.querySelector(".bubble")).borderLeftColor;
 
         rail.setAgentMessage(id, { status: "question", agent: "claude", text: "cut which part?" });
-        const loud = getComputedStyle(node).borderLeftColor;
-        const loudWidth = getComputedStyle(node).borderLeftWidth;
+        const bubble = node.querySelector(".bubble");
+        const loud = getComputedStyle(bubble).borderLeftColor;
+        const loudWidth = getComputedStyle(bubble).borderLeftWidth;
 
         var probe = document.createElement("div");
         probe.style.borderLeft = "3px solid var(--accent)";
@@ -1398,24 +1416,22 @@ test.describe("3A: an agent answers by appending one line", () => {
         probe.remove();
 
         return {
-          ordinaryWidth: ordinaryWidth,
+          ordinary: ordinary,
           loud: loud,
           loudWidth: loudWidth,
           accentColor: accentColor,
         };
       }, item.id);
 
-      // The rule is the attention marker: a loud reply is one the reviewer has
-      // not dealt with yet. Width AND colour, so deleting either goes red.
+      // The accent edge is the attention marker: a loud reply is one the
+      // reviewer has not dealt with yet. Width AND colour, so deleting either
+      // goes red.
       expect(
         parseFloat(drawn.loudWidth),
-        "the loud block carries a real rule, not a zero-width one"
-      ).toBeGreaterThanOrEqual(3);
-      expect(drawn.loud, "the loud rule is the rail's own accent colour").toBe(drawn.accentColor);
-      expect(
-        parseFloat(drawn.ordinaryWidth),
-        "and an ordinary agent message has no rule at all"
-      ).toBe(0);
+        "the loud bubble carries a real edge, not a zero-width one"
+      ).toBeGreaterThanOrEqual(2);
+      expect(drawn.loud, "the loud edge is the rail's own accent colour").toBe(drawn.accentColor);
+      expect(drawn.ordinary, "and an ordinary agent message's edge is not the accent").not.toBe(drawn.accentColor);
     } finally {
       await helper.stop().catch(() => {});
       await app.close();
@@ -1454,7 +1470,7 @@ test.describe("adding another message before the agent has answered", () => {
           // second one on a gesture the footer already advertises.
           // Not the head's disclosure, which folds the card to one line: it is
           // chrome on every card in every tab, not an action on this comment.
-          buttonsOnCard: Array.from(card.querySelectorAll("button:not(.carddisclose)"))
+          buttonsOnCard: Array.from(card.querySelectorAll("button:not(.carddisclose):not(.statemenu *)"))
             .map((b) => b.textContent)
             .sort(),
           cardActs: Array.from(card.querySelectorAll("[data-lahe-act]")).map((b) =>
@@ -1465,7 +1481,7 @@ test.describe("adding another message before the agent has answered", () => {
       expect(box.there, "a sent comment still has somewhere to type").toBe(true);
       // A box gets a send button, which is what a text input has. What it does
       // not get is a place in the card's action row beside Delete.
-      expect(box.buttonsOnCard, "the box brings its own Send, and nothing else").toEqual(["Delete", "Send"]);
+      expect(box.buttonsOnCard, "the box brings its own Send, and nothing else").toEqual(["Send", "\u00d7"]);
       expect(box.cardActs, "the card still acts on the comment in exactly one way").toEqual(["delete"]);
 
       await page.evaluate((id) => {
@@ -1726,9 +1742,9 @@ test.describe("free writing: the proofreading question", () => {
       await bootedPage(page, app, helper, token);
       const run = await typeRunAfterLede(page);
       await waitForItemInLog(helper, run.id);
-      // The reviewer is on Edits. The question lands on Active, which is not
+      // The reviewer is on Done. The question lands on Active, which is not
       // on screen, so it toasts (a reply on the tab already open does not).
-      await page.evaluate(() => window.__lahe.rail.selectTab("edits"));
+      await page.evaluate(() => window.__lahe.rail.selectTab("done"));
       await askProofread(helper, page, run, [{ block: 1, from: "place", to: "spot" }]);
 
       // The question's toast names the run in the reviewer's words, never the
@@ -1765,7 +1781,7 @@ test.describe("free writing: the proofreading question", () => {
         Array.from(window.__lahe.rail.cardNode(id).querySelectorAll("[data-lahe-run-words]")).map((n) => n.textContent),
         run.id
       );
-      expect(listed[1], "the Edits row lists the fixed words").toBe("I lost my spot every time I scrolled back.");
+      expect(listed[1], "the hand-edit row lists the fixed words").toBe("I lost my spot every time I scrolled back.");
 
       // The agent reads the fixed words from review.json at the new revision.
       await pollUntil(
@@ -1806,9 +1822,9 @@ test.describe("free writing: the proofreading question", () => {
   });
 
   // Flow walk, design problem 4: the question waits on the reviewer, so the
-  // card goes back to Active (wireframe 06b). Once answered it waits on the
-  // agent, and it goes back to Edits.
-  test("a proofread question sits on the Active tab while it waits on the reviewer, and goes back to Edits once answered", async ({
+  // card is on Active (wireframe 06b). Hand edits are Active cards now, so it
+  // is on Active before the question, while it waits, and once answered.
+  test("a proofread question sits on the Active tab while it waits on the reviewer, and stays there once answered", async ({
     page
   }, testInfo) => {
     const { app, helper, token } = await startBoth();
@@ -1817,15 +1833,15 @@ test.describe("free writing: the proofreading question", () => {
       const run = await typeRunAfterLede(page);
       await waitForItemInLog(helper, run.id);
       const before = await page.evaluate((id) => window.__lahe.rail.getCard(id).pane, run.id);
-      expect(before, "a run waiting on the agent is an Edits card").toBe("edits");
+      expect(before, "a run waiting on the agent is an Active card").toBe("active");
       await askProofread(helper, page, run, [{ block: 1, from: "place", to: "spot" }]);
       const asked = await page.evaluate((id) => {
         const rail = window.__lahe.rail;
         rail.collapse(false);
         rail.selectTab("active");
-        return { pane: rail.getCard(id).pane, active: rail.countFor("active"), edits: rail.countFor("edits") };
+        return { pane: rail.getCard(id).pane, active: rail.countFor("active"), done: rail.countFor("done") };
       }, run.id);
-      expect(asked, "the question is on Active, and Active counts it").toEqual({ pane: "active", active: 1, edits: 0 });
+      expect(asked, "the question is on Active, and Active counts it").toEqual({ pane: "active", active: 1, done: 0 });
       expect((await proofButtons(page, run.id)).use, "the buttons show on Active").toBe("Use the fixes");
 
       await page.setViewportSize({ width: 1280, height: 1100 });
@@ -1846,9 +1862,13 @@ test.describe("free writing: the proofreading question", () => {
       await pollPage(page, (args) => window.__lahe.itemById(args[0]).rev === args[1] + 1, [run.id, run.rev], {
         message: "Keep mine to post the next revision"
       });
-      await pollPage(page, (id) => window.__lahe.rail.getCard(id).pane === "edits", run.id, {
-        message: "the answered card to go back to Edits"
+      await pollPage(page, (id) => window.__lahe.itemById(id).state === "ready", run.id, {
+        message: "the answered card to wait on the agent again"
       });
+      expect(
+        await page.evaluate((id) => window.__lahe.rail.getCard(id).pane, run.id),
+        "waiting on the agent, it is still an Active card"
+      ).toBe("active");
     } finally {
       await helper.kill9();
       await app.close();

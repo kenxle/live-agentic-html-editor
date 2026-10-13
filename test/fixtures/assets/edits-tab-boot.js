@@ -1,11 +1,11 @@
 // The boot 3D's browser spec drives: THE REAL BOOT.
 //
 // It wires nothing of its own. LAHE.layer.boot is the shipped boot, which is
-// what mounts the rail, the Active tab and the Edits tab; everything below is a
+// what mounts the rail, the Active tab and the hand-edit rows; everything below is a
 // reader or a gesture the spec cannot express as a keystroke (a delete has no
 // keystroke, and a selection inside a block is a Range, not a key).
 //
-// If an assertion in the Edits tab spec could pass because of a line in this
+// If an assertion in the hand-edit spec could pass because of a line in this
 // file, the line is in the wrong file.
 //
 // Everything the spec reads is under window.__laheEdits.
@@ -25,13 +25,25 @@
     return handle.editsTab ? handle.editsTab() : null;
   }
 
-  // The Edits pane and the Active pane, straight off the rail's own accessor.
+  // The Active pane and the Done pane, straight off the rail's own accessor.
   // Both live in a closed shadow root, so a selector from the spec cannot reach
   // them and this is the only honest way to count what is really in each one.
   function paneRows(name) {
     var pane = rail.tabBody(name);
     if (!pane) return [];
     return Array.prototype.slice.call(pane.querySelectorAll("[data-lahe-edit-row]"));
+  }
+
+  // A hand edit's row, wherever the rail placed its card: Active while it is
+  // still work, Done once handled.
+  function rowNode(id) {
+    var found = null;
+    rail.TABS.some(function (name) {
+      var pane = rail.tabBody(name);
+      found = pane ? pane.querySelector('[data-lahe-edit-row="' + id + '"]') : null;
+      return !!found;
+    });
+    return found;
   }
 
   function selectWordIn(blockId, word) {
@@ -147,7 +159,7 @@
       });
     },
 
-    // --- what the Edits tab says about itself --------------------------------
+    // --- what the hand-edit rows say about themselves ------------------------
 
     rowCount: function () {
       var t = tab();
@@ -157,19 +169,23 @@
       var t = tab();
       return t ? t.rows() : null;
     },
-    // The Edits pane, open and on screen, which is what a geometry click needs.
-    showEditsTab: function () {
+    // The Active pane filtered to hand edits, open and on screen, which is what
+    // a geometry click needs.
+    showHandEdits: function () {
       rail.collapse(false);
-      return rail.selectTab("edits");
+      rail.selectTab("active");
+      rail.setActiveFilter("edits");
+      return rail.currentTab();
+    },
+    setFilter: function (name) {
+      return rail.setActiveFilter(name);
     },
 
     // The row's own Undo button, where it really is on screen. The root is
     // closed, so a selector from the spec cannot reach it and hit-testing is the
     // only honest way in: it is also what a hand does.
     undoButtonInfo: function (id) {
-      var pane = rail.tabBody("edits");
-      if (!pane) return null;
-      var row = pane.querySelector('[data-lahe-edit-row="' + id + '"]');
+      var row = rowNode(id);
       if (!row) return null;
       var button = row.querySelector('[data-lahe-act="undo"]');
       if (!button) return null;
@@ -194,36 +210,17 @@
 
     // What a row says when an undo could not be carried out.
     rowFailure: function (id) {
-      var pane = rail.tabBody("edits");
-      if (!pane) return null;
-      var row = pane.querySelector('[data-lahe-edit-row="' + id + '"]');
+      var row = rowNode(id);
       if (!row) return null;
       var said = row.querySelector("[data-lahe-undo-failed]");
       return said && said.textContent ? said.textContent : null;
     },
 
-    exportEnabled: function () {
+    // The hand-edit list export, the one ending the review runs. There is no
+    // button for it on the rail; this calls the same seam.
+    exportList: function () {
       var t = tab();
-      return t ? t.exportEnabled() : null;
-    },
-    exportTitle: function () {
-      var t = tab();
-      return t ? t.exportTitle() : null;
-    },
-    clickExport: function () {
-      var t = tab();
-      if (!t) return null;
-      var button = t.exportButton();
-      if (!button) return null;
-      if (button.disabled) {
-        // A disabled button's click never runs, so answer with what the button
-        // itself tells the reviewer.
-        return { ok: false, reason: button.title, text: null };
-      }
-      button.click();
-      // exportList is a promise now (3C's seam delivers the file); the click
-      // handler kicked it off, and page.evaluate awaits what we return.
-      return t.exportDone() || t.lastExport();
+      return t ? t.exportList() : null;
     }
   };
 })();

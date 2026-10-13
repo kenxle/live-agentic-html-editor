@@ -1,6 +1,6 @@
 /*
  * live-agentic-html-editor review layer
- * version 0.3.0+d8531d6cda09
+ * version 0.3.0+1d5de97e5f32
  *
  * GENERATED FILE. Do not edit. Edit the sources under src/ and run
  *   npm run build:layer
@@ -12,7 +12,7 @@
   "use strict";
   var g = typeof globalThis !== "undefined" ? globalThis : window;
   g.LAHE = g.LAHE || {};
-  g.LAHE.version = "0.3.0+d8531d6cda09";
+  g.LAHE.version = "0.3.0+1d5de97e5f32";
 })();
 /* ---- src/shared/markers.js  (owner: 0A-kernel) ---- */
 // Markers: the attribute and class names that identify DOM the tool added.
@@ -2946,6 +2946,14 @@
     // item whose claim cannot be checked at all.
     HANDLED_NOT_ON_PAGE: "handled_not_on_page",
 
+    // The reviewer marked this item done themselves ("Mark as done" on the
+    // card's state chip), so no agent retired it. "reviewer" when they did,
+    // absent everywhere else. Lifecycle, not content: the helper sets it from
+    // an item.closed event and never takes it from a record the browser posts.
+    // CLOSED_AT is when they did it.
+    CLOSED_BY: "closed_by",
+    CLOSED_AT: "closed_at",
+
     // Completed reviewer/agent exchanges, oldest first. The current exchange
     // stays in NOTE/CHANGE + REPLY until the reviewer continues it.
     THREAD: "thread",
@@ -2996,8 +3004,8 @@
    *
    * The three kinds that carry a before-and-after. It lives here rather than in
    * a tab file because more than one surface has to agree on the answer: the
-   * Edits tab lists exactly these, and the Done tab has to know that the Edits
-   * row on the same card is already drawing the change summary, so it does not
+   * hand-edit rows draw exactly these, and the Done tab has to know that the
+   * hand-edit row on the same card is already drawing the change summary, so it does not
    * print the same sentence a second time.
    */
   function isHandEdit(item) {
@@ -3077,6 +3085,9 @@
     // The page check's own bookkeeping. Tool-written, never read as an
     // instruction, and not projected into review.json at all.
     "region.check_reopen": CLASS_DATA,
+    // Who closed it and when. Tool-written lifecycle facts.
+    closed_by: CLASS_DATA,
+    closed_at: CLASS_DATA,
     page_title: CLASS_DATA,
     page_path: CLASS_DATA,
     "reply.reason": CLASS_DATA,
@@ -3927,6 +3938,20 @@
     return !item[FIELD.REPLY];
   }
 
+  // The one value CLOSED_BY carries today.
+  var CLOSED_BY_REVIEWER = "reviewer";
+
+  /**
+   * Did the reviewer mark this item done themselves, at its current revision?
+   *
+   * True only for a handled item carrying closed_by "reviewer". A reworded or
+   * reopened item drops the mark with the revision it was made at, so a stale
+   * mark on a ready record reads as false here rather than as a close.
+   */
+  function isClosedByReviewer(item) {
+    return !!item && item[FIELD.STATE] === STATE.HANDLED && item[FIELD.CLOSED_BY] === CLOSED_BY_REVIEWER;
+  }
+
   // Outstanding for the reviewer: still in front of them. A handled item is
   // kept and reopenable (R38), not outstanding.
   function isOutstanding(item) {
@@ -3979,6 +4004,10 @@
     var next = Object.assign({}, item, changes || {});
     next[FIELD.REV] = item[FIELD.REV] + 1;
     next[FIELD.UPDATED_AT] = nowIso();
+    // A reviewer's close names the revision it closed. A new revision is new
+    // work, so the mark does not travel onto it.
+    delete next[FIELD.CLOSED_BY];
+    delete next[FIELD.CLOSED_AT];
 
     var history = (item[FIELD.AFTER_HISTORY] || []).slice();
     var newAfter = next[FIELD.AFTER];
@@ -5256,6 +5285,8 @@
     isReady: isReady,
     isUnansweredReady: isUnansweredReady,
     isOutstanding: isOutstanding,
+    CLOSED_BY_REVIEWER: CLOSED_BY_REVIEWER,
+    isClosedByReviewer: isClosedByReviewer,
     isReplayable: isReplayable,
     comparisonMode: comparisonMode,
     normalizedBefore: normalizedBefore,
@@ -5275,7 +5306,8 @@
 //   draft        the reviewer is still thinking. Durable, never actionable
 //   ready        the reviewer said an agent may act on it (Cmd-Enter, or an
 //                edit committing)
-//   handled      an agent said it made the change
+//   handled      an agent said it made the change, or the reviewer marked
+//                the card done themselves (record.FIELD.CLOSED_BY says which)
 //   not_handled  an agent said it did not, with a reason the reviewer reads
 //
 //   `question` is a REPLY STATUS, not a state. An agent asking a question
@@ -5289,7 +5321,7 @@
 //
 //  1. EVERY TRANSITION NAMES AN ACTOR. The agent may only move an item out of
 //     ready, and only for the revision it named. Everything else is the
-//     reviewer's. The helper makes no transition on its own initiative; it
+//     reviewer's, including "Mark as done" (ready or not_handled to handled). The helper makes no transition on its own initiative; it
 //     records the ones it is told about. Without the actor column, a builder
 //     writing the reply handler has nothing stopping it from moving a draft
 //     straight to handled, which is silent loss of the reviewer's work with a
@@ -5386,6 +5418,23 @@
       to: STATE.READY,
       actor: ACTOR.REVIEWER,
       why: "REOPENED. R38: handled items are kept, and the reviewer reopens one whose fix did not land"
+    },
+    // MARK AS DONE. The reviewer closes their own outstanding card without
+    // waiting for an agent: a leftover comment, a refused edit they no longer
+    // want, or a handled claim the page check held open. The record says who
+    // did it (record.FIELD.CLOSED_BY), so nothing reads it as an agent's
+    // answer, and no agent reply moves it afterwards (see applyReply).
+    {
+      from: STATE.READY,
+      to: STATE.HANDLED,
+      actor: ACTOR.REVIEWER,
+      why: "MARK AS DONE: the reviewer closes an outstanding card themselves, at its current rev"
+    },
+    {
+      from: STATE.NOT_HANDLED,
+      to: STATE.HANDLED,
+      actor: ACTOR.REVIEWER,
+      why: "MARK AS DONE: the reviewer closes a card the agent said no to, at its current rev"
     }
   ];
 
@@ -5445,6 +5494,42 @@
 
   function canDelete(from, actor) {
     return actor === ACTOR.REVIEWER && DELETABLE_FROM.indexOf(from) !== -1;
+  }
+
+  // ---------------------------------------------------------------------------
+  // Mark as done: the reviewer closes a card themselves
+  // ---------------------------------------------------------------------------
+
+  /**
+   * May the reviewer mark this item done right now?
+   *
+   * Any committed outstanding item: ready (answered or not, a held handled
+   * claim included) or not_handled. Never a draft, which is the reviewer still
+   * typing, and never an item already handled.
+   */
+  function canClose(item) {
+    if (!item) return false;
+    return canTransition(item[FIELD.STATE], STATE.HANDLED, ACTOR.REVIEWER);
+  }
+
+  /**
+   * The item as the reviewer's close leaves it. Pure: a new record, the input
+   * untouched. The revision does not move, so a close names exactly the
+   * wording it closed, and the agent's last reply stays on the card as
+   * history. Throws on an item that cannot be closed, like every transition.
+   *
+   * @param {Object} item the item as it stands
+   * @param {string} [at] ISO time of the close
+   */
+  function closeItem(item, at) {
+    var to = assertTransition(item && item[FIELD.STATE], STATE.HANDLED, ACTOR.REVIEWER);
+    var next = Object.assign({}, item);
+    next[FIELD.STATE] = to;
+    next[FIELD.CLOSED_BY] = record.CLOSED_BY_REVIEWER;
+    next[FIELD.CLOSED_AT] = at || new Date().toISOString();
+    // A held handled claim is answered by the close: nothing is outstanding.
+    next[FIELD.HANDLED_NOT_ON_PAGE] = false;
+    return next;
   }
 
   // Has an agent answered this item, now or in an earlier round?
@@ -5512,6 +5597,16 @@
     var r = reply || {};
     if (record.REPLY_STATUSES.indexOf(r.status) === -1) {
       return { accepted: false, state: item[FIELD.STATE], refusal: "unknown reply status " + String(r.status) };
+    }
+    // THE REVIEWER CLOSED IT. Every reply after that is refused, whatever it
+    // says and whatever revision it names: the reviewer has decided this card
+    // is finished, and a late answer must not reopen it or hold it.
+    if (record.isClosedByReviewer(item)) {
+      return {
+        accepted: false,
+        state: item[FIELD.STATE],
+        refusal: "the reviewer marked this item done; it takes no reply"
+      };
     }
     if (!replyApplies(item, r.rev)) {
       return {
@@ -5593,6 +5688,8 @@
     assertTransition: assertTransition,
     findTransition: findTransition,
     canDelete: canDelete,
+    canClose: canClose,
+    closeItem: closeItem,
     agentReplied: agentReplied,
     undoTakesBack: undoTakesBack,
     replyApplies: replyApplies,
@@ -5615,6 +5712,7 @@
 //
 //   THE BROWSER WINS ON CONTENT for anything the helper has not acknowledged.
 //   THE STORE WINS ON LIFECYCLE, PER REVISION.
+//   EXCEPT THE REVIEWER'S OWN CLOSE ("Mark as done") AT THAT SAME REVISION.
 //
 // The per-revision half is the whole point. A "handled" that names rev 1
 // retires rev 1. A reviewer who reworded to rev 2 while the helper was down
@@ -5759,6 +5857,19 @@
     // Same revision. Lifecycle comes from the store, because a reply naming
     // this revision is exactly what the store knows and the browser does not.
     var merged = Object.assign({}, storeItem);
+
+    // THE REVIEWER'S CLOSE AT THIS REVISION STANDS. "Mark as done" is a
+    // lifecycle fact the browser knows first: its item.closed may still be in
+    // the outbox when this merge runs, and the store's copy then still says
+    // ready or not_handled with the agent's reply on it. Nothing at the same
+    // revision can undo a close (every reply after it is refused), so the
+    // store's older lifecycle does not win over it.
+    if (record.isClosedByReviewer(browserItem) && !record.isClosedByReviewer(storeItem)) {
+      merged[FIELD.STATE] = browserItem[FIELD.STATE];
+      merged[FIELD.CLOSED_BY] = browserItem[FIELD.CLOSED_BY];
+      merged[FIELD.CLOSED_AT] = browserItem[FIELD.CLOSED_AT];
+      merged[FIELD.HANDLED_NOT_ON_PAGE] = false;
+    }
 
     // Content comes from the browser while its work is unacknowledged: it may
     // hold keystrokes the helper never received.
@@ -6356,6 +6467,8 @@
       keys: "Cmd-Shift-C",
       when: "nothing selected",
       hint: "Press Cmd-Shift-C with nothing selected, then click any element to comment on the whole thing.",
+      panelKeys: "Cmd-Shift-C (no selection)",
+      panelHint: "As you hover over elements, they will be outlined. Click an element to comment on the element. Useful for images and other hard to highlight elements.",
       passThrough: false,
       preventDefault: true,
       requirement: "R17"
@@ -6365,6 +6478,7 @@
       keys: "click",
       when: "element-pick mode is open",
       hint: "Click the outlined element to comment on it. Esc cancels.",
+      inPanel: false,
       passThrough: false,
       preventDefault: true,
       requirement: "R17"
@@ -6374,6 +6488,7 @@
       keys: "Cmd-Shift-E",
       when: "the cursor or a selection is in a block",
       hint: "Press Cmd-Shift-E to edit the block you are in. Just that block.",
+      panelHint: "Select text and press Cmd-Shift-E to edit it by hand.",
       passThrough: false,
       preventDefault: true,
       requirement: "R24"
@@ -6383,6 +6498,8 @@
       keys: "Cmd-Shift-E",
       when: "the cursor is in no block",
       hint: "Click + Write here to add text. Esc to finish.",
+      panelKeys: "Cmd-Shift-E (no selection)",
+      panelHint: "As you hover, editable areas will be outlined. Click an area to hand edit it. Esc to finish.",
       passThrough: false,
       preventDefault: true,
       requirement: "R1"
@@ -6392,6 +6509,7 @@
       keys: "Cmd-Enter",
       when: "a comment box is focused",
       hint: "Cmd-Enter when done with this comment.",
+      panelHint: "Submit your comment or complete your edit.",
       passThrough: false,
       preventDefault: true,
       requirement: "R7"
@@ -6401,6 +6519,7 @@
       keys: "Cmd-Enter, Esc, or a click outside",
       when: "a block is in edit state",
       hint: "Cmd-Enter, Esc, or click outside to finish the edit and give the page back.",
+      inPanel: false,
       passThrough: false,
       preventDefault: true,
       requirement: "R24"
@@ -6410,6 +6529,7 @@
       keys: "Esc",
       when: "element-pick mode is open, or a comment box is focused",
       hint: "Esc closes the comment box or cancels picking. Your draft is kept.",
+      panelHint: "Esc closes the comment box or cancels picking. Half-written drafts are kept in the chat bar.",
       passThrough: false,
       preventDefault: true,
       requirement: "R1"
@@ -6419,6 +6539,7 @@
       keys: "Cmd-Shift-X",
       when: "always, including while the tool is hidden",
       hint: "Press Cmd-Shift-X to hide the review while you present, and again to bring it back.",
+      panelHint: "Presentation mode. Toggle hiding the rail and the pill.",
       passThrough: false,
       preventDefault: true,
       requirement: "R13"
@@ -6428,6 +6549,7 @@
       keys: "Cmd-Shift-1",
       when: "always, except while the review is hidden for presenting",
       hint: "Press Cmd-Shift-1 to open or close the review panel.",
+      panelHint: "Toggle the chat bar.",
       passThrough: false,
       preventDefault: true,
       requirement: "R43"
@@ -6437,6 +6559,8 @@
       keys: "everything else",
       when: "always",
       hint: "Everything else is the page. Links, buttons, and forms work exactly as they do without this.",
+      panelKeys: "page hotkeys",
+      panelHint: "Other page hotkeys should work as normal.",
       passThrough: true,
       preventDefault: false,
       requirement: "R13"
@@ -6955,7 +7079,20 @@
     });
   }
 
+  // The rail's Keyboard shortcuts panel. Its wording is Ken's, written for a
+  // reader who opened the panel to learn the keys: a row may name its keys and
+  // say its hint differently there (panelKeys, panelHint), and a step inside
+  // another gesture (picking the outlined element) is left out (inPanel).
+  function panelLines() {
+    return TABLE.filter(function (row) {
+      return row.inPanel !== false;
+    }).map(function (row) {
+      return { keys: row.panelKeys || row.keys, hint: row.panelHint || row.hint };
+    });
+  }
+
   var api = {
+    panelLines: panelLines,
     GESTURE: GESTURE,
     BREAK: BREAK,
     FORMAT: FORMAT,
@@ -8219,6 +8356,11 @@
     ITEM_READY: "item.ready",
     ITEM_DELETED: "item.deleted",
     ITEM_REOPENED: "item.reopened",
+    // {item, rev}. The reviewer marked the item done themselves ("Mark as
+    // done"). An explicit act at one revision, never a state claim: it carries
+    // no record, and the projection applies it only when the item is still
+    // outstanding at exactly that revision (lifecycle.canClose).
+    ITEM_CLOSED: "item.closed",
     REPLY_FOLDED: "reply.folded",
     REPLY_REJECTED: "reply.rejected",
     REVIEW_ARCHIVED: "review.archived",
@@ -9496,6 +9638,7 @@
     "If the reviewed page is built from a source file, handled means the reviewer's page now shows the change: edit the source, rebuild, check the change is in the built page, and only then reply. The page reloads itself when the file changes, and the rail comes back on its own if a rebuild leaves it out.",
     "When LAHE renders the page from Markdown, there is nothing for you to rebuild. Edit the .md and the page re-renders and reloads on its own. Do not rerun lahe review for that file, and never tell the reviewer to refresh or clear a cache.",
     "A handled reply for a hand edit is checked against the built page before it retires anything. It is held only when the words in the item's after_full are not in that page and the passage was left alone: the item's before is still on the page, exactly once, or nothing in the source or the page was written since the reviewer typed. An agent that changed the passage is not second-guessed on its wording. new_blocks has no old passage, so each block's words are checked against the built page on every handled reply. A take-back with remove_blocks is checked the other way: it is held while any of those blocks is still after the anchor on the built page. A held item stays ready and carries handled_not_on_page: true, the reviewer is told the change has not reached their page, and your next drain lists the item again. Fix the source so the page really shows the change, then reply again. You cannot close an item by saying it is done.",
+    "The reviewer can close a card themselves. Such an item is handled with closed_by_reviewer: true, it is off your drain list, and any reply to it is refused. Do not work on it.",
     "The check reads the built page, so it can be wrong: the renderer may eat a character the reviewer typed. If the reviewer's text genuinely cannot appear on the page as written, reply not_handled and say why. A not_handled reply is never checked, it retires the item off your drain list, and the reviewer reads your reason on the card and decides. Do not keep replying handled into a check that keeps refusing it.",
     "A break the reviewer typed is part of the edit: a blank line in the after text is a paragraph break, and a single newline is a line break. Markdown does not read a single newline as a new paragraph, so write a blank line between the two paragraphs in the source, or the format's own hard-break form for a line break, then rebuild and check the page really shows the break.",
     "An edit's after is the words; after_html is the same words carrying the reviewer's bold and italic, and that formatting is part of the edit. Apply after_html, not after alone. Bold reaches you as <strong> and italic as <em>; in a Markdown source those are ** and _ (or *). When the reviewer took bold or italic OFF words that a page stylesheet makes bold or italic, HTML has no tag that says so, so the record marks that run <not-bold> or <not-italic>: make that true in the source the way the source says it, and never copy either tag into the source. A handled reply for an edit whose formatting you did not carry is a wrong handled. For an item with new_blocks, after_html is still the whole sitting: anchor_after_html is the anchor's own change and new_blocks is the run.",
@@ -9642,6 +9785,9 @@
     // The helper's own finding about a handled claim, not anything an agent or
     // a page said. A boolean, and data like every other non-intent field.
     handled_not_on_page: record.CLASS_DATA,
+    // The reviewer marked the item done themselves. A boolean the helper
+    // writes from the reviewer's own act, never from page text.
+    closed_by_reviewer: record.CLASS_DATA,
     "thread[].rev": record.CLASS_DATA,
     "thread[].reviewer.note": record.CLASS_DATA,
     "thread[].reviewer.change": record.CLASS_DATA,
@@ -10120,6 +10266,12 @@
     // when it looked at the built page. The item is still ready, so it is on
     // the drain list, and this is the field that says why it came back.
     out.handled_not_on_page = it[F.HANDLED_NOT_ON_PAGE] === true;
+
+    // THE REVIEWER CLOSED IT. A handled item no agent retired: the reviewer
+    // chose "Mark as done" on the card. Beside the reply for the same reason as
+    // the flag above: the reply, if any, is the agent's last answer, and this
+    // says it is not what finished the item.
+    out.closed_by_reviewer = record.isClosedByReviewer(it);
 
     // WHEN THE REVIEWER LAST CHANGED THESE WORDS, and it is the obvious field
     // on purpose. This pair used to be created_at and updated_at, side by side
@@ -12912,8 +13064,19 @@
       return out;
     }
 
+    /**
+     * What the Active pane's filter shows: "all", "comments" or "edits".
+     *
+     * Anything else reads as "all", because a filter nobody remembers picking
+     * that hides half the rail is worse than losing the pick.
+     */
+    function readActiveFilter(got) {
+      var value = got && typeof got === "object" ? got.filter : null;
+      return value === "comments" || value === "edits" ? value : "all";
+    }
+
     function emptyUiPreferences() {
-      return { collapsed: false, pill: null, width: null, present: false, cards: {} };
+      return { collapsed: false, pill: null, width: null, present: false, cards: {}, filter: "all" };
     }
 
     function readUiPreferences(reviewId) {
@@ -12930,7 +13093,9 @@
           // reload in the middle of a talk has to keep it hidden.
           present: got.present === true,
           // Which cards are folded to one line. Per review, per card id.
-          cards: readCardStates(got)
+          cards: readCardStates(got),
+          // The Active pane's filter. Per review.
+          filter: readActiveFilter(got)
         };
       } catch (err) {
         return emptyUiPreferences();
@@ -12945,7 +13110,8 @@
         pill: readPillSpot(value),
         width: readRailWidth(value),
         present: !!(value && value.present),
-        cards: readCardStates(value)
+        cards: readCardStates(value),
+        filter: readActiveFilter(value)
       };
       try {
         backing.setItem(uiKey(reviewId), JSON.stringify(next));
@@ -14752,7 +14918,7 @@
   // Both live here because both are read off a node with the same five
   // questions the engine already asks, and because comments.js and editing.js
   // each used to compute their own descriptor. Two copies of a rule is how the
-  // rail and the Edits tab end up naming the same image differently.
+  // rail and the hand-edit rows end up naming the same image differently.
 
   // How much page text rides along as the locating hint. This is a hint, not a
   // passage: the projection bounds it again, and a whole paragraph in a record
@@ -17729,7 +17895,68 @@
 
   var shared = createHighlights();
 
+  // SEND, AND SEND WHILE HELD. Every send button shows its key, Cmd-Enter, on
+  // hover. With Hold on, nothing a reviewer sends reaches the agent until they
+  // release it, so every send button says where its words go and explains why
+  // on hover instead. Both tips show at once, not after the browser's delay.
+  // Every button that sends carries SEND_ATTR; whoever builds one paints it,
+  // and the rail repaints them all when Hold flips.
+  var SEND_ATTR = "data-lahe-send";
+  var SEND_WORDS = {
+    LABEL: "Send",
+    TIP: "Cmd-Enter",
+    HELD_LABEL: "Send to queue",
+    HELD_TIP: "Messages are being held until you release them to the agent in a batch."
+  };
+  var SEND_TIP_CSS =
+    "[" + SEND_ATTR + "]{position:relative}" +
+    "[" + SEND_ATTR + "][data-lahe-tip]:hover::after{content:attr(data-lahe-tip);position:absolute;" +
+    "right:0;bottom:calc(100% + 6px);width:max-content;max-width:220px;padding:7px 9px;border-radius:7px;background:#15171c;" +
+    "color:#fff;font-size:11.5px;font-weight:500;line-height:1.4;text-align:left;white-space:normal;" +
+    "letter-spacing:0;text-transform:none;box-shadow:0 6px 18px rgba(0,0,0,.25);z-index:10;pointer-events:none}";
+
+  /**
+   * Label one send button for the Hold state.
+   *
+   * @param {Element} button a button carrying SEND_ATTR
+   * @param {boolean} held whether Hold is on for this review
+   * @param {string} [label] the button's own word when not held ("Send" by default)
+   */
+  function paintSendButton(button, held, label) {
+    if (!button) return;
+    if (label) button.setAttribute("data-lahe-label", label);
+    var own = button.getAttribute("data-lahe-label") || SEND_WORDS.LABEL;
+    button.setAttribute(SEND_ATTR, "");
+    // The tip is drawn by SEND_TIP_CSS at once, so no native title: it would
+    // show late and say it twice.
+    button.title = "";
+    if (held) {
+      button.setAttribute("data-lahe-held", "true");
+      button.setAttribute("data-lahe-tip", SEND_WORDS.HELD_TIP);
+      button.setAttribute("aria-description", SEND_WORDS.HELD_TIP);
+      button.textContent = SEND_WORDS.HELD_LABEL;
+    } else {
+      button.removeAttribute("data-lahe-held");
+      button.setAttribute("data-lahe-tip", SEND_WORDS.TIP);
+      button.setAttribute("aria-description", SEND_WORDS.TIP);
+      button.textContent = own;
+    }
+  }
+
+  /** Repaint every send button under a root (a shadow root or a document). */
+  function paintSendButtons(root, held) {
+    if (!root || typeof root.querySelectorAll !== "function") return 0;
+    var buttons = root.querySelectorAll("[" + SEND_ATTR + "]");
+    for (var i = 0; i < buttons.length; i += 1) paintSendButton(buttons[i], held);
+    return buttons.length;
+  }
+
   return {
+    SEND_ATTR: SEND_ATTR,
+    SEND_WORDS: SEND_WORDS,
+    SEND_TIP_CSS: SEND_TIP_CSS,
+    paintSendButton: paintSendButton,
+    paintSendButtons: paintSendButtons,
     refusesWholePaint: refusesWholePaint,
     refusesWholeElement: refusesWholeElement,
     WHOLE_PAINT_MAX_RATIO: WHOLE_PAINT_MAX_RATIO,
@@ -17860,6 +18087,10 @@
     BACK: "Back to the document's style",
     CLOSE: "Close",
     ADD_COMMAND: "lahe style add <folder>",
+    // Where the paid styles are. A reviewer with International alone is shown
+    // the way to more, as a link (Ken, 2026-10-12).
+    MORE_URL: "https://www.stclair.ai/lahe-styles.html",
+    MORE: "Get more styles",
     previewing: function (name, documentName) {
       return "Previewing " + name + ". The document uses " + documentName + ".";
     },
@@ -18092,7 +18323,7 @@
       ]);
     }
     if (s.listLoaded && list.length === 0) {
-      notes.push([{ text: "Add styles with " }, { kbd: WORDS.ADD_COMMAND }, { text: ", or ask your agent to." }]);
+      notes.push([{ link: WORDS.MORE_URL, text: WORDS.MORE }, { text: ". Add one with " }, { kbd: WORDS.ADD_COMMAND }, { text: ", or ask your agent to." }]);
     }
 
     var indicator = null;
@@ -18704,7 +18935,8 @@
 // This file holds THE RAIL CHROME ONLY: the tab shell, the status line, the
 // failure chips, and the card API. TAB CONTENTS ARE NOT HERE. They live in
 // three files with one owner each (tab_active.js is 1D's, tab_done.js is 3A's,
-// tab_edits.js is 3D's), so five tasks stop writing one file. A tab owner fills
+// tab_edits.js, the hand-edit rows, is 3D's), so five tasks stop writing one
+// file. A tab owner fills
 // tabBody(tab); a card's contents go in cardBody(id).
 //
 // ---------------------------------------------------------------------------
@@ -18813,11 +19045,58 @@
 ) {
   "use strict";
 
-  // D10's three tabs. Contents come from the three tab files; the shell is
-  // here, so a tab can be registered before its file exists.
-  var TAB = { ACTIVE: "active", EDITS: "edits", DONE: "done" };
-  var TABS = [TAB.ACTIVE, TAB.EDITS, TAB.DONE];
-  var TAB_LABEL = { active: "Active", edits: "Edits", done: "Done" };
+  // Two tabs: what still needs work, and what is finished. Hand edits sit in
+  // Active as cards beside the comments, and the Active pane's filter is how a
+  // reviewer sees only one or the other.
+  var TAB = { ACTIVE: "active", DONE: "done" };
+  var TABS = [TAB.ACTIVE, TAB.DONE];
+  var TAB_LABEL = { active: "Active", done: "Done" };
+  // The name of the hand-edit tab the rail used to have. selectTab answers it
+  // with Active rather than throwing, so an old caller lands somewhere sensible.
+  var LEGACY_EDITS_TAB = "edits";
+
+  // What the Active pane shows. A view and nothing else: the tab counts, the
+  // pill and every card's place are the same whichever one is picked.
+  var FILTER = { ALL: "all", COMMENTS: "comments", EDITS: "edits" };
+  var FILTERS = [FILTER.ALL, FILTER.COMMENTS, FILTER.EDITS];
+  var FILTER_LABEL = { all: "All", comments: "Comments", edits: "Edits" };
+  // What the pane says when the pick hides every card it holds. Without it the
+  // reviewer sees a blank pane under a count that says there is work.
+  var FILTER_EMPTY = {
+    comments: "No comments here. Pick All to see your hand edits too.",
+    edits: "No hand edits here. Pick All to see your comments too."
+  };
+  // The search box at the top of each pane. Case-insensitive "contains", over
+  // the words a card shows (never its button labels), and a view only, like
+  // the filter.
+  var SEARCH_PLACEHOLDER = "Search";
+  var SEARCH_LABEL = "Search the cards in this tab";
+  var SEARCH_MISS_ATTR = "data-lahe-search-miss";
+  function searchEmptyText(query) {
+    return "Nothing here matches “" + query + "”.";
+  }
+
+  /**
+   * Does this text contain the query, ignoring case and runs of whitespace?
+   * Pure, so the matching rule is argued about in a unit test.
+   */
+  function searchMatches(text, query) {
+    var q = String(query || "").replace(/\s+/g, " ").trim().toLowerCase();
+    if (!q) return true;
+    return String(text || "").replace(/\s+/g, " ").toLowerCase().indexOf(q) !== -1;
+  }
+
+  // The card attribute the filter reads. paintCard sets it from the record's
+  // kind, so no tab file has to say what a card is.
+  var HAND_EDIT_ATTR = "data-lahe-hand-edit";
+
+  // Edit, delete and format_only: what the reviewer made with their hands,
+  // which the Active filter calls "Edits". From the kind alone, so a hand edit
+  // waiting on a proofreading answer filters the same as every other one.
+  function isHandEditKind(item) {
+    var kind = item && item[record.FIELD.KIND];
+    return kind === record.KIND.EDIT || kind === record.KIND.FORMAT_ONLY || kind === record.KIND.DELETE;
+  }
 
   /**
    * Which pane a card belongs in, from the record alone.
@@ -18828,35 +19107,16 @@
    * how the two drift apart. Pure: item in, tab name out, no card required, so
    * it answers for an item the rail has never been handed.
    */
-  // The agent's proofreading question on a run, not yet answered. The same
-  // test as tab_done's isProofreadQuestion, on the record alone.
-  function isProofreadWaiting(item) {
-    var reply = item && item[record.FIELD.REPLY];
-    return (
-      !!reply &&
-      reply.status === record.REPLY_STATUS.QUESTION &&
-      reply.proofread === true &&
-      item[record.FIELD.STATE] === record.STATE.READY &&
-      record.isRunRecord(item)
-    );
-  }
-
   function paneForItem(item) {
-    var kind = item[record.FIELD.KIND];
     // The state the REVIEWER is shown, which is the state their card is placed
     // by. While a TOOL ROUND is open the record says ready and the reviewer is
     // not part of it, so the card stays in Done where they left it
     // (record.displayState, and Ken on 2026-09-15).
     var state = record.displayState(item);
     if (state === record.STATE.HANDLED) return TAB.DONE;
-    // A proofreading question waits on the reviewer, not the agent, so its
-    // card goes back to Active until they answer (wireframe 06b: "The card is
-    // back on Active because it needs an answer"). Once answered it waits on
-    // the agent again, and goes back to Edits with every other hand edit.
-    if (isProofreadWaiting(item)) return TAB.ACTIVE;
-    if (kind === record.KIND.EDIT || kind === record.KIND.FORMAT_ONLY || kind === record.KIND.DELETE) {
-      return TAB.EDITS;
-    }
+    // Everything else is still work, comments and hand edits alike, so it is
+    // Active. A proofreading question on a run is here too, which is where it
+    // has to be: it waits on the reviewer's answer.
     return TAB.ACTIVE;
   }
 
@@ -18957,9 +19217,27 @@
     // queued in the outbox with Hold on.
     held: "Held"
   };
+  // MARK AS DONE (docs/features/20261012.01_rail_cleanup). The reviewer closes
+  // an outstanding card themselves from its state chip. One spelling for the
+  // menu item, the tip on the chip, and the chip a closed card wears.
+  var MARK_DONE = {
+    ACTION: "done",
+    LABEL: "Mark as done",
+    TIP: "Mark this card as done without waiting for the agent",
+    // The chip on a card the reviewer closed. "Handled" would say an agent did it.
+    CLOSED_CHIP: "Done"
+  };
+  // The display states a card can be closed from. Held is ready waiting on the
+  // reviewer's own Hold, and a refused item never reached the helper.
+  var CLOSEABLE_CHIP_STATES = ["ready", "not_handled"];
   // The word the toggle and the toast both use. One spelling, so the button's
   // accessible name and anything announcing it never drift apart.
-  var HOLD_LABEL = "Hold sending";
+  var HOLD_LABEL = "Hold sending messages";
+  // While held, the same button sends what is queued.
+  function holdReleaseLabel(n) {
+    if (n === 0) return "Send messages live";
+    return "Send " + n + " held message" + (n === 1 ? "" : "s");
+  }
   var HOLD_ZERO_TEXT = "Holding — nothing sends until you release";
   function holdCountText(n) {
     return "Holding, " + n + " queued";
@@ -18988,6 +19266,130 @@
       }).format(date);
     } catch (err) {
       return date.toLocaleString();
+    }
+  }
+
+  /**
+   * The time on a turn's caption: just the time for today, the date as well
+   * for anything older. The card head keeps the full date; repeating "Oct 12"
+   * over every bubble of a conversation was noise to scan past. The full date
+   * and time are always on the caption's hover.
+   *
+   * @param {string} value ISO time
+   * @param {Date} [now] for tests
+   */
+  function captionTimeLabel(value, now) {
+    if (!value) return "";
+    var date = new Date(value);
+    if (!Number.isFinite(date.getTime())) return "";
+    var today = now instanceof Date ? now : new Date();
+    var sameDay =
+      date.getFullYear() === today.getFullYear() &&
+      date.getMonth() === today.getMonth() &&
+      date.getDate() === today.getDate();
+    if (!sameDay) return timestampLabel(value);
+    try {
+      return new Intl.DateTimeFormat(undefined, { hour: "numeric", minute: "2-digit" }).format(date);
+    } catch (err) {
+      return date.toLocaleTimeString();
+    }
+  }
+
+  // Each file tip gets its own id, so the name that shows it can point at it
+  // with aria-describedby inside the rail's one shadow root.
+  var turnFilesSeq = 0;
+
+  /**
+   * One turn of a card's conversation: a caption (who, then when) over a
+   * bubble. The one builder for every turn on every card, so the reviewer's
+   * words and the agent's look the same wherever they are drawn.
+   *
+   * @param {Element} host the element that becomes the turn
+   * @param {function(string, string=, string=): Element} make the caller's own
+   *   element factory, so the nodes carry that caller's chrome marker
+   * @param {object} opts
+   *   side    "you" (the reviewer, on the right) or "agent" (on the left)
+   *   who     the caption's name
+   *   at      ISO time, or null for none
+   *   text    the words, set as text, never markup
+   *   bubble  an existing node to use as the bubble instead of a new one (the
+   *           Active tab's editable note is its own bubble)
+   *   files   paths the agent changed, shown under a hover on the name
+   *   names   extra class names for {cap, who, time, text, files, file}, so
+   *           older selectors keep finding the parts they always found
+   * @returns {{cap: Element, who: Element, time: Element|null, bubble: Element, files: Element|null}}
+   */
+  function fillTurn(host, make, opts) {
+    var o = opts || {};
+    var names = o.names || {};
+    var withName = function (base, extra) {
+      return extra ? base + " " + extra : base;
+    };
+    var side = o.side === "agent" ? "agent" : "you";
+    host.classList.add("turn");
+    host.setAttribute("data-side", side);
+    var cap = make("div", withName("turn__cap", names.cap));
+    var files = Array.isArray(o.files)
+      ? o.files.filter(function (one) {
+          return typeof one === "string" && one !== "";
+        })
+      : [];
+    var who;
+    if (files.length) {
+      who = make("button", withName("turn__who turn__who--files", names.who), o.who || "");
+      who.setAttribute("type", "button");
+    } else {
+      who = make("span", withName("turn__who", names.who), o.who || "");
+    }
+    cap.appendChild(who);
+    var time = null;
+    if (o.at) {
+      time = make("time", withName("turn__time", names.time), captionTimeLabel(o.at));
+      time.setAttribute("datetime", o.at);
+      var when = new Date(o.at);
+      if (Number.isFinite(when.getTime())) time.setAttribute("title", when.toLocaleString());
+    }
+    if (time) cap.appendChild(time);
+    var list = null;
+    if (files.length) {
+      turnFilesSeq += 1;
+      list = make("div", withName("turn__files", names.files));
+      list.id = "lahe-turn-files-" + turnFilesSeq;
+      list.setAttribute("role", "tooltip");
+      list.appendChild(
+        make("div", "turn__fileshead", files.length === 1 ? "Changed 1 file" : "Changed " + files.length + " files")
+      );
+      files.forEach(function (name) {
+        list.appendChild(make("div", withName("turn__file", names.file), name));
+      });
+      cap.appendChild(list);
+      who.setAttribute("aria-describedby", list.id);
+    }
+    host.appendChild(cap);
+    var bubble = o.bubble || make("div", withName("bubble", names.text), o.text === undefined ? "" : String(o.text));
+    if (o.bubble) {
+      bubble.classList.add("bubble");
+      if (names.text) bubble.classList.add(names.text);
+    }
+    host.appendChild(bubble);
+    return { cap: cap, who: who, time: time, bubble: bubble, files: list };
+  }
+
+  /**
+   * Rewrite a caption's time in place, for a turn whose node outlives one
+   * paint (the Active tab's note is never rebuilt under the reviewer's caret).
+   */
+  function setTurnTime(time, at) {
+    if (!time) return;
+    time.textContent = captionTimeLabel(at);
+    if (at) {
+      time.setAttribute("datetime", at);
+      var when = new Date(at);
+      if (Number.isFinite(when.getTime())) time.setAttribute("title", when.toLocaleString());
+      else time.removeAttribute("title");
+    } else {
+      time.removeAttribute("datetime");
+      time.removeAttribute("title");
     }
   }
 
@@ -19117,11 +19519,19 @@
   // child, so one attribute puts away every block the rail and the three tab
   // owners draw inside it, and nothing has to be told.
   var CARD_COLLAPSED_ATTR = "data-lahe-collapsed";
-  // The two marks a folded card still has to show. tab_done.js SETS both of
+  // The marks a folded card still has to show. tab_done.js SETS all three of
   // these; the rail only reads them, which is what lets a folded card say "1
   // new" without this file knowing what a reply is. Spelled here so there is one
   // spelling: tab_done.js takes its own constants from these.
   var CARD_UNSEEN_ATTR = "data-lahe-unseen";
+  // The narrower of the two: a reply nobody has read yet, and nothing else.
+  // CARD_UNSEEN_ATTR also stays on a card for the rest of the visit that
+  // brought the reviewer to it, so the badge's "which ones?" has an answer on
+  // screen. The "1 new" tag reads THIS one, so a card the reviewer opened, read
+  // and folded again never says "1 new" (Ken, 2026-10-12: "I can read
+  // something and then close that card with the accordion and it still says
+  // new").
+  var CARD_UNREAD_ATTR = "data-lahe-unread";
   var CARD_ASKING_ATTR = "data-lahe-asking";
   // A ready card nobody has picked up, past the overdue rule. Set by the rail
   // alone, off the item and the helper's liveness answer.
@@ -19140,7 +19550,7 @@
     "font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;",
     "--ink:#15171c;--ink-soft:#565e6d;--ink-faint:#868f9f;--paper:#fff;--surface:#f6f7f9;",
     "--sunken:#eef0f4;--line:#e2e5eb;--line-soft:#eceef2;--accent:#3c56a5;--accent-ink:#2c3f7d;",
-    "--accent-wash:rgba(60,86,165,.09);--warn:#8d5715;--warn-wash:rgba(180,120,30,.12);",
+    "--accent-wash:rgba(60,86,165,.09);--warn:#8d5715;--warn-wash:rgba(180,120,30,.12);--bad:#c4372c;",
     "--good:#2c6f52;--shadow:0 1px 2px rgba(18,20,26,.06),0 14px 34px rgba(18,20,26,.13);",
     // THE CARD'S STATE IS A COLOR AS WELL AS A WORD. A draft the reviewer has
     // not submitted wears a quiet warm wash, and a card an agent has HANDLED
@@ -19150,6 +19560,9 @@
     // are washes over the card's paper, not fills: the reviewer's own sentence
     // stays the strongest thing on the card.
     "--draft-wash:#fdf8ef;--draft-line:#ecdcbe;--handled-wash:#f1f8f4;--handled-line:#cee2d6;",
+    // The reviewer's own chat bubble: the accent mixed into the card's paper,
+    // opaque so it reads the same on a draft, a ready and a handled card.
+    "--you-wash:color-mix(in srgb,var(--accent) 9%,var(--paper));",
     "--radius:14px;--radius-sm:10px}",
     // THE PAGE PICKS THE SCHEME, NOT THE OS. highlight.js samples the reviewed
     // page's own background and stamps data-lahe-scheme on this rail's host, so
@@ -19165,13 +19578,14 @@
     // separable from the card behind it, so the block's loudness rested on the
     // rule alone and D10's promise (a question cannot be scrolled past) was
     // thinner in dark than in light. Same relationship, not the same alpha.
-    "--accent-ink:#b7c4f2;--accent-wash:rgba(147,167,234,.22);--warn:#dfae6a;",
+    "--accent-ink:#b7c4f2;--accent-wash:rgba(147,167,234,.22);--warn:#dfae6a;--bad:#ef7a6f;",
     "--warn-wash:rgba(223,174,106,.14);--good:#7fc4a2;",
     // The same two washes, derived the way every other dark token here is: the
     // same relationship to the card's paper, not the same numbers. A light tint
     // carried into dark reads as a lit panel; these are the dark paper with the
     // hue mixed into it.
     "--draft-wash:#26221b;--draft-line:#3b3327;--handled-wash:#1a2420;--handled-line:#2a3d34;",
+    "--you-wash:color-mix(in srgb,var(--accent) 17%,var(--paper));",
     "--shadow:0 1px 2px rgba(0,0,0,.4),0 16px 40px rgba(0,0,0,.45)}",
     "*{box-sizing:border-box;margin:0;padding:0;font:inherit;color:inherit}",
     "button{background:none;border:0;cursor:pointer;font:inherit;color:inherit}",
@@ -19217,10 +19631,44 @@
     // position/z-index so the head's menu can hang over the panes below it.
     ".head{position:relative;z-index:3;display:flex;align-items:center;gap:10px;padding:13px 14px 12px;",
     "border-bottom:1px solid var(--line-soft)}",
-    ".mark{width:8px;height:8px;border-radius:50%;background:var(--accent);flex:none}",
+    // THE STATUS DOT. The head's dot is the status line's dot: one reading of
+    // "is my work stored, and is an agent on it", drawn where the eye starts.
+    // Shape as well as color, so it reads without color vision:
+    //   circle         stored, and an agent is listening or nothing is waiting
+    //   circle + halo  an agent is working on it
+    //   ring           stored, but no agent is listening
+    //   square         kept in this browser, not stored yet
+    //   triangle       work has waited too long; the rail also says so in words
+    // The words live in the dot's title and in the screen-reader status row.
+    // Its words show at once on hover, drawn here rather than as a title,
+    // which the browser shows late.
+    ".markwrap{position:relative;display:flex;align-items:center;justify-content:center;",
+    "width:17px;height:17px;margin:-4px;flex:none}",
+    ".markwrap[data-lahe-copy='true']{cursor:pointer}",
+    ".markwrap[data-lahe-tip]:hover::after{content:attr(data-lahe-tip);position:absolute;left:0;",
+    "top:calc(100% + 6px);width:260px;padding:8px 10px;border-radius:7px;background:#15171c;color:#fff;",
+    "font-size:11.5px;font-weight:500;line-height:1.45;white-space:pre-line;z-index:10;",
+    "box-shadow:0 6px 18px rgba(0,0,0,.25);pointer-events:none}",
+    ".mark{width:9px;height:9px;border-radius:50%;background:var(--ink-faint);flex:none;",
+    "box-sizing:border-box;cursor:default}",
+    ".mark[data-status='stored']{background:var(--good)}",
+    ".mark[data-status='kept_unconfirmed']{border-radius:2px;width:8px;height:8px}",
+    // The helper is down: a red octagon, the one stop sign on the rail.
+    // A white bar across it, like a stop sign, so it does not read as a dot.
+    ".mark[data-status='kept_locally']{background:linear-gradient(#fff,#fff) center/62% 2px no-repeat,var(--bad);",
+    "border-radius:0;width:12px;height:12px;",
+    "clip-path:polygon(30% 0,70% 0,100% 30%,100% 70%,70% 100%,30% 100%,0 70%,0 30%)}",
+    // Working pulses: a halo that swells and fades while the agent is on it.
+    ".mark[data-agent='working']{background:var(--accent);animation:lahe-mark-pulse 1.6s ease-out infinite}",
+    "@keyframes lahe-mark-pulse{0%{box-shadow:0 0 0 0 color-mix(in srgb,var(--accent) 55%,transparent)}",
+    "70%{box-shadow:0 0 0 6px color-mix(in srgb,var(--accent) 0%,transparent)}",
+    "100%{box-shadow:0 0 0 0 color-mix(in srgb,var(--accent) 0%,transparent)}}",
+    "@media (prefers-reduced-motion:reduce){.mark[data-agent='working']{animation:none;",
+    "box-shadow:0 0 0 3px var(--accent-wash)}}",
+    ".mark[data-agent='absent'],.mark[data-agent='no_agent']{background:transparent;border:1.5px solid var(--ink-faint)}",
+    ".mark[data-loud='true']{background:var(--warn);border:0;border-radius:0;width:11px;height:10px;",
+    "clip-path:polygon(50% 0,100% 100%,0 100%)}",
     ".title{font-size:13px;font-weight:600;letter-spacing:-.005em}",
-    ".review{font-size:11px;color:var(--ink-faint);letter-spacing:.02em;",
-    "overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:11ch}",
     ".head .spacer{flex:1}",
     ".iconbtn{width:26px;height:26px;border-radius:7px;color:var(--ink-soft);",
     "display:flex;align-items:center;justify-content:center;font-size:14px}",
@@ -19245,6 +19693,20 @@
     ".menuitem{display:block;width:100%;text-align:left;white-space:nowrap;font-size:12.5px;",
     "font-weight:500;color:var(--ink);padding:7px 10px;border-radius:7px}",
     ".menuitem:hover{background:var(--surface)}",
+    ".menuitem[hidden]{display:none}",
+    // A group flies out to the side on hover, the way a desktop menu does. To
+    // the LEFT, because the rail is against the window's right edge.
+    ".menugroup{position:relative}",
+    ".menuitem--group{display:flex;align-items:center;justify-content:space-between;gap:12px}",
+    ".menuitem--group::after{content:'›';font-size:14px;line-height:1;color:var(--ink-faint)}",
+    ".menuitem--group[aria-expanded='true']{background:var(--surface)}",
+    // Fixed, and placed by setMenuGroupOpen from the group's own rect: the rail
+    // clips what overflows it, and a fly-out has to stand outside the rail.
+    ".submenu{position:fixed;top:auto;right:auto;min-width:190px}",
+    // A bridge over the gap between the group and its fly-out, so a pointer
+    // crossing it never counts as leaving.
+    ".submenu::before{content:'';position:absolute;top:0;bottom:0;right:-12px;width:12px}",
+    ".submenu:not(:has(> .menuitem:not([hidden]))){display:none}",
 
     // --- tabs ---------------------------------------------------------------
     ".tabs{display:flex;gap:2px;padding:8px 10px 0;border-bottom:1px solid var(--line-soft)}",
@@ -19280,6 +19742,66 @@
     ".pane:not(:has(.card:not([data-lahe-blank]))) .empty[data-lahe-empty='page']{display:flex}",
     ".empty__title{margin:0;font-size:13px;font-weight:600;color:var(--ink)}",
     ".empty__line{margin:0;font-size:12.5px;line-height:1.45;color:var(--ink-soft)}",
+
+    // --- the pane head: the Active filter and the search box ------------------
+    // One row above the cards (order -1, so a card placed before it never lands
+    // on top). Not drawn on a pane with no cards, where it would narrow nothing
+    // and push the "how to start" lines down.
+    ".panehead{order:-1;flex:none;display:flex;align-items:center;gap:8px;flex-wrap:wrap}",
+    ".pane:not(:has(.card:not([data-lahe-blank]))) .panehead{display:none}",
+    // The kind filter: a small segmented control in the tab strip's quiet
+    // register. The picked segment is a paper chip on a sunken track, the rest
+    // are plain text.
+    // The kind filter: one small button beside the search box, so the box
+    // takes most of the row (Ken, 2026-10-12). It opens a popover holding the
+    // three picks; a pick other than All shows its name on the button.
+    ".filterwrap{position:relative;flex:none}",
+    ".filterbtn{display:flex;align-items:center;gap:5px;font:inherit;font-size:11.5px;font-weight:550;",
+    "line-height:1.3;color:var(--ink-soft);background:var(--paper);border:1px solid var(--line);",
+    "border-radius:7px;padding:4px 7px;cursor:pointer}",
+    ".filterbtn svg{width:13px;height:13px;flex:none}",
+    ".filterbtn:hover{color:var(--ink)}",
+    ".filterbtn[data-lahe-filtering='true']{color:var(--accent-ink);border-color:var(--accent);",
+    "background:var(--accent-wash)}",
+    ".filterbtn:focus-visible{outline:2px solid var(--accent);outline-offset:0}",
+    ".filterbtn__label:empty{display:none}",
+    ".filter{position:absolute;right:0;top:calc(100% + 4px);z-index:5;display:flex;flex-direction:column;",
+    "gap:1px;padding:4px;min-width:124px;background:var(--paper);border:1px solid var(--line);",
+    "border-radius:8px;box-shadow:0 6px 18px rgba(18,20,26,.12)}",
+    ".filter[hidden]{display:none}",
+    ".filter__opt{font-size:12px;font-weight:500;color:var(--ink);padding:5px 10px;text-align:left;",
+    "border-radius:5px;line-height:1.3;background:transparent;border:0;font-family:inherit;cursor:pointer}",
+    ".filter__opt:hover,.filter__opt:focus-visible{background:var(--sunken);outline:0}",
+    ".filter__opt[aria-pressed='true']{color:var(--accent-ink);font-weight:600}",
+    ".filter__opt[aria-pressed='true']::before{content:'\\2713\\00a0';}",
+    // The search box: the card-action outline at the card-action size, taking
+    // whatever the row leaves after the filter.
+    ".search{flex:1 1 110px;min-width:0;box-sizing:border-box;font:inherit;font-size:11.5px;",
+    "line-height:1.3;color:var(--ink);background:var(--paper);border:1px solid var(--line);",
+    "border-radius:7px;padding:4px 8px;margin:0}",
+    ".search::placeholder{color:var(--ink-faint)}",
+    ".search:focus-visible{outline:2px solid var(--accent);outline-offset:0}",
+    // A card whose words do not contain the search is not drawn. Set by the
+    // search pass, never by a tab owner.
+    ".card[data-lahe-search-miss],.lahe-rail-othercard[data-lahe-search-miss]{display:none}",
+    ".searchempty{color:var(--ink-faint);font-size:12px;padding:18px 4px;text-align:center;",
+    "overflow-wrap:anywhere}",
+    ".searchempty[hidden]{display:none}",
+    // The pick hides cards and the filed-elsewhere comments with them. It never
+    // touches what a card holds, only whether the card is drawn.
+    ".pane[data-lahe-filter='edits'] .card:not([" + HAND_EDIT_ATTR + "]),",
+    ".pane[data-lahe-filter='edits'] [data-lahe-others],",
+    ".pane[data-lahe-filter='comments'] .card[" + HAND_EDIT_ATTR + "]{display:none}",
+    // Said only when the pane HAS cards and the pick hides all of them. An empty
+    // pane keeps its own "nothing here" line instead.
+    ".filterempty{display:none;color:var(--ink-faint);font-size:12px;padding:18px 4px;text-align:center}",
+    ".pane[data-lahe-filter='edits']:has(.card:not([data-lahe-blank]))",
+    ":not(:has(.card[" + HAND_EDIT_ATTR + "]:not([data-lahe-blank]))) .filterempty,",
+    ".pane[data-lahe-filter='comments']:has(.card:not([data-lahe-blank]))",
+    ":not(:has(.card:not([" + HAND_EDIT_ATTR + "]):not([data-lahe-blank]))) .filterempty{display:block}",
+    // While a search is typed, the search's own line speaks for an empty pane,
+    // so the two are never stacked.
+    ".pane[data-lahe-searching] .filterempty{display:none !important}",
 
     // --- cards --------------------------------------------------------------
     ".card{background:var(--paper);border:1px solid var(--line);border-radius:var(--radius-sm);",
@@ -19351,7 +19873,7 @@
     "letter-spacing:.06em;text-transform:uppercase;border-radius:999px;padding:3px 6px;",
     "color:#fff;background:var(--accent)}",
     ":host([data-lahe-scheme='dark']) .card__tag{color:#12151a}",
-    ".card[" + CARD_COLLAPSED_ATTR + "='true'][" + CARD_UNSEEN_ATTR + "='true'] .card__tag--new{display:inline-block}",
+    ".card[" + CARD_COLLAPSED_ATTR + "='true'][" + CARD_UNREAD_ATTR + "='true'] .card__tag--new{display:inline-block}",
     ".card[" + CARD_COLLAPSED_ATTR + "='true'][" + CARD_ASKING_ATTR + "='true'] .card__tag--ask{display:inline-block}",
     // A card that is both is a question, which is the louder of the two.
     ".card[" + CARD_COLLAPSED_ATTR + "='true'][" + CARD_ASKING_ATTR + "='true'] .card__tag--new{display:none}",
@@ -19373,11 +19895,30 @@
     "border:1px solid currentColor}",
     ".card__state[data-state='not_handled']{color:var(--warn);background:var(--warn-wash)}",
     ".card__state[data-state='refused']{color:var(--warn);background:var(--warn-wash)}",
+    // The chip is a button on an outstanding card: it opens the card's own
+    // one-item menu, "Mark as done". The tip is the status dot's, anchored to
+    // the right because the chip sits at the card's right edge.
+    ".statewrap{position:relative;display:inline-flex;flex:none}",
+    ".card__state[role='button']{cursor:pointer}",
+    ".card__state[role='button']:hover,.card__state[aria-expanded='true']{box-shadow:inset 0 0 0 1px currentColor}",
+    ".card__state[role='button']:focus-visible{outline:2px solid var(--accent);outline-offset:2px}",
+    ".statewrap[data-lahe-tip]:hover::after{content:attr(data-lahe-tip);position:absolute;right:0;",
+    "top:calc(100% + 6px);width:200px;padding:8px 10px;border-radius:7px;background:#15171c;color:#fff;",
+    "font-size:11.5px;font-weight:500;line-height:1.45;white-space:pre-line;z-index:10;text-transform:none;",
+    "letter-spacing:normal;box-shadow:0 6px 18px rgba(0,0,0,.25);pointer-events:none}",
+    ".statewrap[data-lahe-open='true']::after{display:none}",
+    ".statemenu{min-width:150px;z-index:11}",
     // A quote rule, which is what a quote has looked like since print. It is
     // decoration, not a signal: it says "these are the page's words, not the
     // reviewer's," and it never means anything is new or unread.
-    ".card__quote{font-size:12px;color:var(--ink-soft);border-left:2px solid var(--line);",
+    ".card__quote{font-size:12px;color:var(--ink-soft);border-left:3px solid var(--ink-faint);",
     "padding-left:9px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}",
+    // A passage longer than two lines can be opened out: the quote itself is
+    // the control, so there is no extra row on a card whose passage is short.
+    ".card__quote[data-lahe-more='true']{cursor:pointer}",
+    ".card__quote[data-lahe-more='true']:hover{color:var(--ink)}",
+    ".card__quote[data-lahe-more='true']:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:3px}",
+    ".card__quote[data-lahe-quote-open='true']{display:block;-webkit-line-clamp:unset;overflow:visible}",
     ".card__body{font-size:13.5px;line-height:1.5;color:var(--ink);display:flex;",
     "flex-direction:column;gap:8px}",
     ".card__body:empty{display:none}",
@@ -19395,6 +19936,11 @@
     // rather than one per file. It is deliberately small and outlined: these sit
     // under the reviewer's own sentence and must not compete with it.
     ".cardacts{display:flex;align-items:center;gap:7px;flex-wrap:wrap}",
+    ".cardacts:not(:has(> :not([hidden]))){display:none}",
+    ".cardact[hidden]{display:none}",
+    // Send sits at the right end, like every other send in the rail, so its
+    // held tip (anchored right) stays inside the card.
+    ".cardact[data-lahe-act='send']{margin-left:auto}",
     ".cardacts:empty{display:none}",
     ".cardact{font-size:11.5px;font-weight:550;color:var(--ink-soft);border:1px solid var(--line);",
     "border-radius:7px;padding:3px 9px;background:var(--paper)}",
@@ -19418,33 +19964,71 @@
     ".card__notice{font-size:12px;color:var(--ink-faint)}",
     ".card__notice:empty{display:none}",
 
-    // The agent's question is the loudest thing on a card: its own block, its
-    // own rule, its own weight. Not a tinted label (D10).
-    // THE AGENT'S WORDS ARE WHAT THE REVIEWER CAME TO READ. Ken, 2026-09-11: the
-    // answer sat at 12.5px on a tinted surface, so it was both smaller and
-    // lower-contrast than his own note above it, "and it's the thing I need to
-    // read." Full ink and the card body's size, the same weight as the note.
-    ".agent{border-radius:8px;padding:9px 11px;background:var(--surface);color:var(--ink);",
-    "font-size:14px;line-height:1.55}",
+    // --- the conversation ------------------------------------------------------
+    //
+    // Ken, 2026-10-12: the threaded cards had been "designed by accretion of
+    // new features". A card's exchange now reads like a chat: the reviewer's
+    // turns sit on the right in a tinted bubble, the agent's on the left in a
+    // plain one, each under one small caption (who, then when). Every turn on
+    // every card is drawn by fillTurn (beside timestampLabel), in the Active and Done tabs alike,
+    // so there is one bubble, one caption and one spacing step.
+    //
+    // THE SPACING SCALE. 3px from a caption to its bubble, and the card's own
+    // 8px between one turn and the next, wherever the two turns live. Nothing
+    // in a turn adds a margin of its own.
+    //
+    // THE GRAY RULE. Gray is for the caption and for the quoted page text, the
+    // two things that are about the words rather than the words. Both the
+    // reviewer's and the agent's words are full ink at the same size.
+    //
+    // A turn is 88% of the card wide and pushed to its own side; the bubble in
+    // it is as wide as its words. The caption stretches the turn's width so the
+    // file tip under the agent's name can be as wide as the card.
+    ".turn{display:flex;flex-direction:column;gap:3px;width:88%;min-width:0}",
+    ".turn[data-side='you']{align-self:flex-end;align-items:flex-end}",
+    ".turn[data-side='agent']{align-self:flex-start;align-items:flex-start}",
+    ".turn__cap{align-self:stretch;position:relative;display:flex;align-items:baseline;gap:6px;",
+    "min-width:0;padding:0 2px;font-size:11px;line-height:1.35;color:var(--ink-faint)}",
+    ".turn[data-side='you'] .turn__cap{justify-content:flex-end}",
+    ".turn__who{font-weight:600;color:var(--ink-soft);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;",
+    "min-width:0}",
+    ".turn__time{flex:none;font-variant-numeric:tabular-nums;white-space:nowrap}",
+    ".bubble{display:block;max-width:100%;min-width:0;padding:7px 11px;border-radius:12px;",
+    "border:1px solid transparent;font-size:13.5px;line-height:1.5;color:var(--ink);",
+    "white-space:pre-wrap;overflow-wrap:anywhere}",
+    // The corner nearest the speaker is the tail, the way chat bubbles point.
+    ".turn[data-side='you'] .bubble{background:var(--you-wash);border-bottom-right-radius:4px}",
+    // Grey, not white: a white bubble reads as a box to type into, and the
+    // follow-up box right below it is white. (Ken, 2026-10-12.)
+    ".turn[data-side='agent'] .bubble{background:var(--sunken);",
+    "border-bottom-left-radius:4px}",
+    // THE FILES ARE ONE HOVER AWAY. The agent's name is a button when it
+    // changed files: hovering it, focusing it, or clicking it (which focuses it,
+    // so a touch screen gets it too) shows the list. The dotted underline is the
+    // only sign that there is something under the name. The list stays in the
+    // DOM, so a screen reader hears it through aria-describedby.
+    ".turn__who--files{font-weight:600;color:var(--ink-soft);cursor:help;padding:0;",
+    "text-decoration:underline dotted;text-decoration-color:var(--ink-faint);text-underline-offset:2px}",
+    ".turn__who--files:hover,.turn__who--files:focus{color:var(--ink)}",
+    ".turn__files{display:none;position:absolute;left:0;top:calc(100% + 4px);z-index:6;",
+    "width:max-content;max-width:calc(100% / .88);flex-direction:column;gap:3px;",
+    "padding:8px 10px;border-radius:7px;background:#15171c;color:#fff;",
+    "box-shadow:0 6px 18px rgba(0,0,0,.25);pointer-events:none;",
+    "font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11px;line-height:1.4}",
+    ":host([data-lahe-scheme='dark']) .turn__files{background:#0b0d11;border:1px solid var(--line)}",
+    ".turn__who--files:hover~.turn__files,.turn__who--files:focus~.turn__files{display:flex}",
+    ".turn__fileshead{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;",
+    "font-size:10.5px;font-weight:600;color:rgba(255,255,255,.65)}",
+    // One path per line, and it breaks: repo paths have no natural break
+    // points, and the longest one still has to fit inside the card.
+    ".turn__file{overflow-wrap:anywhere;word-break:break-word}",
+
+    // The rail's own carrier for the agent's current answer is a turn like
+    // any other. A loud one (an agent message the reviewer has not dealt with)
+    // wears the accent on its bubble, all the way round.
     ".agent:empty{display:none}",
-    ".agent__head{display:flex;align-items:baseline;justify-content:space-between;gap:8px;margin-bottom:3px}",
-    ".agent__who{font-size:10px;font-weight:600;letter-spacing:.07em;text-transform:uppercase;",
-    "color:var(--ink-faint);display:block}",
-    // An attention marker: a loud reply is one the reviewer has not dealt with
-    // yet, so the accent rule down the edge earns its place. Color, size and
-    // line-height are NOT repeated here; they are already set on .agent above,
-    // and this rule only adds to it.
-    ".agent.is-loud{background:var(--accent-wash);border-left:3px solid var(--accent)}",
-    ".agent.is-loud .agent__who{color:var(--accent-ink)}",
-    // ONE PATH PER LINE, AND IT BREAKS. Repo-relative paths are long and have
-    // no natural break points, so joined on one line with normal wrapping they
-    // ran straight out of the card (Ken, Done tab, first real use). A path is a
-    // unit the reviewer scans, so it gets its own line, and anywhere-breaking
-    // keeps the longest one inside the card at rail width.
-    ".agent__files{margin-top:5px;font-size:11px;color:var(--ink-faint);",
-    "font-family:ui-monospace,SFMono-Regular,Menlo,monospace;",
-    "display:flex;flex-direction:column;gap:2px;min-width:0}",
-    ".agent__file{overflow-wrap:anywhere;word-break:break-word;line-height:1.35}",
+    ".agent.is-loud .bubble{background:var(--accent-wash);border:2px solid var(--accent)}",
+    ".agent.is-loud .turn__who{color:var(--accent-ink)}",
 
     // --- the overdue banner ---------------------------------------------------
     //
@@ -19497,6 +20081,9 @@
     "flex-direction:column;gap:9px;padding:11px 12px;",
     "border-radius:var(--radius-sm);background:var(--paper);border:1px solid var(--line);box-shadow:var(--shadow)}",
     ".stylepanel[data-shown='open']{display:flex}",
+    ".keyspanel__list{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:9px}",
+    ".keyspanel__row{display:flex;flex-direction:column;gap:3px;font-size:12px;line-height:1.45;color:var(--ink-soft)}",
+    ".keyspanel__row kbd{align-self:flex-start}",
     ".stylepanel__head{display:flex;align-items:center;justify-content:space-between;gap:8px}",
     ".stylepanel__title{font-size:12.5px;font-weight:700;color:var(--ink)}",
     // A column: the line, then its buttons. The words wrap rather than clip,
@@ -19530,6 +20117,9 @@
     ".stylepanel__note{font-size:11.5px;color:var(--ink-soft);line-height:1.55}",
     ".stylepanel__note code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11px;",
     "color:var(--ink)}",
+    ".stylepanel__link{color:var(--accent-ink);font-weight:600;text-decoration:underline;",
+    "text-underline-offset:2px}",
+    ".stylepanel__link:hover{color:var(--accent)}",
 
     // --- footer -------------------------------------------------------------
     ".foot{border-top:1px solid var(--line-soft);background:var(--paper);",
@@ -19560,22 +20150,17 @@
     // in front of the reviewer. Calm by default, because the healthy reading is
     // most of the reviewer's session and a rail that shouts through it is a rail
     // nobody reads by the third comment.
-    ".statusline{display:flex;align-items:center;gap:8px}",
+    // The row is for screen readers now: the head's dot is what the eye reads,
+    // and the row's words are the dot's title. Kept as a live region so a
+    // change is still announced.
+    ".statusline{position:absolute;width:1px;height:1px;margin:-1px;padding:0;overflow:hidden;",
+    "clip:rect(0 0 0 0);white-space:nowrap;border:0}",
     ".status{display:flex;align-items:center;gap:7px;font-size:12px;color:var(--ink-soft);flex:1;min-width:0}",
-    ".status__dot{width:6px;height:6px;border-radius:50%;background:var(--ink-faint);flex:none}",
-    ".status[data-status='stored'] .status__dot{background:var(--good)}",
-    ".status[data-status='kept_locally'] .status__dot{background:var(--warn)}",
-    ".status[data-agent='working'] .status__dot{background:var(--accent)}",
-    // The quiet indicator is a dot's worth of difference, not a colour change
-    // anyone has to decode: connected keeps the stored green, nobody connected
-    // goes grey. Grey is not an alarm; nothing is waiting.
-    ".status[data-agent='absent'] .status__dot{background:var(--ink-faint)}",
     // LOUD IS THE WAIT'S DOING. Last, so it wins over the calm rules above it:
     // an item nobody has answered in ten minutes, or one the machine can see
     // nothing has picked up, is the one thing on this line worth interrupting
     // for.
     ".status[data-loud='true']{color:var(--warn-ink,var(--ink));font-weight:600}",
-    ".status[data-loud='true'] .status__dot{background:var(--warn)}",
     ".status__text{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}",
 
     // THE HOLD TOGGLE (docs/features/20260917.01_hold_toggle). Beside the
@@ -19584,15 +20169,20 @@
     // switch, drawn with the rail's own neutral tokens: pressed reads as a
     // filled pill on --sunken, the same surface the end-review panel's buttons
     // use for their own pressed state, never a new hue.
-    ".holdrow{display:flex;align-items:center;gap:8px;flex-wrap:wrap}",
-    ".holdbtn{display:flex;align-items:center;gap:6px;font-size:11.5px;font-weight:600;",
-    "color:var(--ink-soft);padding:3px 9px;border-radius:999px;border:1px solid var(--line);flex:none}",
+    // One full-width button that names what pressing it does: "Hold sending
+    // messages", then, while held, "Send N held messages", drawn as the
+    // primary action because that is the thing left to do.
+    ".holdrow{display:flex;align-items:center;gap:6px 8px;flex-wrap:wrap}",
+    ".holdbtn{display:flex;align-items:center;justify-content:center;width:100%;",
+    "font-size:12px;font-weight:600;color:var(--ink-soft);padding:7px 10px;border-radius:var(--radius-sm);",
+    "border:1px solid var(--line);background:var(--paper)}",
     ".holdbtn:hover{background:var(--surface);color:var(--ink)}",
-    ".holdbtn__dot{width:6px;height:6px;border-radius:50%;background:var(--ink-faint);flex:none}",
-    ".holdbtn[aria-pressed='true']{background:var(--sunken);color:var(--ink);border-color:var(--line)}",
-    ".holdbtn[aria-pressed='true'] .holdbtn__dot{background:var(--ink-soft)}",
-    ".holdcount{font-size:11px;color:var(--ink-soft);overflow:hidden;text-overflow:ellipsis;",
-    "white-space:nowrap;flex:1;min-width:0}",
+    ".holdbtn[aria-pressed='true']{background:var(--accent);border-color:var(--accent);color:#fff}",
+    ".holdbtn[aria-pressed='true']:hover{background:var(--accent-ink);border-color:var(--accent-ink);color:#fff}",
+    // The count is said on the button now; this stays as the screen-reader
+    // announcement of a change.
+    ".holdcount{position:absolute;width:1px;height:1px;margin:-1px;overflow:hidden;clip:rect(0 0 0 0);",
+    "white-space:nowrap;border:0}",
     ".holdcount:empty{display:none}",
 
     ".limit{font-size:11.5px;color:var(--ink-faint);line-height:1.4}",
@@ -19637,9 +20227,6 @@
     ".endpanel__go[disabled],.endpanel__no[disabled]{opacity:.6;cursor:default}",
     ".endpanel__go[hidden],.endpanel__no[hidden]{display:none}",
 
-    // The keyboard hints are readable, not fine print (D10).
-    ".hints{display:flex;flex-wrap:wrap;gap:4px 14px;font-size:11.5px;color:var(--ink-soft)}",
-    ".hint{display:flex;align-items:center;gap:5px}",
     "kbd{font-family:inherit;font-size:11px;font-weight:600;color:var(--ink);",
     "background:var(--sunken);border:1px solid var(--line);border-bottom-width:2px;",
     "border-radius:5px;padding:1px 5px;letter-spacing:.01em}",
@@ -19682,7 +20269,8 @@
     ".pill[data-lahe-dragging]{cursor:grabbing;box-shadow:var(--shadow),0 0 0 1px var(--accent)}",
     ".pill[hidden]{display:none}",
     ".pill:hover{background:var(--surface)}",
-    ".pill__dot{width:6px;height:6px;border-radius:50%;background:var(--accent);flex:none}",
+    // The pill's dot is the head's status dot, same shapes and colors (.mark),
+    // so the rail closed says what the rail open says.
     ".pill__count{font-variant-numeric:tabular-nums;color:var(--ink-faint);font-weight:500}",
     ".pill__count[hidden]{display:none}",
     // THE PILL, LATE. The rail can be closed for most of a session, and the
@@ -19690,7 +20278,6 @@
     // border and ring, an amber dot, and the wait. No motion and no sound.
     ".pill__wait{display:none;font-variant-numeric:tabular-nums;font-weight:650;color:var(--warn)}",
     ".pill[data-lahe-late='true']{border-color:var(--warn);box-shadow:var(--shadow),0 0 0 1px var(--warn)}",
-    ".pill[data-lahe-late='true'] .pill__dot{background:var(--warn)}",
     ".pill[data-lahe-late='true'] .pill__wait{display:inline}",
     // THE PILL, HELD (docs/features/20260917.01_hold_toggle). Neutral, on the
     // same tokens as the held card, and never at the same time as late above:
@@ -19698,7 +20285,6 @@
     // actionable of the two ("you did this on purpose") and a card only ever
     // reads as held while Hold suppresses it from the overdue clock entirely.
     ".pill[data-lahe-held='true']{border-color:var(--line);box-shadow:var(--shadow),0 0 0 1px var(--line)}",
-    ".pill[data-lahe-held='true'] .pill__dot{background:var(--ink-faint)}",
     ".pill[data-lahe-held='true'] .pill__wait{display:inline;color:var(--ink-soft)}",
     // THE JEWEL: the same number the Done tab badge carries, on the one surface
     // that is still on screen once the rail is put away. A reviewer works with
@@ -19782,7 +20368,10 @@
     ".toast__text{font-size:15px;line-height:1.45;color:var(--ink);overflow-wrap:anywhere;",
     "white-space:pre-line}",
     // One line, quieter: this is what the answer is ABOUT, not the answer.
+    // The passage the reply is about, drawn as the cards draw a quote: the
+    // same rule down its left, so it reads as the page's words and not a dek.
     ".toast__about{font-size:12.5px;line-height:1.35;color:var(--ink-soft);",
+    "border-left:3px solid var(--ink-faint);padding-left:9px;margin-top:2px;",
     "white-space:nowrap;overflow:hidden;text-overflow:ellipsis}",
     ".toast__about:empty{display:none}",
     ".toast__x{flex:none;width:20px;height:20px;border-radius:6px;color:var(--ink-faint);",
@@ -19931,7 +20520,7 @@
     LABEL: "Hide for presenting",
     // What the rail's own footer teaches. The chord is the ONLY way back, and
     // the reviewer has to know that before they use it, not after.
-    MENU_LABEL: "Hide for presenting (Cmd-Shift-X)"
+    MENU_LABEL: "Hide rail for presenting (Cmd-Shift-X)"
   };
 
   // What the collapsed pill says on hover. It carries the chord for the same
@@ -19946,6 +20535,36 @@
   // tab that is open, because that is the list the reviewer is looking at.
   var FOLD_ALL = { COLLAPSE: "collapse-cards", EXPAND: "expand-cards" };
 
+  // THE STATUS DOT'S FIRST LINE, in Ken's words (the rail mockup's Status dot
+  // section). The dot's shape already says the work is stored, so these drop
+  // the "Stored ·" the footer line used to lead with. Where something may be
+  // wrong, the dot copies a hand-off message when clicked, and says so.
+  var DOT_COPY_HINT = "Click to copy a message you can send to an agent.";
+  var DOT_WORDS = {
+    connected: "Agent listening",
+    working: "Agent is working, {age}",
+    absent: "No agent listening. Your edits are saved in the browser but not in your files. " + DOT_COPY_HINT,
+    waiting:
+      "No response, {age}. Your edits are saved in the browser but not in your files. " +
+      "You may need to check your agent isn't stuck. " + DOT_COPY_HINT,
+    no_agent: "Nobody has picked this up, {age}. " + DOT_COPY_HINT,
+    helper_down:
+      "Lahe server helper is down. Page may crash. Please ask an agent to restart the Lahe helper. " + DOT_COPY_HINT
+  };
+  // What the dot copies when the helper is down: a request an agent can act on.
+  var HELPER_RESTART_MESSAGE =
+    "The Lahe helper on my computer is down, so my review page cannot save my comments. " +
+    "Please restart it by running: lahe serve";
+  // The states where clicking the dot copies the hand-off message.
+  var DOT_COPIES = { absent: true, waiting: true, no_agent: true };
+  var EXPORT_GROUP = "export-review";
+  var MENU_LEAVE_GRACE_MS = 300;
+  var VIEW_GROUP = "view";
+
+  // The keyboard shortcuts, behind the menu rather than standing in the pane.
+  // The menu item opens a panel that lists every gesture in gestures.js.
+  var SHORTCUTS = { ACTION: "shortcuts", LABEL: "Keyboard shortcuts", CLOSE: "Close" };
+
   // The Document style button (docs/features/20260930.01_style_switcher). It
   // has its own place in the head, beside the menu, and exists only on a page
   // that uses the house style, so it is built hidden and shown by
@@ -19954,11 +20573,15 @@
   var DOCUMENT_STYLE = { LABEL: STYLE_WORDS.TITLE };
 
   var MENU_ITEMS = [
-    { action: "copy", label: "Copy review" },
-    { action: "export", label: "Export review to file" },
-    { action: FOLD_ALL.COLLAPSE, label: "Collapse all cards" },
-    { action: FOLD_ALL.EXPAND, label: "Expand all cards" },
-    { action: PRESENT.ACTION, label: PRESENT.MENU_LABEL }
+    // Copy and Export sit under one "Export review" item that opens in place.
+    { action: EXPORT_GROUP, label: "Export review", group: true },
+    { action: "copy", label: "Copy review to clipboard", parent: EXPORT_GROUP },
+    { action: "export", label: "Export review to file", parent: EXPORT_GROUP },
+    { action: VIEW_GROUP, label: "View", group: true },
+    { action: FOLD_ALL.COLLAPSE, label: "Collapse all cards", parent: VIEW_GROUP },
+    { action: FOLD_ALL.EXPAND, label: "Expand all cards", parent: VIEW_GROUP },
+    { action: PRESENT.ACTION, label: PRESENT.MENU_LABEL, parent: VIEW_GROUP },
+    { action: SHORTCUTS.ACTION, label: SHORTCUTS.LABEL }
   ];
 
   // The style button's glyph: Heroicons 2.2.0 `swatch`, MIT, vendored under
@@ -20034,7 +20657,7 @@
     // whose first two words restate its own title reads as filler and costs the
     // reviewer the one line that could have told them something (Ken, 2026-08-24).
     ENDED: "Your work is saved.",
-    ENDED_WITH_LIST: "Your hand edits are under Edits, and saved to a file.",
+    ENDED_WITH_LIST: "Your hand edits are listed under Active, and saved to a file.",
     ENDED_NO_EDITS: "You made no hand edits this session.",
     UNSENT:
       "Some of your typing had not reached the helper yet. It is kept in this browser and goes out on the next load.",
@@ -20241,7 +20864,7 @@
   /**
    * A draft that changes nothing yet: the reviewer opened a block and has not
    * typed. Its card showed the whole block struck through, which reads as a
-   * deletion, and moved the Edits count before anything was typed (flow walk,
+   * deletion, and moved the hand-edit count before anything was typed (flow walk,
    * design problem 6). Such a draft is not drawn and not counted, like the
    * blank draft an empty page opens with. It is still a draft in the store;
    * the first keystroke that changes something draws its card.
@@ -20273,8 +20896,8 @@
   }
   //
   // A page with no content blocks (a brand-new notes page from `lahe write`)
-  // has nothing for either tab to list, and "No hand edits yet." says nothing
-  // about what to do. These are the plan's pinned lines. The file name is the
+  // has nothing for the Active tab to list, and a plain "nothing here" says
+  // nothing about what to do. These are the plan's pinned lines. The file name is the
   // text of the marked file-name title; a page without one gets the
   // instruction alone.
   function emptyPageLines(fileName) {
@@ -20374,12 +20997,6 @@
     return END_REVIEW.NOTHING_PENDING;
   }
 
-  var HINTS = [
-    { keys: ["⌘", "⇧", "C"], what: "comment" },
-    { keys: ["⌘", "⇧", "E"], what: "edit" },
-    { keys: ["⌘", "⏎"], what: "send" }
-  ];
-
   /**
    * The page's own setInterval, bound to it, or null when there is no page.
    *
@@ -20458,6 +21075,15 @@
     // and there for the same reason: EXPANDING A CARD IS READING IT, and the
     // Done tab is the file that knows what that means for a reply.
     var cardCollapseHandlers = [];
+    // Who acts on "Mark as done" from a card's state chip. The rail draws the
+    // chip and its menu; closing the record is the store's and the helper's,
+    // so it belongs to whoever holds them (index.js). With nobody listening
+    // the chip stays a plain label.
+    var cardCloseHandlers = [];
+    // The one open state-chip menu: the card id, or null. One at a time.
+    var stateMenuId = null;
+    var stateMenuOutside = null;
+    var stateMenuShadow = null;
     // id -> true for the cards the reviewer folded to one line. Only the folded
     // ones are held; an absent id is an open card, which is also the right
     // answer for a card that does not exist yet. Read from the review's own
@@ -20495,6 +21121,17 @@
     // gives the reviewer their own width back rather than the one the small
     // window forced.
     var railWidth = readWidthPreference();
+    // What the Active pane is showing: all cards, only comments, or only hand
+    // edits. Per review, in the same preference bucket as the width, so a
+    // reload finds the list the reviewer was reading.
+    var activeFilter = readFilterPreference();
+    // tab -> what is typed in that pane's search box. In memory only: a search
+    // left over from yesterday that quietly hides cards after a reload is worse
+    // than retyping a word. Kept across a remount, which rebuilds the boxes.
+    var searchQueries = Object.create(null);
+    // Watches the panes while any search is typed, so a card that arrives or
+    // changes its words is matched again. Off when every box is empty.
+    var searchObserver = null;
     // Who wants to know the rail's width changed. The surfaces that keep clear
     // of the rail read the published allowance instead (see publishRailAllowance);
     // this is for a caller that wants to hear about it rather than measure.
@@ -20553,6 +21190,9 @@
     var pdfOutsideListener = null;
     var pdfShadowListener = null;
     var stylePanelOpen = false;
+    var shortcutsOpen = false;
+    var shortcutsOutsideListener = null;
+    var shortcutsShadowListener = null;
     var styleHandlers = {};
     var styleOutsideListener = null;
     var styleShadowListener = null;
@@ -20589,6 +21229,7 @@
         // the style dropdown.
         closeMenu(false);
         closeStylePanel(false);
+        closeShortcuts(false);
         closePdfTray(false);
         return { rootId: markers.OVERLAY_ROOT_ID, remounted: false };
       }
@@ -20622,7 +21263,7 @@
       highlightModule.fenceTypingKeys(shadow);
 
       var style = doc.createElement("style");
-      style.textContent = CSS;
+      style.textContent = CSS + highlightModule.SEND_TIP_CSS;
       shadow.appendChild(style);
 
       var rail = el("aside", "rail");
@@ -20644,9 +21285,24 @@
       rail.appendChild(grip);
 
       var head = el("div", "head");
-      head.appendChild(el("span", "mark"));
-      head.appendChild(el("span", "title", "Review"));
-      head.appendChild(el("span", "review", reviewId || ""));
+      // The dot sits in a wrap that carries its hover tip: the triangle's
+      // clip-path would cut a tip drawn on the dot itself, and the wrap gives a
+      // 9px dot a hit area a pointer can find.
+      var statusDotWrap = el("span", "markwrap");
+      statusDotWrap.addEventListener("click", function () {
+        copyFromDot();
+      });
+      statusDotWrap.addEventListener("mouseleave", function () {
+        if (!dotCopyNote) return;
+        dotCopyNote = null;
+        renderStatus();
+      });
+      var statusDot = el("span", "mark");
+      statusDot.setAttribute("aria-hidden", "true");
+      statusDotWrap.appendChild(statusDot);
+      head.appendChild(statusDotWrap);
+      head.appendChild(el("span", "title", "Lahe"));
+      // No review id in the head: it only ever showed a hash, never a name.
       head.appendChild(el("span", "spacer"));
 
       // THE DOCUMENT STYLE BUTTON, and the dropdown that hangs from it. Built
@@ -20765,12 +21421,56 @@
       menuList.setAttribute("role", "menu");
       menuList.setAttribute("aria-label", "More actions");
       menuList.hidden = true;
+      var menuGroups = {};
       var menuItems = MENU_ITEMS.map(function (entry) {
         var item = el("button", "menuitem", entry.label);
         item.setAttribute("type", "button");
         item.setAttribute("role", "menuitem");
         item.setAttribute("data-action", entry.action);
         item.tabIndex = -1;
+        if (entry.group) {
+          item.className = "menuitem menuitem--group";
+          item.setAttribute("aria-expanded", "false");
+          item.setAttribute("aria-haspopup", "menu");
+          var groupWrap = el("div", "menugroup");
+          var sub = el("div", "menu submenu");
+          sub.setAttribute("role", "menu");
+          sub.setAttribute("aria-label", entry.label);
+          groupWrap.appendChild(item);
+          groupWrap.appendChild(sub);
+          menuGroups[entry.action] = sub;
+          // A click opens it rather than toggling: the pointer that clicked
+          // has already opened it by hovering.
+          item.addEventListener("click", function () {
+            setMenuGroupOpen(entry.action, true);
+          });
+          // Hover opens it and leaving the group shuts it. The fly-out is inside
+          // the wrap, so moving onto it does not count as leaving.
+          // Leaving shuts it after a short grace, the way desktop menus do,
+          // so a pointer on its way to the fly-out does not lose it.
+          var leaveTimer = null;
+          groupWrap.addEventListener("mouseenter", function () {
+            if (leaveTimer) clearTimeout(leaveTimer);
+            leaveTimer = null;
+            Object.keys(menuGroups).forEach(function (other) {
+              if (other !== entry.action) setMenuGroupOpen(other, false);
+            });
+            setMenuGroupOpen(entry.action, true);
+          });
+          groupWrap.addEventListener("mouseleave", function () {
+            if (leaveTimer) clearTimeout(leaveTimer);
+            leaveTimer = setTimeout(function () {
+              leaveTimer = null;
+              setMenuGroupOpen(entry.action, false);
+            }, MENU_LEAVE_GRACE_MS);
+          });
+          menuList.appendChild(groupWrap);
+          return item;
+        }
+        if (entry.parent) {
+          item.setAttribute("data-parent", entry.parent);
+          item.hidden = true;
+        }
         item.addEventListener("click", function () {
           // Closed first, so the reviewer's click leaves nothing hanging over
           // the rail while the work runs, and the focus goes back where they
@@ -20783,15 +21483,41 @@
             setPresenting(true);
             return;
           }
+          if (entry.action === SHORTCUTS.ACTION) {
+            openShortcuts();
+            return;
+          }
           if (entry.action === FOLD_ALL.COLLAPSE || entry.action === FOLD_ALL.EXPAND) {
             setCardsCollapsed(currentTab(), entry.action === FOLD_ALL.COLLAPSE);
             return;
           }
           runAction(entry.action);
         });
-        menuList.appendChild(item);
+        (entry.parent ? menuGroups[entry.parent] : menuList).appendChild(item);
         return item;
       });
+      var keysPanel = el("div", "stylepanel keyspanel");
+      keysPanel.setAttribute("role", "group");
+      keysPanel.setAttribute("aria-label", SHORTCUTS.LABEL);
+      keysPanel.setAttribute("data-shown", "closed");
+      var keysHead = el("div", "stylepanel__head");
+      keysHead.appendChild(el("div", "stylepanel__title", SHORTCUTS.LABEL));
+      var keysClose = el("button", "endpanel__no", SHORTCUTS.CLOSE);
+      keysClose.setAttribute("type", "button");
+      keysClose.addEventListener("click", function () {
+        closeShortcuts(true);
+      });
+      keysHead.appendChild(keysClose);
+      keysPanel.appendChild(keysHead);
+      var keysList = el("ul", "keyspanel__list");
+      gestures.panelLines().forEach(function (line) {
+        var row = el("li", "keyspanel__row");
+        row.appendChild(el("kbd", null, line.keys));
+        row.appendChild(el("span", null, line.hint));
+        keysList.appendChild(row);
+      });
+      keysPanel.appendChild(keysList);
+
       menuBtn.addEventListener("click", function () {
         toggleMenu();
       });
@@ -20807,6 +21533,7 @@
       menuWrap.appendChild(menuBtn);
       menuWrap.appendChild(menuList);
       head.appendChild(menuWrap);
+      head.appendChild(keysPanel);
 
       var collapseBtn = el("button", "iconbtn", "→");
       collapseBtn.setAttribute("aria-label", "Collapse the rail");
@@ -20877,6 +21604,87 @@
       });
       rail.appendChild(panes);
 
+      // The kind filter: one popover per pane, behind a button beside the
+      // search box. The pick is one value for both panes: Done holds handled
+      // hand edits too, and a reviewer reading only edits wants that on both.
+      var FUNNEL = "M3 5h18l-7 8v5l-4 2v-7L3 5z";
+      var filterButtons = Object.create(null);
+      var filterToggles = Object.create(null);
+      var filterPops = Object.create(null);
+      var filterEmpties = Object.create(null);
+      var searchInputs = Object.create(null);
+      var searchEmpties = Object.create(null);
+      TABS.forEach(function (name) {
+        var head = el("div", "panehead");
+        head.setAttribute("data-lahe-pane-head", name);
+        var input = el("input", "search");
+        input.setAttribute("type", "search");
+        input.setAttribute("placeholder", SEARCH_PLACEHOLDER);
+        input.setAttribute("aria-label", SEARCH_LABEL);
+        input.setAttribute("data-lahe-search", name);
+        input.setAttribute("autocomplete", "off");
+        input.setAttribute("spellcheck", "false");
+        input.value = searchQueries[name] || "";
+        input.addEventListener("input", function () {
+          setSearch(name, input.value);
+        });
+        head.appendChild(input);
+
+        var wrap = el("div", "filterwrap");
+        var toggle = el("button", "filterbtn");
+        toggle.setAttribute("type", "button");
+        toggle.setAttribute("aria-haspopup", "true");
+        toggle.setAttribute("aria-expanded", "false");
+        toggle.setAttribute("aria-label", "Filter: show all, comments, or edits");
+        toggle.title = "Show all, only comments, or only hand edits";
+        toggle.setAttribute("data-lahe-filter-toggle", name);
+        toggle.innerHTML =
+          '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="' +
+          FUNNEL +
+          '"></path></svg>';
+        var toggleLabel = el("span", "filterbtn__label", "");
+        toggle.appendChild(toggleLabel);
+        toggle.addEventListener("click", function () {
+          toggleFilterPopover(name);
+        });
+        wrap.appendChild(toggle);
+
+        var filter = el("div", "filter");
+        filter.setAttribute("role", "group");
+        filter.setAttribute("aria-label", "Show");
+        filter.setAttribute("data-lahe-filter-bar", name);
+        filter.hidden = true;
+        filterButtons[name] = Object.create(null);
+        FILTERS.forEach(function (pick) {
+          var option = el("button", "filter__opt", FILTER_LABEL[pick]);
+          option.setAttribute("type", "button");
+          option.setAttribute("data-lahe-filter-option", pick);
+          option.addEventListener("click", function () {
+            setActiveFilter(pick);
+            closeFilterPopover(name, true);
+          });
+          filter.appendChild(option);
+          filterButtons[name][pick] = option;
+        });
+        wrap.appendChild(filter);
+        head.appendChild(wrap);
+        filterToggles[name] = toggle;
+        filterPops[name] = filter;
+
+        var filterEmpty = el("div", "filterempty", "");
+        filterEmpty.setAttribute("data-lahe-filter-empty", name);
+        paneNodes[name].appendChild(filterEmpty);
+        filterEmpties[name] = filterEmpty;
+
+        paneNodes[name].insertBefore(head, paneNodes[name].firstChild);
+        searchInputs[name] = input;
+        var said = el("div", "searchempty", "");
+        said.setAttribute("data-lahe-search-empty", name);
+        said.hidden = true;
+        paneNodes[name].appendChild(said);
+        searchEmpties[name] = said;
+      });
+
       var foot = el("div", "foot");
       var footMain = el("div", "footmain");
       var chipList = el("div", "chips");
@@ -20916,8 +21724,6 @@
       var statusLineWrap = el("div", "statusline");
       var statusRow = el("div", "status");
       statusRow.setAttribute("role", "status");
-      var statusDot = el("span", "status__dot");
-      statusRow.appendChild(statusDot);
       var statusText = el("span", "status__text", "Kept in this browser");
       statusRow.appendChild(statusText);
       statusLineWrap.appendChild(statusRow);
@@ -20934,8 +21740,8 @@
       holdBtn.setAttribute("aria-pressed", "false");
       holdBtn.setAttribute("aria-label", HOLD_LABEL);
       holdBtn.title = HOLD_LABEL;
-      holdBtn.appendChild(el("span", "holdbtn__dot"));
-      holdBtn.appendChild(el("span", null, HOLD_LABEL));
+      var holdLabel = el("span", "holdbtn__label", HOLD_LABEL);
+      holdBtn.appendChild(holdLabel);
       holdBtn.addEventListener("click", function () {
         toggleHeld();
       });
@@ -20987,18 +21793,11 @@
 
       // No action buttons here. Copy and Export moved into the head's menu
       // (D10, revised): they read as submit buttons under the reviewer's own
-      // words, and the footer's job is the status line and the hints.
-      var hints = el("div", "hints");
-      HINTS.forEach(function (hint) {
-        var row = el("span", "hint");
-        hint.keys.forEach(function (key) {
-          row.appendChild(el("kbd", null, key));
-        });
-        row.appendChild(el("span", null, hint.what));
-        hints.appendChild(row);
-      });
+      // words, and the footer's job is the status line. The keycap hints that
+      // sat here are gone too: the "All shortcuts" disclosure in the pane has
+      // them, and the footer copy was noise.
 
-      // The hints keep the row and the door sits beside them. Ken asked for the
+      // The door sits beside the footer's column. Ken asked for the
       // way out here rather than in the menu: it is the control that closes the
       // session, and it should be where the reviewer's eye already is when they
       // are done. Same title and accessible name, because an icon with no label
@@ -21011,7 +21810,6 @@
       endBtn.addEventListener("click", function () {
         askEndReview();
       });
-      footMain.appendChild(hints);
       foot.appendChild(footMain);
       foot.appendChild(endBtn);
       rail.appendChild(foot);
@@ -21021,8 +21819,10 @@
       pill.setAttribute("type", "button");
       pill.setAttribute("aria-label", PILL_TITLE);
       pill.title = PILL_TITLE;
-      pill.appendChild(el("span", "pill__dot"));
-      pill.appendChild(el("span", null, "Review"));
+      var pillDot = el("span", "mark pill__dot");
+      pillDot.setAttribute("aria-hidden", "true");
+      pill.appendChild(pillDot);
+      pill.appendChild(el("span", null, "Lahe"));
       var pillCount = el("span", "pill__count", "0");
       pill.appendChild(pillCount);
       // How long the oldest comment has waited, shown only while that is late.
@@ -21175,6 +21975,12 @@
         counts: counts,
         newmarks: newmarks,
         panes: paneNodes,
+        filterButtons: filterButtons,
+        filterToggles: filterToggles,
+        filterPops: filterPops,
+        filterEmpties: filterEmpties,
+        searchInputs: searchInputs,
+        searchEmpties: searchEmpties,
         chipList: chipList,
         foot: foot,
         statusRow: statusRow,
@@ -21186,10 +21992,12 @@
         lateNote: lateNote,
         lateMessage: lateMessage,
         statusDot: statusDot,
+        statusDotWrap: statusDotWrap,
+        pillDot: pillDot,
         holdBtn: holdBtn,
+        holdLabel: holdLabel,
         holdCount: holdCount,
         limit: limit,
-        hints: hints,
         footMain: footMain,
         endBtn: endBtn,
         endPanel: endPanel,
@@ -21203,6 +22011,7 @@
         refusalBtn: refusalBtn,
         menuBtn: menuBtn,
         menuList: menuList,
+        keysPanel: keysPanel,
         menuItems: menuItems,
         menuWrap: menuWrap,
         styleWrap: styleWrap,
@@ -21255,6 +22064,9 @@
       // remount and the thing they were telling the reviewer about is still
       // true, so they are drawn again and their clocks start over.
       remountToasts();
+      // A search typed before a remount still narrows the rebuilt panes.
+      syncSearchObserver();
+      applySearchAll();
       // The pill exists now, so the reviewer's own arrangement can go back on it.
       // Read here as well as in setReview because a rail built WITH a review id
       // never goes through setReview at all, which is how the fixture and the
@@ -21293,12 +22105,12 @@
       return node ? String(node.textContent || "").trim() || null : null;
     }
 
-    // The Active and Edits panes on a page with nothing on it say how to start,
-    // in the plan's pinned lines. Written into the pane's existing empty node.
+    // The Active pane on a page with nothing on it says how to start, in the
+    // plan's pinned lines. Written into the pane's existing empty node.
     function paintEmptyPanes() {
       if (!dom) return;
       var empty = pageIsEmpty();
-      [TAB.ACTIVE, TAB.EDITS].forEach(function (name) {
+      [TAB.ACTIVE].forEach(function (name) {
         var node = dom.panes[name] && dom.panes[name].querySelector(".empty");
         if (!node) return;
         var want = empty ? "page" : "plain";
@@ -21318,9 +22130,275 @@
     }
 
     function emptyTextFor(name) {
-      if (name === TAB.ACTIVE) return "Nothing outstanding. Select some text and press Cmd-Shift-C.";
-      if (name === TAB.EDITS) return "No hand edits yet.";
+      if (name === TAB.ACTIVE) return "No unanswered or active threads. Check the done tab, or select some text and press Cmd-Shift-C.";
       return "Nothing handled yet.";
+    }
+
+    // -------------------------------------------------------------------------
+    // The Active filter
+    // -------------------------------------------------------------------------
+    //
+    // A VIEW, painted from one value. The pane carries the pick as an attribute
+    // and the stylesheet hides the cards it leaves out, so a card arriving while
+    // "Edits" is picked is filtered on the frame it appears, with no list kept
+    // here to fall out of step with the cards.
+
+    function paintFilter() {
+      if (!dom || !dom.filterButtons) return;
+      TABS.forEach(function (tab) {
+        dom.panes[tab].setAttribute("data-lahe-filter", activeFilter);
+        FILTERS.forEach(function (name) {
+          dom.filterButtons[tab][name].setAttribute("aria-pressed", name === activeFilter ? "true" : "false");
+        });
+        var toggle = dom.filterToggles[tab];
+        var filtering = activeFilter !== FILTER.ALL;
+        toggle.setAttribute("data-lahe-filtering", filtering ? "true" : "false");
+        toggle.querySelector(".filterbtn__label").textContent = filtering ? FILTER_LABEL[activeFilter] : "";
+        dom.filterEmpties[tab].textContent = FILTER_EMPTY[activeFilter] || "";
+        // The kind filter decides what counts as shown, so a search's "nothing
+        // matches" line is checked again with it.
+        applySearch(tab);
+      });
+    }
+
+    var filterPopoverOpen = null;
+    var filterOutsideListener = null;
+    var filterShadowListener = null;
+
+    function filterPopoverIsOpen(tab) {
+      return filterPopoverOpen === tab;
+    }
+
+    /**
+     * Open one pane's filter popover. Closed the way the shortcuts panel is:
+     * a press anywhere outside it, or Escape, puts it away.
+     */
+    function openFilterPopover(tab) {
+      if (!dom || !dom.filterPops) return false;
+      closeFilterPopover(filterPopoverOpen, false);
+      var pop = dom.filterPops[tab];
+      var toggle = dom.filterToggles[tab];
+      pop.hidden = false;
+      toggle.setAttribute("aria-expanded", "true");
+      filterPopoverOpen = tab;
+      filterOutsideListener = function (event) {
+        if (event.type === "keydown") {
+          if (event.key !== "Escape") return;
+          event.preventDefault();
+          event.stopPropagation();
+          closeFilterPopover(tab, true);
+          return;
+        }
+        if (fromOurTree(event)) return;
+        closeFilterPopover(tab, false);
+      };
+      filterShadowListener = function (event) {
+        if (pop.contains(event.target) || toggle.contains(event.target)) return;
+        closeFilterPopover(tab, false);
+      };
+      doc.addEventListener("pointerdown", filterOutsideListener, true);
+      doc.addEventListener("keydown", filterOutsideListener, true);
+      dom.shadow.addEventListener("pointerdown", filterShadowListener, true);
+      var pressed = dom.filterButtons[tab][activeFilter];
+      if (pressed && typeof pressed.focus === "function") pressed.focus();
+      return true;
+    }
+
+    function closeFilterPopover(tab, returnFocus) {
+      if (!tab || filterPopoverOpen !== tab) return false;
+      if (filterOutsideListener) {
+        doc.removeEventListener("pointerdown", filterOutsideListener, true);
+        doc.removeEventListener("keydown", filterOutsideListener, true);
+        filterOutsideListener = null;
+      }
+      if (filterShadowListener) {
+        if (dom) dom.shadow.removeEventListener("pointerdown", filterShadowListener, true);
+        filterShadowListener = null;
+      }
+      filterPopoverOpen = null;
+      if (dom && dom.filterPops) {
+        dom.filterPops[tab].hidden = true;
+        dom.filterToggles[tab].setAttribute("aria-expanded", "false");
+        if (returnFocus) dom.filterToggles[tab].focus();
+      }
+      return true;
+    }
+
+    function toggleFilterPopover(tab) {
+      return filterPopoverIsOpen(tab) ? closeFilterPopover(tab, true) : openFilterPopover(tab);
+    }
+
+    /**
+     * Pick what the Active pane shows: "all", "comments" or "edits".
+     *
+     * Remembered for this review. The tab counts do not change: the count says
+     * how much work is in the tab, and the filter only chooses which of it to
+     * read.
+     *
+     * @param {string} name one of FILTERS
+     * @returns {string} the filter now in force
+     */
+    function setActiveFilter(name) {
+      if (FILTERS.indexOf(name) === -1) throw new Error("setActiveFilter: unknown filter " + String(name));
+      if (activeFilter !== name) {
+        activeFilter = name;
+        persistCollapsedPreference();
+      }
+      paintFilter();
+      return activeFilter;
+    }
+
+    function currentFilter() {
+      return activeFilter;
+    }
+
+    /**
+     * Make sure the filter is not hiding this card.
+     *
+     * For the paths that take the reviewer TO a card (a toast's way in, a
+     * reopen): landing them on a card the filter hides is a jump to nothing.
+     * The filter goes back to All only when it is in the way.
+     *
+     * @param {string} id item id
+     * @returns {string} the filter now in force
+     */
+    function revealCard(id) {
+      var card = cards[id];
+      if (!card) return activeFilter;
+      // A search that hides the card is cleared too, in the card's own pane.
+      if (card.node && card.node.hasAttribute(SEARCH_MISS_ATTR) && TABS.indexOf(card.pane) !== -1) {
+        setSearch(card.pane, "");
+      }
+      if (TABS.indexOf(card.pane) === -1 || activeFilter === FILTER.ALL) return activeFilter;
+      var hand = isHandEditKind(card.item);
+      if ((activeFilter === FILTER.EDITS && !hand) || (activeFilter === FILTER.COMMENTS && hand)) {
+        setActiveFilter(FILTER.ALL);
+      }
+      return activeFilter;
+    }
+
+    // -------------------------------------------------------------------------
+    // The search box
+    // -------------------------------------------------------------------------
+    //
+    // Text is not something CSS can match, so this is the one part of the view
+    // painted by a pass: each card in the pane is marked when its words do not
+    // contain the search, and the stylesheet hides marked cards. The kind
+    // filter still hides by kind on top of that, so the two combine.
+
+    // Words that are on every card and say nothing about this one: control
+    // labels, the time stamp, the state chip. Matching them would make "send"
+    // or "oct" find every card.
+    var SEARCH_SKIP = "button,textarea,input,select,style,time,.card__state,.statemenu";
+
+    function searchTextOf(node) {
+      if (!doc || typeof doc.createTreeWalker !== "function") return node.textContent || "";
+      var parts = [];
+      var walker = doc.createTreeWalker(node, 4 /* NodeFilter.SHOW_TEXT */, null);
+      for (var t = walker.nextNode(); t; t = walker.nextNode()) {
+        var parent = t.parentNode;
+        if (parent && typeof parent.closest === "function" && parent.closest(SEARCH_SKIP)) continue;
+        parts.push(t.nodeValue);
+      }
+      return parts.join(" ");
+    }
+
+    function passesKindFilter(tab, node) {
+      if (TABS.indexOf(tab) === -1 || activeFilter === FILTER.ALL) return true;
+      if (!node.classList.contains("card")) return activeFilter !== FILTER.EDITS;
+      var hand = node.hasAttribute(HAND_EDIT_ATTR);
+      return activeFilter === FILTER.EDITS ? hand : !hand;
+    }
+
+    function applySearch(tab) {
+      if (!dom || !dom.panes || !dom.searchEmpties) return;
+      var pane = dom.panes[tab];
+      var query = searchQueries[tab] || "";
+      // Nothing typed and nothing marked from before: nothing to do. This is
+      // the path every repaint takes while nobody is searching.
+      if (!query && !pane.hasAttribute("data-lahe-searching")) return;
+      var anyCard = false;
+      var shown = 0;
+      Array.prototype.forEach.call(pane.querySelectorAll(".card, .lahe-rail-othercard"), function (node) {
+        var miss = !!query && !searchMatches(searchTextOf(node), query);
+        if (miss) {
+          if (!node.hasAttribute(SEARCH_MISS_ATTR)) node.setAttribute(SEARCH_MISS_ATTR, "true");
+        } else if (node.hasAttribute(SEARCH_MISS_ATTR)) {
+          node.removeAttribute(SEARCH_MISS_ATTR);
+        }
+        var isCard = node.classList.contains("card");
+        if (isCard && node.hasAttribute("data-lahe-blank")) return;
+        if (isCard) anyCard = true;
+        if (!miss && passesKindFilter(tab, node)) shown += 1;
+      });
+      if (query) pane.setAttribute("data-lahe-searching", "true");
+      else pane.removeAttribute("data-lahe-searching");
+      // Written only when it changes: the watcher below sees this node too, and
+      // an unchanged write is what keeps it from calling itself forever.
+      var said = dom.searchEmpties[tab];
+      var want = query && anyCard && shown === 0 ? searchEmptyText(query.trim()) : "";
+      if (said.textContent !== want) said.textContent = want;
+      if (said.hidden !== !want) said.hidden = !want;
+    }
+
+    function applySearchAll() {
+      TABS.forEach(applySearch);
+    }
+
+    function syncSearchObserver() {
+      var wanted = !!dom && TABS.some(function (name) {
+        return !!searchQueries[name];
+      });
+      if (!wanted) {
+        if (searchObserver) searchObserver.disconnect();
+        searchObserver = null;
+        return;
+      }
+      if (searchObserver) return;
+      var view = doc && doc.defaultView;
+      var Observer = view && view.MutationObserver;
+      if (typeof Observer !== "function") return;
+      searchObserver = new Observer(function () {
+        applySearchAll();
+      });
+      TABS.forEach(function (name) {
+        // Attributes are left out on purpose: the pass writes them.
+        searchObserver.observe(dom.panes[name], { childList: true, subtree: true, characterData: true });
+      });
+    }
+
+    /**
+     * Narrow a pane to the cards whose words contain this text, ignoring case.
+     * Empty shows everything. A view only: counts do not change, and the kind
+     * filter still applies on top.
+     *
+     * @param {string} tab one of TABS
+     * @param {string} text what is typed
+     * @returns {string} the search now in force for that tab ("" for none)
+     */
+    function setSearch(tab, text) {
+      if (tab === LEGACY_EDITS_TAB) tab = TAB.ACTIVE;
+      if (TABS.indexOf(tab) === -1) throw new Error("setSearch: unknown tab " + String(tab));
+      var typed = text === null || text === undefined ? "" : String(text);
+      searchQueries[tab] = typed.trim() ? typed : "";
+      if (dom && dom.searchInputs && dom.searchInputs[tab].value !== typed) dom.searchInputs[tab].value = typed;
+      syncSearchObserver();
+      applySearch(tab);
+      return searchQueries[tab];
+    }
+
+    function searchFor(tab) {
+      return searchQueries[tab] || "";
+    }
+
+    function readFilterPreference() {
+      if (!reviewId || !store || typeof store.readUiPreferences !== "function") return FILTER.ALL;
+      try {
+        var got = store.readUiPreferences(reviewId).filter;
+        return FILTERS.indexOf(got) === -1 ? FILTER.ALL : got;
+      } catch (err) {
+        return FILTER.ALL;
+      }
     }
 
     // Unmount drops the DOM and keeps every piece of state, which is what makes
@@ -21331,8 +22409,14 @@
       // belongs to a menu that is about to stop existing. The style dropdown's
       // listeners go the same way.
       closeMenu(false);
+      closeStateMenu(false);
       closeStylePanel(false);
+      closeShortcuts(false);
       closePdfTray(false);
+      // The search watcher watches panes that are about to go. The typed words
+      // stay in searchQueries, and mount watches the new panes.
+      if (searchObserver) searchObserver.disconnect();
+      searchObserver = null;
       // An unanswered end-review question goes with the rail that asked it, and
       // whoever awaited it is told, rather than left holding a promise that can
       // never settle now the panel is gone.
@@ -21447,12 +22531,14 @@
       // Folds are per review as well, so a rail told it is showing a different
       // review does not carry the last one's folded list onto these cards.
       collapsedCards = readCardCollapsePreference();
+      // And the Active filter, so one review's pick does not hide another's cards.
+      activeFilter = readFilterPreference();
       loadChips();
       if (dom) {
-        dom.rail.querySelector(".review").textContent = id || "";
         renderChips();
         renderCollapsed();
         renderPresent();
+        paintFilter();
         Object.keys(cards).forEach(function (id) {
           applyCardCollapsed(cards[id]);
         });
@@ -21568,6 +22654,10 @@
       if (!dom || !dom.holdBtn) return;
       var held = isHeldNow();
       dom.holdBtn.setAttribute("aria-pressed", held ? "true" : "false");
+      var label = held ? holdReleaseLabel(heldQueuedCount()) : HOLD_LABEL;
+      dom.holdLabel.textContent = label;
+      dom.holdBtn.setAttribute("aria-label", label);
+      dom.holdBtn.title = "";
       if (!held) {
         dom.holdCount.textContent = "";
         return;
@@ -21591,6 +22681,12 @@
      */
     function repaintHoldChrome() {
       renderHold();
+      // Every send button, in the rail and in the comment boxes on the page,
+      // says "Send to queue" while Hold is on.
+      var heldNow = isHeldNow();
+      if (dom && dom.shadow) highlightModule.paintSendButtons(dom.shadow, heldNow);
+      var surfaceNow = highlights && highlights.surface ? highlights.surface() : null;
+      if (surfaceNow) highlightModule.paintSendButtons(surfaceNow.root || surfaceNow.host, heldNow);
       if (!dom || !dom.pill) return;
       var heldQueued = isHeldNow() ? heldQueuedCount() : 0;
       // HELD, ON THE COLLAPSED PILL (R10), takes over the late pill's spot
@@ -21902,6 +22998,195 @@
       };
     }
 
+    /**
+     * Is the passage longer than its two-line clamp? Sets data-lahe-more so the
+     * quote reads as a control only when there is something more to show.
+     * @param {HTMLElement} quote
+     */
+    function markQuoteOverflow(quote) {
+      if (!quote.isConnected || quote.style.display === "none") return;
+      var open = quote.getAttribute("data-lahe-quote-open") === "true";
+      var more = open || quote.scrollHeight > quote.clientHeight + 1;
+      if (more) {
+        quote.setAttribute("data-lahe-more", "true");
+        quote.setAttribute("role", "button");
+        quote.setAttribute("tabindex", "0");
+        quote.setAttribute("aria-expanded", open ? "true" : "false");
+        quote.setAttribute("title", open ? "Click to shorten the passage" : "Click to show the whole passage");
+      } else {
+        quote.removeAttribute("data-lahe-more");
+        quote.removeAttribute("role");
+        quote.removeAttribute("tabindex");
+        quote.removeAttribute("aria-expanded");
+        quote.removeAttribute("title");
+      }
+    }
+
+    /** Open a clamped passage out to its full length, or clamp it again. */
+    function toggleQuote(quote) {
+      if (quote.getAttribute("data-lahe-more") !== "true") return;
+      var open = quote.getAttribute("data-lahe-quote-open") === "true";
+      if (open) quote.removeAttribute("data-lahe-quote-open");
+      else quote.setAttribute("data-lahe-quote-open", "true");
+      markQuoteOverflow(quote);
+    }
+
+    // -------------------------------------------------------------------------
+    // Mark as done: the state chip's menu
+    // -------------------------------------------------------------------------
+
+    /** Can the reviewer close this card from its chip right now? */
+    function canCloseCard(card) {
+      if (!card || !cards[card.id] || cardCloseHandlers.length === 0) return false;
+      if (refusalOf(card.id)) return false;
+      if (CLOSEABLE_CHIP_STATES.indexOf(card.state) === -1) return false;
+      var item = card.item;
+      if (!item) return false;
+      return record.isOutstanding(item) && record.displayState(item) !== record.STATE.HANDLED;
+    }
+
+    // The chip is a button only on a card that can be closed. Everywhere else it
+    // is the plain label it always was, and a click on it folds the card.
+    function paintStateChip(card) {
+      var p = card.parts;
+      if (!p || !p.stateWrap) return;
+      var can = canCloseCard(card);
+      if (can) {
+        p.state.setAttribute("role", "button");
+        p.state.setAttribute("tabindex", "0");
+        p.state.setAttribute("aria-haspopup", "menu");
+        p.state.setAttribute("aria-expanded", stateMenuId === card.id ? "true" : "false");
+        p.state.setAttribute("aria-label", (p.state.textContent || "") + ": card actions");
+        p.state.setAttribute("data-lahe-no-jump", "");
+        p.stateWrap.setAttribute("data-lahe-tip", MARK_DONE.TIP);
+        return;
+      }
+      ["role", "tabindex", "aria-haspopup", "aria-expanded", "aria-label", "data-lahe-no-jump"].forEach(function (name) {
+        p.state.removeAttribute(name);
+      });
+      p.stateWrap.removeAttribute("data-lahe-tip");
+      if (stateMenuId === card.id) closeStateMenu(false);
+    }
+
+    function openStateMenu(id, focusItem) {
+      closeStateMenu(false);
+      var card = cards[id];
+      if (!dom || !card || !card.parts || !canCloseCard(card)) return false;
+      stateMenuId = id;
+      card.parts.stateMenu.hidden = false;
+      card.parts.state.setAttribute("aria-expanded", "true");
+      card.parts.stateWrap.setAttribute("data-lahe-open", "true");
+      if (focusItem) card.parts.stateDone.focus();
+      // The head menu's two listeners, for the head menu's reason: the root is
+      // closed, so a click inside it reaches the document retargeted.
+      stateMenuOutside = function (event) {
+        if (event.type === "keydown") {
+          if (event.key !== "Escape") return;
+          event.preventDefault();
+          event.stopPropagation();
+          closeStateMenu(true);
+          return;
+        }
+        if (fromOurTree(event)) return;
+        closeStateMenu(false);
+      };
+      stateMenuShadow = function (event) {
+        var open = stateMenuId && cards[stateMenuId];
+        if (open && open.parts && open.parts.stateWrap.contains(event.target)) return;
+        closeStateMenu(false);
+      };
+      doc.addEventListener("pointerdown", stateMenuOutside, true);
+      doc.addEventListener("keydown", stateMenuOutside, true);
+      dom.shadow.addEventListener("pointerdown", stateMenuShadow, true);
+      return true;
+    }
+
+    function closeStateMenu(returnFocus) {
+      if (stateMenuOutside) {
+        doc.removeEventListener("pointerdown", stateMenuOutside, true);
+        doc.removeEventListener("keydown", stateMenuOutside, true);
+        stateMenuOutside = null;
+      }
+      if (stateMenuShadow) {
+        if (dom) dom.shadow.removeEventListener("pointerdown", stateMenuShadow, true);
+        stateMenuShadow = null;
+      }
+      if (!stateMenuId) return false;
+      var card = cards[stateMenuId];
+      stateMenuId = null;
+      if (card && card.parts && card.parts.stateMenu) {
+        card.parts.stateMenu.hidden = true;
+        card.parts.stateWrap.removeAttribute("data-lahe-open");
+        if (card.parts.state.getAttribute("role") === "button") card.parts.state.setAttribute("aria-expanded", "false");
+        if (returnFocus) card.parts.state.focus();
+      }
+      return true;
+    }
+
+    function chooseCardClose(id, action) {
+      var card = cards[id];
+      var can = canCloseCard(card);
+      closeStateMenu(false);
+      if (!can) return false;
+      cardCloseHandlers.slice().forEach(function (fn) {
+        fn(id, action);
+      });
+      return true;
+    }
+
+    /**
+     * Who closes a card when the reviewer chooses "Mark as done" on its chip.
+     * Called as fn(id, action), action being MARK_DONE.ACTION.
+     */
+    function onCardClose(fn) {
+      if (typeof fn !== "function") throw new TypeError("onCardClose: a function is required");
+      cardCloseHandlers.push(fn);
+      if (dom) Object.keys(cards).forEach(function (id) { paintStateChip(cards[id]); });
+      return function () {
+        var at = cardCloseHandlers.indexOf(fn);
+        if (at !== -1) cardCloseHandlers.splice(at, 1);
+        if (dom) Object.keys(cards).forEach(function (id) { paintStateChip(cards[id]); });
+      };
+    }
+
+    /**
+     * Self-report for the closed root: the chip, whether it is a control, the
+     * menu and its items, measured off the real nodes so a test clicks where
+     * the reviewer would.
+     */
+    function cardStateInfo(id) {
+      var card = cards[id];
+      if (!dom || !card || !card.parts) return { present: false };
+      var p = card.parts;
+      function rectOf(node) {
+        var r = node.getBoundingClientRect();
+        return { x: r.x, y: r.y, width: r.width, height: r.height };
+      }
+      return {
+        present: true,
+        label: (p.state.textContent || "").trim(),
+        state: p.state.getAttribute("data-state"),
+        closedBy: p.state.getAttribute("data-lahe-closed-by"),
+        closeable: canCloseCard(card),
+        role: p.state.getAttribute("role"),
+        tip: p.stateWrap.getAttribute("data-lahe-tip"),
+        expanded: p.state.getAttribute("aria-expanded"),
+        focused: dom.shadow.activeElement === p.state,
+        open: stateMenuId === id && !p.stateMenu.hidden,
+        chipRect: rectOf(p.state),
+        items: p.stateMenu.hidden
+          ? []
+          : Array.prototype.map.call(p.stateMenu.querySelectorAll(".menuitem"), function (node) {
+              return {
+                action: node.getAttribute("data-action"),
+                label: (node.textContent || "").trim(),
+                focused: dom.shadow.activeElement === node,
+                rect: rectOf(node)
+              };
+            })
+      };
+    }
+
     function buildCardNode(card) {
       if (!dom || card.node) return card.node;
       var node = el("article", "card");
@@ -21948,8 +23233,37 @@
       top.appendChild(wait);
       var time = el("time", "card__time");
       top.appendChild(time);
+      var stateWrap = el("span", "statewrap");
       var state = el("span", "card__state");
-      top.appendChild(state);
+      stateWrap.appendChild(state);
+      // MARK AS DONE: the chip's menu. Built once with the card, hidden, and
+      // only reachable while paintStateChip says the card can be closed.
+      var stateMenu = el("div", "menu statemenu");
+      stateMenu.setAttribute("role", "menu");
+      stateMenu.hidden = true;
+      var stateDone = el("button", "menuitem", MARK_DONE.LABEL);
+      stateDone.setAttribute("type", "button");
+      stateDone.setAttribute("role", "menuitem");
+      stateDone.setAttribute("data-action", MARK_DONE.ACTION);
+      stateDone.addEventListener("click", function () {
+        chooseCardClose(card.id, MARK_DONE.ACTION);
+      });
+      stateMenu.appendChild(stateDone);
+      stateWrap.appendChild(stateMenu);
+      state.addEventListener("click", function () {
+        if (!canCloseCard(card)) return;
+        if (stateMenuId === card.id) closeStateMenu(false);
+        else openStateMenu(card.id, false);
+      });
+      state.addEventListener("keydown", function (event) {
+        if (event.key !== "Enter" && event.key !== " ") return;
+        if (!canCloseCard(card)) return;
+        event.preventDefault();
+        event.stopPropagation();
+        if (stateMenuId === card.id) closeStateMenu(true);
+        else openStateMenu(card.id, true);
+      });
+      top.appendChild(stateWrap);
       node.appendChild(top);
 
       // The one line a folded card shows. Built once with the card, like every
@@ -21962,6 +23276,13 @@
       node.appendChild(line);
 
       var quote = el("div", "card__quote");
+      quote.addEventListener("click", function () { toggleQuote(quote); });
+      quote.addEventListener("keydown", function (event) {
+        if (event.key !== "Enter" && event.key !== " ") return;
+        event.preventDefault();
+        toggleQuote(quote);
+      });
+      quote.addEventListener("mouseenter", function () { markQuoteOverflow(quote); });
       node.appendChild(quote);
 
       // What a tab-content owner fills. Nothing in this file writes into it.
@@ -21991,6 +23312,9 @@
         wait: wait,
         time: time,
         state: state,
+        stateWrap: stateWrap,
+        stateMenu: stateMenu,
+        stateDone: stateDone,
         quote: quote,
         badges: badges,
         agent: agent,
@@ -22026,14 +23350,9 @@
         pendingPlacement[card.id] = true;
         return;
       }
-      // The Edits pane orders its cards with inline flex order. A card that
-      // leaves that pane keeps the inline style, and one stale negative order
-      // beats every DOM position this function chooses: the card renders at
-      // the top while the newest reply sinks below every migrated edit. Clear
-      // it on the way into any other pane; the Edits tab re-stamps its own.
-      if (card.pane !== TAB.EDITS && card.node.style && card.node.style.order) {
-        card.node.style.order = "";
-      }
+      // Order is DOM position in every pane, hand edits included: nothing
+      // stamps an inline flex order on a card, so a hand edit and a comment
+      // sort by the same newest-activity rule below.
       var before = null;
       var at = activityAt(card.item);
       Array.prototype.some.call(pane.children, function (node) {
@@ -22087,17 +23406,34 @@
         p.time.removeAttribute("title");
       }
       var refused = refusalOf(card.id);
-      p.state.textContent = refused ? NOT_SENT_LABEL : STATE_LABEL[card.state] || card.state;
+      var closedByReviewer = card.state === record.STATE.HANDLED && record.isClosedByReviewer(item);
+      p.state.textContent = refused
+        ? NOT_SENT_LABEL
+        : closedByReviewer
+          ? MARK_DONE.CLOSED_CHIP
+          : STATE_LABEL[card.state] || card.state;
       p.state.setAttribute("data-state", refused ? "refused" : card.state);
+      if (closedByReviewer) p.state.setAttribute("data-lahe-closed-by", record.CLOSED_BY_REVIEWER);
+      else p.state.removeAttribute("data-lahe-closed-by");
+      paintStateChip(card);
       // On the card itself too, so anything a tab owner attached can be shown or
       // withdrawn by the card's own state without a second file being told.
       card.node.setAttribute("data-state", card.state);
       if (isQuietDraft(item)) card.node.setAttribute("data-lahe-blank", "true");
       else card.node.removeAttribute("data-lahe-blank");
+      // What the Active filter reads. From the kind, every paint, so a card is
+      // filtered correctly however it got into the pane.
+      if (isHandEditKind(item)) card.node.setAttribute(HAND_EDIT_ATTR, "true");
+      else card.node.removeAttribute(HAND_EDIT_ATTR);
       paintCardWait(card);
       var quote = (item[record.FIELD.CONTEXT] && item[record.FIELD.CONTEXT].quote) || "";
-      p.quote.textContent = quote;
+      if (p.quote.textContent !== quote) {
+        p.quote.textContent = quote;
+        p.quote.removeAttribute("data-lahe-quote-open");
+      }
       p.quote.style.display = quote ? "" : "none";
+      // Measured after layout: at fill time the card may not be drawn yet.
+      requestAnimationFrame(function () { markQuoteOverflow(p.quote); });
 
       p.badges.textContent = "";
       cardBadges(card.id).forEach(function (badge) {
@@ -22107,32 +23443,24 @@
 
       p.agent.textContent = "";
       p.agent.className = "agent";
+      p.agent.removeAttribute("data-side");
       if (card.agentMessage) {
         var who = card.agentMessage.agent || "agent";
         var label =
           card.agentMessage.status === record.REPLY_STATUS.QUESTION
             ? "Question from " + who
             : who;
-        var agentHead = el("div", "agent__head");
-        agentHead.appendChild(el("span", "agent__who", label));
-        if (card.agentMessage.at) {
-          var agentTime = el("time", "agent__time", timestampLabel(card.agentMessage.at));
-          agentTime.setAttribute("datetime", card.agentMessage.at);
-          agentTime.setAttribute("title", new Date(card.agentMessage.at).toLocaleString());
-          agentHead.appendChild(agentTime);
-        }
-        p.agent.appendChild(agentHead);
-        p.agent.appendChild(
-          el("span", null, card.agentMessage.text || card.agentMessage.reason || "")
-        );
-        if (card.agentMessage.files && card.agentMessage.files.length) {
-          var fileList = el("div", "agent__files");
-          card.agentMessage.files.forEach(function (name) {
-            fileList.appendChild(el("div", "agent__file", name));
-          });
-          p.agent.appendChild(fileList);
-        }
-        if (card.agentMessage.loud) p.agent.className = "agent is-loud";
+        // A turn like every other on the card. The older class names ride
+        // along so anything reading the carrier by them still finds it.
+        fillTurn(p.agent, el, {
+          side: "agent",
+          who: label,
+          at: card.agentMessage.at || null,
+          text: card.agentMessage.text || card.agentMessage.reason || "",
+          files: card.agentMessage.files,
+          names: { cap: "agent__head", who: "agent__who", time: "agent__time", files: "agent__files", file: "agent__file" }
+        });
+        if (card.agentMessage.loud) p.agent.classList.add("is-loud");
       }
 
       p.notice.textContent = card.notice || "";
@@ -22239,6 +23567,7 @@
       // The one guard that matters. A card holding focus is not removed, even
       // when the caller thinks it should be; the caller is told no.
       if (holdsFocus(id)) return false;
+      if (stateMenuId === id) closeStateMenu(false);
       if (cards[id].node && cards[id].node.parentNode) {
         cards[id].node.parentNode.removeChild(cards[id].node);
       }
@@ -22252,9 +23581,9 @@
      * A tab is finished with its own row for this card. The CARD goes only when
      * nobody else owns it.
      *
-     * The card is shared: the Active tab, the Edits tab and the Done tab all
-     * draw their rows inside the same card node, and exactly one of them owns
-     * it at a time (paneForItem says which). A tab that removed the card
+     * The card is shared: the Active tab's comment rows, the hand-edit rows
+     * (tab_edits.js) and the Done tab all draw inside the same card node, and
+     * exactly one pane owns it at a time (paneForItem says which). A tab that removed the card
      * whenever its own row went away deleted a card another tab was still
      * showing. That is how a handled reply vanished: the item folds to handled,
      * its card moves to the Done pane, then closing the still-open comment box
@@ -22457,9 +23786,8 @@
     function countIncomplete() {
       return Object.keys(cards).filter(function (id) {
         if (isQuietDraft(cards[id].item)) return false;
-        // Pane placement and completion are separate. Direct edits stay in the
-        // Edits pane so they do not bury comments, but they are still work for
-        // the agent until a handled reply lands.
+        // Lifecycle, not pane: anything not handled is work for the agent,
+        // hand edits as much as comments, until a handled reply lands.
         return cards[id].state !== record.STATE.HANDLED;
       }).length;
     }
@@ -22869,6 +24197,35 @@
       return String(template).replace("{age}", ageLabel(ms));
     }
 
+    /** The dot's first line: DOT_WORDS for the agent state, else the storage word. */
+    function dotHeadline(line) {
+      if (line && line.status === STATUS.KEPT_LOCALLY) return DOT_WORDS.helper_down;
+      var words = line && line.agentState ? DOT_WORDS[line.agentState] : null;
+      if (!words) return line ? line.text : "";
+      return words.indexOf("{age}") === -1 ? words : fillAge(words, line.agedMs || 0);
+    }
+
+    // "Message copied to clipboard:" and the message's first words, so the
+    // reviewer sees what they are about to paste.
+    function copiedNote(text) {
+      var words = String(text || "").replace(/\s+/g, " ").trim();
+      var start = words.length > 70 ? words.slice(0, 70).replace(/\s+\S*$/, "") + "..." : words;
+      return "Message copied to clipboard: " + start;
+    }
+
+    // After a click copies the hand-off message, the tip says so until the
+    // pointer leaves the dot.
+    var dotCopyNote = null;
+    function copyFromDot() {
+      if (!dom || dom.statusDotWrap.getAttribute("data-lahe-copy") !== "true") return null;
+      var copying = status === STATUS.KEPT_LOCALLY ? copyText(HELPER_RESTART_MESSAGE) : copyHandoff();
+      return copying.then(function (result) {
+        dotCopyNote = result.ok ? copiedNote(result.text) : AGENT_PROMINENT.COPY_FAILED;
+        if (dom) dom.statusDotWrap.setAttribute("data-lahe-tip", dotCopyNote);
+        return result;
+      });
+    }
+
     // -------------------------------------------------------------------------
     // Making an overdue wait prominent
     // -------------------------------------------------------------------------
@@ -23116,6 +24473,25 @@
       dom.lateMessage.setAttribute("data-shown", handoffFailed ? "true" : "");
     }
 
+    /** Put text on the clipboard; the same no-false-success rule as copyHandoff. */
+    function copyText(text) {
+      var target = clipboardTarget();
+      var write =
+        target && typeof target.writeText === "function"
+          ? Promise.resolve().then(function () {
+              return target.writeText(text);
+            })
+          : Promise.reject(new Error("this browser gave the page no clipboard to write to"));
+      return write.then(
+        function () {
+          return { ok: true, text: text };
+        },
+        function (error) {
+          return { ok: false, text: text, error: String((error && error.message) || error) };
+        }
+      );
+    }
+
     function clipboardTarget() {
       if (clipboardOverride) return clipboardOverride;
       var view = doc && doc.defaultView;
@@ -23304,6 +24680,7 @@
       var view = dom.statusRow.ownerDocument ? dom.statusRow.ownerDocument.defaultView : null;
       var computed = view ? view.getComputedStyle(dom.statusRow) : null;
       var dotComputed = view ? view.getComputedStyle(dom.statusDot) : null;
+      // What a reviewer sees is the head's dot; the row is screen-reader text.
       return {
         present: true,
         status: dom.statusRow.getAttribute("data-status") || "",
@@ -23311,10 +24688,16 @@
         loud: dom.statusRow.getAttribute("data-loud") === "true",
         text: dom.statusText.textContent || "",
         title: dom.statusRow.title || "",
-        display: computed ? computed.display : null,
-        visible: !!computed && computed.display !== "none",
+        display: dotComputed ? dotComputed.display : null,
+        visible: !!dotComputed && dotComputed.display !== "none",
         weight: computed ? computed.fontWeight : null,
-        dotColor: dotComputed ? dotComputed.backgroundColor : null
+        dotColor: dotComputed ? dotComputed.backgroundColor : null,
+        dotTip: dom.statusDotWrap.getAttribute("data-lahe-tip") || "",
+        dotCopies: dom.statusDotWrap.getAttribute("data-lahe-copy") === "true",
+        dotRect: (function () {
+          var r = dom.statusDotWrap.getBoundingClientRect();
+          return { x: r.x, y: r.y, width: r.width, height: r.height };
+        })()
       };
     }
 
@@ -23512,7 +24895,7 @@
     function endInfo() {
       if (!dom || !dom.endBtn) return { present: false };
       var rect = dom.endBtn.getBoundingClientRect();
-      var hintsRect = dom.hints.getBoundingClientRect();
+      var columnRect = dom.footMain.getBoundingClientRect();
       var panelRect = dom.endPanel.getBoundingClientRect();
       return {
         present: true,
@@ -23524,13 +24907,13 @@
           return node.getAttribute("data-action") === "end";
         }),
         rect: { x: rect.x, y: rect.y, width: rect.width, height: rect.height, right: rect.right, bottom: rect.bottom },
-        hintsRect: {
-          x: hintsRect.x,
-          y: hintsRect.y,
-          width: hintsRect.width,
-          height: hintsRect.height,
-          right: hintsRect.right,
-          bottom: hintsRect.bottom
+        columnRect: {
+          x: columnRect.x,
+          y: columnRect.y,
+          width: columnRect.width,
+          height: columnRect.height,
+          right: columnRect.right,
+          bottom: columnRect.bottom
         },
         running: endRunning,
         panel: {
@@ -23570,6 +24953,17 @@
       dom.statusRow.setAttribute("data-loud", line.loud ? "true" : "");
       dom.statusText.textContent = line.text;
       dom.statusRow.title = line.title;
+      [dom.statusDot, dom.pillDot].forEach(function (dot) {
+        dot.setAttribute("data-status", status || "");
+        dot.setAttribute("data-agent", line.agentState || "");
+        dot.setAttribute("data-loud", line.loud ? "true" : "");
+      });
+      var headline = dotHeadline(line);
+      if (!dotCopyNote) dom.statusDotWrap.setAttribute("data-lahe-tip", line.title ? headline + "\n\n" + line.title : headline);
+      dom.statusDotWrap.setAttribute(
+        "data-lahe-copy",
+        DOT_COPIES[line.agentState] || line.status === STATUS.KEPT_LOCALLY ? "true" : "false"
+      );
       // The banner and the late cards run off the same clock and the same
       // liveness answer as this line, so they are repainted with it.
       renderWaitBanner(banner);
@@ -23591,6 +24985,7 @@
     function renderTabs() {
       if (!dom) return;
       paintEmptyPanes();
+      paintFilter();
       TABS.forEach(function (name) {
         dom.tabButtons[name].setAttribute("aria-selected", name === activeTab ? "true" : "false");
         dom.panes[name].setAttribute("data-current", name === activeTab ? "true" : "false");
@@ -23614,9 +25009,9 @@
       //
       // An empty pill still invites on an untouched page: "Review 0/0" prints
       // the one number that is not information.
-      // The left number is lifecycle truth, not the Active tab's layout count.
-      // In particular, a ready direct edit sits in Edits but remains incomplete
-      // until the agent reports it handled.
+      // The left number is lifecycle truth, not the Active tab's layout count,
+      // and never the filtered view: a ready hand edit stays incomplete until
+      // the agent reports it handled, whichever filter is picked.
       var open = countIncomplete();
       var total = Object.keys(cards).length;
       dom.pillCount.textContent = total ? String(open) + " (" + String(total) + ")" : "";
@@ -23647,6 +25042,9 @@
     }
 
     function selectTab(tab) {
+      // The hand-edit tab is gone; its cards are in Active. An old caller asking
+      // for it gets Active rather than an exception mid-gesture.
+      if (tab === LEGACY_EDITS_TAB) tab = TAB.ACTIVE;
       if (TABS.indexOf(tab) === -1) throw new Error("selectTab: unknown tab " + String(tab));
       activeTab = tab;
       // Handlers run BEFORE the paint, so a listener that clears its own badge
@@ -23721,10 +25119,59 @@
     // and unmounting. A menu that survives one of those is a menu that hangs
     // over someone's page after they have moved on.
 
+    // The keyboard shortcuts panel. It hangs from the head like the style
+    // dropdown and closes the same ways: Close, Esc, or a click anywhere else.
+    function openShortcuts() {
+      if (!dom) return false;
+      if (shortcutsOpen) return true;
+      closeMenu(false);
+      closeStylePanel(false);
+      closePdfTray(false);
+      shortcutsOpen = true;
+      dom.keysPanel.setAttribute("data-shown", "open");
+      shortcutsOutsideListener = function (event) {
+        if (event.type === "keydown") {
+          if (event.key !== "Escape") return;
+          event.preventDefault();
+          event.stopPropagation();
+          closeShortcuts(true);
+          return;
+        }
+        if (fromOurTree(event)) return;
+        closeShortcuts(false);
+      };
+      shortcutsShadowListener = function (event) {
+        if (dom.keysPanel.contains(event.target)) return;
+        closeShortcuts(false);
+      };
+      doc.addEventListener("pointerdown", shortcutsOutsideListener, true);
+      doc.addEventListener("keydown", shortcutsOutsideListener, true);
+      dom.shadow.addEventListener("pointerdown", shortcutsShadowListener, true);
+      return true;
+    }
+
+    function closeShortcuts(returnFocus) {
+      if (shortcutsOutsideListener) {
+        doc.removeEventListener("pointerdown", shortcutsOutsideListener, true);
+        doc.removeEventListener("keydown", shortcutsOutsideListener, true);
+        shortcutsOutsideListener = null;
+      }
+      if (shortcutsShadowListener) {
+        if (dom) dom.shadow.removeEventListener("pointerdown", shortcutsShadowListener, true);
+        shortcutsShadowListener = null;
+      }
+      if (!shortcutsOpen) return false;
+      shortcutsOpen = false;
+      if (dom) dom.keysPanel.setAttribute("data-shown", "closed");
+      if (returnFocus && dom) dom.menuBtn.focus();
+      return true;
+    }
+
     function openMenu(index) {
       if (!dom || menuOpen) return menuOpen;
       // One thing hangs from the head at a time.
       closeStylePanel(false);
+      closeShortcuts(false);
       closePdfTray(false);
       menuOpen = true;
       dom.menuList.hidden = false;
@@ -23795,8 +25242,31 @@
       if (!dom) return true;
       dom.menuList.hidden = true;
       dom.menuBtn.setAttribute("aria-expanded", "false");
+      setMenuGroupOpen(EXPORT_GROUP, false);
+      setMenuGroupOpen(VIEW_GROUP, false);
       if (returnFocus) dom.menuBtn.focus();
       return true;
+    }
+
+    // Open or shut a group inside the menu: its own items show under it.
+    function setMenuGroupOpen(group, open) {
+      if (!dom) return false;
+      var groupNode = null;
+      dom.menuItems.forEach(function (node) {
+        if (node.getAttribute("data-action") === group) {
+          groupNode = node;
+          node.setAttribute("aria-expanded", open ? "true" : "false");
+        }
+        if (node.getAttribute("data-parent") === group) node.hidden = !open;
+      });
+      var sub = groupNode && groupNode.parentNode ? groupNode.parentNode.querySelector(".submenu") : null;
+      var subView = doc && doc.defaultView;
+      if (open && sub && subView) {
+        var r = groupNode.getBoundingClientRect();
+        sub.style.top = Math.max(8, r.top - 6) + "px";
+        sub.style.right = Math.max(8, subView.innerWidth - r.left + 2) + "px";
+      }
+      return open;
     }
 
     function toggleMenu() {
@@ -23841,6 +25311,19 @@
       } else if (event.key === "End") {
         event.preventDefault();
         focusMenuItem(-1);
+      } else if (event.key === "ArrowRight" || event.key === "ArrowLeft") {
+        // Into and out of a group, the way a submenu works.
+        var focused = visibleMenuItems()[index];
+        if (!focused) return;
+        var group = focused.getAttribute("aria-expanded") !== null ? focused.getAttribute("data-action") : focused.getAttribute("data-parent");
+        if (!group) return;
+        event.preventDefault();
+        setMenuGroupOpen(group, event.key === "ArrowRight");
+        var items = visibleMenuItems();
+        var groupNode = items.filter(function (node) {
+          return node.getAttribute("data-action") === group;
+        })[0];
+        focusMenuItem(items.indexOf(groupNode) + (event.key === "ArrowRight" ? 1 : 0));
       } else if (event.key === "Tab") {
         closeMenu(false);
       }
@@ -23902,6 +25385,7 @@
       // One thing hangs from the head at a time.
       closeMenu(false);
       closeStylePanel(false);
+      closeShortcuts(false);
       pdfTrayOpen = true;
       dom.pdfTray.hidden = false;
       dom.pdfBtn.setAttribute("aria-expanded", "true");
@@ -24189,7 +25673,15 @@
       notes.forEach(function (parts) {
         var line = el("div", "stylepanel__note");
         (parts || []).forEach(function (part) {
-          if (part.kbd) line.appendChild(el("kbd", null, part.kbd));
+          if (part.link) {
+            // A link out of the rail: the styles page. Opened in a new tab so
+            // the review page stays where it is.
+            var out = el("a", "stylepanel__link", String(part.text || part.link));
+            out.setAttribute("href", part.link);
+            out.setAttribute("target", "_blank");
+            out.setAttribute("rel", "noopener noreferrer");
+            line.appendChild(out);
+          } else if (part.kbd) line.appendChild(el("kbd", null, part.kbd));
           else if (part.code) line.appendChild(el("code", null, part.code));
           else line.appendChild(doc.createTextNode(String(part.text || "")));
         });
@@ -24347,7 +25839,8 @@
           pill: pillSpot,
           width: railWidth,
           present: presenting,
-          cards: collapsedCardsValue()
+          cards: collapsedCardsValue(),
+          filter: activeFilter
         });
         return true;
       } catch (err) {
@@ -24443,7 +25936,13 @@
     }
 
     function setCollapsed(next, persist) {
+      var wasCollapsed = collapsed;
       collapsed = next === undefined ? !collapsed : !!next;
+      // Measured before the switch, for the morph between rail and pill.
+      var railBefore = dom && !dom.rail.hidden ? dom.rail.getBoundingClientRect() : null;
+      var pillBefore = dom && !dom.pill.hidden ? dom.pill.getBoundingClientRect() : null;
+      var ghost = collapsed && !wasCollapsed && railBefore ? dom.rail.cloneNode(true) : null;
+      var opening = !collapsed && wasCollapsed;
       if (persist !== false) {
         preferredCollapsed = collapsed;
         persistCollapsedPreference();
@@ -24453,9 +25952,14 @@
       if (collapsed) {
         closeMenu(false);
         closeStylePanel(false);
+        closeShortcuts(false);
         closePdfTray(false);
       }
       renderCollapsed();
+      // Opening copies the rail once it is laid out, so the copy is what grows
+      // and the real rail is never measured mid-animation at the wrong size.
+      if (opening && dom && !dom.rail.hidden) ghost = dom.rail.cloneNode(true);
+      if (collapsed !== wasCollapsed) morphRail(!collapsed, ghost, railBefore, pillBefore);
       collapseHandlers.forEach(function (fn) {
         try {
           fn(collapsed);
@@ -24464,6 +25968,79 @@
         }
       });
       return collapsed;
+    }
+
+    // THE MORPH between the rail and the pill, 0.3 seconds end to end (Ken).
+    // State changes at once: the rail is hidden or shown the moment the call
+    // returns, so nothing waits on the animation. Opening scales the real rail
+    // up out of the pill; closing shrinks a copy of it into the pill while the
+    // pill fades in. Off for anyone who asked their system for less motion.
+    var MORPH_MS = 300;
+    function morphRail(opening, ghost, railBefore, pillBefore) {
+      if (!dom || typeof dom.rail.animate !== "function") return false;
+      var view = doc && doc.defaultView;
+      if (view && view.matchMedia && view.matchMedia("(prefers-reduced-motion: reduce)").matches) return false;
+      function toward(from, to) {
+        return (
+          "translate(" + (to.left - from.left) + "px," + (to.top - from.top) + "px) " +
+          "scale(" + to.width / Math.max(1, from.width) + "," + to.height / Math.max(1, from.height) + ")"
+        );
+      }
+      function placeGhost() {
+        ghost.hidden = false;
+        ghost.removeAttribute("id");
+        Array.prototype.forEach.call(ghost.querySelectorAll("[id],[role]"), function (node) {
+          node.removeAttribute("id");
+          node.removeAttribute("role");
+        });
+        ghost.setAttribute("aria-hidden", "true");
+        ghost.setAttribute("data-lahe-ghost", "");
+        ghost.inert = true;
+        ghost.style.pointerEvents = "none";
+        // After the rail, so anything that looks the rail up finds the real one.
+        dom.rail.parentNode.insertBefore(ghost, dom.rail.nextSibling);
+      }
+      function dropWhenDone(anim) {
+        var drop = function () {
+          if (ghost.parentNode) ghost.parentNode.removeChild(ghost);
+        };
+        anim.onfinish = drop;
+        anim.oncancel = drop;
+      }
+      if (opening && pillBefore && ghost) {
+        var railNow = dom.rail.getBoundingClientRect();
+        if (!railNow.width) return false;
+        placeGhost();
+        dropWhenDone(
+          ghost.animate(
+            [
+              { transformOrigin: "0 0", transform: toward(railNow, pillBefore), opacity: 0.3 },
+              { transformOrigin: "0 0", transform: "none", opacity: 1 }
+            ],
+            { duration: MORPH_MS, easing: "cubic-bezier(.2,.8,.2,1)" }
+          )
+        );
+        // The real rail is in place and measurable at once; it shows when the
+        // copy arrives.
+        dom.rail.animate([{ opacity: 0 }, { opacity: 0, offset: 0.9 }, { opacity: 1 }], { duration: MORPH_MS });
+        return true;
+      }
+      if (!opening && ghost && railBefore) {
+        var pillNow = dom.pill.getBoundingClientRect();
+        if (!pillNow.width) return false;
+        placeGhost();
+        var shrink = ghost.animate(
+          [
+            { transformOrigin: "0 0", transform: "none", opacity: 1 },
+            { transformOrigin: "0 0", transform: toward(railBefore, pillNow), opacity: 0 }
+          ],
+          { duration: MORPH_MS, easing: "cubic-bezier(.4,0,.2,1)" }
+        );
+        dropWhenDone(shrink);
+        dom.pill.animate([{ opacity: 0 }, { opacity: 0, offset: 0.6 }, { opacity: 1 }], { duration: MORPH_MS });
+        return true;
+      }
+      return false;
     }
 
     /**
@@ -24487,6 +26064,7 @@
       if (presenting) {
         closeMenu(false);
         closeStylePanel(false);
+        closeShortcuts(false);
         closePdfTray(false);
       }
       if (persist !== false) persistCollapsedPreference();
@@ -24581,10 +26159,13 @@
       return node.getClientRects().length > 0;
     }
 
-    function firstFocusableIn(root) {
+    // skipFilter: pass over the pane head (filter, search). It is the header, like
+    // the tab strip, and the reviewer opened the rail to reach a card.
+    function firstFocusableIn(root, skipFilter) {
       if (!root || typeof root.querySelectorAll !== "function") return null;
       var found = root.querySelectorAll(FOCUSABLE);
       for (var i = 0; i < found.length; i += 1) {
+        if (skipFilter && typeof found[i].closest === "function" && found[i].closest(".panehead")) continue;
         if (isShown(found[i]) && typeof found[i].focus === "function") return found[i];
       }
       return null;
@@ -24602,7 +26183,7 @@
     function focusFirstControl() {
       if (!dom || collapsed || presenting) return false;
       var pane = dom.panes ? dom.panes[activeTab] : null;
-      var node = firstFocusableIn(pane) || firstFocusableIn(dom.rail);
+      var node = firstFocusableIn(pane, true) || firstFocusableIn(dom.rail);
       if (!node) return false;
       try {
         node.focus();
@@ -25670,6 +27251,16 @@
     return {
       TAB: TAB,
       TABS: TABS,
+      FILTER: FILTER,
+      FILTERS: FILTERS,
+      setActiveFilter: setActiveFilter,
+      currentFilter: currentFilter,
+      openFilterPopover: openFilterPopover,
+      closeFilterPopover: closeFilterPopover,
+      filterPopoverIsOpen: filterPopoverIsOpen,
+      revealCard: revealCard,
+      setSearch: setSearch,
+      searchFor: searchFor,
       STATUS: STATUS,
       STATUS_TEXT: STATUS_TEXT,
       STATUS_SHORT: STATUS_SHORT,
@@ -25745,6 +27336,8 @@
       setCardsCollapsed: setCardsCollapsed,
       collapsedCardIds: collapsedCardIds,
       onCardCollapse: onCardCollapse,
+      onCardClose: onCardClose,
+      cardStateInfo: cardStateInfo,
       setTabNewCount: setTabNewCount,
       tabNewCount: tabNewCount,
       pillNewCount: pillNewCount,
@@ -25840,12 +27433,17 @@
   return {
     PRESENT: PRESENT,
     PDF: PDF,
+    MARK_DONE: MARK_DONE,
     // Folding a card to one line: the attributes the rule is written in, the
     // icon both disclosures wear, and the pure line builder.
     FOLD_ALL: FOLD_ALL,
     CARD_COLLAPSED_ATTR: CARD_COLLAPSED_ATTR,
     CARD_UNSEEN_ATTR: CARD_UNSEEN_ATTR,
+    CARD_UNREAD_ATTR: CARD_UNREAD_ATTR,
     CARD_ASKING_ATTR: CARD_ASKING_ATTR,
+    DOT_WORDS: DOT_WORDS,
+    HELPER_RESTART_MESSAGE: HELPER_RESTART_MESSAGE,
+    paintSendButton: highlightModule.paintSendButton,
     COLLAPSED_LINE_MAX: COLLAPSED_LINE_MAX,
     CHEVRON_ICON: CHEVRON_ICON,
     collapsedLineText: collapsedLineText,
@@ -25857,6 +27455,15 @@
     clipAtWord: clipAtWord,
     TAB: TAB,
     TABS: TABS,
+    FILTER: FILTER,
+    FILTERS: FILTERS,
+    FILTER_LABEL: FILTER_LABEL,
+    FILTER_EMPTY: FILTER_EMPTY,
+    HAND_EDIT_ATTR: HAND_EDIT_ATTR,
+    isHandEditKind: isHandEditKind,
+    SEARCH_PLACEHOLDER: SEARCH_PLACEHOLDER,
+    searchMatches: searchMatches,
+    searchEmptyText: searchEmptyText,
     STATUS: STATUS,
     STATUS_TEXT: STATUS_TEXT,
     STATUS_SHORT: STATUS_SHORT,
@@ -25890,6 +27497,9 @@
     RAIL_GRIP_LABEL: RAIL_GRIP_LABEL,
     clampRailWidth: clampRailWidth,
     timestampLabel: timestampLabel,
+    captionTimeLabel: captionTimeLabel,
+    fillTurn: fillTurn,
+    setTurnTime: setTurnTime,
     paneForItem: paneForItem,
     createRail: createRail,
     shared: shared,
@@ -26107,20 +27717,34 @@
     // reviewer clicks into: the click target ended where Delete began.
     "[data-lahe-active-row]{display:flex;flex-direction:column;gap:8px}",
     ".lahe-rail-note{white-space:pre-wrap;overflow-wrap:anywhere}",
+    // Delete is a small x at the right of the comment, not a word under it.
+    "[data-lahe-active-row]{position:relative}",
+    // The x sits at the right end of the reviewer's caption row, so the
+    // caption makes room for it.
+    "[data-lahe-active-row]:has(> .cardx:not([hidden])) .turn__cap{padding-right:24px}",
+    ".cardx{position:absolute;top:-3px;right:0;width:20px;height:20px;border-radius:5px;display:flex;",
+    "align-items:center;justify-content:center;font-size:15px;line-height:1;color:var(--ink-faint);",
+    "background:none;border:0;cursor:pointer}",
+    // Hovering the x shows what it would delete: the x and the whole comment
+    // turn the rail's stop red.
+    ".cardx:hover{background:color-mix(in srgb,var(--bad) 12%,transparent);color:var(--bad)}",
+    ".card:has([data-lahe-active-row] > .cardx:hover){outline:1.5px solid var(--bad);outline-offset:-1px;",
+    "background:color-mix(in srgb,var(--bad) 6%,var(--paper))}",
+    ".cardx[hidden]{display:none}",
     ".lahe-rail-note[data-empty='true']{color:var(--ink-faint)}",
     // THE NOTE IS THE INPUT. Ken: "do we really need a button for 'reword'?
     // before we could just edit a comment and the color would go from green to
     // yellow and that was how we knew." So the words carry the affordance the
     // button used to: a text cursor, a hover that lifts them off the card, and a
     // focus ring while the reviewer is typing in them.
-    ".lahe-rail-note[data-lahe-note-editor]{cursor:text;border-radius:6px;",
-    "margin:0 -4px;padding:2px 4px;transition:background 90ms ease}",
-    ".lahe-rail-note[data-lahe-note-editor]:hover{background:var(--sunken)}",
-    ".lahe-rail-note[data-lahe-note-editor]:focus{outline:2px solid var(--accent);",
-    "outline-offset:1px;background:var(--paper)}",
+    // The note is the reviewer's bubble, so the hover outlines the bubble
+    // rather than changing its color, and typing gets the accent ring.
+    ".lahe-rail-note[data-lahe-note-editor]{cursor:text;transition:border-color 90ms ease}",
+    ".lahe-rail-note[data-lahe-note-editor]:hover{border-color:var(--line)}",
+    ".lahe-rail-note[data-lahe-note-editor]:focus{outline:2px solid var(--accent);outline-offset:1px}",
     // A window that may not write to the review reads as prose again.
     ".lahe-rail-note[contenteditable='false']{cursor:default}",
-    ".lahe-rail-note[contenteditable='false']:hover{background:transparent}",
+    ".lahe-rail-note[contenteditable='false']:hover{border-color:transparent}",
     // The empty-draft label is drawn, not typed: text inside the node would be
     // text the reviewer has to delete before writing their own sentence.
     ".lahe-rail-note[data-empty='true']::before{content:'Empty draft'}",
@@ -26165,8 +27789,10 @@
     ".lahe-rail-add[hidden]{display:none}",
     ".lahe-rail-add textarea{resize:none;width:100%;box-sizing:border-box;",
     "font:inherit;font-size:12.5px;line-height:1.45;color:var(--ink);",
-    "background:var(--sunken);border:1px solid var(--line);border-radius:6px;",
-    "padding:5px 7px;transition:background 90ms ease}",
+    // The same paper box as the follow-up composer, so the card has one kind
+    // of text box whether or not the agent has answered yet.
+    "background:var(--paper);border:1px solid var(--line);border-radius:7px;",
+    "padding:5px 8px;transition:background 90ms ease}",
     ".lahe-rail-add textarea::placeholder{color:var(--ink-faint)}",
     ".lahe-rail-add textarea:focus{outline:2px solid var(--accent);outline-offset:1px;",
     "background:var(--paper)}",
@@ -26274,16 +27900,17 @@
       panel.appendChild(head);
 
       listEl = el("div", "lahe-rail-list");
-      emptyEl = el("p", "lahe-rail-empty", "Nothing outstanding. Select text and press Cmd-Shift-C.");
+      emptyEl = el("p", "lahe-rail-empty", "No unanswered or active threads. Check the done tab, or select some text and press Cmd-Shift-C.");
       listEl.appendChild(emptyEl);
       panel.appendChild(listEl);
 
       footEl = el("footer", "lahe-rail-foot");
-      footEl.appendChild(el("span", "lahe-rail-footlabel", "A note about the page, tied to nothing"));
+      footEl.appendChild(el("span", "lahe-rail-footlabel", "Add a note on the whole page"));
       panel.appendChild(footEl);
-      footEl.appendChild(hintList());
+      var hints = hintList();
+      if (hints) footEl.appendChild(hints);
 
-      pill = el("button", "lahe-rail-pill", "Review");
+      pill = el("button", "lahe-rail-pill", "Lahe");
       pill.setAttribute("type", "button");
       pill.hidden = true;
       pill.addEventListener("click", function () {
@@ -26317,9 +27944,10 @@
       // closed root. Without it every class below is a name with nothing behind
       // it, which is exactly what shipped.
       ensureHostedStyle(footEl);
-      footEl.appendChild(el("span", "lahe-rail-footlabel", "A note about the page"));
+      footEl.appendChild(el("span", "lahe-rail-footlabel", "Add a note on the whole page"));
       host.appendChild(footEl);
-      footEl.appendChild(hintList());
+      var hints = hintList();
+      if (hints) footEl.appendChild(hints);
 
       openNoteBox();
       unsubscribe = comments.onChange(function (item, event) {
@@ -26392,10 +28020,9 @@
         list.appendChild(li);
       });
       if (!hosted) return list;
-      var more = el("details", "lahe-rail-more");
-      more.appendChild(el("summary", null, "All shortcuts"));
-      more.appendChild(list);
-      return more;
+      // In the rail the shortcuts live behind the menu ("Keyboard shortcuts"),
+      // so the pane keeps no list of its own.
+      return null;
     }
 
     function hintText() {
@@ -26408,7 +28035,14 @@
           })
           .join("\n");
       }
-      return container.querySelector(".lahe-rail-hints").textContent;
+      var list = container.querySelector(".lahe-rail-hints");
+      if (list) return list.textContent;
+      return gestures
+        .hintLines()
+        .map(function (line) {
+          return line.keys + " " + line.hint;
+        })
+        .join("\n");
     }
 
     function onItemChanged(item, event) {
@@ -26439,9 +28073,10 @@
       // the rail's root, and a remount throws that root away.
       ensureHostedStyle(footEl);
       var items = comments.outstanding().filter(function (item) {
-        // The Active thread carries comments and notes only. Hand edits live in
-        // the Edits tab (R32: neither buries the other); rendering a comment row
-        // into an edit's card was the cross-task defect 3D flagged at the stitch.
+        // This file draws comment and note rows only. Hand-edit cards share the
+        // Active pane, but their rows are tab_edits.js's; rendering a comment
+        // row into an edit's card was the cross-task defect 3D flagged at the
+        // stitch.
         var kind = item[record.FIELD.KIND];
         if (kind !== record.KIND.COMMENT && kind !== record.KIND.NOTE) return false;
         return !noteHandle || item[record.FIELD.ID] !== noteHandle.id || !record.isDraft(item);
@@ -26513,7 +28148,20 @@
       // Swapping one for a control on click would be the rail rebuilding a row
       // under a caret, which is the revert mechanism this file exists to avoid.
       var note = el("p", "lahe-rail-note", "");
-      row.appendChild(note);
+      // Hosted, the note is the reviewer's own turn: a bubble on the right
+      // under a "You" caption, the same turn every other card draws.
+      if (hosted) {
+        var turn = el("div", "lahe-rail-turn");
+        overlayModule.fillTurn(turn, el, {
+          side: "you",
+          who: "You",
+          at: item[record.FIELD.UPDATED_AT] || item[record.FIELD.CREATED_AT] || null,
+          bubble: note
+        });
+        row.appendChild(turn);
+      } else {
+        row.appendChild(note);
+      }
       comments.attachNoteEditor(id, note);
 
       // Hosted, these are the rail's own quiet card actions (one register for
@@ -26522,13 +28170,18 @@
       var actionClass = hosted ? "cardact cardact--quiet" : "lahe-rail-btn";
       var foot = el("div", hosted ? "cardacts" : "lahe-rail-rowfoot");
       if (!hosted) foot.appendChild(el("span", "lahe-rail-state", ""));
-      var del = el("button", actionClass, "Delete");
+      var del = el("button", hosted ? "cardx" : actionClass, hosted ? "\u00d7" : "Delete");
       del.setAttribute("data-lahe-act", "delete");
       del.setAttribute("type", "button");
+      if (hosted) {
+        del.setAttribute("aria-label", "Delete this comment");
+        del.title = "Delete this comment";
+      }
       del.addEventListener("click", function () {
         comments.remove(id);
       });
-      foot.appendChild(del);
+      if (hosted) row.appendChild(del);
+      else foot.appendChild(del);
       row.appendChild(foot);
 
       // The box for another message, under the row's own actions. It is drawn
@@ -26566,6 +28219,10 @@
         if (!row && entry.gesture === gestures.GESTURE.MARK_READY) row = entry;
       });
       return (row && row.keys) || "Cmd-Enter";
+    }
+
+    function isHeld() {
+      return !!(store && reviewId && typeof store.isHeld === "function" && store.isHeld(reviewId));
     }
 
     function keepsDrafts() {
@@ -26627,6 +28284,7 @@
       send.setAttribute("type", "button");
       send.addEventListener("click", submit);
       send.title = "Send this message (" + sendKeys() + ")";
+      highlightModule.paintSendButton(send, isHeld(), "Send");
       acts.appendChild(send);
 
       box.appendChild(input);
@@ -26667,6 +28325,45 @@
         if (field) field.disabled = !!item[record.FIELD.REPLY];
         var send = add.querySelector(".lahe-rail-send");
         if (send) send.disabled = !!item[record.FIELD.REPLY];
+      }
+
+      // Once an agent has answered, Delete would take the whole exchange with
+      // it, and it sits above the answer where it reads as deleting that. The
+      // follow-up box is the way on from there.
+      var del = row.querySelector('[data-lahe-act="delete"]');
+      if (del && hosted) del.hidden = !!item[record.FIELD.REPLY];
+      // Send, on a draft with words in it, and only then: the comment box on
+      // the page has its own Send, and this one is for a draft whose box is
+      // closed or out of view. Added and taken away rather than hidden, so a
+      // card that cannot send carries no Send at all.
+      if (hosted) {
+        var wantSend = item[record.FIELD.STATE] === record.STATE.DRAFT && !!String(text || "").trim();
+        var sendBtn = row.querySelector('[data-lahe-act="send"]');
+        if (wantSend && !sendBtn) {
+          var id = item[record.FIELD.ID];
+          sendBtn = el("button", "cardact", "Send");
+          sendBtn.setAttribute("data-lahe-act", "send");
+          sendBtn.setAttribute("type", "button");
+          highlightModule.paintSendButton(sendBtn, isHeld(), "Send");
+          sendBtn.addEventListener("click", function () {
+            var handle = comments.boxFor(id) || comments.editInPlace(id, note);
+            if (handle && typeof handle.commit === "function") handle.commit();
+          });
+          row.querySelector(".cardacts").appendChild(sendBtn);
+        } else if (!wantSend && sendBtn) {
+          sendBtn.parentNode.removeChild(sendBtn);
+        }
+      }
+
+      var cap = row.querySelector(".lahe-rail-turn .turn__cap");
+      if (cap) {
+        var at = item[record.FIELD.UPDATED_AT] || item[record.FIELD.CREATED_AT] || null;
+        var time = cap.querySelector(".turn__time");
+        if (at && !time) {
+          time = el("time", "turn__time", "");
+          cap.appendChild(time);
+        }
+        overlayModule.setTurnTime(time, at);
       }
 
       var state = row.querySelector(".lahe-rail-state");
@@ -27010,9 +28707,9 @@
   var ASKING_ATTR = overlayModule.CARD_ASKING_ATTR;
   // A card holding a reply the reviewer has not read yet.
   var UNSEEN_ATTR = overlayModule.CARD_UNSEEN_ATTR;
-  // How much of a turn fits on a folded round's line. Shorter than a card's,
-  // because a round's line already spends room on who said it and when.
-  var ROUND_LINE_MAX = 48;
+  // The narrower mark: a reply not read yet, and nothing else. The folded
+  // card's "1 new" tag reads this one, never the visit-long mark above.
+  var UNREAD_ATTR = overlayModule.CARD_UNREAD_ATTR;
 
   /**
    * Which reply this is, as one string.
@@ -27082,8 +28779,8 @@
    * Does this round of a thread start open?
    *
    * A long exchange is the thing Ken was scrolling through, so an old thread
-   * opens as a list of one-line rounds with the last one showing. Three rules,
-   * in this order:
+   * opens with its older rounds behind one "Show earlier messages" line (see
+   * foldedRoundCount) and the last one showing. Three rules, in this order:
    *
    *   THE NEWEST IS OPEN     it is what the reviewer came back for
    *   A SHORT THREAD IS OPEN two rounds is not a scroll, and folding half of a
@@ -27110,6 +28807,32 @@
   }
 
   /**
+   * How many of a thread's rounds, from the oldest, sit behind the one
+   * "Show earlier messages" line.
+   *
+   * The rounds roundStartsExpanded would fold, up to the first one it keeps
+   * open. Only a leading run folds, so the earlier line holds one unbroken
+   * stretch of the past and everything below it reads in order: a round that
+   * needs an answer, and every round after it, stays on the card.
+   *
+   * @param {object[]} rounds record.chronologicalThread(item), tool rounds out
+   * @returns {number}
+   */
+  function foldedRoundCount(rounds) {
+    var list = rounds || [];
+    var count = 0;
+    while (count < list.length && !roundStartsExpanded(list[count], count, list.length)) count += 1;
+    return count;
+  }
+
+  // What an agent turn says when the agent sent a status and no words.
+  var STATUS_WORDS = {
+    handled: "Handled this.",
+    not_handled: "Did not handle this.",
+    question: "Asked a question."
+  };
+
+  /**
    * The ids whose reply the reviewer has not read.
    *
    * Pure: items in, marks in, ids out. Nothing here touches the DOM or storage,
@@ -27130,6 +28853,10 @@
       // question coming back answered. A refusal still reaches the reviewer,
       // quietly, as the card's notice (see refresh).
       if (record.toolRoundOf(item)) return;
+      // A CARD THE REVIEWER CLOSED IS READ. Choosing "Mark as done" on it is
+      // the reviewer acting on it, and the agent's last answer it carries is
+      // history, so it never says "1 new" in Done.
+      if (record.isClosedByReviewer(item)) return;
       if (!needsToSeeReply(item[record.FIELD.REPLY])) return;
       if (seen[item[record.FIELD.ID]] !== stamp) out.push(item[record.FIELD.ID]);
     });
@@ -27140,7 +28867,7 @@
    * The unseen ids, grouped by the tab their card actually sits in.
    *
    * THE BADGE GOES WHERE THE CARD IS. A question or a refusal keeps its card on
-   * the ACTIVE (or Edits) side, deliberately: the work is not finished, so it
+   * the ACTIVE side, deliberately: the work is not finished, so it
    * stays where unfinished work lives. Badging Done for it sent the reviewer to
    * a tab the thing was not in. The pane rule is not restated here; `paneOf` is
    * the rail's own paneForItem, passed in.
@@ -27392,6 +29119,10 @@
   // file, nothing about how the page got here. They are looking at a document.
   var NOT_ON_PAGE_NOTICE = "says this is done, but I could not find the change on your page. It is still open.";
 
+  // MARK AS DONE. The Done card of an item the reviewer closed says who closed
+  // it, so it never reads as an agent's work.
+  var CLOSED_NOTICE = "You marked this done.";
+
   // The name this file's sheet answers to inside the rail's closed root.
   var SHEET_KEY = "tab_done";
 
@@ -27400,8 +29131,6 @@
   // these rules add the things this file draws.
   var STYLE = [
     "." + ROW_CLASS + "{display:flex;flex-direction:column;gap:8px}",
-    "." + ROW_CLASS + " .lahe-done-said{font-size:13.5px;line-height:1.5;color:var(--ink);",
-    "white-space:pre-wrap;overflow-wrap:anywhere}",
     // Reopen wears the rail's own card-action register (`.cardact`), so every
     // control that sits on a card has one voice rather than one per file.
     // On a hand-edit card this row draws nothing at all: the reviewer's words
@@ -27409,66 +29138,47 @@
     // slots are hidden rather than left as two blank gaps in the card.
     "." + ROW_CLASS + " .lahe-done-said:empty{display:none}",
     "." + ROW_CLASS + " .cardacts:empty{display:none}",
-    ".lahe-thread{display:flex;flex-direction:column;gap:8px;padding:8px 0;border-bottom:1px solid var(--line)}",
-    ".lahe-thread-round{display:flex;flex-direction:column;gap:5px}",
-    // --- one round, folded to a line ----------------------------------------
+    // The Done row is a column so the reviewer's turn can sit on its own side.
+    // A turn with nothing in its bubble (a hand edit carries no note) is not
+    // drawn at all, rather than left as an empty bubble.
+    "." + ROW_CLASS + " .turn:has(> .lahe-done-said:empty){display:none}",
+    // --- the earlier exchanges -------------------------------------------------
     //
-    // The same gesture as a card's, one level down, so an old exchange is a
-    // short list of who-said-what and the reviewer opens the one they want.
-    // The control is a button and carries the whole summary, which is what makes
-    // the line pressable and keeps the round reachable from the keyboard with
-    // nothing extra wired up.
-    ".lahe-round-toggle{display:flex;align-items:baseline;gap:6px;width:100%;",
-    "min-height:24px;padding:3px 0;border:0;background:none;text-align:left;",
-    "font:inherit;color:var(--ink-faint);cursor:pointer}",
-    ".lahe-round-toggle:hover .lahe-round-line{color:var(--ink-soft)}",
-    ".lahe-round-toggle:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:5px}",
-    ".lahe-round-chev{flex:none;display:inline-flex;align-self:center;color:var(--ink-faint)}",
-    ".lahe-round-chev svg{width:11px;height:11px;transform:rotate(90deg);transition:transform 120ms ease}",
-    ".lahe-thread-round[data-lahe-open='false'] .lahe-round-chev svg{transform:rotate(0deg)}",
-    "@media (prefers-reduced-motion:reduce){.lahe-round-chev svg{transition:none}}",
-    ".lahe-round-who{flex:none;font-size:10px;font-weight:600;letter-spacing:.06em;",
-    "text-transform:uppercase;color:var(--ink-faint)}",
-    ".lahe-round-line{flex:1;min-width:0;font-size:12px;color:var(--ink-faint);",
-    "white-space:nowrap;overflow:hidden;text-overflow:ellipsis}",
-    ".lahe-thread-round[data-lahe-open='false'] .lahe-round-turns{display:none}",
-    ".lahe-round-turns{display:flex;flex-direction:column;gap:5px}",
-    // The reviewer's own turns are context; the agent's turns are the reading.
-    // So the agent's words get full ink and the card body's size, and the
-    // reviewer's stay smaller and softer (Ken, 2026-09-11).
-    ".lahe-thread-turn{margin:0;white-space:pre-wrap;overflow-wrap:anywhere;font-size:12.5px;line-height:1.45;color:var(--ink-soft)}",
-    ".lahe-thread-turn[data-lahe-turn='agent']{font-size:14px;line-height:1.55;color:var(--ink)}",
-    ".lahe-thread-head{display:flex;align-items:baseline;justify-content:space-between;gap:8px}",
-    ".lahe-thread-turn strong{font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--ink-faint)}",
-    ".lahe-thread-time,.lahe-ask-time{font-size:10px;color:var(--ink-faint);font-variant-numeric:tabular-nums;white-space:nowrap}",
-    ".lahe-ask-time{margin-left:auto;font-weight:400;letter-spacing:0;text-transform:none}",
-    ".lahe-thread-text{display:block}",
+    // Every turn is a turn (overlay.js's fillTurn), so the thread is just more
+    // of the conversation above the current exchange, at the card's own 8px.
+    // No rule under it: the bubbles already say where one message ends.
+    ".lahe-thread{display:flex;flex-direction:column;gap:8px}",
+    ".lahe-thread-round,.lahe-round-turns,.lahe-thread-pending{display:flex;flex-direction:column;gap:8px}",
+    ".lahe-thread-round[data-lahe-open='false']{display:none}",
+    // ONE FOLD FOR THE OLD PART OF A LONG THREAD, the way chat apps do it. A
+    // row per round, each with its own chevron, put a header between every
+    // pair of bubbles and spaced the card unevenly. Now the older rounds sit
+    // behind one quiet line at the top, and the newest is always open.
+    ".lahe-thread-earlier{align-self:center;display:inline-flex;align-items:center;gap:5px;",
+    "min-height:24px;padding:2px 10px;border-radius:999px;font-size:11px;font-weight:550;",
+    "color:var(--ink-faint);background:none;border:0;cursor:pointer}",
+    ".lahe-thread-earlier:hover{color:var(--ink-soft);background:var(--sunken)}",
+    ".lahe-thread-earlier:focus-visible{outline:2px solid var(--accent);outline-offset:1px}",
+    ".lahe-thread-earlier svg{width:10px;height:10px;transform:rotate(0deg);transition:transform 120ms ease}",
+    ".lahe-thread-earlier[aria-expanded='true'] svg{transform:rotate(90deg)}",
+    "@media (prefers-reduced-motion:reduce){.lahe-thread-earlier svg{transition:none}}",
     ".lahe-followup{display:flex;flex-direction:column;gap:7px;padding-top:8px}",
-    ".lahe-followup-label{font-size:10px;font-weight:650;text-transform:uppercase;letter-spacing:.07em;color:var(--ink-faint)}",
     ".lahe-followup textarea{box-sizing:border-box;width:100%;min-height:72px;resize:vertical;border:1px solid var(--line);border-radius:7px;padding:8px 9px;background:var(--paper);color:var(--ink);font:inherit;line-height:1.4}",
     ".lahe-followup textarea:focus{outline:2px solid var(--accent);outline-offset:1px}",
     ".lahe-followup .cardacts{justify-content:flex-end}",
 
-    // The question. Full bleed to the card's padding, so the rule runs the
-    // whole height of the block rather than sitting in a box inside a box.
-    // The accent rule stays: this block is the layer asking the reviewer for
-    // something, and nothing has happened until they answer. That is exactly
-    // what a stripe is for here. It does not move or animate, so the stripe is
-    // the only thing pulling the eye to it.
-    "." + ASK_CLASS + "{margin:2px -12px -2px;padding:10px 12px 11px 13px;",
-    "border-left:3px solid var(--accent);background:var(--accent-wash);",
-    "display:flex;flex-direction:column;gap:7px}",
-    "." + ASK_CLASS + " .lahe-ask-who{display:flex;align-items:center;gap:6px;font-size:10px;",
-    "font-weight:700;letter-spacing:.09em;text-transform:uppercase;color:var(--accent-ink)}",
-    "." + ASK_CLASS + " .lahe-ask-dot{width:6px;height:6px;border-radius:50%;background:var(--accent);flex:none}",
-    // One step above the reviewer's own 13.5px, which is otherwise the largest
-    // text in the rail. The question is a stop, not a line of chrome.
-    "." + ASK_CLASS + " .lahe-ask-text{font-size:15px;line-height:1.45;color:var(--ink);",
-    "overflow-wrap:anywhere;white-space:pre-wrap}",
-    // In dark the wash alone carries less separation from the card behind it, so
-    // the block gets a hairline as well. Same relationship, drawn twice.
-    ":host([data-lahe-scheme='dark']) ." + ASK_CLASS + "{",
-    "border-top:1px solid rgba(147,167,234,.28);border-bottom:1px solid rgba(147,167,234,.28)}",
+    // The question. An agent turn like any other, on the agent's side, made
+    // loud by what only it wears: the accent wash, an accent edge all the way
+    // round the bubble, the asking line in accent ink with a dot, and words a
+    // step larger than anything else on the card. It does not move or animate.
+    "." + ASK_CLASS + " .lahe-ask-who{color:var(--accent-ink)}",
+    "." + ASK_CLASS + " .lahe-ask-name{color:var(--accent-ink);font-weight:650}",
+    "." + ASK_CLASS + " .lahe-ask-dot{width:6px;height:6px;border-radius:50%;background:var(--accent);",
+    "flex:none;align-self:center}",
+    "." + ASK_CLASS + ".turn .lahe-ask-text.bubble{font-size:14.5px;line-height:1.45;background:var(--accent-wash);",
+    "border:2px solid var(--accent)}",
+    // The proofreading fixes and their two answers run the turn's full width.
+    "." + ASK_CLASS + " .lahe-ask-fixes,." + ASK_CLASS + " .lahe-ask-acts{align-self:stretch}",
     // The card carrying a question is pulled to the top of its pane and given
     // the accent border, so it is the first thing in the tab and reads as one
     // object with the block inside it.
@@ -27479,8 +29189,7 @@
     "." + ASK_CLASS + " .lahe-ask-fixes{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px}",
     "." + ASK_CLASS + " .lahe-fix{font-size:13px;line-height:1.4;color:var(--ink);overflow-wrap:anywhere;",
     "border-top:1px solid var(--rule,rgba(128,128,128,.25));padding-top:6px}",
-    "." + ASK_CLASS + " .lahe-fix-where{display:block;font-size:10px;font-weight:700;letter-spacing:.06em;",
-    "text-transform:uppercase;color:var(--ink-faint)}",
+    "." + ASK_CLASS + " .lahe-fix-where{display:block;font-size:11px;font-weight:600;color:var(--ink-faint)}",
     "." + ASK_CLASS + " .lahe-fix-from{text-decoration:line-through;color:var(--ink-faint);white-space:pre-wrap}",
     "." + ASK_CLASS + " .lahe-fix-to{white-space:pre-wrap}",
     "." + ASK_CLASS + " .lahe-ask-acts [hidden]{display:none}",
@@ -27650,10 +29359,10 @@
     var rows = Object.create(null);
     var asks = Object.create(null);
     var threads = Object.create(null);
-    // id -> {total, byIndex} for rounds the reviewer opened or shut BY HAND this
-    // session. Never persisted: a reload derives every round from newest and
-    // needs-an-answer again (roundStartsExpanded). It exists only so a repaint,
-    // which redraws the whole thread, does not shut a round mid-read.
+    // id -> {total, earlierOpen}: whether the reviewer opened the "Show earlier
+    // messages" line BY HAND this session. Never persisted: a reload folds the
+    // old rounds again (foldedRoundCount). It exists only so a repaint, which
+    // redraws the whole thread, does not shut what they opened mid-read.
     var roundState = Object.create(null);
     var composers = Object.create(null);
     // id -> the Reopen button. Held separately from its row because on a
@@ -27772,6 +29481,11 @@
       if (!dropCardCollapseWatch && typeof rail.onCardCollapse === "function") {
         dropCardCollapseWatch = rail.onCardCollapse(function (id, folded) {
           if (folded) {
+            // FOLDING A CARD THE REVIEWER HAS READ ENDS ITS VISIT MARK. The mark
+            // answered "which of these did the badge mean"; they opened it,
+            // read it and put it away, so it has nothing left to point at.
+            // Only an unread card keeps its marks (and its "1 new") folded.
+            if (!unseenNow[id]) delete freshNow[id];
             paintUnseen();
             return;
           }
@@ -27821,12 +29535,18 @@
       return marks;
     }
 
-    /** The card wears the mark, so it survives whatever this file draws inside it. */
-    function markUnseenCard(id, unseen) {
+    /**
+     * The card wears the marks, so they survive whatever this file draws inside
+     * it. `marked` is the visit-long accent rule (unread, or unread when the
+     * reviewer arrived); `unread` is only the first, and drives "1 new".
+     */
+    function markUnseenCard(id, marked, unread) {
       var node = rail.cardNode(id);
       if (!node) return false;
-      if (unseen) node.setAttribute(UNSEEN_ATTR, "true");
+      if (marked) node.setAttribute(UNSEEN_ATTR, "true");
       else node.removeAttribute(UNSEEN_ATTR);
+      if (marked && unread) node.setAttribute(UNREAD_ATTR, "true");
+      else node.removeAttribute(UNREAD_ATTR);
       return true;
     }
 
@@ -27867,10 +29587,10 @@
         marked[id] = true;
       });
       Object.keys(markedNow).forEach(function (id) {
-        if (!marked[id]) markUnseenCard(id, false);
+        if (!marked[id]) markUnseenCard(id, false, false);
       });
       Object.keys(marked).forEach(function (id) {
-        markUnseenCard(id, true);
+        markUnseenCard(id, true, next[id] === true);
       });
       markedNow = marked;
       unseenNow = next;
@@ -28060,6 +29780,8 @@
         seen[id] = true;
         rail.upsertCard(item);
         rail.setCardState(id, record.STATE.HANDLED);
+        // From the record, so a reload says it too.
+        if (record.isClosedByReviewer(item)) rail.setCardNotice(id, CLOSED_NOTICE);
         // R37, the half that is on the PAGE: a handled item loses its highlight.
         // Here rather than only in the fold path, because an item can arrive
         // handled from storage on a fresh load too, and the page it lands on has
@@ -28109,7 +29831,15 @@
     function buildRow(item) {
       var row = el("div", ROW_CLASS);
       row.setAttribute("data-lahe-item", item[record.FIELD.ID]);
-      row.appendChild(el("div", "lahe-done-said", ""));
+      // The reviewer's latest words, as their own turn on the right.
+      var turn = el("div", "lahe-done-turn");
+      overlayModule.fillTurn(turn, el, {
+        side: "you",
+        who: "You",
+        at: reviewerAt(item),
+        bubble: el("div", "lahe-done-said", "")
+      });
+      row.appendChild(turn);
 
       // NO BUTTONS. Ken: "in a completed comment we have buttons for follow up
       // and reopen and then below a text field to follow up. this all seems very
@@ -28154,6 +29884,19 @@
 
     function updateRow(row, item) {
       row.querySelector(".lahe-done-said").textContent = saidBy(item);
+      var cap = row.querySelector(".turn__cap");
+      var time = cap && cap.querySelector(".turn__time");
+      var at = reviewerAt(item);
+      if (at && !time && cap) {
+        time = el("time", "turn__time", "");
+        cap.appendChild(time);
+      }
+      overlayModule.setTurnTime(time, at);
+    }
+
+    /** When the reviewer last said something on this item: the card head's own time. */
+    function reviewerAt(item) {
+      return item[record.FIELD.UPDATED_AT] || item[record.FIELD.CREATED_AT] || null;
     }
 
     /**
@@ -28254,12 +29997,24 @@
         return !record.isToolRound(round);
       });
       // A thread whose length changed is a different thread, so the reviewer's
-      // hand-opened rounds from the old one do not apply to it.
+      // "show earlier" from the old one does not apply to it.
       if (!roundState[id] || roundState[id].total !== rounds.length) {
-        roundState[id] = { total: rounds.length, byIndex: Object.create(null) };
+        roundState[id] = { total: rounds.length, earlierOpen: false };
       }
-      rounds.forEach(function (round, index) {
-        node.appendChild(buildRound(id, round, index, rounds.length));
+      var folded = foldedRoundCount(rounds);
+      var built = rounds.map(function (round, index) {
+        return buildRound(id, round, index);
+      });
+      if (folded > 0) {
+        var hidden = 0;
+        built.slice(0, folded).forEach(function (pair) {
+          hidden += pair.querySelectorAll(".lahe-thread-turn").length;
+        });
+        node.appendChild(buildEarlier(id, node, hidden, folded));
+      }
+      built.forEach(function (pair, index) {
+        node.appendChild(pair);
+        applyRound(pair, index >= folded || roundState[id].earlierOpen === true);
       });
       // The reviewer's proofreading answer, sent and not yet answered. It is
       // the current turn rather than a round, so it follows the rounds.
@@ -28272,92 +30027,89 @@
     }
 
     /**
-     * One completed exchange, foldable.
+     * The one line that holds a long thread's older rounds.
      *
-     * The turns are built first, because the folded line is the FIRST of them:
-     * who spoke, what they said, and when. Nothing is summarized twice.
+     * @param {string} id the item
+     * @param {Element} thread the thread section the rounds live in
+     * @param {number} hidden how many turns sit behind it
+     * @param {number} folded how many rounds, from the oldest, it holds
      */
-    function buildRound(id, round, index, total) {
+    function buildEarlier(id, thread, hidden, folded) {
+      var button = el("button", "lahe-thread-earlier");
+      button.setAttribute("type", "button");
+      var chev = el("span", "lahe-thread-earlier-chev");
+      chev.innerHTML = overlayModule.CHEVRON_ICON;
+      button.appendChild(chev);
+      var label = el("span", "lahe-thread-earlier-label", "");
+      button.appendChild(label);
+      var paint = function (open) {
+        button.setAttribute("aria-expanded", open ? "true" : "false");
+        label.textContent = open
+          ? "Hide earlier messages"
+          : hidden === 1
+          ? "Show 1 earlier message"
+          : "Show " + hidden + " earlier messages";
+      };
+      paint(roundState[id].earlierOpen === true);
+      button.addEventListener("click", function () {
+        // SESSION MEMORY, NOT STORAGE. Every draw starts folded again by the
+        // rule; this only stops a repaint shutting what the reviewer opened.
+        var open = roundState[id].earlierOpen !== true;
+        roundState[id].earlierOpen = open;
+        Array.prototype.forEach.call(thread.querySelectorAll(".lahe-thread-round"), function (pair, index) {
+          if (index < folded) applyRound(pair, open);
+        });
+        paint(open);
+      });
+      return button;
+    }
+
+    /**
+     * One completed exchange: the reviewer's turn, then the agent's.
+     */
+    function buildRound(id, round, index) {
       var pair = el("div", "lahe-thread-round");
       pair.setAttribute("data-lahe-round", String(index));
       var turns = el("div", "lahe-round-turns");
 
       var reviewer = round.reviewer || {};
-      if (reviewer.note) appendTurn(turns, "Reviewer note", reviewer.note, reviewer.at, "reviewer");
       // A run's change text is written for the agent, and the card already
       // leads with the reviewer's own two lines for it, so a round on a run
       // record does not print it again.
       var runCard = !!overlayModule.runSummary(itemById(id));
-      if (reviewer.change && !runCard) appendTurn(turns, "Reviewer change", reviewer.change, reviewer.at, "reviewer");
+      var said = [];
+      if (reviewer.note) said.push(reviewer.note);
+      if (reviewer.change && !runCard && reviewer.change !== reviewer.note) said.push(reviewer.change);
+      if (said.length) appendTurn(turns, "You", said.join("\n"), reviewer.at, "reviewer");
       var agent = round.agent || {};
-      if (agent.text) appendTurn(turns, agent.agent || "Agent", agent.text, agent.at, "agent");
-      if (agent.reason) appendTurn(turns, (agent.agent || "Agent") + " reason", agent.reason, agent.at, "agent");
-      if (!agent.text && !agent.reason) appendTurn(turns, agent.agent || "Agent", agent.status || "", agent.at, "agent");
+      var name = agent.agent || "agent";
+      var answer = [];
+      if (agent.text) answer.push(agent.text);
+      if (agent.reason && agent.reason !== agent.text) answer.push(agent.reason);
+      if (!answer.length) answer.push(STATUS_WORDS[agent.status] || agent.status || "");
+      appendTurn(turns, name, answer.join("\n\n"), agent.at, "agent", agent.files);
 
-      var first = turns.firstChild;
-      var toggle = el("button", "lahe-round-toggle");
-      toggle.setAttribute("type", "button");
-      var chev = el("span", "lahe-round-chev");
-      chev.innerHTML = overlayModule.CHEVRON_ICON;
-      toggle.appendChild(chev);
-      toggle.appendChild(el("span", "lahe-round-who", first ? first.getAttribute("data-lahe-who") || "" : ""));
-      toggle.appendChild(
-        el("span", "lahe-round-line", first ? first.getAttribute("data-lahe-said") || "" : "")
-      );
-      var firstAt = first ? first.getAttribute("data-lahe-at") : null;
-      if (firstAt) {
-        var time = el("time", "lahe-thread-time", overlayModule.timestampLabel(firstAt));
-        time.setAttribute("datetime", firstAt);
-        time.setAttribute("title", new Date(firstAt).toLocaleString());
-        toggle.appendChild(time);
-      }
-
-      var byHand = roundState[id].byIndex[index];
-      var open = byHand === undefined ? roundStartsExpanded(round, index, total) : byHand === true;
-      pair.appendChild(toggle);
       pair.appendChild(turns);
-      applyRound(pair, open);
-      toggle.addEventListener("click", function () {
-        var next = pair.getAttribute("data-lahe-open") !== "true";
-        // SESSION MEMORY, NOT STORAGE. The defaults above are worked out again
-        // on every draw, which is the rule; this only stops a repaint from
-        // shutting a round the reviewer opened a second ago.
-        roundState[id].byIndex[index] = next;
-        applyRound(pair, next);
-      });
       return pair;
     }
 
     function applyRound(pair, open) {
       pair.setAttribute("data-lahe-open", open ? "true" : "false");
-      var toggle = pair.querySelector(".lahe-round-toggle");
-      if (!toggle) return open;
-      toggle.setAttribute("aria-expanded", open ? "true" : "false");
-      var who = toggle.querySelector(".lahe-round-who");
-      var label = (who && who.textContent) || "this exchange";
-      toggle.setAttribute("aria-label", (open ? "Collapse " : "Expand ") + label);
       return open;
     }
 
-    function appendTurn(host, who, text, at, side) {
-      var line = el("p", "lahe-thread-turn");
-      line.setAttribute("data-lahe-turn", side === "agent" ? "agent" : "reviewer");
-      // What the round's folded line reads off this turn, stamped here so the
-      // summary is taken from the turn itself rather than rebuilt beside it.
-      line.setAttribute("data-lahe-who", String(who || ""));
-      line.setAttribute("data-lahe-said", overlayModule.clipAtWord(text, ROUND_LINE_MAX));
-      if (at) line.setAttribute("data-lahe-at", at);
-      var head = el("span", "lahe-thread-head");
-      head.appendChild(el("strong", null, who));
-      if (at) {
-        var time = el("time", "lahe-thread-time", overlayModule.timestampLabel(at));
-        time.setAttribute("datetime", at);
-        time.setAttribute("title", new Date(at).toLocaleString());
-        head.appendChild(time);
-      }
-      line.appendChild(head);
-      line.appendChild(el("span", "lahe-thread-text", String(text || "")));
-      host.appendChild(line);
+    function appendTurn(host, who, text, at, side, files) {
+      var turn = el("div", "lahe-thread-turn");
+      turn.setAttribute("data-lahe-turn", side === "agent" ? "agent" : "reviewer");
+      overlayModule.fillTurn(turn, el, {
+        side: side === "agent" ? "agent" : "you",
+        who: who,
+        at: at || null,
+        text: String(text || ""),
+        files: files,
+        names: { cap: "lahe-thread-head", time: "lahe-thread-time", text: "lahe-thread-text" }
+      });
+      host.appendChild(turn);
     }
 
     function clearThread(id) {
@@ -28373,13 +30125,12 @@
       if (!composers[id]) {
         var node = el("section", "lahe-followup");
         node.setAttribute("data-lahe-followup", id);
-        var label = el("label", "lahe-followup-label", "Follow up");
-        node.appendChild(label);
+        // No label above the box: the placeholder says what it is for.
         var input = el("textarea", "lahe-followup-input");
         input.id = "lahe-followup-" + id;
-        label.setAttribute("for", input.id);
+        input.setAttribute("aria-label", "Follow up");
         input.setAttribute("rows", "3");
-        input.setAttribute("placeholder", "Add a new message without changing the earlier exchange");
+        input.setAttribute("placeholder", "Add a new message");
         input.value = store.readFollowupDraft(reviewId, id);
         input.disabled = isReadOnly();
         input.addEventListener("input", function () {
@@ -28394,8 +30145,9 @@
         });
         node.appendChild(input);
         var actions = el("div", "cardacts");
-        var send = el("button", "cardact", "Follow up");
+        var send = el("button", "cardact", "Send");
         send.setAttribute("type", "button");
+        overlayModule.paintSendButton(send, !!(store && typeof store.isHeld === "function" && store.isHeld(reviewId)), "Send");
         send.disabled = isReadOnly();
         send.addEventListener("click", function () {
           submitFollowup(id, input.value);
@@ -28463,10 +30215,11 @@
       // this", and there is nothing here for them to look at.
       if (quiet) return next;
       repaintReopened(next[record.FIELD.ID]);
-      // A proofreading answer is made on a hand edit's card, which lives in the
-      // Edits pane; sending the reviewer to Active would take the card away
-      // from under the press.
+      // A proofreading answer is made on a hand edit's card; stayInPane keeps
+      // the reviewer in whichever pane the rail now places that card in,
+      // rather than assuming one.
       rail.selectTab(options && options.stayInPane ? overlayModule.paneForItem(next) : rail.TAB.ACTIVE);
+      if (typeof rail.revealCard === "function") rail.revealCard(next[record.FIELD.ID]);
       var card = rail.cardNode(next[record.FIELD.ID]);
       if (card && typeof card.focus === "function") {
         card.tabIndex = -1;
@@ -28947,6 +30700,9 @@
       var tab = paneOf(item);
       if (typeof rail.collapse === "function") rail.collapse(false);
       if (typeof rail.selectTab === "function") rail.selectTab(tab);
+      // The Active filter may be hiding this card; pressing the toast is asking
+      // to see it.
+      if (typeof rail.revealCard === "function") rail.revealCard(id);
       // A folded card is opened on the way in. Pressing a toast is the reviewer
       // saying "show me that one", and landing them on a one-line card they then
       // have to press again is the trip this path exists to save.
@@ -29046,6 +30802,13 @@
       var reply = event.reply || {};
       var replyRev = event[protocol.EVENT_FIELD.REV];
 
+      // A CARD THE REVIEWER CLOSED TAKES NO REPLY. Every load re-delivers the
+      // answers folded before the close, and the helper refuses any after it;
+      // neither may move the card, word it, toast it, or put a notice on it.
+      if (record.isClosedByReviewer(item)) {
+        return { kind: "closed", item: id, state: item[record.FIELD.STATE], toast: false };
+      }
+
       // The refusal, on the card. Two ways to get here: the helper refused the
       // line, or the reviewer reworded in THIS browser while the helper was
       // down, so the fold looked current when it happened and does not now.
@@ -29106,6 +30869,9 @@
       }
       var notOnPage = event.handled_not_on_page === true;
       next[record.FIELD.HANDLED_NOT_ON_PAGE] = notOnPage;
+      // An accepted answer means no close stands at this revision.
+      delete next[record.FIELD.CLOSED_BY];
+      delete next[record.FIELD.CLOSED_AT];
       if (next[record.FIELD.STATE] === record.STATE.HANDLED) forgetLostAnchor(next);
       store.write(reviewId, next);
 
@@ -29148,7 +30914,10 @@
       // it unseen and the badge appears on the next paint, on the tab the card
       // is in.
       var watching = watchingTab(paneOf(next));
-      if (watching || toolAnswer || !needsToSeeReply(next[record.FIELD.REPLY])) {
+      // A FOLDED CARD ON THE TAB BEING WATCHED IS STILL NOT READ: its words are
+      // off the screen, so it keeps "1 new" until the reviewer opens it.
+      var watchingOpen = watching && !cardIsFolded(id);
+      if (watchingOpen || toolAnswer || !needsToSeeReply(next[record.FIELD.REPLY])) {
         // DURABLE, not just quiet. Suppressing the toast and the badge is only
         // half of "the reviewer has seen this": the mark has to reach storage,
         // or the next load finds it unread and announces it all over again.
@@ -29195,7 +30964,7 @@
       node.querySelector(".lahe-ask-name").textContent = agentName(reply) + " is asking";
       var time = node.querySelector(".lahe-ask-time");
       if (reply.at) {
-        time.textContent = overlayModule.timestampLabel(reply.at);
+        time.textContent = overlayModule.captionTimeLabel(reply.at);
         time.setAttribute("datetime", reply.at);
         time.setAttribute("title", new Date(reply.at).toLocaleString());
       } else {
@@ -29318,13 +31087,17 @@
       node.setAttribute("data-lahe-item", id);
       node.setAttribute("role", "note");
 
-      var who = el("div", "lahe-ask-who");
-      who.appendChild(el("span", "lahe-ask-dot"));
-      who.appendChild(el("span", "lahe-ask-name", ""));
-      who.appendChild(el("time", "lahe-ask-time", ""));
-      node.appendChild(who);
-
-      node.appendChild(el("p", "lahe-ask-text", ""));
+      // An agent turn: the asking line is its caption, the question its bubble.
+      var parts = overlayModule.fillTurn(node, el, {
+        side: "agent",
+        who: "",
+        at: null,
+        bubble: el("p", "lahe-ask-text", ""),
+        names: { cap: "lahe-ask-who", who: "lahe-ask-name" }
+      });
+      parts.cap.insertBefore(el("span", "lahe-ask-dot"), parts.cap.firstChild);
+      // Always present, so drawQuestion can fill or empty it in place.
+      parts.cap.appendChild(el("time", "turn__time lahe-ask-time", ""));
 
       // NO BUTTON HERE. There was an Answer button, on the theory that a
       // question with nothing to press is a notification. It could never do
@@ -29367,7 +31140,7 @@
       }
       neglectTimer = null;
       Object.keys(markedNow).forEach(function (id) {
-        markUnseenCard(id, false);
+        markUnseenCard(id, false, false);
       });
       unseenNow = Object.create(null);
       // A remount is a new visit. Nothing is fresh in it: the cards were already
@@ -29479,6 +31252,7 @@
     UNSEEN_ATTR: UNSEEN_ATTR,
     STALE_NOTICE: STALE_NOTICE,
     NOT_ON_PAGE_NOTICE: NOT_ON_PAGE_NOTICE,
+    CLOSED_NOTICE: CLOSED_NOTICE,
     PROOFREAD: PROOFREAD,
     proofreadOffer: proofreadOffer,
     keepMineRecord: keepMineRecord,
@@ -29496,7 +31270,7 @@
     replyStamp: replyStamp,
     needsToSeeReply: needsToSeeReply,
     roundStartsExpanded: roundStartsExpanded,
-    ROUND_LINE_MAX: ROUND_LINE_MAX,
+    foldedRoundCount: foldedRoundCount,
     unseenReplyIds: unseenReplyIds,
     unseenByTab: unseenByTab,
     seenMarksFor: seenMarksFor,
@@ -29505,26 +31279,25 @@
 });
 
 /* ---- src/layer/tab_edits.js  (owner: 3D) ---- */
-// The Edits tab's contents: every hand edit as a before-and-after row.
+// The hand-edit rows: every hand edit as a before-and-after row inside its
+// rail card.
 //
 // Owner: 3D. The rail CHROME (the tab shell, the panes, the status line, the
 // card API) is 1B's, in overlay.js, and nothing here edits that file. This file
-// is only what the Edits tab holds.
+// is only what a hand edit's card holds.
 //
-// Implements D10's Edits tab: R32 (hand edits are kept apart from the comment
-// thread so neither buries the other) and R39 (the end-of-session list of hand
-// edits, worth feeding a style guide).
+// Implements R32 (hand edits do not bury the comment thread) and R39 (the
+// end-of-session list of hand edits, worth feeding a style guide).
 //
 // ---------------------------------------------------------------------------
-// Why a hand edit is not a comment
+// Where the rows live
 // ---------------------------------------------------------------------------
 //
-// A session produces a handful of comments and a great many small hand edits.
-// Mixed into one list, the edits bury the comments, and the reviewer stops
-// reading either. The rail already routes a record by kind (overlay's
-// paneForItem sends edit, delete and format_only to this tab), so the
-// separation is the rail's law and this file never has to re-decide it. What
-// this file owns is what a row SAYS.
+// A hand edit's card sits in the Active pane beside the comments while it is
+// still work, and in Done once handled (overlay's paneForItem decides; this
+// file never re-decides it). The rail used to give hand edits a tab of their
+// own; R32 is now kept by the Active pane's filter (All, Comments, Edits),
+// which is the rail's too. What this file owns is what a row SAYS.
 //
 // Three kinds, three readings, because a row that renders all three the same
 // way is wrong twice:
@@ -29541,20 +31314,20 @@
 // ---------------------------------------------------------------------------
 //
 // There is no render(items) here. Rows are created once, updated where they
-// are, and removed only when their record is gone. Newest first is done with
-// flex `order` on the card the rail already built, never by re-appending:
-// re-parenting a node blurs anything focused inside it, which is the exact
-// revert mechanism the rail's law exists to stop.
+// are, and removed only when their record is gone. Where a card sits in its
+// pane is the rail's job (newest activity first); this file never re-appends
+// a card: re-parenting a node blurs anything focused inside it, which is the
+// exact revert mechanism the rail's law exists to stop.
 //
 // ---------------------------------------------------------------------------
 // Undo lives on the row (R28)
 // ---------------------------------------------------------------------------
 //
 // R28 says every edit can be undone on its own. 2A's editing.undo(id) does the
-// work; this tab is where the reviewer can reach it, because the row is the only
+// work; the row is where the reviewer can reach it, because the row is the only
 // place a hand edit is listed. The button wears the rail's own card-action
 // register (`.cardact.cardact--quiet`), the same one Reword and Delete wear on a
-// comment card, so the two tabs read as one product.
+// comment card, so the two kinds of card read as one product.
 //
 // undo reverts that record's region and retires the record, which drops the row
 // on the next refresh. When it CANNOT (`reverted: false`), the row says why,
@@ -29572,16 +31345,18 @@
 // The export seam
 // ---------------------------------------------------------------------------
 //
-// This tab does not format anything for export. The list-export button calls
-// 3C's `exportRecords(records, options)` in src/layer/export.js, which renders
-// through the frozen human-readable formatter in shared/review_format.js. One
-// formatter, one wording, wherever the same records are read.
+// This file does not format anything for export. exportList, which ending the
+// review calls, hands the records to 3C's `exportRecords(records, options)` in
+// src/layer/export.js, which renders through the frozen human-readable
+// formatter in shared/review_format.js. One formatter, one wording, wherever
+// the same records are read. There is no export button on the rail for this
+// list: the end-review step already saves it.
 //
-// The module is resolved LAZILY, on mount and on click, for a mechanical
+// The module is resolved LAZILY, when exportList runs, for a mechanical
 // reason: export.js loads AFTER this file in the bundle (manifest.js pins the
 // order), so a reference captured when this factory runs would always be
-// undefined. When the module is absent the button renders disabled and says why
-// rather than throwing on click or, worse, doing nothing.
+// undefined. When the module is absent exportList says why in its result
+// rather than throwing.
 //
 // Dual-environment module. See docs/CONTRACTS.md, "How a shared module loads".
 (function (root, factory) {
@@ -29608,17 +31383,11 @@
 })(typeof globalThis !== "undefined" ? globalThis : this, function (root, markers, record, normalize, overlayModule) {
   "use strict";
 
-  // The marker a row carries. It is how a test asks "is an edit row in the
-  // Active pane", which is the honest reading of "kept apart": counting cards
-  // would only prove the rail's routing, not what this file drew.
+  // The marker a row carries. It is how a test asks "is there an edit row in
+  // this card": counting cards would only prove the rail's routing, not what
+  // this file drew.
   var ROW_ATTR = "data-lahe-edit-row";
   var ROW_CLASS = "lahe-edits";
-  var BAR_CLASS = "lahe-edits-bar";
-  // The bar sits above every row. Cards are ordered negatively (newest first,
-  // never more negative than the row count), so one number well below that keeps
-  // the bar first without re-appending it. This is the end-of-session list, and
-  // the way to take it elsewhere should not be six rows down a scroll.
-  var BAR_ORDER = -100000;
 
   var DELETED_TEXT = "Deleted";
   // R28's reviewer-facing half. The row is the only place a hand edit is listed,
@@ -29630,25 +31399,58 @@
   // Undo needs 2A's surface. Without it the button says so rather than sitting
   // there doing nothing when pressed.
   var UNDO_MISSING_TITLE = "Undo needs the editing surface, which is not on this page.";
-  // Shortened from "Export the edit list": it was the widest, heaviest thing in
-  // the pane, opposite an 11.5px count, and on the empty tab it was a large
-  // disabled button over "No hand edits yet." Two words rather than one,
-  // because the rail's footer already holds a button called exactly "Export"
-  // and two of those in one rail is a coin toss for anyone reading it.
-  var EXPORT_LABEL = "Export edits";
-  var EXPORT_MISSING_TITLE =
-    "Export is arriving with the copy-and-export module; the list export wires up at the Phase 3 stitch.";
-  var EXPORT_TITLE = "The hand edits on this page, as text, for a style guide or a chat window.";
+  // THE CHANGE, NOT THE START. Before and after share their opening and
+  // closing words; long shared stretches are cut to a few words beside the
+  // change, with "..." where words were left out, so the card shows what moved.
+  var FOCUS_KEEP_WORDS = 6;
+  var FOCUS_MIN_CUT = 40;
 
-  // Quiet neutrals, one accent, and the rail's own tokens: this pane is inside
-  // the rail's closed shadow root, so :host's custom properties inherit into it
-  // and the tab cannot drift from the chrome around it.
+  function focusPair(before, after) {
+    var a = String(before || "");
+    var b = String(after || "");
+    var start = 0;
+    while (start < a.length && start < b.length && a[start] === b[start]) start += 1;
+    var end = 0;
+    while (end < a.length - start && end < b.length - start && a[a.length - 1 - end] === b[b.length - 1 - end]) end += 1;
+    var lead = "";
+    var cutFront = 0;
+    if (start > FOCUS_MIN_CUT) {
+      var head = a.slice(0, start);
+      var words = head.split(/(\s+)/);
+      var kept = words.slice(-FOCUS_KEEP_WORDS * 2).join("");
+      cutFront = start - kept.length;
+      if (cutFront > 0) lead = "...";
+      else cutFront = 0;
+    }
+    var tail = "";
+    var cutBack = 0;
+    if (end > FOCUS_MIN_CUT) {
+      var shared = a.slice(a.length - end);
+      var parts = shared.split(/(\s+)/);
+      var keep = parts.slice(0, FOCUS_KEEP_WORDS * 2).join("");
+      cutBack = end - keep.length;
+      if (cutBack > 0) tail = "...";
+      else cutBack = 0;
+    }
+    return {
+      before: lead + a.slice(cutFront, a.length - cutBack) + tail,
+      after: lead + b.slice(cutFront, b.length - cutBack) + tail
+    };
+  }
+
+  // Why exportList could not run: the export module is not on this page.
+  var EXPORT_MISSING = "The export module is not on this page, so the hand-edit list could not be saved.";
+
+  // Quiet neutrals, one accent, and the rail's own tokens: the rows are inside
+  // the rail's closed shadow root, so :host's custom properties inherit into
+  // them and they cannot drift from the chrome around them.
   var STYLE = [
-    "." + ROW_CLASS + "{display:flex;flex-direction:column;gap:6px}",
+    // The card's own 8px step, the same one between turns of a conversation.
+    "." + ROW_CLASS + "{display:flex;flex-direction:column;gap:8px}",
     // The rule per pair stays, and so does the accent on an edit row. This is
-    // the tab's new-versus-old signal: scanning a column of rows, the accent
+    // the row's new-versus-old signal: scanning a column of cards, the accent
     // rule is what separates the reviewer's own edits from everything else.
-    // Drop it and the tab is one undifferentiated stack.
+    // Drop it and the pane is one undifferentiated stack.
     "." + ROW_CLASS + "__pair{display:flex;flex-direction:column;gap:4px;",
     "border-left:2px solid var(--line);padding-left:9px}",
     "." + ROW_CLASS + "[data-kind='edit'] ." + ROW_CLASS + "__pair{border-left-color:var(--accent)}",
@@ -29674,7 +31476,8 @@
     "." + ROW_CLASS + "__structure{font-size:11.5px;color:var(--ink-soft);",
     "font-family:ui-monospace,SFMono-Regular,Menlo,monospace}",
     "." + ROW_CLASS + "__structure:empty{display:none}",
-    "." + ROW_CLASS + "__said{font-size:12px;color:var(--ink-soft)}",
+    // The change summary heads the pair in the rail's one caption style.
+    "." + ROW_CLASS + "__said{font-size:11px;line-height:1.35;color:var(--ink-faint);margin-bottom:-5px}",
     "." + ROW_CLASS + "__said:empty{display:none}",
     // A run's two pinned lines: where the new text went, then its shape. The
     // first reads as the row's header, the second as its quieter subtitle.
@@ -29690,8 +31493,7 @@
     "." + ROW_CLASS + "__block{display:flex;flex-direction:column;gap:1px;",
     "border-left:2px solid var(--accent);padding-left:9px}",
     "." + ROW_CLASS + "__block[data-lahe-run-block='moved']{border-left-color:var(--line)}",
-    "." + ROW_CLASS + "__block-label{font-size:10px;font-weight:650;letter-spacing:.06em;",
-    "text-transform:uppercase;color:var(--ink-faint)}",
+    "." + ROW_CLASS + "__block-label{font-size:11px;line-height:1.35;font-weight:600;color:var(--ink-faint)}",
     "." + ROW_CLASS + "__block-words{font-size:12.5px;line-height:1.45;color:var(--ink);white-space:pre-wrap;",
     "display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}",
     "." + ROW_CLASS + "__pair[hidden]{display:none}",
@@ -29699,23 +31501,10 @@
     // on, in the rail's warning color. Never a silent no-op.
     "." + ROW_CLASS + "__failed{font-size:11.5px;color:var(--warn);",
     "background:var(--warn-wash);border-radius:7px;padding:5px 8px;margin:0}",
-    "." + ROW_CLASS + "__failed:empty{display:none}",
-
-    "." + BAR_CLASS + "{display:flex;align-items:center;gap:8px;padding:0 2px 10px;",
-    "border-bottom:1px solid var(--line-soft)}",
-    "." + BAR_CLASS + "__count{font-size:11.5px;color:var(--ink-faint);",
-    "font-variant-numeric:tabular-nums}",
-    // The footer's Copy and Export are the full-size pair; this one is a card-
-    // scale action, so it matches the rail's quiet register instead of being
-    // heavier than the buttons that do more.
-    "." + BAR_CLASS + "__btn{margin-left:auto;font-size:11.5px;font-weight:550;padding:3px 9px;",
-    "border-radius:7px;border:1px solid var(--line);background:var(--paper);color:var(--ink-soft)}",
-    "." + BAR_CLASS + "__btn:hover:not(:disabled){color:var(--ink)}",
-    "." + BAR_CLASS + "__btn:hover:not(:disabled){background:var(--surface)}",
-    "." + BAR_CLASS + "__btn:disabled{color:var(--ink-faint);cursor:default}"
+    "." + ROW_CLASS + "__failed:empty{display:none}"
   ].join("");
 
-  // The three kinds this tab holds. Asked in one place so a fourth kind added
+  // The three kinds this file draws rows for. Asked in one place so a fourth kind added
   // later cannot half-appear.
   // One definition of "the reviewer made this with their hands", in record.js,
   // because the Done tab has to agree with this list to know when its own card
@@ -29851,15 +31640,20 @@
   }
 
   // ---------------------------------------------------------------------------
-  // The tab
+  // The rows
   // ---------------------------------------------------------------------------
 
   /**
+   * The name says "tab" for history: hand edits once had a rail tab of their
+   * own. Today this draws the rows into each hand edit's card, wherever the
+   * rail placed that card.
+   *
    * @param {Object} options
    * @param {Object} options.store      1B's store; the records are read from it
    * @param {string} options.reviewId
    * @param {Object} [options.overlay]  the rail; the shared one otherwise
-   * @param {Element} [options.host]    the rail's Edits pane
+   * @param {Element} [options.host]    the rail's Active pane, where the rows'
+   *   stylesheet goes. Nothing is drawn into it directly
    * @param {Object} [options.editing]  2A's surface. When given, the tab
    *   subscribes to its changes itself, so the boot wiring stays one call
    * @param {Object} [options.exportModule]  3C's module, for a test that wants
@@ -29888,9 +31682,6 @@
     var unsubscribe = null;
     // id -> row node. The reason there is no rebuild path.
     var rows = Object.create(null);
-    var barNode = null;
-    var countNode = null;
-    var buttonNode = null;
     var lastExport = null;
     var lastExportPromise = null;
     var lastUndo = null;
@@ -29942,7 +31733,6 @@
       mounted = true;
       if (!doc || !host) return api;
       addStyle();
-      buildBar();
       if (editing && typeof editing.onChange === "function") {
         unsubscribe = editing.onChange(function (item, event) {
           refresh();
@@ -29965,24 +31755,6 @@
       host.insertBefore(style, host.firstChild);
     }
 
-    function buildBar() {
-      if (barNode) return barNode;
-      barNode = el("div", BAR_CLASS);
-      barNode.style.order = String(BAR_ORDER);
-      countNode = el("span", BAR_CLASS + "__count", "");
-      barNode.appendChild(countNode);
-
-      buttonNode = el("button", BAR_CLASS + "__btn", EXPORT_LABEL);
-      buttonNode.setAttribute("type", "button");
-      buttonNode.addEventListener("click", function () {
-        exportList();
-      });
-      barNode.appendChild(buttonNode);
-      host.appendChild(barNode);
-      paintBar(0);
-      return barNode;
-    }
-
     // -------------------------------------------------------------------------
     // The list, in place
     // -------------------------------------------------------------------------
@@ -29992,7 +31764,7 @@
       var items = handEdits();
       var seen = Object.create(null);
 
-      items.forEach(function (item, index) {
+      items.forEach(function (item) {
         var id = item[record.FIELD.ID];
         seen[id] = true;
         // The rail's own model has to know the card exists before anything can
@@ -30007,24 +31779,13 @@
           rail.attachCardNode(id, rows[id]);
         }
         updateRow(rows[id], item);
-        // Newest first, without moving a node: the pane is a flex column, and
-        // the newest record gets the most negative order.
-        var card = rail.cardNode(id);
-        if (card && card.style) card.style.order = String(index - items.length);
+        // No ordering here: the card sits in Active (or Done) beside the
+        // comments, and the rail places every card there by newest activity.
       });
 
       Object.keys(rows).forEach(function (id) {
         if (!seen[id]) dropRow(id);
       });
-
-      // The empty draft an empty page opens with, and a draft that changes
-      // nothing yet, are not hand edits: the rail does not draw them, so the
-      // count does not claim them either.
-      paintBar(
-        items.filter(function (item) {
-          return !overlayModule.isQuietDraft(item);
-        }).length
-      );
       return api;
     }
 
@@ -30072,8 +31833,8 @@
       row.appendChild(failed);
 
       // R28's one gesture, in the rail's own card-action register: the same
-      // quiet outline Reword and Delete wear on a comment card, so the Edits tab
-      // and the Active tab read as one product rather than two.
+      // quiet outline Reword and Delete wear on a comment card, so a hand-edit
+      // card and a comment card read as one product rather than two.
       var foot = el("div", "cardacts");
       var undoBtn = el("button", "cardact cardact--quiet", UNDO_LABEL);
       undoBtn.setAttribute("type", "button");
@@ -30109,8 +31870,7 @@
      * Undo ONE hand edit, from its own row.
      *
      * editing.undo reverts that record's region and retires the record; the row
-     * then leaves the tab on the next refresh, which the tab already does in
-     * place. A refusal (`reverted: false`) is written onto the row, because an
+     * then goes on the next refresh, which this file already does in place. A refusal (`reverted: false`) is written onto the row, because an
      * undo that quietly does nothing is how a reviewer learns not to trust the
      * button.
      */
@@ -30164,8 +31924,11 @@
         after.setAttribute("data-empty", "false");
         pair.hidden = !anchorPair;
       } else {
-        before.textContent = text.before;
-        after.textContent = text.after;
+        // Centered on what changed: a long paragraph with its change at the
+        // end read as two identical lines once the card cut them to three.
+        var focused = focusPair(text.before, text.after);
+        before.textContent = focused.before;
+        after.textContent = focused.after;
         after.setAttribute("data-empty", text.emptyAfter ? "true" : "false");
         pair.hidden = false;
       }
@@ -30248,14 +32011,6 @@
       delete rows[id];
     }
 
-    function paintBar(count) {
-      if (!countNode || !buttonNode) return;
-      countNode.textContent = count === 1 ? "1 hand edit" : count + " hand edits";
-      var available = !!exportModule();
-      buttonNode.disabled = !available || count === 0;
-      buttonNode.title = available ? EXPORT_TITLE : EXPORT_MISSING_TITLE;
-    }
-
     // -------------------------------------------------------------------------
     // Export
     // -------------------------------------------------------------------------
@@ -30264,15 +32019,15 @@
      * Hand the list to 3C's export path, newest first, so what a reader sees is
      * what the text says.
      *
-     * It returns the text rather than delivering it: the clipboard grant and the
-     * download are copyReview() and exportReview(), which are 3C's, and the
-     * delivery is wired at the Phase 3 stitch.
+     * There is no button for this on the rail. Ending the review calls it
+     * (index.js surfaceHandEdits), which is when the session's hand edits are
+     * worth reading as one list.
      */
     function exportList() {
       var mod = exportModule();
       var items = handEdits().reverse();
       if (!mod) {
-        lastExport = { ok: false, reason: EXPORT_MISSING_TITLE, text: null, count: items.length };
+        lastExport = { ok: false, reason: EXPORT_MISSING, text: null, count: items.length };
         lastExportPromise = Promise.resolve(lastExport);
         return lastExportPromise;
       }
@@ -30304,10 +32059,6 @@
       Object.keys(rows).forEach(function (id) {
         dropRow(id);
       });
-      if (barNode && barNode.parentNode) barNode.parentNode.removeChild(barNode);
-      barNode = null;
-      countNode = null;
-      buttonNode = null;
       mounted = false;
     }
 
@@ -30323,7 +32074,7 @@
       rowCount: function () {
         return Object.keys(rows).length;
       },
-      // The list as data, newest first: what the tab is showing, without a
+      // The list as data, newest first: what the rows are showing, without a
       // caller reaching into a closed shadow root to read it.
       rows: function () {
         return handEdits()
@@ -30352,15 +32103,6 @@
         return lastUndo;
       },
       exportList: exportList,
-      exportButton: function () {
-        return buttonNode;
-      },
-      exportEnabled: function () {
-        return !!buttonNode && !buttonNode.disabled;
-      },
-      exportTitle: function () {
-        return buttonNode ? buttonNode.title : null;
-      },
       lastExport: function () {
         return lastExport;
       },
@@ -30375,11 +32117,10 @@
   return {
     ROW_ATTR: ROW_ATTR,
     ROW_CLASS: ROW_CLASS,
-    BAR_CLASS: BAR_CLASS,
     STYLE: STYLE,
     DELETED_TEXT: DELETED_TEXT,
-    EXPORT_LABEL: EXPORT_LABEL,
-    EXPORT_MISSING_TITLE: EXPORT_MISSING_TITLE,
+    focusPair: focusPair,
+    EXPORT_MISSING: EXPORT_MISSING,
     UNDO_LABEL: UNDO_LABEL,
     UNDO_TITLE: UNDO_TITLE,
     UNDO_MISSING_TITLE: UNDO_MISSING_TITLE,
@@ -30690,6 +32431,9 @@
       if (item && typeof rail.paneForItem === "function" && typeof rail.selectTab === "function") {
         rail.selectTab(rail.paneForItem(item));
       }
+      // The Active filter may be hiding this card; a jump to a hidden card is
+      // a jump to nothing.
+      if (typeof rail.revealCard === "function") rail.revealCard(id);
       if (typeof rail.setCardCollapsed === "function") rail.setCardCollapsed(id, false);
       var node = typeof rail.cardNode === "function" ? rail.cardNode(id) : null;
       if (!node) return true;
@@ -30838,7 +32582,8 @@
    * Render records as the human-readable review text.
    *
    * Pure, synchronous, and the only place the slice label is attached. 3D's
-   * Edits tab renders through here too, rather than formatting a second time.
+   * hand-edit list renders through here too, rather than formatting a second
+   * time.
    *
    * @param {{records: Array<Object>, scope: string, review?: string}} input
    * @returns {string}
@@ -31253,7 +32998,7 @@
 
     /**
      * The raw seam: render (and by default download) a caller's own records.
-     * 3D's Edits tab list export calls this rather than formatting a second
+     * 3D's hand-edit list export (run when the review ends) calls this rather than formatting a second
      * time, which is why it takes records instead of reading them.
      *
      * @param {Array<Object>} records
@@ -33117,6 +34862,42 @@
     }
 
     /**
+     * MARK AS DONE: the reviewer closed this item themselves.
+     *
+     * An explicit act at one revision, posted as item.closed with the item id
+     * and that revision and nothing else. It carries no record, because the
+     * helper never takes a state the browser claims: the projection applies
+     * the close only when the item is still outstanding at exactly this
+     * revision, and refuses a stale one the way it refuses a stale reply.
+     *
+     * Only for an item the helper has heard of, as with a delete: a ready
+     * event still in the outbox counts, and goes first.
+     *
+     * @param {Object} item the record as the close leaves it (lifecycle.closeItem)
+     */
+    function closeItem(item) {
+      if (readOnly || !item) return null;
+      var id = item[record.FIELD.ID];
+      if (!id || !helperHeardOf(id)) return null;
+      var event = protocol.newEvent({
+        event: protocol.EVENT.ITEM_CLOSED,
+        event_id: record.randomId("evt"),
+        review: requireReview(),
+        item: id,
+        rev: item[record.FIELD.REV],
+        ts: item[record.FIELD.CLOSED_AT] || undefined,
+        page_path: item[record.FIELD.PAGE_PATH],
+        page_title: item[record.FIELD.PAGE_TITLE],
+        page_seq: item[record.FIELD.PAGE_SEQ],
+        source_hint: item[record.FIELD.SOURCE_HINT]
+      });
+      store.queueEvent(requireReview(), event);
+      scheduleFlush(0);
+      recomputeStatus();
+      return event;
+    }
+
+    /**
      * The typing path. SYNCHRONOUS and non-blocking: the event is queued in
      * browser storage in this task, and the network happens later or never.
      *
@@ -34926,6 +36707,7 @@
         return stampCarriable;
       },
       deleteItem: deleteItem,
+      closeItem: closeItem,
       /** The RUN_EVENT_REFUSED failure an item carries, or null. */
       refusalFor: function (itemId) {
         if (refusedRuns[itemId]) return refusedRuns[itemId];
@@ -35833,6 +37615,8 @@
     "  justify-content: space-between;",
     "  gap: 8px;",
     "}",
+    // Send always sits at the right, whether or not Delete is beside it.
+    ".lahe-comment-act[data-lahe-act='send'] { margin-left: auto; }",
     ".lahe-comment-act {",
     "  font: inherit;",
     "  font-size: 11.5px;",
@@ -35895,15 +37679,6 @@
     "  outline-offset: 1px;",
     "  border-color: transparent;",
     "}",
-    ".lahe-comment-foot {",
-    "  display: flex;",
-    "  align-items: center;",
-    "  justify-content: space-between;",
-    "  gap: 8px;",
-    "  color: rgba(17, 17, 17, 0.5);",
-    "  font-size: 11px;",
-    "}",
-    ".lahe-comment-state[data-state='ready'] { color: rgba(17, 17, 17, 0.72); }",
     // Pick mode is the reviewer choosing something, not the tool warning them,
     // so the outline is the one accent rather than a saturated orange. It was
     // the loudest colour moment anywhere in the product and it meant "normal".
@@ -35926,7 +37701,6 @@
     "  background: rgba(147, 167, 234, 0.12); }",
     ":host([data-lahe-scheme='dark']) .lahe-comment-quote { color: rgba(242,242,242,0.66);",
     "  border-left-color: rgba(147, 167, 234, 0.8); }",
-    ":host([data-lahe-scheme='dark']) .lahe-comment-foot { color: rgba(242,242,242,0.55); }",
     ":host([data-lahe-scheme='dark']) .lahe-comment-grip {",
     "  background-image: radial-gradient(rgba(255,255,255,0.3) 1px, transparent 1px); }",
     ":host([data-lahe-scheme='dark']) .lahe-comment-act { color: rgba(242,242,242,0.66);",
@@ -35934,7 +37708,9 @@
     ":host([data-lahe-scheme='dark']) .lahe-comment-act:hover { color: #f2f2f2;",
     "  background: rgba(255,255,255,0.06); }",
     ":host([data-lahe-scheme='dark']) .lahe-comment-act--quiet { border-color: transparent; background: none; }",
-    PILL_STYLE
+    PILL_STYLE,
+    ".lahe-comment-act[hidden] { display: none; }",
+    highlightModule.SEND_TIP_CSS
   ].join("\n");
 
   // ---------------------------------------------------------------------------
@@ -36410,7 +38186,6 @@
       var id = item[record.FIELD.ID];
       var node = null;
       var inputEl = null;
-      var stateEl = null;
       var gripEl = null;
       var sendEl = null;
       var deleteEl = null;
@@ -36498,18 +38273,8 @@
         markers.markChrome(mirrorEl);
         node.appendChild(mirrorEl);
 
-        var foot = doc.createElement("div");
-        foot.className = "lahe-comment-foot";
-        var hint = doc.createElement("span");
-        hint.className = "lahe-comment-hint";
-        hint.textContent = HINT_READY;
-        stateEl = doc.createElement("span");
-        stateEl.className = "lahe-comment-state";
-        stateEl.setAttribute("data-state", item[record.FIELD.STATE]);
-        stateEl.textContent = item[record.FIELD.STATE] === record.STATE.READY ? "Ready" : "Draft";
-        foot.appendChild(hint);
-        foot.appendChild(stateEl);
-        node.appendChild(foot);
+        // No hint line and no Draft/Ready label under the box: Send says how to
+        // finish, and the card's own color says the state.
 
         // The two controls. Neither is a second way of doing anything: Send runs
         // the very function Cmd-Enter runs, and Delete runs the very remove path
@@ -36518,6 +38283,7 @@
         acts.className = "lahe-comment-acts";
         deleteEl = actionButton("Delete", "lahe-comment-act lahe-comment-act--quiet", "delete", discardDraft);
         sendEl = actionButton("Send", "lahe-comment-act", "send", commitFromControl);
+        highlightModule.paintSendButton(sendEl, store.isHeld(requireReview()), "Send");
         acts.appendChild(deleteEl);
         acts.appendChild(sendEl);
         node.appendChild(acts);
@@ -36804,7 +38570,11 @@
        */
       function paintSendable() {
         if (!sendEl) return null;
-        sendEl.disabled = !readInput().trim();
+        var empty = !readInput().trim();
+        sendEl.disabled = empty;
+        // The note on the whole page is a standing box: empty, there is nothing
+        // to delete, so it offers no Delete until it holds words.
+        if (deleteEl && item[record.FIELD.KIND] === record.KIND.NOTE) deleteEl.hidden = empty;
         return sendEl;
       }
 
@@ -36910,7 +38680,6 @@
         // keystroke came from a keyboard or from a caller driving this handle.
         paintSendable();
         grow();
-        paintState(next);
         // Same rule as persist: a keystroke the disk refused posts nothing, so
         // the helper never acknowledges a wording this browser will not have on
         // the next load. The box keeps the words either way.
@@ -36946,7 +38715,6 @@
         var next = record.bumpRev(current, {});
         committedNote = String(next[record.FIELD.NOTE] || "");
         store.write(requireReview(), next);
-        paintState(next);
         emit(next, "reworded");
         return next;
       }
@@ -36963,15 +38731,8 @@
         // same session is a new rewording and takes it back off again.
         committed = true;
         wasReady = true;
-        paintState(next);
         emit(next, "ready");
         return next;
-      }
-
-      function paintState(next) {
-        if (!stateEl) return;
-        stateEl.setAttribute("data-state", next[record.FIELD.STATE]);
-        stateEl.textContent = next[record.FIELD.STATE] === record.STATE.READY ? "Ready" : "Draft";
       }
 
       /**
@@ -50159,7 +51920,7 @@
   "use strict";
 
   // Replaced by scripts/build-layer.js at concatenation time.
-  var VERSION = "0.3.0+d8531d6cda09";
+  var VERSION = "0.3.0+1d5de97e5f32";
 
   var protocol = ns.protocol;
   var record = ns.record;
@@ -50576,7 +52337,7 @@
     // The layer can only act on the ONE document it is loaded into, so anything
     // from another page is filtered out HERE, at the single read boundary, and
     // every surface below is handed the scoped store: replay and anchoring, the
-    // rail's Active/Done/Edits lists, the count pill, and the highlights. A
+    // rail's Active and Done lists, the count pill, and the highlights. A
     // second page attached to a live review otherwise inherited all 78 of the
     // first page's items, tried to re-anchor them here, and listed them in the
     // rail (Ken, live, 2026-08-17).
@@ -51024,10 +52785,11 @@
     });
     zoom.bind();
 
-    // The Edits tab's contents, inside the rail's own Edits pane, the way the
-    // Active tab lives inside the Active one. It is created after the edit
-    // surface because it subscribes to it: a hand edit becomes a row on the
-    // same act that writes the record.
+    // The hand-edit rows, drawn into each hand edit's card. Those cards sit in
+    // the Active pane beside the comments (Done once handled), and the Active
+    // filter separates the two. Created after the edit surface because it
+    // subscribes to it: a hand edit becomes a row on the same act that writes
+    // the record.
     var editsTab = makeEditsTab();
 
     // The Done tab mounted BEFORE this one existed, and its Reopen button moves
@@ -51244,9 +53006,9 @@
     //   3. the hand-edit list is put in front of the reviewer.
     //
     // Step 3 is not decoration. R39's list exists so style-guide patterns can be
-    // spotted, and the Edits tab has held it all along; what it never had was
-    // the MOMENT. A permanently visible tab is one a reviewer stops seeing by
-    // the third comment, so the payoff happens at the close, which is when a
+    // spotted, and the hand-edit cards have held it all along; what they never
+    // had was the MOMENT. A list always on screen is one a reviewer stops seeing
+    // by the third comment, so the payoff happens at the close, which is when a
     // session's worth of edits reads as a pattern rather than as a row.
     rail.onAction("end", function () {
       // The whole review, not this page's slice: ending ends every page of it,
@@ -51285,12 +53047,15 @@
     /**
      * The closing step: the session's hand edits, in front of the reviewer.
      *
-     * It reuses the Edits tab's own export seam rather than formatting a second
-     * list. Two lists of one thing is how the two of them start disagreeing.
+     * It reuses the hand-edit rows' own export seam rather than formatting a
+     * second list. Two lists of one thing is how the two of them start
+     * disagreeing. On screen, the Active pane is filtered to hand edits, so the
+     * list the file holds is the list the reviewer is looking at.
      */
     function surfaceHandEdits() {
       var count = editsTab && typeof editsTab.rowCount === "function" ? editsTab.rowCount() : 0;
-      rail.selectTab(ns.overlay.TAB.EDITS);
+      rail.selectTab(ns.overlay.TAB.ACTIVE);
+      if (count && typeof rail.setActiveFilter === "function") rail.setActiveFilter(ns.overlay.FILTER.EDITS);
       if (!count || !editsTab || typeof editsTab.exportList !== "function") {
         return Promise.resolve({ count: count, saved: false });
       }
@@ -51312,7 +53077,7 @@
         store: scopedStore,
         reviewId: reviewId,
         overlay: rail,
-        host: rail.tabBody(ns.overlay.TAB.EDITS),
+        host: rail.tabBody(ns.overlay.TAB.ACTIVE),
         editing: editing,
         // The commit wash reads these three; named here, not fished out of the
         // page's namespace by the tab.
@@ -51427,6 +53192,30 @@
       // button goes with it and the Done row is left on a card with no controls
       // at all. Done's own refresh drops the row for a record that is no longer
       // there, which is the whole repair.
+      done.refresh();
+    });
+
+    // MARK AS DONE (docs/features/20261012.01_rail_cleanup). The reviewer
+    // closes an outstanding card from its state chip, without waiting for an
+    // agent: a leftover comment, a refused edit, or a handled claim the page
+    // check held open. The record moves to handled with the reviewer named as
+    // the one who closed it, the helper hears an explicit item.closed for
+    // this revision, and every tab repaints from the record.
+    rail.onCardClose(function (id, action) {
+      if (action !== ns.overlay.MARK_DONE.ACTION) return;
+      if (readOnlyActive) return;
+      var item = scopedStore.readItem(reviewId, id);
+      if (!item || !ns.lifecycle.canClose(item)) return;
+      var closed = ns.lifecycle.closeItem(item, new Date().toISOString());
+      scopedStore.write(reviewId, closed);
+      sync.closeItem(closed);
+      refreshItems();
+      rail.upsertCard(closed);
+      rail.setCardState(id, record.STATE.HANDLED);
+      if (tab && typeof tab.refresh === "function") tab.refresh();
+      if (editsTab && typeof editsTab.refresh === "function") editsTab.refresh();
+      // Done draws the closed card, says the reviewer closed it, and takes the
+      // highlight off the page.
       done.refresh();
     });
 

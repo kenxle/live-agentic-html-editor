@@ -1,23 +1,22 @@
-// The Edits tab's contents: every hand edit as a before-and-after row.
+// The hand-edit rows: every hand edit as a before-and-after row inside its
+// rail card.
 //
 // Owner: 3D. The rail CHROME (the tab shell, the panes, the status line, the
 // card API) is 1B's, in overlay.js, and nothing here edits that file. This file
-// is only what the Edits tab holds.
+// is only what a hand edit's card holds.
 //
-// Implements D10's Edits tab: R32 (hand edits are kept apart from the comment
-// thread so neither buries the other) and R39 (the end-of-session list of hand
-// edits, worth feeding a style guide).
+// Implements R32 (hand edits do not bury the comment thread) and R39 (the
+// end-of-session list of hand edits, worth feeding a style guide).
 //
 // ---------------------------------------------------------------------------
-// Why a hand edit is not a comment
+// Where the rows live
 // ---------------------------------------------------------------------------
 //
-// A session produces a handful of comments and a great many small hand edits.
-// Mixed into one list, the edits bury the comments, and the reviewer stops
-// reading either. The rail already routes a record by kind (overlay's
-// paneForItem sends edit, delete and format_only to this tab), so the
-// separation is the rail's law and this file never has to re-decide it. What
-// this file owns is what a row SAYS.
+// A hand edit's card sits in the Active pane beside the comments while it is
+// still work, and in Done once handled (overlay's paneForItem decides; this
+// file never re-decides it). The rail used to give hand edits a tab of their
+// own; R32 is now kept by the Active pane's filter (All, Comments, Edits),
+// which is the rail's too. What this file owns is what a row SAYS.
 //
 // Three kinds, three readings, because a row that renders all three the same
 // way is wrong twice:
@@ -34,20 +33,20 @@
 // ---------------------------------------------------------------------------
 //
 // There is no render(items) here. Rows are created once, updated where they
-// are, and removed only when their record is gone. Newest first is done with
-// flex `order` on the card the rail already built, never by re-appending:
-// re-parenting a node blurs anything focused inside it, which is the exact
-// revert mechanism the rail's law exists to stop.
+// are, and removed only when their record is gone. Where a card sits in its
+// pane is the rail's job (newest activity first); this file never re-appends
+// a card: re-parenting a node blurs anything focused inside it, which is the
+// exact revert mechanism the rail's law exists to stop.
 //
 // ---------------------------------------------------------------------------
 // Undo lives on the row (R28)
 // ---------------------------------------------------------------------------
 //
 // R28 says every edit can be undone on its own. 2A's editing.undo(id) does the
-// work; this tab is where the reviewer can reach it, because the row is the only
+// work; the row is where the reviewer can reach it, because the row is the only
 // place a hand edit is listed. The button wears the rail's own card-action
 // register (`.cardact.cardact--quiet`), the same one Reword and Delete wear on a
-// comment card, so the two tabs read as one product.
+// comment card, so the two kinds of card read as one product.
 //
 // undo reverts that record's region and retires the record, which drops the row
 // on the next refresh. When it CANNOT (`reverted: false`), the row says why,
@@ -65,16 +64,18 @@
 // The export seam
 // ---------------------------------------------------------------------------
 //
-// This tab does not format anything for export. The list-export button calls
-// 3C's `exportRecords(records, options)` in src/layer/export.js, which renders
-// through the frozen human-readable formatter in shared/review_format.js. One
-// formatter, one wording, wherever the same records are read.
+// This file does not format anything for export. exportList, which ending the
+// review calls, hands the records to 3C's `exportRecords(records, options)` in
+// src/layer/export.js, which renders through the frozen human-readable
+// formatter in shared/review_format.js. One formatter, one wording, wherever
+// the same records are read. There is no export button on the rail for this
+// list: the end-review step already saves it.
 //
-// The module is resolved LAZILY, on mount and on click, for a mechanical
+// The module is resolved LAZILY, when exportList runs, for a mechanical
 // reason: export.js loads AFTER this file in the bundle (manifest.js pins the
 // order), so a reference captured when this factory runs would always be
-// undefined. When the module is absent the button renders disabled and says why
-// rather than throwing on click or, worse, doing nothing.
+// undefined. When the module is absent exportList says why in its result
+// rather than throwing.
 //
 // Dual-environment module. See docs/CONTRACTS.md, "How a shared module loads".
 (function (root, factory) {
@@ -101,17 +102,11 @@
 })(typeof globalThis !== "undefined" ? globalThis : this, function (root, markers, record, normalize, overlayModule) {
   "use strict";
 
-  // The marker a row carries. It is how a test asks "is an edit row in the
-  // Active pane", which is the honest reading of "kept apart": counting cards
-  // would only prove the rail's routing, not what this file drew.
+  // The marker a row carries. It is how a test asks "is there an edit row in
+  // this card": counting cards would only prove the rail's routing, not what
+  // this file drew.
   var ROW_ATTR = "data-lahe-edit-row";
   var ROW_CLASS = "lahe-edits";
-  var BAR_CLASS = "lahe-edits-bar";
-  // The bar sits above every row. Cards are ordered negatively (newest first,
-  // never more negative than the row count), so one number well below that keeps
-  // the bar first without re-appending it. This is the end-of-session list, and
-  // the way to take it elsewhere should not be six rows down a scroll.
-  var BAR_ORDER = -100000;
 
   var DELETED_TEXT = "Deleted";
   // R28's reviewer-facing half. The row is the only place a hand edit is listed,
@@ -123,25 +118,58 @@
   // Undo needs 2A's surface. Without it the button says so rather than sitting
   // there doing nothing when pressed.
   var UNDO_MISSING_TITLE = "Undo needs the editing surface, which is not on this page.";
-  // Shortened from "Export the edit list": it was the widest, heaviest thing in
-  // the pane, opposite an 11.5px count, and on the empty tab it was a large
-  // disabled button over "No hand edits yet." Two words rather than one,
-  // because the rail's footer already holds a button called exactly "Export"
-  // and two of those in one rail is a coin toss for anyone reading it.
-  var EXPORT_LABEL = "Export edits";
-  var EXPORT_MISSING_TITLE =
-    "Export is arriving with the copy-and-export module; the list export wires up at the Phase 3 stitch.";
-  var EXPORT_TITLE = "The hand edits on this page, as text, for a style guide or a chat window.";
+  // THE CHANGE, NOT THE START. Before and after share their opening and
+  // closing words; long shared stretches are cut to a few words beside the
+  // change, with "..." where words were left out, so the card shows what moved.
+  var FOCUS_KEEP_WORDS = 6;
+  var FOCUS_MIN_CUT = 40;
 
-  // Quiet neutrals, one accent, and the rail's own tokens: this pane is inside
-  // the rail's closed shadow root, so :host's custom properties inherit into it
-  // and the tab cannot drift from the chrome around it.
+  function focusPair(before, after) {
+    var a = String(before || "");
+    var b = String(after || "");
+    var start = 0;
+    while (start < a.length && start < b.length && a[start] === b[start]) start += 1;
+    var end = 0;
+    while (end < a.length - start && end < b.length - start && a[a.length - 1 - end] === b[b.length - 1 - end]) end += 1;
+    var lead = "";
+    var cutFront = 0;
+    if (start > FOCUS_MIN_CUT) {
+      var head = a.slice(0, start);
+      var words = head.split(/(\s+)/);
+      var kept = words.slice(-FOCUS_KEEP_WORDS * 2).join("");
+      cutFront = start - kept.length;
+      if (cutFront > 0) lead = "...";
+      else cutFront = 0;
+    }
+    var tail = "";
+    var cutBack = 0;
+    if (end > FOCUS_MIN_CUT) {
+      var shared = a.slice(a.length - end);
+      var parts = shared.split(/(\s+)/);
+      var keep = parts.slice(0, FOCUS_KEEP_WORDS * 2).join("");
+      cutBack = end - keep.length;
+      if (cutBack > 0) tail = "...";
+      else cutBack = 0;
+    }
+    return {
+      before: lead + a.slice(cutFront, a.length - cutBack) + tail,
+      after: lead + b.slice(cutFront, b.length - cutBack) + tail
+    };
+  }
+
+  // Why exportList could not run: the export module is not on this page.
+  var EXPORT_MISSING = "The export module is not on this page, so the hand-edit list could not be saved.";
+
+  // Quiet neutrals, one accent, and the rail's own tokens: the rows are inside
+  // the rail's closed shadow root, so :host's custom properties inherit into
+  // them and they cannot drift from the chrome around them.
   var STYLE = [
-    "." + ROW_CLASS + "{display:flex;flex-direction:column;gap:6px}",
+    // The card's own 8px step, the same one between turns of a conversation.
+    "." + ROW_CLASS + "{display:flex;flex-direction:column;gap:8px}",
     // The rule per pair stays, and so does the accent on an edit row. This is
-    // the tab's new-versus-old signal: scanning a column of rows, the accent
+    // the row's new-versus-old signal: scanning a column of cards, the accent
     // rule is what separates the reviewer's own edits from everything else.
-    // Drop it and the tab is one undifferentiated stack.
+    // Drop it and the pane is one undifferentiated stack.
     "." + ROW_CLASS + "__pair{display:flex;flex-direction:column;gap:4px;",
     "border-left:2px solid var(--line);padding-left:9px}",
     "." + ROW_CLASS + "[data-kind='edit'] ." + ROW_CLASS + "__pair{border-left-color:var(--accent)}",
@@ -167,7 +195,8 @@
     "." + ROW_CLASS + "__structure{font-size:11.5px;color:var(--ink-soft);",
     "font-family:ui-monospace,SFMono-Regular,Menlo,monospace}",
     "." + ROW_CLASS + "__structure:empty{display:none}",
-    "." + ROW_CLASS + "__said{font-size:12px;color:var(--ink-soft)}",
+    // The change summary heads the pair in the rail's one caption style.
+    "." + ROW_CLASS + "__said{font-size:11px;line-height:1.35;color:var(--ink-faint);margin-bottom:-5px}",
     "." + ROW_CLASS + "__said:empty{display:none}",
     // A run's two pinned lines: where the new text went, then its shape. The
     // first reads as the row's header, the second as its quieter subtitle.
@@ -183,8 +212,7 @@
     "." + ROW_CLASS + "__block{display:flex;flex-direction:column;gap:1px;",
     "border-left:2px solid var(--accent);padding-left:9px}",
     "." + ROW_CLASS + "__block[data-lahe-run-block='moved']{border-left-color:var(--line)}",
-    "." + ROW_CLASS + "__block-label{font-size:10px;font-weight:650;letter-spacing:.06em;",
-    "text-transform:uppercase;color:var(--ink-faint)}",
+    "." + ROW_CLASS + "__block-label{font-size:11px;line-height:1.35;font-weight:600;color:var(--ink-faint)}",
     "." + ROW_CLASS + "__block-words{font-size:12.5px;line-height:1.45;color:var(--ink);white-space:pre-wrap;",
     "display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}",
     "." + ROW_CLASS + "__pair[hidden]{display:none}",
@@ -192,23 +220,10 @@
     // on, in the rail's warning color. Never a silent no-op.
     "." + ROW_CLASS + "__failed{font-size:11.5px;color:var(--warn);",
     "background:var(--warn-wash);border-radius:7px;padding:5px 8px;margin:0}",
-    "." + ROW_CLASS + "__failed:empty{display:none}",
-
-    "." + BAR_CLASS + "{display:flex;align-items:center;gap:8px;padding:0 2px 10px;",
-    "border-bottom:1px solid var(--line-soft)}",
-    "." + BAR_CLASS + "__count{font-size:11.5px;color:var(--ink-faint);",
-    "font-variant-numeric:tabular-nums}",
-    // The footer's Copy and Export are the full-size pair; this one is a card-
-    // scale action, so it matches the rail's quiet register instead of being
-    // heavier than the buttons that do more.
-    "." + BAR_CLASS + "__btn{margin-left:auto;font-size:11.5px;font-weight:550;padding:3px 9px;",
-    "border-radius:7px;border:1px solid var(--line);background:var(--paper);color:var(--ink-soft)}",
-    "." + BAR_CLASS + "__btn:hover:not(:disabled){color:var(--ink)}",
-    "." + BAR_CLASS + "__btn:hover:not(:disabled){background:var(--surface)}",
-    "." + BAR_CLASS + "__btn:disabled{color:var(--ink-faint);cursor:default}"
+    "." + ROW_CLASS + "__failed:empty{display:none}"
   ].join("");
 
-  // The three kinds this tab holds. Asked in one place so a fourth kind added
+  // The three kinds this file draws rows for. Asked in one place so a fourth kind added
   // later cannot half-appear.
   // One definition of "the reviewer made this with their hands", in record.js,
   // because the Done tab has to agree with this list to know when its own card
@@ -344,15 +359,20 @@
   }
 
   // ---------------------------------------------------------------------------
-  // The tab
+  // The rows
   // ---------------------------------------------------------------------------
 
   /**
+   * The name says "tab" for history: hand edits once had a rail tab of their
+   * own. Today this draws the rows into each hand edit's card, wherever the
+   * rail placed that card.
+   *
    * @param {Object} options
    * @param {Object} options.store      1B's store; the records are read from it
    * @param {string} options.reviewId
    * @param {Object} [options.overlay]  the rail; the shared one otherwise
-   * @param {Element} [options.host]    the rail's Edits pane
+   * @param {Element} [options.host]    the rail's Active pane, where the rows'
+   *   stylesheet goes. Nothing is drawn into it directly
    * @param {Object} [options.editing]  2A's surface. When given, the tab
    *   subscribes to its changes itself, so the boot wiring stays one call
    * @param {Object} [options.exportModule]  3C's module, for a test that wants
@@ -381,9 +401,6 @@
     var unsubscribe = null;
     // id -> row node. The reason there is no rebuild path.
     var rows = Object.create(null);
-    var barNode = null;
-    var countNode = null;
-    var buttonNode = null;
     var lastExport = null;
     var lastExportPromise = null;
     var lastUndo = null;
@@ -435,7 +452,6 @@
       mounted = true;
       if (!doc || !host) return api;
       addStyle();
-      buildBar();
       if (editing && typeof editing.onChange === "function") {
         unsubscribe = editing.onChange(function (item, event) {
           refresh();
@@ -458,24 +474,6 @@
       host.insertBefore(style, host.firstChild);
     }
 
-    function buildBar() {
-      if (barNode) return barNode;
-      barNode = el("div", BAR_CLASS);
-      barNode.style.order = String(BAR_ORDER);
-      countNode = el("span", BAR_CLASS + "__count", "");
-      barNode.appendChild(countNode);
-
-      buttonNode = el("button", BAR_CLASS + "__btn", EXPORT_LABEL);
-      buttonNode.setAttribute("type", "button");
-      buttonNode.addEventListener("click", function () {
-        exportList();
-      });
-      barNode.appendChild(buttonNode);
-      host.appendChild(barNode);
-      paintBar(0);
-      return barNode;
-    }
-
     // -------------------------------------------------------------------------
     // The list, in place
     // -------------------------------------------------------------------------
@@ -485,7 +483,7 @@
       var items = handEdits();
       var seen = Object.create(null);
 
-      items.forEach(function (item, index) {
+      items.forEach(function (item) {
         var id = item[record.FIELD.ID];
         seen[id] = true;
         // The rail's own model has to know the card exists before anything can
@@ -500,24 +498,13 @@
           rail.attachCardNode(id, rows[id]);
         }
         updateRow(rows[id], item);
-        // Newest first, without moving a node: the pane is a flex column, and
-        // the newest record gets the most negative order.
-        var card = rail.cardNode(id);
-        if (card && card.style) card.style.order = String(index - items.length);
+        // No ordering here: the card sits in Active (or Done) beside the
+        // comments, and the rail places every card there by newest activity.
       });
 
       Object.keys(rows).forEach(function (id) {
         if (!seen[id]) dropRow(id);
       });
-
-      // The empty draft an empty page opens with, and a draft that changes
-      // nothing yet, are not hand edits: the rail does not draw them, so the
-      // count does not claim them either.
-      paintBar(
-        items.filter(function (item) {
-          return !overlayModule.isQuietDraft(item);
-        }).length
-      );
       return api;
     }
 
@@ -565,8 +552,8 @@
       row.appendChild(failed);
 
       // R28's one gesture, in the rail's own card-action register: the same
-      // quiet outline Reword and Delete wear on a comment card, so the Edits tab
-      // and the Active tab read as one product rather than two.
+      // quiet outline Reword and Delete wear on a comment card, so a hand-edit
+      // card and a comment card read as one product rather than two.
       var foot = el("div", "cardacts");
       var undoBtn = el("button", "cardact cardact--quiet", UNDO_LABEL);
       undoBtn.setAttribute("type", "button");
@@ -602,8 +589,7 @@
      * Undo ONE hand edit, from its own row.
      *
      * editing.undo reverts that record's region and retires the record; the row
-     * then leaves the tab on the next refresh, which the tab already does in
-     * place. A refusal (`reverted: false`) is written onto the row, because an
+     * then goes on the next refresh, which this file already does in place. A refusal (`reverted: false`) is written onto the row, because an
      * undo that quietly does nothing is how a reviewer learns not to trust the
      * button.
      */
@@ -657,8 +643,11 @@
         after.setAttribute("data-empty", "false");
         pair.hidden = !anchorPair;
       } else {
-        before.textContent = text.before;
-        after.textContent = text.after;
+        // Centered on what changed: a long paragraph with its change at the
+        // end read as two identical lines once the card cut them to three.
+        var focused = focusPair(text.before, text.after);
+        before.textContent = focused.before;
+        after.textContent = focused.after;
         after.setAttribute("data-empty", text.emptyAfter ? "true" : "false");
         pair.hidden = false;
       }
@@ -741,14 +730,6 @@
       delete rows[id];
     }
 
-    function paintBar(count) {
-      if (!countNode || !buttonNode) return;
-      countNode.textContent = count === 1 ? "1 hand edit" : count + " hand edits";
-      var available = !!exportModule();
-      buttonNode.disabled = !available || count === 0;
-      buttonNode.title = available ? EXPORT_TITLE : EXPORT_MISSING_TITLE;
-    }
-
     // -------------------------------------------------------------------------
     // Export
     // -------------------------------------------------------------------------
@@ -757,15 +738,15 @@
      * Hand the list to 3C's export path, newest first, so what a reader sees is
      * what the text says.
      *
-     * It returns the text rather than delivering it: the clipboard grant and the
-     * download are copyReview() and exportReview(), which are 3C's, and the
-     * delivery is wired at the Phase 3 stitch.
+     * There is no button for this on the rail. Ending the review calls it
+     * (index.js surfaceHandEdits), which is when the session's hand edits are
+     * worth reading as one list.
      */
     function exportList() {
       var mod = exportModule();
       var items = handEdits().reverse();
       if (!mod) {
-        lastExport = { ok: false, reason: EXPORT_MISSING_TITLE, text: null, count: items.length };
+        lastExport = { ok: false, reason: EXPORT_MISSING, text: null, count: items.length };
         lastExportPromise = Promise.resolve(lastExport);
         return lastExportPromise;
       }
@@ -797,10 +778,6 @@
       Object.keys(rows).forEach(function (id) {
         dropRow(id);
       });
-      if (barNode && barNode.parentNode) barNode.parentNode.removeChild(barNode);
-      barNode = null;
-      countNode = null;
-      buttonNode = null;
       mounted = false;
     }
 
@@ -816,7 +793,7 @@
       rowCount: function () {
         return Object.keys(rows).length;
       },
-      // The list as data, newest first: what the tab is showing, without a
+      // The list as data, newest first: what the rows are showing, without a
       // caller reaching into a closed shadow root to read it.
       rows: function () {
         return handEdits()
@@ -845,15 +822,6 @@
         return lastUndo;
       },
       exportList: exportList,
-      exportButton: function () {
-        return buttonNode;
-      },
-      exportEnabled: function () {
-        return !!buttonNode && !buttonNode.disabled;
-      },
-      exportTitle: function () {
-        return buttonNode ? buttonNode.title : null;
-      },
       lastExport: function () {
         return lastExport;
       },
@@ -868,11 +836,10 @@
   return {
     ROW_ATTR: ROW_ATTR,
     ROW_CLASS: ROW_CLASS,
-    BAR_CLASS: BAR_CLASS,
     STYLE: STYLE,
     DELETED_TEXT: DELETED_TEXT,
-    EXPORT_LABEL: EXPORT_LABEL,
-    EXPORT_MISSING_TITLE: EXPORT_MISSING_TITLE,
+    focusPair: focusPair,
+    EXPORT_MISSING: EXPORT_MISSING,
     UNDO_LABEL: UNDO_LABEL,
     UNDO_TITLE: UNDO_TITLE,
     UNDO_MISSING_TITLE: UNDO_MISSING_TITLE,

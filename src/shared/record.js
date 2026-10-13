@@ -93,6 +93,14 @@
     // item whose claim cannot be checked at all.
     HANDLED_NOT_ON_PAGE: "handled_not_on_page",
 
+    // The reviewer marked this item done themselves ("Mark as done" on the
+    // card's state chip), so no agent retired it. "reviewer" when they did,
+    // absent everywhere else. Lifecycle, not content: the helper sets it from
+    // an item.closed event and never takes it from a record the browser posts.
+    // CLOSED_AT is when they did it.
+    CLOSED_BY: "closed_by",
+    CLOSED_AT: "closed_at",
+
     // Completed reviewer/agent exchanges, oldest first. The current exchange
     // stays in NOTE/CHANGE + REPLY until the reviewer continues it.
     THREAD: "thread",
@@ -143,8 +151,8 @@
    *
    * The three kinds that carry a before-and-after. It lives here rather than in
    * a tab file because more than one surface has to agree on the answer: the
-   * Edits tab lists exactly these, and the Done tab has to know that the Edits
-   * row on the same card is already drawing the change summary, so it does not
+   * hand-edit rows draw exactly these, and the Done tab has to know that the
+   * hand-edit row on the same card is already drawing the change summary, so it does not
    * print the same sentence a second time.
    */
   function isHandEdit(item) {
@@ -224,6 +232,9 @@
     // The page check's own bookkeeping. Tool-written, never read as an
     // instruction, and not projected into review.json at all.
     "region.check_reopen": CLASS_DATA,
+    // Who closed it and when. Tool-written lifecycle facts.
+    closed_by: CLASS_DATA,
+    closed_at: CLASS_DATA,
     page_title: CLASS_DATA,
     page_path: CLASS_DATA,
     "reply.reason": CLASS_DATA,
@@ -1074,6 +1085,20 @@
     return !item[FIELD.REPLY];
   }
 
+  // The one value CLOSED_BY carries today.
+  var CLOSED_BY_REVIEWER = "reviewer";
+
+  /**
+   * Did the reviewer mark this item done themselves, at its current revision?
+   *
+   * True only for a handled item carrying closed_by "reviewer". A reworded or
+   * reopened item drops the mark with the revision it was made at, so a stale
+   * mark on a ready record reads as false here rather than as a close.
+   */
+  function isClosedByReviewer(item) {
+    return !!item && item[FIELD.STATE] === STATE.HANDLED && item[FIELD.CLOSED_BY] === CLOSED_BY_REVIEWER;
+  }
+
   // Outstanding for the reviewer: still in front of them. A handled item is
   // kept and reopenable (R38), not outstanding.
   function isOutstanding(item) {
@@ -1126,6 +1151,10 @@
     var next = Object.assign({}, item, changes || {});
     next[FIELD.REV] = item[FIELD.REV] + 1;
     next[FIELD.UPDATED_AT] = nowIso();
+    // A reviewer's close names the revision it closed. A new revision is new
+    // work, so the mark does not travel onto it.
+    delete next[FIELD.CLOSED_BY];
+    delete next[FIELD.CLOSED_AT];
 
     var history = (item[FIELD.AFTER_HISTORY] || []).slice();
     var newAfter = next[FIELD.AFTER];
@@ -2403,6 +2432,8 @@
     isReady: isReady,
     isUnansweredReady: isUnansweredReady,
     isOutstanding: isOutstanding,
+    CLOSED_BY_REVIEWER: CLOSED_BY_REVIEWER,
+    isClosedByReviewer: isClosedByReviewer,
     isReplayable: isReplayable,
     comparisonMode: comparisonMode,
     normalizedBefore: normalizedBefore,

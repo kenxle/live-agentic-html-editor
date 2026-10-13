@@ -206,20 +206,34 @@
     // reviewer clicks into: the click target ended where Delete began.
     "[data-lahe-active-row]{display:flex;flex-direction:column;gap:8px}",
     ".lahe-rail-note{white-space:pre-wrap;overflow-wrap:anywhere}",
+    // Delete is a small x at the right of the comment, not a word under it.
+    "[data-lahe-active-row]{position:relative}",
+    // The x sits at the right end of the reviewer's caption row, so the
+    // caption makes room for it.
+    "[data-lahe-active-row]:has(> .cardx:not([hidden])) .turn__cap{padding-right:24px}",
+    ".cardx{position:absolute;top:-3px;right:0;width:20px;height:20px;border-radius:5px;display:flex;",
+    "align-items:center;justify-content:center;font-size:15px;line-height:1;color:var(--ink-faint);",
+    "background:none;border:0;cursor:pointer}",
+    // Hovering the x shows what it would delete: the x and the whole comment
+    // turn the rail's stop red.
+    ".cardx:hover{background:color-mix(in srgb,var(--bad) 12%,transparent);color:var(--bad)}",
+    ".card:has([data-lahe-active-row] > .cardx:hover){outline:1.5px solid var(--bad);outline-offset:-1px;",
+    "background:color-mix(in srgb,var(--bad) 6%,var(--paper))}",
+    ".cardx[hidden]{display:none}",
     ".lahe-rail-note[data-empty='true']{color:var(--ink-faint)}",
     // THE NOTE IS THE INPUT. Ken: "do we really need a button for 'reword'?
     // before we could just edit a comment and the color would go from green to
     // yellow and that was how we knew." So the words carry the affordance the
     // button used to: a text cursor, a hover that lifts them off the card, and a
     // focus ring while the reviewer is typing in them.
-    ".lahe-rail-note[data-lahe-note-editor]{cursor:text;border-radius:6px;",
-    "margin:0 -4px;padding:2px 4px;transition:background 90ms ease}",
-    ".lahe-rail-note[data-lahe-note-editor]:hover{background:var(--sunken)}",
-    ".lahe-rail-note[data-lahe-note-editor]:focus{outline:2px solid var(--accent);",
-    "outline-offset:1px;background:var(--paper)}",
+    // The note is the reviewer's bubble, so the hover outlines the bubble
+    // rather than changing its color, and typing gets the accent ring.
+    ".lahe-rail-note[data-lahe-note-editor]{cursor:text;transition:border-color 90ms ease}",
+    ".lahe-rail-note[data-lahe-note-editor]:hover{border-color:var(--line)}",
+    ".lahe-rail-note[data-lahe-note-editor]:focus{outline:2px solid var(--accent);outline-offset:1px}",
     // A window that may not write to the review reads as prose again.
     ".lahe-rail-note[contenteditable='false']{cursor:default}",
-    ".lahe-rail-note[contenteditable='false']:hover{background:transparent}",
+    ".lahe-rail-note[contenteditable='false']:hover{border-color:transparent}",
     // The empty-draft label is drawn, not typed: text inside the node would be
     // text the reviewer has to delete before writing their own sentence.
     ".lahe-rail-note[data-empty='true']::before{content:'Empty draft'}",
@@ -264,8 +278,10 @@
     ".lahe-rail-add[hidden]{display:none}",
     ".lahe-rail-add textarea{resize:none;width:100%;box-sizing:border-box;",
     "font:inherit;font-size:12.5px;line-height:1.45;color:var(--ink);",
-    "background:var(--sunken);border:1px solid var(--line);border-radius:6px;",
-    "padding:5px 7px;transition:background 90ms ease}",
+    // The same paper box as the follow-up composer, so the card has one kind
+    // of text box whether or not the agent has answered yet.
+    "background:var(--paper);border:1px solid var(--line);border-radius:7px;",
+    "padding:5px 8px;transition:background 90ms ease}",
     ".lahe-rail-add textarea::placeholder{color:var(--ink-faint)}",
     ".lahe-rail-add textarea:focus{outline:2px solid var(--accent);outline-offset:1px;",
     "background:var(--paper)}",
@@ -373,16 +389,17 @@
       panel.appendChild(head);
 
       listEl = el("div", "lahe-rail-list");
-      emptyEl = el("p", "lahe-rail-empty", "Nothing outstanding. Select text and press Cmd-Shift-C.");
+      emptyEl = el("p", "lahe-rail-empty", "No unanswered or active threads. Check the done tab, or select some text and press Cmd-Shift-C.");
       listEl.appendChild(emptyEl);
       panel.appendChild(listEl);
 
       footEl = el("footer", "lahe-rail-foot");
-      footEl.appendChild(el("span", "lahe-rail-footlabel", "A note about the page, tied to nothing"));
+      footEl.appendChild(el("span", "lahe-rail-footlabel", "Add a note on the whole page"));
       panel.appendChild(footEl);
-      footEl.appendChild(hintList());
+      var hints = hintList();
+      if (hints) footEl.appendChild(hints);
 
-      pill = el("button", "lahe-rail-pill", "Review");
+      pill = el("button", "lahe-rail-pill", "Lahe");
       pill.setAttribute("type", "button");
       pill.hidden = true;
       pill.addEventListener("click", function () {
@@ -416,9 +433,10 @@
       // closed root. Without it every class below is a name with nothing behind
       // it, which is exactly what shipped.
       ensureHostedStyle(footEl);
-      footEl.appendChild(el("span", "lahe-rail-footlabel", "A note about the page"));
+      footEl.appendChild(el("span", "lahe-rail-footlabel", "Add a note on the whole page"));
       host.appendChild(footEl);
-      footEl.appendChild(hintList());
+      var hints = hintList();
+      if (hints) footEl.appendChild(hints);
 
       openNoteBox();
       unsubscribe = comments.onChange(function (item, event) {
@@ -491,10 +509,9 @@
         list.appendChild(li);
       });
       if (!hosted) return list;
-      var more = el("details", "lahe-rail-more");
-      more.appendChild(el("summary", null, "All shortcuts"));
-      more.appendChild(list);
-      return more;
+      // In the rail the shortcuts live behind the menu ("Keyboard shortcuts"),
+      // so the pane keeps no list of its own.
+      return null;
     }
 
     function hintText() {
@@ -507,7 +524,14 @@
           })
           .join("\n");
       }
-      return container.querySelector(".lahe-rail-hints").textContent;
+      var list = container.querySelector(".lahe-rail-hints");
+      if (list) return list.textContent;
+      return gestures
+        .hintLines()
+        .map(function (line) {
+          return line.keys + " " + line.hint;
+        })
+        .join("\n");
     }
 
     function onItemChanged(item, event) {
@@ -538,9 +562,10 @@
       // the rail's root, and a remount throws that root away.
       ensureHostedStyle(footEl);
       var items = comments.outstanding().filter(function (item) {
-        // The Active thread carries comments and notes only. Hand edits live in
-        // the Edits tab (R32: neither buries the other); rendering a comment row
-        // into an edit's card was the cross-task defect 3D flagged at the stitch.
+        // This file draws comment and note rows only. Hand-edit cards share the
+        // Active pane, but their rows are tab_edits.js's; rendering a comment
+        // row into an edit's card was the cross-task defect 3D flagged at the
+        // stitch.
         var kind = item[record.FIELD.KIND];
         if (kind !== record.KIND.COMMENT && kind !== record.KIND.NOTE) return false;
         return !noteHandle || item[record.FIELD.ID] !== noteHandle.id || !record.isDraft(item);
@@ -612,7 +637,20 @@
       // Swapping one for a control on click would be the rail rebuilding a row
       // under a caret, which is the revert mechanism this file exists to avoid.
       var note = el("p", "lahe-rail-note", "");
-      row.appendChild(note);
+      // Hosted, the note is the reviewer's own turn: a bubble on the right
+      // under a "You" caption, the same turn every other card draws.
+      if (hosted) {
+        var turn = el("div", "lahe-rail-turn");
+        overlayModule.fillTurn(turn, el, {
+          side: "you",
+          who: "You",
+          at: item[record.FIELD.UPDATED_AT] || item[record.FIELD.CREATED_AT] || null,
+          bubble: note
+        });
+        row.appendChild(turn);
+      } else {
+        row.appendChild(note);
+      }
       comments.attachNoteEditor(id, note);
 
       // Hosted, these are the rail's own quiet card actions (one register for
@@ -621,13 +659,18 @@
       var actionClass = hosted ? "cardact cardact--quiet" : "lahe-rail-btn";
       var foot = el("div", hosted ? "cardacts" : "lahe-rail-rowfoot");
       if (!hosted) foot.appendChild(el("span", "lahe-rail-state", ""));
-      var del = el("button", actionClass, "Delete");
+      var del = el("button", hosted ? "cardx" : actionClass, hosted ? "\u00d7" : "Delete");
       del.setAttribute("data-lahe-act", "delete");
       del.setAttribute("type", "button");
+      if (hosted) {
+        del.setAttribute("aria-label", "Delete this comment");
+        del.title = "Delete this comment";
+      }
       del.addEventListener("click", function () {
         comments.remove(id);
       });
-      foot.appendChild(del);
+      if (hosted) row.appendChild(del);
+      else foot.appendChild(del);
       row.appendChild(foot);
 
       // The box for another message, under the row's own actions. It is drawn
@@ -665,6 +708,10 @@
         if (!row && entry.gesture === gestures.GESTURE.MARK_READY) row = entry;
       });
       return (row && row.keys) || "Cmd-Enter";
+    }
+
+    function isHeld() {
+      return !!(store && reviewId && typeof store.isHeld === "function" && store.isHeld(reviewId));
     }
 
     function keepsDrafts() {
@@ -726,6 +773,7 @@
       send.setAttribute("type", "button");
       send.addEventListener("click", submit);
       send.title = "Send this message (" + sendKeys() + ")";
+      highlightModule.paintSendButton(send, isHeld(), "Send");
       acts.appendChild(send);
 
       box.appendChild(input);
@@ -766,6 +814,45 @@
         if (field) field.disabled = !!item[record.FIELD.REPLY];
         var send = add.querySelector(".lahe-rail-send");
         if (send) send.disabled = !!item[record.FIELD.REPLY];
+      }
+
+      // Once an agent has answered, Delete would take the whole exchange with
+      // it, and it sits above the answer where it reads as deleting that. The
+      // follow-up box is the way on from there.
+      var del = row.querySelector('[data-lahe-act="delete"]');
+      if (del && hosted) del.hidden = !!item[record.FIELD.REPLY];
+      // Send, on a draft with words in it, and only then: the comment box on
+      // the page has its own Send, and this one is for a draft whose box is
+      // closed or out of view. Added and taken away rather than hidden, so a
+      // card that cannot send carries no Send at all.
+      if (hosted) {
+        var wantSend = item[record.FIELD.STATE] === record.STATE.DRAFT && !!String(text || "").trim();
+        var sendBtn = row.querySelector('[data-lahe-act="send"]');
+        if (wantSend && !sendBtn) {
+          var id = item[record.FIELD.ID];
+          sendBtn = el("button", "cardact", "Send");
+          sendBtn.setAttribute("data-lahe-act", "send");
+          sendBtn.setAttribute("type", "button");
+          highlightModule.paintSendButton(sendBtn, isHeld(), "Send");
+          sendBtn.addEventListener("click", function () {
+            var handle = comments.boxFor(id) || comments.editInPlace(id, note);
+            if (handle && typeof handle.commit === "function") handle.commit();
+          });
+          row.querySelector(".cardacts").appendChild(sendBtn);
+        } else if (!wantSend && sendBtn) {
+          sendBtn.parentNode.removeChild(sendBtn);
+        }
+      }
+
+      var cap = row.querySelector(".lahe-rail-turn .turn__cap");
+      if (cap) {
+        var at = item[record.FIELD.UPDATED_AT] || item[record.FIELD.CREATED_AT] || null;
+        var time = cap.querySelector(".turn__time");
+        if (at && !time) {
+          time = el("time", "turn__time", "");
+          cap.appendChild(time);
+        }
+        overlayModule.setTurnTime(time, at);
       }
 
       var state = row.querySelector(".lahe-rail-state");
