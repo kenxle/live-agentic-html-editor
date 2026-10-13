@@ -1,6 +1,6 @@
 # Progress: Menu bar app
 
-**Where things are at 12:58 on October 13.** Both halves are on main: PR 1 ([#61](https://github.com/kenxle/live-agentic-html-editor/pull/61), the helper's summary) and PR 2 ([#62](https://github.com/kenxle/live-agentic-html-editor/pull/62), the icon, the install, Stop and Start), each reviewed, fixed, walked on a copy of your state folder and gated green. Idle cost is 0.73 s of processor time per 10 minutes for the app and its polls together, under the one-tab budget. The full gate on main is running now. **Two things are yours:** three small design calls under Needs your attention, and the real install on your Mac (`lahe install --menu-bar`, then one picture of the icon and its open menu), which I will not run for you.
+**Where things are at 13:15 on October 13.** Done and landed. PR 1 ([#61](https://github.com/kenxle/live-agentic-html-editor/pull/61), the helper's summary) and PR 2 ([#62](https://github.com/kenxle/live-agentic-html-editor/pull/62), the icon, the install, Stop and Start) are on main, and main is green on CI and on the full local gate (one Linux-only CI failure after the merge was fixed the same hour). Idle cost is 0.73 s of processor time per 10 minutes for the app and its polls together, under the one-tab budget; a question on a closed document reaches the icon in under a second. **Everything left is yours, under Needs your attention:** three small design calls, the real install on your Mac with one screenshot, the proposed lesson to review, and the cleanup batch to approve.
 
 **Docs:** [Crucible](00_crucible_menu_bar_app.html) · [Brief](01_brief_menu_bar_app.html) · [Architecture](02_architecture_menu_bar_app.html) · [Plan](03_plan_menu_bar_app.html) (each page carries its reviews at the bottom) · [PR 2 reviews](05_pr2_reviews_menu_bar_app.md)
 
@@ -37,7 +37,7 @@ The icon keeps the review layer's speech bubble. Main changed the browser tab's 
 
 | Agent or task | Doing | Started | Branch |
 |---|---|---|---|
-| Orchestrator | Main is green on CI and on the local gate at the merge; one more local gate on main's head; then the cleanup batch waits on your go | 2026-10-12 20:44 | `main` |
+| Orchestrator | Holding: everything left is yours (the three design calls, the install and screenshot, the lessons review, the cleanup batch) | 2026-10-12 20:44 | `main` |
 | Flow walker (Opus, independent) | Done at 12:51: V32 passes, V33 counts equal, one board row (a global `lahe status` slows the helper) and one note for Ken | 2026-10-13 12:27 | `feat/menu-bar-pr2` |
 | Builder: summary (Opus) | Done: fix round 2 (the helper's idle cost, unwatched replies) returned at 2026-10-13 11:36 and is merged into `feat/menu-bar-pr2` | 2026-10-12 22:46 | `feat/menu-bar-summary` |
 | Code review (Opus) | Done at 11:51: one important bug, one coverage gap, one rare bug; findings in the fix round | 2026-10-13 11:50 | `feat/menu-bar-pr2` |
@@ -60,8 +60,8 @@ The icon keeps the review layer's speech bubble. Main changed the browser tab's 
 | 5 Human review | done | 2026-10-12 |
 | 6 Implement | done | 2026-10-13 |
 | 7 Verify | done (both PRs reviewed, walked and gated) | 2026-10-13 |
-| 8 Ship and land | in progress (both PRs merged; main's gate running; your install and screenshot still to come) | 2026-10-13 |
-| 9 Cleanup | not started | |
+| 8 Ship and land | done for the code (both PRs merged, main green on CI and on the local gate); your install and screenshot are the last step | 2026-10-13 |
+| 9 Cleanup | in progress (lesson proposed, board rows written, docs landed; the deletion batch waits on your go) | 2026-10-13 |
 
 ## The record
 
@@ -129,6 +129,7 @@ To delete at cleanup, in one batch with your go:
 
 ## Log
 
+- 2026-10-13 13:15: the full local gate on main's head (`272129b0`, with the CI fix) is green: unit 2864 passed, 0 failed; browser 884 passed, 0 failed, 7 skipped; `check:menubar` 4 passed, 1 skipped; helpers 1 before and after. The feature's code is done and landed. Holding for your answers.
 - 2026-10-13 13:08: the full local gate on main at PR 2's merge (`2c913902`) is green: unit 2864 passed, 0 failed; browser 884 passed, 0 failed, 7 skipped; `check:menubar` with the app's live tests 4 passed, 1 skipped (launchd); helpers 1 before and after. One more full gate is running on main's head (`272129b0`), which carries the CI fix. A lesson is proposed in `docs/lessons/proposed/` (a back-to-back benchmark of a polled route measures only the warm path), with a pointer from STABLE_ADDRESSES.md's old "almost no CPU" sentence; the lessons review is yours when you want it.
 - 2026-10-13 13:01: main's CI run on the fix (`cd20d722`) is green. The full local gate on main is still running; one more runs on main's new head after it.
 - 2026-10-13 12:59: main's CI run on PR 2's merge failed on Linux: 3 of 2,862 unit tests (so you have an email). Two Stop-and-Start tests expected `gui/501` in a launchctl call while the start path read the uid from the install record, not from the caller, so the runner's uid 1001 appeared; and the test for a question written while no helper ran found it not counted, because the Linux runner's file system gave the reply file and the log the same time and the first-look rule asked for strictly newer. Both fixed in one commit on main (the caller's uid is used in every launchctl call; a tie counts, and folding a reply the log already holds changes nothing), with the three test files green here and the unit gate run before the push. Main's next CI run is the proof.
