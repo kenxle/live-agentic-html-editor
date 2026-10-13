@@ -2,9 +2,10 @@
 
 ## Progress
 
-**Where it stands:** done, and the close-out needs three answers from you.
-They are in [Cleanup decisions](#cleanup-decisions) at the bottom: two
-proposed lessons and one CLAUDE.md line. Last updated 2026-10-12, 10:35 PM.
+**Where it stands:** closed. Ken approved the three close-out answers and the
+deletion batch on 2026-10-13 (the outcomes are under
+[Cleanup decisions](#cleanup-decisions)). Nothing is waiting on you.
+Last updated 2026-10-13, 9:32 AM.
 
 - Post-merge `npm run gate` on main: lint passed, bundle check passed, unit
   2724 passed and 0 failed, Chromium 882 passed and 0 failed.
@@ -15,14 +16,20 @@ proposed lessons and one CLAUDE.md line. Last updated 2026-10-12, 10:35 PM.
   is new, and a fresh install no longer gets the two-hour number.
 - The Library "Open" test that failed once in CI was a same-millisecond race
   that another agent fixed in PR #58 (d36f7624); its board row is marked done.
-- Lesson proposed: `docs/lessons/proposed/a-fresh-worktree-under-the-clone-runs-the-suite-without-its-own-node-modules.md`.
+- Lessons: the screenshot lesson is live at
+  [docs/lessons/testing](../../lessons/testing/the-browser-suite-rewrites-committed-screenshots-under-docs-features.md).
+  The fresh-worktree trap is now a rule in CLAUDE.md ("Running the gate"), and
+  the rail cleanup close-out had already promoted its lesson to
+  [docs/lessons/testing](../../lessons/testing/a-fresh-worktree-under-the-clone-runs-the-suite-without-its-own-node-modules.md)
+  on Ken's yes there, so both exist.
 - Review session closed. Ken's comments and the replies are in the
   [review log](01_spec_hook_indefinite_review_log.md).
 
-**To delete at cleanup:** `.claude-pr-body-202610122118.md` in the worktree
-root (the PR body scratch file), and the worktree
+**Deleted at cleanup (batch approved 2026-10-13):** the PR body scratch file
+`.claude-pr-body-202610122118.md`, the worktree
 `.claude/worktrees/hook-indefinite` with its local branch `hook-indefinite`
-(the remote branch is already deleted).
+(the remote branch was already deleted), and the promoted proposal file
+`docs/lessons/proposed/the-browser-suite-rewrites-committed-screenshots-under-docs-features.md`.
 
 **Summary.** The Stop hook still tells a Claude Code agent to relaunch the
 monitor with a two-hour timeout. The skill, the contract and `docs/CLI.md` were
@@ -118,6 +125,13 @@ in the hook's comment that 24 hours is the skill's number rather than a Claude
 Code limit. Rejected: nothing.
 
 ## Cleanup decisions
+
+**Outcome (Ken approved all three in chat, 2026-10-13):** the CLAUDE.md line is
+in, the screenshot lesson is promoted, and the deletion batch ran. Lesson 1 was
+not discarded: the rail cleanup close-out had promoted the same proposal to live
+the evening before on Ken's yes there, so the trap sits both in CLAUDE.md and in
+`docs/lessons/testing/`. Removing the live lesson is a deletion for Ken to call.
+The recommendations below are kept as written for the record.
 
 Answer on each card: promote, discard, or merge for a lesson; yes or no for
 the CLAUDE.md line. Nothing is deleted until you approve the batch at the end.
