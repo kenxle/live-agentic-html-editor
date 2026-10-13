@@ -1514,6 +1514,112 @@ details.fold .fold-body{padding-top:var(--section-gap-narrow);padding-bottom:var
   overflow-wrap:anywhere;
 }
 
+/* ---------- links row: the documents of one feature ----------
+   A small label, then the sibling documents separated by a centred dot, between
+   two hairlines. The current page is a span with aria-current, in plain ink
+   and not underlined; a page that does not exist yet is a span.disabled in
+   faint text. Items after the first item get the dot from ::before. */
+
+.toplinks{
+  display:flex;
+  flex-wrap:wrap;
+  align-items:baseline;
+  gap:var(--s1) 0;
+  margin-block:var(--s4) var(--s2);
+  padding-block:var(--s3);
+  border-top:var(--line);
+  border-bottom:var(--line);
+  font-size:var(--text-small);
+}
+.toplinks .toplinks-label{
+  font-family:var(--font-display);
+  font-weight:var(--w-display);
+  font-size:var(--text-meta);
+  color:var(--on-surface-faint);
+  margin-right:var(--s3);
+}
+.toplinks > :is(a,span):not(.toplinks-label) ~ :is(a,span)::before{
+  content:"\00B7";
+  display:inline-block;      /* so the dot is not underlined with the link it sits in */
+  color:var(--on-surface-faint);
+  margin-inline:var(--s2);
+  text-decoration:none;
+}
+.toplinks a:hover{text-decoration-thickness:2px}
+.toplinks [aria-current="page"]{
+  color:var(--on-surface);
+  font-weight:var(--w-display);
+  text-decoration:none;
+}
+.toplinks .disabled{color:var(--on-surface-faint)}
+
+/* ---------- contents list: the list inside a folded section ----------
+   Styles only the list. The fold around it is the folded section above. No
+   bullets, nested levels indented, links in body ink and not underlined until
+   hover. */
+
+.contents-list{font-size:var(--text-small);line-height:1.5}
+.contents-list ul{list-style:none;padding-left:0;margin:0}
+.contents-list ul ul{padding-left:var(--s4);margin-top:var(--s1)}
+.contents-list li{margin-bottom:var(--s1);padding-left:0;font-size:inherit;line-height:inherit}   /* undo the house list item, which a class-free ul gets */
+.contents-list li::before{content:none}   /* and its sage dot */
+.contents-list a{color:var(--on-surface);text-decoration:none}
+.contents-list a:hover{color:var(--link);text-decoration:underline}
+
+/* ---------- cross-reference line ----------
+   One line pointing at the place a point is argued in full: a light accent
+   tint, "See" with an arrow in the display face, then the link in bold ink.
+   As a body child the column rule sets its side inset, so only its block
+   padding is set here. */
+
+.xref{
+  font-size:var(--text-small);
+  line-height:1.5;
+  background:var(--accent-tint);
+  border-radius:var(--r);
+  padding:var(--s3) var(--s4);
+  margin-block:0 var(--block-gap);
+  color:var(--on-surface-soft);
+}
+.xref::before{
+  content:"\21B3  See";
+  font-family:var(--font-display);
+  font-weight:var(--w-display);
+  font-size:var(--text-meta);
+  color:var(--accent);
+  margin-right:var(--s2);
+}
+.xref > *{display:inline;margin:0}
+.xref a{font-weight:var(--w-display);color:var(--on-surface)}
+
+/* ---------- status dots ----------
+   A small round dot and one short word, for a verdict in a table cell or a
+   line: Accepted, Rejected, Deferred. The dot takes the text colour, so a
+   variant sets only the colour. Measured as text on white:
+     (none)               ink                 16.68:1
+     .status-dot--sage    --mark, the darkened sage  4.67:1
+     .status-dot--purple  --emphasis  11.87:1
+     .status-dot--faint   --on-surface-faint  5.56:1 */
+
+.status-dot{
+  font-family:var(--font-display);
+  font-weight:var(--w-display);
+  white-space:nowrap;
+}
+.status-dot::before{
+  content:"";
+  display:inline-block;
+  width:7px;       /* px: the dot is drawn geometry, a circle of 7px */
+  height:7px;      /* px: the dot's drawn size */
+  border-radius:var(--r-pill);
+  background:currentColor;
+  margin-right:var(--s2);
+  vertical-align:0.12em;
+}
+.status-dot--sage{color:var(--mark)}
+.status-dot--purple{color:var(--emphasis)}
+.status-dot--faint{color:var(--on-surface-faint)}
+
 /* ---------- bands: full-bleed, one per document at most ---------- */
 
 .band{background:var(--structure);color:var(--on-structure);margin-top:var(--section-gap)}
@@ -1579,6 +1685,12 @@ body > footer a{color:var(--on-surface)}
   .image-cards,.image-cards--3{grid-template-columns:minmax(0,1fr)}
   .gallery--3{grid-template-columns:repeat(2,minmax(0,1fr))}
   .icon-set{grid-template-columns:repeat(3,minmax(0,1fr))}
+
+  /* The links row: each item is a 44px-tall tap target. */
+  .toplinks > :is(a,span):not(.toplinks-label){
+    display:inline-block;
+    line-height:44px;   /* px: the tap-target floor; a line box, so the dot before an item is not underlined with its link */
+  }
 
   /* The large stat stacks: label, number, meta, the way a small tile reads. */
   .stat--large{grid-template-columns:minmax(0,1fr);grid-template-areas:"label" "value" "meta";padding:var(--gutter)}
