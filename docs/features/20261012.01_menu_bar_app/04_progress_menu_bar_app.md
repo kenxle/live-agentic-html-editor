@@ -1,6 +1,6 @@
 # Progress: Menu bar app
 
-**Phase 6, building.** You approved the plan at 20:35 and every question is settled. Step 0 is done (the wire in CONTRACTS.md, fixtures, proof vectors, the gate script; unit gate 2724 passed, 0 failed) and the three builders are at work in their own worktrees. Nothing needs you right now. Last updated 2026-10-12 20:46.
+**Phase 6, building.** You approved the plan at 20:35 and every question is settled. Step 0 is done (the wire in CONTRACTS.md, fixtures, proof vectors, the gate script; unit gate 2724 passed, 0 failed) and the three builders are at work in their own worktrees. Nothing needs you right now. Last updated 2026-10-12 20:44.
 
 **Docs:** [Crucible](00_crucible_menu_bar_app.html) · [Brief](01_brief_menu_bar_app.html) · [Architecture](02_architecture_menu_bar_app.html) · [Plan](03_plan_menu_bar_app.html) (each page carries its reviews at the bottom)
 
@@ -12,10 +12,10 @@ Nothing right now. The one thing coming later: the menu bar screenshots. The cap
 
 | Agent or task | Doing | Started | Branch |
 |---|---|---|---|
-| Orchestrator | Watching the three builders; integrates and runs the browser suite at the checkpoint | 2026-10-12 20:46 | `feat/menu-bar` |
-| Builder: summary (Opus) | Step 1: the read mark's round trip, the one-review summary, the summary and its cache, the two routes and the signed auth mode | 2026-10-12 20:46 | `feat/menu-bar-summary` |
-| Builder: macapp (Opus) | Step 2: the Swift app, its debug modes, the fake helper | 2026-10-12 20:46 | `feat/menu-bar-macapp` |
-| Builder: install (Opus) | Step 3: the build recipe and login item, `lahe install --menu-bar`, rebuild on change, Stop holds | 2026-10-12 20:46 | `feat/menu-bar-install` |
+| Orchestrator | Watching the three builders; integrates and runs the browser suite at the checkpoint | 2026-10-12 20:44 | `feat/menu-bar` |
+| Builder: summary (Opus) | Step 1: the read mark's round trip, the one-review summary, the summary and its cache, the two routes and the signed auth mode | 2026-10-12 20:44 | `feat/menu-bar-summary` |
+| Builder: macapp (Opus) | Step 2: the Swift app, its debug modes, the fake helper | 2026-10-12 20:44 | `feat/menu-bar-macapp` |
+| Builder: install (Opus) | Step 3: the build recipe and login item, `lahe install --menu-bar`, rebuild on change, Stop holds | 2026-10-12 20:44 | `feat/menu-bar-install` |
 
 ## Phases
 
@@ -72,7 +72,7 @@ Not shipped yet.
 
 ## Log
 
-- 2026-10-12 20:46: Step 0 committed (`13833038`). Three builders dispatched, one per workstream, each in its own worktree cut from that commit.
+- 2026-10-12 20:44: Step 0 committed (`13833038`). Three builders dispatched, one per workstream, each in its own worktree cut from that commit.
 - 2026-10-12 20:40: Plan approved. Your review changed three rules: "read" is the rail's own "1 new" mark, posted to the store, with no logic of its own and a question treated like any reply; Stop Lahe holds until you start it, and agents' commands fail plainly meanwhile; every document counts, open or not, with open ones marked in the menu. Main merged into the branch (Mark as done and the read mark are what the design now builds on). Step 0 started.
 - 2026-10-12 10:37: Plan review returned 23 findings (6 high), all accepted. The most important: a background tab could have marked answers as seen when it reloaded; a test step would have stopped your live helper (tests now use their own labels and never touch your login items); the signed-request format is now written down exactly, with test vectors, so the Node and Swift halves cannot drift. Full set built and ready for you.
 - 2026-10-12 10:26: Security review returned 7 findings. The one real hole: the app would have sent its secret to any program sitting on the helper's port, which Stop leaves free. Fixed in the design: the app signs requests instead of sending the secret, and trusts only signed answers. The other five fixes are accepted too. One (whether Stop should hold while agents are connected) is now a question for you. The CLI has the same secret weakness today; filed on the board. Plan drafted (3 parallel workstreams, 2 PRs, 34 checks) and sent to the plan reviewer.
