@@ -517,10 +517,13 @@ async function startThroughItem(record, isUp, options) {
   var opts = options || {};
   var waitMs = typeof opts.waitMs === "number" ? opts.waitMs : START_WAIT_MS;
   refuseWhileStopped(record.state_dir);
-  var commands = startCommands(record);
+  // One uid for every launchctl call here: the caller's, else the record's,
+  // else this process's. The first kickstart used to read only the record,
+  // so a test passing its own uid saw the machine's in that call.
+  var uid = typeof opts.uid === "number" ? opts.uid : typeof record.uid === "number" ? record.uid : process.getuid();
+  var commands = startCommands(Object.assign({}, record, { uid: uid }));
   var ran = await runCommands(commands, opts.runner);
   if (!ran.ok && record.system === "macos" && ran.notLoaded) {
-    var uid = typeof opts.uid === "number" ? opts.uid : process.getuid();
     var label = knownLabel(record.label);
     var plistPath = path.join(opts.home || os.homedir(), "Library", "LaunchAgents", label + ".plist");
     if (!plistMatchesInstall(record, plistPath, opts.home || os.homedir(), label)) {

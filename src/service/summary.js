@@ -415,9 +415,12 @@ function createSummary(options) {
    * one poll (brief R3: 10 seconds), and only for a review with an item in
    * state ready (a reply to any other item is refused anyway): a stat of the
    * review's folder and of each reply file it holds, and nothing read unless
-   * one moved. On the first look the files are folded when one is newer than
-   * the log, which is what a reply written while no helper ran looks like;
-   * after that, when their signature moves.
+   * one moved. On the first look the files are folded when one is at least as
+   * new as the log, which is what a reply written while no helper ran looks
+   * like; a tie counts, because a file system with coarse timestamps (the
+   * Linux CI runner) gives a reply written right after the log the same
+   * time, and folding a reply the log already holds changes nothing. After
+   * that, when their signature moves.
    */
   function foldWaitingReplies() {
     if (!foldReplies) return;
@@ -426,7 +429,7 @@ function createSummary(options) {
       var sig = replySignature(id, held);
       replyState[id] = sig;
       if (!sig.key) return;
-      var due = held === undefined ? sig.newestMs > statMtime(stateDir.eventsPath(dir, id)) : held.key !== sig.key;
+      var due = held === undefined ? sig.newestMs >= statMtime(stateDir.eventsPath(dir, id)) : held.key !== sig.key;
       if (!due) return;
       try {
         foldReplies(id);
