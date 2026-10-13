@@ -404,7 +404,7 @@ work.
 | `item.deleted` | The reviewer deleted their own outstanding work |
 | `item.reopened` | `handled` back to `ready` (R38) |
 | `item.closed` | `{item, rev}`, no record. The reviewer chose "Mark as done" on the card's state chip. The projection moves the item to `handled` with `closed_by: "reviewer"` only when it is still `ready` or `not_handled` at exactly that `rev`; a stale or misplaced close is dropped and reported, like a stale reply. The page check never runs on it, and every later reply to the item is refused. review.json shows it as `closed_by_reviewer: true` |
-| `reply.seen` | `{item, stamp}`, no record. The rail marked an agent reply read: the card was opened, so its "1 new" tag dropped. `stamp` is `record.replyStamp(item)` (the reply's `at`, then `@`, then the revision it answered), a string of at most 64 characters. The projection records it on the item as `reply_seen` only when it names the item's current reply; a stamp for another reply, an item the review does not hold, or a non-string is dropped and reported, like a stale reply. Not a lifecycle move: the item's state, revision and reply are untouched, the drain does not list it, and no agent acts on it. The page adopts a polled `reply_seen` that matches the current reply into its own marks, so a reply read in one browser reads as read in every browser |
+| `reply.seen` | `{item, stamp}`, no record. The rail marked an agent reply read: the card was opened, so its "1 new" tag dropped. `stamp` is `record.replyStamp(item)` (the reply's `at`, then `@`, then the revision it answered), a string of at most 64 characters. The projection records it on the item as `reply_seen` only when it names the item's current reply; a stamp for another reply, an item the review does not hold, or a non-string is dropped and reported, like a stale reply. Not a lifecycle move: the item's state, revision and reply are untouched, the drain does not list it, and no agent acts on it. The envelope carries no `rev` (an accepted event with a rev marks the item acknowledged at it, which a follow-up typed at that revision must not lose to). `replies.poll` hands the page every `reply.seen` beside the folds, and the page adopts one that names its record's current reply into its own marks, posting nothing back, so a reply read in one browser reads as read in every browser. Reading a reply is not work on the document: the Library's `last` skips it (`CATALOG.NOT_WORK_EVENTS`) |
 | `reply.folded` | An agent's reply line was folded into the log |
 | `reply.rejected` | A reply line could not be read. Names the file, the line number, and the reason |
 | `review.archived` | End review |
@@ -1115,8 +1115,11 @@ with every intermediate value; `auth.js`, the fake helper and the Swift self-tes
 **Versioning.** The app sends the `summary_version` it was built for, as `?v=1` on `summary.read` (so
 the signature covers it) and as `summary_version` in `summary.open`'s body. A mismatch answers
 `409 {error: {code: "SUMMARY_VERSION", detail}}`, signed. A refused proof answers `401
-{error: {code: "AUTH_REFUSED", detail}}`, signed with the key when the helper has one. Error bodies
-are the helper's usual `{error: {code, detail}}`.
+{error: {code: "AUTH_REFUSED", detail}}`, signed with the key when the helper has one; so does every
+other refusal on these routes (a Sec-Fetch header, an Origin on `summary.open`, the raw secret, a
+preflight), with a `detail` naming the check, and the helper log names it too. A Host that is not a
+loopback name never reaches them: Host dispatch answers 400 first. Error bodies are the helper's usual
+`{error: {code, detail}}`, exactly those two fields.
 
 **`summary.read` answers** this shape, and `test/fixtures/menubar/summary.json` is its reference
 (`summary_empty.json` and `summary_many.json` are the empty and the overflowing cases). A test
@@ -1128,22 +1131,23 @@ compares nested key paths and value types with the fixture in both directions.
 | `generated_at` | ISO time | when this answer was built |
 | `helper` | `{version, started_at, always_on}` | the helper's version string, its start time, and whether it runs from a login item |
 | `waiting_on_you` | `{count, documents}` | `count` is `documents.length`, never capped. Each document: `review`, `title`, `path_hint`, `open` (a window holder is current), `questions` (unread replies whose status is `question`), `unread` (every unread reply, questions included), `newest_at` (the newest unread reply's time). Open documents first, then newest first |
-| `waiting_on_agents` | `{count, more, documents}` | `count` is the sum of `waiting` over every document, the Library's own total; `documents` is at most 8, newest first, with `more` the rest. Each: `review`, `title`, `path_hint`, `waiting` |
+| `waiting_on_agents` | `{count, more, documents}` | `count` is the sum of `waiting` over every document not retired, the Library's own total less retired reviews (a retired review is in no section); `documents` is at most 8, newest first, with `more` the rest. Each: `review`, `title`, `path_hint`, `waiting` |
 | `open_documents` | `{count, more, items}` | reviews with a current window holder, `focused` from the holder's own quiet flag; at most 8 items, `more` the rest |
-| `sessions` | `{open, connected: {count, more, items}}` | `open` counts sessions not closed. `connected` lists sessions whose agent is `listening` (a live monitor) or `working` (a `lahe` command in the last few minutes), the Library's test; at most 8 items, `more` the rest. Each: `session`, `name` (the Library rename, else the newest review's title), `presence`, `last_heard_at`, `review` (its most recent review, or null) |
+| `sessions` | `{open, connected: {count, more, items}}` | `open` counts sessions not closed. `connected` lists sessions whose agent is `listening` (a live monitor) or `working` (a `lahe` command in the last few minutes), the Library's test; at most 8 items, most recently heard first, `more` the rest. Each: `session`, `name` (the Library rename, else the newest review's title, else the session's own name, else null), `presence`, `last_heard_at`, `review` (its most recent review, or null) |
 | `recent` | `{more, items}` | the Library's order, at most 8 items, `more` the rest. Each: `review`, `title`, `path_hint`, `last` |
-| `library_url` | string | the Library's printed address, with the pages port when the port-80 forward is not proved |
+| `library_url` | string | the Library's printed address, with the pages port when the port-80 forward is not proved, and its page path: `http://library.lahe.localhost:1483/catalog`. The Library's host answers no other path |
 
 Every `title` and `path_hint` has control characters (U+0000 to U+001F, U+007F) and Unicode format
 characters (category Cf, the bidirectional overrides among them) removed, and is cut at 120 and 200
-characters. `path_hint` starts with `~` or is the review's own hint; never an absolute path. No comment
+characters. `path_hint` is the document's path (or a folded folder's) with the home folder written as `~`; a document outside the home folder shows only its file name. Never an absolute path. Retired reviews are in no section; ended reviews and reviews whose file is gone never wait on you. No comment
 text, no token, no session secret, anywhere in the answer. The day-one cutoff lives in
 `<state>/summary.json`, `{version: 1, seeded_at}`, written on the first `summary.read`; a reply older
 than `seeded_at` is never unread.
 
 **`summary.open`** takes `{review, summary_version}` and answers `{url}`: the address catalog Open
 would use, found with `handoff: false`, so it never queues a request for an agent. A row only an agent
-can serve answers `{url: null}`. It writes nothing but what catalog Open writes.
+can serve answers `{url: null}`, as does any review catalog Open refuses as not openable (a missing
+file, a review the Library does not list). It writes nothing but what catalog Open writes.
 
 **Stop holds.** The menu's Stop writes `<state>/stopped.json`, `{by: "menu bar", at}`, then unloads the
 helper's login item. While that file stands, `login_item.startThroughItem` throws with one line naming

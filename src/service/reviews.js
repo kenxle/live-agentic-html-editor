@@ -1529,7 +1529,10 @@ function createReviews(options) {
     return {
       window_id: holder.window_id,
       since: holder.since,
-      stale: holderIsStale(holder)
+      stale: holderIsStale(holder),
+      // The page said it has no focus (the slow beat). The menu bar shows an
+      // open document as focused or not from this.
+      quiet: holder.quiet === true
     };
   }
 

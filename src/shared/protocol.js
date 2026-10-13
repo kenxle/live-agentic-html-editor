@@ -175,7 +175,13 @@
     // The CLI secret (stable addresses): read from an owner-only file in the
     // state folder and sent only by the CLI on site.bind. A page can never read
     // it, so a page holding a review token still cannot name a file to serve.
-    CLI_SECRET: "x-lahe-cli-secret"
+    CLI_SECRET: "x-lahe-cli-secret",
+    // The signed-request wire (AUTH.CLI_PROOF): the menu bar app proves it can
+    // read the CLI secret without ever sending it. See PROOF below.
+    PROOF_TS: "x-lahe-proof-ts",
+    PROOF_NONCE: "x-lahe-proof-nonce",
+    PROOF: "x-lahe-proof",
+    PROOF_REPLY: "x-lahe-proof-reply"
   };
 
   var CLIENT_LAYER = "layer";
@@ -192,7 +198,7 @@
   // Auth
   // ---------------------------------------------------------------------------
   //
-  // Two modes, and that is the whole model. There is no session exchange and no
+  // These modes are the whole model. There is no session exchange and no
   // machine-wide run token: both belonged to the archived send model.
 
   var AUTH = {
@@ -209,8 +215,38 @@
     // The CLI secret (stable addresses). Only site.bind takes it, and that
     // route also refuses any request carrying an Origin header, so only a
     // process that can read the state folder's owner-only file can bind.
-    CLI_SECRET: "cli_secret"
+    CLI_SECRET: "cli_secret",
+    // The CLI proof (the menu bar app): a request signed with HMAC-SHA256
+    // keyed by the CLI secret, within PROOF.WINDOW_MS, with a nonce never seen
+    // before, and an answer signed back. The secret itself never travels, so
+    // a program squatting on the port learns one used proof and nothing else.
+    // No browser can send one: the routes refuse any Sec-Fetch header.
+    CLI_PROOF: "cli_proof"
   };
+
+  // The signed-request wire, spelled once (docs/CONTRACTS.md, "The summary
+  // routes and the signed-request wire"). The signed string is these lines
+  // joined by a single newline, no trailing newline:
+  //
+  //   request  REQUEST_PREFIX, method, path with its query exactly as sent,
+  //            timestamp (Unix ms, decimal), nonce, hex SHA-256 of the body
+  //   answer   REPLY_PREFIX, the request's nonce, status code, hex SHA-256 of
+  //            the response body
+  var PROOF = {
+    REQUEST_PREFIX: "lahe-proof-v1",
+    REPLY_PREFIX: "lahe-proof-reply-v1",
+    // A timestamp this far from the helper's clock, either way, is refused.
+    WINDOW_MS: 30 * 1000,
+    TS_PATTERN: /^[0-9]{1,16}$/,
+    // 16 random bytes, as lowercase hex.
+    NONCE_PATTERN: /^[0-9a-f]{32}$/,
+    // A lowercase hex HMAC-SHA256.
+    MAC_PATTERN: /^[0-9a-f]{64}$/
+  };
+
+  // The version of the summary.read answer. The app sends the one it was
+  // built for; any other is a signed 409 SUMMARY_VERSION.
+  var SUMMARY_VERSION = 1;
 
   // Review ids and agent names are path components, so they are constrained to
   // a plain safe set. One regex, used for both.
@@ -635,8 +671,39 @@
     }
   ];
 
+  // The menu bar's two routes (docs/features/20261012.01_menu_bar_app). Read by
+  // a program the person runs, never by a page: the CLI proof, every Sec-Fetch
+  // header refused, never on the Library's host. `refuse_origin` turns away
+  // any Origin header as well.
+  var SUMMARY_ROUTES = [
+    {
+      name: "summary.read",
+      method: "GET",
+      path: BASE + "/summary",
+      auth: AUTH.CLI_PROOF,
+      mutating: false,
+      why:
+        "the menu bar app's poll: what is waiting on the reviewer, what is waiting on agents, open documents, " +
+        "connected sessions and recent documents, with titles and ~ paths and never comment text. ?v=<summary_version>",
+      response: "docs/CONTRACTS.md, the summary.read table; test/fixtures/menubar/summary.json"
+    },
+    {
+      name: "summary.open",
+      method: "POST",
+      path: BASE + "/summary/open",
+      auth: AUTH.CLI_PROOF,
+      mutating: true,
+      refuse_origin: true,
+      why:
+        "a click on a menu row: the address catalog Open would use, found with no hand-off, so it never queues " +
+        "a request for an agent",
+      request: "{review, summary_version}",
+      response: "{url} or {url: null} for a row only an agent can serve"
+    }
+  ];
+
   function route(name) {
-    var lists = [ROUTES, CATALOG_ROUTES, SITE_ROUTES];
+    var lists = [ROUTES, CATALOG_ROUTES, SITE_ROUTES, SUMMARY_ROUTES];
     for (var l = 0; l < lists.length; l += 1) {
       for (var i = 0; i < lists[l].length; i += 1) {
         if (lists[l][i].name === name) return lists[l][i];
@@ -682,7 +749,10 @@
     TOKEN: "token",
     ORIGIN: "origin",
     // Catalog routes only (see CATALOG_ROUTES[].checks.sec_fetch_site).
-    SEC_FETCH_SITE: "sec_fetch_site"
+    SEC_FETCH_SITE: "sec_fetch_site",
+    // The summary routes only (AUTH.CLI_PROOF).
+    SEC_FETCH: "sec_fetch",
+    PROOF: "proof"
   };
 
   var CHECKS = [
@@ -722,6 +792,20 @@
       why:
         "catalog routes only. A document under review on another loopback port sends same-site, and it is the page " +
         "most likely to run a script the reviewer did not write, so the Library's API takes exactly same-origin"
+    },
+    {
+      name: CHECK.SEC_FETCH,
+      code: "AUTH_REFUSED",
+      why:
+        "summary routes only. Current browsers send Sec-Fetch-Site, -Mode or -Dest on every request to a loopback " +
+        "address and the menu bar app sends none, so any of them means a page is asking"
+    },
+    {
+      name: CHECK.PROOF,
+      code: "AUTH_REFUSED",
+      why:
+        "summary routes only. A request signed with the CLI secret, within the window, with a nonce not seen in " +
+        "it, compared in constant time. The raw secret header is refused: it must never travel"
     }
   ];
 
@@ -859,7 +943,10 @@
     PROTO_NO_AGENT: 409,
     PROTO_CONFIRM_NEEDED: 409,
     PROTO_NO_LAUNCH: 409,
-    PROTO_CATALOG_UNREADABLE: 500
+    PROTO_CATALOG_UNREADABLE: 500,
+    // The summary routes' two refusals, both signed.
+    AUTH_REFUSED: 401,
+    SUMMARY_VERSION: 409
   };
 
   function statusFor(code) {
@@ -975,6 +1062,11 @@
     // no record, and the projection applies it only when the item is still
     // outstanding at exactly that revision (lifecycle.canClose).
     ITEM_CLOSED: "item.closed",
+    // {item, stamp}. The rail marked an agent reply read (its card was
+    // opened), naming the reply by record.replyStamp. No record, and not a
+    // lifecycle move: the projection records it on the item as reply_seen only
+    // when it names the item's current reply, and no agent acts on it.
+    REPLY_SEEN: "reply.seen",
     REPLY_FOLDED: "reply.folded",
     REPLY_REJECTED: "reply.rejected",
     REVIEW_ARCHIVED: "review.archived",
@@ -985,9 +1077,16 @@
   };
   // The Library's `last` is the time inside the newest event that is work on
   // the document, by the reviewer or the agent. These are not: an Open's
-  // origin swap, and a reviewer's visit. Compaction rewrites the log without
-  // adding an event, so the file's modified time is never read for `last`.
-  CATALOG.NOT_WORK_EVENTS = [EVENT.ORIGIN_REGISTERED, EVENT.ORIGIN_REMOVED, EVENT.PAGE_VISITED, EVENT.REVIEW_ADOPTED];
+  // origin swap, a reviewer's visit, and a reviewer reading a reply.
+  // Compaction rewrites the log without adding an event, so the file's
+  // modified time is never read for `last`.
+  CATALOG.NOT_WORK_EVENTS = [
+    EVENT.ORIGIN_REGISTERED,
+    EVENT.ORIGIN_REMOVED,
+    EVENT.PAGE_VISITED,
+    EVENT.REVIEW_ADOPTED,
+    EVENT.REPLY_SEEN
+  ];
 
 
   // Closed. The projector, the merge rule, and reply folding all switch on this
@@ -2125,6 +2224,9 @@
     siteOrigin: siteOrigin,
     siteNameFromOrigin: siteNameFromOrigin,
     SITE_ROUTES: SITE_ROUTES,
+    SUMMARY_ROUTES: SUMMARY_ROUTES,
+    PROOF: PROOF,
+    SUMMARY_VERSION: SUMMARY_VERSION,
 
     CLI_EXIT: CLI_EXIT,
 
