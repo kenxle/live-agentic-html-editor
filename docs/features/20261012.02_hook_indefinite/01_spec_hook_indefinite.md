@@ -1,5 +1,19 @@
 # Spec: the Stop hook says one launch waits until there is work
 
+## Progress
+
+**Where it stands:** built and reviewed, waiting on the full gate before the
+PR opens. Last updated 2026-10-12, 9:12 PM.
+
+- Done: spec approved on this page; hook, test, diagram, CLI doc and skill
+  pitfall changed; skill reinstalled; unit suite 2724 passed, 0 failed; code
+  review said merge; branch `hook-indefinite` pushed; board row added.
+- Running: `npm run gate` (lint, bundle check, unit, Chromium) on the branch.
+- Next: read the gate counts, open the PR with them in the body, wait for
+  Ken's approval on the PR, merge, rerun the gate on main, then
+  `npm run install-skills` from the main clone so the installed hook points at
+  the new code (the worktree run skipped the hook step on purpose).
+
 **Summary.** The Stop hook still tells a Claude Code agent to relaunch the
 monitor with a two-hour timeout. The skill, the contract and `docs/CLI.md` were
 updated on 2026-10-11 to say one background launch waits until there is work,
