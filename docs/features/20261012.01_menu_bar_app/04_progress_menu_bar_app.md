@@ -1,6 +1,6 @@
 # Progress: Menu bar app
 
-**Where things are at 22:46.** The walk on a copy of your state folder found two real problems, both being fixed before PR 2: the idle cost is too high (V18 fails: each poll costs the helper about 47 ms of processor time, and the app itself about 10 ms, against a budget of one open tab), and a question an agent leaves on a document no page is open on never reaches the icon until something opens that document. PR 1 ([#61](https://github.com/kenxle/live-agentic-html-editor/pull/61), invisible, nothing polls it yet) still merges once its gate is green; the fixes land with PR 2. Nothing needs you now.
+**Where things are at 00:00 on October 13.** PR 1 ([#61](https://github.com/kenxle/live-agentic-html-editor/pull/61), the helper's half, invisible on its own) is merged and green on main. The walk on a copy of your state folder found two real problems, both being fixed before PR 2: the idle cost was too high (V18: each poll cost the helper about 47 ms of processor time and the app about 10 ms, against a budget of one open tab), and a question an agent leaves on a document no page is open on never reached the icon until something opened that document. The app's side is fixed and merged (about 1.5 ms per poll now). The helper's side is being measured. PR 2 opens after that and one full gate. Nothing needs you now.
 
 **Docs:** [Crucible](00_crucible_menu_bar_app.html) · [Brief](01_brief_menu_bar_app.html) · [Architecture](02_architecture_menu_bar_app.html) · [Plan](03_plan_menu_bar_app.html) (each page carries its reviews at the bottom)
 
@@ -24,9 +24,9 @@ The icon keeps the review layer's speech bubble. Main changed the browser tab's 
 
 | Agent or task | Doing | Started | Branch |
 |---|---|---|---|
-| Orchestrator | PR 1 open, watching CI; then PR 2's full gate, the walk on a copy of the state folder, and PR 2 | 2026-10-12 20:44 | `feat/menu-bar` |
-| Builder: summary (Opus) | Done: returned and merged at 2026-10-12 21:20 | 2026-10-12 20:44 | `feat/menu-bar-summary` |
-| Builder: macapp (Opus) | Done: returned at 2026-10-12 21:10. Waiting for summary before the merge | 2026-10-12 20:44 | `feat/menu-bar-macapp` |
+| Orchestrator | PR 1 landed. Waiting on the helper's fix round, then PR 2's full gate and PR 2 | 2026-10-12 20:44 | `feat/menu-bar` |
+| Builder: summary (Opus) | Fix round 2 (the helper's idle cost, unwatched replies): measuring before and after | 2026-10-12 22:46 | `feat/menu-bar-summary` |
+| Builder: macapp (Opus) | Done: fix round 2 (the app's idle cost) returned at 2026-10-13 00:00 and is merged into `feat/menu-bar-pr2` | 2026-10-12 22:46 | `feat/menu-bar-macapp` |
 | Builder: install (Opus) | Done: returned at 2026-10-12 21:06. Waiting for the other two before the merge | 2026-10-12 20:44 | `feat/menu-bar-install` |
 
 ## Phases
@@ -86,6 +86,7 @@ To delete at cleanup, in one batch with your go:
 - Main after PR 1 (`85c8be9d`), full gate in its own worktree: unit 2783 passed, 0 failed; browser 884 passed, 0 failed, 7 skipped; one helper before and after.
 - PR 2 integration (`feat/menu-bar-pr2`, `10067c50`): `npm run gate:unit` 2831 passed, 0 failed; `npm run check:menubar` built `Lahe.app` through the real recipe in 7.4 seconds and the app's self-test passed 84 of 84; no helper or launchd job left behind. The app's own four tests against a test build and the fake helper: 4 passed, 0 failed, including Stop and Start on a `lahe-test` launchd job; no job or plist left behind.
 - Checkpoint 1 after the fix round (`77ad1ed4`): the browser suite alone, Chromium: 884 passed, 0 failed, 7 skipped, in 7.2 minutes.
+- **V18, the app's side, after its fix round (`538ecc0b`), 300 idle seconds of the test build per run, each before-and-after pair run side by side under load from other agents:** on the plain fixture, 0.33 s of processor time before and 0.09 s after (1.5 ms per poll, 0.18 s per 10 minutes); on a made-up state folder shaped like yours (`service.json` at 187 KB with 700 reviews, answer times changing on every poll) 0.58 s before and 0.11 s after (1.83 ms per poll, 0.22 s per 10 minutes). The before figure on the realistic folder matches the walk's 1.18 s per 10 minutes. What changed: `service.json` is parsed only when its size, time or inode changes; an unchanged answer is not decoded, drawn or rebuilt; the icon redraws only when its look changes; the menu is built just before it opens; each request is one plain HTTP/1.0 exchange over a socket instead of URLSession; hex encoding and the signing key are no longer rebuilt per poll. The builder kept a new connection per poll on purpose: the helper closes an idle socket after 5 s, the same as the poll interval, so a kept connection would need retry logic for nothing. Self-test 92 of 92 with the vectors (89 of 89 through `check:menubar` on the merged branch); the app's four tests 4 passed against the new test build; gate:unit on its branch 2845 passed, 0 failed.
 
 **Capture probe (Step 0, 2026-10-12 20:36):** `screencapture -x -R 0,0,600,30` from the agent's terminal fails with "could not create image from rect" (no screen recording permission). So V29's icon looks come from the app's own `--snapshot` (drawn in code, no permission needed), and the real menu bar picture in V32 is yours to take.
 
@@ -98,6 +99,7 @@ To delete at cleanup, in one batch with your go:
 
 ## Log
 
+- 2026-10-13 00:00: the app's fix round is back and merged into PR 2's branch (`fa0600e7`): an idle poll now costs the app about 1.5 ms instead of 10 ms, under the V18 target; numbers under Test results. The helper's fix round is still measuring. Then: the full gate alone on the integrated branch, V18 re-measured on the copy of your state folder, and PR 2.
 - 2026-10-12 23:00: the local post-merge gate on main is green. PR 1 is fully landed. Waiting on the two fix rounds (the helper's idle cost and unwatched replies; the app's idle cost) before PR 2.
 - 2026-10-12 22:53: main's CI run on the PR 1 merge (`85c8be9d`) passed: lint, the bundle check and the unit suite on a clean Linux machine. That is V20 (the new code runs on Linux) proven. The local post-merge gate on main is still running.
 - 2026-10-12 22:52: PR 1 merged into main (#61). The post-merge gate runs on main in its own worktree, and main's CI run is watched. Main carried into the PR 2 branch.
