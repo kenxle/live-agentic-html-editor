@@ -42,7 +42,7 @@ function base(w, mac, extra) {
 }
 
 function appProgram(w) {
-  return path.join(w.dir, "menubar", "Lahe.app", "Contents", "MacOS", "Lahe");
+  return path.join(w.dir, "menubar", "Lahe.app", "Contents", "MacOS", "LaheMenuBar");
 }
 
 // --- Task 3.1: build and the login item --------------------------------------
@@ -54,7 +54,7 @@ test("V21: installApp builds Lahe.app in the state folder, writes its plist, loa
   assert.equal(result.ok, true, result.message);
 
   const app = path.join(w.dir, "menubar", "Lahe.app");
-  assert.equal(fs.readFileSync(path.join(app, "Contents", "MacOS", "Lahe"), "utf8"), "// version one\n");
+  assert.equal(fs.readFileSync(path.join(app, "Contents", "MacOS", "LaheMenuBar"), "utf8"), "// version one\n");
   assert.match(fs.readFileSync(path.join(app, "Contents", "Info.plist"), "utf8"), /CFBundleExecutable/);
 
   const plistPath = path.join(w.home, "Library", "LaunchAgents", LABEL + ".plist");
@@ -62,7 +62,7 @@ test("V21: installApp builds Lahe.app in the state folder, writes its plist, loa
   assert.match(plist, new RegExp("<string>" + LABEL + "</string>"));
   assert.match(plist, /<key>RunAtLoad<\/key>\s*<true\/>/);
   assert.ok(
-    plist.indexOf("<string>" + path.join(app, "Contents", "MacOS", "Lahe") + "</string>\n    <string>--state-dir</string>\n    <string>" + w.dir + "</string>") !== -1,
+    plist.indexOf("<string>" + path.join(app, "Contents", "MacOS", "LaheMenuBar") + "</string>\n    <string>--state-dir</string>\n    <string>" + w.dir + "</string>") !== -1,
     "the app's arguments are pinned as absolute values"
   );
 
@@ -109,10 +109,10 @@ test("V21: the build copies the fixed file list into a fresh folder in the state
   assert.match(path.basename(work), /^\.build-/);
   assert.deepEqual(compile, [
     menubar.XCRUN, "swiftc", "-swift-version", "5", "-target", "arm64-apple-macosx13.0", "-O",
-    "-o", path.join(work, "Lahe.app", "Contents", "MacOS", "Lahe"),
+    "-o", path.join(work, "Lahe.app", "Contents", "MacOS", "LaheMenuBar"),
     path.join(work, "src", "LaheMenuBar.swift")
   ]);
-  assert.equal(out, path.join(work, "Lahe.app", "Contents", "MacOS", "Lahe"));
+  assert.equal(out, path.join(work, "Lahe.app", "Contents", "MacOS", "LaheMenuBar"));
   assert.equal(fs.existsSync(work), false, "the build folder is gone");
   assert.deepEqual(fs.readdirSync(path.join(w.dir, "menubar")), ["Lahe.app"]);
   assert.equal(built.stamp, menubar.sourceStamp(w.clone));

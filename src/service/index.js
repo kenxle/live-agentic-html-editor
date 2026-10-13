@@ -55,6 +55,7 @@ var catalogSites = require("./catalog_sites.js");
 var staticServers = require("./static_servers.js");
 var selfStopModule = require("./self_stop.js");
 var loginItemModule = require("./login_item.js");
+var menubarModule = require("./menubar.js");
 var addressesModule = require("./addresses.js");
 var sitesModule = require("./sites.js");
 var pageRoutesModule = require("./page_routes.js");
@@ -1071,6 +1072,16 @@ async function serve(options) {
         log.helperLog("Library sweep failed: " + err.message);
       })
       .then(function () {
+        // The menu bar app's rebuild-on-change check rides the same beat. It
+        // does nothing off macOS, without the icon installed, or while a
+        // rebuild is already running, and only an always-on helper owns an
+        // install to keep current.
+        if (!alwaysOn) return;
+        return menubarModule.tick({ stateDir: dir }).catch(function (err) {
+          log.helperLog("menu bar rebuild check failed: " + err.message);
+        });
+      })
+      .then(function () {
         sweeping = false;
       });
   }, protocol.CATALOG.POLL_MS);
@@ -1090,6 +1101,11 @@ async function serve(options) {
     };
   }
   reviews.writeReadyFile(readyDetails());
+  // A running helper always means the person started it (the menu's Start,
+  // lahe install, or the login item at login), so the hold the menu's Stop
+  // wrote ends here, and not earlier: a start that fails on a taken port must
+  // not end it.
+  loginItemModule.clearStopMarker(dir);
   log.helperLog(
     "serving on http://" + host + ":" + boundPort + ", state directory " + dir + ", reviews " + (reviews.list().join(", ") || "none")
   );

@@ -47,7 +47,7 @@ var SOURCE_DIR = ["macos", "menubar"];
 var APP_FOLDER = "menubar";
 var APP_NAME = "Lahe.app";
 // Info.plist's CFBundleExecutable names this.
-var EXECUTABLE = "Lahe";
+var EXECUTABLE = "LaheMenuBar";
 var MACOS_FLOOR = "13.0";
 // The pinned flags, less the target and the output. Part of the stamp, so a
 // change to the recipe rebuilds the app just as a change to its source does.

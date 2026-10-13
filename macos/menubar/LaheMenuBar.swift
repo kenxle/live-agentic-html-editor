@@ -717,7 +717,7 @@ final class Controller {
     /// Before the first answer, the Library at the pages port service.json names.
     private func fallbackLibrary() -> String? {
         guard case .cantTell = status, let pages = client.service()?.pagesPort else { return nil }
-        return "http://library.lahe.localhost:\(pages)/"
+        return "http://library.lahe.localhost:\(pages)/catalog"
     }
 
     // MARK: Actions
@@ -954,7 +954,7 @@ func dumpMenu(_ args: [String]) -> Int32 {
     }
     var library: String? = nil
     if case .summary(let s) = status { library = s.libraryUrl }
-    if case .cantTell = status { library = "http://library.lahe.localhost:1483/" }
+    if case .cantTell = status { library = "http://library.lahe.localhost:1483/catalog" }
     let rows = menuRows(status: status, stopped: stopped, libraryURL: library)
     var out = lookJSON(look(of: status))
     out["rows"] = rows.map(rowJSON)
@@ -1065,7 +1065,7 @@ func snapshot(_ args: [String]) -> Int32 {
             menus.append(("cant_tell_updated", .cantTell(updatedReason), nil))
         }
         for (name, status, stopped) in menus {
-            var library: String? = "http://library.lahe.localhost:1483/"
+            var library: String? = "http://library.lahe.localhost:1483/catalog"
             if case .summary(let s) = status { library = s.libraryUrl }
             let rows = menuRows(status: status, stopped: stopped, libraryURL: library)
             for (theme, palette) in [("light", Palette.light), ("dark", Palette.dark)] {

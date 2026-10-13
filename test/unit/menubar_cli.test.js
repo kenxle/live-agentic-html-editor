@@ -91,7 +91,7 @@ test("lahe menubar rebuild builds now from install.json's clone and restarts a r
   writeMenubarSources(w.clone, "// two\n");
   const d = deps(w, mac, { isTTY: false });
   assert.equal(await menubarCommand.run(["rebuild", "--state-dir", w.dir], d), 0, d.err());
-  assert.equal(fs.readFileSync(path.join(menubar.appPath(w.dir), "Contents", "MacOS", "Lahe"), "utf8"), "// two\n");
+  assert.equal(fs.readFileSync(path.join(menubar.appPath(w.dir), "Contents", "MacOS", "LaheMenuBar"), "utf8"), "// two\n");
   assert.ok(mac.calls.some((c) => c.join(" ") === "launchctl kickstart -k gui/501/" + LABEL));
   assert.match(d.out(), /rebuilt/);
   assert.match(d.out(), /restarted/);

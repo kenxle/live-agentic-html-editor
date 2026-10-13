@@ -580,7 +580,7 @@ test("V21: on macOS, --menu-bar installs the helper, builds the app, writes its 
   assert.equal(code, 0, d.err());
   assert.equal((await service.probeHealth(protocol.DEFAULT_HOST, port)).always_on, true);
   assert.ok(fs.existsSync(appPlist(w)), "the app's plist");
-  assert.equal(fs.readFileSync(menubar.appPath(w.dir) + "/Contents/MacOS/Lahe", "utf8"), "// the app\n");
+  assert.equal(fs.readFileSync(menubar.appPath(w.dir) + "/Contents/MacOS/LaheMenuBar", "utf8"), "// the app\n");
   const record = loginItem.readInstall(w.dir);
   assert.equal(record.menubar.label, MENUBAR_LABEL);
   assert.equal(record.menubar.source_stamp, menubar.sourceStamp(record.clone));

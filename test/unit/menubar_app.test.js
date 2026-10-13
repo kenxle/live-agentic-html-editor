@@ -188,7 +188,7 @@ test("a document opens only through the allowlist (V30)", { skip }, async (t) =>
 
   assert.deepEqual(await open("r183d18583a43"), ["opened http://notes.lahe.localhost:1483/r183d18583a43.md"]);
   await fake.command("open-url null");
-  assert.deepEqual(await open("r183d18583a46"), ["opened http://library.lahe.localhost:1483/"], "url null opens the Library");
+  assert.deepEqual(await open("r183d18583a46"), ["opened http://library.lahe.localhost:1483/catalog"], "url null opens the Library");
   for (const bad of ["javascript:alert(1)", "http://127.0.0.1:1483/", "http://notes.lahe.localhost:9999/", "https://notes.lahe.localhost/"]) {
     await fake.command("open-url " + bad);
     assert.deepEqual(await open("r183d18583a43"), [], bad + " is not opened");
