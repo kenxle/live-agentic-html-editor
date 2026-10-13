@@ -50,7 +50,13 @@ on arm64. On an Intel Mac the target is `x86_64-apple-macosx13.0`.
   `127.0.0.1` at the port `service.json` names, never `localhost`.
 - Every 5 seconds, and when the menu opens, it asks `summary.read` with a
   signed proof (the secret itself never travels) and drops any answer whose
-  `x-lahe-proof-reply` does not check. Redirects are never followed.
+  `x-lahe-proof-reply` does not check. The request is a plain HTTP/1.0
+  exchange over a socket, not URLSession, so nothing follows a redirect and
+  an idle poll costs a few system calls.
+- Idle costs almost nothing: `service.json` is parsed again only when the file
+  changes, an answer identical to the last one is not decoded, the icon is
+  redrawn only when its look changes, and the menu is built only when it opens
+  (and kept current while it is open). The 5-second poll is the only timer.
 - The icon has four looks: the plain mark (nothing waiting), the mark and a
   count (to 99, then 99+), a struck-through outline (not running), and an
   outline with a question mark (can't tell). "Can't tell" covers a refused

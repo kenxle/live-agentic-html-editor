@@ -59,8 +59,8 @@
       "action" : "open r183d18583a4a",
       "enabled" : true,
       "kind" : "item",
-      "title" : "Document 7 with a title of ordinary length (open, 2 unread)",
-      "tooltip" : "Document 7 with a title of ordinary length\n~/Documents/workspace/project/docs/doc_7.md\nOpen in a browser window now."
+      "title" : "Title with a lone surrogate half  here (open, 2 unread)",
+      "tooltip" : "Title with a lone surrogate half  here\n~/Documents/workspace/project/docs/doc_7.md\nOpen in a browser window now."
     },
     {
       "action" : "open r183d18583a4b",
