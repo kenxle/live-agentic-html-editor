@@ -1130,8 +1130,10 @@ event through its outbox, the same path Mark as done uses:</p>
 time plus the revision it answered, at most 64 characters. The
 projection records it on the item as <code>reply_seen</code> only when
 it names the item's current reply; a stamp for an older reply is dropped
-and reported, like a stale reply. review.json carries
-<code>reply_seen</code> on the item (absent when nothing was read).
+and reported, like a stale reply. <code>review.json</code> does not
+carry it: agents read that file on every wake, and a read mark is not
+for them. The mark travels on <code>records.read</code> and on the reply
+poll, and the summary reads it by folding <code>events.jsonl</code>.
 Nothing else about the item moves: it is not a lifecycle transition, and
 the agent never sees it.</p>
 <p>Both sides run one rule, moved from
@@ -1553,10 +1555,14 @@ stops DNS rebinding.</li>
 <li><strong>The <code>reply.seen</code> event (SR3).</strong>
 <code>item</code> must be an item of the review the token names,
 <code>stamp</code> a string of at most 64 characters naming that item's
-current reply; anything else is dropped and reported, and nothing is
-stored. It carries no reviewer text. Accepted risk: a page holding a
-review's token can mark that review's replies read, and only that
-review's. A page's token already lets it close the item outright with
+current reply; a malformed event (anything but a string
+<code>item</code> and a 1 to 64 character <code>stamp</code>, with no
+other keys) is refused at <code>events.append</code> and never written;
+a well-formed mark naming another reply lands in the log and is dropped
+by the projection, like a stale reply, so nothing is projected. It
+carries no reviewer text. Accepted risk: a page holding a review's token
+can mark that review's replies read, and only that review's. A page's
+token already lets it close the item outright with
 <code>item.closed</code>.</li>
 <li><strong>What it holds.</strong> Titles, <code>~</code> paths,
 counts, times, session names. No comment text, no review tokens, no
