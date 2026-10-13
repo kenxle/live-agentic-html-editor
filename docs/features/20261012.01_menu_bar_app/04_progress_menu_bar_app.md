@@ -75,7 +75,7 @@ Nothing queued.
 ### Test results
 
 - Checkpoint 1 (PR 1, `cc04e6a1`): `npm run gate:unit` 2769 passed, 0 failed; the browser suite alone, Chromium: 884 passed, 0 failed, 7 skipped, in 7.3 minutes; helpers 1 before and 1 after.
-- PR 2 integration (`feat/menu-bar-pr2`, `10067c50`): `npm run gate:unit` 2831 passed, 0 failed; `npm run check:menubar` built `Lahe.app` through the real recipe in 7.4 seconds and the app's self-test passed 84 of 84; no helper or launchd job left behind.
+- PR 2 integration (`feat/menu-bar-pr2`, `10067c50`): `npm run gate:unit` 2831 passed, 0 failed; `npm run check:menubar` built `Lahe.app` through the real recipe in 7.4 seconds and the app's self-test passed 84 of 84; no helper or launchd job left behind. The app's own four tests against a test build and the fake helper: 4 passed, 0 failed, including Stop and Start on a `lahe-test` launchd job; no job or plist left behind.
 
 **Capture probe (Step 0, 2026-10-12 20:36):** `screencapture -x -R 0,0,600,30` from the agent's terminal fails with "could not create image from rect" (no screen recording permission). So V29's icon looks come from the app's own `--snapshot` (drawn in code, no permission needed), and the real menu bar picture in V32 is yours to take.
 
@@ -87,6 +87,7 @@ Not shipped yet.
 
 ## Log
 
+- 2026-10-12 21:32: code review of PR 1 returned three findings, all taken: a Hold on the rail would also hold back read marks, so the icon would keep counting what you had read (read marks now post through a Hold); the cache key stats the review folder, whose time is too coarse on Linux to catch two rewrites in one tick (back to the files the plan named); `reply_seen` was on every item in `review.json`, which agents read, so it moves out of that file and stays on the page's own reads. One fix round sent to the summary builder with the seven security findings.
 - 2026-10-12 21:31: PR 2's integrated branch is green on the unit gate (2831 passed, 0 failed) and the real build check (the app compiles through `src/service/menubar.js` and passes its self-test). Its browser suite runs after PR 1's fix round.
 - 2026-10-12 21:29: checkpoint 1's browser suite, run alone: 884 passed, 0 failed, 7 skipped. PR 2's unit gate and the real Swift build check run next in the scratch worktree.
 - 2026-10-12 21:27: security review of PR 1's code returned: SR1 to SR4 met. One important finding: a page title holding a lone UTF-16 surrogate would reach the summary and make the app refuse the whole answer, so the icon would stick on "can't tell" until that review is retired. Six minor: a proof captured just before a helper restart replays once (refuse proofs older than the helper's start); C1 controls and the line separators are not stripped; `summary.open` buffers 8 MB before any check; one unreadable review darkens the whole count and the 500's text can carry a path; a session file swapped for a symlink after first read is followed; a dropped `reply.seen` still lands in the log in full. All go to the summary builder in one fix round with the code review's findings.
