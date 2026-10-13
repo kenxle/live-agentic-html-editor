@@ -123,7 +123,7 @@ test("every look and every change between looks, against the fake helper (V29, V
   const failures = [
     ["timeout", "Lahe did not answer in time"],
     ["401", "Lahe refused the request"],
-    ["409", "Lahe was updated; rebuilding"],
+    ["409", "Lahe was updated. This icon is out of date."],
     ["unsigned", "An answer on Lahe's port was not signed by Lahe"],
     ["badsig", "An answer on Lahe's port was not signed by Lahe"]
   ];
@@ -171,6 +171,39 @@ test("every look and every change between looks, against the fake helper (V29, V
 
   const log = fs.readFileSync(path.join(stateDir, "menubar.log"), "utf8");
   assert.match(log, /x-lahe-proof-reply did not check/, "a dropped answer is logged");
+});
+
+test("while the stop hold stands the app sends nothing, and polls again when the marker goes", { skip }, async (t) => {
+  const stateDir = tempState();
+  // A plain TCP listener on the port service.json names: something holding a
+  // freed port. Each request the app sent it would be a proof it could replay.
+  const connections = [];
+  const squatter = net.createServer((socket) => {
+    connections.push(Date.now());
+    socket.destroy();
+  });
+  await new Promise((resolve) => squatter.listen(0, "127.0.0.1", resolve));
+  t.after(() => new Promise((resolve) => squatter.close(resolve)));
+  const port = squatter.address().port;
+  fs.writeFileSync(path.join(stateDir, "service.json"), JSON.stringify({ port, pages: { port: 1483 } }) + "\n");
+  fs.writeFileSync(path.join(stateDir, "cli-secret"), crypto.randomBytes(32).toString("hex") + "\n", { mode: 0o600 });
+  const marker = path.join(stateDir, "stopped.json");
+  fs.writeFileSync(marker, JSON.stringify({ by: "menu bar", at: new Date().toISOString() }) + "\n");
+
+  const app = runApp(["--watch", "--state-dir", stateDir]);
+  t.after(() => app.stop());
+  const shown = await app.until((l) => l.look === "not-running", ONE_POLL_MS, "the stopped look from the marker");
+  assert.equal(shown.stopped, true, "stopped by you");
+  // Two timed polls and one asked for: nothing reaches the port.
+  app.send("poll");
+  await new Promise((resolve) => setTimeout(resolve, 2 * 5000 + 1000));
+  assert.equal(connections.length, 0, "no request while the marker stands");
+  assert.equal(app.seen.filter((l) => l.look && l.look !== "not-running").length, 0, "the look stays not running");
+
+  fs.unlinkSync(marker);
+  app.send("poll");
+  await waitFor(() => connections.length > 0, ONE_POLL_MS, "a poll to land once the marker is gone");
+  await app.until(isCantTell, ONE_POLL_MS, "can't tell: the listener does not answer as Lahe");
 });
 
 test("a document opens only through the allowlist (V30)", { skip }, async (t) => {
