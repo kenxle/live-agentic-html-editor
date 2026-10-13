@@ -70,13 +70,20 @@ None.
 
 ### Cleanup queue
 
-Nothing queued.
+To delete at cleanup, in one batch with your go:
+
+- Worktrees and branches: `lahe-worktrees/menu-bar-summary`, `menu-bar-macapp`, `menu-bar-install`, `menu-bar-pr2`, `main-gate`, and their branches once PR 2 is merged.
+- `node_modules` symlinks in the `menu-bar`, `menu-bar-summary`, `menu-bar-pr2` and `main-gate` worktrees.
+- `~/Documents/lahe-menubar-review/`: the 331 MB copy of your state folder, the test app build, the walk scripts and numbers, and the notes once they are no longer needed.
+- `.claude-commit2026101220*` files in the `menu-bar` worktree (gitignored).
+- Session scratchpad files under `/private/tmp/claude-501/` (the OS clears these; nothing to do).
 
 ### Test results
 
 - **V18 on a copy of your state folder (690 reviews, 93 sessions), 10 idle minutes each, machine load 3.5 to 6.2 from other agents:** helper with the app polling 6.31 s of processor time; helper alone 0.67 s; the app 1.18 s; one review tab's renderer (headless Chromium, rail mounted) 1.02 s. Verdict: fails. The app's share (5.64 + 1.18 = 6.82 s) is 6.7 times the tab. Warm median of 50 back-to-back `summary.read` requests 13.2 ms (p90 14.2 ms); spaced 5 s apart, median 27.5 ms; first read after start 384 ms. The copy's helper ran without `--always-on`. Raw numbers in `~/Documents/lahe-menubar-review/`, outside the repo.
 - **The summary on real data:** first read 200, signed, 4,760 bytes; `waiting_on_you.count` 0 on the first read with `summary.json` seeded; waiting on agents 13; open documents 6 falling to 2 as copied window holders went stale; 93 open sessions, 1 connected; 466 more recent; 45 titles, path hints and names clean, no nulls. The app's `--dump-menu` order matches the brief; the test build ran 11 minutes against the copy with no error logged and a count equal to the summary's.
 - Checkpoint 1 (PR 1, `cc04e6a1`): `npm run gate:unit` 2769 passed, 0 failed; the browser suite alone, Chromium: 884 passed, 0 failed, 7 skipped, in 7.3 minutes; helpers 1 before and 1 after.
+- Main after PR 1 (`85c8be9d`), full gate in its own worktree: unit 2783 passed, 0 failed; browser 884 passed, 0 failed, 7 skipped; one helper before and after.
 - PR 2 integration (`feat/menu-bar-pr2`, `10067c50`): `npm run gate:unit` 2831 passed, 0 failed; `npm run check:menubar` built `Lahe.app` through the real recipe in 7.4 seconds and the app's self-test passed 84 of 84; no helper or launchd job left behind. The app's own four tests against a test build and the fake helper: 4 passed, 0 failed, including Stop and Start on a `lahe-test` launchd job; no job or plist left behind.
 - Checkpoint 1 after the fix round (`77ad1ed4`): the browser suite alone, Chromium: 884 passed, 0 failed, 7 skipped, in 7.2 minutes.
 
@@ -91,6 +98,7 @@ Nothing queued.
 
 ## Log
 
+- 2026-10-12 23:00: the local post-merge gate on main is green. PR 1 is fully landed. Waiting on the two fix rounds (the helper's idle cost and unwatched replies; the app's idle cost) before PR 2.
 - 2026-10-12 22:53: main's CI run on the PR 1 merge (`85c8be9d`) passed: lint, the bundle check and the unit suite on a clean Linux machine. That is V20 (the new code runs on Linux) proven. The local post-merge gate on main is still running.
 - 2026-10-12 22:52: PR 1 merged into main (#61). The post-merge gate runs on main in its own worktree, and main's CI run is watched. Main carried into the PR 2 branch.
 - 2026-10-12 22:46: the flow walk returned (full notes outside the repo). Two findings: V18 fails on both sides (helper about 47 ms of processor time per poll, app about 10 ms), and a reply to a document no page is polling is never folded, so it never counts (the helper reads reply files only for reviews something has asked about since it started; one `review.read` fixed it). Fix rounds sent to the summary builder (profile the poll, keep the answer in memory and rebuild only what the helper itself wrote; fold unwatched replies within one liveness beat) and to the app builder (skip decoding, menu and icon work when the answer is unchanged). Main merged into PR 1 twice as other work landed; its gate on the latest merge commit is running.
