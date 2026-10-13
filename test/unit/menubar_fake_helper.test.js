@@ -14,6 +14,7 @@ const http = require("node:http");
 const os = require("node:os");
 const path = require("node:path");
 const { spawn } = require("node:child_process");
+const { pollUntil } = require("../helpers/poll.js");
 
 const FAKE = path.join(__dirname, "..", "fixtures", "menubar", "fake_helper.js");
 const fake = require(FAKE);
@@ -42,13 +43,18 @@ function startFake(stateDir, extra) {
     child.stdin.write(line + "\n");
     return next();
   };
-  const stop = () =>
-    new Promise((resolve) => {
-      if (child.exitCode !== null || child.signalCode !== null) return resolve();
-      child.once("exit", () => resolve());
-      child.stdin.end();
-      setTimeout(() => child.kill("SIGKILL"), 3000).unref();
-    });
+  // Closing stdin stops it; a SIGKILL only if it lingers.
+  const gone = () => child.exitCode !== null || child.signalCode !== null;
+  const stop = async () => {
+    if (gone()) return;
+    child.stdin.end();
+    try {
+      await pollUntil(gone, { timeoutMs: 3000, message: "the fake helper to exit" });
+    } catch (e) {
+      child.kill("SIGKILL");
+      await pollUntil(gone, { timeoutMs: 3000, message: "the fake helper to die" });
+    }
+  };
   return next().then((ready) => ({ child, ready, command, stop }));
 }
 

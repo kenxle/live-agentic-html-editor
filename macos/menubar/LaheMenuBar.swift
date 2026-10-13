@@ -214,17 +214,18 @@ func cut(_ title: String) -> String {
 
 func plural(_ n: Int, _ word: String) -> String { return "\(n) \(word)" + (n == 1 ? "" : "s") }
 
-func parseTime(_ text: String) -> Date? {
-    let withFraction = ISO8601DateFormatter()
-    withFraction.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-    return withFraction.date(from: text) ?? ISO8601DateFormatter().date(from: text)
-}
-
-func isoNow() -> String {
+let isoWithFraction: ISO8601DateFormatter = {
     let formatter = ISO8601DateFormatter()
     formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-    return formatter.string(from: Date())
+    return formatter
+}()
+let isoPlain = ISO8601DateFormatter()
+
+func parseTime(_ text: String) -> Date? {
+    return isoWithFraction.date(from: text) ?? isoPlain.date(from: text)
 }
+
+func isoNow() -> String { return isoWithFraction.string(from: Date()) }
 
 /// "10 sec ago", measured against the summary's own generated_at so a menu
 /// always describes one moment, the one the helper answered for.
@@ -251,7 +252,7 @@ func clockTime(_ iso: String) -> String {
 func waitingReason(_ doc: Summary.WaitingDoc) -> String {
     var parts: [String] = []
     if doc.questions > 0 { parts.append(plural(doc.questions, "question")) }
-    if doc.unread > doc.questions || parts.isEmpty { parts.append("\(max(doc.unread, 1)) unread") }
+    if doc.unread > doc.questions || parts.isEmpty { parts.append("\(doc.unread) unread") }
     return parts.joined(separator: ", ")
 }
 
@@ -312,7 +313,7 @@ enum RowAction: Equatable {
     }
 }
 
-struct Row {
+struct Row: Equatable {
     enum Kind: String { case header, item, note, separator }
     var kind: Kind
     var title: String = ""
@@ -825,11 +826,19 @@ final class Controller {
 
 // MARK: - The menu bar icon
 
+/// A row's action, carried on its own menu item. A poll can rebuild the menu
+/// while it is open, so a click must never look its action up by position.
+final class ActionBox: NSObject {
+    let action: RowAction
+    init(_ action: RowAction) { self.action = action }
+}
+
 final class MenuBarApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
     let controller: Controller
     var statusItem: NSStatusItem?
     let menu = NSMenu()
-    private var actions: [RowAction] = []
+    private var shownLook: Look?
+    private var shownRows: [Row] = []
 
     init(controller: Controller) { self.controller = controller }
 
@@ -846,13 +855,19 @@ final class MenuBarApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     func menuWillOpen(_ menu: NSMenu) { controller.poll() }
 
+    /// Redraws only what changed, so an idle poll costs no drawing.
     func redraw() {
         let current = look(of: controller.status)
-        statusItem?.button?.image = iconImage(current)
-        statusItem?.button?.setAccessibilityLabel(accessibilityText(current))
+        if current != shownLook {
+            shownLook = current
+            statusItem?.button?.image = iconImage(current)
+            statusItem?.button?.setAccessibilityLabel(accessibilityText(current))
+        }
+        let rows = controller.rows()
+        if rows == shownRows { return }
+        shownRows = rows
         menu.removeAllItems()
-        actions = []
-        for row in controller.rows() {
+        for row in rows {
             if row.kind == .separator {
                 menu.addItem(.separator())
                 continue
@@ -861,15 +876,14 @@ final class MenuBarApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
             item.target = self
             item.isEnabled = row.enabled
             item.toolTip = row.tooltip
-            item.tag = actions.count
-            actions.append(row.action)
+            item.representedObject = ActionBox(row.action)
             menu.addItem(item)
         }
     }
 
     @objc func clicked(_ sender: NSMenuItem) {
-        guard sender.tag >= 0, sender.tag < actions.count else { return }
-        controller.perform(actions[sender.tag])
+        guard let box = sender.representedObject as? ActionBox else { return }
+        controller.perform(box.action)
     }
 }
 

@@ -21,6 +21,7 @@ const net = require("node:net");
 const os = require("node:os");
 const path = require("node:path");
 const { spawn, execFileSync } = require("node:child_process");
+const { pollUntil } = require("../helpers/poll.js");
 
 const APP = process.env.LAHE_MENUBAR_APP || "";
 const FAKE = path.join(__dirname, "..", "fixtures", "menubar", "fake_helper.js");
@@ -35,8 +36,9 @@ const ONE_POLL_MS = 10000;
 function lineProcess(command, args, options) {
   const child = spawn(command, args, Object.assign({ stdio: ["pipe", "pipe", "inherit"] }, options));
   const seen = [];
+  // Resolves with the exit code once stdout is drained, so every line is in `seen`.
+  const closed = new Promise((resolve) => child.once("close", resolve));
   let buffer = "";
-  let waiter = null;
   child.stdout.setEncoding("utf8");
   child.stdout.on("data", (text) => {
     buffer += text;
@@ -51,43 +53,39 @@ function lineProcess(command, args, options) {
         line = { text: raw };
       }
       seen.push(line);
-      if (waiter) waiter();
     }
   });
   let from = 0;
   /** The next line (after the last one taken) that passes `match`, within `ms`. */
   function until(match, ms, what) {
-    return new Promise((resolve, reject) => {
-      const timer = setTimeout(() => {
-        waiter = null;
-        reject(new Error("no line for " + what + " within " + ms + " ms; saw " + JSON.stringify(seen.slice(from))));
-      }, ms);
-      const look = () => {
+    return pollUntil(
+      () => {
         while (from < seen.length) {
           const line = seen[from++];
-          if (match(line)) {
-            clearTimeout(timer);
-            waiter = null;
-            return resolve(line);
-          }
+          if (match(line)) return line;
         }
-      };
-      waiter = look;
-      look();
-    });
+        return null;
+      },
+      { timeoutMs: ms, message: what, describe: () => seen.slice(-8) }
+    );
   }
   function send(line) {
     child.stdin.write(line + "\n");
   }
-  function stop() {
-    return new Promise((resolve) => {
-      if (child.exitCode !== null || child.signalCode !== null) return resolve();
-      child.once("exit", () => resolve());
-      child.stdin.end();
-      setTimeout(() => child.kill("SIGKILL"), 3000).unref();
-    });
+  return { child, seen, closed, until, send, stop: () => stopChild(child) };
+}
+
+/** Close the child's stdin (it exits on that) and wait; kill it if it lingers. */
+async function stopChild(child) {
+  const gone = () => child.exitCode !== null || child.signalCode !== null;
+  if (gone()) return;
+  child.stdin.end();
+  try {
+    await pollUntil(gone, { timeoutMs: 3000, message: "the child to exit" });
+  } catch (e) {
+    child.kill("SIGKILL");
+    await pollUntil(gone, { timeoutMs: 3000, message: "the child to die" });
   }
-  return { child, seen, until, send, stop };
 }
 
 function tempState() {
@@ -183,7 +181,7 @@ test("a document opens only through the allowlist (V30)", { skip }, async (t) =>
   async function open(review) {
     const app = runApp(["--state-dir", stateDir, "--action", "open", review]);
     t.after(() => app.stop());
-    const code = await new Promise((resolve) => app.child.once("exit", resolve));
+    const code = await app.closed;
     assert.equal(code, 0);
     return app.seen.filter((l) => typeof l.text === "string").map((l) => l.text);
   }
@@ -205,7 +203,7 @@ test("Hide exits with status 0 (V31)", { skip }, async (t) => {
   t.after(() => fake.stop());
   const app = runApp(["--state-dir", stateDir, "--action", "hide"]);
   t.after(() => app.stop());
-  assert.equal(await new Promise((resolve) => app.child.once("exit", resolve)), 0);
+  assert.equal(await app.closed, 0);
 });
 
 function freePort() {
@@ -238,13 +236,8 @@ function answers(port) {
   });
 }
 
-async function waitFor(check, ms, what) {
-  const deadline = Date.now() + ms;
-  while (Date.now() < deadline) {
-    if (await check()) return;
-    await new Promise((resolve) => setTimeout(resolve, 200));
-  }
-  throw new Error("timed out waiting for " + what);
+function waitFor(check, ms, what) {
+  return pollUntil(check, { timeoutMs: ms, intervalMs: 200, message: what });
 }
 
 test("Stop writes the marker and unloads the helper; Start removes it, bootstraps and kickstarts (V31)", { skip: skipLaunchd }, async (t) => {
@@ -277,7 +270,7 @@ test("Stop writes the marker and unloads the helper; Start removes it, bootstrap
 
   const stop = runApp(["--state-dir", stateDir, "--action", "stop"], env);
   t.after(() => stop.stop());
-  assert.equal(await new Promise((resolve) => stop.child.once("exit", resolve)), 0);
+  assert.equal(await stop.closed, 0);
   const marker = JSON.parse(fs.readFileSync(path.join(stateDir, "stopped.json"), "utf8"));
   assert.equal(marker.by, "menu bar");
   assert.ok(!Number.isNaN(Date.parse(marker.at)), "the marker carries the time");
@@ -292,7 +285,7 @@ test("Stop writes the marker and unloads the helper; Start removes it, bootstrap
 
   const start = runApp(["--state-dir", stateDir, "--action", "start"], env);
   t.after(() => start.stop());
-  assert.equal(await new Promise((resolve) => start.child.once("exit", resolve)), 0);
+  assert.equal(await start.closed, 0);
   assert.equal(fs.existsSync(path.join(stateDir, "stopped.json")), false, "Start removes the marker");
   assert.ok(launchctl(["print", domain + "/" + label]), "the job is loaded again");
   await waitFor(() => answers(port), 10000, "the helper to start again");
