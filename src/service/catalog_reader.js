@@ -245,12 +245,25 @@ function createReader(options) {
   // Sessions, heartbeats and servers
   // ---------------------------------------------------------------------------
 
+  // A session's three files, each resolved once per reader. Resolving checks
+  // every folder on the way for a symlink, and the menu bar's summary asks
+  // about every session every five seconds. A resolution that throws is not
+  // kept, so it throws again next time.
+  var SESSION_FILES = { session: stateDir.agentSessionPath, monitor: stateDir.monitorPath, activity: stateDir.activityPath };
+  var sessionPaths = Object.create(null);
+
+  function sessionFile(kind, sessionId) {
+    var key = kind + ":" + sessionId;
+    if (!sessionPaths[key]) sessionPaths[key] = SESSION_FILES[kind](dir, sessionId);
+    return sessionPaths[key];
+  }
+
   function readSession(sessionId) {
     if (sessionId === LEGACY) return { state: "ok", value: { id: LEGACY, synthetic: true } };
     if (!protocol.isSafeId(sessionId)) return { state: "bad" };
     var got;
     try {
-      got = cachedJson(stateDir.agentSessionPath(dir, sessionId));
+      got = cachedJson(sessionFile("session", sessionId));
     } catch (err) {
       return { state: "bad" };
     }
@@ -286,13 +299,13 @@ function createReader(options) {
     var beat = null;
     var activity = null;
     try {
-      var got = cachedJson(stateDir.monitorPath(dir, sessionId));
+      var got = cachedJson(sessionFile("monitor", sessionId));
       beat = got.state === "ok" ? got.value : null;
     } catch (err) {
       beat = null;
     }
     try {
-      var act = cachedJson(stateDir.activityPath(dir, sessionId));
+      var act = cachedJson(sessionFile("activity", sessionId));
       activity = act.state === "ok" ? act.value : null;
     } catch (err) {
       activity = null;
@@ -1178,7 +1191,6 @@ function createReader(options) {
         row.pathHint = pathHint(folderPath);
         // The document itself (or the folded folder), ~ for the home folder.
         row.docHint = pathHint(row.folder || lead.docPath);
-        row.projectPath = projectPath(row.folder || lead.docPath);
         allRows.push(row);
       });
     });
@@ -1394,8 +1406,10 @@ function createReader(options) {
       folder: row.folderName,
       path_hint: row.pathHint,
       // The document's path from its project root (worktree root, ~/.claude),
-      // else its ~ path: the row's second line.
-      project_path: row.projectPath || null,
+      // else its ~ path: the row's second line. Worked out here rather than
+      // when rows are folded, because finding the project root walks up the
+      // folders and only the list shows it.
+      project_path: projectPath(row.folder || info.docPath) || null,
       // "folder" for old per-page reviews folded by folder, "document" for
       // several reviews of one document; null for a single review.
       fold_kind: row.parts.length > 1 ? row.foldKind || "folder" : null,

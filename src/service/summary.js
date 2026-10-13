@@ -20,11 +20,12 @@
 // rule (catalog_reader.foldParts), so a document reviewed twice counts once.
 //
 // LIGHT WHEN IDLE (R21). The app asks every five seconds. Each review's part is
-// cached on the size, modified time and inode of its events.jsonl, review.json,
-// meta.json and the reviewed document, so an idle request is a few stat calls
+// cached on the size, modified time and inode of its folder (review.json and
+// meta.json land there by rename) and its events.jsonl, plus the reviewed
+// document while it has an unread reply, so an idle request is two stat calls
 // per review and one read of catalog.json, which is where a Library rename
 // lives. Inode is in the key because a same-size rewrite in the same
-// millisecond (an atomic rename) changes nothing else.
+// millisecond (an atomic rename) changes nothing else. See partOf.
 //
 // NEVER IN THE ANSWER: comment text, a token, a session secret, or an absolute
 // path. Titles and path hints go through catalog_reader.menuText.
@@ -60,12 +61,13 @@ function iso(ms) {
 /** size:mtime:inode, or "-" for a file that is not there. */
 function statKey(file) {
   if (typeof file !== "string" || !file) return "-";
+  var stat;
   try {
-    var stat = fs.statSync(file);
-    return stat.size + ":" + stat.mtimeMs + ":" + stat.ino;
+    stat = fs.statSync(file, { throwIfNoEntry: false });
   } catch (err) {
-    return "-";
+    stat = null;
   }
+  return stat ? stat.size + ":" + stat.mtimeMs + ":" + stat.ino : "-";
 }
 
 /** At most LIST_MAX items, and how many more there are. */
@@ -128,27 +130,42 @@ function createSummary(options) {
   // One review, cached
   // -------------------------------------------------------------------------
 
-  /** The review's own three files, and the cutoff the part was counted with. */
+  // review id -> the two paths its key stats. Resolved once: each resolution
+  // checks every folder on the way for a symlink, three lstat calls a path,
+  // and an idle request would otherwise spend most of its time there.
+  var pathsOf = Object.create(null);
+
+  /**
+   * What says a review's part may have moved, and the cutoff it was counted
+   * with. Two stats, because an idle request pays them for every review:
+   *
+   *   the review's folder  review.json and meta.json are only ever written by
+   *                        a rename into it (state_dir.writeAtomic,
+   *                        review_writer), and a rename changes the folder
+   *   events.jsonl         appended in place, which the folder does not see
+   */
   function stateKeyOf(reviewId, sinceMs) {
-    return [
-      statKey(stateDir.eventsPath(dir, reviewId)),
-      statKey(stateDir.reviewJsonPath(dir, reviewId)),
-      statKey(stateDir.metaPath(dir, reviewId)),
-      sinceMs
-    ].join("|");
+    var paths = pathsOf[reviewId];
+    if (!paths) paths = pathsOf[reviewId] = [stateDir.reviewDir(dir, reviewId), stateDir.eventsPath(dir, reviewId)];
+    return statKey(paths[0]) + "|" + statKey(paths[1]) + "|" + sinceMs;
   }
 
   /**
-   * The review's part, rebuilt only when one of its files moved. The state
-   * files are stat'ed before the rebuild reads them, so a write landing during
-   * the rebuild moves the key for the next request. The reviewed document is
-   * the path the part itself names: a changed meta.json changes the key on its
-   * own, and the rebuild reads the new path.
+   * The review's part, rebuilt only when its key moved. The state files are
+   * stat'ed before the rebuild reads them, so a write landing during the
+   * rebuild moves the key for the next request.
+   *
+   * THE REVIEWED DOCUMENT is stat'ed only while the review has an unread
+   * reply: a deleted file must drop out of waiting on you at once (R7), and no
+   * other section changes when a file goes. A changed meta.json, which is
+   * where the document's path lives, moves the folder's key on its own.
    */
   function partOf(reviewId, sinceMs, rebuilt) {
     var hit = cache[reviewId];
     var stateKey = stateKeyOf(reviewId, sinceMs);
-    if (hit && hit.stateKey === stateKey && hit.docKey === statKey(hit.part.info.docPath)) return hit.part;
+    if (hit && hit.stateKey === stateKey && (hit.part.unread.count === 0 || hit.docKey === statKey(hit.part.info.docPath))) {
+      return hit.part;
+    }
     var part = reader.reviewPart(reviewId, { since: sinceMs });
     cache[reviewId] = { stateKey: stateKey, docKey: statKey(part.info.docPath), part: part };
     rebuilt.push(reviewId);
@@ -237,7 +254,9 @@ function createSummary(options) {
       if (!part.info.retired) parts.push(part);
     });
     Object.keys(cache).forEach(function (id) {
-      if (!present[id]) delete cache[id];
+      if (present[id]) return;
+      delete cache[id];
+      delete pathsOf[id];
     });
     lastRebuilt = rebuilt;
 
