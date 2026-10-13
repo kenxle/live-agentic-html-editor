@@ -37,7 +37,7 @@ The icon keeps the review layer's speech bubble. Main changed the browser tab's 
 
 | Agent or task | Doing | Started | Branch |
 |---|---|---|---|
-| Orchestrator | PR 2 merged; running the full gate on main and watching main's CI; then cleanup | 2026-10-12 20:44 | `main` |
+| Orchestrator | Main is green on CI and on the local gate at the merge; one more local gate on main's head; then the cleanup batch waits on your go | 2026-10-12 20:44 | `main` |
 | Flow walker (Opus, independent) | Done at 12:51: V32 passes, V33 counts equal, one board row (a global `lahe status` slows the helper) and one note for Ken | 2026-10-13 12:27 | `feat/menu-bar-pr2` |
 | Builder: summary (Opus) | Done: fix round 2 (the helper's idle cost, unwatched replies) returned at 2026-10-13 11:36 and is merged into `feat/menu-bar-pr2` | 2026-10-12 22:46 | `feat/menu-bar-summary` |
 | Code review (Opus) | Done at 11:51: one important bug, one coverage gap, one rare bug; findings in the fix round | 2026-10-13 11:50 | `feat/menu-bar-pr2` |
@@ -129,6 +129,7 @@ To delete at cleanup, in one batch with your go:
 
 ## Log
 
+- 2026-10-13 13:08: the full local gate on main at PR 2's merge (`2c913902`) is green: unit 2864 passed, 0 failed; browser 884 passed, 0 failed, 7 skipped; `check:menubar` with the app's live tests 4 passed, 1 skipped (launchd); helpers 1 before and after. One more full gate is running on main's head (`272129b0`), which carries the CI fix. A lesson is proposed in `docs/lessons/proposed/` (a back-to-back benchmark of a polled route measures only the warm path), with a pointer from STABLE_ADDRESSES.md's old "almost no CPU" sentence; the lessons review is yours when you want it.
 - 2026-10-13 13:01: main's CI run on the fix (`cd20d722`) is green. The full local gate on main is still running; one more runs on main's new head after it.
 - 2026-10-13 12:59: main's CI run on PR 2's merge failed on Linux: 3 of 2,862 unit tests (so you have an email). Two Stop-and-Start tests expected `gui/501` in a launchctl call while the start path read the uid from the install record, not from the caller, so the runner's uid 1001 appeared; and the test for a question written while no helper ran found it not counted, because the Linux runner's file system gave the reply file and the log the same time and the first-look rule asked for strictly newer. Both fixed in one commit on main (the caller's uid is used in every launchctl call; a tie counts, and folding a reply the log already holds changes nothing), with the three test files green here and the unit gate run before the push. Main's next CI run is the proof.
 - 2026-10-13 12:58: PR 2 is merged into main at `2c913902` (opened 12:52; main had moved under it, so main was merged in first: docs and CLAUDE.md only, one board conflict kept both sides, gate:unit green again). The full local gate on main is running and main's CI run started at 12:54. What is left for you: the three design calls above, and installing it for real.
