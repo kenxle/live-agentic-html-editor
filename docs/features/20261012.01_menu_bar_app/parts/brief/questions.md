@@ -1,12 +1,10 @@
-For Ken to decide in review:
+All questions are settled. The history of each is below.
 
-::: callout-question
-**Should the count include documents you do not have open?** Ken, in review: he had pictured counting only open documents, and finds flagging closed ones interesting. As written, every document counts (R5).
 
-- **A.** Count every document, open or not. A closed document with an unread reply is the one thing nothing else tells you about. (Recommended, with the menu marking which waiting documents are open right now.)
-- **C.** Count only documents open in a browser. The number stays small; a closed document waits until you open it.
-:::
 
+Settled with Ken in review:
+
+- **Every document counts, open or not (R5).** Ken had pictured open documents only, then: closed ones only if it is not really complicated, since counting on closed documents felt like a can of worms. It is not more work: the helper reads every review the same way for the recent and waiting-on-agents lists, so counting all of them is the same loop, and open-only would be the extra filter. The worms are the old questions, and the day-one cutoff (R4) plus Mark as done handle those. The menu lists open waiting documents first and marks them.
 
 Settled with Ken in the crucible:
 

@@ -1127,21 +1127,18 @@ asks for it. The helper starts keeping read marks the first time the new
 helper runs. The day-one cutoff (R4) is set the first time the app asks.
 This is a minor version bump.</p>
 <h2 id="questions-and-decisions">Questions and Decisions</h2>
-<p>For Ken to decide in review:</p>
-<div class="callout callout-question">
-<p><strong>Should the count include documents you do not have
-open?</strong> Ken, in review: he had pictured counting only open
-documents, and finds flagging closed ones interesting. As written, every
-document counts (R5).</p>
+<p>All questions are settled. The history of each is below.</p>
+<p>Settled with Ken in review:</p>
 <ul>
-<li><strong>A.</strong> Count every document, open or not. A closed
-document with an unread reply is the one thing nothing else tells you
-about. (Recommended, with the menu marking which waiting documents are
-open right now.)</li>
-<li><strong>C.</strong> Count only documents open in a browser. The
-number stays small; a closed document waits until you open it.</li>
+<li><strong>Every document counts, open or not (R5).</strong> Ken had
+pictured open documents only, then: closed ones only if it is not really
+complicated, since counting on closed documents felt like a can of
+worms. It is not more work: the helper reads every review the same way
+for the recent and waiting-on-agents lists, so counting all of them is
+the same loop, and open-only would be the extra filter. The worms are
+the old questions, and the day-one cutoff (R4) plus Mark as done handle
+those. The menu lists open waiting documents first and marks them.</li>
 </ul>
-</div>
 <p>Settled with Ken in the crucible:</p>
 <ul>
 <li><p><strong>Which version?</strong> The icon that says when something

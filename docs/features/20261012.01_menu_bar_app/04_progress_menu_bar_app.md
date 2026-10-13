@@ -1,19 +1,18 @@
 # Progress: Menu bar app
 
-**Phase 5, your review.** The full set is ready: brief, architecture and plan, with all three reviews taken in. Three things need your attention: read the set, and answer two questions. No code is written until you say go. Last updated 2026-10-12 10:37.
+**Phase 6, building.** You approved the plan at 20:35 and every question is settled. Step 0 (the wire written down, fixtures, test vectors, the gate script) is the orchestrator's and is under way; the three builders start after it. Nothing needs you right now. Last updated 2026-10-12 20:40.
 
 **Docs:** [Crucible](00_crucible_menu_bar_app.html) · [Brief](01_brief_menu_bar_app.html) · [Architecture](02_architecture_menu_bar_app.html) · [Plan](03_plan_menu_bar_app.html) (each page carries its reviews at the bottom)
 
 ## Needs your attention
 
-- [ ] **Review the full set:** start with the [brief](01_brief_menu_bar_app.html), then the [architecture](02_architecture_menu_bar_app.html) and the [plan](03_plan_menu_bar_app.html). Comment anywhere. Building waits for your go.
-- [ ] **Should the count include documents you do not have open?** A: every document, with the menu marking which are open (recommended). C: only documents open in a browser. Details at the top of the brief's Questions section.
+Nothing right now. The one thing coming later: the menu bar screenshots. The capture probe below shows an agent cannot take them on this Mac, so when the app is built, you will be asked for one picture of the icon and its open menu.
 
 ## Currently working on
 
 | Agent or task | Doing | Started | Branch |
 |---|---|---|---|
-| Orchestrator | Waiting on your review of the full set | 2026-10-12 10:37 | `feat/menu-bar` |
+| Orchestrator | Step 0: the wire in CONTRACTS.md, fixtures, proof vectors, manifest entries, the gate script | 2026-10-12 20:40 | `feat/menu-bar` |
 
 ## Phases
 
@@ -24,8 +23,8 @@
 | 2 Brief | done | 2026-10-12 |
 | 3 Architecture | done | 2026-10-12 |
 | 4 Plan | done | 2026-10-12 |
-| 5 Human review | in progress | 2026-10-12 |
-| 6 Implement | not started | |
+| 5 Human review | done | 2026-10-12 |
+| 6 Implement | in progress | 2026-10-12 |
 | 7 Verify | not started | |
 | 8 Ship and land | not started | |
 | 9 Cleanup | not started | |
@@ -56,12 +55,17 @@ Nothing queued.
 
 No test run yet.
 
+**Capture probe (Step 0, 2026-10-12 20:36):** `screencapture -x -R 0,0,600,30` from the agent's terminal fails with "could not create image from rect" (no screen recording permission). So V29's icon looks come from the app's own `--snapshot` (drawn in code, no permission needed), and the real menu bar picture in V32 is yours to take.
+
+**Starting counts (V33, 2026-10-12 20:36):** helpers 1 (the real one), menu bar apps 0, fake helpers 0, `launchctl list` lahe-test 0, lahe-test plists 0.
+
 ### Ship
 
 Not shipped yet.
 
 ## Log
 
+- 2026-10-12 20:40: Plan approved. Your review changed three rules: "read" is the rail's own "1 new" mark, posted to the store, with no logic of its own and a question treated like any reply; Stop Lahe holds until you start it, and agents' commands fail plainly meanwhile; every document counts, open or not, with open ones marked in the menu. Main merged into the branch (Mark as done and the read mark are what the design now builds on). Step 0 started.
 - 2026-10-12 10:37: Plan review returned 23 findings (6 high), all accepted. The most important: a background tab could have marked answers as seen when it reloaded; a test step would have stopped your live helper (tests now use their own labels and never touch your login items); the signed-request format is now written down exactly, with test vectors, so the Node and Swift halves cannot drift. Full set built and ready for you.
 - 2026-10-12 10:26: Security review returned 7 findings. The one real hole: the app would have sent its secret to any program sitting on the helper's port, which Stop leaves free. Fixed in the design: the app signs requests instead of sending the secret, and trusts only signed answers. The other five fixes are accepted too. One (whether Stop should hold while agents are connected) is now a question for you. The CLI has the same secret weakness today; filed on the board. Plan drafted (3 parallel workstreams, 2 PRs, 34 checks) and sent to the plan reviewer.
 - 2026-10-12 10:17: PM review returned 15 findings (4 high). All accepted: only a focused tab counts as looking, per page; replies before install never count, so day one shows zero; a distinct "can't tell" look; every way a question clears is listed. One question for you came out of it (when an open question stops counting); it waits for the full review. Architecture drafted; security review started.
