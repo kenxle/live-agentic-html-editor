@@ -31,5 +31,6 @@ A SwiftBar script (no real Lahe icon) and a Dock badge on the Library (he keeps 
 
 ### How Stop works
 
-- **Chosen: unload the helper's login item, and teach the CLI to load it again when needed.** A plain kill is restarted at once by `KeepAlive`.
-- **Rejected: a "paused" flag the helper reads at start and then exits.** It would fight launchd, which restarts the helper every ten seconds, and agents would see a helper that keeps dying.
+- **Chosen: a `stopped.json` marker plus unloading the helper's login item.** A plain kill is restarted at once by `KeepAlive`, so the item is unloaded; the marker is what makes the stop hold, because the CLI refuses to load the item again while it stands. Ken, in review: a Stop that restarts itself would make him mad.
+- **Rejected: unload the item and let any `lahe` command load it again.** The first draft, with a warning line in the menu. With an agent listening, Stop lasted seconds (SR7, and Ken's answer above).
+- **Rejected: a "paused" flag the helper reads at start and then exits.** It would fight launchd, which restarts the helper every ten seconds, and agents would see a helper that keeps dying. The marker chosen is read by the CLI before anything is loaded, so launchd never sees a dying helper.

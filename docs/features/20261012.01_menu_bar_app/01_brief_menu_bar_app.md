@@ -116,7 +116,7 @@ This is not a new flag, and it has no logic of its own. It is the rail's "1 new"
 :::
 
 ::: callout-req
-**R14. Quit has two items.** "Hide the icon" closes the menu bar app only; the helper keeps running. "Stop Lahe until next login" stops the helper. A line under it says plainly that a connected agent will start it again, usually within seconds. Whether Stop should hold instead is a question for Ken.
+**R14. Quit has two items, and Stop holds.** "Hide the icon" closes the menu bar app only; the helper keeps running. "Stop Lahe" stops the helper and keeps it stopped until Ken clicks Start in the menu, runs `lahe install`, or logs in again. While it is stopped, an agent's `lahe` commands fail with a plain message that Ken stopped Lahe and when, and nothing an agent does starts it. The menu shows "Stopped by you" with the time, and Start. A line under Stop says agents' commands will fail until he starts it again.
 :::
 
 ### Installing and keeping it working
@@ -202,7 +202,7 @@ Full prose in [01_brief_menu_bar_app_reviews.md](01_brief_menu_bar_app_reviews.m
 | RF8 | Open could ask an agent to pick a document up | Accepted | R11: the menu's open never does. |
 | RF9 | Any command could undo Hide | Accepted | R17: one named command a person runs. |
 | RF10 | Rebuild had no trigger or failure story | Accepted | R18: the helper rebuilds on change; a failure keeps the old app. |
-| RF11 | Stop does not hold while agents are connected | Accepted | R14: a line under Stop says so. |
+| RF11 | Stop does not hold while agents are connected | Accepted, then reversed | Ken, in review: a Stop that restarts itself would make him mad. R14: Stop holds until he starts it, and agents' commands fail plainly meanwhile. |
 | RF12 | No success criteria | Accepted | New "How we know it worked" section. |
 | RF13 | "Connected" and "open" undefined | Accepted | R10 defines both. |
 | RF14 | "A few seconds" needs a number; measure on real data | Accepted | R3 (10 s and 15 s) and R21. |

@@ -1067,10 +1067,13 @@ opens the returned address only when it passes the allowlist
 (<code>http</code>, no user part, <code>library.lahe.localhost</code> or
 a site name plus <code>.lahe.localhost</code>, port absent or the pages
 port), rebuilt from its parsed parts; <code>url: null</code> opens the
-Library. Hide exits with status 0. Stop runs
-<code>launchctl bootout</code> on the helper's label; Start runs
-bootstrap then kickstart. Labels and plist paths are constants in the
-app, never read from a file; tests set their own through a compile-time
+Library. Hide exits with status 0. Stop writes <code>stopped.json</code>
+in the state folder, then runs <code>launchctl bootout</code> on the
+helper's label; while the file stands the menu shows "Stopped by you at
+<time>" and Start. Start removes the file, then runs bootstrap and
+kickstart. The line under Stop says agents' commands will fail until he
+starts it again. Labels and plist paths are constants in the app, never
+read from a file; tests set their own through a compile-time
 <code>-D</code> flag. Start does not check the plist's contents
 (architecture, "Install, rebuild, and Quit"). Errors go to
 <code>menubar.log</code> in the state folder.</p>
@@ -1161,12 +1164,17 @@ again. <strong>Files:</strong> <code>src/service/menubar.js</code>,
 tests. <strong>Acceptance:</strong> V24.</p>
 <h3 id="task-34-starting-a-stopped-helper-and-status">Task 3.4: Starting
 a stopped helper, and status</h3>
-<p><strong>Spec:</strong> <code>startThroughItem</code> bootstraps the
-helper's plist and then kickstarts when kickstart reports the job is not
-loaded, after checking the plist's contents are what
-<code>login_item.js</code> would write for the recorded install. Labels
-and paths are constants. <code>lahe status</code> prints one line on the
-icon. <strong>Files:</strong> <code>src/service/login_item.js</code>,
+<p><strong>Spec:</strong> <code>startThroughItem</code> first looks for
+<code>&lt;state&gt;/stopped.json</code>: if it stands, it throws the
+stop message (who, when, how to start it) and starts nothing, so the
+command exits 1. Otherwise, when kickstart reports the job is not
+loaded, it bootstraps the helper's plist and then kickstarts, after
+checking the plist's contents are what <code>login_item.js</code> would
+write for the recorded install. <code>lahe install</code> removes
+<code>stopped.json</code>; the helper removes it on its own start.
+Labels and paths are constants. <code>lahe status</code> prints one line
+on the icon, and says "stopped by you" when the marker stands.
+<strong>Files:</strong> <code>src/service/login_item.js</code>,
 <code>src/cli/commands/status.js</code>, tests.
 <strong>Acceptance:</strong> V26, V27.</p>
 <p><strong>Step test:</strong> <code>npm run gate:unit</code> green with
@@ -1554,11 +1562,14 @@ not running, not installed, or names the failed rebuild</td>
 </tr>
 <tr>
 <td>V27</td>
-<td>R14 Start (SR6)</td>
-<td>When kickstart reports the helper's job is not loaded, the CLI
-checks the plist's contents, bootstraps it, then kickstarts, and an
-agent's <code>lahe review</code> works after Stop; a plist that differs
-is refused with a message to run <code>lahe install</code></td>
+<td>R14 Stop holds (SR6, SR7)</td>
+<td>With <code>stopped.json</code> standing,
+<code>startThroughItem</code> throws the stop message naming the time
+and starts nothing, so <code>lahe review</code> exits 1;
+<code>lahe install</code> removes the marker; the helper removes it on
+start. Without it, when kickstart reports the job not loaded, the CLI
+checks the plist's contents, bootstraps, then kickstarts; a plist that
+differs is refused with a message to run <code>lahe install</code></td>
 <td>U</td>
 </tr>
 <tr>
@@ -1598,9 +1609,12 @@ and passes <code>proof_vectors.json</code></td>
 <tr>
 <td>V31</td>
 <td>R14, R17 Quit</td>
-<td>With test labels: Hide exits and stays hidden through a crash test
-of the helper; Stop unloads the helper; Start bootstraps and kickstarts
-it without a contents check; the menu shows the line about agents</td>
+<td>With test labels and a test state folder: Hide exits and stays
+hidden through a crash test of the helper; Stop writes the marker and
+unloads the helper, the menu reads "Stopped by you" with the time, and a
+<code>lahe status</code> against that state folder says so and exits 1
+on start; Start removes the marker, bootstraps and kickstarts without a
+contents check</td>
 <td>M</td>
 </tr>
 <tr>

@@ -1023,11 +1023,14 @@ short.</p>
 the browser.</p>
 </div>
 <div class="callout callout-req">
-<p><strong>R14. Quit has two items.</strong> "Hide the icon" closes the
-menu bar app only; the helper keeps running. "Stop Lahe until next
-login" stops the helper. A line under it says plainly that a connected
-agent will start it again, usually within seconds. Whether Stop should
-hold instead is a question for Ken.</p>
+<p><strong>R14. Quit has two items, and Stop holds.</strong> "Hide the
+icon" closes the menu bar app only; the helper keeps running. "Stop
+Lahe" stops the helper and keeps it stopped until Ken clicks Start in
+the menu, runs <code>lahe install</code>, or logs in again. While it is
+stopped, an agent's <code>lahe</code> commands fail with a plain message
+that Ken stopped Lahe and when, and nothing an agent does starts it. The
+menu shows "Stopped by you" with the time, and Start. A line under Stop
+says agents' commands will fail until he starts it again.</p>
 </div>
 <h3 id="installing-and-keeping-it-working">Installing and keeping it
 working</h3>
@@ -1139,41 +1142,6 @@ open right now.)</li>
 number stays small; a closed document waits until you open it.</li>
 </ul>
 </div>
-<div class="callout callout-question">
-<p><strong>What should "Stop Lahe" in the menu do while an agent is
-working?</strong></p>
-<p>Some background first. "Lahe" here means the helper: the background
-program on your Mac that serves your review pages, takes your comments,
-and hands them to agents. It starts when you log in and keeps running.
-If it dies, macOS starts it again within seconds. Every
-<code>lahe</code> command an agent runs (<code>lahe review</code>,
-<code>lahe status</code>, <code>lahe monitor</code>) also starts it if
-it is not running. That is how a Claude session can open a review for
-you without you doing anything.</p>
-<p>The menu's Quit item has two choices. "Hide the icon" just removes
-the icon. "Stop Lahe" stops the helper: your review pages go dark,
-nothing takes comments, and the icon shows "not running". You might do
-that to save battery, to get a clean slate when something looks wrong,
-or because you are done for the day.</p>
-<p>The catch: if an agent is in the middle of a review, its next
-<code>lahe</code> command starts the helper right back up, within
-seconds. So with an agent connected, Stop barely stops anything. The
-question is what you want in that case.</p>
-<ul>
-<li><strong>A. Stop is "stop until something needs it."</strong> Agents
-can start the helper again, and the menu says so under the Stop item
-("an agent may start it again"). Nothing an agent is doing breaks; if
-you wanted it to stay down, you close that agent's session first.
-(Recommended: you rarely stop Lahe, and a stop that breaks an agent
-mid-review costs more than it saves.)</li>
-<li><strong>B. Stop is "stay stopped until I say so."</strong> The
-helper stays down until you click Start in the menu, run
-<code>lahe install</code>, or log in again. An agent's
-<code>lahe review</code> fails with "Ken stopped Lahe" and it cannot
-serve pages until you bring it back. Safer when something looks wrong;
-worse when you forget you stopped it and an agent sits there stuck.</li>
-</ul>
-</div>
 <p>Settled with Ken in the crucible:</p>
 <ul>
 <li><p><strong>Which version?</strong> The icon that says when something
@@ -1192,8 +1160,14 @@ version counts only what Lahe knows for certain.</p></li>
 <li><p><strong>Agents do not change how they work.</strong> The icon is
 another way of seeing and reaching what the helper already
 records.</p></li>
-<li><p><strong>Quit has two items:</strong> hide the icon, or stop Lahe
-until next login.</p></li>
+<li><p><strong>Quit has two items:</strong> hide the icon, or stop
+Lahe.</p></li>
+<li><p><strong>Stop holds (R14).</strong> Ken, in review: if he clicks
+Stop and it immediately restarts, he would be mad. So the helper stays
+stopped until he clicks Start, runs <code>lahe install</code>, or logs
+in again, and an agent's <code>lahe</code> commands fail plainly until
+then. The earlier draft let agents restart it, with a warning line; the
+security review had flagged the same thing (SR7).</p></li>
 <li><p><strong>"Read" is the rail's own read mark (R5), and a question
 is not a special case.</strong> A reply counts until its card is opened,
 exactly when the rail drops its "1 new" tag. Two earlier drafts gave the
@@ -1215,9 +1189,6 @@ menu.</li>
 (R10),</strong> because Lahe records no agent name today. When board row
 LAHE-agent-name-default lands, the menu can show "Claude" or "Codex"
 too.</li>
-<li><strong>"Stop Lahe until next login" can be undone early by an agent
-(R14).</strong> An agent's <code>lahe review</code> asks for a helper,
-and refusing would break that agent. The menu says so.</li>
 <li><strong>Up to 8 rows per list (R12),</strong> tuned on the real
 menu.</li>
 </ul>
@@ -1302,8 +1273,10 @@ app.</td>
 <tr>
 <td>RF11</td>
 <td>Stop does not hold while agents are connected</td>
-<td><span class="accepted">Accepted</span></td>
-<td>R14: a line under Stop says so.</td>
+<td>Accepted, then reversed</td>
+<td>Ken, in review: a Stop that restarts itself would make him mad. R14:
+Stop holds until he starts it, and agents' commands fail plainly
+meanwhile.</td>
 </tr>
 <tr>
 <td>RF12</td>

@@ -24,7 +24,7 @@ Architecture: "`install.json` gains a `menubar` block", "Install, rebuild, and Q
 
 ### Task 3.4: Starting a stopped helper, and status
 
-**Spec:** `startThroughItem` bootstraps the helper's plist and then kickstarts when kickstart reports the job is not loaded, after checking the plist's contents are what `login_item.js` would write for the recorded install. Labels and paths are constants. `lahe status` prints one line on the icon.
+**Spec:** `startThroughItem` first looks for `<state>/stopped.json`: if it stands, it throws the stop message (who, when, how to start it) and starts nothing, so the command exits 1. Otherwise, when kickstart reports the job is not loaded, it bootstraps the helper's plist and then kickstarts, after checking the plist's contents are what `login_item.js` would write for the recorded install. `lahe install` removes `stopped.json`; the helper removes it on its own start. Labels and paths are constants. `lahe status` prints one line on the icon, and says "stopped by you" when the marker stands.
 **Files:** `src/service/login_item.js`, `src/cli/commands/status.js`, tests.
 **Acceptance:** V26, V27.
 

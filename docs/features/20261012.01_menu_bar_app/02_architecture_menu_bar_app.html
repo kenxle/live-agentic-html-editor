@@ -1084,8 +1084,9 @@ field, the summary's fields and the signed-request wire</td>
 </tr>
 <tr>
 <td><code>src/service/login_item.js</code></td>
-<td>Starting a helper that the app stopped: bootstrap before
-kickstart</td>
+<td><code>startThroughItem</code> refuses while
+<code>stopped.json</code> stands, and bootstraps before kickstart when
+the item is unloaded for any other reason</td>
 <td>changed</td>
 </tr>
 <tr>
@@ -1305,23 +1306,32 @@ and not yet answered is read; the rail still shows it as asking.</p>
     Stamp --&gt;|&quot;no&quot;| Idle[&quot;nothing&quot;]
 
     Hide[&quot;menu: Hide the icon&quot;] --&gt; Exit[&quot;app exits cleanly;&lt;br/&gt;launchd leaves it stopped&lt;br/&gt;until login or lahe menubar show&quot;]
-    Stop[&quot;menu: Stop Lahe until next login&quot;] --&gt; Bootout[&quot;launchctl bootout lahe-helper&quot;]
-    Bootout --&gt; Back[&quot;next login loads it again.&lt;br/&gt;A lahe command that needs it&lt;br/&gt;bootstraps the item, then kickstarts&quot;]</code></pre>
+    Stop[&quot;menu: Stop Lahe&quot;] --&gt; Mark[&quot;write stopped.json,&lt;br/&gt;then launchctl bootout lahe-helper&quot;]
+    Mark --&gt; Held[&quot;an agent&#39;s lahe command sees&lt;br/&gt;stopped.json and fails plainly&quot;]
+    Mark --&gt; Back[&quot;Start in the menu, lahe install,&lt;br/&gt;or the next login clears it&lt;br/&gt;and loads the item again&quot;]</code></pre>
 <ul>
 <li><strong>Hide</strong> exits with status 0. The login item restarts
 the app only on a crash (<code>KeepAlive</code> with
 <code>SuccessfulExit: false</code>), so Hide holds until the next login
 or <code>lahe menubar show</code>.</li>
-<li><strong>Stop Lahe</strong> unloads the helper's login item, because
-a plain kill would be restarted at once. Whether Stop should hold while
-agents are connected is a question for Ken (the questions leaf); this
-design assumes it does not, and the menu says so. Today a
-<code>lahe</code> command asks an unloaded item to kickstart and fails.
-<code>startThroughItem</code> gains one step: when kickstart reports the
-job is not loaded, bootstrap the plist first. That keeps agents working
-after Ken stops Lahe.</li>
-<li><strong>Start Lahe</strong>, shown when the helper is down, does the
-same bootstrap and kickstart.</li>
+<li><strong>Stop Lahe holds (R14).</strong> The app writes
+<code>&lt;state&gt;/stopped.json</code>
+(<code>{"by": "menu bar", "at": "..."}</code>) and then unloads the
+helper's login item, because a plain kill would be restarted at once.
+The marker is the hold: <code>startThroughItem</code>, the path every
+<code>lahe</code> command takes to start an installed helper, refuses
+while the file exists, with "Ken stopped Lahe from the menu bar at
+<time>. Click Start in the menu, or run <code>lahe install</code>." and
+a non-zero exit, so an agent's <code>lahe review</code> fails in one
+line and starts nothing. Without the marker (an item unloaded by hand,
+or a stale install), <code>startThroughItem</code> bootstraps the plist
+and then kickstarts, which today's code cannot do.</li>
+<li><strong>Start Lahe</strong>, shown while stopped with "Stopped by
+you at <time>", removes the marker, bootstraps and kickstarts.
+<code>lahe install</code> removes it too. The helper removes it on its
+own start, so the login item loading at the next login ends the hold;
+since nothing else can start the helper while the marker stands, a
+running helper always means Ken started it.</li>
 <li><strong>Bootstrap checks the plist first.</strong> Before loading
 <code>lahe-helper.plist</code>, the CLI checks its contents are what
 <code>login_item.js</code> would write for the recorded install, and
@@ -1439,12 +1449,21 @@ Monitor, and is hard to test.</li>
 </ul>
 <h3 id="how-stop-works">How Stop works</h3>
 <ul>
-<li><strong>Chosen: unload the helper's login item, and teach the CLI to
-load it again when needed.</strong> A plain kill is restarted at once by
-<code>KeepAlive</code>.</li>
+<li><strong>Chosen: a <code>stopped.json</code> marker plus unloading
+the helper's login item.</strong> A plain kill is restarted at once by
+<code>KeepAlive</code>, so the item is unloaded; the marker is what
+makes the stop hold, because the CLI refuses to load the item again
+while it stands. Ken, in review: a Stop that restarts itself would make
+him mad.</li>
+<li><strong>Rejected: unload the item and let any <code>lahe</code>
+command load it again.</strong> The first draft, with a warning line in
+the menu. With an agent listening, Stop lasted seconds (SR7, and Ken's
+answer above).</li>
 <li><strong>Rejected: a "paused" flag the helper reads at start and then
 exits.</strong> It would fight launchd, which restarts the helper every
-ten seconds, and agents would see a helper that keeps dying.</li>
+ten seconds, and agents would see a helper that keeps dying. The marker
+chosen is read by the CLI before anything is loaded, so launchd never
+sees a dying helper.</li>
 </ul>
 <h2 id="failure-modes--edge-cases">Failure Modes / Edge Cases</h2>
 <ul>
@@ -1495,6 +1514,11 @@ open, so it marks nothing.</li>
 <li><strong>The page is offline when the card is opened.</strong> The
 mark sits in the outbox like any other record and posts when the helper
 is back. The count stays up until then, which is the honest answer.</li>
+<li><strong>An agent while Lahe is stopped.</strong> Its
+<code>lahe</code> command fails with the stop message and exit code 1; a
+<code>lahe monitor</code> already running sees the helper down and
+reports it as it does today. The agent tells its human, and only Ken's
+Start, <code>lahe install</code> or login brings the helper back.</li>
 <li><strong>Another user on the Mac.</strong> Their app reads their own
 state folder and their own helper port. The secret file is
 owner-only.</li>
@@ -1637,9 +1661,10 @@ success, full path to <code>xcrun</code>.</td>
 <tr>
 <td>SR7</td>
 <td>Agents restart a stopped helper within seconds</td>
-<td>Deferred to Ken</td>
-<td>A question in the questions leaf; the design keeps agents able to
-restart it, and the menu says so plainly.</td>
+<td><span class="accepted">Accepted</span></td>
+<td>Ken chose a Stop that holds: <code>stopped.json</code> blocks every
+<code>lahe</code> command from starting the helper until he starts it,
+logs in, or reinstalls.</td>
 </tr>
 </tbody>
 </table></div>

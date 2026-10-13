@@ -52,7 +52,7 @@ What stays the same: every existing route, the Library page and its token, the a
 | `docs/CONTRACTS.md` | The `reply.seen` event, the `reply_seen` field, the summary's fields and the signed-request wire | changed |
 | `src/cli/commands/install.js` | Offers the icon, `--menu-bar` and `--no-menu-bar`; uninstall removes it | changed |
 | `src/cli/commands/menubar.js` | `lahe menubar show` brings a hidden icon back; `lahe menubar rebuild` | new |
-| `src/service/login_item.js` | Starting a helper that the app stopped: bootstrap before kickstart | changed |
+| `src/service/login_item.js` | `startThroughItem` refuses while `stopped.json` stands, and bootstraps before kickstart when the item is unloaded for any other reason | changed |
 | `src/cli/commands/status.js` | One line on the menu bar app (R20) | changed |
 | `macos/menubar/` | `LaheMenuBar.swift`, `Info.plist`, `README.md` | new |
 | `src/shared/manifest.js` | The new `src/` files | changed |
@@ -189,13 +189,14 @@ flowchart TD
     Stamp -->|"no"| Idle["nothing"]
 
     Hide["menu: Hide the icon"] --> Exit["app exits cleanly;<br/>launchd leaves it stopped<br/>until login or lahe menubar show"]
-    Stop["menu: Stop Lahe until next login"] --> Bootout["launchctl bootout lahe-helper"]
-    Bootout --> Back["next login loads it again.<br/>A lahe command that needs it<br/>bootstraps the item, then kickstarts"]
+    Stop["menu: Stop Lahe"] --> Mark["write stopped.json,<br/>then launchctl bootout lahe-helper"]
+    Mark --> Held["an agent's lahe command sees<br/>stopped.json and fails plainly"]
+    Mark --> Back["Start in the menu, lahe install,<br/>or the next login clears it<br/>and loads the item again"]
 ```
 
 - **Hide** exits with status 0. The login item restarts the app only on a crash (`KeepAlive` with `SuccessfulExit: false`), so Hide holds until the next login or `lahe menubar show`.
-- **Stop Lahe** unloads the helper's login item, because a plain kill would be restarted at once. Whether Stop should hold while agents are connected is a question for Ken (the questions leaf); this design assumes it does not, and the menu says so. Today a `lahe` command asks an unloaded item to kickstart and fails. `startThroughItem` gains one step: when kickstart reports the job is not loaded, bootstrap the plist first. That keeps agents working after Ken stops Lahe.
-- **Start Lahe**, shown when the helper is down, does the same bootstrap and kickstart.
+- **Stop Lahe holds (R14).** The app writes `<state>/stopped.json` (`{"by": "menu bar", "at": "..."}`) and then unloads the helper's login item, because a plain kill would be restarted at once. The marker is the hold: `startThroughItem`, the path every `lahe` command takes to start an installed helper, refuses while the file exists, with "Ken stopped Lahe from the menu bar at <time>. Click Start in the menu, or run `lahe install`." and a non-zero exit, so an agent's `lahe review` fails in one line and starts nothing. Without the marker (an item unloaded by hand, or a stale install), `startThroughItem` bootstraps the plist and then kickstarts, which today's code cannot do.
+- **Start Lahe**, shown while stopped with "Stopped by you at <time>", removes the marker, bootstraps and kickstarts. `lahe install` removes it too. The helper removes it on its own start, so the login item loading at the next login ends the hold; since nothing else can start the helper while the marker stands, a running helper always means Ken started it.
 - **Bootstrap checks the plist first.** Before loading `lahe-helper.plist`, the CLI checks its contents are what `login_item.js` would write for the recorded install, and refuses with a message to run `lahe install` if not (SR6).
 - **The labels are constants.** The app and the CLI use the fixed labels `lahe-helper` and `lahe-menubar` and their fixed plist paths; nothing reads a label from `install.json` to run `launchctl` (SR6). Tests get their own labels through a seam that stays a constant: the CLI's existing `label` and `home` options, and a compile-time `-D` flag for the app. No test ever loads, stops, rewrites or removes the real labels.
 - **A rebuild respects Hide.** After swapping in a rebuilt app, the helper restarts it only if `launchctl print` says it was running. A hidden icon stays hidden through a `git pull` (R17).
@@ -222,6 +223,7 @@ flowchart TD
 - **Many documents waiting.** The icon shows the number up to 99, then "99+". The waiting list is not cut (R12); in practice the install cutoff (R4) keeps it short.
 - **Two browsers on one review.** A mark posted from either lands in the store, and the other adopts it on its next poll, so "1 new" clears in both. A second window refused the rail has no cards to open, so it marks nothing.
 - **The page is offline when the card is opened.** The mark sits in the outbox like any other record and posts when the helper is back. The count stays up until then, which is the honest answer.
+- **An agent while Lahe is stopped.** Its `lahe` command fails with the stop message and exit code 1; a `lahe monitor` already running sees the helper down and reports it as it does today. The agent tells its human, and only Ken's Start, `lahe install` or login brings the helper back.
 - **Another user on the Mac.** Their app reads their own state folder and their own helper port. The secret file is owner-only.
 - **Ken renames or retires a review.** Retired reviews are dropped from every section. A rename shows on the next summary.
 
@@ -260,4 +262,4 @@ Full prose in [02_architecture_menu_bar_app_reviews.md](02_architecture_menu_bar
 | SR4 | The URL allowlist was wider than needed | Accepted | Only `*.lahe.localhost` at the pages port or none; URL rebuilt from parsed parts; titles cleaned. |
 | SR5 | Which clone and which files a rebuild compiles | Accepted | Installed clone only, fixed file list, temp folder, rename on success, full path to `xcrun`. |
 | SR6 | launchctl labels read from a file | Accepted | Fixed labels and paths; bootstrap checks the plist's contents. |
-| SR7 | Agents restart a stopped helper within seconds | Deferred to Ken | A question in the questions leaf; the design keeps agents able to restart it, and the menu says so plainly. |
+| SR7 | Agents restart a stopped helper within seconds | Accepted | Ken chose a Stop that holds: `stopped.json` blocks every `lahe` command from starting the helper until he starts it, logs in, or reinstalls. |
