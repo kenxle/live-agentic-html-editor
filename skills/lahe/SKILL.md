@@ -644,10 +644,47 @@ page to load with the helper down.
   Markdown file's frontmatter. `lahe style add <folder>` installs a style and
   `lahe style list` shows the installed ones.
 
-  The stylesheet ships ready-made components: stat tiles, callouts, insight panels,
-  badges, tables, option cards, image layouts, and more. Build the page from them
-  rather than bare paragraphs. `vendor/stclair-doc-style/COMPONENTS.md` in the Lahe
-  clone lists each one with its markup.
+- **Lay the page out in the house style, `international`.** Linking the
+  stylesheet is not enough; the layout comes from the markup. A Markdown page
+  gets it from its headings: the first `#` becomes the title block and each `##`
+  a numbered section. An HTML page you write has to spell it out:
+
+  ```html
+  <body>
+
+  <div class="hero">
+    <h1>The title, as a sentence saying what this is</h1>
+    <p class="lede">One or two sentences: what this is for and who it is for.</p>
+  </div>
+
+  <section class="sheet">
+    <div class="sheet-head"><h2>First section</h2><span class="n">Section 1</span></div>
+    <p>Body text.</p>
+    <div class="sheet-head sheet-head--medium"><h3>A subsection</h3><span class="n">Label</span></div>
+    <p>More text.</p>
+  </section>
+
+  <section class="sheet">
+    <div class="sheet-head"><h2>Second section</h2><span class="n">Section 2</span></div>
+    <p>Body text.</p>
+  </section>
+
+  </body>
+  ```
+
+  - Every page has one `.hero`, and every major section is a `section.sheet`
+    with a `.sheet-head`. That draws the hanging rule and the section number.
+  - Put the hero and the sections directly in `<body>`. The stylesheet sets the
+    page column and its grid; a wrapper of your own breaks it.
+  - Prose gets its line length only inside `.hero`, `section.sheet`, or a folded
+    section. A paragraph loose in `<body>` runs the full column width.
+  - Components go inside sections, never in place of them: stat tiles, callouts,
+    insight panels, badges, tables, option cards, image layouts, and more. Use
+    one loud component per kind per page.
+
+  `vendor/stclair-doc-style/COMPONENTS.md` in the Lahe clone lists each
+  component with its markup. The clone is the path inside `~/.local/bin/lahe`.
+  Read it before you write a page that needs more than headings and prose.
 
 - **Keep the top of a working document current.** When you wrote the document
   and it has no format of its own (a plan, a brief, a progress or decision

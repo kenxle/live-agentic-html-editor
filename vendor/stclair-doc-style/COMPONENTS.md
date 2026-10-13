@@ -52,6 +52,9 @@ Sample text below is placeholder. Replace it.
 - `.hero`: the title block. Every document has one.
 - `.sheet` with `.sheet-head`: a numbered section under a hanging rule. Every
   major section is one. The `<span class="n">` is the label on the right.
+  Prose gets its reading width only inside `.hero`, `section.sheet`, a folded
+  section or a check-in block, so a paragraph loose in `<body>` runs the full
+  column width.
 - `.masthead` (`<div class="masthead"><div class="meta">Report, March 2026</div></div>`)
   is an optional small line above the hero.
 - `.read` on a paragraph caps it at reading width.
