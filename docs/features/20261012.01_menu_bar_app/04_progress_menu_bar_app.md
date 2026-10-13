@@ -1,6 +1,6 @@
 # Progress: Menu bar app
 
-**Phase 6, building.** You approved the plan at 20:35 and every question is settled. Step 0 is done (the wire in CONTRACTS.md, fixtures, proof vectors, the gate script; unit gate 2724 passed, 0 failed) and the three builders are at work in their own worktrees. Nothing needs you right now. Last updated 2026-10-12 20:44.
+**Where things are at 22:46.** The walk on a copy of your state folder found two real problems, both being fixed before PR 2: the idle cost is too high (V18 fails: each poll costs the helper about 47 ms of processor time, and the app itself about 10 ms, against a budget of one open tab), and a question an agent leaves on a document no page is open on never reaches the icon until something opens that document. PR 1 ([#61](https://github.com/kenxle/live-agentic-html-editor/pull/61), invisible, nothing polls it yet) still merges once its gate is green; the fixes land with PR 2. Nothing needs you now.
 
 **Docs:** [Crucible](00_crucible_menu_bar_app.html) · [Brief](01_brief_menu_bar_app.html) · [Architecture](02_architecture_menu_bar_app.html) · [Plan](03_plan_menu_bar_app.html) (each page carries its reviews at the bottom)
 
@@ -24,7 +24,7 @@ The icon keeps the review layer's speech bubble. Main changed the browser tab's 
 
 | Agent or task | Doing | Started | Branch |
 |---|---|---|---|
-| Orchestrator | Checkpoint 1 (PR 1): browser suite, code and security reviews of the integrated diff, then the pull request | 2026-10-12 20:44 | `feat/menu-bar` |
+| Orchestrator | PR 1 open, watching CI; then PR 2's full gate, the walk on a copy of the state folder, and PR 2 | 2026-10-12 20:44 | `feat/menu-bar` |
 | Builder: summary (Opus) | Done: returned and merged at 2026-10-12 21:20 | 2026-10-12 20:44 | `feat/menu-bar-summary` |
 | Builder: macapp (Opus) | Done: returned at 2026-10-12 21:10. Waiting for summary before the merge | 2026-10-12 20:44 | `feat/menu-bar-macapp` |
 | Builder: install (Opus) | Done: returned at 2026-10-12 21:06. Waiting for the other two before the merge | 2026-10-12 20:44 | `feat/menu-bar-install` |
@@ -40,8 +40,8 @@ The icon keeps the review layer's speech bubble. Main changed the browser tab's 
 | 4 Plan | done | 2026-10-12 |
 | 5 Human review | done | 2026-10-12 |
 | 6 Implement | in progress | 2026-10-12 |
-| 7 Verify | not started | |
-| 8 Ship and land | not started | |
+| 7 Verify | in progress (PR 1 verified; PR 2 next) | 2026-10-12 |
+| 8 Ship and land | in progress (PR 1 open) | 2026-10-12 |
 | 9 Cleanup | not started | |
 
 ## The record
@@ -74,6 +74,8 @@ Nothing queued.
 
 ### Test results
 
+- **V18 on a copy of your state folder (690 reviews, 93 sessions), 10 idle minutes each, machine load 3.5 to 6.2 from other agents:** helper with the app polling 6.31 s of processor time; helper alone 0.67 s; the app 1.18 s; one review tab's renderer (headless Chromium, rail mounted) 1.02 s. Verdict: fails. The app's share (5.64 + 1.18 = 6.82 s) is 6.7 times the tab. Warm median of 50 back-to-back `summary.read` requests 13.2 ms (p90 14.2 ms); spaced 5 s apart, median 27.5 ms; first read after start 384 ms. The copy's helper ran without `--always-on`. Raw numbers in `~/Documents/lahe-menubar-review/`, outside the repo.
+- **The summary on real data:** first read 200, signed, 4,760 bytes; `waiting_on_you.count` 0 on the first read with `summary.json` seeded; waiting on agents 13; open documents 6 falling to 2 as copied window holders went stale; 93 open sessions, 1 connected; 466 more recent; 45 titles, path hints and names clean, no nulls. The app's `--dump-menu` order matches the brief; the test build ran 11 minutes against the copy with no error logged and a count equal to the summary's.
 - Checkpoint 1 (PR 1, `cc04e6a1`): `npm run gate:unit` 2769 passed, 0 failed; the browser suite alone, Chromium: 884 passed, 0 failed, 7 skipped, in 7.3 minutes; helpers 1 before and 1 after.
 - PR 2 integration (`feat/menu-bar-pr2`, `10067c50`): `npm run gate:unit` 2831 passed, 0 failed; `npm run check:menubar` built `Lahe.app` through the real recipe in 7.4 seconds and the app's self-test passed 84 of 84; no helper or launchd job left behind. The app's own four tests against a test build and the fake helper: 4 passed, 0 failed, including Stop and Start on a `lahe-test` launchd job; no job or plist left behind.
 - Checkpoint 1 after the fix round (`77ad1ed4`): the browser suite alone, Chromium: 884 passed, 0 failed, 7 skipped, in 7.2 minutes.
@@ -84,10 +86,13 @@ Nothing queued.
 
 ### Ship
 
-Not shipped yet.
+- PR 1: [#61](https://github.com/kenxle/live-agentic-html-editor/pull/61), opened 2026-10-12 22:02 from `feat/menu-bar` at `2697c4c9`. Full gate on that commit: lint, unit 2783 passed, browser 884 passed, 0 failed.
+- PR 2: not opened yet.
 
 ## Log
 
+- 2026-10-12 22:46: the flow walk returned (full notes outside the repo). Two findings: V18 fails on both sides (helper about 47 ms of processor time per poll, app about 10 ms), and a reply to a document no page is polling is never folded, so it never counts (the helper reads reply files only for reviews something has asked about since it started; one `review.read` fixed it). Fix rounds sent to the summary builder (profile the poll, keep the answer in memory and rebuild only what the helper itself wrote; fold unwatched replies within one liveness beat) and to the app builder (skip decoding, menu and icon work when the answer is unchanged). Main merged into PR 1 twice as other work landed; its gate on the latest merge commit is running.
+- 2026-10-12 22:02: PR 1 opened (#61) after the full gate on its final commit: unit 2783 passed, 0 failed; browser 884 passed, 0 failed, 7 skipped; one helper before and after. The follow-up from the spec check is in: no string field is ever null (a session's `review` is the one that may be), and the two missing tests are written.
 - 2026-10-12 21:53: the browser suite on the merged fix round: 884 passed, 0 failed, 7 skipped. The spec check of PR 1 found no blocking gap; its follow-ups (no nulls where the app expects strings, two missing tests, three stale doc lines) are with the summary builder and done in the docs. PR 1 opens after that follow-up and one last full gate on the final commit.
 - 2026-10-12 21:44: the fix round came back (`f80c73ae`) with all ten findings fixed, each test written red first, and is merged. gate:unit on the merge: 2780 passed, 0 failed. One number still open: the summary's warm median on a 700-review made-up state folder measured 8.7 to 13.4 ms with the machine at a load of about 9 from other agents; V18's 10 ms limit is measured on a quiet machine at Step 4. The browser suite runs again once another agent's run on this machine finishes; the independent spec check of PR 1 started.
 - 2026-10-12 21:32: code review of PR 1 returned three findings, all taken: a Hold on the rail would also hold back read marks, so the icon would keep counting what you had read (read marks now post through a Hold); the cache key stats the review folder, whose time is too coarse on Linux to catch two rewrites in one tick (back to the files the plan named); `reply_seen` was on every item in `review.json`, which agents read, so it moves out of that file and stays on the page's own reads. One fix round sent to the summary builder with the seven security findings.

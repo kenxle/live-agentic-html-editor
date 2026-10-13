@@ -37,8 +37,9 @@ Third-party files are vendored under `vendor/` rather than installed:
 - `vendor/mermaid/mermaid.tiny.js`: `@mermaid-js/tiny` 11.16.1, MIT.
 - `vendor/heroicons/arrow-right-start-on-rectangle.svg`, `swatch.svg` and `document-arrow-down.svg`: Heroicons 2.2.0, MIT.
 - `vendor/stclair-doc-style/`: the St. Clair AI document style. `system-tokens.css`
-  and `document.css` are copies from the personal repo; `lahe-markdown.css` is
-  this repo's own layer over them. `fonts/` holds three latin-subset variable
+  and `document.css` are this repo's own, and the official copy of the style
+  (Ken decided this on 2026-10-12; the personal repo's copy is no longer the
+  source); `lahe-markdown.css` is a thin layer over them. `fonts/` holds three latin-subset variable
   woff2 files (Schibsted Grotesk, Hanken Grotesk, JetBrains Mono), all OFL 1.1.
 
 Each folder carries the upstream LICENSE and a README naming the package and
@@ -53,9 +54,8 @@ The document style is read, not required: `src/service/markdown.js` joins the
 three CSS files into one bundle, inlines it into every rendered Markdown page,
 and serves it at `.lahe-doc-style.css` for pages an agent writes. The fonts are
 copied beside a written artifact and served at `.lahe-fonts/<file>.woff2`. To
-take a newer style, copy the personal repo's two files over the vendored ones
-and update `vendor/stclair-doc-style/README.md`; `lahe-markdown.css` is ours and
-is edited here.
+change the style, edit the vendored files here and update
+`vendor/stclair-doc-style/README.md`. Nothing is copied in from the personal repo.
 
 The paid Lahe Styles never enter this repo. This repo is public, and the styles
 are sold. Their files live in Ken's private personal repo, and a user installs

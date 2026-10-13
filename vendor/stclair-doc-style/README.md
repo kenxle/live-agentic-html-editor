@@ -9,18 +9,19 @@ already carries its own styles is never touched.
 
 | File | Where it came from |
 | --- | --- |
-| `system-tokens.css` | `~/Documents/workspace/personal/lib/templates/system-tokens.css`, copied whole on 2026-09-30 from `main` at `fbd13fcc` (the style-components merge: 14 components and 3 upgrades) |
-| `document.css` | `~/Documents/workspace/personal/lib/templates/document.css`, copied whole on 2026-09-30 from `main` at `fbd13fcc` (the style-components merge: 14 components and 3 upgrades) |
+| `system-tokens.css` | started as a copy of the personal repo's `lib/templates/system-tokens.css` (2026-09-30, `fbd13fcc`). LAHE's copy is now the official one, edited here |
+| `document.css` | started as a copy of the personal repo's `lib/templates/document.css` (2026-09-30, `fbd13fcc`). LAHE's copy is now the official one, edited here. It has four components the personal copy lacks: links row, contents list, cross-reference line and status dot |
 | `COMPONENTS.md` | written in this repo: an agent-facing catalog of every component class with minimal markup, built from `personal/docs/document-style-guide.md` and `personal/lib/templates/document-every-component.html`. Update it when a sync adds or renames a component |
 | `lahe-markdown.css` | written in this repo, not a copy |
 | `fonts/*.woff2` | Google Fonts, latin subset, fetched 2026-09-16 |
 | `LICENSE` | SIL Open Font License 1.1, with all three font copyright lines |
 
-The spec for the style is `personal/docs/document-style-guide.md`. The two
-copied files are taken whole, header comments included, and are never edited
-here. If one of them needs to change, change it in the personal repo and copy
-the new version over, the same way the other vendor folders work. Nothing
-imports across repos, by rule.
+On 2026-10-12 Ken decided that LAHE's copy of the style is the official one. The
+personal repo's copy is no longer the source, so `system-tokens.css` and
+`document.css` are edited here, and nothing is copied in from the personal repo.
+The header comments in both files stay as written. The guide that explains the
+style, `personal/docs/document-style-guide.md`, still lives in the personal repo
+and may lag this folder.
 
 `lahe-markdown.css` is LAHE's own layer, and it is thin on purpose. `document.css`
 styles bare elements now: a class-free `ul` gets the sage dot, a class-free `ol`
