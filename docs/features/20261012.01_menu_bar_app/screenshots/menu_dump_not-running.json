@@ -1,0 +1,27 @@
+{
+  "look" : "not-running",
+  "rows" : [
+    {
+      "enabled" : false,
+      "kind" : "note",
+      "title" : "Lahe is not running"
+    },
+    {
+      "action" : "start",
+      "enabled" : true,
+      "kind" : "item",
+      "title" : "Start Lahe",
+      "tooltip" : "Starts the Lahe helper again."
+    },
+    {
+      "kind" : "separator"
+    },
+    {
+      "action" : "hide",
+      "enabled" : true,
+      "kind" : "item",
+      "title" : "Hide the icon",
+      "tooltip" : "Closes this icon only. Lahe keeps running. `lahe menubar show` brings it back."
+    }
+  ]
+}

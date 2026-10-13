@@ -1,0 +1,68 @@
+{
+  "look" : "clear",
+  "rows" : [
+    {
+      "enabled" : false,
+      "kind" : "header",
+      "title" : "Nothing is waiting on you"
+    },
+    {
+      "kind" : "separator"
+    },
+    {
+      "enabled" : false,
+      "kind" : "header",
+      "title" : "No comments waiting on agents"
+    },
+    {
+      "kind" : "separator"
+    },
+    {
+      "enabled" : false,
+      "kind" : "header",
+      "title" : "No open documents"
+    },
+    {
+      "enabled" : false,
+      "kind" : "header",
+      "title" : "No connected sessions (0 open)"
+    },
+    {
+      "kind" : "separator"
+    },
+    {
+      "enabled" : false,
+      "kind" : "header",
+      "title" : "Recent documents"
+    },
+    {
+      "action" : "open library",
+      "enabled" : true,
+      "kind" : "item",
+      "title" : "Open the Library",
+      "tooltip" : "Every review, in the browser."
+    },
+    {
+      "kind" : "separator"
+    },
+    {
+      "action" : "hide",
+      "enabled" : true,
+      "kind" : "item",
+      "title" : "Hide the icon",
+      "tooltip" : "Closes this icon only. Lahe keeps running. `lahe menubar show` brings it back."
+    },
+    {
+      "action" : "stop",
+      "enabled" : true,
+      "kind" : "item",
+      "title" : "Stop Lahe",
+      "tooltip" : "Stops the Lahe helper until you start it again."
+    },
+    {
+      "enabled" : false,
+      "kind" : "note",
+      "title" : "Agents' lahe commands will fail until you start it again"
+    }
+  ]
+}
