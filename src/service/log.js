@@ -116,6 +116,23 @@ function repairTornTail(logPath) {
   return dropped;
 }
 
+// A reply.seen is {item, stamp} and nothing else: every window's reply poll
+// receives it, so nothing the poster adds may ride along. The envelope's other
+// fields may be present only empty, the way protocol.newEvent writes them.
+var REPLY_SEEN_KEYS = ["event", "event_id", "ts", "seq", "review", "item", "stamp"];
+
+/** Why a reply.seen event is refused, or null when it is well formed. */
+function replySeenProblem(event) {
+  if (typeof event.item !== "string" || !event.item) return "reply.seen needs an item id";
+  if (typeof event.stamp !== "string" || !event.stamp || event.stamp.length > record.REPLY_STAMP_MAX) {
+    return "reply.seen needs a stamp of 1 to " + record.REPLY_STAMP_MAX + " characters";
+  }
+  var extra = Object.keys(event).filter(function (key) {
+    return REPLY_SEEN_KEYS.indexOf(key) === -1 && event[key] !== null;
+  });
+  return extra.length ? "reply.seen carries only item and stamp, not " + extra.slice(0, 3).join(", ") : null;
+}
+
 /**
  * The event log for one state directory.
  *
@@ -493,6 +510,13 @@ function createEventLog(options) {
       if (state.seen[eventId]) {
         duplicates.push(eventId);
         return;
+      }
+      if (event[protocol.EVENT_FIELD.EVENT] === protocol.EVENT.REPLY_SEEN) {
+        var problem = replySeenProblem(event);
+        if (problem) {
+          rejected.push({ event_id: eventId, reason: problem });
+          return;
+        }
       }
       // A free-writing record is checked here, before anything is stored.
       // The helper refuses rather than cleans, so a forgery shows up: the

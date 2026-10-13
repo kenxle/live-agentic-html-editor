@@ -195,29 +195,37 @@ test("V4: a review with no reply.seen events counts every reply the rule names",
 // ---------------------------------------------------------------------------
 
 test("V7: a reply.seen for an unknown item, an over-long stamp, another reply's stamp or a non-string is dropped and reported", () => {
-  const { log } = freshLog();
+  const { dir, log } = freshLog();
   const item = comment();
   postItem(log, item);
   postFold(log, item, QUESTION, "2026-10-20T15:40:00.000Z");
   const before = itemOf(log, "itm_q");
   const stamp = record.replyStamp(before);
 
+  // The helper refuses a malformed one at the door: it never reaches the log.
+  const longStamp = postSeen(log, "itm_q", "x".repeat(record.REPLY_STAMP_MAX + 1));
+  const numberStamp = postSeen(log, "itm_q", 12345);
+  const nullStamp = postSeen(log, "itm_q", null);
+  [longStamp, numberStamp, nullStamp].forEach((result) => {
+    assert.equal(result.rejected.length, 1);
+    assert.match(result.rejected[0].reason, /stamp of 1 to 64 characters/);
+  });
+  // A well-formed one naming the wrong item or reply is folded and dropped.
   postSeen(log, "itm_nobody", stamp);
-  postSeen(log, "itm_q", "x".repeat(record.REPLY_STAMP_MAX + 1));
   postSeen(log, "itm_q", "2026-10-20T15:39:00.000Z@1");
-  postSeen(log, "itm_q", 12345);
-  postSeen(log, "itm_q", null);
+  // A malformed line already on disk (an older helper's, or written by hand)
+  // is dropped by the fold too.
+  const stray = protocol.newEvent({ event: protocol.EVENT.REPLY_SEEN, event_id: eventId(), review: REVIEW, item: "itm_q", seq: 999, payload: { stamp: "x".repeat(100) } });
+  stateDir.appendLine(stateDir.eventsPath(dir, REVIEW), protocol.encodeEventLine(stray));
 
   const dropped = [];
-  const after = itemOf(log, "itm_q", dropped);
-  assert.equal(dropped.length, 5, "each one is reported: " + JSON.stringify(dropped));
+  const after = itemOf(logModule.createEventLog({ dir: dir }), "itm_q", dropped);
+  assert.equal(dropped.length, 3, "each one is reported: " + JSON.stringify(dropped));
   assert.match(dropped[0], /does not hold/);
-  assert.match(dropped[1], /stamp of 1 to 64 characters/);
-  assert.match(dropped[2], /but the item's reply is/);
-  assert.match(dropped[3], /stamp of 1 to 64 characters/);
+  assert.match(dropped[1], /but the item's reply is/);
+  assert.match(dropped[2], /stamp of 1 to 64 characters/);
   assert.equal(after[F.REPLY_SEEN], undefined, "and nothing is stored");
   assert.deepEqual(after, before);
-  assert.equal(itemsOf(log).length, 1, "no item is made for the unknown id");
   assert.equal(record.REPLY_STAMP_MAX, 64);
 });
 
@@ -240,21 +248,6 @@ test("the browser's carried record cannot claim a read mark, and a new revision 
   // The reviewer answers: a new revision, no reply, no mark.
   postItem(log, Object.assign({}, item, { rev: item[F.REV] + 1, note: "the April one" }));
   assert.equal(itemOf(log, "itm_q")[F.REPLY_SEEN], undefined);
-});
-
-test("review.json carries reply_seen on every item: the stamp once read, null before", () => {
-  const { log } = freshLog();
-  const asked = comment({ id: "itm_a" });
-  const other = comment({ id: "itm_b" });
-  postItem(log, asked);
-  postItem(log, other);
-  postFold(log, asked, QUESTION, "2026-10-20T15:40:00.000Z");
-  postSeen(log, "itm_a", record.replyStamp(itemOf(log, "itm_a")));
-  const projected = projection.project(REVIEW, log.read(REVIEW));
-  const items = projected.pages.reduce((all, page) => all.concat(page.items), []);
-  const byId = Object.fromEntries(items.map((it) => [it.id, it]));
-  assert.equal(byId.itm_a.reply_seen, record.replyStamp(itemOf(log, "itm_a")));
-  assert.equal(byId.itm_b.reply_seen, null);
 });
 
 test("a reviewer reading a reply is not work on the document: the Library's last skips it", () => {
@@ -345,4 +338,79 @@ test("a polled reply.seen for the current reply is adopted into this browser's m
   assert.equal(store.readSeenReplies(REVIEW).itm_q, stamp, "the mark is durable");
   rail.selectTab(overlay.TAB.ACTIVE);
   assert.deepEqual(posted, [], "an adopted mark is never posted back");
+});
+
+// ---------------------------------------------------------------------------
+// Fix round (code and security review of the integrated diff)
+// ---------------------------------------------------------------------------
+
+const syncModule = require("../../src/layer/sync.js");
+
+test("Hold holds agent work, not read marks: a held review posts its reply.seen and keeps the rest queued", async (t) => {
+  const store = storeModule.createStore();
+  store.setHeld(REVIEW, true);
+  const posted = [];
+  const sync = syncModule.createSync({
+    review: REVIEW,
+    token: "t",
+    helperOrigin: "http://127.0.0.1:7817",
+    store: store,
+    document: null,
+    window: null,
+    fetch: async (_url, config) => {
+      const sent = JSON.parse(config.body);
+      posted.push(sent.events.map((e) => e.event));
+      return { ok: true, status: 200, json: async () => ({ accepted: sent.events.map((e) => e.event_id), seq: 1 }) };
+    }
+  });
+  t.after(() => sync.stop());
+
+  sync.recordItem(comment({ id: "itm_other" }), { immediate: "ready" });
+  const answered = Object.assign(comment(), { reply: Object.assign({ at: "2026-10-20T15:40:00.000Z" }, QUESTION) });
+  assert.ok(sync.markReplySeen(answered), "the mark is queued");
+  await sync.flush();
+
+  assert.deepEqual(posted, [["reply.seen"]], "exactly the read mark went out");
+  const left = store.pendingEvents(REVIEW);
+  assert.deepEqual(left.map((e) => [e.event, e.item]), [["item.ready", "itm_other"]], "the held comment stays queued");
+});
+
+test("reply.seen carries only its item and stamp: no page fields, no rev", () => {
+  const store = storeModule.createStore();
+  const sync = syncModule.createSync({ review: REVIEW, token: "t", helperOrigin: "http://127.0.0.1:7817", store: store, document: null, window: null, fetch: async () => ({ ok: false, status: 500, json: async () => ({}) }) });
+  const answered = Object.assign(comment(), { reply: Object.assign({ at: "2026-10-20T15:40:00.000Z" }, QUESTION) });
+  const event = sync.markReplySeen(answered);
+  sync.stop();
+  assert.equal(event.stamp, record.replyStamp(answered));
+  ["rev", "page_path", "page_title", "page_seq", "source_hint"].forEach((key) => assert.equal(event[key], null, key));
+});
+
+test("review.json does not carry reply_seen, and records.read's items still do", () => {
+  const { log } = freshLog();
+  const item = comment();
+  postItem(log, item);
+  postFold(log, item, QUESTION, "2026-10-20T15:40:00.000Z");
+  postSeen(log, "itm_q", record.replyStamp(itemOf(log, "itm_q")));
+  const projected = projection.project(REVIEW, log.read(REVIEW));
+  const items = projected.pages.reduce((all, page) => all.concat(page.items), []);
+  assert.equal(items.length, 1);
+  items.forEach((it) => assert.equal(Object.prototype.hasOwnProperty.call(it, "reply_seen"), false, "no reply_seen in review.json"));
+  // records.read answers with the projection's own records (routes.js).
+  assert.equal(itemOf(log, "itm_q").reply_seen, record.replyStamp(itemOf(log, "itm_q")));
+});
+
+test("log.append refuses a bad reply.seen: it lands in rejected and never on disk", () => {
+  const { log } = freshLog();
+  const seen = (fields, payload) =>
+    protocol.newEvent(Object.assign({ event: protocol.EVENT.REPLY_SEEN, event_id: eventId(), review: REVIEW, item: "itm_q" }, fields, { payload: payload }));
+  const longStamp = seen({}, { stamp: "x".repeat(1000) });
+  const extraKey = seen({}, { stamp: "2026-10-20T15:40:00.000Z@1", note: "page text" });
+  const pageFields = seen({ page_title: "A page" }, { stamp: "2026-10-20T15:40:00.000Z@1" });
+  const noItem = seen({ item: null }, { stamp: "2026-10-20T15:40:00.000Z@1" });
+  const good = seen({}, { stamp: "2026-10-20T15:40:00.000Z@1" });
+  const result = log.append(REVIEW, [longStamp, extraKey, pageFields, noItem, good]);
+  assert.deepEqual(result.rejected.map((r) => r.event_id), [longStamp.event_id, extraKey.event_id, pageFields.event_id, noItem.event_id]);
+  assert.deepEqual(result.accepted, [good.event_id]);
+  const onDisk = log.read(REVIEW).map((e) => e.event_id);
+  assert.deepEqual(onDisk, [good.event_id], "only the good mark is on disk");
 });

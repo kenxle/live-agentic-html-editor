@@ -20,12 +20,12 @@
 // rule (catalog_reader.foldParts), so a document reviewed twice counts once.
 //
 // LIGHT WHEN IDLE (R21). The app asks every five seconds. Each review's part is
-// cached on the size, modified time and inode of its folder (review.json and
-// meta.json land there by rename) and its events.jsonl, plus the reviewed
-// document while it has an unread reply, so an idle request is two stat calls
-// per review and one read of catalog.json, which is where a Library rename
-// lives. Inode is in the key because a same-size rewrite in the same
-// millisecond (an atomic rename) changes nothing else. See partOf.
+// cached on the size, modified time and inode of its events.jsonl, review.json
+// and meta.json, plus the reviewed document while it has an unread reply, so
+// an idle request is three stat calls per review and one read of
+// catalog.json, which is where a Library rename lives. Inode is in the key
+// because a same-size rewrite in the same millisecond (an atomic rename)
+// changes nothing else. See stateKeyOf and partOf.
 //
 // NEVER IN THE ANSWER: comment text, a token, a session secret, or an absolute
 // path. Titles and path hints go through catalog_reader.menuText.
@@ -83,7 +83,7 @@ function newestFirst(a, b) {
 /**
  * @param {{dir: string, reader: object, reviews: object, now?: function(): number,
  *          version: string, startedAt: string, alwaysOn?: boolean,
- *          libraryUrl: function(): string}} options
+ *          libraryUrl: function(): string, log?: function(string)}} options
  *   `reader` is the helper's catalog_reader.createReader. `reviews` is the
  *   helper's registry, for its window holders (openWindowReviews, holderOf).
  */
@@ -97,6 +97,9 @@ function createSummary(options) {
   var reviews = opts.reviews;
   var now = typeof opts.now === "function" ? opts.now : function () { return Date.now(); };
   var libraryUrl = typeof opts.libraryUrl === "function" ? opts.libraryUrl : function () { return null; };
+  var log = typeof opts.log === "function" ? opts.log : function () {};
+  // review id -> true while it cannot be read, so the log says so once.
+  var unreadable = Object.create(null);
 
   // review id -> {stateKey, docKey, part}
   var cache = Object.create(null);
@@ -130,24 +133,30 @@ function createSummary(options) {
   // One review, cached
   // -------------------------------------------------------------------------
 
-  // review id -> the two paths its key stats. Resolved once: each resolution
-  // checks every folder on the way for a symlink, three lstat calls a path,
-  // and an idle request would otherwise spend most of its time there.
+  // review id -> the three files its key stats. Resolved once: resolving
+  // checks every folder on the way for a symlink, three lstat calls a file,
+  // and an idle request would otherwise spend most of its time there. Only
+  // stat reads these paths; a rebuild reads the files through the reader,
+  // which resolves and checks them afresh.
   var pathsOf = Object.create(null);
 
   /**
-   * What says a review's part may have moved, and the cutoff it was counted
-   * with. Two stats, because an idle request pays them for every review:
-   *
-   *   the review's folder  review.json and meta.json are only ever written by
-   *                        a rename into it (state_dir.writeAtomic,
-   *                        review_writer), and a rename changes the folder
-   *   events.jsonl         appended in place, which the folder does not see
+   * The review's own three files, each by size, modified time and inode (a
+   * rename gives a new inode, so a same-size rewrite in the same millisecond
+   * still moves the key), and the cutoff the part was counted with. The
+   * files, not their folder: a rename into a folder changes neither its inode
+   * nor, on ext4, its size, and Linux stamps its time from a coarse clock.
    */
   function stateKeyOf(reviewId, sinceMs) {
     var paths = pathsOf[reviewId];
-    if (!paths) paths = pathsOf[reviewId] = [stateDir.reviewDir(dir, reviewId), stateDir.eventsPath(dir, reviewId)];
-    return statKey(paths[0]) + "|" + statKey(paths[1]) + "|" + sinceMs;
+    if (!paths) {
+      paths = pathsOf[reviewId] = [
+        stateDir.eventsPath(dir, reviewId),
+        stateDir.reviewJsonPath(dir, reviewId),
+        stateDir.metaPath(dir, reviewId)
+      ];
+    }
+    return statKey(paths[0]) + "|" + statKey(paths[1]) + "|" + statKey(paths[2]) + "|" + sinceMs;
   }
 
   /**
@@ -158,18 +167,32 @@ function createSummary(options) {
    * THE REVIEWED DOCUMENT is stat'ed only while the review has an unread
    * reply: a deleted file must drop out of waiting on you at once (R7), and no
    * other section changes when a file goes. A changed meta.json, which is
-   * where the document's path lives, moves the folder's key on its own.
+   * where the document's path lives, moves the key on its own.
+   *
+   * ONE UNREADABLE REVIEW IS LEFT OUT, never the whole answer: null, and one
+   * line in the helper log until it reads again.
    */
   function partOf(reviewId, sinceMs, rebuilt) {
-    var hit = cache[reviewId];
-    var stateKey = stateKeyOf(reviewId, sinceMs);
-    if (hit && hit.stateKey === stateKey && (hit.part.unread.count === 0 || hit.docKey === statKey(hit.part.info.docPath))) {
-      return hit.part;
+    try {
+      var hit = cache[reviewId];
+      var stateKey = stateKeyOf(reviewId, sinceMs);
+      if (hit && hit.stateKey === stateKey && (hit.part.unread.count === 0 || hit.docKey === statKey(hit.part.info.docPath))) {
+        return hit.part;
+      }
+      var part = reader.reviewPart(reviewId, { since: sinceMs });
+      cache[reviewId] = { stateKey: stateKey, docKey: statKey(part.info.docPath), part: part };
+      rebuilt.push(reviewId);
+      delete unreadable[reviewId];
+      return part;
+    } catch (err) {
+      delete cache[reviewId];
+      delete pathsOf[reviewId];
+      if (!unreadable[reviewId]) {
+        unreadable[reviewId] = true;
+        log("summary: left out review " + reviewId + ", which could not be read: " + err.message);
+      }
+      return null;
     }
-    var part = reader.reviewPart(reviewId, { since: sinceMs });
-    cache[reviewId] = { stateKey: stateKey, docKey: statKey(part.info.docPath), part: part };
-    rebuilt.push(reviewId);
-    return part;
   }
 
   // -------------------------------------------------------------------------
@@ -182,6 +205,21 @@ function createSummary(options) {
     if (typeof hint === "string" && hint.charAt(0) === "~") return catalogReader.menuText(hint, PATH_HINT_MAX);
     var own = row.folder || row.lead.info.docPath;
     return catalogReader.menuText(own ? path.basename(own) : null, PATH_HINT_MAX);
+  }
+
+  /**
+   * A row's title and path as the menu shows them, cleaned once and only for
+   * a row the answer lists: most rows are in no list, and an idle request
+   * should not clean seven hundred titles to show eight.
+   */
+  function shown(r) {
+    if (!r.shown) {
+      r.shown = {
+        title: catalogReader.menuText(r.row.customName || r.row.displayName, TITLE_MAX),
+        path_hint: hintOf(r.row)
+      };
+    }
+    return r.shown;
   }
 
   /** Whose window holds each review now: id -> {focused}. */
@@ -204,8 +242,8 @@ function createSummary(options) {
     var out = {
       review: lead.id,
       sessionId: lead.sessionId,
-      title: catalogReader.menuText(row.customName || row.displayName, TITLE_MAX),
-      path_hint: hintOf(row),
+      row: row,
+      shown: null,
       lastMs: lead.lastMs,
       waiting: 0,
       unread: 0,
@@ -251,7 +289,7 @@ function createSummary(options) {
       present[id] = true;
       var part = partOf(id, sinceMs, rebuilt);
       // A retired review answers on no page: it is in no section at all.
-      if (!part.info.retired) parts.push(part);
+      if (part && !part.info.retired) parts.push(part);
     });
     Object.keys(cache).forEach(function (id) {
       if (present[id]) return;
@@ -295,8 +333,8 @@ function createSummary(options) {
       .map(function (r) {
         return {
           review: r.review,
-          title: r.title,
-          path_hint: r.path_hint,
+          title: shown(r).title,
+          path_hint: shown(r).path_hint,
           open: r.open,
           questions: r.questions,
           unread: r.unread,
@@ -318,7 +356,7 @@ function createSummary(options) {
       count: total,
       more: cut.more,
       documents: cut.items.map(function (r) {
-        return { review: r.review, title: r.title, path_hint: r.path_hint, waiting: r.waiting };
+        return { review: r.review, title: shown(r).title, path_hint: shown(r).path_hint, waiting: r.waiting };
       })
     };
   }
@@ -330,7 +368,7 @@ function createSummary(options) {
       count: open.length,
       more: cut.more,
       items: cut.items.map(function (r) {
-        return { review: r.review, title: r.title, path_hint: r.path_hint, focused: r.focused };
+        return { review: r.review, title: shown(r).title, path_hint: shown(r).path_hint, focused: r.focused };
       })
     };
   }
@@ -355,7 +393,7 @@ function createSummary(options) {
         var renamed = Object.prototype.hasOwnProperty.call(sessionNames || {}, s.id) ? String(sessionNames[s.id]) : null;
         return {
           session: s.id,
-          name: catalogReader.menuText(renamed || (row && row.title) || s.name, TITLE_MAX),
+          name: catalogReader.menuText(renamed || (row && shown(row).title) || s.name, TITLE_MAX),
           presence: s.watching.state,
           last_heard_at: s.watching.last_active || null,
           review: row ? row.review : null
@@ -374,7 +412,7 @@ function createSummary(options) {
     return {
       more: cut.more,
       items: cut.items.map(function (r) {
-        return { review: r.review, title: r.title, path_hint: r.path_hint, last: iso(r.lastMs) };
+        return { review: r.review, title: shown(r).title, path_hint: shown(r).path_hint, last: iso(r.lastMs) };
       })
     };
   }

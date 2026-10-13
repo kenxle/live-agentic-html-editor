@@ -548,3 +548,96 @@ test("the reader's unread fold reads only a log's new lines once it has folded i
   const fresh = record.unseenReplyIds(projection.itemsFrom(state.log.read("r_a")));
   assert.deepEqual(fresh, [second.id]);
 });
+
+// ---------------------------------------------------------------------------
+// Fix round (code and security review of the integrated diff)
+// ---------------------------------------------------------------------------
+
+test("V17: a rewrite the review folder's own times do not show still rebuilds: the key is the files", () => {
+  const { state, summary } = setup();
+  state.review("r_a", { session: "s_one", title: "Same size A" });
+  state.item("r_a", { page_title: "Same size A" });
+  const folder = stateDir.reviewDir(state.dir, "r_a");
+  const file = stateDir.reviewJsonPath(state.dir, "r_a");
+  const stamp = Math.floor(Date.now() / 1000);
+  fs.utimesSync(stateDir.eventsPath(state.dir, "r_a"), stamp, stamp);
+  fs.utimesSync(file, stamp, stamp);
+  fs.utimesSync(folder, stamp, stamp);
+  summary.read();
+  const temp = file + ".tmp";
+  fs.writeFileSync(temp, fs.readFileSync(file, "utf8").replace("Same size A", "Same size B"));
+  fs.utimesSync(temp, stamp, stamp);
+  fs.renameSync(temp, file);
+  // Linux stamps a folder from a coarse clock, so two rewrites in one tick
+  // leave it looking untouched. Put it back to say exactly that.
+  fs.utimesSync(folder, stamp, stamp);
+  const answer = summary.read();
+  assert.deepEqual(summary.lastRebuilt(), ["r_a"]);
+  assert.equal(answer.recent.items[0].title, "Same size B");
+});
+
+test("menuText removes lone surrogates, C1 controls and line and paragraph separators", () => {
+  assert.equal(catalogReader.menuText("a\uD800b", 120), "ab");
+  assert.equal(catalogReader.menuText("a\uDC00b", 120), "ab");
+  assert.equal(catalogReader.menuText("a\u0085b\u2028c\u2029d", 120), "abcd");
+  assert.equal(catalogReader.menuText("\u{1F600}x", 120), "\u{1F600}x", "a real pair is kept");
+});
+
+test("V13: a page title holding a lone surrogate, a C1 control or a line separator reaches the summary clean", () => {
+  const { state, summary, T } = setup();
+  state.review("r_odd", { session: "s_one", doc: "docs/odd.md", title: "Odd" });
+  const it = state.item("r_odd", { page_title: "Half \uD800 pair\u0085 and\u2028 break" });
+  state.reply("r_odd", it, { status: "question", ts: iso(T - 5 * SECOND) });
+  const answer = summary.read();
+  const body = JSON.stringify(answer);
+  assert.equal(/\\ud[89a-f]/i.test(body), false, "no lone surrogate escape in the body: " + body);
+  assert.equal(/[\u0080-\u009f\u2028\u2029]/.test(collectStrings(answer).join("")), false);
+  assert.equal(doc(answer, "r_odd").title, "Half  pair and break");
+});
+
+test("one unreadable review is skipped, logged once, and the rest of the summary answers", () => {
+  const s = setup();
+  const lines = [];
+  const summary = summaryModule.createSummary({
+    dir: s.state.dir,
+    reader: s.reader,
+    reviews: fixture.holders({}),
+    now: () => s.clock.ms,
+    version: "0.4.0",
+    startedAt: "2026-10-20T08:00:00.000Z",
+    libraryUrl: () => "u",
+    log: (line) => lines.push(line)
+  });
+  const { state, T } = s;
+  state.review("r_good", { session: "s_one", title: "Good" });
+  const g = state.item("r_good", { page_title: "Good" });
+  state.reply("r_good", g, { status: "question", ts: iso(T - 5 * SECOND) });
+  state.review("r_bad", { session: "s_one", title: "Bad" });
+  const events = stateDir.eventsPath(state.dir, "r_bad");
+  const outside = path.join(state.root, "outside-events.jsonl");
+  fs.renameSync(events, outside);
+  fs.symlinkSync(outside, events);
+  const first = summary.read();
+  summary.read();
+  assert.deepEqual(waitingIds(first), ["r_good"]);
+  assert.equal(JSON.stringify(first).includes("r_bad"), false);
+  assert.equal(lines.length, 1, "one line, not one per poll: " + JSON.stringify(lines));
+  assert.match(lines[0], /r_bad/);
+});
+
+test("a session file swapped for a symlink after the first read reads as bad, and its target never shows", () => {
+  const { state, reader } = setup();
+  state.sessions.create({ id: "s_swap", name: "inside name" });
+  state.review("r_a", { session: "s_swap", title: "A" });
+  assert.equal(reader.reviewPart("r_a").unreadable, false);
+  assert.equal(reader.sessionsAt(Date.now()).find((s) => s.id === "s_swap").name, "inside name");
+  const file = stateDir.agentSessionPath(state.dir, "s_swap");
+  const outside = path.join(state.root, "outside-session.json");
+  const held = JSON.parse(fs.readFileSync(file, "utf8"));
+  fs.writeFileSync(outside, JSON.stringify(Object.assign(held, { name: "OUTSIDE NAME" })));
+  fs.unlinkSync(file);
+  fs.symlinkSync(outside, file);
+  assert.equal(reader.reviewPart("r_a").unreadable, true, "the session reads as bad");
+  const sessions = reader.sessionsAt(Date.now());
+  assert.equal(JSON.stringify(sessions).includes("OUTSIDE NAME"), false);
+});

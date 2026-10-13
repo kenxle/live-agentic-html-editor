@@ -34,6 +34,7 @@ const sitesModule = require("../../src/service/sites.js");
 const agentSessions = require("../../src/service/agent_sessions.js");
 const stateDirModule = require("../../src/service/state_dir.js");
 const { writeOldServerRecord } = require("../helpers/old_server_record.js");
+const service = require("../../src/service/index.js");
 const { sitesWorld, raw, writeFile } = require("../helpers/sites_world.js");
 
 const VECTORS = JSON.parse(fs.readFileSync(path.join(__dirname, "..", "fixtures", "menubar", "proof_vectors.json"), "utf8"));
@@ -159,6 +160,8 @@ test("V14: a good proof reads the summary, and the answer is signed; no CORS hea
 
 test("V14: no proof, a wrong key, a stale proof and a repeated nonce are each 401, signed", async (t) => {
   const w = await world(t);
+  // A minute after the helper started, so a proof 29 s old is still after it.
+  w.clock.ms += 60000;
   const bare = await raw(w.helper.port, { path: READ.path + "?v=1", headers: { host: "127.0.0.1:" + w.helper.port } });
   bare.nonce = "";
   assertRefused(w, bare, "no proof");
@@ -260,6 +263,8 @@ test("a preflight to a summary path is refused", async (t) => {
   });
   assert.equal(res.status, 401);
   assert.equal(res.headers["access-control-allow-origin"], undefined);
+  res.nonce = "";
+  assert.ok(signedByHelper(w, res), "signed, over the empty nonce");
 });
 
 // ---------------------------------------------------------------------------
@@ -308,4 +313,60 @@ test("V15: summary.open answers catalog Open's address, writes nothing to the re
   assert.equal(agentOnly.status, 200, agentOnly.text);
   assert.deepEqual(agentOnly.json, { url: null });
   assert.equal(fs.existsSync(stateDirModule.catalogRequestsPath(w.state)), false, "no request was ever queued");
+});
+
+// ---------------------------------------------------------------------------
+// Fix round (security review of the integrated diff)
+// ---------------------------------------------------------------------------
+
+test("a proof signed before the helper started is refused, so a capture replays against no restart", async (t) => {
+  const w = await world(t);
+  const captured = signed(w, "GET", READ.path + "?v=1");
+  await w.helper.close();
+  const T = w.clock.ms;
+  const second = await service.serve({ port: 0, stateDir: w.state, quiet: true, pagesPort: 0, sitesHome: w.home, now: () => T + 5000 });
+  t.after(() => second.close());
+  captured.port = second.port;
+  captured.options.headers.host = "127.0.0.1:" + second.port;
+  const replayed = await send(captured);
+  assertRefused(w, replayed, "the proof from before the restart");
+  w.clock.ms = T + 5000;
+  const fresh = signed(w, "GET", READ.path + "?v=1", undefined, { port: second.port, headers: { host: "127.0.0.1:" + second.port } });
+  assert.equal((await send(fresh)).status, 200, "the app's next poll, signed after the start, is answered");
+});
+
+test("summary.open checks its headers before reading the body, and caps the body", async (t) => {
+  const w = await world(t);
+  const before = w.helper.summaryCounters.bodiesRead;
+  const big = "x".repeat(1024 * 1024);
+  const fromPage = await open(w, big, { headers: { "sec-fetch-site": "cross-site" } });
+  assertRefused(w, fromPage, "a page's 1 MB post");
+  assert.equal(w.helper.summaryCounters.bodiesRead, before, "the body was never read");
+
+  const tooBig = await open(w, JSON.stringify({ review: "r1", summary_version: 1, pad: "x".repeat(64 * 1024) }));
+  assert.equal(tooBig.status, 413, tooBig.text);
+  assert.ok(signedByHelper(w, tooBig), "the 413 is signed");
+});
+
+test("one unreadable review does not fail summary.read, and no 5xx body names the state folder", async (t) => {
+  const w = await world(t);
+  const folder = path.join(w.home, "ws", "repo", "docs");
+  const good = w.helper.reviews.create({ origins: ["null"], agent_session_id: "s_a", target_path: writeFile(folder, "good.html", PAGE_HTML) });
+  const bad = w.helper.reviews.create({ origins: ["null"], agent_session_id: "s_a", target_path: writeFile(folder, "bad.html", PAGE_HTML) });
+  const events = stateDirModule.eventsPath(w.state, bad.id);
+  const outside = path.join(w.root, "outside-events.jsonl");
+  fs.renameSync(events, outside);
+  fs.symlinkSync(outside, events);
+  const res = await read(w);
+  assert.equal(res.status, 200, res.text);
+  assert.deepEqual(res.json.recent.items.map((r) => r.review), [good.id]);
+
+  // A summary that cannot be built at all: its cutoff file is a folder.
+  fs.unlinkSync(path.join(w.state, "summary.json"));
+  fs.mkdirSync(path.join(w.state, "summary.json"));
+  const broken = await read(w);
+  assert.equal(broken.status, 500);
+  assert.ok(signedByHelper(w, broken));
+  assert.equal(broken.text.includes(w.state), false, "the state folder's path stays in the log: " + broken.text);
+  assert.equal(broken.text.includes(w.root), false);
 });

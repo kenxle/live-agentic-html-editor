@@ -1800,14 +1800,12 @@
         event_id: record.randomId("evt"),
         review: requireReview(),
         item: id,
-        // NO REVISION on the envelope: the stamp already names the reply, and
-        // an accepted event carrying a rev marks the item acknowledged at it
-        // (flush), which would let the store's copy win over a follow-up the
-        // reviewer is typing at that same revision.
-        page_path: item[record.FIELD.PAGE_PATH],
-        page_title: item[record.FIELD.PAGE_TITLE],
-        page_seq: item[record.FIELD.PAGE_SEQ],
-        source_hint: item[record.FIELD.SOURCE_HINT],
+        // THE ITEM AND THE STAMP, NOTHING ELSE. No revision: the stamp already
+        // names the reply, and an accepted event carrying a rev marks the item
+        // acknowledged at it (flush), which would let the store's copy win
+        // over a follow-up the reviewer is typing at that same revision. No
+        // page fields either: every window's reply poll receives this event,
+        // and the helper refuses one that carries more (log.js).
         payload: { stamp: stamp }
       });
       store.queueEvent(requireReview(), event);
@@ -2052,9 +2050,11 @@
       // two callers who must get past the gate ask for that: drainOutbox, so
       // ending a review with items held still flushes them first (R6), and
       // releasing Hold itself, which flushes immediately, in one pass (R3).
-      if (!fo.force && typeof store.isHeld === "function" && store.isHeld(requireReview())) {
-        return Promise.resolve({ sent: 0, remaining: pendingCount(), held: true });
-      }
+      // A READ MARK IS NOT HELD. reply.seen is not work for an agent and wakes
+      // nothing; holding it back only keeps the menu bar counting a reply the
+      // reviewer has read. So a held flush posts the read marks and leaves
+      // everything else where it is.
+      var held = !fo.force && typeof store.isHeld === "function" && store.isHeld(requireReview());
       // ONCE THE DOCUMENT IS LEAVING, EVERY FLUSH IS AN UNLOAD FLUSH.
       //
       // The cap and the keepalive header belong to the MOMENT, not to the
@@ -2077,6 +2077,12 @@
       var leaving = !!fo.unload || unloading;
 
       var queued = store.pendingEvents(requireReview());
+      if (held) {
+        queued = queued.filter(function (event) {
+          return event[protocol.EVENT_FIELD.EVENT] === protocol.EVENT.REPLY_SEEN;
+        });
+        if (!queued.length) return Promise.resolve({ sent: 0, remaining: pendingCount(), held: true });
+      }
       if (!queued.length) {
         recomputeStatus();
         return Promise.resolve({ sent: 0, remaining: 0 });
@@ -2176,7 +2182,9 @@
           // helper about once a second (DRAFT_PERSISTENCE.md section 4).
           var again = rerun;
           rerun = null;
-          if ((remaining > 0 || again) && !leaving) scheduleFlush(0, again);
+          // A held review's other events stay queued on purpose: posting its
+          // read marks is not a reason to come straight back for them.
+          if (((remaining > 0 && !held) || again) && !leaving) scheduleFlush(0, again);
           return { sent: accepted.length, remaining: remaining };
         }
 
