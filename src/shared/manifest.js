@@ -251,7 +251,7 @@ var NON_BUNDLE_FILES = [
   { path: "src/service/addresses.js", owner: "stable-addresses lahe-names", why: "proves the port 80 forward and .lahe before either is used: the printed port and whether .lahe Hosts answer" },
   { path: "src/service/name_server.js", owner: "stable-addresses lahe-names", why: "the .lahe name server: loopback answers for names under .lahe, REFUSED for the rest, malformed packets dropped" },
   { path: "src/service/login_item.js", owner: "stable-addresses install", why: "the login item per system (launchd, systemd --user, Task Scheduler) and install.json" },
-  { path: "src/service/summary.js", owner: "menu-bar summary", planned: true, why: "the menu bar summary: waiting on you, waiting on agents, open documents, connected sessions, recent; a per-review cache; summary.json holds the day-one cutoff" },
+  { path: "src/service/summary.js", owner: "menu-bar summary", why: "the menu bar summary: waiting on you, waiting on agents, open documents, connected sessions, recent; a per-review cache; summary.json holds the day-one cutoff" },
   { path: "src/service/menubar.js", owner: "menu-bar install", planned: true, why: "macOS only: the one build recipe for the menu bar app, its login item, and the rebuild-on-change tick" },
   { path: "src/service/markdown.js", owner: "1A", why: "deterministic Markdown review artifacts" },
   { path: "src/service/styles.js", owner: "Style switcher 1.1", why: "installed document styles: the store, the checks, and serving their files" },
