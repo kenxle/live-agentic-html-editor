@@ -16,7 +16,8 @@ hook runs the new code, and the post-merge gate on main is green. Last updated
 - The Library "Open" test that failed once in CI was a same-millisecond race
   that another agent fixed in PR #58 (d36f7624); its board row is marked done.
 - Lesson proposed: `docs/lessons/proposed/a-fresh-worktree-under-the-clone-runs-the-suite-without-its-own-node-modules.md`.
-- Review session closed.
+- Review session closed. Ken's comments and the replies are in the
+  [review log](01_spec_hook_indefinite_review_log.md).
 
 **To delete at cleanup:** `.claude-pr-body-202610122118.md` in the worktree
 root (the PR body scratch file), and the worktree
