@@ -8,10 +8,16 @@ For Ken to decide in review:
 :::
 
 ::: callout-question
-**Should "Stop Lahe" hold while agents are connected?** As designed, the next `lahe` command an agent runs starts Lahe again, and a listening agent runs one within seconds. So with an agent connected, Stop barely stops anything. The menu line under it will say so plainly. The security reviewer points out that people reach for Stop when something looks wrong.
+**What should "Stop Lahe" in the menu do while an agent is working?**
 
-- **A.** Keep it as designed: agents can start Lahe again, and the menu warns. Nothing an agent is doing breaks. (Recommended: you rarely stop Lahe, and a stop that breaks your agents mid-review costs more than it saves.)
-- **B.** Stop holds until the next login. Agent commands refuse to start it and tell the agent you stopped Lahe. Only Start in the menu, or a command you run, brings it back.
+Some background first. "Lahe" here means the helper: the background program on your Mac that serves your review pages, takes your comments, and hands them to agents. It starts when you log in and keeps running. If it dies, macOS starts it again within seconds. Every `lahe` command an agent runs (`lahe review`, `lahe status`, `lahe monitor`) also starts it if it is not running. That is how a Claude session can open a review for you without you doing anything.
+
+The menu's Quit item has two choices. "Hide the icon" just removes the icon. "Stop Lahe" stops the helper: your review pages go dark, nothing takes comments, and the icon shows "not running". You might do that to save battery, to get a clean slate when something looks wrong, or because you are done for the day.
+
+The catch: if an agent is in the middle of a review, its next `lahe` command starts the helper right back up, within seconds. So with an agent connected, Stop barely stops anything. The question is what you want in that case.
+
+- **A. Stop is "stop until something needs it."** Agents can start the helper again, and the menu says so under the Stop item ("an agent may start it again"). Nothing an agent is doing breaks; if you wanted it to stay down, you close that agent's session first. (Recommended: you rarely stop Lahe, and a stop that breaks an agent mid-review costs more than it saves.)
+- **B. Stop is "stay stopped until I say so."** The helper stays down until you click Start in the menu, run `lahe install`, or log in again. An agent's `lahe review` fails with "Ken stopped Lahe" and it cannot serve pages until you bring it back. Safer when something looks wrong; worse when you forget you stopped it and an agent sits there stuck.
 :::
 
 Settled with Ken in the crucible:
