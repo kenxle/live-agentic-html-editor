@@ -1,12 +1,10 @@
 // The menu bar app's build recipe, login item and rebuild tick
 // (src/service/menubar.js; menu bar plan V21 to V25).
 //
-// Nothing here runs a real xcrun, swiftc or launchctl. The runner plays a Mac:
-// `xcrun --find swiftc` answers or fails, `xcrun swiftc` "compiles" by writing
-// the Swift source it was given into the output file (so a test can tell which
-// copy was compiled), and launchctl keeps a loaded and running flag per label.
-// The home is a temp folder and the label is lahe-test-menubar-<pid>, so no
-// real login item is read, written, loaded or stopped. Nothing is spawned.
+// Nothing here runs a real xcrun, swiftc or launchctl: the runner is the Mac
+// test/helpers/fake_mac.js plays. The home is a temp folder and the label is
+// lahe-test-menubar-<pid>, so no real login item is read, written, loaded or
+// stopped. Nothing is spawned.
 
 "use strict";
 
@@ -18,17 +16,11 @@ const path = require("node:path");
 
 const loginItem = require("../../src/service/login_item.js");
 const menubar = require("../../src/service/menubar.js");
+const { fakeMac, writeMenubarSources } = require("../helpers/fake_mac.js");
 
 const LABEL = "lahe-test-menubar-" + process.pid;
 
-function writeSources(clone, swift) {
-  const dir = path.join(clone, "macos", "menubar");
-  fs.mkdirSync(dir, { recursive: true });
-  fs.writeFileSync(path.join(dir, "LaheMenuBar.swift"), swift);
-  fs.writeFileSync(path.join(dir, "Info.plist"), "<plist><dict><key>CFBundleExecutable</key><string>Lahe</string></dict></plist>\n");
-  // Not on the fixed list: never copied, never part of the stamp.
-  fs.writeFileSync(path.join(dir, "README.md"), "notes\n");
-}
+const writeSources = writeMenubarSources;
 
 function world(t, options) {
   const opts = options || {};
@@ -43,53 +35,6 @@ function world(t, options) {
   const record = { system: "macos", label: "lahe-test", port: 47999, clone: clone, state_dir: dir, installed_at: "2026-10-12T00:00:00.000Z" };
   loginItem.writeInstall(dir, record);
   return { root, home, dir, clone, record };
-}
-
-/** A Mac, played: tools, a compiler that copies its input, and launchd. */
-function fakeMac(options) {
-  const opts = Object.assign({ swiftc: true, compiles: true }, options || {});
-  const calls = [];
-  const jobs = {};
-  function job(target) {
-    const label = target.split("/").pop();
-    jobs[label] = jobs[label] || { loaded: false, running: false };
-    return jobs[label];
-  }
-  const runner = (command, args) => {
-    calls.push([command].concat(args));
-    if (command === menubar.XCRUN && args[0] === "--find") {
-      return opts.swiftc
-        ? { status: 0, output: "/Library/Developer/CommandLineTools/usr/bin/swiftc\n" }
-        : { status: 1, output: "xcrun: error: invalid active developer path (/Library/Developer/CommandLineTools), missing xcrun at: /Library/Developer/CommandLineTools/usr/bin/xcrun" };
-    }
-    if (command === menubar.XCRUN && args[0] === "swiftc") {
-      if (!opts.compiles) return { status: 1, output: "LaheMenuBar.swift:3:1: error: expected expression" };
-      const out = args[args.indexOf("-o") + 1];
-      const sources = args.filter((a) => a.endsWith(".swift"));
-      fs.writeFileSync(out, sources.map((s) => fs.readFileSync(s, "utf8")).join(""));
-      return { status: 0, output: "" };
-    }
-    if (command === "launchctl") {
-      const verb = args[0];
-      if (verb === "bootstrap") {
-        const label = path.basename(args[2], ".plist");
-        jobs[label] = { loaded: true, running: true };
-        return { status: 0, output: "" };
-      }
-      const j = job(args[args.length - 1]);
-      if (verb === "bootout") {
-        const was = j.loaded;
-        j.loaded = false;
-        j.running = false;
-        return was ? { status: 0, output: "" } : { status: 3, output: "Boot-out failed: 3: No such process" };
-      }
-      if (!j.loaded) return { status: 113, output: "Could not find service in domain for user gui: 501" };
-      if (verb === "kickstart") { j.running = true; return { status: 0, output: "" }; }
-      if (verb === "print") return { status: 0, output: "gui/501/x = {\n\tstate = " + (j.running ? "running" : "not running") + "\n}\n" };
-    }
-    return { status: 0, output: "" };
-  };
-  return { runner, calls, jobs, job: (label) => jobs[label] || { loaded: false, running: false } };
 }
 
 function base(w, mac, extra) {

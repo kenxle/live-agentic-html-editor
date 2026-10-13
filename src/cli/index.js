@@ -41,6 +41,7 @@ var USAGE = [
   "  style   install a document style folder for every page on this machine, or list them",
   "  install start the helper at login and restart it if it stops (run it yourself, in a terminal)",
   "  uninstall stop starting the helper at login; `lahe review` starts it on demand again",
+  "  menubar show a hidden menu bar icon again, or rebuild it now (macOS)",
   "  hook    Claude Code's Stop hook: keeps a watcher running on your open sessions (installed for you)",
   "",
   "Run `lahe <command> --help` for a command's own options, and `lahe --version` for the version."
@@ -64,6 +65,7 @@ var COMMANDS = {
   style: function () { return require("./commands/style.js"); },
   install: function () { return require("./commands/install.js"); },
   uninstall: function () { return require("./commands/install.js").uninstall; },
+  menubar: function () { return require("./commands/menubar.js"); },
   hook: function () { return require("./commands/hook.js"); }
 };
 
