@@ -24,8 +24,8 @@ The icon keeps the review layer's speech bubble. Main changed the browser tab's 
 
 | Agent or task | Doing | Started | Branch |
 |---|---|---|---|
-| Orchestrator | Watching the three builders; integrates and runs the browser suite at the checkpoint | 2026-10-12 20:44 | `feat/menu-bar` |
-| Builder: summary (Opus) | Step 1: the read mark's round trip, the one-review summary, the summary and its cache, the two routes and the signed auth mode | 2026-10-12 20:44 | `feat/menu-bar-summary` |
+| Orchestrator | Checkpoint 1 (PR 1): browser suite, code and security reviews of the integrated diff, then the pull request | 2026-10-12 20:44 | `feat/menu-bar` |
+| Builder: summary (Opus) | Done: returned and merged at 2026-10-12 21:20 | 2026-10-12 20:44 | `feat/menu-bar-summary` |
 | Builder: macapp (Opus) | Done: returned at 2026-10-12 21:10. Waiting for summary before the merge | 2026-10-12 20:44 | `feat/menu-bar-macapp` |
 | Builder: install (Opus) | Done: returned at 2026-10-12 21:06. Waiting for the other two before the merge | 2026-10-12 20:44 | `feat/menu-bar-install` |
 
@@ -50,7 +50,7 @@ The icon keeps the review layer's speech bubble. Main changed the browser tab's 
 
 | Workstream | Tasks | Branch | Status |
 |---|---|---|---|
-| summary | 1.1 to 1.4 | `feat/menu-bar-summary` | building |
+| summary | 1.1 to 1.4 | `feat/menu-bar-summary` | built, `14997075`; merged into `feat/menu-bar` for PR 1 |
 | macapp | 2.1 to 2.3 | `feat/menu-bar-macapp` | built, `02503610`; waits for integration |
 | install | 3.1 to 3.4 | `feat/menu-bar-install` | built, `efe79a40`; waits for integration |
 
@@ -60,6 +60,7 @@ No passes yet.
 
 ### Changes from plan
 
+- **summary:** the per-review cache is keyed on the review folder's change time plus `events.jsonl`, not the four files the plan named: with four files, 700 made-up reviews cost 37 ms per idle request against V18's 10 ms limit; the folder key answers in 8 to 9 ms. The reviewed document is checked only while the review has an unread reply, so a deleted file still drops out at once. One gap accepted: a review with no page title whose document heading changes keeps its old title until the review changes. `library_url` ends in `/catalog` because the Library host refuses `/`. Retired reviews appear in no section. A path outside the home folder shows only the file name. Every refusal on the two routes is a signed 401 `AUTH_REFUSED` whose detail names the check. `summary_many.json` had 40 documents with more questions than unread, which the contract rules out; fixed, and a test guards it.
 - **macapp:** the executable inside the bundle is `LaheMenuBar` (what Activity Monitor shows), while the install recipe wrote `Lahe`; reconciled at integration to `LaheMenuBar`. The app rereads the secret after a bad signature as well as after a 401, because a replaced secret makes the helper sign its 401 with the new key. Waiting on you is never cut short (brief R12), where the builder's prompt had said otherwise.
 - **install:** the app is built under `<state>/menubar/.build-*` rather than the system temp folder, so the final rename stays on one volume. The source stamp also hashes the compiler flags, so a recipe change rebuilds too. The stop message reads "the person using this computer stopped it from the menu bar at <time>" rather than naming Ken, because the repo is public; `lahe status` says "stopped by you". SR6 (labels are constants) is met for the icon and for the new bootstrap path, but kickstart still reads the helper's label from `install.json` as it did before this feature, now limited to the four known label shapes; the three callers are outside this workstream. Noted for the integration review.
 
@@ -85,6 +86,7 @@ Not shipped yet.
 
 ## Log
 
+- 2026-10-12 21:20: summary builder returned and merged (`14997075`, merge `67cfcd77`): the `reply.seen` round trip (the rail's read mark now reaches the store and comes back to every browser), the one unread rule in `src/shared/record.js`, the one-review reader, `src/service/summary.js` with its cache and `summary.json`, the two routes on the signed auth mode. gate:unit 2769 passed, 0 failed; the V19 browser spec 4 of 4, twice. On the merge: 2769 passed, 0 failed, bundle rebuilt. Code review and security review of the integrated diff started; the browser suite runs next, alone.
 - 2026-10-12 21:10: Mac app builder returned: one Swift file (AppKit, Foundation, CryptoKit), `Info.plist`, a README with the exact build command, the fake helper and its unit test. Self-test 87 passed, 0 failed; gate:unit 2727 passed, 0 failed, 4 skipped on purpose (the app tests run only against a test build); no helper, fake helper or launchd job left behind. Ten icon snapshots and seven menu dumps in the feature folder; three are shown above.
 - 2026-10-12 21:06: install builder returned: `src/service/menubar.js` (the one build recipe, the app's login item, rebuild on change), `lahe install --menu-bar` and `--no-menu-bar`, `lahe menubar show` and `rebuild`, Stop holds through `stopped.json`, the status line, `docs/CLI.md`. 59 new unit tests; gate:unit 2783 passed, 0 failed; no helper leaked. A throwaway Swift file compiled through the real recipe and ran. Two wiring points left for integration (`tick` in the 15-second timer, the stop-marker clear after the listener binds).
 - 2026-10-12 20:44: Step 0 committed (`13833038`). Three builders dispatched, one per workstream, each in its own worktree cut from that commit.
