@@ -76,6 +76,7 @@ Nothing queued.
 
 - Checkpoint 1 (PR 1, `cc04e6a1`): `npm run gate:unit` 2769 passed, 0 failed; the browser suite alone, Chromium: 884 passed, 0 failed, 7 skipped, in 7.3 minutes; helpers 1 before and 1 after.
 - PR 2 integration (`feat/menu-bar-pr2`, `10067c50`): `npm run gate:unit` 2831 passed, 0 failed; `npm run check:menubar` built `Lahe.app` through the real recipe in 7.4 seconds and the app's self-test passed 84 of 84; no helper or launchd job left behind. The app's own four tests against a test build and the fake helper: 4 passed, 0 failed, including Stop and Start on a `lahe-test` launchd job; no job or plist left behind.
+- Checkpoint 1 after the fix round (`77ad1ed4`): the browser suite alone, Chromium: 884 passed, 0 failed, 7 skipped, in 7.2 minutes.
 
 **Capture probe (Step 0, 2026-10-12 20:36):** `screencapture -x -R 0,0,600,30` from the agent's terminal fails with "could not create image from rect" (no screen recording permission). So V29's icon looks come from the app's own `--snapshot` (drawn in code, no permission needed), and the real menu bar picture in V32 is yours to take.
 
@@ -87,6 +88,7 @@ Not shipped yet.
 
 ## Log
 
+- 2026-10-12 21:53: the browser suite on the merged fix round: 884 passed, 0 failed, 7 skipped. The spec check of PR 1 found no blocking gap; its follow-ups (no nulls where the app expects strings, two missing tests, three stale doc lines) are with the summary builder and done in the docs. PR 1 opens after that follow-up and one last full gate on the final commit.
 - 2026-10-12 21:44: the fix round came back (`f80c73ae`) with all ten findings fixed, each test written red first, and is merged. gate:unit on the merge: 2780 passed, 0 failed. One number still open: the summary's warm median on a 700-review made-up state folder measured 8.7 to 13.4 ms with the machine at a load of about 9 from other agents; V18's 10 ms limit is measured on a quiet machine at Step 4. The browser suite runs again once another agent's run on this machine finishes; the independent spec check of PR 1 started.
 - 2026-10-12 21:32: code review of PR 1 returned three findings, all taken: a Hold on the rail would also hold back read marks, so the icon would keep counting what you had read (read marks now post through a Hold); the cache key stats the review folder, whose time is too coarse on Linux to catch two rewrites in one tick (back to the files the plan named); `reply_seen` was on every item in `review.json`, which agents read, so it moves out of that file and stays on the page's own reads. One fix round sent to the summary builder with the seven security findings.
 - 2026-10-12 21:31: PR 2's integrated branch is green on the unit gate (2831 passed, 0 failed) and the real build check (the app compiles through `src/service/menubar.js` and passes its self-test). Its browser suite runs after PR 1's fix round.
