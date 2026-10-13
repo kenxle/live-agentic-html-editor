@@ -447,7 +447,7 @@ and any reply to it is refused. Do not work on it.
 
 ```sh
 lahe reply --review <id> --item <item-id> --rev <n> --status handled \
-  --agent <your-name> --file path/you/changed
+  --agent claude --file path/you/changed
 ```
 
 `--text -` reads a long answer from stdin. The command encodes the line, so a
@@ -464,7 +464,8 @@ Reply checklist:
 - **A `not_handled` reason names what you checked.** Say which file or page you
   looked at and what it said. A blank reason is refused by the command, and the
   card's age is not a reason.
-- **Pass `--agent <your-name>`.** The card shows it.
+- **Pass `--agent` with the kind of agent you are**: `claude`, `codex`, and so on.
+  The card says "claude is asking", so a session or task name reads wrong there.
 - **Flag with `--needs-see` only** an answer, a caveat, or a change made
   differently than asked, and put the words on the same line with `--text` or
   `--reason`. Leave it off routine confirmations and off bookkeeping about their
@@ -950,9 +951,10 @@ Each of these is a rule that a live review paid for.
 9. **Wait with the wake channel for your host.** Tailing `review.json` goes deaf,
    because it is written atomically and a tail follows a deleted inode.
    `events.jsonl` has no session routing.
-10. **On Claude Code, wait with `lahe monitor` in a background Bash call with the
-    largest timeout allowed.** A watch with a short timeout wakes the model every
-    few minutes on nothing. When Claude Code stops it for low memory, relaunch
+10. **On Claude Code, wait with `lahe monitor` in one background Bash call.** One
+    launch waits until there is work; a watch with a short timeout, or a timer
+    of your own, wakes the model every few minutes on nothing. When Claude Code
+    stops it for low memory, relaunch
     it and do nothing else; after three such kills in a row with nothing new
     landing, stop and tell the reviewer.
 11. **In Codex, keep the turn pending on the monitor's exec call, with no Codex

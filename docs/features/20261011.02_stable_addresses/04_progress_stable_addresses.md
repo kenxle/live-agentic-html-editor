@@ -1,18 +1,16 @@
 # Progress: Stable addresses
 
-**Merged, installed and released. One test needs you: the `:1483` timeout.** Last updated 2026-10-12 09:28.
+**Done: merged, installed and released as [v0.3.0](https://github.com/kenxle/live-agentic-html-editor/releases/tag/v0.3.0). Nothing is waiting on you.** Shipped in [PR #45](https://github.com/kenxle/live-agentic-html-editor/pull/45). Last updated 2026-10-12 21:22.
 
-**Docs:** [Decisions page](../../ongoing/STABLE_ADDRESSES.md) · [Crucible](00_crucible_stable_addresses.html) · [Brief](01_brief_stable_addresses.html) · [Architecture](02_architecture_stable_addresses.html) · [Plan](03_plan_stable_addresses.html) · [Code survey](parts/architecture/recon.md)
+**Docs:** [Decisions page](../../ongoing/STABLE_ADDRESSES.md) · [Crucible](00_crucible_stable_addresses.html) · [Brief](01_brief_stable_addresses.html) · [Architecture](02_architecture_stable_addresses.html) · [Plan](03_plan_stable_addresses.html) · [Code survey](parts/architecture/recon.md) · Review logs: [progress](04_progress_stable_addresses_review_log.md), [decisions](04_progress_stable_addresses_review_log_decisions.md), [brief](04_progress_stable_addresses_review_log_brief.md), [architecture](04_progress_stable_addresses_review_log_architecture.md)
 
 ## Needs your attention
 
-- [ ] **Run one test for the `:1483` timeout.** With the port-80 forward on, `...lahe.localhost:1483/...` times out while the address without the port works. The helper accepts the connection, but the last handshake packet never arrives, so pf (the Mac's firewall, which the port-80 forward switched on) is dropping it. Type this in the Claude prompt. It asks for your password and swaps in a test version of Lahe's forward rules, the same two port-80 rules plus two that let port 1483 through. Nothing on disk changes, and a restart puts the installed rules back:
-
-  `! sudo pfctl -a com.apple/lahe -f ~/Documents/lahe-preview-stable-addresses/pf_test_rules.conf`
-
-  Then reload a `:1483` address and say whether it loads. If it does, I add those rules to `lahe install --port-80`.
+Nothing is waiting on you.
 
 ## Decided
+
+- **The `:1483` timeout is accepted for now.** With the port-80 forward on, the address with `:1483` can time out; the address without the port works. You said either address is fine for now. It is a known issue in the release notes and on the board as LAHE-port-1483-timeout-with-port-80 (what we found, and the one test left to run). Until your next restart, Lahe's forward rules also carry the two test lines from that check; the restart puts the installed rules back.
 
 - **Released.** [v0.3.0](https://github.com/kenxle/live-agentic-html-editor/releases/tag/v0.3.0) is out, with an upgrade page ([docs/UPGRADING.md](../../UPGRADING.md)) for moving older documents to their new address.
 - **Restart check passed.** After your restart the helper came back on its own and the port-free addresses load.
@@ -58,10 +56,7 @@ The Lahe test folders were deleted at your go-ahead, and the disk went from 953 
 
 ## Currently working on
 
-| Agent or task | Doing | Started | Branch |
-|---|---|---|---|
-| Orchestrator | Full suite in all three browsers (gate:all) | 2026-10-11 21:52 | `feat/stable-addresses` |
-| Orchestrator | Waiting on the core builder, then dist rebuild and the full gate | 2026-10-11 20:42 | `feat/stable-addresses` |
+Nothing is running.
 
 ## Phases
 
@@ -73,10 +68,10 @@ The Lahe test folders were deleted at your go-ahead, and the disk went from 953 
 | 3 Architecture | done | 2026-10-11 |
 | 4 Plan | done | 2026-10-11 |
 | 5 Human review | done | 2026-10-11 |
-| 6 Implement | in progress | 2026-10-11 |
-| 7 Verify | in progress | 2026-10-11 |
-| 8 Ship and land | not started | 2026-10-11 |
-| 9 Cleanup | not started | 2026-10-11 |
+| 6 Implement | done | 2026-10-12 |
+| 7 Verify | done | 2026-10-12 |
+| 8 Ship and land | done | 2026-10-12 |
+| 9 Cleanup | done | 2026-10-12 |
 
 ## The record
 
@@ -144,6 +139,8 @@ From core Step 1 (details in the [core progress](progress/phase6_workstream_core
 
 ### Follow-ups
 
+All open follow-ups are on the board (`docs/BULLETIN.md`): LAHE-port-1483-timeout-with-port-80, LAHE-stable-addresses-three-browser-followup, LAHE-stable-addresses-small-followups, LAHE-agent-name-default, LAHE-second-reply-replaces-first. The menu-bar app has its own feature underway. The list below is the record.
+
 - Two small leftovers for the fix round: `CATALOG.REOPENED_AUTOCLOSE_MS` in `protocol.js` is no longer read, and `launchRoot` in `status.js` still checks a field that no longer exists.
 - Since Step 3 a helper defaults to pages port 1483. `npm run gate:unit` sets `LAHE_PAGES_PORT=0`; a single test file run with plain `node --test` needs it too.
 - The `::1` half of the port-80 forward is installed but not checked separately; only the IPv4 path is verified.
@@ -156,12 +153,7 @@ From core Step 1 (details in the [core progress](progress/phase6_workstream_core
 
 ### Cleanup queue
 
-- `../lahe-worktrees/sa-spike` worktree, local branch `spike/localhost-names`, and the same branch on GitHub: the browser check is done.
-- `../lahe-worktrees/sa-ci-dispatch` now holds the local branch `fix/spike-workflow-yaml`; PR #41 is merged.
-- `../lahe-worktrees/sa-ci-dispatch` worktree and its local branch `chore/spike-dispatch-workflow`: PR #40 is merged.
-- `.github/workflows/spike.yml` on main: temporary, remove before this feature's last PR merges.
-- `docs/features/20261011.02_stable_addresses/02_architecture_stable_addresses_reviews_security.html`: stale build output from before the review files were combined.
-- `docs/features/20261011.02_stable_addresses/parts/reviews/`: the two original review files, now copied into `02_architecture_stable_addresses_reviews.md`.
+Done 2026-10-12 at Ken's go-ahead: the nine merged worktrees, their ten local branches, `spike/localhost-names` and `release/v0.3.0` on GitHub (the v0.3.0 tag stays), the stale `02_architecture_stable_addresses_reviews_security.html`, the two architecture review copies in `parts/reviews/`, and `~/Documents/lahe-preview-stable-addresses/`. `spike.yml` was removed before PR #45 merged.
 
 ### Test results
 
@@ -208,9 +200,14 @@ Windows restarts through the once-a-minute trigger, so a crashed helper there ca
 
 ### Ship
 
-Not shipped yet.
+- Merged: [PR #45](https://github.com/kenxle/live-agentic-html-editor/pull/45) (stable addresses), [PR #43](https://github.com/kenxle/live-agentic-html-editor/pull/43) (tests clean their temp folders), [PR #47](https://github.com/kenxle/live-agentic-html-editor/pull/47) (WebKit Library link test), [PR #48](https://github.com/kenxle/live-agentic-html-editor/pull/48) (version 0.3.0 and the upgrade page).
+- Released: [v0.3.0](https://github.com/kenxle/live-agentic-html-editor/releases/tag/v0.3.0).
+- On Ken's Mac: `lahe install`, `--port-80` and `--lahe-names` done; after a restart the helper came back and port-free addresses load.
+- Post-merge checks still open on the board: LAHE-stable-addresses-three-browser-followup (rerun the remaining three-browser failures alone, the idle measurement, a walkthrough).
 
 ## Log
+
+- 2026-10-12 21:22: Cleanup. Stable addresses shipped in v0.3.0 and runs on Ken's Mac from the login item. Ken accepted the `:1483` timeout under the port-80 forward for now; what was found is on the board. The build taught one thing with no owning task: a merged change can wait on the slow checks (now in CLAUDE.md).
 
 - 2026-10-11 18:37: Library fix merged (Open gives one address per file). Free disk fell to 887 MB, so all test runs and previews are on hold. What is left after the disk is cleared: full `gate` and `gate:all`, the idle measurement against the limits (at most 100 MB and 120 wakeups a minute with nothing open; at most 250 MB and 400 with about 20 pages open), a preview on your real documents, and a browser walkthrough.
 - 2026-10-11 18:35: Core fix round 2 merged: hidden folders cannot be mounted, the helper refuses to start if another program holds its IPv6 address, the worktree fallback checks git's own link, one address per file for `lahe review`, docs and skill current. The Library's Open gets the same one-address rule next.

@@ -1,6 +1,6 @@
 # Progress: Menu bar app
 
-**PR 1 is open, PR 2 is prepared.** [PR 61](https://github.com/kenxle/live-agentic-html-editor/pull/61) carries the helper's half (nothing you can see changes); it merges once its CI is green, per the repo's velocity rule. PR 2 (the app and `lahe install --menu-bar`) follows on its own branch, already green on the unit gate and the real build. Nothing needs you right now; your real install waits for your go-ahead at the end. Last updated 2026-10-12 20:44.
+**Where things are at 22:25.** PR 1 ([#61](https://github.com/kenxle/live-agentic-html-editor/pull/61), the helper's half, nothing you can see) is open but main moved under it while other work merged, so it needs main merged in and one more full gate before it goes in. A flow walker is running the integrated helper and a test build of the app against a copy of your state folder right now (the icon you may see in the menu bar is that test build; it stops on its own) and measuring the idle cost. After that: PR 2's full gate, then PR 2 (the app and `lahe install --menu-bar`). Your real install waits for your go at the end. Nothing needs you now.
 
 **Docs:** [Crucible](00_crucible_menu_bar_app.html) · [Brief](01_brief_menu_bar_app.html) · [Architecture](02_architecture_menu_bar_app.html) · [Plan](03_plan_menu_bar_app.html) (each page carries its reviews at the bottom)
 

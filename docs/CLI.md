@@ -26,7 +26,7 @@ lahe skill; after that a plain sentence works:
 | `lahe add ... --source path/to/template` | Record where the source lives, so an agent edits the template rather than build output |
 | `lahe add ... --review <id>` | Re-attach this page to a review that already exists, by id |
 | `lahe status [--session <id>] [--review <id>] [--json]` | What is open right now. Agent monitors must name their session; plain global status is only a human diagnostic. The printed form starts with the pages port, the ending addresses print with and why, and whether they print with the port and why; with no helper running it names a pages port another program holds. Each review shows its `address`. It also says whether a login item runs the helper, and when to run `lahe install` again |
-| `lahe reply --review <id> --item <itm> --rev <n> --status handled\|not_handled\|question` | Write one reply. Add `--text` or `--reason` for what you want to say, `--file <path>` per file you changed, `--needs-see` when the reviewer should read it, `--agent <name>` for the card and the per-agent file. The command encodes the JSON, so a newline or a quote in your answer cannot split the line |
+| `lahe reply --review <id> --item <itm> --rev <n> --status handled\|not_handled\|question` | Write one reply. Add `--text` or `--reason` for what you want to say, `--file <path>` per file you changed, `--needs-see` when the reviewer should read it, `--agent <name>` with the kind of agent you are (claude, codex) for the card and the per-agent file. The command encodes the JSON, so a newline or a quote in your answer cannot split the line |
 | `lahe reply ... --status question --proofread --suggest <block> <from> <to>` | A proofreading question on an item that carries `proofread: true`. Place the reviewer's words as written first, then ask. `--suggest` is one fix: in `new_blocks[<block>]`, change `<from>` to `<to>`; repeat it for each fix. The command reads the item from `review.json` at the rev you name and refuses, by name, a suggestion whose `<from>` is not in that block's words exactly once (`SUGGESTION_NOT_FOUND`), and refuses the whole line when the rev is not the item's current one. Both flags belong on `--status question` only, and `--suggest` needs `--proofread` |
 | `lahe monitor --session <id>` | Poll locally without model wakeups, print unanswered session work, and exit |
 | `lahe monitor --session <id> --session <other>` | Watch several sessions with one monitor. The first is the primary. A session that closes or is taken over is dropped with a line and the rest are still watched |
@@ -149,8 +149,10 @@ is that hook:
   then would start a second one. A default state directory that is refused
   only drops the default from the search.
 - **What it prints.** For those sessions, one block whose reason names the
-  monitor command (one command per state directory, every session in it) and
-  says to run it with Bash `run_in_background` and the largest timeout allowed.
+  monitor command (one command per state directory, every session in it),
+  says to run it with Bash `run_in_background` and `timeout` 86400000 (or
+  `BASH_MAX_TIMEOUT_MS` when that is larger), and says one launch waits until
+  there is work, so no timer or loop is added.
   Nothing when `stop_hook_active` is true, so it blocks at most once per turn.
   Nothing on any error. It always exits `0`.
 

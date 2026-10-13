@@ -97,17 +97,18 @@ test("an open session this agent started, with no live monitor, blocks once with
   assert.equal(parsed.decision, "block");
   assert.match(parsed.reason, new RegExp("lahe monitor --session " + OURS + " --state-dir " + w.dir.replace(/[.*+?^${}()|[\]\\/]/g, "\\$&")));
   assert.match(parsed.reason, /run_in_background/);
-  assert.match(parsed.reason, /timeout 7200000/);
+  assert.match(parsed.reason, /timeout 86400000/);
+  assert.match(parsed.reason, /One launch waits until there is work/);
 });
 
-test("the timeout in the reason follows BASH_MAX_TIMEOUT_MS when it allows more than two hours", async () => {
+test("the timeout in the reason follows BASH_MAX_TIMEOUT_MS when it allows more than 24 hours", async () => {
   const w = world();
-  const raised = JSON.parse((await runHook(w, input(w), { env: { BASH_MAX_TIMEOUT_MS: "86400000" } })).stdout);
-  assert.match(raised.reason, /timeout 86400000/);
-  const lower = JSON.parse((await runHook(w, input(w), { env: { BASH_MAX_TIMEOUT_MS: "60000" } })).stdout);
-  assert.match(lower.reason, /timeout 7200000/, "a lower or default limit leaves the two-hour maximum");
+  const raised = JSON.parse((await runHook(w, input(w), { env: { BASH_MAX_TIMEOUT_MS: "172800000" } })).stdout);
+  assert.match(raised.reason, /timeout 172800000/);
+  const lower = JSON.parse((await runHook(w, input(w), { env: { BASH_MAX_TIMEOUT_MS: "7200000" } })).stdout);
+  assert.match(lower.reason, /timeout 86400000/, "a lower or default limit leaves the 24-hour default");
   const junk = JSON.parse((await runHook(w, input(w), { env: { BASH_MAX_TIMEOUT_MS: "lots" } })).stdout);
-  assert.match(junk.reason, /timeout 7200000/);
+  assert.match(junk.reason, /timeout 86400000/);
 });
 
 test("stop_hook_active true never blocks: at most one block per turn", async () => {
@@ -325,11 +326,12 @@ test("end to end through bin/lahe.js: stdin in, block JSON out, exit 0", () => {
 
 test("the block reason is exactly the text the docs show", () => {
   assert.equal(
-    hook.blockReason([{ id: OURS, stateDir: null }], 7200000),
+    hook.blockReason([{ id: OURS, stateDir: null }], 86400000),
     "Lahe: nothing is watching your review session " + OURS + ", so the reviewer's next comment will go unanswered. " +
-      "Before you end this turn, start the watcher again with the Bash tool, run_in_background true and timeout 7200000:\n\n" +
+      "Before you end this turn, start the watcher again with the Bash tool, run_in_background true and timeout 86400000:\n\n" +
       "  lahe monitor --session " + OURS + "\n\n" +
       "Run only that one command; there is no need to drain or to message the reviewer first. " +
+      "One launch waits until there is work, so add no timer or loop. " +
       "If the human has said this review is over, close the session instead with lahe session close " + OURS + ". " +
       "If the session is not yours, say so in one line and end your turn."
   );
