@@ -2,23 +2,22 @@
 
 ## Progress
 
-**Where it stands:** PR open, waiting on Ken's approval. Last updated
-2026-10-12, 9:20 PM.
+**Where it stands:** merged to main (PR #59, d80cb2de) and the installed hook
+runs the new code. Last updated 2026-10-12, 9:23 PM.
 
-- PR: [#59 on GitHub](https://github.com/kenxle/live-agentic-html-editor/pull/59).
-- Full gate on the code commit: lint passed, bundle check passed, unit 2724
-  passed and 0 failed, Chromium 878 passed and 1 failed. The one failure was
-  the install walk asserting `node_modules` exists in the repo root, which a
-  fresh worktree lacks; after `npm install` in the worktree it passed alone
-  (2 passed). Not caused by this change.
-- Done: spec approved on this page; hook, test, diagram, CLI doc and skill
-  pitfall changed; skill reinstalled; code review said merge; board row added.
-- Next: Ken approves the PR, then merge, pull main, rerun the gate there, and
-  `npm run install-skills` from the main clone so the installed hook points at
-  the merged code (the worktree run skips the hook step on purpose).
+- Merged after Ken's approval and a green CI run. The first CI run failed on a
+  Library "Open" unit test the change does not touch; it passes locally every
+  time and is on the board as LAHE-library-open-closed-session-flake.
+- The main clone is pulled and `npm run install-skills` ran there, so the Stop
+  hook in Ken's settings now prints the 24-hour number and "One launch waits
+  until there is work, so add no timer or loop."
+- Running: `npm run gate` on main, as the post-merge check.
+- Next: close this review session, write the lesson, and list the worktree
+  for cleanup.
 
 **To delete at cleanup:** `.claude-pr-body-202610122118.md` in the worktree
-root (the PR body scratch file; `.gitignore` covers `.claude-commit*` only).
+root (the PR body scratch file), and the worktree
+`.claude/worktrees/hook-indefinite` with its branch once the review is closed.
 
 **Summary.** The Stop hook still tells a Claude Code agent to relaunch the
 monitor with a two-hour timeout. The skill, the contract and `docs/CLI.md` were
