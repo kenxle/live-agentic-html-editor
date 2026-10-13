@@ -1,6 +1,6 @@
 # Progress: Menu bar app
 
-**Where things are at 11:55 on October 13.** PR 1 ([#61](https://github.com/kenxle/live-agentic-html-editor/pull/61), the helper's half, invisible on its own) is merged and green on main. Both idle-cost fix rounds are merged: a poll now costs the helper 5 to 8 ms (was 52) and the app about 1.5 ms (was 10), and a question on a document no page has open now reaches the icon. Four reviews of PR 2's diff came back with fixes worth making before it opens (a crash from a port squatter, a way for an agent's command to end your Stop, the live menu missing its section headers); one fix round is out as two builders. **Three small design calls are yours, under Needs your attention**; they do not hold up the PR. After the fix round: the full gate alone, the timed walkthrough again, and PR 2.
+**Where things are at 12:58 on October 13.** Both halves are on main: PR 1 ([#61](https://github.com/kenxle/live-agentic-html-editor/pull/61), the helper's summary) and PR 2 ([#62](https://github.com/kenxle/live-agentic-html-editor/pull/62), the icon, the install, Stop and Start), each reviewed, fixed, walked on a copy of your state folder and gated green. Idle cost is 0.73 s of processor time per 10 minutes for the app and its polls together, under the one-tab budget. The full gate on main is running now. **Two things are yours:** three small design calls under Needs your attention, and the real install on your Mac (`lahe install --menu-bar`, then one picture of the icon and its open menu), which I will not run for you.
 
 **Docs:** [Crucible](00_crucible_menu_bar_app.html) · [Brief](01_brief_menu_bar_app.html) · [Architecture](02_architecture_menu_bar_app.html) · [Plan](03_plan_menu_bar_app.html) (each page carries its reviews at the bottom) · [PR 2 reviews](05_pr2_reviews_menu_bar_app.md)
 
@@ -12,7 +12,7 @@ Three calls from the design review of the app's menu and icon (full review in [P
 2. **Should Stop Lahe ask before it stops?** Stop sits one row under Hide with no confirmation, and it breaks every agent's lahe commands. Suggested: an alert "Stop Lahe? Agents' lahe commands will fail until you start it again." with Stop and Cancel; the brief's sentence under the Stop row could move into the alert, which also removes a grey line from every menu. Keep it as a one-click row with the line under it, or add the alert?
 3. **Which mark on the icon?** It is the speech bubble, the tab icon's old shape; the tab icon is now a document with an L. The designer calls the bubble the most generic shape in a menu bar (Messages and Slack use one) against the brief's "the Lahe mark, not a generic symbol", and suggests an outlined document with a folded corner, drawn outline at rest and filled when it carries a count. Keep the bubble, or switch to the document?
 
-Still coming later: one real picture of the icon and its open menu from you, once the app is installed on your Mac (an agent cannot take it on this machine).
+4. **Install it on your Mac, when you want it.** From the clone on main: `lahe install --menu-bar`. It compiles the app with the system's Swift (no Xcode needed, about 10 seconds), writes its login item beside the helper's, and starts it; `lahe status` then says where the icon is. An agent never runs this for you (Task 4.5 in the plan waits on your word). Then one real picture of the icon and its open menu, light or dark, for this page and the brief's V29; an agent cannot take it on this machine. If anything looks wrong, `lahe uninstall` removes the icon and `lahe menubar show` brings a hidden one back.
 
 Two things the walk saw that are not in the menu bar's own flow, for you to know:
 
@@ -37,7 +37,7 @@ The icon keeps the review layer's speech bubble. Main changed the browser tab's 
 
 | Agent or task | Doing | Started | Branch |
 |---|---|---|---|
-| Orchestrator | Opening PR 2 | 2026-10-12 20:44 | `feat/menu-bar-pr2` |
+| Orchestrator | PR 2 merged; running the full gate on main and watching main's CI; then cleanup | 2026-10-12 20:44 | `main` |
 | Flow walker (Opus, independent) | Done at 12:51: V32 passes, V33 counts equal, one board row (a global `lahe status` slows the helper) and one note for Ken | 2026-10-13 12:27 | `feat/menu-bar-pr2` |
 | Builder: summary (Opus) | Done: fix round 2 (the helper's idle cost, unwatched replies) returned at 2026-10-13 11:36 and is merged into `feat/menu-bar-pr2` | 2026-10-12 22:46 | `feat/menu-bar-summary` |
 | Code review (Opus) | Done at 11:51: one important bug, one coverage gap, one rare bug; findings in the fix round | 2026-10-13 11:50 | `feat/menu-bar-pr2` |
@@ -58,9 +58,9 @@ The icon keeps the review layer's speech bubble. Main changed the browser tab's 
 | 3 Architecture | done | 2026-10-12 |
 | 4 Plan | done | 2026-10-12 |
 | 5 Human review | done | 2026-10-12 |
-| 6 Implement | in progress | 2026-10-12 |
-| 7 Verify | in progress (PR 1 verified; PR 2 next) | 2026-10-12 |
-| 8 Ship and land | in progress (PR 1 open) | 2026-10-12 |
+| 6 Implement | done | 2026-10-13 |
+| 7 Verify | done (both PRs reviewed, walked and gated) | 2026-10-13 |
+| 8 Ship and land | in progress (both PRs merged; main's gate running; your install and screenshot still to come) | 2026-10-13 |
 | 9 Cleanup | not started | |
 
 ## The record
@@ -124,10 +124,11 @@ To delete at cleanup, in one batch with your go:
 ### Ship
 
 - PR 1: [#61](https://github.com/kenxle/live-agentic-html-editor/pull/61), merged 2026-10-12 22:52 (gate on `e3816757`: lint, unit 2783 passed, browser 884 passed, 0 failed). Opened 2026-10-12 22:02 from `feat/menu-bar` at `2697c4c9`. Full gate on that commit: lint, unit 2783 passed, browser 884 passed, 0 failed.
-- PR 2: not opened yet.
+- PR 2: [#62](https://github.com/kenxle/live-agentic-html-editor/pull/62), opened 2026-10-13 12:52 from `feat/menu-bar-pr2`, merged 2026-10-13 12:54 at `2c913902`. Full gate on its code commit `2390bbe3` (lint, unit 2864 passed, browser 884 passed, 0 failed, `check:menubar` with the app's live tests); main merged in once after that, docs and CLAUDE.md only, with gate:unit again on the merge commit (2864 passed, 0 failed). Main's own CI run and the local post-merge gate on main: see the log.
 
 ## Log
 
+- 2026-10-13 12:58: PR 2 is merged into main at `2c913902` (opened 12:52; main had moved under it, so main was merged in first: docs and CLAUDE.md only, one board conflict kept both sides, gate:unit green again). The full local gate on main is running and main's CI run started at 12:54. What is left for you: the three design calls above, and installing it for real.
 - 2026-10-13 12:55: the walkthrough passes V32 and V33 (numbers under Test results). It found one pre-existing cost outside this feature (a global `lahe status` slows the helper; board row) and one behavior for you to know (opening a page clears the icon, by the rail's own rule); both under What it looks like. Three board rows added (that one, connection reuse, the Library sweep). PR 2 opens now.
 - 2026-10-13 12:27: the full gate is green on the final PR 2 commit (numbers under Test results) and the branch is pushed. The timed walkthrough (V32) is running on a fresh copy of your state folder; PR 2 opens when it comes back clean.
 - 2026-10-13 12:20: the app half of fix round 3 is back and merged (`397e0a42`): a Content-Length that is not plain digits fails the answer instead of trapping the process (the old code crashed the self-test with that case); the app sends nothing while the Stop hold stands and shows the stopped look from the marker (a plain listener on the port sees zero connections); every menu row is built by one function and the section headers are real ones (the system's on macOS 14, small semibold grey on 13), with the snapshots and dumps read back from those items so a picture cannot show what the live menu does not; the waiting rows say "1 question, 2 more unread"; connected sessions get a note row for the others still open; the Hide tooltip is true in every menu and carries no backticks; the 409 look says "Lahe was updated. This icon is out of date."; the many-documents fixture adds up and is drawn for the first time; a poll while the menu is open only updates rows in place. Self-test 362 passed with the vectors; the app's five tests against a fresh test build 5 passed. The pictures on this page are regenerated. One known effect: a menu open when the first answer arrives keeps the "can't tell" rows until it is reopened.
