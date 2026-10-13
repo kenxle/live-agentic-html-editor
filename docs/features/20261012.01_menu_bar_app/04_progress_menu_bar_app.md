@@ -1,6 +1,6 @@
 # Progress: Menu bar app
 
-**Phase 6, building.** You approved the plan at 20:35 and every question is settled. Step 0 is done (the wire in CONTRACTS.md, fixtures, proof vectors, the gate script; unit gate 2724 passed, 0 failed) and the three builders are at work in their own worktrees. Nothing needs you right now. Last updated 2026-10-12 20:44.
+**PR 1 is open, PR 2 is prepared.** [PR 61](https://github.com/kenxle/live-agentic-html-editor/pull/61) carries the helper's half (nothing you can see changes); it merges once its CI is green, per the repo's velocity rule. PR 2 (the app and `lahe install --menu-bar`) follows on its own branch, already green on the unit gate and the real build. Nothing needs you right now; your real install waits for your go-ahead at the end. Last updated 2026-10-12 20:44.
 
 **Docs:** [Crucible](00_crucible_menu_bar_app.html) · [Brief](01_brief_menu_bar_app.html) · [Architecture](02_architecture_menu_bar_app.html) · [Plan](03_plan_menu_bar_app.html) (each page carries its reviews at the bottom)
 
@@ -24,7 +24,7 @@ The icon keeps the review layer's speech bubble. Main changed the browser tab's 
 
 | Agent or task | Doing | Started | Branch |
 |---|---|---|---|
-| Orchestrator | Checkpoint 1 (PR 1): browser suite, code and security reviews of the integrated diff, then the pull request | 2026-10-12 20:44 | `feat/menu-bar` |
+| Orchestrator | PR 1 open, watching CI; then PR 2's full gate, the walk on a copy of the state folder, and PR 2 | 2026-10-12 20:44 | `feat/menu-bar` |
 | Builder: summary (Opus) | Done: returned and merged at 2026-10-12 21:20 | 2026-10-12 20:44 | `feat/menu-bar-summary` |
 | Builder: macapp (Opus) | Done: returned at 2026-10-12 21:10. Waiting for summary before the merge | 2026-10-12 20:44 | `feat/menu-bar-macapp` |
 | Builder: install (Opus) | Done: returned at 2026-10-12 21:06. Waiting for the other two before the merge | 2026-10-12 20:44 | `feat/menu-bar-install` |
@@ -40,8 +40,8 @@ The icon keeps the review layer's speech bubble. Main changed the browser tab's 
 | 4 Plan | done | 2026-10-12 |
 | 5 Human review | done | 2026-10-12 |
 | 6 Implement | in progress | 2026-10-12 |
-| 7 Verify | not started | |
-| 8 Ship and land | not started | |
+| 7 Verify | in progress (PR 1 verified; PR 2 next) | 2026-10-12 |
+| 8 Ship and land | in progress (PR 1 open) | 2026-10-12 |
 | 9 Cleanup | not started | |
 
 ## The record
@@ -84,10 +84,12 @@ Nothing queued.
 
 ### Ship
 
-Not shipped yet.
+- PR 1: [#61](https://github.com/kenxle/live-agentic-html-editor/pull/61), opened 2026-10-12 22:02 from `feat/menu-bar` at `2697c4c9`. Full gate on that commit: lint, unit 2783 passed, browser 884 passed, 0 failed.
+- PR 2: not opened yet.
 
 ## Log
 
+- 2026-10-12 22:02: PR 1 opened (#61) after the full gate on its final commit: unit 2783 passed, 0 failed; browser 884 passed, 0 failed, 7 skipped; one helper before and after. The follow-up from the spec check is in: no string field is ever null (a session's `review` is the one that may be), and the two missing tests are written.
 - 2026-10-12 21:53: the browser suite on the merged fix round: 884 passed, 0 failed, 7 skipped. The spec check of PR 1 found no blocking gap; its follow-ups (no nulls where the app expects strings, two missing tests, three stale doc lines) are with the summary builder and done in the docs. PR 1 opens after that follow-up and one last full gate on the final commit.
 - 2026-10-12 21:44: the fix round came back (`f80c73ae`) with all ten findings fixed, each test written red first, and is merged. gate:unit on the merge: 2780 passed, 0 failed. One number still open: the summary's warm median on a 700-review made-up state folder measured 8.7 to 13.4 ms with the machine at a load of about 9 from other agents; V18's 10 ms limit is measured on a quiet machine at Step 4. The browser suite runs again once another agent's run on this machine finishes; the independent spec check of PR 1 started.
 - 2026-10-12 21:32: code review of PR 1 returned three findings, all taken: a Hold on the rail would also hold back read marks, so the icon would keep counting what you had read (read marks now post through a Hold); the cache key stats the review folder, whose time is too coarse on Linux to catch two rewrites in one tick (back to the files the plan named); `reply_seen` was on every item in `review.json`, which agents read, so it moves out of that file and stays on the page's own reads. One fix round sent to the summary builder with the seven security findings.
