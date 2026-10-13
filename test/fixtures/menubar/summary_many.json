@@ -74,7 +74,7 @@
       },
       {
         "review": "r183d18583a4a",
-        "title": "Title with a lone surrogate half \ud800 here",
+        "title": "Title with a lone surrogate half  here",
         "path_hint": "~/Documents/workspace/project/docs/doc_7.md",
         "open": true,
         "questions": 0,
