@@ -1,12 +1,12 @@
 # Progress: Rail cleanup
 
-**Closed.** Ten pull requests (#49 through #58) cleaned up the rail from Ken's comments on a mockup of it, and all are merged to main with a green full gate after the last one. Three close-out choices wait on you on the [close-out decisions page](06_close_out_decisions.md): one lesson, the file deletions, and the worktree teardown. Last updated 2026-10-12 22:25.
+**Closed.** Ten pull requests (#49 through #58) cleaned up the rail from Ken's comments on a mockup of it, and all are merged to main with a green full gate after the last one. Nothing is waiting on you. Last updated 2026-10-13 09:28.
 
 **Docs:** [Rail mockup](rail_mockup.html) · [Close-out decisions](06_close_out_decisions.md) · [Cards redesign notes](03_progress_cards_redesign.md) · [Mark as done notes](04_progress_mark_done.md) · [Shipped list and cleanup list](05_shipped_and_cleanup.md) · [Review log](04_progress_rail_cleanup_review_log.md)
 
 ## Needs your attention
 
-- [ ] Answer the three cards on the [close-out decisions page](06_close_out_decisions.md). The deletions wait until you do.
+Nothing is waiting on you.
 
 ## Currently working on
 
@@ -66,11 +66,11 @@ Posted to docs/BULLETIN.md on 2026-10-12:
 
 ### Cleanup queue
 
-Waiting on Ken's approval. Nothing has been deleted.
+Done on 2026-10-13, after Ken said yes on the [close-out decisions page](06_close_out_decisions.md):
 
 - Worktrees under `.claude/worktrees/`, all merged: `rail-cleanup`, `rail-r4`, `rail-cleanup-6` through `rail-cleanup-11`, and `agent-a42f70013754785a5`. Inside them: `test-results/` folders, `node_modules` symlinks, `.claude-pr-body.md` and `.claude-commit*` files.
 - Twelve local branches: `rail-cleanup`, `rail-cleanup-2` through `rail-cleanup-11`, and `remove-edits-tab`, all merged. The remote copies were deleted on 2026-10-12.
-- Maybe: `capture_reference.png` and `capture_reference_open.png` in this folder, which the capture script regenerates and the mockup does not use.
+- `capture_reference.png` and `capture_reference_open.png` in this folder, which the capture script regenerates and the mockup does not use.
 
 ### Test results
 
@@ -81,5 +81,7 @@ Full gate on main after #58: unit 2724 passed, 0 failed; browser 882 passed, 0 f
 All ten PRs merged to main and pushed. Ken's helper restarted itself onto the new code. The skill copy is reinstalled with `npm run install-skills`.
 
 ## Log
+
+**2026-10-13 09:28.** Ken answered the close-out page. The worktree lesson is promoted to `docs/lessons/testing/`. The nine worktrees, twelve local branches, the two capture pictures and the proposed lesson's old copy are removed. The capture script writes those two pictures again if it runs.
 
 **2026-10-12 22:25.** Closed. Shipped ten PRs (see Task index). The build taught two things with no owning task: a merged change is fastest to test by copying the rebuilt bundle into the main checkout's `dist/`, because the helper serves the bundle from disk; and a Stop hook that scans the transcript for session ids also finds ids in tool output, which is now a board item.
