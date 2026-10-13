@@ -12,11 +12,11 @@
 // no Xcode project. See README.md beside this file.
 //
 // Debug modes (none needs a macOS permission):
-//   --self-test [--vectors <file>] [--decode <file>]...
+//   --self-test [--vectors <file>] [--fixtures <dir>] [--decode <file>]...
 //   --snapshot <dir> [--summary <file>]...
 //   --dump-menu <summary.json | none> [--look not-running|stopped|cant-tell|updated]
 //   --watch --state-dir <dir>    poll with no icon; one JSON line per change;
-//                                stdin lines "wake", "poll", "quit"
+//                                stdin lines "wake", "poll", "polls", "quit"
 //   --wake-after <seconds>       post the system wake notification once
 //   --action <hide|stop|start|open <review>>   test builds only
 
@@ -224,10 +224,20 @@ func plain(_ text: String) -> String {
     return String(String.UnicodeScalarView(kept))
 }
 
-/// A row title: plain, and cut with an ellipsis. The tooltip has the full name.
+/// Plain, with runs of spaces made one and the ends trimmed. A character the
+/// helper or plain() removed can leave two spaces where it stood.
+func tidy(_ text: String) -> String {
+    return plain(text).split(separator: " ", omittingEmptySubsequences: true).joined(separator: " ")
+}
+
+/// A row title: tidy, and cut with an ellipsis right after the last word or
+/// letter kept, never after a space. The tooltip has the full name.
 func cut(_ title: String) -> String {
-    let text = plain(title)
-    return text.count <= titleLimit ? text : String(text.prefix(titleLimit - 1)) + "\u{2026}"
+    let text = tidy(title)
+    if text.count <= titleLimit { return text }
+    var kept = String(text.prefix(titleLimit - 1))
+    while kept.last == " " { kept.removeLast() }
+    return kept + "\u{2026}"
 }
 
 func plural(_ n: Int, _ word: String) -> String { return "\(n) \(word)" + (n == 1 ? "" : "s") }
@@ -256,22 +266,25 @@ func heardAgo(_ heard: String, now: String) -> String {
     return plural(seconds / 86400, "day") + " ago"
 }
 
-func clockTime(_ iso: String) -> String {
-    guard let date = parseTime(iso) else { return "an unknown time" }
+/// "Stopped by you at 11:41 AM" today, "Stopped by you on Oct 20 at 11:41 AM"
+/// another day.
+func stoppedLine(_ iso: String?) -> String {
+    guard let iso = iso, let date = parseTime(iso) else { return "Stopped by you" }
     let time = DateFormatter()
     time.setLocalizedDateFormatFromTemplate("jmm")
-    if Calendar.current.isDateInToday(date) { return time.string(from: date) }
+    if Calendar.current.isDateInToday(date) { return "Stopped by you at " + time.string(from: date) }
     let day = DateFormatter()
     day.setLocalizedDateFormatFromTemplate("MMMd")
-    return time.string(from: date) + " on " + day.string(from: date)
+    return "Stopped by you on " + day.string(from: date) + " at " + time.string(from: date)
 }
 
-/// "1 question", "3 unread", or both. unread counts questions too.
+/// "1 question", "3 unread", or "1 question, 2 more unread". The helper's
+/// unread counts the questions too, so the second number is the rest.
 func waitingReason(_ doc: Summary.WaitingDoc) -> String {
-    var parts: [String] = []
-    if doc.questions > 0 { parts.append(plural(doc.questions, "question")) }
-    if doc.unread > doc.questions || parts.isEmpty { parts.append("\(doc.unread) unread") }
-    return parts.joined(separator: ", ")
+    let rest = max(0, doc.unread - doc.questions)
+    if doc.questions <= 0 { return "\(doc.unread) unread" }
+    let questions = plural(doc.questions, "question")
+    return rest > 0 ? "\(questions), \(rest) more unread" : questions
 }
 
 // MARK: - What the app knows, and how it looks
@@ -313,7 +326,20 @@ func look(of status: Status) -> Look {
     }
 }
 
-let updatedReason = "Lahe was updated; rebuilding"
+// A rebuild can fail and leave this app running on purpose, so say only what
+// is known, and what to do if it lasts.
+let updatedReason = "Lahe was updated. This icon is out of date."
+let updatedNote = "If this stays, run lahe menubar rebuild."
+
+/// The can't-tell reason for a signed answer that is not a summary.
+func reason(forStatus code: Int) -> String {
+    switch code {
+    case 401: return "Lahe refused the request"
+    case 409: return updatedReason
+    case 200: return "Could not read Lahe's answer"
+    default: return "Lahe had an error (\(code))"
+    }
+}
 
 // MARK: - The menu, as plain rows (so --dump-menu prints exactly what is shown)
 
@@ -347,43 +373,44 @@ struct Row: Equatable {
     }
 }
 
-func tip(_ title: String, _ path: String, _ extra: String? = nil) -> String {
-    return [plain(title), plain(path), extra].compactMap { $0 }.joined(separator: "\n")
+func tip(_ lines: String?...) -> String {
+    return lines.compactMap { $0 }.map(tidy).filter { !$0.isEmpty }.joined(separator: "\n")
 }
 
-func moreRow(_ more: Int) -> [Row] {
-    return more > 0 ? [.note("\(more) more", "The Library lists every one.")] : []
+/// The overflow row. The agents section counts comments in its header but
+/// lists documents, so its row names the unit.
+func moreRow(_ more: Int, _ unit: String? = nil) -> [Row] {
+    guard more > 0 else { return [] }
+    let title = "\(more) more" + (unit.map { " " + (more == 1 ? $0 : $0 + "s") } ?? "")
+    return [.note(title, "The Library lists every one.")]
 }
+
+let hideTipRunning = "Closes this icon only. Lahe keeps running. Run lahe menubar show in a terminal to bring it back."
+let hideTipStopped = "Closes this icon only. Run lahe menubar show in a terminal to bring it back."
 
 /// The brief's order: waiting on you, waiting on agents, open and connected,
 /// recent, the Library, then Quit.
 func menuRows(status: Status, stopped: Stopped?, libraryURL: String?) -> [Row] {
     var rows: [Row] = []
-    let hideRow = Row.item("Hide the icon", .hide,
-                           "Closes this icon only. Lahe keeps running. `lahe menubar show` brings it back.")
     let startRow = Row.item("Start Lahe", .start, "Starts the Lahe helper again.")
 
     switch status {
     case .notRunning:
-        if let stopped = stopped {
-            rows.append(.note("Stopped by you at " + (stopped.at.map(clockTime) ?? "an unknown time")))
-        } else {
-            rows.append(.note("Lahe is not running"))
-        }
-        rows += [startRow, .separator, hideRow]
+        rows.append(.header(stopped.map { stoppedLine($0.at) } ?? "Lahe is not running"))
+        rows += [startRow, .separator, .item("Hide the icon", .hide, hideTipStopped)]
         return rows
 
     case .cantTell(let reason):
         rows.append(.header("Can't tell what is waiting"))
         rows.append(.note(reason))
+        if reason == updatedReason { rows.append(.note(updatedNote)) }
         rows.append(.separator)
 
     case .summary(let s):
         let you = s.waitingOnYou
         rows.append(.header(you.count > 0 ? "Waiting on you: \(you.count)" : "Nothing is waiting on you"))
         for doc in you.documents {
-            let reason = (doc.open ? "open, " : "") + waitingReason(doc)
-            rows.append(.item("\(cut(doc.title)) (\(reason))", .openReview(doc.review),
+            rows.append(.item("\(cut(doc.title)) (\(waitingReason(doc)))", .openReview(doc.review),
                               tip(doc.title, doc.pathHint, doc.open ? "Open in a browser window now." : nil)))
         }
         rows.append(.separator)
@@ -396,34 +423,38 @@ func menuRows(status: Status, stopped: Stopped?, libraryURL: String?) -> [Row] {
             rows.append(.item("\(cut(doc.title)) (\(doc.waiting) waiting)", .openReview(doc.review),
                               tip(doc.title, doc.pathHint)))
         }
-        rows += moreRow(agents.more)
+        rows += moreRow(agents.more, "document")
         rows.append(.separator)
 
         let open = s.openDocuments
         rows.append(.header(open.count > 0 ? "Open documents: \(open.count)" : "No open documents"))
         for doc in open.items {
-            rows.append(.item(cut(doc.title) + (doc.focused ? " (focused)" : ""), .openReview(doc.review),
+            rows.append(.item(cut(doc.title) + (doc.focused ? " (front tab)" : ""), .openReview(doc.review),
                               tip(doc.title, doc.pathHint)))
         }
         rows += moreRow(open.more)
+        rows.append(.separator)
 
         let connected = s.sessions.connected
-        rows.append(.header(connected.count > 0
-            ? "Connected sessions: \(connected.count) (\(s.sessions.open) open)"
-            : "No connected sessions (\(s.sessions.open) open)"))
+        rows.append(.header(connected.count > 0 ? "Connected sessions: \(connected.count)" : "No connected sessions"))
         for session in connected.items {
             let heard = heardAgo(session.lastHeardAt, now: s.generatedAt)
             let title = "\(cut(session.name)) (\(session.presence), last heard \(heard))"
             if let review = session.review {
-                rows.append(.item(title, .openReview(review), tip(session.name, session.session, "Opens its most recent document.")))
+                rows.append(.item(title, .openReview(review), tip(session.name, "Opens its most recent document.")))
             } else {
-                rows.append(.item(title, .openLibrary, tip(session.name, session.session, "No document yet; opens the Library.")))
+                rows.append(.item(title, .openLibrary, tip(session.name, "No document yet; opens the Library.")))
             }
         }
         rows += moreRow(connected.more)
+        let others = s.sessions.open - connected.count
+        if others > 0 {
+            let line = others == 1 ? "1 other session still open" : "\(others) other sessions still open"
+            rows.append(.note(line, "Open, but no agent is listening or working now. The Library lists every session."))
+        }
         rows.append(.separator)
 
-        rows.append(.header("Recent documents"))
+        rows.append(.header(s.recent.items.isEmpty ? "No recent documents" : "Recent documents"))
         for doc in s.recent.items {
             rows.append(.item(cut(doc.title), .openReview(doc.review), tip(doc.title, doc.pathHint)))
         }
@@ -434,7 +465,7 @@ func menuRows(status: Status, stopped: Stopped?, libraryURL: String?) -> [Row] {
         rows.append(.item("Open the Library", .openLibrary, "Every review, in the browser."))
     }
     rows.append(.separator)
-    rows.append(hideRow)
+    rows.append(.item("Hide the icon", .hide, hideTipRunning))
     rows.append(.item("Stop Lahe", .stop, "Stops the Lahe helper until you start it again."))
     rows.append(.note("Agents' lahe commands will fail until you start it again"))
     return rows
@@ -641,7 +672,8 @@ enum Wire {
         }
         let lines = head.components(separatedBy: "\r\n")
         let statusParts = lines[0].split(separator: " ")
-        guard statusParts.count >= 2, statusParts[0].hasPrefix("HTTP/1."), let status = Int(statusParts[1]) else {
+        guard statusParts.count >= 2, statusParts[0].hasPrefix("HTTP/1."),
+              statusParts[1].count == 3, isDigits(statusParts[1]), let status = Int(statusParts[1]) else {
             return .failed("bad status line")
         }
         var headers: [String: String] = [:]
@@ -652,11 +684,19 @@ enum Wire {
         }
         if headers["transfer-encoding"] != nil { return .failed("chunked answer to an HTTP/1.0 request") }
         var body = Data(answer[split.upperBound...])
-        if let declared = headers["content-length"].flatMap(Int.init) {
+        // Plain ASCII digits only. Int() alone takes "-1" and "+5", and a
+        // negative length would trap in prefix() before the signature is read.
+        if let raw = headers["content-length"] {
+            guard isDigits(Substring(raw)), let declared = Int(raw) else { return .failed("bad content-length") }
             guard declared <= body.count else { return .failed("short answer") }
             body = body.prefix(declared)
         }
         return .answer(status: status, headers: headers, body: body)
+    }
+
+    /// One or more of the ASCII digits 0 to 9, and nothing else.
+    static func isDigits(_ text: Substring) -> Bool {
+        return !text.isEmpty && text.utf8.allSatisfy { $0 >= 0x30 && $0 <= 0x39 }
     }
 }
 
@@ -770,6 +810,8 @@ final class Controller {
     private var generation = 0      // bumped by a wake; older answers are ignored
     private var inFlight = false
     private var lastBody: Data?     // the last summary answer, to skip an unchanged one
+    private var shownStopped = false  // the stopped look is up, from the marker
+    private(set) var polls = 0      // poll() calls, sent or not; --watch prints it on "polls"
     private var timer: Timer?
     var onChange: (() -> Void)?
 
@@ -808,7 +850,22 @@ final class Controller {
         poll()
     }
 
+    /// One poll. While the stop hold stands it sends nothing: whatever holds
+    /// the port then is not a helper this app started, and a fresh signed
+    /// request every 5 seconds would hand it a proof to replay. The stopped
+    /// look comes from the marker alone, and polling resumes when it goes.
     func poll() {
+        polls += 1
+        if FileManager.default.fileExists(atPath: stoppedURL.path) {
+            if case .notRunning = status, shownStopped { return }
+            generation += 1  // an answer to a request sent before the marker is ignored
+            inFlight = false
+            lastBody = nil
+            shownStopped = true
+            set(.notRunning)
+            return
+        }
+        shownStopped = false
         if inFlight { return }
         inFlight = true
         let asked = generation
@@ -839,10 +896,10 @@ final class Controller {
             }
             if code == 409 {
                 log.write("version", "the helper answers another summary_version")
-                return .cantTell(updatedReason)
+            } else {
+                log.write("status:\(code)", "summary.read answered \(code)")
             }
-            log.write("status:\(code)", "summary.read answered \(code)")
-            return .cantTell(code == 401 ? "Lahe refused the request" : "Lahe answered \(code)")
+            return .cantTell(reason(forStatus: code))
         }
     }
 
@@ -928,8 +985,7 @@ final class Controller {
             return
         }
         launchctl(["bootout", "gui/\(getuid())/\(HelperJob.label)"])
-        set(.notRunning)
-        poll()
+        poll()  // shows the stopped look from the marker, and sends nothing
     }
 
     /// Start: remove the marker, load the item, start it. No contents check of
@@ -967,11 +1023,59 @@ final class Controller {
 
 // MARK: - The menu bar icon
 
-/// A row's action, carried on its own menu item. A poll can rebuild the menu
+/// A row's action, carried on its own menu item. A poll can change the menu
 /// while it is open, so a click must never look its action up by position.
 final class ActionBox: NSObject {
     let action: RowAction
     init(_ action: RowAction) { self.action = action }
+}
+
+/// A header row on macOS 13, which has no section header item: small,
+/// semibold, in the secondary label colour. macOS 14 and later draw the
+/// system's own section header.
+let headerFont = NSFont.systemFont(ofSize: NSFont.smallSystemFontSize, weight: .semibold)
+
+func isSystemHeader(_ item: NSMenuItem) -> Bool {
+    if #available(macOS 14, *) { return item.isSectionHeader }
+    return false
+}
+
+/// The one place a row becomes a menu item. The live menu and the snapshot
+/// drawing both go through it, so a picture cannot show a row the menu does not.
+func menuItem(for row: Row, target: AnyObject?, action: Selector?) -> NSMenuItem {
+    if row.kind == .separator { return .separator() }
+    let item: NSMenuItem
+    if row.kind == .header, #available(macOS 14, *) {
+        item = NSMenuItem.sectionHeader(title: row.title)
+    } else {
+        item = NSMenuItem(title: row.title, action: row.enabled ? action : nil, keyEquivalent: "")
+        item.target = target
+    }
+    update(item, to: row)
+    return item
+}
+
+/// A row's title, tooltip and action onto an item made for a row of the same
+/// kind, so an open menu can change in place.
+func update(_ item: NSMenuItem, to row: Row) {
+    item.title = row.title
+    if row.kind == .header && !isSystemHeader(item) {
+        item.attributedTitle = NSAttributedString(string: row.title, attributes: [
+            .font: headerFont, .foregroundColor: NSColor.secondaryLabelColor,
+        ])
+    }
+    item.isEnabled = row.enabled
+    item.toolTip = row.tooltip
+    item.representedObject = ActionBox(row.action)
+}
+
+/// How an item draws, read back from the item itself: the snapshot's input.
+enum ItemLook: String { case rule, header, enabled, disabled }
+
+func itemLook(_ item: NSMenuItem) -> ItemLook {
+    if item.isSeparatorItem { return .rule }
+    if isSystemHeader(item) || item.attributedTitle != nil { return .header }
+    return item.isEnabled ? .enabled : .disabled
 }
 
 final class MenuBarApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
@@ -996,9 +1100,11 @@ final class MenuBarApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
         controller.start()
     }
 
-    // The menu is built just before it opens and kept current while it is
-    // open. A closed menu costs nothing per poll, which matters because the
-    // "last heard" times change on almost every answer.
+    // The menu is built just before it opens. While it is open, a poll changes
+    // titles in place and never adds or removes a row, so the highlight stays
+    // under the cursor; a row added or removed shows the next time it opens.
+    // A closed menu costs nothing per poll, which matters because the "last
+    // heard" times change on almost every answer.
     func menuNeedsUpdate(_ menu: NSMenu) { rebuildMenu() }
     func menuWillOpen(_ menu: NSMenu) {
         menuOpen = true
@@ -1014,26 +1120,27 @@ final class MenuBarApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
             statusItem?.button?.image = iconImage(current)
             statusItem?.button?.setAccessibilityLabel(accessibilityText(current))
         }
-        if menuOpen { rebuildMenu() }
+        if menuOpen { refreshOpenMenu() }
     }
 
     private func rebuildMenu() {
         let rows = controller.rows()
-        if rows == shownRows { return }
+        if rows == shownRows && menu.items.count == rows.count { return }
         shownRows = rows
         menu.removeAllItems()
-        for row in rows {
-            if row.kind == .separator {
-                menu.addItem(.separator())
-                continue
-            }
-            let item = NSMenuItem(title: row.title, action: row.enabled ? #selector(clicked(_:)) : nil, keyEquivalent: "")
-            item.target = self
-            item.isEnabled = row.enabled
-            item.toolTip = row.tooltip
-            item.representedObject = ActionBox(row.action)
-            menu.addItem(item)
+        for row in rows { menu.addItem(menuItem(for: row, target: self, action: #selector(clicked(_:)))) }
+    }
+
+    /// Only rows whose kind is unchanged, in place. A different set of rows
+    /// waits for the menu to close.
+    private func refreshOpenMenu() {
+        let rows = controller.rows()
+        guard rows != shownRows, menu.items.count == shownRows.count,
+              rows.map({ $0.kind }) == shownRows.map({ $0.kind }) else { return }
+        for (index, row) in rows.enumerated() where row != shownRows[index] {
+            update(menu.items[index], to: row)
         }
+        shownRows = rows
     }
 
     @objc func clicked(_ sender: NSMenuItem) {
@@ -1047,7 +1154,7 @@ func accessibilityText(_ look: Look) -> String {
     case .clear: return "Lahe: nothing waiting"
     case .count(let text): return "Lahe: \(text) waiting on you"
     case .notRunning: return "Lahe is not running"
-    case .cantTell: return "Lahe: can't tell"
+    case .cantTell: return "Lahe: can't tell what is waiting"
     }
 }
 
@@ -1077,6 +1184,7 @@ func rowJSON(_ row: Row) -> [String: Any] {
     out["enabled"] = row.enabled
     if let tooltip = row.tooltip { out["tooltip"] = tooltip }
     if let action = row.action.name { out["action"] = action }
+    out["style"] = itemLook(menuItem(for: row, target: nil, action: nil)).rawValue  // as the live menu draws it
     return out
 }
 
@@ -1161,26 +1269,29 @@ func drawIconStrip(_ look: Look, palette: Palette, in rect: NSRect) {
     image.draw(at: origin, from: .zero, operation: .sourceOver, fraction: 1)
 }
 
-/// A drawing of the open menu from the same rows the real menu uses. The real
-/// menu cannot be captured without a screen recording permission.
+/// A drawing of the open menu. The real menu cannot be captured without a
+/// screen recording permission, so this draws the menu items the live menu is
+/// built from (menuItem(for:)), reading each one's title and look back from the
+/// item: a header is small and semibold, a disabled row is grey.
 func drawMenuPicture(rows: [Row], look: Look, palette: Palette, size: NSSize) {
     let barHeight: CGFloat = 26
     drawIconStrip(look, palette: palette, in: NSRect(x: 0, y: size.height - barHeight, width: size.width, height: barHeight))
     palette.panel.setFill()
     NSRect(x: 0, y: 0, width: size.width, height: size.height - barHeight).fill()
     var y = size.height - barHeight - 8
-    for row in rows {
-        if row.kind == .separator {
+    for item in rows.map({ menuItem(for: $0, target: nil, action: nil) }) {
+        let style = itemLook(item)
+        if style == .rule {
             y -= 6
             palette.rule.setFill()
             NSRect(x: 10, y: y, width: size.width - 20, height: 1).fill()
             y -= 6
             continue
         }
-        let font = row.kind == .header ? NSFont.systemFont(ofSize: 11, weight: .semibold) : NSFont.systemFont(ofSize: 13)
-        let color = row.kind == .item ? palette.text : palette.dim
+        let font = style == .header ? headerFont : NSFont.menuFont(ofSize: 0)
+        let color = style == .enabled ? palette.text : palette.dim
         y -= 20
-        (row.title as NSString).draw(at: NSPoint(x: 14, y: y + 3), withAttributes: [.font: font, .foregroundColor: color])
+        (item.title as NSString).draw(at: NSPoint(x: 14, y: y + 3), withAttributes: [.font: font, .foregroundColor: color])
     }
 }
 
@@ -1340,6 +1451,114 @@ func selfTest(_ args: [String]) -> Int32 {
     t.check(parsed("HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n2\r\n{}\r\n0\r\n\r\n") == nil, "a chunked answer is refused")
     t.check(parsed("garbage") == nil && parsed("SSH-2.0\r\n\r\n") == nil, "a non-HTTP answer is refused")
 
+    // An answer whose length is not plain digits fails; it must never reach
+    // prefix() with a negative count, which traps (fix round 3, finding 1).
+    t.check(parsed("HTTP/1.1 200 OK\r\nContent-Length: abc\r\n\r\n{}") == nil, "a non-digit Content-Length is refused")
+    t.check(parsed("HTTP/1.1 200 OK\r\nContent-Length: +2\r\n\r\n{}") == nil, "a signed Content-Length is refused")
+    t.check(parsed("HTTP/1.1 200 OK\r\nContent-Length: 99999999999999999999999\r\n\r\n{}") == nil, "an overflowing Content-Length is refused")
+    t.check(parsed("HTTP/1.1 +200 OK\r\n\r\n{}") == nil, "a status that is not three digits is refused")
+
+    // The menu's words, on the committed summaries.
+    var fixtureDir = argument("--fixtures", in: args)
+    if fixtureDir == nil {
+        let guess = FileManager.default.currentDirectoryPath + "/test/fixtures/menubar"
+        if FileManager.default.fileExists(atPath: guess + "/summary.json") { fixtureDir = guess }
+    }
+    func summaryRows(_ name: String) -> [Row] {
+        guard let dir = fixtureDir, let data = FileManager.default.contents(atPath: dir + "/" + name),
+              let summary = Summary.decode(data) else {
+            t.check(false, "could not read the fixture " + name + "; pass --fixtures <test/fixtures/menubar>")
+            return []
+        }
+        return menuRows(status: .summary(summary), stopped: nil, libraryURL: summary.libraryUrl)
+    }
+    func titled(_ rows: [Row], _ title: String) -> Row? { return rows.first { $0.title == title } }
+    let full = summaryRows("summary.json")
+    let empty = summaryRows("summary_empty.json")
+    let many = summaryRows("summary_many.json")
+    let notRunningRows = menuRows(status: .notRunning, stopped: nil, libraryURL: nil)
+    let stoppedRows = menuRows(status: .notRunning, stopped: Stopped(at: "2026-10-20T15:41:00.000Z"), libraryURL: nil)
+    let updatedRows = menuRows(status: .cantTell(updatedReason), stopped: nil, libraryURL: "http://library.lahe.localhost:1483/catalog")
+    let everyMenu = [full, empty, many, notRunningRows, stoppedRows, updatedRows]
+
+    // Waiting rows: no "open", and questions said apart from the rest.
+    t.check(titled(full, "Crucible: Menu bar app (1 question, 2 more unread)") != nil, "a waiting row says 1 question, 2 more unread")
+    t.check(titled(full, "Stable addresses: the plan (2 unread)") != nil, "a waiting row with no question says 2 unread")
+    t.check(!full.contains { $0.title.contains("(open") }, "a waiting row does not say open")
+    t.check(full.first { $0.action == .openReview("r183d18583a43") }?.tooltip?.hasSuffix("Open in a browser window now.") == true,
+            "an open document's tooltip says it is open")
+
+    // Sessions: no "(5 open)"; the others are their own note row.
+    t.check(titled(full, "Connected sessions: 2") != nil, "the sessions header is the connected count alone")
+    t.check(titled(full, "3 other sessions still open")?.kind == .note, "the other open sessions are a note row")
+    t.check(titled(empty, "No connected sessions") != nil, "the empty sessions header has no (0 open)")
+    t.check(!everyMenu.joined().contains { $0.title.contains(" open)") }, "no header says (N open)")
+    if let at = full.firstIndex(where: { $0.title == "Connected sessions: 2" }) {
+        t.check(at > 0 && full[at - 1].kind == .separator, "a separator between open documents and connected sessions")
+    } else {
+        t.check(false, "a separator between open documents and connected sessions")
+    }
+    let sessionTips = full.filter { $0.title.contains("last heard") }.compactMap { $0.tooltip }
+    t.check(sessionTips.count == 2 && !sessionTips.contains { $0.contains("s_") }, "a session's tooltip has no raw session id")
+
+    // Small wording.
+    t.check(titled(full, "Crucible: Menu bar app (front tab)") != nil, "the front tab says (front tab)")
+    t.check(!everyMenu.joined().contains { $0.title.contains("(focused)") }, "no row says (focused)")
+    t.check(titled(empty, "No recent documents")?.kind == .header && titled(empty, "Recent documents") == nil,
+            "no recent documents says so")
+    t.check(!everyMenu.joined().contains { $0.title.contains("`") || ($0.tooltip ?? "").contains("`") }, "no backticks in any menu text")
+    for (name, rows) in [("not running", notRunningRows), ("stopped", stoppedRows)] {
+        let hide = rows.first { $0.action == .hide }
+        t.check(hide != nil && !(hide?.tooltip ?? "").contains("keeps running"), "the \(name) menu's Hide does not say Lahe keeps running")
+        t.check(rows.first?.kind == .header, "the \(name) menu's first line is a header")
+    }
+    t.check(stoppedRows.first?.title.hasPrefix("Stopped by you on ") == true && stoppedRows.first?.title.contains(" at ") == true,
+            "the stopped line reads Stopped by you on <day> at <time>")
+    t.check(titled(updatedRows, "Lahe was updated. This icon is out of date.") != nil, "updated says the icon is out of date")
+    t.check(titled(updatedRows, "If this stays, run lahe menubar rebuild.") != nil, "updated says what to run if it stays")
+    t.check(!everyMenu.joined().contains { $0.title.contains("rebuilding") }, "nothing claims a rebuild is under way")
+    t.check(accessibilityText(.cantTell) == "Lahe: can't tell what is waiting", "VoiceOver says can't tell what is waiting")
+
+    // Cutting: no space before the ellipsis, no double space left behind.
+    t.check(cut("A very long document title that keeps going well past what a menu row can show")
+            == "A very long document title that keeps going well\u{2026}", "no space before the ellipsis")
+    t.check(cut("Title with a lone surrogate half  here") == "Title with a lone surrogate half here", "a double space is made one")
+
+    // The many fixture: each capped section draws its 8 rows and the overflow.
+    func section(_ rows: [Row], _ header: String) -> [Row] {
+        guard let at = rows.firstIndex(where: { $0.title.hasPrefix(header) }) else { return [] }
+        return Array(rows[(at + 1)...].prefix { $0.kind != .separator && $0.kind != .header })
+    }
+    let manyAgents = section(many, "Your comments waiting on agents: ")
+    t.check(manyAgents.filter { $0.kind == .item }.count == 8 && manyAgents.last?.title == "2 more documents",
+            "many: 8 agent documents and 2 more documents")
+    let manyOpen = section(many, "Open documents: ")
+    t.check(titled(many, "Open documents: 14") != nil && manyOpen.filter { $0.kind == .item }.count == 8 && manyOpen.last?.title == "6 more",
+            "many: open documents 14 is 8 rows and 6 more")
+    let manySessions = section(many, "Connected sessions: ")
+    t.check(titled(many, "Connected sessions: 11") != nil && manySessions.filter { $0.kind == .item }.count == 8
+            && manySessions.contains { $0.title == "3 more" }, "many: connected sessions 11 is 8 rows and 3 more")
+    t.check(section(many, "Waiting on you: ").filter { $0.kind == .item }.count == 120, "many: all 120 waiting documents are rows")
+    fflush(stdout)  // a trap below would lose buffered lines
+    t.check(parsed("HTTP/1.1 200 OK\r\nContent-Length: -1\r\n\r\n{}") == nil, "a negative Content-Length is refused")
+
+    // Headers look like headers in the live menu, and the snapshot reads the
+    // same items (fix round 3, finding 3).
+    for row in everyMenu.joined() {
+        let style = itemLook(menuItem(for: row, target: nil, action: nil))
+        let expected: ItemLook = row.kind == .separator ? .rule : row.kind == .header ? .header : row.kind == .item ? .enabled : .disabled
+        t.check(style == expected, "\(row.kind.rawValue) \"\(row.title)\" draws as \(expected.rawValue), not \(style.rawValue)")
+    }
+    if #available(macOS 14, *) {
+        t.check(menuItem(for: .header("Waiting on you: 2"), target: nil, action: nil).isSectionHeader, "macOS 14 uses the system section header")
+    }
+    let fallback = NSMenuItem(title: "x", action: nil, keyEquivalent: "")
+    update(fallback, to: .header("Waiting on you: 2"))
+    t.check(itemLook(fallback) == .header && (fallback.attributedTitle?.attribute(.font, at: 0, effectiveRange: nil) as? NSFont) == headerFont,
+            "the macOS 13 header is small and semibold")
+    t.check(reason(forStatus: 500) == "Lahe had an error (500)", "a 500 says Lahe had an error (500)")
+    t.check(reason(forStatus: 409) == updatedReason && reason(forStatus: 401) == "Lahe refused the request", "409 and 401 reasons")
+
     let nonce = Proof.newNonce()
     t.check(nonce.count == 32 && Proof.fromHex(nonce) != nil, "a nonce is 32 lowercase hex characters")
 
@@ -1384,6 +1603,9 @@ func watch(_ controller: Controller) {
                 switch command {
                 case "wake": NSWorkspace.shared.notificationCenter.post(name: NSWorkspace.didWakeNotification, object: nil)
                 case "poll": controller.poll()
+                case "polls":
+                    print("{\"polls\":\(controller.polls)}")
+                    fflush(stdout)
                 case "quit": exit(0)
                 default: break
                 }

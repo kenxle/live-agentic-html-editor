@@ -4,12 +4,20 @@
     {
       "enabled" : false,
       "kind" : "header",
+      "style" : "header",
       "title" : "Can't tell what is waiting"
     },
     {
       "enabled" : false,
       "kind" : "note",
-      "title" : "Lahe was updated; rebuilding"
+      "style" : "disabled",
+      "title" : "Lahe was updated. This icon is out of date."
+    },
+    {
+      "enabled" : false,
+      "kind" : "note",
+      "style" : "disabled",
+      "title" : "If this stays, run lahe menubar rebuild."
     },
     {
       "kind" : "separator"
@@ -18,6 +26,7 @@
       "action" : "open library",
       "enabled" : true,
       "kind" : "item",
+      "style" : "enabled",
       "title" : "Open the Library",
       "tooltip" : "Every review, in the browser."
     },
@@ -28,19 +37,22 @@
       "action" : "hide",
       "enabled" : true,
       "kind" : "item",
+      "style" : "enabled",
       "title" : "Hide the icon",
-      "tooltip" : "Closes this icon only. Lahe keeps running. `lahe menubar show` brings it back."
+      "tooltip" : "Closes this icon only. Lahe keeps running. Run lahe menubar show in a terminal to bring it back."
     },
     {
       "action" : "stop",
       "enabled" : true,
       "kind" : "item",
+      "style" : "enabled",
       "title" : "Stop Lahe",
       "tooltip" : "Stops the Lahe helper until you start it again."
     },
     {
       "enabled" : false,
       "kind" : "note",
+      "style" : "disabled",
       "title" : "Agents' lahe commands will fail until you start it again"
     }
   ],
