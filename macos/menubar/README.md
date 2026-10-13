@@ -106,7 +106,7 @@ None needs a macOS permission.
 | `--snapshot <dir> [--summary <file>]...` | Each icon look on a light and a dark menu bar, as PNGs. With summaries, also a drawing of the open menu for each, plus not running, stopped and "updated". The real menu cannot be captured without a screen recording permission, so the drawing is made from the same menu items the live menu builds, and reads each one's title and look back from the item. |
 | `--dump-menu <summary.json>` | The menu built from that summary: titles, order, enabled state, tooltips, actions, and each row's style as the live menu draws it (`header`, `enabled`, `disabled`, `rule`), as JSON. |
 | `--dump-menu none --look <not-running\|stopped\|cant-tell\|updated>` | The menu for a look with no summary. |
-| `--watch --state-dir <dir>` | The real poll loop with no icon, printing one JSON line per change of look. Reads `wake`, `poll` and `quit` from stdin; `wake` posts the system wake notification. |
+| `--watch --state-dir <dir>` | The real poll loop with no icon, printing one JSON line per change of look. Reads `wake`, `poll`, `polls` and `quit` from stdin; `wake` posts the system wake notification, and `polls` prints how many polls have run, sent or not. |
 | `--wake-after <seconds>` | Posts the system wake notification once, in any mode that polls. |
 | `--action hide\|stop\|start\|library\|open <review>` | Test builds only: runs one menu action the way a click would, then exits. A test build prints an address instead of opening a browser. |
 

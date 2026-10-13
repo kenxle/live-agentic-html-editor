@@ -16,7 +16,7 @@
 //   --snapshot <dir> [--summary <file>]...
 //   --dump-menu <summary.json | none> [--look not-running|stopped|cant-tell|updated]
 //   --watch --state-dir <dir>    poll with no icon; one JSON line per change;
-//                                stdin lines "wake", "poll", "quit"
+//                                stdin lines "wake", "poll", "polls", "quit"
 //   --wake-after <seconds>       post the system wake notification once
 //   --action <hide|stop|start|open <review>>   test builds only
 
@@ -811,6 +811,7 @@ final class Controller {
     private var inFlight = false
     private var lastBody: Data?     // the last summary answer, to skip an unchanged one
     private var shownStopped = false  // the stopped look is up, from the marker
+    private(set) var polls = 0      // poll() calls, sent or not; --watch prints it on "polls"
     private var timer: Timer?
     var onChange: (() -> Void)?
 
@@ -854,6 +855,7 @@ final class Controller {
     /// request every 5 seconds would hand it a proof to replay. The stopped
     /// look comes from the marker alone, and polling resumes when it goes.
     func poll() {
+        polls += 1
         if FileManager.default.fileExists(atPath: stoppedURL.path) {
             if case .notRunning = status, shownStopped { return }
             generation += 1  // an answer to a request sent before the marker is ignored
@@ -1601,6 +1603,9 @@ func watch(_ controller: Controller) {
                 switch command {
                 case "wake": NSWorkspace.shared.notificationCenter.post(name: NSWorkspace.didWakeNotification, object: nil)
                 case "poll": controller.poll()
+                case "polls":
+                    print("{\"polls\":\(controller.polls)}")
+                    fflush(stdout)
                 case "quit": exit(0)
                 default: break
                 }

@@ -194,9 +194,15 @@ test("while the stop hold stands the app sends nothing, and polls again when the
   t.after(() => app.stop());
   const shown = await app.until((l) => l.look === "not-running", ONE_POLL_MS, "the stopped look from the marker");
   assert.equal(shown.stopped, true, "stopped by you");
-  // Two timed polls and one asked for: nothing reaches the port.
+  // Two timed polls and one asked for: nothing reaches the port. The app
+  // counts its polls, sent or not, so the wait is a counter read.
   app.send("poll");
-  await new Promise((resolve) => setTimeout(resolve, 2 * 5000 + 1000));
+  async function polls() {
+    app.send("polls");
+    return (await app.until((l) => l.polls !== undefined, 2000, "the poll count")).polls;
+  }
+  const first = await polls();
+  await waitFor(async () => (await polls()) >= first + 2, 3 * ONE_POLL_MS, "two more polls while stopped");
   assert.equal(connections.length, 0, "no request while the marker stands");
   assert.equal(app.seen.filter((l) => l.look && l.look !== "not-running").length, 0, "the look stays not running");
 
