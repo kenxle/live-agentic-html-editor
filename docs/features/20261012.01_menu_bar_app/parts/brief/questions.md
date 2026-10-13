@@ -5,6 +5,9 @@ For Ken to decide in review:
 
 - **A.** Keep R5 as written: a question counts until you answer it or mark it done. Nothing more to build. (Recommended: it keeps a question in front of you until you deal with it, and Mark as done is one click when you decide not to.)
 - **B.** A question stops counting once you have read its card, the same as any other reply. The count clears more easily, but a question you read and walked past stops nagging.
+- **C.** Count a question only while its document is open in a browser. A question on a closed document waits until you open the document. The number stays small, but a closed document with a question is the one thing nothing else tells you about. (Ken, in review: he had pictured open documents only, and finds flagging closed ones interesting.)
+
+A and C can be combined: count everything, and in the menu show which waiting documents are open right now and which are not.
 :::
 
 ::: callout-question
