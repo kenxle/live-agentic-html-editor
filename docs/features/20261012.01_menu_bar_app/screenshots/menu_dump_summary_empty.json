@@ -4,6 +4,7 @@
     {
       "enabled" : false,
       "kind" : "header",
+      "style" : "header",
       "title" : "Nothing is waiting on you"
     },
     {
@@ -12,6 +13,7 @@
     {
       "enabled" : false,
       "kind" : "header",
+      "style" : "header",
       "title" : "No comments waiting on agents"
     },
     {
@@ -20,12 +22,8 @@
     {
       "enabled" : false,
       "kind" : "header",
+      "style" : "header",
       "title" : "No open documents"
-    },
-    {
-      "enabled" : false,
-      "kind" : "header",
-      "title" : "No connected sessions (0 open)"
     },
     {
       "kind" : "separator"
@@ -33,12 +31,23 @@
     {
       "enabled" : false,
       "kind" : "header",
-      "title" : "Recent documents"
+      "style" : "header",
+      "title" : "No connected sessions"
+    },
+    {
+      "kind" : "separator"
+    },
+    {
+      "enabled" : false,
+      "kind" : "header",
+      "style" : "header",
+      "title" : "No recent documents"
     },
     {
       "action" : "open library",
       "enabled" : true,
       "kind" : "item",
+      "style" : "enabled",
       "title" : "Open the Library",
       "tooltip" : "Every review, in the browser."
     },
@@ -49,19 +58,22 @@
       "action" : "hide",
       "enabled" : true,
       "kind" : "item",
+      "style" : "enabled",
       "title" : "Hide the icon",
-      "tooltip" : "Closes this icon only. Lahe keeps running. `lahe menubar show` brings it back."
+      "tooltip" : "Closes this icon only. Lahe keeps running. Run lahe menubar show in a terminal to bring it back."
     },
     {
       "action" : "stop",
       "enabled" : true,
       "kind" : "item",
+      "style" : "enabled",
       "title" : "Stop Lahe",
       "tooltip" : "Stops the Lahe helper until you start it again."
     },
     {
       "enabled" : false,
       "kind" : "note",
+      "style" : "disabled",
       "title" : "Agents' lahe commands will fail until you start it again"
     }
   ]
