@@ -40,7 +40,15 @@ function createState() {
   var dir = path.join(root, "state");
   fs.mkdirSync(home, { recursive: true });
   stateDir.ensureDir(dir);
-  var log = logModule.createEventLog({ dir: dir });
+  // Every append is told to whoever listens, the way the helper tells its
+  // summary which review it wrote to (src/service/index.js).
+  var listeners = [];
+  var log = logModule.createEventLog({
+    dir: dir,
+    onAppend: function (reviewId) {
+      listeners.forEach(function (fn) { fn(reviewId); });
+    }
+  });
   var clock = { iso: null };
   var sessions = agentSessions.createStore({
     dir: dir,
@@ -217,7 +225,8 @@ function createState() {
     append: append,
     seed: seed,
     catalog: catalog,
-    reader: reader
+    reader: reader,
+    listen: function (fn) { listeners.push(fn); }
   };
 }
 

@@ -838,6 +838,22 @@ function createProjector(options) {
     return itemsOf(catchUp(reviewId).fold);
   }
 
+  /**
+   * Fold one review's reply files now, once, without joining the watch list.
+   *
+   * The menu bar's summary counts replies on documents no page has open, and
+   * nothing else folds those: the watch list is only what somebody asked
+   * about. Joining it would tick the review every interval for the rest of
+   * the helper's life, so a review that was not watched before is not
+   * watched after. The reply folder keeps its read offsets either way.
+   */
+  function foldOnce(reviewId) {
+    var wasWatched = Object.prototype.hasOwnProperty.call(watched, reviewId);
+    var result = tickReview(reviewId);
+    if (!wasWatched) delete watched[reviewId];
+    return result;
+  }
+
   function tick() {
     counters.ticks += 1;
     return Object.keys(watched).map(function (reviewId) {
@@ -865,6 +881,7 @@ function createProjector(options) {
     tickReview: tickReview,
     currentProjection: currentProjection,
     currentItems: currentItems,
+    foldOnce: foldOnce,
     start: start,
     stop: stop,
     counters: counters,
@@ -938,8 +955,16 @@ function currentItems(deps, reviewId) {
   return projector.currentItems(reviewId);
 }
 
+/** Fold a review's reply files once (projector.foldOnce), or null with no projector. */
+function foldOnce(deps, reviewId) {
+  var projector = attach(deps);
+  if (!projector) return null;
+  return projector.foldOnce(reviewId);
+}
+
 module.exports = {
   currentItems: currentItems,
+  foldOnce: foldOnce,
   createFold: createFold,
   foldEvents: foldEvents,
   continuesFold: continuesFold,

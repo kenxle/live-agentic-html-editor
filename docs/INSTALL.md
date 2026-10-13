@@ -388,6 +388,16 @@ to a chosen name server, but only on port 53, and Lahe's name server answers on
 port 7853. `node bin/lahe.js install --lahe-names` says so and changes nothing.
 `.lahe.localhost` addresses work on Windows with no setup.
 
+## Optional: the icon in the menu bar (macOS)
+
+```
+lahe install --menu-bar
+```
+
+Adds a Lahe icon to the menu bar. It shows how many documents are waiting on you (an agent's question, or a reply you have not read), and its menu lists them, your comments waiting on agents, what is open and which agents are connected, recent documents, the Library, and Quit. Nothing about agents changes.
+
+It needs Apple's command line tools (`xcode-select --install`): the app is built on your Mac from `macos/menubar/` in the clone, so nothing binary is downloaded or checked in. A plain `lahe install` asks once whether you want it; `--no-menu-bar` skips the question and removes an icon already installed. The icon starts at login. "Hide the icon" keeps it hidden until the next login or `lahe menubar show`. "Stop Lahe" stops the helper and keeps it stopped, even for agents, until you choose Start in the menu, run `lahe install`, or log in again. When Lahe is updated, the helper rebuilds the app on its own. How it works is `docs/ongoing/MENU_BAR.md`.
+
 ## Your settings file
 
 Some steps in a review use details about you, such as where your voice

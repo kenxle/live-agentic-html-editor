@@ -104,6 +104,10 @@ test/
   unit/      node:test unit tests
   browser/   Playwright tests (Chromium by default, three lanes on gate:all)
   fixtures/  Static HTML pages used as review targets in tests
+macos/
+  menubar/   The optional Mac menu bar app: one Swift file and its plist,
+             built on the Mac by `lahe install --menu-bar`. Nothing here is
+             required; see docs/ongoing/MENU_BAR.md
 ```
 
 Put new code in the directory that matches its job in the architecture doc,
@@ -115,12 +119,15 @@ needs an update, not that `src/` needs a new top-level folder.
 **A builder runs `npm run gate:unit`.** Four gates exist and they are not
 interchangeable:
 
-| Command | lint | `check:layer` | unit | browsers |
-| --- | --- | --- | --- | --- |
-| `npm run gate:unit` | yes | **no** | yes | **none** |
-| `npm run gate:builder` | yes | **no** | yes | Chromium |
-| `npm run gate` | yes | yes | yes | Chromium |
-| `npm run gate:all` | yes | yes | yes | Chromium, Firefox, WebKit |
+| Command | lint | `check:layer` | `check:menubar` | unit | browsers |
+| --- | --- | --- | --- | --- | --- |
+| `npm run gate:unit` | yes | **no** | **no** | yes | **none** |
+| `npm run gate:builder` | yes | **no** | **no** | yes | Chromium |
+| `npm run gate` | yes | yes | yes | yes | Chromium |
+| `npm run gate:all` | yes | yes | yes | yes | Chromium, Firefox, WebKit |
+
+`check:menubar` builds the menu bar app and runs its self-test and its tests
+against the fake helper on a Mac; it skips with one line anywhere else.
 
 Builders and reviewers run `gate:unit`. The browser suite runs ONCE per
 checkpoint, by the orchestrator, on the integrated diff. On 2026-09-16 the full

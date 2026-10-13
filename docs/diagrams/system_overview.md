@@ -2,7 +2,7 @@
 
 This is the current picture of what exists and what talks to what: the
 reviewer's browser, the helper process, the store on disk, the Library page
-and its request queue, and the agent. It
+and its request queue, the menu bar icon on a Mac, and the agent. It
 updates the summary diagram in the architecture doc, which predates agent
 sessions and the helper serving every page at a stable address.
 
@@ -18,6 +18,8 @@ flowchart TD
         Sites[("Name registry<br/>sites.json + sites.log")]
         Store[("Store on disk<br/>events.jsonl + review.json")]
         Queue[("Request queue<br/>catalog-requests.jsonl")]
+        MenuBar["Menu bar app (macOS, optional)<br/>count of documents waiting on you"]
+        Launchd["launchd<br/>(the helper's login item)"]
 
         subgraph Session["Agent session"]
             Agent["Agent<br/>(Claude, Codex, anything)"]
@@ -39,6 +41,11 @@ flowchart TD
     Helper -->|"Pick this up, Launch:<br/>appends a request"| Queue
     Queue -->|"catalog_requests in the drain"| Agent
     Agent -->|"lahe library answer"| Queue
+
+    MenuBar -->|"summary.read every 5 s, summary.open<br/>(signed request, signed answer)"| Helper
+    MenuBar -->|"opens a document's address<br/>through the allowlist"| Browser
+    MenuBar -->|"Stop: stopped.json, then bootout<br/>Start: bootstrap, kickstart"| Launchd
+    Launchd -->|"starts at login"| Helper
 ```
 
 ## What to notice
@@ -65,3 +72,9 @@ flowchart TD
 - The request queue is how the page reaches an agent. Only the helper appends
   requests, and only `lahe library answer` appends answers. The agent sees a
   request in its normal drain, the same way it sees an ended review.
+- The menu bar app is the only program that talks to the helper without a
+  page. It signs each request with the CLI secret and trusts only answers the
+  helper signs back; it asks the helper for a document's address and opens
+  it in the browser. Stop and Start go through launchd, never the helper, and
+  while Stop holds no `lahe` command starts a helper. How it works now is
+  `docs/ongoing/MENU_BAR.md`.

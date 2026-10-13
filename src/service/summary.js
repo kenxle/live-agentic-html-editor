@@ -19,13 +19,15 @@
 // Every document is a Library row: reviews are folded with the Library's own
 // rule (catalog_reader.foldParts), so a document reviewed twice counts once.
 //
-// LIGHT WHEN IDLE (R21). The app asks every five seconds. Each review's part is
-// cached on the size, modified time and inode of its events.jsonl, review.json
-// and meta.json, plus the reviewed document while it has an unread reply, so
-// an idle request is three stat calls per review and one read of
-// catalog.json, which is where a Library rename lives. Inode is in the key
-// because a same-size rewrite in the same millisecond (an atomic rename)
-// changes nothing else. See stateKeyOf and partOf.
+// LIGHT WHEN IDLE (R21). The app asks every five seconds. The answer's rows
+// are kept in memory and an idle poll reads no file: it stats catalog.json
+// and the reply files of reviews with a ready item; what moved is rebuilt
+// (see "What is kept between polls").
+// When a review's part is looked at, it is keyed on the size, modified time
+// and inode of its events.jsonl, review.json and meta.json, plus the reviewed
+// document while it has an unread reply. Inode is in the key because a
+// same-size rewrite in the same millisecond (an atomic rename) changes
+// nothing else. See stateKeyOf and partOf.
 //
 // NEVER IN THE ANSWER: comment text, a token, a session secret, or an absolute
 // path. Titles and path hints go through catalog_reader.menuText.
@@ -186,12 +188,12 @@ function createSummary(options) {
       }
       var part = reader.reviewPart(reviewId, { since: sinceMs });
       cache[reviewId] = { stateKey: stateKey, docKey: statKey(part.info.docPath), part: part };
+      noteSets(reviewId, part);
       rebuilt.push(reviewId);
       delete unreadable[reviewId];
       return part;
     } catch (err) {
-      delete cache[reviewId];
-      delete pathsOf[reviewId];
+      forget(reviewId);
       if (!unreadable[reviewId]) {
         unreadable[reviewId] = true;
         log("summary: left out review " + reviewId + ", which could not be read: " + err.message);
@@ -249,10 +251,11 @@ function createSummary(options) {
    * the parts a reviewer can act on: never a review that ended, or whose file
    * is gone (R7).
    */
-  function describeRow(row, held) {
+  function describeRow(row) {
     var lead = row.lead.info;
     var out = {
       review: lead.id,
+      ids: row.parts.map(function (part) { return part.info.id; }),
       sessionId: lead.sessionId,
       row: row,
       shown: null,
@@ -267,10 +270,6 @@ function createSummary(options) {
     row.parts.forEach(function (part) {
       var info = part.info;
       out.waiting += info.summary.waiting;
-      if (held[info.id]) {
-        out.open = true;
-        if (held[info.id].focused) out.focused = true;
-      }
       if (info.summary.ended || part.openable === "missing") return;
       var unread = part.unread;
       out.unread += unread.count;
@@ -285,6 +284,238 @@ function createSummary(options) {
   // The answer
   // -------------------------------------------------------------------------
 
+  /** Mark the rows a browser window holds now. */
+  function applyHolders(list, held) {
+    list.forEach(function (r) {
+      r.open = false;
+      r.focused = false;
+      r.ids.forEach(function (id) {
+        if (!held[id]) return;
+        r.open = true;
+        if (held[id].focused) r.focused = true;
+      });
+    });
+  }
+
+  // -------------------------------------------------------------------------
+  // What is kept between polls
+  // -------------------------------------------------------------------------
+  //
+  // AN IDLE POLL READS NO FILE. It stats catalog.json, and the folder and
+  // reply files of each review with an item an agent can still answer (13 of
+  // 690 on Ken's state folder), and reads nothing unless a stat moved. The
+  // app asks every five seconds, and on a real state folder (690 reviews, 93 sessions) a poll that
+  // stat'ed every review and folded every row cost the helper about 40 ms of
+  // processor time each, spaced five seconds apart, which was more than an
+  // open review tab costs. So the answer's rows are kept, and a poll rebuilds
+  // only what moved:
+  //
+  //   a review the helper  the event log tells the summary (touched), and the
+  //   itself wrote to      next poll rebuilds that review alone
+  //   an agent's reply     the reply files of reviews with a ready item,
+  //   on a closed document stat'ed on every poll and folded when they move
+  //   anything else        a beat at most once per BEAT_MS: sessions and
+  //                        their agents read again, waiting documents and the cutoff file
+  //                        checked, and a slice of the reviews' own files
+  //                        stat'ed (all of them every FULL_PASS_BEATS beats).
+  //                        A monitor heartbeat or a deleted waiting
+  //                        document shows within one beat
+  //   a Library rename     catalog.json, stat'ed on every poll
+  //   window holders       read from the helper's own memory on every poll
+
+  var BEAT_MS = protocol.CATALOG.POLL_MS;
+  // A beat stats a slice of the reviews, in turn, so each review's own files
+  // are looked at once every FULL_PASS_BEATS beats (ten minutes). While the
+  // helper runs it is the single writer of every one of those files, and
+  // tells the summary when it writes one; the slow look is insurance. Closed
+  // sessions are looked at in the same turn. What a reviewer is waiting on
+  // (an agent's reply line, a waiting document going away, an open session's
+  // agent) is looked at on every beat. A stat or a loop over every review
+  // costs several times on a processor woken from five seconds of idle what
+  // a back-to-back benchmark shows, so a beat touches a few hundred files and
+  // loops over the reviews that matter, not all of them.
+  var FULL_PASS_BEATS = 40;
+  var turn = 0;
+
+  var ids = [];
+  var reviewsRoot = stateDir.reviewsRoot(dir);
+  var reviewsRootKey = null;
+  var sessionIdList = [];
+  var sessionsRoot = stateDir.agentSessionsRoot(dir);
+  var sessionsRootKey = null;
+  // session id -> what reader.sessionAt said at its last look.
+  var sessionEntries = Object.create(null);
+  var touchedIds = Object.create(null);
+  var lastFullMs = null;
+  var sinceMs = null;
+  var catalogKey = null;
+  var catalogFile = path.join(dir, "catalog.json");
+  var rows = null;
+  var sections = null;
+  var sectionsHeldKey = null;
+  var sessionNames = {};
+  // The reviews with an unread reply, and the ones with an item an agent can
+  // still answer: kept as parts are rebuilt, so a beat need not walk them all.
+  var waitingIds = Object.create(null);
+  var readyIds = Object.create(null);
+  // review id -> its reply files at the last look (replySignature).
+  var replyState = Object.create(null);
+  // review id -> its folder, resolved once: resolving lstats the folders on
+  // the way, and the reply check runs on every poll.
+  var folderOf = Object.create(null);
+  var foldReplies = typeof opts.foldReplies === "function" ? opts.foldReplies : null;
+
+  function noteSets(reviewId, part) {
+    if (part.unread.count > 0) waitingIds[reviewId] = true;
+    else delete waitingIds[reviewId];
+    if (part.info.summary.ready > 0 && !part.info.summary.ended) readyIds[reviewId] = true;
+    else delete readyIds[reviewId];
+  }
+
+  function forget(reviewId) {
+    delete cache[reviewId];
+    delete pathsOf[reviewId];
+    delete waitingIds[reviewId];
+    delete readyIds[reviewId];
+    delete replyState[reviewId];
+    delete folderOf[reviewId];
+  }
+
+  /**
+   * A folder's key, or null when it moved in the last two seconds, is not
+   * there, or is not a real folder (a symlink is not followed): a coarse
+   * folder clock can stamp a second new entry with the same time as the look
+   * before it, so an unsettled folder is listed again.
+   */
+  function settledKey(folder) {
+    return keyOfFolder(fs.lstatSync(folder, { throwIfNoEntry: false }));
+  }
+
+  function keyOfFolder(stat) {
+    if (!stat || !stat.isDirectory() || Date.now() - stat.mtimeMs <= 2000) return null;
+    return stat.size + ":" + stat.mtimeMs + ":" + stat.ino;
+  }
+
+  /** This beat's slice of a list, in turn. */
+  function sliceOf(list) {
+    var size = Math.ceil(list.length / FULL_PASS_BEATS);
+    return list.slice(turn * size, (turn + 1) * size);
+  }
+
+  /** The helper appended to a review's log: rebuild it on the next poll. */
+  function touched(reviewId) {
+    touchedIds[reviewId] = true;
+  }
+
+  /**
+   * Reply files the helper has not folded, on a review an agent can still
+   * answer. Nothing else folds them while no page has the document open, so
+   * an agent's question on a closed document would never reach the icon.
+   * Checked on every poll, not only on the beat, so a question shows within
+   * one poll (brief R3: 10 seconds), and only for a review with an item in
+   * state ready (a reply to any other item is refused anyway): a stat of the
+   * review's folder and of each reply file it holds, and nothing read unless
+   * one moved. On the first look the files are folded when one is newer than
+   * the log, which is what a reply written while no helper ran looks like;
+   * after that, when their signature moves.
+   */
+  function foldWaitingReplies() {
+    if (!foldReplies) return;
+    Object.keys(readyIds).forEach(function (id) {
+      var held = replyState[id];
+      var sig = replySignature(id, held);
+      replyState[id] = sig;
+      if (!sig.key) return;
+      var due = held === undefined ? sig.newestMs > statMtime(stateDir.eventsPath(dir, id)) : held.key !== sig.key;
+      if (!due) return;
+      try {
+        foldReplies(id);
+        // Its reply.folded events come back through touched too; marked here
+        // as well, so this poll rebuilds it whatever log the fold wrote with.
+        touched(id);
+      } catch (err) {
+        log("summary: could not fold the replies of review " + id + ": " + err.message);
+      }
+    });
+  }
+
+  /**
+   * {folderKey, names, key, newestMs} over a review's reply files. The
+   * folder is listed again only when it moved (a new reply file is a new
+   * entry in it); otherwise only the reply files already known are stat'ed,
+   * because a line appended to one does not move the folder. A symlink or
+   * anything else that is not a regular file is skipped and never followed,
+   * the rule replies.discover applies: a reply-named link to a busy file
+   * would otherwise fold the review on every poll.
+   */
+  function replySignature(reviewId, held) {
+    var folder = folderOf[reviewId] || (folderOf[reviewId] = stateDir.reviewDir(dir, reviewId));
+    var folderStat = fs.lstatSync(folder, { throwIfNoEntry: false });
+    // A review folder swapped for a link is not listed through it.
+    if (folderStat && !folderStat.isDirectory()) return { folderKey: null, names: [], key: "", newestMs: 0 };
+    var folderKey = keyOfFolder(folderStat);
+    var names = folderKey && held && held.folderKey === folderKey ? held.names : null;
+    if (!names) {
+      try {
+        names = fs.readdirSync(folder).filter(function (name) { return protocol.REPLY_FILE.PATTERN.test(name); });
+      } catch (err) {
+        names = [];
+      }
+    }
+    var key = [];
+    var newestMs = 0;
+    names.forEach(function (name) {
+      var stat = fs.lstatSync(path.join(folder, name), { throwIfNoEntry: false });
+      if (!stat || !stat.isFile()) return;
+      key.push(name + ":" + stat.size + ":" + stat.mtimeMs + ":" + stat.ino);
+      if (stat.mtimeMs > newestMs) newestMs = stat.mtimeMs;
+    });
+    return { folderKey: folderKey, names: names, key: key.join("|"), newestMs: newestMs };
+  }
+
+  function statMtime(file) {
+    var stat = fs.lstatSync(file, { throwIfNoEntry: false });
+    return stat && stat.isFile() ? stat.mtimeMs : 0;
+  }
+
+  /**
+   * The beat's look at sessions: the list again when its folder moved, every
+   * open session someone watches (that agent's liveness moves with the
+   * clock), every open session whose folder moved, and this turn's slice of
+   * the rest.
+   */
+  function lookAtSessions(first, nowMs) {
+    var key = settledKey(sessionsRoot);
+    if (first || key === null || key !== sessionsRootKey) sessionIdList = reader.sessionIds();
+    sessionsRootKey = key;
+    var listed = Object.create(null);
+    var slice = Object.create(null);
+    sessionIdList.forEach(function (id) { listed[id] = true; });
+    sliceOf(sessionIdList).forEach(function (id) { slice[id] = true; });
+    Object.keys(sessionEntries).forEach(function (id) {
+      if (!listed[id]) delete sessionEntries[id];
+    });
+    sessionIdList.forEach(function (id) {
+      var held = sessionEntries[id];
+      // A closed session waits for its turn. An open one nobody watches stays
+      // as it was until something is written into its folder: only a
+      // heartbeat or a command makes an agent listening or working.
+      if (!first && held && !slice[id] && (held.closed || (held.settled && reader.sessionKey(id) === held.key))) return;
+      sessionEntries[id] = reader.sessionAt(id, nowMs);
+    });
+  }
+
+  /** The beat's look at the list of reviews: again only when its folder moved. */
+  function lookAtReviewList(first) {
+    var key = settledKey(reviewsRoot);
+    if (first || key === null || key !== reviewsRootKey) ids = reader.reviewIds();
+    reviewsRootKey = key;
+  }
+
+  // -------------------------------------------------------------------------
+  // The answer
+  // -------------------------------------------------------------------------
+
   /**
    * The summary.read answer, exactly the fields docs/CONTRACTS.md lists.
    *
@@ -292,43 +523,105 @@ function createSummary(options) {
    */
   function read() {
     var nowMs = now();
-    var sinceMs = seededAt(nowMs);
     var rebuilt = [];
-    var ids = reader.reviewIds();
-    var present = Object.create(null);
-    var parts = [];
-    ids.forEach(function (id) {
-      present[id] = true;
-      var part = partOf(id, sinceMs, rebuilt);
-      // A retired review answers on no page: it is in no section at all.
-      if (part && !part.info.retired) parts.push(part);
+    var first = rows === null;
+    var full = first || nowMs - lastFullMs >= BEAT_MS || nowMs < lastFullMs;
+    var changed = first;
+    var written = Object.keys(touchedIds);
+    touchedIds = Object.create(null);
+    var looking;
+    if (full) {
+      var seeded = seededAt(nowMs);
+      if (seeded !== sinceMs) changed = true;
+      sinceMs = seeded;
+      lookAtReviewList(first);
+      lookAtSessions(first, nowMs);
+      lastFullMs = nowMs;
+      // Every review on the first poll; then this turn's slice, every review
+      // with an unread reply, and the ones the helper wrote to.
+      looking = first ? ids : written.concat(sliceOf(ids), Object.keys(waitingIds));
+      turn = (turn + 1) % FULL_PASS_BEATS;
+    } else {
+      looking = written;
+    }
+    var known = Object.create(null);
+    ids.forEach(function (id) { known[id] = true; });
+    written.forEach(function (id) {
+      if (!known[id]) {
+        ids.push(id);
+        known[id] = true;
+      }
     });
-    Object.keys(cache).forEach(function (id) {
-      if (present[id]) return;
-      delete cache[id];
-      delete pathsOf[id];
+    looking.forEach(function (id) {
+      var had = cache[id] !== undefined;
+      // A review that could not be read leaves the rows if it was in them.
+      if (!partOf(id, sinceMs, rebuilt) && had) changed = true;
     });
+    if (full) {
+      Object.keys(cache).forEach(function (id) {
+        if (known[id]) return;
+        forget(id);
+        changed = true;
+      });
+    }
+    // Every poll: the reply files of reviews an agent can still answer.
+    // Folding writes reply.folded events, which come back through touched;
+    // those reviews are rebuilt here, in this same poll.
+    foldWaitingReplies();
+    Object.keys(touchedIds).forEach(function (id) {
+      partOf(id, sinceMs, rebuilt);
+    });
+    touchedIds = Object.create(null);
+    if (rebuilt.length) changed = true;
     lastRebuilt = rebuilt;
 
-    var folded = reader.foldParts(parts);
-    var held = holders();
-    var rows = [];
-    folded.sessions.forEach(function (s) {
-      s.rows.forEach(function (row) {
-        rows.push(describeRow(row, held));
+    var catalogNow = statKey(catalogFile);
+    if (catalogNow !== catalogKey) changed = true;
+    catalogKey = catalogNow;
+
+    if (changed) {
+      var parts = [];
+      ids.forEach(function (id) {
+        var hit = cache[id];
+        // A retired review answers on no page: it is in no section at all.
+        if (hit && !hit.part.info.retired) parts.push(hit.part);
       });
-    });
-    rows.sort(newestFirst);
+      var folded = reader.foldParts(parts);
+      sessionNames = folded.sessionNames;
+      rows = [];
+      folded.sessions.forEach(function (s) {
+        s.rows.forEach(function (row) {
+          rows.push(describeRow(row));
+        });
+      });
+      rows.sort(newestFirst);
+    }
+    // The sections are kept too, and built again only when the rows, the
+    // sessions (a beat) or the window holders moved. An idle poll answers the
+    // kept sections under a new generated_at.
+    var held = holders();
+    var heldKey = Object.keys(held).sort().map(function (id) { return id + (held[id].focused ? "+" : "-"); }).join(",");
+    if (changed || full || heldKey !== sectionsHeldKey || sections === null) {
+      applyHolders(rows, held);
+      sections = {
+        waiting_on_you: waitingOnYou(rows),
+        waiting_on_agents: waitingOnAgents(rows),
+        open_documents: openDocuments(rows),
+        sessions: sessionsSection(rows, sessionNames, nowMs),
+        recent: recent(rows)
+      };
+      sectionsHeldKey = heldKey;
+    }
 
     return {
       summary_version: SUMMARY_VERSION,
       generated_at: iso(nowMs),
       helper: { version: opts.version, started_at: opts.startedAt, always_on: opts.alwaysOn === true },
-      waiting_on_you: waitingOnYou(rows),
-      waiting_on_agents: waitingOnAgents(rows),
-      open_documents: openDocuments(rows),
-      sessions: sessionsSection(rows, folded.sessionNames, nowMs),
-      recent: recent(rows),
+      waiting_on_you: sections.waiting_on_you,
+      waiting_on_agents: sections.waiting_on_agents,
+      open_documents: sections.open_documents,
+      sessions: sections.sessions,
+      recent: sections.recent,
       library_url: String(libraryUrl())
     };
   }
@@ -397,8 +690,9 @@ function createSummary(options) {
     rows.forEach(function (r) {
       if (!newestRow[r.sessionId]) newestRow[r.sessionId] = r;
     });
-    var all = reader.sessionsAt(nowMs);
-    var open = all.filter(function (s) { return !s.closed; });
+    var open = sessionIdList
+      .map(function (id) { return sessionEntries[id]; })
+      .filter(function (s) { return !!s && !s.closed; });
     var connected = open
       .filter(function (s) { return !!s.watching; })
       .map(function (s) {
@@ -432,6 +726,9 @@ function createSummary(options) {
 
   return {
     read: read,
+    touched: touched,
+    /** Beats until every review's own files have been looked at again. */
+    FULL_PASS_BEATS: FULL_PASS_BEATS,
     /** The reviews the last read had to rebuild. */
     lastRebuilt: function () { return lastRebuilt.slice(); }
   };

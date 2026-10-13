@@ -23,6 +23,8 @@ const service = require("../../src/service/index.js");
 const stateDir = require("../../src/service/state_dir.js");
 const loginItem = require("../../src/service/login_item.js");
 const installCommand = require("../../src/cli/commands/install.js");
+const menubar = require("../../src/service/menubar.js");
+const { fakeMac, writeMenubarSources } = require("../helpers/fake_mac.js");
 const { freePort } = require("../helpers/free_port.js");
 const dgram = require("node:dgram");
 const net = require("node:net");
@@ -40,6 +42,7 @@ const { pollUntil } = require("../helpers/poll.js");
 const { trackSpawned } = require("../helpers/spawned.js");
 
 const BIN = path.join(__dirname, "..", "..", "bin", "lahe.js");
+const MENUBAR_LABEL = "lahe-test-menubar-" + process.pid;
 
 /**
  * A temp home and state folder, plus the test-owned listeners a helper's
@@ -112,6 +115,11 @@ function deps(w, overrides) {
     home: w.home,
     node: path.join(w.root, "node bin", "node"),
     users: () => ["jo"],
+    // The menu bar question is never put to the terminal running the tests,
+    // and the app's login item, if a test adds one, has a test label.
+    canAsk: false,
+    menubarLabel: MENUBAR_LABEL,
+    arch: "arm64",
     nameServerPort: w.udp,
     // Never the real /etc files or the real port 80.
     portHolder: () => null,
@@ -536,4 +544,228 @@ test("a label passed in names the login item, and uninstall finds it from instal
   assert.equal(await installCommand.uninstall.run(["--state-dir", w.dir], u), 0, u.err());
   assert.ok(fake.calls.some((c) => c.join(" ") === "launchctl bootout gui/501/lahe-spike-abc123"));
   assert.equal(fs.existsSync(path.join(w.home, "Library", "LaunchAgents", "lahe-spike-abc123.plist")), false);
+});
+
+// --- the menu bar icon (menu bar plan V21, V22, V25, V27) ---------------------
+//
+// The Mac's half is test/helpers/fake_mac.js: it answers xcrun and the app's
+// launchctl calls (label lahe-test-menubar-<pid>); every other call goes to the
+// fake service manager above, which starts and stops the helper. The app's
+// source is a temp clone named through the `clone` seam, so install.json's
+// clone is that folder and the build reads it from there.
+
+function withMac(w, port, options) {
+  const manager = fakeManager(w, port);
+  const mac = fakeMac(Object.assign({ labels: [MENUBAR_LABEL] }, options || {}));
+  const runner = (command, args) => (mac.handles(command, args) ? mac.runner(command, args) : manager.runner(command, args));
+  return { runner, mac, manager };
+}
+
+function iconClone(w) {
+  const clone = path.join(w.root, "clone");
+  writeMenubarSources(clone, "// the app\n");
+  return clone;
+}
+
+function appPlist(w) {
+  return path.join(w.home, "Library", "LaunchAgents", MENUBAR_LABEL + ".plist");
+}
+
+test("V21: on macOS, --menu-bar installs the helper, builds the app, writes its plist, and records the menubar block", async (t) => {
+  const w = await world(t);
+  const port = await freePort();
+  const fake = withMac(w, port);
+  const d = deps(w, { runner: fake.runner, clone: iconClone(w) });
+  const code = await installCommand.run(["--state-dir", w.dir, "--port", String(port), "--menu-bar"], d);
+  assert.equal(code, 0, d.err());
+  assert.equal((await service.probeHealth(protocol.DEFAULT_HOST, port)).always_on, true);
+  assert.ok(fs.existsSync(appPlist(w)), "the app's plist");
+  assert.equal(fs.readFileSync(menubar.appPath(w.dir) + "/Contents/MacOS/LaheMenuBar", "utf8"), "// the app\n");
+  const record = loginItem.readInstall(w.dir);
+  assert.equal(record.menubar.label, MENUBAR_LABEL);
+  assert.equal(record.menubar.source_stamp, menubar.sourceStamp(record.clone));
+  assert.equal(fake.mac.job(MENUBAR_LABEL).running, true);
+  assert.match(d.out(), /menu bar/);
+  assert.match(d.out(), /lahe menubar show/);
+});
+
+test("V21: --no-menu-bar skips the icon and asks nothing", async (t) => {
+  const w = await world(t);
+  const port = await freePort();
+  const fake = withMac(w, port);
+  const d = deps(w, { runner: fake.runner, clone: iconClone(w), canAsk: true, ask: () => { throw new Error("asked"); } });
+  assert.equal(await installCommand.run(["--state-dir", w.dir, "--port", String(port), "--no-menu-bar"], d), 0, d.err());
+  assert.equal(fs.existsSync(appPlist(w)), false);
+  assert.equal(loginItem.readInstall(w.dir).menubar, undefined);
+  assert.deepEqual(fake.mac.calls, [], "no xcrun, no app launchctl");
+});
+
+test("V21: with neither flag, a terminal is asked once; yes adds the icon", async (t) => {
+  const w = await world(t);
+  const port = await freePort();
+  const fake = withMac(w, port);
+  const asked = [];
+  const d = deps(w, { runner: fake.runner, clone: iconClone(w), canAsk: true, ask: async (q) => { asked.push(q); return "y"; } });
+  assert.equal(await installCommand.run(["--state-dir", w.dir, "--port", String(port)], d), 0, d.err());
+  assert.equal(asked.length, 1);
+  assert.match(asked[0], /menu bar/);
+  assert.match(asked[0], /\[y\/N\]/);
+  assert.ok(loginItem.readInstall(w.dir).menubar);
+});
+
+test("V21: with neither flag, answering no (or nothing) leaves the icon out and says how to add it", async (t) => {
+  const w = await world(t);
+  const port = await freePort();
+  const fake = withMac(w, port);
+  const d = deps(w, { runner: fake.runner, clone: iconClone(w), canAsk: true, ask: async () => "" });
+  assert.equal(await installCommand.run(["--state-dir", w.dir, "--port", String(port)], d), 0, d.err());
+  assert.equal(loginItem.readInstall(w.dir).menubar, undefined);
+  assert.match(d.out(), /lahe install --menu-bar/);
+  assert.deepEqual(fake.mac.calls, []);
+});
+
+test("V21: with neither flag and no terminal to ask, the icon is not added and install says how", async (t) => {
+  const w = await world(t);
+  const port = await freePort();
+  const fake = withMac(w, port);
+  const d = deps(w, { runner: fake.runner, clone: iconClone(w), canAsk: false, ask: () => { throw new Error("asked"); } });
+  assert.equal(await installCommand.run(["--state-dir", w.dir, "--port", String(port)], d), 0, d.err());
+  assert.equal(loginItem.readInstall(w.dir).menubar, undefined);
+  assert.match(d.out(), /lahe install --menu-bar/);
+  assert.deepEqual(fake.mac.calls, []);
+});
+
+test("V21: an existing install plus --menu-bar adds only the icon: the helper's plist, its process and the rest of install.json are untouched", async (t) => {
+  const w = await world(t);
+  const port = await freePort();
+  const fake = withMac(w, port);
+  const clone = iconClone(w);
+  assert.equal(await installCommand.run(["--state-dir", w.dir, "--port", String(port)], deps(w, { runner: fake.runner, clone })), 0);
+  const helperPlist = loginItem.readInstall(w.dir).login_item;
+  const before = {
+    plist: fs.readFileSync(helperPlist, "utf8"),
+    mtime: fs.statSync(helperPlist).mtimeMs,
+    record: loginItem.readInstall(w.dir),
+    pid: readyPid(w.dir)
+  };
+  fake.manager.calls.length = 0;
+  const d = deps(w, { runner: fake.runner, clone });
+  // No --port: the record's port is the one in use.
+  assert.equal(await installCommand.run(["--state-dir", w.dir, "--menu-bar"], d), 0, d.err());
+  assert.deepEqual(fake.manager.calls, [], "nothing ran against the helper's login item");
+  assert.equal(fs.readFileSync(helperPlist, "utf8"), before.plist);
+  assert.equal(fs.statSync(helperPlist).mtimeMs, before.mtime);
+  assert.equal(readyPid(w.dir), before.pid, "the same helper process");
+  const after = loginItem.readInstall(w.dir);
+  assert.ok(after.menubar, "the icon is recorded");
+  const rest = Object.assign({}, after);
+  delete rest.menubar;
+  assert.deepEqual(rest, before.record, "the rest of install.json is untouched");
+  assert.ok(fs.existsSync(appPlist(w)));
+});
+
+test("V21: on Linux and Windows, --menu-bar says it is macOS only and the install goes on", async (t) => {
+  const w = await world(t);
+  const port = await freePort();
+  const fake = withMac(w, port);
+  const linux = deps(w, { platform: "linux", runner: fake.runner, clone: iconClone(w) });
+  assert.equal(await installCommand.run(["--state-dir", w.dir, "--port", String(port), "--menu-bar"], linux), 0, linux.err());
+  assert.match(linux.out() + linux.err(), /menu bar icon is macOS only/);
+  assert.equal((await service.probeHealth(protocol.DEFAULT_HOST, port)).always_on, true);
+  assert.equal(loginItem.readInstall(w.dir).menubar, undefined);
+
+  const win = deps(w, { platform: "win32", uid: null, runner: fake.runner, clone: iconClone(w) });
+  assert.equal(await installCommand.run(["--state-dir", w.dir, "--port", String(port), "--menu-bar"], win), 0, win.err());
+  assert.match(win.out() + win.err(), /menu bar icon is macOS only/);
+  assert.deepEqual(fake.mac.calls, [], "no xcrun anywhere but a Mac");
+});
+
+test("V22: with no swiftc, install names xcode-select --install, writes no app plist, and the rest of the install completes", async (t) => {
+  const w = await world(t);
+  const port = await freePort();
+  const fake = withMac(w, port, { swiftc: false });
+  const d = deps(w, { runner: fake.runner, clone: iconClone(w) });
+  const code = await installCommand.run(["--state-dir", w.dir, "--port", String(port), "--menu-bar"], d);
+  assert.equal(code, 0, "the helper installed, so install succeeded");
+  assert.match(d.err(), /xcode-select --install/);
+  assert.equal(fs.existsSync(appPlist(w)), false);
+  const record = loginItem.readInstall(w.dir);
+  assert.equal(record.menubar, undefined);
+  assert.equal(record.port, port);
+  assert.equal((await service.probeHealth(protocol.DEFAULT_HOST, port)).always_on, true);
+});
+
+test("V22: with no swiftc on an existing install, --menu-bar alone exits 1 and changes nothing", async (t) => {
+  const w = await world(t);
+  const port = await freePort();
+  const clone = iconClone(w);
+  assert.equal(await installCommand.run(["--state-dir", w.dir, "--port", String(port)], deps(w, { runner: withMac(w, port).runner, clone })), 0);
+  const before = loginItem.readInstall(w.dir);
+  const d = deps(w, { runner: withMac(w, port, { swiftc: false }).runner, clone });
+  assert.equal(await installCommand.run(["--state-dir", w.dir, "--menu-bar"], d), 1);
+  assert.match(d.err(), /xcode-select --install/);
+  assert.deepEqual(loginItem.readInstall(w.dir), before);
+});
+
+test("R17: installing again keeps an installed icon without rebuilding or restarting it", async (t) => {
+  const w = await world(t);
+  const port = await freePort();
+  const fake = withMac(w, port);
+  const clone = iconClone(w);
+  assert.equal(await installCommand.run(["--state-dir", w.dir, "--port", String(port), "--menu-bar"], deps(w, { runner: fake.runner, clone })), 0);
+  const block = loginItem.readInstall(w.dir).menubar;
+  fake.mac.job(MENUBAR_LABEL).running = false; // hidden
+  fake.mac.calls.length = 0;
+  const d = deps(w, { runner: fake.runner, clone, canAsk: true, ask: () => { throw new Error("asked"); } });
+  assert.equal(await installCommand.run(["--state-dir", w.dir, "--port", String(port)], d), 0, d.err());
+  assert.deepEqual(loginItem.readInstall(w.dir).menubar, block);
+  assert.deepEqual(fake.mac.calls, [], "the hidden icon stays hidden");
+});
+
+test("--no-menu-bar with the icon installed removes the icon and keeps the helper", async (t) => {
+  const w = await world(t);
+  const port = await freePort();
+  const fake = withMac(w, port);
+  const clone = iconClone(w);
+  assert.equal(await installCommand.run(["--state-dir", w.dir, "--port", String(port), "--menu-bar"], deps(w, { runner: fake.runner, clone })), 0);
+  const d = deps(w, { runner: fake.runner, clone });
+  assert.equal(await installCommand.run(["--state-dir", w.dir, "--port", String(port), "--no-menu-bar"], d), 0, d.err());
+  assert.equal(fs.existsSync(appPlist(w)), false);
+  assert.equal(loginItem.readInstall(w.dir).menubar, undefined);
+  assert.equal((await service.probeHealth(protocol.DEFAULT_HOST, port)).always_on, true);
+});
+
+test("--menu-bar and --no-menu-bar together are bad usage", async (t) => {
+  const w = await world(t);
+  const d = deps(w, { runner: () => ({ status: 0, output: "" }) });
+  assert.equal(await installCommand.run(["--state-dir", w.dir, "--menu-bar", "--no-menu-bar"], d), protocol.CLI_EXIT.BAD_USAGE);
+});
+
+test("V25: uninstall removes the app's plist, the built app and the menubar block, and leaves the app unloaded", async (t) => {
+  const w = await world(t);
+  const port = await freePort();
+  const fake = withMac(w, port);
+  assert.equal(await installCommand.run(["--state-dir", w.dir, "--port", String(port), "--menu-bar"], deps(w, { runner: fake.runner, clone: iconClone(w) })), 0);
+  const d = deps(w, { runner: fake.runner });
+  assert.equal(await installCommand.uninstall.run(["--state-dir", w.dir], d), 0, d.err());
+  assert.equal(fs.existsSync(appPlist(w)), false);
+  assert.equal(fs.existsSync(menubar.appPath(w.dir)), false);
+  assert.equal(fs.existsSync(loginItem.installPath(w.dir)), false);
+  assert.deepEqual(fake.mac.job(MENUBAR_LABEL), { loaded: false, running: false });
+  assert.match(d.out(), /menu bar icon/);
+});
+
+test("V27: lahe install removes stopped.json, so the hold ends", async (t) => {
+  const w = await world(t);
+  const port = await freePort();
+  const fake = withMac(w, port);
+  const clone = iconClone(w);
+  assert.equal(await installCommand.run(["--state-dir", w.dir, "--port", String(port)], deps(w, { runner: fake.runner, clone })), 0);
+  fs.writeFileSync(path.join(w.dir, loginItem.STOP_FILE), JSON.stringify({ by: "menu bar", at: new Date().toISOString() }));
+  // Even an icon-only install: the helper is stopped, so the whole install runs.
+  const d = deps(w, { runner: fake.runner, clone });
+  assert.equal(await installCommand.run(["--state-dir", w.dir, "--port", String(port), "--menu-bar"], d), 0, d.err());
+  assert.equal(fs.existsSync(path.join(w.dir, loginItem.STOP_FILE)), false);
+  assert.equal((await service.probeHealth(protocol.DEFAULT_HOST, port)).always_on, true);
+  assert.ok(loginItem.readInstall(w.dir).menubar);
 });

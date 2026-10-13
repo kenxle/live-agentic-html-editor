@@ -1,7 +1,7 @@
 // `lahe install` and `lahe uninstall`: the helper starts at login and
 // restarts if it stops (stable addresses, brief requirement 7).
 //
-//   lahe install   [--port <n>] [--state-dir <path>]
+//   lahe install   [--menu-bar | --no-menu-bar] [--port <n>] [--state-dir <path>]
 //   lahe uninstall [--port <n>] [--state-dir <path>]
 //
 // WITHOUT THE INSTALL NOTHING CHANGES. A clone keeps starting the helper on
@@ -19,6 +19,18 @@
 // on the same computer (architecture, "Always-on exposure"). Install warns when
 // there is more than one, and goes on.
 //
+// THE MENU BAR ICON (macOS only; src/service/menubar.js). Install asks once
+// whether to add it; --menu-bar and --no-menu-bar answer without asking. An
+// existing install plus --menu-bar adds only the icon and leaves the helper
+// alone. A later plain install keeps an icon already there without touching
+// it, so a hidden icon stays hidden (menu bar brief R17). No Apple command
+// line tools: the icon is skipped with the one command that installs them,
+// and the rest of the install completes.
+//
+// STOP ENDS HERE. `lahe install` removes the menu bar Stop's marker
+// (stopped.json), since running it is one of the two ways a person starts a
+// stopped Lahe again.
+//
 // Node-only. Service-manager commands run as argument arrays, never a shell.
 
 "use strict";
@@ -28,11 +40,13 @@ var os = require("node:os");
 var path = require("node:path");
 var childProcess = require("node:child_process");
 var net = require("node:net");
+var readline = require("node:readline");
 
 var protocol = require("../../shared/protocol.js");
 var stateDirModule = require("../../service/state_dir.js");
 var service = require("../../service/index.js");
 var loginItem = require("../../service/login_item.js");
+var menubar = require("../../service/menubar.js");
 var selfStop = require("../../service/self_stop.js");
 var sessionCommand = require("./session.js");
 
@@ -40,7 +54,7 @@ var CLONE = path.join(__dirname, "..", "..", "..");
 var ENTRY = path.join(CLONE, "bin", "lahe.js");
 
 var USAGE = [
-  "usage: lahe install [--port-80] [--lahe-names] [--port <n>] [--state-dir <path>]",
+  "usage: lahe install [--menu-bar | --no-menu-bar] [--port-80] [--lahe-names] [--port <n>] [--state-dir <path>]",
   "       lahe uninstall [--port <n>] [--state-dir <path>]",
   "",
   "  install    start the helper at login and restart it if it stops, so a document's address",
@@ -54,6 +68,10 @@ var USAGE = [
   "                On Linux and Windows these record a step you do by hand (docs/INSTALL.md), and the",
   "                helper checks it. .lahe is not available on Windows yet.",
   "                A later `lahe install` keeps whichever of these is already set up.",
+  "  --menu-bar    macOS: add the Lahe icon to the menu bar, built here from the clone with Apple's",
+  "                command line tools. Already installed? This adds only the icon.",
+  "  --no-menu-bar macOS: no icon, and no question. Removes an icon already installed.",
+  "                With neither, install asks once.",
   "",
   "  --port       the helper's port. Default " + protocol.DEFAULT_PORT + ".",
   "  --state-dir  the state folder the login item pins. Default $LAHE_STATE_DIR, then",
@@ -67,6 +85,7 @@ function parse(argv) {
     if (list[i] === "--help" || list[i] === "-h") return { help: true };
     if (list[i] === "--port" && list[i + 1] !== undefined) {
       out.port = Number(list[(i += 1)]);
+      out.portGiven = true;
       if (!Number.isInteger(out.port) || out.port < 1 || out.port > 65535) return { error: "--port takes a port number" };
     } else if (list[i] === "--state-dir" && list[i + 1] !== undefined) {
       out.stateDir = list[(i += 1)];
@@ -74,6 +93,10 @@ function parse(argv) {
       out.port80 = true;
     } else if (list[i] === "--lahe-names") {
       out.laheNames = true;
+    } else if (list[i] === "--menu-bar" || list[i] === "--no-menu-bar") {
+      var wanted = list[i] === "--menu-bar";
+      if (out.menuBar !== undefined && out.menuBar !== wanted) return { error: "--menu-bar and --no-menu-bar answer the same question; pass one" };
+      out.menuBar = wanted;
     } else {
       return { error: "unknown or incomplete option " + JSON.stringify(list[i]) };
     }
@@ -139,6 +162,13 @@ function environment(argv, given, name) {
     node: d.node || process.execPath,
     runner: d.runner,
     label: d.label,
+    // The menu bar seams. The real label is menubar.LABEL; a test passes its
+    // own, a clone holding the app's source, and the build's architecture.
+    menubarLabel: d.menubarLabel,
+    clone: d.clone || CLONE,
+    arch: d.arch,
+    ask: d.ask || defaultAsk,
+    canAsk: d.canAsk !== undefined ? d.canAsk : !!process.stdin.isTTY,
     users: d.users,
     waitMs: d.waitMs,
     portHolder: d.portHolder || defaultPortHolder,
@@ -184,6 +214,8 @@ function environment(argv, given, name) {
     return { done: 1 };
   }
   env.port = args.port;
+  env.portGiven = args.portGiven === true;
+  env.menuBar = args.menuBar;
   env.port80 = args.port80 === true;
   env.laheNames = args.laheNames === true;
   if (env.laheNames && env.system === "windows") {
@@ -416,6 +448,104 @@ async function removeAdminSteps(env, only) {
 }
 
 // ---------------------------------------------------------------------------
+// The menu bar icon (macOS)
+// ---------------------------------------------------------------------------
+
+var ICON_QUESTION = "Add the Lahe icon to the menu bar? It shows what is waiting on you. [y/N] ";
+var ICON_HOW = "lahe install: no menu bar icon. `lahe install --menu-bar` adds it later.\n";
+
+function defaultAsk(question) {
+  return new Promise(function (resolve) {
+    var prompt = readline.createInterface({ input: process.stdin, output: process.stdout });
+    prompt.question(question, function (answer) {
+      prompt.close();
+      resolve(answer);
+    });
+  });
+}
+
+/** The menubar module's options for this run; the clone is install.json's. */
+function menubarOptions(env, record) {
+  return {
+    clone: record && record.clone ? record.clone : env.clone,
+    stateDir: env.dir,
+    home: env.home,
+    uid: env.uid,
+    label: env.menubarLabel,
+    runner: env.runner,
+    arch: env.arch
+  };
+}
+
+/**
+ * An install already in place, and all this run asks for is the icon: add
+ * only the icon. A stopped helper is not "in place": the whole install runs,
+ * which is what brings it back.
+ */
+function iconOnly(env) {
+  var record = env.record;
+  return env.system === "macos" && env.menuBar === true && !!record && record.system === "macos" &&
+    (!env.portGiven || record.port === env.port) && !env.port80 && !env.laheNames &&
+    fs.existsSync(env.item.path) && !loginItem.readStopMarker(env.dir);
+}
+
+/** Build and load the icon; say what happened. True when it is installed. */
+async function addIcon(env) {
+  var record = loginItem.readInstall(env.dir);
+  var result = await menubar.installApp(menubarOptions(env, record));
+  if (!result.ok) {
+    env.err(
+      "lahe install: no menu bar icon: " + result.message +
+        (result.code === menubar.FAILED.NO_TOOLS ? "" : " Its log is " + path.join(env.dir, menubar.LOG_FILE) + ".") +
+        "\n  The rest of Lahe is installed and works without the icon.\n"
+    );
+    return false;
+  }
+  env.out(
+    [
+      "lahe install: the Lahe icon is in the menu bar, and starts at login.",
+      "  app         " + result.app,
+      "  login item  " + result.item.path,
+      "  Hide it from its menu; `lahe menubar show` brings it back. The helper rebuilds it when its source changes.",
+      ""
+    ].join("\n")
+  );
+  if (!result.loaded.ok) env.err("lahe install: launchd did not start the icon yet (" + result.loaded.failed + "). It starts at the next login.\n");
+  return true;
+}
+
+/**
+ * The icon's part of a whole install, after the helper is up. A flag answers;
+ * with none, an icon already installed is kept as it is, and otherwise a
+ * person at a terminal is asked once.
+ */
+async function iconStep(env) {
+  if (env.system !== "macos") return;
+  var installed = !!(env.record && env.record.menubar);
+  if (env.menuBar === false) {
+    if (installed) {
+      await menubar.removeApp(menubarOptions(env, env.record));
+      env.out("lahe install: the menu bar icon is removed.\n");
+    }
+    return;
+  }
+  if (env.menuBar === undefined) {
+    // Kept without a rebuild or a restart: a hidden icon stays hidden (R17).
+    if (installed) return;
+    if (!env.canAsk) {
+      env.out(ICON_HOW);
+      return;
+    }
+    var answer = await env.ask(ICON_QUESTION);
+    if (!/^\s*y(es)?\s*$/i.test(String(answer || ""))) {
+      env.out(ICON_HOW);
+      return;
+    }
+  }
+  await addIcon(env);
+}
+
+// ---------------------------------------------------------------------------
 // lahe install
 // ---------------------------------------------------------------------------
 
@@ -424,6 +554,11 @@ async function run(argv, deps) {
   if (start.done !== undefined) return start.done;
   var env = start.env;
   var item = env.item;
+
+  if (env.menuBar === true && env.system !== "macos") {
+    env.out("lahe install: the menu bar icon is macOS only; installing the rest.\n");
+  }
+  if (iconOnly(env)) return (await addIcon(env)) ? protocol.CLI_EXIT.OK : 1;
 
   if (env.system === "linux") {
     var bus = await loginItem.runCommands([["systemctl", "--user", "show-environment"]], env.runner);
@@ -470,7 +605,7 @@ async function run(argv, deps) {
     label: item.label,
     login_item: item.path,
     node: env.node,
-    clone: CLONE,
+    clone: env.clone,
     entry: ENTRY,
     port: env.port,
     state_dir: env.dir,
@@ -484,9 +619,13 @@ async function run(argv, deps) {
     by_hand: admin ? admin.by_hand === true : false,
     installed_at: new Date().toISOString()
   };
+  // An icon already installed stays recorded; iconStep decides what happens to it.
+  if (env.system === "macos" && env.record && env.record.menubar) record.menubar = env.record.menubar;
   // install.json first: the helper reads it as it starts, to say in
   // service.json that a login item runs it.
   loginItem.writeInstall(env.dir, record);
+  // A person running install is one of the ways a stopped Lahe starts again.
+  loginItem.clearStopMarker(env.dir);
   loginItem.writeItem(item);
   var loaded = await loginItem.runCommands(item.load, env.runner);
   var up = loaded.ok && (await waitForInstalledHelper(env));
@@ -517,7 +656,7 @@ async function run(argv, deps) {
       "lahe install: the helper now starts at login and restarts if it stops.",
       "  login item  " + item.path,
       "  node        " + env.node,
-      "  clone       " + CLONE,
+      "  clone       " + env.clone,
       "  port        " + env.port,
       "  state       " + env.dir,
       "  The login item runs this Node and this clone. If either moves or is removed, run `lahe install` again.",
@@ -525,6 +664,7 @@ async function run(argv, deps) {
       ""
     ].join("\n")
   );
+  await iconStep(env);
   return protocol.CLI_EXIT.OK;
 }
 
@@ -544,8 +684,19 @@ async function runUninstall(argv, deps) {
     var undo = [record.port_80 ? "the port 80 forward" : null, record.lahe_names ? "the .lahe setup" : null].filter(Boolean);
     if (undo.length) env.out("lahe uninstall: undo " + undo.join(" and ") + " by hand, as docs/INSTALL.md describes.\n");
   }
+  var iconRemoved = false;
+  if (env.system === "macos") {
+    var options = menubarOptions(env, record);
+    if ((record && record.menubar) || fs.existsSync(menubar.describeApp({ home: env.home, uid: env.uid, label: env.menubarLabel, stateDir: env.dir }).path)) {
+      await menubar.removeApp(options);
+      iconRemoved = true;
+      env.out("lahe uninstall: the menu bar icon is removed.\n");
+    }
+  }
+  // With no login item, nothing reads the hold any more.
+  loginItem.clearStopMarker(env.dir);
   if (!record && !fs.existsSync(item.path)) {
-    env.out("lahe uninstall: nothing to uninstall for " + env.dir + ".\n");
+    if (!iconRemoved) env.out("lahe uninstall: nothing to uninstall for " + env.dir + ".\n");
     return protocol.CLI_EXIT.OK;
   }
   var unloaded = await removeItem(env, item);

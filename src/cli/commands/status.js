@@ -60,6 +60,7 @@ var sitesModule = require("../../service/sites.js");
 var markdownModule = require("../../service/markdown.js");
 var service = require("../../service/index.js");
 var loginItemModule = require("../../service/login_item.js");
+var menubar = require("../../service/menubar.js");
 
 // Shared CLI codes. OK means status completed, whether or not it found an item.
 var EXIT = protocol.CLI_EXIT;
@@ -365,6 +366,44 @@ function installLines(dir, ready, helperRunning) {
   if (reinstall) out.push("install   " + reinstall);
   if (out.length) out.push("");
   return out;
+}
+
+/**
+ * The menu bar line (menu bar brief R20), macOS only: installed and running,
+ * installed and not running, not installed, or stopped by you, plus a failed
+ * rebuild when there is one. It only reads: `launchctl print`, never a
+ * command that starts or stops the icon (R17).
+ *
+ * @param {string} dir the state folder
+ * @param {{runner?: function, platform?: string, uid?: number, home?: string, menubarLabel?: string}} [options]
+ *   seams for tests; the real label is the menu bar module's constant
+ */
+async function menubarLines(dir, options) {
+  var opts = options || {};
+  if ((opts.platform || process.platform) !== "darwin") return [];
+  var state;
+  try {
+    state = await menubar.appState({ stateDir: dir, runner: opts.runner, uid: opts.uid, home: opts.home, label: opts.menubarLabel, platform: "darwin" });
+  } catch (err) {
+    return [];
+  }
+  var icon;
+  if (!state.installed) {
+    icon = "not installed; `lahe install --menu-bar` adds the icon";
+  } else {
+    icon = state.running ? "installed and running" : "installed, not running (hidden); `lahe menubar show` brings it back";
+    if (state.lastError) {
+      icon += "; the last rebuild failed at " + loginItemModule.localTime(state.lastError.at) + ": " +
+        clip(String(state.lastError.message || "").split("\n")[0], 160) +
+        ". The old app keeps running; the log is " + path.join(dir, menubar.LOG_FILE);
+    }
+  }
+  // Stopped says so first, and still says how the icon is.
+  var line = state.stopped
+    ? "Lahe stopped by you at " + loginItemModule.localTime(state.stopped.at) + " from the " + state.stopped.by +
+      "; lahe commands will not start the helper until you click Start in the Lahe menu or run `lahe install`. The icon: " + icon
+    : icon;
+  return ["menu bar  " + line, ""];
 }
 
 /**
@@ -1125,7 +1164,7 @@ async function run(argv, options) {
       // that ever loosens: quiet with nothing waiting prints nothing.
       if (args.quiet && catalogPending.length === 0) return EXIT.OK;
       out(
-        catalogLines(catalogPending, dir).join("\n") +
+        (await menubarLines(dir, opts)).concat(catalogLines(catalogPending, dir)).join("\n") +
           "lahe status: no reviews in " + stateDirModule.reviewsRoot(dir) + ". Start one with `lahe review <page>`.\n"
       );
     }
@@ -1490,7 +1529,11 @@ async function run(argv, options) {
   }
 
   var helperRunning = !!helperOrigin && !!(await service.probeHealth(protocol.DEFAULT_HOST, ready.port));
-  out((await pagesLines(ready, helperRunning)).concat(installLines(dir, ready, helperRunning), lines, catalogLines(catalogPending, dir)).join("\n") + "\n");
+  out(
+    (await pagesLines(ready, helperRunning))
+      .concat(installLines(dir, ready, helperRunning), await menubarLines(dir, opts), lines, catalogLines(catalogPending, dir))
+      .join("\n") + "\n"
+  );
   return EXIT.OK;
 }
 
@@ -1510,6 +1553,7 @@ module.exports = {
   sitePages: sitePages,
   pagesLines: pagesLines,
   installLines: installLines,
+  menubarLines: menubarLines,
   readerDescriber: readerDescriber,
   excerpt: excerpt,
   PAGE_TEXT_LABEL: PAGE_TEXT_LABEL,

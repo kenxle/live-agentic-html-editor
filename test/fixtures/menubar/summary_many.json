@@ -1092,43 +1092,109 @@
     ]
   },
   "waiting_on_agents": {
-    "count": 4,
+    "count": 18,
     "more": 2,
     "documents": [
       {
-        "review": "r183d18583a45",
-        "title": "Rail cleanup",
-        "path_hint": "~/Documents/workspace/project/docs/rail.md",
+        "review": "r183d18583b00",
+        "title": "Crucible: Menu bar app",
+        "path_hint": "~/Documents/workspace/project/docs/doc_0.md",
         "waiting": 3
       },
       {
-        "review": "r183d18583a46",
+        "review": "r183d18583b01",
+        "title": "Rail cleanup",
+        "path_hint": "~/Documents/workspace/project/docs/rail.md",
+        "waiting": 1
+      },
+      {
+        "review": "r183d18583b02",
         "title": "Free writing notes",
         "path_hint": "~/Documents/notes/free_writing.md",
+        "waiting": 2
+      },
+      {
+        "review": "r183d18583b03",
+        "title": "Stable addresses: the plan",
+        "path_hint": "~/Documents/workspace/project/docs/doc_1.md",
+        "waiting": 1
+      },
+      {
+        "review": "r183d18583b04",
+        "title": "Weekly plan",
+        "path_hint": "~/Documents/personal/weekly.md",
+        "waiting": 4
+      },
+      {
+        "review": "r183d18583b05",
+        "title": "Research: tray icons",
+        "path_hint": "~/Documents/reports/tray.md",
+        "waiting": 1
+      },
+      {
+        "review": "r183d18583b06",
+        "title": "Brief: style switcher",
+        "path_hint": "~/Documents/workspace/project/docs/style.md",
+        "waiting": 2
+      },
+      {
+        "review": "r183d18583b07",
+        "title": "Notes page",
+        "path_hint": "~/Documents/notes/notes.md",
         "waiting": 1
       }
     ]
   },
   "open_documents": {
-    "count": 3,
-    "more": 14,
+    "count": 14,
+    "more": 6,
     "items": [
       {
-        "review": "r183d18583a43",
+        "review": "r183d18583b00",
         "title": "Crucible: Menu bar app",
         "path_hint": "~/Documents/workspace/project/docs/doc_0.md",
         "focused": true
       },
       {
-        "review": "r183d18583a45",
+        "review": "r183d18583b01",
         "title": "Rail cleanup",
         "path_hint": "~/Documents/workspace/project/docs/rail.md",
         "focused": false
       },
       {
-        "review": "r183d18583a46",
+        "review": "r183d18583b02",
         "title": "Free writing notes",
         "path_hint": "~/Documents/notes/free_writing.md",
+        "focused": false
+      },
+      {
+        "review": "r183d18583b03",
+        "title": "Stable addresses: the plan",
+        "path_hint": "~/Documents/workspace/project/docs/doc_1.md",
+        "focused": false
+      },
+      {
+        "review": "r183d18583b04",
+        "title": "Weekly plan",
+        "path_hint": "~/Documents/personal/weekly.md",
+        "focused": false
+      },
+      {
+        "review": "r183d18583b05",
+        "title": "Research: tray icons",
+        "path_hint": "~/Documents/reports/tray.md",
+        "focused": false
+      },
+      {
+        "review": "r183d18583b06",
+        "title": "Brief: style switcher",
+        "path_hint": "~/Documents/workspace/project/docs/style.md",
+        "focused": false
+      },
+      {
+        "review": "r183d18583b07",
+        "title": "Notes page",
+        "path_hint": "~/Documents/notes/notes.md",
         "focused": false
       }
     ]
@@ -1136,7 +1202,7 @@
   "sessions": {
     "open": 23,
     "connected": {
-      "count": 2,
+      "count": 11,
       "more": 3,
       "items": [
         {
@@ -1144,14 +1210,56 @@
           "name": "menu bar icon",
           "presence": "listening",
           "last_heard_at": "2026-10-20T15:40:50.000Z",
-          "review": "r183d18583a43"
+          "review": "r183d18583b00"
         },
         {
           "session": "s_0d6c3a8b1e2f4a5b",
           "name": "Rail cleanup",
           "presence": "working",
           "last_heard_at": "2026-10-20T15:39:12.000Z",
-          "review": "r183d18583a45"
+          "review": "r183d18583b01"
+        },
+        {
+          "session": "s_1a2b3c4d5e6f7081",
+          "name": "free writing",
+          "presence": "listening",
+          "last_heard_at": "2026-10-20T15:38:00.000Z",
+          "review": "r183d18583b02"
+        },
+        {
+          "session": "s_2b3c4d5e6f708192",
+          "name": "stable addresses",
+          "presence": "working",
+          "last_heard_at": "2026-10-20T15:30:00.000Z",
+          "review": "r183d18583b03"
+        },
+        {
+          "session": "s_3c4d5e6f708192a3",
+          "name": "weekly plan",
+          "presence": "listening",
+          "last_heard_at": "2026-10-20T15:20:00.000Z",
+          "review": "r183d18583b04"
+        },
+        {
+          "session": "s_4d5e6f708192a3b4",
+          "name": "tray research",
+          "presence": "listening",
+          "last_heard_at": "2026-10-20T15:00:00.000Z",
+          "review": "r183d18583b05"
+        },
+        {
+          "session": "s_5e6f708192a3b4c5",
+          "name": "style switcher",
+          "presence": "working",
+          "last_heard_at": "2026-10-20T14:41:00.000Z",
+          "review": "r183d18583b06"
+        },
+        {
+          "session": "s_9f8e7d6c5b4a3921",
+          "name": "s_9f8e7d6c5b4a3921",
+          "presence": "listening",
+          "last_heard_at": "2026-10-20T13:41:00.000Z",
+          "review": "r183d18583b07"
         }
       ]
     }

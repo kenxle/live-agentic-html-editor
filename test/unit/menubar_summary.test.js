@@ -48,6 +48,24 @@ const fixture = require("../fixtures/menubar/state.js");
 const FIXTURES = path.join(__dirname, "..", "fixtures", "menubar");
 const SECOND = 1000;
 const MINUTE = 60 * SECOND;
+// A write the helper does not make shows within one beat of the summary.
+const BEAT = protocol.CATALOG.POLL_MS;
+
+/**
+ * Beats until every review's own files have been looked at again (the
+ * summary looks at a slice of them each beat): the last answer, and every
+ * review those beats rebuilt.
+ */
+function afterEveryReview(summary, clock) {
+  let answer = null;
+  const rebuilt = [];
+  for (let n = 0; n < summary.FULL_PASS_BEATS; n += 1) {
+    clock.ms += BEAT;
+    answer = summary.read();
+    summary.lastRebuilt().forEach((id) => { if (rebuilt.indexOf(id) === -1) rebuilt.push(id); });
+  }
+  return { answer, rebuilt };
+}
 
 function readFixture(name) {
   return JSON.parse(fs.readFileSync(path.join(FIXTURES, name), "utf8"));
@@ -70,8 +88,11 @@ function setup(options) {
     version: "0.4.0",
     startedAt: "2026-10-20T08:00:00.000Z",
     alwaysOn: true,
-    libraryUrl: () => "http://library.lahe.localhost:1483/catalog"
+    libraryUrl: () => "http://library.lahe.localhost:1483/catalog",
+    foldReplies: o.foldReplies
   });
+  // The helper's own wiring: its event log tells the summary what it wrote.
+  state.listen(summary.touched);
   return { state, reader, summary, clock, T, held };
 }
 
@@ -488,8 +509,8 @@ test("V17: nothing changed rebuilds nothing; touching one log rebuilds only that
   assert.deepEqual(waitingIds(answer), ["r_b"]);
 });
 
-test("V17: a same-size rewrite in the same millisecond still rebuilds", () => {
-  const { state, summary } = setup();
+test("V17: a same-size rewrite in the same millisecond still rebuilds, within one beat", () => {
+  const { state, summary, clock } = setup();
   state.review("r_a", { session: "s_one", title: "Same size A" });
   state.item("r_a", { page_title: "Same size A" });
   const file = stateDir.reviewJsonPath(state.dir, "r_a");
@@ -507,18 +528,19 @@ test("V17: a same-size rewrite in the same millisecond still rebuilds", () => {
   fs.utimesSync(temp, stamp, stamp);
   fs.renameSync(temp, file);
   assert.equal(fs.statSync(file).mtimeMs, before.mtimeMs, "and the same modified time");
-  const answer = summary.read();
-  assert.deepEqual(summary.lastRebuilt(), ["r_a"]);
+  const { answer, rebuilt } = afterEveryReview(summary, clock);
+  assert.deepEqual(rebuilt, ["r_a"]);
   assert.equal(answer.recent.items[0].title, "Same size B");
 });
 
-test("V17: deleting the reviewed document drops it from waiting on you on the next summary", () => {
-  const { state, summary, T } = setup();
+test("V17: deleting the reviewed document drops it from waiting on you within one beat", () => {
+  const { state, summary, T, clock } = setup();
   const a = state.review("r_a", { session: "s_one", title: "A" });
   const it = state.item("r_a", { page_title: "A" });
   state.reply("r_a", it, { status: "question", ts: iso(T - 5 * SECOND) });
   assert.deepEqual(waitingIds(summary.read()), ["r_a"]);
   fs.unlinkSync(a.file);
+  clock.ms += BEAT;
   assert.deepEqual(waitingIds(summary.read()), []);
   assert.deepEqual(summary.lastRebuilt(), ["r_a"]);
 });
@@ -554,7 +576,7 @@ test("the reader's unread fold reads only a log's new lines once it has folded i
 // ---------------------------------------------------------------------------
 
 test("V17: a rewrite the review folder's own times do not show still rebuilds: the key is the files", () => {
-  const { state, summary } = setup();
+  const { state, summary, clock } = setup();
   state.review("r_a", { session: "s_one", title: "Same size A" });
   state.item("r_a", { page_title: "Same size A" });
   const folder = stateDir.reviewDir(state.dir, "r_a");
@@ -571,8 +593,8 @@ test("V17: a rewrite the review folder's own times do not show still rebuilds: t
   // Linux stamps a folder from a coarse clock, so two rewrites in one tick
   // leave it looking untouched. Put it back to say exactly that.
   fs.utimesSync(folder, stamp, stamp);
-  const answer = summary.read();
-  assert.deepEqual(summary.lastRebuilt(), ["r_a"]);
+  const { answer, rebuilt } = afterEveryReview(summary, clock);
+  assert.deepEqual(rebuilt, ["r_a"]);
   assert.equal(answer.recent.items[0].title, "Same size B");
 });
 
@@ -699,4 +721,143 @@ test("V12: connected sessions cap at 8 with a correct more", () => {
   assert.equal(connected.count, 10);
   assert.equal(connected.items.length, 8);
   assert.equal(connected.more, 2);
+});
+
+// ---------------------------------------------------------------------------
+// Fix round 2: an idle poll costs almost nothing
+// ---------------------------------------------------------------------------
+
+/** Back-date a review's folder, so it reads as settled (no new entry in two seconds). */
+function settle(state, reviewId) {
+  const past = new Date(Date.now() - MINUTE);
+  fs.utimesSync(stateDir.reviewDir(state.dir, reviewId), past, past);
+}
+
+/** Every stat, lstat, read and listing the summary makes during `fn`. */
+function watchFiles(fn) {
+  const stats = [];
+  const reads = [];
+  const real = { statSync: fs.statSync, lstatSync: fs.lstatSync, readFileSync: fs.readFileSync, readdirSync: fs.readdirSync, openSync: fs.openSync };
+  fs.statSync = function (file) { stats.push(String(file)); return real.statSync.apply(fs, arguments); };
+  fs.lstatSync = function (file) { stats.push(String(file)); return real.lstatSync.apply(fs, arguments); };
+  fs.readFileSync = function (file) { reads.push(String(file)); return real.readFileSync.apply(fs, arguments); };
+  fs.readdirSync = function (file) { reads.push(String(file)); return real.readdirSync.apply(fs, arguments); };
+  fs.openSync = function (file) { reads.push(String(file)); return real.openSync.apply(fs, arguments); };
+  try {
+    fn();
+  } finally {
+    Object.assign(fs, real);
+  }
+  return { stats, reads };
+}
+
+test("V18: an idle poll between beats stats catalog.json and the reply files of reviews with a ready item, and reads none", () => {
+  const folds = [];
+  const { state, summary, clock } = setup({ foldReplies: (id) => folds.push(id) });
+  // Ten reviews with a comment an agent can still answer, ten whose comment
+  // is answered (handled): only the first ten are looked at between beats.
+  for (let n = 0; n < 20; n += 1) {
+    state.review("r_" + n, { session: "s_one", title: "Doc " + n });
+    const it = state.item("r_" + n, { page_title: "Doc " + n });
+    if (n >= 10) state.reply("r_" + n, it, { status: "handled" });
+  }
+  const replyFile = path.join(stateDir.reviewDir(state.dir, "r_0"), "replies-claude.jsonl");
+  fs.writeFileSync(replyFile, "");
+  for (let n = 0; n < 20; n += 1) settle(state, "r_" + n);
+  summary.read();
+  folds.length = 0;
+  const seen = watchFiles(() => {
+    clock.ms += 5 * SECOND;
+    summary.read();
+    clock.ms += 5 * SECOND;
+    summary.read();
+  });
+  assert.deepEqual(seen.reads, [], "nothing read, nothing listed");
+  assert.deepEqual(folds, [], "nothing moved, so nothing folded");
+  const ready = new Set();
+  for (let n = 0; n < 10; n += 1) ready.add(stateDir.reviewDir(state.dir, "r_" + n));
+  const allowed = (file) => path.basename(file) === "catalog.json" || ready.has(file) || ready.has(path.dirname(file));
+  assert.deepEqual(seen.stats.filter((f) => !allowed(f)), [], "no other file stat'ed");
+  assert.equal(seen.stats.filter((f) => path.basename(f) === "catalog.json").length, 2, "catalog.json once a poll");
+  assert.equal(seen.stats.filter((f) => f === replyFile).length, 2, "the reply file once a poll");
+  for (let n = 10; n < 20; n += 1) {
+    assert.equal(seen.stats.some((f) => f.indexOf(stateDir.reviewDir(state.dir, "r_" + n)) === 0), false, "r_" + n + " has no ready item");
+  }
+});
+
+test("R3: an agent's reply line on a document no page has open folds on the next poll, with no beat between", () => {
+  const folds = [];
+  const { state, summary, clock } = setup({ foldReplies: (id) => folds.push(id) });
+  state.review("r_a", { session: "s_one", title: "A" });
+  state.item("r_a", { page_title: "A" });
+  settle(state, "r_a");
+  const replyFile = path.join(stateDir.reviewDir(state.dir, "r_a"), "replies-claude.jsonl");
+  fs.writeFileSync(replyFile, "");
+  summary.read();
+  folds.length = 0;
+  clock.ms += 5 * SECOND;
+  summary.read();
+  assert.deepEqual(folds, [], "nothing new yet");
+  fs.appendFileSync(replyFile, "{\"item\":\"x\"}\n");
+  clock.ms += 5 * SECOND;
+  summary.read();
+  assert.deepEqual(folds, ["r_a"], "folded on the very next poll");
+});
+
+test("a reply-named symlink is never followed: touching its target folds nothing, on a poll or a beat", () => {
+  const folds = [];
+  const { state, summary, clock } = setup({ foldReplies: (id) => folds.push(id) });
+  state.review("r_a", { session: "s_one", title: "A" });
+  state.item("r_a", { page_title: "A" });
+  const busy = path.join(state.root, "busy.log");
+  fs.writeFileSync(busy, "one\n");
+  fs.symlinkSync(busy, path.join(stateDir.reviewDir(state.dir, "r_a"), "replies-claude.jsonl"));
+  summary.read();
+  fs.appendFileSync(busy, "two\n");
+  const later = new Date(Date.now() + MINUTE);
+  fs.utimesSync(busy, later, later);
+  clock.ms += 5 * SECOND;
+  summary.read();
+  clock.ms += BEAT;
+  summary.read();
+  assert.deepEqual(folds, []);
+});
+
+test("a write the helper did not make shows on the next beat; one it made shows on the next poll", () => {
+  const { state, summary, clock, T } = setup();
+  state.review("r_a", { session: "s_one", title: "A" });
+  summary.read();
+  // The helper's own append (the fixture's log tells the summary, as the
+  // helper's does): the very next poll has it.
+  const it = state.item("r_a", { page_title: "A" });
+  state.reply("r_a", it, { status: "question", ts: iso(T - 5 * SECOND) });
+  clock.ms += SECOND;
+  assert.deepEqual(waitingIds(summary.read()), ["r_a"]);
+  // A write behind the helper's back (another process's log): not until the beat.
+  state.review("r_b", { session: "s_one", title: "B" });
+  clock.ms += SECOND;
+  summary.read();
+  const other = require("../../src/service/log.js").createEventLog({ dir: state.dir });
+  const b = record.newItem({ id: "itm_b", kind: record.KIND.COMMENT, state: record.STATE.READY, note: "x", page_origin: "http://127.0.0.1:4321", page_path: "/b.html", page_seq: 1 });
+  other.append("r_b", [protocol.newEvent({ event: protocol.EVENT.ITEM_READY, event_id: "evt_other_b", review: "r_b", item: b.id, rev: b.rev, page_path: b.page_path, page_seq: 1, payload: { draft: false, record: b } })]);
+  other.append("r_b", [protocol.newEvent({ event: protocol.EVENT.REPLY_FOLDED, event_id: "evt_other_fold", review: "r_b", item: b.id, rev: b.rev, ts: iso(T - 2 * SECOND), payload: { accepted: true, state: "ready", file: "replies.jsonl", reply: { status: "question", agent: "claude", text: "which?" } } })]);
+  clock.ms += SECOND;
+  assert.deepEqual(waitingIds(summary.read()), ["r_a"], "not yet: no beat since");
+  const { answer } = afterEveryReview(summary, clock);
+  assert.deepEqual(waitingIds(answer).sort(), ["r_a", "r_b"], "the beats find it");
+});
+
+test("an open session nobody watched shows connected on the next beat after its first heartbeat, and drops out when the heartbeat goes stale", () => {
+  const { state, summary, clock, T } = setup();
+  state.clock.iso = iso(T);
+  state.sessions.create({ id: "s_quiet", name: "quiet" });
+  const connected = () => summary.read().sessions.connected.items.map((s) => s.session);
+  assert.deepEqual(connected(), []);
+  clock.ms += BEAT;
+  assert.deepEqual(connected(), [], "still nobody, and nothing written");
+  state.sessions.writeMonitor("s_quiet", { pid: process.pid, handoff_rev: 0, at: iso(clock.ms) });
+  clock.ms += BEAT;
+  assert.deepEqual(connected(), ["s_quiet"], "the heartbeat moved its folder");
+  clock.ms += 10 * MINUTE;
+  assert.deepEqual(connected(), [], "a heartbeat ten minutes old is nobody listening");
 });

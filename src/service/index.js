@@ -55,6 +55,7 @@ var catalogSites = require("./catalog_sites.js");
 var staticServers = require("./static_servers.js");
 var selfStopModule = require("./self_stop.js");
 var loginItemModule = require("./login_item.js");
+var menubarModule = require("./menubar.js");
 var addressesModule = require("./addresses.js");
 var sitesModule = require("./sites.js");
 var pageRoutesModule = require("./page_routes.js");
@@ -195,11 +196,14 @@ function pagesPortFrom(opts) {
  *
  * @param {{port?: number, host?: string, stateDir?: string, reviews?: string[],
  *          origins?: string[], quiet?: boolean, now?: function(): number,
- *          pidAlive?: function, uid?: number, schedule?: function}} [options]
+ *          pidAlive?: function, uid?: number, schedule?: function,
+ *          launch?: {env?: object, ppid?: number}}} [options]
  *   `now`, `pidAlive`, `uid` and `schedule` are for tests of the Library: the
  *   clock every Library action and the sweep of its own sessions read, the
  *   liveness seam for monitor pids, the user a file Open restarts must belong
- *   to, and a stand-in for setInterval that runs the sweep's timer.
+ *   to, and a stand-in for setInterval that runs the sweep's timer. `launch`
+ *   stands in for launchd's environment and parent pid, so a test can start
+ *   the helper the way the login item does (login_item.startedByLoginItem).
  * @returns {Promise<object>} a handle with port, url, close, and the pieces the
  *   tests and `add` reach for: log, reviews, dir.
  */
@@ -224,12 +228,28 @@ async function serve(options) {
   var alwaysOn = opts.alwaysOn === true;
   var stateId = selfStopModule.stateToken(dir);
   var installed = loginItemModule.installedFor(dir, port);
+  // STOP HOLDS (menu bar brief R14, security review SR7). While the menu's
+  // Stop marker stands, no helper starts on this state folder, on any port,
+  // whoever asks: `lahe serve --always-on` and a spawn on another port refuse
+  // here too, not only the CLI's paths. The one start that goes ahead is the
+  // login item's own at login (or launchd's restart of it), and only that
+  // start ends the hold. `opts.launch` is the tests' stand-in for launchd.
+  var atLogin = alwaysOn && loginItemModule.startedByLoginItem(installed, opts.launch);
+  if (!atLogin) loginItemModule.refuseWhileStopped(dir);
   // The two address options install may have set up (port-free, .lahe),
   // each used only once proved (addresses.js). Made once the pages listener
   // is bound; null until then and with no pages listener.
   var addresses = null;
 
-  var log = logModule.createEventLog({ dir: dir });
+  // The summary (below) keeps its answer in memory: every append the helper
+  // makes is how it learns which review to rebuild.
+  var summary = null;
+  var log = logModule.createEventLog({
+    dir: dir,
+    onAppend: function (reviewId) {
+      if (summary) summary.touched(reviewId);
+    }
+  });
   var reviews = reviewsModule.createReviews({ dir: dir, log: log });
   reviews.loadFromDisk();
 
@@ -279,11 +299,24 @@ async function serve(options) {
   var catalog = authModule.createCatalogState();
   // The clock every Library action, the sweep and the CLI proof's window read.
   var now = typeof opts.now === "function" ? opts.now : function () { return Date.now(); };
+  // The CLI secret, read again only when its file moved. The menu bar signs
+  // every poll with it and every answer is signed back, so an open, a read
+  // and a close twice a poll become one stat each; a replaced file is read at
+  // once, which is how the app recovers from a new secret.
+  var secretFile = sitesModule.secretPath(dir);
+  var secretHeld = { key: null, value: null };
+  function cliSecret() {
+    var stat = fs.statSync(secretFile, { throwIfNoEntry: false });
+    var key = stat ? stat.size + ":" + stat.mtimeMs + ":" + stat.ino : null;
+    if (key === null) return null;
+    if (key !== secretHeld.key) secretHeld = { key: key, value: sitesModule.readCliSecret(dir) };
+    return secretHeld.value;
+  }
   var auth = authModule.createAuth({
     log: log,
     reviews: reviews,
     catalog: catalog,
-    cliSecret: function () { return sitesModule.readCliSecret(dir); },
+    cliSecret: cliSecret,
     siteOriginAllowed: siteOriginAllowed,
     now: now
   });
@@ -365,8 +398,10 @@ async function serve(options) {
   // How many summary bodies were read: a test's proof that a refused post is
   // turned away before its body is.
   var summaryCounters = { bodiesRead: 0 };
-  var summary = summaryModule.createSummary({
+  summary = summaryModule.createSummary({
     log: function (line) { log.helperLog(line); },
+    // Reply lines on a document no page has open are folded by nothing else.
+    foldReplies: function (reviewId) { return projection.foldOnce(deps, reviewId); },
     dir: dir,
     reader: catalogReaderInstance,
     reviews: reviews,
@@ -843,7 +878,7 @@ async function serve(options) {
     var bytes = Buffer.from(JSON.stringify(body), "utf8");
     var headers = { "Content-Type": protocol.JSON_CONTENT_TYPE, "Cache-Control": "no-store" };
     if (requestId) headers[protocol.HEADER.REQUEST_ID] = requestId;
-    var secret = sitesModule.readCliSecret(dir);
+    var secret = cliSecret();
     if (secret) headers[protocol.HEADER.PROOF_REPLY] = authModule.replyProof(secret, nonce, status, bytes);
     res.writeHead(status, headers);
     res.end(bytes);
@@ -1120,6 +1155,16 @@ async function serve(options) {
         log.helperLog("Library sweep failed: " + err.message);
       })
       .then(function () {
+        // The menu bar app's rebuild-on-change check rides the same beat. It
+        // does nothing off macOS, without the icon installed, or while a
+        // rebuild is already running, and only an always-on helper owns an
+        // install to keep current.
+        if (!alwaysOn) return;
+        return menubarModule.tick({ stateDir: dir }).catch(function (err) {
+          log.helperLog("menu bar rebuild check failed: " + err.message);
+        });
+      })
+      .then(function () {
         sweeping = false;
       });
   }, protocol.CATALOG.POLL_MS);
@@ -1139,6 +1184,11 @@ async function serve(options) {
     };
   }
   reviews.writeReadyFile(readyDetails());
+  // The login item's start at login ends the hold the menu's Stop wrote. It
+  // ends here, and not earlier: a start that fails on a taken port must not
+  // end it. Every other start refused above while the marker stood, and the
+  // menu's Start and `lahe install` remove it themselves.
+  if (atLogin) loginItemModule.clearStopMarker(dir);
   log.helperLog(
     "serving on http://" + host + ":" + boundPort + ", state directory " + dir + ", reviews " + (reviews.list().join(", ") || "none")
   );

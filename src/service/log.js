@@ -136,7 +136,11 @@ function replySeenProblem(event) {
 /**
  * The event log for one state directory.
  *
- * @param {{dir: string, onHelperLog?: (line: string) => void}} options
+ * @param {{dir: string, onHelperLog?: (line: string) => void,
+ *          onAppend?: (reviewId: string) => void}} options
+ *   `onAppend` hears every append that put an event on disk: the helper is
+ *   the single writer of a review's log, so this is how a reader that keeps
+ *   an answer in memory (the menu bar's summary) knows what to rebuild.
  */
 function createEventLog(options) {
   var opts = options || {};
@@ -543,6 +547,7 @@ function createEventLog(options) {
       accepted.push(eventId);
     });
 
+    if (accepted.length && typeof opts.onAppend === "function") opts.onAppend(reviewId);
     return { accepted: accepted, duplicates: duplicates, rejected: rejected, seq: state.seq };
   }
 
