@@ -15,7 +15,7 @@ Nothing right now. The one thing coming later: the menu bar screenshots. The cap
 | Orchestrator | Watching the three builders; integrates and runs the browser suite at the checkpoint | 2026-10-12 20:44 | `feat/menu-bar` |
 | Builder: summary (Opus) | Step 1: the read mark's round trip, the one-review summary, the summary and its cache, the two routes and the signed auth mode | 2026-10-12 20:44 | `feat/menu-bar-summary` |
 | Builder: macapp (Opus) | Step 2: the Swift app, its debug modes, the fake helper | 2026-10-12 20:44 | `feat/menu-bar-macapp` |
-| Builder: install (Opus) | Step 3: the build recipe and login item, `lahe install --menu-bar`, rebuild on change, Stop holds | 2026-10-12 20:44 | `feat/menu-bar-install` |
+| Builder: install (Opus) | Done: returned at 2026-10-12 21:06. Waiting for the other two before the merge | 2026-10-12 20:44 | `feat/menu-bar-install` |
 
 ## Phases
 
@@ -40,7 +40,7 @@ Nothing right now. The one thing coming later: the menu bar screenshots. The cap
 |---|---|---|---|
 | summary | 1.1 to 1.4 | `feat/menu-bar-summary` | building |
 | macapp | 2.1 to 2.3 | `feat/menu-bar-macapp` | building |
-| install | 3.1 to 3.4 | `feat/menu-bar-install` | building |
+| install | 3.1 to 3.4 | `feat/menu-bar-install` | built, `efe79a40`; waits for integration |
 
 ### Passes
 
@@ -48,7 +48,7 @@ No passes yet.
 
 ### Changes from plan
 
-None.
+- **install:** the app is built under `<state>/menubar/.build-*` rather than the system temp folder, so the final rename stays on one volume. The source stamp also hashes the compiler flags, so a recipe change rebuilds too. The stop message reads "the person using this computer stopped it from the menu bar at <time>" rather than naming Ken, because the repo is public; `lahe status` says "stopped by you". SR6 (labels are constants) is met for the icon and for the new bootstrap path, but kickstart still reads the helper's label from `install.json` as it did before this feature, now limited to the four known label shapes; the three callers are outside this workstream. Noted for the integration review.
 
 ### Follow-ups
 
@@ -72,6 +72,7 @@ Not shipped yet.
 
 ## Log
 
+- 2026-10-12 21:06: install builder returned: `src/service/menubar.js` (the one build recipe, the app's login item, rebuild on change), `lahe install --menu-bar` and `--no-menu-bar`, `lahe menubar show` and `rebuild`, Stop holds through `stopped.json`, the status line, `docs/CLI.md`. 59 new unit tests; gate:unit 2783 passed, 0 failed; no helper leaked. A throwaway Swift file compiled through the real recipe and ran. Two wiring points left for integration (`tick` in the 15-second timer, the stop-marker clear after the listener binds).
 - 2026-10-12 20:44: Step 0 committed (`13833038`). Three builders dispatched, one per workstream, each in its own worktree cut from that commit.
 - 2026-10-12 20:40: Plan approved. Your review changed three rules: "read" is the rail's own "1 new" mark, posted to the store, with no logic of its own and a question treated like any reply; Stop Lahe holds until you start it, and agents' commands fail plainly meanwhile; every document counts, open or not, with open ones marked in the menu. Main merged into the branch (Mark as done and the read mark are what the design now builds on). Step 0 started.
 - 2026-10-12 10:37: Plan review returned 23 findings (6 high), all accepted. The most important: a background tab could have marked answers as seen when it reloaded; a test step would have stopped your live helper (tests now use their own labels and never touch your login items); the signed-request format is now written down exactly, with test vectors, so the Node and Swift halves cannot drift. Full set built and ready for you.
