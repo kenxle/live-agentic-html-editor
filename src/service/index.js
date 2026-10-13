@@ -230,7 +230,15 @@ async function serve(options) {
   // is bound; null until then and with no pages listener.
   var addresses = null;
 
-  var log = logModule.createEventLog({ dir: dir });
+  // The summary (below) keeps its answer in memory: every append the helper
+  // makes is how it learns which review to rebuild.
+  var summary = null;
+  var log = logModule.createEventLog({
+    dir: dir,
+    onAppend: function (reviewId) {
+      if (summary) summary.touched(reviewId);
+    }
+  });
   var reviews = reviewsModule.createReviews({ dir: dir, log: log });
   reviews.loadFromDisk();
 
@@ -280,11 +288,24 @@ async function serve(options) {
   var catalog = authModule.createCatalogState();
   // The clock every Library action, the sweep and the CLI proof's window read.
   var now = typeof opts.now === "function" ? opts.now : function () { return Date.now(); };
+  // The CLI secret, read again only when its file moved. The menu bar signs
+  // every poll with it and every answer is signed back, so an open, a read
+  // and a close twice a poll become one stat each; a replaced file is read at
+  // once, which is how the app recovers from a new secret.
+  var secretFile = sitesModule.secretPath(dir);
+  var secretHeld = { key: null, value: null };
+  function cliSecret() {
+    var stat = fs.statSync(secretFile, { throwIfNoEntry: false });
+    var key = stat ? stat.size + ":" + stat.mtimeMs + ":" + stat.ino : null;
+    if (key === null) return null;
+    if (key !== secretHeld.key) secretHeld = { key: key, value: sitesModule.readCliSecret(dir) };
+    return secretHeld.value;
+  }
   var auth = authModule.createAuth({
     log: log,
     reviews: reviews,
     catalog: catalog,
-    cliSecret: function () { return sitesModule.readCliSecret(dir); },
+    cliSecret: cliSecret,
     siteOriginAllowed: siteOriginAllowed,
     now: now
   });
@@ -366,8 +387,10 @@ async function serve(options) {
   // How many summary bodies were read: a test's proof that a refused post is
   // turned away before its body is.
   var summaryCounters = { bodiesRead: 0 };
-  var summary = summaryModule.createSummary({
+  summary = summaryModule.createSummary({
     log: function (line) { log.helperLog(line); },
+    // Reply lines on a document no page has open are folded by nothing else.
+    foldReplies: function (reviewId) { return projection.foldOnce(deps, reviewId); },
     dir: dir,
     reader: catalogReaderInstance,
     reviews: reviews,
@@ -844,7 +867,7 @@ async function serve(options) {
     var bytes = Buffer.from(JSON.stringify(body), "utf8");
     var headers = { "Content-Type": protocol.JSON_CONTENT_TYPE, "Cache-Control": "no-store" };
     if (requestId) headers[protocol.HEADER.REQUEST_ID] = requestId;
-    var secret = sitesModule.readCliSecret(dir);
+    var secret = cliSecret();
     if (secret) headers[protocol.HEADER.PROOF_REPLY] = authModule.replyProof(secret, nonce, status, bytes);
     res.writeHead(status, headers);
     res.end(bytes);

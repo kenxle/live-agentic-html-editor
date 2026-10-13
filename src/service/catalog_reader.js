@@ -144,13 +144,27 @@ function createReader(options) {
   var fileCache = Object.create(null);
 
   /**
+   * Every file read here is in the state folder, where a symlink is never
+   * followed (state_dir.resolveWithin). So the one stat a read costs is an
+   * lstat, and a symlink found there, even one swapped in after the path was
+   * checked, reads as unreadable rather than being followed.
+   *
    * @returns {{state: "missing"} | {state: "bad"} | {state: "ok", value: *, stat: fs.Stats}}
    */
   function cached(file, parse) {
-    var stat = statOrNull(file);
+    var stat;
+    try {
+      stat = fs.lstatSync(file);
+    } catch (err) {
+      stat = null;
+    }
     if (!stat) {
       delete fileCache[file];
       return { state: "missing" };
+    }
+    if (stat.isSymbolicLink()) {
+      delete fileCache[file];
+      return { state: "bad" };
     }
     // The inode too: an atomic rewrite of the same size in the same
     // millisecond changes nothing else.
@@ -245,24 +259,91 @@ function createReader(options) {
   // Sessions, heartbeats and servers
   // ---------------------------------------------------------------------------
 
-  // A session's three files, each resolved once per reader: resolving checks
-  // every folder on the way for a symlink, and the menu bar's summary asks
-  // about every session every five seconds. The file itself is checked again
-  // on every read (one lstat), so a file swapped for a symlink after the first
-  // read is refused, not followed. A refusal throws, and every caller reads
-  // a throw as an unreadable file.
-  var SESSION_FILES = { session: stateDir.agentSessionPath, monitor: stateDir.monitorPath, activity: stateDir.activityPath };
+  // A session's folder and three files, each resolved once per reader:
+  // resolving checks every folder on the way for a symlink, and the menu
+  // bar's summary asks about every session on every beat.
+  var SESSION_FILES = {
+    dir: stateDir.agentSessionDir,
+    session: stateDir.agentSessionPath,
+    monitor: stateDir.monitorPath,
+    activity: stateDir.activityPath
+  };
   var sessionPaths = Object.create(null);
 
   function sessionFile(kind, sessionId) {
     var key = kind + ":" + sessionId;
     if (!sessionPaths[key]) sessionPaths[key] = SESSION_FILES[kind](dir, sessionId);
-    return stateDir.assertNotSymlink(sessionPaths[key]);
+    return sessionPaths[key];
+  }
+
+  // session id -> {key, session, monitor, activity}: what its three files
+  // said when its folder last moved.
+  //
+  // ONE STAT A SESSION, NOT THREE. session.json, monitor.json and
+  // activity.json are each written by a rename into the session's folder
+  // (state_dir.writeAtomic), so a write to any of them moves the folder's
+  // modified time. The menu bar asks about every session every beat, and a
+  // stat costs far more on a processor woken from idle than a back-to-back
+  // benchmark shows. Only when the folder moved are the files read again,
+  // each through cached(), whose lstat refuses a symlink. Two writes inside
+  // one tick of a coarse folder clock can leave the second unseen until the
+  // session's next write: a heartbeat or a command repeats within seconds,
+  // and a name or a close is a rare write a later one corrects.
+  var sessionSnaps = Object.create(null);
+  // Inside one sessionsAt call a session's folder is looked at once, however
+  // many questions (its state, its liveness, its name) ask about it.
+  var snapPass = null;
+
+  function snapshotOf(sessionId) {
+    if (snapPass && snapPass[sessionId]) return snapPass[sessionId];
+    var held = lookAtSession(sessionId);
+    if (snapPass) snapPass[sessionId] = held;
+    return held;
+  }
+
+  function lookAtSession(sessionId) {
+    var folder;
+    var stat;
+    try {
+      folder = sessionFile("dir", sessionId);
+      stat = fs.lstatSync(folder);
+    } catch (err) {
+      stat = null;
+    }
+    var key = stat && stat.isDirectory() ? stat.mtimeMs + ":" + stat.size + ":" + stat.ino : "-";
+    var held = sessionSnaps[sessionId];
+    if (held && held.key === key && held.settled) return held;
+    var lookedMs = Date.now();
+    held = {
+      key: key,
+      // A coarse folder clock can stamp a second write with the time of the
+      // look before it, so a folder that moved in the last two seconds is
+      // read again next time, whatever its key says.
+      settled: !!stat && lookedMs - stat.mtimeMs > 2000,
+      session: readSessionFile(sessionId),
+      monitor: readSessionJson("monitor", sessionId),
+      activity: readSessionJson("activity", sessionId)
+    };
+    sessionSnaps[sessionId] = held;
+    return held;
+  }
+
+  function readSessionJson(kind, sessionId) {
+    try {
+      var got = cachedJson(sessionFile(kind, sessionId));
+      return got.state === "ok" ? got.value : null;
+    } catch (err) {
+      return null;
+    }
   }
 
   function readSession(sessionId) {
     if (sessionId === LEGACY) return { state: "ok", value: { id: LEGACY, synthetic: true } };
     if (!protocol.isSafeId(sessionId)) return { state: "bad" };
+    return snapshotOf(sessionId).session;
+  }
+
+  function readSessionFile(sessionId) {
     var got;
     try {
       got = cachedJson(sessionFile("session", sessionId));
@@ -298,20 +379,9 @@ function createReader(options) {
   function presenceOf(sessionId, nowMs) {
     var none = { known: false, presence: PRESENCE.AWAY, lastActive: null, beat: null };
     if (sessionId === LEGACY || !protocol.isSafeId(sessionId)) return none;
-    var beat = null;
-    var activity = null;
-    try {
-      var got = cachedJson(sessionFile("monitor", sessionId));
-      beat = got.state === "ok" ? got.value : null;
-    } catch (err) {
-      beat = null;
-    }
-    try {
-      var act = cachedJson(sessionFile("activity", sessionId));
-      activity = act.state === "ok" ? act.value : null;
-    } catch (err) {
-      activity = null;
-    }
+    var snap = snapshotOf(sessionId);
+    var beat = snap.monitor;
+    var activity = snap.activity;
     if (!beat && !activity) return none;
     var s = readSession(sessionId);
     var liveness = agentSessions.livenessFrom({
@@ -737,6 +807,9 @@ function createReader(options) {
     var title = null;
     var pages = [];
     var waiting = 0;
+    // Items an agent may still answer (state ready, answered or not): the
+    // only ones a new reply line can change.
+    var ready = 0;
     var total = 0;
     (projected.pages || []).forEach(function (page) {
       if (!title && typeof page.title === "string" && page.title.trim()) title = page.title.trim();
@@ -746,6 +819,7 @@ function createReader(options) {
       (page.items || []).forEach(function (item) {
         total += 1;
         if (record.isUnansweredReady(item)) waiting += 1;
+        if (item.state === record.STATE.READY) ready += 1;
       });
     });
     var review = projected.review || {};
@@ -753,6 +827,7 @@ function createReader(options) {
       title: title,
       pages: pages,
       waiting: waiting,
+      ready: ready,
       total: total,
       ended: !!review.ended_at,
       generated_at: typeof projected.generated_at === "string" ? projected.generated_at : null,
@@ -886,7 +961,7 @@ function createReader(options) {
       // it was generated, and never later than `last`.
       countsAsOf = logIsNewer ? Math.min(generatedMs !== null ? generatedMs : rj.stat.mtimeMs, info.lastMs) : info.lastMs;
     }
-    info.summary = summary || { title: null, pages: [], waiting: 0, total: 0, ended: false, agent_session_id: null };
+    info.summary = summary || { title: null, pages: [], waiting: 0, ready: 0, total: 0, ended: false, agent_session_id: null };
     info.metaServedPath = meta && typeof meta.target_path === "string" && meta.target_path ? meta.target_path : null;
     info.summary = withOwnPageFirst(info.summary, info.metaServedPath, meta && typeof meta.source_path === "string" ? meta.source_path : null);
     info.countsAsOfMs = summary ? countsAsOf : null;
@@ -1135,9 +1210,20 @@ function createReader(options) {
     var cache = Object.create(null);
     return function (sessionId) {
       if (!cache[sessionId]) {
+        // Each half is read when first asked for: folding rows needs only the
+        // state, and a session's server records are a folder listing and a
+        // read per record.
+        var state;
+        var servers;
         cache[sessionId] = {
-          state: readSession(sessionId).state,
-          servers: serversOf(sessionId)
+          get state() {
+            if (state === undefined) state = readSession(sessionId).state;
+            return state;
+          },
+          get servers() {
+            if (servers === undefined) servers = serversOf(sessionId);
+            return servers;
+          }
         };
       }
       return cache[sessionId];
@@ -1245,38 +1331,69 @@ function createReader(options) {
     return placed;
   }
 
-  /**
-   * Every agent session on disk: whether it is closed, its own name, and its
-   * agent by the Library's liveness test (`watching`: listening or working,
-   * else null). A closed or unreadable session is never watching.
-   *
-   * @param {number|string} [now]
-   * @returns {{id: string, closed: boolean, name: string|null, started_at: string|null,
-   *            watching: object|null}[]}
-   */
-  function sessionsAt(now) {
-    var nowMs = toMs(now);
-    var root = stateDir.agentSessionsRoot(dir);
+  /** Every agent session id on disk, sorted. */
+  function sessionIds() {
     var entries;
     try {
-      entries = fs.readdirSync(root, { withFileTypes: true });
+      entries = fs.readdirSync(stateDir.agentSessionsRoot(dir), { withFileTypes: true });
     } catch (err) {
       return [];
     }
     return entries
       .filter(function (entry) { return entry.isDirectory() && protocol.isSafeId(entry.name) && entry.name !== LEGACY; })
-      .map(function (entry) {
-        var got = readSession(entry.name);
-        var open = got.state === "ok" && !got.value.closed_at;
-        return {
-          id: entry.name,
-          closed: !open,
-          name: got.state === "ok" ? agentSessions.cleanName(got.value.name) : null,
-          started_at: got.state === "ok" && typeof got.value.created_at === "string" ? got.value.created_at : null,
-          watching: open ? watchingOf(entry.name, nowMs) : null
-        };
-      })
-      .sort(function (a, b) { return a.id < b.id ? -1 : 1; });
+      .map(function (entry) { return entry.name; })
+      .sort();
+  }
+
+  /**
+   * One agent session: whether it is closed, its own name, when it was
+   * created, and its agent by the Library's liveness test (`watching`:
+   * listening or working, else null). A closed or unreadable session is never
+   * watching. Its folder is looked at once, however many of those ask.
+   *
+   * @param {string} sessionId
+   * @param {number|string} [now]
+   * `key` is the session folder's, and `settled` says the answer cannot
+   * change until something is written into that folder: nobody is watching,
+   * and no other session's monitor stands in for this one's. A reader that
+   * keeps the answer asks sessionKey before asking again.
+   *
+   * @returns {{id: string, closed: boolean, name: string|null, started_at: string|null,
+   *            watching: object|null, key: string, settled: boolean}}
+   */
+  function sessionAt(sessionId, now) {
+    var nowMs = toMs(now);
+    snapPass = Object.create(null);
+    try {
+      var got = readSession(sessionId);
+      var open = got.state === "ok" && !got.value.closed_at;
+      var snap = snapshotOf(sessionId);
+      var watching = open ? watchingOf(sessionId, nowMs) : null;
+      var primary = snap.monitor ? snap.monitor[HEARTBEAT.PRIMARY] : null;
+      return {
+        id: sessionId,
+        closed: !open,
+        name: got.state === "ok" ? agentSessions.cleanName(got.value.name) : null,
+        started_at: got.state === "ok" && typeof got.value.created_at === "string" ? got.value.created_at : null,
+        watching: watching,
+        key: snap.key,
+        settled: snap.settled && !watching && !(typeof primary === "string" && primary !== sessionId)
+      };
+    } finally {
+      snapPass = null;
+    }
+  }
+
+  /** The session folder's key, as sessionAt reports it: one lstat. */
+  function sessionKey(sessionId) {
+    return lookAtSession(sessionId).key;
+  }
+
+  /** Every agent session on disk, as sessionAt describes one. */
+  function sessionsAt(now) {
+    return sessionIds().map(function (id) {
+      return sessionAt(id, now);
+    });
   }
 
   // ---------------------------------------------------------------------------
@@ -1564,6 +1681,9 @@ function createReader(options) {
     reviewIds: reviewIds,
     reviewPart: reviewPart,
     foldParts: foldParts,
+    sessionIds: sessionIds,
+    sessionAt: sessionAt,
+    sessionKey: sessionKey,
     sessionsAt: sessionsAt
   };
 }

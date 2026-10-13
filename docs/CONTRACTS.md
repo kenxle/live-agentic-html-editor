@@ -1161,6 +1161,24 @@ text, no token, no session secret, anywhere in the answer. The day-one cutoff li
 `<state>/summary.json`, `{version: 1, seeded_at}`, written on the first `summary.read`; a reply older
 than `seeded_at` is never unread.
 
+**How fresh the answer is.** The helper keeps the answer's rows in memory, and an idle poll reads no
+file but a stat of `catalog.json` (so a Library rename shows on the next poll). A change the helper
+writes itself (an event any page posts, a reply it folds, a review it creates) shows on the next
+poll: its event log tells the summary which review to rebuild. What else a reviewer waits on shows
+within one beat, `CATALOG.POLL_MS` (15 seconds): at most once a beat a poll reads every open
+session's agent again, checks `summary.json` and every waiting document, folds reply files no page is
+folding, and lists the reviews and the sessions again when their folders moved. The same beat stats
+the `events.jsonl`, `review.json` and `meta.json` of a fortieth of the reviews, and reads a fortieth
+of the closed sessions, in turn, so a write to those files the helper did not make (a command run
+while no helper held the review) shows within forty beats, ten minutes; while the helper runs it
+writes those files itself. A session's three files are read again only when its folder moved: each is
+written by a rename into it. Folding reply files is how an agent's reply to a document nobody has open reaches the
+count: for a review with an item in state ready, a reply file whose size, time or
+inode moved since the last beat is folded once (`projection.foldOnce`), without putting the review on
+the watch list. On a helper's first beat a reply file newer than the review's log is folded, which is
+what a reply written while no helper ran looks like. Window holders are read from the helper's memory
+on every poll.
+
 **`summary.open`** takes `{review, summary_version}` and answers `{url}`: the address catalog Open
 would use, found with `handoff: false`, so it never queues a request for an agent. A row only an agent
 can serve answers `{url: null}`, as does any review catalog Open refuses as not openable (a missing

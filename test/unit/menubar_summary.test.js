@@ -48,6 +48,24 @@ const fixture = require("../fixtures/menubar/state.js");
 const FIXTURES = path.join(__dirname, "..", "fixtures", "menubar");
 const SECOND = 1000;
 const MINUTE = 60 * SECOND;
+// A write the helper does not make shows within one beat of the summary.
+const BEAT = protocol.CATALOG.POLL_MS;
+
+/**
+ * Beats until every review's own files have been looked at again (the
+ * summary looks at a slice of them each beat): the last answer, and every
+ * review those beats rebuilt.
+ */
+function afterEveryReview(summary, clock) {
+  let answer = null;
+  const rebuilt = [];
+  for (let n = 0; n < summary.FULL_PASS_BEATS; n += 1) {
+    clock.ms += BEAT;
+    answer = summary.read();
+    summary.lastRebuilt().forEach((id) => { if (rebuilt.indexOf(id) === -1) rebuilt.push(id); });
+  }
+  return { answer, rebuilt };
+}
 
 function readFixture(name) {
   return JSON.parse(fs.readFileSync(path.join(FIXTURES, name), "utf8"));
@@ -72,6 +90,8 @@ function setup(options) {
     alwaysOn: true,
     libraryUrl: () => "http://library.lahe.localhost:1483/catalog"
   });
+  // The helper's own wiring: its event log tells the summary what it wrote.
+  state.listen(summary.touched);
   return { state, reader, summary, clock, T, held };
 }
 
@@ -488,8 +508,8 @@ test("V17: nothing changed rebuilds nothing; touching one log rebuilds only that
   assert.deepEqual(waitingIds(answer), ["r_b"]);
 });
 
-test("V17: a same-size rewrite in the same millisecond still rebuilds", () => {
-  const { state, summary } = setup();
+test("V17: a same-size rewrite in the same millisecond still rebuilds, within one beat", () => {
+  const { state, summary, clock } = setup();
   state.review("r_a", { session: "s_one", title: "Same size A" });
   state.item("r_a", { page_title: "Same size A" });
   const file = stateDir.reviewJsonPath(state.dir, "r_a");
@@ -507,18 +527,19 @@ test("V17: a same-size rewrite in the same millisecond still rebuilds", () => {
   fs.utimesSync(temp, stamp, stamp);
   fs.renameSync(temp, file);
   assert.equal(fs.statSync(file).mtimeMs, before.mtimeMs, "and the same modified time");
-  const answer = summary.read();
-  assert.deepEqual(summary.lastRebuilt(), ["r_a"]);
+  const { answer, rebuilt } = afterEveryReview(summary, clock);
+  assert.deepEqual(rebuilt, ["r_a"]);
   assert.equal(answer.recent.items[0].title, "Same size B");
 });
 
-test("V17: deleting the reviewed document drops it from waiting on you on the next summary", () => {
-  const { state, summary, T } = setup();
+test("V17: deleting the reviewed document drops it from waiting on you within one beat", () => {
+  const { state, summary, T, clock } = setup();
   const a = state.review("r_a", { session: "s_one", title: "A" });
   const it = state.item("r_a", { page_title: "A" });
   state.reply("r_a", it, { status: "question", ts: iso(T - 5 * SECOND) });
   assert.deepEqual(waitingIds(summary.read()), ["r_a"]);
   fs.unlinkSync(a.file);
+  clock.ms += BEAT;
   assert.deepEqual(waitingIds(summary.read()), []);
   assert.deepEqual(summary.lastRebuilt(), ["r_a"]);
 });
@@ -554,7 +575,7 @@ test("the reader's unread fold reads only a log's new lines once it has folded i
 // ---------------------------------------------------------------------------
 
 test("V17: a rewrite the review folder's own times do not show still rebuilds: the key is the files", () => {
-  const { state, summary } = setup();
+  const { state, summary, clock } = setup();
   state.review("r_a", { session: "s_one", title: "Same size A" });
   state.item("r_a", { page_title: "Same size A" });
   const folder = stateDir.reviewDir(state.dir, "r_a");
@@ -571,8 +592,8 @@ test("V17: a rewrite the review folder's own times do not show still rebuilds: t
   // Linux stamps a folder from a coarse clock, so two rewrites in one tick
   // leave it looking untouched. Put it back to say exactly that.
   fs.utimesSync(folder, stamp, stamp);
-  const answer = summary.read();
-  assert.deepEqual(summary.lastRebuilt(), ["r_a"]);
+  const { answer, rebuilt } = afterEveryReview(summary, clock);
+  assert.deepEqual(rebuilt, ["r_a"]);
   assert.equal(answer.recent.items[0].title, "Same size B");
 });
 
@@ -699,4 +720,76 @@ test("V12: connected sessions cap at 8 with a correct more", () => {
   assert.equal(connected.count, 10);
   assert.equal(connected.items.length, 8);
   assert.equal(connected.more, 2);
+});
+
+// ---------------------------------------------------------------------------
+// Fix round 2: an idle poll costs almost nothing
+// ---------------------------------------------------------------------------
+
+test("V18: an idle poll between beats stats one file, catalog.json, and reads none", () => {
+  const { state, summary, clock } = setup();
+  for (let n = 0; n < 20; n += 1) {
+    state.review("r_" + n, { session: "s_one", title: "Doc " + n });
+    state.item("r_" + n, { page_title: "Doc " + n });
+  }
+  summary.read();
+  const stats = [];
+  const reads = [];
+  const realStat = fs.statSync;
+  const realRead = fs.readFileSync;
+  const realDir = fs.readdirSync;
+  fs.statSync = function (file) { stats.push(String(file)); return realStat.apply(fs, arguments); };
+  fs.readFileSync = function (file) { reads.push(String(file)); return realRead.apply(fs, arguments); };
+  fs.readdirSync = function (file) { reads.push(String(file)); return realDir.apply(fs, arguments); };
+  try {
+    clock.ms += 5 * SECOND;
+    summary.read();
+    clock.ms += 5 * SECOND;
+    summary.read();
+  } finally {
+    fs.statSync = realStat;
+    fs.readFileSync = realRead;
+    fs.readdirSync = realDir;
+  }
+  assert.deepEqual(stats.map((f) => path.basename(f)), ["catalog.json", "catalog.json"], "one stat per poll");
+  assert.deepEqual(reads, [], "nothing read, nothing listed");
+});
+
+test("a write the helper did not make shows on the next beat; one it made shows on the next poll", () => {
+  const { state, summary, clock, T } = setup();
+  state.review("r_a", { session: "s_one", title: "A" });
+  summary.read();
+  // The helper's own append (the fixture's log tells the summary, as the
+  // helper's does): the very next poll has it.
+  const it = state.item("r_a", { page_title: "A" });
+  state.reply("r_a", it, { status: "question", ts: iso(T - 5 * SECOND) });
+  clock.ms += SECOND;
+  assert.deepEqual(waitingIds(summary.read()), ["r_a"]);
+  // A write behind the helper's back (another process's log): not until the beat.
+  state.review("r_b", { session: "s_one", title: "B" });
+  clock.ms += SECOND;
+  summary.read();
+  const other = require("../../src/service/log.js").createEventLog({ dir: state.dir });
+  const b = record.newItem({ id: "itm_b", kind: record.KIND.COMMENT, state: record.STATE.READY, note: "x", page_origin: "http://127.0.0.1:4321", page_path: "/b.html", page_seq: 1 });
+  other.append("r_b", [protocol.newEvent({ event: protocol.EVENT.ITEM_READY, event_id: "evt_other_b", review: "r_b", item: b.id, rev: b.rev, page_path: b.page_path, page_seq: 1, payload: { draft: false, record: b } })]);
+  other.append("r_b", [protocol.newEvent({ event: protocol.EVENT.REPLY_FOLDED, event_id: "evt_other_fold", review: "r_b", item: b.id, rev: b.rev, ts: iso(T - 2 * SECOND), payload: { accepted: true, state: "ready", file: "replies.jsonl", reply: { status: "question", agent: "claude", text: "which?" } } })]);
+  clock.ms += SECOND;
+  assert.deepEqual(waitingIds(summary.read()), ["r_a"], "not yet: no beat since");
+  const { answer } = afterEveryReview(summary, clock);
+  assert.deepEqual(waitingIds(answer).sort(), ["r_a", "r_b"], "the beats find it");
+});
+
+test("an open session nobody watched shows connected on the next beat after its first heartbeat, and drops out when the heartbeat goes stale", () => {
+  const { state, summary, clock, T } = setup();
+  state.clock.iso = iso(T);
+  state.sessions.create({ id: "s_quiet", name: "quiet" });
+  const connected = () => summary.read().sessions.connected.items.map((s) => s.session);
+  assert.deepEqual(connected(), []);
+  clock.ms += BEAT;
+  assert.deepEqual(connected(), [], "still nobody, and nothing written");
+  state.sessions.writeMonitor("s_quiet", { pid: process.pid, handoff_rev: 0, at: iso(clock.ms) });
+  clock.ms += BEAT;
+  assert.deepEqual(connected(), ["s_quiet"], "the heartbeat moved its folder");
+  clock.ms += 10 * MINUTE;
+  assert.deepEqual(connected(), [], "a heartbeat ten minutes old is nobody listening");
 });
