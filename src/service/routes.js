@@ -43,6 +43,9 @@ function missingDependency(routeName, dependency) {
  * @property {string} requestId
  */
 
+// What the reply poll hands the page.
+var POLLED_EVENTS = [protocol.EVENT.REPLY_FOLDED, protocol.EVENT.REPLY_REJECTED, protocol.EVENT.REPLY_SEEN];
+
 var HANDLERS = {
   // Liveness and version only, so `add` can tell a helper that is up from one
   // that is not. No credential, and no review data in the answer.
@@ -396,9 +399,11 @@ var HANDLERS = {
       noteReplyActivity(deps, deps.projection.tickReview(deps, request.review), owner);
     }
     var since = numberOr(request.query.since, 0);
+    // Replies, and the reviewer's read marks: a reply.seen another browser
+    // posted is how this page's "1 new" clears too. The page adopts one only
+    // when it names the reply its record holds now.
     var events = deps.log.since(request.review, since).filter(function (event) {
-      var type = event[protocol.EVENT_FIELD.EVENT];
-      return type === protocol.EVENT.REPLY_FOLDED || type === protocol.EVENT.REPLY_REJECTED;
+      return POLLED_EVENTS.indexOf(event[protocol.EVENT_FIELD.EVENT]) !== -1;
     });
     return {
       status: 200,

@@ -106,54 +106,11 @@
     return record.replyStamp(item);
   }
 
-  /**
-   * Is this a reply the reviewer actually has to read?
-   *
-   * The badge used to count every folded reply, which meant "claude carried this
-   * change into the source" interrupted the reviewer exactly as loudly as an
-   * open question did. Two things count now:
-   *
-   *   THE AGENT SAID SO   user_needs_to_see_reply on the reply line, which the
-   *                       contract asks for on an answer, a caveat, or a change
-   *                       made differently than asked, AND words to read in
-   *                       text or reason
-   *   THE STATUS SAYS SO  question and not_handled, always, flag or no flag: a
-   *                       question needs an answer and a refusal needs its
-   *                       reason read, and neither is the agent's call
-   *
-   * Everything else still lands on its card in Done, whole, with its text and
-   * its timestamp. It simply arrives already read.
-   *
-   * THE FLAG NEEDS WORDS BEHIND IT. All three things the contract asks the flag
-   * for, an answer, a caveat, a change made differently than asked, are things
-   * an agent says in words. A flagged reply carrying neither text nor reason
-   * has nothing to read, so the card falls through to the wordless line
-   * `agentMessageFor` writes: "claude handled this." Counting that is a badge
-   * that sends the reviewer to a card to learn nothing, and it happens in runs:
-   * an agent that flags one wordless confirmation flags twelve, and the number
-   * on the rail stops meaning anything. Ken hit exactly this (2026-09-04). The
-   * agent asked for attention it had no use for, so the ask is refused here
-   * rather than trusted; the reply is not hidden, only already read.
-   *
-   * `question` and `not_handled` are deliberately NOT held to this. A refusal
-   * with no reason and a question with no text are both worth fixing, but the
-   * status alone is the signal there, and swallowing a wordless refusal would
-   * leave the reviewer thinking their item was done.
-   *
-   * @param {object} reply the reply as it sits on a record
-   */
-  function needsToSeeReply(reply) {
-    if (!reply) return false;
-    if (reply.status === record.REPLY_STATUS.QUESTION) return true;
-    if (reply.status === record.REPLY_STATUS.NOT_HANDLED) return true;
-    if (reply.user_needs_to_see_reply !== true) return false;
-    return hasWords(reply.text) || hasWords(reply.reason);
-  }
-
-  /** Is there anything here for a person to actually read? */
-  function hasWords(value) {
-    return typeof value === "string" && value.trim() !== "";
-  }
+  // THE UNREAD RULE lives in record.js (needsToSeeReply, unseenReplyIds), so
+  // the rail's "1 new" and the menu bar's "waiting on you" are one function
+  // over the same records. These names stay here for this file's call sites.
+  var needsToSeeReply = record.needsToSeeReply;
+  var hasWords = record.hasWords;
 
   /**
    * Does this round of a thread start open?
@@ -213,35 +170,16 @@
   };
 
   /**
-   * The ids whose reply the reviewer has not read.
-   *
-   * Pure: items in, marks in, ids out. Nothing here touches the DOM or storage,
-   * which is what makes the rule testable without a browser.
+   * The ids whose reply the reviewer has not read: record.unseenReplyIds, with
+   * this browser's marks. A record carrying the helper's reply_seen for its
+   * current reply reads as read here too, so a reply read in another browser
+   * clears in this one.
    *
    * @param {object[]} items every record this review holds
    * @param {object} marks id -> the stamp of the reply already read
    * @returns {string[]}
    */
-  function unseenReplyIds(items, marks) {
-    var seen = marks && typeof marks === "object" ? marks : {};
-    var out = [];
-    (items || []).forEach(function (item) {
-      var stamp = replyStamp(item);
-      if (!stamp) return;
-      // AN ANSWER TO A TOOL ROUND IS ROUTINE BY DEFINITION, whatever the agent
-      // put on it. Nobody is badged, marked or toasted for the tool's own
-      // question coming back answered. A refusal still reaches the reviewer,
-      // quietly, as the card's notice (see refresh).
-      if (record.toolRoundOf(item)) return;
-      // A CARD THE REVIEWER CLOSED IS READ. Choosing "Mark as done" on it is
-      // the reviewer acting on it, and the agent's last answer it carries is
-      // history, so it never says "1 new" in Done.
-      if (record.isClosedByReviewer(item)) return;
-      if (!needsToSeeReply(item[record.FIELD.REPLY])) return;
-      if (seen[item[record.FIELD.ID]] !== stamp) out.push(item[record.FIELD.ID]);
-    });
-    return out;
-  }
+  var unseenReplyIds = record.unseenReplyIds;
 
   /**
    * The unseen ids, grouped by the tab their card actually sits in.
@@ -902,17 +840,69 @@
     // An agent's reply used to move an item to Done and say nothing. The
     // reviewer, who is on the Active tab writing the next comment, got no signal
     // that an answer had arrived, and no way to tell the answers they had read
-    // from the ones they had not. The mark below is that signal, and it is
-    // reviewer-side only: it lives in browser storage, never in review.json, and
-    // no agent sees it or can set it.
+    // from the ones they had not. The mark below is that signal. It lives in
+    // browser storage, and each reply it newly marks read is also posted to the
+    // helper as a reply.seen event, so the menu bar's count and a second
+    // browser clear with it (see postReadMarks). No agent acts on it.
 
     function readSeen() {
       return typeof store.readSeenReplies === "function" ? store.readSeenReplies(reviewId) : {};
     }
 
     function writeSeen(marks) {
+      var before = readSeen();
       if (typeof store.writeSeenReplies === "function") store.writeSeenReplies(reviewId, marks);
+      postReadMarks(before, marks);
       return marks;
+    }
+
+    /**
+     * Tell the helper which replies were just read.
+     *
+     * ONCE PER STAMP, at the moment the mark is written, never per paint. A
+     * reply counts only when the rule called it unread a moment ago and the new
+     * marks name its stamp: a routine reply stamped read as it folded was never
+     * unread, and a mark already standing is not news. A reply only exists on an
+     * item the helper holds, so there is no "has the helper heard of it" check.
+     *
+     * @param {object} before the marks as they stood
+     * @param {object} after the marks just written
+     * @returns {number} how many reply.seen events were queued
+     */
+    function postReadMarks(before, after) {
+      var client = typeof sync === "function" ? sync() : sync;
+      if (!client || typeof client.markReplySeen !== "function") return 0;
+      var posted = 0;
+      itemsNow().forEach(function (item) {
+        var id = item[record.FIELD.ID];
+        var stamp = after[id];
+        if (!stamp || before[id] === stamp) return;
+        if (!record.isUnreadReply(item, before[id])) return;
+        if (client.markReplySeen(item)) posted += 1;
+      });
+      return posted;
+    }
+
+    /**
+     * A reply read in another browser, as the reply poll reports it: the
+     * reply.seen event the helper holds. It is taken into this browser's marks
+     * only when it names the reply this record holds now, and written straight
+     * to storage, so nothing is posted back.
+     *
+     * @param {object} event a reply.seen event, {item, stamp}
+     * @returns {object|null} what was adopted, or null
+     */
+    function adoptReadMark(event) {
+      var id = event[protocol.EVENT_FIELD.ITEM];
+      var item = id ? itemById(id) : null;
+      var stamp = event.stamp;
+      if (!item || typeof stamp !== "string" || replyStamp(item) !== stamp) return null;
+      var marks = readSeen();
+      if (marks[id] === stamp) return null;
+      marks[id] = stamp;
+      if (typeof store.writeSeenReplies === "function") store.writeSeenReplies(reviewId, marks);
+      delete life.neglected[id];
+      return { kind: "seen", item: id, toast: false };
     }
 
     /**
@@ -1728,13 +1718,14 @@
     // -------------------------------------------------------------------------
 
     /**
-     * Apply folded replies and rejected lines from 1B's poll loop.
+     * Apply folded replies, rejected lines and other browsers' read marks from
+     * 1B's poll loop.
      *
      * This file never reads a reply file and never edits sync.js: the helper is
      * the single reader of reply files, and the library sees only what it
      * folded.
      *
-     * @param {object[]} events reply.folded and reply.rejected events
+     * @param {object[]} events reply.folded, reply.rejected and reply.seen events
      */
     function applyReplies(events) {
       var applied = [];
@@ -1742,6 +1733,10 @@
         var type = event[protocol.EVENT_FIELD.EVENT];
         if (type === protocol.EVENT.REPLY_REJECTED) {
           applied.push(rejectedLine(event));
+          return;
+        }
+        if (type === protocol.EVENT.REPLY_SEEN) {
+          applied.push(adoptReadMark(event));
           return;
         }
         if (type !== protocol.EVENT.REPLY_FOLDED) return;

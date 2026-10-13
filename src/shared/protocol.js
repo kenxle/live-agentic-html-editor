@@ -975,6 +975,11 @@
     // no record, and the projection applies it only when the item is still
     // outstanding at exactly that revision (lifecycle.canClose).
     ITEM_CLOSED: "item.closed",
+    // {item, stamp}. The rail marked an agent reply read (its card was
+    // opened), naming the reply by record.replyStamp. No record, and not a
+    // lifecycle move: the projection records it on the item as reply_seen only
+    // when it names the item's current reply, and no agent acts on it.
+    REPLY_SEEN: "reply.seen",
     REPLY_FOLDED: "reply.folded",
     REPLY_REJECTED: "reply.rejected",
     REVIEW_ARCHIVED: "review.archived",
@@ -985,9 +990,16 @@
   };
   // The Library's `last` is the time inside the newest event that is work on
   // the document, by the reviewer or the agent. These are not: an Open's
-  // origin swap, and a reviewer's visit. Compaction rewrites the log without
-  // adding an event, so the file's modified time is never read for `last`.
-  CATALOG.NOT_WORK_EVENTS = [EVENT.ORIGIN_REGISTERED, EVENT.ORIGIN_REMOVED, EVENT.PAGE_VISITED, EVENT.REVIEW_ADOPTED];
+  // origin swap, a reviewer's visit, and a reviewer reading a reply.
+  // Compaction rewrites the log without adding an event, so the file's
+  // modified time is never read for `last`.
+  CATALOG.NOT_WORK_EVENTS = [
+    EVENT.ORIGIN_REGISTERED,
+    EVENT.ORIGIN_REMOVED,
+    EVENT.PAGE_VISITED,
+    EVENT.REVIEW_ADOPTED,
+    EVENT.REPLY_SEEN
+  ];
 
 
   // Closed. The projector, the merge rule, and reply folding all switch on this

@@ -45,7 +45,7 @@ Read this before touching `src/service/catalog_*.js`, `src/layer/catalog/`, or `
   - With no title recorded, the name comes from the file itself: its `<title>`, else a Markdown file's first heading.
   - With neither, the name is just the file name.
 - **Paths.** A row's second line is `project_path`, the path from the project root: the repository, a worktree's own root, or `~/.claude` (labelled "claude config"). Outside any project it is the `~` path. It is never shortened. Pages behind a `.lahe-source` mount are listed by their real path.
-- **Last worked on.** `last` is the time inside the newest event that is work on the document. Origin swaps, visits and adoption events do not count. It is never a file's modified time, because compaction rewrites old logs. With no readable event, it is `review.json`'s `generated_at`, then `meta.json`'s `created_at`.
+- **Last worked on.** `last` is the time inside the newest event that is work on the document. Origin swaps, visits, adoption events and reply reads (`reply.seen`) do not count. It is never a file's modified time, because compaction rewrites old logs. With no readable event, it is `review.json`'s `generated_at`, then `meta.json`'s `created_at`.
 - **Sections.**
   - The top section holds only waiting and starred reviews, under their session's header.
   - A session's other reviews appear as a second card, under This week or Older than a week by their own newest time.
