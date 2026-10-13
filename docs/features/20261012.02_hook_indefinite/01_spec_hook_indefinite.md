@@ -2,22 +2,26 @@
 
 ## Progress
 
-**Where it stands:** merged to main (PR #59, d80cb2de) and the installed hook
-runs the new code. Last updated 2026-10-12, 9:23 PM.
+**Where it stands:** done. Merged to main (PR #59, d80cb2de), the installed
+hook runs the new code, and the post-merge gate on main is green. Last updated
+2026-10-12, 9:47 PM.
 
-- Merged after Ken's approval and a green CI run. The first CI run failed on a
-  Library "Open" unit test the change does not touch; it passes locally every
-  time and is on the board as LAHE-library-open-closed-session-flake.
-- The main clone is pulled and `npm run install-skills` ran there, so the Stop
-  hook in Ken's settings now prints the 24-hour number and "One launch waits
-  until there is work, so add no timer or loop."
-- Running: `npm run gate` on main, as the post-merge check.
-- Next: close this review session, write the lesson, and list the worktree
-  for cleanup.
+- Post-merge `npm run gate` on main: lint passed, bundle check passed, unit
+  2724 passed and 0 failed, Chromium 882 passed and 0 failed.
+- What you will notice: when a Claude Code agent tries to end a turn with its
+  watcher down, the hook now tells it to pass a 24-hour timeout and that one
+  launch waits until there is work, with no timer or loop. On this machine
+  the number was already 24 hours through `BASH_MAX_TIMEOUT_MS`; the sentence
+  is new, and a fresh install no longer gets the two-hour number.
+- The Library "Open" test that failed once in CI was a same-millisecond race
+  that another agent fixed in PR #58 (d36f7624); its board row is marked done.
+- Lesson proposed: `docs/lessons/proposed/a-fresh-worktree-under-the-clone-runs-the-suite-without-its-own-node-modules.md`.
+- Review session closed.
 
 **To delete at cleanup:** `.claude-pr-body-202610122118.md` in the worktree
 root (the PR body scratch file), and the worktree
-`.claude/worktrees/hook-indefinite` with its branch once the review is closed.
+`.claude/worktrees/hook-indefinite` with its local branch `hook-indefinite`
+(the remote branch is already deleted).
 
 **Summary.** The Stop hook still tells a Claude Code agent to relaunch the
 monitor with a two-hour timeout. The skill, the contract and `docs/CLI.md` were
