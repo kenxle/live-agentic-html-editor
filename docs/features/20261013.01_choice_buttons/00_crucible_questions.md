@@ -1,9 +1,9 @@
 # Choice buttons in LAHE: the crucible
 
 Date: 2026-10-13
-Status: ROUND 1, seven questions waiting on Ken
+Status: ON HOLD. Ken, 2026-10-13: "holding on this until we get the proper document meta structure in place." Round 1 answers so far are folded in below; the questions stay open until the hold lifts.
 
-**Needs you.** Seven questions below. Under each one I wrote my best answer from what I found in the code, the board and your message. Where I got it right, a comment saying "yes" on the card is enough. Where I got it wrong, say so and I will fold your answer in. Round 2 brings the premises and two or three approaches to pick from.
+**Needs you (when the hold lifts).** Seven questions below. Under each one I wrote my best answer from what I found in the code, the board and your message. Where I got it right, a comment saying "yes" on the card is enough. Where I got it wrong, say so and I will fold your answer in. Round 2 brings the premises and two or three approaches to pick from.
 
 **Why one page and not one question at a time.** The crucible skill asks its questions one by one in chat. Your global rule says a set of questions goes on a page, and the free-writing crucible ran this way and worked. Same here.
 
