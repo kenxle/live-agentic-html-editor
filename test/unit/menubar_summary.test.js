@@ -42,6 +42,7 @@ const stateDir = require("../../src/service/state_dir.js");
 const projection = require("../../src/service/projection.js");
 const summaryModule = require("../../src/service/summary.js");
 const catalogReader = require("../../src/service/catalog_reader.js");
+const sitesModule = require("../../src/service/sites.js");
 const tabDone = require("../../src/layer/tab_done.js");
 const fixture = require("../fixtures/menubar/state.js");
 
@@ -543,6 +544,33 @@ test("V17: deleting the reviewed document drops it from waiting on you within on
   clock.ms += BEAT;
   assert.deepEqual(waitingIds(summary.read()), []);
   assert.deepEqual(summary.lastRebuilt(), ["r_a"]);
+});
+
+test("a document whose worktree was removed stops waiting on you within one beat: no page can show its reply", () => {
+  const { state, summary, T, clock } = setup();
+  // A main checkout and a worktree of it, the same file in each.
+  const main = path.join(state.home, "ws", "main-repo");
+  const wt = path.join(state.home, "ws", "wt1");
+  fs.mkdirSync(path.join(main, ".git", "worktrees", "wt1"), { recursive: true });
+  fs.mkdirSync(path.join(wt, "docs"), { recursive: true });
+  fs.mkdirSync(path.join(main, "docs"), { recursive: true });
+  fs.writeFileSync(path.join(wt, ".git"), "gitdir: " + path.join(main, ".git", "worktrees", "wt1") + "\n");
+  // git's back-link, which the registry checks before it trusts the .git file.
+  fs.writeFileSync(path.join(main, ".git", "worktrees", "wt1", "gitdir"), path.join(wt, ".git") + "\n");
+  fs.writeFileSync(path.join(main, "docs", "page.md"), "# Page\n\nMain copy.\n");
+  const file = path.join(wt, "docs", "page.md");
+  fs.writeFileSync(file, "# Page\n\nWorktree copy.\n");
+  const bound = sitesModule.createSites({ dir: state.dir, home: state.home })
+    .bind({ root: fs.realpathSync(path.join(wt, "docs")), mode: "folder", entry: "page.md" });
+  assert.ok(bound.site.worktree_root, "the registry recorded the worktree");
+  state.review("r_wt", { session: "s_one", title: "Page", file: fs.realpathSync(file) });
+  const it = state.item("r_wt", { page_title: "Page" });
+  state.reply("r_wt", it, { status: "question", ts: iso(T - 5 * SECOND) });
+  assert.deepEqual(waitingIds(summary.read()), ["r_wt"]);
+  // The worktree is removed (moved aside here, so nothing is deleted).
+  fs.renameSync(wt, wt + "-removed");
+  clock.ms += BEAT;
+  assert.deepEqual(waitingIds(summary.read()), []);
 });
 
 test("V17: a Library rename shows on the next summary, with nothing rebuilt", () => {

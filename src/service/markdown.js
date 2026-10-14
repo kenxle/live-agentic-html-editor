@@ -259,7 +259,7 @@ function newTabTarget(href) {
 
 function sourceNote(sourcePath) {
   return "<p class=\"lahe-readonly-note\">Read-only rendered view of <code>" + escapeHtml(sourcePath) +
-    "</code>. This document is not under review.</p>";
+    "</code><br>This document is not under review.</p>";
 }
 
 /**
