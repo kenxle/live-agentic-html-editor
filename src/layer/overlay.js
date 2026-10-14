@@ -629,7 +629,7 @@
     // signifying success"): it is the plain card with the accent border. They
     // are washes over the card's paper, not fills: the reviewer's own sentence
     // stays the strongest thing on the card.
-    "--draft-wash:#fdf8ef;--draft-line:#ecdcbe;--handled-wash:#f1f8f4;--handled-line:#cee2d6;",
+    "--draft-wash:#fdf8ef;--draft-line:#ecdcbe;",
     // The reviewer's own chat bubble: the accent mixed into the card's paper,
     // opaque so it reads the same on a draft, a ready and a handled card.
     "--you-wash:color-mix(in srgb,var(--accent) 9%,var(--paper));",
@@ -654,7 +654,7 @@
     // same relationship to the card's paper, not the same numbers. A light tint
     // carried into dark reads as a lit panel; these are the dark paper with the
     // hue mixed into it.
-    "--draft-wash:#26221b;--draft-line:#3b3327;--handled-wash:#1a2420;--handled-line:#2a3d34;",
+    "--draft-wash:#26221b;--draft-line:#3b3327;",
     "--you-wash:color-mix(in srgb,var(--accent) 17%,var(--paper));",
     "--shadow:0 1px 2px rgba(0,0,0,.4),0 16px 40px rgba(0,0,0,.45)}",
     "*{box-sizing:border-box;margin:0;padding:0;font:inherit;color:inherit}",
@@ -879,10 +879,12 @@
     "box-shadow:0 1px 1px rgba(18,20,26,.03)}",
     // The state, in color. Draft is a quiet warm wash: unsent, and only the
     // reviewer can see it. Ready is the plain card with the accent border: sent,
-    // and not done yet. Handled is the one green card, because green means done.
+    // and not done yet. Handled is the plain card with the plain border: the
+    // green HANDLED chip says done. A green wash under the grey captions and
+    // grey agent bubbles made the two fight (Ken, 2026-10-14).
     ".card[data-state='draft']{background:var(--draft-wash);border-color:var(--draft-line)}",
     ".card[data-state='ready']{background:var(--paper);border-color:var(--accent)}",
-    ".card[data-state='handled']{background:var(--handled-wash);border-color:var(--handled-line)}",
+    ".card[data-state='handled']{background:var(--paper);border-color:var(--line)}",
     // HELD (docs/features/20260917.01_hold_toggle). Not a fifth meaning added to
     // the three colors above: green stays "handled", the warm wash stays
     // "draft", so held is neutral, built only from tokens this rail already

@@ -514,19 +514,17 @@
 
     // The unseen mark. A reply the agent flagged (or a question, or a refusal)
     // that folded while the reviewer was looking at another tab is the only
-    // sign they get that an answer arrived, so the card carries one: an accent
-    // rule down its left edge, drawn as an inset shadow
-    // so it costs the card no layout and cannot fight the border a question
-    // sets. Deliberately calmer than the question block above: a question is a
-    // stop, and this is a "there is something here". If the same card is both,
-    // the question treatment is the one that reads.
+    // sign they get that an answer arrived, so the card carries one: its own
+    // border, on all four sides, turns the accent color. Not a stripe down the
+    // left edge: Ken (2026-10-14) called that one-sided colored edge, curving
+    // round the card's corner, slop. It costs no layout, and a card that is
+    // also a question already wears the same accent border.
     //
     // The mark OUTLIVES the badge by one visit. Opening the tab clears the
     // count, and the cards that were unread when the reviewer got there keep
     // this rule until they leave the tab. Otherwise the badge says four and the
     // tab it sends them to has no way of saying which four.
-    ".card[" + UNSEEN_ATTR + "='true']{box-shadow:inset 3px 0 0 0 var(--accent)}",
-    ".card[" + UNSEEN_ATTR + "='true'][" + ASKING_ATTR + "='true']{box-shadow:none}"
+    ".card[" + UNSEEN_ATTR + "='true']{border-color:var(--accent)}"
   ].join("");
 
   // ---------------------------------------------------------------------------

@@ -146,6 +146,7 @@ function readCards(page, ids) {
       scheme: root.host.getAttribute("data-lahe-scheme"),
       paper: resolve("--paper"),
       accent: resolve("--accent"),
+      line: resolve("--line"),
       warn: resolve("--warn"),
       tokenPaper: tokens.getPropertyValue("--paper").trim()
     };
@@ -808,11 +809,11 @@ test.describe("the rail says whether anything has come back", () => {
 
         expect(c.fresh.background, label + ": ready is the plain card surface").toBe(c.paper);
         expect(c.fresh.border, label + ": with the accent border").toBe(c.accent);
-        const ready = rgb(c.fresh.background);
-        const done = rgb(c.handled.background);
-        expect(done.g - ready.g, label + ": handled is the green one").not.toBe(0);
-        expect(done.g - done.r, label + ": handled is green").toBeGreaterThanOrEqual(3);
-        expect(c.handled.background, label + ": and ready is not").not.toBe(c.fresh.background);
+        // Ken, 2026-10-14: the green wash on a handled card fought the grey
+        // text on it. Handled is the plain card with the plain border; the
+        // green HANDLED chip says done. So no card here is a green wash.
+        expect(c.handled.background, label + ": handled is the plain card surface").toBe(c.paper);
+        expect(c.handled.border, label + ": with the plain border, not the accent").toBe(c.line);
 
         expect(c.late.border, label + ": late wears the amber border").toBe(c.warn);
         expect(c.late.background, label + ": late is not the draft's wash").not.toBe(c.draft.background);

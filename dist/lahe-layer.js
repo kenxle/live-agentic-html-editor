@@ -1,6 +1,6 @@
 /*
  * live-agentic-html-editor review layer
- * version 0.3.0+273ee3129958
+ * version 0.3.0+5c50477b6d82
  *
  * GENERATED FILE. Do not edit. Edit the sources under src/ and run
  *   npm run build:layer
@@ -12,7 +12,7 @@
   "use strict";
   var g = typeof globalThis !== "undefined" ? globalThis : window;
   g.LAHE = g.LAHE || {};
-  g.LAHE.version = "0.3.0+273ee3129958";
+  g.LAHE.version = "0.3.0+5c50477b6d82";
 })();
 /* ---- src/shared/markers.js  (owner: 0A-kernel) ---- */
 // Markers: the attribute and class names that identify DOM the tool added.
@@ -19785,7 +19785,7 @@
     // signifying success"): it is the plain card with the accent border. They
     // are washes over the card's paper, not fills: the reviewer's own sentence
     // stays the strongest thing on the card.
-    "--draft-wash:#fdf8ef;--draft-line:#ecdcbe;--handled-wash:#f1f8f4;--handled-line:#cee2d6;",
+    "--draft-wash:#fdf8ef;--draft-line:#ecdcbe;",
     // The reviewer's own chat bubble: the accent mixed into the card's paper,
     // opaque so it reads the same on a draft, a ready and a handled card.
     "--you-wash:color-mix(in srgb,var(--accent) 9%,var(--paper));",
@@ -19810,7 +19810,7 @@
     // same relationship to the card's paper, not the same numbers. A light tint
     // carried into dark reads as a lit panel; these are the dark paper with the
     // hue mixed into it.
-    "--draft-wash:#26221b;--draft-line:#3b3327;--handled-wash:#1a2420;--handled-line:#2a3d34;",
+    "--draft-wash:#26221b;--draft-line:#3b3327;",
     "--you-wash:color-mix(in srgb,var(--accent) 17%,var(--paper));",
     "--shadow:0 1px 2px rgba(0,0,0,.4),0 16px 40px rgba(0,0,0,.45)}",
     "*{box-sizing:border-box;margin:0;padding:0;font:inherit;color:inherit}",
@@ -20035,10 +20035,12 @@
     "box-shadow:0 1px 1px rgba(18,20,26,.03)}",
     // The state, in color. Draft is a quiet warm wash: unsent, and only the
     // reviewer can see it. Ready is the plain card with the accent border: sent,
-    // and not done yet. Handled is the one green card, because green means done.
+    // and not done yet. Handled is the plain card with the plain border: the
+    // green HANDLED chip says done. A green wash under the grey captions and
+    // grey agent bubbles made the two fight (Ken, 2026-10-14).
     ".card[data-state='draft']{background:var(--draft-wash);border-color:var(--draft-line)}",
     ".card[data-state='ready']{background:var(--paper);border-color:var(--accent)}",
-    ".card[data-state='handled']{background:var(--handled-wash);border-color:var(--handled-line)}",
+    ".card[data-state='handled']{background:var(--paper);border-color:var(--line)}",
     // HELD (docs/features/20260917.01_hold_toggle). Not a fifth meaning added to
     // the three colors above: green stays "handled", the warm wash stays
     // "draft", so held is neutral, built only from tokens this rail already
@@ -29360,19 +29362,17 @@
 
     // The unseen mark. A reply the agent flagged (or a question, or a refusal)
     // that folded while the reviewer was looking at another tab is the only
-    // sign they get that an answer arrived, so the card carries one: an accent
-    // rule down its left edge, drawn as an inset shadow
-    // so it costs the card no layout and cannot fight the border a question
-    // sets. Deliberately calmer than the question block above: a question is a
-    // stop, and this is a "there is something here". If the same card is both,
-    // the question treatment is the one that reads.
+    // sign they get that an answer arrived, so the card carries one: its own
+    // border, on all four sides, turns the accent color. Not a stripe down the
+    // left edge: Ken (2026-10-14) called that one-sided colored edge, curving
+    // round the card's corner, slop. It costs no layout, and a card that is
+    // also a question already wears the same accent border.
     //
     // The mark OUTLIVES the badge by one visit. Opening the tab clears the
     // count, and the cards that were unread when the reviewer got there keep
     // this rule until they leave the tab. Otherwise the badge says four and the
     // tab it sends them to has no way of saying which four.
-    ".card[" + UNSEEN_ATTR + "='true']{box-shadow:inset 3px 0 0 0 var(--accent)}",
-    ".card[" + UNSEEN_ATTR + "='true'][" + ASKING_ATTR + "='true']{box-shadow:none}"
+    ".card[" + UNSEEN_ATTR + "='true']{border-color:var(--accent)}"
   ].join("");
 
   // ---------------------------------------------------------------------------
@@ -52188,7 +52188,7 @@
   "use strict";
 
   // Replaced by scripts/build-layer.js at concatenation time.
-  var VERSION = "0.3.0+273ee3129958";
+  var VERSION = "0.3.0+5c50477b6d82";
 
   var protocol = ns.protocol;
   var record = ns.record;
