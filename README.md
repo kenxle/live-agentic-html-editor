@@ -8,7 +8,7 @@
 [![Agents: Claude Code, Codex, Antigravity](https://img.shields.io/badge/agents-Claude%20Code%20%7C%20Codex%20%7C%20Antigravity-8A7CFF.svg)](#which-agents-this-works-with)
 [![Formats: HTML and Markdown](https://img.shields.io/badge/formats-HTML%20%7C%20Markdown-orange.svg)](#features)
 
-![The Steady Thread home page under review, with a threaded exchange in the rail: a reviewer note, the agent's question, the answer, and the agent's fix](docs/images/hero-thread.jpg)
+![A Markdown plan under review, with a threaded exchange in the rail: a reviewer note, the agent's question, the answer, and the agent's fix, already showing on the page](docs/images/hero-thread.jpg)
 
 ## Why
 
