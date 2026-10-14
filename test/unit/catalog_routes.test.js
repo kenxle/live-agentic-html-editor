@@ -12,6 +12,9 @@
 
 "use strict";
 
+// The helper under test never opens a real Terminal window for a launch.
+process.env.LAHE_DIRECT_LAUNCH = "off";
+
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");

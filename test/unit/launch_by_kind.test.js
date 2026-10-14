@@ -5,10 +5,14 @@
 // A launched agent's first prompt is the Library's hand-off message: take the
 // document's session over. A legacy review has no session, so that message
 // told the new agent to go find one in `lahe session list` and take it over:
-// a session nobody pointed at. A worktree row's session serves a folder that
-// is gone. So Launch is refused on legacy and worktree rows, on the page and
-// in the API, with a reason; the drain carries no hand-off for them; and the
-// page offers no hand-off message to copy for them.
+// a session nobody pointed at. So Launch is refused on a legacy row, on the
+// page and in the API, with a reason; the drain carries no hand-off for it;
+// and the page offers no hand-off message to copy for it.
+//
+// A worktree row's session is real; only its folder is gone. Since the
+// helper's direct launch (catalog_launch.js), Launch works there when the
+// reader found a main-repo copy: the hand-off tells the new agent to serve
+// that copy after the takeover.
 
 const test = require("node:test");
 const assert = require("node:assert/strict");
@@ -26,7 +30,7 @@ const vm = require("../../src/layer/catalog/view_model.js");
 const fixture = require("../fixtures/catalog_state.js");
 
 const LIST = require(path.join(__dirname, "..", "fixtures", "catalog_list.json"));
-const NO_TAKEOVER = ["r_legacy", "r_wt_gone"];
+const NO_TAKEOVER = ["r_legacy"];
 
 function rowsOf(view) {
   const rows = [];
@@ -82,6 +86,17 @@ test("page: a static row still offers Launch", () => {
   assert.equal(row.buttons.launch.reason, null);
 });
 
+test("page: a worktree row offers Launch, and its hand-off names its session, never a hunt", () => {
+  const row = viewRow(null, "r_wt_gone");
+  assert.equal(row.buttons.launch.enabled, true);
+  assert.equal(row.buttons.launch.reason, null);
+  const list = JSON.parse(JSON.stringify(LIST));
+  list.attached = null;
+  const open = viewRow((s) => vm.withPanel(s, "r_wt_gone", "no_agent"), "r_wt_gone", list);
+  assert.equal(typeof open.panel.message, "string");
+  assert.equal(mentionsSessionHunt(open), false);
+});
+
 function actionsFor(installed) {
   const queue = catalogRequests.createQueue({ dir: installed.dir });
   const reader = catalogReader.createReader(Object.assign({
@@ -122,7 +137,7 @@ test("PROTO_NO_LAUNCH is a known failure with a remedy the page can show", () =>
   assert.equal(protocol.statusFor("PROTO_NO_LAUNCH"), 409);
 });
 
-test("drain: a launch already queued on the legacy or worktree row carries no hand-off", async () => {
+test("drain: a launch queued on the legacy row carries no hand-off; the worktree row's names its session and the copy to serve", async () => {
   const installed = fixture.install();
   const store = agentSessions.createStore({ dir: installed.dir });
   store.create({ id: "s_library" });
@@ -142,12 +157,16 @@ test("drain: a launch already queued on the legacy or worktree row carries no ha
   const entries = lines[lines.length - 1].catalog_requests;
   assert.equal(entries.length, 2);
   for (const entry of entries) {
-    assert.equal(entry.handoff, null, entry.review + ": " + entry.handoff);
     assert.equal(mentionsSessionHunt(entry), false);
+    if (entry.review === "r_legacy") assert.equal(entry.handoff, null, "legacy: " + entry.handoff);
+    else {
+      assert.match(entry.handoff, /lahe session takeover s_ops /);
+      assert.match(entry.handoff, /lahe review \S+\/docs\/brief\.html --session s_ops/);
+    }
   }
 });
 
-test("every copy of the agent instructions says a launch on a legacy or worktree row is refused", () => {
+test("every copy of the agent instructions says the helper launches on a Mac and a legacy row is refused", () => {
   const rf = require("../../src/shared/review_format.js");
   const root = path.join(__dirname, "..", "..");
   const copies = {
@@ -156,6 +175,7 @@ test("every copy of the agent instructions says a launch on a legacy or worktree
     contracts_md: fs.readFileSync(path.join(root, "docs", "CONTRACTS.md"), "utf8")
   };
   for (const [name, text] of Object.entries(copies)) {
-    assert.match(text, /A launch request is only for a static row/, name);
+    assert.match(text, /On a Mac the helper opens the Terminal window itself/, name);
+    assert.match(text, /The Library refuses a launch on a legacy row/, name);
   }
 });

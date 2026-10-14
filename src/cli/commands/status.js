@@ -55,6 +55,7 @@ var healModule = require("../../service/heal.js");
 var staticServersModule = require("../../service/static_servers.js");
 var catalogRequestsModule = require("../../service/catalog_requests.js");
 var catalogReaderModule = require("../../service/catalog_reader.js");
+var catalogLaunch = require("../../service/catalog_launch.js");
 var catalogSitesModule = require("../../service/catalog_sites.js");
 var sitesModule = require("../../service/sites.js");
 var markdownModule = require("../../service/markdown.js");
@@ -734,114 +735,30 @@ function readerDescriber(dir, nowMs) {
     // gets the project folder for those rows too.
     if (!reader) reader = catalogReaderModule.createReader({ dir: dir, pages: sitePages(dir, readyOf(dir)).tools });
     var described = reader.describeReview(request.review, nowMs);
-    var sessionId = request.session;
     var name = null;
     try {
-      var session = sessions.read(sessionId);
+      var session = sessions.read(request.session);
       // Never a name read off a page's title: this is a new agent's first prompt.
       name = agentSessionsModule.handoffName(session);
     } catch (err) {
       name = null;
     }
-    // "legacy" is not a session anybody can take over; the message then points
-    // the new agent at `lahe session list` instead.
-    var takeable = protocol.isSafeId(sessionId) && sessionId !== agentSessionsModule.LEGACY_ID;
-    // A legacy or worktree row has no session a new agent could take over, so
-    // it gets no hand-off at all: never one that sends a new agent to
-    // `lahe session list` to pick a session nobody named (adversary fixes).
-    var noTakeover = !described || described.kind === "legacy" || described.kind === "worktree";
     return {
       kind: described ? described.kind : null,
       origin: described && described.origin ? described.origin : null,
       title: described ? described.display_name : null,
       path: described ? described.path : null,
       candidate: described ? described.candidate : null,
-      folder: described ? projectFolder(launchRoot(described)) : null,
+      folder: described ? catalogLaunch.projectFolder(catalogLaunch.launchRoot(described)) : null,
       // The rail's hand-off message in its Library form: take-over wording,
-      // with the real --state-dir when it is not the default.
-      handoff: noTakeover ? null : protocol.AGENT_LIVENESS.handoffMessage(takeable ? sessionId : null, takeable ? name : null, false, {
-        library: true,
-        stateDir: stateDirModule.flagFor(dir),
-        request: request.id
-      })
+      // with the real --state-dir when it is not the default. Null for a row
+      // with no session to take over (catalog_launch.handoffFor).
+      handoff: catalogLaunch.handoffFor(dir, described, request, name)
     };
   };
 }
 
-/**
- * Where the launch folder is looked for, from records a page cannot write:
- * a static row's site root, a worktree row's candidate
- * (itself derived from that root), a legacy row's document only when it holds
- * the review's own script line. meta.json's source_path and target_path are
- * page text (review.write records them), so they never name the folder.
- */
-function launchRoot(described) {
-  if (described.kind === "static") {
-    // Served by the helper: the site's root, which the registry or an old
-    // page-server record vouched for (catalog_sites.planOf). A notes site's
-    // root is its one page, so the folder is the one it sits in.
-    var site = described.site;
-    if (site && !site.worktree && typeof site.root === "string" && site.root) {
-      return site.mode === "page-only" ? path.dirname(site.root) : site.root;
-    }
-    return null;
-  }
-  if (described.kind === "worktree") return described.candidate || null;
-  if (described.kind === "legacy") return described.verified_path || null;
-  return null;
-}
-
 var DESCRIBED_FIELDS = ["kind", "origin", "title", "path", "candidate", "folder", "handoff"];
-
-/** The home folder as given and by real path, so either spelling stops the walk. */
-function homeFolders() {
-  var home = os.homedir();
-  if (!home) return [];
-  var out = [path.resolve(home)];
-  try {
-    var real = fs.realpathSync(home);
-    if (out.indexOf(real) === -1) out.push(real);
-  } catch (err) {
-    // a home folder that is not there stops nothing extra
-  }
-  return out;
-}
-
-/**
- * The folder a launched agent starts in: the repository that holds the
- * document (the nearest folder with a .git, below the home folder), else the
- * document's own folder.
- * Null for no path, or for a folder with a control character in it, which the
- * Launch steps could not read back as one line.
- */
-function projectFolder(docPath) {
-  if (typeof docPath !== "string" || !docPath) return null;
-  var start = docPath;
-  while (!fs.existsSync(start)) {
-    var up = path.dirname(start);
-    if (up === start) return null;
-    start = up;
-  }
-  try {
-    if (!fs.statSync(start).isDirectory()) start = path.dirname(start);
-  } catch (err) {
-    return null;
-  }
-  var found = start;
-  // The walk stops at the home folder: a dotfiles repository in ~ is never a
-  // document's project, and a new agent must not start there.
-  var homes = homeFolders();
-  for (var current = start; ; current = path.dirname(current)) {
-    if (homes.indexOf(current) !== -1) break;
-    if (fs.existsSync(path.join(current, ".git"))) {
-      found = current;
-      break;
-    }
-    if (path.dirname(current) === current) break;
-  }
-  // eslint-disable-next-line no-control-regex
-  return /[\u0000-\u001f\u007f]/.test(found) ? null : found;
-}
 
 /** The other reviews in the document's session: they move with a takeover. */
 function movesWith(dir, request) {

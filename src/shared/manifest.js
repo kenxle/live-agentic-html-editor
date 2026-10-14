@@ -291,6 +291,11 @@ var NON_BUNDLE_FILES = [
     why: "the helper-written request queue, catalog-requests.jsonl: append, answer, expire, pending"
   },
   {
+    path: "src/service/catalog_launch.js",
+    owner: "Library direct launch",
+    why: "the helper opening a new Terminal window running the agent's command line for Launch a new agent, with no shell string; the launch folder and the hand-off message the drain and the helper both build from"
+  },
+  {
     path: "src/service/catalog_actions.js",
     owner: "Library 2.1",
     why: "what list, open, star and request do after the checks, and the sweep of the Library's own idle sessions: joins the reader, store, queue and site tools"

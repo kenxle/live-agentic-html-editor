@@ -1035,10 +1035,10 @@ test("an expired launch after an attach change names both facts", () => {
   assert.equal(r.note.copyHandoff, true);
 });
 
-test("an expired launch on a worktree row offers no hand-off message: it has no session to take over", () => {
+test("an expired launch on a worktree row offers the hand-off message: its session is real, only its folder is gone", () => {
   const r = expiredRow("launch", "timeout");
   assert.equal(r.note.text, "No new agent was launched. document index didn't answer.");
-  assert.equal(r.note.copyHandoff, false);
+  assert.equal(r.note.copyHandoff, true);
 });
 
 // ---------------------------------------------------------------------------

@@ -501,26 +501,49 @@ test.describe("the Library page", () => {
     ]);
   });
 
-  test("Launch is disabled with its reason on a legacy and a worktree row; Pick this up stays", async ({ page }) => {
+  test("Launch is disabled with its reason on a legacy row; a worktree row and a static row keep it", async ({ page }) => {
     // The worktree row's session is watched by the Library's own agent in the
     // fixture, which hides its menu; nobody watches it here.
     const list = freshList();
     list.sessions.forEach((s) => { if (s.reviews.some((r) => r.id === "r_wt_gone")) s.watching = null; });
     await routeCatalog(page, { list: () => list });
     await openLibrary(page, helper);
-    for (const id of ["r_legacy", "r_wt_gone"]) {
+    const legacy = rowLocator(page, "r_legacy");
+    await legacy.locator('[data-act="menu"]').click();
+    await expect(legacy.locator('[data-act="pickup"]')).toBeEnabled();
+    const launch = legacy.locator('[data-act="launch"]');
+    await expect(launch).toBeDisabled();
+    await expect(launch).toHaveAttribute("title", /no session for a new agent to take over/);
+    await page.keyboard.press("Escape");
+    // A worktree row's session is real: its new agent serves the main-repo copy.
+    for (const id of ["r_wt_gone", "r_mounted"]) {
       const row = rowLocator(page, id);
       await row.locator('[data-act="menu"]').click();
-      await expect(row.locator('[data-act="pickup"]')).toBeEnabled();
-      const launch = row.locator('[data-act="launch"]');
-      await expect(launch).toBeDisabled();
-      await expect(launch).toHaveAttribute("title", /no session for a new agent to take over/);
+      await expect(row.locator('[data-act="launch"]')).toBeEnabled();
       await page.keyboard.press("Escape");
     }
-    // A static row keeps Launch.
-    const mounted = rowLocator(page, "r_mounted");
-    await mounted.locator('[data-act="menu"]').click();
-    await expect(mounted.locator('[data-act="launch"]')).toBeEnabled();
+  });
+
+  test("with direct launch and no agent, the header says Launch still works and Launch posts the request", async ({ page }) => {
+    const list = freshList();
+    list.attached = null;
+    list.launch = { direct: true, host: "claude" };
+    list.sessions.forEach((s) => { s.watching = null; });
+    const calls = await routeCatalog(page, {
+      list: () => list,
+      answers: {
+        "catalog.request": async () => ({ status: 200, body: { request_id: "cq_1111111111111111", launched: true, text: "Launched claude in a new Terminal window." } })
+      }
+    });
+    await openLibrary(page, helper);
+    await expect(page.locator("#lahe-catalog-agent")).toHaveText(
+      "No agent attached. Open and Launch a new agent still work; Pick this up gives you a message to paste."
+    );
+    await handTo(page, "r_mounted", "launch");
+    await expect(rowLocator(page, "r_mounted").locator(".lib-note")).toHaveText("Launched claude in a new Terminal window.");
+    const posted = calls.filter((c) => c.name === "catalog.request");
+    expect(posted.length).toBe(1);
+    expect(posted[0].body).toEqual({ review: "r_mounted", action: "launch", confirmed: false });
   });
 
   test("the header says no agent attached when the attached session is closed", async ({ page }) => {

@@ -45,6 +45,11 @@
     AGENT_ATTACHED: "Hand-overs go to: {agent}",
     AGENT_NONE: "No agent attached. Open still works; hand-overs give you a message to paste.",
     AGENT_STOPPED: "{agent} is attached but has stopped watching. Open still works; hand-overs give you a message to paste.",
+    // On a Mac the helper opens the new Terminal window itself, so Launch a
+    // new agent needs no attached agent (catalog_launch.js).
+    AGENT_NONE_DIRECT: "No agent attached. Open and Launch a new agent still work; Pick this up gives you a message to paste.",
+    AGENT_STOPPED_DIRECT: "{agent} is attached but has stopped watching. Open and Launch a new agent still work; Pick this up gives you a message to paste.",
+    LAUNCHING: "Opening a new Terminal window.",
     WAITING: "Waiting for {agent}.",
     ALREADY_WAITING: "Already waiting for {agent}.",
     // The helper queued nothing: the attached agent already owns or watches
@@ -81,7 +86,6 @@
     // A launched agent takes the document's session over. These rows have
     // none to take, so Launch is off and no hand-off message is offered.
     LAUNCH_NO_SESSION_LEGACY: "This review is from before sessions, so there is no session for a new agent to take over. Pick this up has the attached agent serve it.",
-    LAUNCH_NO_SESSION_WORKTREE: "The worktree is gone, so there is no session for a new agent to take over. Pick this up has the attached agent serve the main repository's copy.",
     PANEL_NO_SESSION: "This document has no session a new agent could take over, so there is no hand-off message. Attach an agent with lahe library, then choose Pick this up.",
     DEV_SERVER_NO_HANDOFF: "An app's dev server serves this page, so no agent can take it from here. Start the dev server and open the page yourself.",
     SEARCH_PLACEHOLDER: "Search titles, files, folders, sessions",
@@ -165,6 +169,7 @@
     UNKNOWN_ERROR: "Something went wrong.",
     CONFIRM_TITLE: "Another agent is on this session.",
     CONFIRM_BODY: '"{name}" belongs to session "{session}". Handing it to {agent} moves the whole session and stops the other agent.',
+    CONFIRM_BODY_LAUNCH: '"{name}" belongs to session "{session}". A new agent takes the whole session over and stops the other agent.',
     CONFIRM_MOVES: "These reviews move with it:",
     CONFIRM_MOVE: "Move the session",
     CONFIRM_READ: "Just open it to read",
@@ -444,17 +449,24 @@
     return { session: a.session, name: agentLabel(a) };
   }
 
+  /** Does the helper open the new Terminal window itself (a Mac)? */
+  function directLaunch(list) {
+    return !!(list && list.launch && list.launch.direct === true);
+  }
+
   function agentHeader(list) {
     var a = list && list.attached;
+    var direct = directLaunch(list);
+    var none = direct ? TEXT.AGENT_NONE_DIRECT : TEXT.AGENT_NONE;
     // A closed attached session is no agent at all, not one that stopped.
-    if (a && a.closed === true) return { attached: false, text: TEXT.AGENT_NONE };
+    if (a && a.closed === true) return { attached: false, text: none };
     if (a && a.session && a.watching !== false) {
       return { attached: true, text: fill(TEXT.AGENT_ATTACHED, { agent: agentLabel(a) }) };
     }
     if (a && a.session) {
-      return { attached: false, text: fill(TEXT.AGENT_STOPPED, { agent: agentLabel(a) }) };
+      return { attached: false, text: fill(direct ? TEXT.AGENT_STOPPED_DIRECT : TEXT.AGENT_STOPPED, { agent: agentLabel(a) }) };
     }
-    return { attached: false, text: TEXT.AGENT_NONE };
+    return { attached: false, text: none };
   }
 
   function handoffFor(session, list) {
@@ -652,9 +664,11 @@
     if (devServer && !missing) notices.push({ text: TEXT.DEV_SERVER_NO_HANDOFF, tone: "quiet" });
 
     var handEnabled = !missing && !devServer;
-    var noSession = review.kind === "legacy" || review.kind === "worktree";
-    var launchReason = review.kind === "legacy" ? TEXT.LAUNCH_NO_SESSION_LEGACY
-      : review.kind === "worktree" ? TEXT.LAUNCH_NO_SESSION_WORKTREE : null;
+    // A legacy review has no session a new agent could take over. A worktree
+    // row's session is real: the new agent takes it over and serves the main
+    // repository's copy (the helper refuses when no copy passes its checks).
+    var noSession = review.kind === "legacy";
+    var launchReason = review.kind === "legacy" ? TEXT.LAUNCH_NO_SESSION_LEGACY : null;
     if (note && noSession) note = assign({}, note, { copyHandoff: false });
     var buttons = {
       open: { label: TEXT.OPEN, enabled: !missing && !(viaAgent && !agent), busy: isOpening(state, review.id) },
@@ -922,7 +936,8 @@
     if (!d) return null;
     var found = findReview(list, d.review);
     var agent = liveAgent(list);
-    if (!found || !agent) return null;
+    var direct = d.action === "launch" && directLaunch(list);
+    if (!found || (!agent && !direct)) return null;
     var others = found.session.reviews
       .filter(function (r) {
         return r.id !== d.review;
@@ -930,10 +945,10 @@
       .map(function (r) {
         return r.display_name || r.id;
       });
-    var body = fill(TEXT.CONFIRM_BODY, {
+    var body = fill(direct ? TEXT.CONFIRM_BODY_LAUNCH : TEXT.CONFIRM_BODY, {
       name: found.review.display_name || found.review.id,
       session: sessionTitle(found.session),
-      agent: agent.name
+      agent: agent ? agent.name : ""
     });
     if (others.length) body += " " + TEXT.CONFIRM_MOVES;
     // What is known about the other agent, and what is waiting on it.
@@ -1184,6 +1199,14 @@
       };
     }
 
+    if (action === "launch" && directLaunch(list)) {
+      // The helper opens the window itself. Anyone listening on the
+      // document's session still gets the confirm step: the new agent's
+      // takeover would cut them off.
+      if (waiting) return already;
+      if (found.session.watching && !options.confirmed) return { kind: "confirm", review: reviewId, action: action };
+      return { kind: "request", review: reviewId, body: { review: reviewId, action: action, confirmed: !!options.confirmed } };
+    }
     if (action === "pickup" || action === "launch") {
       if (!agent) return { kind: "handoff", review: reviewId, reason: "no_agent" };
       if (waiting) return already;
@@ -1312,6 +1335,16 @@
     var out = clearRow(state, reviewId);
     if (!result || !result.ok) return refused(out, list, reviewId, action, result || { unreachable: true }, now);
     var agent = liveAgent(list);
+    // The helper launched (or could not) and answered on the spot: the row
+    // shows its words, and the next poll reads the same from the queue.
+    if (result.body && typeof result.body.launched === "boolean") {
+      return withNote(out, reviewId, {
+        kind: result.body.launched ? "launched" : "error",
+        text: result.body.text || TEXT.LAUNCHING,
+        tone: result.body.launched ? "ok" : "warn",
+        requestId: result.body.request_id || null
+      }, now);
+    }
     if (result.body && result.body.request_id === null) {
       return withNote(out, reviewId, {
         kind: "has",
