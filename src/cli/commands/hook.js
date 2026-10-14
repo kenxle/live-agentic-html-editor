@@ -272,7 +272,8 @@ function blockReason(sessions, timeoutMs) {
     timeoutMs + ":\n\n" +
     commands.join("\n") + "\n\n" +
     (commands.length === 1 ? "Run only that one command" : "Run only those commands") +
-    "; there is no need to drain or to message the reviewer first. " +
+    "; there is no need to message the reviewer first. " +
+    "If the watcher's last line said work is waiting and you have not drained since, drain first: the new watcher waits on work it already woke you for. " +
     "One launch waits until there is work, so add no timer or loop. " +
     (sessions.length === 1
       ? "If the human has said this review is over, close the session instead with lahe session close " +

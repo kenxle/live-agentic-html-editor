@@ -218,13 +218,13 @@ a timer, `/loop`, a scheduled wakeup, the Monitor tool, or a `tail` of your own.
 The timeout only matters in an unattended run (`-p`, the Agent SDK, CI, cloud),
 where the limit is real; there, relaunch when it is stopped.
 
-**It wakes you once per item.** The monitor remembers what it has printed to
-you. Relaunched while those items are still unanswered, it waits; it wakes on
+**It wakes you once per item.** The monitor remembers which items it woke you
+for. Relaunched while those items are still unanswered, it waits; it wakes on
 the first new item, a new revision of one, an ended review, or a Library
 request, and then prints one line naming the drain. So launch it again as soon as you have
 drained, even while you are still working an item (a CI run, a build): it will
 not exit on work you already have. The drain command is still the full list.
-After a takeover it starts fresh and prints everything unanswered.
+After a takeover it starts fresh and wakes you for everything unanswered.
 
 **A Stop hook reminds you when the watcher is down.** `npm run install-skills`
 installs `lahe hook stop` as a Claude Code Stop hook. When you try to end a turn

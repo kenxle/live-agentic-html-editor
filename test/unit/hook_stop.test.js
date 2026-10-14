@@ -330,7 +330,8 @@ test("the block reason is exactly the text the docs show", () => {
     "Lahe: nothing is watching your review session " + OURS + ", so the reviewer's next comment will go unanswered. " +
       "Before you end this turn, start the watcher again with the Bash tool, run_in_background true and timeout 86400000:\n\n" +
       "  lahe monitor --session " + OURS + "\n\n" +
-      "Run only that one command; there is no need to drain or to message the reviewer first. " +
+      "Run only that one command; there is no need to message the reviewer first. " +
+      "If the watcher's last line said work is waiting and you have not drained since, drain first: the new watcher waits on work it already woke you for. " +
       "One launch waits until there is work, so add no timer or loop. " +
       "If the human has said this review is over, close the session instead with lahe session close " + OURS + ". " +
       "If the session is not yours, say so in one line and end your turn."
