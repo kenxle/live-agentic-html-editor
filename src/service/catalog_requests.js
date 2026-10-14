@@ -58,6 +58,11 @@ var EXPIRY_REASON = { ATTACH_CHANGED: "attach_changed", MONITOR_DEAD: "monitor_d
 var STATE = { WAITING: "waiting", DONE: "done", REFUSED: "refused", EXPIRED: "expired" };
 // The documented key set of a request line, in the order it is written.
 var REQUEST_KEYS = ["id", "at", "action", "review", "session", "for"];
+// A launch the helper ran itself (catalog_launch.js) is `for` the helper, not
+// an agent: no attach change or dead monitor expires it, only the timeout.
+// Its answer is the helper's too. The name the row shows for it is below.
+var LAUNCHER_FOR = "helper";
+var LAUNCHER_NAME = "the Library";
 var ATTACH_SCHEMA = 1;
 
 function iso(nowMs) {
@@ -245,8 +250,10 @@ function createQueue(options) {
 
   /** Why a pending request has expired at `nowMs`, or null when it has not. */
   function expiryReason(request, nowMs, attach) {
-    if (!attach || attach.session !== request.for) return EXPIRY_REASON.ATTACH_CHANGED;
-    if (!listening(request.for, nowMs)) return EXPIRY_REASON.MONITOR_DEAD;
+    if (request.for !== LAUNCHER_FOR) {
+      if (!attach || attach.session !== request.for) return EXPIRY_REASON.ATTACH_CHANGED;
+      if (!listening(request.for, nowMs)) return EXPIRY_REASON.MONITOR_DEAD;
+    }
     var at = Date.parse(request.at);
     if (Number.isNaN(at) || nowMs - at >= C.REQUEST_EXPIRY_MS) return EXPIRY_REASON.TIMEOUT;
     return null;
@@ -347,8 +354,29 @@ function createQueue(options) {
     return { ok: true, answer: line, request: found.request };
   }
 
+  /**
+   * Does this request confirm a takeover of `sessionId`? It does while it is
+   * pending for an agent, and, for a launch the helper ran itself, until the
+   * request's own expiry: the helper answers its launch the moment the
+   * Terminal window opens, and the new agent's takeover comes after.
+   */
+  function confirms(requestId, sessionId, nowMs) {
+    if (!protocol.isSafeId(requestId)) return false;
+    var found = null;
+    resolve(nowMs).forEach(function (entry) {
+      if (entry.request.id === requestId) found = entry;
+    });
+    if (!found || found.request.session !== sessionId) return false;
+    if (ACTIONS.indexOf(found.request.action) === -1) return false;
+    if (found.state === STATE.WAITING) return true;
+    if (found.request.for !== LAUNCHER_FOR || found.state !== STATE.DONE) return false;
+    var at = Date.parse(found.request.at);
+    return !Number.isNaN(at) && nowMs - at < C.REQUEST_EXPIRY_MS;
+  }
+
   /** A session's display name for the Library row: its name, or its id. */
   function nameOf(sessionId) {
+    if (sessionId === LAUNCHER_FOR) return LAUNCHER_NAME;
     var session = readSession(sessionId);
     return (session && agentSessions.cleanName(session.name)) || sessionId;
   }
@@ -430,6 +458,7 @@ function createQueue(options) {
   return {
     append: append,
     answer: answer,
+    confirms: confirms,
     pending: pending,
     pendingFor: pendingFor,
     requestFor: requestFor,
@@ -446,6 +475,8 @@ module.exports = {
   EXPIRY_REASON: EXPIRY_REASON,
   STATE: STATE,
   REQUEST_KEYS: REQUEST_KEYS,
+  LAUNCHER_FOR: LAUNCHER_FOR,
+  LAUNCHER_NAME: LAUNCHER_NAME,
   writeAttach: writeAttach,
   readAttachRecord: readAttachRecord,
   createQueue: createQueue

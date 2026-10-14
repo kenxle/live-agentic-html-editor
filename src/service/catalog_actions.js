@@ -45,6 +45,7 @@ var stateDir = require("./state_dir.js");
 var agentSessions = require("./agent_sessions.js");
 var catalogRequests = require("./catalog_requests.js");
 var catalogSites = require("./catalog_sites.js");
+var catalogLaunch = require("./catalog_launch.js");
 
 var C = protocol.CATALOG;
 var DAY_MS = 24 * 60 * 60 * 1000;
@@ -58,7 +59,10 @@ function iso(ms) {
 }
 
 // Row kinds a new agent cannot be launched on: no session to take over.
-var NO_LAUNCH_KINDS = ["legacy", "worktree"];
+// A legacy review has no session a new agent could take over, so Launch is
+// refused there. A worktree row's session is real: Launch works when the
+// reader found a main-repo copy to serve (candidate), and is refused otherwise.
+var NO_LAUNCH_KINDS = ["legacy"];
 
 function fail(code, detail) {
   return { status: protocol.statusFor(code), error: { code: code, detail: detail === undefined ? null : detail } };
@@ -96,6 +100,9 @@ function createCatalogActions(options) {
   var uid = typeof opts.uid === "number" ? opts.uid : typeof process.getuid === "function" ? process.getuid() : null;
   var statFile = typeof opts.statFile === "function" ? opts.statFile : fs.statSync;
   var siteTools = opts.pages || catalogSites.readOnly(dir);
+  // The helper's own launcher (catalog_launch.js): on a Mac it opens the new
+  // Terminal window itself, so Launch needs no attached agent there.
+  var launcher = opts.launcher || catalogLaunch.createLauncher({ dir: dir, log: function (line) { log(line, Date.now()); } });
 
   // -------------------------------------------------------------------------
   // Shared steps
@@ -282,6 +289,9 @@ function createCatalogActions(options) {
     // The state directory when it is not the default one, else null, so the
     // Library's hand-off message can name it in the takeover command.
     body.state_dir = stateDir.flagFor(dir);
+    // Whether Launch a new agent works with no agent attached (the helper
+    // opens the Terminal window itself), and which host it runs.
+    body.launch = launcher.describe();
     return { status: 200, body: body };
   }
 
@@ -390,11 +400,13 @@ function createCatalogActions(options) {
     // exactly as Open refuses it.
     if (d.openable === "missing") return fail("PROTO_NOT_OPENABLE", "missing");
     // A launched agent's first prompt takes the document's session over. A
-    // legacy review has no session, and a worktree row's session serves a
-    // folder that is gone, so a launch there would send a new agent hunting
-    // for a session nobody pointed at (adversary fixes). Pick this up serves
-    // those rows instead.
+    // legacy review has no session, so a launch there would send a new agent
+    // hunting for a session nobody pointed at (adversary fixes). A worktree
+    // row whose main-repo copy failed the checks has nothing to serve. Pick
+    // this up serves those rows instead.
     if (action === ACTION.LAUNCH && NO_LAUNCH_KINDS.indexOf(d.kind) !== -1) return fail("PROTO_NO_LAUNCH", d.kind);
+    if (action === ACTION.LAUNCH && d.kind === "worktree" && !d.candidate) return fail("PROTO_NO_LAUNCH", d.kind);
+    if (action === ACTION.LAUNCH && launcher.available()) return launchDirect(d, body, nowMs);
     var agent = liveAgent(nowMs);
     if (!agent) return fail("PROTO_NO_AGENT");
     // A pick-up of a served document the attached agent already has asks for
@@ -407,6 +419,56 @@ function createCatalogActions(options) {
     if (!queued.ok) return fail(queued.code, queued.detail);
     logAction(action === ACTION.LAUNCH ? protocol.CATALOG_LOG.ACTION.LAUNCH : protocol.CATALOG_LOG.ACTION.PICKUP, d, nowMs);
     return { status: 200, body: { request_id: queued.request.id } };
+  }
+
+  /**
+   * Launch a new agent from the helper itself (catalog_launch.js). The
+   * request is queued `for` the helper, so no agent's drain sees it and no
+   * attach change expires it; the helper answers it as soon as the window
+   * opens, and the new agent's takeover names it (`--request`), which the
+   * queue honors until the request's own expiry.
+   *
+   * Someone listening on the document's session still gets the confirm step:
+   * the new agent's takeover would cut them off.
+   */
+  async function launchDirect(d, body, nowMs) {
+    if (d.watching && body.confirmed !== true) return fail("PROTO_CONFIRM_NEEDED");
+    var appended = queue.append(
+      { action: ACTION.LAUNCH, review: d.review, session: d.session, for: catalogRequests.LAUNCHER_FOR },
+      nowMs
+    );
+    if (!appended.ok) {
+      if (appended.code === "PROTO_REQUEST_PENDING" || appended.code === "PROTO_QUEUE_FULL") return fail(appended.code);
+      return fail("PROTO_BAD_REQUEST", appended.message || "the request could not be queued");
+    }
+    var request = appended.request;
+    logAction(protocol.CATALOG_LOG.ACTION.LAUNCH, d, nowMs);
+    // The session is named after the document, as `lahe session name
+    // --from-review` names it: the cleaned, cut title, kept by the store.
+    var name = null;
+    try {
+      if (d.session !== agentSessions.LEGACY_ID) {
+        var current = sessions.read(d.session);
+        if (!agentSessions.cleanName(current.name)) sessions.setName(d.session, agentSessions.fitName(d.display_name), { source: agentSessions.NAME_SOURCE_PAGE });
+        name = agentSessions.handoffName(sessions.read(d.session));
+      }
+    } catch (err) {
+      name = null;
+    }
+    var handoff = catalogLaunch.handoffFor(dir, d, request, name);
+    if (!handoff) {
+      queue.answer({ id: request.id, by: catalogRequests.LAUNCHER_FOR, status: catalogRequests.ANSWER_STATUS.REFUSED, text: "No hand-off message for this row." }, nowMs);
+      return fail("PROTO_NO_LAUNCH", d.kind);
+    }
+    var folder = catalogLaunch.projectFolder(catalogLaunch.launchRoot(d));
+    var result = await launcher.launch(request, handoff, folder);
+    queue.answer({
+      id: request.id,
+      by: catalogRequests.LAUNCHER_FOR,
+      status: result.ok ? catalogRequests.ANSWER_STATUS.DONE : catalogRequests.ANSWER_STATUS.REFUSED,
+      text: result.text
+    }, nowMs);
+    return { status: 200, body: { request_id: request.id, launched: result.ok === true, text: result.text } };
   }
 
   // -------------------------------------------------------------------------

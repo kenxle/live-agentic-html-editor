@@ -470,17 +470,15 @@ function listLine(row, nowMs) {
 }
 
 /**
- * Is there a pending Library request (pickup or launch) with this id, asking
- * for this session? The same queue check add.js makes for --adopt.
+ * Is there a Library request (pickup or launch) with this id, asking for this
+ * session: pending for an agent, or a launch the helper ran itself and
+ * answered? The same queue check add.js makes for --adopt.
  */
 function confirmedByLibrary(dir, sessionId, requestId) {
   if (!protocol.isSafeId(requestId)) return false;
   try {
     var catalogRequests = require("../../service/catalog_requests.js");
-    return catalogRequests.createQueue({ dir: dir }).pending(Date.now()).some(function (request) {
-      return request.id === requestId && request.session === sessionId &&
-        catalogRequests.ACTIONS.indexOf(request.action) !== -1;
-    });
+    return catalogRequests.createQueue({ dir: dir }).confirms(requestId, sessionId, Date.now());
   } catch (err) {
     return false;
   }

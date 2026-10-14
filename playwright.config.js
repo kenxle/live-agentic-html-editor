@@ -1,3 +1,6 @@
+// A helper under test never opens a real Terminal window for Launch a new
+// agent (src/service/catalog_launch.js reads this).
+process.env.LAHE_DIRECT_LAUNCH = "off";
 // Playwright config.
 //
 // THREE LANES, ONE DEFAULT. The architecture's D1 makes cross-platform a product

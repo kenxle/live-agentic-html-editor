@@ -838,7 +838,7 @@ lahe monitor --session <your-session-id> --session <session>
 
 **Launch a new agent** (`action: launch`). Start one new agent, never more.
 Do not take the session over yourself: the new agent does that.
-A launch request is only for a static row: the Library refuses one on a legacy or worktree row, and if one reaches you anyway its handoff is null, so answer refused.
+On a Mac the helper opens the Terminal window itself, so a launch request reaches you only where it cannot (Linux or Windows). The Library refuses a launch on a legacy row, and on a worktree row with no main-repo copy; if one reaches you with a null handoff anyway, answer refused. A worktree row's hand-off tells the new agent to serve the main-repo copy after the takeover.
 
 On macOS, with a host that has a command line (`claude` for Claude Code,
 `codex` for Codex):

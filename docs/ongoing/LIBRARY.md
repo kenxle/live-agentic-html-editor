@@ -72,7 +72,9 @@ The flows are "Key Flows" in the architecture doc; the hand-over picture is the 
   - With an attached agent it also queues a pick-up.
   - A row nothing vouches for (legacy, dev server, a file Lahe cannot serve) is `via-agent`: Open queues a pick-up and the agent re-serves it.
   - A worktree row whose site recorded its main checkout opens the read-only copy (`worktree`, `openable: yes`). One the registry never saw is `worktree` and `via-agent`.
-- **Pick this up** and **Launch a new agent** queue a request for the agent attached with `lahe library`. Requests carry ids only.
+- **Pick this up** queues a request for the agent attached with `lahe library`. Requests carry ids only.
+- **Launch a new agent** opens a new Terminal window running `claude` (or `codex`, with `LAHE_LAUNCH_HOST=codex` in the helper's environment) in the document's project folder, with the hand-off message as its first prompt. On a Mac the helper does this itself (`src/service/catalog_launch.js`): it needs no attached agent, the request is queued `for` the helper so no agent's drain sees it, and the helper answers it the moment the window opens. The new agent's `lahe session takeover <session> --request <id>` is honored until that request's own expiry (`catalog_requests.confirms`). The command is fixed `osascript` arguments with no shell string; the message and folder go through files under `<state>/launches/`. On Linux or Windows the request goes to the attached agent as before, which follows the skill's recipe.
+  - Launch works on a static row and on a worktree row whose main-repo copy passed the reader's checks (the hand-off adds the `lahe review <copy> --session <session>` line). It is refused on a legacy row (no session to take over) and on a worktree row with no copy (`PROTO_NO_LAUNCH`).
 - **The confirm step.** When another agent is listening on, or working in, the document's session, the page asks first, naming that agent and the reviews that would move. The helper refuses an unconfirmed hand-over with `PROTO_CONFIRM_NEEDED`.
 
 ## The request queue

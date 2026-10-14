@@ -103,7 +103,8 @@ flowchart TD
     Agent -->|"pickup, pre-session or worktree row"| Serve["lahe library serve request:<br/>adopts a pre-session review into its own session,<br/>or serves the main-repo copy of a worktree"]
     Serve --> Answer
     Take --> Both["lahe monitor --session own<br/>--session doc-session"]
-    Agent -->|"launch"| Name["lahe session name doc-session<br/>--from-review review"]
+    Click -->|"Launch on a Mac: the helper itself,<br/>no agent needed"| Name["session named after the document;<br/>osascript opens the Terminal window"]
+    Agent -->|"launch, elsewhere"| Name
     Name --> NewAgent["new agent in a new Terminal window,<br/>given the hand-off message"]
     NewAgent --> Take2["it runs lahe session takeover doc-session --request id"]
     Both --> Answer["lahe library answer request<br/>done or refused"]
@@ -119,6 +120,10 @@ flowchart TD
   the primary, which is the name the Library shows as watching.
 - A takeover moves `handoff_rev`, so the request is delivered again to the
   agent that owns the session now.
+- On a Mac, Launch a new agent never waits for an agent: the helper opens the
+  Terminal window itself (`src/service/catalog_launch.js`), answers the
+  request at once, and the new agent's takeover names that request. See
+  `docs/ongoing/LIBRARY.md`.
 
 ## When the helper stops
 
