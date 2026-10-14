@@ -488,6 +488,7 @@ func stopAlert() -> NSAlert {
     alert.informativeText = StopConfirmation.detail
     alert.addButton(withTitle: StopConfirmation.confirm)
     alert.addButton(withTitle: StopConfirmation.cancel)
+    alert.icon = libraryIcon
     return alert
 }
 
@@ -546,6 +547,25 @@ func strokeMarkOutline(origin: CGPoint) {
     }
     shapes.last?.fill()
 }
+
+/// The Library page's tab icon in full color, for the Stop alert and the app's
+/// own icon: the dark rounded plate (rx 7 in the 32 unit viewBox), the white
+/// upright books and shelf, and the blue leaning book. 64 points, drawn by a
+/// handler, so it is sharp at any scale. Not a template: it keeps its colors.
+let libraryIcon: NSImage = {
+    let size: CGFloat = 64, unit = size / 32
+    return NSImage(size: NSSize(width: size, height: size), flipped: true) { _ in
+        NSColor(srgbRed: 0x23 / 255.0, green: 0x26 / 255.0, blue: 0x2b / 255.0, alpha: 1).setFill()
+        NSBezierPath(roundedRect: NSRect(x: 0, y: 0, width: size, height: size), xRadius: 7 * unit, yRadius: 7 * unit).fill()
+        let shapes = markShapes(scale: unit, origin: CGPoint(x: 5.5 * unit, y: 8 * unit))
+        let blue = NSColor(srgbRed: 0x5b / 255.0, green: 0x9b / 255.0, blue: 1, alpha: 1)
+        for (index, shape) in shapes.enumerated() {
+            (index == 2 ? blue : NSColor.white).setFill()
+            shape.fill()
+        }
+        return true
+    }
+}()
 
 /// The four looks as one template image, so macOS colors it for a light, dark
 /// or highlighted menu bar. The count (or "?") is part of the image, so the
@@ -1141,6 +1161,7 @@ final class MenuBarApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
     init(controller: Controller) { self.controller = controller }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        NSApp.applicationIconImage = libraryIcon  // the app has no .icns; anything the system shows for it uses this
         let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         menu.delegate = self
         menu.autoenablesItems = false
@@ -1667,7 +1688,9 @@ func selfTest(_ args: [String]) -> Int32 {
     // The icon: the Library mark, about 15 points tall, and each look drawn.
     let markBounds = markPath(scale: markScale, origin: .zero).bounds
     t.check(abs(markBounds.height - 15) < 0.01 && abs(markBounds.width - markWidth) < 0.01, "the mark is 15 points tall")
-    func inked(_ image: NSImage) -> Int {
+    /// Pixels drawn at 2x whose alpha is over half, and, given a color, whose
+    /// red, green and blue are each within 2/255 of it.
+    func inked(_ image: NSImage, _ color: (Int, Int, Int)? = nil) -> Int {
         guard let rep = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: Int(image.size.width * 2), pixelsHigh: Int(image.size.height * 2),
                                          bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true, isPlanar: false,
                                          colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0) else { return 0 }
@@ -1677,9 +1700,26 @@ func selfTest(_ args: [String]) -> Int32 {
         image.draw(in: NSRect(origin: .zero, size: image.size))
         NSGraphicsContext.restoreGraphicsState()
         var count = 0
-        for x in 0..<rep.pixelsWide { for y in 0..<rep.pixelsHigh where (rep.colorAt(x: x, y: y)?.alphaComponent ?? 0) > 0.5 { count += 1 } }
+        var pixel = [Int](repeating: 0, count: 4)
+        for x in 0..<rep.pixelsWide {
+            for y in 0..<rep.pixelsHigh {
+                rep.getPixel(&pixel, atX: x, y: y)
+                guard pixel[3] > 127 else { continue }
+                if let (r, g, b) = color, abs(pixel[0] - r) > 2 || abs(pixel[1] - g) > 2 || abs(pixel[2] - b) > 2 { continue }
+                count += 1
+            }
+        }
         return count
     }
+
+    // The Stop alert's icon: the Library page's tab icon in full color.
+    let alertIcon = stopAlert().icon
+    t.check(alertIcon != nil && alertIcon === libraryIcon, "the stop alert's icon is the Library icon")
+    t.check(libraryIcon.size.width == 64 && libraryIcon.size.height == 64, "the Library icon is 64 points square")
+    t.check(!libraryIcon.isTemplate, "the Library icon is not a template image")
+    t.check(inked(libraryIcon, (0x23, 0x26, 0x2b)) > 0, "the Library icon has its dark plate")
+    t.check(inked(libraryIcon, (0x5b, 0x9b, 0xff)) > 0, "the Library icon has its blue leaning book")
+    t.check(inked(libraryIcon, (0xff, 0xff, 0xff)) > 0, "the Library icon has its white books and shelf")
     let clearIcon = iconImage(.clear), threeIcon = iconImage(.count("3")), manyIcon = iconImage(.count("99+"))
     t.check(clearIcon.isTemplate && clearIcon.size.height == iconHeight, "the icon is an 18 point template image")
     t.check(threeIcon.size.width > clearIcon.size.width && manyIcon.size.width > threeIcon.size.width, "count is wider than clear, 99+ wider than 3")

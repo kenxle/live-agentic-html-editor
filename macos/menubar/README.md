@@ -88,7 +88,9 @@ on arm64. On an Intel Mac the target is `x86_64-apple-macosx13.0`.
   a crash, so it stays hidden until the next login or `lahe menubar show`.
 - **Stop Lahe** asks first, in an alert: "Stop Lahe?", then "Agents' lahe
   commands will fail until you start it again.", with Stop (the default) and
-  Cancel. There is no line under Stop in the menu. Only the click asks; the
+  Cancel, under the Library page's tab icon in full color (drawn in code; it
+  is also the app's icon image, since the bundle has no `.icns`). There is no
+  line under Stop in the menu. Only the click asks; the
   test build's `--action stop` stops at once. Once confirmed it writes
   `<state>/stopped.json` (`{"by": "menu bar", "at": ...}`) and then runs
   `launchctl bootout gui/<uid>/lahe-helper`. While the file
@@ -109,7 +111,7 @@ None needs a macOS permission.
 | Command | What it does |
 | --- | --- |
 | `--self-test [--vectors <file>] [--fixtures <dir>] [--decode <file>]...` | The allowlist, count formatting, the answer parser, every case in `test/fixtures/menubar/proof_vectors.json`, the menu's words and header looks on the three summary fixtures in `test/fixtures/menubar/` (both found under the current folder when not given), the Stop alert's words, the mark's size and each icon look's width and ink, and a decode of each captured summary. Exits 1 on any failure. |
-| `--snapshot <dir> [--summary <file>]...` | Each icon look on a light and a dark menu bar, as PNGs, and the Stop alert as `alert_stop_light.png` and `alert_stop_dark.png`. The alert is drawn from its own views without being shown; its frosted background does not draw offscreen, so the system window colour stands in for it, and a bare test build shows a folder where the app's icon would be. With summaries, also a drawing of the open menu for each, plus not running, stopped and "updated". The real menu cannot be captured without a screen recording permission, so the drawing is made from the same menu items the live menu builds, and reads each one's title and look back from the item. |
+| `--snapshot <dir> [--summary <file>]...` | Each icon look on a light and a dark menu bar, as PNGs, and the Stop alert as `alert_stop_light.png` and `alert_stop_dark.png`. The alert is drawn from its own views without being shown; its frosted background does not draw offscreen, so the system window colour stands in for it. With summaries, also a drawing of the open menu for each, plus not running, stopped and "updated". The real menu cannot be captured without a screen recording permission, so the drawing is made from the same menu items the live menu builds, and reads each one's title and look back from the item. |
 | `--dump-menu <summary.json>` | The menu built from that summary: titles, order, enabled state, tooltips, actions, and each row's style as the live menu draws it (`header`, `enabled`, `disabled`, `rule`), as JSON. |
 | `--dump-menu none --look <not-running\|stopped\|cant-tell\|updated>` | The menu for a look with no summary. |
 | `--watch --state-dir <dir>` | The real poll loop with no icon, printing one JSON line per change of look. Reads `wake`, `poll`, `polls` and `quit` from stdin; `wake` posts the system wake notification, and `polls` prints how many polls have run, sent or not. |
