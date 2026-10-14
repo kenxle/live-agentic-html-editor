@@ -1,10 +1,23 @@
 # Progress: Menu bar app
 
-**Where things are at 01:25 on October 14.** Done, landed, and running on your Mac. Your three design answers shipped as PR [#64](https://github.com/kenxle/live-agentic-html-editor/pull/64), merged at 00:48: Stop Lahe asks first, the icon is the Library's three books on a shelf, and Waiting on you stays uncapped. The icon was installed at 23:56; when main was pulled into your clone, the helper rebuilt the app from the new source and restarted it on its own about forty seconds later. The real menu bar shows the new mark (picture below). The full gate on merged main is green, and so is main's CI after one rerun of a flaky install test. **Still yours:** the proposed lesson to review, and the cleanup batch to approve.
+**Where things are at 11:05 on October 14.** Done, landed, and running on your Mac. Your note this morning about the stable addresses progress page is fixed in PR [#66](https://github.com/kenxle/live-agentic-html-editor/pull/66), merged at 11:03: the note on that page now puts each statement on its own line, and the dead row it left under Waiting on you is gone (details under Needs your attention). Your three design answers shipped earlier as PR [#64](https://github.com/kenxle/live-agentic-html-editor/pull/64): Stop Lahe asks first, the icon is the Library's three books on a shelf, and Waiting on you stays uncapped. **Still yours:** the proposed lesson to review, and the cleanup batch to approve.
 
 **Docs:** [Crucible](00_crucible_menu_bar_app.html) · [Brief](01_brief_menu_bar_app.html) · [Architecture](02_architecture_menu_bar_app.html) · [Plan](03_plan_menu_bar_app.html) (each page carries its reviews at the bottom) · [PR 2 reviews](05_pr2_reviews_menu_bar_app.md)
 
 ## Needs your attention
+
+**Your note on the stable addresses progress page (fixed, PR [#66](https://github.com/kenxle/live-agentic-html-editor/pull/66)).** That page's worktree was removed at cleanup, so its address shows the copy in the main checkout, read-only and without the rail. Three changes:
+
+- **One statement per line.** The note above such a page now reads like this (made-up paths):
+
+![The read-only note, one statement per line](screenshots/moved_note_light.png)
+
+- **It says how to edit.** It used to say "open it from the Library", which is where you came from. Open shows only this read-only copy. Now it says to choose **Hand to agent** in the Library: Pick this up gives it to the agent attached to the Library, and Launch a new agent works with none attached. Either way an agent serves this copy with its rail, and you can edit and comment.
+- **The dead row is gone from Waiting on you.** The agent's question lived in the old review, and no page could ever show that review's cards, so you could never mark it read. The menu bar already leaves out documents whose file is gone. A removed worktree's file counts as gone now too.
+
+On "it opened an md file": that is how the forge serves it. The progress page is the Markdown file, and Lahe renders it with the doc style and the rail. The forge's `.html` files are for the brief, architecture and plan. The rail was missing only because the worktree was gone.
+
+**Your call, only if you want it:** Open itself could give an editable copy, with no hand-off. The stable addresses design ruled that out on purpose: Open would put a review's key into a file nobody asked Lahe to review. Today, Hand to agent is the one-click way to edit. Say so on a card if you want Open to do it, and I'll build it.
 
 Still yours, neither urgent:
 
@@ -112,6 +125,7 @@ No passes yet.
 
 To delete at cleanup, in one batch with your go:
 
+- The `lahe-worktrees/readonly-note` worktree and its local branch `fix/readonly-note-lines` (PR #66 is merged; the remote branch is already deleted), with its `node_modules` symlink, its untracked `moved_note_dark.png` (a duplicate: the Markdown style has no dark look), and `.claude-commit202610141039`, `...1055`, `...1105` there.
 - Worktrees and branches: `lahe-worktrees/menu-bar-summary`, `menu-bar-macapp`, `menu-bar-install`, `menu-bar-pr2`, `main-gate`, and their branches (all three PRs are merged), plus the feature branch `feat/menu-bar` and its worktree last.
 - `node_modules` symlinks in the `menu-bar`, `menu-bar-summary`, `menu-bar-pr2`, `menu-bar-macapp` and `main-gate` worktrees.
 - `~/Documents/lahe-menubar-review/`: the 331 MB copy of your state folder, the test app build, the walk scripts and numbers, and the notes once they are no longer needed.
@@ -147,6 +161,7 @@ To delete at cleanup, in one batch with your go:
 
 ## Log
 
+- 2026-10-14 11:05: your card on the stable addresses progress page. PR [#66](https://github.com/kenxle/live-agentic-html-editor/pull/66): the read-only notes put one statement per line, the moved note names Hand to agent and links the Library, and the menu bar no longer counts a document whose worktree was removed. New unit test, red without the change. `npm run gate` on `fb771df4`: unit 2878 passed, 0 failed, 5 skipped; browser 885 passed, 0 failed, 7 skipped; app self-test 383 passed; helpers 1 before and after. PR check `gate` passed; merged at 11:03 as `c9d52b23`.
 - 2026-10-14 01:25: the full local gate on merged main (`824f6f43`) is green: lint, bundle, `check:menubar` (self-test 383 passed, 0 failed; app tests 4 passed, 1 skipped); unit 2864 passed, 0 failed, 5 skipped; browser 884 passed, 0 failed, 7 skipped; helpers 1 before and after. Main's CI run on the merge failed once on Linux in an install test this change never touched (the faked helper did not answer within 20 s), so you have one failure email; the rerun of that job passed. On the board as LAHE-install-windows-port80-flake.
 - 2026-10-14 00:55: PR [#64](https://github.com/kenxle/live-agentic-html-editor/pull/64) merged at 00:48 (`824f6f43`). Its gate on `a56e8466`: lint, bundle and `check:menubar` passed (app self-test 383 passed, 0 failed; app tests 4 passed, 1 skipped, the launchd case, 5 of 5 when run); unit 2864 passed, 0 failed, 5 skipped; browser 884 passed, 0 failed, 7 skipped; helpers 1 before and after. The PR's CI check passed. Pulled main into your clone with a fast-forward (the other agents' files there untouched); the helper rebuilt the menu bar app from the new source and restarted it at 00:50:03 on its own (its log: "rebuilt from source 2f40f78cf222, restarted"). Real screenshot taken. Full gate on merged main started.
 - 2026-10-14 00:13: round 4 is back (`5f964ede`, `c4107c47`, `c849ac3c`). A click on Stop shows the alert with the Library icon; Cancel does nothing; the grey line under Stop is gone. The icon is the Library's three books on a shelf, filled at rest and with a count, outlined when not running or unsure. All pictures and menu dumps are redrawn. The full gate waits for another agent's browser run to finish.
