@@ -1,9 +1,9 @@
 # Lahe menu bar app
 
-An optional Mac extra. It puts the Lahe mark in the menu bar with a count of
-the documents waiting on you, and a menu with those documents, the ones
-waiting on agents, what is open and connected, recent documents, the Library,
-and Hide, Stop and Start. Nothing here is required to use Lahe: the helper,
+An optional Mac extra. It puts the Lahe mark (the Library page's three books
+on a shelf) in the menu bar with a count of the documents waiting on you,
+and a menu with those documents, the ones waiting on agents, what is open and
+connected, recent documents, the Library, and Hide, Stop and Start. Nothing here is required to use Lahe: the helper,
 the review layer and every `lahe` command work the same without it, on every
 system.
 
@@ -66,9 +66,11 @@ on arm64. On an Intel Mac the target is `x86_64-apple-macosx13.0`.
   section header items on macOS 14 and later, and small semibold text in the
   secondary label colour on macOS 13. Notes ("6 more") are plain disabled
   rows.
-- The icon has four looks: the plain mark (nothing waiting), the mark and a
+- The icon has four looks: the filled mark (nothing waiting), the mark and a
   count (to 99, then 99+), a struck-through outline (not running), and an
-  outline with a question mark (can't tell). "Can't tell" covers a refused
+  outline with a question mark (can't tell). The mark is the Library page's
+  icon, `LIBRARY_ICON_URI` in `src/service/tab_icon.js`, without its
+  background plate. "Can't tell" covers a refused
   request, a timeout, an answer it cannot read, a bad signature, a version
   mismatch ("Lahe was updated. This icon is out of date.", with "If this
   stays, run lahe menubar rebuild." under it, since a failed rebuild keeps
@@ -84,8 +86,14 @@ on arm64. On an Intel Mac the target is `x86_64-apple-macosx13.0`.
   the Library. The Library's address goes through the same check.
 - **Hide the icon** exits with status 0. The login item restarts it only after
   a crash, so it stays hidden until the next login or `lahe menubar show`.
-- **Stop Lahe** writes `<state>/stopped.json` (`{"by": "menu bar", "at": ...}`)
-  and then runs `launchctl bootout gui/<uid>/lahe-helper`. While the file
+- **Stop Lahe** asks first, in an alert: "Stop Lahe?", then "Agents' lahe
+  commands will fail until you start it again.", with Stop (the default) and
+  Cancel, under the Library page's tab icon in full color (drawn in code; it
+  is also the app's icon image, since the bundle has no `.icns`). There is no
+  line under Stop in the menu. Only the click asks; the
+  test build's `--action stop` stops at once. Once confirmed it writes
+  `<state>/stopped.json` (`{"by": "menu bar", "at": ...}`) and then runs
+  `launchctl bootout gui/<uid>/lahe-helper`. While the file
   stands, the app sends nothing to the port: whatever holds it then is not a
   helper this app started, and each signed request would be a proof it could
   replay. The menu shows "Stopped by you on <day> at <time>" (or "at <time>"
@@ -102,8 +110,8 @@ None needs a macOS permission.
 
 | Command | What it does |
 | --- | --- |
-| `--self-test [--vectors <file>] [--fixtures <dir>] [--decode <file>]...` | The allowlist, count formatting, the answer parser, every case in `test/fixtures/menubar/proof_vectors.json`, the menu's words and header looks on the three summary fixtures in `test/fixtures/menubar/` (both found under the current folder when not given), and a decode of each captured summary. Exits 1 on any failure. |
-| `--snapshot <dir> [--summary <file>]...` | Each icon look on a light and a dark menu bar, as PNGs. With summaries, also a drawing of the open menu for each, plus not running, stopped and "updated". The real menu cannot be captured without a screen recording permission, so the drawing is made from the same menu items the live menu builds, and reads each one's title and look back from the item. |
+| `--self-test [--vectors <file>] [--fixtures <dir>] [--decode <file>]...` | The allowlist, count formatting, the answer parser, every case in `test/fixtures/menubar/proof_vectors.json`, the menu's words and header looks on the three summary fixtures in `test/fixtures/menubar/` (both found under the current folder when not given), the Stop alert's words, the mark's size and each icon look's width and ink, and a decode of each captured summary. Exits 1 on any failure. |
+| `--snapshot <dir> [--summary <file>]...` | Each icon look on a light and a dark menu bar, as PNGs, and the Stop alert as `alert_stop_light.png` and `alert_stop_dark.png`. The alert is drawn from its own views without being shown; its frosted background does not draw offscreen, so the system window colour stands in for it. With summaries, also a drawing of the open menu for each, plus not running, stopped and "updated". The real menu cannot be captured without a screen recording permission, so the drawing is made from the same menu items the live menu builds, and reads each one's title and look back from the item. |
 | `--dump-menu <summary.json>` | The menu built from that summary: titles, order, enabled state, tooltips, actions, and each row's style as the live menu draws it (`header`, `enabled`, `disabled`, `rule`), as JSON. |
 | `--dump-menu none --look <not-running\|stopped\|cant-tell\|updated>` | The menu for a look with no summary. |
 | `--watch --state-dir <dir>` | The real poll loop with no icon, printing one JSON line per change of look. Reads `wake`, `poll`, `polls` and `quit` from stdin; `wake` posts the system wake notification, and `polls` prints how many polls have run, sent or not. |
