@@ -1185,7 +1185,7 @@ would use, found with `handoff: false`, so it never queues a request for an agen
 can serve answers `{url: null}`, as does any review catalog Open refuses as not openable (a missing
 file, a review the Library does not list). It writes nothing but what catalog Open writes.
 
-**Stop holds.** The menu's Stop writes `<state>/stopped.json`, `{by: "menu bar", at}`, then unloads the
+**Stop holds.** The menu's Stop, once the person confirms it in an alert, writes `<state>/stopped.json`, `{by: "menu bar", at}`, then unloads the
 helper's login item. While that file stands, no helper starts on that state folder, on any port.
 `login_item.startThroughItem`, the CLI's own spawn of `lahe serve` (`lahe add`, `lahe session`, and a
 replacement of a running helper), `lahe serve` itself and the helper's start (`service.serve`) each
