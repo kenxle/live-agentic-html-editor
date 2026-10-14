@@ -48,12 +48,6 @@
       "style" : "enabled",
       "title" : "Stop Lahe",
       "tooltip" : "Stops the Lahe helper until you start it again."
-    },
-    {
-      "enabled" : false,
-      "kind" : "note",
-      "style" : "disabled",
-      "title" : "Agents' lahe commands will fail until you start it again"
     }
   ],
   "text" : "?"
