@@ -1,0 +1,167 @@
+<!doctype html>
+<!--
+DIRECTION A: THE ONE QUIET LINE
+
+Why it puts what where:
+  The rail already has one place that says whether anything is coming back: the status line at
+  the foot. Ken has fought twice to keep that a single line ("one line cannot disagree with
+  itself"). A argues auto-answer is just another answer to that same question, so it adds WORDS
+  to that line and nothing else. Turning it on and off lives in the head's existing menu, next to
+  Copy and Export. Usage lives in the line's hover detail and in the menu. A failure borrows the
+  existing overdue banner at the top of the rail: same shape, same amber full border, new words.
+
+What it trades away against B and C:
+  Against B: stopping a misbehaving run is two clicks behind a menu, and nothing on screen says
+  the mode exists until you read the line.
+  Against C: the reviewer never sees which cards the current run holds, and usage is behind hover.
+  In exchange it adds no new control and no new zone.
+
+Signature element: the status line itself, 'Stored · auto-answer working on 2, 35s'.
+
+THIS SCREEN (03-on-idle): Step 3 of 7: on, nothing waiting
+  On. Nothing is waiting, so nothing runs and nothing is used (R8). The reviewer leaves a comment the usual way.
+
+Wireframe rules: rough on purpose. System fonts, grey rules, one blue (#3c56a5) and one amber (#8d5715) from the real rail tokens. No JavaScript. The rail is drawn at its real size: 16px in from the edge, clamp(320px, 26vw, 392px) wide. Controls with a dotted underline are not wired.
+-->
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>A. The one quiet line: Step 3 of 7: on, nothing waiting</title><style>
+:root{--blue:#3c56a5;--amber:#8d5715;--amberwash:rgba(180,120,30,.12);--green:#2c6f52;--ink:#222;--soft:#5f5f5f;
+--faint:#9a9a9a;--line:#d6d6d6;--wash:#f4f4f4;--surface:#f6f7f9}
+*{box-sizing:border-box}
+body{margin:0;font-family:system-ui,-apple-system,"Segoe UI",sans-serif;color:var(--ink);background:#fff}
+a{color:var(--blue)}
+.nw{text-decoration:underline dotted;text-underline-offset:3px;cursor:help}
+.strip{position:fixed;top:0;left:0;right:0;height:38px;z-index:50;display:flex;align-items:center;gap:14px;
+ padding:0 12px;background:var(--wash);border-bottom:1px solid #bbb;font-size:12px;white-space:nowrap}
+.strip .dir{color:var(--soft)} .strip .where{font-weight:600} .strip .spacer{flex:1}
+.strip details{position:relative} .strip summary{cursor:pointer;color:var(--blue)}
+.strip details ol{position:absolute;right:0;top:22px;margin:0;padding:8px 12px 8px 28px;background:#fff;
+ border:1px solid #bbb;box-shadow:0 4px 14px rgba(0,0,0,.12);line-height:1.8}
+.strip details li.here{font-weight:700}
+.stage{position:absolute;top:38px;left:0;right:calc(clamp(320px,26vw,392px) + 32px);bottom:0;overflow:auto}
+.anno{max-width:620px;margin:16px auto 0;padding:8px 12px;border:1px dashed #999;background:#fafafa;
+ font-size:12.5px;line-height:1.5;color:#444}
+.anno b{color:var(--ink)} .anno .go{display:inline-block;margin-top:6px;margin-right:12px;font-weight:600}
+.anno .branch{display:block;margin-top:3px}
+.page{max-width:620px;margin:28px auto 120px;padding:0 10px;font-family:Georgia,"Times New Roman",serif;
+ font-size:17px;line-height:1.6}
+.page h1{font-size:30px;line-height:1.2;margin:0 0 4px} .page .meta{color:#777;font-size:14px;margin:0 0 18px}
+.page h2{font-size:21px;margin:26px 0 6px} .page p{margin:0 0 12px}
+.hl{background:rgba(60,86,165,.10);border-bottom:1.5px solid rgba(60,86,165,.5)}
+.hl.ed{background:#ececec;border-bottom-style:dashed}
+/* ---- the rail, in its real proportions: fixed 16px in, clamp(320px, 26vw, 392px) wide ---- */
+.rail{position:fixed;top:54px;right:16px;bottom:16px;width:clamp(320px,26vw,392px);display:flex;
+ flex-direction:column;background:#fff;border:1px solid #bbb;border-radius:14px;overflow:hidden;
+ font-size:13px;line-height:1.45;box-shadow:0 10px 30px rgba(0,0,0,.10)}
+.rhead{position:relative;display:flex;align-items:center;gap:10px;padding:13px 14px 12px;border-bottom:1px solid #e6e6e6}
+.rhead .mark{width:8px;height:8px;border-radius:50%;background:var(--blue)}
+.rhead .title{font-weight:600} .rhead .rid{font-size:11px;color:var(--faint)} .rhead .spacer{flex:1}
+.iconbtn{width:26px;height:26px;border-radius:7px;display:flex;align-items:center;justify-content:center;
+ color:var(--soft);text-decoration:none;font-size:14px}
+a.iconbtn{border:1px solid var(--blue);color:var(--blue)}
+.menu{position:absolute;top:44px;right:44px;min-width:210px;z-index:5;background:#fff;border:1px solid #bbb;
+ border-radius:10px;box-shadow:0 6px 18px rgba(0,0,0,.14);padding:5px;display:flex;flex-direction:column}
+.menu > *{padding:6px 10px;border-radius:7px;font-size:12.5px;color:#111;text-decoration:none}
+.menu a{color:var(--blue);font-weight:600;text-decoration:underline}
+.menu .info{color:var(--soft);font-size:11.5px;border-top:1px solid #eee;margin-top:3px;padding-top:7px}
+.tabs{display:flex;gap:2px;padding:8px 10px 0;border-bottom:1px solid #e6e6e6}
+.tabs > *{padding:6px 10px 9px;font-size:12px;color:var(--soft);text-decoration:none;display:flex;gap:6px;align-items:center}
+.tabs .on{color:#111;font-weight:600;box-shadow:inset 0 -2px 0 var(--blue)}
+.tabs a{color:var(--blue)}
+.count{font-size:11px;color:var(--faint);background:var(--wash);border-radius:999px;padding:0 6px}
+.newmark{font-size:10px;font-weight:700;color:#fff;background:var(--blue);border-radius:999px;padding:1px 5px}
+.slot{padding:0 10px}
+.banner{margin:10px 0 0;padding:10px 12px;border-radius:10px;border:1px solid var(--amber);background:var(--amberwash);
+ display:flex;flex-direction:column;gap:6px}
+.banner .t{font-weight:700;font-size:12.5px} .banner .c{font-size:12px;color:#444}
+.banner .mono,.mono{font-family:ui-monospace,Menlo,monospace;font-size:11.5px;background:rgba(0,0,0,.06);padding:0 3px;border-radius:3px}
+.btnrow{display:flex;gap:8px;flex-wrap:wrap}
+.btn{display:inline-block;font-size:12px;font-weight:600;padding:5px 11px;border-radius:8px;border:1px solid #bbb;
+ background:#fff;color:#111;text-decoration:none}
+a.btn.primary{background:var(--blue);border-color:var(--blue);color:#fff;text-decoration:none}
+a.btn{border-color:var(--blue);color:var(--blue)}
+/* direction C: the strip */
+.seat{margin:10px 0 0;padding:9px 11px;border-radius:10px;border:1px solid var(--line);background:var(--surface);
+ display:flex;flex-direction:column;gap:5px}
+.seat .row{display:flex;align-items:center;gap:8px}
+.seat .who{font-size:10px;font-weight:600;letter-spacing:.07em;text-transform:uppercase;color:var(--soft)}
+.seat .what{font-size:12.5px;flex:1;min-width:0}
+.seat .sub{font-size:11.5px;color:var(--soft)}
+.seat.bad{border-color:var(--amber);background:var(--amberwash)}
+.seat.bad .who{color:var(--amber)}
+.panes{flex:1;overflow:auto;background:var(--surface);padding:12px;display:flex;flex-direction:column;gap:10px}
+.empty{color:var(--faint);font-size:12px;text-align:center;padding:18px 4px}
+.card{background:#fff;border:1px solid var(--line);border-radius:10px;padding:10px 12px 11px;display:flex;
+ flex-direction:column;gap:7px}
+.card.ready{border-color:var(--blue)} .card.handled{background:#f1f8f4;border-color:#cee2d6}
+.card.late{border-color:var(--amber);box-shadow:0 0 0 1px var(--amber)}
+.card .top{display:flex;align-items:center;gap:8px}
+.card .kind{font-size:10px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--faint)}
+.card .spacer{flex:1} .card .time{font-size:10px;color:var(--faint)}
+.pill{font-size:10px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;padding:2px 7px;border-radius:999px;
+ background:var(--wash);color:var(--soft)}
+.pill.blue{background:rgba(60,86,165,.10);color:var(--blue)}
+.pill.green{color:var(--green);border:1px solid currentColor;background:transparent}
+.pill.amber{color:var(--amber);background:var(--amberwash)}
+.card .quote{font-size:12px;color:var(--soft);border-left:2px solid var(--line);padding-left:9px}
+.card .body{font-size:13.5px}
+.pair{display:flex;flex-direction:column;gap:3px;font-size:12.5px}
+.pair .was{text-decoration:line-through;color:var(--soft)} .pair .now{font-weight:600}
+.notice{font-size:12px;color:var(--soft)}
+.badge{font-size:12px;color:var(--amber);background:var(--amberwash);border-radius:7px;padding:6px 8px}
+.agent{border-radius:8px;padding:8px 10px;background:var(--surface);font-size:13.5px;line-height:1.5}
+.agent .who{font-size:10px;font-weight:600;letter-spacing:.07em;text-transform:uppercase;color:var(--faint)}
+.agent.loud{background:rgba(60,86,165,.09);border-left:3px solid var(--blue)}
+.agent.loud .who{color:var(--blue)}
+.agent .file{font-family:ui-monospace,Menlo,monospace;font-size:11px;color:var(--faint);margin-top:4px}
+.acts{display:flex;gap:7px} .acts .btn{font-size:11.5px;padding:3px 9px}
+/* footer */
+.foot{border-top:1px solid #e6e6e6;padding:10px 12px 11px;display:flex;gap:10px;background:#fff}
+.fmain{flex:1;min-width:0;display:flex;flex-direction:column;gap:7px}
+.status{display:flex;align-items:center;gap:7px;font-size:12px;color:var(--soft);position:relative}
+.status .dot{width:6px;height:6px;border-radius:50%;flex:none}
+.dot.grey{background:var(--faint)} .dot.green{background:var(--green)} .dot.blue{background:var(--blue)}
+.dot.amber{background:var(--amber)}
+.status.loud{color:#111;font-weight:600}
+.status .txt{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tip{position:absolute;bottom:22px;left:0;right:-20px;background:#fff;border:1px solid #bbb;border-radius:8px;
+ box-shadow:0 6px 18px rgba(0,0,0,.14);padding:8px 10px;font-size:11.5px;font-weight:400;color:#333;line-height:1.5;
+ white-space:normal;z-index:4}
+.tip .k{color:var(--faint)}
+.holdrow{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.holdbtn{display:inline-flex;align-items:center;gap:6px;font-size:11.5px;font-weight:600;color:var(--soft);
+ padding:3px 9px;border-radius:999px;border:1px solid var(--line);text-decoration:none}
+a.holdbtn{border-color:var(--blue);color:var(--blue)}
+.holdbtn .d{width:6px;height:6px;border-radius:50%;background:var(--faint)}
+.holdbtn.on{background:#e9ecf5;color:#111} .holdbtn.on .d{background:var(--green)}
+.holdbtn.working .d{background:var(--blue)} .holdbtn.bad{border-color:var(--amber);color:var(--amber)}
+.holdbtn.bad .d{background:var(--amber)}
+.holdcount{font-size:11px;color:var(--soft)} a.holdcount{color:var(--blue)}
+.pop{border:1px solid #bbb;border-radius:10px;padding:9px 11px;background:#fff;box-shadow:0 6px 18px rgba(0,0,0,.10);
+ font-size:12px;display:flex;flex-direction:column;gap:4px}
+.pop .r{display:flex;justify-content:space-between;gap:10px} .pop .k{color:var(--soft)}
+.pop .n{font-size:11px;color:var(--soft);margin-top:3px}
+.panel{border:1px solid var(--line);border-radius:10px;padding:11px 12px;background:#fff;display:flex;flex-direction:column;
+ gap:7px;font-size:12px;line-height:1.45}
+.panel .t{font-weight:700;font-size:13px}
+.panel ul{margin:0;padding-left:16px;display:flex;flex-direction:column;gap:4px}
+.panel label{font-size:11px;font-weight:600;color:var(--soft)}
+.panel .ta{border:1px solid var(--line);border-radius:7px;padding:6px 8px;font-size:12px;color:#444;background:#fcfcfc}
+.panel .scope{font-size:11.5px;color:var(--soft)}
+.chip{background:var(--amberwash);border-radius:8px;padding:8px 10px;font-size:12px;display:flex;flex-direction:column;gap:5px}
+.chip .t{font-weight:700}
+.hints{display:flex;gap:4px 14px;flex-wrap:wrap;font-size:11.5px;color:var(--soft)}
+kbd{font:11px system-ui;border:1px solid #ccc;border-radius:4px;padding:0 4px;background:#fafafa}
+.endbtn{flex:none;width:38px;display:flex;align-items:center;justify-content:center;color:var(--soft);font-size:16px}
+</style></head><body><div class="strip"><a href="../index.html">All directions</a><span class="dir">A. The one quiet line</span><span class="where">Step 3 of 7: on, nothing waiting</span><a href="02-turn-on.html">&larr; back</a><a href="04-comment-sent.html">next: a comment lands &rarr;</a><span class="spacer"></span><details><summary>All screens</summary><ol><li><a href="01-off.html">Step 1 of 7: the review, auto-answer off</a></li><li><a href="02-turn-on.html">Step 2 of 7: turning it on, and what it may do</a></li><li class="here"><a href="03-on-idle.html">Step 3 of 7: on, nothing waiting</a></li><li><a href="04-comment-sent.html">Step 4 of 7: a comment lands, a run starts</a></li><li><a href="05-working.html">Step 5 of 7: the run works the batch</a></li><li><a href="06-replied.html">Step 6 of 7: the replies are on the cards</a></li><li><a href="06b-replied-done.html">Step 6 of 7: the Done tab</a></li><li><a href="07-off.html">Step 7 of 7: turned off from the page</a></li><li><a href="b1-usage.html">Branch: how much it has used</a></li><li><a href="b2-queued.html">Branch: waiting its turn behind other reviews</a></li><li><a href="b3-failed.html">Branch: a run failed (Claude signed out)</a></li><li><a href="b4-retry-limit.html">Branch: one comment it could not answer</a></li><li><a href="b5-ceiling.html">Branch: today&#x27;s usage limit reached</a></li><li><a href="b6-stop-confirm.html">Branch: stopping while a run is working</a></li><li><a href="b7-stopped-partial.html">Branch: stopped mid-run, a change with no reply</a></li></ol></details></div><div class="stage"><div class="anno"><b>Step 3 of 7: on, nothing waiting.</b> On. Nothing is waiting, so nothing runs and nothing is used (R8). The reviewer leaves a comment the usual way.<a class="go" href="04-comment-sent.html">A comment lands</a></div><div class="page">
+<h1>Garden plan</h1>
+<p class="meta">Alder Street community plot · spring</p>
+<p>Eight families share the plot this year. This page is the plan everyone agreed to at the March meeting.</p>
+<h2>Beds</h2>
+<p>We will <span class="hl">utilize</span> the four raised beds along the fence for tomatoes and beans, and keep the herb spiral by the gate.</p>
+<h2>Watering</h2>
+<p>Two volunteers water <span class="hl ed">every week</span>, on a rota posted inside the shed door. Anyone away for a week swaps a day with a neighbour.</p>
+<h2>Budget</h2>
+<p>Seeds, soil and a new hose will cost <span class="hl">about as much as last year</span>. The treasurer holds the receipts.</p>
+<h2>Tools</h2>
+<p>The shed code stays the same. Return the wheelbarrow upside down so it does not fill with rain.</p>
+</div></div><div class="rail"><div class="rhead"><span class="mark"></span><span class="title">Review</span><span class="rid">garden/notes.md</span><span class="spacer"></span><span class="iconbtn nw" title="not wired">⋯</span><span class="iconbtn nw" title="not wired: collapse rail">›</span></div><div class="tabs"><span class="on">Active <span class="count">0</span></span><span class="nw" title="not wired">Edits <span class="count">0</span></span><span class="nw" title="not wired">Done <span class="count">3</span></span></div><div class="panes"><div class="empty">Nothing waiting. Comments and edits you send show here.</div></div><div class="foot"><div class="fmain"><div class="status" title=""><span class="dot green"></span><span class="txt">Stored · auto-answer on</span></div><div class="holdrow"><span class="holdbtn nw" title="not wired: existing Hold toggle"><span class="d"></span>Hold sending</span></div><div class="hints"><span><kbd>⌘</kbd><kbd>⇧</kbd><kbd>C</kbd> comment</span><span><kbd>⌘</kbd><kbd>⇧</kbd><kbd>E</kbd> edit</span><span><kbd>⌘</kbd><kbd>⏎</kbd> send</span></div></div><span class="endbtn nw" title="not wired: End review">⇥</span></div></div></body></html>
