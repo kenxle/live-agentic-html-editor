@@ -1,18 +1,22 @@
 # Progress: Menu bar app
 
-**Where things are at 13:15 on October 13.** Done and landed. PR 1 ([#61](https://github.com/kenxle/live-agentic-html-editor/pull/61), the helper's summary) and PR 2 ([#62](https://github.com/kenxle/live-agentic-html-editor/pull/62), the icon, the install, Stop and Start) are on main, and main is green on CI and on the full local gate (one Linux-only CI failure after the merge was fixed the same hour). Idle cost is 0.73 s of processor time per 10 minutes for the app and its polls together, under the one-tab budget; a question on a closed document reaches the icon in under a second. **Everything left is yours, under Needs your attention:** three small design calls, the real install on your Mac with one screenshot, the proposed lesson to review, and the cleanup batch to approve.
+**Where things are at 23:55 on October 13.** Done and landed, with one small round running on your three design answers. PR 1 ([#61](https://github.com/kenxle/live-agentic-html-editor/pull/61), the helper's summary) and PR 2 ([#62](https://github.com/kenxle/live-agentic-html-editor/pull/62), the icon, the install, Stop and Start) are on main, and main is green on CI and on the full local gate. Your answers: Waiting on you stays uncapped (nothing changes), Stop Lahe asks before it stops, and the icon becomes the Library's mark. The app builder is making the last two now; they land as one small PR after a full gate. The icon is installed on your Mac (23:56) and running. **Still yours:** the proposed lesson to review, and the cleanup batch to approve.
 
 **Docs:** [Crucible](00_crucible_menu_bar_app.html) · [Brief](01_brief_menu_bar_app.html) · [Architecture](02_architecture_menu_bar_app.html) · [Plan](03_plan_menu_bar_app.html) (each page carries its reviews at the bottom) · [PR 2 reviews](05_pr2_reviews_menu_bar_app.md)
 
 ## Needs your attention
 
-Three calls from the design review of the app's menu and icon (full review in [PR 2 reviews](05_pr2_reviews_menu_bar_app.md)). None of them blocks the fix round or PR 2; each is a small change the app builder can make after your answer, and the current behavior is what the brief says.
+Your answers to the three design calls (full review in [PR 2 reviews](05_pr2_reviews_menu_bar_app.md)):
 
-1. **Should "Waiting on you" get a row cap?** The brief says that section is never cut short. The designer points out that with 120 waiting documents the menu is taller than the screen and Hide and Stop end up below a scroll arrow. Suggested: about 15 rows, then one row "N more: open the Library". Leave it uncapped, or cap it?
-2. **Should Stop Lahe ask before it stops?** Stop sits one row under Hide with no confirmation, and it breaks every agent's lahe commands. Suggested: an alert "Stop Lahe? Agents' lahe commands will fail until you start it again." with Stop and Cancel; the brief's sentence under the Stop row could move into the alert, which also removes a grey line from every menu. Keep it as a one-click row with the line under it, or add the alert?
-3. **Which mark on the icon?** It is the speech bubble, the tab icon's old shape; the tab icon is now a document with an L. The designer calls the bubble the most generic shape in a menu bar (Messages and Slack use one) against the brief's "the Lahe mark, not a generic symbol", and suggests an outlined document with a folded corner, drawn outline at rest and filled when it carries a count. Keep the bubble, or switch to the document?
+- **Row cap on Waiting on you: no.** It stays uncapped, as the brief says. Nothing changes.
+- **Stop Lahe asks first: yes.** A click on Stop shows "Stop Lahe? Agents' lahe commands will fail until you start it again." with Stop and Cancel. The grey line under Stop moves into the alert, so it leaves the menu. Being built now.
+- **The icon's mark: the Library mark.** The three books on a shelf from the Library page's own icon replace the speech bubble, drawn in one color so macOS can tint it for a light or dark menu bar. Being built now; the pictures below change when it lands.
 
-4. **Install it on your Mac, when you want it.** From the clone on main: `lahe install --menu-bar`. It compiles the app with the system's Swift (no Xcode needed, about 10 seconds), writes its login item beside the helper's, and starts it; `lahe status` then says where the icon is. An agent never runs this for you (Task 4.5 in the plan waits on your word). Then one real picture of the icon and its open menu, light or dark, for this page and the brief's V29; an agent cannot take it on this machine. If anything looks wrong, `lahe uninstall` removes the icon and `lahe menubar show` brings a hidden one back.
+- **Installed on your Mac at 23:56, as you asked.** The icon is in your menu bar and starts at login. The install refuses without a terminal by design, so I ran `lahe install --menu-bar` inside one; it took the icon-only path, which neither restarts the helper nor asks for your password. To undo it, `lahe install --no-menu-bar` removes the icon; `lahe menubar show` brings back a hidden one. The real menu bar, a minute after the install, with nothing waiting:
+
+  ![The real icon in the menu bar at rest, still the speech bubble](screenshots/real_icon_bubble_at_rest.png)
+
+  When the round above merges and the clone is updated, the helper rebuilds the app on its own; the new icon's real picture goes here.
 
 Two things the walk saw that are not in the menu bar's own flow, for you to know:
 
@@ -31,13 +35,14 @@ Drawn by the app itself (`--snapshot`), on made-up data, since an agent cannot c
 
 ![The menu while Lahe is stopped by you, dark](screenshots/menu_stopped_dark.png)
 
-The icon keeps the review layer's speech bubble. Main changed the browser tab's icon to a document mark on 2026-10-12 (`e5397fda`); the bubble stays here because the count is about replies. Say so on this page if you want the document mark instead. Every look and every menu dump is under [screenshots/](screenshots/).
+These pictures still show the speech bubble; they are redrawn with the Library mark in the round that is running. Every look and every menu dump is under [screenshots/](screenshots/).
 
 ## Currently working on
 
 | Agent or task | Doing | Started | Branch |
 |---|---|---|---|
-| Orchestrator | Holding: everything left is yours (the three design calls, the install and screenshot, the lessons review, the cleanup batch) | 2026-10-12 20:44 | `main` |
+| Builder: macapp round 4 (Opus) | Stop asks first (an alert), the icon becomes the Library mark, pictures and docs redrawn | 2026-10-13 23:53 | `feat/menu-bar-macapp` |
+| Orchestrator | Waiting on round 4, then a full gate and a small PR; the install, lessons review and cleanup batch are yours | 2026-10-12 20:44 | `main` |
 | Flow walker (Opus, independent) | Done at 12:51: V32 passes, V33 counts equal, one board row (a global `lahe status` slows the helper) and one note for Ken | 2026-10-13 12:27 | `feat/menu-bar-pr2` |
 | Builder: summary (Opus) | Done: fix round 2 (the helper's idle cost, unwatched replies) returned at 2026-10-13 11:36 and is merged into `feat/menu-bar-pr2` | 2026-10-12 22:46 | `feat/menu-bar-summary` |
 | Code review (Opus) | Done at 11:51: one important bug, one coverage gap, one rare bug; findings in the fix round | 2026-10-13 11:50 | `feat/menu-bar-pr2` |
@@ -79,6 +84,7 @@ No passes yet.
 
 ### Changes from plan
 
+- **Your design answers (round 4):** the line under Stop that the brief's R14 (Stop holds, with a line under it saying agents' commands will fail) asks for moves into a confirmation alert on the Stop click. The icon uses the Library page's mark (three books on a shelf) rather than the review layer's speech bubble, which meets the brief's UX note "the Lahe mark, not a generic symbol" more plainly. Waiting on you stays uncapped as R12 (long lists stay short, Waiting on you never cut short) says.
 - **summary:** the per-review cache is keyed on `review.json`, `meta.json` and `events.jsonl` (size, time and inode each), as the plan named. The builder first keyed it on the review folder, which was faster (8 to 9 ms against 37 ms for 700 made-up reviews), but the code review showed a folder's time is too coarse on Linux to catch two rewrites in one tick, so the files are the key and the no-symlink walk is cached instead; the reviewed document is checked only while the review has an unread reply. The warm median is still to be measured on a quiet machine (V18). Read marks post through a Hold on the rail, since they are not agent work. `reply_seen` is not in `review.json`, which agents read; it travels on the page's own reads and the summary folds `events.jsonl`. `library_url` ends in `/catalog` because the Library host refuses `/`. Retired reviews appear in no section. A path outside the home folder shows only the file name. Every refusal on the two routes is a signed 401 `AUTH_REFUSED` whose detail names the check. `summary_many.json` had 40 documents with more questions than unread, which the contract rules out; fixed, and a test guards it.
 - **macapp:** the executable inside the bundle is `LaheMenuBar` (what Activity Monitor shows), while the install recipe wrote `Lahe`; reconciled at integration to `LaheMenuBar`. The app rereads the secret after a bad signature as well as after a 401, because a replaced secret makes the helper sign its 401 with the new key. Waiting on you is never cut short (brief R12), where the builder's prompt had said otherwise.
 - **summary, fix round 2:** a question an agent leaves on a document no page has open shows within one 15-second beat plus the app's 5-second poll, not within the brief's 10 seconds (R3). Folding every review's reply files on every poll is what the idle cost came from, so the beat is the trade. A write the helper did not make (a command run while no helper held the review) can take up to 10 minutes to show, because the beat stats a fortieth of the reviews in turn; with the always-on helper that write does not happen.
@@ -129,6 +135,8 @@ To delete at cleanup, in one batch with your go:
 
 ## Log
 
+- 2026-10-13 23:57: installed the icon on your Mac at your request (`lahe install --menu-bar`, icon-only path, run inside a terminal since the command refuses without one). The app runs under its login item; `lahe status` says "menu bar installed and running". A real screenshot of the icon at rest is under Needs your attention; screen capture works from this terminal now.
+- 2026-10-13 23:55: your three answers came in on this page. Waiting on you stays uncapped; Stop Lahe gets the alert; the icon becomes the Library mark. The app builder has the last two (it merges main first, writes the tests red then green, and redraws every picture and menu dump). After it returns: a full local gate, one small PR, a gate on main after the merge.
 - 2026-10-13 13:15: the full local gate on main's head (`272129b0`, with the CI fix) is green: unit 2864 passed, 0 failed; browser 884 passed, 0 failed, 7 skipped; `check:menubar` 4 passed, 1 skipped; helpers 1 before and after. The feature's code is done and landed. Holding for your answers.
 - 2026-10-13 13:08: the full local gate on main at PR 2's merge (`2c913902`) is green: unit 2864 passed, 0 failed; browser 884 passed, 0 failed, 7 skipped; `check:menubar` with the app's live tests 4 passed, 1 skipped (launchd); helpers 1 before and after. One more full gate is running on main's head (`272129b0`), which carries the CI fix. A lesson is proposed in `docs/lessons/proposed/` (a back-to-back benchmark of a polled route measures only the warm path), with a pointer from STABLE_ADDRESSES.md's old "almost no CPU" sentence; the lessons review is yours when you want it.
 - 2026-10-13 13:01: main's CI run on the fix (`cd20d722`) is green. The full local gate on main is still running; one more runs on main's new head after it.
