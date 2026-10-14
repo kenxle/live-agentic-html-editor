@@ -467,38 +467,85 @@ func menuRows(status: Status, stopped: Stopped?, libraryURL: String?) -> [Row] {
     rows.append(.separator)
     rows.append(.item("Hide the icon", .hide, hideTipRunning))
     rows.append(.item("Stop Lahe", .stop, "Stops the Lahe helper until you start it again."))
-    rows.append(.note("Agents' lahe commands will fail until you start it again"))
     return rows
+}
+
+/// The words of the alert a click on Stop Lahe shows first. The alert and the
+/// self-test both read them here, so the words are tested even though the
+/// alert itself cannot be clicked in a test.
+enum StopConfirmation {
+    static let message = "Stop Lahe?"
+    static let detail = "Agents' lahe commands will fail until you start it again."
+    static let confirm = "Stop"
+    static let cancel = "Cancel"
+}
+
+/// The alert, not yet shown. "Stop" is the first button, so Return chooses it;
+/// AppKit gives the button titled "Cancel" the Escape key.
+func stopAlert() -> NSAlert {
+    let alert = NSAlert()
+    alert.messageText = StopConfirmation.message
+    alert.informativeText = StopConfirmation.detail
+    alert.addButton(withTitle: StopConfirmation.confirm)
+    alert.addButton(withTitle: StopConfirmation.cancel)
+    return alert
 }
 
 // MARK: - The icon, drawn in code
 
-// The review layer's speech-bubble mark, in its 32 by 32 viewBox (the tab icon
-// in src/service/tab_icon.js before it became a document, commit e5397fda):
-//   M9 8h14a3 3 0 0 1 3 3v8a3 3 0 0 1-3 3h-6l-6 5v-5H9a3 3 0 0 1-3-3v-8a3 3 0 0 1 3-3z
-// It spans x 6 to 26 and y 8 to 27; drawn here in a flipped (y down) space.
-func bubblePath(scale s: CGFloat, origin o: CGPoint) -> NSBezierPath {
-    func p(_ x: CGFloat, _ y: CGFloat) -> NSPoint { return NSPoint(x: o.x + (x - 6) * s, y: o.y + (y - 8) * s) }
+// The Library page's own icon, LIBRARY_ICON_URI in src/service/tab_icon.js,
+// in its 32 by 32 viewBox, without its dark rounded-square background (a menu
+// bar glyph is a template image with no plate). Four shapes:
+//   M7 8h4v15H7z                              an upright book
+//   M12.5 10h4v13h-4z                         a shorter upright book
+//   M18.2 10.6l3.8-1.2 4.1 13.1-3.8 1.2z      a leaning book
+//   M5.5 24h21v2h-21z                         the shelf
+// Together they span x 5.5 to 26.5 and y 8 to 26; drawn here in a flipped
+// (y down) space. Each shape is its own closed subpath, and none overlap.
+func markShapes(scale s: CGFloat, origin o: CGPoint) -> [NSBezierPath] {
+    func p(_ x: CGFloat, _ y: CGFloat) -> NSPoint { return NSPoint(x: o.x + (x - 5.5) * s, y: o.y + (y - 8) * s) }
+    func shape(_ corners: [(CGFloat, CGFloat)]) -> NSBezierPath {
+        let path = NSBezierPath()
+        path.move(to: p(corners[0].0, corners[0].1))
+        for corner in corners.dropFirst() { path.line(to: p(corner.0, corner.1)) }
+        path.close()
+        return path
+    }
+    return [
+        shape([(7, 8), (11, 8), (11, 23), (7, 23)]),
+        shape([(12.5, 10), (16.5, 10), (16.5, 23), (12.5, 23)]),
+        shape([(18.2, 10.6), (22, 9.4), (26.1, 22.5), (22.3, 23.7)]),
+        shape([(5.5, 24), (26.5, 24), (26.5, 26), (5.5, 26)]),
+    ]
+}
+
+/// The whole mark as one path, for filling.
+func markPath(scale s: CGFloat, origin o: CGPoint) -> NSBezierPath {
     let path = NSBezierPath()
-    path.move(to: p(9, 8))
-    path.line(to: p(23, 8))
-    path.appendArc(from: p(26, 8), to: p(26, 11), radius: 3 * s)
-    path.line(to: p(26, 19))
-    path.appendArc(from: p(26, 22), to: p(23, 22), radius: 3 * s)
-    path.line(to: p(17, 22))
-    path.line(to: p(11, 27))
-    path.line(to: p(11, 22))
-    path.line(to: p(9, 22))
-    path.appendArc(from: p(6, 22), to: p(6, 19), radius: 3 * s)
-    path.line(to: p(6, 11))
-    path.appendArc(from: p(6, 8), to: p(9, 8), radius: 3 * s)
-    path.close()
+    for shape in markShapes(scale: s, origin: o) { path.append(shape) }
     return path
 }
 
 let iconHeight: CGFloat = 18
-let bubbleScale: CGFloat = 15.0 / 19.0  // the mark's 19 units become 15 points
+let markScale: CGFloat = 15.0 / 18.0  // the mark's 18 units become 15 points
+let markWidth = 21 * markScale
 let iconFont = NSFont.monospacedDigitSystemFont(ofSize: 13, weight: .semibold)
+
+/// The outline looks. Each book is stroked inside its own edge (a doubled line
+/// clipped to the shape), so the gaps between the books stay open at 18
+/// points; the shelf is too thin to hollow and stays solid.
+let outlineWidth: CGFloat = 1.1
+func strokeMarkOutline(origin: CGPoint) {
+    let shapes = markShapes(scale: markScale, origin: origin)
+    for book in shapes.dropLast() {
+        NSGraphicsContext.saveGraphicsState()
+        book.addClip()
+        book.lineWidth = outlineWidth * 2
+        book.stroke()
+        NSGraphicsContext.restoreGraphicsState()
+    }
+    shapes.last?.fill()
+}
 
 /// The four looks as one template image, so macOS colors it for a light, dark
 /// or highlighted menu bar. The count (or "?") is part of the image, so the
@@ -508,34 +555,39 @@ let iconFont = NSFont.monospacedDigitSystemFont(ofSize: 13, weight: .semibold)
 ///   not running  the mark as an outline, struck through
 ///   can't tell   the outline and a question mark, never the plain mark
 func iconImage(_ look: Look) -> NSImage {
-    let bubbleWidth = 20 * bubbleScale
     let text = look.text
     let attrs: [NSAttributedString.Key: Any] = [.font: iconFont, .foregroundColor: NSColor.black]
     let textSize = text.map { ($0 as NSString).size(withAttributes: attrs) } ?? .zero
     let gap: CGFloat = text == nil ? 0 : 3
-    let width = ceil(1 + bubbleWidth + gap + textSize.width + 1)
+    let width = ceil(1 + markWidth + gap + textSize.width + 1)
     let image = NSImage(size: NSSize(width: width, height: iconHeight), flipped: true) { _ in
-        let origin = CGPoint(x: 1, y: (iconHeight - 19 * bubbleScale) / 2)
-        let path = bubblePath(scale: bubbleScale, origin: origin)
+        let origin = CGPoint(x: 1, y: (iconHeight - 18 * markScale) / 2)
+        let markHeight = 18 * markScale
         NSColor.black.set()
         switch look {
         case .clear, .count:
-            path.fill()
+            markPath(scale: markScale, origin: origin).fill()
         case .notRunning, .cantTell:
-            path.lineWidth = 1.4
-            path.stroke()
+            strokeMarkOutline(origin: origin)
         }
         if look == .notRunning {
+            // The slash across the whole mark, with a clear band either side
+            // so it reads apart from the books it crosses.
             let slash = NSBezierPath()
-            slash.move(to: NSPoint(x: origin.x - 0.5, y: origin.y + 15.5))
-            slash.line(to: NSPoint(x: origin.x + bubbleWidth + 0.5, y: origin.y - 0.5))
-            slash.lineWidth = 1.6
+            slash.move(to: NSPoint(x: origin.x - 0.5, y: origin.y + markHeight + 0.5))
+            slash.line(to: NSPoint(x: origin.x + markWidth + 0.5, y: origin.y - 0.5))
             slash.lineCapStyle = .round
+            NSGraphicsContext.saveGraphicsState()
+            NSGraphicsContext.current?.compositingOperation = .clear
+            slash.lineWidth = 2.9
+            slash.stroke()
+            NSGraphicsContext.restoreGraphicsState()
+            slash.lineWidth = 1.5
             slash.stroke()
         }
         if let text = text {
             let y = (iconHeight - textSize.height) / 2
-            (text as NSString).draw(at: NSPoint(x: 1 + bubbleWidth + gap, y: y), withAttributes: attrs)
+            (text as NSString).draw(at: NSPoint(x: 1 + markWidth + gap, y: y), withAttributes: attrs)
         }
         return true
     }
@@ -1145,7 +1197,17 @@ final class MenuBarApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     @objc func clicked(_ sender: NSMenuItem) {
         guard let box = sender.representedObject as? ActionBox else { return }
+        if box.action == .stop && !confirmStop() { return }
         controller.perform(box.action)
+    }
+
+    /// The confirmation lives on the click path only. perform(.stop) itself
+    /// stays unconfirmed, so the test build's --action stop (and the live test
+    /// that checks it writes the marker) runs with no alert to answer.
+    private func confirmStop() -> Bool {
+        let alert = stopAlert()
+        NSApp.activate(ignoringOtherApps: true)  // a menu bar app has no window to bring it forward
+        return alert.runModal() == .alertFirstButtonReturn
     }
 }
 
@@ -1299,6 +1361,28 @@ func menuPictureHeight(_ rows: [Row]) -> CGFloat {
     return 26 + 16 + rows.reduce(0) { $0 + ($1.kind == .separator ? 12 : 20) }
 }
 
+/// The stop alert, drawn from its own window's views without ever running it.
+/// The alert's frosted window background does not draw offscreen, so the
+/// system window colour for that appearance is painted behind the views.
+func renderAlert(_ alert: NSAlert, appearance name: NSAppearance.Name, to url: URL) throws {
+    _ = NSApplication.shared
+    guard let appearance = NSAppearance(named: name) else { throw NSError(domain: "lahe", code: 3) }
+    alert.layout()
+    alert.window.appearance = appearance
+    guard let view = alert.window.contentView,
+          let views = view.bitmapImageRepForCachingDisplay(in: view.bounds) else { throw NSError(domain: "lahe", code: 3) }
+    view.cacheDisplay(in: view.bounds, to: views)
+    let size = view.bounds.size
+    try renderPNG(size: size, to: url) {
+        appearance.performAsCurrentDrawingAppearance {
+            NSColor.windowBackgroundColor.setFill()
+            NSRect(origin: .zero, size: size).fill()
+        }
+        views.draw(in: NSRect(origin: .zero, size: size), from: .zero, operation: .sourceOver, fraction: 1,
+                   respectFlipped: false, hints: nil)
+    }
+}
+
 func snapshot(_ args: [String]) -> Int32 {
     guard let dir = argument("--snapshot", in: args) else { return 1 }
     let out = URL(fileURLWithPath: dir)
@@ -1315,6 +1399,11 @@ func snapshot(_ args: [String]) -> Int32 {
                 }
                 written.append(file)
             }
+        }
+        for (theme, appearance) in [("light", NSAppearance.Name.aqua), ("dark", NSAppearance.Name.darkAqua)] {
+            let file = "alert_stop_\(theme).png"
+            try renderAlert(stopAlert(), appearance: appearance, to: out.appendingPathComponent(file))
+            written.append(file)
         }
         var menus: [(String, Status, Stopped?)] = []
         for path in arguments("--summary", in: args) {
@@ -1561,6 +1650,44 @@ func selfTest(_ args: [String]) -> Int32 {
 
     let nonce = Proof.newNonce()
     t.check(nonce.count == 32 && Proof.fromHex(nonce) != nil, "a nonce is 32 lowercase hex characters")
+
+    // Stop asks first. The alert cannot be clicked in a test, so its words are
+    // checked here, from the one value the alert reads.
+    t.check(StopConfirmation.message == "Stop Lahe?", "the stop alert asks Stop Lahe?")
+    t.check(StopConfirmation.detail == "Agents' lahe commands will fail until you start it again.",
+            "the stop alert says agents' commands will fail")
+    t.check(StopConfirmation.confirm == "Stop" && StopConfirmation.cancel == "Cancel", "the stop alert's buttons are Stop and Cancel")
+    t.check(!everyMenu.joined().contains { $0.title.contains("until you start it again") }, "no menu has the note row under Stop")
+    for rows in [full, empty, many, updatedRows] {
+        let at = rows.firstIndex { $0.action == .stop }
+        t.check(at != nil && rows[at!].title == "Stop Lahe" && at == rows.count - 1, "Stop Lahe is the last row")
+        t.check(at.map { rows[$0].tooltip == "Stops the Lahe helper until you start it again." } == true, "Stop Lahe keeps its tooltip")
+    }
+
+    // The icon: the Library mark, about 15 points tall, and each look drawn.
+    let markBounds = markPath(scale: markScale, origin: .zero).bounds
+    t.check(abs(markBounds.height - 15) < 0.01 && abs(markBounds.width - markWidth) < 0.01, "the mark is 15 points tall")
+    func inked(_ image: NSImage) -> Int {
+        guard let rep = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: Int(image.size.width * 2), pixelsHigh: Int(image.size.height * 2),
+                                         bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true, isPlanar: false,
+                                         colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0) else { return 0 }
+        rep.size = image.size
+        NSGraphicsContext.saveGraphicsState()
+        NSGraphicsContext.current = NSGraphicsContext(bitmapImageRep: rep)
+        image.draw(in: NSRect(origin: .zero, size: image.size))
+        NSGraphicsContext.restoreGraphicsState()
+        var count = 0
+        for x in 0..<rep.pixelsWide { for y in 0..<rep.pixelsHigh where (rep.colorAt(x: x, y: y)?.alphaComponent ?? 0) > 0.5 { count += 1 } }
+        return count
+    }
+    let clearIcon = iconImage(.clear), threeIcon = iconImage(.count("3")), manyIcon = iconImage(.count("99+"))
+    t.check(clearIcon.isTemplate && clearIcon.size.height == iconHeight, "the icon is an 18 point template image")
+    t.check(threeIcon.size.width > clearIcon.size.width && manyIcon.size.width > threeIcon.size.width, "count is wider than clear, 99+ wider than 3")
+    t.check(iconImage(.notRunning).size.width == clearIcon.size.width, "not running is as wide as clear")
+    t.check(iconImage(.cantTell).size.width > clearIcon.size.width, "can't tell is wider than clear, for its question mark")
+    let clearInk = inked(clearIcon), outlineInk = inked(iconImage(.notRunning))
+    t.check(clearInk > 0, "the clear icon is not empty")
+    t.check(outlineInk > 0 && outlineInk != clearInk, "not running draws something other than the filled mark")
 
     // Captured summaries.
     for path in arguments("--decode", in: args) {
