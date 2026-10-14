@@ -48,6 +48,7 @@ test("idle polls stay local until work appears, then monitor prints once and exi
   ], {
     stdout: (text) => stdout.push(text),
     stderr: (text) => stderr.push(text),
+    sameStream: false,
     readSession: () => ({ id: "s_owner", handoff_rev: 0, closed_at: null }),
     statusRun: async (args, io) => {
       calls.push(args);
@@ -63,17 +64,19 @@ test("idle polls stay local until work appears, then monitor prints once and exi
   assert.deepEqual(waits, [7000, 7000]);
 
   const printed = stdout.join("");
-  // The banner is on STDOUT, ahead of the items. A host that captures one
-  // stream used to get the instruction without the work.
+  // ONE LINE on STDOUT, led by the banner, and none of the work: the agent's
+  // drain prints the items (docs/features/20261014.02_lean_agent_output).
   assert.ok(printed.startsWith(monitor.ACTION_REQUIRED), "the banner leads stdout");
-  assert.match(printed, /\{"review":"r_one","id":"c_one","rev":1\}/);
-  // The stderr copy is kept for hosts that surface only that stream.
-  assert.match(stderr.join(""), /LAHE ACTION REQUIRED/);
+  assert.equal(printed.split("\n").filter((line) => line).length, 1, "one line");
+  assert.equal(printed.includes('"id":"c_one"'), false, "the item is the drain's to print");
+  // With the two streams split, the stderr copy is kept for hosts that surface
+  // only that stream.
+  assert.equal(stderr.join(""), printed);
 
   // The exact next commands, printed where the agent is already looking.
   assert.match(printed, /lahe status --session s_owner --json --quiet/);
   assert.match(printed, /lahe monitor --session s_owner/);
-  assert.match(printed, /repeat until it prints no items/);
+  assert.match(printed, /drain again until it prints nothing/);
 
   // The drain command the monitor runs is the same one it prints.
   calls.forEach((args) => {
@@ -81,10 +84,10 @@ test("idle polls stay local until work appears, then monitor prints once and exi
   });
 });
 
-test("the work the monitor prints carries no contract block", async () => {
-  // The monitor has no output of its own: it prints what the drain printed.
+test("the monitor's line carries no contract block and none of the work", async () => {
+  // The monitor prints one line of its own and none of what its drain printed.
   // So this runs the REAL status command, not a stub, because a stub would
-  // only prove the monitor forwards a string.
+  // only prove the monitor handles a string.
   const dir = tempDir();
   const sessions = agentSessions.createStore({ dir: dir });
   sessions.create({ id: "s_monitor" });
@@ -121,12 +124,10 @@ test("the work the monitor prints carries no contract block", async () => {
 
   assert.equal(code, protocol.CLI_EXIT.OK);
   const printed = stdout.join("");
-  assert.match(printed, /fix the footer/, "the work still gets through");
-  assert.equal(printed.includes("contract_in"), false, "and no pointer line: the item lines are the work");
+  assert.match(printed, /^LAHE ACTION REQUIRED: 1 item waiting\./, "the line says the work is there");
+  assert.equal(printed.includes("fix the footer"), false, "and leaves the work to the drain");
+  assert.equal(printed.includes("contract_in"), false, "no pointer line");
   assert.equal(printed.includes("field_classes"), false, "and no field-class table");
-  const itemLine = JSON.parse(printed.split("\n").find((line) => line.includes('"note":"fix the footer"')));
-  assert.ok(Object.prototype.hasOwnProperty.call(itemLine.page, "quote"), "page text sits under page (D12)");
-  assert.equal(Object.prototype.hasOwnProperty.call(itemLine, "quote"), false, "and not at the top level");
   reviewFormat.CONTRACT.forEach((clause) => {
     assert.equal(printed.includes(clause), false, "a contract clause reached the monitor: " + clause);
   });
@@ -152,7 +153,7 @@ test("the real monitor wakes once on an ended review, and the drain it hands ove
     wait: async () => {}
   });
   assert.equal(code, protocol.CLI_EXIT.OK);
-  assert.match(woke.join(""), /"ended_reviews":\[\{"review":"r_ended"/, "the monitor wakes on the ending");
+  assert.match(woke.join(""), /LAHE ACTION REQUIRED: 1 ended review waiting/, "the monitor wakes on the ending");
 
   // The relaunched monitor stays quiet. The session is closed on its first
   // idle wait, which is the only way this loop ends when nothing is printed.
@@ -406,8 +407,8 @@ test("the printed drain and relaunch carry --state-dir only when it is not the d
     wait: async () => {}
   });
   const printed = stdout.join("");
-  assert.match(printed, new RegExp("drain\\s+lahe status --session s_flags --json --quiet --state-dir " + path.resolve(dir)));
-  assert.match(printed, new RegExp("relaunch\\s+lahe monitor --session s_flags --state-dir " + path.resolve(dir)));
+  assert.ok(printed.includes("Drain: lahe status --session s_flags --json --quiet --state-dir " + path.resolve(dir) + "."), printed);
+  assert.ok(printed.includes("Then relaunch: lahe monitor --session s_flags --state-dir " + path.resolve(dir) + "\n"), printed);
 
   // No --state-dir given: the copied command resolves the same default this one
   // did, so printing the path would be noise on every command.
@@ -422,7 +423,7 @@ test("the printed drain and relaunch carry --state-dir only when it is not the d
     },
     wait: async () => {}
   });
-  assert.match(plain.join(""), /drain\s+lahe status --session s_plain --json --quiet\n/);
+  assert.ok(plain.join("").includes("Drain: lahe status --session s_plain --json --quiet."), plain.join(""));
   assert.doesNotMatch(plain.join(""), /--state-dir/);
 });
 
@@ -523,15 +524,15 @@ test("a relaunch waits on work it already printed, and wakes when something new 
 
   const first = scriptedRun(store, [ITEM_ONE + SUMMARY]);
   assert.equal(await monitor.run(["--session", "s_loop"], first.opts), protocol.CLI_EXIT.OK);
-  assert.match(first.stdout.join(""), /c_one/);
+  assert.match(first.stdout.join(""), /1 item waiting/);
 
   // Relaunched with c_one still unanswered: two quiet polls, then c_two lands.
   const second = scriptedRun(store, [ITEM_ONE + SUMMARY, ITEM_ONE + SUMMARY, ITEM_ONE + ITEM_TWO + SUMMARY], { pid: process.pid + 1 });
   assert.equal(await monitor.run(["--session", "s_loop"], second.opts), protocol.CLI_EXIT.OK);
   assert.equal(second.polls(), 3, "it kept polling past the item it had already printed");
   const printed = second.stdout.join("");
-  assert.match(printed, /c_two/, "the new item is printed");
-  assert.match(printed, /c_one/, "the drain output is printed whole, old item included");
+  // The line counts the whole drain, old item included; the drain prints them.
+  assert.match(printed, /2 items waiting/, "the wake counts everything the drain will print");
 });
 
 test("the same item at a new revision is new work", async () => {

@@ -231,7 +231,12 @@ test("lahe monitor exits 0 on a pending request alone, and not again for the sam
     }
   });
   assert.equal(code, protocol.CLI_EXIT.OK);
-  assert.match(stdout.join(""), /"catalog_requests":\[\{"request":"cq_/);
+  // The monitor prints one line; the agent's drain prints the request
+  // (docs/features/20261014.02_lean_agent_output).
+  assert.match(stdout.join(""), /^LAHE ACTION REQUIRED: 1 Library request waiting\./);
+  w.store.reopen("s_attached");
+  const handDrain = await drain(w, ["--session", "s_attached", "--json", "--quiet"], { now: Date.now() });
+  assert.match(handDrain.text, /"catalog_requests":\[\{"request":"cq_/, "the agent's own drain still lists what woke it");
 
   let polls = 0;
   const again = await monitor.run(["--session", "s_attached", "--state-dir", w.dir], {

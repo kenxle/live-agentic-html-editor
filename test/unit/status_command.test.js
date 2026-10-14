@@ -253,13 +253,17 @@ test("on a drain line, page text sits under page and no rule text is repeated", 
     const items = run.stdout.trim().split("\n").slice(0, -1).map((text) => JSON.parse(text));
     assert.equal(items.length, 2);
     items.forEach((line) => {
+      // An empty field is left off the line (docs/features/20261014.02_lean_agent_output),
+      // so the rule is about where a data field can be, not that every one is there.
       reviewFormat.DATA_FIELDS.forEach((field) => {
         assert.equal(Object.prototype.hasOwnProperty.call(line, field), false, field + " is not at the top level");
-        assert.ok(Object.prototype.hasOwnProperty.call(line.page, field), field + " is under page");
       });
+      assert.ok(Object.prototype.hasOwnProperty.call(line.page, "quote") || line.note === "second thing", "the quote is under page");
+      assert.ok(Object.prototype.hasOwnProperty.call(line.page, "region"), "region is under page");
       assert.equal(line.page.path, "/report.html", "beside the page's own path");
+      assert.ok(Object.prototype.hasOwnProperty.call(line, "note"), "note stays at the top level");
       reviewFormat.INTENT_FIELDS.forEach((field) => {
-        assert.ok(Object.prototype.hasOwnProperty.call(line, field), field + " stays at the top level");
+        assert.equal(Object.prototype.hasOwnProperty.call(line.page, field), false, field + " is never under page");
       });
     });
     const withQuote = items.find((line) => line.note === "tighten this");
@@ -298,20 +302,33 @@ test("an item line still carries everything that locates it", async () => {
   const line = JSON.parse(run.stdout.trim().split("\n")[0]);
 
   // Every field review.json gives this item, with the same value: page text
-  // under page, the rest where it always was.
+  // under page, the rest where it always was. Empty fields are left off the
+  // line, and three are dropped on purpose: the region label, the card's
+  // first-created time, and (below) the page's address and title
+  // (docs/features/20261014.02_lean_agent_output).
   const events = logModule.createEventLog({ dir }).read("rev1");
-  const projected = projectionModule.project("rev1", events).pages[0].items[0];
+  const projected = status.leanValue(projectionModule.project("rev1", events).pages[0].items[0]);
+  const dropped = ["region_label", "card_first_created_at"];
   Object.keys(projected).forEach((key) => {
+    if (dropped.includes(key)) return;
     const carried = reviewFormat.DATA_FIELDS.includes(key) ? line.page[key] : line[key];
     assert.deepEqual(carried, projected[key], "the drain line carries " + key + " as review.json does");
   });
-  // Plus which review and session it belongs to, and the page it is on.
+  // Plus which review it belongs to, and the page it is on.
   assert.equal(line.review, "rev1");
-  assert.equal(line.agent_session_id, "legacy");
   assert.equal(line.page.path, "/report.html");
-  assert.equal(line.page.origin, "http://127.0.0.1:8000");
   assert.equal(line.page.quote, "the old headline");
   assert.equal(line.page.context.heading, "Intro");
+  assert.equal(line.page.context.prefix, "before it ", "context the quote does not hold is kept");
+  assert.equal(line.page.region.text_unique, true);
+  assert.deepEqual(line.page.region.ordinal, { index: 1, of: 1 });
+  assert.equal(typeof line.reviewer_last_changed_at, "string", "when the reviewer last changed it stays");
+  dropped.concat(["agent_session_id"]).forEach((key) => {
+    assert.equal(Object.prototype.hasOwnProperty.call(line, key), false, key + " is not on the line");
+  });
+  ["origin", "title", "region_label"].forEach((key) => {
+    assert.equal(Object.prototype.hasOwnProperty.call(line.page, key), false, "page." + key + " is not on the line");
+  });
 });
 
 test("liveness is said once per review, on the summary line, not on every item", async () => {
@@ -1063,17 +1080,22 @@ test("on a drain line, a run item's new text sits under page and its markers sta
   assert.equal(items.length, 2);
   const runLine = items.find((l) => l.id === run.id);
   const backLine = items.find((l) => l.id === back.id);
-  for (const field of ["new_blocks", "anchor_after_html", "remove_blocks"]) {
-    assert.equal(Object.prototype.hasOwnProperty.call(runLine, field), false, field + " is not at the top level");
-    assert.ok(Object.prototype.hasOwnProperty.call(runLine.page, field), field + " is under page");
+  // An empty field is left off the line, so each text field is checked on the
+  // item that has it (docs/features/20261014.02_lean_agent_output).
+  for (const [line, field] of [[runLine, "new_blocks"], [runLine, "anchor_after_html"], [backLine, "remove_blocks"]]) {
+    assert.equal(Object.prototype.hasOwnProperty.call(line, field), false, field + " is not at the top level");
+    assert.ok(Object.prototype.hasOwnProperty.call(line.page, field), field + " is under page");
   }
   assert.equal(runLine.page.new_blocks.length, 3);
   assert.equal(backLine.page.remove_blocks.length, 3);
-  for (const marker of ["placement", "proofread", "anchor_tag_after", "run_words"]) {
+  for (const marker of ["placement", "run_words"]) {
     assert.ok(Object.prototype.hasOwnProperty.call(runLine, marker), marker + " stays at the top level");
   }
+  for (const marker of ["placement", "proofread", "anchor_tag_after", "run_words"]) {
+    assert.equal(Object.prototype.hasOwnProperty.call(runLine.page, marker), false, marker + " is never under page");
+  }
   assert.equal(runLine.placement, "after_anchor");
-  assert.equal(runLine.proofread, false);
+  assert.equal(Object.prototype.hasOwnProperty.call(runLine, "proofread"), false, "proofread false is left off, and missing means false");
   items.forEach((line) => assert.equal(Object.prototype.hasOwnProperty.call(line, "notes"), false, "no item line carries notes"));
   assert.equal(/instruction|never|trust/i.test(out.stdout), false, "the drain repeats no rule text");
 });

@@ -51,6 +51,7 @@ var logModule = require("../../service/log.js");
 var projectionModule = require("../../service/projection.js");
 var agentSessionsModule = require("../../service/agent_sessions.js");
 var reviewFormat = require("../../shared/review_format.js");
+var normalize = require("../../shared/normalize.js");
 var healModule = require("../../service/heal.js");
 var staticServersModule = require("../../service/static_servers.js");
 var catalogRequestsModule = require("../../service/catalog_requests.js");
@@ -499,8 +500,8 @@ function clip(text, limit) {
  * fence is kept as structure instead. The page-derived fields
  * (review_format.DATA_FIELDS: quote, before, after_full, context, region,
  * subject and the rest) move into the item's `page` object, beside the page's
- * own path and title, which came off the page too. The contract says once what
- * `page` means. The reviewer's words, `note` and `change`, stay at the top.
+ * own path, which came off the page too. The contract says once what `page`
+ * means. The reviewer's words, `note` and `change`, stay at the top.
  *
  * A data field is moved only when the item has it, and the move always wins, so
  * an item can never carry page text at the top level of a drain line.
@@ -532,8 +533,93 @@ function drainLine(where, item) {
       });
     }
   }
+  // FIELDS THE AGENT DOES NOT NEED ON EVERY ITEM
+  // (docs/features/20261014.02_lean_agent_output). The page's address and
+  // title are the same on every comment, the region label is a short name for
+  // the rail, and the card's first-created time is the field that once read as
+  // "this request is old". review.json keeps all four. reviewer_last_changed_at
+  // stays: the no-stale-excuse spec (20260923.02, R1) requires it on the drain.
+  DRAIN_DROPPED_PAGE_FIELDS.forEach(function (field) { delete page[field]; });
+  DRAIN_DROPPED_FIELDS.forEach(function (field) { delete line[field]; });
+  page.context = withoutRepeatedContext(page.context, page.quote);
   line[DRAIN_PAGE_KEY] = page;
-  return line;
+  return leanValue(line);
+}
+
+var DRAIN_DROPPED_PAGE_FIELDS = ["origin", "title", reviewFormat.PROJECTED.REGION_LABEL];
+var DRAIN_DROPPED_FIELDS = ["agent_session_id", "card_first_created_at"];
+
+/**
+ * The context with any side the quote already holds taken out.
+ *
+ * A prefix or suffix that is wholly inside the quote, once both go through the
+ * one normalizer, tells the agent nothing the quote does not. A partial overlap
+ * is kept whole: trimming it would hand the agent text that is not on the page.
+ */
+function withoutRepeatedContext(context, quote) {
+  if (!context || typeof context !== "object" || typeof quote !== "string" || !quote) return context;
+  var heldQuote = normalize.normalizeText(quote);
+  var out = Object.assign({}, context);
+  ["prefix", "suffix"].forEach(function (side) {
+    if (typeof out[side] !== "string") return;
+    var text = normalize.normalizeText(out[side]);
+    if (text && heldQuote.indexOf(text) !== -1) delete out[side];
+  });
+  return out;
+}
+
+/**
+ * A copy of a drain value with every empty field left out, at every depth.
+ *
+ * Empty is null, undefined, false, "", [] and {}, and an object that is empty
+ * once its own empty fields are gone. A plain comment used to carry two dozen
+ * of them on every drain line. The contract says once that a missing field
+ * means empty and a missing true/false field means false.
+ *
+ * An array's entries are never dropped, only cleaned inside: a block's index
+ * in new_blocks is how a proofread reply names it.
+ */
+function leanValue(value) {
+  if (Array.isArray(value)) {
+    return value.map(function (entry) {
+      return entry && typeof entry === "object" ? leanValue(entry) : entry;
+    });
+  }
+  if (!value || typeof value !== "object") return value;
+  var out = {};
+  Object.keys(value).forEach(function (key) {
+    var kept = leanValue(value[key]);
+    if (isEmptyValue(kept)) return;
+    out[key] = kept;
+  });
+  return out;
+}
+
+function isEmptyValue(value) {
+  if (value === null || value === undefined || value === false || value === "") return true;
+  if (Array.isArray(value)) return value.length === 0;
+  if (typeof value === "object") return Object.keys(value).length === 0;
+  return false;
+}
+
+/**
+ * Does a drain's summary line carry anything the agent needs?
+ *
+ * The contract and the skill tell an agent to read three things off it: an
+ * ended review, a Library request, and whether each review's page is
+ * connected. So it prints on a drain only when one of those says something:
+ * a list is not empty, or a review on the drain has its helper down or no page
+ * seen. On a healthy drain it was 126 tokens of nothing, every time.
+ */
+function summaryNeeded(summary) {
+  if (!summary) return false;
+  if (Array.isArray(summary.ended_reviews) && summary.ended_reviews.length) return true;
+  if (Array.isArray(summary.catalog_requests) && summary.catalog_requests.length) return true;
+  var liveness = summary.liveness || {};
+  return Object.keys(liveness).some(function (review) {
+    var entry = liveness[review] || {};
+    return entry.helper_up !== true || !entry.page_last_seen_at;
+  });
 }
 
 /**
@@ -1194,7 +1280,7 @@ async function run(argv, options) {
       // 175 bytes each, for one fact per review.
       livenessByReview[id] = liveness;
       open.forEach(function (item) {
-        jsonItems.push(drainLine({ review: id, agent_session_id: ownerSessionId }, item));
+        jsonItems.push(drainLine({ review: id }, item));
       });
     }
 
@@ -1397,19 +1483,20 @@ async function run(argv, options) {
     toPrint.forEach(function (item) {
       out(JSON.stringify(item) + "\n");
     });
-    out(
-      JSON.stringify({
-        reviews: ids.length,
-        unanswered_ready: totalUnanswered,
-        ended_reviews: endedToReport,
-        catalog_requests: catalogReport.entries.map(printableEntry),
-        liveness: livenessOfPrinted(toPrint, livenessByReview),
-        new_since_seen_file: args.seenFile ? toPrint.length : undefined,
-        helper: helperOrigin,
-        agent_session_id: args.session,
-        state_dir: dir
-      }) + "\n"
-    );
+    var summary = {
+      reviews: ids.length,
+      unanswered_ready: totalUnanswered,
+      ended_reviews: endedToReport,
+      catalog_requests: catalogReport.entries.map(printableEntry),
+      liveness: livenessOfPrinted(toPrint, livenessByReview),
+      new_since_seen_file: args.seenFile ? toPrint.length : undefined,
+      helper: helperOrigin,
+      agent_session_id: args.session,
+      state_dir: dir
+    };
+    // ONLY WHEN IT SAYS SOMETHING, on a drain. An audit (no --quiet) is a
+    // person or an agent looking, and it keeps the whole picture.
+    if (!args.quiet || summaryNeeded(summary)) out(JSON.stringify(summary) + "\n");
 
     // AFTER THE PRINT, so a drain whose output never reached the agent has
     // marked nothing, and the next drain says it again.
@@ -1475,6 +1562,8 @@ module.exports = {
   excerpt: excerpt,
   PAGE_TEXT_LABEL: PAGE_TEXT_LABEL,
   drainLine: drainLine,
+  leanValue: leanValue,
+  summaryNeeded: summaryNeeded,
   DRAIN_PAGE_KEY: DRAIN_PAGE_KEY,
   // `lahe session list` counts reviews and unanswered work per session. It asks
   // these two, rather than spelling the routing rule a second time: one answer

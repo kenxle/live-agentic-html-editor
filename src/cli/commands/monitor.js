@@ -1,4 +1,4 @@
-// `lahe monitor`: wait locally for new session work, print it, and exit.
+// `lahe monitor`: wait locally for new session work, say it is there, and exit.
 //
 // This process, not an LLM timer, pays for idle polling. Empty status checks
 // stay inside this Node process; the command completes only when new item lines
@@ -15,12 +15,14 @@
 // whether to relaunch, so "handle this work" and "stop relaunching, the session
 // is over" cannot share one.
 //
-//   OK                  work is printed; handle it, drain, relaunch
+//   OK                  work is waiting; drain it, handle it, relaunch
 //   SESSION_CLOSED      the session is closed; do not relaunch
 //   SESSION_TAKEN_OVER  another agent owns this session now; do not relaunch
 //   BAD_USAGE           a caller error, including a duplicate monitor
 
 "use strict";
+
+var fs = require("node:fs");
 
 var protocol = require("../../shared/protocol.js");
 var agentSessions = require("../../service/agent_sessions.js");
@@ -29,12 +31,15 @@ var status = require("./status.js");
 
 var DEFAULT_INTERVAL_SECONDS = protocol.MONITOR.INTERVAL_SECONDS;
 var MAX_INTERVAL_SECONDS = 3600;
-var ACTION_REQUIRED = "LAHE ACTION REQUIRED: do not end this turn or report that work is ready. Handle every item below now, rebuild and verify visible output, append replies, drain status until empty, then relaunch lahe monitor.\n";
+// The banner that opens the monitor's one line. The contract and the skill tell
+// an agent what it means, so the words stay exactly these.
+var ACTION_REQUIRED = "LAHE ACTION REQUIRED";
 
 var USAGE = [
   "usage: lahe monitor --session <id> [--session <id> ...] [--interval <seconds>] [--state-dir <path>]",
   "",
-  "Polls session-scoped status locally, prints only unanswered work, then exits.",
+  "Polls session-scoped status locally. When work is waiting it prints one line",
+  "naming the drain and relaunch commands, then exits.",
   "Idle polls invoke no model and print nothing.",
   "",
   "  --session <id>       required agent-session owner. Give it more than once to watch several",
@@ -45,7 +50,7 @@ var USAGE = [
   "  --state-dir <path>   same state root used by review and status",
   "",
   "Exit codes:",
-  "  " + protocol.CLI_EXIT.OK + "  new work printed; handle it, drain, then relaunch",
+  "  " + protocol.CLI_EXIT.OK + "  new work waiting; drain it, handle it, then relaunch",
   "  " + protocol.CLI_EXIT.BAD_USAGE + "  bad usage, an unknown session, or another monitor already running",
   "  " + protocol.CLI_EXIT.SESSION_CLOSED + "  the agent session is closed; monitoring has ended, do not relaunch",
   "  " + protocol.CLI_EXIT.SESSION_TAKEN_OVER + "  another agent took this session over; do not relaunch"
@@ -117,10 +122,15 @@ function parseArgs(argv) {
  * carries anything else: an ended review, a Library request, or a line that is
  * not one of the two shapes the drain prints. Anything unrecognised counts as
  * new, so a format change can only cost a repeat wake, never a missed one.
+ *
+ * It also counts what it read, for the one line the monitor prints: ended
+ * reviews and Library requests.
  */
 function parseDrain(text) {
   var keys = [];
   var other = false;
+  var ended = 0;
+  var requests = 0;
   String(text).split("\n").forEach(function (line) {
     if (!line.trim()) return;
     var row;
@@ -131,13 +141,58 @@ function parseDrain(text) {
       return;
     }
     if (row.reviews !== undefined) {
-      if ((Array.isArray(row.ended_reviews) && row.ended_reviews.length) ||
-          (Array.isArray(row.catalog_requests) && row.catalog_requests.length)) other = true;
+      if (Array.isArray(row.ended_reviews)) ended += row.ended_reviews.length;
+      if (Array.isArray(row.catalog_requests)) requests += row.catalog_requests.length;
+      if (ended || requests) other = true;
       return;
     }
     other = true;
   });
-  return { keys: keys, other: other };
+  return { keys: keys, other: other, ended: ended, requests: requests };
+}
+
+/**
+ * Do stdout and stderr write to the same place?
+ *
+ * The same device and inode is one terminal, one pipe, or one output file,
+ * which is how a host that merges the streams captures a background command.
+ * Anything that cannot be read is treated as split, so the line goes to both:
+ * a doubt costs one repeated line, never a missed one.
+ */
+function streamsShareDestination(fstat) {
+  var stat = fstat || fs.fstatSync;
+  try {
+    var out = stat(1);
+    var err = stat(2);
+    return !!out && !!err && out.dev === err.dev && out.ino === err.ino;
+  } catch (statError) {
+    return false;
+  }
+}
+
+function plural(count, one, many) {
+  return count + " " + (count === 1 ? one : many);
+}
+
+/**
+ * The one line the monitor prints when work is waiting.
+ *
+ * It names what is waiting, the drain for each session with work, and the
+ * relaunch. It carries none of the work: the agent's own drain prints that, so
+ * printing it here was a second copy of every item in the agent's context.
+ */
+function actionLine(counts, drains, relaunch) {
+  var parts = [];
+  if (counts.items) parts.push(plural(counts.items, "item", "items"));
+  if (counts.ended) parts.push(plural(counts.ended, "ended review", "ended reviews"));
+  if (counts.requests) parts.push(plural(counts.requests, "Library request", "Library requests"));
+  var what = parts.length ? parts.join(", ") + " waiting" : "work waiting";
+  var one = drains.length === 1;
+  return ACTION_REQUIRED + ": " + what + ". Do not end this turn. " +
+    (one ? "Drain: " : "Drain each: ") + drains.join(" and ") + ". " +
+    "Handle every item it prints, rebuild and verify, reply, and drain again until " +
+    (one ? "it prints" : "each prints") + " nothing. " +
+    "Then relaunch: " + relaunch + "\n";
 }
 
 function waitMs(ms) {
@@ -185,6 +240,9 @@ async function run(argv, options) {
   var wait = opts.wait || waitMs;
   var pid = typeof opts.pid === "number" ? opts.pid : process.pid;
   var nowMs = typeof opts.now === "function" ? opts.now : function () { return Date.now(); };
+  // Whether one copy of the line reaches both streams' reader. A test passes
+  // it; a real run asks the file system when it prints.
+  var sameStream = typeof opts.sameStream === "boolean" ? opts.sameStream : null;
   // The session store this monitor reads and heartbeats through. `readSession`
   // is the narrower seam a test uses when it only wants to script the session
   // record; a store built from it has no heartbeat, which the guards below allow.
@@ -480,29 +538,32 @@ async function run(argv, options) {
       var seen = deliveredKeys(result.entry);
       var parsed = parseDrain(result.printed);
       result.keys = parsed.keys;
+      result.parsed = parsed;
       result.fresh = parsed.other || parsed.keys.some(function (key) { return seen.indexOf(key) === -1; });
     });
     var withWork = results.filter(function (result) { return !!result.printed && result.fresh; });
     if (withWork.length > 0) {
       withWork.forEach(recordDelivered);
-      // ON STDOUT, ahead of the items, and on stderr as well. A host that
-      // captures one stream used to get the instruction without the work, or the
-      // work without the instruction.
-      out(ACTION_REQUIRED);
-      err(ACTION_REQUIRED);
-      withWork.forEach(function (result) { out(result.printed); });
-      // The next step, printed where the agent is already looking, rather than
-      // left in a doc it may never open. One drain per session that had work;
-      // the relaunch names every session still watched.
-      var drains = withWork.map(function (result, index) {
-        return (index === 0 ? "  drain     " : "            ") + protocol.drainCommand(result.entry.id, flagDir);
+      // ONE LINE, AND NONE OF THE WORK. The agent drains next, and the drain
+      // prints the items; printing them here too put every item in the agent's
+      // context twice. The line names the drain for each session that had work
+      // and the relaunch for every session still watched.
+      var counts = { items: 0, ended: 0, requests: 0 };
+      withWork.forEach(function (result) {
+        counts.items += result.parsed.keys.length;
+        counts.ended += result.parsed.ended;
+        counts.requests += result.parsed.requests;
       });
-      out(
-        "\nNEXT: handle every item above, rebuild and verify, append your replies.\n" +
-          drains.join("\n") + "\n" +
-          "            repeat until it prints no items\n" +
-          "  relaunch  " + protocol.monitorCommand(watched.map(function (entry) { return entry.id; }), flagDir) + "\n"
+      var line = actionLine(
+        counts,
+        withWork.map(function (result) { return protocol.drainCommand(result.entry.id, flagDir); }),
+        protocol.monitorCommand(watched.map(function (entry) { return entry.id; }), flagDir)
       );
+      // ON STDOUT, and on stderr too only when the two go to different places.
+      // A host that captured one stream once got the instruction without the
+      // work; a host that merges them showed the agent two copies.
+      out(line);
+      if (!(sameStream === null ? streamsShareDestination() : sameStream)) err(line);
     }
     var failed = null;
     results.forEach(function (result) {
@@ -530,6 +591,8 @@ module.exports = {
   MAX_INTERVAL_SECONDS: MAX_INTERVAL_SECONDS,
   ACTION_REQUIRED: ACTION_REQUIRED,
   USAGE: USAGE,
+  actionLine: actionLine,
+  streamsShareDestination: streamsShareDestination,
   liveDuplicate: liveDuplicate,
   parseArgs: parseArgs,
   parseDrain: parseDrain,
