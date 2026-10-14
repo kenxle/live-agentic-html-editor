@@ -55,6 +55,22 @@ flowchart TD
 
 ### Step 1. Get ready and serve the page
 
+**Check for a newer Lahe** once, at the start of your session, before your
+first `lahe` command. The clone is the path inside `~/.local/bin/lahe`.
+
+```sh
+git -C <clone> fetch --quiet
+git -C <clone> status -sb    # the first line says "behind N" when there is an update
+```
+
+- If the clone is behind, on its default branch, and `git -C <clone> pull --ff-only`
+  succeeds, run `npm run install-skills` in the clone. When `skills/lahe/SKILL.md`
+  changed in the pull, read it again before you go on. The next `lahe review`
+  restarts the helper onto the new code by itself.
+- If the clone is on another branch, or the pull refuses, change nothing in it.
+  Tell your human in one line that an update is waiting, and go on.
+- If the fetch fails (no network), go on with the version you have.
+
 **Read the user settings file** once, at the start of the review:
 `$XDG_CONFIG_HOME/lahe/user.env`, or `~/.config/lahe/user.env` when
 `XDG_CONFIG_HOME` is not set. It holds plain `KEY=value` lines, and lines
