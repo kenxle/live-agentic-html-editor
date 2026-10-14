@@ -159,7 +159,7 @@ test("rendering translates local links, marks the read-only view, and stays dete
 
     const registry = links.createRegistry({});
     const html = markdown.render(doc, { readOnlyNote: true, links: registry });
-    assert.match(html, /Read-only rendered view of <code>[^<]*SKILL\.md<\/code>\. This document is not under review\./);
+    assert.match(html, /Read-only rendered view of <code>[^<]*SKILL\.md<\/code><br>This document is not under review\./);
     assert.match(html, new RegExp('href="' + links.mountPrefix(siblingDir) + 'SKILL\\.md"'));
     assert.match(html, /href="\/\.lahe-source\/[a-f0-9]+\/references\/document-templates\.md"/);
     assert.doesNotMatch(html,

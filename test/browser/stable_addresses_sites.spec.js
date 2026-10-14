@@ -190,6 +190,10 @@ test("V20: a gone worktree file shows the main checkout's copy read-only, with t
   await expect(page.locator("h1")).toHaveText("From the main checkout");
   await expect(page.locator(".lahe-moved-note")).toContainText("worktree is gone");
   await expect(page.locator(".lahe-moved-note")).toContainText(path.join(main, "docs", "page.html"));
+  // One statement per line: two long paths in one sentence were hard to read.
+  await expect(page.locator(".lahe-moved-note br")).toHaveCount(4);
+  await expect(page.locator(".lahe-moved-note a")).toHaveText("the Library");
+  expect(await page.locator(".lahe-moved-note a").getAttribute("href")).toContain("/catalog");
   expect(await page.evaluate(() => document.querySelectorAll("script[data-lahe-review]").length)).toBe(0);
   expect(await page.evaluate(() => !!window.__lahe)).toBe(false);
 });

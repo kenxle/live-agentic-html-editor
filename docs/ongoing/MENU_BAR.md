@@ -16,7 +16,7 @@ A document waits on the reviewer while one of its items is unread, by the one ru
 
 Only replies newer than `seeded_at` in `<state>/summary.json` count. That file is written the first time the installed app asks, so the day the icon is installed it shows zero, not the dozens of old unanswered questions a long-running state folder holds. A missing or unreadable file starts fresh, which can only make the count smaller.
 
-Retired reviews, ended reviews and documents whose file is gone never count. Every other document counts, open in a browser or not; the menu lists the open ones first and marks them.
+Retired reviews, ended reviews and documents whose file is gone never count. A file whose worktree was removed is gone too: its address shows the main checkout's copy read-only, with no rail to read the reply on, so it would otherwise wait forever. Every other document counts, open in a browser or not; the menu lists the open ones first and marks them.
 
 ## How the read mark travels
 

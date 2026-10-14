@@ -1083,11 +1083,18 @@ function gonePage(file, libraryHref) {
   ]);
 }
 
-/** R13: the note on a worktree file shown from the main checkout. */
-function movedNote(goneFile, shownFile) {
-  return "<p class=\"lahe-readonly-note lahe-moved-note\">This file's worktree is gone, so this is the copy in the main checkout, " +
-    "read-only: <code>" + escapeHtml(shownFile) + "</code>. It was served from <code>" + escapeHtml(goneFile) +
-    "</code>. To comment on it, open it from the Library.</p>";
+/**
+ * R13: the note on a worktree file shown from the main checkout. One statement
+ * per line: two long paths in one run of prose were hard to read. Editing
+ * needs a review's rail on this copy, which an agent brings: Hand to agent in
+ * the Library (Pick this up, or Launch a new agent with none attached).
+ */
+function movedNote(goneFile, shownFile, libraryHref) {
+  return "<p class=\"lahe-readonly-note lahe-moved-note\">This file's worktree is gone.<br>" +
+    "This is the copy in the main checkout, read-only.<br>" +
+    "This copy: <code>" + escapeHtml(shownFile) + "</code><br>" +
+    "It was served from: <code>" + escapeHtml(goneFile) + "</code><br>" +
+    "To edit or comment on it, find it in <a href=\"" + escapeHtml(libraryHref) + "\">the Library</a> and choose Hand to agent, which has an agent serve this copy with its rail.</p>";
 }
 
 // ---------------------------------------------------------------------------
@@ -1356,8 +1363,8 @@ function createPageRoutes(options) {
 
   /** A linked page that has its own review, shown here read-only, with where to comment. */
   function serveElsewhere(req, res, ctx, candidate, real, urlDir) {
-    var note = "<p class=\"lahe-readonly-note lahe-own-review-note\">This document has its own review. Open it at its own address to comment on it: <code>" +
-      escapeHtml(real) + "</code>.</p>";
+    var note = "<p class=\"lahe-readonly-note lahe-own-review-note\">This document has its own review.<br>" +
+      "Open it at its own address to comment on it: <code>" + escapeHtml(real) + "</code></p>";
     if (markdown.isMarkdown(candidate)) {
       return serveMarkdown(req, res, ctx, candidate, real, urlDir, { readOnly: true, mounted: true, note: note });
     }
@@ -1377,14 +1384,14 @@ function createPageRoutes(options) {
         var copyBase = path.join(site.main_checkout, path.relative(site.worktree_root, site.root));
         return serveMarkdown(req, res, ctx, copy, copy, urlDirOf("/", site.mode === "page-only" ? path.dirname(copyBase) : copyBase, copy), {
           readOnly: true,
-          note: movedNote(candidate, copy)
+          note: movedNote(candidate, copy, libraryHref())
         });
       }
       if (heal.isStaticPage(copy)) {
         var html;
         try { html = fs.readFileSync(copy, "utf8"); } catch (err) { return notFound(req, res); }
         var stripped = scriptLine.removeScriptLine(html);
-        return sendHtml(req, res, 200, tabIcon.ensure(placeNote(stripped ? stripped.html : html, movedNote(candidate, copy))));
+        return sendHtml(req, res, 200, tabIcon.ensure(placeNote(stripped ? stripped.html : html, movedNote(candidate, copy, libraryHref()))));
       }
       var stat = fs.statSync(copy);
       return streamFile(req, res, copy, stat.size);

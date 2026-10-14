@@ -249,7 +249,9 @@ function createSummary(options) {
   /**
    * One Library row as the summary needs it. Unread replies count only from
    * the parts a reviewer can act on: never a review that ended, or whose file
-   * is gone (R7).
+   * is gone (R7). A file whose worktree was removed is gone too: its address
+   * shows the main checkout's copy without this review's rail, so no page can
+   * read the reply, and it would wait on the reviewer forever.
    */
   function describeRow(row) {
     var lead = row.lead.info;
@@ -270,7 +272,7 @@ function createSummary(options) {
     row.parts.forEach(function (part) {
       var info = part.info;
       out.waiting += info.summary.waiting;
-      if (info.summary.ended || part.openable === "missing") return;
+      if (info.summary.ended || part.openable === "missing" || part.kind === "worktree") return;
       var unread = part.unread;
       out.unread += unread.count;
       out.questions += unread.questions;
