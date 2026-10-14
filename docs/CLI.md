@@ -86,6 +86,14 @@ drain with nothing waiting prints nothing at all. A takeover counts as a new
 reader: the agent that took over is told again. Whether each review's page is
 connected is said once per review, under `liveness` on the same last line.
 
+The drain is also lean, because it runs on every wake. An item line leaves out
+every empty field (`null`, `false`, `""`, `[]`, `{}`): a missing field means
+empty, and a missing true/false field means false. It leaves out context text
+the quoted passage already holds, and the page's address and title, the region
+label, the session id and the card's first-created time, which `review.json`
+keeps. The summary line prints only when it says something: an ended review, a
+Library request, or a page that is not connected.
+
 The **wake channel** is per host, because hosts differ in what they can do
 without spending model tokens:
 
@@ -94,8 +102,8 @@ without spending model tokens:
   In a terminal, desktop app or VS Code session, Claude Code puts no time limit on
   a background command (since 2.1.288), so one launch waits until there is work.
   The timeout matters only in unattended runs (`-p`, Agent SDK, CI, cloud). The
-  monitor remembers what it printed (`delivered.json` in the agent session
-  folder): relaunched while those items are unanswered, it waits, and it wakes
+  monitor remembers which items it woke the agent for (`delivered.json` in the
+  agent session folder): relaunched while those items are unanswered, it waits, and it wakes
   on a new item, a new revision, an ended review, or a Library request. A
   takeover starts the list fresh.
   It exits when work lands (`0`), the session closes (`5`), or another agent takes
@@ -103,8 +111,8 @@ without spending model tokens:
   in the background. A Stop hook catches the relaunch an agent forgets (see "The
   Stop hook" below). Claude Code can also stop a quiet background command when
   it thinks memory is low, outside those three codes. On such a kill the agent
-  only relaunches the monitor: its first poll prints any waiting work, so no
-  drain is needed. Setting `CLAUDE_CODE_DISABLE_BG_SHELL_PRESSURE_REAP=1` in the
+  only relaunches the monitor: its first poll wakes it on any work that landed
+  in the gap, so no drain is needed. Setting `CLAUDE_CODE_DISABLE_BG_SHELL_PRESSURE_REAP=1` in the
   `env` block of Claude Code's settings.json turns the kills off. After three
   kills in a row with nothing new landed between them, the agent stops
   relaunching and tells the reviewer instead.
@@ -118,12 +126,16 @@ without spending model tokens:
   interrupt it.
 
 The monitor keeps its idle polling in one small local Node process, so no host
-pays model tokens for a quiet document. It prints `LAHE ACTION REQUIRED` ahead of
-the work, on both stdout and stderr. That is an interrupt, not a stopping point:
-the agent continues the same turn through editing, rebuilding, verification, and
-replies. Merely reporting that an item arrived is a workflow failure.
+pays model tokens for a quiet document. When work lands it prints one line and
+none of the work: `LAHE ACTION REQUIRED`, what is waiting (counts), the drain
+command and the relaunch command. The drain prints the items. The line goes to
+stdout, and to stderr as well only when the two streams go to different places,
+so a host that reads one stream still sees it and a host that merges them sees
+it once. That is an interrupt, not a stopping point: the agent continues the
+same turn through draining, editing, rebuilding, verification, and replies.
+Merely reporting that an item arrived is a workflow failure.
 
-Monitor exit codes tell a host what to do next: `0` work is printed, `4` bad
+Monitor exit codes tell a host what to do next: `0` work is waiting, `4` bad
 usage or a live monitor already holds the session, `5` the session is closed, and
 `6` another agent took it over. On `5` or `6`, stop relaunching.
 
@@ -289,7 +301,9 @@ the append-only history underneath both.
 Write that line with `lahe reply`, not with `echo`. The command encodes the
 JSON, so a paragraph break or a quote in an agent's answer lands as `\n` and
 `\"` instead of splitting one object across three physical lines that the
-helper then rejects one by one. Hand-appending still works and is still read:
+helper then rejects one by one. It prints back only the item and the status,
+for example `{"item":"itm_x","status":"handled"}`: the agent just wrote the
+words, so echoing them would cost it the same tokens twice. Hand-appending still works and is still read:
 if you do it, the whole object goes on one physical line and every newline
 inside `text` or `reason` is the two characters backslash n.
 

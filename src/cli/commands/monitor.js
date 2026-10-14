@@ -530,8 +530,8 @@ async function run(argv, options) {
     // mid-way through it (waiting on CI, a build). Printing it again and exiting
     // at once is the relaunch loop, a wasted model turn each round. So a poll
     // whose items were all printed before waits, and the first new item, a new
-    // revision, an ended review, or a Library request wakes the agent with the
-    // whole drain output. A takeover moves the rev, which empties the list, so a
+    // revision, an ended review, or a Library request wakes the agent with its
+    // one line. A takeover moves the rev, which empties the list, so a
     // new agent is caught up on everything.
     results.forEach(function (result) {
       if (!result.printed) return;

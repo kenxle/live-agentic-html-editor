@@ -12,6 +12,7 @@ flowchart TD
 
     Wait -->|"a wake line lands"| Drain["lahe status --session id --json --quiet"]
     Drain -->|"prints one or more items"| Handle["handle each item:<br/>edit source, rebuild,<br/>verify the change is really in the built page,<br/>append one reply line"]
+    Handle -->|"after a batch"| Chat["say one line in chat;<br/>the detail is on the cards"]
     Handle --> Drain
     Drain -->|"prints nothing"| Wait
 
@@ -43,7 +44,7 @@ flowchart TD
     Cx --> LocalPoll["the monitor polls locally in one<br/>small Node process, no model tokens spent"]
     AG --> LocalPoll
     Oth --> LocalPoll
-    LocalPoll -->|"work is found"| Exit0["exits with code 0, prints the work"]
+    LocalPoll -->|"work is found"| Exit0["exits with code 0, prints one line:<br/>what is waiting, the drain and the relaunch"]
     Exit0 --> Drain1["run the drain command,<br/>then launch the monitor again"]
 
     LocalPoll -.->|"session closed"| Exit5["exits with code 5"]
@@ -95,6 +96,9 @@ the loop above, and the wake channel below carrying all four required pieces.
 
 - The main loop never has the agent stop and report that a wake arrived; the
   interrupt is a reason to keep working through drain, not a stopping point.
+- The monitor's wake is one line, not the work. Only the drain prints items,
+  so each item reaches the agent's context once. `lahe reply` prints back only
+  the item and the status, and after a batch the agent says one line in chat.
 - Every host now waits with the same `lahe monitor` process; only how it is
   run differs. On Claude Code it runs with Bash in the background, where one
   launch waits until there is work (the 86400000 timeout matters only in an

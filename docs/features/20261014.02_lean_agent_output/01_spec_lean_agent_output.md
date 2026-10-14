@@ -172,10 +172,27 @@ and the browser library are not touched.
 | Empty drain prints nothing | `lean_agent_output.test.js` | Any output from a drain with no work |
 | Reply prints only item and status | `lean_agent_output.test.js` | The reply text or `files` in stdout |
 | Contract and its copies agree | `test/unit/review_format.test.js` | A sentence differs |
-| One comment's cost | `node docs/features/20261014.02_lean_agent_output/measure_one_comment.js` | Before: 5,281 characters, 1,320 tokens. After: see below |
+| One comment's cost | `node docs/features/20261014.02_lean_agent_output/measure_one_comment.js` | Before: 5,281 characters, 1,320 tokens. After: 1,305 characters, 326 tokens. Failure is the after number not dropping |
 | Whole suite | `npm run gate:unit`, then `npm run gate` | Any failure |
 
-The measured cost is filled in below once the build is done.
+### The measured cost of one comment
+
+The script builds the comment from the token audit (a comment on a list item
+in a Markdown page, the helper up and the page seen) and runs the monitor, the
+drain and the reply in process. Tokens are characters divided by 4.
+
+| What the agent receives | Before | After |
+| --- | ---: | ---: |
+| The wake (`lahe monitor`) | 683 | 110 |
+| The drain | 479 | 202 |
+| The reply (`lahe reply`) | 159 | 15 |
+| **Total** | **1,320** | **326** |
+
+That is a 75.3% drop. Both runs use a temporary state folder, so both carry a
+`--state-dir` flag on each printed command; with the default folder both
+numbers are a little smaller. What is left is mostly the reviewer's note and
+the fields the agent uses to find the passage: the quote, the context, and the
+region.
 
 ## Acceptance criteria
 
