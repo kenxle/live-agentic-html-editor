@@ -1,6 +1,6 @@
 # Progress: Menu bar app
 
-**Where things are at 23:55 on October 13.** Done and landed, with one small round running on your three design answers. PR 1 ([#61](https://github.com/kenxle/live-agentic-html-editor/pull/61), the helper's summary) and PR 2 ([#62](https://github.com/kenxle/live-agentic-html-editor/pull/62), the icon, the install, Stop and Start) are on main, and main is green on CI and on the full local gate. Your answers: Waiting on you stays uncapped (nothing changes), Stop Lahe asks before it stops, and the icon becomes the Library's mark. The app builder is making the last two now; they land as one small PR after a full gate. **Still yours, under Needs your attention:** the real install on your Mac with one screenshot (best after this round lands), the proposed lesson to review, and the cleanup batch to approve.
+**Where things are at 23:55 on October 13.** Done and landed, with one small round running on your three design answers. PR 1 ([#61](https://github.com/kenxle/live-agentic-html-editor/pull/61), the helper's summary) and PR 2 ([#62](https://github.com/kenxle/live-agentic-html-editor/pull/62), the icon, the install, Stop and Start) are on main, and main is green on CI and on the full local gate. Your answers: Waiting on you stays uncapped (nothing changes), Stop Lahe asks before it stops, and the icon becomes the Library's mark. The app builder is making the last two now; they land as one small PR after a full gate. The icon is installed on your Mac (23:56) and running. **Still yours:** the proposed lesson to review, and the cleanup batch to approve.
 
 **Docs:** [Crucible](00_crucible_menu_bar_app.html) · [Brief](01_brief_menu_bar_app.html) · [Architecture](02_architecture_menu_bar_app.html) · [Plan](03_plan_menu_bar_app.html) (each page carries its reviews at the bottom) · [PR 2 reviews](05_pr2_reviews_menu_bar_app.md)
 
@@ -12,7 +12,11 @@ Your answers to the three design calls (full review in [PR 2 reviews](05_pr2_rev
 - **Stop Lahe asks first: yes.** A click on Stop shows "Stop Lahe? Agents' lahe commands will fail until you start it again." with Stop and Cancel. The grey line under Stop moves into the alert, so it leaves the menu. Being built now.
 - **The icon's mark: the Library mark.** The three books on a shelf from the Library page's own icon replace the speech bubble, drawn in one color so macOS can tint it for a light or dark menu bar. Being built now; the pictures below change when it lands.
 
-1. **Install it on your Mac, when you want it, ideally after the round above lands.** From the clone on main: `lahe install --menu-bar`. It compiles the app with the system's Swift (no Xcode needed, about 10 seconds), writes its login item beside the helper's, and starts it; `lahe status` then says where the icon is. An agent never runs this for you (Task 4.5 in the plan waits on your word). Then one real picture of the icon and its open menu, light or dark, for this page and the brief's V29; an agent cannot take it on this machine. If anything looks wrong, `lahe uninstall` removes the icon and `lahe menubar show` brings a hidden one back.
+- **Installed on your Mac at 23:56, as you asked.** The icon is in your menu bar and starts at login. The install refuses without a terminal by design, so I ran `lahe install --menu-bar` inside one; it took the icon-only path, which neither restarts the helper nor asks for your password. To undo it, `lahe install --no-menu-bar` removes the icon; `lahe menubar show` brings back a hidden one. The real menu bar, a minute after the install, with nothing waiting:
+
+  ![The real icon in the menu bar at rest, still the speech bubble](screenshots/real_icon_bubble_at_rest.png)
+
+  When the round above merges and the clone is updated, the helper rebuilds the app on its own; the new icon's real picture goes here.
 
 Two things the walk saw that are not in the menu bar's own flow, for you to know:
 
@@ -131,6 +135,7 @@ To delete at cleanup, in one batch with your go:
 
 ## Log
 
+- 2026-10-13 23:57: installed the icon on your Mac at your request (`lahe install --menu-bar`, icon-only path, run inside a terminal since the command refuses without one). The app runs under its login item; `lahe status` says "menu bar installed and running". A real screenshot of the icon at rest is under Needs your attention; screen capture works from this terminal now.
 - 2026-10-13 23:55: your three answers came in on this page. Waiting on you stays uncapped; Stop Lahe gets the alert; the icon becomes the Library mark. The app builder has the last two (it merges main first, writes the tests red then green, and redraws every picture and menu dump). After it returns: a full local gate, one small PR, a gate on main after the merge.
 - 2026-10-13 13:15: the full local gate on main's head (`272129b0`, with the CI fix) is green: unit 2864 passed, 0 failed; browser 884 passed, 0 failed, 7 skipped; `check:menubar` 4 passed, 1 skipped; helpers 1 before and after. The feature's code is done and landed. Holding for your answers.
 - 2026-10-13 13:08: the full local gate on main at PR 2's merge (`2c913902`) is green: unit 2864 passed, 0 failed; browser 884 passed, 0 failed, 7 skipped; `check:menubar` with the app's live tests 4 passed, 1 skipped (launchd); helpers 1 before and after. One more full gate is running on main's head (`272129b0`), which carries the CI fix. A lesson is proposed in `docs/lessons/proposed/` (a back-to-back benchmark of a polled route measures only the warm path), with a pointer from STABLE_ADDRESSES.md's old "almost no CPU" sentence; the lessons review is yours when you want it.
