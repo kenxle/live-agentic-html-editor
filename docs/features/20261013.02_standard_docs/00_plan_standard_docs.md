@@ -1,5 +1,7 @@
 # Bringing LAHE's docs up to your standard set
 
+**On hold.** You have specced a skill pack for managing projects, and this cleanup will be its first test run once it is ready. Nothing below has been started.
+
 **Short version:** LAHE has none of your four standard docs. It has no product brief, no architecture doc, no style guide and no brand doc. (The style doc you were thinking of, `STYLES.md`, is about the document styles a reviewer installs. It says nothing about how LAHE itself looks.) Seven of the 13 files in `docs/ongoing/` are feature records: plans, option pages and build notes. They belong in `docs/features/`. My plan is to move those seven out, write the four missing docs, and give every remaining ongoing doc a charter, the way Steady Thread does.
 
 ## Questions for you
