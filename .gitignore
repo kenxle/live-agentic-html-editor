@@ -15,3 +15,6 @@ playwright/.cache/
 # architecture (D11); this pattern covers any local/dev state that lands
 # inside the repo during manual testing.
 .review-state/
+
+# Seneschal run evidence stays local (docs/STANDARD.md sets evidence: local)
+docs/reports/seneschal/
