@@ -41,8 +41,8 @@ These pictures still show the speech bubble; they are redrawn with the Library m
 
 | Agent or task | Doing | Started | Branch |
 |---|---|---|---|
-| Builder: macapp round 4 (Opus) | Stop asks first (an alert), the icon becomes the Library mark, pictures and docs redrawn | 2026-10-13 23:53 | `feat/menu-bar-macapp` |
-| Orchestrator | Waiting on round 4, then a full gate and a small PR; the install, lessons review and cleanup batch are yours | 2026-10-12 20:44 | `main` |
+| Builder: macapp round 4 (Opus) | Done at 00:12: Stop asks first, the icon is the Library mark, the alert carries the full-color Library icon; gate:unit 2864 passed, 0 failed; app self-test 383 passed, app tests 4 passed, 1 skipped (5 of 5 with the launchd case) | 2026-10-13 23:53 | `feat/menu-bar-macapp` |
+| Orchestrator | Full gate on round 4 waits for another agent's browser run to end (two at once fail each other); then the PR, the merge, and the icon rebuild on your Mac | 2026-10-12 20:44 | `main` |
 | Flow walker (Opus, independent) | Done at 12:51: V32 passes, V33 counts equal, one board row (a global `lahe status` slows the helper) and one note for Ken | 2026-10-13 12:27 | `feat/menu-bar-pr2` |
 | Builder: summary (Opus) | Done: fix round 2 (the helper's idle cost, unwatched replies) returned at 2026-10-13 11:36 and is merged into `feat/menu-bar-pr2` | 2026-10-12 22:46 | `feat/menu-bar-summary` |
 | Code review (Opus) | Done at 11:51: one important bug, one coverage gap, one rare bug; findings in the fix round | 2026-10-13 11:50 | `feat/menu-bar-pr2` |
@@ -135,6 +135,7 @@ To delete at cleanup, in one batch with your go:
 
 ## Log
 
+- 2026-10-14 00:13: round 4 is back (`5f964ede`, `c4107c47`, `c849ac3c`). A click on Stop shows the alert with the Library icon; Cancel does nothing; the grey line under Stop is gone. The icon is the Library's three books on a shelf, filled at rest and with a count, outlined when not running or unsure. All pictures and menu dumps are redrawn. The full gate waits for another agent's browser run to finish.
 - 2026-10-13 23:57: installed the icon on your Mac at your request (`lahe install --menu-bar`, icon-only path, run inside a terminal since the command refuses without one). The app runs under its login item; `lahe status` says "menu bar installed and running". A real screenshot of the icon at rest is under Needs your attention; screen capture works from this terminal now.
 - 2026-10-13 23:55: your three answers came in on this page. Waiting on you stays uncapped; Stop Lahe gets the alert; the icon becomes the Library mark. The app builder has the last two (it merges main first, writes the tests red then green, and redraws every picture and menu dump). After it returns: a full local gate, one small PR, a gate on main after the merge.
 - 2026-10-13 13:15: the full local gate on main's head (`272129b0`, with the CI fix) is green: unit 2864 passed, 0 failed; browser 884 passed, 0 failed, 7 skipped; `check:menubar` 4 passed, 1 skipped; helpers 1 before and after. The feature's code is done and landed. Holding for your answers.
