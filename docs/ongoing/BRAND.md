@@ -27,74 +27,83 @@ First draft by Seneschal.
 
 **In one line:**
 
-> Lahe puts a review rail on any HTML or Markdown page on your machine. Comment on it or edit it in place, and your coding agent changes the source.
+> Lahe is the best collaborative editor for documents and websites.
 
 **In one paragraph:**
 
-> Reviewing a document with a coding agent usually means copying a paragraph into the chat, asking for a change, and hunting for the answer later. Lahe skips that. Open the page in your browser, select a sentence, and comment on it or rewrite it where it stands. Your comment goes to the agent you already use, which edits the real source files, even when the page is built from many of them. The answer comes back on the same card, so it is easy to find. Lahe runs on your machine with no account and no service in the middle.
+> Lahe gives you control, flexibility, focus, and beauty in how you edit documents and websites. Stay in flow by communicating with your agent directly within your document. Ask your AI to write, or write your own content. Lahe manages the conversation inside the document or webpage, so you can move faster and stay focused. Create beautifully styled documents, with any AI you want, with no Lahe account and no Lahe telemetry in the middle.
 
 Use the one-liner wherever a single sentence fits: a repo description, a link preview, the top of a doc. Use the paragraph when there is room to say why.
 
 ## Positioning
 
-- **Lahe is a review tool, not an editor or a writing app.** The reviewer reads, comments and fixes. The agent does the work on the source. Lead with that split.
-- **It works with the agent you already have.** Do not present Lahe as an agent, or as a replacement for one. Name the hosts it supports by their product names.
-- **It is local.** The page, the helper and the review records stay on the reviewer's machine. Say this plainly; it is the main trust claim.
-- **It costs nothing while you are quiet.** An idle review spends no model tokens. This matters to people on small plans, so state it where cost comes up.
-- **It works on real pages.** Pages built from templates, includes, partials or many Markdown files are reviewed as one page. The agent edits the files underneath.
-- **The reviewer's own words are kept.** A hand edit reaches the source as typed, not as the agent's paraphrase.
+- **Lahe is a quality of life writing and review tool.** Lahe is for editing, writing and reviewing.
+- **BYOA (Bring your own agent).** You can use any coding agent with Lahe. Name the hosts it supports by their product names.
+- **It is local.** The page, the Lahe program and the review records stay on the reviewer's machine. Say this plainly. Users can manage how their docs are distributed but Lahe edits locally.
+- **Lahe optimizes token spend.** An idle document spends no model tokens. The plumbing cares about every token that is used.
+- **It works on websites and web apps.** Walk your website and give feedback. The agent edits the files underneath.
+- **The user's words are gospel.** Hand edits are not rewritten automatically. Agents can give suggestions, but never overwrite user written content without asking.
+- **Lahe, not LAHE.** Don't write the name in all caps.
+- **Lahe is beautiful by default.** We sweat the design details, so that your documents are beautiful by default.
 
-## Tone
+## Voice and writing
 
-- **Plain and short.** One idea per sentence. Common words. If a sentence needs a second read, rewrite it.
+### Brand voice
+
+How Lahe sounds when it describes itself: the README, the website, a launch post.
+
+- **Confident and calm.** Say what Lahe does well, plainly. No hedging, and no shouting.
+- **About the person's work.** Lead with what they get: control, flow, focus, and documents that look good.
+- **Concrete.** Name a thing the person can do ("select a sentence and rewrite it") rather than a quality ("powerful editing").
+- **A light touch of humor is fine in the README.** It can be a little dry and wry. The product itself stays plain.
+
+### How to talk to the user
+
+How the interface and the agent speak to the person using Lahe.
+
 - **Say what happened, then what to do.** "The Library token is missing. Reload this page." Not an apology, not an explanation of the internals.
-- **Reassure with facts, not adjectives.** When something fails, say where the work is: "Kept in this browser." "Nothing is lost. Both versions are on the card." Do not write "don't worry".
-- **About the document, not the tool.** An agent's reply on a card says what changed in the document in one sentence, plus one more only for a caveat or a question. It leaves out serving, reloads, rebuilds and reply files unless the reviewer asked. See the reply checklist in [the skill](../../skills/lahe/SKILL.md).
-- **Second person to the reviewer, first person from the agent.** The rail says "your edits" and "you marked this done". An agent's reply says "I made the change".
-- **No hype.** No "seamless", "powerful", "revolutionary", "AI-powered", "magic" or "effortless".
-- **No em dashes.** Not in the rail, the docs, commit messages or code comments. Use a comma, period, colon or semicolon. This is a project rule in [CLAUDE.md](../../CLAUDE.md).
-- **Few absolutes.** Use "never" and "always" only for a real guarantee the code keeps, such as "a rename is never sent to an agent".
-- **A light touch of humor is fine in the README, not in the product.** The README can be a little dry and wry. The rail, error text and agent replies stay plain.
+- **Reassure with facts, not adjectives.** When something fails, say where the work is: "Kept in this browser." "Nothing is lost. Both versions are on the thread." Do not write "don't worry".
+- **About the document, not the tool.** An agent's response says what changed in the document in one sentence, plus one more only for a caveat or a question. It leaves out serving, reloads, rebuilds and reply files unless the user asked. See the reply checklist in [the skill](../../skills/lahe/SKILL.md).
+- **Second person to the user, first person from the agent.** The interface says "your edits" and "you marked this done". An agent's response says "I made the change".
 - **Quote times as written.** Text that shows a timestamp shows it as recorded. Do not turn it into "3 minutes ago" by hand.
+
+### Default writing preferences
+
+The defaults for any text Lahe or its agents write, unless a document asks for something else.
+
+- **Plain and short.** One idea per sentence. Common words: "do" and "use", not "perform", "utilize" or "leverage". If a sentence needs a second read, rewrite it.
+- **No hype words.** No "seamless", "powerful", "revolutionary", "AI-powered", "magic" or "effortless".
+- **No em dashes.** Use a comma, period, colon or semicolon. This is a project rule in [CLAUDE.md](../../CLAUDE.md).
+- **Few absolutes.** Use "never" and "always" only for a real guarantee the code keeps, such as "a rename is never sent to an agent".
 
 ## Names
 
-- **Lahe** in prose, with a capital L and lower case after.
+- **Lahe** in prose, with a capital L and lower case after. Do not use LAHE.
 - **`lahe`** in code formatting when it is the command, as in `lahe review page.html`.
-- **Live Agentic HTML Editor** is the long name. Use it as the repo title and on first mention in a long piece, then say Lahe.
-- **Avoid "LAHE"** in anything a user reads. Some older text still uses it; see "Where the text disagrees today" below.
+- **Live Agentic HTML Editor** is the inspiration for the name, and can be used in parentheticals to describe where the name comes from, but we always call it Lahe.
 
 ## Words we use
 
-These are the rail's own words. Use them the same way in docs, the README and agent replies.
+Use these words the same way in the interface, the docs, the README and agent responses.
 
 | Word | Means | Notes |
 | --- | --- | --- |
-| reviewer | the person in the browser | In text shown to them, say "you". |
-| agent | the coding agent doing the work | Name its kind when it matters: "claude is asking". |
-| review | one document under review, with its cards | "End review" closes it. |
-| rail | the panel down the side of the page | On first mention to a newcomer: "the rail, a panel down the side of the page". |
-| card | one comment or edit, and its thread, in the rail | The reviewer sees cards. The agent works "items"; keep "item" out of reviewer text. |
-| comment | a note on a passage or an element, for the agent to act on | Sent with Cmd-Enter. Until then it is a draft. |
-| hand edit | a change the reviewer typed into the page | Not "manual edit" or "direct edit" in rail text. |
-| note on the whole page | a comment tied to nothing in particular | The box at the foot of the rail. |
-| Handled, Not handled, Question | the agent's three answers on a card | Capitalized as labels, lower case in a sentence. "Handled" means the change is on the reviewer's screen. |
-| Active, Done | the rail's two tabs | "Mark as done" is the reviewer closing a card themselves. |
-| helper | the small program on your machine that serves pages and keeps the records | Not "daemon", "backend" or "service" in user text. |
+| reviewer, user | the person in the browser | In text shown to them, say "you". |
+| agent | the coding agent doing the work | Name its kind in the interface: "claude is asking". |
+| review | one document under review, with its threads | "End review" closes it. |
 | session | one agent's run, which owns one or more reviews | Used on the Library page and in hand-overs. |
+| chat bar, chat rail | the panel down the side of the page | On first mention to a newcomer: "the chat bar, a panel overlaid on the side of the page". |
+| thread, response | a comment or edit and the agent's responses under it, in the chat bar | Say threads, responses, comments and edits. Keep "card" and "item" out of user text. |
+| comment | a note on a passage or an element, for the agent to act on | Until sent it is a draft. |
+| hand edit | a change the user typed into the page | |
+| note on the page | a comment tied to nothing in particular | The input box at the foot of the rail. |
+| Done, Open, Question | the three states of a thread | Capitalized as labels, lower case in a sentence. "Done" means the change is on the user's screen. |
+| Active, Done | the chat bar's two tabs | "Mark as done" is the user closing a thread themselves. |
+| the Lahe program | the program on your machine that serves pages and keeps the records | Say "the Lahe program" to most people. Say "the Lahe server" when the user is doing dev work. Not "helper", "daemon", "backend" or "service" in user text. Say "your dev server" for theirs. |
 | Library | the page that lists every review on this machine | Capital L. Opened with `lahe library`. |
-| address | the page's stable URL | "Addresses that stay put." |
-| Document style | the rail panel that switches a page's look | |
-| Lahe Styles | the paid styles | International Style is the free one. |
-
-## Words that need care
-
-- **"library".** The Library (capital L) is the page that lists every review. Older code and some install text use "library" for the script that draws the rail on a page. In anything new, call that script "the review layer" or "the rail's script", and keep "Library" for the page. In the code the Library is called `catalog`. See [LIBRARY.md](LIBRARY.md).
-- **"anchor".** In this repo an anchor is how a saved comment or edit finds its spot on the page again. On an HTML page, `<a>` is also called an anchor, so the word confuses. In user text say "the passage the card is about" or "its spot on the page". In builder docs that must use the word, say once what it means. See [DIAGRAMS_PLAN.md](DIAGRAMS_PLAN.md).
-- **"server".** People run their own dev servers. Say "helper" for Lahe's own program, and "your dev server" for theirs.
-- **"sidebar".** Fine as a plain explanation for someone who has never seen Lahe. After that, say "rail".
-- **"sync".** Say what actually happens: "the page updates itself", "it posts when the helper comes back".
-- **"perform", "utilize", "leverage".** Say "do", "use".
+| document address | the page's stable URL | |
+| Document style | the panel that switches a page's look | |
+| Lahe Styles | the swappable styles | International Style is default. Additional styles can be downloaded. |
 
 ## Key claims and where they come from
 
@@ -102,34 +111,18 @@ Make these claims as written. Each one has a doc behind it. Do not stretch them.
 
 | Claim | Where it comes from |
 | --- | --- |
-| No Lahe account, no Lahe server, no telemetry. Feedback goes only to the agent you already use. | [README.md, "Under the hood"](../../README.md#features) |
-| An idle review costs no model tokens on any supported host. | [README.md, "Which agents this works with"](../../README.md#which-agents-this-works-with) |
-| No runtime dependencies. A `git clone` runs with no install step. | [CLAUDE.md](../../CLAUDE.md), [README.md, "Requirements"](../../README.md#requirements) |
-| Works with Claude Code, Codex, Antigravity and Gemini CLI, and any other host that can run a command. | [AGENTS.md](../../AGENTS.md) |
-| Highlighting a passage adds nothing to the page's DOM, so the page's own scripts and styles behave as before. | [docs/INSTALL.md](../INSTALL.md) |
-| `lahe review` writes nothing into the page's folder. | [docs/INSTALL.md](../INSTALL.md) |
-| A hand edit reaches the source as typed. | [README.md, "Features"](../../README.md#features) |
-| A page built from many files is reviewed as one page, and the agent edits the files underneath. | [README.md, "Features"](../../README.md#features) |
-| A `handled` reply is checked against the built page. | [skills/lahe/SKILL.md](../../skills/lahe/SKILL.md) |
-| The rail shows whether an agent is watching, from the helper's own files, not from what the agent claimed. | [README.md, "When something goes wrong"](../../README.md#when-something-goes-wrong) |
-| The Library reads only files on disk, and a rename or a star is never sent to an agent. | [README.md, "The Library"](../../README.md#the-library), [LIBRARY.md](LIBRARY.md) |
-| Every document gets one address that keeps working after a session ends and, with `lahe install`, after a reboot. | [README.md, "Addresses that stay put"](../../README.md#addresses-that-stay-put) |
-| International Style ships free. | [README.md, "Document styles"](../../README.md#document-styles) |
-| MIT licensed. | [README.md, "License"](../../README.md#license) |
+| No Lahe account, no Lahe server, no telemetry. Comments go to the agent you bring. | [README.md, "Under the hood"](../../README.md#features) |
+| Clone it and go. Nothing to install but Node. | [CLAUDE.md](../../CLAUDE.md), [README.md, "Requirements"](../../README.md#requirements) |
+| Bring your own agent: Claude Code, Codex, Antigravity, Gemini CLI, or any agent that can run a command. | [AGENTS.md](../../AGENTS.md) |
+| Review a site built from many files as one page. Your agent edits the files underneath. | [README.md, "Features"](../../README.md#features) |
+| When your agent says it's done, Lahe checks that your page shows it. | [skills/lahe/SKILL.md](../../skills/lahe/SKILL.md) |
+| See at a glance whether your agent is listening. | [README.md, "When something goes wrong"](../../README.md#when-something-goes-wrong) |
+| Every document you have worked on, in one Library. Your stars and names stay on your machine. | [README.md, "The Library"](../../README.md#the-library), [LIBRARY.md](LIBRARY.md) |
+| Every document keeps its address, so old tabs and bookmarks still work. | [README.md, "Addresses that stay put"](../../README.md#addresses-that-stay-put) |
+| Beautiful by default. International Style comes built in, and more styles are a download away. | [README.md, "Document styles"](../../README.md#document-styles) |
+| Free and open source, MIT licensed. | [README.md, "License"](../../README.md#license) |
 
 Claims to avoid:
 
-- **Windows support for the installer.** The helper runs on Windows, but the `install-cli` wrapper is macOS and Linux only. Say that.
-- **Security promises beyond the docs.** Describe what the helper checks; do not call it "secure" or "safe" in general.
+- **Windows support for the installer.** Lahe runs on Windows, but the `install-cli` wrapper is macOS and Linux only. Say that.
 - **Numbers with no source.** No speed, adoption or savings figures until a report backs them.
-- **"Never lose work" as a blanket promise.** Name the fallbacks instead: browser storage, the outbox, the event log on disk, Copy review and Export review.
-
-## Where the text disagrees today
-
-A writer touching these should bring them in line with the rules above.
-
-- The Library page says "LAHE" in several messages, such as "LAHE is not running". It should say Lahe.
-- [docs/INSTALL.md](../INSTALL.md) says "LAHE" and uses "library" for the rail's script.
-- One rail message says "Lahe server helper is down". It should say "helper".
-- The README badge lists three agent hosts; [AGENTS.md](../../AGENTS.md) also lists Gemini CLI.
-- The "End review" button's label says "End this review and perform cleanup".
