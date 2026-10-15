@@ -27,6 +27,12 @@
 // replies-<agent>.jsonl when --agent names one. Append only, one line, one
 // trailing newline.
 //
+// --batch answers many items in one run (docs/features/20261015.01_batch_reply_own_answers).
+// An agent answering ten comments made up to ten calls, and each call re-reads
+// the whole conversation. The batch is one JSON array on stdin, checked entry
+// by entry with the single form's rules, and written all together or not at
+// all.
+//
 // Node-only.
 
 "use strict";
@@ -49,6 +55,7 @@ var USAGE = [
   "                  [--text <words>] [--reason <words>] [--file <path>]... [--needs-see]",
   "                  [--agent <name>] [--session <agent-session-id>] [--state-dir <path>]",
   "                  [--proofread [--suggest <block> <from> <to>]...]",
+  "       lahe reply --review <id> --batch [--agent <name>] [--session <agent-session-id>] [--state-dir <path>]",
   "",
   "Appends one correctly encoded reply line to your reply file in the review folder.",
   "Newlines and quotes in --text and --reason are encoded for you; never hand-write the JSON.",
@@ -74,9 +81,20 @@ var USAGE = [
   "  --suggest <block> <from> <to>",
   "                   one fix: in new_blocks[<block>], change <from> to <to>. Repeat it.",
   "                   <from> must be in that block's words exactly once. Needs --proofread",
+  "  --batch          answer many items in one run. Reads a JSON array from stdin, one entry per",
+  "                   item: {\"item\":\"...\",\"rev\":1,\"status\":\"handled\",\"text\":\"...\"}. An entry also",
+  "                   takes reason, files (a list), needs_see, proofread, and suggest (a list of",
+  "                   [block, from, to]). Each entry is checked like the single form. If any",
+  "                   entry fails, nothing is written. Prints one result line per entry.",
+  "                   It refuses --item, --rev, --status, --text, --reason, --file,",
+  "                   --needs-see, --proofread and --suggest",
   "",
   "Exit codes: " + EXIT.OK + " written, " + EXIT.HELPER_UNREACHABLE + " the state directory is unusable, " + EXIT.UNKNOWN_REVIEW + " unknown review, " + EXIT.BAD_USAGE + " bad usage."
 ].join("\n");
+
+// The flags that describe one reply. --batch carries its replies on stdin and
+// refuses all of them.
+var SINGLE_VALUE_FLAGS = ["--item", "--rev", "--status", "--text", "--reason", "--file"];
 
 var VALUE_FLAGS = ["--review", "--item", "--rev", "--status", "--text", "--reason", "--file", "--agent", "--session", "--state-dir"];
 
@@ -95,6 +113,8 @@ function parseArgs(argv) {
     agent: null,
     session: null,
     stateDir: null,
+    batch: false,
+    singleFlags: [],
     help: false,
     error: null
   };
@@ -104,11 +124,16 @@ function parseArgs(argv) {
     var arg = list[i];
     if (arg === "--help" || arg === "-h") {
       out.help = true;
+    } else if (arg === "--batch") {
+      out.batch = true;
     } else if (arg === "--needs-see") {
       out.needsSee = true;
+      out.singleFlags.push(arg);
     } else if (arg === "--proofread") {
       out.proofread = true;
+      out.singleFlags.push(arg);
     } else if (arg === "--suggest") {
+      out.singleFlags.push(arg);
       if (list[i + 1] === undefined || list[i + 2] === undefined || list[i + 3] === undefined) {
         out.error = "--suggest needs three values: <block> <from> <to>";
         break;
@@ -126,6 +151,7 @@ function parseArgs(argv) {
         break;
       }
       var value = list[(i += 1)];
+      if (SINGLE_VALUE_FLAGS.indexOf(arg) !== -1) out.singleFlags.push(arg);
       if (arg === "--review") out.review = value;
       if (arg === "--item") out.item = value;
       if (arg === "--rev") out.rev = value;
@@ -143,6 +169,19 @@ function parseArgs(argv) {
   }
 
   if (out.help || out.error) return out;
+
+  if (out.batch) {
+    if (out.singleFlags.length) {
+      out.error = "--batch takes its replies as a JSON array on stdin, so it cannot be combined with " + out.singleFlags[0];
+    } else if (!out.review) out.error = "--review is required";
+    else if (!protocol.isSafeId(out.review)) out.error = "--review must be a safe id: " + String(protocol.SAFE_ID);
+    else if (out.agent !== null && !protocol.isSafeId(out.agent)) {
+      out.error = "--agent names a file too, so it must be a safe id: " + String(protocol.SAFE_ID);
+    } else if (out.session !== null && !protocol.isSafeId(out.session)) {
+      out.error = "--session must be a safe id: " + String(protocol.SAFE_ID);
+    }
+    return out;
+  }
 
   if (!out.review) out.error = "--review is required";
   else if (!protocol.isSafeId(out.review)) out.error = "--review must be a safe id: " + String(protocol.SAFE_ID);
@@ -162,16 +201,24 @@ function parseArgs(argv) {
     out.error = "--file needs a path";
   }
 
-  if (!out.error && out.suggestions.length && !out.proofread) {
-    out.error = "--suggest needs --proofread: suggestions belong on a proofreading question";
-  } else if (!out.error && out.proofread && out.status !== protocol.REPLY_STATUS.QUESTION) {
-    out.error = "--proofread and --suggest belong on a --status question reply only";
-  } else if (!out.error && out.suggestions.some(function (sg) { return !sg.from; })) {
-    out.error = "--suggest <from> must not be empty";
-  }
+  if (!out.error) out.error = proofreadRuleError(out);
 
   if (!out.error) out.rev = Number(out.rev);
   return out;
+}
+
+/** Null, or which proofread rule these args break. Shared by the single form and each batch entry. */
+function proofreadRuleError(args) {
+  if (args.suggestions.length && !args.proofread) {
+    return "--suggest needs --proofread: suggestions belong on a proofreading question";
+  }
+  if (args.proofread && args.status !== protocol.REPLY_STATUS.QUESTION) {
+    return "--proofread and --suggest belong on a --status question reply only";
+  }
+  if (args.suggestions.some(function (sg) { return !sg.from; })) {
+    return "--suggest <from> must not be empty";
+  }
+  return null;
 }
 
 /**
@@ -350,6 +397,163 @@ function revWarning(dir, reviewId, itemId, rev) {
   return null;
 }
 
+var ENTRY_KEYS = ["item", "rev", "status", "text", "reason", "files", "needs_see", "proofread", "suggest"];
+
+/** "entry 2 (item itm_x)", the words every batch problem opens with. */
+function entryName(entry, index) {
+  var item = entry && typeof entry === "object" && typeof entry.item === "string" ? entry.item : null;
+  return "entry " + (index + 1) + (item ? " (item " + item + ")" : "");
+}
+
+/**
+ * One batch entry, as the args the single form would have built from flags.
+ * Returns {args} or {error}. The field types are checked here because JSON can
+ * hold a number where a flag held a string; the per-status and proofread rules
+ * are the single form's own functions, not copies of them.
+ */
+function entryArgs(entry, batchArgs) {
+  if (!entry || typeof entry !== "object" || Array.isArray(entry)) return { error: "must be a JSON object" };
+  var unknown = Object.keys(entry).filter(function (key) { return ENTRY_KEYS.indexOf(key) === -1; });
+  if (unknown.length) {
+    return { error: "has an unknown field " + JSON.stringify(unknown[0]) + "; the fields are " + ENTRY_KEYS.join(", ") };
+  }
+  if (typeof entry.item !== "string" || !entry.item) return { error: "item is required, as review.json or lahe status prints it" };
+  if (!protocol.isSafeId(entry.item)) return { error: "item must be an item id as review.json prints it: " + String(protocol.SAFE_ID) };
+  if (typeof entry.rev !== "number" || !Number.isInteger(entry.rev)) {
+    return { error: "rev is required and must be an integer (a number, not a string), got " + JSON.stringify(entry.rev) };
+  }
+  if (protocol.REPLY_STATUSES.indexOf(entry.status) === -1) {
+    return { error: "status must be one of " + protocol.REPLY_STATUSES.join(", ") + ", got " + JSON.stringify(entry.status) };
+  }
+  var notString = ["text", "reason"].filter(function (key) {
+    return entry[key] !== undefined && typeof entry[key] !== "string";
+  })[0];
+  if (notString) return { error: notString + " must be a string" };
+  if (entry.files !== undefined) {
+    var goodFiles = Array.isArray(entry.files) && entry.files.every(function (path) { return typeof path === "string" && path.trim(); });
+    if (!goodFiles) return { error: "files must be a list of paths" };
+  }
+  if (entry.needs_see !== undefined && typeof entry.needs_see !== "boolean") return { error: "needs_see must be true or false" };
+  if (entry.proofread !== undefined && typeof entry.proofread !== "boolean") return { error: "proofread must be true or false" };
+  var suggestions = [];
+  if (entry.suggest !== undefined) {
+    if (!Array.isArray(entry.suggest)) return { error: "suggest must be a list of [block, from, to]" };
+    for (var i = 0; i < entry.suggest.length; i += 1) {
+      var sg = entry.suggest[i];
+      if (!Array.isArray(sg) || sg.length !== 3 || !Number.isInteger(sg[0]) || sg[0] < 0 || typeof sg[1] !== "string" || typeof sg[2] !== "string") {
+        return { error: "each suggest entry must be [block, from, to]: a whole number from 0, then two strings" };
+      }
+      suggestions.push({ block: sg[0], from: sg[1], to: sg[2] });
+    }
+  }
+
+  var args = {
+    review: batchArgs.review,
+    item: entry.item,
+    rev: entry.rev,
+    status: entry.status,
+    text: entry.text || null,
+    reason: entry.reason || null,
+    files: entry.files ? entry.files.slice() : [],
+    needsSee: entry.needs_see === true,
+    proofread: entry.proofread === true,
+    suggestions: suggestions,
+    agent: batchArgs.agent
+  };
+  var problem = proofreadRuleError(args) || validateBody(args);
+  return problem ? { error: problem } : { args: args };
+}
+
+/**
+ * The entries of a batch, or why the stdin text is not one.
+ * Every entry is checked before the caller writes anything.
+ */
+function parseBatch(text, batchArgs, dir) {
+  if (!String(text).trim()) return { error: "--batch read nothing from stdin; it needs a JSON array of replies" };
+  var parsed;
+  try {
+    parsed = JSON.parse(text);
+  } catch (error) {
+    return { error: "stdin is not valid JSON (" + error.message + "). A line break inside a string must be written \\n; --batch refuses a raw one rather than splitting it" };
+  }
+  if (!Array.isArray(parsed)) return { error: "stdin must be a JSON array of replies, got " + (parsed === null ? "null" : typeof parsed) };
+  if (!parsed.length) return { error: "the batch is empty; there is nothing to write" };
+
+  var entries = [];
+  for (var i = 0; i < parsed.length; i += 1) {
+    var built = entryArgs(parsed[i], batchArgs);
+    var problem = built.error || (built.args.proofread ? proofreadProblem(dir, built.args) : null);
+    if (problem) return { error: entryName(parsed[i], i) + ": " + problem };
+    entries.push(built.args);
+  }
+  return { entries: entries };
+}
+
+/** `lahe reply --batch`: validate every entry, then append every line in one write. */
+async function runBatch(args, opts, out, err) {
+  var isTty = opts.stdinIsTty === undefined ? Boolean(process.stdin && process.stdin.isTTY) : opts.stdinIsTty;
+  var text;
+  if (opts.stdin !== undefined) text = String(opts.stdin);
+  else if (isTty) {
+    err("lahe reply: --batch reads a JSON array of replies from stdin, and stdin is a terminal\n");
+    return EXIT.BAD_USAGE;
+  } else text = readStdin(opts.readFileSync);
+
+  var dir;
+  try {
+    dir = args.stateDir
+      ? stateDirModule.stateDir({ dir: args.stateDir })
+      : opts.stateDir || stateDirModule.stateDir();
+  } catch (error) {
+    err("lahe reply: " + error.message + "\n");
+    return EXIT.HELPER_UNREACHABLE;
+  }
+
+  var target;
+  var batch;
+  try {
+    if (!fs.existsSync(stateDirModule.reviewDir(dir, args.review))) {
+      err("lahe reply: no review " + JSON.stringify(args.review) + " in " + stateDirModule.reviewsRoot(dir) + "\n");
+      return EXIT.UNKNOWN_REVIEW;
+    }
+    batch = parseBatch(text, args, dir);
+    if (batch.error) {
+      err("lahe reply: nothing written. " + batch.error + "\n");
+      return EXIT.BAD_USAGE;
+    }
+    target = stateDirModule.replyFilePath(dir, args.review, replyFilename(args.agent));
+  } catch (error) {
+    err("lahe reply: " + error.message + "\n");
+    return EXIT.BAD_USAGE;
+  }
+
+  var lines = batch.entries.map(function (entry) { return JSON.stringify(replyObject(entry)); });
+  try {
+    stateDirModule.appendLine(target, lines.join("\n") + "\n");
+  } catch (error) {
+    err("lahe reply: could not append to " + target + ": " + error.message + "\n");
+    return EXIT.BAD_USAGE;
+  }
+
+  batch.entries.forEach(function (entry, index) {
+    var warning = revWarning(dir, args.review, entry.item, entry.rev);
+    if (warning) err("lahe reply: warning: " + entryName(entry, index) + ": " + warning + "\n");
+  });
+
+  if (args.session) {
+    try {
+      agentSessionsModule.createStore({ dir: dir }).touchActivity(args.session);
+    } catch (error) {
+      // A session that does not exist is not a reason to fail a written reply.
+    }
+  }
+
+  out(batch.entries.map(function (entry) {
+    return JSON.stringify({ item: entry.item, status: entry.status }) + "\n";
+  }).join(""));
+  return EXIT.OK;
+}
+
 /**
  * @param {string[]} argv everything after `reply`
  * @param {{stateDir?: string, stdout?: function, stderr?: function, stdin?: string,
@@ -370,6 +574,7 @@ async function run(argv, options) {
     err("lahe reply: " + args.error + "\n\n" + USAGE + "\n");
     return EXIT.BAD_USAGE;
   }
+  if (args.batch) return runBatch(args, opts, out, err);
 
   var stdinError = resolveStdin(args, opts);
   if (stdinError) {
@@ -451,5 +656,7 @@ module.exports = {
   proofreadProblem: proofreadProblem,
   replyFilename: replyFilename,
   revWarning: revWarning,
+  entryArgs: entryArgs,
+  parseBatch: parseBatch,
   run: run
 };
