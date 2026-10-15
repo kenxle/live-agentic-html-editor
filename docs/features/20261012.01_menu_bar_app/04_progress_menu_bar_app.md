@@ -26,7 +26,7 @@ Two calls were built with these defaults. Say so on a card to change either:
 - **The Library's Open serves the main copy on its own, with no agent.** The security reviewer accepted this because it stays inside the main checkout's copy of the folder you already served.
 - **When the main copy already has a newer review, the review holding your comments gets the page.** A newer review with no comments gives way. If both hold comments, the newest wins, as today.
 
-Say "merge" on a card and I merge it. Your real helper then picks up the new code, and this page's old cards come back here too with no extra step.
+The pull request is [#71](https://github.com/kenxle/live-agentic-html-editor/pull/71). Say "merge" on a card and I merge it. Your real helper then picks up the new code, and this page's old cards come back here too with no extra step.
 
 Spec: [the spec on GitHub](https://github.com/kenxle/live-agentic-html-editor/blob/fix/review-follows-doc/docs/features/20261015.01_review_follows_document/01_spec_review_follows_document.md).
 
