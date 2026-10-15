@@ -59,6 +59,7 @@ Every look and every menu dump is under [screenshots/](screenshots/).
 
 | Agent or task | Doing | Started | Branch |
 |---|---|---|---|
+| Builder: review follows document (Opus) | Writing the spec for your comments following a document from a worktree to main; a design review follows, then the build | 2026-10-15 10:25 | `fix/review-follows-doc` |
 | Builder: macapp round 4 (Opus) | Done at 00:12: Stop asks first, the icon is the Library mark, the alert carries the full-color Library icon; gate:unit 2864 passed, 0 failed; app self-test 383 passed, app tests 4 passed, 1 skipped (5 of 5 with the launchd case) | 2026-10-13 23:53 | `feat/menu-bar-macapp` |
 | Orchestrator | Holding: the lessons review and the cleanup go are yours; the review session stays open for your cards | 2026-10-12 20:44 | `main` |
 | Flow walker (Opus, independent) | Done at 12:51: V32 passes, V33 counts equal, one board row (a global `lahe status` slows the helper) and one note for Ken | 2026-10-13 12:27 | `feat/menu-bar-pr2` |
@@ -126,6 +127,7 @@ Done on 2026-10-15 with your go, in one batch. The list as it stood:
 - `~/Documents/lahe-menubar-review/` also holds the second walk's `state-copy2/` (333 MB), `build2/`, `scripts2/`, `walk2-doc/`, `walk2-doc-exp/`, the `watch2*`, `copy2-helper*`, `copy1-exp-*`, `w2-*` outputs and `w2-helper.cpuprofile`, and `final/` with the V18 numbers.
 - `.claude-commit2026101220*` files in the `menu-bar` worktree, `.claude-commit202610131205-fix1`, `-fix2`, `-fix3`, `-fix5` in `menu-bar-install`, and `.claude-commit202610131200-macapp`, `-1215-macapp`, `-1225-macapp` and `.claude-commit202610140007-macapp` in `menu-bar-macapp` (all gitignored).
 - `docs/lessons/proposed/a-back-to-back-benchmark-of-a-polled-route-measures-only-the-warm-path.md`: the proposal, now promoted to `docs/lessons/service/` (needs your go; added after the batch).
+- The `lahe-worktrees/review-follows-doc` worktree and its branch `fix/review-follows-doc`, once that work has merged.
 - Session scratchpad files under `/private/tmp/claude-501/` (the OS clears these; nothing to do).
 
 ### Test results
