@@ -3,9 +3,13 @@
 ## Charter
 
 **What belongs:** How the product looks: color, type, spacing and the reusable components. Tokens and the rules for using them. Each component and when to use it.
+
 **What does not:** Voice and word choice (BRAND.md). How a screen works.
+
 **Level of detail:** Rules a builder can apply without asking, with the reason for each.
+
 **Describes:** the stylesheet and component folders
+
 **Sources:** [system-tokens.css](../../vendor/stclair-doc-style/system-tokens.css), [document.css](../../vendor/stclair-doc-style/document.css), [lahe-markdown.css](../../vendor/stclair-doc-style/lahe-markdown.css), [COMPONENTS.md](../../vendor/stclair-doc-style/COMPONENTS.md), [the style folder README](../../vendor/stclair-doc-style/README.md), [overlay.js](../../src/layer/overlay.js), [tab_done.js](../../src/layer/tab_done.js), [tab_edits.js](../../src/layer/tab_edits.js), [highlight.js](../../src/layer/highlight.js), [zoom.js](../../src/layer/zoom.js), [catalog_page.js](../../src/service/catalog_page.js), [STYLES.md](STYLES.md), [DOC_STYLE_BUILD.md](DOC_STYLE_BUILD.md), [CLAUDE.md](../../CLAUDE.md), and the git history of `src/layer`
 
 First draft by Seneschal.

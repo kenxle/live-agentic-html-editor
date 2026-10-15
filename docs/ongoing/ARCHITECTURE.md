@@ -3,9 +3,13 @@
 ## Charter
 
 **What belongs:** The shape of the system at a level a person can hold in their head. The stack and the folder structure. The surfaces people and agents touch, and the outside services behind them. The main models and how they relate, in outline.
+
 **What does not:** How one feature works. That goes in a diagram or its own ongoing doc. How a feature got built. That stays in docs/features/.
+
 **Level of detail:** A paragraph or a short table per area. Link out when a section passes three paragraphs.
+
 **Describes:** the code root named in Settings
+
 **Sources:** [CLAUDE.md](../../CLAUDE.md), [README.md](../../README.md), [package.json](../../package.json), [the file manifest](../../src/shared/manifest.js), [the state folder layout](../../src/service/state_dir.js), [the system overview](../diagrams/system_overview.md), [the module map](../diagrams/module_map.md), [CONTRACTS.md](../CONTRACTS.md), [CLI.md](../CLI.md), [LIBRARY.md](LIBRARY.md), [MENU_BAR.md](MENU_BAR.md), [STABLE_ADDRESSES.md](STABLE_ADDRESSES.md), [SERVING_ARCHITECTURES.md](SERVING_ARCHITECTURES.md), [SESSION_OWNERSHIP.md](SESSION_OWNERSHIP.md), [STYLES.md](STYLES.md), [FREE_WRITING.md](FREE_WRITING.md), [the menu bar README](../../macos/menubar/README.md), [the original architecture](../features/20260812.01_live_agentic_html_editor/02_architecture_live_agentic_html_editor.md)
 
 ## Summary

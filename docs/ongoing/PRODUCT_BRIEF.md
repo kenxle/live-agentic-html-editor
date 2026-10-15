@@ -2,9 +2,25 @@
 
 ## Charter
 
-**What belongs:** What the product is, who it is for, and why. Sections, in this order: Charter, What it is, Who it is for, The problem, The jobs to be done, What it does, What it is not, The principles for choosing methods, Commitments, How we know it works. The principles and commitments that hold for every feature.
+**What belongs:** What the product is, who it is for, and why. The principles and commitments that hold for every feature.
+
+Sections, in this order:
+
+- Charter
+- What it is
+- Who it is for
+- The problem
+- The jobs to be done
+- What it does
+- What it is not
+- The principles for choosing methods
+- Commitments
+- How we know it works
+
 **What does not:** How anything works (ARCHITECTURE.md and diagrams). How it looks (STYLE_GUIDE.md). A feature's own reasoning (its folder under docs/features/).
+
 **Level of detail:** A reader finishes knowing what the product is for. That guides every other doc.
+
 **Sources:** [README.md](../../README.md), [CLAUDE.md](../../CLAUDE.md), [AGENTS.md](../../AGENTS.md), [the lahe skill](../../skills/lahe/SKILL.md), [INSTALL.md](../INSTALL.md), [the original brief](../features/20260812.01_live_agentic_html_editor/01_brief_live_agentic_html_editor.md), [the original architecture](../features/20260812.01_live_agentic_html_editor/02_architecture_live_agentic_html_editor.md), and the crucibles for [the Library](../features/20260922.02_lahe_library/00_crucible.md), [free writing](../features/20260928.01_free_writing/00_crucible.md), [the style switcher](../features/20260930.01_style_switcher/00_crucible_style_switcher.md), [stable addresses](../features/20261011.02_stable_addresses/00_crucible_stable_addresses.md) and [the menu bar app](../features/20261012.01_menu_bar_app/00_crucible_menu_bar_app.md)
 
 Feature crucibles back parts of this brief, but no product-level crucible or research report backs it yet. The one report in [docs/research](../research/) is about identifying page elements, not about the product. A `research-report` run on who uses Lahe and why should back it.
