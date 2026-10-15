@@ -167,7 +167,13 @@ function createCatalogActions(options) {
    * the root is checked with the document.
    */
   function siteOwnedByUser(described) {
-    var files = [described.path, described.served_path, described.site.root, described.site.file].filter(function (file, i, all) {
+    // A moved document's own paths are gone with its worktree: the check runs
+    // on the main copy and the plan's root instead, never skipped (spec
+    // 20261015.01 R12).
+    var named = described.site && described.site.moved
+      ? [described.site.root, described.site.file]
+      : [described.path, described.served_path, described.site.root, described.site.file];
+    var files = named.filter(function (file, i, all) {
       return typeof file === "string" && file && all.indexOf(file) === i;
     });
     return files.every(function (file) {
@@ -179,6 +185,27 @@ function createCatalogActions(options) {
       }
       return uid === null || stat.uid === uid;
     });
+  }
+
+  /**
+   * Give a moved document its address and record its main path, as Open
+   * does, without opening anything. Null when it went through; an error
+   * answer otherwise. Nothing is stamped or recorded when another review
+   * holds the main copy.
+   */
+  function settleMoved(d, nowMs) {
+    if (!siteOwnedByUser(d)) return fail("PROTO_NOT_OPENABLE", "not owned by the current user, or not on disk");
+    try {
+      siteTools.bindPlan(d.site);
+    } catch (err) {
+      return fail("PROTO_NOT_OPENABLE", "the document could not be given an address: " + err.message);
+    }
+    var holderId = siteTools.holderOf(d.site.file);
+    if ((!holderId || holderId === d.review) && !d.retired) {
+      siteTools.stamp(d.review, nowMs);
+      siteTools.recordMoved(d.review, d.site);
+    }
+    return null;
   }
 
   /** Is this agent session open? A session the store cannot read is not. */
@@ -267,7 +294,10 @@ function createCatalogActions(options) {
       }
       url = siteTools.addressOf(bound.name, filePath);
       if (other) heldBy = { review: holderId, name: other.display_name || holderId };
-      else if (!d.retired) siteTools.stamp(d.review, nowMs);
+      else if (!d.retired) {
+        siteTools.stamp(d.review, nowMs);
+        if (d.site.moved) siteTools.recordMoved(d.review, d.site);
+      }
     }
     if (!url) return fail("PROTO_NOT_OPENABLE", "the helper is not serving pages");
 
@@ -406,6 +436,13 @@ function createCatalogActions(options) {
     // this up serves those rows instead.
     if (action === ACTION.LAUNCH && NO_LAUNCH_KINDS.indexOf(d.kind) !== -1) return fail("PROTO_NO_LAUNCH", d.kind);
     if (action === ACTION.LAUNCH && d.kind === "worktree" && !d.candidate) return fail("PROTO_NO_LAUNCH", d.kind);
+    // A moved document gets its address before it is handed over, as Open
+    // gives it, so the agent that takes it over finds the page with its rail
+    // (spec 20261015.01 R12).
+    if (d.site && d.site.moved) {
+      var settled = settleMoved(d, nowMs);
+      if (settled) return settled;
+    }
     if (action === ACTION.LAUNCH && launcher.available()) return launchDirect(d, body, nowMs);
     var agent = liveAgent(nowMs);
     if (!agent) return fail("PROTO_NO_AGENT");

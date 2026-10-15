@@ -412,6 +412,17 @@ test("a missing row has Open disabled with its reason, and Star still works", ()
   assert.equal(r.star.enabled, true);
 });
 
+test("a moved row (spec 20261015.01 R12) says it moved and that its comments came with it; its buttons are a static row's", () => {
+  const list = freshList();
+  const target = list.sessions.reduce((found, s) => found || s.reviews.filter((r) => r.kind === "static" && r.openable === "yes")[0], null);
+  target.moved = true;
+  const r = row(build(list, okState()), target.id);
+  assert.ok(r.notices.some((n) => n.text === vm.TEXT.MOVED), JSON.stringify(r.notices));
+  assert.equal(vm.TEXT.MOVED, "Moved from a worktree that is gone. Your comments came with it.");
+  assert.equal(r.buttons.open.enabled, true);
+  assert.equal(r.buttons.launch.enabled, true);
+});
+
 test("a worktree row says the main repository's copy will open", () => {
   const r = row(build(freshList(), okState()), "r_wt_gone");
   assert.deepEqual(r.notices.map((n) => n.text), [

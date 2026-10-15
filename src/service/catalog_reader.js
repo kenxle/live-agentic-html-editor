@@ -973,6 +973,18 @@ function createReader(options) {
 
     info.servedPath = meta && typeof meta.target_path === "string" && meta.target_path ? meta.target_path : null;
     var source = meta && typeof meta.source_path === "string" && meta.source_path ? meta.source_path : null;
+    // A SOURCE THAT IS THERE wins over a first source that is gone (spec
+    // 20261015.01 R10): a review that followed its document out of a removed
+    // worktree has the main copy later in its list.
+    if (source && !exists(source) && meta && Array.isArray(meta.source_paths)) {
+      for (var si = 0; si < meta.source_paths.length; si += 1) {
+        var other = meta.source_paths[si];
+        if (typeof other === "string" && other && other !== source && exists(other)) {
+          source = other;
+          break;
+        }
+      }
+    }
     info.docPath = source || info.servedPath;
     // What stable addresses need to pick the review's site (catalog_sites.js).
     info.sourcePath = source;
@@ -1089,8 +1101,28 @@ function createReader(options) {
         }
       }
     } else {
-      var gone = kind === "static" ? siteTools.worktreeSiteFor(info.docPath) : null;
-      if (gone) {
+      // A DOCUMENT WHOSE WORKTREE IS GONE is an ordinary document at its main
+      // copy (spec 20261015.01 R12): Open, Pick this up and Launch work as for
+      // any static row. Vouched only under the move rule (R13).
+      var movedPlan = kind === "static" ? siteTools.movedPlanOf(info.docPath) : null;
+      var gone = kind === "static" && !movedPlan ? siteTools.worktreeSiteFor(info.docPath) : null;
+      if (movedPlan) {
+        var movedFound = siteTools.siteFor(movedPlan);
+        var movedUrl = siteTools.urlPathOf(movedPlan, movedFound);
+        openable = "yes";
+        site = {
+          mounts: Object.assign({}, movedFound && movedFound.site.mounts),
+          mode: movedPlan.mode,
+          root: movedPlan.root,
+          file: movedPlan.file,
+          contained: movedPlan.contained === true,
+          url_path: movedUrl,
+          name: movedFound ? movedFound.name : null,
+          address: movedFound ? siteTools.addressOf(movedFound.name, movedUrl) : null,
+          worktree: false,
+          moved: true
+        };
+      } else if (gone) {
         kind = "worktree";
         openable = "yes";
         site = { mode: null, root: null, file: null, url_path: gone.urlPath, name: gone.name, address: siteTools.addressOf(gone.name, gone.urlPath), worktree: true };
@@ -1196,6 +1228,9 @@ function createReader(options) {
   function documentKey(placed) {
     var info = placed.info;
     if (info.unreadable) return null;
+    // A moved document is keyed on its main copy, so its review folds with a
+    // review made on the main copy in the same session (spec 20261015.01 R12).
+    if (placed.site && placed.site.moved && placed.site.file) return "doc:" + placed.site.file;
     if (info.docPath) return "doc:" + info.docPath;
     var pages = info.summary && info.summary.pages ? info.summary.pages : [];
     if (info.sessionId === LEGACY && pages.length === 1 && pages[0].title) return "page:" + pages[0].path + "|" + pages[0].title;
@@ -1530,11 +1565,11 @@ function createReader(options) {
       // else its ~ path: the row's second line. Worked out here rather than
       // when rows are folded, because finding the project root walks up the
       // folders and only the list shows it.
-      project_path: projectPath(row.folder || info.docPath) || null,
+      project_path: projectPath(row.folder || movedFile(lead) || info.docPath) || null,
       // "folder" for old per-page reviews folded by folder, "document" for
       // several reviews of one document; null for a single review.
       fold_kind: row.parts.length > 1 ? row.foldKind || "folder" : null,
-      project: projectOf(row.folder || info.docPath),
+      project: projectOf(row.folder || movedFile(lead) || info.docPath),
       last: iso(info.lastMs),
       waiting: waiting,
       total: total,
@@ -1555,7 +1590,14 @@ function createReader(options) {
     };
     // The site's address, once it has one.
     out.address = lead.site && lead.site.address ? lead.site.address : null;
+    // Moved out of a removed worktree: the row says so (spec 20261015.01 R12).
+    out.moved = !!(lead.site && lead.site.moved);
     return out;
+  }
+
+  /** A moved row's main copy, or null. */
+  function movedFile(placed) {
+    return placed && placed.site && placed.site.moved ? placed.site.file : null;
   }
 
   /**

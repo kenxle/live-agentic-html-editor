@@ -192,18 +192,49 @@ function createCatalogSites(options) {
     for (var i = 0; i < all.length; i += 1) {
       var site = all[i].site;
       if (!site.worktree_root || !site.main_checkout) continue;
-      if (fs.existsSync(site.worktree_root)) continue;
       if (!within(docPath, site.root)) continue;
       var file = docPath === site.root && site.mode === MODE.FOLDER ? path.join(site.root, site.entry || "") : docPath;
-      var copy = path.join(site.main_checkout, path.relative(site.worktree_root, file));
-      var real = realOrNull(copy);
-      var stat = real ? statOrNull(real) : null;
-      if (!real || !stat || !stat.isFile() || !isPageFile(real)) continue;
-      if (!within(real, realOrNull(site.main_checkout) || site.main_checkout)) continue;
+      // The one rule (page_routes.js, spec 20261015.01 R4).
+      var real = pageRoutes.movedCopyOf(dir, file);
+      if (!real || !isPageFile(real)) continue;
       var urlPath = site.mode === MODE.PAGE_ONLY ? "/" + encodeURIComponent(path.basename(site.root)) : urlPathUnder(site.root, file);
       return { name: all[i].name, urlPath: urlPath };
     }
     return null;
+  }
+
+  /**
+   * A document whose worktree is gone, planned at its main copy, or null
+   * (spec 20261015.01 R12, R13). A row's recorded path is page text, so the
+   * plan exists only when that path is under a registry site's own root and
+   * the copy under that site's twin root in the main checkout (the move rule
+   * checks both). A new site is only ever named inside the twin: the copy's
+   * own folder, or the copy itself for a notes page.
+   *
+   * @returns {{mode: string, root: string, file: string, contained: boolean, moved: true, twin: string}|null}
+   */
+  function movedPlanOf(docPath) {
+    if (typeof docPath !== "string" || !path.isAbsolute(docPath)) return null;
+    var place = pageRoutes.movedPlace(dir, docPath);
+    if (!place || !isPageFile(place.copy)) return null;
+    if (place.mode === MODE.PAGE_ONLY) {
+      return { mode: MODE.PAGE_ONLY, root: place.copy, file: place.copy, contained: false, moved: true, twin: place.twin };
+    }
+    var root = path.dirname(place.copy);
+    if (!within(root, place.twin)) return null;
+    return { mode: MODE.FOLDER, root: root, file: place.copy, contained: true, moved: true, twin: place.twin };
+  }
+
+  /**
+   * Record a moved document's main path on its review, the trusted moment
+   * spec 20261015.01 A13 names: from then on the review matches the main copy
+   * directly. A Markdown review records it as a source, any other as its page.
+   */
+  function recordMoved(reviewId, plan) {
+    if (!plan || plan.moved !== true || typeof reviews.recordPaths !== "function") return;
+    reviews.ensureKnown(reviewId);
+    if (!reviews.get(reviewId)) return;
+    reviews.recordPaths(reviewId, markdown.isMarkdown(plan.file) ? { source_path: plan.file } : { target_path: plan.file });
   }
 
   /**
@@ -263,6 +294,8 @@ function createCatalogSites(options) {
     siteFor: siteFor,
     addressOf: addressOf,
     worktreeSiteFor: worktreeSiteFor,
+    movedPlanOf: movedPlanOf,
+    recordMoved: recordMoved,
     holderOf: holderOf,
     pathUnder: pathUnder,
     bindPlan: bindPlan,

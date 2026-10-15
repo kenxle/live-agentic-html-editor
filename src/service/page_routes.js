@@ -797,6 +797,22 @@ function movedCopyOf(dir, file) {
   return copyAmong(movesIn(entry), file, entry.stateDir);
 }
 
+/**
+ * Where a gone worktree file lives now, for the Library (R13): the copy, the
+ * twin root it sits under, and the old site's mode. Null when it has not moved.
+ *
+ * @returns {{copy: string, twin: string, mode: string}|null}
+ */
+function movedPlace(dir, file) {
+  var entry = registryEntry(dir);
+  var moves = movesIn(entry);
+  for (var i = 0; i < moves.length; i += 1) {
+    var copy = copyThrough(moves[i], typeof file === "string" ? path.resolve(file) : file, entry.stateDir);
+    if (copy) return { copy: copy, twin: moves[i].twin, mode: moves[i].site.mode };
+  }
+  return null;
+}
+
 /** Is `file` under any move's twin root? The cheap test before any review is read. */
 function underATwin(moves, file) {
   return moves.some(function (move) {
@@ -1864,6 +1880,7 @@ module.exports = {
   movesOf: movesOf,
   movesFor: movesFor,
   movedCopyOf: movedCopyOf,
+  movedPlace: movedPlace,
   linkAddressFor: linkAddressFor,
   registryEntry: registryEntry,
   committedRecords: committedRecords,
