@@ -1,5 +1,5 @@
 // A review follows its document out of a removed worktree, in a real browser
-// (docs/features/20261015.01_review_follows_document/01_spec_review_follows_document.md).
+// (docs/features/20261015.02_review_follows_document/01_spec_review_follows_document.md).
 //
 //  - from the worktree: two comments made on the worktree's page, one answered
 //    handled; the worktree is removed and the main copy served in the same

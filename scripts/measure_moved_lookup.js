@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // What a page load costs when many worktrees have been removed.
 //
-// Written for docs/features/20261015.01_review_follows_document (R14), to be
+// Written for docs/features/20261015.02_review_follows_document (R14), to be
 // run once against the code before the change and once after:
 //
 //   node scripts/measure_moved_lookup.js [<tree root>] [--loads N] [--gap-ms M] [--json]

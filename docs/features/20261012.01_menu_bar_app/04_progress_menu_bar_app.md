@@ -24,7 +24,7 @@ Two calls were built with these defaults. Say so on a card to change either:
 
 The pull request is [#71](https://github.com/kenxle/live-agentic-html-editor/pull/71). Say "merge" on a card and I merge it. Your real helper then picks up the new code, and this page's old cards come back here too with no extra step.
 
-Spec: [the spec on GitHub](https://github.com/kenxle/live-agentic-html-editor/blob/fix/review-follows-doc/docs/features/20261015.01_review_follows_document/01_spec_review_follows_document.md).
+Spec: [the spec on GitHub](../20261015.02_review_follows_document/01_spec_review_follows_document.md).
 
 Not decisions, already on the board for later: the icon showing "can't tell" for five seconds when one poll is slow (LAHE-menubar-cant-tell-flicker), the app opening a new connection every poll (LAHE-menubar-connection-reuse), and the Library's background sweep reading every session file every 15 seconds (LAHE-library-sweep-cost).
 

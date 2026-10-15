@@ -1,5 +1,5 @@
 // A review follows its document out of a removed worktree (spec
-// docs/features/20261015.01_review_follows_document/01_spec_review_follows_document.md).
+// docs/features/20261015.02_review_follows_document/01_spec_review_follows_document.md).
 //
 // The fixture: a fake main checkout with .git/worktrees/feature, a worktree
 // whose .git file points at it, and git's back-link. A Markdown page is served

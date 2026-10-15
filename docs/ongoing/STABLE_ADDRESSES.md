@@ -162,7 +162,7 @@ not hold, as cards. They are not posted back. An old Markdown review's page was 
 ## A review follows its document out of a worktree
 
 When a worktree is removed, a document reviewed in it keeps its review in the main checkout.
-The spec is [01_spec_review_follows_document.md](../features/20261015.01_review_follows_document/01_spec_review_follows_document.md).
+The spec is [01_spec_review_follows_document.md](../features/20261015.02_review_follows_document/01_spec_review_follows_document.md).
 
 - **The rule lives in one place,** `page_routes.js` (the move). A gone worktree file is the same
   document as the file at the same path in its main checkout when:
