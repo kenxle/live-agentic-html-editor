@@ -12,21 +12,9 @@
 
 **Sources:**
 
-- [system-tokens.css](../../vendor/stclair-doc-style/system-tokens.css)
-- [document.css](../../vendor/stclair-doc-style/document.css)
-- [lahe-markdown.css](../../vendor/stclair-doc-style/lahe-markdown.css)
-- [COMPONENTS.md](../../vendor/stclair-doc-style/COMPONENTS.md)
-- [the style folder README](../../vendor/stclair-doc-style/README.md)
-- [overlay.js](../../src/layer/overlay.js)
-- [tab_done.js](../../src/layer/tab_done.js)
-- [tab_edits.js](../../src/layer/tab_edits.js)
-- [highlight.js](../../src/layer/highlight.js)
-- [zoom.js](../../src/layer/zoom.js)
-- [catalog_page.js](../../src/service/catalog_page.js)
-- [STYLES.md](STYLES.md)
-- [DOC_STYLE_BUILD.md](DOC_STYLE_BUILD.md)
-- [CLAUDE.md](../../CLAUDE.md)
-- the git history of `src/layer`
+- [the style folder README](../../vendor/stclair-doc-style/README.md), [system-tokens.css](../../vendor/stclair-doc-style/system-tokens.css), [document.css](../../vendor/stclair-doc-style/document.css) and [COMPONENTS.md](../../vendor/stclair-doc-style/COMPONENTS.md), for documents and the Library page
+- [overlay.js](../../src/layer/overlay.js), the one place the rail's tokens are defined
+- [STYLES.md](STYLES.md) and [DOC_STYLE_BUILD.md](DOC_STYLE_BUILD.md), for installed styles and how the document style is built
 
 First draft by Seneschal.
 
