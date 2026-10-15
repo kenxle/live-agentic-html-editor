@@ -508,7 +508,7 @@ function clip(text, limit) {
  */
 var DRAIN_PAGE_KEY = "page";
 
-function drainLine(where, item, asDrain) {
+function drainLine(where, item, asDrain, takenOverAt) {
   var line = Object.assign({}, where, item);
   var page = Object.assign({}, line[DRAIN_PAGE_KEY] || {});
   reviewFormat.DATA_FIELDS.forEach(function (field) {
@@ -543,7 +543,7 @@ function drainLine(where, item, asDrain) {
   DRAIN_DROPPED_FIELDS.forEach(function (field) { delete line[field]; });
   page.context = withoutRepeatedContext(page.context, page.quote);
   line[DRAIN_PAGE_KEY] = page;
-  if (asDrain) withoutAgentWords(line);
+  if (asDrain) withoutAgentWords(line, takenOverAt);
   return leanValue(line);
 }
 
@@ -553,16 +553,47 @@ function drainLine(where, item, asDrain) {
 // words: the catch-up (--json alone) is how a new or compacted agent reads them,
 // and review.json keeps all of it. A proofread turn's suggestions stay, because
 // the contract sends the agent to read the fixes in the thread's last turn.
+//
+// Two kinds of turn keep their words, because the agent reading the drain does
+// not have them. A question in the thread's last turn: the reviewer's note is
+// the answer to it, and an answer without its question means nothing. And any
+// turn written before the session's last takeover: the agent that wrote it was
+// a different agent.
 var AGENT_WORD_FIELDS = ["text", "reason"];
 
-function withoutAgentWords(line) {
+function writtenBeforeTakeover(turn, takenOverAt) {
+  if (!takenOverAt) return false;
+  var takeover = Date.parse(takenOverAt);
+  if (!Number.isFinite(takeover)) return false;
+  var wrote = Date.parse(turn && turn.at);
+  // A turn with no readable time cannot be shown to be this agent's own.
+  return !Number.isFinite(wrote) || wrote < takeover;
+}
+
+function withoutAgentWords(line, takenOverAt) {
   if (Array.isArray(line.thread)) {
-    line.thread = line.thread.map(function (round) {
+    var last = line.thread.length - 1;
+    line.thread = line.thread.map(function (round, index) {
       if (!round || typeof round !== "object" || !round.agent) return round;
+      var awaitingAnswer = index === last && round.agent.status === "question";
+      if (awaitingAnswer || writtenBeforeTakeover(round.agent, takenOverAt)) return round;
       return Object.assign({}, round, { agent: withoutFields(round.agent, AGENT_WORD_FIELDS) });
     });
   }
-  if (line.reply && typeof line.reply === "object") line.reply = withoutFields(line.reply, AGENT_WORD_FIELDS);
+  if (line.reply && typeof line.reply === "object" && !writtenBeforeTakeover(line.reply, takenOverAt)) {
+    line.reply = withoutFields(line.reply, AGENT_WORD_FIELDS);
+  }
+}
+
+/** When the session was last taken over, or null when it never was or cannot be read. */
+function takenOverAtOf(dir, sessionId) {
+  if (!sessionId) return null;
+  try {
+    var session = agentSessionsModule.createStore({ dir: dir }).read(sessionId);
+    return (session && session.taken_over_at) || null;
+  } catch (error) {
+    return null;
+  }
 }
 
 function withoutFields(object, fields) {
@@ -1305,7 +1336,7 @@ async function run(argv, options) {
       // 175 bytes each, for one fact per review.
       livenessByReview[id] = liveness;
       open.forEach(function (item) {
-        jsonItems.push(drainLine({ review: id }, item, args.quiet));
+        jsonItems.push(drainLine({ review: id }, item, args.quiet, takenOverAtOf(dir, ownerSessionId || args.session)));
       });
     }
 

@@ -140,11 +140,12 @@ empty. A missing field means null or empty, and a missing true/false field
 means false. The line also leaves out the page's address and title, and any
 context text the quote already holds. `review.json` keeps all of it.
 
-**The drain leaves out your own earlier answers.** On a follow-up, an item's
-`thread` keeps your turns' `status` and `agent` but not their `text` or `reason`.
-You wrote them and have them. After a compaction, or whenever you need them
-again, run `lahe status --session <id> --json` once, without `--quiet`: it prints
-each thread in full.
+**The drain leaves out your own earlier answers on a card, except a question the
+reviewer is now answering and turns written before a takeover.** In an item's
+`thread`, those turns keep their `status` and `agent` but not their `text` or
+`reason`. After a compaction, or whenever you need them, run
+`lahe status --session <id> --json` once, without `--quiet`: it prints each
+thread in full.
 
 **Name your session if your host tells you its name.** The human may run many
 agents at once, and when nothing comes back on their comments, the rail tells

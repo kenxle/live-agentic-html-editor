@@ -187,7 +187,9 @@ test("a proofread turn's fixes stay on the drain, because the contract sends the
   });
   const projected = reviewFormat.projectItem(item, null, undefined, {});
   const line = status.drainLine({ review: REVIEW }, projected, true);
-  assert.equal(JSON.stringify(line).includes("I placed it as written"), false);
+  // The proofread question is the thread's last turn, and the reviewer's button
+  // answers it, so its words stay with its fixes.
+  assert.equal(line.thread[0].agent.text, "I placed it as written.");
   assert.deepEqual(line.thread[0].agent.suggestions, [{ block: 0, from: "teh", to: "the" }]);
 });
 
@@ -220,6 +222,73 @@ test("lahe status --json without --quiet prints the threads in full", async () =
   assert.equal(line.thread[0].agent.text, FIRST_ANSWER);
   assert.equal(line.thread[1].agent.text, SECOND_ANSWER);
   assert.equal(line.thread[1].agent.reason, SECOND_REASON);
+});
+
+function questionThread(extraRound) {
+  const rounds = [
+    {
+      rev: 1,
+      reviewer: { note: "FIRST-REVIEWER-NOTE move the table", change: null, at: "2026-10-14T20:00:00.000Z" },
+      agent: { status: "handled", agent: "claude", text: FIRST_ANSWER, reason: null, files: [], at: "2026-10-14T20:01:00.000Z" }
+    },
+    {
+      rev: 2,
+      reviewer: { note: "SECOND-REVIEWER-NOTE and the heading", change: null, at: "2026-10-14T20:10:00.000Z" },
+      agent: { status: "question", agent: "claude", text: "ASKED-QUESTION-WORDS which heading?", reason: null, files: [], at: "2026-10-14T20:11:00.000Z" }
+    }
+  ];
+  return extraRound ? rounds.concat([extraRound]) : rounds;
+}
+
+test("a question the reviewer is now answering keeps its words on the drain", async () => {
+  const item = aFollowUp({ note: "THE-ANSWER the second one", thread: questionThread() });
+  const text = await statusRun(stateWith([item]), ["--quiet"]);
+  const line = itemLine(text);
+  assert.equal(line.note, "THE-ANSWER the second one");
+  assert.equal(line.thread[1].agent.text, "ASKED-QUESTION-WORDS which heading?", "the question stays");
+  assert.equal(text.includes("FIRST-ANSWER-WORDS"), false, "the earlier answer still goes");
+});
+
+test("a question that is not the thread's last turn is dropped like any answer", () => {
+  const later = {
+    rev: 3,
+    reviewer: { note: "THIRD-REVIEWER-NOTE the second one", change: null, at: "2026-10-14T20:20:00.000Z" },
+    agent: { status: "handled", agent: "claude", text: "LATER-ANSWER-WORDS done", reason: null, files: [], at: "2026-10-14T20:21:00.000Z" }
+  };
+  const projected = reviewFormat.projectItem(aFollowUp({ rev: 4, thread: questionThread(later) }), null, undefined, {});
+  const text = JSON.stringify(status.drainLine({ review: REVIEW }, projected, true));
+  assert.equal(text.includes("ASKED-QUESTION-WORDS"), false);
+  assert.equal(text.includes("LATER-ANSWER-WORDS"), false);
+});
+
+test("after a takeover, a turn written before it keeps its words and a newer turn drops them", async () => {
+  const dir = stateWith([aFollowUp()]);
+  // The thread's turns are dated 2026-10-14; the takeover happens now.
+  agentSessions.createStore({ dir: dir }).takeover(SESSION);
+  const newer = {
+    rev: 3,
+    reviewer: { note: "THIRD-REVIEWER-NOTE", change: null, at: "2999-01-01T00:00:00.000Z" },
+    agent: { status: "handled", agent: "claude", text: "NEWER-ANSWER-WORDS", reason: null, files: [], at: "2999-01-01T00:01:00.000Z" }
+  };
+  const fresh = stateWith([aFollowUp({ rev: 4, thread: aFollowUp().thread.concat([newer]) })]);
+  agentSessions.createStore({ dir: fresh }).takeover(SESSION);
+
+  const kept = itemLine(await statusRun(dir, ["--quiet"]));
+  assert.equal(kept.thread[0].agent.text, FIRST_ANSWER, "written before the takeover, so the new agent never saw it");
+  assert.equal(kept.thread[1].agent.reason, SECOND_REASON);
+
+  const mixed = itemLine(await statusRun(fresh, ["--quiet"]));
+  assert.equal(mixed.thread[0].agent.text, FIRST_ANSWER);
+  assert.equal(mixed.thread[2].agent.text, undefined, "written after the takeover, so this agent has it");
+});
+
+test("drainLine takes the takeover time as its fourth argument", () => {
+  const projected = reviewFormat.projectItem(aFollowUp(), null, undefined, {});
+  const kept = status.drainLine({ review: REVIEW }, projected, true, "2026-10-14T20:05:00.000Z");
+  assert.equal(kept.thread[0].agent.text, FIRST_ANSWER, "turn at 20:01 is before 20:05");
+  assert.equal(kept.thread[1].agent.text, undefined, "turn at 20:11 is after 20:05");
+  const never = status.drainLine({ review: REVIEW }, projected, true, null);
+  assert.equal(never.thread[0].agent.text, undefined, "a session never taken over drops them");
 });
 
 test("review.json's projection keeps the agent's words", () => {

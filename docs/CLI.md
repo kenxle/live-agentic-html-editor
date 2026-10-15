@@ -95,10 +95,12 @@ label, the session id and the card's first-created time, which `review.json`
 keeps. The summary line prints only when it says something: an ended review, a
 Library request, or a page that is not connected. The drain also leaves out the
 agent's own earlier answers: in an item's `thread` each agent turn keeps its
-`status` and `agent` but not its `text` or `reason`, because the agent that wrote
-them already has them. `lahe status --session <id> --json` without `--quiet` (the
-catch-up) prints each thread in full, and an agent whose context was compacted
-runs it once to get them back.
+`status` and `agent` but not its `text` or `reason`. Two kinds of turn keep their
+words: a question that is the thread's last turn, because the reviewer's note is
+the answer to it, and any turn written before the session's last takeover, because
+the agent now reading it did not write it. `lahe status --session <id> --json`
+without `--quiet` (the catch-up) prints each thread in full, and an agent whose
+context was compacted runs it once to get them back.
 
 The **wake channel** is per host, because hosts differ in what they can do
 without spending model tokens:
