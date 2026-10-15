@@ -42,7 +42,7 @@ It has two parts:
 
 ## Who it is for
 
-- **Someone heavily using AI and have a better interface than MD readers.** When users need to constantly review documentation from agents, it becomes important to have good workflows for editing, and well-designed documents to read.
+- **Someone heavily using AI and wants a better interface than MD readers.** When users need to constantly review documentation from agents, it becomes important to have good workflows for editing, and well-designed documents to read.
 - **Someone reviewing a website or app built in html.** Reviewing websites with agents is difficult because you need to constantly explain the section you are talking about. Point and click and then describe is much easier.
 - **Someone who wants to make nice documents.** We now have the ability to create documentation for our fellow humans that is much more well designed than before. With agent assistance and styles, users can now create beautiful documentation to share with each other.
 
@@ -71,7 +71,7 @@ Editing the page directly has its own risk. Tools that make a page editable have
 ## What it does
 
 - **Comments and edits.** Leave comments on text, html elements (an image, a chart, a section), or on the page as a whole. Rewrite text in place and write new paragraphs, headings and lists.
-- **Protection for hand edits.** If you wrote it, the agent will not change it without asking. A doc-wide changes recognize text you placed by hand. If agents do change your work without asking, there are checks that find the changes and revert to your wording.
+- **Protection for hand edits.** If you wrote it, the agent will not change it without asking. A doc-wide change recognizes text you placed by hand. If agents do change your work without asking, there are checks that find the changes and revert to your wording.
 - **Threaded answers/conversations.** Comments and edits are answered and confirmed by the agent, and the comments are threaded for easy navigation.
 - **Smart live updates.** The agent lands a change and the page automatically reloads. You don't have to think about this, and any additional edits you have made are not destroyed. You just work and updates are merged in seamlessly.
 - **Multi-file editing.** A page may be built from many files and reviewed as one page, and the agent edits the files underneath.
