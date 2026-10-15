@@ -1425,9 +1425,10 @@ function gonePage(file, libraryHref) {
 
 /**
  * R13: the note on a worktree file shown from the main checkout. One statement
- * per line: two long paths in one run of prose were hard to read. Editing
- * needs a review's rail on this copy, which an agent brings: Hand to agent in
- * the Library (Pick this up, or Launch a new agent with none attached).
+ * per line: two long paths in one run of prose were hard to read. Shown only
+ * when the main copy's own page does not carry this file's review (spec
+ * 20261015.01 R11); Library Open gives the copy its address and that rail.
+ * `heldBy` names another review that holds the copy, by title.
  */
 function movedNote(goneFile, shownFile, libraryHref, heldBy) {
   // No command is printed: a path can hold shell text (spec 20261015.01 R11).

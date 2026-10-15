@@ -1345,7 +1345,16 @@ root or a URL, and fields a route does not list are never read.
   `not owned by the current user, or not on disk`, or `the document could not be given an address`.
 - **The owner check** covers the reviewed file, the served file, and the root of the site Open would
   name, since a site serves everything under its root. Each must be on disk and owned by the current
-  user. A gone worktree's read-only copy binds nothing and is not checked.
+  user. For a moved row (below) it covers the main copy and the plan's root, since the recorded files
+  are gone. A gone worktree's read-only copy binds nothing and is not checked.
+- **A moved document** (spec 20261015.01) is a row whose recorded file was in a worktree that is gone,
+  and whose main-checkout copy passes the move rule in `page_routes.js`: git agrees the worktree is
+  gone, the main checkout's saved real path still holds, and the copy is under the site's twin root.
+  It is kind `static`, openable `yes`, with `moved: true` in the list. Open, Pick this up and Launch
+  first give the main copy its address (a new site only inside the twin root) and, when no other review
+  holds the copy, stamp the review and record the main path on it (`source_path` for Markdown, else
+  `target_path`). A row's recorded path is page text, so it is vouched only when it is under a
+  registry site's own root.
 - **A folder review opens on a page, never the bare root:** the page its comments are on when that is a
   page in the folder, else the page `lahe review <folder>` opens. `served_url` in the list is the same page.
 - **Nothing is asked of an agent that already has the document.** When the attached agent owns the
@@ -1491,10 +1500,11 @@ The one read path, and the one keep-up loop. Before it, every agent hand-rolled 
   - **`kind`:** `legacy` for a review with no session; `dev-server` only when the review has a
     registered origin no old page server record of its session serves, on a target LAHE would not serve
     itself (a folder, a non-page file, or none) and no such record covers it; `worktree` for a document
-    whose worktree is gone; and otherwise `static`. `openable` says whether Open can open it: `yes` when
+    whose worktree is gone and whose main copy does not pass the move rule; and otherwise `static`, a
+    moved document included. `openable` says whether Open can open it: `yes` when
     the file is on disk, Lahe can serve it (HTML or Markdown, or a folder of pages) and something a page
-    cannot write vouches for its root, or when a gone worktree's site recorded its main checkout, which
-    still has the page; `via-agent` when nothing vouches; `missing` when neither the file nor a copy is
+    cannot write vouches for its root, or when its worktree is gone and its main copy passes the move
+    rule; `via-agent` when nothing vouches; `missing` when neither the file nor a copy is
     there.
   - `title`, `path`, `candidate`, `folder` and `handoff` are page text, classed as data in
     `PROJECTED_FIELD_CLASS` (`catalog_requests[].title` and so on) and fenced like every other data

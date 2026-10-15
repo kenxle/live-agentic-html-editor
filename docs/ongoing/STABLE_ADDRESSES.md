@@ -159,6 +159,29 @@ not hold, as cards. They are not posted back. An old Markdown review's page was 
 (`/<name>-<hash>.html`); the helper names that old path on the tag, so those comments come over too.
 `docs/CONTRACTS.md` has the guards.
 
+## A review follows its document out of a worktree
+
+When a worktree is removed, a document reviewed in it keeps its review in the main checkout.
+The spec is [01_spec_review_follows_document.md](../features/20261015.01_review_follows_document/01_spec_review_follows_document.md).
+
+- **The rule lives in one place,** `page_routes.js` (the move). A gone worktree file is the same
+  document as the file at the same path in its main checkout when:
+  - git agrees the worktree is gone: its admin folder is missing, or names a `.git` file that is not there;
+  - the main checkout's real path still matches the one the site saved at bind;
+  - the main checkout's `.git` is a folder, inside the home folder and outside the state folder;
+  - the copy is under the site's twin root by real path.
+- **Records:** `fileForPageIn` maps the old address to the main copy. Spellings, `records.read`, the
+  handled check and the reload check all go through it.
+- **The file's review:** a review that recorded the worktree file holds the main copy, in
+  `holderOfFile`, `pickReview`, `ownReviewOf` and the Origin check. When a direct review and a moved
+  review compete, the newest one with comments on the file wins.
+- **`lahe review <main copy>`** in the review's own session continues it and records the main path. A
+  first source that is gone is replaced by the copy.
+- **The old address** redirects a page load to the main copy's address when that page carries the
+  review. Otherwise it shows the copy read-only, naming any review that holds it.
+- **`review.json`** names the main copy as a page's source.
+- **Cost:** one root check per worktree site per request. `scripts/measure_moved_lookup.js` measures it.
+
 ## Each page carries its own comments
 
 - **One review per file.** `lahe review` of a file that already has a review opens it and never makes a second. In another agent session's review it says whose it is and makes nothing; `lahe review retire` ends a review on purpose.
