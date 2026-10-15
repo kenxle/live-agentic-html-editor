@@ -27,6 +27,7 @@ lahe skill; after that a plain sentence works:
 | `lahe add ... --review <id>` | Re-attach this page to a review that already exists, by id |
 | `lahe status [--session <id>] [--review <id>] [--json]` | What is open right now. Agent monitors must name their session; plain global status is only a human diagnostic. The printed form starts with the pages port, the ending addresses print with and why, and whether they print with the port and why; with no helper running it names a pages port another program holds. Each review shows its `address`. It also says whether a login item runs the helper, and when to run `lahe install` again. On macOS one `menu bar` line says whether the icon is installed and running, installed and not running (hidden), or not installed, and names a failed rebuild with its time and error. While Lahe is stopped from the menu, that line says "stopped by you" with the time |
 | `lahe reply --review <id> --item <itm> --rev <n> --status handled\|not_handled\|question` | Write one reply. Add `--text` or `--reason` for what you want to say, `--file <path>` per file you changed, `--needs-see` when the reviewer should read it, `--agent <name>` with the kind of agent you are (claude, codex) for the card and the per-agent file. The command encodes the JSON, so a newline or a quote in your answer cannot split the line |
+| `lahe reply --review <id> --batch [--agent <name>]` | Answer many items in one run. Reads a JSON array from stdin; each entry is `{"item", "rev", "status"}` plus the optional `text`, `reason`, `files` (a list), `needs_see`, `proofread` and `suggest` (a list of `[block, from, to]`). Every entry is checked with the single form's rules before anything is written; one bad entry means nothing is written, and the error names the entry by position and item. Prints one `{"item","status"}` line per entry, in order. A raw line break inside a string fails JSON parsing and is refused. It cannot be combined with `--item`, `--rev`, `--status`, `--text`, `--reason`, `--file`, `--needs-see`, `--proofread` or `--suggest` |
 | `lahe reply ... --status question --proofread --suggest <block> <from> <to>` | A proofreading question on an item that carries `proofread: true`. Place the reviewer's words as written first, then ask. `--suggest` is one fix: in `new_blocks[<block>]`, change `<from>` to `<to>`; repeat it for each fix. The command reads the item from `review.json` at the rev you name and refuses, by name, a suggestion whose `<from>` is not in that block's words exactly once (`SUGGESTION_NOT_FOUND`), and refuses the whole line when the rev is not the item's current one. Both flags belong on `--status question` only, and `--suggest` needs `--proofread` |
 | `lahe monitor --session <id>` | Poll locally without model wakeups, print unanswered session work, and exit |
 | `lahe monitor --session <id> --session <other>` | Watch several sessions with one monitor. The first is the primary. A session that closes or is taken over is dropped with a line and the rest are still watched |
@@ -92,7 +93,12 @@ empty, and a missing true/false field means false. It leaves out context text
 the quoted passage already holds, and the page's address and title, the region
 label, the session id and the card's first-created time, which `review.json`
 keeps. The summary line prints only when it says something: an ended review, a
-Library request, or a page that is not connected.
+Library request, or a page that is not connected. The drain also leaves out the
+agent's own earlier answers: in an item's `thread` each agent turn keeps its
+`status` and `agent` but not its `text` or `reason`, because the agent that wrote
+them already has them. `lahe status --session <id> --json` without `--quiet` (the
+catch-up) prints each thread in full, and an agent whose context was compacted
+runs it once to get them back.
 
 The **wake channel** is per host, because hosts differ in what they can do
 without spending model tokens:
@@ -303,7 +309,10 @@ JSON, so a paragraph break or a quote in an agent's answer lands as `\n` and
 `\"` instead of splitting one object across three physical lines that the
 helper then rejects one by one. It prints back only the item and the status,
 for example `{"item":"itm_x","status":"handled"}`: the agent just wrote the
-words, so echoing them would cost it the same tokens twice. Hand-appending still works and is still read:
+words, so echoing them would cost it the same tokens twice. To answer several
+items at once, `lahe reply --review <id> --batch` reads one JSON array from
+stdin and writes every reply in one run, or none of them if any entry fails
+its checks; it prints one such line per entry. Hand-appending still works and is still read:
 if you do it, the whole object goes on one physical line and every newline
 inside `text` or `reason` is the two characters backslash n.
 

@@ -140,6 +140,12 @@ empty. A missing field means null or empty, and a missing true/false field
 means false. The line also leaves out the page's address and title, and any
 context text the quote already holds. `review.json` keeps all of it.
 
+**The drain leaves out your own earlier answers.** On a follow-up, an item's
+`thread` keeps your turns' `status` and `agent` but not their `text` or `reason`.
+You wrote them and have them. After a compaction, or whenever you need them
+again, run `lahe status --session <id> --json` once, without `--quiet`: it prints
+each thread in full.
+
 **Name your session if your host tells you its name.** The human may run many
 agents at once, and when nothing comes back on their comments, the rail tells
 them which agent to go check. If your host tells you the human's name for this
@@ -476,6 +482,27 @@ lahe reply --review <id> --item <item-id> --rev <n> --status handled \
 `--text -` reads a long answer from stdin. The command encodes the line, so a
 newline in your answer cannot split it. It prints back only the item and the
 status. Then drain again, until it prints nothing.
+
+**With several items in one drain, batch the replies.** Make all the edits to one
+file together, rebuild once, then send every reply in one run. Each call re-reads
+the whole conversation, so ten replies as ten calls cost ten times as much:
+
+```sh
+lahe reply --review <id> --agent claude --batch <<'EOF'
+[
+  {"item": "<item-id>", "rev": 2, "status": "handled", "text": "Moved the table up.", "files": ["path/you/changed"]},
+  {"item": "<item-id>", "rev": 1, "status": "not_handled", "reason": "The heading is shared with page two."}
+]
+EOF
+```
+
+An entry takes `item`, `rev` and `status`, and the single form's other fields:
+`text`, `reason`, `files` (a list), `needs_see` (true), `proofread` (true) and
+`suggest` (a list of `[block, from, to]`). Every entry is checked like the single
+form. If any fails, nothing is written and the error names the entry by its
+position and item, so fix it and send the whole batch again. Write a line break
+inside a string as `\n`: a raw one fails the JSON and is refused. It prints one
+`{"item","status"}` line per entry. The single form stays for one item.
 
 Reply checklist:
 

@@ -508,7 +508,7 @@ function clip(text, limit) {
  */
 var DRAIN_PAGE_KEY = "page";
 
-function drainLine(where, item) {
+function drainLine(where, item, asDrain) {
   var line = Object.assign({}, where, item);
   var page = Object.assign({}, line[DRAIN_PAGE_KEY] || {});
   reviewFormat.DATA_FIELDS.forEach(function (field) {
@@ -543,7 +543,32 @@ function drainLine(where, item) {
   DRAIN_DROPPED_FIELDS.forEach(function (field) { delete line[field]; });
   page.context = withoutRepeatedContext(page.context, page.quote);
   line[DRAIN_PAGE_KEY] = page;
+  if (asDrain) withoutAgentWords(line);
   return leanValue(line);
+}
+
+// THE AGENT'S OWN EARLIER ANSWERS (docs/features/20261015.01_batch_reply_own_answers).
+// On a follow-up the thread hands back every answer the agent wrote, and the
+// agent that wrote them already has them. Only the drain (--quiet) drops the
+// words: the catch-up (--json alone) is how a new or compacted agent reads them,
+// and review.json keeps all of it. A proofread turn's suggestions stay, because
+// the contract sends the agent to read the fixes in the thread's last turn.
+var AGENT_WORD_FIELDS = ["text", "reason"];
+
+function withoutAgentWords(line) {
+  if (Array.isArray(line.thread)) {
+    line.thread = line.thread.map(function (round) {
+      if (!round || typeof round !== "object" || !round.agent) return round;
+      return Object.assign({}, round, { agent: withoutFields(round.agent, AGENT_WORD_FIELDS) });
+    });
+  }
+  if (line.reply && typeof line.reply === "object") line.reply = withoutFields(line.reply, AGENT_WORD_FIELDS);
+}
+
+function withoutFields(object, fields) {
+  var out = Object.assign({}, object);
+  fields.forEach(function (field) { delete out[field]; });
+  return out;
 }
 
 var DRAIN_DROPPED_PAGE_FIELDS = ["origin", "title", reviewFormat.PROJECTED.REGION_LABEL];
@@ -1280,7 +1305,7 @@ async function run(argv, options) {
       // 175 bytes each, for one fact per review.
       livenessByReview[id] = liveness;
       open.forEach(function (item) {
-        jsonItems.push(drainLine({ review: id }, item));
+        jsonItems.push(drainLine({ review: id }, item, args.quiet));
       });
     }
 
