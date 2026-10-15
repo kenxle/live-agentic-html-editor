@@ -10,7 +10,18 @@
 
 **Describes:** the test folders and CI config
 
-**Sources:** [the CI workflow](../../.github/workflows/gate.yml), [package.json](../../package.json), [the Playwright config](../../playwright.config.js), [the test folders](../../test/), [the browser harness README](../../test/helpers/README.md), [the lint script](../../scripts/lint.js), [the leak-check wrapper](../../scripts/no_stray_helpers.js), [the menu bar check](../../scripts/check_menubar.js), [.nvmrc](../../.nvmrc), [CLAUDE.md](../../CLAUDE.md)
+**Sources:**
+
+- [the CI workflow](../../.github/workflows/gate.yml)
+- [package.json](../../package.json)
+- [the Playwright config](../../playwright.config.js)
+- [the test folders](../../test/)
+- [the browser harness README](../../test/helpers/README.md)
+- [the lint script](../../scripts/lint.js)
+- [the leak-check wrapper](../../scripts/no_stray_helpers.js)
+- [the menu bar check](../../scripts/check_menubar.js)
+- [.nvmrc](../../.nvmrc)
+- [CLAUDE.md](../../CLAUDE.md)
 
 ## Short version
 

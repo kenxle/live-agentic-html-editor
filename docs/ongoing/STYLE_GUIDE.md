@@ -10,7 +10,23 @@
 
 **Describes:** the stylesheet and component folders
 
-**Sources:** [system-tokens.css](../../vendor/stclair-doc-style/system-tokens.css), [document.css](../../vendor/stclair-doc-style/document.css), [lahe-markdown.css](../../vendor/stclair-doc-style/lahe-markdown.css), [COMPONENTS.md](../../vendor/stclair-doc-style/COMPONENTS.md), [the style folder README](../../vendor/stclair-doc-style/README.md), [overlay.js](../../src/layer/overlay.js), [tab_done.js](../../src/layer/tab_done.js), [tab_edits.js](../../src/layer/tab_edits.js), [highlight.js](../../src/layer/highlight.js), [zoom.js](../../src/layer/zoom.js), [catalog_page.js](../../src/service/catalog_page.js), [STYLES.md](STYLES.md), [DOC_STYLE_BUILD.md](DOC_STYLE_BUILD.md), [CLAUDE.md](../../CLAUDE.md), and the git history of `src/layer`
+**Sources:**
+
+- [system-tokens.css](../../vendor/stclair-doc-style/system-tokens.css)
+- [document.css](../../vendor/stclair-doc-style/document.css)
+- [lahe-markdown.css](../../vendor/stclair-doc-style/lahe-markdown.css)
+- [COMPONENTS.md](../../vendor/stclair-doc-style/COMPONENTS.md)
+- [the style folder README](../../vendor/stclair-doc-style/README.md)
+- [overlay.js](../../src/layer/overlay.js)
+- [tab_done.js](../../src/layer/tab_done.js)
+- [tab_edits.js](../../src/layer/tab_edits.js)
+- [highlight.js](../../src/layer/highlight.js)
+- [zoom.js](../../src/layer/zoom.js)
+- [catalog_page.js](../../src/service/catalog_page.js)
+- [STYLES.md](STYLES.md)
+- [DOC_STYLE_BUILD.md](DOC_STYLE_BUILD.md)
+- [CLAUDE.md](../../CLAUDE.md)
+- the git history of `src/layer`
 
 First draft by Seneschal.
 

@@ -21,7 +21,15 @@ Sections, in this order:
 
 **Level of detail:** A reader finishes knowing what the product is for. That guides every other doc.
 
-**Sources:** [README.md](../../README.md), [CLAUDE.md](../../CLAUDE.md), [AGENTS.md](../../AGENTS.md), [the lahe skill](../../skills/lahe/SKILL.md), [INSTALL.md](../INSTALL.md), [the kickoff feature brief](../features/20260812.01_live_agentic_html_editor/01_brief_live_agentic_html_editor.md), [the kickoff feature architecture](../features/20260812.01_live_agentic_html_editor/02_architecture_live_agentic_html_editor.md).
+**Sources:**
+
+- [README.md](../../README.md)
+- [CLAUDE.md](../../CLAUDE.md)
+- [AGENTS.md](../../AGENTS.md)
+- [the lahe skill](../../skills/lahe/SKILL.md)
+- [INSTALL.md](../INSTALL.md)
+- [the kickoff feature brief](../features/20260812.01_live_agentic_html_editor/01_brief_live_agentic_html_editor.md)
+- [the kickoff feature architecture](../features/20260812.01_live_agentic_html_editor/02_architecture_live_agentic_html_editor.md)
 
 ## What it is
 

@@ -8,7 +8,16 @@
 
 **Level of detail:** Rules a writer can apply without asking. No history of past decisions.
 
-**Sources:** [README.md](../../README.md), [AGENTS.md](../../AGENTS.md), [docs/INSTALL.md](../INSTALL.md), [skills/lahe/SKILL.md](../../skills/lahe/SKILL.md), [LIBRARY.md](LIBRARY.md), [DIAGRAMS_PLAN.md](DIAGRAMS_PLAN.md), [CLAUDE.md](../../CLAUDE.md), and the rail's own strings in [overlay.js](../../src/layer/overlay.js), [tab_active.js](../../src/layer/tab_active.js), [tab_done.js](../../src/layer/tab_done.js), [conflict_toast.js](../../src/layer/conflict_toast.js) and [catalog/view_model.js](../../src/layer/catalog/view_model.js)
+**Sources:**
+
+- [README.md](../../README.md)
+- [AGENTS.md](../../AGENTS.md)
+- [docs/INSTALL.md](../INSTALL.md)
+- [skills/lahe/SKILL.md](../../skills/lahe/SKILL.md)
+- [LIBRARY.md](LIBRARY.md)
+- [DIAGRAMS_PLAN.md](DIAGRAMS_PLAN.md)
+- [CLAUDE.md](../../CLAUDE.md)
+- the rail's own strings in [overlay.js](../../src/layer/overlay.js), [tab_active.js](../../src/layer/tab_active.js), [tab_done.js](../../src/layer/tab_done.js), [conflict_toast.js](../../src/layer/conflict_toast.js) and [catalog/view_model.js](../../src/layer/catalog/view_model.js)
 
 No research report in the repo backs the brand. The one research file, [element fingerprinting](../research/20260826_element_fingerprinting.md), is technical. The next step is a `research-report` run on how people who review documents with a coding agent describe the problem and the tools they use now.
 
