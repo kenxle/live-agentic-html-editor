@@ -97,8 +97,11 @@ the loop above, and the wake channel below carrying all four required pieces.
 - The main loop never has the agent stop and report that a wake arrived; the
   interrupt is a reason to keep working through drain, not a stopping point.
 - The monitor's wake is one line, not the work. Only the drain prints items,
-  so each item reaches the agent's context once. `lahe reply` prints back only
-  the item and the status, and after a batch the agent says one line in chat.
+  so each item reaches the agent's context once. The drain leaves out the
+  agent's own earlier answers in a thread, and the catch-up
+  (`lahe status --json` without `--quiet`) keeps them. `lahe reply` prints back
+  only the item and the status, with several items answered in one
+  `lahe reply --batch` run, and after a batch the agent says one line in chat.
 - Every host now waits with the same `lahe monitor` process; only how it is
   run differs. On Claude Code it runs with Bash in the background, where one
   launch waits until there is work (the 86400000 timeout matters only in an
