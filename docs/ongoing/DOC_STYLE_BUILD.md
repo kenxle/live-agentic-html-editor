@@ -37,10 +37,17 @@ Pages that already carry their own styles are never touched.
 
 ## Source of truth for the style
 
-`~/Documents/workspace/personal/lib/templates/system-tokens.css` (tokens) and
-`document.css` (components), spec in `personal/docs/document-style-guide.md`.
-Copy, do not import across repos. Record the source path and copy date in
-`vendor/stclair-doc-style/README.md`, same as the other vendor folders.
+Since 2026-10-12 this repo's `vendor/stclair-doc-style/` is the official
+International Style (Ken's call). Edit the style here. Other builders read it
+from here at build time: feature-forge's doc build inlines it on every build,
+and the research-report build is a board row to follow. The personal repo's
+`lib/templates/` copy is legacy until the Personal board row that moves its
+users over is done. New reusable parts go in as components and get a line in
+`vendor/stclair-doc-style/COMPONENTS.md` (the links row `.toplinks`, the
+contents list, the cross-reference `.xref` and the status dots came in that
+way, pull request 60).
+
+The prose spec is still `personal/docs/document-style-guide.md`.
 
 ## The Markdown adaptation
 
