@@ -1,6 +1,6 @@
 # Progress: Menu bar app
 
-**Where things are at 10:20 on October 15.** The menu bar icon is done and running on your Mac, and the cleanup you approved is done. One decision is left, and a second only if you want it. Everything below them is a record of what happened.
+**Where things are at 10:22 on October 15.** The menu bar icon is done and running on your Mac. The cleanup and the lesson are done as you said. Next: making your comments follow a document when its worktree goes away, which you asked for on a card. Nothing needs you until that is ready to merge.
 
 **Docs:** [Crucible](00_crucible_menu_bar_app.html) · [Brief](01_brief_menu_bar_app.html) · [Architecture](02_architecture_menu_bar_app.html) · [Plan](03_plan_menu_bar_app.html) (each page carries its reviews at the bottom) · [PR 2 reviews](05_pr2_reviews_menu_bar_app.md)
 
@@ -8,9 +8,9 @@
 
 **Done: the leftovers are deleted, as you said on your card.** Six builder worktrees and their branches, two leftover branches on GitHub, and the two test copies of your Lahe data in `~/Documents/lahe-menubar-review/` are gone. The feature's own worktree goes last; this page keeps its rail from the main checkout's copy.
 
-**1. Keep or drop the lesson I wrote?** It says: to measure what a polled route costs, time it at the rhythm its caller really uses, on real-sized data. A benchmark of fifty requests back to back only measures the fast, warm path. That is how this feature first claimed the icon cost about 9 ms per poll when it really cost about 47. I recommend keeping it. Run `/lessons` to promote it, or say "drop" on a card. [The lesson](../../lessons/proposed/a-back-to-back-benchmark-of-a-polled-route-measures-only-the-warm-path.md).
+**Done: the lesson is kept.** It is now [a live lesson](../../lessons/service/a-back-to-back-benchmark-of-a-polled-route-measures-only-the-warm-path.md) that agents read.
 
-**2. Optional: should Open in the Library let you edit a document whose worktree is gone?** Today Open shows a read-only copy with no rail, and the note above it tells you to use Hand to agent, which gives you the rail in one click. Making Open itself editable means Open would start a review on that file without an agent. The stable addresses design ruled that out on purpose, because Open would then write a review key into a file nobody asked Lahe to review. I recommend leaving it. Say "yes" on a card if you want it, and I'll build it.
+**Being built: your comments follow the document from a worktree to main.** You asked why a document moved out of a worktree starts a new review instead of keeping your earlier comments. It should keep them. Today a review is tied to the file's exact path, and the worktree's path is not the main checkout's path, so nothing links the two. I moved this page's review onto the main checkout's copy by hand, at its new address: http://live-agentic-html-editor.docs.features.20261012-01-menu-bar-app.lahe.localhost/04_progress_menu_bar_app.md. Your old cards do not show there yet, because the page only brings over cards from addresses it already knows. That gap is what the change fixes. Its design and the pull request go on this page for your OK before anything merges. This replaces the earlier optional question about Open.
 
 Not decisions, already on the board for later: the icon showing "can't tell" for five seconds when one poll is slow (LAHE-menubar-cant-tell-flicker), the app opening a new connection every poll (LAHE-menubar-connection-reuse), and the Library's background sweep reading every session file every 15 seconds (LAHE-library-sweep-cost).
 
@@ -125,6 +125,7 @@ Done on 2026-10-15 with your go, in one batch. The list as it stood:
 - `~/Documents/lahe-menubar-review/`: the 331 MB copy of your state folder, the test app build, the walk scripts and numbers, and the notes once they are no longer needed.
 - `~/Documents/lahe-menubar-review/` also holds the second walk's `state-copy2/` (333 MB), `build2/`, `scripts2/`, `walk2-doc/`, `walk2-doc-exp/`, the `watch2*`, `copy2-helper*`, `copy1-exp-*`, `w2-*` outputs and `w2-helper.cpuprofile`, and `final/` with the V18 numbers.
 - `.claude-commit2026101220*` files in the `menu-bar` worktree, `.claude-commit202610131205-fix1`, `-fix2`, `-fix3`, `-fix5` in `menu-bar-install`, and `.claude-commit202610131200-macapp`, `-1215-macapp`, `-1225-macapp` and `.claude-commit202610140007-macapp` in `menu-bar-macapp` (all gitignored).
+- `docs/lessons/proposed/a-back-to-back-benchmark-of-a-polled-route-measures-only-the-warm-path.md`: the proposal, now promoted to `docs/lessons/service/` (needs your go; added after the batch).
 - Session scratchpad files under `/private/tmp/claude-501/` (the OS clears these; nothing to do).
 
 ### Test results
@@ -155,6 +156,7 @@ Done on 2026-10-15 with your go, in one batch. The list as it stood:
 
 ## Log
 
+- 2026-10-15 10:22: the lesson is promoted to `docs/lessons/service/`, with its pointer to a deleted measurement script cut. The feature worktree is removed; this page now lives in the main checkout, and its review `r183d18583a43` is re-attached there. Your old cards do not show at the new address yet; the fix for that is the next piece of work.
 - 2026-10-15 10:20: cleanup done with your go: worktrees and branches `menu-bar-summary`, `menu-bar-macapp`, `menu-bar-install`, `menu-bar-pr2`, `main-gate`, `readonly-note` removed (each checked merged into main and clean first); remote branches `feat/menu-bar-macapp` and `feat/menu-bar-pr2` deleted; `~/Documents/lahe-menubar-review/` removed. `feat/menu-bar` and its worktree go last, after this page moves to the main checkout's copy.
 - 2026-10-15 10:01: the top of this page now lists only your decisions, after your card asking what you are actually needed for.
 - 2026-10-14 11:13: the full local gate on merged main (`c9d52b23`) is green: lint, bundle, `check:menubar` (self-test 383 passed, 0 failed; app tests 4 passed, 1 skipped); unit 2878 passed, 0 failed, 5 skipped; browser 885 passed, 0 failed, 7 skipped; helpers 1 before and after. Main's CI on the merge passed. Checked live: the stable addresses page shows the new note, and your menu bar reads 0 waiting.
