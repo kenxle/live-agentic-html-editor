@@ -60,6 +60,7 @@ Editing the page directly has its own risk. Tools that make a page editable have
 
 ## What it does
 
+- **Built pages and Markdown.** A page built from many files is reviewed as one page, and the agent edits the files underneath. Markdown is rendered for review the same way.
 - **Comments and edits.** You comment on a selection, on any element (an image, a chart, a section), or on the page as a whole. You can rewrite text in place and write new paragraphs, headings and lists.
 - **Threaded answers.** The agent answers each item on its card: handled, not handled with a reason, or a question for you.
 - **Live updates.** The agent lands a change and the page reloads itself. A reload waits while you are typing, then puts your outstanding work back.
