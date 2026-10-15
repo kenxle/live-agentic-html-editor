@@ -6,10 +6,6 @@
 
 ## Needs your attention
 
-**Done: the leftovers are deleted, as you said on your card.** Six builder worktrees and their branches, two leftover branches on GitHub, and the two test copies of your Lahe data in `~/Documents/lahe-menubar-review/` are gone. The feature's own worktree goes last; this page keeps its rail from the main checkout's copy.
-
-**Done: the lesson is kept.** It is now [a live lesson](../../lessons/service/a-back-to-back-benchmark-of-a-polled-route-measures-only-the-warm-path.md) that agents read.
-
 **Ready for you to try: your comments follow the document from a worktree to main.** Built, reviewed (security, design and code) and green. Not merged.
 
 Try it here: **http://docs.features.20261012-01-menu-bar-app.lahe.localhost:1493/04_progress_menu_bar_app.md**. That is this page's old address, on a preview copy of your Lahe data, running the new code on its own port. It sends you to the main copy's address, and the rail there shows your 12 earlier cards under Done, including the one where you asked for this. Comments you leave in the preview go to the copy, not to your real review.
@@ -33,6 +29,10 @@ Spec: [the spec on GitHub](https://github.com/kenxle/live-agentic-html-editor/bl
 Not decisions, already on the board for later: the icon showing "can't tell" for five seconds when one poll is slow (LAHE-menubar-cant-tell-flicker), the app opening a new connection every poll (LAHE-menubar-connection-reuse), and the Library's background sweep reading every session file every 15 seconds (LAHE-library-sweep-cost).
 
 ## Done since you last looked
+
+**Done: the leftovers are deleted, as you said on your card.** Six builder worktrees and their branches, two leftover branches on GitHub, and the two test copies of your Lahe data in `~/Documents/lahe-menubar-review/` are gone. The feature's own worktree goes last; this page keeps its rail from the main checkout's copy.
+
+**Done: the lesson is kept.** It is now [a live lesson](../../lessons/service/a-back-to-back-benchmark-of-a-polled-route-measures-only-the-warm-path.md) that agents read.
 
 **Your note on the stable addresses progress page (fixed, PR [#66](https://github.com/kenxle/live-agentic-html-editor/pull/66)).** That page's worktree was removed at cleanup, so its address shows the copy in the main checkout, read-only and without the rail.
 
