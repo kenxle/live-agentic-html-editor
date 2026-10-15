@@ -1,47 +1,41 @@
 # Progress: Menu bar app
 
-**Where things are at 11:05 on October 14.** Done, landed, and running on your Mac. Your note this morning about the stable addresses progress page is fixed in PR [#66](https://github.com/kenxle/live-agentic-html-editor/pull/66), merged at 11:03: the note on that page now puts each statement on its own line, and the dead row it left under Waiting on you is gone (details under Needs your attention). Your three design answers shipped earlier as PR [#64](https://github.com/kenxle/live-agentic-html-editor/pull/64): Stop Lahe asks first, the icon is the Library's three books on a shelf, and Waiting on you stays uncapped. **Still yours:** the proposed lesson to review, and the cleanup batch to approve.
+**Where things are at 10:01 on October 15.** The menu bar icon is done and running on your Mac. You have two decisions to make, and a third only if you want it. Everything below them is a record of what happened.
 
 **Docs:** [Crucible](00_crucible_menu_bar_app.html) · [Brief](01_brief_menu_bar_app.html) · [Architecture](02_architecture_menu_bar_app.html) · [Plan](03_plan_menu_bar_app.html) (each page carries its reviews at the bottom) · [PR 2 reviews](05_pr2_reviews_menu_bar_app.md)
 
 ## Needs your attention
 
-**Your note on the stable addresses progress page (fixed, PR [#66](https://github.com/kenxle/live-agentic-html-editor/pull/66)).** That page's worktree was removed at cleanup, so its address shows the copy in the main checkout, read-only and without the rail. Three changes:
+**1. May I delete the leftovers from this feature?** Building it left seven git worktrees (separate working copies of the repo, one per builder) and their branches. Every one of them has been merged. It also left two copies of your Lahe data that I made to test against, 331 MB and 333 MB, in `~/Documents/lahe-menubar-review/`, plus scratch commit-message files. Nothing on main and nothing of another agent's is on the list. The full list is under Cleanup queue below. I recommend yes. Say "go" on a card and I remove it all in one pass.
+
+**2. Keep or drop the lesson I wrote?** It says: to measure what a polled route costs, time it at the rhythm its caller really uses, on real-sized data. A benchmark of fifty requests back to back only measures the fast, warm path. That is how this feature first claimed the icon cost about 9 ms per poll when it really cost about 47. I recommend keeping it. Run `/lessons` to promote it, or say "drop" on a card. [The lesson](../../lessons/proposed/a-back-to-back-benchmark-of-a-polled-route-measures-only-the-warm-path.md).
+
+**3. Optional: should Open in the Library let you edit a document whose worktree is gone?** Today Open shows a read-only copy with no rail, and the note above it tells you to use Hand to agent, which gives you the rail in one click. Making Open itself editable means Open would start a review on that file without an agent. The stable addresses design ruled that out on purpose, because Open would then write a review key into a file nobody asked Lahe to review. I recommend leaving it. Say "yes" on a card if you want it, and I'll build it.
+
+Not decisions, already on the board for later: the icon showing "can't tell" for five seconds when one poll is slow (LAHE-menubar-cant-tell-flicker), the app opening a new connection every poll (LAHE-menubar-connection-reuse), and the Library's background sweep reading every session file every 15 seconds (LAHE-library-sweep-cost).
+
+## Done since you last looked
+
+**Your note on the stable addresses progress page (fixed, PR [#66](https://github.com/kenxle/live-agentic-html-editor/pull/66)).** That page's worktree was removed at cleanup, so its address shows the copy in the main checkout, read-only and without the rail.
 
 - **One statement per line.** The note above such a page now reads like this (made-up paths):
 
 ![The read-only note, one statement per line](screenshots/moved_note_light.png)
 
-- **It says how to edit.** It used to say "open it from the Library", which is where you came from. Open shows only this read-only copy. Now it says to choose **Hand to agent** in the Library: Pick this up gives it to the agent attached to the Library, and Launch a new agent works with none attached. Either way an agent serves this copy with its rail, and you can edit and comment.
-- **The dead row is gone from Waiting on you.** The agent's question lived in the old review, and no page could ever show that review's cards, so you could never mark it read. The menu bar already leaves out documents whose file is gone. A removed worktree's file counts as gone now too.
+- **It says how to edit.** It used to say "open it from the Library", which is where you came from. Now it says to choose **Hand to agent** in the Library, which has an agent serve this copy with its rail.
+- **The dead row is gone from Waiting on you.** The agent's question lived in the old review, which no page could show, so you could never mark it read. A removed worktree's file now counts as gone, and the menu bar already leaves those out.
+- **Why it opened as `.md`:** the progress page is a Markdown file, and Lahe renders it with the doc style and the rail. The forge's `.html` files are the brief, architecture and plan.
 
-On "it opened an md file": that is how the forge serves it. The progress page is the Markdown file, and Lahe renders it with the doc style and the rail. The forge's `.html` files are for the brief, architecture and plan. The rail was missing only because the worktree was gone.
+**Your three design answers shipped in PR [#64](https://github.com/kenxle/live-agentic-html-editor/pull/64):** Waiting on you stays uncapped; Stop asks first, in an alert with the Library icon; the icon is the Library mark, three books on a shelf.
 
-**Your call, only if you want it:** Open itself could give an editable copy, with no hand-off. The stable addresses design ruled that out on purpose: Open would put a review's key into a file nobody asked Lahe to review. Today, Hand to agent is the one-click way to edit. Say so on a card if you want Open to do it, and I'll build it.
-
-Still yours, neither urgent:
-
-- **Review the proposed lesson** with `/lessons`: [a back-to-back benchmark of a polled route measures only the warm path](../../lessons/proposed/a-back-to-back-benchmark-of-a-polled-route-measures-only-the-warm-path.md).
-- **Approve the cleanup batch** listed under Cleanup queue below (finished worktrees and branches, the review copies of your state folder, scratch commit-message files). Nothing is removed until you say so.
-
-Your answers to the three design calls are in the app (PR [#64](https://github.com/kenxle/live-agentic-html-editor/pull/64)):
-
-- **Row cap on Waiting on you: no.** It stays uncapped, as the brief says.
-- **Stop Lahe asks first: yes.** A click on Stop shows the alert below, with the Library icon; Cancel does nothing. The grey line under Stop is gone from the menu.
-- **The icon's mark: the Library mark.** Three books on a shelf, tinted by macOS for a light or dark menu bar. Filled at rest and with a count; outlined when Lahe is not running or the app cannot tell.
-
-**Installed on your Mac, as you asked.** The install refuses without a terminal by design, so I ran `lahe install --menu-bar` inside one at 23:56. It took the icon-only path, which neither restarts the helper nor asks for your password. To undo it, `lahe install --no-menu-bar` removes the icon; `lahe menubar show` brings back a hidden one. The real menu bar at 00:50, after the automatic rebuild, with nothing waiting:
+**Installed on your Mac, as you asked.** I ran `lahe install --menu-bar` in a terminal at 23:56 on October 13. To undo it, `lahe install --no-menu-bar` removes the icon; `lahe menubar show` brings back a hidden one. The real menu bar at rest:
 
 ![The real menu bar icon at rest: the Library mark](screenshots/real_icon_library_mark_at_rest.png)
 
-The same spot at 23:57, before the rebuild, still the speech bubble:
+Two things to know, both outside the menu bar's own flow:
 
-![The real menu bar icon at rest before the rebuild: the speech bubble](screenshots/real_icon_bubble_at_rest.png)
-
-Two things for you to know, both outside the menu bar's own flow:
-
-- **Opening a document's page clears the icon without a click.** A fresh browser opens the rail with the asking card unfolded, and that counts as read (the rail's own "1 new" rule, which you asked the icon to share). So the icon clears the moment the page opens, before you have read the question. If that is wrong, it is the rail's rule to change, not the icon's.
-- **A plain `lahe status` with no `--session` slows the helper until it restarts** (about nine times the idle cost), because it puts every review on the projector's watch list for good. Predates this feature; on the board as LAHE-global-status-watches-every-review.
+- **Opening a document's page clears the icon without a click.** The rail opens with the asking card unfolded, and that counts as read under the rail's own "1 new" rule, which the icon shares.
+- **A plain `lahe status` with no `--session` slows the helper until it restarts.** It predates this feature and is on the board as LAHE-global-status-watches-every-review.
 
 ## What it looks like
 
