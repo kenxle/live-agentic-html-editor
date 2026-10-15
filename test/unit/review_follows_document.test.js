@@ -251,12 +251,20 @@ test("R2: a main checkout outside the home folder is refused", async (t) => {
   assert.equal(pageRoutes.movedCopyOf(w.state, pair.wtFile), null);
 });
 
-test("R2: a main checkout inside the state folder is refused", async (t) => {
+test("R2: a main checkout inside the state folder is refused by the site check itself", async (t) => {
+  // Through movedCopyOf this cannot be told apart from the copy's own
+  // state-folder check (a copy under such a checkout is in the state folder
+  // too), so the site's move is asked directly, beside a control outside it.
   const w = await sitesWorld(t);
-  const pair = gitPair(w.home, { main: path.join(w.state, "repo") });
-  w.helper.sites.bind({ root: pair.wtFolder, mode: "folder", entry: "progress.md" });
-  await pair.remove();
-  assert.equal(pageRoutes.movedCopyOf(w.state, pair.wtFile), null);
+  const inside = gitPair(w.home, { main: path.join(w.state, "repo"), worktree: path.join(w.home, "ws", "wt-in", "feature") });
+  const outside = gitPair(w.home, { main: path.join(w.home, "ws", "repo-out"), worktree: path.join(w.home, "ws", "wt-out", "feature") });
+  const inSite = w.helper.sites.bind({ root: inside.wtFolder, mode: "folder", entry: "progress.md" });
+  const outSite = w.helper.sites.bind({ root: outside.wtFolder, mode: "folder", entry: "progress.md" });
+  await inside.remove();
+  await outside.remove();
+  assert.equal(pageRoutes.moveOfSite(w.state, inSite.name), null);
+  assert.ok(pageRoutes.moveOfSite(w.state, outSite.name), "the control outside the state folder moves");
+  assert.equal(pageRoutes.movedCopyOf(w.state, inside.wtFile), null);
 });
 
 // --- R5: one seam for records ---------------------------------------------------
@@ -386,6 +394,20 @@ test("R7: recordPaths replaces a first source that is gone, and keeps the old pa
   const after = w.helper.reviews.recordPaths(w.review.id, { source_path: w.mainFile });
   assert.equal(after.source_path, w.mainFile);
   assert.deepEqual(after.source_paths, [w.wtFile, w.mainFile]);
+});
+
+test("R7: a gone first source is replaced only by its own moved copy, never by another document", async (t) => {
+  const w = await sitesWorld(t);
+  const notes = path.join(w.home, "ws", "repo", "notes");
+  const hub = writeFile(notes, "hub.md", "# Hub\n");
+  const linked = writeFile(notes, "linked.md", "# Linked\n");
+  const s1 = agentSessions.createStore({ dir: w.state }).create({ name: "Hub agent" }).id;
+  const review = w.helper.reviews.create({ target_path: path.join(w.state, "artifact-hub.html"), source_path: hub, agent_session_id: s1, origins: ["null"] });
+  // The hub is deleted (moved aside here); a linked document's source is recorded.
+  fs.renameSync(hub, hub + ".aside");
+  const after = w.helper.reviews.recordPaths(review.id, { source_path: linked });
+  assert.equal(after.source_path, hub, "the hub stays the first source");
+  assert.deepEqual(after.source_paths, [hub, linked]);
 });
 
 test("R10: review.json names the main copy as the source for the old cards' page", async (t) => {
@@ -598,4 +620,43 @@ test("R7: with the owning session closed, the rail still carries the review, sho
   const live = poll.json.agent_liveness;
   assert.notEqual(live[protocol.AGENT_LIVENESS.FIELD.LISTENING], true, "no agent watching");
   assert.equal(live[protocol.AGENT_LIVENESS.FIELD.SESSION_ID], w.session, "the takeover names the owner");
+});
+
+// --- R14 in the Library: one move list per scan -----------------------------------
+
+test("R14: a Library scan outside the helper reads the registry once and checks each worktree root at most once", async (t) => {
+  const w = await sitesWorld(t);
+  const pair = gitPair(w.home);
+  const s1 = agentSessions.createStore({ dir: w.state }).create({ name: "Builder" }).id;
+  // Several reviews of pages in one worktree folder, all moved.
+  for (let i = 0; i < 6; i += 1) {
+    const wtFile = writeFile(pair.wtFolder, "page" + i + ".md", "# Page " + i + "\n");
+    writeFile(pair.mainFolder, "page" + i + ".md", "# Page " + i + "\n");
+    w.helper.reviews.create({ target_path: path.join(w.state, "a" + i + ".html"), source_path: wtFile, agent_session_id: s1, origins: ["null"] });
+  }
+  w.helper.sites.bind({ root: pair.wtFolder, mode: "folder", entry: "progress.md" });
+  // The CLI's case (the drain, `lahe library serve`): no helper in this process.
+  await w.helper.close();
+  await pair.remove();
+  const reader = require("../../src/service/catalog_reader.js").createReader({ dir: w.state });
+  const sitesJson = path.join(w.state, "sites.json");
+  const readyJson = path.join(w.state, "ready.json");
+  const reads = [];
+  const roots = [];
+  const originalRead = fs.readFileSync;
+  const originalExists = fs.existsSync;
+  fs.readFileSync = function (p) { reads.push(String(p)); return originalRead.apply(fs, arguments); };
+  fs.existsSync = function (p) { roots.push(String(p)); return originalExists.apply(fs, arguments); };
+  let list;
+  try {
+    list = await reader.list(Date.now());
+  } finally {
+    fs.readFileSync = originalRead;
+    fs.existsSync = originalExists;
+  }
+  assert.ok(reads.filter((p) => p === sitesJson).length <= 1, "sites.json read " + reads.filter((p) => p === sitesJson).length + " times");
+  assert.equal(reads.filter((p) => p === readyJson).length, 0, "ready.json is not read for the move");
+  assert.ok(roots.filter((p) => p === pair.wt).length <= 1, "the worktree root checked " + roots.filter((p) => p === pair.wt).length + " times");
+  const moved = JSON.stringify(list).match(/"moved":true/g) || [];
+  assert.equal(moved.length > 0, true, "the rows are moved");
 });

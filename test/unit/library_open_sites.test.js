@@ -64,7 +64,8 @@ async function libraryOf(w) {
       for (const s of list.sessions) for (const r of s.reviews) if (r.id === id) return r;
       return null;
     },
-    open: (review, extra) => call("catalog.open", Object.assign({ review, handoff: false, confirmed: false }, extra || {}))
+    open: (review, extra) => call("catalog.open", Object.assign({ review, handoff: false, confirmed: false }, extra || {})),
+    request: (review, action, extra) => call("catalog.request", Object.assign({ review, action }, extra || {}))
   };
 }
 
@@ -282,6 +283,44 @@ test("spec 20261015.01 R12: a moved row's launch hand-off is a takeover with no 
   assert.equal(text.indexOf(tree.wt), -1, "no worktree path");
   assert.equal(text.indexOf(tree.main), -1, "no main checkout path");
   assert.equal(require("../../src/service/catalog_launch.js").launchRoot(described), path.dirname(fs.realpathSync(tree.copy)));
+});
+
+test("spec 20261015.01 R12: a hand-over refused for no agent, or held for a confirm, gives the moved document no address and records nothing", async (t) => {
+  const w = await sitesWorld(t);
+  const tree = worktreeWorld(w);
+  const store = sessions(w);
+  openSession(w, "s_a");
+  const review = makeReview(w, { agent_session_id: "s_a", target_path: tree.file });
+  w.helper.sites.bind({ root: fs.realpathSync(tree.folder), mode: "folder", entry: "page.html" });
+  fs.renameSync(tree.wt, tree.wt + "-moved");
+  await new Promise((resolve) => setImmediate(resolve));
+  const lib = await libraryOf(w);
+  const sitesBefore = w.helper.sites.list().length;
+  const metaBefore = JSON.stringify(w.helper.reviews.get(review.id));
+
+  // No agent attached: refused, nothing named or recorded.
+  const noAgent = await lib.request(review.id, "pickup");
+  assert.equal(noAgent.json.error && noAgent.json.error.code, "PROTO_NO_AGENT", noAgent.text);
+  assert.equal(w.helper.sites.list().length, sitesBefore, "no site named");
+  assert.equal(JSON.stringify(w.helper.reviews.get(review.id)), metaBefore, "nothing stamped or recorded");
+
+  // An attached agent, and another agent watching the document's session: the
+  // page asks first. Cancelling that confirm leaves everything as it was.
+  const now = Date.now();
+  store.create({ id: "s_agent", name: "library agent" });
+  catalogRequests.writeAttach(w.state, "s_agent", now);
+  store.writeMonitor("s_agent", { pid: process.pid, handoff_rev: agentSessions.handoffRev(store.read("s_agent")), at: new Date(now).toISOString(), primary: true });
+  store.writeMonitor("s_a", { pid: process.pid, handoff_rev: agentSessions.handoffRev(store.read("s_a")), at: new Date(now).toISOString(), primary: true });
+  const held = await lib.request(review.id, "pickup");
+  assert.equal(held.json.error && held.json.error.code, "PROTO_CONFIRM_NEEDED", held.text);
+  assert.equal(w.helper.sites.list().length, sitesBefore, "no site named");
+  assert.equal(JSON.stringify(w.helper.reviews.get(review.id)), metaBefore, "nothing stamped or recorded");
+
+  // Confirmed: the main copy gets its address and the review records it.
+  const confirmed = await lib.request(review.id, "pickup", { confirmed: true });
+  assert.equal(confirmed.status, 200, confirmed.text);
+  assert.equal(w.helper.sites.list().length, sitesBefore + 1, "the main copy's site");
+  assert.equal(w.helper.reviews.get(review.id).target_path, fs.realpathSync(tree.copy));
 });
 
 test("V41, spec 20261015.01 R13: a forged path outside every registry site is not vouched, though the copy exists", async (t) => {

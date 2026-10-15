@@ -805,12 +805,39 @@ function movedCopyOf(dir, file) {
  */
 function movedPlace(dir, file) {
   var entry = registryEntry(dir);
-  var moves = movesIn(entry);
+  return movedPlaceIn(entry, movesIn(entry), file);
+}
+
+/**
+ * movedPlace over a registry entry the caller already holds, and moves it
+ * already listed: the Library builds both once per scan, not once per row.
+ */
+function movedPlaceIn(entry, moves, file) {
+  if (typeof file !== "string" || !file) return null;
+  var resolved = path.resolve(file);
+  if (!underAGoneRoot(moves, resolved)) return null;
   for (var i = 0; i < moves.length; i += 1) {
-    var copy = copyThrough(moves[i], typeof file === "string" ? path.resolve(file) : file, entry.stateDir);
+    var copy = copyThrough(moves[i], resolved, entry.stateDir);
     if (copy) return { copy: copy, twin: moves[i].twin, mode: moves[i].site.mode };
   }
   return null;
+}
+
+/**
+ * The move for one named site, or null: R1 and R2 alone, before any file is
+ * translated (R3). A seam for tests, which cannot otherwise tell R2's
+ * state-folder check from the copy's own.
+ */
+function moveOfSite(dir, name) {
+  var entry = registryEntry(dir);
+  var site = entry.sites.get(name);
+  var move = site ? siteMove(entry.stateDir, site) : null;
+  return move ? { twin: move.twin } : null;
+}
+
+/** A registry entry over a sites registry the caller already holds. */
+function entryOver(dir, sites) {
+  return { sites: sites, stateDir: dirKey(dir) };
 }
 
 /** Is `file` under any move's twin root? The cheap test before any review is read. */
@@ -989,6 +1016,27 @@ function tierOneOf(dir, entry, target, metas) {
     moved: direct.indexOf(winner.review) === -1,
     ruled: winner.ruled === true
   };
+}
+
+/**
+ * Does the file have a tier-1 review at all? tierOneOf's candidates without
+ * choosing between them: no log is read, and the first one found answers.
+ */
+function hasTierOne(entry, target, metas) {
+  var moves = null;
+  for (var i = 0; i < metas.length; i += 1) {
+    var meta = metas[i].meta;
+    var direct = recordedFiles(meta).some(function (one) {
+      return (realOrNull(one) || path.resolve(one)) === target;
+    });
+    if (direct) return true;
+    if (moves === null) {
+      moves = movesIn(entry);
+      if (!underATwin(moves, target)) moves = [];
+    }
+    if (moves.length && recordedThroughMove(meta, target, moves, entry.stateDir)) return true;
+  }
+  return false;
 }
 
 /**
@@ -1659,7 +1707,7 @@ function createPageRoutes(options) {
    */
   function ownReviewOf(real) {
     var metas = readReviews(dir).filter(function (each) { return typeof each.meta.retired_at !== "string"; });
-    return !!tierOneOf(dir, activeFor(dir) || registryEntry(dir), real, metas);
+    return hasTierOne(activeFor(dir) || registryEntry(dir), real, metas);
   }
 
   /**
@@ -1882,6 +1930,10 @@ module.exports = {
   movesFor: movesFor,
   movedCopyOf: movedCopyOf,
   movedPlace: movedPlace,
+  movedPlaceIn: movedPlaceIn,
+  movesIn: movesIn,
+  entryOver: entryOver,
+  moveOfSite: moveOfSite,
   linkAddressFor: linkAddressFor,
   registryEntry: registryEntry,
   committedRecords: committedRecords,

@@ -194,6 +194,7 @@ function createCatalogActions(options) {
    * holds the main copy.
    */
   function settleMoved(d, nowMs) {
+    if (!d.site || d.site.moved !== true) return null;
     if (!siteOwnedByUser(d)) return fail("PROTO_NOT_OPENABLE", "not owned by the current user, or not on disk");
     try {
       siteTools.bindPlan(d.site);
@@ -436,22 +437,23 @@ function createCatalogActions(options) {
     // this up serves those rows instead.
     if (action === ACTION.LAUNCH && NO_LAUNCH_KINDS.indexOf(d.kind) !== -1) return fail("PROTO_NO_LAUNCH", d.kind);
     if (action === ACTION.LAUNCH && d.kind === "worktree" && !d.candidate) return fail("PROTO_NO_LAUNCH", d.kind);
-    // A moved document gets its address before it is handed over, as Open
-    // gives it, so the agent that takes it over finds the page with its rail
-    // (spec 20261015.01 R12).
-    if (d.site && d.site.moved) {
-      var settled = settleMoved(d, nowMs);
-      if (settled) return settled;
-    }
     if (action === ACTION.LAUNCH && launcher.available()) return launchDirect(d, body, nowMs);
     var agent = liveAgent(nowMs);
     if (!agent) return fail("PROTO_NO_AGENT");
     // A pick-up of a served document the attached agent already has asks for
     // nothing. A via-agent row still needs re-serving, so it is still asked.
     if (action === ACTION.PICKUP && d.openable === "yes" && alreadyTheirs(d, agent)) {
+      var settledTheirs = settleMoved(d, nowMs);
+      if (settledTheirs) return settledTheirs;
       return { status: 200, body: { request_id: null } };
     }
     if (watchedByAnother(d, agent) && body.confirmed !== true) return fail("PROTO_CONFIRM_NEEDED");
+    // A moved document gets its address before it is handed over, as Open
+    // gives it, so the agent that takes it over finds the page with its rail
+    // (spec 20261015.01 R12). Only past every refusal: a refused or
+    // unconfirmed hand-over names and records nothing.
+    var settled = settleMoved(d, nowMs);
+    if (settled) return settled;
     var queued = enqueue(action, d, agent, nowMs);
     if (!queued.ok) return fail(queued.code, queued.detail);
     logAction(action === ACTION.LAUNCH ? protocol.CATALOG_LOG.ACTION.LAUNCH : protocol.CATALOG_LOG.ACTION.PICKUP, d, nowMs);
@@ -470,6 +472,8 @@ function createCatalogActions(options) {
    */
   async function launchDirect(d, body, nowMs) {
     if (d.watching && body.confirmed !== true) return fail("PROTO_CONFIRM_NEEDED");
+    var settled = settleMoved(d, nowMs);
+    if (settled) return settled;
     var appended = queue.append(
       { action: ACTION.LAUNCH, review: d.review, session: d.session, for: catalogRequests.LAUNCHER_FOR },
       nowMs

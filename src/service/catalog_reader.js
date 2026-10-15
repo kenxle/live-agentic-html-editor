@@ -1056,7 +1056,7 @@ function createReader(options) {
    * `site` is what Open binds and what the row's address comes from. It is
    * read without naming anything.
    */
-  function placeRow(info, sessionState, servers) {
+  function placeRow(info, sessionState, servers, movesOf) {
     var kind;
     var devOrigin = null;
     // An old page server's record that covers the review's file: written by the
@@ -1104,8 +1104,9 @@ function createReader(options) {
       // A DOCUMENT WHOSE WORKTREE IS GONE is an ordinary document at its main
       // copy (spec 20261015.01 R12): Open, Pick this up and Launch work as for
       // any static row. Vouched only under the move rule (R13).
-      var movedPlan = kind === "static" ? siteTools.movedPlanOf(info.docPath) : null;
-      var gone = kind === "static" && !movedPlan ? siteTools.worktreeSiteFor(info.docPath) : null;
+      var scanMoves = kind === "static" && typeof movesOf === "function" ? movesOf() : undefined;
+      var movedPlan = kind === "static" ? siteTools.movedPlanOf(info.docPath, scanMoves) : null;
+      var gone = kind === "static" && !movedPlan ? siteTools.worktreeSiteFor(info.docPath, scanMoves) : null;
       if (movedPlan) {
         var movedFound = siteTools.siteFor(movedPlan);
         var movedUrl = siteTools.urlPathOf(movedPlan, movedFound);
@@ -1243,7 +1244,8 @@ function createReader(options) {
    */
   function sessionContexts() {
     var cache = Object.create(null);
-    return function (sessionId) {
+    var moves;
+    var lookup = function (sessionId) {
       if (!cache[sessionId]) {
         // Each half is read when first asked for: folding rows needs only the
         // state, and a session's server records are a folder listing and a
@@ -1263,13 +1265,20 @@ function createReader(options) {
       }
       return cache[sessionId];
     };
+    // The sites whose worktree is gone, listed once per scan and only when a
+    // row's document is missing (spec 20261015.01 R14).
+    lookup.moves = function () {
+      if (moves === undefined) moves = typeof siteTools.moves === "function" ? siteTools.moves() : null;
+      return moves || undefined;
+    };
+    return lookup;
   }
 
   /** One review, read and placed: what a row is made of. */
   function placeReview(reviewId, contextOf) {
     var info = readReview(reviewId);
     var ctx = contextOf(info.sessionId);
-    return placeRow(info, ctx.state, ctx.servers);
+    return placeRow(info, ctx.state, ctx.servers, contextOf.moves);
   }
 
   /**

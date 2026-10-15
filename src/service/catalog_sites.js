@@ -83,6 +83,14 @@ function createCatalogSites(options) {
   var dir = opts.dir;
   var sites = opts.sites;
   var reviews = opts.reviews;
+  // The move lookup (spec 20261015.01) reads THIS registry, built once: never
+  // sites.json again per row.
+  var moveEntry = pageRoutes.entryOver(dir, sites);
+
+  /** Every site whose worktree is gone, for one scan: one root check per worktree site. */
+  function moves() {
+    return pageRoutes.movesIn(moveEntry);
+  }
   var log = typeof opts.log === "function" ? opts.log : function () {};
 
   /**
@@ -186,8 +194,9 @@ function createCatalogSites(options) {
    *
    * @returns {{name: string, urlPath: string}|null}
    */
-  function worktreeSiteFor(docPath) {
+  function worktreeSiteFor(docPath, scanMoves) {
     if (typeof docPath !== "string" || !path.isAbsolute(docPath)) return null;
+    var listed = scanMoves || moves();
     var all = sites.list();
     for (var i = 0; i < all.length; i += 1) {
       var site = all[i].site;
@@ -195,7 +204,8 @@ function createCatalogSites(options) {
       if (!within(docPath, site.root)) continue;
       var file = docPath === site.root && site.mode === MODE.FOLDER ? path.join(site.root, site.entry || "") : docPath;
       // The one rule (page_routes.js, spec 20261015.01 R4).
-      var real = pageRoutes.movedCopyOf(dir, file);
+      var place = pageRoutes.movedPlaceIn(moveEntry, listed, file);
+      var real = place ? place.copy : null;
       if (!real || !isPageFile(real)) continue;
       var urlPath = site.mode === MODE.PAGE_ONLY ? "/" + encodeURIComponent(path.basename(site.root)) : urlPathUnder(site.root, file);
       return { name: all[i].name, urlPath: urlPath };
@@ -213,9 +223,9 @@ function createCatalogSites(options) {
    *
    * @returns {{mode: string, root: string, file: string, contained: boolean, moved: true, twin: string}|null}
    */
-  function movedPlanOf(docPath) {
+  function movedPlanOf(docPath, scanMoves) {
     if (typeof docPath !== "string" || !path.isAbsolute(docPath)) return null;
-    var place = pageRoutes.movedPlace(dir, docPath);
+    var place = pageRoutes.movedPlaceIn(moveEntry, scanMoves || moves(), docPath);
     if (!place || !isPageFile(place.copy)) return null;
     if (place.mode === MODE.PAGE_ONLY) {
       return { mode: MODE.PAGE_ONLY, root: place.copy, file: place.copy, contained: false, moved: true, twin: place.twin };
@@ -295,6 +305,7 @@ function createCatalogSites(options) {
     addressOf: addressOf,
     worktreeSiteFor: worktreeSiteFor,
     movedPlanOf: movedPlanOf,
+    moves: moves,
     recordMoved: recordMoved,
     holderOf: holderOf,
     pathUnder: pathUnder,

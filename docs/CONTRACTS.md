@@ -1158,7 +1158,7 @@ U+0080 to U+009F), Unicode format characters (category Cf, the bidirectional ove
 lone surrogate halves (Cs, which the app's JSON decoder refuses, failing the whole answer), and the
 line and paragraph separators U+2028 and U+2029 removed, and is cut at 120 and 200 characters. A
 review that cannot be read is left out of the answer, with one line in the helper log, never the
-whole answer. `path_hint` is the document's path (or a folded folder's) with the home folder written as `~`; a document outside the home folder shows only its file name. Never an absolute path. Retired reviews are in no section; ended reviews and reviews whose file is gone (a removed worktree's file included) never wait on you. No comment
+whole answer. `path_hint` is the document's path (or a folded folder's) with the home folder written as `~`; a document outside the home folder shows only its file name. Never an absolute path. Retired reviews are in no section; ended reviews and reviews whose file is gone never wait on you. A file moved out of a removed worktree counts when its main copy passes the move rule (a moved `static` row, whose page shows the reply); only a `worktree` row, whose main copy failed the rule, never waits on you. No comment
 text, no token, no session secret, anywhere in the answer. The day-one cutoff lives in
 `<state>/summary.json`, `{version: 1, seeded_at}`, written on the first `summary.read`; a reply older
 than `seeded_at` is never unread.
