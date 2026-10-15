@@ -26,7 +26,7 @@ Every table is read by a script. Keep the header rows and the column order.
 | docs/ongoing/TESTING.md | doc | yes | no | | charters/TESTING.md |
 | docs/ongoing/ROADMAP.md | doc | no | no | | charters/ROADMAP.md |
 | docs/ongoing/diagrams/ | folder | yes | no | docs/diagrams/ | |
-| docs/ongoing/diagrams/INDEX.md | doc | yes | no | | charters/DIAGRAMS_INDEX.md |
+| docs/ongoing/diagrams/INDEX.md | doc | yes | no | docs/diagrams/README.md | charters/DIAGRAMS_INDEX.md |
 | docs/features/ | folder | yes | no | | |
 | docs/reports/ | folder | yes | no | | |
 | docs/lessons/ | folder | yes | no | | |
