@@ -472,6 +472,35 @@ function sourceHintOf(state) {
 }
 
 /**
+ * Source hints that name a file in a removed worktree, as {gone path: main
+ * copy} (spec 20261015.01 R10), so review.json sends the agent to the file that
+ * is there. `movedPathFor` is the helper's move lookup
+ * (page_routes.movedCopyOf); only a hint whose file is not on disk is asked.
+ * Undefined when nothing moved.
+ */
+function movedHintsOf(items, reviewHint, movedPathFor) {
+  if (typeof movedPathFor !== "function") return undefined;
+  var out = {};
+  var any = false;
+  var seen = {};
+  function consider(hint) {
+    var hinted = hint && typeof hint === "object" ? hint.path : hint;
+    if (typeof hinted !== "string" || !hinted || seen[hinted]) return;
+    seen[hinted] = true;
+    if (fs.existsSync(hinted)) return;
+    var copy = null;
+    try { copy = movedPathFor(hinted); } catch (err) { copy = null; }
+    if (typeof copy === "string" && copy) {
+      out[hinted] = copy;
+      any = true;
+    }
+  }
+  items.forEach(function (item) { consider(item[F.SOURCE_HINT]); });
+  consider(reviewHint);
+  return any ? out : undefined;
+}
+
+/**
  * The file on disk behind every linked page an item was made on, as
  * {page path: real path or null}.
  *
@@ -516,6 +545,7 @@ function projectFold(reviewId, state, options) {
     generated_at: opts.generated_at || undefined,
     items: actionableItems(itemsOf(state)),
     source_hint: sourceHintOf(state),
+    moved_hints: movedHintsOf(actionableItems(itemsOf(state)), sourceHintOf(state), opts.movedPathFor),
     linked_files: linkedFilesOf(actionableItems(itemsOf(state)), opts.linkedFileFor),
     // Stable addresses: old page-server origins group with the page's site.
     origin_aliases: opts.originAliases || undefined
@@ -690,7 +720,8 @@ function createProjector(options) {
   function projectOptions(reviewId) {
     return {
       linkedFileFor: linkedLookup(reviewId),
-      originAliases: pageRoutes.aliasMap(dir)
+      originAliases: pageRoutes.aliasMap(dir),
+      movedPathFor: function (file) { return pageRoutes.movedCopyOf(dir, file); }
     };
   }
 

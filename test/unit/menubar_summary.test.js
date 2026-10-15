@@ -546,8 +546,15 @@ test("V17: deleting the reviewed document drops it from waiting on you within on
   assert.deepEqual(summary.lastRebuilt(), ["r_a"]);
 });
 
-test("a document whose worktree was removed stops waiting on you within one beat: no page can show its reply", () => {
+test("a document whose worktree was removed keeps waiting on you when its main copy carries the review (spec 20261015.01 R12)", async (t) => {
   const { state, summary, T, clock } = setup();
+  // The move rule wants the main checkout inside the home folder.
+  const priorHome = process.env.LAHE_HOME_DIR;
+  process.env.LAHE_HOME_DIR = state.home;
+  t.after(() => {
+    if (priorHome === undefined) delete process.env.LAHE_HOME_DIR;
+    else process.env.LAHE_HOME_DIR = priorHome;
+  });
   // A main checkout and a worktree of it, the same file in each.
   const main = path.join(state.home, "ws", "main-repo");
   const wt = path.join(state.home, "ws", "wt1");
@@ -569,6 +576,13 @@ test("a document whose worktree was removed stops waiting on you within one beat
   assert.deepEqual(waitingIds(summary.read()), ["r_wt"]);
   // The worktree is removed (moved aside here, so nothing is deleted).
   fs.renameSync(wt, wt + "-removed");
+  await new Promise((resolve) => setImmediate(resolve));
+  clock.ms += BEAT;
+  // The main copy's page shows the reply, so it still waits on you.
+  assert.deepEqual(waitingIds(summary.read()), ["r_wt"]);
+  // With no main copy there is no page to read it on: it stops waiting.
+  fs.renameSync(path.join(main, "docs", "page.md"), path.join(main, "docs", "page.md.aside"));
+  await new Promise((resolve) => setImmediate(resolve));
   clock.ms += BEAT;
   assert.deepEqual(waitingIds(summary.read()), []);
 });

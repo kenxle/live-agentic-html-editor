@@ -44,6 +44,14 @@ sequenceDiagram
     N->>N: merge again, replay anchors the new cards
 ```
 
+### A document whose worktree is gone
+
+The same read brings a review's comments to a document's main-checkout copy
+once its worktree is removed (spec 20261015.01). The helper maps a record made
+at the worktree's address to the main copy (`fileForPageIn`), so the main
+copy's script tag names the old address as a spelling, and `records.read`
+returns those records, open and done, through the same `store.adopt`.
+
 ## What to notice
 
 - **Two different fields, two different winners.** Content (the words, the region it is tied to) comes from the browser as long as the helper has not acknowledged that revision. Lifecycle (ready, handled, not_handled) comes from the store, but strictly per revision: a "handled" naming rev 1 can only ever retire rev 1.

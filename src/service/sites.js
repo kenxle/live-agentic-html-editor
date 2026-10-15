@@ -160,25 +160,35 @@ function linksBack(adminDir, gitFile) {
  * worktree's `.git` file while it still exists, and only when the main
  * checkout's back-link names the same `.git` file (linksBack). A plain
  * checkout (a `.git` folder) or no checkout at all records nothing.
+ *
+ * The main checkout is saved as its REAL path, and the worktree's admin folder
+ * (`<main>/.git/worktrees/<name>`) with it: a review follows its document out
+ * of a removed worktree only while the main checkout's real path still matches
+ * what was saved, and "removed" is judged by that admin folder
+ * (page_routes.js, the move; spec 20261015.01 R1 and R2).
  */
 function worktreeOf(root) {
+  var none = { main_checkout: null, worktree_root: null, worktree_admin: null };
   var current = path.resolve(root);
   for (;;) {
     var gitPath = path.join(current, ".git");
     var stat = null;
     try { stat = fs.statSync(gitPath); } catch (err) { stat = null; }
     if (stat) {
-      if (!stat.isFile()) return { main_checkout: null, worktree_root: null };
+      if (!stat.isFile()) return none;
       var text = "";
       try { text = fs.readFileSync(gitPath, "utf8"); } catch (err) { text = ""; }
       var gitdir = /^gitdir:\s*(.+?)\s*$/m.exec(text);
       var adminDir = gitdir ? path.resolve(current, gitdir[1]) : null;
       var main = adminDir ? /^(.*)[\\/]\.git[\\/]worktrees[\\/][^\\/]+[\\/]?$/.exec(adminDir) : null;
-      if (!main || !linksBack(adminDir, gitPath)) return { main_checkout: null, worktree_root: null };
-      return { main_checkout: main[1], worktree_root: current };
+      if (!main || !linksBack(adminDir, gitPath)) return none;
+      var realMain = null;
+      try { realMain = fs.realpathSync.native(main[1]); } catch (err) { realMain = null; }
+      if (!realMain) return none;
+      return { main_checkout: realMain, worktree_root: current, worktree_admin: adminDir };
     }
     var parent = path.dirname(current);
-    if (parent === current) return { main_checkout: null, worktree_root: null };
+    if (parent === current) return none;
     current = parent;
   }
 }
@@ -436,6 +446,7 @@ function createSites(options) {
       linked_files: {},
       main_checkout: where.main_checkout,
       worktree_root: where.worktree_root,
+      worktree_admin: where.worktree_admin,
       created_at: new Date(now()).toISOString()
     };
     record("grant", name);

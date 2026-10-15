@@ -139,6 +139,7 @@
     WORKTREE: "The worktree is gone. An agent will open the main repository's copy, which may differ from what you reviewed.",
     // With stable addresses the helper shows that copy itself, read-only.
     WORKTREE_READONLY: "The worktree is gone. Open shows the main repository's copy, read-only, which may differ from what you reviewed.",
+    MOVED: "Moved from a worktree that is gone. Your comments came with it.",
     OPENED_RAIL_HELD: 'Opened. This file\'s review is "{name}", so the page shows its comments. Open did not move the rail.',
     OPENED_RETIRED: "Opened. This review was retired, so it answers on no page. The page shows the file's current review, if it has one.",
     BADGE_RETIRED: "review retired",
@@ -659,6 +660,7 @@
     if (!missing && review.kind === "worktree") {
       notices.push({ text: viaAgent ? TEXT.WORKTREE : TEXT.WORKTREE_READONLY, tone: "info" });
     }
+    if (!missing && review.moved === true) notices.push({ text: TEXT.MOVED, tone: "info" });
     if (!missing && review.kind === "legacy") notices.push({ text: TEXT.LEGACY_PICKUP, tone: "info" });
     if (viaAgent && !agent) notices.push({ text: TEXT.NEEDS_AGENT, tone: "warn" });
     if (devServer && !missing) notices.push({ text: TEXT.DEV_SERVER_NO_HANDOFF, tone: "quiet" });

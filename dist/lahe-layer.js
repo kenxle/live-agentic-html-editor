@@ -1,6 +1,6 @@
 /*
  * live-agentic-html-editor review layer
- * version 0.3.0+0fbed51f19d3
+ * version 0.3.0+691073547819
  *
  * GENERATED FILE. Do not edit. Edit the sources under src/ and run
  *   npm run build:layer
@@ -12,7 +12,7 @@
   "use strict";
   var g = typeof globalThis !== "undefined" ? globalThis : window;
   g.LAHE = g.LAHE || {};
-  g.LAHE.version = "0.3.0+0fbed51f19d3";
+  g.LAHE.version = "0.3.0+691073547819";
 })();
 /* ---- src/shared/markers.js  (owner: 0A-kernel) ---- */
 // Markers: the attribute and class names that identify DOM the tool added.
@@ -10578,9 +10578,21 @@
     return typeof file === "string" && file ? { known: true, path: file } : null;
   }
 
+  // A source hint naming a file in a removed worktree reads as its main copy
+  // (spec 20261015.01 R10). The helper computes the map; this only applies it.
+  function movedHint(review, hint) {
+    var map = review.moved_hints;
+    if (!map || typeof map !== "object" || !hint) return hint;
+    var hinted = typeof hint === "object" ? hint.path : hint;
+    if (typeof hinted !== "string" || !Object.prototype.hasOwnProperty.call(map, hinted)) return hint;
+    return typeof hint === "object" ? Object.assign({}, hint, { path: map[hinted] }) : map[hinted];
+  }
+
   function projectReview(review) {
     requireReview(review);
     var groups = pageGroups(review.items, review.origin_aliases);
+    groups.forEach(function (g) { g.hint = movedHint(review, g.hint); });
+    review = Object.assign({}, review, { source_hint: movedHint(review, review.source_hint) });
     return {
       schema: SCHEMA,
       contract: CONTRACT.slice(),
@@ -10696,7 +10708,7 @@
 
     pageGroups(review.items, review.origin_aliases).forEach(function (g) {
       out.push("Page: " + (g.title ? g.title + " " : "") + g.path + " (" + g.origin + ")");
-      out.push(sourceHintSentence(g.hint));
+      out.push(sourceHintSentence(movedHint(review, g.hint)));
       out.push("");
       g.items.forEach(function (it) {
         out.push(renderItemText(it));
@@ -52189,7 +52201,7 @@
   "use strict";
 
   // Replaced by scripts/build-layer.js at concatenation time.
-  var VERSION = "0.3.0+0fbed51f19d3";
+  var VERSION = "0.3.0+691073547819";
 
   var protocol = ns.protocol;
   var record = ns.record;

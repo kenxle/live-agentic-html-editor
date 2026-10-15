@@ -295,9 +295,20 @@ function pickReview(dir, site, request) {
   var linkedIds = realFile && site.linked_files && Array.isArray(site.linked_files[realFile])
     ? site.linked_files[realFile]
     : [];
-  var recorded = null;
+  var recordedList = [];
+  var movedIds = [];
   var backing = null;
   var linking = null;
+  // A FILE WHOSE WORKTREE IS GONE (spec 20261015.01 R6): a review that
+  // recorded the worktree's file is rule 1 for its main copy. The moves are
+  // read only when this file sits under a gone worktree's twin root.
+  var registry = null;
+  var moves = [];
+  if (!request.mounted && realFile) {
+    registry = activeFor(dir) || registryEntry(dir);
+    moves = movesIn(registry);
+    if (!underATwin(moves, realFile)) moves = [];
+  }
   readReviews(dir).forEach(function (entry) {
     var meta = entry.meta;
     // A retired review answers on no page.
@@ -309,11 +320,14 @@ function pickReview(dir, site, request) {
       notes: meta.notes === true,
       source_path: typeof meta.source_path === "string" ? meta.source_path : null,
       source_paths: markdownSourcesOf(meta),
-      targets: targetsOf(meta)
+      targets: targetsOf(meta),
+      meta: meta
     };
     var only = meta.only_recorded_pages === true;
-    if (!request.mounted && recordsFile(recordedFiles(meta), filePaths, realFile)) {
-      if (newer(candidate, recorded)) recorded = candidate;
+    var moved = moves.length > 0 && recordedThroughMove(meta, realFile, moves, registry.stateDir);
+    if (moved) movedIds.push(entry.id);
+    if (!request.mounted && (moved || recordsFile(recordedFiles(meta), filePaths, realFile))) {
+      recordedList.push(candidate);
       return;
     }
     if (only) return;
@@ -323,9 +337,44 @@ function pickReview(dir, site, request) {
     }
     if (site.mode === "folder" && linkedIds.indexOf(entry.id) !== -1 && newer(candidate, linking)) linking = candidate;
   });
+  var recorded = recordedList.length
+    ? tierOneWinner(dir, registry || activeFor(dir) || registryEntry(dir), realFile, recordedList, movedIds)
+    : null;
   var best = recorded || backing || linking;
   if (!best) return null;
   return { review: best.review, token: best.token, notes: best.notes, source_path: best.source_path, source_paths: best.source_paths, targets: best.targets };
+}
+
+/** The newest of `list` by `newer` (served or created time, then id). */
+function newestIn(list) {
+  var best = null;
+  list.forEach(function (one) { if (newer(one, best)) best = one; });
+  return best;
+}
+
+/**
+ * R8: a direct review and a moved review on one file are both tier 1. When a
+ * review that reached this file through a move is among them, the newest one
+ * that holds committed comments on the file wins, and only with none holding
+ * any does the newest win. So re-stamping an empty review never takes the
+ * page from one with comments. With no moved candidate, the newest wins as it
+ * always has. holderOfFile and pickReview both ask here, so `lahe review`,
+ * Library Open and the page agree.
+ *
+ * @param {{review: string, at: string, meta: object}[]} list
+ * @param {string[]} movedIds the candidates that came through a move
+ * @returns {object|null} the winning candidate, with `ruled` set when the rule
+ *   chose it over the plain newest
+ */
+function tierOneWinner(dir, entry, file, list, movedIds) {
+  var top = newestIn(list);
+  if (!movedIds.length || !file) return top;
+  var holding = list.filter(function (one) {
+    return holdsRecordOn(dir, entry, Object.assign({ id: one.review }, one.meta), file);
+  });
+  var winner = holding.length ? newestIn(holding) : top;
+  if (winner !== top) winner = Object.assign({}, winner, { ruled: true });
+  return winner;
 }
 
 /**
@@ -337,16 +386,28 @@ function pickReview(dir, site, request) {
  * @param {{target_path?: string, target_paths?: string[], source_path?: string,
  *          only_recorded_pages?: boolean, id: string}} review
  */
-function reviewAnswersOnSite(site, review) {
+function reviewAnswersOnSite(site, review, movesFn) {
   if (!site || !review) return false;
   if (typeof review.retired_at === "string") return false;
   var files = recordedFiles(review);
   var root = site.root;
-  var recordedHere = files.some(function (file) {
-    var real = realOrNull(file) || path.resolve(file);
+  function here(real) {
     return site.mode === "page-only" ? real === root : within(real, root);
+  }
+  var recordedHere = files.some(function (file) {
+    return here(realOrNull(file) || path.resolve(file));
   });
   if (recordedHere) return true;
+  // A recorded file whose worktree is gone answers at its main copy (spec
+  // 20261015.01 R6). Asked only when the direct match fails.
+  if (typeof movesFn === "function") {
+    var asked = movesFn();
+    var moves = asked && Array.isArray(asked.moves) ? asked.moves : [];
+    if (moves.length && files.some(function (file) {
+      var copy = translated(moves, file, asked.stateDir);
+      return !!copy && here(copy);
+    })) return true;
+  }
   if (site.mode !== "folder" || review.only_recorded_pages === true) return false;
   if (servedRootsOf(review).indexOf(root) !== -1) return true;
   var linked = site.linked_files || {};
@@ -430,6 +491,7 @@ function dirKey(dir) {
 
 /** @param {{sites: object, pagesPort: number, laheNames?: function(): boolean}} entry */
 function activate(dir, entry) {
+  if (entry && !entry.stateDir) entry.stateDir = dirKey(dir);
   active[dirKey(dir)] = entry;
 }
 
@@ -485,11 +547,17 @@ function fileForPageIn(entry, origin, pagePath) {
   var decoded = site ? decodePath(String(pagePath || "")) : null;
   var where = decoded !== null ? locate(site, decoded, pagePath) : null;
   if (!where) return null;
-  if (where.page) return site.root;
-  var candidate = candidateOf(where, decoded);
+  var candidate = where.page ? site.root : candidateOf(where, decoded);
   if (!candidate) return null;
   var real = realOrNull(candidate);
-  if (!real) return candidate;
+  if (!real) {
+    // A FILE WHOSE WORKTREE IS GONE names its main-checkout copy (spec
+    // 20261015.01 R5): the one seam records, the handled check and the reload
+    // check share, so a comment made at the old address is about the copy.
+    var copy = where.mounted ? null : movedCopyOnSite(entry, site, candidate);
+    return copy || candidate;
+  }
+  if (where.page) return site.root;
   var realBase = realOrNull(where.base);
   return realBase && within(real, realBase) ? real : null;
 }
@@ -542,10 +610,273 @@ function registryEntry(dir) {
   var pages = ready && ready.pages ? ready.pages : null;
   return {
     sites: sites,
+    stateDir: dirKey(dir),
     pagesPort: pages && Number.isInteger(pages.port) ? pages.port : protocol.PAGES.PORT,
     laheNames: function () { return !!(pages && pages.lahe_names && pages.lahe_names.verified === true); },
     transient: true
   };
+}
+
+// ---------------------------------------------------------------------------
+// A document whose worktree is gone (spec 20261015.01)
+// ---------------------------------------------------------------------------
+//
+// THE ONE RULE (R1 to R4). When a worktree is removed, a file served from it
+// is the same document as the file at the same path in its main checkout. The
+// trusted pair is the registry's: a site saves its worktree root, its admin
+// folder and its main checkout's real path when it is bound (sites.worktreeOf,
+// checked against git's back-link then). At use:
+//
+//   - gone: the worktree root is not on disk, and git agrees (its admin folder
+//     is missing, or names a .git file that is not there). A moved worktree is
+//     not gone.
+//   - the main checkout's real path is still the saved one, its .git is a
+//     folder, it is inside the home folder and outside the state folder;
+//   - the twin root (the main checkout plus the site root's path inside the
+//     worktree) is inside the main checkout by real path;
+//   - the copy is under the twin root by real path, a regular file, and
+//     outside the state folder.
+//
+// Each check that compares paths asks here: fileForPageIn, holderOfFile,
+// pickReview, ownReviewOf, reviewAnswersOnSite, the read-only fallback and the
+// Library. Nothing here writes, and nothing reads page text except the
+// recorded paths it is asked to translate, which never leave a site's root.
+
+// The checks past "the root is not on disk" cost a few stats and a realpath
+// each. A gone worktree stays gone, so they are kept a short while per site;
+// the root's own stat is made on every ask, so a worktree that comes back is
+// seen at once.
+var MOVE_KEEP_MS = 10000;
+var moveCache = new Map();
+
+function homeReal() {
+  var home = markdownLinks.homeRoot();
+  return realOrNull(home) || path.resolve(home);
+}
+
+/** The worktree's admin folder: saved at bind, or found for a site bound before it was saved. */
+function adminFolderOf(site) {
+  if (typeof site.worktree_admin === "string" && site.worktree_admin) return site.worktree_admin;
+  var base = path.join(site.main_checkout, ".git", "worktrees");
+  var wanted = path.join(site.worktree_root, ".git");
+  var names = [];
+  try { names = fs.readdirSync(base); } catch (err) { names = []; }
+  for (var i = 0; i < names.length; i += 1) {
+    var text = "";
+    try { text = fs.readFileSync(path.join(base, names[i], "gitdir"), "utf8").trim(); } catch (err) { text = ""; }
+    if (text && path.resolve(base, names[i], text) === wanted) return path.join(base, names[i]);
+  }
+  return path.join(base, path.basename(site.worktree_root));
+}
+
+/** Does git agree the worktree is gone? Called only once its root is not on disk. */
+function gitSaysGone(site) {
+  var admin = adminFolderOf(site);
+  var text;
+  try { text = fs.readFileSync(path.join(admin, "gitdir"), "utf8").trim(); } catch (err) { return true; }
+  if (!text) return true;
+  return !fs.existsSync(path.resolve(admin, text));
+}
+
+/** The checks of R1 and R2 for one site, past its root's stat. {twin} or null. */
+function checkMove(stateReal, site) {
+  if (!gitSaysGone(site)) return null;
+  var main = site.main_checkout;
+  var realMain = realOrNull(main);
+  if (!realMain || realMain !== main) return null;
+  try { if (!fs.statSync(path.join(realMain, ".git")).isDirectory()) return null; } catch (err) { return null; }
+  var home = homeReal();
+  if (realMain === home || !within(realMain, home)) return null;
+  if (within(realMain, stateReal)) return null;
+  var rel = path.relative(site.worktree_root, site.root);
+  if (rel === ".." || rel.indexOf(".." + path.sep) === 0 || path.isAbsolute(rel)) return null;
+  var realTwin = realOrNull(rel ? path.join(realMain, rel) : realMain);
+  if (!realTwin || !within(realTwin, realMain) || within(realTwin, stateReal)) return null;
+  var stat;
+  try { stat = fs.statSync(realTwin); } catch (err) { return null; }
+  if (site.mode === "page-only" ? !stat.isFile() : !stat.isDirectory()) return null;
+  return { twin: realTwin };
+}
+
+/**
+ * The move for one site, or null: {site, root, twin}. One stat when the
+ * worktree is still there; the rest is kept for MOVE_KEEP_MS.
+ */
+// ONE ROOT CHECK PER REQUEST (R14). A page load asks about the same worktree
+// roots from several places (the review pick, its R8 rule, each record's
+// file); the answer is kept until the event loop turns, which is the end of
+// the request's synchronous work.
+var rootMemo = null;
+
+function rootOnDisk(root) {
+  if (!rootMemo) {
+    rootMemo = new Map();
+    var clear = setImmediate(function () { rootMemo = null; });
+    if (clear && typeof clear.unref === "function") clear.unref();
+  }
+  if (rootMemo.has(root)) return rootMemo.get(root);
+  var there = fs.existsSync(root);
+  rootMemo.set(root, there);
+  return there;
+}
+
+function siteMove(stateReal, site) {
+  if (!site || typeof site.worktree_root !== "string" || typeof site.main_checkout !== "string") return null;
+  if (!site.worktree_root || !site.main_checkout) return null;
+  if (rootOnDisk(site.worktree_root)) return null;
+  var key = stateReal + "\u0000" + site.root + "\u0000" + site.mode + "\u0000" + site.worktree_root + "\u0000" + site.main_checkout;
+  var now = Date.now();
+  var held = moveCache.get(key);
+  var checked;
+  if (held && now - held.at < MOVE_KEEP_MS) {
+    checked = held.checked;
+  } else {
+    checked = checkMove(stateReal, site);
+    moveCache.set(key, { at: now, checked: checked });
+    if (moveCache.size > 512) moveCache.delete(moveCache.keys().next().value);
+  }
+  return checked ? { site: site, root: site.root, twin: checked.twin } : null;
+}
+
+/** Every site whose worktree is gone, for one request: one root stat per worktree site. */
+function movesIn(entry) {
+  if (!entry) return [];
+  var stateReal = entry.stateDir || null;
+  if (!stateReal) return [];
+  var out = [];
+  entry.sites.list().forEach(function (item) {
+    var move = siteMove(stateReal, item.site);
+    if (move) out.push(move);
+  });
+  return out;
+}
+
+/** The moves for a state folder: the helper's registry, or one read off disk. */
+function movesOf(dir) {
+  return movesIn(registryEntry(dir));
+}
+
+/** The main copy of `file` through one move, or null (R3). */
+function copyThrough(move, file, stateReal) {
+  if (typeof file !== "string" || !file) return null;
+  var site = move.site;
+  var rel;
+  if (site.mode === "page-only") {
+    if (file !== site.root) return null;
+    rel = "";
+  } else {
+    if (file === site.root || !within(file, site.root)) return null;
+    rel = path.relative(site.root, file);
+  }
+  var real = realOrNull(rel ? path.join(move.twin, rel) : move.twin);
+  if (!real || !within(real, move.twin) || (stateReal && within(real, stateReal))) return null;
+  try { if (!fs.statSync(real).isFile()) return null; } catch (err) { return null; }
+  return real;
+}
+
+/** The main copy of a gone worktree file, through any of `moves`, or null. */
+function copyAmong(moves, file, stateReal) {
+  for (var i = 0; i < moves.length; i += 1) {
+    var copy = copyThrough(moves[i], file, stateReal);
+    if (copy) return copy;
+  }
+  return null;
+}
+
+/** The main copy of a gone file on this one site, or null. */
+function movedCopyOnSite(entry, site, file) {
+  var stateReal = entry && entry.stateDir;
+  if (!stateReal) return null;
+  var move = siteMove(stateReal, site);
+  return move ? copyThrough(move, file, stateReal) : null;
+}
+
+/** The main copy of a gone worktree file, or null. Exported for the Library and tests. */
+function movedCopyOf(dir, file) {
+  var entry = registryEntry(dir);
+  return copyAmong(movesIn(entry), file, entry.stateDir);
+}
+
+/**
+ * Where a gone worktree file lives now, for the Library (R13): the copy, the
+ * twin root it sits under, and the old site's mode. Null when it has not moved.
+ *
+ * @returns {{copy: string, twin: string, mode: string}|null}
+ */
+function movedPlace(dir, file) {
+  var entry = registryEntry(dir);
+  return movedPlaceIn(entry, movesIn(entry), file);
+}
+
+/**
+ * movedPlace over a registry entry the caller already holds, and moves it
+ * already listed: the Library builds both once per scan, not once per row.
+ */
+function movedPlaceIn(entry, moves, file) {
+  if (typeof file !== "string" || !file) return null;
+  var resolved = path.resolve(file);
+  if (!underAGoneRoot(moves, resolved)) return null;
+  for (var i = 0; i < moves.length; i += 1) {
+    var copy = copyThrough(moves[i], resolved, entry.stateDir);
+    if (copy) return { copy: copy, twin: moves[i].twin, mode: moves[i].site.mode };
+  }
+  return null;
+}
+
+/**
+ * The move for one named site, or null: R1 and R2 alone, before any file is
+ * translated (R3). A seam for tests, which cannot otherwise tell R2's
+ * state-folder check from the copy's own.
+ */
+function moveOfSite(dir, name) {
+  var entry = registryEntry(dir);
+  var site = entry.sites.get(name);
+  var move = site ? siteMove(entry.stateDir, site) : null;
+  return move ? { twin: move.twin } : null;
+}
+
+/** A registry entry over a sites registry the caller already holds. */
+function entryOver(dir, sites) {
+  return { sites: sites, stateDir: dirKey(dir) };
+}
+
+/** Is `file` under any move's twin root? The cheap test before any review is read. */
+function underATwin(moves, file) {
+  return moves.some(function (move) {
+    return move.site.mode === "page-only" ? file === move.twin : within(file, move.twin);
+  });
+}
+
+/** Is `file` under a gone site's own root? A string test: no disk is read (R14). */
+function underAGoneRoot(moves, file) {
+  return moves.some(function (move) {
+    return move.site.mode === "page-only" ? file === move.root : file !== move.root && within(file, move.root);
+  });
+}
+
+/**
+ * The main copy of a recorded path, or null. Only a path under a gone site's
+ * root is looked at on disk, so a pass over every review stats only the files
+ * that could have moved (R14).
+ */
+function translated(moves, one, stateReal) {
+  if (typeof one !== "string" || !one) return null;
+  var resolved = path.resolve(one);
+  if (!underAGoneRoot(moves, resolved) || fs.existsSync(resolved)) return null;
+  return copyAmong(moves, resolved, stateReal);
+}
+
+/** Did this review record a gone worktree file whose main copy is `target`? */
+function recordedThroughMove(meta, target, moves, stateReal) {
+  return recordedFiles(meta).some(function (one) {
+    return translated(moves, one, stateReal) === target;
+  });
+}
+
+/** The moves and the state folder they were judged against, for the Origin check. */
+function movesFor(dir) {
+  var entry = activeFor(dir) || registryEntry(dir);
+  return { moves: movesIn(entry), stateDir: entry.stateDir };
 }
 
 /** A review's committed records (drafts never count), off the helper's fold or off disk. */
@@ -653,6 +984,62 @@ function holdsRecordOn(dir, entry, review, file) {
 }
 
 /**
+ * The file's tier-1 review, or null: one that recorded this file, or (spec
+ * 20261015.01) recorded it in a worktree that is gone. R8 picks between them.
+ *
+ * @returns {{review: string, meta: object, tier: 1, moved: boolean, ruled: boolean}|null}
+ *   `moved` when the winner reached the file only through a move, `ruled`
+ *   when R8 chose it over the plain newest
+ */
+function tierOneOf(dir, entry, target, metas) {
+  var moves = movesIn(entry);
+  if (!underATwin(moves, target)) moves = [];
+  var direct = [];
+  var movedIds = [];
+  var list = [];
+  metas.forEach(function (each) {
+    var isDirect = recordedFiles(each.meta).some(function (one) {
+      return (realOrNull(one) || path.resolve(one)) === target;
+    });
+    var isMoved = moves.length > 0 && recordedThroughMove(each.meta, target, moves, entry.stateDir);
+    if (!isDirect && !isMoved) return;
+    if (isDirect) direct.push(each.id);
+    if (isMoved) movedIds.push(each.id);
+    list.push({ review: each.id, at: stampOf(each.meta), meta: each.meta });
+  });
+  if (!list.length) return null;
+  var winner = tierOneWinner(dir, entry, target, list, movedIds);
+  return {
+    review: winner.review,
+    meta: winner.meta,
+    tier: 1,
+    moved: direct.indexOf(winner.review) === -1,
+    ruled: winner.ruled === true
+  };
+}
+
+/**
+ * Does the file have a tier-1 review at all? tierOneOf's candidates without
+ * choosing between them: no log is read, and the first one found answers.
+ */
+function hasTierOne(entry, target, metas) {
+  var moves = null;
+  for (var i = 0; i < metas.length; i += 1) {
+    var meta = metas[i].meta;
+    var direct = recordedFiles(meta).some(function (one) {
+      return (realOrNull(one) || path.resolve(one)) === target;
+    });
+    if (direct) return true;
+    if (moves === null) {
+      moves = movesIn(entry);
+      if (!underATwin(moves, target)) moves = [];
+    }
+    if (moves.length && recordedThroughMove(meta, target, moves, entry.stateDir)) return true;
+  }
+  return false;
+}
+
+/**
  * The review a file has, or null: the one `lahe review` opens instead of
  * making a second (Part 1). Tiered, newest within a tier, retired reviews
  * never:
@@ -683,12 +1070,8 @@ function holderOfFile(dir, file) {
     if (best) delete best.at;
     return best;
   }
-  var tier1 = metas.filter(function (each) {
-    return recordedFiles(each.meta).some(function (one) {
-      return (realOrNull(one) || path.resolve(one)) === target;
-    });
-  });
-  if (tier1.length) return newestOf(tier1, 1);
+  var tier1 = tierOneOf(dir, entry, target, metas);
+  if (tier1) return tier1;
   function asReview(each) { return Object.assign({ id: each.id }, each.meta); }
   var tier2 = metas.filter(function (each) {
     if (each.meta.only_recorded_pages === true) return false;
@@ -952,10 +1335,15 @@ function pageRecords(dir, review, origin, pagePath, items) {
   }
   var store = null;
   var others = [];
+  var movesHeld = null;
+  function movesAsked() {
+    if (!movesHeld) movesHeld = { moves: movesIn(entry), stateDir: entry.stateDir };
+    return movesHeld;
+  }
   readReviews(dir).forEach(function (each) {
     if (each.id === review.id || typeof each.meta.retired_at === "string") return;
     var other = Object.assign({ id: each.id }, each.meta);
-    if (!reviewAnswersOnSite(site, other) && linking[each.id] !== true) return;
+    if (!reviewAnswersOnSite(site, other, movesAsked) && linking[each.id] !== true) return;
     var held = committedRecords(dir, entry, each.id).filter(function (item) {
       return fileOfItem(dir, entry, other, item) === file;
     });
@@ -1085,16 +1473,19 @@ function gonePage(file, libraryHref) {
 
 /**
  * R13: the note on a worktree file shown from the main checkout. One statement
- * per line: two long paths in one run of prose were hard to read. Editing
- * needs a review's rail on this copy, which an agent brings: Hand to agent in
- * the Library (Pick this up, or Launch a new agent with none attached).
+ * per line: two long paths in one run of prose were hard to read. Shown only
+ * when the main copy's own page does not carry this file's review (spec
+ * 20261015.01 R11); Library Open gives the copy its address and that rail.
+ * `heldBy` names another review that holds the copy, by title.
  */
-function movedNote(goneFile, shownFile, libraryHref) {
+function movedNote(goneFile, shownFile, libraryHref, heldBy) {
+  // No command is printed: a path can hold shell text (spec 20261015.01 R11).
   return "<p class=\"lahe-readonly-note lahe-moved-note\">This file's worktree is gone.<br>" +
     "This is the copy in the main checkout, read-only.<br>" +
     "This copy: <code>" + escapeHtml(shownFile) + "</code><br>" +
     "It was served from: <code>" + escapeHtml(goneFile) + "</code><br>" +
-    "To edit or comment on it, find it in <a href=\"" + escapeHtml(libraryHref) + "\">the Library</a> and choose Hand to agent, which has an agent serve this copy with its rail.</p>";
+    (heldBy ? "This copy has its own review now: <b>" + escapeHtml(heldBy) + "</b>.<br>" : "") +
+    "To keep commenting, open it from <a href=\"" + escapeHtml(libraryHref) + "\">the Library</a>. Its comments come with it.</p>";
 }
 
 // ---------------------------------------------------------------------------
@@ -1298,16 +1689,8 @@ function createPageRoutes(options) {
    * read-only. Null when there is no such copy.
    */
   function mainCheckoutCopy(site, candidate) {
-    if (!site.worktree_root || !site.main_checkout) return null;
-    if (fs.existsSync(site.worktree_root)) return null;
-    if (!within(candidate, site.worktree_root)) return null;
-    var copy = path.join(site.main_checkout, path.relative(site.worktree_root, candidate));
-    var mainRoot = path.join(site.main_checkout, path.relative(site.worktree_root, site.root));
-    var real = realOrNull(copy);
-    var realMain = realOrNull(site.mode === "page-only" ? path.dirname(mainRoot) : mainRoot);
-    if (!real || !realMain || !within(real, realMain)) return null;
-    try { if (!fs.statSync(real).isFile()) return null; } catch (err) { return null; }
-    return real;
+    // The one rule (spec 20261015.01 R4), not a second copy of it.
+    return movedCopyOnSite(activeFor(dir) || registryEntry(dir), site, candidate);
   }
 
   /** Both Fetch Metadata headers of a top-level page load. Absent on .lahe, so never there. */
@@ -1317,14 +1700,14 @@ function createPageRoutes(options) {
     return dest === "document" && mode === "navigate";
   }
 
-  /** A review, not retired, that recorded this exact file: the file's own review. */
+  /**
+   * A review, not retired, that recorded this exact file: the file's own
+   * review. The tier-1 rule holderOfFile uses, so a file whose review followed
+   * it out of a worktree counts too (spec 20261015.01 R6).
+   */
   function ownReviewOf(real) {
-    return readReviews(dir).some(function (each) {
-      if (typeof each.meta.retired_at === "string") return false;
-      return recordedFiles(each.meta).some(function (one) {
-        return (realOrNull(one) || path.resolve(one)) === real;
-      });
-    });
+    var metas = readReviews(dir).filter(function (each) { return typeof each.meta.retired_at !== "string"; });
+    return hasTierOne(activeFor(dir) || registryEntry(dir), real, metas);
   }
 
   /**
@@ -1334,6 +1717,12 @@ function createPageRoutes(options) {
    * Null when no site holds it. Never makes a site.
    */
   function ownAddressOf(real) {
+    var own = ownSiteOf(real);
+    return own ? own.url : null;
+  }
+
+  /** The site ownAddressOf names, with its address: {name, site, url}, or null. */
+  function ownSiteOf(real) {
     var best = null;
     sites.list().forEach(function (each) {
       var root = each.site.root;
@@ -1347,7 +1736,39 @@ function createPageRoutes(options) {
     if (!best) return null;
     var port = printedPort();
     var origin = protocol.siteOrigin(best.name, typeof port === "number" ? port : protocol.PAGES.PORT);
-    return origin + "/" + best.rel.split(path.sep).map(encodeURIComponent).join("/");
+    return { name: best.name, site: sites.get(best.name), url: origin + "/" + best.rel.split(path.sep).map(encodeURIComponent).join("/") };
+  }
+
+  /**
+   * Does `match` hold the gone file `gone`, served at `ctx`? It recorded the
+   * file, or it holds a committed record made at this very address.
+   */
+  function holdsGoneFile(match, gone, ctx) {
+    var meta = null;
+    readReviews(dir).some(function (each) {
+      if (each.id !== match.review) return false;
+      meta = each.meta;
+      return true;
+    });
+    if (!meta) return false;
+    if (recordedFiles(meta).some(function (one) { return path.resolve(one) === gone; })) return true;
+    var registry = activeFor(dir) || registryEntry(dir);
+    return committedRecords(dir, registry, match.review).some(function (item) {
+      var origin = item[record.FIELD.PAGE_ORIGIN];
+      var name = typeof origin === "string" ? protocol.siteNameFromOrigin(origin, registry.pagesPort, typeof registry.laheNames === "function" && registry.laheNames()) : null;
+      return name === ctx.name && item[record.FIELD.PAGE_PATH] === ctx.pagePath;
+    });
+  }
+
+  /** A review's title for a note: its name, else the file's name. Page text, escaped by the caller. */
+  function titleOfReview(reviewId, file) {
+    var title = null;
+    readReviews(dir).some(function (each) {
+      if (each.id !== reviewId) return false;
+      title = typeof each.meta.name === "string" && each.meta.name ? each.meta.name : null;
+      return true;
+    });
+    return title || path.basename(file);
   }
 
   function redirectTo(res, location) {
@@ -1379,19 +1800,35 @@ function createPageRoutes(options) {
     var copy = mainCheckoutCopy(site, candidate);
     if (copy && inStateDir(copy)) return notFound(req, res);
     if (copy) {
+      // THE OLD ADDRESS (spec 20261015.01 R11). When the main copy has an
+      // address of its own and its page carries the review that holds this
+      // file, a page load goes there. The Location is built by ownAddressOf
+      // from the registry, never from the request. Otherwise the copy is
+      // shown here read-only, naming the review that holds it, if one does.
+      var heldBy = null;
+      if (isPage(copy)) {
+        var own = ownSiteOf(copy);
+        var match = own && own.site ? pickReview(dir, own.site, { filePaths: [copy], realFile: copy, mounted: false }) : null;
+        if (match && holdsGoneFile(match, candidate, ctx)) {
+          if (topLevel(req)) return redirectTo(res, own.url);
+        } else if (match) {
+          heldBy = titleOfReview(match.review, copy);
+        }
+      }
       sayOnce("moved\u0000" + candidate, "pages: " + candidate + " is gone with its worktree; showing " + copy + " read-only");
+      var note = movedNote(candidate, copy, libraryHref(), heldBy);
       if (markdown.isMarkdown(copy)) {
         var copyBase = path.join(site.main_checkout, path.relative(site.worktree_root, site.root));
         return serveMarkdown(req, res, ctx, copy, copy, urlDirOf("/", site.mode === "page-only" ? path.dirname(copyBase) : copyBase, copy), {
           readOnly: true,
-          note: movedNote(candidate, copy, libraryHref())
+          note: note
         });
       }
       if (heal.isStaticPage(copy)) {
         var html;
         try { html = fs.readFileSync(copy, "utf8"); } catch (err) { return notFound(req, res); }
         var stripped = scriptLine.removeScriptLine(html);
-        return sendHtml(req, res, 200, tabIcon.ensure(placeNote(stripped ? stripped.html : html, movedNote(candidate, copy, libraryHref()))));
+        return sendHtml(req, res, 200, tabIcon.ensure(placeNote(stripped ? stripped.html : html, note)));
       }
       var stat = fs.statSync(copy);
       return streamFile(req, res, copy, stat.size);
@@ -1489,6 +1926,14 @@ module.exports = {
   markdownSourcesOf: markdownSourcesOf,
   fileOfItem: fileOfItem,
   holderOfFile: holderOfFile,
+  movesOf: movesOf,
+  movesFor: movesFor,
+  movedCopyOf: movedCopyOf,
+  movedPlace: movedPlace,
+  movedPlaceIn: movedPlaceIn,
+  movesIn: movesIn,
+  entryOver: entryOver,
+  moveOfSite: moveOfSite,
   linkAddressFor: linkAddressFor,
   registryEntry: registryEntry,
   committedRecords: committedRecords,

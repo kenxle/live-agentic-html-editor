@@ -167,7 +167,13 @@ function createCatalogActions(options) {
    * the root is checked with the document.
    */
   function siteOwnedByUser(described) {
-    var files = [described.path, described.served_path, described.site.root, described.site.file].filter(function (file, i, all) {
+    // A moved document's own paths are gone with its worktree: the check runs
+    // on the main copy and the plan's root instead, never skipped (spec
+    // 20261015.01 R12).
+    var named = described.site && described.site.moved
+      ? [described.site.root, described.site.file]
+      : [described.path, described.served_path, described.site.root, described.site.file];
+    var files = named.filter(function (file, i, all) {
       return typeof file === "string" && file && all.indexOf(file) === i;
     });
     return files.every(function (file) {
@@ -179,6 +185,28 @@ function createCatalogActions(options) {
       }
       return uid === null || stat.uid === uid;
     });
+  }
+
+  /**
+   * Give a moved document its address and record its main path, as Open
+   * does, without opening anything. Null when it went through; an error
+   * answer otherwise. Nothing is stamped or recorded when another review
+   * holds the main copy.
+   */
+  function settleMoved(d, nowMs) {
+    if (!d.site || d.site.moved !== true) return null;
+    if (!siteOwnedByUser(d)) return fail("PROTO_NOT_OPENABLE", "not owned by the current user, or not on disk");
+    try {
+      siteTools.bindPlan(d.site);
+    } catch (err) {
+      return fail("PROTO_NOT_OPENABLE", "the document could not be given an address: " + err.message);
+    }
+    var holderId = siteTools.holderOf(d.site.file);
+    if ((!holderId || holderId === d.review) && !d.retired) {
+      siteTools.stamp(d.review, nowMs);
+      siteTools.recordMoved(d.review, d.site);
+    }
+    return null;
   }
 
   /** Is this agent session open? A session the store cannot read is not. */
@@ -267,7 +295,10 @@ function createCatalogActions(options) {
       }
       url = siteTools.addressOf(bound.name, filePath);
       if (other) heldBy = { review: holderId, name: other.display_name || holderId };
-      else if (!d.retired) siteTools.stamp(d.review, nowMs);
+      else if (!d.retired) {
+        siteTools.stamp(d.review, nowMs);
+        if (d.site.moved) siteTools.recordMoved(d.review, d.site);
+      }
     }
     if (!url) return fail("PROTO_NOT_OPENABLE", "the helper is not serving pages");
 
@@ -412,9 +443,17 @@ function createCatalogActions(options) {
     // A pick-up of a served document the attached agent already has asks for
     // nothing. A via-agent row still needs re-serving, so it is still asked.
     if (action === ACTION.PICKUP && d.openable === "yes" && alreadyTheirs(d, agent)) {
+      var settledTheirs = settleMoved(d, nowMs);
+      if (settledTheirs) return settledTheirs;
       return { status: 200, body: { request_id: null } };
     }
     if (watchedByAnother(d, agent) && body.confirmed !== true) return fail("PROTO_CONFIRM_NEEDED");
+    // A moved document gets its address before it is handed over, as Open
+    // gives it, so the agent that takes it over finds the page with its rail
+    // (spec 20261015.01 R12). Only past every refusal: a refused or
+    // unconfirmed hand-over names and records nothing.
+    var settled = settleMoved(d, nowMs);
+    if (settled) return settled;
     var queued = enqueue(action, d, agent, nowMs);
     if (!queued.ok) return fail(queued.code, queued.detail);
     logAction(action === ACTION.LAUNCH ? protocol.CATALOG_LOG.ACTION.LAUNCH : protocol.CATALOG_LOG.ACTION.PICKUP, d, nowMs);
@@ -433,6 +472,8 @@ function createCatalogActions(options) {
    */
   async function launchDirect(d, body, nowMs) {
     if (d.watching && body.confirmed !== true) return fail("PROTO_CONFIRM_NEEDED");
+    var settled = settleMoved(d, nowMs);
+    if (settled) return settled;
     var appended = queue.append(
       { action: ACTION.LAUNCH, review: d.review, session: d.session, for: catalogRequests.LAUNCHER_FOR },
       nowMs

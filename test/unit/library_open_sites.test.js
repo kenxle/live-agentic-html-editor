@@ -64,7 +64,8 @@ async function libraryOf(w) {
       for (const s of list.sessions) for (const r of s.reviews) if (r.id === id) return r;
       return null;
     },
-    open: (review, extra) => call("catalog.open", Object.assign({ review, handoff: false, confirmed: false }, extra || {}))
+    open: (review, extra) => call("catalog.open", Object.assign({ review, handoff: false, confirmed: false }, extra || {})),
+    request: (review, action, extra) => call("catalog.request", Object.assign({ review, action }, extra || {}))
   };
 }
 
@@ -203,26 +204,141 @@ function worktreeWorld(w) {
   return { main, wt, copy, file, folder: path.join(wt, "docs") };
 }
 
-test("V41: a gone worktree whose site recorded its main checkout is a worktree row that Open can open, read-only", async (t) => {
+test("V41, spec 20261015.01 R12: a gone worktree whose site recorded its main checkout is a moved static row; Open gives the main copy its address and the review's rail", async (t) => {
   const w = await sitesWorld(t);
   const tree = worktreeWorld(w);
   openSession(w, "s_a");
   const review = makeReview(w, { agent_session_id: "s_a", target_path: tree.file });
   const bound = w.helper.sites.bind({ root: fs.realpathSync(tree.folder), mode: "folder", entry: "page.html" });
   fs.renameSync(tree.wt, tree.wt + "-moved");
+  await new Promise((resolve) => setImmediate(resolve));
   const lib = await libraryOf(w);
 
   const row = await lib.row(review.id);
-  assert.equal(row.kind, "worktree");
+  assert.equal(row.kind, "static");
   assert.equal(row.openable, "yes");
+  assert.equal(row.moved, true);
   const opened = await lib.open(review.id);
   assert.equal(opened.status, 200, opened.text);
-  assert.equal(opened.json.url, "http://" + bound.name + ".lahe.localhost:" + w.helper.pagesPort + "/page.html");
-  assert.equal(w.helper.reviews.get(review.id).served_at || null, null, "a read-only copy moves no rail");
-  const page = await getPage(w, bound.name, "/page.html");
+  const url = new URL(opened.json.url);
+  assert.notEqual(url.hostname, bound.name + ".lahe.localhost", "the main copy's own address, not the worktree's");
+  assert.equal(url.pathname, "/page.html");
+  const realCopy = fs.realpathSync(tree.copy);
+  assert.equal(w.helper.reviews.get(review.id).target_path, realCopy, "Open records the main path");
+  const page = await getPage(w, url.hostname.replace(/\.lahe\.localhost$/, ""), "/page.html");
   assert.equal(page.status, 200);
   assert.match(page.text, /main copy/);
-  assert.doesNotMatch(page.text, /data-lahe-review/);
+  assert.match(page.text, new RegExp('data-lahe-review="' + review.id + '"'));
+  // The old address now sends a page load to the main copy.
+  const old = await getPage(w, bound.name, "/page.html", { "sec-fetch-dest": "document", "sec-fetch-mode": "navigate" });
+  assert.equal(old.status, 302);
+  assert.equal(old.headers.location, opened.json.url);
+});
+
+test("spec 20261015.01 R12: a moved review and a review made on the main copy in one session show as one row", async (t) => {
+  const w = await sitesWorld(t);
+  const tree = worktreeWorld(w);
+  openSession(w, "s_a");
+  const old = makeReview(w, { agent_session_id: "s_a", target_path: tree.file });
+  w.helper.sites.bind({ root: fs.realpathSync(tree.folder), mode: "folder", entry: "page.html" });
+  fs.renameSync(tree.wt, tree.wt + "-moved");
+  await new Promise((resolve) => setImmediate(resolve));
+  const fresh = makeReview(w, { agent_session_id: "s_a", target_path: fs.realpathSync(tree.copy) });
+  const lib = await libraryOf(w);
+  const list = await lib.list();
+  // Every row object anywhere in the answer (sections nest them).
+  const rowsOf = (l) => {
+    const out = [];
+    const walk = (v) => {
+      if (Array.isArray(v)) return v.forEach(walk);
+      if (v && typeof v === "object") {
+        if (typeof v.id === "string" && Array.isArray(v.folded_from)) out.push(v);
+        Object.values(v).forEach(walk);
+      }
+    };
+    walk(l);
+    return out;
+  };
+  const rows = rowsOf(list).filter((r) => r.id === old.id || r.id === fresh.id || r.folded_from.indexOf(old.id) !== -1 || r.folded_from.indexOf(fresh.id) !== -1);
+  const ids = new Set(rows.map((r) => r.id));
+  assert.equal(ids.size, 1, "one row for the document");
+  const row = rows[0];
+  assert.deepEqual([row.id].concat(row.folded_from).sort(), [old.id, fresh.id].sort());
+});
+
+test("spec 20261015.01 R12: a moved row's launch hand-off is a takeover with no path in it", async (t) => {
+  const w = await sitesWorld(t);
+  const tree = worktreeWorld(w);
+  openSession(w, "s_a");
+  const review = makeReview(w, { agent_session_id: "s_a", target_path: tree.file });
+  w.helper.sites.bind({ root: fs.realpathSync(tree.folder), mode: "folder", entry: "page.html" });
+  fs.renameSync(tree.wt, tree.wt + "-moved");
+  await new Promise((resolve) => setImmediate(resolve));
+  const described = require("../../src/service/catalog_reader.js").createReader({ dir: w.state }).describeReview(review.id);
+  assert.equal(described.kind, "static");
+  assert.equal(described.site.moved, true);
+  const text = require("../../src/service/catalog_launch.js").handoffFor(w.state, described, { id: "q_test", session: "s_a" }, null);
+  assert.ok(text, "a hand-off message");
+  assert.match(text, /takeover s_a/);
+  assert.equal(text.indexOf(tree.wt), -1, "no worktree path");
+  assert.equal(text.indexOf(tree.main), -1, "no main checkout path");
+  assert.equal(require("../../src/service/catalog_launch.js").launchRoot(described), path.dirname(fs.realpathSync(tree.copy)));
+});
+
+test("spec 20261015.01 R12: a hand-over refused for no agent, or held for a confirm, gives the moved document no address and records nothing", async (t) => {
+  const w = await sitesWorld(t);
+  const tree = worktreeWorld(w);
+  const store = sessions(w);
+  openSession(w, "s_a");
+  const review = makeReview(w, { agent_session_id: "s_a", target_path: tree.file });
+  w.helper.sites.bind({ root: fs.realpathSync(tree.folder), mode: "folder", entry: "page.html" });
+  fs.renameSync(tree.wt, tree.wt + "-moved");
+  await new Promise((resolve) => setImmediate(resolve));
+  const lib = await libraryOf(w);
+  const sitesBefore = w.helper.sites.list().length;
+  const metaBefore = JSON.stringify(w.helper.reviews.get(review.id));
+
+  // No agent attached: refused, nothing named or recorded.
+  const noAgent = await lib.request(review.id, "pickup");
+  assert.equal(noAgent.json.error && noAgent.json.error.code, "PROTO_NO_AGENT", noAgent.text);
+  assert.equal(w.helper.sites.list().length, sitesBefore, "no site named");
+  assert.equal(JSON.stringify(w.helper.reviews.get(review.id)), metaBefore, "nothing stamped or recorded");
+
+  // An attached agent, and another agent watching the document's session: the
+  // page asks first. Cancelling that confirm leaves everything as it was.
+  const now = Date.now();
+  store.create({ id: "s_agent", name: "library agent" });
+  catalogRequests.writeAttach(w.state, "s_agent", now);
+  store.writeMonitor("s_agent", { pid: process.pid, handoff_rev: agentSessions.handoffRev(store.read("s_agent")), at: new Date(now).toISOString(), primary: true });
+  store.writeMonitor("s_a", { pid: process.pid, handoff_rev: agentSessions.handoffRev(store.read("s_a")), at: new Date(now).toISOString(), primary: true });
+  const held = await lib.request(review.id, "pickup");
+  assert.equal(held.json.error && held.json.error.code, "PROTO_CONFIRM_NEEDED", held.text);
+  assert.equal(w.helper.sites.list().length, sitesBefore, "no site named");
+  assert.equal(JSON.stringify(w.helper.reviews.get(review.id)), metaBefore, "nothing stamped or recorded");
+
+  // Confirmed: the main copy gets its address and the review records it.
+  const confirmed = await lib.request(review.id, "pickup", { confirmed: true });
+  assert.equal(confirmed.status, 200, confirmed.text);
+  assert.equal(w.helper.sites.list().length, sitesBefore + 1, "the main copy's site");
+  assert.equal(w.helper.reviews.get(review.id).target_path, fs.realpathSync(tree.copy));
+});
+
+test("V41, spec 20261015.01 R13: a forged path outside every registry site is not vouched, though the copy exists", async (t) => {
+  const w = await sitesWorld(t);
+  const tree = worktreeWorld(w);
+  openSession(w, "s_a");
+  // A page holding the token can write any path into meta.json: one in the
+  // worktree, but under no site the helper served.
+  const forged = path.join(tree.wt, "other", "page.html");
+  writeFile(tree.main, "other/page.html", PAGE_HTML);
+  const review = makeReview(w, { agent_session_id: "s_a", target_path: forged });
+  w.helper.sites.bind({ root: fs.realpathSync(tree.folder), mode: "folder", entry: "page.html" });
+  fs.renameSync(tree.wt, tree.wt + "-moved");
+  await new Promise((resolve) => setImmediate(resolve));
+  const lib = await libraryOf(w);
+  const row = await lib.row(review.id);
+  assert.notEqual(row.moved, true);
+  assert.notEqual(row.openable, "yes");
 });
 
 test("V41: a gone worktree the registry never saw keeps the old rule: a worktree row that needs an agent, or missing", async (t) => {

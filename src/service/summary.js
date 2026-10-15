@@ -179,15 +179,23 @@ function createSummary(options) {
    * ONE UNREADABLE REVIEW IS LEFT OUT, never the whole answer: null, and one
    * line in the helper log until it reads again.
    */
+  /**
+   * The file a part's page shows: a moved document's main copy (spec
+   * 20261015.01 R12), else its recorded document.
+   */
+  function docOf(part) {
+    return part.site && part.site.moved && part.site.file ? part.site.file : part.info.docPath;
+  }
+
   function partOf(reviewId, sinceMs, rebuilt) {
     try {
       var hit = cache[reviewId];
       var stateKey = stateKeyOf(reviewId, sinceMs);
-      if (hit && hit.stateKey === stateKey && (hit.part.unread.count === 0 || hit.docKey === statKey(hit.part.info.docPath))) {
+      if (hit && hit.stateKey === stateKey && (hit.part.unread.count === 0 || hit.docKey === statKey(docOf(hit.part)))) {
         return hit.part;
       }
       var part = reader.reviewPart(reviewId, { since: sinceMs });
-      cache[reviewId] = { stateKey: stateKey, docKey: statKey(part.info.docPath), part: part };
+      cache[reviewId] = { stateKey: stateKey, docKey: statKey(docOf(part)), part: part };
       noteSets(reviewId, part);
       rebuilt.push(reviewId);
       delete unreadable[reviewId];
@@ -249,9 +257,11 @@ function createSummary(options) {
   /**
    * One Library row as the summary needs it. Unread replies count only from
    * the parts a reviewer can act on: never a review that ended, or whose file
-   * is gone (R7). A file whose worktree was removed is gone too: its address
-   * shows the main checkout's copy without this review's rail, so no page can
-   * read the reply, and it would wait on the reviewer forever.
+   * is gone (R7). A document whose worktree was removed counts when its main
+   * copy carries the review (kind static, spec 20261015.01 R12): that page
+   * shows the reply. A `worktree` row is one whose main copy failed the move
+   * rule; its address shows the copy read-only, so no page can read the
+   * reply, and it would wait on the reviewer forever.
    */
   function describeRow(row) {
     var lead = row.lead.info;

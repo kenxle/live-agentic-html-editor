@@ -291,7 +291,10 @@ async function run(argv, mode) {
       }
       if (!own) return openOthersReview(dir, opts, store, holder, owner, originalTarget);
       // This session's folder or linking review holds the file: add it there.
-      if (holder.tier > 1 && !opts.review) list.push("--review", holder.review);
+      // So does a review that followed this file out of a removed worktree, or
+      // one the tier-1 rule chose over a newer empty review (spec 20261015.01
+      // R7, R8): add would otherwise go by the recorded page and miss it.
+      if ((holder.tier > 1 || holder.moved || holder.ruled) && !opts.review) list.push("--review", holder.review);
     }
   }
 

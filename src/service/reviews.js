@@ -763,6 +763,19 @@ function createReviews(options) {
     return !!review && review.notes === true;
   }
 
+  /** The main-checkout copy of a source whose worktree is gone, or null (page_routes.js, the move). */
+  function movedCopyOfSource(source) {
+    try {
+      return pageRoutesModule.movedCopyOf(dir, source);
+    } catch (err) {
+      return null;
+    }
+  }
+
+  function realOrNullHere(file) {
+    try { return fs.realpathSync.native(file); } catch (err) { return null; }
+  }
+
   function recordPaths(reviewId, paths) {
     var review = get(reviewId);
     if (!review) return null;
@@ -783,9 +796,20 @@ function createReviews(options) {
     // source to a review (a linked document added to the linking review), and
     // replacing source_path took the first page's rail and re-render away.
     // source_path stays the first; source_paths lists them all.
+    //
+    // A FIRST SOURCE THAT IS GONE is replaced by ITS OWN MOVED COPY (spec
+    // 20261015.01 R7): a review that followed its document out of a removed
+    // worktree is given the main copy, and the readers that look only at
+    // source_path (rebuild, the Library) then read a file that is there. Any
+    // other new source (a linked document) is only added to the list. The old
+    // path stays in the list.
     if (typeof p.source_path === "string" && p.source_path) {
       if (!Array.isArray(review.source_paths)) review.source_paths = review.source_path ? [review.source_path] : [];
       if (!review.source_path) {
+        review.source_path = p.source_path;
+        changed = true;
+      } else if (review.source_path !== p.source_path && !fs.existsSync(review.source_path) &&
+          movedCopyOfSource(review.source_path) === (realOrNullHere(p.source_path) || path.resolve(p.source_path))) {
         review.source_path = p.source_path;
         changed = true;
       }

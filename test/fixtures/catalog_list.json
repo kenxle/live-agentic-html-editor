@@ -65,7 +65,8 @@
             }
           ],
           "folded_from": [],
-          "address": null
+          "address": null,
+          "moved": false
         },
         {
           "id": "r_spec",
@@ -107,7 +108,8 @@
             }
           ],
           "folded_from": [],
-          "address": "http://projects.beta.specs.lahe.localhost:1483/spec.html"
+          "address": "http://projects.beta.specs.lahe.localhost:1483/spec.html",
+          "moved": false
         },
         {
           "id": "r_notes",
@@ -149,7 +151,8 @@
             }
           ],
           "folded_from": [],
-          "address": null
+          "address": null,
+          "moved": false
         },
         {
           "id": "r_mounted",
@@ -176,7 +179,8 @@
           "request": null,
           "pages": [],
           "folded_from": [],
-          "address": null
+          "address": null,
+          "moved": false
         },
         {
           "id": "r_deleted",
@@ -209,7 +213,8 @@
             }
           ],
           "folded_from": [],
-          "address": null
+          "address": null,
+          "moved": false
         }
       ]
     },
@@ -256,7 +261,8 @@
             }
           ],
           "folded_from": [],
-          "address": null
+          "address": null,
+          "moved": false
         }
       ]
     },
@@ -295,7 +301,8 @@
           "request": null,
           "pages": [],
           "folded_from": [],
-          "address": null
+          "address": null,
+          "moved": false
         }
       ]
     },
@@ -334,7 +341,8 @@
           "request": null,
           "pages": [],
           "folded_from": [],
-          "address": null
+          "address": null,
+          "moved": false
         }
       ]
     },
@@ -380,7 +388,8 @@
           "request": null,
           "pages": [],
           "folded_from": [],
-          "address": null
+          "address": null,
+          "moved": false
         },
         {
           "id": "r_wt_vanished",
@@ -407,7 +416,8 @@
           "request": null,
           "pages": [],
           "folded_from": [],
-          "address": null
+          "address": null,
+          "moved": false
         },
         {
           "id": "r_wt_gone",
@@ -449,7 +459,8 @@
             }
           ],
           "folded_from": [],
-          "address": null
+          "address": null,
+          "moved": false
         },
         {
           "id": "r_old4",
@@ -482,7 +493,8 @@
             }
           ],
           "folded_from": [],
-          "address": null
+          "address": null,
+          "moved": false
         },
         {
           "id": "r_old2",
@@ -518,7 +530,8 @@
             "r_old1",
             "r_old3"
           ],
-          "address": null
+          "address": null,
+          "moved": false
         },
         {
           "id": "r_other",
@@ -545,7 +558,8 @@
           "request": null,
           "pages": [],
           "folded_from": [],
-          "address": null
+          "address": null,
+          "moved": false
         },
         {
           "id": "r_oldfolder",
@@ -572,7 +586,8 @@
           "request": null,
           "pages": [],
           "folded_from": [],
-          "address": null
+          "address": null,
+          "moved": false
         }
       ]
     },
@@ -623,7 +638,8 @@
             }
           ],
           "folded_from": [],
-          "address": null
+          "address": null,
+          "moved": false
         },
         {
           "id": "r_big",
@@ -656,7 +672,8 @@
             }
           ],
           "folded_from": [],
-          "address": null
+          "address": null,
+          "moved": false
         },
         {
           "id": "r_shared",
@@ -689,7 +706,8 @@
             }
           ],
           "folded_from": [],
-          "address": null
+          "address": null,
+          "moved": false
         },
         {
           "id": "r_badreview",
@@ -716,7 +734,8 @@
           "request": null,
           "pages": [],
           "folded_from": [],
-          "address": null
+          "address": null,
+          "moved": false
         },
         {
           "id": "r_badmeta",
@@ -743,7 +762,8 @@
           "request": null,
           "pages": [],
           "folded_from": [],
-          "address": null
+          "address": null,
+          "moved": false
         },
         {
           "id": "r_notitle",
@@ -770,7 +790,8 @@
           "request": null,
           "pages": [],
           "folded_from": [],
-          "address": null
+          "address": null,
+          "moved": false
         },
         {
           "id": "r_s3page",
@@ -797,7 +818,8 @@
           "request": null,
           "pages": [],
           "folded_from": [],
-          "address": null
+          "address": null,
+          "moved": false
         }
       ]
     },
@@ -842,7 +864,8 @@
             }
           ],
           "folded_from": [],
-          "address": null
+          "address": null,
+          "moved": false
         }
       ]
     }
