@@ -25,7 +25,7 @@ Sections, in this order:
 
 ## What it is
 
-Lahe is an embedded review layer for any HTML page on your own machine. You open a page in the browser, select a passage, and comment on it, or you rewrite the text in place. Every finished comment and edit goes to the coding agent you already use. The agent changes the source files, rebuilds, and answers on the page, beside the passage, while you keep reading.
+Lahe is an embedded review layer for any HTML page on your own machine. You open a page in the browser, select a passage, and comment on it, or you rewrite the text in place. Your comments and edits goes to a coding agent. The agent changes the source files, rebuilds, and communicates on the page.
 
 It has two parts:
 
