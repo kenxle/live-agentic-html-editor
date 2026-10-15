@@ -32,8 +32,6 @@ It has two parts:
 - a script in the page, which draws the rail and records what you do
 - a small helper on your machine, which keeps the review on disk and passes it to the agent
 
-A page built from many files is reviewed as one page. The agent edits the files underneath. Markdown is rendered for review the same way.
-
 ## Who it is for
 
 - **The owner, first.** He runs several coding agents at once and reads almost every plan, brief and report they write through Lahe. He is the main user today, so his daily use sets most priorities.
