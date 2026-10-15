@@ -1,16 +1,16 @@
 # Progress: Menu bar app
 
-**Where things are at 10:01 on October 15.** The menu bar icon is done and running on your Mac. You have two decisions to make, and a third only if you want it. Everything below them is a record of what happened.
+**Where things are at 10:20 on October 15.** The menu bar icon is done and running on your Mac, and the cleanup you approved is done. One decision is left, and a second only if you want it. Everything below them is a record of what happened.
 
 **Docs:** [Crucible](00_crucible_menu_bar_app.html) · [Brief](01_brief_menu_bar_app.html) · [Architecture](02_architecture_menu_bar_app.html) · [Plan](03_plan_menu_bar_app.html) (each page carries its reviews at the bottom) · [PR 2 reviews](05_pr2_reviews_menu_bar_app.md)
 
 ## Needs your attention
 
-**1. May I delete the leftovers from this feature?** Building it left seven git worktrees (separate working copies of the repo, one per builder) and their branches. Every one of them has been merged. It also left two copies of your Lahe data that I made to test against, 331 MB and 333 MB, in `~/Documents/lahe-menubar-review/`, plus scratch commit-message files. Nothing on main and nothing of another agent's is on the list. The full list is under Cleanup queue below. I recommend yes. Say "go" on a card and I remove it all in one pass.
+**Done: the leftovers are deleted, as you said on your card.** Six builder worktrees and their branches, two leftover branches on GitHub, and the two test copies of your Lahe data in `~/Documents/lahe-menubar-review/` are gone. The feature's own worktree goes last; this page keeps its rail from the main checkout's copy.
 
-**2. Keep or drop the lesson I wrote?** It says: to measure what a polled route costs, time it at the rhythm its caller really uses, on real-sized data. A benchmark of fifty requests back to back only measures the fast, warm path. That is how this feature first claimed the icon cost about 9 ms per poll when it really cost about 47. I recommend keeping it. Run `/lessons` to promote it, or say "drop" on a card. [The lesson](../../lessons/proposed/a-back-to-back-benchmark-of-a-polled-route-measures-only-the-warm-path.md).
+**1. Keep or drop the lesson I wrote?** It says: to measure what a polled route costs, time it at the rhythm its caller really uses, on real-sized data. A benchmark of fifty requests back to back only measures the fast, warm path. That is how this feature first claimed the icon cost about 9 ms per poll when it really cost about 47. I recommend keeping it. Run `/lessons` to promote it, or say "drop" on a card. [The lesson](../../lessons/proposed/a-back-to-back-benchmark-of-a-polled-route-measures-only-the-warm-path.md).
 
-**3. Optional: should Open in the Library let you edit a document whose worktree is gone?** Today Open shows a read-only copy with no rail, and the note above it tells you to use Hand to agent, which gives you the rail in one click. Making Open itself editable means Open would start a review on that file without an agent. The stable addresses design ruled that out on purpose, because Open would then write a review key into a file nobody asked Lahe to review. I recommend leaving it. Say "yes" on a card if you want it, and I'll build it.
+**2. Optional: should Open in the Library let you edit a document whose worktree is gone?** Today Open shows a read-only copy with no rail, and the note above it tells you to use Hand to agent, which gives you the rail in one click. Making Open itself editable means Open would start a review on that file without an agent. The stable addresses design ruled that out on purpose, because Open would then write a review key into a file nobody asked Lahe to review. I recommend leaving it. Say "yes" on a card if you want it, and I'll build it.
 
 Not decisions, already on the board for later: the icon showing "can't tell" for five seconds when one poll is slow (LAHE-menubar-cant-tell-flicker), the app opening a new connection every poll (LAHE-menubar-connection-reuse), and the Library's background sweep reading every session file every 15 seconds (LAHE-library-sweep-cost).
 
@@ -84,7 +84,7 @@ Every look and every menu dump is under [screenshots/](screenshots/).
 | 6 Implement | done | 2026-10-13 |
 | 7 Verify | done (both PRs reviewed, walked and gated) | 2026-10-13 |
 | 8 Ship and land | done: three PRs merged (#61, #62, #64), installed on your Mac, real screenshot taken | 2026-10-14 |
-| 9 Cleanup | in progress (lesson proposed, board rows written, docs landed; the deletion batch waits on your go) | 2026-10-13 |
+| 9 Cleanup | done except the lesson, which is yours to keep or drop (deletion batch done with your go) | 2026-10-15 |
 
 ## The record
 
@@ -117,7 +117,7 @@ No passes yet.
 
 ### Cleanup queue
 
-To delete at cleanup, in one batch with your go:
+Done on 2026-10-15 with your go, in one batch. The list as it stood:
 
 - The `lahe-worktrees/readonly-note` worktree and its local branch `fix/readonly-note-lines` (PR #66 is merged; the remote branch is already deleted), with its `node_modules` symlink, its untracked `moved_note_dark.png` (a duplicate: the Markdown style has no dark look), and `.claude-commit202610141039`, `...1055`, `...1105` there.
 - Worktrees and branches: `lahe-worktrees/menu-bar-summary`, `menu-bar-macapp`, `menu-bar-install`, `menu-bar-pr2`, `main-gate`, and their branches (all three PRs are merged), plus the feature branch `feat/menu-bar` and its worktree last.
@@ -155,6 +155,8 @@ To delete at cleanup, in one batch with your go:
 
 ## Log
 
+- 2026-10-15 10:20: cleanup done with your go: worktrees and branches `menu-bar-summary`, `menu-bar-macapp`, `menu-bar-install`, `menu-bar-pr2`, `main-gate`, `readonly-note` removed (each checked merged into main and clean first); remote branches `feat/menu-bar-macapp` and `feat/menu-bar-pr2` deleted; `~/Documents/lahe-menubar-review/` removed. `feat/menu-bar` and its worktree go last, after this page moves to the main checkout's copy.
+- 2026-10-15 10:01: the top of this page now lists only your decisions, after your card asking what you are actually needed for.
 - 2026-10-14 11:13: the full local gate on merged main (`c9d52b23`) is green: lint, bundle, `check:menubar` (self-test 383 passed, 0 failed; app tests 4 passed, 1 skipped); unit 2878 passed, 0 failed, 5 skipped; browser 885 passed, 0 failed, 7 skipped; helpers 1 before and after. Main's CI on the merge passed. Checked live: the stable addresses page shows the new note, and your menu bar reads 0 waiting.
 - 2026-10-14 11:05: your card on the stable addresses progress page. PR [#66](https://github.com/kenxle/live-agentic-html-editor/pull/66): the read-only notes put one statement per line, the moved note names Hand to agent and links the Library, and the menu bar no longer counts a document whose worktree was removed. New unit test, red without the change. `npm run gate` on `fb771df4`: unit 2878 passed, 0 failed, 5 skipped; browser 885 passed, 0 failed, 7 skipped; app self-test 383 passed; helpers 1 before and after. PR check `gate` passed; merged at 11:03 as `c9d52b23`.
 - 2026-10-14 01:25: the full local gate on merged main (`824f6f43`) is green: lint, bundle, `check:menubar` (self-test 383 passed, 0 failed; app tests 4 passed, 1 skipped); unit 2864 passed, 0 failed, 5 skipped; browser 884 passed, 0 failed, 7 skipped; helpers 1 before and after. Main's CI run on the merge failed once on Linux in an install test this change never touched (the faked helper did not answer within 20 s), so you have one failure email; the rerun of that job passed. On the board as LAHE-install-windows-port80-flake.
