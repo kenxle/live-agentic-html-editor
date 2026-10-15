@@ -93,7 +93,8 @@ test("work in either session exits 0, with the drain for that session and a rela
   assert.deepEqual(polled, ["s_a", "s_b", "s_a", "s_b"]);
   const printed = stdout.join("");
   assert.ok(printed.startsWith(monitor.ACTION_REQUIRED));
-  assert.match(printed, /"id":"c_b"/);
+  assert.match(printed, /1 item waiting/);
+  assert.equal(printed.includes(protocol.drainCommand("s_a", w.dir)), false, "no drain for a session with no work");
   const flag = " --state-dir " + w.dir;
   assert.ok(printed.includes(protocol.drainCommand("s_b", w.dir)), printed);
   assert.ok(printed.includes("lahe monitor --session s_a --session s_b" + flag), printed);
@@ -146,8 +147,11 @@ test("a takeover of either session fences it: its work captured in that poll is 
   });
   assert.equal(code, protocol.CLI_EXIT.OK);
   const printed = stdout.join("");
-  assert.equal(printed.includes("c_taken"), false, "work of a session taken over mid-poll is not handed out");
-  assert.match(printed, /"id":"c_a"/);
+  // The monitor prints no items, so "not handed out" means it neither counts
+  // the taken session's work nor names its drain.
+  assert.match(printed, /^LAHE ACTION REQUIRED: 1 item waiting\./, "only s_a's item is counted");
+  assert.ok(printed.includes(protocol.drainCommand("s_a", w.dir)), printed);
+  assert.equal(printed.includes(protocol.drainCommand("s_b", w.dir)), false, "work of a session taken over mid-poll is not handed out");
   assert.match(stderr.join(""), /agent session s_b was taken over; no longer watching it; still watching s_a/);
 });
 

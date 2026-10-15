@@ -434,7 +434,10 @@ async function run(argv, options) {
     }
   }
 
-  out(line + "\n");
+  // THE ITEM AND THE STATUS, NOT THE WHOLE LINE. The agent just wrote the
+  // words, and echoing them back put every reply in its context twice. The
+  // file holds the whole line.
+  out(JSON.stringify({ item: args.item, status: args.status }) + "\n");
   return EXIT.OK;
 }
 

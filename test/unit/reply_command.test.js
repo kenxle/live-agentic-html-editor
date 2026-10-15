@@ -70,8 +70,10 @@ test("a text with paragraph breaks and quotes is ONE physical line the fold can 
     raw,
     '{"item":"itm_ab12","rev":2,"status":"question","text":"Two things.\\n\\nFirst, the \\"wrapper\\" is gone.\\nSecond, it is a tab \\there."}\n'
   );
-  // The line it printed is the line it wrote, so an agent can see what landed.
-  assert.equal(result.stdout, raw);
+  // It prints only the item and the status: the agent just wrote the words, and
+  // echoing them put every reply in its context twice
+  // (docs/features/20261014.02_lean_agent_output).
+  assert.equal(result.stdout, '{"item":"itm_ab12","status":"question"}\n');
 
   const parsed = protocol.parseReplyLine(raw.trim(), { filenameAgent: null });
   assert.equal(parsed.ok, true, parsed.reason);
