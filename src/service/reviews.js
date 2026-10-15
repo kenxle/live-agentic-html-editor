@@ -783,9 +783,17 @@ function createReviews(options) {
     // source to a review (a linked document added to the linking review), and
     // replacing source_path took the first page's rail and re-render away.
     // source_path stays the first; source_paths lists them all.
+    //
+    // A FIRST SOURCE THAT IS GONE is replaced (spec 20261015.01 R7): a review
+    // that followed its document out of a removed worktree is given the main
+    // copy, and the readers that look only at source_path (rebuild, the
+    // Library) then read a file that is there. The old path stays in the list.
     if (typeof p.source_path === "string" && p.source_path) {
       if (!Array.isArray(review.source_paths)) review.source_paths = review.source_path ? [review.source_path] : [];
       if (!review.source_path) {
+        review.source_path = p.source_path;
+        changed = true;
+      } else if (review.source_path !== p.source_path && !fs.existsSync(review.source_path) && fs.existsSync(p.source_path)) {
         review.source_path = p.source_path;
         changed = true;
       }

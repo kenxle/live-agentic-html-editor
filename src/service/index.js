@@ -279,7 +279,10 @@ async function serve(options) {
     var name = protocol.siteNameFromOrigin(origin, boundPagesPort, !!addresses && addresses.laheNamesVerified());
     var site = name ? sites.get(name) : null;
     var review = site ? reviews.get(reviewId) : null;
-    return !!review && pageRoutesModule.reviewAnswersOnSite(site, review);
+    // A review that followed its document out of a removed worktree answers at
+    // the main copy (spec 20261015.01 R6); the moves are read only when the
+    // direct match fails.
+    return !!review && pageRoutesModule.reviewAnswersOnSite(site, review, function () { return pageRoutesModule.movesFor(dir); });
   }
 
   /** The preflight's question for a site origin: is it a registered site? */

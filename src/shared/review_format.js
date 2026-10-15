@@ -823,9 +823,21 @@
     return typeof file === "string" && file ? { known: true, path: file } : null;
   }
 
+  // A source hint naming a file in a removed worktree reads as its main copy
+  // (spec 20261015.01 R10). The helper computes the map; this only applies it.
+  function movedHint(review, hint) {
+    var map = review.moved_hints;
+    if (!map || typeof map !== "object" || !hint) return hint;
+    var hinted = typeof hint === "object" ? hint.path : hint;
+    if (typeof hinted !== "string" || !Object.prototype.hasOwnProperty.call(map, hinted)) return hint;
+    return typeof hint === "object" ? Object.assign({}, hint, { path: map[hinted] }) : map[hinted];
+  }
+
   function projectReview(review) {
     requireReview(review);
     var groups = pageGroups(review.items, review.origin_aliases);
+    groups.forEach(function (g) { g.hint = movedHint(review, g.hint); });
+    review = Object.assign({}, review, { source_hint: movedHint(review, review.source_hint) });
     return {
       schema: SCHEMA,
       contract: CONTRACT.slice(),
@@ -941,7 +953,7 @@
 
     pageGroups(review.items, review.origin_aliases).forEach(function (g) {
       out.push("Page: " + (g.title ? g.title + " " : "") + g.path + " (" + g.origin + ")");
-      out.push(sourceHintSentence(g.hint));
+      out.push(sourceHintSentence(movedHint(review, g.hint)));
       out.push("");
       g.items.forEach(function (it) {
         out.push(renderItemText(it));
