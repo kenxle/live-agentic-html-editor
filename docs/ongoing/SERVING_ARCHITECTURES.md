@@ -210,7 +210,10 @@ renderer exists so that never happens.
 Relative images and local links work: they are served from the source folder,
 and a link to another local `.md` opens as another rendered page. A link to a
 file in another folder is served through a mount, `/.lahe-source/<hash>/`,
-stored on the page's site. Links stay
+stored on the page's site. When that folder also has a site of its own, the
+helper renders and checks its files through the site that holds them, never
+through the mount (`page_routes.siteForFile`, spec
+`docs/features/20261017.01_site_for_file_owner/`). Links stay
 source-true on disk; the renderer translates them for the browser at build time.
 A link that leaves the documentation (an external URL, or a protocol-relative
 `//host` link) opens in a new tab, so following it never takes the reviewer off
