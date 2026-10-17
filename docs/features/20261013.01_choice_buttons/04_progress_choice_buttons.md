@@ -6,7 +6,7 @@
 
 **What you will notice first.** The lesson queue rebuilt with real buttons, served with the rail live, before any PR gate.
 
-Updated 2026-10-17 15:10.
+Updated 2026-10-17 15:47.
 
 ## The documents
 
