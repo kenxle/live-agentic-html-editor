@@ -2,50 +2,52 @@
 
 ## Summary
 
-A choice group is a house component an agent writes into a page as an HTML block: a question, two or more real buttons, and an id the agent chooses. On a page the helper serves as a document, the review layer arms those buttons and nothing else. A click mints a record of a new kind, `choice`, carrying the group id and the answer, and sends it in one step, draft and ready in the same tick. The helper projects it like any item, the drain prints it with the id and answer at the top level and the question under `page`, and the agent answers with the reply command it already uses. The layer marks the group's state on the page from the record, and the agent writes the decision into the source as an attribute when it handles the item, so the document keeps the decision with no Lahe running. No new routes, tokens, lifecycle states or processes.
+A choice group is a house component an agent writes into a page as an HTML block: a question, two or more real buttons, and a group name the agent chooses in `data-choice`. On a page the helper serves itself as a document, the review layer arms those buttons and nothing else. A click mints a record of a new kind, `choice`, carrying the group name and the answer, draft and ready in the same tick. The anchor engine gains one rung that finds a choice group by its name, so replay, lost-marking and "show me where" work on a choice unchanged. The helper projects it like any item, the drain prints the choice at the top level with only the question and heading under `page`, and the agent answers with the reply command it already uses. The layer paints the group's state from the record; the agent writes the decision into the source as `data-chosen` when it handles the item, so the document keeps the decision with no Lahe running. No new routes, tokens, lifecycle states or processes.
 
 ## Analysis of Existing Structure
 
-- **Records.** `src/shared/record.js` holds the closed list of kinds (comment, edit, delete, format_only, note) and `newItem`. Free writing added `note` and five optional fields; this feature adds `choice` and one optional field the same way. The lifecycle table (`src/shared/lifecycle.js`) and the merge rule are untouched.
-- **Minting and sending.** `src/layer/comments.js` mints a draft on open and marks it ready on Cmd-Enter; `src/layer/sync.js` posts `item.created` and `item.ready` from the outbox. A press uses the same two events, with no box and no typing between them.
-- **The drain.** `src/cli/commands/status.js` moves `review_format.DATA_FIELDS` under `page` and leaves intent at the top. A choice adds one top-level field and reuses `quote` and `context.heading` under `page`.
-- **The rail.** `src/layer/tab_active.js` draws comment and note rows and refuses other kinds; `src/layer/tab_edits.js` draws hand edits. A choice row joins the Active pane as a read-only comment-shaped row.
-- **Replay and painting.** `src/layer/replay.js` writes only edit kinds and treats comments as guessable marks; `src/layer/index.js` paints highlights for comment and note. A choice is neither written nor painted; a small re-mark pass sets the group's state by id.
-- **The handled check.** `src/service/handled_check.js` checks edit and format_only only, so a handled choice retires on the agent's word, which is right: there are no reviewer words to find on the page.
-- **Serving.** `src/service/page_routes.js` writes the script tag into every page it serves (`protocol.scriptTag`, src `/.lahe-library/lahe-layer.js`). A `lahe add` page carries a tag that points at the helper's API origin instead. The Markdown renderer passes HTML blocks through unchanged, so the component needs no renderer work.
-- **The house style and the catalog.** `vendor/stclair-doc-style/document.css` and `COMPONENTS.md` are the official copies; `scripts/install-skills.js` ships the catalog beside the skill as `references/components.md`. The component is CSS plus a catalog entry plus a skill row.
+- **Records.** `src/shared/record.js` holds the closed list of kinds and `newItem`, plus `validateItem`, the checker the helper's door runs. Free writing added `note` and optional fields; this adds `choice` the same way. The lifecycle table is untouched.
+- **Minting and sending.** `src/layer/comments.js` mints a draft and marks it ready; `src/layer/sync.js` queues `item.created` and `item.ready` and flushes the outbox, holding drafts back in `splitForFloor`. A press uses the same two events and a new hold in that same function.
+- **Finding the region.** `src/layer/anchor.js` `resolve` has one rung keyed on the record (the empty-container rung, keyed on `placement`). The choice rung is keyed on `kind` and sits beside it.
+- **Waking the agent.** The helper writes one wake line per accepted `item.ready`. Every supported host waits with `lahe monitor`, which polls `lahe status` every 15 seconds and exits once on the first poll that finds undelivered work. So a post carrying several presses is one wake, and the wake count during a clicking session is one per agent work cycle, whatever the layer does.
+- **The drain.** `src/cli/commands/status.js` moves `review_format.DATA_FIELDS` under `page` and leaves intent at the top. A choice adds one top-level field.
+- **The rail.** `src/layer/tab_active.js` draws comment and note rows and refuses other kinds. A choice row joins it with a fixed answer and the ordinary reply box.
+- **Clicks.** `src/shared/gestures.js` decides every click on the page; today it names two click rules (the overlay's, and element pick). A press is a third.
+- **Serving.** `src/service/page_routes.js` builds the script tag for every page the helper serves itself, and sends a file that already carries this review's tag as it is. `lahe add` and `heal.js` use the same tag builder but write into files.
+- **The house style and the catalog.** `vendor/stclair-doc-style/document.css` and `COMPONENTS.md` are the official copies; `scripts/install-skills.js` ships the catalog beside the skill.
 
-What stays the same: every route, token and check; the lifecycle; the merge rule; events.jsonl's envelope; the anchor engine; the Edits tab; the Library; the menu bar.
+What stays the same: every route, token and check; the lifecycle table; the events.jsonl envelope; the Markdown renderer; the Edits tab; the Library; the menu bar.
 
 ## Components / Modules Touched
 
 | Area | Files | Change |
 | --- | --- | --- |
-| Standing architecture | `docs/ongoing/ARCHITECTURE.md` | The item row names the sixth kind; D3 gains its one document-only exception. Done first. |
-| Shared kernel | `record.js`, `review_format.js`, `protocol.js` | The `choice` kind and its `choice` field; the field's class and the contract paragraph; one script-tag attribute, `data-lahe-document`. |
-| Layer | new `choices.js` (load after `comments.js`), `index.js`, `tab_active.js`, `replay.js`, `overlay.js` | Arming, minting, the re-mark pass, the card row, the early return in replay, the duplicate-id chip. |
-| Service | `page_routes.js`, `markdown.js` (the tag only) | Write `data-lahe-document` on the tag of every page the helper serves itself. |
-| CLI | `status.js` | Keep `choice` at the top level of a drain line; nothing else. |
-| House style and catalog | `document.css`, `COMPONENTS.md` | The `.choice` component and its states. |
-| Agent instructions | `skills/lahe/SKILL.md` (with the skill-creator skill), the contract array, `docs/CONTRACTS.md`, `test/unit/review_format.test.js`, `dist/` | The authoring block, how a press appears, how to answer and write the decision back. |
-| Manifest | `src/shared/manifest.js` | `choices.js` gets its owner line. |
+| Standing docs | `docs/ongoing/ARCHITECTURE.md` (done), `docs/ongoing/BRAND.md`, `docs/CONTRACTS.md`, `docs/diagrams/module_map.md`, `finding_the_region.md`, `item_lifecycle.md` | The sixth kind, D3's exception, the word for the component, the record row and the drain line, the new rung, the one new load-order entry |
+| Shared kernel | `record.js` (kind, field, `validateItem`, `isReplayable` unchanged), `review_format.js` (field class, `projectItem`, the contract paragraph), `merge.js` (`choice` in the browser-owned fields), `gestures.js` (the press outcome), `protocol.js` (`SCRIPT_ATTR.DOCUMENT`) | |
+| Layer | new `choices.js`, `anchor.js` (the rung), `sync.js` (the press hold in `splitForFloor`), `replay.js` (paint state for the kind), `tab_active.js` (the row), `index.js` (boot and the chip), `overlay.js` (chip styling if any) | |
+| Service | `page_routes.js` (the attribute, at response time), `log.js` (the door runs the checker for the new field) | |
+| CLI | `status.js` (the drain line) | |
+| House style and catalog | `document.css`, `COMPONENTS.md` | The `.choice` component and its states |
+| Agent instructions | `skills/lahe/SKILL.md` (with the skill-creator skill), the contract array and its copies in `test/unit/review_format.test.js` and `docs/CONTRACTS.md`, `dist/` | |
+| Manifest | `src/shared/manifest.js` | `choices.js` in load order |
 
 ## Data / State Changes
 
 ### The component, as the agent writes it
 
 ```html
-<div class="choice" data-lahe-choice="lesson-css-counter">
+<div class="choice" data-choice="lesson-css-counter">
   <p class="choice-q">Promote this lesson?</p>
-  <button value="promote" data-recommended>Promote</button>
-  <button value="discard">Discard</button>
-  <button value="merge">Merge</button>
+  <button type="button" value="promote" data-recommended>Promote</button>
+  <button type="button" value="discard">Discard</button>
+  <button type="button" value="merge">Merge</button>
 </div>
 ```
 
-- `data-lahe-choice` is the group id: lowercase letters, digits and hyphens, 1 to 64 characters, starting with a letter or digit. It must be unique on the page.
-- Each `button` has a `value` with the same grammar as the id. The button's text is the label the reviewer reads. `data-recommended` marks at most one.
+- `data-choice` is the group name: lowercase letters, digits and hyphens, 1 to 32 characters, starting with a letter or digit. Unique on the page. It is not under the `data-lahe-` prefix on purpose: the tool strips that prefix from captured markup and from the element descriptions agents get, and the group name must survive both.
+- Each `button` has a `value` with the same grammar. The button's text is the label the reviewer reads. `type="button"` keeps it out of any form. `data-recommended` marks at most one.
 - Once the agent has handled a press, it writes `data-chosen="<value>"` onto the group in the source. The stylesheet draws that group as decided with no Lahe present.
+- Look: square-cornered outlined buttons in the document's type, the pressed one filled with ink, the Recommended badge (`badge--purple`) drawn by the stylesheet from `data-recommended`. No pills, no colored edges, no shadows.
 
 In Markdown the block is written as HTML with a blank line before and after, like every other component.
 
@@ -59,35 +61,44 @@ One new kind, `choice`, and one new optional field:
   "state": "ready",
   "note": null,
   "change": null,
-  "choice": { "group": "lesson-css-counter", "answer": "promote", "label": "Promote" },
+  "choice": { "group": "lesson-css-counter", "answer": "promote" },
   "context": { "quote": "Promote this lesson?", "heading": "A CSS counter ignores an ol start attribute" },
-  "region": { "...": "an element anchor on the group, minted the way an element pick mints one" }
+  "region": { "ref": { "kind": "choice", "group": "lesson-css-counter" }, "label": "choice", "lost": null }
 }
 ```
 
-- `choice.group` and `choice.answer` are the reviewer's act. They are the third intent carrier beside `note` and `change`, bounded by the grammar above, so they can never hold prose. `choice.label` is the pressed button's text and is data.
-- `context.quote` carries the question and `context.heading` the nearest heading, both data, both already fenced under `page` on the drain.
+- `choice.group` and `choice.answer` are the reviewer's act and the only intent the record carries. Both are bounded by the grammar above, so neither can hold prose. `validateItem` refuses a record whose kind is `choice` without both, with a value off the grammar, or with any other key inside `choice`; the helper's door (`log.js`) runs that checker on every posted record, and the projection runs it again when it builds review.json.
+- The pressed label is not stored. The agent knows its own labels, and the rail draws the answer from the group on the page.
+- `context.quote` carries the question and `context.heading` the nearest heading, both data. `context.prefix`, `suffix`, `element` and `subject` are left null.
+- The region's ref is the choice rung's reference: kind and group name, nothing else. No stamp is minted for a choice, so no stamp round ever asks the agent for a `data-lahe-id`, and the drain line carries no region facts.
 - Everything else is the ordinary record: id, rev, page fields, thread, reply.
+
+### The anchor engine's choice rung
+
+`anchor.resolve` gains one rung, keyed on the ref's kind, beside the empty-container rung. For a choice ref it looks for elements matching `.choice[data-choice="<group>"]`. Exactly one binds. Zero or two is a refusal with its own reason ("no group named X", "two groups named X") and the rung stops there: no text search, no tie-breakers. Everything downstream (`applyRecord`, `markLost`, `clearLost`, "show me where", the settle recheck) works unchanged, and a moved group is found wherever it is.
 
 ### State on the page
 
-The layer sets two attributes on the group element and the stylesheet draws them. They are DOM only; a rebuild clears them and the re-mark pass sets them again from the records.
+`replay.js` writes nothing for a choice (the kind is not in its writing kinds). After it resolves the group it paints two attributes, inside a write epoch, from the group's current record:
 
 | Attribute | Values | Meaning |
 | --- | --- | --- |
-| `data-lahe-pressed` | the answer's value | Which button the reviewer pressed, from the newest record for the group |
-| `data-lahe-choice-state` | `kept`, `open`, `question`, `not_handled`, `done` | The rail's own states (brief R9): kept in this browser and not yet stored; stored and waiting; the agent asked; the agent said no; handled or marked done |
-| `data-lahe-inert` | present | The group was refused: a bad or duplicate id or value, or not a document page. The buttons do nothing |
+| `data-lahe-pressed` | the answer's value | Which button the reviewer pressed |
+| `data-lahe-choice-state` | `kept`, `open`, `question`, `not_handled`, `done` | The rail's own states (brief R9) |
 
-`data-chosen`, written by the agent into the source, draws the same as `done`, so the page looks the same before and after the write-back. The stylesheet carries one rule per state.
-
-### Presses travel together
-
-A press is marked ready at once in the browser, but its `item.ready` leaves the outbox after a quiet window of 3 seconds with no further press on the page, or at once when the tab is hidden or the page is left (the same moments the draft flush uses). Every press made inside the window goes in the one flush, and the helper writes one wake line for the flush. Clearing the lesson queue by clicking steadily is a handful of wakes; pausing between lessons is one wake each, which is what the reviewer asked for by pausing.
+The current record for a group is the one with the latest `created_at` among this page's choice records naming it. A newer press wins over `data-chosen` in the source: the stylesheet draws the pressed state when both are present. `data-chosen` alone draws the same as `done`. These are DOM only and a rebuild clears them; replay's next pass paints them again. A refused group gets `data-lahe-inert` from `choices.js` at arming time.
 
 ### Lifecycle
 
-No new states. A press mints the item in `draft` and marks it `ready` in the same tick, posting `item.created` and `item.ready` together. Pressing another answer while the item is `ready` with no reply is the reword path: `ready` to `draft` to `ready` at the next revision, with the new answer. After a `handled` or `not_handled` reply, a press on the same group mints a new item. Mark as done, reopen and delete work as for a comment.
+No new states. A press mints the item in `draft` and marks it `ready` in the same tick, queueing `item.created` and `item.ready` together; the helper's door does no state check on these events and the merge on load handles a record that was never a typed draft. Pressing another answer while the item is `ready` with no reply is the reword path (`ready` to `draft` to `ready` at the next revision). After a `not_handled` reply, a new press on the same group reopens the same record (`not_handled` to `ready`, a reviewer move the table already allows) at a new revision. After `handled`, a new press mints a new item. Mark as done, reopen and delete work as for a comment. `merge.js` lists `choice` among the browser-owned content fields.
+
+### Presses travel together, and what bounds the wakes
+
+`choices.js` records a press with no immediate flush. `splitForFloor` holds every queued event of a choice item until 3 seconds have passed since the page's last press, with a cap of 10 seconds from the first held press so steady clicking cannot hold work back for minutes. Hiding the tab or leaving the page flushes at once, as the draft floor does. Hold's gate stays in force.
+
+The helper still writes one wake line per accepted `item.ready`. That does not matter on any supported host: `lahe monitor` polls every 15 seconds and exits once on the first poll that finds undelivered work, so one post of several presses is one wake, and a clicking session costs about one wake per agent work cycle. R13's bound is this monitor behaviour plus the 3 second hold; the R15 measurement runs at a realistic reading pace and reports the wake count. Making the monitor itself wait for a quiet spell would cover comments too and is a change to a shared loop, so it goes on the board for Ken rather than into this feature.
+
+While a press is held it is `kept` on the page. The rail's own not-stored warning is driven by the helper being unreachable, not by the hold, so a held press does not read as a program-down warning; the plan checks that.
 
 ### The drain line
 
@@ -98,11 +109,15 @@ No new states. A press mints the item in `draft` and marks it `ready` in the sam
          "context":{"heading":"A CSS counter ignores an ol start attribute"}}}
 ```
 
-`choice.label` is left off the drain line (the agent knows its own labels) and kept in review.json. No `before`, `after_full`, `region` or html fields are present.
+`choice` is classed as intent by key: `choice.group` and `choice.answer` each get `CLASS_INSTRUCTION` in `PROJECTED_FIELD_CLASS`. No `before`, `after_full`, `region`, `region_label`, `subject` or html fields appear; `projectItem` leaves them null for the kind and the drain's lean pass drops them.
 
 ### The script tag
 
-One new attribute, `data-lahe-document`, written by the helper on the tag of every page it serves itself: rendered Markdown, an HTML page under a site root, a `lahe write` page. A tag written by `lahe add` into a file or printed for a dev server never carries it. The layer arms choice groups only when the attribute is present.
+One new attribute, `data-lahe-document`, is added by `page_routes.js` when it builds the response for a page it serves itself: rendered Markdown, an HTML page under a site root, a `lahe write` page, and a file that already carries this review's tag (the attribute is added to the served copy, never written to disk). It is an opt-in on the tag builder that `add.js` and `heal.js` never pass. The layer arms choice groups only when its tag carries it.
+
+### The gesture
+
+`gestures.js` gains `PRESS_CHOICE`: a click on a `button` inside an armed `.choice`, on a document page, in browse mode, outside element-pick mode, with no block open for editing, in a window that may write, and not in present mode. It calls `preventDefault` so no form is submitted. In every other case the click is the page's, and on a document page a plain button does nothing anyway.
 
 ## Key Flows
 
@@ -110,33 +125,29 @@ One new attribute, `data-lahe-document`, written by the helper on the tag of eve
 
 ```mermaid
 flowchart TD
-  A[Layer boots on a page whose tag carries data-lahe-document] --> B[Find every .choice with a valid, unique id and arm its buttons]
-  B --> C[Reviewer clicks an answer]
+  A[Layer boots on a page whose tag carries data-lahe-document] --> B[choices.js arms every .choice with a valid unique name and valid values; the rest get data-lahe-inert and a chip]
+  B --> C[Reviewer clicks an answer; gestures says PRESS_CHOICE]
   C --> D[Mint a choice record in draft and mark it ready in the same tick]
-  D --> E[Set data-lahe-pressed and state kept on the group; the card appears in the rail]
-  E --> F[After the 3 second quiet window sync posts the batch; on ack the state is open]
-  F --> G[Drain prints the item with choice at the top level]
-  G --> H[Agent acts, writes data-chosen into the source, replies handled]
-  H --> I[Projection folds the reply; the card reads handled]
-  I --> J[Page reloads on the rebuild: the group carries data-chosen and the re-mark pass finds a handled record for it]
+  D --> E[Replay resolves the group by the choice rung and paints pressed and kept]
+  E --> F[splitForFloor holds it 3 s after the last press, 10 s at most; one flush posts the batch]
+  F --> G[Helper accepts, projects, writes wake lines; the monitor wakes once]
+  G --> H[Drain prints each item with choice at the top]
+  H --> I[Agent acts, writes data-chosen into the source, replies handled]
+  I --> J[Page reloads on the rebuild; the group carries data-chosen and replay paints done from the handled record]
 ```
-
-### The re-mark pass
-
-Runs on boot, after merge on load, and after every repaint, in the same place replay runs. For each choice record on this page, newest revision first, it finds the group by id. Exactly one match: set the state attribute from the record. No match on a `ready` record: flag the card lost, as a comment whose anchor is gone is flagged. No match on a `handled` record: do nothing, as a handled item is never stamped lost. Two matches: mark both inert and raise the duplicate-id chip. It writes attributes only, inside a write epoch, so it never retriggers replay.
 
 ### Refusing a group
 
 ```mermaid
 flowchart TD
   S([a .choice element]) --> T{tag carries data-lahe-document?}
-  T -- no --> I[inert: plain buttons, the page's own]
-  T -- yes --> U{id present and well formed?}
-  U -- no --> I
-  U -- yes --> V{exactly one group with this id?}
-  V -- no --> W[both inert, rail chip names the id]
-  V -- yes --> X{at least two buttons with well-formed values?}
-  X -- no --> I
+  T -- no --> I[inert, no chip: not a document page]
+  T -- yes --> U{name present and well formed?}
+  U -- no --> C1[inert; chip: group has no valid name]
+  U -- yes --> V{exactly one group with this name?}
+  V -- no --> C2[both inert; chip names the duplicate]
+  V -- yes --> X{two or more buttons, every value well formed?}
+  X -- no --> C3[inert; chip names the group and the bad value]
   X -- yes --> Y[armed]
 ```
 
@@ -144,43 +155,60 @@ flowchart TD
 
 <!-- forge-include: parts/architecture/alternatives.md -->
 
+The leaf is [parts/architecture/alternatives.md](parts/architecture/alternatives.md).
+
 ## Failure Modes / Edge Cases
 
-- **Helper down at the press.** The record is in browser storage and the outbox like any item. The group shows `kept`; the card shows the usual not-stored mark. It sends when the helper is back.
-- **A group moved by a rebuild.** The re-mark pass finds it by id wherever it is on the page, so its state follows it (brief R10).
-- **Agent not listening.** Same as a comment: the rail's liveness dot says so. Nothing choice-specific.
-- **The agent rewrites the page and the group id is gone while the item is ready.** The card is flagged lost. The item stays on the drain, so the agent still sees the press and can answer it.
-- **The agent handles the item but forgets `data-chosen`.** The page still shows decided while the record exists, from the re-mark pass. A fresh reader with no Lahe sees an undecided group. The skill names the write-back as part of handling, and the contract says a handled reply without it is incomplete, the same way it treats a missing `data-lahe-id`.
-- **A press on a decided group.** A new item at rev 1. The group shows the new press as pending over the old decision until the agent answers.
-- **Two quick presses.** The second is a reword at rev 2 before the first is acknowledged; the drain shows only the latest.
-- **A button with a `value` that fails the grammar.** The group is inert and the chip says which value. A missing `value` is the same.
-- **A group inside a `lahe add` page.** Inert, and the page's own scripts see the click. D3 holds in full.
-- **Keyboard.** The buttons are real buttons, so Enter and Space press them and the house focus ring applies. No extra handling.
-- **Print.** Buttons print as text; a decided group prints its decision because the stylesheet draws `data-chosen`.
-- **Old skill, new helper.** An agent on a stale skill sees `kind: choice` on the drain with a `choice` field it was not told about. The contract paragraph ships in the same change, and review.json's contract is what it reads first.
+- **Helper down at the press.** The record is in browser storage and the outbox like any item. The group shows `kept`; the card shows the rail's not-stored mark because the helper is unreachable, which is true. It sends when the helper is back.
+- **A group moved by a rebuild.** The rung finds it by name wherever it is, so its state follows it.
+- **The group is gone while the item is ready.** The rung refuses, `markLost` runs as for any record, and the card says the group is gone. The item stays on the drain.
+- **The group is gone after the item is handled.** A handled item is never stamped lost; nothing is painted.
+- **The agent handles the item but forgets `data-chosen`.** The page shows `done` while the record exists. A reader with no Lahe sees an undecided group. The skill names the write-back as part of handling, and the contract says a handled reply without it is incomplete, as it does for a missing `data-lahe-id`.
+- **A press on a decided group.** A new item at rev 1; the newer press paints over `data-chosen` until the agent answers.
+- **Two quick presses on one group.** A reword at rev 2 inside the same hold; one flush, the drain shows only the latest.
+- **A reviewer's words on a choice thread.** The card keeps the ordinary reply box. Words typed there go in `note` on the same record as a follow-up turn; the choice itself does not change.
+- **A group inside a `lahe add` page, or any page without the attribute.** Inert and chip-less; the page's own scripts see the click. D3 holds in full.
+- **Element-pick mode, an open edit, a read-only window, present mode.** The click is not a press; the gesture table says so.
+- **Keyboard.** Real buttons: Enter and Space press them; the house focus ring applies.
+- **Print.** A decided group prints its decision because the stylesheet draws `data-chosen`.
+- **Old skill, new helper.** An agent on a stale skill sees `kind: choice` with a `choice` field it was not told about. The contract paragraph ships in the same change, and review.json's contract is what it reads first.
 
 ## Security & Privacy Notes
 
-- **What the layer claims.** Only clicks on a `button` inside a `.choice[data-lahe-choice]` on a page whose tag carries `data-lahe-document`. The helper alone writes that attribute, onto pages it serves itself. A dev-server page never gets it, so a site's own buttons are never touched.
-- **What reaches the agent as intent.** `choice.group` and `choice.answer` are bounded tokens: the grammar forbids spaces and punctuation beyond hyphens, so a page cannot smuggle an instruction through the intent field. The question and the label are page text and travel under `page` as data (D12), where the contract already says nothing is an instruction.
+- **What the layer claims.** Only a `PRESS_CHOICE` gesture: a click on a `button` inside an armed `.choice` on a page whose tag carries `data-lahe-document`, in browse mode. The helper alone writes that attribute, onto responses for pages it serves itself. A dev-server page never gets it.
+- **What reaches the agent as intent.** `choice.group` and `choice.answer`: bounded tokens, checked at the helper's door and again at projection, so a page cannot smuggle prose through the intent field. The question and heading are page text under `page` (D12).
 - **The source write-back.** The agent edits its own source, as it does for `data-lahe-id`. No new path, token or route.
 - **No new trust boundary.** No route, no token, no header, no process. events.jsonl gains a kind, not a shape.
 
 ## Test Strategy
 
-The plan owns the verification table. The failure modes above and the refusal flow are its inputs. The measurement for R11 is a script in the feature folder, after the pattern of `docs/features/20261014.02_lean_agent_output/measure_one_comment.js`.
+The plan owns the verification table. The failure modes above, the refusal flow and the architect review's requirement sweep are its inputs. The R15 measurement is a script in the feature folder after `docs/features/20261014.02_lean_agent_output/measure_one_comment.js`, run at a reading pace, reporting drain size and wake count.
 
 ## Open Questions
 
-In [the brief's questions leaf](parts/brief/questions.md). Architecture adds none: Q1 (a press after handled starts a new thread) is answered above as the chosen behaviour, and Q2 (a page-level "all as recommended") stays out of scope.
+None. The brief's questions leaf is [parts/brief/questions.md](parts/brief/questions.md). The one call this review handed to Ken (a quiet spell in the monitor) goes on the board as a follow-up, not into this feature.
 
 ## Architect Review
 
-Pending. Full prose will live in `02_architecture_choice_buttons_reviews.md`.
+Full prose: [02_architecture_choice_buttons_reviews.md](02_architecture_choice_buttons_reviews.md).
 
 | # | Finding | Disposition | Rationale |
 |---|---------|-------------|-----------|
+| RF1 | The group attribute sat in the `data-lahe` namespace the tool strips from captured markup | Accepted | Renamed `data-choice`; only the layer's state attributes stay under `data-lahe-` |
+| RF2 | The helper writes one wake line per press; the monitor's 15 s poll is what bounds wakes; the poll loop would defeat a timer window | Accepted | Mechanism restated; the hold lives in `splitForFloor` with a 10 s cap; wakes measured in R15; a monitor quiet spell goes to the board for Ken |
+| RF3 | A served file already carrying the tag never got the attribute | Accepted | Added at response time as an opt-in `add.js` and `heal.js` never pass |
+| RF4 | A choice would be stamped and its drain line would carry region facts | Accepted | No stamp; region ref is the rung's own; drain carries only the question and heading |
+| RF5 | `choice.label` was page text classed as intent; grammar checked only in the browser | Accepted | Label dropped; `group` and `answer` classed by key; checked at the door and at projection; limit 32 |
+| RF6 | A separate re-mark pass would rebuild lost-marking by hand | Accepted | One rung in `anchor.resolve`; replay paints state and writes nothing |
+| RF7 | Only duplicates raised the chip | Accepted | Every refusal on a document page raises the chip with its reason |
+| RF8 | A read-only card blocked answering an agent's question | Accepted | Only the answer is fixed; the reply box stays and its words go in `note` |
+| RF9 | The click bypassed the gesture table | Accepted | `PRESS_CHOICE` in `gestures.js`, off in pick, edit, read-only and present |
+| RF10 | "Newest revision first" picked the wrong record; a press after `not_handled` left the old card open | Accepted | Latest `created_at`; a press after `not_handled` reopens the same record |
+| RF11 | `choice` missing from the merge rule's browser-owned fields | Accepted | Added |
+| RF12 | The load-order note named the wrong dependency | Accepted | After the shared files, listeners, store, anchor, overlay and sync; before `index.js` |
+| RF13 | Look and the newer-press-wins rule were unstated | Accepted | Stated under the component and the state table |
+| RF14 | The files table missed ten files and listed `markdown.js` | Accepted | Table corrected |
 
 ## Security Review
 
-Not run separately. The diff touches no route, token, path or serving rule; the one serving change is an attribute on a tag the helper already writes. The code review covers the click gate and the field grammar.
+Not run separately. The diff touches no route, token, path or serving rule; the one serving change is an attribute on a tag the helper already writes. The code review covers the click gate and the field grammar at both checkpoints.

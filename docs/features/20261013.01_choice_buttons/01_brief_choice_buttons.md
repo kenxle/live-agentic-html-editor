@@ -96,7 +96,7 @@ The agent writes a choice group into the page the way it writes any other house 
 :::
 
 ::: callout-req
-**R13:** Presses made within a few seconds of each other reach the Lahe program together and wake the agent once. Clearing the nineteen-lesson queue by clicking is one wake, or a handful, never nineteen.
+**R13:** Presses made within a few seconds of each other reach the Lahe program together. The agent wakes once per batch of work that landed since it last looked, never once per press, so clearing the nineteen-lesson queue by clicking costs a handful of wakes at most, one per stretch the agent spends working. The count is measured with R15.
 :::
 
 ::: callout-req
@@ -162,6 +162,8 @@ No flag. A page without a choice group is unchanged (R3). A new record kind reac
 
 <!-- forge-include: parts/brief/questions.md -->
 
+The questions leaf is [parts/brief/questions.md](parts/brief/questions.md).
+
 ## PM Review
 
 Full prose: [01_brief_choice_buttons_reviews.md](01_brief_choice_buttons_reviews.md).
@@ -180,3 +182,4 @@ Full prose: [01_brief_choice_buttons_reviews.md](01_brief_choice_buttons_reviews
 | RF10 | No "How we know it worked" section | Accepted | Added |
 | RF11 | Whether a served folder is a document or a site was unclear | Accepted | R11: served by the Lahe program means document; only a group's own buttons are ever claimed, on any page |
 | RF12 | R1 was not testable as written | Accepted | R1 names the skill eval check |
+| AR2 | From the architect review: the helper writes one wake line per press, and the monitor's poll is what bounds wakes | Accepted | R13 reworded: one wake per batch of landed work, counted in R15, never a promise of one wake total |
