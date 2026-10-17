@@ -1,17 +1,17 @@
 # Choice buttons: in progress, nothing waiting on you
 
-**Where it stands.** The crucible is closed, the brief is written and its PM review is folded in, and the architecture is written and going to an architect review now. The plan and the build come next. You said you do not need to be asked, so nothing here waits on you; comment anywhere if you want a different call.
+**Where it stands.** Crucible closed; brief written with its PM review folded in; architecture written with its architect review folded in (fourteen findings, one of them a blocker that renamed the group attribute); plan written and under review. Step 0 of the build is committed on the feature branch `feat/choice-buttons`, and three builder worktrees are cut. Builders start when the plan review lands. You said you do not need to be asked, so nothing here waits on you; comment anywhere if you want a different call.
 
 **What you will notice first.** The lesson queue rebuilt with real buttons, served with the rail live, before any PR gate.
 
-Updated 2026-10-17 13:36.
+Updated 2026-10-17 14:08.
 
 ## The documents
 
 - [The crucible summary](00_crucible_choice_buttons.md), and [the questions page](00_crucible_questions.md) with your edits.
 - [The brief](01_brief_choice_buttons.md): nineteen requirements, the PM review's twelve findings folded in. [The review prose](01_brief_choice_buttons_reviews.md).
 - [The architecture](02_architecture_choice_buttons.md), with [the alternatives](parts/architecture/alternatives.md) it rejected. The standing [architecture doc](../../ongoing/ARCHITECTURE.md) already names the sixth record kind and D3's one exception.
-- The plan: not yet written.
+- [The plan](03_plan_choice_buttons.md): three workstreams (kernel, layer, style and skill), one PR, the verification table V1 to V23.
 
 ## Decisions made without you
 
@@ -24,6 +24,7 @@ Each one is yours to overrule.
 - **A broken group is shown to you, not reported to the agent.** It draws as plain content and the rail names it. An automatic message to the agent is deferred.
 - **Only pages the Lahe program serves itself carry live groups.** The program marks its own pages; a dev-server page never gets the mark, so the layer claims no click there.
 - **No page-level "all as recommended" switch.** An agent that wants one writes one more group.
+- **The wake count is accepted and measured, not engineered away.** Making `lahe monitor` wait for a quiet spell would cover comments too and changes a loop every host shares, so that is a board row for you rather than part of this feature.
 
 ## Progress
 
@@ -31,6 +32,8 @@ Each one is yours to overrule.
 - 2026-10-17: hold lifted; round 2 with premises and approaches; you picked B and rewrote the job and the user in your words.
 - 2026-10-17: brief written; PM review returned twelve findings, no blockers; eleven accepted, one accepted in part.
 - 2026-10-17: architecture written; `docs/ongoing/ARCHITECTURE.md` amended first, as its rule requires.
+- 2026-10-17: architect review: fourteen findings, all accepted. The one blocker: the group attribute was under the `data-lahe` prefix the tool strips from captured markup; it is now `data-choice`. The wake story was wrong and is corrected: the monitor's poll is what bounds wakes, and the count is measured rather than promised. A possible monitor quiet spell is on the board for you (LAHE-monitor-quiet-spell).
+- 2026-10-17: plan written; Step 0 (shared names, manifest, contract rows, fixtures) committed on `feat/choice-buttons`; unit suite green there.
 
 ## To delete at cleanup
 
