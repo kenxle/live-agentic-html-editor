@@ -1,10 +1,10 @@
 # Choice buttons: in progress, nothing waiting on you
 
-**Where it stands.** Crucible closed; brief written with its PM review folded in; architecture written with its architect review folded in (fourteen findings, one of them a blocker that renamed the group attribute); plan written and under review. Step 0 of the build is committed on the feature branch `feat/choice-buttons`. Both builders are done and merged into the feature branch `feat/choice-buttons`: lint, bundle check and the unit suite are green there (3029 passed, 0 failed). The Chromium browser suite is running on it now, alone, and a code review and an independent requirements check are reading the integrated diff. After those: the lesson-queue preview against the branch's own helper, the end-to-end walk, then the PR. You said you do not need to be asked, so nothing here waits on you; comment anywhere if you want a different call.
+**Where it stands.** Crucible closed; brief written with its PM review folded in; architecture written with its architect review folded in (fourteen findings, one of them a blocker that renamed the group attribute); plan written and under review. Step 0 of the build is committed on the feature branch `feat/choice-buttons`. Both builders are merged, main is merged in, and the integrated branch `feat/choice-buttons` has had its first Chromium run (899 passed, 6 failed, all six from one gap the integration found and fixed: the new anchor rung assumed the record module was loaded). The code review and the requirements check are in; their findings are being fixed in one round by the core builder. After that: the final gates, the lesson-queue preview against the branch's own helper, the end-to-end walk, then the PR. You said you do not need to be asked, so nothing here waits on you; comment anywhere if you want a different call.
 
 **What you will notice first.** The lesson queue rebuilt with real buttons, served with the rail live, before any PR gate.
 
-Updated 2026-10-17 14:47.
+Updated 2026-10-17 14:52.
 
 ## The documents
 
