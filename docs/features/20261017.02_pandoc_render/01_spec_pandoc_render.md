@@ -2,6 +2,26 @@
 
 Status: spec written, not yet reviewed. Sized past whetstone (see "Size" at the bottom), so it stops here for a decision on route.
 
+## Needs Ken
+
+Updated 2026-10-17 15:29. Two things before any code: how to run the build, and the four open questions at the bottom of this page. Each open question has a recommendation; a comment saying "go with the recommendations" settles all four.
+
+<div class="options">
+  <div class="option">
+    <span class="badge badge--purple">Recommended</span>
+    <p class="eyebrow">Option A</p>
+    <h4>Feature-forge, starting from this spec</h4>
+    <p>This page stands in for the brief. Feature-forge adds an architecture doc, a plan, and the review passes, then builds in this same worktree.</p>
+    <ul><li>Gets an architecture review on the two risky calls: what the Lua filter does versus the JavaScript afterwards, and how tests run on GitHub's machine without pandoc.</li><li>Costs more agent time than whetstone.</li></ul>
+  </div>
+  <div class="option">
+    <p class="eyebrow">Option B</p>
+    <h4>Push on under whetstone anyway</h4>
+    <p>One builder takes this spec as written and builds it, with a code review before the PR.</p>
+    <ul><li>Cheaper.</li><li>About ten files and seven requirements is past whetstone's size, and the design calls get no review before code.</li></ul>
+  </div>
+</div>
+
 ## Problem, user, and context
 
 When LAHE renders a Markdown file directly (`lahe review some.md`, or a link to a `.md`), pandoc fenced divs print as literal text. A doc that says `::: callout-nongoal` shows the colons and the word on the page instead of the house panel the feature-forge build draws. The choice-buttons brief (`docs/features/20261013.01_choice_buttons/01_brief_choice_buttons.md`, its Non-Goals section) is a live example.
