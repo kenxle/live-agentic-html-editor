@@ -182,6 +182,31 @@ The spec is [01_spec_review_follows_document.md](../features/20261015.02_review_
 - **`review.json`** names the main copy as a page's source.
 - **Cost:** one root check per worktree site per request. `scripts/measure_moved_lookup.js` measures it.
 
+## A file's comments move with it
+
+When an agent moves or renames a reviewed file, it runs `lahe review <new path> --session <id> --review <review-id>`.
+The review then records both paths, and the new page shows the old comments, open and done.
+Lahe does not look for moves on its own.
+The spec is [01_spec_comments_follow_moved_file.md](../features/20261017.01_comments_follow_moved_file/01_spec_comments_follow_moved_file.md).
+
+- **Gone:** no file is at the old path, or its real path leaves the root of the site that served it.
+  A symlink left at the old folder that points out of the site counts as gone.
+- **The pair rule lives in one place,** `pairOf` in `page_routes.js`. A gone page pairs with a later
+  page of the same review, from the same list (targets, or Markdown sources). The new file must be a
+  regular file, outside the state folder, under a site's root. Then either:
+  - the old path, through its symlinks, is the new file; or
+  - the new file is the only page of that name in the list that is not gone.
+- **Two candidates** of the same name pair with neither, and the comments stay where they were.
+- **Every reader agrees:** `fileOfItem` (the rail, the spellings, `records.read`), the handled check
+  and `review.json`'s source hints all ask `pairOf`. `fileForPageIn` knows nothing of reviews.
+- **The page's review:** when a newer empty review and the carried review both record the new file,
+  the newest one with comments on it wins, as for a worktree move.
+- **The first Markdown source:** a gone first source is replaced by its pair. `site.bind` checks
+  again, because `lahe review` records the path before it binds the new file's site.
+- **The old address** redirects a page load to the new file's address when that page carries the
+  review. The address comes from the registry. Anything else is a 404 or the "file is gone" page, as before.
+- **Cost:** the pair is worked out when asked and kept for one request, by review and gone path.
+
 ## Each page carries its own comments
 
 - **One review per file.** `lahe review` of a file that already has a review opens it and never makes a second. In another agent session's review it says whose it is and makes nothing; `lahe review retire` ends a review on purpose.
