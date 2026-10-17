@@ -75,7 +75,7 @@ Answer a question from the agent quickly and easily
 
 ### Q2. Who is this for?
 
-Two users. You, reading a decision page an agent made for you, usually while something else is running. And the agent writing the page: if the way to make a button is fiddly, agents will not use it, or will use it wrong, and you are back to comments. The authoring side has to be one short block an agent gets right from the skill text alone. Since there is still no second reviewer, the authoring side is the harder design problem, because you can learn any gesture and the agents cannot.
+Agent writing the page: instructions must be clear and communication must be good.
 
 ### Q3. Where and how does it happen?
 
@@ -121,6 +121,7 @@ The decisions named below (D3, D4, D12) now live in [ARCHITECTURE.md](../../ongo
 
 ## Decisions so far
 
+- 2026-10-17: Ken rewrote who it is for by hand: "Agent writing the page: instructions must be clear and communication must be good."
 - 2026-10-17: Ken rewrote the job by hand: "Answer a question from the agent quickly and easily." His words replace mine here and in the summary. He also deleted the paragraph about the misread being the deeper pain.
 - 2026-10-17: Ken on approach B: "let's do this."
 - 2026-10-17: approach B, a choice record, is the pick. Ken on the card: "I think this might be better for token management as well."

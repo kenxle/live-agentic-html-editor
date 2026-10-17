@@ -17,7 +17,9 @@ My longer framing (clear a queue of verdicts the agent framed, each tied to the 
 
 ## Who the user is
 
-Two users. Ken, reading a decision page an agent made for him, usually while something else is running, with no context loaded. And the agent writing the page: if authoring a button is fiddly, agents will not use it or will use it wrong, and the reviewer is back to comments. There is still no second human reviewer, so the authoring side is the harder design problem; a person can learn any gesture and the agents cannot.
+In Ken's words, written onto the questions page by hand: **the agent writing the page. Instructions must be clear and communication must be good.**
+
+The reviewer reading the page is the other party, but Ken put the agent first: the feature is only as good as an agent's ability to author it correctly from the instructions it is given.
 
 ## User context
 
