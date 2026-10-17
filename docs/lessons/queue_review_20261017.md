@@ -1,4 +1,4 @@
-# Three lessons wait for your call: promote one, discard two
+# Three lessons wait for your call: discard all three
 
 Agents wrote these after hitting a trap. A promoted lesson is what the next agent finds when it searches the words it is stuck on. Answer on each section: promote, discard, or merge.
 
@@ -6,7 +6,7 @@ Agents wrote these after hitting a trap. A promoted lesson is what the next agen
 
 <dl class="facts">
   <div><dt>Discard</dt><dd>The link-mount trap behind your Homework 6 cards. The PR fixed it; the part still open is a code fix on the board.</dd></div>
-  <div><dt>Promote</dt><dd>The drain that dropped the question the reviewer was answering.</dd></div>
+  <div><dt>Discard</dt><dd>The drain that dropped the question the reviewer was answering. The code already keeps it, and the whole conversation is on disk.</dd></div>
   <div><dt>Discard</dt><dd>The README hero recipe. It is a how-to, not a trap, and memory already holds it.</dd></div>
 </dl>
 
@@ -26,7 +26,7 @@ File: [the proposal](proposed/a-link-mount-makes-one-site-claim-another-sites-fi
 
 ## The agent reading a drain did not write every agent turn in it
 
-<span class="badge badge--purple">Recommend: promote</span>
+<span class="badge badge--cobalt">Recommend: discard</span>
 
 **The problem.** To save tokens, the drain stopped showing an agent its own earlier replies, on the idea that it already has them. Two cases broke:
 
@@ -35,7 +35,7 @@ File: [the proposal](proposed/a-link-mount-makes-one-site-claim-another-sites-fi
 
 **The fix.** Keep the agent's words when the last turn is a question you are answering, or when an earlier agent wrote them before a takeover. The code does this today (`withoutAgentWords` in `src/cli/commands/status.js`).
 
-**Why promote.** Any future trim of what agents see will meet the same trap. The lesson's rule, "ask who reads it, not who wrote it", is the useful part.
+**Why discard.** The code fix already shipped with the batch-reply change (PR #70): the drain keeps the question being answered and every turn from before a takeover. And yes, the whole conversation is on disk. `review.json` holds every thread in full, and `lahe status --json` without `--quiet` prints all of it; the skill tells an agent to run that after a compaction. The trim only decides what each wake pushes into the agent's context. What is left of the lesson is a design rule for the next trim, and the charter sends rules like that to docs, not lessons.
 
 File: [the proposal](proposed/the-agent-reading-a-drain-did-not-write-every-agent-turn-in-it.md)
 
