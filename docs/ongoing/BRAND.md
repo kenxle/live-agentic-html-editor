@@ -31,7 +31,7 @@ First draft by Seneschal.
 
 **In one paragraph:**
 
-> Lahe gives you control, flexibility, focus, and beauty in how you edit documents and websites. Stay in flow by communicating with your agent directly within your document. Ask your AI to write, or write your own content. Lahe manages the conversation inside the document or webpage, so you can move faster and stay focused. Create beautifully styled documents, with any AI you want, with no Lahe account and no Lahe telemetry in the middle.
+> Lahe gives you focus, control, and beauty in how you edit documents and websites. You stay in flow because Lahe manages the conversation inside your the document or webpage. Interactive modules and beautifully styled documents are easy with pre-shipped styles, and you can use any AI model you want, with no Lahe account and no Lahe telemetry in the middle.
 
 Use the one-liner wherever a single sentence fits: a repo description, a link preview, the top of a doc. Use the paragraph when there is room to say why.
 
