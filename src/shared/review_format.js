@@ -164,7 +164,11 @@
     ANCHOR_TAG_AFTER: "anchor_tag_after",
     PLACEMENT: "placement",
     RUN_WORDS: "run_words",
-    PROOFREAD: "proofread"
+    PROOFREAD: "proofread",
+    // Choice buttons (docs/features/20261013.01_choice_buttons). The press, at
+    // the top level of the item and of a drain line: {group, answer}, two
+    // bounded ids. Intent, by key. Only on a choice item.
+    CHOICE: "choice"
   };
 
   // A run proofreads when its words (from_anchor blocks aside) are more than
@@ -210,6 +214,12 @@
     // intent (D12): the reviewer's own words, verbatim, never bounded
     note: record.CLASS_INSTRUCTION,
     change: record.CLASS_INSTRUCTION,
+    // intent, by key (choice buttons): which group the reviewer pressed and
+    // which answer. Two ids off record.CHOICE_TOKEN, checked at the helper's
+    // door and again at projection, so neither can hold a sentence. The
+    // group's question rides in quote and its heading in context, as data.
+    "choice.group": record.CLASS_INSTRUCTION,
+    "choice.answer": record.CLASS_INSTRUCTION,
     // data: everything that came off the page, boundable
     quote: record.CLASS_DATA,
     before: record.CLASS_DATA,
@@ -700,6 +710,28 @@
     );
     out[PROJECTED.AFTER_HISTORY] = boundHistory(it[F.AFTER_HISTORY]);
 
+    // A CHOICE carries its press and nothing about a region to rewrite: no
+    // before, after_full, html, region_label, subject or region facts (no
+    // stamp is ever minted for one, so no stamp round asks the agent for a
+    // data-lahe-id on a button group). The question is in quote and the
+    // heading in context, as for any item. The key is set only on a choice,
+    // so every other item keeps today's shape.
+    if (record.isChoice(it)) {
+      var press = it[F.CHOICE] || {};
+      out[PROJECTED.CHOICE] = {
+        group: record.isChoiceToken(press.group) ? press.group : null,
+        answer: record.isChoiceToken(press.answer) ? press.answer : null
+      };
+      out[PROJECTED.BEFORE] = null;
+      out[PROJECTED.AFTER_FULL] = null;
+      out[PROJECTED.BEFORE_HTML] = null;
+      out[PROJECTED.AFTER_HTML] = null;
+      out[PROJECTED.REGION_LABEL] = null;
+      out[PROJECTED.SUBJECT] = null;
+      out[PROJECTED.REGION] = null;
+      out[PROJECTED.AFTER_HISTORY] = [];
+    }
+
     // A HANDLED ITEM HAS NO LOST ANCHOR. The fix an agent reported was expected
     // to rewrite the passage the item points at, so an anchor that no longer
     // binds is the fix landing rather than the feedback going missing. The
@@ -1024,7 +1056,15 @@
     if (ctx.subject && ctx.subject.html) {
       lines.push("  The element (page markup): " + boundData(record.subjectHtmlOf(ctx.subject), BEFORE_MAX));
     }
-    if (ctx.quote) lines.push("  Quoted from the page: " + wrapped(boundData(ctx.quote, BEFORE_MAX)));
+    // A CHOICE reads as its question and its answer. The answer is the
+    // button's value, which is what the agent acts on; the question is the
+    // group's own words off the page.
+    if (record.isChoice(it)) {
+      var press = it[F.CHOICE] || {};
+      if (ctx.quote) lines.push("  Question (page text): " + wrapped(boundData(ctx.quote, BEFORE_MAX)));
+      if (ctx.heading) lines.push("  Under the heading (page text): " + boundData(ctx.heading, CONTEXT_MAX));
+      lines.push("  Answer (the reviewer's press): " + String(press.answer) + ", in the group " + String(press.group));
+    } else if (ctx.quote) lines.push("  Quoted from the page: " + wrapped(boundData(ctx.quote, BEFORE_MAX)));
     if (typeof it[F.BEFORE] === "string") lines.push("  Before (page text): " + wrapped(boundData(it[F.BEFORE], BEFORE_MAX)));
     if (record.isRunRecord(it)) {
       runTextLines(it).forEach(function (line) {

@@ -167,7 +167,9 @@ function foldEvents(state, events, options) {
       // older helper's, or one written straight into the file) never passed
       // that door. It is dropped here with the same code, and the drop is
       // reported like any other.
-      var runProblem = record.validateRun(next);
+      // A choice record is held to the same door rule (choice buttons): a
+      // hand-edited line with prose in choice.answer is dropped and reported.
+      var runProblem = record.validateChoice(next) || record.validateRun(next);
       if (runProblem) {
         if (onDropped) onDropped(event, runProblem.code + ": " + runProblem.reason);
         return;

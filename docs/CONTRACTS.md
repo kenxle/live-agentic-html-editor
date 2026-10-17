@@ -336,6 +336,15 @@ Shift-Enter a line, today's rule where a run cannot go), `edgeDeleteFor` (Backsp
 a block edge, refused at the session's own edge), and `historyIntentFor` (Cmd-Z and Shift-Cmd-Z walk
 the session's own history). `BLOCK_TYPES` holds each type's menu label, chords and shortcut.
 
+**Choice buttons** (docs/features/20261013.01_choice_buttons) add the one click in browse the
+library takes: `PRESS_CHOICE`, a click on a `button` inside a `.choice` group `choices.js` armed, on a
+page whose tag carries `data-lahe-document`. `gestureFor` decides it from opt-in descriptor fields
+(`inArmedChoice`, `documentPage`, `mayWrite`) and refuses it in element-pick mode, with a block open
+or edit state on (`editing`, `editState`), in a read-only window, and while presenting
+(`presenting`). It calls `preventDefault`, so a group inside a form submits nothing. It has no row in
+the table, because every row is a hint line on every page's rail and a page with no groups must stay
+as it was.
+
 Dead and deliberately so: Alt-click (undiscoverable), plain-click-places-caret (it fought the page
 for every click), Cmd-click-follows-link (browse is native, so a plain click already does), the
 editing toggle, and Send.
@@ -786,6 +795,13 @@ Public API, because D1 makes this the one line a person or an agent types by han
 `protocol.NOTES_ON`), just before `defer`. The helper's notes page and `add --notes` write it; the layer
 reads it into its config as `notes: true` and hands it to editing as the `notes` option, so an
 empty page opens for typing only on a notes review. Any other value, or no attribute, is false.
+
+**A page the helper serves itself carries `data-lahe-document="true"`** (`protocol.SCRIPT_ATTR.DOCUMENT`,
+`protocol.DOCUMENT_ON`; choice buttons). `page_routes.js` passes the opt-in on every response it
+builds: rendered Markdown, an HTML page under a site, a `lahe write` page, and a file that already
+carries this review's own tag (`markServedAsDocument` adds the attribute to the served copy; the file
+on disk is never written). `lahe add` and `heal.js` never pass it, so a dev-server page never has it.
+The layer arms choice groups only when its tag carries it.
 
 **The line carries both halves, and needs both.** The primary `src` is the helper's
 own URL: one absolute URL resolves from any folder, origin and depth, which a bare

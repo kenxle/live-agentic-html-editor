@@ -320,8 +320,38 @@
     edit: "Edit",
     delete: "Deletion",
     format_only: "Formatting",
-    note: "Note"
+    note: "Note",
+    choice: "Choice"
   };
+
+  /**
+   * What a choice card says the reviewer answered: the pressed button's own
+   * label, read off the page, so the card uses the words the reviewer clicked.
+   * The record stores only the value (the agent knows its own labels), so with
+   * no single group of that name on the page it falls back to the value.
+   *
+   * @param {object} item a choice record
+   * @param {Document} [doc]
+   * @returns {string}
+   */
+  function choiceAnswerText(item, doc) {
+    var press = item && item[record.FIELD.CHOICE];
+    if (!press || typeof press.answer !== "string") return "";
+    var d = doc || (typeof document !== "undefined" ? document : null);
+    var M = record.CHOICE_MARKUP;
+    if (d && typeof d.querySelectorAll === "function" && record.isChoiceToken(press.group)) {
+      var groups = d.querySelectorAll("." + M.GROUP_CLASS + "[" + M.NAME_ATTR + '="' + press.group + '"]');
+      if (groups.length === 1) {
+        var buttons = groups[0].querySelectorAll("button");
+        for (var i = 0; i < buttons.length; i += 1) {
+          if (buttons[i].getAttribute("value") !== press.answer) continue;
+          var words = String(buttons[i].textContent || "").replace(/\s+/g, " ").trim();
+          if (words) return words;
+        }
+      }
+    }
+    return press.answer;
+  }
 
   function timestampLabel(value) {
     if (!value) return "";
@@ -1205,8 +1235,10 @@
     // the detail line pushed the whole chip wider than the rail so the first
     // sentence was clipped off the side, unreadable (Ken, live, 2026-08-18).
     ".chip__text{flex:1;min-width:0;overflow-wrap:anywhere;word-break:break-word}",
+    // pre-line, so a detail that names several things one per line (the
+    // broken choice groups) keeps its lines; a one-line detail is unchanged.
     ".chip__remedy{display:block;color:var(--ink-soft);font-size:11.5px;margin-top:2px;",
-    "overflow-wrap:anywhere;word-break:break-word}",
+    "overflow-wrap:anywhere;word-break:break-word;white-space:pre-line}",
     ".chip__copy{margin-top:4px;padding:2px 8px;border-radius:6px;font-size:11.5px;",
     "background:var(--ink);color:var(--paper,#fff);cursor:pointer}",
     ".chip__action{margin-top:6px;padding:3px 10px;border-radius:7px;font-size:11.5px;font-weight:600;",
@@ -2018,7 +2050,11 @@
     // The reviewer's own words, never the tool's: see record.reviewerNote.
     var note = oneLine(record.reviewerNote(item));
     var picked;
-    if (kind === record.KIND.NOTE) picked = note || quote || change;
+    // A choice's line is the answer, not the question: every group on a
+    // decision page may ask the same question, and the answer is what tells
+    // two cards apart.
+    if (kind === record.KIND.CHOICE) picked = oneLine(choiceAnswerText(item)) || quote;
+    else if (kind === record.KIND.NOTE) picked = note || quote || change;
     else if (kind === record.KIND.EDIT || kind === record.KIND.FORMAT_ONLY || kind === record.KIND.DELETE) {
       picked = change || quote || note;
     } else picked = quote || note || change;
@@ -8533,6 +8569,7 @@
     FILTER_EMPTY: FILTER_EMPTY,
     HAND_EDIT_ATTR: HAND_EDIT_ATTR,
     isHandEditKind: isHandEditKind,
+    choiceAnswerText: choiceAnswerText,
     SEARCH_PLACEHOLDER: SEARCH_PLACEHOLDER,
     searchMatches: searchMatches,
     searchEmptyText: searchEmptyText,
