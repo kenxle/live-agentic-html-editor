@@ -24,7 +24,7 @@ Agree or disagree with each. Silence is agreement.
 1. **The job is clearing a queue of verdicts the agent already framed.** A question with a free answer stays a comment. Buttons are for the case where the agent can name every answer in advance.
 2. **Documents only. Never on a live site.** Ken: "just don't do it on live sites. only docs." A choice group works on a page Lahe renders from Markdown or an agent wrote as HTML, where there is no page functionality to protect. On a page served from someone else's dev server (the `lahe add` path), the library claims no clicks at all, so rule D3 (browse is the page untouched) is never touched. A choice group on such a page draws as plain content and does nothing.
 3. **A press is a record like any other.** Durable, revisioned, listed in the drain, answered on its thread. Never a side channel to the agent that the store does not hold. The product brief's rule is that the record is the truth and the page is a view.
-4. **Identity is an id the agent writes, unique on the page.** Never the button's label or its position. The helper refuses a page where two groups share an id, the same way an anchor is refused when it is not unique.
+4. **A press can never be confused with another press.** Two buttons that read "Promote" under two different lessons reach the agent as two different answers, with no parsing and no guessing. How the identity is carried is the architecture's to decide, not this page's. (Ken: "this is architecture.")
 5. **Every button set keeps a way to answer in words.** Claude Code's own question tool always offers "Other"; a page of buttons with no escape hatch forces a bad fit.
 6. **Agents learn to author it from the lahe skill and the component catalog,** and that skill change is made with the skill-creator skill. The authoring block has to be short enough that an agent gets it right from the skill text alone.
 7. **This goes ahead of the npm package and the launch.** Behind nothing else open on the board except a real security hole.
@@ -42,7 +42,7 @@ Agree or disagree with each. Silence is agreement.
 
 ### Approach B: a choice record
 
-**Summary.** A new component in the catalog: a choice group with an id the agent writes and one button per answer, drawn from the option-card and badge styles. A click mints a new kind of item, a choice, carrying the group id, the answer and the heading it sits under. It is sent at once, since a click is a commit. The drain prints it with its id, so the agent reads one field and parses nothing. The page shows the chosen answer and keeps it after a reload. Every group carries a "Something else" button that opens the ordinary comment box. When the agent handles it, it may write the decision back into the source so the document keeps it.
+**Summary.** A new component in the catalog, grown out of option cards: a choice group with one button per answer. A click mints a new kind of item, a choice, that carries its own identity and the answer. It is sent at once, since a click is a commit, and it reaches the agent as a field to read rather than words to parse. The page shows the chosen answer and keeps it after a reload. Every group keeps a way to answer in words instead. Which fields carry the identity, how the page shows the choice and how the agent records the decision are for the architecture.
 
 - **Effort:** M to L. **Risk:** medium.
 - **For:** identity is the agent's own id, checked unique per page by the helper, so two "Promote" buttons can never be confused. The page shows the decision. It is a document-only feature, so D3 and live sites are untouched. Changing your mind is a new revision of the same item, which the lifecycle already handles.
@@ -64,7 +64,7 @@ Agents keep inventing page-by-page shortcuts like "one comment saying all as rec
 
 ## Recommendation
 
-**B, a choice record.** The whole ask is identity, and only B puts identity in a field the agent wrote and the helper checks. A is the cheapest and fails on exactly the repeated-button case you named. C's one great property, that the document keeps the decision, is worth borrowing: the agent writes the chosen answer back into the source when it handles the item. What would change my mind: if you tell me the queue pages are nearly always Markdown and you want decisions to live in the file above all else, C becomes the contender.
+**B, a choice record.** The whole ask is identity, and only B gives a press its own record with identity the agent reads as data. A is the cheapest and fails on exactly the repeated-button case you named. C's one great property, that the document keeps the decision, is worth borrowing: the agent writes the chosen answer back into the source when it handles the item. What would change my mind: if you tell me the queue pages are nearly always Markdown and you want decisions to live in the file above all else, C becomes the contender.
 
 ## The questions, with working answers
 
@@ -124,6 +124,7 @@ The decisions named below (D3, D4, D12) now live in [ARCHITECTURE.md](../../ongo
 
 ## Decisions so far
 
+- 2026-10-17: premise 4 restated as the decision (a press is never confused with another) with the mechanism left to the architecture. Ken: "this is architecture."
 - 2026-10-17: documents only, never live sites. Ken on premise 2: "just don't do it on live sites. only docs."
 - 2026-10-17: the clickable choice grows out of the option-card component, not a new look. Ken agreed on the card.
 - 2026-10-17: "interactive modules" already exist on pages (charts, zoomable diagrams); what is new here is one that reports back to the agent. Ken corrected the page.
