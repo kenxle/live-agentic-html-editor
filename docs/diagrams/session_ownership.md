@@ -59,7 +59,9 @@ flowchart TD
   review it is. When that session's agent is listening, it says to ask the
   human; otherwise it names the takeover, which the agent runs only when the
   human asks. `lahe review retire` ends a review on purpose, and only its own
-  session may retire it.
+  session may retire it. Once git says a worktree is gone, the main checkout's
+  copy at the same path counts as the same file, so its review follows it
+  (`docs/ongoing/STABLE_ADDRESSES.md`).
 - A takeover from the command line is refused while the session's agent is
   listening (a live monitor, or a lahe command in the last few minutes). That
   handoff cuts someone off, so the human confirms it from the Library page,

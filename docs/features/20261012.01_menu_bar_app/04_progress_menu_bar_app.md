@@ -1,16 +1,18 @@
 # Progress: Menu bar app
 
-**Where things are at 12:25 on October 15.** Done. Your comments now follow a document out of a worktree: PR [#71](https://github.com/kenxle/live-agentic-html-editor/pull/71) merged at your word, and your real Lahe runs it. This page's old address now sends you here, and the rail shows your earlier cards. Nothing needs you except the cleanup go below.
+**Where things are at 11:58 on October 17.** Closed. The menu bar icon is built, installed on your Mac and running (PRs [#61](https://github.com/kenxle/live-agentic-html-editor/pull/61), [#62](https://github.com/kenxle/live-agentic-html-editor/pull/62), [#64](https://github.com/kenxle/live-agentic-html-editor/pull/64), [#66](https://github.com/kenxle/live-agentic-html-editor/pull/66)), and your comments now follow a document out of a removed worktree ([#71](https://github.com/kenxle/live-agentic-html-editor/pull/71)). Nothing is waiting on you.
 
-**Docs:** [Crucible](00_crucible_menu_bar_app.html) · [Brief](01_brief_menu_bar_app.html) · [Architecture](02_architecture_menu_bar_app.html) · [Plan](03_plan_menu_bar_app.html) (each page carries its reviews at the bottom) · [PR 2 reviews](05_pr2_reviews_menu_bar_app.md)
+**Docs:** [Crucible](00_crucible_menu_bar_app.html) · [Brief](01_brief_menu_bar_app.html) · [Architecture](02_architecture_menu_bar_app.html) · [Plan](03_plan_menu_bar_app.html) (each page carries its reviews at the bottom) · [PR 2 reviews](05_pr2_reviews_menu_bar_app.md) · [Review log](04_progress_menu_bar_app_review_log.md) (every comment you left and the answer it got)
 
 ## Needs your attention
 
-**May I delete the leftovers from this last piece?** The `review-follows-doc` worktree and its branch (merged), and the preview copy of your Lahe data in `~/Documents/lahe-rfd-preview/` (350 MB; its helper is stopped). Say "go" on a card.
+Nothing is waiting on you.
 
-Not decisions, already on the board for later: the icon showing "can't tell" for five seconds when one poll is slow (LAHE-menubar-cant-tell-flicker), the app opening a new connection every poll (LAHE-menubar-connection-reuse), and the Library's background sweep reading every session file every 15 seconds (LAHE-library-sweep-cost).
+Not decisions, on the board for later: the icon showing "can't tell" for five seconds when one poll is slow (LAHE-menubar-cant-tell-flicker), the app opening a new connection every poll (LAHE-menubar-connection-reuse), the Library's background sweep reading every session file every 15 seconds (LAHE-library-sweep-cost), and a page able to record any file path for its review (LAHE-page-sets-target-path).
 
 ## Done since you last looked
+
+**Done: the last leftovers are deleted, at your go.** The `review-follows-doc` working copy and its branch, the 350 MB preview copy of your Lahe data, and the lesson draft you had already kept.
 
 **Merged: your comments follow the document from a worktree to main (PR [#71](https://github.com/kenxle/live-agentic-html-editor/pull/71)).** You said "merge" on the preview at 12:07. After the merge, the real helper restarted onto the new code. This page's old address now forwards here, and the rail shows your 12 earlier cards under Done. `lahe review` of the main copy reused your old review instead of starting a new one. The spec is [here](../20261015.02_review_follows_document/01_spec_review_follows_document.md).
 
@@ -63,20 +65,7 @@ Every look and every menu dump is under [screenshots/](screenshots/).
 
 ## Currently working on
 
-| Agent or task | Doing | Started | Branch |
-|---|---|---|---|
-| Builder: review follows document (Opus) | Done: merged as PR 71 at 12:22 | 2026-10-15 10:25 | `fix/review-follows-doc` |
-| Builder: macapp round 4 (Opus) | Done at 00:12: Stop asks first, the icon is the Library mark, the alert carries the full-color Library icon; gate:unit 2864 passed, 0 failed; app self-test 383 passed, app tests 4 passed, 1 skipped (5 of 5 with the launchd case) | 2026-10-13 23:53 | `feat/menu-bar-macapp` |
-| Orchestrator | Holding: the lessons review and the cleanup go are yours; the review session stays open for your cards | 2026-10-12 20:44 | `main` |
-| Flow walker (Opus, independent) | Done at 12:51: V32 passes, V33 counts equal, one board row (a global `lahe status` slows the helper) and one note for Ken | 2026-10-13 12:27 | `feat/menu-bar-pr2` |
-| Builder: summary (Opus) | Done: fix round 2 (the helper's idle cost, unwatched replies) returned at 2026-10-13 11:36 and is merged into `feat/menu-bar-pr2` | 2026-10-12 22:46 | `feat/menu-bar-summary` |
-| Code review (Opus) | Done at 11:51: one important bug, one coverage gap, one rare bug; findings in the fix round | 2026-10-13 11:50 | `feat/menu-bar-pr2` |
-| Security review (Opus) | Done at 11:48: two important, three minor; all in the fix round | 2026-10-13 11:50 | `feat/menu-bar-pr2` |
-| Spec check (Opus, independent) | Done at 11:49: five gaps, all in the fix round or on this page | 2026-10-13 11:50 | `feat/menu-bar-pr2` |
-| Design eye (Opus) | Done at 11:47: seven must-fixes in the fix round, three calls for Ken above | 2026-10-13 11:50 | `feat/menu-bar-pr2` |
-| Builder: macapp (Opus) | Done: fix round 3 returned at 2026-10-13 12:13 (`397e0a42`, all 16 items, red then green) and is merged into `feat/menu-bar-pr2` | 2026-10-13 11:52 | `feat/menu-bar-macapp` |
-| Builder: install and summary (Opus) | Done: fix round 3 returned at 2026-10-13 12:12 (`f6248a60`, nine fixes, each red then green) and is merged into `feat/menu-bar-pr2` | 2026-10-13 11:53 | `feat/menu-bar-install` |
-| Builder: install (Opus) | Done: returned at 2026-10-12 21:06. Waiting for the other two before the merge | 2026-10-12 20:44 | `feat/menu-bar-install` |
+Nothing is running.
 
 ## Phases
 
@@ -91,7 +80,7 @@ Every look and every menu dump is under [screenshots/](screenshots/).
 | 6 Implement | done | 2026-10-13 |
 | 7 Verify | done (both PRs reviewed, walked and gated) | 2026-10-13 |
 | 8 Ship and land | done: three PRs merged (#61, #62, #64), installed on your Mac, real screenshot taken | 2026-10-14 |
-| 9 Cleanup | done except the lesson, which is yours to keep or drop (deletion batch done with your go) | 2026-10-15 |
+| 9 Cleanup | done: lesson kept, both deletion batches done with your go, review log exported | 2026-10-17 |
 
 ## The record
 
@@ -99,13 +88,15 @@ Every look and every menu dump is under [screenshots/](screenshots/).
 
 | Workstream | Tasks | Branch | Status |
 |---|---|---|---|
-| summary | 1.1 to 1.4 | `feat/menu-bar-summary` | built, `14997075`; merged into `feat/menu-bar` for PR 1 |
-| macapp | 2.1 to 2.3 | `feat/menu-bar-macapp` | built, `02503610`; waits for integration |
-| install | 3.1 to 3.4 | `feat/menu-bar-install` | built, `efe79a40`; waits for integration |
+| summary | 1.1 to 1.4 | `feat/menu-bar-summary` | done; shipped in PR 1 (#61) and PR 2 (#62) |
+| readonly note | your card on the stable addresses page | `fix/readonly-note-lines` | done; shipped in #66 |
+| review follows document | your card on this page | `fix/review-follows-doc` | done; shipped in #71 |
+| macapp | 2.1 to 2.3 | `feat/menu-bar-macapp` | done; shipped in PR 2 (#62) and round 4 (#64) |
+| install | 3.1 to 3.4 | `feat/menu-bar-install` | done; shipped in PR 2 (#62) |
 
 ### Passes
 
-No passes yet.
+This feature ran as PRs rather than numbered passes; each PR's gate is under Test results and Ship.
 
 ### Changes from plan
 
@@ -124,7 +115,7 @@ No passes yet.
 
 ### Cleanup queue
 
-Done on 2026-10-15 with your go, in one batch. The list as it stood:
+Done with your go in two batches, on 2026-10-15 and 2026-10-17. Nothing is left on it. The list as it stood:
 
 - The `lahe-worktrees/readonly-note` worktree and its local branch `fix/readonly-note-lines` (PR #66 is merged; the remote branch is already deleted), with its `node_modules` symlink, its untracked `moved_note_dark.png` (a duplicate: the Markdown style has no dark look), and `.claude-commit202610141039`, `...1055`, `...1105` there.
 - Worktrees and branches: `lahe-worktrees/menu-bar-summary`, `menu-bar-macapp`, `menu-bar-install`, `menu-bar-pr2`, `main-gate`, and their branches (all three PRs are merged), plus the feature branch `feat/menu-bar` and its worktree last.
@@ -161,10 +152,12 @@ Done on 2026-10-15 with your go, in one batch. The list as it stood:
 ### Ship
 
 - PR 1: [#61](https://github.com/kenxle/live-agentic-html-editor/pull/61), merged 2026-10-12 22:52 (gate on `e3816757`: lint, unit 2783 passed, browser 884 passed, 0 failed). Opened 2026-10-12 22:02 from `feat/menu-bar` at `2697c4c9`. Full gate on that commit: lint, unit 2783 passed, browser 884 passed, 0 failed.
+- Round 4 (your design answers): [#64](https://github.com/kenxle/live-agentic-html-editor/pull/64), merged 2026-10-14 00:48. PR [#66](https://github.com/kenxle/live-agentic-html-editor/pull/66) (read-only note), merged 2026-10-14 11:03. PR [#71](https://github.com/kenxle/live-agentic-html-editor/pull/71) (review follows document), merged 2026-10-15 12:22; main CI on `bc56c5a9` passed.
 - PR 2: [#62](https://github.com/kenxle/live-agentic-html-editor/pull/62), opened 2026-10-13 12:52 from `feat/menu-bar-pr2`, merged 2026-10-13 12:54 at `2c913902`. Full gate on its code commit `2390bbe3` (lint, unit 2864 passed, browser 884 passed, 0 failed, `check:menubar` with the app's live tests); main merged in once after that, docs and CLAUDE.md only, with gate:unit again on the merge commit (2864 passed, 0 failed). Main's own CI run and the local post-merge gate on main: see the log.
 
 ## Log
 
+- 2026-10-17 11:58: feature closed. Last deletion batch done at your go (the `review-follows-doc` worktree and branch, `~/Documents/lahe-rfd-preview/`, the promoted lesson draft). Review log exported to [04_progress_menu_bar_app_review_log.md](04_progress_menu_bar_app_review_log.md) (42 items, 41 handled, 1 draft of yours still unsent). The session ownership diagram now says a moved copy keeps its review. Board row for the feature added as done. Learned along the way: a document served from a worktree loses its comments when the worktree goes, which #71 fixed.
 - 2026-10-15 12:25: PR 71 merged at Ken's word (`bc56c5a9`), after main was merged in and the full gate rerun alone on `d9f5c329`: lint, bundle and check:menubar passed (app self-test 383); unit 2956 passed, 0 failed, 5 skipped; browser 890 passed, 0 failed, 7 skipped; PR check gate passed. The feature folder is numbered 20261015.02, since batch reply took .01. The real helper restarted onto the new code; the old address returns 302 to the main copy, and the rail there shows 12 cards under Done. The preview helper is stopped.
 - 2026-10-15 10:22: the lesson is promoted to `docs/lessons/service/`, with its pointer to a deleted measurement script cut. The feature worktree is removed; this page now lives in the main checkout, and its review `r183d18583a43` is re-attached there. Your old cards do not show at the new address yet; the fix for that is the next piece of work.
 - 2026-10-15 10:20: cleanup done with your go: worktrees and branches `menu-bar-summary`, `menu-bar-macapp`, `menu-bar-install`, `menu-bar-pr2`, `main-gate`, `readonly-note` removed (each checked merged into main and clean first); remote branches `feat/menu-bar-macapp` and `feat/menu-bar-pr2` deleted; `~/Documents/lahe-menubar-review/` removed. `feat/menu-bar` and its worktree go last, after this page moves to the main checkout's copy.

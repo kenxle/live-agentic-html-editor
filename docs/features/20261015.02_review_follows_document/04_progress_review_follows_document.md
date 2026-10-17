@@ -2,14 +2,12 @@
 
 ## Status
 
-Both slices are built on `fix/review-follows-doc`. Not pushed, no pull request. The spec is [01_spec_review_follows_document.md](01_spec_review_follows_document.md).
+**Closed on October 17.** Merged as PR [#71](https://github.com/kenxle/live-agentic-html-editor/pull/71) on October 15 (`bc56c5a9`), at your word on the preview. Main's CI passed, and your real Lahe runs it: the menu bar progress page's old address forwards to the main checkout's copy, and its rail shows your earlier cards. Nothing is waiting on you. The spec is [01_spec_review_follows_document.md](01_spec_review_follows_document.md).
 
-**Waiting on Ken** (each has a default, which is what is built):
+Your two calls went in as the defaults:
 
-- **Q1, a security trade-off.** Library Open on a moved document gives the main copy an address and the old review's rail, with no agent involved. Built as yes. The limit: Open names a new site only inside the main checkout's copy of a folder Lahe already served from the worktree.
-- **Q2.** When the main copy already has a newer review, the newest review that holds comments on the document gets the page. A newer review with no comments loses to the old one. Built that way.
-
-**Your menu bar progress page needs no extra step once this lands** and the always-on helper picks up the new code. I read your real state (read-only): review `r183d18583a43` already records the main copy's path, its worktree site recorded the main checkout, and git's admin folder for that worktree is gone. So the main copy's page picks that review, and the old cards come through.
+- **Q1, a security trade-off.** Library Open on a moved document gives the main copy an address and the old review's rail, with no agent involved. The limit: Open names a new site only inside the main checkout's copy of a folder Lahe already served from the worktree.
+- **Q2.** When the main copy already has a newer review, the newest review that holds comments on the document gets the page. A newer review with no comments loses to the old one.
 
 ## What you will see
 
@@ -26,6 +24,10 @@ The Library row for the same document, marked as moved:
 ![The Library row, dark](library_moved_row_dark.png)
 
 ## Checks
+
+- Final gate before the merge, on `d9f5c329` with main merged in: lint, bundle and `check:menubar` passed (app self-test 383); unit 2956 passed, 0 failed, 5 skipped; browser 890 passed, 0 failed, 7 skipped. PR check passed; main CI on `bc56c5a9` passed.
+
+Earlier, on the branch:
 
 - `npm run gate:unit`: 2929 passed, 0 failed, 5 skipped.
 - `npx playwright test test/browser/review_follows_document.spec.js` (Chromium): 5 passed. Run against the old server code first: 5 failed.
@@ -47,6 +49,4 @@ An ordinary page costs the same before and after. The moved page does more work 
 
 ## To delete at cleanup
 
-- `.claude-commit202610151030`, `.claude-commit202610151046`, `.claude-commit202610151058`, `.claude-commit202610151104` and later `.claude-commit*` files in the worktree root: commit message scratch, ignored by git.
-- `test-results/` in the worktree root, if Playwright left one.
-- `node_modules/` in the worktree root, from `npm install` for the browser runs.
+Done on October 17 with your go: the worktree (with its `.claude-commit*` files, `test-results/` and `node_modules/`), its local branch, and the preview copy of your Lahe data in `~/Documents/lahe-rfd-preview/`. The remote branch was deleted when the PR closed.
