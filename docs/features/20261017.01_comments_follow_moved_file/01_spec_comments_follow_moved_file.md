@@ -32,20 +32,33 @@ The worktree version of this problem was fixed on 2026-10-15 (`docs/features/202
 
 ### Piece 1: a review that followed its file
 
-**R1. Comments on a gone file show on its new file.** When a review records two pages, the earlier one is gone and the later one is on disk, the comments made on the earlier one count as made on the later one. "Gone" means no file is at that path, or the path's real location is no longer inside the folder its site serves (the symlink case).
+**R1. Comments on a gone page show on its new file.** When one of a review's recorded pages is gone, and the review records a new file for it (R2), the comments made on the gone page count as made on the new file.
 
-**R2. Which later file.** A gone page pairs with a later recorded page of the same review when either:
+"Gone" means one thing everywhere in this spec: no file is at the path, or the path's real location is outside the real root of the site that served the comment's address. In Ken's brief the old path still opens through a symlink, and it is gone by this rule.
 
-- the gone path, followed through symlinks, is the later file; or
-- the two have the same file name.
+**R2. Which new file.** A gone page pairs with a later recorded page of the same review, from the same list (`target_paths` for a page, `source_paths` for a Markdown source), when:
 
-When more than one later page qualifies, the one recorded last wins. When none does, the comments stay where they are, as today.
+- the gone page is itself one of the review's recorded pages;
+- the new file is a regular file by real path, outside the state folder, and held by a site the helper serves;
+- and either the gone path, followed through symlinks, is the new file, or the new file is the only page in that list with the same file name that is not gone.
 
-**R3. One answer everywhere.** The new pairing goes through the one place that says which file a comment was made on (`fileOfItem`). So the page's rail, the old-address spellings on its script tag, `records.read`, the handled check, the reload check and the source named in `review.json` all agree.
+Two or more candidates with the same name means no pair: the comments stay where they are, as today. A file moved twice pairs with the copy that is still there.
 
-**R4. Nothing to migrate.** The pairing is worked out when it is asked, from the paths the review already records. Ken's brief needs no command and no edit to its records.
+**R3. One answer for every reader.** One review-aware function names a gone page's new file. Three places call it:
 
-**R5. The old address.** A page load at the old address of a paired file goes to the new address, the way a gone worktree's old address does now. A gone file with no pair keeps today's "file is gone" page.
+- `fileOfItem`: the rail, the old-address spellings on the script tag, and `records.read`;
+- the handled check (`pageFilesFor` in `src/service/handled_check.js`);
+- the source `review.json` names for a page (`movedHintsOf` in `src/service/projection.js`).
+
+`fileForPageIn` stays review-free. The reload check asks about the page's current address, so it needs no change.
+
+**R4. Nothing to migrate.** The pairing is worked out when it is asked, from the paths the review already records, and held for one request. Ken's brief needs no command and no edit to its records.
+
+**R5. The old address.** A top-level page load at the old address of a paired page goes to the new file's address when the new file's page carries the same review. The address comes from the site registry, never from recorded text. The helper never binds a site for it, and never serves the new file through the old site. Anything else answers as today: 404 for a link that leaves the site, the "file is gone" page for a missing file.
+
+**R5a. A gone Markdown source is replaced.** When a review's first Markdown source is gone and pairs with a new file, recording the new file makes it the first source, the way a worktree's main copy does now. The Library and rebuild read the first source.
+
+**R5b. A newer empty review does not take the page.** When two reviews record the new file and one of them holds it through a pair, the newest one with comments on the file wins, the rule a worktree move already uses. So an agent that first made an empty review on the new path, then carried the old one over, still shows the old comments.
 
 ### Piece 2: the agent is told
 
@@ -63,7 +76,7 @@ When more than one later page qualifies, the one recorded last wins. When none d
 
 **Trust.** A review's recorded pages can be added by a page holding that review's token (`review.write`), so a recorded path is not proof by itself. The pairing only decides which of this review's own comments show on which of this review's own pages. A page that could add a path could already make that file a page of the review. So piece 1 adds no new power. Piece 2 adds no code path at all: the agent uses a flag that already exists.
 
-**Cost.** Piece 1 adds at most one `stat` and one `realpath` per recorded page, only for a comment whose file is gone, and the answer is held for one request.
+**Cost.** Piece 1 adds a `stat` and a `realpath` per recorded page, only for a comment whose file is gone. The answer is held for one request, keyed by review and gone path, so the `pageRecords` loop over other reviews does not repeat it.
 
 ## 4. Tasks
 
@@ -71,8 +84,9 @@ Both pieces ship in one pull request. Piece 2 is a contract rule, so it adds no 
 
 | # | Task | Files |
 |---|---|---|
-| 1 | The pair rule (gone, same name or symlink, last recorded wins) and its use in `fileOfItem` | `src/service/page_routes.js` |
-| 2 | The old address redirects to a paired file's new address | `src/service/page_routes.js` |
+| 1 | The pair function and its three callers; the newer-empty-review rule | `src/service/page_routes.js`, `src/service/handled_check.js`, `src/service/projection.js` |
+| 2 | The old address redirects to a paired file's new address, including the symlink branch | `src/service/page_routes.js` |
+| 2a | A gone first Markdown source is replaced by its pair | `src/service/reviews.js` |
 | 3 | Piece 2: the contract rule, in every copy | the skill, `src/shared/review_format.js`, its test, `docs/CONTRACTS.md` |
 | 4 | Docs | the three named in the docs requirement |
 
@@ -83,8 +97,13 @@ Both pieces ship in one pull request. Piece 2 is a contract rule, so it adds no 
 | A plain move: comments on the gone file show at the new address, open and done | unit: `test/unit/comments_follow_move.test.js` (new) builds two sites, a review with records on site A, moves the file to site B and records it; `pageRecords` and `spellingsFor` on site B return them | the rail at B is empty |
 | The symlink case (Ken's brief) | same file: the old folder becomes a symlink to the new one | `fileOfItem` answers null |
 | A gone file with a different name and no symlink does not pair | same file | its comments show on an unrelated page |
-| Two later files with the same name: the last recorded wins | same file | the older one wins |
+| Two later files with the same name: neither pairs | same file | one of them takes the comments |
+| A deleted file with a same-named sibling in another review page list, where two qualify, does not pair | same file | a sibling shows a deleted page's comments |
+| A later path no site serves, or one in the state folder, does not pair | same file | `review.json` points the agent at an arbitrary file |
 | A file still on disk never pairs | same file | a live page loses its comments |
+| After a plain move, the handled check and `review.json` name the new file | same file | the agent is sent to the gone path |
+| A newer empty review on the new path loses to the carried review with comments | same file | the rail is empty again |
+| A moved Markdown source becomes the review's first source | same file | rebuild or the Library reads the gone file |
 | The old address redirects to the new one | same file | 404 or the "gone" page |
 | End to end: comment on a page, mark one done, move it, run `lahe review` on the new path in the same session; the rail shows Active 1 and Done 1, each on its words | browser: `test/browser/comments_follow_move.spec.js` (new), light and dark screenshots | either count is 0 |
 | The contract line is in every copy | the existing seams test in `test/unit/review_format.test.js` | a copy drifts |
@@ -99,3 +118,4 @@ Gate: `npm run gate:unit` while building; `npm run gate` once on the integrated 
 
 - **How Lahe knows a file moved (2026-10-17).** The agent tells it, with `lahe review <new path> --review <id>`. Lahe does not detect a move on its own. Ken: "just let the agent do it. it doesn't need to be complicated." The automatic search (same name, half the quoted words) and a `--fresh` flag were dropped.
 - **Only the owning session moves a review (2026-10-17).** Ken: "only let the current owning session do the move. this should be simple." `lahe review <new path> --review <id>` already refuses a review from another session, and that stays. An agent in another session that moves the file gets that refusal, and the comments wait for the owner or for a takeover Ken asks for.
+- **Spec review (security, 2026-10-17).** Accepted: one review-aware pair function with three callers, pairing only to a file a site serves, the stricter same-name rule (exactly one candidate), the Markdown source replacement, the newer-empty-review rule, the redirect limits, and the per-request memo. Rejected: nothing.
