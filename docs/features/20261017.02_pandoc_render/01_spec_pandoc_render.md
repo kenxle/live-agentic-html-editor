@@ -169,7 +169,7 @@ Every builder brief carries the no-delete rule: no `rm`, `rmdir`, `unlink` or `g
 
 <div class="insight insight--caveat" data-label="Open question">
 
-**Telling the reader when pandoc is missing.** On a computer without pandoc, a Markdown page still opens, but its `:::` boxes print as raw text, the way they did for Ken today. Where should LAHE say why? (a) Only in LAHE's log file, which only agents and developers read. (b) Also as one line in the comment rail on the page, such as "Install pandoc to draw the boxes on this page." Option (b) means changing the rail's code too, so it is a little more work. On Ken's machine neither ever shows, because pandoc is installed. Recommendation: (b). A reader who sees raw `:::` text has no other way to learn why.
+**Telling the reader when pandoc is missing.** On a computer without pandoc, a Markdown page still opens, but its `:::` boxes print as raw text, the way they did for Ken today. Where should LAHE say why? (a) Only in LAHE's log file, which only agents and developers read. (b) Also as one line in the comment rail on the page, such as "Ask your agent to install pandoc to get the correct styles" Option (b) means changing the rail's code too, so it is a little more work. On Ken's machine neither ever shows, because pandoc is installed. Recommendation: (b). A reader who sees raw `:::` text has no other way to learn why.
 
 </div>
 
