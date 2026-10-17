@@ -230,6 +230,12 @@ test("a later path no site serves, or one in the state folder, does not pair", a
   fs.renameSync(w.newFile, inState);
   w.helper.reviews.recordPaths(w.review.id, { target_path: inState });
   assert.equal(itemOf(w, w.open), w.oldFile, "a file in the state folder never pairs");
+  // A site rooted above the state folder holds that file, so only the state
+  // folder rule refuses it.
+  w.helper.sites.bind({ root: w.root, mode: "folder", entry: "home" });
+  // The next request: a pair is kept only for the request that asked.
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(itemOf(w, w.open), w.oldFile, "a file in the state folder never pairs, even under a site's root");
 });
 
 test("a file moved twice pairs with the copy that is still there", async (t) => {
@@ -251,13 +257,22 @@ test("a page still on disk never pairs, even with a newer page of the same name"
   assert.equal(itemOf(w, w.open), fs.realpathSync.native(w.oldFile));
 });
 
-test("another review's gone page is not paired with this review's page", async (t) => {
+test("another review's comments on a gone page it never recorded do not pair, though it records the new file", async (t) => {
   const w = await briefWorld(t);
+  // The other review's comments were made on a same-named page at another
+  // site, through its rail, without that review recording the page.
+  const otherPage = writeFile(path.join(w.home, "ws", "gone", "x"), "brief.html", HTML);
+  const otherSite = w.helper.sites.bind({ root: path.dirname(otherPage), mode: "folder", entry: "brief.html" });
+  const otherOrigin = protocol.siteOrigin(otherSite.name, w.helper.pagesPort);
   const site = w.move();
-  const other = w.helper.reviews.create({ target_path: path.join(w.home, "ws", "gone", "brief.html"), agent_session_id: w.s1, origins: ["null"] });
+  const other = w.helper.reviews.create({ target_path: w.newFile, agent_session_id: w.s1, origins: ["null"] });
+  const said = postItem(w.state, other.id, { page_origin: otherOrigin, page_path: "/brief.html", note: "said on the other page" });
+  fs.renameSync(otherPage, otherPage + ".aside");
   const res = await readRecords(w, w.review, site.origin, "/brief.html");
   assert.equal(res.status, 200, res.text);
-  assert.deepEqual(res.json.others, [], "nothing from " + other.id);
+  assert.deepEqual(res.json.records.map((r) => r.id).sort(), [w.open.id, w.done.id].sort());
+  const shown = res.json.others.reduce((all, group) => all.concat(group.records.map((r) => r.id)), []);
+  assert.equal(shown.indexOf(said.id), -1, "the other review's comment is not on this page");
 });
 
 // --- Every reader names the new file ---------------------------------------------
@@ -378,7 +393,14 @@ test("the old address of a gone file with no pair keeps the gone page", async (t
   const w = await briefWorld(t);
   w.move({ rename: "brief_v2.html" });
   const res = await getPage(w, w.oldSite.name, OLD_PATH, NAVIGATE);
-  assert.notEqual(res.status, 302);
+  assert.equal(res.status, 410);
+});
+
+test("a request that is not a page load of a paired page's old address keeps the gone page", async (t) => {
+  const w = await briefWorld(t);
+  w.move();
+  const res = await getPage(w, w.oldSite.name, OLD_PATH);
+  assert.equal(res.status, 410);
 });
 
 test("the symlink case: a page load of the old address goes to the new one; anything else is the 404 it was", async (t) => {
