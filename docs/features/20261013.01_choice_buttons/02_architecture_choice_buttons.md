@@ -71,14 +71,19 @@ One new kind, `choice`, and one new optional field:
 
 ### State on the page
 
-The layer sets attributes on the group element and the stylesheet draws them. They are DOM only; a rebuild clears them and the re-mark pass sets them again from the records.
+The layer sets two attributes on the group element and the stylesheet draws them. They are DOM only; a rebuild clears them and the re-mark pass sets them again from the records.
 
-| Attribute | Meaning |
-| --- | --- |
-| `data-lahe-pressed="<value>"` | The reviewer pressed this answer and the record is ready. |
-| `data-lahe-sent` | The helper has acknowledged the record. |
-| `data-lahe-decided="<value>"` | The record is handled. Drawn the same as `data-chosen`, so the page looks the same before and after the agent writes the decision into the source. |
-| `data-lahe-inert` | The group was refused: a bad or duplicate id, or not a document page. The buttons do nothing. |
+| Attribute | Values | Meaning |
+| --- | --- | --- |
+| `data-lahe-pressed` | the answer's value | Which button the reviewer pressed, from the newest record for the group |
+| `data-lahe-choice-state` | `kept`, `open`, `question`, `not_handled`, `done` | The rail's own states (brief R9): kept in this browser and not yet stored; stored and waiting; the agent asked; the agent said no; handled or marked done |
+| `data-lahe-inert` | present | The group was refused: a bad or duplicate id or value, or not a document page. The buttons do nothing |
+
+`data-chosen`, written by the agent into the source, draws the same as `done`, so the page looks the same before and after the write-back. The stylesheet carries one rule per state.
+
+### Presses travel together
+
+A press is marked ready at once in the browser, but its `item.ready` leaves the outbox after a quiet window of 3 seconds with no further press on the page, or at once when the tab is hidden or the page is left (the same moments the draft flush uses). Every press made inside the window goes in the one flush, and the helper writes one wake line for the flush. Clearing the lesson queue by clicking steadily is a handful of wakes; pausing between lessons is one wake each, which is what the reviewer asked for by pausing.
 
 ### Lifecycle
 
@@ -108,8 +113,8 @@ flowchart TD
   A[Layer boots on a page whose tag carries data-lahe-document] --> B[Find every .choice with a valid, unique id and arm its buttons]
   B --> C[Reviewer clicks an answer]
   C --> D[Mint a choice record in draft and mark it ready in the same tick]
-  D --> E[Set data-lahe-pressed on the group; the card appears in the rail]
-  E --> F[sync posts item.created and item.ready; on ack set data-lahe-sent]
+  D --> E[Set data-lahe-pressed and state kept on the group; the card appears in the rail]
+  E --> F[After the 3 second quiet window sync posts the batch; on ack the state is open]
   F --> G[Drain prints the item with choice at the top level]
   G --> H[Agent acts, writes data-chosen into the source, replies handled]
   H --> I[Projection folds the reply; the card reads handled]
@@ -141,7 +146,8 @@ flowchart TD
 
 ## Failure Modes / Edge Cases
 
-- **Helper down at the press.** The record is in browser storage and the outbox like any item. The group shows pressed but not sent; the card shows the usual not-stored mark. It sends when the helper is back.
+- **Helper down at the press.** The record is in browser storage and the outbox like any item. The group shows `kept`; the card shows the usual not-stored mark. It sends when the helper is back.
+- **A group moved by a rebuild.** The re-mark pass finds it by id wherever it is on the page, so its state follows it (brief R10).
 - **Agent not listening.** Same as a comment: the rail's liveness dot says so. Nothing choice-specific.
 - **The agent rewrites the page and the group id is gone while the item is ready.** The card is flagged lost. The item stays on the drain, so the agent still sees the press and can answer it.
 - **The agent handles the item but forgets `data-chosen`.** The page still shows decided while the record exists, from the re-mark pass. A fresh reader with no Lahe sees an undecided group. The skill names the write-back as part of handling, and the contract says a handled reply without it is incomplete, the same way it treats a missing `data-lahe-id`.

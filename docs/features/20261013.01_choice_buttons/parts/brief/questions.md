@@ -1,12 +1,4 @@
-Open questions, for Ken in review:
-
-::: callout-question
-**Q1: Can a choice be changed after the agent has acted on it?** The brief says a second press before the agent answers is a change of mind (R5). After the agent has handled it, the brief says a new press starts a new thread (R6). Say so if you would rather it reopen the old one.
-:::
-
-::: callout-question
-**Q2: Does the whole page get one "all as recommended" choice?** The lesson queue's shortcut comment suggests yes: one choice group at the top that answers every group below it the recommended way. The brief leaves it out of the first cut (Non-Goals). Say so if you want it in.
-:::
+No open questions. Ken said the rest should be straightforward and he does not need to be asked, so every call below was made by the brief; he can overrule any of them in review.
 
 Settled with Ken in the crucible (details on [the questions page](00_crucible_questions.md)):
 
@@ -21,6 +13,10 @@ Settled with Ken in the crucible (details on [the questions page](00_crucible_qu
 
 Chosen by the brief, for Ken to overrule in review:
 
-- **A click is a commit (R3).** There is no draft state for a press; it is sent the moment it is made.
-- **The chosen answer stays on the page after the agent handles it (R8),** so a reader coming back later sees what was decided without opening the rail.
-- **One answer per group (R4).** A group is a single choice among its buttons. A page that needs several ticks uses several groups.
+- **A click is a commit (R5).** There is no draft state for a press; it is sent the moment it is made.
+- **One answer per group (R6).** A group is a single choice among its buttons. A page that needs several ticks uses several groups.
+- **A press after the agent has handled the group is a new thread, not a reopen (R7).** The old thread stays as the record of the earlier decision. The agent undoes and redoes, and says both.
+- **No page-level "all as recommended" switch.** An agent that wants one writes one more group and says in its question what it covers. Nothing special is built.
+- **The decision lives in the file (R17).** Handling a press includes writing it into the source, so the document shows its decisions with no Lahe present.
+- **Presses close together travel together (R13).** The few-second window is the architecture's to set.
+- **A broken group is shown to the reviewer, not reported to the agent (R4).** The rail names the group and the reason. An automatic message to the agent was deferred: it would be a new agent-facing channel for an authoring mistake the reviewer can report in one comment. Revisit if agents keep getting the block wrong.
