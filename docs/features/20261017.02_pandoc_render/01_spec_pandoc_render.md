@@ -4,23 +4,14 @@ Status: spec written, not yet reviewed. Sized past whetstone (see "Size" at the 
 
 ## Needs Ken
 
-Updated 2026-10-17 15:29. Two things before any code: how to run the build, and the four open questions at the bottom of this page. Each open question has a recommendation; a comment saying "go with the recommendations" settles all four.
+Updated 2026-10-17 15:34. One question is still open: open question 4 (whether a missing pandoc shows a line in the rail, or only in the helper log). The build goes ahead with the recommendation, helper log only, unless Ken says otherwise.
 
-<div class="options">
-  <div class="option">
-    <span class="badge badge--purple">Recommended</span>
-    <p class="eyebrow">Option A</p>
-    <h4>Feature-forge, starting from this spec</h4>
-    <p>This page stands in for the brief. Feature-forge adds an architecture doc, a plan, and the review passes, then builds in this same worktree.</p>
-    <ul><li>Gets an architecture review on the two risky calls: what the Lua filter does versus the JavaScript afterwards, and how tests run on GitHub's machine without pandoc.</li><li>Costs more agent time than whetstone.</li></ul>
-  </div>
-  <div class="option">
-    <p class="eyebrow">Option B</p>
-    <h4>Push on under whetstone anyway</h4>
-    <p>One builder takes this spec as written and builds it, with a code review before the PR.</p>
-    <ul><li>Cheaper.</li><li>About ten files and seven requirements is past whetstone's size, and the design calls get no review before code.</li></ul>
-  </div>
-</div>
+### Decided 2026-10-17
+
+- **Route:** no full feature-forge doc set. This spec stays the only spec doc. The builder runs an architecture review, and any other review it judges worth it, before and after the code.
+- **Open question 1 (bare `::: callout`):** maps to `.insight`, as recommended.
+- **Open question 2 (`callout-warn`, `callout-note`):** as recommended. `callout-warn` maps to the caveat panel, and `callout-note` to `.insight` labelled "Note".
+- **Open question 3 (report-only kinds):** standardize them. Each one that has no house component yet (card, cardgrid, rimage) becomes a house component, added to `vendor/stclair-doc-style` (document.css and COMPONENTS.md). The report's CSS is not copied into `lahe-markdown.css`. Kinds that already have a house twin map onto it.
 
 ## Problem, user, and context
 
