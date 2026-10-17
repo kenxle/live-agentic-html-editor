@@ -1,9 +1,9 @@
 # Choice buttons in Lahe: the crucible
 
 Date: 2026-10-13, round 2 on 2026-10-17
-Status: ROUND 2, one pick and six premises waiting on Ken
+Status: CLOSED. Ken picked B on 2026-10-17; the summary is [the crucible summary](00_crucible_choice_buttons.md), and the brief comes next.
 
-**Needs you.** Two things, both near the top. Pick an approach from the three below (my recommendation is B, a choice record). Then disagree with any premise you do not hold. One comment on a card is enough for each. Everything under "The questions" is my working answer from the code, the board and your comments; those stand unless you object, so you do not need to confirm them one by one.
+**Nothing open here.** Approach B (a choice record) is chosen and every premise edit you made is folded in. [The crucible summary](00_crucible_choice_buttons.md) is what the brief is written from. Comment there or here if a reading below is wrong.
 
 **What changed since round 1.** You put this on hold until the standard docs existed. They do now: [the product brief](../../ongoing/PRODUCT_BRIEF.md), [the architecture doc](../../ongoing/ARCHITECTURE.md), [the style guide](../../ongoing/STYLE_GUIDE.md) and [the brand doc](../../ongoing/BRAND.md). I read all four and the rewritten lahe skill. Three things in them bear on this feature:
 
@@ -44,7 +44,7 @@ Agree or disagree with each. Silence is agreement.
 **Summary.** A new component in the catalog, grown out of option cards: a choice group with one button per answer. A click mints a new kind of item, a choice, that carries its own identity and the answer. It is sent at once, since a click is a commit, and it reaches the agent as a field to read rather than words to parse. The page shows the chosen answer and keeps it after a reload. Which fields carry the identity, how the page shows the choice and how the agent records the decision are for the architecture.
 
 - **Effort:** M to L. **Risk:** medium.
-- **For:** identity is the agent's own id, checked unique per page by the helper, so two "Promote" buttons can never be confused. The page shows the decision. It is a document-only feature, so D3 and live sites are untouched. Changing your mind is a new revision of the same item, which the lifecycle already handles.
+- **For:** a press reaches the agent as its own record, so two "Promote" buttons can never be confused. Cheaper in tokens than a comment per verdict: a press is a few fields in the drain, where a comment carries a quote, context and region text (Ken: "I think this might be better for token management as well"). The page shows the decision. It is a document-only feature, so D3 and live sites are untouched. Changing your mind is a new revision of the same item, which the lifecycle already handles.
 - **Against:** a new record kind touches the record module, the contract text, the skill, the tests and the built bundle, and the architecture doc has to change first. Replay has to learn one more record shape so a pressed choice survives a repaint.
 - **Reuses:** the Mark as done event (a small verified act at one revision), the lifecycle, the card, option cards and badges for the look, the uniqueness rule.
 
@@ -123,6 +123,7 @@ The decisions named below (D3, D4, D12) now live in [ARCHITECTURE.md](../../ongo
 
 ## Decisions so far
 
+- 2026-10-17: approach B, a choice record, is the pick. Ken on the card: "I think this might be better for token management as well."
 - 2026-10-17: the "answer in words" premise is dropped. Highlighting and commenting is always there, so it needs no saying. Ken on premise 5.
 - 2026-10-17: premise 4 restated as the decision (a press is never confused with another) with the mechanism left to the architecture. Ken: "this is architecture."
 - 2026-10-17: documents only, never live sites. Ken on premise 2: "just don't do it on live sites. only docs."
