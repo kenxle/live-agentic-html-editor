@@ -550,6 +550,13 @@ function pageFilesFor(meta, item, dir) {
   var siteFile = item && dir
     ? pageRoutes.fileForPage(dir, item[record.FIELD.PAGE_ORIGIN], item[record.FIELD.PAGE_PATH])
     : null;
+  // A PAGE THAT MOVED (spec 20261017.01 R3): when the page at the item's
+  // address is gone, the review's own pair names the new file, the one the
+  // rail and review.json name too.
+  if (item && dir && !(siteFile && fs.existsSync(siteFile))) {
+    var paired = pageRoutes.pairedPageFor(dir, meta, item[record.FIELD.PAGE_ORIGIN], item[record.FIELD.PAGE_PATH]);
+    if (paired) return [paired];
+  }
   if (siteFile) return [siteFile];
   var targets = Array.isArray(meta.target_paths) ? meta.target_paths.slice() : [];
   if (typeof meta.target_path === "string" && meta.target_path && targets.indexOf(meta.target_path) === -1) {

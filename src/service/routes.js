@@ -895,6 +895,9 @@ var SITE_HANDLERS = {
     // gives the file an address: it never re-stamps that review or drops its
     // origins, which are its own session's business.
     if (body.stamp !== false) deps.reviews.stampServedByHelper(review.id, new Date(deps.now()).toISOString());
+    // A gone first source whose new file has an address now (spec 20261017.01
+    // R5a): `lahe review` recorded the new path before this bind.
+    if (body.stamp !== false && typeof deps.reviews.settleFirstSource === "function") deps.reviews.settleFirstSource(review.id);
     // The port the helper has proved: 80 once the port-80 forward is checked,
     // otherwise the pages port (src/service/addresses.js).
     var port = typeof deps.printedPort === "function" ? deps.printedPort()
