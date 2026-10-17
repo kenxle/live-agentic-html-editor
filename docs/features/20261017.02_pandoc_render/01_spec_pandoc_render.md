@@ -76,7 +76,46 @@ This change carries real design calls, which is part of why it outgrew whetstone
 
 **Engine choice.** `src/service/pandoc.js` finds pandoc once per process (`pandoc --version` via `spawnSync`, cached) and exposes `render(markdown) -> html | null`. `LAHE_MARKDOWN_ENGINE=marked` forces the fallback, so the unit suite is deterministic on a machine with pandoc and on GitHub's runner, which may not have it. Pandoc-only tests skip with a message when pandoc is missing.
 
-**Speed.** `renderPage` is synchronous and stays synchronous: `spawnSync` with a 10-second timeout. A pandoc start costs a fraction of a second per render; a rebuild renders on each save. Measured during build and reported.
+**Speed.** `renderPage` is synchronous and stays synchronous: `spawnSync` with a 10-second timeout. A pandoc start costs a fraction of a second per render; a rebuild renders on each save, and the handled check renders the file on every check. So `pandoc.js` keeps a small cache of pandoc's HTML keyed by a hash of the Markdown text: the same text never runs pandoc twice in one helper process. Measured during build and reported.
+
+**The pandoc call.** `pandoc --from gfm+fenced_divs-gfm_auto_identifiers --to html5 --wrap=preserve --sandbox --lua-filter <src/service/lahe_render.lua>`, Markdown on stdin, HTML on stdout, `spawnSync` with an argument array, `shell: false`, a 10-second timeout and an output cap.
+
+- `--sandbox` stops pandoc reading or fetching anything beyond the files named on the command line, so a Markdown file cannot pull another file's contents into the page through pandoc.
+- `--wrap=preserve` keeps the source's line breaks inside paragraphs, the way marked does, so text-matching code (the handled check, anchors) sees the same text.
+- No highlighting flag is needed: the filter writes code blocks itself.
+- Version floor 3.0. `pandoc --version` is read once; an older pandoc is treated as missing and logged once with its version.
+- Raw HTML in the Markdown passes through, as it does under marked today. The trust posture does not change: the author's file is the page.
+
+**Fenced-div mapping.** Kinds come from the builds; the decided open questions settle the rest. "Unwrapped" means the wrapper div goes and an eyebrow label sits above the content, as `unwrap_plain_callouts` does. A run of two or more same-kind callouts with only whitespace between them merges into one panel with one label, as `merge_callout_runs` does. An author's own `data-label` wins over the default label.
+
+| Kind | Renders as | Source |
+|---|---|---|
+| `callout-req` | eyebrow "Requirement", content unwrapped | build_feature_docs.py |
+| `callout-nongoal` | eyebrow "Non-goals", content unwrapped | build_feature_docs.py |
+| `callout-metric` | `.insight`, label "Metrics" | build_feature_docs.py |
+| `callout-suggest` | `.insight`, label "Suggestion" | build_feature_docs.py |
+| `callout-question` | `.insight .insight--caveat`, label "Open question" | build_feature_docs.py |
+| `callout-flag` | `.insight .insight--caveat`, label "Red flag" | build_feature_docs.py |
+| `callout` | `.insight` (label "Key insight" from the house CSS) | report header; decided Q1 |
+| `callout-warn` | `.insight .insight--caveat` (label "Caveat") | report header; decided Q2 |
+| `callout-note` | `.insight`, label "Note" | decided Q2 |
+| `insight`, `insight--caveat` | unchanged; already house classes | report authoring guide |
+| `xref` | unchanged; `.xref` is a house class | both |
+| `stat` | `.stat`: first paragraph becomes `p.stat-value`, the rest `p.stat-meta` | report guide; house twin |
+| `stat-row` | `.stats` | report guide; house twin |
+| `pullquote` | `blockquote.pullquote`: first paragraph is the quote, the rest go in its `footer` | report guide; house twin |
+| `keytakeaway` | `.callout` (the solid ink block, white text) | report header; house twin |
+| `eyebrow` | `p.eyebrow` holding the div's text | report guide; house twin |
+| `rimage` | `figure.plate`: the image, then the caption paragraph as `figcaption` | report guide; house twin (see note) |
+| `card` | `.card`, a new house component | decided Q3 |
+| `cardgrid` | `.cards`, a new house component | decided Q3 |
+| anything else (`beattable`, `reviews-banner`, unknown) | `<div class="kind">`, inside rendered as Markdown | R1 (unknown kinds) |
+
+Note on `rimage`: the decision named it as one of the kinds with no house twin. The house already has `figure.plate`, "a picture on a framed plate with a caption", which is what `rimage` draws. Under the decision's own rule (a kind with a house twin maps onto it) it maps to the plate, and no new image component is added. card and cardgrid have no twin (`.options` is for a page that asks the reader to pick), so they become `.card` and `.cards`, written the way `.option` and `.options` are, from tokens only.
+
+**Not a fence.** One report writes `::: xref [link] :::` on a single line. Pandoc reads that as a paragraph, so the builds show it as text too. LAHE matches the builds and leaves it alone.
+
+**The missing-pandoc seam.** `renderPage` returns `engine` (`"pandoc"` or `"marked"`) and `engineNote` (null, or one sentence such as "Install pandoc to draw the boxes on this page"). Callers that hold a state directory log the note once. The rail line (open question 4) reads the same field later, so either answer is a small change. The rail part is not built until Ken answers.
 
 ## Tasks
 
@@ -86,7 +125,8 @@ This change carries real design calls, which is part of why it outgrew whetstone
 | 2 | Lua filter: hero/sheet split, mermaid, code, tables, link tags, task lists | `src/service/lahe_render.lua` (new) | unit: H2 in a code fence or div does not split; mermaid markup; tagged links |
 | 3 | Fenced-div mapping ported from the builds | `src/service/callouts.js` (new) | unit per kind, run merging, req/nongoal unwrap, unknown kind, nesting, `:::` in a fence stays literal |
 | 4 | Wire into `renderPage`; link pass over tagged anchors; one-time fallback log | `src/service/markdown.js` | existing markdown unit tests green under both engines |
-| 5 | Rail notice for the fallback, if chosen | `src/layer/style_switch.js`, `dist/` rebuild | browser spec |
+| 5 | House components `.card` and `.cards` | `vendor/stclair-doc-style/document.css`, `COMPONENTS.md`, its README | unit: stylesheet carries both; screenshot of a report card grid |
+| 5b | Rail notice for the fallback, only once Ken answers open question 4 | `src/layer/style_switch.js`, `dist/` rebuild | browser spec |
 | 6 | Dependency rule and install docs | `CLAUDE.md`, `AGENTS.md`, `README.md`, `vendor/marked/README.md`, `docs/ongoing/TESTING.md` | read-through |
 | 7 | Evidence | none | screenshots: choice-buttons brief, one older research report with stat/card/pullquote, a no-div page before and after; `npm run gate` counts |
 
@@ -135,4 +175,4 @@ Every builder brief carries the no-delete rule: no `rm`, `rmdir`, `unlink` or `g
 
 ## Size
 
-This is past whetstone: seven requirements, about ten files (three new source files, `markdown.js`, the manifest, four docs, tests, optionally the layer), and an Approach section with real alternatives. Per the escalation rule it should move to feature-forge, which adopts this worktree and branch. The spec has had no agent review yet and has not been in front of Ken.
+This is past whetstone: seven requirements, about ten files (three new source files, `markdown.js`, the manifest, four docs, tests, optionally the layer), and an Approach section with real alternatives. Ken chose on 2026-10-17 to build it here with this one spec, plus an architecture review before code, and a code review and an independent requirements check before the PR.
