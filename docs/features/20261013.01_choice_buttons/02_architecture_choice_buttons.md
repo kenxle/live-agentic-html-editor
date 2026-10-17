@@ -85,13 +85,13 @@ One new kind, `choice`, and one new optional field:
 | Attribute | On | Values | Meaning |
 | --- | --- | --- | --- |
 | `data-lahe-pressed` | the pressed `button` | present | Which button the reviewer pressed |
-| `data-lahe-choice-state` | the group | `kept`, `open`, `question`, `not_handled`, `done` | The rail's own states (brief R9) |
+| `data-lahe-choice-state` | the group | `kept`, `open`, `question`, `not_handled`, `done` | The rail's own states (brief R9). The stylesheet draws `not_handled` with the word Open, the brand's word for a thread the agent has answered no to, since the card says the same; the attribute keeps the finer value for tests and for a later look |
 
 The current record for a group is the one with the latest `created_at` among this page's choice records naming it. A newer press wins over `data-chosen` in the source: when a group holds both a `data-chosen` button and a `data-lahe-pressed` one, the stylesheet draws the pressed one as the answer and the chosen one quiet. `data-chosen` alone draws the same as `done`. These are DOM only and a rebuild clears them; replay's next pass paints them again. A refused group gets `data-lahe-inert` from `choices.js` at arming time.
 
 ### Lifecycle
 
-No new states. A press mints the item in `draft` and marks it `ready` in the same tick, queueing `item.created` and `item.ready` together; the helper's door does no state check on these events and the merge on load handles a record that was never a typed draft. Pressing another answer while the item is `ready` with no reply is the reword path (`ready` to `draft` to `ready` at the next revision). After a `not_handled` reply, a new press on the same group reopens the same record (`not_handled` to `ready`, a reviewer move the table already allows) at a new revision. After `handled`, a new press mints a new item. Mark as done, reopen and delete work as for a comment. `merge.js` lists `choice` among the browser-owned content fields.
+No new states. A press mints the item in `draft` and marks it `ready` in the same tick, queueing `item.created` and `item.ready` together; the helper's door does no state check on these events and the merge on load handles a record that was never a typed draft. Pressing another answer while the item is `ready` with no reply is a reword: one `ready` write at the next revision, the way a committed comment's rewording lands (the browser never shows a draft in between, since there is nothing to type). After a `not_handled` reply, a new press on the same group reopens the same record (`not_handled` to `ready`, a reviewer move the table already allows) at a new revision. After `handled`, a new press mints a new item. Mark as done, reopen and delete work as for a comment. `merge.js` lists `choice` among the browser-owned content fields.
 
 ### Presses travel together, and what bounds the wakes
 
@@ -142,14 +142,16 @@ flowchart TD
 ```mermaid
 flowchart TD
   S([a .choice element]) --> T{tag carries data-lahe-document?}
-  T -- no --> I[inert, no chip: not a document page]
+  T -- no --> I[untouched: nothing written, no chip; not a document page]
   T -- yes --> U{name present and well formed?}
   U -- no --> C1[inert; chip: group has no valid name]
   U -- yes --> V{exactly one group with this name?}
   V -- no --> C2[both inert; chip names the duplicate]
   V -- yes --> X{two or more buttons, every value well formed?}
   X -- no --> C3[inert; chip names the group and the bad value]
-  X -- yes --> Y[armed]
+  X -- yes --> Z{two buttons share a value,<br/>or two carry data-chosen?}
+  Z -- yes --> C4[inert; chip names the group and the reason]
+  Z -- no --> Y[armed]
 ```
 
 ## Alternatives Considered
@@ -166,9 +168,9 @@ The leaf is [parts/architecture/alternatives.md](parts/architecture/alternatives
 - **The group is gone after the item is handled.** A handled item is never stamped lost; nothing is painted.
 - **The agent handles the item but forgets `data-chosen`.** The page shows `done` while the record exists. A reader with no Lahe sees an undecided group. The skill names the write-back as part of handling, and the contract says a handled reply without it is incomplete, as it does for a missing `data-lahe-id`.
 - **A press on a decided group.** A new item at rev 1; the newer press paints over `data-chosen` until the agent answers.
-- **Two quick presses on one group.** A reword at rev 2 inside the same hold; one flush, the drain shows only the latest.
+- **Two quick presses on one group.** A reword at rev 2 inside the same hold; one flush, the drain shows only the latest. Pressing the same answer again while the press waits, or while the agent has asked a question, does nothing.
 - **A reviewer's words on a choice thread.** The card keeps the ordinary reply box. Words typed there go in `note` on the same record as a follow-up turn; the choice itself does not change.
-- **A group inside a `lahe add` page, or any page without the attribute.** Inert and chip-less; the page's own scripts see the click. D3 holds in full.
+- **A group inside a `lahe add` page, or any page without the attribute.** Untouched: no attribute is written on it and no chip is raised; the page's own scripts see the click. D3 holds in full.
 - **Element-pick mode, an open edit, a read-only window, present mode.** The click is not a press; the gesture table says so.
 - **Keyboard.** Real buttons: Enter and Space press them; the house focus ring applies.
 - **Print.** A decided group prints its decision because the stylesheet draws `data-chosen`.

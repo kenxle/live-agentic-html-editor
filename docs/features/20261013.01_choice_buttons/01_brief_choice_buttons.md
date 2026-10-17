@@ -78,7 +78,7 @@ The agent writes a choice group into the page the way it writes any other house 
 :::
 
 ::: callout-req
-**R9:** The group shows its state on the page in the rail's own words. Kept in this browser (the Lahe program has not stored it yet). Open (stored, waiting on the agent). Question (the agent asked something on the thread). Not handled (the agent said no, with a reason on the thread). Done (the agent acted, or the reviewer marked it done). The state survives a reload and the agent's rebuild.
+**R9:** The group shows its state on the page in the rail's own words, which are the brand's three thread states plus the not-stored case. Kept in this browser (the Lahe program has not stored it yet). Open (stored and waiting on the agent, including after the agent said no, whose reason is on the thread). Question (the agent asked something on the thread). Done (the agent acted, or the reviewer marked it done). The state survives a reload and the agent's rebuild.
 :::
 
 ::: callout-req
@@ -183,3 +183,4 @@ Full prose: [01_brief_choice_buttons_reviews.md](01_brief_choice_buttons_reviews
 | RF11 | Whether a served folder is a document or a site was unclear | Accepted | R11: served by the Lahe program means document; only a group's own buttons are ever claimed, on any page |
 | RF12 | R1 was not testable as written | Accepted | R1 names the skill eval check |
 | AR2 | From the architect review: the helper writes one wake line per press, and the monitor's poll is what bounds wakes | Accepted | R13 reworded: one wake per batch of landed work, counted in R15, never a promise of one wake total |
+| RC9 | From the requirements check: main's PR #75 renamed the rail's thread states to the brand's Done, Open and Question, so a group saying "Not handled" would disagree with its own card | Accepted | R9 follows the rail: a refused press reads Open on the group, with the agent's reason on the thread |

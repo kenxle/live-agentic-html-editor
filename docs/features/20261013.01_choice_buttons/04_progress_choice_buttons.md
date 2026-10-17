@@ -4,7 +4,7 @@
 
 **What you will notice first.** The lesson queue rebuilt with real buttons, served with the rail live, before any PR gate.
 
-Updated 2026-10-17 14:42.
+Updated 2026-10-17 14:47.
 
 ## The documents
 
@@ -19,12 +19,25 @@ Each one is yours to overrule.
 
 - **A click is a commit.** No draft, no Cmd-Enter. Changing your mind before the agent answers is the same reword path a comment uses.
 - **A press after the agent handled the group is a new thread.** The agent undoes the old answer where it can, does the new one, and says both.
-- **The decision lives in the file.** Handling a press includes the agent writing `data-chosen` onto the group in the source, so the page shows its decisions with no Lahe running.
+- **The decision lives in the file.** Handling a press includes the agent writing `data-chosen` onto the chosen button in the source, so the page shows its decisions with no Lahe running.
 - **Presses close together travel together.** A short quiet window, then one flush and one wake, so clearing nineteen lessons is not nineteen wakes.
 - **A broken group is shown to you, not reported to the agent.** It draws as plain content and the rail names it. An automatic message to the agent is deferred.
 - **Only pages the Lahe program serves itself carry live groups.** The program marks its own pages; a dev-server page never gets the mark, so the layer claims no click there.
 - **No page-level "all as recommended" switch.** An agent that wants one writes one more group.
 - **The wake count is accepted and measured, not engineered away.** Making `lahe monitor` wait for a quiet spell would cover comments too and changes a loop every host shares, so that is a board row for you rather than part of this feature.
+
+## Changes from plan
+
+Each was made by a builder or by me during integration, and each is written into the architecture.
+
+- **Off a document page the layer writes nothing at all**, not even the inert mark. A page someone else serves keeps its DOM byte for byte.
+- **A press checks the page's state at pointerdown.** Leaving an open edit or picking an element both finish before the click arrives, and without this those clicks became presses.
+- **Two more refusals:** two buttons sharing a value, and more than one button carrying `data-chosen`.
+- **Pressing the same answer again does nothing** while the press is waiting or the agent has asked a question.
+- **A reword is one ready write** at the next revision, not a draft in between; there is nothing to type.
+- **The group's word for a refused press is Open**, not "Not handled": main's PR #75 moved the rail to the brand's three thread states while this was being built, and the group follows its own card. The attribute keeps `not_handled` underneath.
+- **The drain line carries `reviewer_last_changed_at`**, as every drain line does; the architecture's example left it out.
+- **Files outside the plan's list:** `src/shared/failures.js` (four codes), `src/layer/listeners.js` (a listener group), `test/unit/remount_contract.test.js`, two short paragraphs in `docs/CONTRACTS.md` under the gestures and the script tag.
 
 ## Progress
 
