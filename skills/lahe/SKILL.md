@@ -243,8 +243,8 @@ comment.
   leave it off; the group still works.
 - **A press arrives on the drain as an item with `kind` `choice`.** `choice.group`
   and `choice.answer` sit at the top level: they are the reader's decision.
-  `page.quote` is the group's question and `page.context.heading` the heading
-  above it.
+  `page.quote` is the group's question and `page.context.heading` the nearest
+  heading above it, of any level, so a `###` per lesson is what you get back.
 - **Answer it like any item.** Do what the answer says. Then write `data-chosen`
   (no value) onto the chosen button in the source, rebuild, and reply `handled`
   in one sentence about the document. The attribute is how the file keeps the
