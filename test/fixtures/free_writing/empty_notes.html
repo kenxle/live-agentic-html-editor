@@ -1086,7 +1086,7 @@ figure.plate figcaption b{font-family:var(--font-display);font-weight:var(--w-di
 .choice[data-lahe-choice-state="kept"]::after{content:"Kept in this browser";border-color:var(--border);color:var(--on-surface-soft)}
 .choice[data-lahe-choice-state="open"]::after{content:"Open";background:var(--accent-tint);color:var(--accent)}
 .choice[data-lahe-choice-state="question"]::after{content:"Question";background:var(--structure);color:var(--on-structure)}
-.choice[data-lahe-choice-state="not_handled"]::after{content:"Not handled";border-color:var(--structure);color:var(--on-surface)}
+.choice[data-lahe-choice-state="not_handled"]::after{content:"Open";border-color:var(--structure);color:var(--on-surface)}
 .choice[data-lahe-choice-state="done"]::after,
 .choice:not([data-lahe-choice-state]):has(> button[data-chosen])::after{content:"Done";background:var(--tint);color:var(--on-surface)}
 
@@ -1098,6 +1098,10 @@ figure.plate figcaption b{font-family:var(--font-display);font-weight:var(--w-di
 .choice[data-lahe-inert]{border-style:dashed}
 .choice[data-lahe-inert] > button{cursor:default}
 .choice[data-lahe-inert] > button:not([data-chosen],[data-lahe-pressed]){border-color:var(--border);color:var(--on-surface-soft)}
+/* A refused group shows no decision either: two buttons carrying data-chosen is one
+   of the reasons it was refused, so neither may draw as the answer. */
+.choice[data-lahe-inert] > button:is([data-chosen],[data-lahe-pressed]){background:var(--surface);border-color:var(--border);color:var(--on-surface-soft)}
+.choice[data-lahe-inert]::after{content:none}
 
 /* ---------- images ----------
    Five ways to place a picture beyond the plain one in the column. Every one

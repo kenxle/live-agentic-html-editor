@@ -337,7 +337,7 @@ test("the skill carries the item and reply rules as a checklist, and reads user 
   // Ken, 2026-09-16: the comment and reply rules are instructions, so they
   // come back into the skill as a short checklist said the contract's way.
   for (const rule of [
-    /The reviewer's words are `note` and `change`/,
+    /The reviewer's intent is `note`, `change` and `choice`/,
     /Carry the stamp/,
     /Apply `after_html`, not the plain text/,
     /An item with `reverts` is a take-back/,
