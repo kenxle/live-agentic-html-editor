@@ -37,7 +37,7 @@ const MINE = ORIGINAL + REVIEWER_TAIL;
 const THEIRS = ORIGINAL + AGENT_TAIL;
 
 const TITLE = "Your edit clashed with a change to the page";
-const BODY = "Nothing is lost. Both versions are on the card. Click to choose which to keep.";
+const BODY = "Nothing is lost. Both versions are on the thread. Click to choose which to keep.";
 
 function articleHtml(config, sentence, dark) {
   const style = dark

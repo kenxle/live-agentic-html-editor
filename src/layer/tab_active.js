@@ -878,9 +878,8 @@
     function stateLabel(item) {
       var state = item[record.FIELD.STATE];
       if (state === record.STATE.DRAFT) return "Draft, not sent";
-      if (state === record.STATE.READY) return "Ready";
-      if (state === record.STATE.NOT_HANDLED) return "Not handled";
-      return "Handled";
+      if (state === record.STATE.READY || state === record.STATE.NOT_HANDLED) return "Open";
+      return "Done";
     }
 
     // This tab's row goes, always. The CARD goes only when no other tab is
@@ -1039,7 +1038,7 @@
           card.setAttribute("data-lahe-other-card", String(group.key) + ":" + item.id);
           var kind = el("div", "lahe-rail-otherkind");
           kind.appendChild(el("span", null, String(item.kind || "comment")));
-          kind.appendChild(el("span", null, String(item.state || "")));
+          kind.appendChild(el("span", null, item.state ? stateLabel(item) : ""));
           card.appendChild(kind);
           var quote = quoteOf(item);
           if (quote) card.appendChild(el("div", "lahe-rail-otherquote", quote));
