@@ -171,7 +171,7 @@ test("every copy of the agent instructions says the helper launches on a Mac and
   const root = path.join(__dirname, "..", "..");
   const copies = {
     contract: rf.CONTRACT.join("\n"),
-    skill: fs.readFileSync(path.join(root, "skills", "lahe", "SKILL.md"), "utf8"),
+    skill: ["SKILL.md", path.join("references", "library.md")].map((f) => fs.readFileSync(path.join(root, "skills", "lahe", f), "utf8")).join("\n"),
     contracts_md: fs.readFileSync(path.join(root, "docs", "CONTRACTS.md"), "utf8")
   };
   for (const [name, text] of Object.entries(copies)) {

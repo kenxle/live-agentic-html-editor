@@ -31,6 +31,7 @@ const rebuildModule = require("../../src/service/rebuild.js");
 const markdown = require("../../src/service/markdown.js");
 const stateDir = require("../../src/service/state_dir.js");
 const { tempRoot, writeFile } = require("../helpers/sites_world.js");
+const { createFixtures } = require("../../src/shared/record_fixtures.js");
 
 // The id the old page servers gave their record: a hash of the root.
 function oldServerId(root) {
@@ -277,6 +278,84 @@ test("on: the Markdown render is cached by file time and shared", async (t) => {
   const later = new Date(Date.now() + 5000);
   fs.utimesSync(doc, later, later);
   assert.match(pageRoutes.renderForFile(w.dir, real), /version two/);
+});
+
+// --- the site that owns a file wins over one that only mounts it ----------------------
+//
+// spec 20261017.01. A docs site that linked into an assignments folder holds a
+// mount of it, and when it is listed first, the lookup took it for the
+// assignments page. The render then refused (the file is not under that site's
+// root), and the handled check read the raw Markdown, where a placed paragraph
+// is never found.
+
+/** A docs site with a mount into `assignments`, bound before the assignments site. */
+function mountedFirst(w) {
+  const docs = path.join(w.home, "ws", "repo", "docs", "ongoing");
+  const assignments = path.join(w.home, "ws", "repo", "assignments");
+  writeFile(docs, "plan.md", "# Plan\n");
+  const doc = writeFile(assignments, "hw.md", "# Homework\n\nWrite the strategy.\n\nWe will check your public pages for tags.\n");
+  const prefix = "/.lahe-source/00112233445566aa/";
+  const mounting = w.sites.bind({ root: fs.realpathSync(docs), mode: "folder", entry: "plan.md", mounts: { [prefix]: fs.realpathSync(assignments) } });
+  const owner = w.sites.bind({ root: fs.realpathSync(assignments), mode: "folder", entry: "hw.md" });
+  assert.deepEqual(w.sites.list().map((e) => e.name).slice(0, 2), [mounting.name, owner.name], "the mounting site is listed first");
+  return { doc, assignments, owner, origin: protocol.siteOrigin(owner.name, PAGES_PORT) };
+}
+
+test("a Markdown file is rendered through the site whose folder holds it, not one that mounts it", (t) => {
+  const w = world(t, "on");
+  const { doc } = mountedFirst(w);
+  const rendered = pageRoutes.renderForFile(w.dir, fs.realpathSync(doc));
+  assert.ok(rendered, "the render is found");
+  assert.match(rendered, /We will check your public pages for tags/);
+});
+
+test("a paragraph placed in a Markdown file passes the handled check when a mounting site is listed first", (t) => {
+  const w = world(t, "on");
+  const { doc, origin } = mountedFirst(w);
+  const artifact = markdown.writeArtifact(w.dir, SESSION, doc).target;
+  const review = w.reviews.create({ target_path: artifact, source_path: doc, agent_session_id: SESSION, origins: ["null"] });
+  const item = createFixtures({ seed: "ownersite" }).runItem({
+    before: "Write the strategy.",
+    before_html: "Write the strategy.",
+    anchor_after_html: "Write the strategy.",
+    new_blocks: [{ tag: "p", html: "We will check your public pages for tags." }]
+  });
+  item[record.FIELD.PAGE_ORIGIN] = origin;
+  item[record.FIELD.PAGE_PATH] = "/hw.md";
+  item[record.FIELD.UPDATED_AT] = "2000-01-01T00:00:00.000Z";
+  const check = handledCheck.createHandledCheck({ dir: w.dir });
+  assert.equal(check.pageShows(review.id, item), true);
+});
+
+test("the deepest folder site owns a file, and a file only a mount reaches is still served", (t) => {
+  const w = world(t, "on");
+  const outer = path.join(w.home, "ws", "repo");
+  const inner = path.join(outer, "notes");
+  const far = path.join(w.home, "ws", "elsewhere");
+  writeFile(outer, "readme.md", "# Repo\n\nouter words\n");
+  const doc = writeFile(inner, "doc.md", "# Doc\n\ninner words\n");
+  const reached = writeFile(far, "far.md", "# Far\n");
+  w.sites.bind({ root: fs.realpathSync(outer), mode: "folder", entry: "readme.md", mounts: { "/.lahe-source/00112233445566bb/": fs.realpathSync(far) } });
+  const innerSite = w.sites.bind({ root: fs.realpathSync(inner), mode: "folder", entry: "doc.md" });
+  w.sites.addLinked(innerSite.name, "rev-1", [fs.realpathSync(reached)]);
+  assert.deepEqual(w.sites.get(innerSite.name).linked_files[fs.realpathSync(reached)], ["rev-1"]);
+  pageRoutes.recordLinkedFor(w.dir, fs.realpathSync(doc), "rev-2", [fs.realpathSync(reached)]);
+  assert.deepEqual(w.sites.get(innerSite.name).linked_files[fs.realpathSync(reached)], ["rev-1", "rev-2"],
+    "the link is recorded on the inner site, the one that owns doc.md");
+  assert.equal(pageRoutes.servesFile(w.dir, fs.realpathSync(reached)), true, "a mount still counts when no site owns the file");
+});
+
+test("a page-only site whose root is the file owns it over a folder site listed first", (t) => {
+  const w = world(t, "on");
+  const folder = path.join(w.home, "ws", "repo", "notes");
+  const doc = writeFile(folder, "today.md", "# Today\n");
+  const far = writeFile(w.home, "ws/other/far.md", "# far\n");
+  const folderSite = w.sites.bind({ root: fs.realpathSync(folder), mode: "folder", entry: "today.md" });
+  const pageSite = w.sites.bind({ root: fs.realpathSync(doc), mode: "page-only" });
+  assert.notEqual(pageSite.name, folderSite.name);
+  pageRoutes.recordLinkedFor(w.dir, fs.realpathSync(doc), "rev-1", [fs.realpathSync(far)]);
+  assert.deepEqual(w.sites.get(pageSite.name).linked_files[fs.realpathSync(far)], ["rev-1"]);
+  assert.equal((w.sites.get(folderSite.name).linked_files || {})[fs.realpathSync(far)], undefined);
 });
 
 // --- V32: grouping old and new origins of one page ------------------------------------

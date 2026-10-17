@@ -516,20 +516,33 @@ function activeFor(dir) {
 }
 
 /** The site an existing file is served under, or null. Mounts count. */
+// THE SITE THAT OWNS A FILE WINS (spec 20261017.01). A site owns a file when
+// its own root holds it: a page-only site whose root is the file, else the
+// folder site with the deepest root. A site that only reaches the file through
+// a mount counts only when no site owns it. Taking the first site in the list
+// let a docs site that linked into another folder claim that folder's pages,
+// and its render refused them, so the handled check read the raw Markdown.
 function siteForFile(sites, file) {
   var real = realOrNull(file) || path.resolve(file);
-  var found = null;
-  sites.list().some(function (entry) {
+  var owner = null;
+  var mounted = null;
+  sites.list().forEach(function (entry) {
     var site = entry.site;
-    var covered = site.mode === "page-only"
-      ? real === site.root
-      : within(real, site.root) || Object.keys(site.mounts || {}).some(function (prefix) {
-        return within(real, site.mounts[prefix]);
-      });
-    if (covered) found = entry;
-    return covered;
+    if (site.mode === "page-only") {
+      if (real === site.root) owner = { entry: entry, depth: Infinity };
+      return;
+    }
+    if (within(real, site.root)) {
+      if (!owner || site.root.length > owner.depth) owner = { entry: entry, depth: site.root.length };
+      return;
+    }
+    if (!mounted && Object.keys(site.mounts || {}).some(function (prefix) {
+      return within(real, site.mounts[prefix]);
+    })) {
+      mounted = entry;
+    }
   });
-  return found;
+  return owner ? owner.entry : mounted;
 }
 
 /**

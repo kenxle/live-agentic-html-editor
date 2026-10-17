@@ -140,7 +140,7 @@ Everything lives in one state folder outside any checkout: `$LAHE_STATE_DIR`, el
 | --- | --- | --- |
 | Agent session | `agent-sessions/<id>/`: `session.json`, `wake.log` | One agent's workstream. It owns its reviews |
 | Review | `reviews/<id>/`: `events.jsonl`, `review.json`, `meta.json`, `replies*.jsonl` | One document under review. The log is the truth; `review.json` is built from it; `meta.json` holds its token and origins |
-| Item | A record inside a review (`src/shared/record.js`) | One comment, edit, delete, format-only change or note. It has an id, a revision, one of four states, and the page it was made on |
+| Item | A record inside a review (`src/shared/record.js`) | One comment, edit, delete, format-only change, note, or choice (a press on a choice group an agent put on a document page). It has an id, a revision, one of four states, and the page it was made on |
 | Site | `sites.json`, rebuilt from the append-only `sites.log` | One served folder or notes page, and its name. The name is the page's browser origin |
 | Library state | `catalog.json`, `catalog-requests.jsonl` | Stars and names, and the queue of requests the Library sends an agent |
 | Machine settings | `service.json`, `install.json`, `summary.json`, `styles/<id>/` | The running server and its tokens, the login item, the menu bar's settings, installed styles |
@@ -157,7 +157,7 @@ These began as the first build's key decisions, in [the original architecture](.
 
 - **D1:** one file in the page, one process beside it.
 - **D2:** The agent changes the source.
-- **D3:** two page states. Browse is the page untouched; edit is entered on purpose.
+- **D3:** two page states. Browse is the page untouched; edit is entered on purpose. One exception, on a page the helper serves itself as a document: the buttons of a choice group the agent marked for Lahe are the layer's to answer. On any other page the layer claims no click.
 - **D6:** the agent contract is one JSON file, and a reply is an appended line.
 - **D7:** protect the region being edited, and replay committed records after a repaint.
 - **D9:** an anchor matches by uniqueness, not by a confidence score.

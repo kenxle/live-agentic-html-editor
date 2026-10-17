@@ -11,7 +11,7 @@ flowchart TD
     Arm --> Wait["wait, no model tokens spent while quiet"]
 
     Wait -->|"a wake line lands"| Drain["lahe status --session id --json --quiet"]
-    Drain -->|"prints one or more items"| Handle["handle each item:<br/>edit source, rebuild,<br/>verify the change is really in the built page,<br/>append one reply line"]
+    Drain -->|"prints one or more items"| Handle["handle the items:<br/>make every edit, rebuild once,<br/>verify each change is really in the built page,<br/>send every reply in one lahe reply --batch"]
     Handle -->|"after a batch"| Chat["say one line in chat;<br/>the detail is on the cards"]
     Handle --> Drain
     Drain -->|"prints nothing"| Wait

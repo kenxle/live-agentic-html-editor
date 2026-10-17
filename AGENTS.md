@@ -20,8 +20,9 @@ next comment without spending model turns.
 | Antigravity | read `skills/lahe/SKILL.md` from the clone | `lahe monitor --session <id>`, run as a background terminal task |
 | Any other host | read `skills/lahe/SKILL.md` from the clone | `lahe monitor --session <id>`, run in the foreground |
 
-`npm run install-skills` copies the skill to both skill folders, and adds Claude
-Code's Stop hook, `lahe hook stop`, to `~/.claude/settings.json` (see
+`npm run install-skills` copies the skill to both skill folders, with its
+`references/` beside it (the Library steps, and the component catalog from
+`vendor/stclair-doc-style/COMPONENTS.md`), and adds Claude Code's Stop hook, `lahe hook stop`, to `~/.claude/settings.json` (see
 [docs/CLI.md](docs/CLI.md), "The Stop hook"). `lahe review`
 prints the exact monitor command for each session.
 
