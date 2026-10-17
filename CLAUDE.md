@@ -360,3 +360,7 @@ copy of it:
 
 An agent instruction that exists only in the skill is invisible to an
 agent that only ever reads review.json.
+
+Change the skill in the repo, never the installed copy. A rule written into
+`~/.claude/skills/lahe/SKILL.md` by hand is erased by the next
+`npm run install-skills`. Skill changes go in `skills/lahe/` in the repo.
