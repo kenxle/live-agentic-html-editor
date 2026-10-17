@@ -49,7 +49,7 @@ When more than one later page qualifies, the one recorded last wins. When none d
 
 ### Piece 2: the agent is told
 
-**R6. The agent carries the review.** The skill and the review contract gain one short rule: after you move or rename a reviewed file, run `lahe review <new path> --session <id> --review <review-id>`, and hand over the new link. The comments follow by default. Start a new review instead only when your human asks for a fresh start. The rule lands in every copy (the skill, `src/shared/review_format.js`, the copy in `test/unit/review_format.test.js`, `docs/CONTRACTS.md`, and a rebuilt bundle).
+**R6. The agent carries the review.** The skill and the review contract gain one short rule: after you move or rename a reviewed file, run `lahe review <new path> --session <id> --review <review-id>`, and hand over the new link. The comments follow by default. Start a new review instead only when your human asks for a fresh start. Only the session that owns the review can do this; the command refuses any other, as it does today. The rule lands in every copy (the skill, `src/shared/review_format.js`, the copy in `test/unit/review_format.test.js`, `docs/CONTRACTS.md`, and a rebuilt bundle).
 
 **R7. Nothing new to detect.** Lahe adds no search for moves nobody announced. A file moved without its agent knowing keeps its comments under the old review, as today, and that review stays in the Library.
 
@@ -98,4 +98,4 @@ Gate: `npm run gate:unit` while building; `npm run gate` once on the integrated 
 ## Decisions
 
 - **How Lahe knows a file moved (2026-10-17).** The agent tells it, with `lahe review <new path> --review <id>`. Lahe does not detect a move on its own. Ken: "just let the agent do it. it doesn't need to be complicated." The automatic search (same name, half the quoted words) and a `--fresh` flag were dropped.
-- **Another agent session's review.** Unchanged from today: `lahe review` opens it, says whose it is, and moves nothing. With no automatic search, this no longer comes up in this change.
+- **Only the owning session moves a review (2026-10-17).** Ken: "only let the current owning session do the move. this should be simple." `lahe review <new path> --review <id>` already refuses a review from another session, and that stays. An agent in another session that moves the file gets that refusal, and the comments wait for the owner or for a takeover Ken asks for.
