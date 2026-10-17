@@ -65,6 +65,7 @@
     BAD_NAME: "bad-name",
     DUPLICATE: "duplicate",
     TOO_FEW: "too-few-buttons",
+    NESTED: "nested-buttons",
     BAD_VALUE: "bad-value",
     SAME_VALUE: "same-value",
     TWO_CHOSEN: "two-chosen"
@@ -86,6 +87,16 @@
 
   function buttonsOf(group) {
     return Array.prototype.slice.call(group.querySelectorAll("button"));
+  }
+
+  // The buttons that are the group's own children. The stylesheet draws
+  // `.choice > button` only, so a button wrapped in anything (a Markdown block
+  // with a blank line inside wraps each one in a <p>) would arm and then never
+  // show its decision.
+  function directButtonsOf(group) {
+    return buttonsOf(group).filter(function (button) {
+      return button.parentElement === group;
+    });
   }
 
   /** The group's question, as the reviewer reads it, or null. */
@@ -119,7 +130,13 @@
       out.detail = counts[name] + " groups on this page are named " + name;
       return out;
     }
-    var buttons = buttonsOf(group);
+    var all = buttonsOf(group);
+    var buttons = directButtonsOf(group);
+    if (all.length > buttons.length) {
+      out.refusal = REFUSAL.NESTED;
+      out.detail = "its buttons must sit directly inside the group, not wrapped in a paragraph or another element";
+      return out;
+    }
     if (buttons.length < 2) {
       out.refusal = REFUSAL.TOO_FEW;
       out.detail = buttons.length === 1 ? "it has only one button" : "it has no buttons";

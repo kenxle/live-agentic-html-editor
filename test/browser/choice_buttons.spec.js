@@ -24,7 +24,7 @@
 //            not presses; a group in a form submits nothing
 //   V11      replies fold onto the card; Mark as done; words in the reply box
 //            are a note follow-up and the answer is unchanged
-//   V23      the rail card, light and dark (screenshots in progress/)
+//   V23      the rail card, light and dark (with CHOICE_SHOTS set)
 //
 // Every helper a test starts is stopped in afterEach (stopTempHelpers).
 
@@ -43,7 +43,22 @@ const { withLayer } = require("./support/with_layer");
 const REPO_ROOT = path.join(__dirname, "..", "..");
 const CLI = path.join(REPO_ROOT, "bin", "lahe.js");
 const FIXTURES = path.join(REPO_ROOT, "test", "fixtures");
-const SHOTS = path.join(REPO_ROOT, "docs", "features", "20261013.01_choice_buttons", "progress");
+// Set CHOICE_SHOTS=<folder> to also write the rail screenshots there, as
+// test/browser/choice_style.spec.js does. A plain run writes no file, so it
+// never rewrites the tracked pictures under docs/.
+const SHOTS = process.env.CHOICE_SHOTS || "";
+
+async function shot(page, file, options) {
+  if (!SHOTS) return;
+  fs.mkdirSync(SHOTS, { recursive: true });
+  const clip = options && options.railOnly
+    ? await page.evaluate(() => {
+        const r = window.__lahe.rail.geometry().rail;
+        return { x: Math.max(0, r.left - 16), y: 0, width: r.right - r.left + 32, height: window.innerHeight };
+      })
+    : undefined;
+  await page.screenshot({ path: path.join(SHOTS, file), clip: clip });
+}
 
 
 const CSS_COUNTER = "lesson-css-counter";
@@ -367,8 +382,20 @@ test.describe("the lesson queue, served by the helper", () => {
     expect(await cardText(page, b.id)).toContain("This lesson already exists as L14.");
     expect(await cardText(page, c.id)).toContain("Discarded; data-chosen is on the button.");
 
+    // A read mark queued by opening this card is not the press waiting to be
+    // stored: the group still says question while the mark sits in the outbox.
+    const whileMarked = await page.evaluate((id) => {
+      const item = window.__lahe.items().find((i) => i.id === id);
+      window.__lahe.handle.sync.markReplySeen(item);
+      const queued = window.__lahe.handle.store.pendingEvents(window.__lahe.handle.review).some((e) => e.item === id && e.event === "reply.seen");
+      window.__lahe.choices.paint();
+      const el = document.querySelector('.choice[data-choice="lesson-css-counter"]');
+      return { queued: queued, state: el.getAttribute("data-lahe-choice-state") };
+    }, a.id);
+    expect(whileMarked.queued, "the read mark is in the outbox").toBe(true);
+    expect(whileMarked.state, "and the stored press is not read as kept").toBe("question");
+
     // The picture of the card, light and dark: a question on a choice.
-    fs.mkdirSync(SHOTS, { recursive: true });
     await page.evaluate((id) => {
       window.__lahe.rail.selectTab("active");
       const node = window.__lahe.rail.cardNode(id);
@@ -376,14 +403,16 @@ test.describe("the lesson queue, served by the helper", () => {
       document.querySelector('.choice[data-choice="lesson-css-counter"]').scrollIntoView({ block: "center" });
     }, a.id);
     await page.mouse.move(1, 1);
-    await page.screenshot({ path: path.join(SHOTS, "choice_card_light.png") });
+    await shot(page, "choice_card_light.png");
     await page.evaluate(() => {
       document.documentElement.style.background = "#14161b";
       document.body.style.background = "#14161b";
       document.body.style.color = "#e6e6e6";
       window.__lahe.rail.refreshScheme();
     });
-    await page.screenshot({ path: path.join(SHOTS, "choice_card_dark.png") });
+    // The rail alone: a document is light only, and darkening the page body
+    // to turn the rail dark would show the page in a scheme it never has.
+    await shot(page, "choice_card_dark.png", { railOnly: true });
     await page.evaluate(() => {
       document.documentElement.style.background = "";
       document.body.style.background = "";
@@ -612,6 +641,7 @@ test.describe("a press only in browse, in a window that may write", () => {
   test("pick mode, an open edit, present mode and a read-only window are not presses; a form submits nothing (V8)", async ({ page, context }) => {
     await ready(page, world);
     expect((await page.evaluate(() => window.__lahe.choices.armed())).sort()).toEqual(["inside-form", "ship-menu-bar"]);
+    await expect(page.locator("#submits"), "the page's own submit counter is running").toHaveText("0");
     const url = page.url();
 
     // Element-pick mode: the click picks the element, it does not press.
@@ -638,10 +668,17 @@ test.describe("a press only in browse, in a window that may write", () => {
     expect(await choices(page), "a click while presenting is not a press").toEqual([]);
     await page.evaluate(() => window.__lahe.present(false));
 
-    // A group inside a form: the press is a record, and the form never submits.
-    await press(page, "inside-form", "drop");
-    expect((await latestChoice(page, "inside-form")).choice.answer).toBe("drop");
-    expect(page.url(), "no navigation: the form did not submit").toBe(url);
+    // A group inside a form: the press is a record, and the form never
+    // submits. "Rework" has no type, so it is a submit button by default; the
+    // page counts its form's own submit events.
+    await press(page, "inside-form", "rework");
+    expect((await latestChoice(page, "inside-form")).choice.answer).toBe("rework");
+    // A beat for a submit to land, if one were coming. A submit fires during
+    // the click's own activation, so two rendered frames later it has long
+    // since been counted.
+    await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+    await expect(page.locator("#submits"), "the form never submitted").toHaveText("0");
+    expect(page.url(), "and nothing navigated").toBe(url);
 
     // A second window on the same review is read-only: its click is not a press.
     const other = await context.newPage();
@@ -693,6 +730,9 @@ test.describe("groups an agent got wrong", () => {
       { name: "twin", inert: "duplicate" },
       { name: "lonely", inert: "too-few-buttons" },
       { name: "bad-value", inert: "bad-value" },
+      { name: "wrapped", inert: "nested-buttons" },
+      { name: "same-value", inert: "same-value" },
+      { name: "two-chosen", inert: "two-chosen" },
       { name: "fine", inert: null }
     ]);
     const chip = await page.evaluate(() => window.__lahe.failures().find((f) => f.code === "CHOICE_GROUP_INERT") || null);
@@ -702,18 +742,23 @@ test.describe("groups an agent got wrong", () => {
     expect(chip.detail).toContain("The choice twin: 2 groups on this page are named twin.");
     expect(chip.detail).toContain("The choice lonely: it has only one button.");
     expect(chip.detail).toContain('The choice bad-value: the button "Yes" has the value "yes please do it"');
+    expect(chip.detail).toContain("The choice wrapped: its buttons must sit directly inside the group");
+    expect(chip.detail).toContain("The choice same-value: two buttons have the value yes.");
+    expect(chip.detail).toContain("The choice two-chosen: more than one button carries data-chosen.");
 
     // A click on an inert group is the page's: nothing is minted.
     await page.click(buttonSel("lonely", "yes"));
     await page.click(buttonSel("twin", "yes"));
+    await page.click(buttonSel("wrapped", "no"));
+    await page.click(buttonSel("same-value", "yes"));
+    await page.click(buttonSel("two-chosen", "no"));
     expect(await choices(page)).toEqual([]);
     // The valid one presses.
     await press(page, "fine", "no");
     expect((await latestChoice(page, "fine")).choice.answer).toBe("no");
 
-    fs.mkdirSync(SHOTS, { recursive: true });
     await page.evaluate(() => window.__lahe.rail.selectTab("active"));
     await page.mouse.move(1, 1);
-    await page.screenshot({ path: path.join(SHOTS, "choice_inert_chip_light.png") });
+    await shot(page, "choice_inert_chip_light.png");
   });
 });

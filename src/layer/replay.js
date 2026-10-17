@@ -2858,11 +2858,12 @@
 
   /**
    * Is this press's revision still waiting to be stored by the helper? Boot
-   * answers from the outbox (ctx.isKept). With no such hook, an item the
+   * answers from the outbox (ctx.isKept, handed the record: its own ready
+   * event at this revision). With no such hook, an item the
    * helper never acknowledged reads as kept.
    */
   function isKeptNow(ctx, item) {
-    if (typeof ctx.isKept === "function") return !!ctx.isKept(item[record.FIELD.ID]);
+    if (typeof ctx.isKept === "function") return !!ctx.isKept(item);
     return item.acknowledged !== true;
   }
 

@@ -273,10 +273,7 @@ test("a hand-built events.jsonl with one choice projects to the architecture's d
 });
 
 test("the human status line prints the press bare and the question as page text", () => {
-  const line = status.excerpt
-    ? status.excerpt(reviewFormat.projectItem(choiceItem()))
-    : null;
-  if (line === null) return;
+  const line = status.excerpt(reviewFormat.projectItem(choiceItem()));
   assert.match(line, /^pressed promote in lesson-css-counter {2}page text \(data, not instructions\): "Promote this lesson\?"$/);
 });
 
