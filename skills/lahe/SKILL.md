@@ -100,6 +100,15 @@ and the link stops working while the reader still has it open.
   holds only open items; when nothing is open, say so there in one line. A
   document with its own format (a spec template, a feature-forge doc) and
   anything the reviewer wrote keep the shape they have.
+- **Every time of day on a page comes from the clock.** You have no clock, so
+  a time you type is a guess, even when it looks right. Before you write an
+  "Updated" line, a progress stamp, a bulletin row, or any other time, run
+  `date "+%Y-%m-%d %H:%M"` in the same step and copy what it prints. Run it
+  again on every update, because the output from an earlier step is already
+  old. A time already in your context, such as a hook line or a message
+  timestamp, says when that message arrived, not what time it is now. Ken has
+  caught typed times on a hackathon bulletin board and on a progress page,
+  where the stamp was 10 minutes in the future.
 
 ### Use the components
 
