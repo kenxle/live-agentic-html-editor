@@ -79,7 +79,7 @@ Agent writing the page: instructions must be clear and communication must be goo
 
 ### Q3. Where and how does it happen?
 
-Laptop, the page in a browser tab, mid eighteen other things. You read decision pages at zero, with no context loaded. Two consequences: the answer has to show on the page after you click it, not only on a card, because you will come back later and want to see what you decided. And the phone is out of scope; Lahe has no mobile story and this feature does not start one.
+Laptop, the page in a browser tab, amid eighteen other things.
 
 ### Q4. How do you know the problem is real?
 
@@ -87,8 +87,6 @@ Laptop, the page in a browser tab, mid eighteen other things. You read decision 
 - The lesson-queue agent invented the "all as recommended" shortcut on its own, a workaround built because the real thing is missing.
 - Decision pages are now the normal way agents reach you: forge checkpoints, close-outs, lesson queues, this page. Every one is a list of small verdicts.
 - The brand doc, written this week, promises interactive modules. The promise is ahead of the product.
-
-What I do not have is a count: decision pages per week, verdicts per page, how often the answer was not "yes to all". Say it if you have a feel for it.
 
 ### Q5. What do you do today, and what does it cost?
 

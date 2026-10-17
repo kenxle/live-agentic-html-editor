@@ -23,7 +23,7 @@ The reviewer reading the page is the other party, but Ken put the agent first: t
 
 ## User context
 
-A laptop, the page in a browser tab, mid eighteen other things. Decision pages are read at zero. Two consequences: the chosen answer has to show on the page after the click, because the reader comes back later and wants to see what was decided; and the phone is out of scope, since Lahe has no mobile story and this feature does not start one.
+In Ken's words: a laptop, the page in a browser tab, amid eighteen other things. He cut my two consequences (the page shows the answer after a click; the phone is out of scope). The first survives as part of approach B; the second is a non-goal for the brief to state.
 
 ## What already exists
 
@@ -38,7 +38,6 @@ A laptop, the page in a browser tab, mid eighteen other things. Decision pages a
 - The lesson-queue agent invented a shortcut on its own, "one comment here saying all as recommended is enough", a workaround built because the real thing is missing.
 - Decision pages are now the normal way agents reach Ken: forge checkpoints, close-outs, lesson queues, this crucible. Every one is a list of small verdicts.
 - The brand doc, written this week, promises interactive modules. The promise is ahead of the product.
-- No count exists: decision pages per week, verdicts per page, how often the answer was not "yes to all". Ken was asked and did not supply one.
 
 ## Status quo
 
@@ -99,7 +98,7 @@ None. Every challenge raised was taken. The one place Ken pushed back on me was 
 
 ## What we skipped and why
 
-The seven questions were put on one page with pre-filled answers rather than asked one at a time in chat, following the free-writing crucible and the rule that any set of questions goes on a page. Ken did not object to any working answer, so they stand. No count of decision pages was gathered; Ken was asked and the brief should not depend on one.
+The seven questions were put on one page with pre-filled answers rather than asked one at a time in chat, following the free-writing crucible and the rule that any set of questions goes on a page. Ken did not object to any working answer, so they stand. Ken deleted the request for a count of decision pages; the brief does not depend on one.
 
 ## Open questions
 
