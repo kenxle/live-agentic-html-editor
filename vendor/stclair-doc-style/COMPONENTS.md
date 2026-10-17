@@ -293,6 +293,41 @@ never a coloured edge.
 </div>
 ```
 
+### Choice group
+A question with a set of answers the reader clicks, when you can name every
+answer and will act on the one they pick. Lahe sends the click to you as the
+answer. Option cards explain the alternatives; a choice group collects the
+answer. A page may use both, the cards above the group.
+
+```html
+<div class="choice" data-choice="lesson-css-counter">
+  <p class="choice-q">Promote this lesson?</p>
+  <button type="button" value="promote" data-recommended>Promote</button>
+  <button type="button" value="discard">Discard</button>
+</div>
+```
+
+- `data-choice` names the group: lowercase letters, digits and hyphens, 1 to 32
+  characters, starting with a letter or digit. Unique on the page.
+- Two or more `button`s, each `type="button"` with a `value` in the same form.
+  The button's text is what the reader sees.
+- `data-recommended` on at most one button draws the Recommended badge. Leave it
+  off when you have no recommendation.
+- Once you have acted on the answer, write `data-chosen` (no value) onto the
+  chosen button in the source. The page then shows the decision with no Lahe
+  running, and in print.
+- In Markdown, the group is its own HTML block, with a blank line before and after.
+
+What the reader sees. Lahe paints the attributes marked "Lahe"; never write them yourself.
+
+| On the page | Look |
+| --- | --- |
+| At rest | Square outlined buttons; the recommended one carries the badge |
+| `data-chosen` on a button | That button filled with ink, the others quiet, the word Done |
+| Lahe: `data-lahe-pressed` on a button | The button the reader pressed, filled with ink. A newer press than `data-chosen`, so it wins and the chosen one goes quiet |
+| Lahe: `data-lahe-choice-state` on the group | A word at the end of the row: Kept in this browser, Open, Question, Not handled, Done |
+| Lahe: `data-lahe-inert` on the group | A dashed box with quiet buttons: Lahe refused the group, and the rail says why |
+
 ## Badges
 
 A small square tag for a status or category. One or two words.
@@ -456,7 +491,9 @@ A page with no problem shows neither colour.
 
 - Three short points: facts grid. Numbers that are the point: stat tiles.
 - A side note: panel. A labelled point with parts: insight panel. One loud line: callout.
-- A choice for the reader: option cards, with a "Recommended" badge.
+- Alternatives to explain: option cards, with a "Recommended" badge. A question
+  with set answers you will act on: a choice group. Both, when the answer needs
+  the alternatives explained first.
 - Stages with names: step sequence. Sentences in order: `ol`.
 - A screenshot with its explanation: image beside text. A framed figure with a
   number: plate. Several thumbnails: gallery or image cards.
