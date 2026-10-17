@@ -28,6 +28,7 @@
 - [SESSION_OWNERSHIP.md](SESSION_OWNERSHIP.md)
 - [STYLES.md](STYLES.md)
 - [FREE_WRITING.md](FREE_WRITING.md)
+- [CHOICE_BUTTONS.md](CHOICE_BUTTONS.md)
 - [the menu bar README](../../macos/menubar/README.md)
 - [the original architecture](../features/20260812.01_live_agentic_html_editor/02_architecture_live_agentic_html_editor.md)
 
@@ -93,7 +94,7 @@ The code and the older docs call the server "the helper". It lives in `src/servi
 
 | Surface | Who uses it | What it is | Read more |
 | --- | --- | --- | --- |
-| The page rail | The reviewer | The review layer on a served page. Comment, edit, write new blocks, read the agent's answers | [FREE_WRITING.md](FREE_WRITING.md), [SERVING_ARCHITECTURES.md](SERVING_ARCHITECTURES.md) |
+| The page rail | The reviewer | The review layer on a served page. Comment, edit, write new blocks, press a choice an agent offered, read the agent's answers | [FREE_WRITING.md](FREE_WRITING.md), [CHOICE_BUTTONS.md](CHOICE_BUTTONS.md), [SERVING_ARCHITECTURES.md](SERVING_ARCHITECTURES.md) |
 | The Library page | The reviewer | `/catalog` on the server, at `library.lahe.localhost`. Every review on the machine, grouped by agent session | [LIBRARY.md](LIBRARY.md) |
 | The CLI | People and agents | `lahe review`, `write`, `status`, `reply`, `monitor`, `session`, `library`, `style`, `install` and the rest | [CLI.md](../CLI.md) |
 | The menu bar app | The reviewer, on a Mac | A count of documents waiting on the reviewer, and a menu of them. Optional | [MENU_BAR.md](MENU_BAR.md) |
