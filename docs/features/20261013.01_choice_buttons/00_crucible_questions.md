@@ -90,7 +90,7 @@ Laptop, the page in a browser tab, amid eighteen other things.
 
 ### Q5. What do you do today, and what does it cost?
 
-Three things. A comment per item: select, Cmd-Shift-C, type, Cmd-Enter, nineteen times on the lesson page. One blanket comment, fast but every exception is prose the agent can misread. Or buttons in the terminal, which Claude Code already has, and which you do not use for this because the chat scrolls away and you are not watching it.
+Three things. A comment per item: select, Cmd-Shift-C, type, Cmd-Enter, nineteen times on the lesson page. One blanket comment, fast but every exception is prose the agent can misread. Or text in the terminal, which Claude Code already has, and which you do not use for this because the chat scrolls away and you are not watching it.
 
 ### Q6. Does this matter more or less as the models improve?
 

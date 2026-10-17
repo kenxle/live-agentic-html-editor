@@ -41,7 +41,7 @@ In Ken's words: a laptop, the page in a browser tab, amid eighteen other things.
 
 ## Status quo
 
-A comment per item: select, Cmd-Shift-C, type, Cmd-Enter, nineteen times on the lesson page. Or one blanket comment, fast but every exception is prose the agent can misread, and a misread costs a round trip nobody notices until later. Or buttons in the terminal, which Claude Code has and Ken does not use for this because the chat scrolls away and he is not watching it.
+A comment per item: select, Cmd-Shift-C, type, Cmd-Enter, nineteen times on the lesson page. Or one blanket comment, fast but every exception is prose the agent can misread, and a misread costs a round trip nobody notices until later. Or text in the terminal, which Claude Code has and Ken does not use for this because the chat scrolls away and he is not watching it.
 
 ## Premises
 
