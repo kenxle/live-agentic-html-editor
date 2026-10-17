@@ -7,12 +7,9 @@ When a reviewed file moves to a new folder or a new name, its comments should co
 It ships in two pieces:
 
 - **Piece 1, the fix for what happened today.** A review that already followed its file to the new path shows the old comments there. Nothing has to be re-run: your brief's comments come back as soon as this lands.
-- **Piece 2, a move nobody announced.** When `lahe review` is run on a file with no review, and an older review's file is gone and matches this one, the comments come over too. `--fresh` skips that.
+- **Piece 2, the agent is told.** The agent that moves a file serves the new path on the same review, with the `--review` flag `lahe review` already has. Lahe does not try to detect a move on its own. Starting fresh is the agent leaving that flag off.
 
-**Your calls** (each has a default, so building is not blocked):
-
-- **Q1. How sure must Lahe be that a file moved before it carries comments over, when no agent said so?** The default: same file name, the old file is gone, and at least half of the old comments' quoted words are on the new page. See "Piece 2: a move nobody announced" below.
-- **Q2. When the review belongs to another agent session**, the default is what Lahe already does for any file with another session's review: open it, say whose it is, and move nothing. Taking it over stays your call, as today.
+**Open:** nothing. Both questions are settled; see "Decisions" at the bottom.
 
 ## 1. Problem, user and context
 
@@ -50,44 +47,34 @@ When more than one later page qualifies, the one recorded last wins. When none d
 
 **R5. The old address.** A page load at the old address of a paired file goes to the new address, the way a gone worktree's old address does now. A gone file with no pair keeps today's "file is gone" page.
 
-### Piece 2: a move nobody announced
+### Piece 2: the agent is told
 
-**R6. Finding the old review.** `lahe review <file>`, on a file no review holds, looks for a review (not retired) that recorded a page that is now gone, with the same file name, and whose committed comments' quoted words are at least half found on the new file. When one is found, it holds the new file the same way a review that followed its file does:
+**R6. The agent carries the review.** The skill and the review contract gain one short rule: after you move or rename a reviewed file, run `lahe review <new path> --session <id> --review <review-id>`, and hand over the new link. The comments follow by default. Start a new review instead only when your human asks for a fresh start. The rule lands in every copy (the skill, `src/shared/review_format.js`, the copy in `test/unit/review_format.test.js`, `docs/CONTRACTS.md`, and a rebuilt bundle).
 
-- In the agent's own session, `lahe review` continues that review and records the new path. Piece 1 then shows the comments.
-- In another session's review, it prints the address and whose review it is, and moves nothing (the immutable-owner rule).
-
-When several reviews match, the one with the most matching comments wins, then the newest.
-
-**R7. It says so.** When comments come over, `lahe review` prints one line naming the old path and how to start fresh instead.
-
-**R8. Starting fresh.** `lahe review <file> --fresh` skips the search and starts a new review. The old review keeps its comments under the old path. The Library still lists it.
-
-**R9. The agent is told.** The skill and the review contract gain one line: after moving a reviewed file, run `lahe review` on the new path; its comments follow. Do not start a new review. The line lands in every copy (the skill, `src/shared/review_format.js`, the copy in `test/unit/review_format.test.js`, `docs/CONTRACTS.md`, and a rebuilt bundle).
+**R7. Nothing new to detect.** Lahe adds no search for moves nobody announced. A file moved without its agent knowing keeps its comments under the old review, as today, and that review stays in the Library.
 
 ### Both
 
-**R10. The docs say how it works now.** A section in `docs/ongoing/STABLE_ADDRESSES.md` next to "A review follows its document out of a worktree", the `--fresh` flag in `docs/CLI.md`, and the move in `docs/diagrams/merge_on_load.md`.
+**R10. The docs say how it works now.** A section in `docs/ongoing/STABLE_ADDRESSES.md` next to "A review follows its document out of a worktree", the move rule beside `--review` in `docs/CLI.md`, and the move in `docs/diagrams/merge_on_load.md`.
 
 ## 3. Approach
 
 **Work out the pair when asked, from paths the review already records.** That is how the worktree fix works, and it covers Ken's brief with no migration. A new "moved" event was considered and rejected: nothing notices the moment a file moves, and the brief's review would still need the computed pair.
 
-**Trust.** A review's recorded pages can be added by a page holding that review's token (`review.write`), so a recorded path is not proof by itself. The pairing only decides which of this review's own comments show on which of this review's own pages. A page that could add a path could already make that file a page of the review. So piece 1 adds no new power. Piece 2's search runs only from the CLI, reads only paths and comments already on disk, and asks for both a matching name and matching words.
+**Trust.** A review's recorded pages can be added by a page holding that review's token (`review.write`), so a recorded path is not proof by itself. The pairing only decides which of this review's own comments show on which of this review's own pages. A page that could add a path could already make that file a page of the review. So piece 1 adds no new power. Piece 2 adds no code path at all: the agent uses a flag that already exists.
 
 **Cost.** Piece 1 adds at most one `stat` and one `realpath` per recorded page, only for a comment whose file is gone, and the answer is held for one request.
 
 ## 4. Tasks
 
-Piece 1 ships as its own pull request first. Piece 2 follows on the same branch line.
+Both pieces ship in one pull request. Piece 2 is a contract rule, so it adds no code.
 
 | # | Task | Files |
 |---|---|---|
 | 1 | The pair rule (gone, same name or symlink, last recorded wins) and its use in `fileOfItem` | `src/service/page_routes.js` |
 | 2 | The old address redirects to a paired file's new address | `src/service/page_routes.js` |
-| 3 | Piece 2: the search in `holderOfFile`'s last tier, `--fresh`, the printed line | `src/service/page_routes.js`, `src/cli/commands/review.js` |
-| 4 | Piece 2: the contract line, in every copy | the skill, `src/shared/review_format.js`, its test, `docs/CONTRACTS.md` |
-| 5 | Docs | the three named in the docs requirement |
+| 3 | Piece 2: the contract rule, in every copy | the skill, `src/shared/review_format.js`, its test, `docs/CONTRACTS.md` |
+| 4 | Docs | the three named in the docs requirement |
 
 ## 5. Verification
 
@@ -100,12 +87,15 @@ Piece 1 ships as its own pull request first. Piece 2 follows on the same branch 
 | A file still on disk never pairs | same file | a live page loses its comments |
 | The old address redirects to the new one | same file | 404 or the "gone" page |
 | End to end: comment on a page, mark one done, move it, run `lahe review` on the new path in the same session; the rail shows Active 1 and Done 1, each on its words | browser: `test/browser/comments_follow_move.spec.js` (new), light and dark screenshots | either count is 0 |
-| Piece 2: an unannounced move finds the review by name and words; `--fresh` makes a new one; another session's review is opened, not moved | unit tests on `holderOfFile` and `lahe review` | a new empty review appears, or another session's review changes owner |
-| Piece 2: half the words is the line | unit: 4 of 10 quotes found does not match; 5 of 10 does | an unrelated file with the same name takes the comments |
 | The contract line is in every copy | the existing seams test in `test/unit/review_format.test.js` | a copy drifts |
 
 Ken's brief is the live check: after piece 1 lands and the helper restarts, its new address shows Active 2 and Done 8.
 
-No analytics. No flag: the change is a fix for comments that look lost, and `--fresh` is the way out.
+No analytics. No flag: the change is a fix for comments that look lost.
 
 Gate: `npm run gate:unit` while building; `npm run gate` once on the integrated change before the pull request.
+
+## Decisions
+
+- **How Lahe knows a file moved (2026-10-17).** The agent tells it, with `lahe review <new path> --review <id>`. Lahe does not detect a move on its own. Ken: "just let the agent do it. it doesn't need to be complicated." The automatic search (same name, half the quoted words) and a `--fresh` flag were dropped.
+- **Another agent session's review.** Unchanged from today: `lahe review` opens it, says whose it is, and moves nothing. With no automatic search, this no longer comes up in this change.
