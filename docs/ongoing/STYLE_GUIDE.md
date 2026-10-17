@@ -289,6 +289,8 @@ Rules:
 
 Every class, its markup and its variants are in [COMPONENTS.md](../../vendor/stclair-doc-style/COMPONENTS.md). Do not copy that catalog. These are the rules for choosing.
 
+Agents learn these from the lahe skill: its "Writing a page for someone to read" section has a table matching content to components and the markup for the common ones, and `npm run install-skills` copies COMPONENTS.md beside the installed skill as `references/components.md`. A component added to the catalog reaches agents on their next install; one that changes how pages should be shaped also belongs in that skill section.
+
 - **Start bare.** A class-free `ul`, `ol`, `table`, `blockquote`, `img`, `code` and `pre` are already styled. Reach for a class only when the bare element cannot say it.
 - **Less is more: one tinted panel per page, one callout, one band, one pull quote.** Two loud things cancel each other.
 - **Every document has one `.hero`. Every major section is a `section.sheet` with a `.sheet-head`.**

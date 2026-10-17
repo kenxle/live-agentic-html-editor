@@ -31,6 +31,13 @@ var path = require("node:path");
 
 var REPO_ROOT = path.join(__dirname, "..");
 var SOURCE = path.join(REPO_ROOT, "skills", "lahe", "SKILL.md");
+// Files the skill reads on demand, copied beside each installed SKILL.md. The
+// component catalog stays in vendor/ as the style's own document, so it is
+// copied from there rather than kept twice.
+var REFERENCES = [
+  { from: path.join(REPO_ROOT, "skills", "lahe", "references", "library.md"), to: path.join("references", "library.md") },
+  { from: path.join(REPO_ROOT, "vendor", "stclair-doc-style", "COMPONENTS.md"), to: path.join("references", "components.md") }
+];
 var MARKER = "<!-- lahe canonical skill: managed by the live-agentic-html-editor repository -->";
 
 function defaultTargets(home) {
@@ -284,6 +291,7 @@ function install(options) {
   var home = opts.home || os.homedir();
   var sourceFile = opts.source || SOURCE;
   var targets = opts.targets || defaultTargets(home);
+  var references = opts.references || REFERENCES;
   var out = opts.stdout || function (text) { process.stdout.write(text); };
   var err = opts.stderr || function (text) { process.stderr.write(text); };
   var source = fs.readFileSync(sourceFile, "utf8");
@@ -300,6 +308,9 @@ function install(options) {
       return;
     }
     out("lahe install-skills: " + result.action + " " + result.target + "\n");
+    references.forEach(function (ref) {
+      writeAtomic(path.join(path.dirname(target.file), ref.to), fs.readFileSync(ref.from, "utf8"));
+    });
     if (result.backup) out("  preserved previous skill at " + result.backup + "\n");
   });
   if (opts.hook !== false) {
@@ -319,6 +330,7 @@ if (require.main === module) {
 module.exports = {
   MARKER: MARKER,
   SOURCE: SOURCE,
+  REFERENCES: REFERENCES,
   defaultTargets: defaultTargets,
   isLaheSkill: isLaheSkill,
   backupPath: backupPath,

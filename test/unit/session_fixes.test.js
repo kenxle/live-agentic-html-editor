@@ -186,6 +186,28 @@ test("it refuses, with the reason, rather than overwriting something else", () =
   assert.equal(fs.readFileSync(target, "utf8"), "#!/bin/sh\necho somebody else's lahe\n", "untouched");
 });
 
+test("skill installation puts the component catalog and the Library reference beside each copy", () => {
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), "lahe-skill-home-"));
+  assert.equal(installSkills.install({ home: home, hook: false, stdout: () => {}, stderr: () => {} }), 0);
+  const repo = path.join(__dirname, "..", "..");
+  for (const target of installSkills.defaultTargets(home)) {
+    const dir = path.dirname(target.file);
+    assert.equal(
+      fs.readFileSync(path.join(dir, "references", "components.md"), "utf8"),
+      fs.readFileSync(path.join(repo, "vendor", "stclair-doc-style", "COMPONENTS.md"), "utf8"),
+      "the catalog is the vendored one, for " + target.agent
+    );
+    assert.equal(
+      fs.readFileSync(path.join(dir, "references", "library.md"), "utf8"),
+      fs.readFileSync(path.join(repo, "skills", "lahe", "references", "library.md"), "utf8"),
+      "the Library reference, for " + target.agent
+    );
+  }
+  const skill = fs.readFileSync(installSkills.SOURCE, "utf8");
+  assert.match(skill, /references\/components\.md/, "the skill names the catalog it ships");
+  assert.match(skill, /references\/library\.md/, "and the Library reference");
+});
+
 test("skill installation preserves one hand-maintained LAHE copy before migration", () => {
   const home = fs.mkdtempSync(path.join(os.tmpdir(), "lahe-skill-home-"));
   const target = path.join(home, ".claude", "skills", "lahe", "SKILL.md");
