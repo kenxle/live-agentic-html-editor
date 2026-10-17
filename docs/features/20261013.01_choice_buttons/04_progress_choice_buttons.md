@@ -1,10 +1,12 @@
-# Choice buttons: in progress, nothing waiting on you
+# Choice buttons: working on a preview, the full gate is running
 
-**Where it stands.** Crucible closed; brief written with its PM review folded in; architecture written with its architect review folded in (fourteen findings, one of them a blocker that renamed the group attribute); plan written and under review. Step 0 of the build is committed on the feature branch `feat/choice-buttons`. Both builders are merged, main is merged in, and the integrated branch `feat/choice-buttons` has had its first Chromium run (899 passed, 6 failed, all six from one gap the integration found and fixed: the new anchor rung assumed the record module was loaded). The code review and the requirements check are in; their findings are being fixed in one round by the core builder. After that: the final gates, the lesson-queue preview against the branch's own helper, the end-to-end walk, then the PR. You said you do not need to be asked, so nothing here waits on you; comment anywhere if you want a different call.
+**Where it stands.** The feature is built, reviewed, fixed and merged on `feat/choice-buttons`. The whole loop passes by script, and the lesson queue takes a press through the branch's own helper. The full gate is running on the final commit now; after it and the three-browser run, the PR opens and merges, then your helper and skill are brought current.
+
+**Try it now.** [The lesson queue with real buttons](http://personal.docs.features.20261012-01-forge-international-style.lahe.localhost:1484/02_lesson_queue.md) is served by the branch's helper on its own port, against a copy of your Lahe data. Click an answer on any lesson: it paints, the card appears, and the state goes Open once stored. No agent is listening to that copy, so nothing answers there; the real one will once this lands.
 
 **What you will notice first.** The lesson queue rebuilt with real buttons, served with the rail live, before any PR gate.
 
-Updated 2026-10-17 14:56.
+Updated 2026-10-17 14:59.
 
 ## The documents
 
