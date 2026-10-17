@@ -4,7 +4,7 @@ Status: route decided (build in this worktree with this spec as the only spec do
 
 ## Needs Ken
 
-Updated 2026-10-17 15:35. One question is still open: open question 4, at the bottom of the page. It asks where LAHE tells a reader that pandoc is missing: only in the log file, or also on the page. The recommendation is now to say it on the page too.
+Updated 2026-10-17 15:40. Nothing is open. All four questions are decided; the builder is building.
 
 ### Decided 2026-10-17
 
@@ -12,6 +12,7 @@ Updated 2026-10-17 15:35. One question is still open: open question 4, at the bo
 - **Open question 1 (bare `::: callout`):** maps to `.insight`, as recommended.
 - **Open question 2 (`callout-warn`, `callout-note`):** as recommended. `callout-warn` maps to the caveat panel, and `callout-note` to `.insight` labelled "Note".
 - **Open question 3 (report-only kinds):** standardize them. Each one that has no house component yet (card, cardgrid, rimage) becomes a house component, added to `vendor/stclair-doc-style` (document.css and COMPONENTS.md). The report's CSS is not copied into `lahe-markdown.css`. Kinds that already have a house twin map onto it.
+- **Open question 4 (telling the reader pandoc is missing):** both. The helper log gets a line, and the rail shows "Ask your agent to install pandoc to get the correct styles".
 
 ## Problem, user, and context
 
@@ -167,9 +168,11 @@ Every builder brief carries the no-delete rule: no `rm`, `rmdir`, `unlink` or `g
 
 </div>
 
-<div class="insight insight--caveat" data-label="Open question">
+<div class="insight" data-label="Decided">
 
 **Telling the reader when pandoc is missing.** On a computer without pandoc, a Markdown page still opens, but its `:::` boxes print as raw text, the way they did for Ken today. Where should LAHE say why? (a) Only in LAHE's log file, which only agents and developers read. (b) Also as one line in the comment rail on the page, such as "Ask your agent to install pandoc to get the correct styles" Option (b) means changing the rail's code too, so it is a little more work. On Ken's machine neither ever shows, because pandoc is installed. Recommendation: (b). A reader who sees raw `:::` text has no other way to learn why.
+
+**Decided 2026-10-17: (b), with Ken's wording.**
 
 </div>
 
