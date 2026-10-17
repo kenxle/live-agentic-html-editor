@@ -943,6 +943,11 @@ review this way. Use `--review <id>` only to put a page back on the review it
 already belonged to, usually after a rebuild. Each page shows the reviewer only
 its own items; `lahe status` and `review.json` show all of them.
 
+When you move or rename a reviewed file, run
+`lahe review <new path> --session <session-id> --review <review-id>` and hand
+over the new link, so its comments follow it. Start a new review instead only
+when the reviewer asks for a fresh start.
+
 A page already under its own review keeps it when you later review its folder.
 Two reviews over one folder is legal, and it is where a reply lands on the wrong
 card.

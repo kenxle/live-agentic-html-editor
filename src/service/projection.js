@@ -52,6 +52,7 @@
 "use strict";
 
 var fs = require("node:fs");
+var path = require("node:path");
 var protocol = require("../shared/protocol.js");
 var record = require("../shared/record.js");
 var lifecycle = require("../shared/lifecycle.js");
@@ -472,10 +473,11 @@ function sourceHintOf(state) {
 }
 
 /**
- * Source hints that name a file in a removed worktree, as {gone path: main
- * copy} (spec 20261015.01 R10), so review.json sends the agent to the file that
- * is there. `movedPathFor` is the helper's move lookup
- * (page_routes.movedCopyOf); only a hint whose file is not on disk is asked.
+ * Source hints that name a gone file, as {gone path: the file now}, so
+ * review.json sends the agent to the file that is there: a removed worktree's
+ * main copy (spec 20261015.01 R10), or the new file a moved page pairs with
+ * (spec 20261017.01 R3). `movedPathFor` is the helper's lookup, and it judges
+ * "gone": a file left as a link out of its site is gone though it opens.
  * Undefined when nothing moved.
  */
 function movedHintsOf(items, reviewHint, movedPathFor) {
@@ -487,7 +489,6 @@ function movedHintsOf(items, reviewHint, movedPathFor) {
     var hinted = hint && typeof hint === "object" ? hint.path : hint;
     if (typeof hinted !== "string" || !hinted || seen[hinted]) return;
     seen[hinted] = true;
-    if (fs.existsSync(hinted)) return;
     var copy = null;
     try { copy = movedPathFor(hinted); } catch (err) { copy = null; }
     if (typeof copy === "string" && copy) {
@@ -716,12 +717,33 @@ function createProjector(options) {
     };
   }
 
+  /**
+   * Where a gone source hint's file is now, or null: a removed worktree's main
+   * copy, else the review's own pair for a page that moved. A file that is
+   * there is asked about only as a pair, which a link out of its site can be.
+   */
+  function movedPathOf(reviewId, file) {
+    var real = null;
+    try { real = fs.realpathSync.native(file); } catch (err) { real = null; }
+    if (!real) {
+      var copy = pageRoutes.movedCopyOf(dir, file);
+      if (copy) return copy;
+    }
+    // A file that is there by its own spelling, with no link on the way, is
+    // inside any root that holds it: not gone, and no meta is read for it.
+    if (real && real === path.resolve(file)) return null;
+    var meta = null;
+    try { meta = JSON.parse(fs.readFileSync(stateDir.metaPath(dir, reviewId), "utf8")); } catch (err) { meta = null; }
+    if (!meta || typeof meta !== "object") return null;
+    return pageRoutes.movedFileOf(dir, Object.assign({}, meta, { id: reviewId }), file);
+  }
+
   /** What a projection of this review is built with, beyond its events. */
   function projectOptions(reviewId) {
     return {
       linkedFileFor: linkedLookup(reviewId),
       originAliases: pageRoutes.aliasMap(dir),
-      movedPathFor: function (file) { return pageRoutes.movedCopyOf(dir, file); }
+      movedPathFor: function (file) { return movedPathOf(reviewId, file); }
     };
   }
 

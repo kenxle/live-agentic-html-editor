@@ -776,6 +776,51 @@ function createReviews(options) {
     try { return fs.realpathSync.native(file); } catch (err) { return null; }
   }
 
+  /** The new file a gone first source pairs with, or null (page_routes.js, a page that moved). */
+  function pairedFirstSource(review) {
+    try {
+      return pageRoutesModule.movedFileOf(dir, review, review.source_path);
+    } catch (err) {
+      return null;
+    }
+  }
+
+  /**
+   * Is `next` the file a gone first source is now? Its worktree's main copy
+   * (spec 20261015.01 R7), or the new file it pairs with (spec 20261017.01
+   * R5a). `next` must already be in source_paths: a pair is a later source.
+   */
+  function firstSourceMovedTo(review, next) {
+    if (!review.source_path || review.source_path === next) return false;
+    var real = realOrNullHere(next) || path.resolve(next);
+    if (!fs.existsSync(review.source_path) && movedCopyOfSource(review.source_path) === real) return true;
+    return pairedFirstSource(review) === real;
+  }
+
+  /**
+   * A GONE FIRST SOURCE, settled once its pair has an address. `lahe review`
+   * records the new path before it binds the new file's site, and a pair must
+   * be a page a site serves, so site.bind asks again here. True when the
+   * first source changed.
+   */
+  function settleFirstSource(reviewId) {
+    var review = get(reviewId);
+    if (!review || !review.source_path || !Array.isArray(review.source_paths)) return false;
+    var paired = pairedFirstSource(review);
+    if (!paired) return false;
+    var next = null;
+    review.source_paths.some(function (one) {
+      if (typeof one !== "string" || one === review.source_path) return false;
+      if ((realOrNullHere(one) || path.resolve(one)) !== paired) return false;
+      next = one;
+      return true;
+    });
+    if (!next) return false;
+    review.source_path = next;
+    persist(review);
+    return true;
+  }
+
   function recordPaths(reviewId, paths) {
     var review = get(reviewId);
     if (!review) return null;
@@ -797,24 +842,23 @@ function createReviews(options) {
     // replacing source_path took the first page's rail and re-render away.
     // source_path stays the first; source_paths lists them all.
     //
-    // A FIRST SOURCE THAT IS GONE is replaced by ITS OWN MOVED COPY (spec
-    // 20261015.01 R7): a review that followed its document out of a removed
-    // worktree is given the main copy, and the readers that look only at
-    // source_path (rebuild, the Library) then read a file that is there. Any
-    // other new source (a linked document) is only added to the list. The old
-    // path stays in the list.
+    // A FIRST SOURCE THAT IS GONE is replaced by ITS OWN MOVED COPY: the main
+    // copy of a removed worktree's file (spec 20261015.01 R7), or the new file
+    // a moved source pairs with (spec 20261017.01 R5a). The readers that look
+    // only at source_path (rebuild, the Library) then read a file that is
+    // there. Any other new source (a linked document) is only added to the
+    // list. The old path stays in the list.
     if (typeof p.source_path === "string" && p.source_path) {
       if (!Array.isArray(review.source_paths)) review.source_paths = review.source_path ? [review.source_path] : [];
+      if (review.source_paths.indexOf(p.source_path) === -1) {
+        review.source_paths.push(p.source_path);
+        changed = true;
+      }
       if (!review.source_path) {
         review.source_path = p.source_path;
         changed = true;
-      } else if (review.source_path !== p.source_path && !fs.existsSync(review.source_path) &&
-          movedCopyOfSource(review.source_path) === (realOrNullHere(p.source_path) || path.resolve(p.source_path))) {
+      } else if (firstSourceMovedTo(review, p.source_path)) {
         review.source_path = p.source_path;
-        changed = true;
-      }
-      if (review.source_paths.indexOf(p.source_path) === -1) {
-        review.source_paths.push(p.source_path);
         changed = true;
       }
     }
@@ -1621,6 +1665,7 @@ function createReviews(options) {
     registerOrigin: registerOrigin,
     removeOrigin: removeOrigin,
     recordPaths: recordPaths,
+    settleFirstSource: settleFirstSource,
     isolate: isolate,
     isNotes: isNotes,
     stampServed: stampServed,

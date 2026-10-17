@@ -52,6 +52,14 @@ at the worktree's address to the main copy (`fileForPageIn`), so the main
 copy's script tag names the old address as a spelling, and `records.read`
 returns those records, open and done, through the same `store.adopt`.
 
+### A file that moved
+
+The same read brings a file's comments to its new path once the agent moves it
+and runs `lahe review <new path> --review <id>` (spec 20261017.01). The review
+then records both paths. The helper pairs the gone page with the new file
+(`pairOf`), so the new page's script tag names the old address as a spelling,
+and `records.read` returns those records, open and done.
+
 ## What to notice
 
 - **Two different fields, two different winners.** Content (the words, the region it is tied to) comes from the browser as long as the helper has not acknowledged that revision. Lifecycle (ready, handled, not_handled) comes from the store, but strictly per revision: a "handled" naming rev 1 can only ever retire rev 1.

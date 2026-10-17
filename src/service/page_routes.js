@@ -287,7 +287,9 @@ function readReviews(dir) {
  * @param {string} dir the state folder
  * @param {object} site the registry entry
  * @param {{filePaths: string[], realFile: string|null, mounted: boolean}} request
- * @returns {{review: string, token: string, notes: boolean, source_path: (string|null), targets: string[]}|null}
+ * @returns {{review: string, token: string, notes: boolean, source_path: (string|null), targets: string[], meta: object}|null}
+ *   `meta` is the review's meta.json as read, for the readers that need its
+ *   recorded lists in their own order
  */
 function pickReview(dir, site, request) {
   var filePaths = request.filePaths || [];
@@ -337,12 +339,20 @@ function pickReview(dir, site, request) {
     }
     if (site.mode === "folder" && linkedIds.indexOf(entry.id) !== -1 && newer(candidate, linking)) linking = candidate;
   });
+  var ruleEntry = recordedList.length ? registry || activeFor(dir) || registryEntry(dir) : null;
+  // A REVIEW THAT HOLDS THIS FILE THROUGH A PAIR (spec 20261017.01 R5b) is
+  // judged by the same rule as a moved one. Asked only when two compete.
+  if (recordedList.length > 1) {
+    recordedList.forEach(function (one) {
+      if (movedIds.indexOf(one.review) === -1 && pairsInto(ruleEntry, one.meta, realFile)) movedIds.push(one.review);
+    });
+  }
   var recorded = recordedList.length
-    ? tierOneWinner(dir, registry || activeFor(dir) || registryEntry(dir), realFile, recordedList, movedIds)
+    ? tierOneWinner(dir, ruleEntry, realFile, recordedList, movedIds)
     : null;
   var best = recorded || backing || linking;
   if (!best) return null;
-  return { review: best.review, token: best.token, notes: best.notes, source_path: best.source_path, source_paths: best.source_paths, targets: best.targets };
+  return { review: best.review, token: best.token, notes: best.notes, source_path: best.source_path, source_paths: best.source_paths, targets: best.targets, meta: best.meta };
 }
 
 /** The newest of `list` by `newer` (served or created time, then id). */
@@ -892,6 +902,222 @@ function movesFor(dir) {
   return { moves: movesIn(entry), stateDir: entry.stateDir };
 }
 
+// ---------------------------------------------------------------------------
+// A file that moved to a new path (spec 20261017.01)
+// ---------------------------------------------------------------------------
+//
+// THE ONE PAIR RULE (R1 to R3). A page is GONE when no file is at its path, or
+// its real path is outside the real root of the site that serves the path. A
+// gone page pairs with a later page of the same review, from the same list
+// (its targets for a page, its Markdown sources for a source), when:
+//
+//   - the gone page is itself one of the review's recorded pages;
+//   - the new file is a regular file by real path, outside the state folder,
+//     under a site's own root (a mount does not count);
+//   - and either the gone path, through its symlinks, is the new file, or the
+//     new file is the only page in the list with the same name that is not
+//     gone. Two such pages pair with neither.
+//
+// It is worked out when asked, from the paths the review already records, so
+// nothing is migrated (R4). fileForPageIn stays review-free. fileOfItem, the
+// handled check and review.json's source hints ask pairOf, so all three name
+// the same file. Each caller judges "gone" first; pairOf never pairs a page
+// that is there. Nothing here writes.
+
+// ONE ANSWER PER REQUEST, keyed by review and gone path: the pageRecords loop
+// over other reviews asks again for every record. Cleared when the event loop
+// turns, as rootMemo is.
+var pairMemo = null;
+
+function pairMemoNow() {
+  if (!pairMemo) {
+    pairMemo = new Map();
+    var clear = setImmediate(function () { pairMemo = null; });
+    if (clear && typeof clear.unref === "function") clear.unref();
+  }
+  return pairMemo;
+}
+
+/**
+ * A review's Markdown sources in the order they were recorded: source_paths,
+ * with source_path first only when the list lacks it. markdownSourcesOf puts
+ * source_path first, which a replaced first source (R5a) would reorder.
+ */
+function sourceOrderOf(review) {
+  var all = Array.isArray(review.source_paths) ? review.source_paths.slice() : [];
+  if (typeof review.source_path === "string" && review.source_path && all.indexOf(review.source_path) === -1) {
+    all.unshift(review.source_path);
+  }
+  var out = [];
+  all.forEach(function (one) {
+    if (typeof one === "string" && one && markdown.isMarkdown(one) && out.indexOf(one) === -1) out.push(one);
+  });
+  return out;
+}
+
+/**
+ * Does a recorded path name the path `file`? As spelled, or through a
+ * symlinked folder that is still there. Only same-named paths are resolved.
+ */
+function namesPath(one, file) {
+  if (typeof one !== "string" || !one) return false;
+  var resolved = path.resolve(one);
+  if (resolved === file) return true;
+  if (path.basename(resolved) !== path.basename(file)) return false;
+  var folder = realOrNull(path.dirname(resolved));
+  return !!folder && path.join(folder, path.basename(resolved)) === file;
+}
+
+/** The sites whose own root holds `file` as spelled. Mounts do not count. */
+function sitesHolding(entry, file) {
+  return entry.sites.list().map(function (item) { return item.site; }).filter(function (site) {
+    return site.mode === "page-only" ? file === site.root : file !== site.root && within(file, site.root);
+  });
+}
+
+/** Is a recorded path gone? No file there, or its real path leaves every site root that holds it. */
+function goneByPath(entry, file) {
+  var resolved = path.resolve(file);
+  var real = realOrNull(resolved);
+  if (!real) return true;
+  var holders = sitesHolding(entry, resolved);
+  if (!holders.length) return false;
+  return !holders.some(function (site) {
+    var root = realOrNull(site.root) || site.root;
+    return site.mode === "page-only" ? real === root : within(real, root);
+  });
+}
+
+/** `file`'s real path when it may be a pair: a regular file, outside the state folder, a site's page. */
+function pairable(entry, file) {
+  var real = realOrNull(file);
+  if (!real) return null;
+  if (entry.stateDir && within(real, entry.stateDir)) return null;
+  try { if (!fs.statSync(real).isFile()) return null; } catch (err) { return null; }
+  var served = entry.sites.list().some(function (item) {
+    var site = item.site;
+    return site.mode === "page-only" ? real === site.root : real !== site.root && within(real, site.root);
+  });
+  return served ? real : null;
+}
+
+/** The pair in one list, or null. */
+function pairInList(entry, list, gone) {
+  var at = -1;
+  list.some(function (one, i) {
+    if (!namesPath(one, gone)) return false;
+    at = i;
+    return true;
+  });
+  if (at === -1) return null;
+  var through = realOrNull(gone);
+  var base = path.basename(gone);
+  var linked = null;
+  var named = [];
+  list.forEach(function (one, i) {
+    if (i === at || namesPath(one, gone)) return;
+    var resolved = path.resolve(one);
+    var real = null;
+    if (through && i > at && !linked) {
+      real = realOrNull(resolved);
+      if (real === through) linked = pairable(entry, resolved);
+    }
+    if (path.basename(resolved) !== base) return;
+    real = real || realOrNull(resolved);
+    if (!real || goneByPath(entry, resolved)) return;
+    try { if (!fs.statSync(real).isFile()) return; } catch (err) { return; }
+    if (named.some(function (each) { return each.real === real; })) return;
+    named.push({ real: real, resolved: resolved, later: i > at });
+  });
+  if (linked) return linked;
+  if (named.length === 1 && named[0].later) return pairable(entry, named[0].resolved);
+  return null;
+}
+
+/**
+ * The new file a gone page of `review` pairs with, or null (R2). The caller
+ * has judged the page gone. `review` carries the recorded lists as meta.json
+ * holds them.
+ *
+ * @param {object} entry a registry entry (sites and stateDir)
+ * @param {object} review
+ * @param {string} gone the gone page's path, resolved
+ * @returns {string|null} the new file's real path
+ */
+function pairOf(entry, review, gone) {
+  if (!entry || !review || typeof gone !== "string" || !gone) return null;
+  var targets = targetsOf(review);
+  var sources = sourceOrderOf(review);
+  var key = (entry.stateDir || "") + "\u0000" + (review.id || "") + "\u0000" + gone + "\u0000" +
+    targets.join("\u0001") + "\u0000" + sources.join("\u0001");
+  var memo = pairMemoNow();
+  if (memo.has(key)) return memo.get(key);
+  var found = pairInList(entry, targets, gone) || pairInList(entry, sources, gone);
+  memo.set(key, found);
+  return found;
+}
+
+/**
+ * The gone page an item's address names, or null when the page is there or
+ * the address is not a page of a site. A mount's page never pairs.
+ */
+function goneAtAddress(entry, origin, pagePath) {
+  if (!entry) return null;
+  var name = protocol.siteNameFromOrigin(origin, entry.pagesPort, typeof entry.laheNames === "function" && entry.laheNames());
+  var site = name ? entry.sites.get(name) : null;
+  var decoded = site ? decodePath(String(pagePath || "")) : null;
+  var where = decoded !== null ? locate(site, decoded, pagePath) : null;
+  if (!where || where.mounted) return null;
+  var candidate = where.page ? site.root : candidateOf(where, decoded);
+  if (!candidate) return null;
+  var real = realOrNull(candidate);
+  if (!real) return candidate;
+  if (where.page) return null;
+  var realBase = realOrNull(where.base);
+  return realBase && within(real, realBase) ? null : candidate;
+}
+
+/** The new file for a gone page at a site address, for `review`, or null. */
+function pairAtAddress(entry, review, origin, pagePath) {
+  var gone = goneAtAddress(entry, origin, pagePath);
+  return gone ? pairOf(entry, review, gone) : null;
+}
+
+/** pairAtAddress for a state folder: the handled check asks here. */
+function pairedPageFor(dir, review, origin, pagePath) {
+  return pairAtAddress(activeFor(dir) || registryEntry(dir), review, origin, pagePath);
+}
+
+/**
+ * The new file for a recorded path of `review` that is gone, or null: what
+ * review.json's source hints and a gone first source (reviews.recordPaths) ask.
+ */
+function movedFileOf(dir, review, file) {
+  if (typeof file !== "string" || !file) return null;
+  var entry = activeFor(dir) || registryEntry(dir);
+  if (!goneByPath(entry, file)) return null;
+  return pairOf(entry, review, path.resolve(file));
+}
+
+/**
+ * Does `review` hold `target` through a pair (R5b)? One of its recorded pages
+ * before the target, in the same list, is gone and pairs with it.
+ */
+function pairsInto(entry, review, target) {
+  return [targetsOf(review), sourceOrderOf(review)].some(function (list) {
+    var at = -1;
+    list.some(function (one, i) {
+      if ((realOrNull(one) || path.resolve(one)) !== target) return false;
+      at = i;
+      return true;
+    });
+    for (var i = 0; i < at; i += 1) {
+      if (goneByPath(entry, list[i]) && pairOf(entry, review, path.resolve(list[i])) === target) return true;
+    }
+    return false;
+  });
+}
+
 /** A review's committed records (drafts never count), off the helper's fold or off disk. */
 function committedRecords(dir, entry, reviewId) {
   var items = null;
@@ -909,7 +1135,8 @@ function committedRecords(dir, entry, reviewId) {
  * The real file `item` was made on, for `review`, or null when it cannot be
  * told: at a site address (its own path, or a link address under a mount this
  * review linked), or at an old 127.0.0.1:<port> address (through the helper's
- * own page-server records, and an old Markdown review's rendered path).
+ * own page-server records, and an old Markdown review's rendered path). A
+ * gone page that moved names its new file (pairOf).
  */
 function fileOfItem(dir, entry, review, item) {
   var origin = item && item[record.FIELD.PAGE_ORIGIN];
@@ -917,7 +1144,13 @@ function fileOfItem(dir, entry, review, item) {
   if (typeof origin !== "string" || typeof pagePath !== "string" || pagePath.charAt(0) !== "/") return null;
   if (pagePath.indexOf(MOUNT_ROOT) === 0) return linkedFileIn(entry, review.id, pagePath);
   var onSite = fileForPageIn(entry, origin, pagePath);
-  if (onSite) return realOrNull(onSite) || onSite;
+  var real = onSite ? realOrNull(onSite) : null;
+  if (real) return real;
+  // A PAGE THAT MOVED (spec 20261017.01 R1): a gone page this review records
+  // names the new file it pairs with.
+  var paired = pairAtAddress(entry, review, origin, pagePath);
+  if (paired) return paired;
+  if (onSite) return onSite;
   if (!protocol.isLoopbackPortOrigin(origin)) return null;
   var sources = markdownSourcesOf(review);
   if (sources.length) {
@@ -1021,6 +1254,12 @@ function tierOneOf(dir, entry, target, metas) {
     list.push({ review: each.id, at: stampOf(each.meta), meta: each.meta });
   });
   if (!list.length) return null;
+  // Spec 20261017.01 R5b: a review that holds the file through a pair, as in pickReview.
+  if (list.length > 1) {
+    list.forEach(function (one) {
+      if (movedIds.indexOf(one.review) === -1 && pairsInto(entry, one.meta, target)) movedIds.push(one.review);
+    });
+  }
   var winner = tierOneWinner(dir, entry, target, list, movedIds);
   return {
     review: winner.review,
@@ -1389,7 +1628,9 @@ function pageRecords(dir, review, origin, pagePath, items) {
 function spellingsFor(dir, siteName, pagePath, file, match) {
   var entry = activeFor(dir);
   if (!entry || !file || !match) return [];
-  var review = { id: match.review, source_path: match.source_path, source_paths: match.source_paths || [], target_paths: match.targets || [] };
+  var review = match.meta
+    ? Object.assign({ id: match.review }, match.meta)
+    : { id: match.review, source_path: match.source_path, source_paths: match.source_paths || [], target_paths: match.targets || [] };
   var own = record.identityOrigin(protocol.siteOrigin(siteName, entry.pagesPort)) + " " + pagePath;
   var out = [];
   committedRecords(dir, entry, match.review).forEach(function (item) {
@@ -1808,6 +2049,29 @@ function createPageRoutes(options) {
     sendHtml(req, res, 200, tabIcon.ensure(placeNote(stripped ? stripped.html : html, note)));
   }
 
+  /**
+   * THE OLD ADDRESS OF A PAGE THAT MOVED (spec 20261017.01 R5): the new file's
+   * own address, when a review that recorded this gone page pairs it with a
+   * new file and that file's page carries the same review. The address comes
+   * from the registry (ownSiteOf), never from recorded text, and no site is
+   * made for it. Null otherwise. The caller has judged `gone` gone.
+   */
+  function pairedAddressOf(gone) {
+    var entry = activeFor(dir) || registryEntry(dir);
+    var found = null;
+    readReviews(dir).some(function (each) {
+      if (typeof each.meta.retired_at === "string") return false;
+      var paired = pairOf(entry, Object.assign({ id: each.id }, each.meta), gone);
+      if (!paired || !isPage(paired) || inStateDir(paired)) return false;
+      var own = ownSiteOf(paired);
+      var match = own && own.site ? pickReview(dir, own.site, { filePaths: [paired], realFile: paired, mounted: false }) : null;
+      if (!match || match.review !== each.id) return false;
+      found = own.url;
+      return true;
+    });
+    return found;
+  }
+
   function serveGone(req, res, ctx, candidate) {
     var site = ctx.site;
     var copy = mainCheckoutCopy(site, candidate);
@@ -1847,6 +2111,8 @@ function createPageRoutes(options) {
       return streamFile(req, res, copy, stat.size);
     }
     if (!isPage(candidate)) return notFound(req, res);
+    var moved = topLevel(req) ? pairedAddressOf(candidate) : null;
+    if (moved) return redirectTo(res, moved);
     sayOnce("gone\u0000" + candidate, "pages: " + candidate + " is gone; served the file-is-gone page");
     sendHtml(req, res, 410, gonePage(candidate, libraryHref()));
   }
@@ -1888,7 +2154,15 @@ function createPageRoutes(options) {
     }
     var real = realOrNull(candidate);
     var realBase = realOrNull(where.base);
-    if (!real || !realBase || !within(real, realBase) || !stat.isFile() || inStateDir(real)) return notFound(req, res);
+    if (!real || !realBase || !within(real, realBase) || !stat.isFile() || inStateDir(real)) {
+      // A LINK LEFT AT A MOVED PAGE'S OLD PATH leads out of the site: still a
+      // 404, except a page load whose review followed the file (R5).
+      var leftAt = real && realBase && !within(real, realBase) && !where.mounted && topLevel(req) && isPage(candidate)
+        ? pairedAddressOf(candidate)
+        : null;
+      if (leftAt) return redirectTo(res, leftAt);
+      return notFound(req, res);
+    }
     // A LINK ADDRESS TO A FILE WITH ITS OWN REVIEW (each page carries its own
     // comments, Part 2). A top-level page load goes to the file's own address;
     // anything else gets the page read-only with no rail, so a new comment is
@@ -1942,6 +2216,8 @@ module.exports = {
   movesOf: movesOf,
   movesFor: movesFor,
   movedCopyOf: movedCopyOf,
+  movedFileOf: movedFileOf,
+  pairedPageFor: pairedPageFor,
   movedPlace: movedPlace,
   movedPlaceIn: movedPlaceIn,
   movesIn: movesIn,
