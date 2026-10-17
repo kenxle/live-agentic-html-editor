@@ -22,7 +22,7 @@ First draft by Seneschal.
 
 Lahe has two looks, and they do not share rules.
 
-- **The rail and its pieces** (cards, toast, pill, menus, zoom viewer, page highlights). It is drawn by `src/layer/` inside a closed shadow root, in a system font, with its own tokens in `src/layer/overlay.js`. It follows the reviewed page's light or dark, not the operating system's.
+- **The rail and its pieces** (cards, toast, pill, menus, zoom viewer, page highlights). It is drawn by `src/layer/` inside a closed shadow root, in a system font, with its own tokens in `src/layer/overlay.js`. Those tokens are independent of the document styles, so switching a document's style never changes the rail. It follows the reviewed page's light or dark, not the operating system's.
 - **Documents and the Library page.** Rendered Markdown, agent-written pages and the Library page use the house document style in `vendor/stclair-doc-style/`. The documents are light only. The Library page also follows the operating system's dark setting.
 
 The rules that cross both: the border carries meaning on all four sides; a recommended option gets a badge, not a colored edge; no em dashes in any text the product draws; a visual change ships with a screenshot.
@@ -44,6 +44,7 @@ All rail tokens are custom properties on `:host` at the top of the `CSS` array i
 
 Rules for tokens:
 
+- **The rail's tokens are their own set.** They do not read `system-tokens.css`, and an installed style does not change them. Reason: the rail should look the same whatever style the document uses, and not shift when the reviewer switches styles.
 - A rule in the rail reads `var(--token)`. It does not write a hex value.
 - One exception is the text on an accent fill. It is `#fff` in light and `#12151a` in dark (the Send button, the "1 new" tag, the count jewel, the late and refusal buttons). Reason: the dark accent is a light blue, and white on it fails.
 - A new color is added to both the light and dark sets in the same change. Dark is derived the way the others are: the same relationship to the card's paper, not the same numbers.
