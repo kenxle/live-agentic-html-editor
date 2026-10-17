@@ -45,7 +45,9 @@ const PAGES_PORT = arg("--pages-port", "1484");
 const WORK = arg("--work", path.join(os.homedir(), "Documents/lahe-choice-preview/walk-" + Date.now()));
 
 function lahe(args) {
-  return execFileSync(process.execPath, [BIN].concat(args, ["--port", PORT, "--state-dir", STATE]), {
+  // Only `review` takes --port; status and reply find the helper through the state folder.
+  const tail = args[0] === "review" ? ["--port", PORT, "--state-dir", STATE] : ["--state-dir", STATE];
+  return execFileSync(process.execPath, [BIN].concat(args, tail), {
     encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], env: Object.assign({}, process.env, { LAHE_PAGES_PORT: PAGES_PORT })
   });
 }
