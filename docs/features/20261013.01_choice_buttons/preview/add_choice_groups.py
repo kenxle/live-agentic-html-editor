@@ -23,8 +23,20 @@ PROPOSAL = re.compile(r"^\[The proposal\]\(\.\./\.\./lessons/proposed/([a-z0-9-]
 HEADING = re.compile(r"^### ")
 
 
+def group_name(slug):
+    """lesson-<slug>, cut to the grammar's 32 characters. A long slug keeps its
+    first 23 characters and ends in a 7-character hash of the whole slug, so two
+    lessons whose titles share a long prefix still get different names."""
+    name = "lesson-" + slug
+    if len(name) <= 32:
+        return name
+    import hashlib
+    h = hashlib.sha1(slug.encode("utf-8")).hexdigest()[:7]
+    return (name[:24].rstrip("-") + "-" + h)[:32]
+
+
 def group(slug, recommended):
-    name = ("lesson-" + slug)[:32].rstrip("-")
+    name = group_name(slug)
     answers = ["promote", "discard", "merge"]
     labels = {"promote": "Promote", "discard": "Discard", "merge": "Merge"}
     lines = ['<div class="choice" data-choice="%s">' % name,

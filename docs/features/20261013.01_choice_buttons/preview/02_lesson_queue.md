@@ -22,7 +22,7 @@ Updated 2026-10-13 23:49.
 
 [The proposal](../../lessons/proposed/a-calendar-query-across-all-accounts-silently-drops-accounts.md)
 
-<div class="choice" data-choice="lesson-a-calendar-query-across-a">
+<div class="choice" data-choice="lesson-a-calendar-query-dbcb82b">
   <p class="choice-q">What should happen to this lesson?</p>
   <button type="button" value="promote" data-recommended>Promote</button>
   <button type="button" value="discard">Discard</button>
@@ -65,7 +65,7 @@ Updated 2026-10-13 23:49.
 
 [The proposal](../../lessons/proposed/a-reveal-js-slide-timer-restarts-on-every-page-load.md)
 
-<div class="choice" data-choice="lesson-a-reveal-js-slide-timer-r">
+<div class="choice" data-choice="lesson-a-reveal-js-slide-578dfee">
   <p class="choice-q">What should happen to this lesson?</p>
   <button type="button" value="promote" data-recommended>Promote</button>
   <button type="button" value="discard">Discard</button>
@@ -82,7 +82,7 @@ Updated 2026-10-13 23:49.
 
 [The proposal](../../lessons/proposed/lahe-serves-slides-md-as-a-rendered-page-so-reveal-shows-one-long-slide.md)
 
-<div class="choice" data-choice="lesson-lahe-serves-slides-md-as">
+<div class="choice" data-choice="lesson-lahe-serves-slide-4ed1164">
   <p class="choice-q">What should happen to this lesson?</p>
   <button type="button" value="promote" data-recommended>Promote</button>
   <button type="button" value="discard">Discard</button>
@@ -99,7 +99,7 @@ Updated 2026-10-13 23:49.
 
 [The proposal](../../lessons/proposed/pandoc-writes-a-fenced-div-that-opens-with-a-heading-as-a-section.md)
 
-<div class="choice" data-choice="lesson-pandoc-writes-a-fenced-di">
+<div class="choice" data-choice="lesson-pandoc-writes-a-f-7dcf2da">
   <p class="choice-q">What should happen to this lesson?</p>
   <button type="button" value="promote" data-recommended>Promote</button>
   <button type="button" value="discard">Discard</button>
@@ -116,7 +116,7 @@ Updated 2026-10-13 23:49.
 
 [The proposal](../../lessons/proposed/plotly-draws-empty-axes-for-a-trace-type-the-bundle-lacks.md)
 
-<div class="choice" data-choice="lesson-plotly-draws-empty-axes-f">
+<div class="choice" data-choice="lesson-plotly-draws-empt-410c66e">
   <p class="choice-q">What should happen to this lesson?</p>
   <button type="button" value="promote" data-recommended>Promote</button>
   <button type="button" value="discard">Discard</button>
@@ -133,7 +133,7 @@ Updated 2026-10-13 23:49.
 
 [The proposal](../../lessons/proposed/screenshotting-a-served-lahe-url-takes-over-the-reviewers-session.md)
 
-<div class="choice" data-choice="lesson-screenshotting-a-served-l">
+<div class="choice" data-choice="lesson-screenshotting-a-a9d467a">
   <p class="choice-q">What should happen to this lesson?</p>
   <button type="button" value="promote" data-recommended>Promote</button>
   <button type="button" value="discard">Discard</button>
@@ -150,7 +150,7 @@ Updated 2026-10-13 23:49.
 
 [The proposal](../../lessons/proposed/the-international-style-reading-measure-applies-only-inside-a-sheet.md)
 
-<div class="choice" data-choice="lesson-the-international-style-r">
+<div class="choice" data-choice="lesson-the-international-b2e94a8">
   <p class="choice-q">What should happen to this lesson?</p>
   <button type="button" value="promote" data-recommended>Promote</button>
   <button type="button" value="discard">Discard</button>
@@ -167,7 +167,7 @@ Updated 2026-10-13 23:49.
 
 [The proposal](../../lessons/proposed/lahe-review-serves-can-silently-attach-to-a-different-agent-sessions-review.md)
 
-<div class="choice" data-choice="lesson-lahe-review-serves-can-si">
+<div class="choice" data-choice="lesson-lahe-review-serve-1db923b">
   <p class="choice-q">What should happen to this lesson?</p>
   <button type="button" value="promote">Promote</button>
   <button type="button" value="discard" data-recommended>Discard</button>
@@ -184,7 +184,7 @@ Updated 2026-10-13 23:49.
 
 [The proposal](../../lessons/proposed/the-monitor-tool-has-no-persistent-parameter.md)
 
-<div class="choice" data-choice="lesson-the-monitor-tool-has-no-p">
+<div class="choice" data-choice="lesson-the-monitor-tool-b95cf10">
   <p class="choice-q">What should happen to this lesson?</p>
   <button type="button" value="promote">Promote</button>
   <button type="button" value="discard" data-recommended>Discard</button>
@@ -203,7 +203,7 @@ Updated 2026-10-13 23:49.
 
 [The proposal](../../lessons/proposed/a-scheduled-job-on-the-laptop-ran-overnight-only-because-the-mac-never-slept.md)
 
-<div class="choice" data-choice="lesson-a-scheduled-job-on-the-la">
+<div class="choice" data-choice="lesson-a-scheduled-job-o-77d2ee2">
   <p class="choice-q">What should happen to this lesson?</p>
   <button type="button" value="promote" data-recommended>Promote</button>
   <button type="button" value="discard">Discard</button>
@@ -220,7 +220,7 @@ Updated 2026-10-13 23:49.
 
 [The proposal](../../lessons/proposed/a-worktree-with-no-start-point-branches-from-the-clones-checked-out-head.md)
 
-<div class="choice" data-choice="lesson-a-worktree-with-no-start">
+<div class="choice" data-choice="lesson-a-worktree-with-n-75f492d">
   <p class="choice-q">What should happen to this lesson?</p>
   <button type="button" value="promote" data-recommended>Promote</button>
   <button type="button" value="discard">Discard</button>
@@ -237,7 +237,7 @@ Updated 2026-10-13 23:49.
 
 [The proposal](../../lessons/proposed/canvas-says-a-nav-item-is-not-visible-to-students-when-the-page-is-empty.md)
 
-<div class="choice" data-choice="lesson-canvas-says-a-nav-item-is">
+<div class="choice" data-choice="lesson-canvas-says-a-nav-95977f3">
   <p class="choice-q">What should happen to this lesson?</p>
   <button type="button" value="promote" data-recommended>Promote</button>
   <button type="button" value="discard">Discard</button>
@@ -254,7 +254,7 @@ Updated 2026-10-13 23:49.
 
 [The proposal](../../lessons/proposed/claude-in-chrome-blocks-a-javascript-result-that-contains-query-string-urls.md)
 
-<div class="choice" data-choice="lesson-claude-in-chrome-blocks-a">
+<div class="choice" data-choice="lesson-claude-in-chrome-b60da78">
   <p class="choice-q">What should happen to this lesson?</p>
   <button type="button" value="promote" data-recommended>Promote</button>
   <button type="button" value="discard">Discard</button>
@@ -271,7 +271,7 @@ Updated 2026-10-13 23:49.
 
 [The proposal](../../lessons/proposed/tail-1-on-a-git-push-turns-a-fatal-error-into-a-sentence-fragment.md)
 
-<div class="choice" data-choice="lesson-tail-1-on-a-git-push-turn">
+<div class="choice" data-choice="lesson-tail-1-on-a-git-p-6c65ef1">
   <p class="choice-q">What should happen to this lesson?</p>
   <button type="button" value="promote" data-recommended>Promote</button>
   <button type="button" value="discard">Discard</button>
@@ -290,7 +290,7 @@ Updated 2026-10-13 23:49.
 
 [The proposal](../../lessons/proposed/nohup-inside-run-in-background-orphans-the-process.md)
 
-<div class="choice" data-choice="lesson-nohup-inside-run-in-backg">
+<div class="choice" data-choice="lesson-nohup-inside-run-e95d581">
   <p class="choice-q">What should happen to this lesson?</p>
   <button type="button" value="promote" data-recommended>Promote</button>
   <button type="button" value="discard">Discard</button>
@@ -309,7 +309,7 @@ Updated 2026-10-13 23:49.
 
 [The proposal](../../lessons/proposed/re-running-a-script-does-not-verify-a-point-in-time-claim.md)
 
-<div class="choice" data-choice="lesson-re-running-a-script-does">
+<div class="choice" data-choice="lesson-re-running-a-scri-c8484b0">
   <p class="choice-q">What should happen to this lesson?</p>
   <button type="button" value="promote" data-recommended>Promote</button>
   <button type="button" value="discard">Discard</button>
