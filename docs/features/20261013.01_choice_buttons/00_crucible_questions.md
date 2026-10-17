@@ -7,8 +7,8 @@ Status: ROUND 2, one pick and seven premises waiting on Ken
 
 **What changed since round 1.** You put this on hold until the standard docs existed. They do now: [the product brief](../../ongoing/PRODUCT_BRIEF.md), [the architecture doc](../../ongoing/ARCHITECTURE.md), [the style guide](../../ongoing/STYLE_GUIDE.md) and [the brand doc](../../ongoing/BRAND.md). I read all four and the rewritten lahe skill. Three things in them bear on this feature:
 
-- The brand paragraph now promises "interactive modules". Today the product has none on a page. This feature is the first one.
-- The style guide names option cards with a Recommended badge as the component for a choice. A clickable choice should grow out of that component, not stand beside it.
+- The brand paragraph now promises "interactive modules". Pages already carry some: Plotly charts, zoomable diagrams. None of them talks back to the agent. This feature is the first interactive module whose use is itself a message to the agent. (Ken: "we load interactive graphs all the time.")
+- The style guide names option cards with a Recommended badge as the component for a choice. A clickable choice should grow out of that component, not stand beside it. Ken: "love this." Taken as decided.
 - The architecture doc says a change that needs a new kind of record changes that doc first. Approach B below adds a kind, so the brief and architecture for this feature land in that doc too.
 
 ## What you asked for
@@ -124,6 +124,8 @@ The decisions named below (D3, D4, D12) now live in [ARCHITECTURE.md](../../ongo
 
 ## Decisions so far
 
+- 2026-10-17: the clickable choice grows out of the option-card component, not a new look. Ken agreed on the card.
+- 2026-10-17: "interactive modules" already exist on pages (charts, zoomable diagrams); what is new here is one that reports back to the agent. Ken corrected the page.
 - 2026-10-13: documents and live sites are two cases; only live sites need D3's protection. Folded into premise 2.
 - 2026-10-13: there was no standing architecture doc. Written since as part of the standard docs; the board row LAHE-standing-architecture-doc can close.
 - 2026-10-13 to 2026-10-17: on hold until the standard docs existed. Lifted.
