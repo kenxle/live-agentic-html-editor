@@ -1,18 +1,18 @@
-# Three lessons wait for your call: promote two, discard one
+# Three lessons wait for your call: promote one, discard two
 
 Agents wrote these after hitting a trap. A promoted lesson is what the next agent finds when it searches the words it is stuck on. Answer on each section: promote, discard, or merge.
 
 ## What needs you
 
 <dl class="facts">
-  <div><dt>Promote</dt><dd>The link-mount trap behind your Homework 6 cards.</dd></div>
+  <div><dt>Discard</dt><dd>The link-mount trap behind your Homework 6 cards. The PR fixed it; the part still open is a code fix on the board.</dd></div>
   <div><dt>Promote</dt><dd>The drain that dropped the question the reviewer was answering.</dd></div>
   <div><dt>Discard</dt><dd>The README hero recipe. It is a how-to, not a trap, and memory already holds it.</dd></div>
 </dl>
 
 ## A link mount makes one site claim another site's files
 
-<span class="badge badge--purple">Recommend: promote</span>
+<span class="badge badge--cobalt">Recommend: discard</span>
 
 **The problem.** On your Homework 6 review, two paragraphs you added were in the file and on your page. The agent answered "handled" six times between the two cards, and Lahe refused every answer with "the built page does not show its text". The agent gave up and asked you to close the cards. Every other edit on that document quietly came back "can't tell", so the check was doing nothing there either.
 
@@ -20,7 +20,7 @@ The cause: your `docs/ongoing` site had a link into the assignments folder and c
 
 **The fix.** The site whose folder holds the file wins, and a link only counts when no site holds it (PR #74, merged today).
 
-**Why promote.** The symptoms are the exact words an agent sees ("the built page does not show its text", "the check can't see it"). Without the lesson, the next agent in this spot retries the same reply, as this one did.
+**Why discard.** You are right that the PR covers it: a lesson about code that no longer behaves that way would point the next agent at a fixed bug. The part still open is underneath it. When the check cannot get the rendered page for any reason, it reads the raw Markdown without saying so, and a placed paragraph always fails there. That is better fixed than written up: the check should answer "cannot tell" instead. It is on the board as LAHE-handled-check-raw-markdown.
 
 File: [the proposal](proposed/a-link-mount-makes-one-site-claim-another-sites-files.md)
 
