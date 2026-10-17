@@ -135,7 +135,10 @@ test("each state Lahe paints draws its word, and a newer press wins over data-ch
       kept: "\"Kept in this browser\"",
       open: "\"Open\"",
       question: "\"Question\"",
-      not_handled: "\"Not handled\"",
+      // The rail moved to the brand's three thread states (Done, Open, Question)
+      // in PR #75, so a press the agent said no to reads Open on the group too,
+      // with the reason on its thread. The attribute keeps not_handled.
+      not_handled: "\"Open\"",
       done: "\"Done\""
     };
     const target = group(page, "lesson-css-counter");
