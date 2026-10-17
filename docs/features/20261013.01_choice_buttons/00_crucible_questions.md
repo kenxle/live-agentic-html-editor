@@ -119,6 +119,7 @@ The decisions named below (D3, D4, D12) now live in [ARCHITECTURE.md](../../ongo
 
 ## Decisions so far
 
+- 2026-10-17: Ken on the page: "continue. i don't think you need me for the rest of this. this should be pretty straightforward." The brief, architecture, plan and build proceed without waiting on him; the progress page carries anything he should see.
 - 2026-10-17: Ken rewrote who it is for by hand: "Agent writing the page: instructions must be clear and communication must be good."
 - 2026-10-17: Ken rewrote the job by hand: "Answer a question from the agent quickly and easily." His words replace mine here and in the summary. He also deleted the paragraph about the misread being the deeper pain.
 - 2026-10-17: Ken on approach B: "let's do this."
