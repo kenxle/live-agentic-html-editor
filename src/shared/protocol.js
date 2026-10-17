@@ -1197,6 +1197,14 @@
     // A free-writing run record's drafts carry the whole run, so they wait
     // longer (docs/features/20260928.01_free_writing). A commit is never held.
     RUN_DRAFT_FLOOR_MS: 30000,
+    // Choice buttons (docs/features/20261013.01_choice_buttons): every event of
+    // a choice item waits until this long after the page's last press, so
+    // presses made close together reach the helper in one post and wake the
+    // agent once. Capped at PRESS_CAP_MS from the first held press, so steady
+    // clicking cannot hold work back for minutes. Hiding the tab and leaving
+    // the page flush at once, as for drafts; Hold's gate still applies.
+    PRESS_QUIET_MS: 3000,
+    PRESS_CAP_MS: 10000,
     // Plus an immediate flush on each of these, with no debounce and no draft
     // floor. `hide` is the tab being hidden, which is often the last thing a
     // page hears before the browser discards it.

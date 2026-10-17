@@ -128,7 +128,7 @@
       tag = doc.querySelector(protocol.SCRIPT_SELECTOR);
       from = tag ? "selector" : null;
     }
-    if (!tag) return { review: null, token: null, helper: null, frames: null, start: null, notes: null, from: null };
+    if (!tag) return { review: null, token: null, helper: null, frames: null, start: null, notes: null, documentPage: null, from: null };
     var config = {
       review: tag.getAttribute(attr.REVIEW) || null,
       token: tag.getAttribute(attr.TOKEN) || null,
@@ -139,6 +139,9 @@
       start: tag.getAttribute(attr.START) || null,
       // A `lahe write` notes review: the one value protocol.NOTES_ON, or null.
       notes: tag.getAttribute(attr.NOTES) || null,
+      // A page the helper serves itself (choice buttons): the one value
+      // protocol.DOCUMENT_ON, or null.
+      documentPage: tag.getAttribute(attr.DOCUMENT) || null,
       from: from
     };
     // Only a tag on a stable address carries aliases, so only then is the
@@ -198,6 +201,10 @@
       // True only on a notes review (design call 2). Editing reads it to open
       // an empty page for typing; every other empty page stays in reading.
       notes: opts.notes !== undefined ? opts.notes === true : fromTag.notes === protocol.NOTES_ON,
+      // True only on a page the helper serves itself. choices.js arms choice
+      // groups only then; a dev server's page never carries the attribute.
+      documentPage:
+        opts.documentPage !== undefined ? opts.documentPage === true : fromTag.documentPage === protocol.DOCUMENT_ON,
       aliases: Array.isArray(opts.aliases) ? opts.aliases : fromTag.aliases || [],
       pathAliases: Array.isArray(opts.pathAliases) ? opts.pathAliases : fromTag.pathAliases || [],
       spellings: Array.isArray(opts.spellings) ? opts.spellings : fromTag.spellings || [],
@@ -665,6 +672,9 @@
     // panel is shown. Its button re-claims with a takeover, and on success the
     // handlers are re-installed and the panel hidden.
     var readOnlyActive = false;
+    // The choice groups on this page (choice buttons). Made after the rail,
+    // sync and replay are wired; the hooks above read it when they fire.
+    var choices = null;
 
     function enterReadOnly(info) {
       if (readOnlyActive) {
@@ -728,6 +738,9 @@
       onStatus: function (state) {
         statusLog = statusLog.concat([state]).slice(-STATUS_KEPT);
         rail.setStatusLine(state);
+        // A choice group reads "kept" until the helper stores its press. The
+        // status line moves when a post lands, so that is when it is read again.
+        if (choices) ns.replay.paintChoices();
       },
       // Whether an agent is actually listening, from the helper's own files
       // rather than from anything the agent said. The rail shows it under the
@@ -760,6 +773,14 @@
       onLimit: function (text) {
         rail.setLimitNote(text);
       },
+      // A choice group shows "kept" until the helper stores its press, and
+      // "open" from then on.
+      onAcknowledged: function () {
+        if (choices) {
+          refreshItems();
+          ns.replay.paintChoices();
+        }
+      },
       // The helper refused a run event (record.validateRun), so the agent has
       // not seen it. The refusal lives in sync; the card asks for it through
       // the source set below and repaints now, so a refused item is never shown
@@ -777,6 +798,13 @@
         // 1B's poll loop brings folded replies and rejected lines back; 3A's
         // file decides what each one does to a card.
         done.applyReplies(events);
+        // A reply moves a choice group's state (open to done, question, not
+        // handled) without a repaint of the page. Replay reads the items
+        // cache, so the cache is read again from the store first.
+        if (choices) {
+          refreshItems();
+          ns.replay.paintChoices();
+        }
         // The Active tab's rows depend on the reply too, and nothing else tells
         // them it arrived. Two things on an outstanding row turn on "has this
         // been answered yet": the note's own editability, and the box for adding
@@ -1374,6 +1402,8 @@
       // Done draws the closed card, says the reviewer closed it, and takes the
       // highlight off the page.
       done.refresh();
+      // A closed choice shows done on its group.
+      if (choices) ns.replay.paintChoices();
     });
 
     comments.onChange(function (item, event, createdOnElement, meta) {
@@ -1385,6 +1415,11 @@
       if (event === "removed") {
         rail.removeCard(item[record.FIELD.ID]);
         sync.deleteItem(item);
+        // A deleted press takes its mark off its group.
+        if (record.isChoice(item)) {
+          refreshItems();
+          ns.replay.paintChoices();
+        }
         return;
       }
       // "closed" is not a change to the record: the state it would post was
@@ -1603,6 +1638,19 @@
       },
       onPass: function () {
         conflictToasts.sync();
+        // After every repaint the page's choice groups are judged again: a
+        // rebuild can add, fix or break one (choice buttons).
+        if (choices) choices.arm();
+      },
+      // A press is "kept" on its group until the helper has stored it: while
+      // any event for it is still in the outbox, held for the quiet spell or
+      // waiting on a helper that is down.
+      isKept: function (id) {
+        var pending = store.pendingEvents(reviewId);
+        for (var i = 0; i < pending.length; i += 1) {
+          if (pending[i] && pending[i].item === id) return true;
+        }
+        return false;
       },
       onResolved: function (id) {
         conflictToasts.resolved(id);
@@ -1640,6 +1688,48 @@
         if (sync && typeof sync.recordItem === "function") sync.recordItem(item, { existing: true });
       }
     });
+
+    // -------------------------------------------------------------------------
+    // Choice buttons (docs/features/20261013.01_choice_buttons)
+    // -------------------------------------------------------------------------
+    //
+    // An agent's choice groups, armed only on a page the helper serves itself.
+    // A press is decided by the gesture table and minted by choices.js; this is
+    // where it meets the rail, the cache replay reads, and the paint.
+    choices = ns.choices.createChoices({
+      document: doc,
+      window: win,
+      isDocument: config.documentPage === true,
+      store: scopedStore,
+      reviewId: reviewId,
+      page: function () {
+        return page;
+      },
+      sync: sync,
+      rail: rail,
+      gate: function () {
+        return {
+          pickMode: comments.pickMode().active === true,
+          editing: editing.isEditing(),
+          editState: typeof editing.isInEditState === "function" && editing.isInEditState(),
+          mayWrite: !readOnlyActive && !(typeof sync.isReadOnly === "function" && sync.isReadOnly()),
+          presenting: rail.isPresenting()
+        };
+      },
+      headingFor: function (element) {
+        return ns.comments.headingTextFor(element, doc);
+      },
+      listeners: { registry: ns.listeners.shared, group: ns.listeners.GROUP.CHOICES },
+      onPress: function (item) {
+        refreshItems();
+        rail.upsertCard(item);
+        if (tab && typeof tab.refresh === "function") tab.refresh();
+        done.refresh();
+        ns.replay.paintChoices();
+      }
+    });
+    choices.arm();
+    choices.bind();
 
     // -------------------------------------------------------------------------
     // Clicking a card to find its place on the page
@@ -2136,6 +2226,7 @@
       sync: sync,
       exporter: exporter,
       editing: editing,
+      choices: choices,
       protect: protect,
       injector: injector,
       merge: merge,
@@ -2152,6 +2243,7 @@
         // heartbeat and liveness timers, and releases the window lock and the
         // window-registered unload listeners, all of which used to leak.
         sync.stop();
+        if (choices) choices.unbind();
         injector.teardown();
         if (pageObserver) pageObserver.disconnect();
         pageObserver = null;
@@ -2366,6 +2458,30 @@
       },
       pickMode: function () {
         return handle.comments.pickMode().active;
+      },
+
+      // Choice buttons: which groups armed, which were refused and why, and
+      // what a press would store. The groups are on the page; this is what the
+      // library decided about them.
+      choices: {
+        armed: function () {
+          return handle.choices ? handle.choices.armedNames() : [];
+        },
+        refused: function () {
+          return handle.choices ? handle.choices.refused() : [];
+        },
+        arm: function () {
+          return handle.choices ? handle.choices.arm() : null;
+        },
+        isDocument: function () {
+          return handle.choices ? handle.choices.isDocument() : false;
+        },
+        counters: function () {
+          return handle.choices ? Object.assign({}, handle.choices.counters) : null;
+        },
+        paint: function () {
+          return ns.replay.paintChoices();
+        }
       },
 
       // Copy and Export. The buttons are the reviewer's path; this is here so a

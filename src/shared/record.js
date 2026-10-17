@@ -2401,6 +2401,70 @@
   // region ref is the anchor engine's choice rung's: {kind, group}.
 
   var CHOICE_CODE = { REFUSED: "CHOICE_REFUSED" };
+
+  // The component's markup, spelled once for the anchor rung, replay's paint
+  // and choices.js. The group's name is NOT under the data-lahe- prefix on
+  // purpose: the tool strips that prefix from captured markup and from the
+  // element descriptions agents get, and the name has to survive both. The
+  // three attributes the layer writes are the tool's own and DOM only.
+  var CHOICE_MARKUP = {
+    GROUP_CLASS: "choice",
+    NAME_ATTR: "data-choice",
+    QUESTION_CLASS: "choice-q",
+    CHOSEN_ATTR: "data-chosen",
+    RECOMMENDED_ATTR: "data-recommended",
+    PRESSED_ATTR: "data-lahe-pressed",
+    STATE_ATTR: "data-lahe-choice-state",
+    INERT_ATTR: "data-lahe-inert"
+  };
+
+  // What data-lahe-choice-state says, in the rail's own words (brief R9).
+  var CHOICE_STATE = {
+    KEPT: "kept",
+    OPEN: "open",
+    QUESTION: "question",
+    NOT_HANDLED: "not_handled",
+    DONE: "done"
+  };
+
+  /**
+   * The state a choice group shows for its current record.
+   *
+   * @param {Object} item the group's latest choice record
+   * @param {boolean} kept true while the helper has not stored this revision
+   *   (an event for it is still in the outbox)
+   * @returns {string} a CHOICE_STATE value
+   */
+  function choiceStateOf(item, kept) {
+    var state = item && item[FIELD.STATE];
+    if (state === STATE.HANDLED) return CHOICE_STATE.DONE;
+    if (state === STATE.NOT_HANDLED) return CHOICE_STATE.NOT_HANDLED;
+    if (kept || state === STATE.DRAFT) return CHOICE_STATE.KEPT;
+    var reply = item && item[FIELD.REPLY];
+    if (reply && reply.status === REPLY_STATUS.QUESTION) return CHOICE_STATE.QUESTION;
+    return CHOICE_STATE.OPEN;
+  }
+
+  /**
+   * The current record for each group: the one with the latest created_at
+   * among the choice records given (the caller passes this page's). A newer
+   * press after a handled one is a new item, so created_at, not the revision,
+   * is what says which is current.
+   *
+   * @returns {Object} group name -> record
+   */
+  function latestChoiceByGroup(items) {
+    var out = Object.create(null);
+    (items || []).forEach(function (item) {
+      if (!isChoice(item)) return;
+      var press = item[FIELD.CHOICE];
+      var group = press && press.group;
+      if (!isChoiceToken(group)) return;
+      var held = out[group];
+      if (!held || String(item[FIELD.CREATED_AT] || "") >= String(held[FIELD.CREATED_AT] || "")) out[group] = item;
+    });
+    return out;
+  }
   var CHOICE_KEYS = ["group", "answer"];
 
   function copyChoice(value) {
@@ -2648,6 +2712,10 @@
     comparisonFields: comparisonFields,
     validateItem: validateItem,
     CHOICE_CODE: CHOICE_CODE,
+    CHOICE_MARKUP: CHOICE_MARKUP,
+    CHOICE_STATE: CHOICE_STATE,
+    choiceStateOf: choiceStateOf,
+    latestChoiceByGroup: latestChoiceByGroup,
     isChoice: isChoice,
     isChoiceToken: isChoiceToken,
     choiceRef: choiceRef,

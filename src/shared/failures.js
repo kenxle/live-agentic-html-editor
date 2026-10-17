@@ -252,6 +252,33 @@
       "A choice record names its group and answer with short ids and carries nothing else, so this one was not stored.",
       null
     ),
+    // A group the agent wrote wrong: no name, a name or a value off the
+    // grammar, two groups with one name, fewer than two buttons. Drawn as plain
+    // content and named here before anything can be pressed (brief R4). The
+    // detail names each group and why, written to hand to the agent.
+    CHOICE_GROUP_INERT: def(
+      SEVERITY.WARNING,
+      true,
+      SURFACE.FAILURES_LIST,
+      "Some choices on this page cannot be pressed, so they show as plain text.",
+      "Ask your agent to fix them. Each one and the reason:"
+    ),
+    // The card notes for a press whose group the page no longer shows. The
+    // press stays with the agent either way.
+    CHOICE_GROUP_GONE: def(
+      SEVERITY.WARNING,
+      true,
+      SURFACE.CARD,
+      "This choice is no longer on the page. Your answer is kept and is still with the agent.",
+      null
+    ),
+    CHOICE_GROUP_TWICE: def(
+      SEVERITY.WARNING,
+      true,
+      SURFACE.CARD,
+      "Two choices on this page now share this one's name, so Lahe marked neither. Your answer is kept.",
+      null
+    ),
 
     // --- replies from agents (D6) ------------------------------------------
     //
@@ -472,7 +499,15 @@
   // reply folds as handled), and a list typed twice is a badge that outlives
   // the state behind it the moment one copy gains a code. ANCHOR_LOST is the
   // legacy spelling, kept so a card drawn by an older build still clears.
-  var ANCHOR_FAILURE_CODES = ["ANCHOR_NO_TEXT_MATCH", "ANCHOR_AMBIGUOUS", "ANCHOR_STRUCTURE_ONLY", "ANCHOR_LOST"];
+  var ANCHOR_FAILURE_CODES = [
+    "ANCHOR_NO_TEXT_MATCH",
+    "ANCHOR_AMBIGUOUS",
+    "ANCHOR_STRUCTURE_ONLY",
+    "ANCHOR_LOST",
+    // The choice rung's two refusals (choice buttons).
+    "CHOICE_GROUP_GONE",
+    "CHOICE_GROUP_TWICE"
+  ];
 
   function canonical(code) {
     return Object.prototype.hasOwnProperty.call(ALIASES, code) ? ALIASES[code] : code;
@@ -500,7 +535,9 @@
   // that ends it (the helper answering again) clears the chip.
   var STANDING = {
     SECOND_WINDOW_REFUSED: true,
-    HELPER_UNREACHABLE: true
+    HELPER_UNREACHABLE: true,
+    // Re-raised on every arming pass while a broken group is on the page.
+    CHOICE_GROUP_INERT: true
   };
 
   // ---------------------------------------------------------------------------
@@ -531,7 +568,10 @@
     // The allowlist dropped them, so the codes whose remedy is literally "hand
     // this line to your agent" were the two with no way to hand it over.
     REPLY_LINE_MALFORMED: true,
-    SYNC_UNAUTHORIZED: true
+    SYNC_UNAUTHORIZED: true,
+    // An agent wrote the broken choice group, and fixing it is agent work: the
+    // detail names each group and why, ready to hand over.
+    CHOICE_GROUP_INERT: true
   };
 
   function chipAction(code) {

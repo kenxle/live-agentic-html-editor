@@ -1244,6 +1244,12 @@
     function saidBy(item) {
       // The reviewer's own words, never the tool's: see record.reviewerNote.
       var note = record.reviewerNote(item);
+      // A choice: the decided answer, as the button said it, then any words
+      // the reviewer added on the card (choice buttons).
+      if (record.isChoice(item)) {
+        var answer = overlayModule.choiceAnswerText(item, doc);
+        return note ? answer + "\n" + note : answer;
+      }
       if (record.isHandEdit(item)) return note || "";
       var change = item[record.FIELD.CHANGE];
       if (note && change && note !== change) return note + "\n" + change;

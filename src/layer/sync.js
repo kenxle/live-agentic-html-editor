@@ -1491,6 +1491,10 @@
     // them. A later event for the item that the helper accepts clears it.
     var refusedRuns = Object.create(null);
     var onItemRefused = typeof opts.onItemRefused === "function" ? opts.onItemRefused : function () {};
+    // The helper stored some events. Told after the outbox is updated, so a
+    // reader asking "is anything still queued for this item" gets the answer
+    // the helper just gave (choice buttons: a group goes from kept to open).
+    var onAcknowledged = typeof opts.onAcknowledged === "function" ? opts.onAcknowledged : function () {};
     // When the armed flush timer fires, and whether it was asked for by
     // something that skips the floor. The timer keeps the EARLIEST deadline it
     // is given (requirement 5): a later request never pushes it back.
@@ -1833,6 +1837,10 @@
       if (readOnly) return null;
       var opts2 = options || {};
       runDraftItems[item[record.FIELD.ID]] = record.isRunRecord(item);
+      if (record.isChoice(item)) choiceItems[item[record.FIELD.ID]] = true;
+      // A press starts or extends the hold. A follow-up typed on a choice card
+      // is not a press: it waits only for a hold already running.
+      if (opts2.press === true) notePress();
       var event = eventFor(item, opts2);
       store.queueEvent(requireReview(), event);
       if (opts2.immediate) {
@@ -1920,6 +1928,35 @@
       return ids;
     }
 
+    // PRESSES TRAVEL TOGETHER (choice buttons, docs/features/
+    // 20261013.01_choice_buttons). A press is recorded with no immediate
+    // flush, and every queued event of a choice item waits in splitForFloor
+    // until PRESS_QUIET_MS after the page's last press, or PRESS_CAP_MS after
+    // the first press still held, whichever comes first. `firstAt` is null
+    // whenever nothing is held: a post that carries the choice events ends the
+    // hold, so a press made during that post starts a new one, and a post that
+    // fails retries on the ordinary backoff rather than waiting again.
+    var pressHold = { firstAt: null, lastAt: null };
+    var choiceItems = Object.create(null);
+
+    function notePress() {
+      var now = nowMs();
+      pressHold.lastAt = now;
+      if (pressHold.firstAt === null) pressHold.firstAt = now;
+    }
+
+    function pressDueAt() {
+      if (pressHold.firstAt === null) return 0;
+      return Math.min(pressHold.lastAt + protocol.FLUSH.PRESS_QUIET_MS, pressHold.firstAt + protocol.FLUSH.PRESS_CAP_MS);
+    }
+
+    function isChoiceEvent(event) {
+      var id = event && event[protocol.EVENT_FIELD.ITEM];
+      if (id && choiceItems[id]) return true;
+      var carried = event && event.record;
+      return !!carried && carried[record.FIELD.KIND] === record.KIND.CHOICE;
+    }
+
     // When an item's drafts may next go to the helper: the floor after its last
     // draft post, or now when this page has never posted it.
     function draftDueAt(itemId) {
@@ -1958,6 +1995,16 @@
           if (waitUntil === null || due < waitUntil) waitUntil = due;
         }
       });
+      // A choice item waits whole for the press hold, whatever it has queued.
+      var pressDue = pressDueAt();
+      if (pressDue > now) {
+        events.forEach(function (event) {
+          var id = event[protocol.EVENT_FIELD.ITEM];
+          if (!id || waiting[id] || !isChoiceEvent(event)) return;
+          waiting[id] = true;
+          if (waitUntil === null || pressDue < waitUntil) waitUntil = pressDue;
+        });
+      }
       return {
         send: events.filter(function (event) {
           return !waiting[event[protocol.EVENT_FIELD.ITEM]];
@@ -2113,6 +2160,9 @@
       flushing = true;
       state = STATE.IN_FLIGHT;
       counters.posts += 1;
+      // The held presses are going out, so the hold ends here. A press made
+      // while this post is in flight starts a fresh one.
+      if (events.some(isChoiceEvent)) pressHold.firstAt = null;
 
       // Start each draft-only item's floor now, when its post goes out, so a
       // keystroke that lands during the post waits its turn. Kept to put back
@@ -2174,6 +2224,13 @@
             cursor = result.body.seq;
           }
           recomputeStatus();
+          if (accepted.length) {
+            try {
+              onAcknowledged(accepted.length);
+            } catch (err) {
+              // A listener's trouble is never the post's.
+            }
+          }
           var remaining = pendingCount();
           // What arrived during the post goes through flush again at once, and
           // flush decides: drafts typed meanwhile wait for their floor, and a
