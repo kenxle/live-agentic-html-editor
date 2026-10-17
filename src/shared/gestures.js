@@ -360,7 +360,40 @@
       return decide(GESTURE.COMMIT_EDIT, true, false, "a click outside the edited block commits it, and the page still gets the click");
     }
 
+    // A PRESS ON A CHOICE GROUP (docs/features/20261013.01_choice_buttons).
+    // The one click in browse the library takes, and only because the agent
+    // marked the button as a question for the reviewer: a `button` inside an
+    // armed `.choice`, on a page the helper serves itself as a document. Every
+    // condition is an explicit opt-in, so a caller that cannot tell gets the
+    // page's own outcome. preventDefault, so a group inside a form submits
+    // nothing. No hint row in TABLE: every row there is a line on every page's
+    // rail, and a page with no groups must stay exactly as it was.
+    var choice = choiceRefusal(e);
+    if (choice === null) {
+      return decide(GESTURE.PRESS_CHOICE, false, true, "a click on an armed choice group's button is the reviewer's answer");
+    }
+    if (e.inArmedChoice === true) return decide(GESTURE.PAGE_DEFAULT, true, false, choice);
+
     return decide(GESTURE.PAGE_DEFAULT, true, false, "browse is the page untouched (D3, R13)");
+  }
+
+  /**
+   * Why a click is not a choice press, or null when it is one.
+   *
+   * The descriptor fields, all opt-in: `inArmedChoice` (the target is a button
+   * inside a .choice group choices.js armed), `documentPage` (the script tag
+   * carries data-lahe-document), `mayWrite` (this window holds the review's
+   * write claim). And the refusals: `pickMode`, `editing` or `editState` (a
+   * block is open, or edit state is on), `presenting`.
+   */
+  function choiceRefusal(e) {
+    if (e.inArmedChoice !== true) return "not a button in an armed choice group";
+    if (e.documentPage !== true) return "a choice group arms only on a page the helper serves as a document";
+    if (e.pickMode === true) return "element-pick mode is open, so the click picks";
+    if (e.editing === true || e.editState === true) return "an edit is open, so the page is not in browse";
+    if (e.presenting === true) return "the review is hidden for presenting";
+    if (e.mayWrite !== true) return "this window is read-only for the review";
+    return null;
   }
 
   /**

@@ -1593,6 +1593,10 @@
   var FRAMES_ALLOW = "allow";
   var START_HIDDEN = "hidden";
   var NOTES_ON = "true";
+  // The one value SCRIPT_ATTR.DOCUMENT carries (choice buttons). Written only
+  // by the helper, at response time, onto a page it serves itself; the layer
+  // arms choice groups only when the tag carries exactly this.
+  var DOCUMENT_ON = "true";
 
   // The inline onerror, kept to one statement-per-clause line so the attribute
   // stays readable in a page's source. Single quotes only: the attribute is
@@ -1628,6 +1632,7 @@
       '        ' + SCRIPT_ATTR.HELPER + '="' + (o.helper || DEFAULT_HELPER_ORIGIN) + '"\n' +
       fallback +
       (o.notes === true ? '        ' + SCRIPT_ATTR.NOTES + '="' + NOTES_ON + '"\n' : "") +
+      (o.document === true ? '        ' + SCRIPT_ATTR.DOCUMENT + '="' + DOCUMENT_ON + '"\n' : "") +
       (o.aliases !== undefined ? '        ' + SCRIPT_ATTR.ALIASES + '="' + aliasesAttribute(o.aliases) + '"\n' : "") +
       (o.pathAliases !== undefined ? '        ' + SCRIPT_ATTR.PATH_ALIASES + '="' + pathAliasesAttribute(o.pathAliases) + '"\n' : "") +
       (o.spellings !== undefined ? '        ' + SCRIPT_ATTR.SPELLINGS + '="' + spellingsAttribute(o.spellings) + '"\n' : "") +
@@ -2217,6 +2222,7 @@
     FRAMES_ALLOW: FRAMES_ALLOW,
     START_HIDDEN: START_HIDDEN,
     NOTES_ON: NOTES_ON,
+    DOCUMENT_ON: DOCUMENT_ON,
     SCRIPT_SELECTOR: SCRIPT_SELECTOR,
     SCRIPT_FALLBACK_ONERROR: SCRIPT_FALLBACK_ONERROR,
     scriptTag: scriptTag,

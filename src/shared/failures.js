@@ -239,6 +239,20 @@
       null
     ),
 
+    // --- choice buttons -----------------------------------------------------
+    //
+    // docs/features/20261013.01_choice_buttons. The helper's refusal of a
+    // choice record (record.validateChoice): a group or answer off the grammar,
+    // a key other than the two, or a field a press never carries. The layer
+    // never sends one, so it shows up only as a forgery.
+    CHOICE_REFUSED: def(
+      SEVERITY.BLOCKING,
+      false,
+      SURFACE.CLI,
+      "A choice record names its group and answer with short ids and carries nothing else, so this one was not stored.",
+      null
+    ),
+
     // --- replies from agents (D6) ------------------------------------------
     //
     // The helper SKIPS a bad line and never dies: exiting on one agent's typo

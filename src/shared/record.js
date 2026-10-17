@@ -274,7 +274,12 @@
     anchor_after_html: CLASS_DATA,
     anchor_tag_after: CLASS_DATA,
     placement: CLASS_DATA,
-    remove_blocks: CLASS_DATA
+    remove_blocks: CLASS_DATA,
+    // Choice buttons: the reviewer's press, by key. Both values are bounded by
+    // CHOICE_TOKEN, so neither can carry prose (validateChoice). The group's
+    // question and heading ride in context, as data.
+    "choice.group": CLASS_INSTRUCTION,
+    "choice.answer": CLASS_INSTRUCTION
   };
 
   function fieldClass(path) {
@@ -1067,6 +1072,9 @@
     item[FIELD.CREATED_AT] = at;
     item[FIELD.UPDATED_AT] = src.updated_at || at;
     copyRunFields(src, item);
+    // A choice rides only when the input carries it, like the run fields, so
+    // every other record is today's record, byte for byte.
+    if (src.choice !== undefined) item[FIELD.CHOICE] = copyChoice(src.choice);
 
     // A record that arrives with an `after` starts its history with it, so
     // branch three has something to compare against from the first revision.
@@ -2377,6 +2385,80 @@
   // Validation
   // ---------------------------------------------------------------------------
 
+  // ---------------------------------------------------------------------------
+  // Choice records (docs/features/20261013.01_choice_buttons)
+  // ---------------------------------------------------------------------------
+  //
+  // A press on a choice group. Its whole intent is `choice`: the group's name
+  // and the pressed button's value, both bounded by CHOICE_TOKEN so neither can
+  // hold prose. The helper's door (log.append) and the projection's fold both
+  // run validateChoice, so a page cannot smuggle words through the field and a
+  // hand-edited log line cannot either.
+  //
+  // A choice record carries no before, after, markup, history, run fields or
+  // stamp: there is nothing on the page for the agent to rewrite, and no stamp
+  // round should ever ask the agent for a data-lahe-id on a button group. Its
+  // region ref is the anchor engine's choice rung's: {kind, group}.
+
+  var CHOICE_CODE = { REFUSED: "CHOICE_REFUSED" };
+  var CHOICE_KEYS = ["group", "answer"];
+
+  function copyChoice(value) {
+    return value && typeof value === "object" && !Array.isArray(value) ? Object.assign({}, value) : value;
+  }
+
+  /** Is this a choice record? */
+  function isChoice(item) {
+    return !!item && item[FIELD.KIND] === KIND.CHOICE;
+  }
+
+  /** Does `value` match the group and answer grammar? */
+  function isChoiceToken(value) {
+    return typeof value === "string" && CHOICE_TOKEN.test(value);
+  }
+
+  /** The choice region reference: the rung's own, kind and group, nothing else. */
+  function choiceRef(group) {
+    return { kind: KIND.CHOICE, group: group };
+  }
+
+  function choiceRefusal(reason) {
+    return { code: CHOICE_CODE.REFUSED, reason: reason };
+  }
+
+  /**
+   * The helper's check on a choice field. Null when the record may be stored,
+   * or {code, reason} naming the first refusal. A record that is not a choice
+   * and carries no `choice` is not this check's business and passes.
+   */
+  function validateChoice(item) {
+    if (!item || typeof item !== "object") return choiceRefusal("not a record");
+    var value = item[FIELD.CHOICE];
+    var present = value !== undefined && value !== null;
+    if (!isChoice(item)) {
+      return present ? choiceRefusal("choice is set only on a choice record, and this is a " + String(item[FIELD.KIND])) : null;
+    }
+    if (!present || typeof value !== "object" || Array.isArray(value)) {
+      return choiceRefusal("a choice record must carry choice as {group, answer}");
+    }
+    var extra = Object.keys(value).filter(function (key) {
+      return CHOICE_KEYS.indexOf(key) === -1;
+    });
+    if (extra.length) return choiceRefusal("choice carries a key other than group and answer: " + extra.join(", "));
+    if (!isChoiceToken(value.group)) return choiceRefusal("choice.group is missing or off the grammar");
+    if (!isChoiceToken(value.answer)) return choiceRefusal("choice.answer is missing or off the grammar");
+    var carried = [FIELD.BEFORE, FIELD.AFTER, FIELD.BEFORE_HTML, FIELD.AFTER_HTML].filter(function (key) {
+      return item[key] !== undefined && item[key] !== null;
+    });
+    if (Array.isArray(item[FIELD.AFTER_HISTORY]) && item[FIELD.AFTER_HISTORY].length) carried.push(FIELD.AFTER_HISTORY);
+    if (hasRunFields(item)) carried.push("the free-writing fields");
+    if (carried.length) return choiceRefusal("a choice record carries " + carried.join(", "));
+    var region = item[FIELD.REGION];
+    var ref = region && region.ref;
+    if (ref && typeof ref.stamp === "string" && ref.stamp) return choiceRefusal("a choice record carries a stamp");
+    return null;
+  }
+
   // Fail loud, and report every problem at once rather than the first.
   //
   // A draft is held to a lighter bar than a ready item on purpose: a draft is
@@ -2428,6 +2510,8 @@
     if (item[FIELD.REPLY] && REPLY_STATUSES.indexOf(item[FIELD.REPLY].status) === -1) {
       problems.push("reply.status must be one of " + REPLY_STATUSES.join(", "));
     }
+    var choiceProblem = validateChoice(item);
+    if (choiceProblem) problems.push(choiceProblem.reason);
     if (problems.length) {
       throw new Error("invalid item " + String(item[FIELD.ID]) + ": " + problems.join("; "));
     }
@@ -2563,6 +2647,11 @@
     BREAK_REMOVED: BREAK_REMOVED,
     comparisonFields: comparisonFields,
     validateItem: validateItem,
+    CHOICE_CODE: CHOICE_CODE,
+    isChoice: isChoice,
+    isChoiceToken: isChoiceToken,
+    choiceRef: choiceRef,
+    validateChoice: validateChoice,
     isDraft: isDraft,
     isReady: isReady,
     isUnansweredReady: isUnansweredReady,

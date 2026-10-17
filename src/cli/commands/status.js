@@ -479,8 +479,17 @@ function excerpt(item, max) {
   var limit = typeof max === "number" ? max : 100;
   var intent = item.note || item.change || "";
   var flatIntent = String(intent).replace(/\s+/g, " ").trim();
-  if (flatIntent) return clip(flatIntent, limit);
   var flatQuote = String(item.quote || "").replace(/\s+/g, " ").trim();
+  // A CHOICE (choice buttons): the press is the intent, two ids, so it prints
+  // bare. A follow-up the reviewer typed on its card prints after it; with
+  // none, the group's question follows, labeled as page text.
+  var press = item.kind === "choice" && item.choice ? item.choice : null;
+  if (press) {
+    var said = "pressed " + press.answer + " in " + press.group;
+    if (flatIntent) return said + "  " + clip(flatIntent, limit);
+    return flatQuote ? said + "  " + PAGE_TEXT_LABEL + '"' + clip(flatQuote, limit) + '"' : said;
+  }
+  if (flatIntent) return clip(flatIntent, limit);
   if (!flatQuote) return "(no text)";
   return PAGE_TEXT_LABEL + '"' + clip(flatQuote, limit) + '"';
 }
