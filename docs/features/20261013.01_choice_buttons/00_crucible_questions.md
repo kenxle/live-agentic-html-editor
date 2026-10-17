@@ -71,9 +71,7 @@ These stand unless you object on a card.
 
 ### Q1. What job is this hired to do?
 
-Clear a queue of decisions the agent has already framed, so the agent can act, without any decision getting lost or misread. The trigger is an agent handing you a page of recommendations: a lesson queue, a crucible like this one, a forge checkpoint, a close-out asking approval on deletions. The job is not "answer a question"; it is "get N small verdicts back to the agent in one sitting, each tied to the thing it is about."
-
-The deeper pain is the misread, not the gestures. "All as recommended, except merge the two monitor ones" is one comment and the agent can still get it wrong. That is why identity, not speed, is the first premise.
+Answer a question from the agent quickly and easily
 
 ### Q2. Who is this for?
 
@@ -123,6 +121,8 @@ The decisions named below (D3, D4, D12) now live in [ARCHITECTURE.md](../../ongo
 
 ## Decisions so far
 
+- 2026-10-17: Ken rewrote the job by hand: "Answer a question from the agent quickly and easily." His words replace mine here and in the summary. He also deleted the paragraph about the misread being the deeper pain.
+- 2026-10-17: Ken on approach B: "let's do this."
 - 2026-10-17: approach B, a choice record, is the pick. Ken on the card: "I think this might be better for token management as well."
 - 2026-10-17: the "answer in words" premise is dropped. Highlighting and commenting is always there, so it needs no saying. Ken on premise 5.
 - 2026-10-17: premise 4 restated as the decision (a press is never confused with another) with the mechanism left to the architecture. Ken: "this is architecture."

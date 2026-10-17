@@ -1,7 +1,7 @@
 # Crucible: choice buttons on a document
 
 Date: 2026-10-17
-Status: ACCEPTED (Ken picked B on the questions page, 2026-10-17; say so on a card if that reading is wrong)
+Status: ACCEPTED (Ken on approach B, 2026-10-17: "let's do this")
 
 The questions, Ken's comments and how each was folded in are on [the questions page](00_crucible_questions.md). This file is the summary the brief is written from.
 
@@ -11,7 +11,9 @@ The questions, Ken's comments and how each was folded in are on [the questions p
 
 ## Jobs to be done
 
-Clear a queue of decisions the agent has already framed, so the agent can act, without any decision getting lost or misread. The trigger is an agent handing Ken a page of recommendations: a lesson queue, a crucible, a forge checkpoint, a close-out asking approval on deletions. The job is "get N small verdicts back to the agent in one sitting, each tied to the thing it is about", not "answer a question". The deeper pain is the misread, not the gesture count: a blanket comment with exceptions in prose is one comment and the agent can still get it wrong.
+In Ken's words, written onto the questions page by hand: **answer a question from the agent quickly and easily.**
+
+My longer framing (clear a queue of verdicts the agent framed, each tied to the thing it is about) was his starting point and he replaced it. He also deleted my claim that the misread, not the gesture count, was the deeper pain. The brief takes his sentence as the job and treats the identity requirement as a constraint, not the job.
 
 ## Who the user is
 
