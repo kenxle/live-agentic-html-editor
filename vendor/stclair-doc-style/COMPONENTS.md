@@ -315,8 +315,11 @@ answer. A page may use both, the cards above the group.
   off when you have no recommendation.
 - Once you have acted on the answer, write `data-chosen` (no value) onto the
   chosen button in the source. The page then shows the decision with no Lahe
-  running, and in print.
-- In Markdown, the group is its own HTML block, with a blank line before and after.
+  running, and in print. One button carries it; when the answer changes, move it.
+- The buttons sit directly inside the group. In Markdown, the group is its own
+  HTML block, with a blank line before and after and none inside: a blank line
+  inside ends the block and wraps each button in its own paragraph, and Lahe
+  refuses the group.
 
 What the reader sees. Lahe paints the attributes marked "Lahe"; never write them yourself.
 
@@ -325,7 +328,7 @@ What the reader sees. Lahe paints the attributes marked "Lahe"; never write them
 | At rest | Square outlined buttons; the recommended one carries the badge |
 | `data-chosen` on a button | That button filled with ink, the others quiet, the word Done |
 | Lahe: `data-lahe-pressed` on a button | The button the reader pressed, filled with ink. A newer press than `data-chosen`, so it wins and the chosen one goes quiet |
-| Lahe: `data-lahe-choice-state` on the group | A word at the end of the row: Kept in this browser, Open, Question, Not handled, Done |
+| Lahe: `data-lahe-choice-state` on the group | A word at the end of the row: Kept in this browser, Open, Question, Done. A press the agent said no to reads Open too, with the reason on its thread |
 | Lahe: `data-lahe-inert` on the group | A dashed box with quiet buttons: Lahe refused the group, and the rail says why |
 
 ## Badges

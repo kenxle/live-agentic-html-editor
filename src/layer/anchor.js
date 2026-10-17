@@ -1372,7 +1372,10 @@
   }
 
   function choiceRung(ref, scope) {
-    if (!ref || ref.kind !== record.KIND.CHOICE) return null;
+    // The anchor engine also runs without the record module (the anchor
+    // engine spec mounts normalize, uniqueness and this file alone). No record
+    // module means no choice record can exist, so the rung has nothing to say.
+    if (!record || !ref || ref.kind !== record.KIND.CHOICE) return null;
     var group = typeof ref.group === "string" ? ref.group : "";
     var found = record.isChoiceToken(group) ? choiceGroupsNamed(scope, group) : [];
     var bound = found.length === 1;

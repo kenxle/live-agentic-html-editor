@@ -36,14 +36,14 @@ It works only on pages the Lahe program serves itself as documents. On a page fr
 
 - `data-choice` names the group: lowercase letters, digits and hyphens, 1 to 32 characters, starting with a letter or digit (`record.CHOICE_TOKEN`). Unique on the page. It is not under `data-lahe-` on purpose: the tool strips that prefix from captured markup, and the name must survive.
 - Each button's `value` follows the same grammar. The button's text is the label. `type="button"` keeps it out of any form. `data-recommended` marks at most one.
-- Once the agent has handled a press, it writes `data-chosen` onto the chosen button in the source. The stylesheet draws that button as the decision with no Lahe present.
+- Once the agent has handled a press, it writes `data-chosen` onto the chosen button in the source, and moves it when the answer changes; a group carries it on one button only. The stylesheet draws that button as the decision with no Lahe present.
 - In Markdown the block is written as HTML with a blank line before and after. The catalog entry is in COMPONENTS.md.
 
 ## Which pages are live
 
 The Lahe program adds `data-lahe-document` to the script tag of every page it serves itself (rendered Markdown, an HTML page under a served folder, a `lahe write` page), on the response and never on disk. A tag written by `lahe add` into a file or printed for a dev server never carries it. The layer arms choice groups only when its tag carries the attribute; everywhere else a group is inert and raises nothing.
 
-On a document page the layer refuses a group with no name, a name or value off the grammar, fewer than two buttons, or a name shared with another group, marks it `data-lahe-inert`, and raises a rail chip that names the group and the reason.
+On a document page the layer refuses a group with no name, a name or value off the grammar, fewer than two buttons, two buttons sharing a value, more than one button carrying `data-chosen`, buttons that are not direct children of the group (a blank line inside the block in Markdown does that), or a name shared with another group. It marks the group `data-lahe-inert` and raises a rail chip that names the group and the reason. Off a document page it writes nothing at all.
 
 ## A press
 
@@ -51,11 +51,11 @@ The click is decided by the gesture table (`gestures.GESTURE.PRESS_CHOICE`): a b
 
 A press mints a record of kind `choice` in `draft` and marks it `ready` in the same tick. Its intent is the `choice` field, `{group, answer}`, and nothing else: no `note`, no `before` or `after`, no stamp. `context.quote` carries the question and `context.heading` the nearest heading. The helper's door and the projection both refuse a choice record off the grammar.
 
-Pressing another answer before the agent replies is the reword path (`ready` to `draft` to `ready` at the next revision). After `not_handled`, a press reopens the same record. After `handled`, a press mints a new one. Mark as done, reopen and delete work as for a comment, and the card keeps the ordinary reply box; words typed there go in `note` as a follow-up turn.
+Pressing another answer before the agent replies is a reword: one `ready` write at the next revision. Pressing the same answer again while the press waits, or while the agent has asked a question, does nothing. After `not_handled`, a press reopens the same record. After `handled`, a press mints a new one. Mark as done, reopen and delete work as for a comment, and the card keeps the ordinary reply box; words typed there go in `note` as a follow-up turn.
 
 ## Finding and painting a group
 
-`anchor.resolve` has a rung keyed on the record's kind: a choice resolves to the one element matching `.choice[data-choice="<group>"]`. Two or none is a refusal with its own reason, and the rung stops there. Replay, lost-marking and "show me where" then work on a choice unchanged. Replay writes nothing for the kind; after the rung binds it paints `data-lahe-pressed` on the pressed button and `data-lahe-choice-state` (`kept`, `open`, `question`, `not_handled`, `done`) on the group, from the group's latest record by `created_at`. A newer press draws over a `data-chosen` button. These attributes are DOM only; a rebuild clears them and the next pass paints them again.
+`anchor.resolve` has a rung keyed on the record's kind: a choice resolves to the one element matching `.choice[data-choice="<group>"]`. Two or none is a refusal with its own reason, and the rung stops there. Replay, lost-marking and "show me where" then work on a choice unchanged. Replay writes nothing for the kind; after the rung binds it paints `data-lahe-pressed` on the pressed button and `data-lahe-choice-state` (`kept`, `open`, `question`, `not_handled`, `done`) on the group, from the group's latest record by `created_at`. The stylesheet writes the rail's word for each: Kept in this browser, Open, Question, Open again for `not_handled` (the brand's three thread states are Done, Open and Question, and the reason sits on the thread), Done. A newer press draws over a `data-chosen` button. These attributes are DOM only; a rebuild clears them and the next pass paints them again.
 
 ## Presses travel together
 
