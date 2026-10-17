@@ -146,7 +146,7 @@
       keys: "Cmd-Shift-X",
       when: "always, including while the tool is hidden",
       hint: "Press Cmd-Shift-X to hide the review while you present, and again to bring it back.",
-      panelHint: "Presentation mode. Toggle hiding the rail and the pill.",
+      panelHint: "Presentation mode. Toggle hiding the chat bar and the pill.",
       passThrough: false,
       preventDefault: true,
       requirement: "R13"

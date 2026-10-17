@@ -69,7 +69,7 @@ test("one new conflict raises one sticky toast with the agreed words", () => {
   const list = shown(rail);
   assert.equal(list.length, 1);
   assert.equal(list[0].text, "Your edit clashed with a change to the page");
-  assert.equal(list[0].about, "Nothing is lost. Both versions are on the card. Click to choose which to keep.");
+  assert.equal(list[0].about, "Nothing is lost. Both versions are on the thread. Click to choose which to keep.");
   assert.equal(list[0].sticky, true, "it does not time out: this is when a reviewer thinks their work is gone");
   assert.equal(list[0].armed, false);
 });

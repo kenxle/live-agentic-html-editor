@@ -22,9 +22,10 @@ What stays the same: every route, token and check; the lifecycle table; the even
 
 | Area | Files | Change |
 | --- | --- | --- |
-| Standing docs | `docs/ongoing/ARCHITECTURE.md` (done), `docs/ongoing/BRAND.md`, `docs/CONTRACTS.md`, `docs/diagrams/module_map.md`, `finding_the_region.md`, `item_lifecycle.md` | The sixth kind, D3's exception, the word for the component, the record row and the drain line, the new rung, the one new load-order entry |
-| Shared kernel | `record.js` (kind, field, `validateItem`, `isReplayable` unchanged), `review_format.js` (field class, `projectItem`, the contract paragraph), `merge.js` (`choice` in the browser-owned fields), `gestures.js` (the press outcome), `protocol.js` (`SCRIPT_ATTR.DOCUMENT`) | |
-| Layer | new `choices.js`, `anchor.js` (the rung), `sync.js` (the press hold in `splitForFloor`), `replay.js` (paint state for the kind), `tab_active.js` (the row), `index.js` (boot and the chip), `overlay.js` (chip styling if any) | |
+| Standing docs | `docs/ongoing/ARCHITECTURE.md` (done), `docs/ongoing/BRAND.md`, `docs/ongoing/STYLE_GUIDE.md` (its "a choice for the reader is option cards" line), `docs/CONTRACTS.md`, `docs/diagrams/module_map.md`, `finding_the_region.md`, `item_lifecycle.md` | The sixth kind, D3's exception, the word for the component, the record row and the drain line, the new rung, the one new load-order entry |
+| Test harness | `test/browser/support/with_layer.js`, `test/helpers/` | The tag builder takes the document opt-in so a spec can mount the layer as on a served page |
+| Shared kernel | `record.js` (kind, field, `validateItem`, `isReplayable` unchanged), `review_format.js` (field class, `projectItem`, the copy-and-export text for the kind, the contract paragraph), `merge.js` (`choice` in the browser-owned fields), `gestures.js` (the press outcome, no hint row), `protocol.js` (`SCRIPT_ATTR.DOCUMENT` and the tag builder's opt-in) | |
+| Layer | new `choices.js`, `anchor.js` (the rung), `sync.js` (the press hold in `splitForFloor`), `replay.js` (paint state for the kind), `tab_active.js` (the row), `tab_done.js` (the Done row's text for the kind), `overlay.js` (the kind label and the card summary, which shows the answer), `index.js` (boot and the chip) | |
 | Service | `page_routes.js` (the attribute, at response time), `log.js` (the door runs the checker for the new field) | |
 | CLI | `status.js` (the drain line) | |
 | House style and catalog | `document.css`, `COMPONENTS.md` | The `.choice` component and its states |
@@ -46,7 +47,7 @@ What stays the same: every route, token and check; the lifecycle table; the even
 
 - `data-choice` is the group name: lowercase letters, digits and hyphens, 1 to 32 characters, starting with a letter or digit. Unique on the page. It is not under the `data-lahe-` prefix on purpose: the tool strips that prefix from captured markup and from the element descriptions agents get, and the group name must survive both.
 - Each `button` has a `value` with the same grammar. The button's text is the label the reviewer reads. `type="button"` keeps it out of any form. `data-recommended` marks at most one.
-- Once the agent has handled a press, it writes `data-chosen="<value>"` onto the group in the source. The stylesheet draws that group as decided with no Lahe present.
+- Once the agent has handled a press, it writes `data-chosen` (no value) onto the chosen `button` in the source. At most one button in a group carries it. The stylesheet draws that button as the decision with no Lahe present. It sits on the button, not the group, because CSS cannot match a button whose `value` equals an attribute on its parent.
 - Look: square-cornered outlined buttons in the document's type, the pressed one filled with ink, the Recommended badge (`badge--purple`) drawn by the stylesheet from `data-recommended`. No pills, no colored edges, no shadows.
 
 In Markdown the block is written as HTML with a blank line before and after, like every other component.
@@ -81,16 +82,16 @@ One new kind, `choice`, and one new optional field:
 
 `replay.js` writes nothing for a choice (the kind is not in its writing kinds). After it resolves the group it paints two attributes, inside a write epoch, from the group's current record:
 
-| Attribute | Values | Meaning |
-| --- | --- | --- |
-| `data-lahe-pressed` | the answer's value | Which button the reviewer pressed |
-| `data-lahe-choice-state` | `kept`, `open`, `question`, `not_handled`, `done` | The rail's own states (brief R9) |
+| Attribute | On | Values | Meaning |
+| --- | --- | --- | --- |
+| `data-lahe-pressed` | the pressed `button` | present | Which button the reviewer pressed |
+| `data-lahe-choice-state` | the group | `kept`, `open`, `question`, `not_handled`, `done` | The rail's own states (brief R9). The stylesheet draws `not_handled` with the word Open, the brand's word for a thread the agent has answered no to, since the card says the same; the attribute keeps the finer value for tests and for a later look |
 
-The current record for a group is the one with the latest `created_at` among this page's choice records naming it. A newer press wins over `data-chosen` in the source: the stylesheet draws the pressed state when both are present. `data-chosen` alone draws the same as `done`. These are DOM only and a rebuild clears them; replay's next pass paints them again. A refused group gets `data-lahe-inert` from `choices.js` at arming time.
+The current record for a group is the one with the latest `created_at` among this page's choice records naming it. A newer press wins over `data-chosen` in the source: when a group holds both a `data-chosen` button and a `data-lahe-pressed` one, the stylesheet draws the pressed one as the answer and the chosen one quiet. `data-chosen` alone draws the same as `done`. These are DOM only and a rebuild clears them; replay's next pass paints them again. A refused group gets `data-lahe-inert` from `choices.js` at arming time.
 
 ### Lifecycle
 
-No new states. A press mints the item in `draft` and marks it `ready` in the same tick, queueing `item.created` and `item.ready` together; the helper's door does no state check on these events and the merge on load handles a record that was never a typed draft. Pressing another answer while the item is `ready` with no reply is the reword path (`ready` to `draft` to `ready` at the next revision). After a `not_handled` reply, a new press on the same group reopens the same record (`not_handled` to `ready`, a reviewer move the table already allows) at a new revision. After `handled`, a new press mints a new item. Mark as done, reopen and delete work as for a comment. `merge.js` lists `choice` among the browser-owned content fields.
+No new states. A press mints the item in `draft` and marks it `ready` in the same tick, queueing `item.created` and `item.ready` together; the helper's door does no state check on these events and the merge on load handles a record that was never a typed draft. Pressing another answer while the item is `ready` with no reply is a reword: one `ready` write at the next revision, the way a committed comment's rewording lands (the browser never shows a draft in between, since there is nothing to type). After a `not_handled` reply, a new press on the same group reopens the same record (`not_handled` to `ready`, a reviewer move the table already allows) at a new revision. After `handled`, a new press mints a new item. Mark as done, reopen and delete work as for a comment. `merge.js` lists `choice` among the browser-owned content fields.
 
 ### Presses travel together, and what bounds the wakes
 
@@ -117,7 +118,7 @@ One new attribute, `data-lahe-document`, is added by `page_routes.js` when it bu
 
 ### The gesture
 
-`gestures.js` gains `PRESS_CHOICE`: a click on a `button` inside an armed `.choice`, on a document page, in browse mode, outside element-pick mode, with no block open for editing, in a window that may write, and not in present mode. It calls `preventDefault` so no form is submitted. In every other case the click is the page's, and on a document page a plain button does nothing anyway.
+`gestures.js` gains `PRESS_CHOICE` in the gesture vocabulary and in the deciding function: a click on a `button` inside an armed `.choice`, on a document page, in browse mode, outside element-pick mode, with no block open for editing, in a window that may write, and not in present mode. It calls `preventDefault` so no form is submitted. It gets no row in the hint table: every table row becomes a hint line on every page's rail, and a page with no groups must stay unchanged (brief R3). The hint-count tests change on purpose to say so. In every other case the click is the page's, and on a document page a plain button does nothing anyway.
 
 ## Key Flows
 
@@ -141,14 +142,16 @@ flowchart TD
 ```mermaid
 flowchart TD
   S([a .choice element]) --> T{tag carries data-lahe-document?}
-  T -- no --> I[inert, no chip: not a document page]
+  T -- no --> I[untouched: nothing written, no chip; not a document page]
   T -- yes --> U{name present and well formed?}
   U -- no --> C1[inert; chip: group has no valid name]
   U -- yes --> V{exactly one group with this name?}
   V -- no --> C2[both inert; chip names the duplicate]
   V -- yes --> X{two or more buttons, every value well formed?}
   X -- no --> C3[inert; chip names the group and the bad value]
-  X -- yes --> Y[armed]
+  X -- yes --> Z{two buttons share a value,<br/>or two carry data-chosen?}
+  Z -- yes --> C4[inert; chip names the group and the reason]
+  Z -- no --> Y[armed]
 ```
 
 ## Alternatives Considered
@@ -165,9 +168,9 @@ The leaf is [parts/architecture/alternatives.md](parts/architecture/alternatives
 - **The group is gone after the item is handled.** A handled item is never stamped lost; nothing is painted.
 - **The agent handles the item but forgets `data-chosen`.** The page shows `done` while the record exists. A reader with no Lahe sees an undecided group. The skill names the write-back as part of handling, and the contract says a handled reply without it is incomplete, as it does for a missing `data-lahe-id`.
 - **A press on a decided group.** A new item at rev 1; the newer press paints over `data-chosen` until the agent answers.
-- **Two quick presses on one group.** A reword at rev 2 inside the same hold; one flush, the drain shows only the latest.
+- **Two quick presses on one group.** A reword at rev 2 inside the same hold; one flush, the drain shows only the latest. Pressing the same answer again while the press waits, or while the agent has asked a question, does nothing.
 - **A reviewer's words on a choice thread.** The card keeps the ordinary reply box. Words typed there go in `note` on the same record as a follow-up turn; the choice itself does not change.
-- **A group inside a `lahe add` page, or any page without the attribute.** Inert and chip-less; the page's own scripts see the click. D3 holds in full.
+- **A group inside a `lahe add` page, or any page without the attribute.** Untouched: no attribute is written on it and no chip is raised; the page's own scripts see the click. D3 holds in full.
 - **Element-pick mode, an open edit, a read-only window, present mode.** The click is not a press; the gesture table says so.
 - **Keyboard.** Real buttons: Enter and Space press them; the house focus ring applies.
 - **Print.** A decided group prints its decision because the stylesheet draws `data-chosen`.
@@ -179,6 +182,10 @@ The leaf is [parts/architecture/alternatives.md](parts/architecture/alternatives
 - **What reaches the agent as intent.** `choice.group` and `choice.answer`: bounded tokens, checked at the helper's door and again at projection, so a page cannot smuggle prose through the intent field. The question and heading are page text under `page` (D12).
 - **The source write-back.** The agent edits its own source, as it does for `data-lahe-id`. No new path, token or route.
 - **No new trust boundary.** No route, no token, no header, no process. events.jsonl gains a kind, not a shape.
+
+## Showing it before the PR
+
+The lesson-queue preview (brief R19) cannot work by copying the bundle into main's `dist/`, because this feature changes the helper too (the tag attribute, the door check, the drain line). The preview runs the branch's own helper from the feature worktree on another port, with its own state folder copied from Ken's with the recorded pids neutralized, serving the rebuilt lesson queue; a press on it must appear in that helper's drain as a choice item. That is the pass bar, with a screenshot beside it.
 
 ## Test Strategy
 
@@ -208,6 +215,10 @@ Full prose: [02_architecture_choice_buttons_reviews.md](02_architecture_choice_b
 | RF12 | The load-order note named the wrong dependency | Accepted | After the shared files, listeners, store, anchor, overlay and sync; before `index.js` |
 | RF13 | Look and the newer-press-wins rule were unstated | Accepted | Stated under the component and the state table |
 | RF14 | The files table missed ten files and listed `markdown.js` | Accepted | Table corrected |
+| PR3 | From the plan review: CSS cannot match a button from a value on its group | Accepted | `data-chosen` and `data-lahe-pressed` live on the button; the state stays on the group |
+| PR4 | From the plan review: a bundle-only preview cannot show a feature that changes the helper | Accepted | "Showing it before the PR": the branch's helper on another port against a copied state folder |
+| PR10 | From the plan review: `tab_done.js`, `overlay.js` labels, the export text, the style guide line and the harness were unowned | Accepted | Added to the files table |
+| PR11 | From the plan review: a hint-table row would put a new hint on every page | Accepted | `PRESS_CHOICE` is in the vocabulary and the deciding function, with no table row |
 
 ## Security Review
 

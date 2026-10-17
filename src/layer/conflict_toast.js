@@ -53,8 +53,8 @@
 
   var LABEL = "Conflict";
   var TITLE_ONE = "Your edit clashed with a change to the page";
-  var BODY_ONE = "Nothing is lost. Both versions are on the card. Click to choose which to keep.";
-  var BODY_MANY = "Nothing is lost. Both versions are on each card. Click to choose which to keep.";
+  var BODY_ONE = "Nothing is lost. Both versions are on the thread. Click to choose which to keep.";
+  var BODY_MANY = "Nothing is lost. Both versions are on each thread. Click to choose which to keep.";
 
   var SEEN_PREFIX = "lahe:conflict-notices:";
   // A tab that has been told fifty collisions and resolved none of them is not

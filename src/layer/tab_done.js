@@ -164,8 +164,8 @@
 
   // What an agent turn says when the agent sent a status and no words.
   var STATUS_WORDS = {
-    handled: "Handled this.",
-    not_handled: "Did not handle this.",
+    handled: "Did this.",
+    not_handled: "Did not do this.",
     question: "Asked a question."
   };
 
@@ -312,7 +312,7 @@
   // own agent field, the same one the card shows.
   var TOAST_LABEL = {
     question: "Question",
-    not_handled: "Not handled",
+    not_handled: "Not done",
     says: " says"
   };
 
@@ -1329,7 +1329,7 @@
         text: said
           ? boundedText(said)
           : agentName(reply) +
-            (record.isHandEdit(item) ? " carried this change into the source." : " handled this."),
+            (record.isHandEdit(item) ? " carried this change into the source." : " did this."),
         files: Array.isArray(reply.files) ? reply.files : [],
         at: reply.at || null
       };
