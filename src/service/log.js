@@ -527,7 +527,9 @@ function createEventLog(options) {
       // refusal names its code, and the event_id stays unused.
       var carried = event.record;
       if (carried && typeof carried === "object") {
-        var refusal = record.validateRun(carried);
+        // A choice record is checked the same way (choice buttons): its two
+        // values are bounded ids, so the intent field cannot carry prose.
+        var refusal = record.validateChoice(carried) || record.validateRun(carried);
         if (refusal) {
           rejected.push({ event_id: eventId, code: refusal.code, reason: refusal.code + ": " + refusal.reason });
           return;

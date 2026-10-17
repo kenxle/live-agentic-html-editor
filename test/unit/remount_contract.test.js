@@ -234,18 +234,27 @@ test("boot reads its config from the script tag, and options win over it", () =>
     start: null,
     // The notes flag is absent too: only a notes review's tag carries it.
     notes: null,
+    // And the document mark (choice buttons): only a page the helper serves
+    // itself carries it.
+    documentPage: null,
     from: "currentScript"
   });
 
   const merged = layer.resolveConfig(doc, { review: "rev-other" }, tag);
   assert.equal(merged.review, "rev-other");
   assert.equal(merged.token, "tok-1");
+  assert.equal(merged.documentPage, false);
+
+  attrs[protocol.SCRIPT_ATTR.DOCUMENT] = protocol.DOCUMENT_ON;
+  assert.equal(layer.resolveConfig(doc, {}, tag).documentPage, true, "the helper's mark arms choice groups");
+  attrs[protocol.SCRIPT_ATTR.DOCUMENT] = "yes";
+  assert.equal(layer.resolveConfig(doc, {}, tag).documentPage, false, "any other value is not the mark");
 });
 
 test("no script tag and no options means no configuration, and the helper default fills in", () => {
   const doc = { querySelector: () => null };
   const empty = layer.readScriptConfig(doc, null);
-  assert.deepEqual(empty, { review: null, token: null, helper: null, frames: null, start: null, notes: null, from: null });
+  assert.deepEqual(empty, { review: null, token: null, helper: null, frames: null, start: null, notes: null, documentPage: null, from: null });
   assert.equal(layer.resolveConfig(doc, {}, null).helper, protocol.DEFAULT_HELPER_ORIGIN);
 });
 

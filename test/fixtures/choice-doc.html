@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Two decisions, as HTML</title>
+<link rel="stylesheet" href="./.lahe-doc-style.css">
+</head>
+<body>
+<div class="hero">
+  <h1>Two decisions, as HTML</h1>
+  <p>An agent-written HTML page with two choice groups. One sits inside a form.</p>
+</div>
+<section class="sheet">
+  <div class="sheet-head"><h2>Ship the menu bar app</h2><span class="n">Section 1</span></div>
+  <p>The app is built and the walkthrough passed.</p>
+  <div class="choice" data-choice="ship-menu-bar">
+    <p class="choice-q">Ship it?</p>
+    <button type="button" value="ship" data-recommended>Ship</button>
+    <button type="button" value="hold">Hold</button>
+  </div>
+</section>
+<section class="sheet">
+  <div class="sheet-head"><h2>Inside a form</h2><span class="n">Section 2</span></div>
+  <form action="/never" method="post" id="the-form">
+    <p>This group sits inside a form that must never submit.</p>
+    <div class="choice" data-choice="inside-form">
+      <p class="choice-q">Keep the form?</p>
+      <button type="button" value="keep">Keep</button>
+      <button type="button" value="drop" data-recommended>Drop</button>
+      <button value="rework">Rework</button>
+    </div>
+  </form>
+  <!-- The page counts its own form submits: a press must never submit the
+       form, and "Rework" has no type, so it is a submit button by default. -->
+  <p id="submits">0</p>
+  <script>
+    document.getElementById("the-form").addEventListener("submit", function (event) {
+      event.preventDefault();
+      var el = document.getElementById("submits");
+      el.textContent = String(Number(el.textContent) + 1);
+    });
+  </script>
+</section>
+</body>
+</html>

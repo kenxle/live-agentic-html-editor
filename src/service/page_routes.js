@@ -112,9 +112,27 @@ function notInjectingNotes(dir) {
   return held;
 }
 
+/**
+ * `html` with data-lahe-document added to this review's own script tag, or
+ * null when the tag already carries it (choice buttons). Only the served copy
+ * changes: the file on disk keeps the line `lahe add` or heal wrote, which
+ * never carries the attribute.
+ */
+function markServedAsDocument(html) {
+  var found = scriptLine.EXISTING_TAG.exec(html);
+  if (!found) return null;
+  var tag = found[0];
+  if (tag.indexOf(protocol.SCRIPT_ATTR.DOCUMENT + "=") !== -1) return null;
+  var marked = tag.replace(/^<script\b/i, "<script " + protocol.SCRIPT_ATTR.DOCUMENT + '="' + protocol.DOCUMENT_ON + '"');
+  return html.slice(0, found.index) + marked + html.slice(found.index + tag.length);
+}
+
 function injectForMatch(dir, match, target, html, aliases, pathAliases, spellings) {
   var carried = scriptLine.reviewAlreadyInFile(html);
-  if (carried === match.review) return null;
+  // A file that already carries this review's own tag (a `lahe add` line, or
+  // one heal put back) is served with it, plus the document mark: the helper
+  // is serving this page itself, so its choice groups arm.
+  if (carried === match.review) return markServedAsDocument(html);
   if (carried) {
     // Once per review, file and carried review, and capped: a page's image
     // requests can ask for this file again and again.
@@ -132,6 +150,9 @@ function injectForMatch(dir, match, target, html, aliases, pathAliases, spelling
     fallback: helperOrigin + protocol.route("library.get").path,
     // pickReview carries the notes flag from the meta.json it already read.
     notes: typeof match.notes === "boolean" ? match.notes : stateDir.isNotesReview(dir, match.review),
+    // The helper is serving this page itself, so it is a document and its
+    // choice groups arm (choice buttons). add.js and heal.js never pass this.
+    document: true,
     aliases: Array.isArray(aliases) && aliases.length ? aliases : undefined,
     // Only with an old origin: a path alias alone is never read (samePage).
     pathAliases: Array.isArray(aliases) && aliases.length && Array.isArray(pathAliases) && pathAliases.length ? pathAliases : undefined,
@@ -2188,6 +2209,7 @@ module.exports = {
   MIME: MIME,
   currentHelperOrigin: currentHelperOrigin,
   injectForMatch: injectForMatch,
+  markServedAsDocument: markServedAsDocument,
   placeNote: placeNote,
   servedFrom: servedFrom,
   newer: newer,

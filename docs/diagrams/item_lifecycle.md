@@ -4,7 +4,7 @@ Every comment you leave and every edit you make is one "item," and at any moment
 
 ```mermaid
 stateDiagram-v2
-    [*] --> draft : reviewer starts typing
+    [*] --> draft : reviewer starts typing, or presses a choice button
 
     draft --> draft : reviewer keeps typing (every keystroke saved, revision unchanged)
     draft --> ready : reviewer confirms (Cmd-Enter, or an edit committing)
@@ -36,6 +36,8 @@ stateDiagram-v2
 The page differs from the file only while an item is `ready`, waiting for the agent's answer. Replay writes only those (`record.isReplayable`). Once the agent answers, `handled` or `not_handled`, the page shows the file. A refused item's words stay on its card with the reason, and are not drawn onto the page. The rail's open count still counts `not_handled` (`record.isOutstanding`). See `docs/features/20261011.01_stuck_replayed_blocks/01_spec_flag_dont_hold.md`.
 
 ## What to notice
+
+- **A press on a choice button is a draft and a ready in the same tick.** The reviewer types nothing; the click mints the record and confirms it at once (`docs/ongoing/CHOICE_BUTTONS.md`). Pressing a different answer before the agent replies is the ordinary reword path, a press after `not_handled` is the ordinary reopen, and a press after `handled` is a new item. No arrow is added.
 
 - **Every arrow names an actor.** The reviewer is the only one who can move an item from `draft` to `ready`, or take it back from `ready` to `draft`. An agent can never do either. An agent may only move an item OUT of `ready` (to `handled` or `not_handled`), and only for the exact revision it named. If the reviewer reworded the comment after the agent read it, the agent's reply names a revision that no longer applies, and the move is refused rather than silently swallowing the rewording. The two `handled` arrows the reviewer draws ("Mark as done") are separate rows in the table from the agent's, so the record can say who closed the item.
 - **The reviewer can close any outstanding card.** On a `ready` or `not_handled` card, including one the page check is holding with `handled_not_on_page`, the state chip opens a menu with "Mark as done". The browser posts an `item.closed` event naming the item and its current revision, and nothing else. The helper moves the item to `handled` with `closed_by: "reviewer"` only if it is still outstanding at exactly that revision. A close naming an older revision is dropped, like a stale reply. The close clears `handled_not_on_page`, never runs the page check, and takes the item off the agent's drain. Every agent reply after it is refused. In Done the card reads "You marked this done.", its chip reads "Done", and it never counts as "1 new". review.json shows it with `closed_by_reviewer: true`. Rewording or reopening it is a new revision, which is new work and drops the mark.

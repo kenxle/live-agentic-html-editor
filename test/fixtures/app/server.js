@@ -134,7 +134,10 @@ async function startAppServer(options = {}) {
             src: BUNDLE_ROUTE,
             review: config.review,
             token: config.token,
-            helper: config.helper
+            helper: config.helper,
+            // Opt-in, as on the helper's own pages (choice buttons): the app
+            // fixture stands for a dev server, which never carries it.
+            document: config.document === true
           })
         }
       : null;

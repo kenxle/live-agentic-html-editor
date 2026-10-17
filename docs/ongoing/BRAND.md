@@ -97,6 +97,7 @@ Use these words the same way in the interface, the docs, the README and agent re
 | comment | a note on a passage or an element, for the agent to act on | Until sent it is a draft. |
 | hand edit | a change the user typed into the page | |
 | note on the page | a comment tied to nothing in particular | The input box at the foot of the rail. |
+| choice | a question on the page with set answers the user clicks, one button each | The component is a choice group. A click is the user's answer, and it reaches the agent like a comment. |
 | Done, Open, Question | the three states of a thread | Capitalized as labels, lower case in a sentence. "Done" means the change is on the user's screen. |
 | Active, Done | the chat bar's two tabs | "Mark as done" is the user closing a thread themselves. |
 | the Lahe program | the program on your machine that serves pages and keeps the records | Say "the Lahe program" to most people. Say "the Lahe server" when the user is doing dev work. Not "helper", "daemon", "backend" or "service" in user text. Say "your dev server" for theirs. |
