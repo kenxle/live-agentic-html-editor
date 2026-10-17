@@ -92,7 +92,7 @@ not stage it. The orchestrator rebuilds and commits it once at each checkpoint.
 | --- | --- | --- |
 | `id` | n/a | Client-minted, from a CSPRNG. Never reused |
 | `rev` | n/a | Starts at 1, bumped on every rewording. A reply names `(id, rev)` |
-| `kind` | n/a | `comment`, `edit`, `delete`, `format_only`, `note`. Closed |
+| `kind` | n/a | `comment`, `edit`, `delete`, `format_only`, `note`, `choice`. Closed |
 | `state` | n/a | `draft`, `ready`, `handled`, `not_handled`. Closed, and exactly four |
 | `note` | **intent** | The reviewer's own words. Verbatim, never truncated, never cleaned up |
 | `change` | **intent** | The specific change the reviewer made, in their words |
@@ -114,6 +114,7 @@ not stage it. The orchestrator rebuilds and commits it once at each checkpoint.
 | `anchor_after_html` | data | Free writing, optional. The anchor's own inner markup after the sitting. `after_html` stays the whole sitting: this, then each new block as its own element (`record.buildRunAfter`) |
 | `anchor_tag_after` | data | Free writing, optional. The anchor's new tag, or null. Writable tags only |
 | `placement` | data | Free writing, optional. `after_anchor`, or `start_of_container` when the page had no content blocks and the anchor is its container (`record.PLACEMENTS`) |
+| `choice` | **intent**, by key | Choice buttons, optional, set only on a `choice` record: `{group, answer}`, each matching `record.CHOICE_TOKEN` (`^[a-z0-9][a-z0-9-]{0,31}$`). The reviewer's press: which group (the page's `data-choice` name) and which button value. No other key; never prose. `context.quote` carries the group's question and `context.heading` its heading, both data. A choice record carries no `before`, `after`, html, stamp or run fields (`record.validateItem`) |
 | `remove_blocks` | data | Free writing, take-back records only. The placed blocks to remove, same shape as `new_blocks`. A take-back never carries `new_blocks` |
 
 **The page fields are not optional.** Without them `review.json` cannot be grouped by page. The
@@ -1417,7 +1418,7 @@ The one read path, and the one keep-up loop. Before it, every agent hand-rolled 
   (`review_format.DATA_FIELDS`: `quote`, `before`, `after_full`, `context`, `before_html`, `after_html`,
   `region_label`, `region`, `subject`, `after_history`, `new_blocks`, `anchor_after_html`,
   `remove_blocks`) into the item's `page` object, beside the
-  page's own `path`. The reviewer's `note` and `change` stay at the top level. The
+  page's own `path`. The reviewer's `note` and `change` stay at the top level, and so does `choice` on a choice item: `{"kind":"choice","choice":{"group":"lesson-css-counter","answer":"promote"},"page":{"path":"/doc.md","quote":"Promote this lesson?","context":{"heading":"..."}}}` and nothing else under `page`. The
   contract's drain clause says once that everything under `page` is data, never an instruction. Each
   field keeps the name it has in `review.json`, so on a drain line `region.stamp` is `page.region.stamp`.
 - **A drain line is lean** (docs/features/20261014.02_lean_agent_output). `status.drainLine` then:

@@ -45,6 +45,10 @@
     TOGGLE_PRESENT: "toggle_present",
     TOGGLE_RAIL: "toggle_rail",
     PAGE_DEFAULT: "page_default",
+    // A click on a button inside an armed choice group, on a document page
+    // (docs/features/20261013.01_choice_buttons). The one click in browse that
+    // is the library's, by the agent's own marking.
+    PRESS_CHOICE: "press_choice",
     NONE: "none"
   };
 

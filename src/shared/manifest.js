@@ -194,6 +194,12 @@ var LAYER_FILES = [
     why: "post per record, re-post unacknowledged, and the reply poll loop"
   },
   {
+    path: "src/layer/choices.js",
+    owner: "choice-buttons layer",
+    why: "arm choice groups on a document page, mint a press, raise the refusal chip. Needs gestures, record, store, anchor, overlay, sync",
+    planned: true
+  },
+  {
     path: "src/layer/comments.js",
     owner: "1D",
     why: "comment boxes, element-pick mode, the untethered note. 0A-kernel seeds a minimal real box"

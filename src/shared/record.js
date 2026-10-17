@@ -128,6 +128,11 @@
     PLACEMENT: "placement",
     REMOVE_BLOCKS: "remove_blocks",
 
+    // Choice buttons (docs/features/20261013.01_choice_buttons). Optional; set
+    // only on a KIND.CHOICE record: {group, answer}, both CHOICE_TOKEN. The
+    // reviewer's act, and the record's only intent.
+    CHOICE: "choice",
+
     CREATED_AT: "created_at",
     UPDATED_AT: "updated_at"
   };
@@ -147,8 +152,18 @@
     EDIT: "edit",
     DELETE: "delete",
     FORMAT_ONLY: "format_only",
-    NOTE: "note"
+    NOTE: "note",
+    // A press on a choice group an agent put on a document page
+    // (docs/features/20261013.01_choice_buttons). Its intent is the `choice`
+    // field, never words.
+    CHOICE: "choice"
   };
+
+  // The grammar of a choice group's name and of each answer's value: lowercase
+  // letters, digits and hyphens, 1 to 32, starting with a letter or digit. Bounded
+  // so the intent field can never carry prose. Checked in the browser, at the
+  // helper's door and at projection.
+  var CHOICE_TOKEN = /^[a-z0-9][a-z0-9-]{0,31}$/;
   var KINDS = Object.keys(KIND).map(function (k) {
     return KIND[k];
   });
@@ -2442,6 +2457,7 @@
   return {
     FIELD: FIELD,
     KIND: KIND,
+    CHOICE_TOKEN: CHOICE_TOKEN,
     KINDS: KINDS,
     isHandEdit: isHandEdit,
     STATE: STATE,

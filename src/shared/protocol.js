@@ -1498,6 +1498,11 @@
     // reads it at boot, before the helper has answered anything, so an empty
     // notes page can open for typing and no other empty page does.
     NOTES: "data-lahe-notes",
+    // Choice buttons (docs/features/20261013.01_choice_buttons): present on the
+    // tag of a page the helper serves itself as a document, added at response
+    // time and never written to disk. `lahe add` and heal never pass it. The
+    // layer arms choice groups only when it is there.
+    DOCUMENT: "data-lahe-document",
     // Stable addresses: the old page-server origins of this page's site, as a
     // JSON array. The layer reads a record made on one of them as made on this
     // page, so a review's old comments show at its new address. Written only by
