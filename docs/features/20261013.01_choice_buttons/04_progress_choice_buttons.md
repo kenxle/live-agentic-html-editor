@@ -1,10 +1,10 @@
 # Choice buttons: in progress, nothing waiting on you
 
-**Where it stands.** Crucible closed; brief written with its PM review folded in; architecture written with its architect review folded in (fourteen findings, one of them a blocker that renamed the group attribute); plan written and under review. Step 0 of the build is committed on the feature branch `feat/choice-buttons`. The plan review's sixteen findings are folded in (two builders instead of three, the chosen mark on the button, the preview against the branch's own helper). Two builders are running: core (the record, the helper, then the browser half) and style-skill (the component, the skill, every agent-facing word). You said you do not need to be asked, so nothing here waits on you; comment anywhere if you want a different call.
+**Where it stands.** Crucible closed; brief written with its PM review folded in; architecture written with its architect review folded in (fourteen findings, one of them a blocker that renamed the group attribute); plan written and under review. Step 0 of the build is committed on the feature branch `feat/choice-buttons`. Both builders are done and merged into the feature branch `feat/choice-buttons`: lint, bundle check and the unit suite are green there (3029 passed, 0 failed). The Chromium browser suite is running on it now, alone, and a code review and an independent requirements check are reading the integrated diff. After those: the lesson-queue preview against the branch's own helper, the end-to-end walk, then the PR. You said you do not need to be asked, so nothing here waits on you; comment anywhere if you want a different call.
 
 **What you will notice first.** The lesson queue rebuilt with real buttons, served with the rail live, before any PR gate.
 
-Updated 2026-10-17 14:07.
+Updated 2026-10-17 14:42.
 
 ## The documents
 
