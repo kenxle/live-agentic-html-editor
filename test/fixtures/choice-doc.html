@@ -28,8 +28,19 @@
       <p class="choice-q">Keep the form?</p>
       <button type="button" value="keep">Keep</button>
       <button type="button" value="drop" data-recommended>Drop</button>
+      <button value="rework">Rework</button>
     </div>
   </form>
+  <!-- The page counts its own form submits: a press must never submit the
+       form, and "Rework" has no type, so it is a submit button by default. -->
+  <p id="submits">0</p>
+  <script>
+    document.getElementById("the-form").addEventListener("submit", function (event) {
+      event.preventDefault();
+      var el = document.getElementById("submits");
+      el.textContent = String(Number(el.textContent) + 1);
+    });
+  </script>
 </section>
 </body>
 </html>

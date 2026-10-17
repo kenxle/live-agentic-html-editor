@@ -47,6 +47,30 @@ Every group on this page is wrong in one way, except the last.
   <button type="button" value="no">No</button>
 </div>
 
+## Buttons wrapped in paragraphs
+
+<div class="choice" data-choice="wrapped">
+  <p class="choice-q">Each button sits inside a paragraph.</p>
+  <p><button type="button" value="yes">Yes</button></p>
+  <p><button type="button" value="no">No</button></p>
+</div>
+
+## Same value twice
+
+<div class="choice" data-choice="same-value">
+  <p class="choice-q">Two buttons share a value.</p>
+  <button type="button" value="yes">Yes</button>
+  <button type="button" value="yes">Also yes</button>
+</div>
+
+## Two chosen
+
+<div class="choice" data-choice="two-chosen">
+  <p class="choice-q">Two buttons carry data-chosen.</p>
+  <button type="button" value="yes" data-chosen>Yes</button>
+  <button type="button" value="no" data-chosen>No</button>
+</div>
+
 ## Valid
 
 <div class="choice" data-choice="fine">

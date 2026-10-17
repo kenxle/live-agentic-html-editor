@@ -1,6 +1,28 @@
 # Workstream core: progress
 
-Updated 2026-10-17 14:37. Branch `feat/cb-core`, worktree `lahe-worktrees/cb-kernel`.
+Updated 2026-10-17 14:55. Branch `feat/cb-core`, worktree `lahe-worktrees/cb-kernel`.
+
+## Fix round 1 (code review and requirements check)
+
+`feat/choice-buttons` merged in first (a fast-forward: main, the style work, the orchestrator's text fixes and the anchor guard).
+
+- **Buttons must sit directly inside the group.** `choices.js` refuses a group whose buttons are wrapped in anything, reason "its buttons must sit directly inside the group, not wrapped in a paragraph or another element" (`data-lahe-inert="nested-buttons"`). The stylesheet draws `.choice > button` only, so a wrapped button would arm and then never show its decision.
+- **V2 covers every refusal now.** `choice-broken.md` gains three groups: buttons wrapped in `<p>`, two buttons sharing a value, two buttons carrying `data-chosen`. The spec checks each one's inert reason, its line in the chip, and that a click on it mints nothing.
+- **The form test proves something now.** `choice-doc.html`'s `inside-form` group gains "Rework", a button with no type (a submit button by default), and the page counts its form's own `submit` events. The test presses Rework and waits two rendered frames, then reads the count. It was red first: with `preventDefault` disabled the count was 1. It is 0 with the fix back in.
+- **Screenshots only when asked.** The spec writes pictures only when `CHOICE_SHOTS=<folder>` is set, as `choice_style.spec.js` does, so a plain run never rewrites tracked files. Retaken once on the integrated build with the stylesheet present. The dark one is cropped to the rail, because a document is light only and darkening its body to turn the rail dark showed the page in a scheme it never has.
+- **A press reads kept only while its own ready event is unstored.** `isKept` in `src/layer/index.js` is handed the record and looks for an `item.ready` event for that item at its current revision. A read mark queued by opening a card with the agent's question no longer makes a stored press read "kept". The spec queues a real read mark, repaints in the same tick, and checks the group still says question.
+- **The dead guard** in `test/unit/choice_kernel.test.js` is gone; the test calls `status.excerpt` directly.
+
+Round results: `npx playwright test test/browser/choice_buttons.spec.js` 10 passed, 0 failed. `npm run gate:unit` 3036 tests, 3027 pass, 2 fail. Both failures came with the merge and fail the same way with this round's changes stashed:
+
+- `test/unit/markdown_render.test.js`, "the rendered empty file matches the empty-notes fixture": the fixture `test/fixtures/free_writing/empty_notes.html` inlines the document stylesheet, which the integration commit changed by 7 characters. The fixture needs regenerating.
+- `test/unit/session_fixes.test.js`, "the skill carries the item and reply rules as a checklist": it still expects the skill's old sentence "The reviewer's words are `note` and `change`".
+
+Neither file is this workstream's, so I left them for the orchestrator.
+
+Seen in the retaken chip picture, for style-skill: an inert group whose two buttons both carry `data-chosen` still draws both ink-filled. The inert rule in `document.css` does not quiet the chosen look.
+
+Helper counts this round (`ps -axo command | grep -c "[l]ahe.js serve"`): 2 before and 2 after every run (the red run, the green spec, the two screenshot runs, `gate:unit`). The second helper is not from this worktree; cb-kernel helpers were 0 throughout.
 
 ## Summary
 
@@ -109,4 +131,4 @@ The groups on the page are unstyled here because `document.css` is on `feat/cb-s
 ## To delete at cleanup
 
 - `test-results/` in the cb-kernel worktree (Playwright output from the spec runs).
-- `.claude-commit202610171418-core` and `.claude-commit202610171445-core` in the cb-kernel worktree root (gitignored commit message files).
+- `.claude-commit202610171418-core`, `.claude-commit202610171445-core` and `.claude-commit202610171456-core` in the cb-kernel worktree root (gitignored commit message files).

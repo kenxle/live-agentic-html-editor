@@ -1643,12 +1643,18 @@
         if (choices) choices.arm();
       },
       // A press is "kept" on its group until the helper has stored it: while
-      // any event for it is still in the outbox, held for the quiet spell or
-      // waiting on a helper that is down.
-      isKept: function (id) {
+      // its own ready event for this revision is still in the outbox, held for
+      // the quiet spell or waiting on a helper that is down. Only that event:
+      // a read mark queued by opening a card that carries the agent's question,
+      // or a lost stamp's content post, says nothing about whether the press
+      // itself was stored.
+      isKept: function (item) {
+        var id = item && item[record.FIELD.ID];
+        var rev = item && item[record.FIELD.REV];
         var pending = store.pendingEvents(reviewId);
         for (var i = 0; i < pending.length; i += 1) {
-          if (pending[i] && pending[i].item === id) return true;
+          var ev = pending[i];
+          if (ev && ev.item === id && ev.event === protocol.EVENT.ITEM_READY && ev.rev === rev) return true;
         }
         return false;
       },
