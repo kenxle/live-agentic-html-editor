@@ -1,6 +1,6 @@
 # Render Markdown with pandoc
 
-Status: route decided (build in this worktree with this spec as the only spec doc). Approach section filled in with the mapping table and the pandoc call; architecture and security reviews next, then the build.
+Status: reviewed (architecture and security, 2026-10-17; dispositions at the bottom). Building in this worktree.
 
 ## Needs Ken
 
@@ -60,7 +60,7 @@ That is seven requirements, past whetstone's guide of about five.
 
 This change carries real design calls, which is part of why it outgrew whetstone.
 
-**Where each job happens.** A pandoc Lua filter for structure, JavaScript on the HTML for anything that needs LAHE's state.
+**Where each job happens.** The pandoc Lua filter does everything that reads the document's structure, including the fenced-div mapping. JavaScript on pandoc's HTML does only what needs LAHE's state: link classification, the file-name title, URL rewriting.
 
 | Job | Where | Why |
 |---|---|---|
@@ -68,20 +68,27 @@ This change carries real design calls, which is part of why it outgrew whetstone
 | Mermaid blocks | Lua filter: a `mermaid` CodeBlock becomes `<pre class="mermaid">` | Matches today's markup exactly; the page script is unchanged. |
 | Other code blocks | Lua filter: `<pre><code class="language-x">` | Keeps marked's shape so the house CSS and the handled check see the same thing. Highlighting off, as the builds do. |
 | Tables in `.scrollx` | Lua filter | Same as today's renderer hook. |
-| Task lists | Lua filter or HTML pass (port of `task_lists`) | The house rule is written for marked's shape. |
-| Fenced-div mapping | JavaScript on the HTML, ported from the Python | The Python works on pandoc's HTML with regexes. Porting it on the same input keeps the two builds in step and makes a diff between them readable. |
-| Link classification | Lua filter tags each Markdown link with `data-lahe-link`; JavaScript rewrites only tagged links | `links.classify` needs the per-render registry, which a filter cannot reach. Tagging stops LAHE rewriting raw-HTML anchors, which marked's renderer never touched either. |
+| Task lists | Lua filter | The house rule is written for marked's shape: a bare checkbox in a class-free list. |
+| Fenced-div mapping | Lua filter, on the syntax tree | Ten of the kinds restructure their content (stat, pullquote, rimage, card and more), which regexes on HTML do badly. Pandoc also writes a div that opens with a heading as a `<section>`, and raw HTML in a document breaks regex depth counting; the filter sees neither problem. The mapping table below is the contract both builds follow. One cost: a raw-HTML `<div class="callout-req">` written by hand is no longer mapped. |
+| Link classification | Lua filter tags each Markdown link `data-lahe-link="<nonce>:<n>"` and writes a matching `<!--/lahe-link <nonce>:<n>-->` after its `</a>`; JavaScript rewrites each tagged pair exactly | `links.classify` needs the per-render registry, which a filter cannot reach. The nonce is random per helper process and passed on the command line, so raw HTML in a document cannot fake a tag. The closing marker makes the inert-link swap exact even when the link text holds raw HTML. |
 | Relative-URL rewrite, frontmatter, style line, title, notes | JavaScript, unchanged | Already work on strings before or after rendering. |
 
-**Input format.** `gfm+fenced_divs-gfm_auto_identifiers`. The feature-forge build reads `gfm+fenced_divs`. LAHE already strips frontmatter before rendering, so the YAML extension is not needed. Heading ids are off so headings match marked's output and the layer's anchors do not move.
+**Input format.** `gfm+fenced_divs-gfm_auto_identifiers-yaml_metadata_block-tex_math_dollars-tex_math_gfm`. The feature-forge build reads `gfm+fenced_divs`. Each extension turned off would change the words on the page from what marked shows today, which strands comment anchors and changes what the handled check reads:
 
-**Engine choice.** `src/service/pandoc.js` finds pandoc once per process (`pandoc --version` via `spawnSync`, cached) and exposes `render(markdown) -> html | null`. `LAHE_MARKDOWN_ENGINE=marked` forces the fallback, so the unit suite is deterministic on a machine with pandoc and on GitHub's runner, which may not have it. Pandoc-only tests skip with a message when pandoc is missing.
+- heading ids would move the layer's anchors
+- a later `---` block would be swallowed as metadata (LAHE already strips the real frontmatter)
+- `$HOME/$PATH` would render as italic math
 
-**Speed.** `renderPage` is synchronous and stays synchronous: `spawnSync` with a 10-second timeout. A pandoc start costs a fraction of a second per render; a rebuild renders on each save, and the handled check renders the file on every check. So `pandoc.js` keeps a small cache of pandoc's HTML keyed by a hash of the Markdown text: the same text never runs pandoc twice in one helper process. Measured during build and reported.
+Emoji, alerts and footnotes stay on, as in the builds. When pandoc is first found, LAHE checks `--list-extensions=gfm` names every extension above; a pandoc that does not is treated as missing.
+
+**Engine choice.** `src/service/pandoc.js` finds pandoc by absolute path: `LAHE_PANDOC` if set, then PATH (absolute entries only), then `/opt/homebrew/bin` and `/usr/local/bin`, because the helper inherits PATH from whichever agent shell started it. It checks the version and extensions, and logs the path and version once. A missing pandoc is looked for again after a minute, so installing it needs no helper restart. `renderPage({engine})` picks an engine for one call; `LAHE_MARKDOWN_ENGINE=marked` forces the fallback for the process and is read on every call. The unit script sets it, so existing tests keep marked's expected strings; the pandoc tests ask for pandoc explicitly and skip with a message when it is missing. CI stays install-free on purpose: it proves a clean clone works, which is now the fallback path. The pandoc tests run in the local `npm run gate` that precedes every PR.
+
+**Speed.** `renderPage` is synchronous and stays synchronous: `spawnSync` blocks the helper's one event loop, so the timeout is 5 seconds and the process is killed with SIGKILL. A rebuild renders on each save, and the handled check renders the file on every check. So `pandoc.js` keeps a bounded cache of pandoc's raw output keyed by a hash of the Markdown text, the pandoc version and the filter. Failures and timeouts are cached too, so a slow document stalls once, then renders with marked. Link classification and URL rewriting run on every render, cached or not, because they depend on the page's folder and registry. Measured during build and reported.
 
 **The pandoc call.** `pandoc --from gfm+fenced_divs-gfm_auto_identifiers --to html5 --wrap=preserve --sandbox --lua-filter <src/service/lahe_render.lua>`, Markdown on stdin, HTML on stdout, `spawnSync` with an argument array, `shell: false`, a 10-second timeout and an output cap.
 
-- `--sandbox` stops pandoc reading or fetching anything beyond the files named on the command line, so a Markdown file cannot pull another file's contents into the page through pandoc.
+- `--sandbox` stops pandoc's readers and writers opening files or URLs. It does not limit Lua, so the filter uses no `io`, `os`, `pandoc.pipe` or mediabag call (a unit test greps for them), and `--data-dir` points at a folder that does not exist, so a user's `init.lua` never runs inside LAHE.
+- The child gets `cwd` set to the temp folder and a minimal environment (`HOME`, `LANG=C.UTF-8`), without `LUA_PATH`, `LUA_CPATH` or `XDG_DATA_HOME`. Output is capped at 32 MB and input at 8 MB. Pandoc is only ever handed text, never a path, so a notes review's no-follow read stays the only read. Nothing from the document reaches the argument list.
 - `--wrap=preserve` keeps the source's line breaks inside paragraphs, the way marked does, so text-matching code (the handled check, anchors) sees the same text.
 - No highlighting flag is needed: the filter writes code blocks itself.
 - Version floor 3.0. `pandoc --version` is read once; an older pandoc is treated as missing and logged once with its version.
@@ -116,18 +123,17 @@ Note on `rimage`: the decision named it as one of the kinds with no house twin. 
 
 **Not a fence.** One report writes `::: xref [link] :::` on a single line. Pandoc reads that as a paragraph, so the builds show it as text too. LAHE matches the builds and leaves it alone.
 
-**The missing-pandoc seam.** `renderPage` returns `engine` (`"pandoc"` or `"marked"`) and `engineNote` (null, or one sentence such as "Install pandoc to draw the boxes on this page"). Callers that hold a state directory log the note once. The rail line (open question 4) reads the same field later, so either answer is a small change. The rail part is not built until Ken answers.
+**The missing-pandoc notice.** When pandoc did not render a page whose source has a `:::` line outside code, the page carries `<meta name="lahe-render-note" content="pandoc">`. The rail reads that meta and shows one line, its own fixed text: "Ask your agent to install pandoc to get the correct styles". The page never supplies the words. `writeArtifact` and the page server's Markdown render, which know the state directory, write one helper-log line naming why (missing, too old, failed). A forced `LAHE_MARKDOWN_ENGINE=marked` writes neither.
 
 ## Tasks
 
 | # | Task | Files | Proof |
 |---|---|---|---|
 | 1 | Pandoc runner: find, call with array args, stdin, timeout, cache, env override, fall back on error | `src/service/pandoc.js` (new), `src/shared/manifest.js` | unit: found, missing, timeout, nonzero exit, env override |
-| 2 | Lua filter: hero/sheet split, mermaid, code, tables, link tags, task lists | `src/service/lahe_render.lua` (new) | unit: H2 in a code fence or div does not split; mermaid markup; tagged links |
-| 3 | Fenced-div mapping ported from the builds | `src/service/callouts.js` (new) | unit per kind, run merging, req/nongoal unwrap, unknown kind, nesting, `:::` in a fence stays literal |
-| 4 | Wire into `renderPage`; link pass over tagged anchors; one-time fallback log | `src/service/markdown.js` | existing markdown unit tests green under both engines |
+| 2 | Lua filter: hero/sheet split, mermaid, code, tables, link tags, task lists, and the fenced-div mapping | `src/service/lahe_render.lua` (new) | unit: H2 in a code fence or div does not split; mermaid markup; tagged links; each mapped kind; run merging; req/nongoal unwrap; unknown kind; nesting; `:::` in a fence stays literal; no io/os/pipe in the filter |
+| 4 | Wire into `renderPage`; link pass over tagged pairs; file-name title; meta notice; one-time log | `src/service/markdown.js`, `src/service/page_routes.js`, `src/shared/markers.js` | existing markdown unit tests green with marked pinned; new pandoc tests |
 | 5 | House components `.card` and `.cards` | `vendor/stclair-doc-style/document.css`, `COMPONENTS.md`, its README | unit: stylesheet carries both; screenshot of a report card grid |
-| 5b | Rail notice for the fallback, only once Ken answers open question 4 | `src/layer/style_switch.js`, `dist/` rebuild | browser spec |
+| 5b | Rail line for the fallback, Ken's wording | `src/layer/overlay.js`, `dist/` rebuild | browser spec: line shows with the meta, absent without |
 | 6 | Dependency rule and install docs | `CLAUDE.md`, `AGENTS.md`, `README.md`, `vendor/marked/README.md`, `docs/ongoing/TESTING.md` | read-through |
 | 7 | Evidence | none | screenshots: choice-buttons brief, one older research report with stat/card/pullquote, a no-div page before and after; `npm run gate` counts |
 
@@ -139,7 +145,7 @@ Every builder brief carries the no-delete rule: no `rm`, `rmdir`, `unlink` or `g
 - The choice-buttons brief and one older research report render through `lahe review` with zero literal `:::` lines, checked by a Playwright text search, with screenshots.
 - A no-div page looks the same before and after, by screenshot.
 - `npm run gate` reads 0 failed, counts in the PR body, with every changed expected string listed.
-- With `LAHE_MARKDOWN_ENGINE=marked`, output is byte-identical to today's.
+- With `LAHE_MARKDOWN_ENGINE=marked`, output is byte-identical to today's for a page with no `:::` lines.
 - Analytics: none; LAHE has no analytics. Rollout: no flag beyond the env override, because a missing pandoc already falls back.
 
 ## Open questions
@@ -179,3 +185,30 @@ Every builder brief carries the no-delete rule: no `rm`, `rmdir`, `unlink` or `g
 ## Size
 
 This is past whetstone: seven requirements, about ten files (three new source files, `markdown.js`, the manifest, four docs, tests, optionally the layer), and an Approach section with real alternatives. Ken chose on 2026-10-17 to build it here with this one spec, plus an architecture review before code, and a code review and an independent requirements check before the PR.
+
+## Review dispositions
+
+Architecture review (review-architect, opus) and security review (review-security, opus), both 2026-10-17, on the Approach before code.
+
+| # | Finding | Disposition | What changed |
+|---|---|---|---|
+| A1 | Do the fenced-div mapping in the Lua filter, not a JS port of the Python | <span class="status-dot status-dot--sage">Accepted</span> | Approach table; task 3 folded into task 2 |
+| A2 | The missing-pandoc seam never reaches the browser | <span class="status-dot status-dot--sage">Accepted</span> | A page meta carries the signal; logging moves to the two callers that know the state folder; only pages with `:::` lines get it |
+| A3 | gfm turns on math, emoji, alerts, footnotes and YAML metadata; name extensions explicitly and check them | <span class="status-dot status-dot--sage">Accepted</span> | Math and YAML metadata off; emoji, alerts and footnotes kept, as in the builds; extension check at detection |
+| A4 | Decode and re-escape attributes; make the inert-link swap exact | <span class="status-dot status-dot--sage">Accepted</span> | Numbered tag plus closing marker |
+| A5 | sheet-head as raw HTML, file-title placeholder, empty documents, mermaid escaping | <span class="status-dot status-dot--sage">Accepted</span> | All in the filter |
+| A6 | Rendering blocks the helper; cache failures; key on version and filter | <span class="status-dot status-dot--sage">Accepted</span> | 5-second timeout (security asked 5, architecture 3; 5 leaves room for a long report), failure caching, key widened |
+| A7 | Pin existing tests to marked by option; install pandoc in CI; `LAHE_REQUIRE_PANDOC` | <span class="status-dot status-dot--faint">Deferred</span> | Option and env pinning accepted. CI install rejected for now: CI proves a clean clone with no installs, which is the fallback path, and the local gate runs the pandoc tests before every PR |
+| A8 | Find pandoc beyond PATH; log path and version | <span class="status-dot status-dot--sage">Accepted</span> | Homebrew folders and `LAHE_PANDOC` |
+| A9 | Footnotes land after the last sheet; restart needed after install | <span class="status-dot status-dot--sage">Accepted</span> | Footnotes left where pandoc puts them; a missing pandoc is looked for again after a minute instead of needing a restart |
+| S1 | Raw HTML can fake the link tag | <span class="status-dot status-dot--sage">Accepted</span> | Per-process nonce from the command line |
+| S2 | `--sandbox` does not cover Lua or a user's `init.lua` | <span class="status-dot status-dot--sage">Accepted</span> | Absent `--data-dir`, filter grep test, spec sentence corrected |
+| S3 | A slow document freezes the helper | <span class="status-dot status-dot--sage">Accepted</span> | Same as A6 |
+| S4 | Node's default 1 MB output cap | <span class="status-dot status-dot--sage">Accepted</span> | 32 MB output, 8 MB input |
+| S5 | Find pandoc once by absolute path; fixed cwd | <span class="status-dot status-dot--sage">Accepted</span> | Relative PATH entries skipped; cwd is the temp folder |
+| S6 | Minimal child environment | <span class="status-dot status-dot--sage">Accepted</span> | `HOME`, `LANG` and Windows' temp and system variables only |
+| S7 | Decode, re-escape, allow newlines in attribute patterns | <span class="status-dot status-dot--sage">Accepted</span> | Same as A4 |
+| S8 | Cache only raw output; classification runs every render | <span class="status-dot status-dot--sage">Accepted</span> | Speed paragraph |
+| S9 | noFollow not weakened, given text-only input and no document values in argv | <span class="status-dot status-dot--sage">Accepted</span> | Stated in the pandoc call section |
+
+Accepted all but A7's CI install. `rimage` maps to the existing `figure.plate` rather than a new component, under Ken's own rule for kinds with a house twin.
