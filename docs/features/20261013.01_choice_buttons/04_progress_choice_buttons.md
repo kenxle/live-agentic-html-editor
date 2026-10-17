@@ -6,7 +6,7 @@
 
 **What you will notice first.** The lesson queue rebuilt with real buttons, served with the rail live, before any PR gate.
 
-Updated 2026-10-17 14:59.
+Updated 2026-10-17 15:10.
 
 ## The documents
 
@@ -53,4 +53,10 @@ Each was made by a builder or by me during integration, and each is written into
 
 ## To delete at cleanup
 
+One batch, at your go, by the orchestrator. Nothing here is removed before that.
+
 - The worktree `~/Documents/workspace/lahe-worktrees/cb-layer` and its branch `feat/cb-layer`: cut for a separate layer builder before the plan review folded the kernel and layer into one core builder. Never used.
+- The builder worktrees `~/Documents/workspace/lahe-worktrees/cb-kernel` (branch `feat/cb-core`) and `cb-style` (branch `feat/cb-style`), and the feature worktree `choice-buttons` (branch `feat/choice-buttons`), once the PR is merged.
+- Three `.claude-commit2026101714*-core` files in the cb-kernel worktree root, and `test-results/` folders in the builder worktrees.
+- `~/Documents/lahe-choice-preview/`: the copied state folder (346 MB), the preview helper's log, the eval home, the walk's work folders, and the preview copy of the lesson queue, once you have looked at the preview. The preview helper (port 7819) is stopped first.
+- `.claude-pr-body-choice-buttons.md` in the main checkout (ignored by git).
