@@ -1,10 +1,10 @@
 # Choice buttons: in progress, nothing waiting on you
 
-**Where it stands.** Crucible closed; brief written with its PM review folded in; architecture written with its architect review folded in (fourteen findings, one of them a blocker that renamed the group attribute); plan written and under review. Step 0 of the build is committed on the feature branch `feat/choice-buttons`, and three builder worktrees are cut. Builders start when the plan review lands. You said you do not need to be asked, so nothing here waits on you; comment anywhere if you want a different call.
+**Where it stands.** Crucible closed; brief written with its PM review folded in; architecture written with its architect review folded in (fourteen findings, one of them a blocker that renamed the group attribute); plan written and under review. Step 0 of the build is committed on the feature branch `feat/choice-buttons`. The plan review came back with four blockers I can fix myself (builder order, a flag that kept the new file out of the bundle, where the chosen mark lives, and how the preview runs); I am folding them in before any builder starts. You said you do not need to be asked, so nothing here waits on you; comment anywhere if you want a different call.
 
 **What you will notice first.** The lesson queue rebuilt with real buttons, served with the rail live, before any PR gate.
 
-Updated 2026-10-17 14:08.
+Updated 2026-10-17 14:03.
 
 ## The documents
 
@@ -33,7 +33,8 @@ Each one is yours to overrule.
 - 2026-10-17: brief written; PM review returned twelve findings, no blockers; eleven accepted, one accepted in part.
 - 2026-10-17: architecture written; `docs/ongoing/ARCHITECTURE.md` amended first, as its rule requires.
 - 2026-10-17: architect review: fourteen findings, all accepted. The one blocker: the group attribute was under the `data-lahe` prefix the tool strips from captured markup; it is now `data-choice`. The wake story was wrong and is corrected: the monitor's poll is what bounds wakes, and the count is measured rather than promised. A possible monitor quiet spell is on the board for you (LAHE-monitor-quiet-spell).
-- 2026-10-17: plan written; Step 0 (shared names, manifest, contract rows, fixtures) committed on `feat/choice-buttons`; unit suite green there.
+- 2026-10-17: plan written; Step 0 (shared names, manifest, contract rows, fixtures) committed on `feat/choice-buttons`. One unit test failed on it (the list of kinds); fixed in the next Step 0 commit.
+- 2026-10-17: plan review: sixteen findings, four blockers, all being folded in. Ken caught a hand-written timestamp on this page that was ten minutes ahead; the timestamp now comes from the shell clock.
 
 ## To delete at cleanup
 
