@@ -1,6 +1,6 @@
 # Render Markdown with pandoc
 
-Status: spec written, not yet reviewed. Sized past whetstone (see "Size" at the bottom), so it stops here for a decision on route.
+Status: route decided (build in this worktree with this spec as the only spec doc). Approach section filled in with the mapping table and the pandoc call; architecture and security reviews next, then the build.
 
 ## Needs Ken
 
@@ -103,10 +103,35 @@ Every builder brief carries the no-delete rule: no `rm`, `rmdir`, `unlink` or `g
 
 ## Open questions
 
-1. **The bare `callout` kind.** The research-report header treats `::: callout` as the old name for the Key-insight panel (cobalt tint). The feature-forge build leaves the class alone, and the house style draws a bare `.callout` as the solid ink block. Recommendation: follow the report header, since every known bare `::: callout` is in a research report, and map it to `.insight`.
-2. **`callout-warn` and `callout-note`.** The report header maps `callout-warn` to the caveat panel. `callout-note` has no mapping in either source. Recommendation: `callout-warn` to `.insight .insight--caveat`; `callout-note` to `.insight` with label "Note".
-3. **Report-only kinds** (stat, stat-row, card, cardgrid, pullquote, keytakeaway, rimage, eyebrow). The report draws them with its own CSS, not house components. Two options: port that CSS into `lahe-markdown.css`, or restructure the markup onto house components (stat to `.stat` with `.stat-value` and `.stat-meta`, stat-row to `.stats`, pullquote to `blockquote.pullquote` with a footer, keytakeaway to `.callout`, eyebrow to `p.eyebrow`). Recommendation: house components where one exists, and port the report CSS only for card, cardgrid and rimage, which have no house twin.
-4. **Telling the reader when pandoc is missing.** On a computer without pandoc, a Markdown page still opens, but its `:::` boxes print as raw text, the way they did for Ken today. Where should LAHE say why? (a) Only in LAHE's log file, which only agents and developers read. (b) Also as one line in the comment rail on the page, such as "Install pandoc to draw the boxes on this page." Option (b) means changing the rail's code too, so it is a little more work. On Ken's machine neither ever shows, because pandoc is installed. Recommendation: (b). A reader who sees raw `:::` text has no other way to learn why.
+<div class="insight" data-label="Decided">
+
+**The bare `callout` kind.** The research-report header treats `::: callout` as the old name for the Key-insight panel (cobalt tint). The feature-forge build leaves the class alone, and the house style draws a bare `.callout` as the solid ink block. Recommendation: follow the report header, since every known bare `::: callout` is in a research report, and map it to `.insight`.
+
+**Decided 2026-10-17: map it to `.insight`.**
+
+</div>
+
+<div class="insight" data-label="Decided">
+
+**`callout-warn` and `callout-note`.** The report header maps `callout-warn` to the caveat panel. `callout-note` has no mapping in either source. Recommendation: `callout-warn` to `.insight .insight--caveat`; `callout-note` to `.insight` with label "Note".
+
+**Decided 2026-10-17: as recommended.**
+
+</div>
+
+<div class="insight" data-label="Decided">
+
+**Report-only kinds** (stat, stat-row, card, cardgrid, pullquote, keytakeaway, rimage, eyebrow). The report draws them with its own CSS, not house components. Two options: port that CSS into `lahe-markdown.css`, or restructure the markup onto house components (stat to `.stat` with `.stat-value` and `.stat-meta`, stat-row to `.stats`, pullquote to `blockquote.pullquote` with a footer, keytakeaway to `.callout`, eyebrow to `p.eyebrow`). Recommendation: house components where one exists, and port the report CSS only for card, cardgrid and rimage, which have no house twin.
+
+**Decided 2026-10-17: standardize. card, cardgrid and rimage become house components in vendor/stclair-doc-style; the rest map onto their house twins.**
+
+</div>
+
+<div class="insight insight--caveat" data-label="Open question">
+
+**Telling the reader when pandoc is missing.** On a computer without pandoc, a Markdown page still opens, but its `:::` boxes print as raw text, the way they did for Ken today. Where should LAHE say why? (a) Only in LAHE's log file, which only agents and developers read. (b) Also as one line in the comment rail on the page, such as "Install pandoc to draw the boxes on this page." Option (b) means changing the rail's code too, so it is a little more work. On Ken's machine neither ever shows, because pandoc is installed. Recommendation: (b). A reader who sees raw `:::` text has no other way to learn why.
+
+</div>
 
 ## Size
 
