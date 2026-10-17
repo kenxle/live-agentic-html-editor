@@ -35,6 +35,12 @@ High-level fix: prefer the site that owns the file, meaning the one whose folder
 
 No design call. One function changes its choice rule; the callers stay as they are. `sites.deepestFolderSite` already picks the deepest folder site, but it only knows folder sites, and `siteForFile` also has to handle page-only sites and mounts. So `siteForFile` gets the rule inline rather than calling it.
 
+What else moves with it:
+
+- `recordLinkedFor`, and the mounts a render adds, now land on the owning site. That is the site `linkedFileForPage` should find them on.
+- When a page-only site (a `lahe write` notes page) and a folder site both hold a file, the page-only site wins. Its render has the same words, so the handled check's answer does not change.
+- A file only a mount reaches still gets no render from `renderForFile`. Those are linked documents, and the handled check reads them through its own linked-page path.
+
 Rejected: rendering through the mounting site. A file reached through a mount is served under `/.lahe-source/<id>/`, not at `/`, so its render would be a different page from the one at the document's own address.
 
 ## Tasks
@@ -43,9 +49,9 @@ Rejected: rendering through the mounting site. A file reached through a mount is
 |---|---|---|---|
 | 1 | Unit test, written red first: two sites, the first mounting the second's folder. `renderForFile` returns the render (not null). | `test/unit/sites_mappers.test.js` new test fails before, passes after | the bug as Ken hit it |
 | 2 | Unit test, red first: same setup, a free-writing item with a new paragraph placed in the `.md`. `createHandledCheck(...).pageShows` returns true. | same file | the check holding a placed paragraph |
-| 3 | Unit test: two nested folder sites; the deeper one wins. A file only a mount reaches is still served (`servesFile` true). | same file | requirements 2 and 3 |
+| 3 | Unit tests: two nested folder sites with the shallower listed first, and the deeper one gets the recorded link. A page-only site wins over a folder site listed first. A file only a mount reaches is still served (`servesFile` true; a regression guard, already true today). | same file | requirements 2 and 3 |
 | 4 | Change `siteForFile` in `src/service/page_routes.js`. | tasks 1-3 green; `npm run gate:unit` 0 failed | |
-| 5 | Replay the real review's two items against the fixed code with a scratch script (outside the repo). | both come back true | a fix that passes the fixture but not the real case |
+| 5 | Replay the real review's two items against the fixed code with a scratch script outside the repo, on a copy of the site registry (never the live state folder). | both come back true, and false on the old code | a fix that passes the fixture but not the real case |
 
 Authority: this spec. Review owner for the diff: one `feature-dev:code-reviewer`. No browser change, so no browser run and no screenshot; `npm run gate` runs once before the PR, per CLAUDE.md.
 
@@ -60,3 +66,7 @@ Authority: this spec. Review owner for the diff: one `feature-dev:code-reviewer`
 ## Questions
 
 - None open. The two stuck cards on Ken's review can be closed with "Mark as done" today; this fix stops the next ones.
+
+## Review summary
+
+Spec review (testing): accepted all of it. The tests use real paths and assert the list order, list the shallower site first, cover the page-only case, and test `recordLinkedFor`. The replay runs on a copy of the registry. Rejected nothing.
