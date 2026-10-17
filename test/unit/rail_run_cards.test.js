@@ -121,7 +121,7 @@ test("the empty-page lines name the file when the page has a file-name title", (
   assert.deepEqual(overlay.emptyPageLines("2026-09-28.md"), [
     "Nothing written yet",
     "Start typing. Your notes go to 2026-09-28.md.",
-    "Each time you stop writing, everything you wrote in that sitting becomes one card here, and the agent places it in the file.",
+    "Each time you stop writing, everything you wrote in that sitting becomes one thread here, and the agent places it in the file.",
     "The agent only places your words. It organizes the notes when you ask it to."
   ]);
 });

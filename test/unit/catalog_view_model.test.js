@@ -161,7 +161,7 @@ test("with no agent, Pick this up and Launch show the hand-off panel instead of 
     const r = row(view, "r_mounted");
     assert.equal(
       r.panel.intro,
-      "No agent is attached. This is the same hand-off message the rail already copies. Paste it into any agent:"
+      "No agent is attached. This is the same hand-off message the chat bar already copies. Paste it into any agent:"
     );
     assert.equal(r.panel.message, protocol.AGENT_LIVENESS.handoffMessage("s_coach", "coach activity", false, { library: true, stateDir: null }));
     assert.equal(r.panel.copyLabel, "Copy");
@@ -1585,7 +1585,7 @@ test("Open that left a newer review's rail alone says which review holds it", ()
     body: { url: "http://x.lahe.localhost:1483/f.html", request_id: null, not_asked: null, held_by: { review: "r_newer", name: "Figure v2" } }
   }, NOW);
   const note = row(build(list, state), "r_mounted").note;
-  assert.equal(note.text, 'Opened. This file\'s review is "Figure v2", so the page shows its comments. Open did not move the rail.');
+  assert.equal(note.text, 'Opened. This file\'s review is "Figure v2", so the page shows its comments. Open did not move the chat bar.');
   assert.equal(note.tone, "info");
 });
 

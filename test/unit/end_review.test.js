@@ -73,8 +73,8 @@ test("nothing pending is said plainly, and never with a zero in it", () => {
 test("unanswered items are counted and named, singular and plural", () => {
   const four = [itemOf(), itemOf(), itemOf(), itemOf()];
   assert.deepEqual(overlay.endReviewCounts(four), { unanswered: 4, drafts: 0 });
-  assert.equal(overlay.unfinishedSentence({ unanswered: 4, drafts: 0 }), "4 items are still waiting on an agent.");
-  assert.equal(overlay.unfinishedSentence({ unanswered: 1, drafts: 0 }), "1 item is still waiting on an agent.");
+  assert.equal(overlay.unfinishedSentence({ unanswered: 4, drafts: 0 }), "4 threads are still waiting on an agent.");
+  assert.equal(overlay.unfinishedSentence({ unanswered: 1, drafts: 0 }), "1 thread is still waiting on an agent.");
 });
 
 test("drafts are counted separately, and the sentence says why they matter", () => {
@@ -95,7 +95,7 @@ test("both at once are one sentence, and neither number goes missing", () => {
   assert.deepEqual(counts, { unanswered: 4, drafts: 2 });
   assert.equal(
     overlay.unfinishedSentence(counts),
-    "4 items are still waiting on an agent, and 2 drafts have not been marked ready, so no agent has seen them."
+    "4 threads are still waiting on an agent, and 2 drafts have not been marked ready, so no agent has seen them."
   );
 });
 

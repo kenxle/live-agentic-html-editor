@@ -342,12 +342,12 @@ test.describe("a card folds to one line", () => {
       const first = await commentOn(page, "p.lede", "cut this to one sentence");
       const second = await commentOn(page, "#feed-queue p", "this queue is longer than the day is");
 
-      await chooseMenuItem(page, "Collapse all cards");
+      await chooseMenuItem(page, "Collapse all threads");
       expect(await foldedIds(page)).toEqual([first.id, second.id].sort());
       expect((await cardShape(page, first.id)).folded).toBe(true);
       expect((await cardShape(page, second.id)).folded).toBe(true);
 
-      await chooseMenuItem(page, "Expand all cards");
+      await chooseMenuItem(page, "Expand all threads");
       expect(await foldedIds(page)).toEqual([]);
       expect((await cardShape(page, second.id)).folded).toBe(false);
     } finally {

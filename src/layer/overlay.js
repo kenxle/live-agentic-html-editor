@@ -140,7 +140,7 @@
   // the words a card shows (never its button labels), and a view only, like
   // the filter.
   var SEARCH_PLACEHOLDER = "Search";
-  var SEARCH_LABEL = "Search the cards in this tab";
+  var SEARCH_LABEL = "Search the threads in this tab";
   var SEARCH_MISS_ATTR = "data-lahe-search-miss";
   function searchEmptyText(query) {
     return "Nothing here matches “" + query + "”.";
@@ -278,23 +278,29 @@
 
   var STATE_LABEL = {
     draft: "Draft",
-    ready: "Ready",
-    handled: "Handled",
-    not_handled: "Not handled",
+    // The brand words (docs/ongoing/BRAND.md, Words we use): a thread is Open,
+    // Question or Done. A refused thread is still open: the reviewer answers it
+    // or marks it done, and its amber chip and the agent's reason say why.
+    ready: "Open",
+    handled: "Done",
+    not_handled: "Open",
     // A rail-only display state (docs/features/20260917.01_hold_toggle): the
     // item itself is still `ready` in the record (Hold gates delivery, not
     // lifecycle); this is what the card shows while its ready event sits
     // queued in the outbox with Hold on.
     held: "Held"
   };
+  // The chip on an open thread whose agent is asking the reviewer something.
+  var QUESTION_CHIP = "Question";
   // MARK AS DONE (docs/features/20261012.01_rail_cleanup). The reviewer closes
   // an outstanding card themselves from its state chip. One spelling for the
   // menu item, the tip on the chip, and the chip a closed card wears.
   var MARK_DONE = {
     ACTION: "done",
     LABEL: "Mark as done",
-    TIP: "Mark this card as done without waiting for the agent",
-    // The chip on a card the reviewer closed. "Handled" would say an agent did it.
+    TIP: "Mark this thread as done without waiting for the agent",
+    // The chip on a card the reviewer closed. The same word as an agent's
+    // handled chip; the card's own line says who closed it.
     CLOSED_CHIP: "Done"
   };
   // The display states a card can be closed from. Held is ready waiting on the
@@ -1592,7 +1598,7 @@
     LABEL: "Hide for presenting",
     // What the rail's own footer teaches. The chord is the ONLY way back, and
     // the reviewer has to know that before they use it, not after.
-    MENU_LABEL: "Hide rail for presenting (Cmd-Shift-X)"
+    MENU_LABEL: "Hide chat bar for presenting (Cmd-Shift-X)"
   };
 
   // What the collapsed pill says on hover. It carries the chord for the same
@@ -1650,8 +1656,8 @@
     { action: "copy", label: "Copy review to clipboard", parent: EXPORT_GROUP },
     { action: "export", label: "Export review to file", parent: EXPORT_GROUP },
     { action: VIEW_GROUP, label: "View", group: true },
-    { action: FOLD_ALL.COLLAPSE, label: "Collapse all cards", parent: VIEW_GROUP },
-    { action: FOLD_ALL.EXPAND, label: "Expand all cards", parent: VIEW_GROUP },
+    { action: FOLD_ALL.COLLAPSE, label: "Collapse all threads", parent: VIEW_GROUP },
+    { action: FOLD_ALL.EXPAND, label: "Expand all threads", parent: VIEW_GROUP },
     { action: PRESENT.ACTION, label: PRESENT.MENU_LABEL, parent: VIEW_GROUP },
     { action: SHORTCUTS.ACTION, label: SHORTCUTS.LABEL }
   ];
@@ -1977,7 +1983,7 @@
     return [
       "Nothing written yet",
       name ? "Start typing. Your notes go to " + name + "." : "Start typing.",
-      "Each time you stop writing, everything you wrote in that sitting becomes one card here, and the agent places it in the file.",
+      "Each time you stop writing, everything you wrote in that sitting becomes one thread here, and the agent places it in the file.",
       "The agent only places your words. It organizes the notes when you ask it to."
     ];
   }
@@ -2055,7 +2061,7 @@
     var waiting =
       unanswered +
       " " +
-      plural(unanswered, "item is", "items are") +
+      plural(unanswered, "thread is", "threads are") +
       " still waiting on an agent";
     var unsent =
       drafts +
@@ -2608,8 +2614,8 @@
       head.appendChild(keysPanel);
 
       var collapseBtn = el("button", "iconbtn", "→");
-      collapseBtn.setAttribute("aria-label", "Collapse the rail");
-      collapseBtn.title = "Collapse the rail";
+      collapseBtn.setAttribute("aria-label", "Collapse the chat bar");
+      collapseBtn.title = "Collapse the chat bar";
       collapseBtn.addEventListener("click", function () {
         collapse(true);
       });
@@ -3203,7 +3209,7 @@
 
     function emptyTextFor(name) {
       if (name === TAB.ACTIVE) return "No unanswered or active threads. Check the done tab, or select some text and press Cmd-Shift-C.";
-      return "Nothing handled yet.";
+      return "Nothing done yet.";
     }
 
     // -------------------------------------------------------------------------
@@ -3696,6 +3702,22 @@
       return false;
     }
 
+    /**
+     * Is the agent's current reply a question the reviewer has not answered?
+     * Answering clears the reply (record.continueThread), so a reply that is
+     * still a question is still waiting on the reviewer. A tool round's
+     * question is between the tool and the agent, not the reviewer's.
+     */
+    function isAskingReviewer(card) {
+      var reply = card.item && card.item[record.FIELD.REPLY];
+      return (
+        card.state === record.STATE.READY &&
+        !!reply &&
+        reply.status === record.REPLY_STATUS.QUESTION &&
+        !record.toolRoundOf(card.item)
+      );
+    }
+
     /** record.displayState, with the rail's one display-only addition. */
     function cardDisplayState(item) {
       var base = record.displayState(item);
@@ -3995,7 +4017,7 @@
       if (folded) card.node.setAttribute(CARD_COLLAPSED_ATTR, "true");
       else card.node.removeAttribute(CARD_COLLAPSED_ATTR);
       card.parts.disclose.setAttribute("aria-expanded", folded ? "false" : "true");
-      var label = folded ? "Expand this card" : "Collapse this card";
+      var label = folded ? "Expand this thread" : "Collapse this thread";
       card.parts.disclose.setAttribute("aria-label", label);
       card.parts.disclose.title = label;
       // Kept up to date whether the card is folded or not, so the line is
@@ -4128,7 +4150,7 @@
         p.state.setAttribute("tabindex", "0");
         p.state.setAttribute("aria-haspopup", "menu");
         p.state.setAttribute("aria-expanded", stateMenuId === card.id ? "true" : "false");
-        p.state.setAttribute("aria-label", (p.state.textContent || "") + ": card actions");
+        p.state.setAttribute("aria-label", (p.state.textContent || "") + ": thread actions");
         p.state.setAttribute("data-lahe-no-jump", "");
         p.stateWrap.setAttribute("data-lahe-tip", MARK_DONE.TIP);
         return;
@@ -4483,7 +4505,9 @@
         ? NOT_SENT_LABEL
         : closedByReviewer
           ? MARK_DONE.CLOSED_CHIP
-          : STATE_LABEL[card.state] || card.state;
+          : isAskingReviewer(card)
+            ? QUESTION_CHIP
+            : STATE_LABEL[card.state] || card.state;
       p.state.setAttribute("data-state", refused ? "refused" : card.state);
       if (closedByReviewer) p.state.setAttribute("data-lahe-closed-by", record.CLOSED_BY_REVIEWER);
       else p.state.removeAttribute("data-lahe-closed-by");

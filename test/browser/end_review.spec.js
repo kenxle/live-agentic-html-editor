@@ -298,7 +298,7 @@ test.describe("the reviewer ends the review from the rail", () => {
     // sentence carries both counts, and a draft is called out for the reason it
     // matters, which is that no agent will ever see it.
     expect(info.panel.what).toBe(
-      "1 item is still waiting on an agent, and 1 draft has not been marked ready, so no agent has seen it."
+      "1 thread is still waiting on an agent, and 1 draft has not been marked ready, so no agent has seen it."
     );
     expect(info.panel.kept, "and what ending costs, which is the reviewer's real question").toContain(
       "Your work is kept either way"

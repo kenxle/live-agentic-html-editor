@@ -34,6 +34,7 @@ const { stopTempHelpers } = require("../helpers/temp_helpers.js");
 const REPO_ROOT = path.join(__dirname, "..", "..");
 const CLI = path.join(REPO_ROOT, "bin", "lahe.js");
 const SHOTS = path.join(REPO_ROOT, "docs", "features", "20261012.01_rail_cleanup");
+const BRAND_SHOTS = path.join(REPO_ROOT, "docs", "features", "20261017.01_brand_rail_words");
 
 test.describe.configure({ mode: "serial" });
 
@@ -363,10 +364,10 @@ test.describe("the reviewer can mark any outstanding card done", () => {
 
     // THE CHIP IS A CONTROL on an outstanding card, with the rail's tip.
     const before = await chipOnScreen(page, item.id);
-    expect(before.label).toBe("Not handled");
+    expect(before.label).toBe("Open");
     expect(before.closeable).toBe(true);
     expect(before.role).toBe("button");
-    expect(before.tip).toBe("Mark this card as done without waiting for the agent");
+    expect(before.tip).toBe("Mark this thread as done without waiting for the agent");
 
     // The pictures: the menu open on an Active card, light and dark.
     fs.mkdirSync(SHOTS, { recursive: true });
@@ -403,6 +404,40 @@ test.describe("the reviewer can mark any outstanding card done", () => {
     await page.reload();
     await booted(page);
     await expectClosedByReviewer(page, item.id);
+  });
+
+  test("the chip says Question while the agent is asking, and Open once the reviewer answers", async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 800 });
+    await page.goto(world.open);
+    await booted(page);
+
+    const item = await commentOn(page, INTRO_P, COMMENT);
+    expect(item, "the comment is a record").toBeTruthy();
+    expect((await chipOnScreen(page, item.id)).label, "a sent comment is open").toBe("Open");
+
+    reply({ item: item.id, rev: item.rev, status: "question", text: "Which number do you want there?" });
+    await pollUntil(
+      async () => {
+        const got = await chipOnScreen(page, item.id);
+        return got.label === "Question" ? got : null;
+      },
+      { message: "the chip to say Question once the question folds", timeoutMs: 30000 }
+    );
+    expect((await chipOnScreen(page, item.id)).closeable, "a question can still be marked done").toBe(true);
+    fs.mkdirSync(BRAND_SHOTS, { recursive: true });
+    await page.mouse.move(1, 1);
+    await page.screenshot({ path: path.join(BRAND_SHOTS, "question_chip.png") });
+
+    // Answering clears the reply, so the thread is back with the agent.
+    const answered = await page.evaluate((id) => window.__lahe.handle.doneTab().followUp(id, "Two weeks."), item.id);
+    expect(answered, "the answer is sent").toBeTruthy();
+    await pollUntil(
+      async () => {
+        const got = await chipOnScreen(page, item.id);
+        return got.label === "Open" ? got : null;
+      },
+      { message: "the chip to say Open once the reviewer answers", timeoutMs: 30000 }
+    );
   });
 
   test("a hand edit the page check held open is marked done from the keyboard", async ({ page }) => {

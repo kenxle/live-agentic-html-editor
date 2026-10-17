@@ -304,7 +304,7 @@ test.describe("the Library page", () => {
       await handTo(page, "r_mounted", action);
       const panel = rowLocator(page, "r_mounted").locator(".lib-panel");
       await expect(panel.locator("p")).toHaveText(
-        "No agent is attached. This is the same hand-off message the rail already copies. Paste it into any agent:"
+        "No agent is attached. This is the same hand-off message the chat bar already copies. Paste it into any agent:"
       );
       await expect(panel.locator("pre")).toHaveText(message);
       await expect(panel.locator('[data-act="copy"]')).toBeFocused();
