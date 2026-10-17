@@ -85,8 +85,9 @@ and the link stops working while the reader still has it open.
 
 ### Shape the top
 
-- **The title is a sentence that says what this is.** "The menu bar app is
-  ready, with two decisions left", not "Menu bar status".
+- **The title is a short sentence that says what this is**, about twelve words
+  at most. "The menu bar app is ready, with two decisions left", not "Menu bar
+  status". Detail goes in the lede.
 - **The lede says what the page is for and what you need from the reader**, in
   one or two sentences.
 - **The first section holds what needs the reader**: the answer, the decision,
