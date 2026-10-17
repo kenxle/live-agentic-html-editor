@@ -22,7 +22,7 @@ And on the page since: documents and live websites are two different cases, and 
 Agree or disagree with each. Silence is agreement.
 
 1. **The job is clearing a queue of verdicts the agent already framed.** A question with a free answer stays a comment. Buttons are for the case where the agent can name every answer in advance.
-2. **Two uses, and only one is dangerous.** On a page an agent wrote or Lahe rendered, the library may own a marked element's click outright. On a live site, only elements the agent marked for Lahe are claimed, and every other button, link and form stays the site's. This is your own point, and it is how rule D3 (browse is the page untouched) and this feature fit together.
+2. **Documents only. Never on a live site.** Ken: "just don't do it on live sites. only docs." A choice group works on a page Lahe renders from Markdown or an agent wrote as HTML, where there is no page functionality to protect. On a page served from someone else's dev server (the `lahe add` path), the library claims no clicks at all, so rule D3 (browse is the page untouched) is never touched. A choice group on such a page draws as plain content and does nothing.
 3. **A press is a record like any other.** Durable, revisioned, listed in the drain, answered on its thread. Never a side channel to the agent that the store does not hold. The product brief's rule is that the record is the truth and the page is a view.
 4. **Identity is an id the agent writes, unique on the page.** Never the button's label or its position. The helper refuses a page where two groups share an id, the same way an anchor is refused when it is not unique.
 5. **Every button set keeps a way to answer in words.** Claude Code's own question tool always offers "Other"; a page of buttons with no escape hatch forces a bad fit.
@@ -45,7 +45,7 @@ Agree or disagree with each. Silence is agreement.
 **Summary.** A new component in the catalog: a choice group with an id the agent writes and one button per answer, drawn from the option-card and badge styles. A click mints a new kind of item, a choice, carrying the group id, the answer and the heading it sits under. It is sent at once, since a click is a commit. The drain prints it with its id, so the agent reads one field and parses nothing. The page shows the chosen answer and keeps it after a reload. Every group carries a "Something else" button that opens the ordinary comment box. When the agent handles it, it may write the decision back into the source so the document keeps it.
 
 - **Effort:** M to L. **Risk:** medium.
-- **For:** identity is the agent's own id, checked unique per page by the helper, so two "Promote" buttons can never be confused. The page shows the decision. On a live site only marked groups are claimed, so the site keeps working. Changing your mind is a new revision of the same item, which the lifecycle already handles.
+- **For:** identity is the agent's own id, checked unique per page by the helper, so two "Promote" buttons can never be confused. The page shows the decision. It is a document-only feature, so D3 and live sites are untouched. Changing your mind is a new revision of the same item, which the lifecycle already handles.
 - **Against:** a new record kind touches the record module, the contract text, the skill, the tests and the built bundle, and the architecture doc has to change first. Replay has to learn one more record shape so a pressed choice survives a repaint.
 - **Reuses:** the Mark as done event (a small verified act at one revision), the lifecycle, the card, option cards and badges for the look, the uniqueness rule.
 
@@ -109,7 +109,7 @@ What else is open on the board: two security rows (the CLI's raw secret, the mis
 
 The decisions named below (D3, D4, D12) now live in [ARCHITECTURE.md](../../ongoing/ARCHITECTURE.md), under "Architecture rules", with [the August doc](../20260812.01_live_agentic_html_editor/02_architecture_live_agentic_html_editor.md) kept as the history of why.
 
-- **Two very different uses, and D3 only bites one of them.** Your point. Document creation and editing has no existing page functionality to protect, because the agent made the page. Walking a website is where Lahe has to be careful not to disturb anything. So: on a page Lahe renders or an agent wrote, a choice button is part of the document and the library may own its click. On a live site, D3 (browse is the page untouched) stays in force, and only a button the agent marked for Lahe is ever claimed. Premise 2.
+- **Documents only, so D3 never comes up.** Ken first split the two uses (document creation has no page functionality to protect; walking a website does), then narrowed the feature to documents. A choice group is live only on a page Lahe renders or serves as a document. On a live site, D3 (browse is the page untouched) stays whole, and the library claims no click.
 - **The record kinds are a closed list.** Comment, edit, delete, format_only and note. Free writing added note, which is the precedent for adding one. A press is either a sixth kind (approach B) or a comment (approach A).
 - **A non-comment event already exists.** Mark as done on a card's chip posts an `item.closed` event naming the item and its revision, nothing else. The helper checks the id and revision and drops a stale one. That is the shape a button press takes: a small identified act the helper can verify.
 - **The Markdown renderer keeps raw HTML.** I ran marked on a `<button>` and it comes out as-is. An agent can already write a button into a Markdown page today. Nothing catches the click.
@@ -124,6 +124,7 @@ The decisions named below (D3, D4, D12) now live in [ARCHITECTURE.md](../../ongo
 
 ## Decisions so far
 
+- 2026-10-17: documents only, never live sites. Ken on premise 2: "just don't do it on live sites. only docs."
 - 2026-10-17: the clickable choice grows out of the option-card component, not a new look. Ken agreed on the card.
 - 2026-10-17: "interactive modules" already exist on pages (charts, zoomable diagrams); what is new here is one that reports back to the agent. Ken corrected the page.
 - 2026-10-13: documents and live sites are two cases; only live sites need D3's protection. Folded into premise 2.
