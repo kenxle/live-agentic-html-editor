@@ -33,10 +33,10 @@ Says the lahe skill told agents to pass a setting the tool does not have.
 
 **Recommend: discard.** Already decided on an earlier pass.
 
-<div class="choice" data-choice="lesson-monitor-setting" data-chosen="discard">
+<div class="choice" data-choice="lesson-monitor-setting">
   <p class="choice-q">Promote this lesson?</p>
   <button type="button" value="promote">Promote</button>
-  <button type="button" value="discard" data-recommended>Discard</button>
+  <button type="button" value="discard" data-recommended data-chosen>Discard</button>
 </div>
 
 ## Pandoc writes a fenced div that opens with a heading as a section

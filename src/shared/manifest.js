@@ -196,8 +196,7 @@ var LAYER_FILES = [
   {
     path: "src/layer/choices.js",
     owner: "choice-buttons layer",
-    why: "arm choice groups on a document page, mint a press, raise the refusal chip. Needs gestures, record, store, anchor, overlay, sync",
-    planned: true
+    why: "arm choice groups on a document page, mint a press, raise the refusal chip. Needs gestures, record, store, anchor, overlay, sync"
   },
   {
     path: "src/layer/comments.js",
