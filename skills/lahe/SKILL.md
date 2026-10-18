@@ -49,15 +49,12 @@ file.html` or another server: those pages have no rail, and comments made on
 them reach nobody.
 
 - "LAHE", "live review", "review this page", "put it on a page for me"
-- "claim the lahe session" or "take over the lahe session" (see "Sessions")
 
 ## Writing a page for someone to read
 
-Most reviews start with a page you write: a plan, a summary, a set of options,
-a list of questions, a report. Write it in the house style, then serve it. The
-style is what makes the reader's eye land on the decision you need from them; a
-page of headings and bullets reads as a draft, and the one thing that mattered
-gets skimmed past.
+Many reviews start with a page you write. Write it in the house style, then
+serve it. The style is what makes the reader's eye land on the decision you need
+from them.
 
 ### Pick the format
 
