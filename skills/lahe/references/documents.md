@@ -87,6 +87,4 @@ review, follow [feedback](feedback.md#document-styles).
 ## Before serving
 
 Check the title, lede and first section; match each section to its component;
-check the HTML skeleton and avoid repeated loud components. Then follow
-[the review runbook](review.md), give the printed link and start the monitor.
-The page is the answer: chat gets one line and the link.
+check the HTML skeleton. Then follow [the review runbook](review.md).
