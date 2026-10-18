@@ -36,6 +36,11 @@ conditional, paste it where the layout's scripts go, and reload the page. The
 line's `onerror` names a fallback path, `/lahe-layer.js`; publish the built
 library there if you want the page to load with the helper down.
 
+A page inside an iframe gets no rail by default. Add
+`data-lahe-frames="allow"` to the script tag only when the framed page itself
+is meant to be reviewed. Leave it off for speaker notes and other duplicate
+views that would compete with the main page.
+
 For a single generated page, use
 `lahe review page.html --source generator` and rerun that generator after
 each source change. Verify the change in the built page before replying

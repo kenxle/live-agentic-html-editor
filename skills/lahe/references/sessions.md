@@ -18,6 +18,14 @@ When you move or rename a reviewed file, run
 over the new link, so its comments follow it. Start a new review instead only
 when the reviewer asks for a fresh start.
 
+This also applies when moving a reviewed document out of a git worktree. Make
+sure the main checkout has the current document, then serve that copy with the
+owning session and the existing review id before retiring the worktree. The
+new URL keeps the earlier comments and replies. If the worktree is already
+gone, `lahe review <main copy> --session <session-id>` continues its review
+in that session and records the main path. Use the new URL when replying or
+handing the document back.
+
 A page already under its own review keeps it when you later review its folder.
 Two reviews over one folder is legal, and it is where a reply lands on the wrong
 card.

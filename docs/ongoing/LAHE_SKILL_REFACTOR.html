@@ -16,6 +16,7 @@
   <section class="sheet" id="review">
     <div class="sheet-head"><h2>Start with the router and document runbook</h2><span class="n">Review</span></div>
     <p data-lahe-id="eb3zupc4x">Read <a href="http://live-agentic-html-editor.skills.lahe.lahe.localhost/SKILL.md">the new main skill</a>, then <a href="http://live-agentic-html-editor.skills.lahe.lahe.localhost/references/documents.md">the document runbook</a>. Those are the most important places to judge whether this is lighter without making house styles optional. Every changed document is linked in the index below.</p>
+    <p>The <a href="LAHE_SKILL_REFACTOR_AUDIT.md">instruction audit</a> compares the runbooks with the skill before the split and records the gaps repaired during this review.</p>
     <ul>
       <li><b>Routing:</b> Does the entry point tell an agent what to read next without encouraging it to load everything?</li>
       <li><b>Style consistency:</b> Does the document runbook make the right component easy to find and require the catalog before writing markup?</li>
@@ -31,7 +32,7 @@
       <div class="stat"><p class="stat-label">Main skill after review edits</p><p class="stat-value">67 lines</p><p class="stat-meta">681 words, with the original description restored</p></div>
     </div>
     <p>Most specialized guidance moved into references. The smaller entry point is what an agent reads when the skill activates; the task then determines which references it needs. These are file-size measurements, not measured token use or a claim that an entire review needs only the entry point.</p>
-    <p>The shared safeguards stayed in the router: use the house styles, serve a live review, read the contract, arm the right monitor, drain feedback, edit the source, verify before replying, and take over sessions only when asked.</p>
+    <p>The shared safeguards stay in the router: use the house styles, serve a live review, read the relevant runbook, arm the right monitor, drain feedback, edit the source, verify before replying, and take over sessions only when asked. Review data stays in <code>review.json</code>; agent instructions live in the skill.</p>
   </section>
 
   <section class="sheet" id="structure">
@@ -43,7 +44,8 @@
         <tr><td>Opening a notes page</td><td>Notes and the review loop; new-writing rules when the reviewer types.</td></tr>
         <tr><td>Reviewing slides</td><td>Deck conventions and framing; build guidance when the deck is generated.</td></tr>
         <tr><td>Reviewing a webapp</td><td>Development-only integration, the real source and build process, and the review loop.</td></tr>
-        <tr><td>Handling feedback</td><td>The shared feedback checklist, with new-writing or choice details only when those item types arrive.</td></tr>
+        <tr><td>Handling feedback</td><td>The shared feedback checklist, with new-writing or choice details when those item types arrive.</td></tr>
+        <tr><td>Changing a style or exporting a PDF</td><td>The document-style and PDF routes in the main skill.</td></tr>
         <tr><td>Taking over or finishing</td><td>The session, Library or finish runbook for that operation.</td></tr>
       </tbody>
     </table>
@@ -61,7 +63,7 @@
         <tr><td><a href="http://live-agentic-html-editor.skills.lahe.lahe.localhost/references/notes.md">Notes</a></td><td>Blank notes pages and preserving the reviewer's writing.</td></tr>
         <tr><td><a href="http://live-agentic-html-editor.skills.lahe.lahe.localhost/references/slides.md">Slides</a></td><td>Deck themes, source/build routing and iframe behavior.</td></tr>
         <tr><td><a href="http://live-agentic-html-editor.skills.lahe.lahe.localhost/references/webapps.md">Webapps and builds</a></td><td>Development integration and generated documents.</td></tr>
-        <tr><td><a href="http://live-agentic-html-editor.skills.lahe.lahe.localhost/references/review.md">Review loop</a></td><td>Startup, target selection, serving, URLs, assets, contract and draining.</td></tr>
+        <tr><td><a href="http://live-agentic-html-editor.skills.lahe.lahe.localhost/references/review.md">Review loop</a></td><td>Startup, target selection, serving, URLs, assets and draining.</td></tr>
         <tr><td><a href="http://live-agentic-html-editor.skills.lahe.lahe.localhost/references/feedback.md">Feedback</a></td><td>Item interpretation, protected edits, stamps, verification, replies and style requests.</td></tr>
         <tr><td><a href="http://live-agentic-html-editor.skills.lahe.lahe.localhost/references/free-writing.md">New writing and proofreading</a></td><td>Block placement, revisions, take-backs and proposed corrections.</td></tr>
         <tr><td><a href="http://live-agentic-html-editor.skills.lahe.lahe.localhost/references/choices.md">Choice groups</a></td><td>Button answers, recording decisions and changed minds.</td></tr>
