@@ -36,17 +36,19 @@ var MAX_INTERVAL_SECONDS = 3600;
 var ACTION_REQUIRED = "LAHE ACTION REQUIRED";
 
 var USAGE = [
-  "usage: lahe monitor --session <id> [--session <id> ...] [--interval <seconds>] [--state-dir <path>]",
+  "usage: lahe monitor --session <id> [--session <id> ...] [--interval <seconds>] [--codex] [--state-dir <path>]",
   "",
   "Polls session-scoped status locally. When work is waiting it prints one line",
   "naming the drain and relaunch commands, then exits.",
   "Idle polls invoke no model and print nothing.",
+  "In Codex, --codex starts a watcher and returns; real work arrives via codex queue.",
   "",
   "  --session <id>       required agent-session owner. Give it more than once to watch several",
   "                       sessions with one monitor; the first is the primary. A session that",
   "                       closes or is taken over is dropped with a line, and the rest are watched",
   "                       on; its exit code is used only when no session is left.",
   "  --interval <seconds> local polling interval; default " + DEFAULT_INTERVAL_SECONDS,
+  "  --codex             watch outside the turn; queue real work to CODEX_THREAD_ID",
   "  --state-dir <path>   same state root used by review and status",
   "",
   "Exit codes:",
@@ -69,6 +71,8 @@ function parseArgs(argv) {
     // changes nothing would be a worse answer than taking it.
     seenFile: null,
     intervalSeconds: DEFAULT_INTERVAL_SECONDS,
+    codex: false,
+    handoffRevisions: Object.create(null),
     stateDir: null,
     help: false,
     error: null
@@ -78,12 +82,21 @@ function parseArgs(argv) {
     var arg = list[i];
     if (arg === "--help" || arg === "-h") {
       out.help = true;
-    } else if (arg === "--session" || arg === "--seen-file" || arg === "--interval" || arg === "--state-dir") {
+    } else if (arg === "--codex") {
+      out.codex = true;
+    } else if (arg === "--session" || arg === "--seen-file" || arg === "--interval" || arg === "--state-dir" || arg === "--handoff-rev") {
       if (list[i + 1] === undefined) {
         out.error = arg + " needs a value";
         break;
       }
       var value = list[(i += 1)];
+      if (arg === "--handoff-rev") {
+        if (!out.sessions.length || !/^\d+$/.test(value) || !Number.isSafeInteger(Number(value))) {
+          out.error = "--handoff-rev needs a non-negative integer after its --session";
+          break;
+        }
+        out.handoffRevisions[out.sessions[out.sessions.length - 1]] = Number(value);
+      }
       // More than once is how one monitor watches several sessions (after a
       // Library pick-up the agent owns its own and the document's). A repeated
       // id is watched once.
@@ -181,7 +194,7 @@ function plural(count, one, many) {
  * relaunch. It carries none of the work: the agent's own drain prints that, so
  * printing it here was a second copy of every item in the agent's context.
  */
-function actionLine(counts, drains, relaunch) {
+function actionLine(counts, drains, relaunch, codex) {
   var parts = [];
   if (counts.items) parts.push(plural(counts.items, "item", "items"));
   if (counts.ended) parts.push(plural(counts.ended, "ended review", "ended reviews"));
@@ -192,7 +205,7 @@ function actionLine(counts, drains, relaunch) {
     (one ? "Drain: " : "Drain each: ") + drains.join(" and ") + ". " +
     "Handle every item it prints, rebuild and verify, reply, and drain again until " +
     (one ? "it prints" : "each prints") + " nothing. " +
-    "Then relaunch: " + relaunch + "\n";
+    (codex ? "Then re-arm: " + relaunch + " --codex. End this turn after it returns.\n" : "Then relaunch: " + relaunch + "\n");
 }
 
 function waitMs(ms) {
@@ -264,6 +277,7 @@ async function run(argv, options) {
     err("lahe monitor: " + args.error + "\n\n" + USAGE + "\n");
     return protocol.CLI_EXIT.BAD_USAGE;
   }
+  if (args.codex) return require("../codex_monitor.js").start(argv, args, opts);
 
   // THE WATCH SET. One entry per --session, the primary first. Each carries the
   // handoff rev it started under, because a takeover fences each session on its
@@ -277,6 +291,11 @@ async function run(argv, options) {
       if (!startingSession) {
         err("lahe monitor: unknown agent session " + JSON.stringify(args.sessions[s]) + "\n");
         return protocol.CLI_EXIT.BAD_USAGE;
+      }
+      var expectedRev = opts.expectedRevisions ? opts.expectedRevisions[args.sessions[s]] : args.handoffRevisions[args.sessions[s]];
+      if (expectedRev !== undefined && expectedRev !== agentSessions.handoffRev(startingSession)) {
+        err("lahe monitor: session changed hands before its watcher started; do not re-arm this stale request\n");
+        return protocol.CLI_EXIT.SESSION_TAKEN_OVER;
       }
       watched.push({
         id: args.sessions[s],
@@ -327,7 +346,13 @@ async function run(argv, options) {
   // on disk for a second monitor to find: writing it before the first poll (and
   // a poll can take a while) shrinks that window from an interval to
   // milliseconds.
-  beatAll();
+  var ready = beatAll();
+  if (opts.deliverWork && !ready) {
+    stopBeatingAll();
+    err("lahe monitor: could not write the Codex watcher's heartbeat\n");
+    return protocol.CLI_EXIT.BAD_USAGE;
+  }
+  if (typeof opts.onReady === "function") opts.onReady();
 
   /** The primary: the first session still watched. */
   function primary() {
@@ -337,7 +362,7 @@ async function run(argv, options) {
   function beat(entry) {
     if (typeof store.writeMonitor !== "function") return false;
     try {
-      store.writeMonitor(entry.id, { pid: pid, handoff_rev: entry.handoffRev, primary: primary() });
+      store.writeMonitor(entry.id, { pid: pid, handoff_rev: entry.handoffRev, primary: primary(), codex_thread: opts.codexThread });
       return true;
     } catch (writeError) {
       // A heartbeat that cannot be written costs the rail a chip, not the agent
@@ -347,7 +372,7 @@ async function run(argv, options) {
   }
 
   function beatAll() {
-    watched.forEach(beat);
+    return watched.map(beat).every(function (ok) { return ok; });
   }
 
   /**
@@ -472,6 +497,21 @@ async function run(argv, options) {
   }
 
   while (true) {
+    if (typeof opts.additionalSessions === "function") {
+      opts.additionalSessions().forEach(function (entry) {
+        if (!protocol.isSafeId(entry.id) || watched.some(function (current) { return current.id === entry.id && current.handoffRev === entry.rev; })) return;
+        var session = store.read(entry.id);
+        if (!session || session.closed_at || agentSessions.handoffRev(session) !== entry.rev) return;
+        var heartbeat = typeof store.readMonitor === "function" ? store.readMonitor(entry.id) : null;
+        if (liveDuplicate(heartbeat, entry.rev, nowMs(), pid) !== null) return;
+        watched = watched.filter(function (current) {
+          if (current.id !== entry.id) return true;
+          stopBeating(current);
+          return false;
+        });
+        watched.push({ id: entry.id, handoffRev: entry.rev, closedAtStart: false });
+      });
+    }
     var early;
     try {
       early = prune();
@@ -491,6 +531,7 @@ async function run(argv, options) {
     for (var w = 0; w < watched.length; w += 1) {
       var stdout = [];
       var stderr = [];
+      var deliveryCommits = [];
       var code = await statusRun(statusArgsFor(watched[w]), {
         stdout: function (text) { stdout.push(String(text)); },
         stderr: function (text) { stderr.push(String(text)); },
@@ -507,9 +548,12 @@ async function run(argv, options) {
         // marks it as "the monitor woke on it", which is not "the agent read it":
         // the agent's first drain after this wake still lists it. The same flag
         // marks Library requests delivered, once per request.
-        markEndedDelivered: true
+        markEndedDelivered: true,
+        // A push watcher has not delivered anything until the host accepts its
+        // queue command. Keep ended reviews and Library requests retryable.
+        deferDelivery: opts.deliverWork ? function (commit) { deliveryCommits.push(commit); } : null
       });
-      results.push({ entry: watched[w], printed: stdout.join(""), errors: stderr.join(""), code: code });
+      results.push({ entry: watched[w], printed: stdout.join(""), errors: stderr.join(""), code: code, deliveryCommits: deliveryCommits });
     }
 
     // Checked AFTER the poll too, so work captured a moment before a takeover is
@@ -542,8 +586,8 @@ async function run(argv, options) {
       result.fresh = parsed.other || parsed.keys.some(function (key) { return seen.indexOf(key) === -1; });
     });
     var withWork = results.filter(function (result) { return !!result.printed && result.fresh; });
+    var delivered = false;
     if (withWork.length > 0) {
-      withWork.forEach(recordDelivered);
       // ONE LINE, AND NONE OF THE WORK. The agent drains next, and the drain
       // prints the items; printing them here too put every item in the agent's
       // context twice. The line names the drain for each session that had work
@@ -556,14 +600,27 @@ async function run(argv, options) {
       });
       var line = actionLine(
         counts,
-        withWork.map(function (result) { return protocol.drainCommand(result.entry.id, flagDir); }),
-        protocol.monitorCommand(watched.map(function (entry) { return entry.id; }), flagDir)
+        withWork.map(function (result) {
+          return protocol.drainCommand(result.entry.id, flagDir) + (opts.deliverWork ? " --handoff-rev " + result.entry.handoffRev : "");
+        }),
+        protocol.monitorCommand(watched.map(function (entry) { return entry.id; }), flagDir,
+          opts.deliverWork ? Object.fromEntries(watched.map(function (entry) { return [entry.id, entry.handoffRev]; })) : null),
+        !!opts.deliverWork
       );
       // ON STDOUT, and on stderr too only when the two go to different places.
       // A host that captured one stream once got the instruction without the
       // work; a host that merges them showed the agent two copies.
-      out(line);
-      if (!(sameStream === null ? streamsShareDestination() : sameStream)) err(line);
+      if (opts.deliverWork) {
+        delivered = await opts.deliverWork(line, watched.map(function (entry) { return { id: entry.id, rev: entry.handoffRev }; }));
+        if (delivered) withWork.forEach(function (result) {
+          result.deliveryCommits.forEach(function (commit) { commit(); });
+        });
+      } else {
+        out(line);
+        if (!(sameStream === null ? streamsShareDestination() : sameStream)) err(line);
+        delivered = true;
+      }
+      if (delivered) withWork.forEach(recordDelivered);
     }
     var failed = null;
     results.forEach(function (result) {
@@ -577,7 +634,7 @@ async function run(argv, options) {
       stopBeatingAll();
       return failed;
     }
-    if (withWork.length > 0) {
+    if (delivered) {
       stopBeatingAll();
       return protocol.CLI_EXIT.OK;
     }

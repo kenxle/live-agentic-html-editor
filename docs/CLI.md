@@ -125,10 +125,21 @@ without spending model tokens:
   `env` block of Claude Code's settings.json turns the kills off. After three
   kills in a row with nothing new landed between them, the agent stops
   relaunching and tells the reviewer instead.
-- **Codex** runs `lahe monitor --session <id>` as a foreground pending exec call
-  and keeps waiting on it. It must not detach the process, announce that
-  monitoring started, and end the turn: detached task completion alone does not
-  guarantee a new Codex turn.
+- **Codex** runs `lahe monitor --session <id> --codex`. It returns after a local
+  watcher starts, so the model turn can end and a graceful Codex restart can
+  finish. The watcher invokes `codex queue --remote unix:// --thread <id>
+  --message <wake>` only when work is waiting. It sends counts and a drain
+  command, with no page text. It exits after Codex accepts the queue, and the
+  agent drains to empty and re-arms after handling the batch. Re-arming an
+  active watcher for the same conversation returns successfully. Queue failures
+  are retried locally without marking feedback delivered. The bare command
+  selects this mode automatically under `CODEX_THREAD_ID` or `CODEX_SESSION_ID`.
+  It requires the local shared Codex daemon and a CLI with `codex queue`.
+  Missing prerequisites produce an error, without an indefinite foreground
+  wait. Socket access blocked by a sandbox needs the host's normal permission
+  mechanism. Worker diagnostics go to `agent-sessions/<id>/codex-monitor.log`.
+  A queued drain includes `--handoff-rev <n>`; a takeover makes that drain exit
+  `6` before printing any work, so an old queued message cannot cross a handoff.
 - **Antigravity** runs the same command as a background terminal task, never the
   native `schedule` timer, which invokes Gemini on every no-op.
 - **Any other host** runs it in the foreground after telling the user how to

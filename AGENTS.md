@@ -15,7 +15,7 @@ next comment without spending model turns.
 | Host | Finds the skill at | Waits for work with |
 | --- | --- | --- |
 | Claude Code | `~/.claude/skills/lahe/SKILL.md` | `lahe monitor --session <id>`, run with Bash in the background and launched again after each batch |
-| Codex | `~/.agents/skills/lahe/SKILL.md` | `lahe monitor --session <id>`, run as a foreground pending exec call |
+| Codex | `~/.agents/skills/lahe/SKILL.md` | `lahe monitor --session <id> --codex`, returns after starting a watcher that queues real work to the same conversation |
 | Gemini CLI | `~/.agents/skills/lahe/SKILL.md` | `lahe monitor --session <id>`, run in the foreground |
 | Antigravity | read `skills/lahe/SKILL.md` from the clone | `lahe monitor --session <id>`, run as a background terminal task |
 | Any other host | read `skills/lahe/SKILL.md` from the clone | `lahe monitor --session <id>`, run in the foreground |

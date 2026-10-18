@@ -483,6 +483,7 @@ function createStore(options) {
     if (typeof s.primary === "string" && protocol.isSafeId(s.primary)) {
       record[protocol.MONITOR.HEARTBEAT_FIELD.PRIMARY] = s.primary;
     }
+    if (typeof s.codex_thread === "string") record.codex_thread = s.codex_thread;
     stateDir.writeAtomic(stateDir.monitorPath(dir, id), JSON.stringify(record, null, 2) + "\n");
     return record;
   }

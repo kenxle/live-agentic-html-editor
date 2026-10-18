@@ -35,6 +35,7 @@ var SOURCE = path.join(REPO_ROOT, "skills", "lahe", "SKILL.md");
 // component catalog stays in vendor/ as the style's own document, so it is
 // copied from there rather than kept twice.
 var REFERENCES = [
+  { from: path.join(REPO_ROOT, "skills", "lahe", "references", "host-codex.md"), to: path.join("references", "host-codex.md") },
   { from: path.join(REPO_ROOT, "skills", "lahe", "references", "library.md"), to: path.join("references", "library.md") },
   { from: path.join(REPO_ROOT, "vendor", "stclair-doc-style", "COMPONENTS.md"), to: path.join("references", "components.md") }
 ];

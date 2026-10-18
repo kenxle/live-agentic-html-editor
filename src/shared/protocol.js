@@ -1771,9 +1771,11 @@
    * `sessionId` may be a list: a monitor watching several sessions is relaunched
    * with one --session per session, the primary first.
    */
-  function monitorCommand(sessionId, stateDirPath) {
+  function monitorCommand(sessionId, stateDirPath, handoffRevisions) {
     var ids = Array.isArray(sessionId) ? sessionId : [sessionId];
-    return "lahe monitor" + ids.map(function (id) { return " --session " + String(id); }).join("") +
+    return "lahe monitor" + ids.map(function (id) {
+      return " --session " + String(id) + (handoffRevisions && Number.isInteger(handoffRevisions[id]) ? " --handoff-rev " + handoffRevisions[id] : "");
+    }).join("") +
       stateDirFlag(stateDirPath);
   }
 

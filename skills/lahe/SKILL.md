@@ -544,12 +544,14 @@ again.
 
 #### Codex
 
-Run the printed `lahe monitor` command as a foreground pending exec call and keep
-waiting on it. The monitor keeps its idle polling in one small local Node
-process, so it uses no model turns while it waits. When work lands it prints one
-`LAHE ACTION REQUIRED` line naming the drain, and exits. It is an interrupt:
-continue the same turn, run the drain, handle every item it prints, rebuild and
-verify, append replies, then drain until empty and run the monitor again.
+Run the printed `lahe monitor` command with `--codex`. It starts a local watcher
+and returns, so finish current work and end the turn. Real feedback reaches this
+same conversation through `codex queue`; idle polling uses no model calls.
+The native queue starts the follow-up turn. On a wake, drain to empty, handle
+and reply, then re-arm with the printed command and end the turn.
+Do not keep a model turn pending on an idle monitor: it can prevent a graceful
+Codex restart. Read [the Codex guide](references/host-codex.md) for prerequisites,
+guarded drains, retries and session handoffs.
 
 #### Antigravity / AGY
 
@@ -1138,9 +1140,9 @@ Each of these is a rule that a live review paid for.
     stops it for low memory, relaunch
     it and do nothing else; after three such kills in a row with nothing new
     landing, stop and tell the reviewer.
-11. **In Codex, keep the turn pending on the monitor's exec call, with no Codex
-    Timer.** A detached terminal task does not guarantee a new Codex turn after the
-    current one ends.
+11. **In Codex, use `lahe monitor --codex`, with no Codex
+    Timer.** It returns after arming a local watcher. Real feedback queues a
+    follow-up in the same conversation. End the turn when current work is done.
 12. **In Antigravity, use the exit-on-work background task, not the native
     `schedule` timer.** Every scheduled wakeup spends Gemini allowance on a no-op.
 13. **Treat `LAHE ACTION REQUIRED` as work to do now.** Run the drain it names.

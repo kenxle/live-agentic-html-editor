@@ -295,8 +295,9 @@ test("the canonical skill rejects the retired and cross-session workflows", () =
   assert.match(skill, /native\s+`schedule` timer/);
   assert.match(skill, /LAHE ACTION REQUIRED/);
   assert.match(skill, /Receiving or describing an\s+item is not handling it/);
-  assert.match(skill, /detached terminal task does not guarantee a new Codex turn/);
-  assert.match(skill, /keep the turn\s+pending on the monitor's exec call/);
+  assert.match(skill, /native queue starts the follow-up turn/);
+  assert.match(skill, /Do not keep a model turn pending on an idle monitor/);
+  assert.match(skill, /--codex/);
   // The exit codes a host acts on.
   assert.match(skill, /\| 5 \| The agent session is closed \| Stop \|/);
   assert.match(skill, /\| 6 \| Another agent took the session over \| Stop \|/);

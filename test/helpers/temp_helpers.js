@@ -42,7 +42,7 @@ function isUnderTemp(dir) {
 }
 
 function isHelperCommand(command) {
-  return /\bbin\/lahe\.js serve\b/.test(command) || /static_servers\.js --serve\b/.test(command);
+  return /\bbin\/lahe\.js serve\b/.test(command) || /static_servers\.js --serve\b/.test(command) || /src\/cli\/codex_monitor\.js /.test(command);
 }
 
 /** [{pid, command}] for every process, or [] where ps is not available. */
