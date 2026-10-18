@@ -28,12 +28,13 @@ Some documents will be generated on the fly, like a prompt that is composed of m
 lahe review path/to/project --origin http://localhost:3000
 ```
 
-This row writes and serves nothing. It prints one script line with a reminder
-comment, and the comment is NOT a guard. Wrap the script in the framework's real
-development-only conditional, paste it where the layout's scripts go, and reload
-the page. The server is yours to start and stop. The line's `onerror` names a
-fallback path, `/lahe-layer.js`; publish the built library there if you want the
-page to load with the helper down.
+The app's own dev server serves the page. Start and stop it according to the
+project's workflow; `lahe review` does neither. It connects the review rail to
+that origin and prints one script line with a reminder comment. The comment is
+NOT a guard. Wrap the script in the framework's real development-only
+conditional, paste it where the layout's scripts go, and reload the page. The
+line's `onerror` names a fallback path, `/lahe-layer.js`; publish the built
+library there if you want the page to load with the helper down.
 
 For a single generated page, use
 `lahe review page.html --source generator` and rerun that generator after
