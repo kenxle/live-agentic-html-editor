@@ -1,7 +1,7 @@
 # Review apps and generated documents
 
 Keep the app or document's own styles and icon. Edit the source rather than
-generated HTML. Use [review](review.md) for setup, the URL, contract and
+generated HTML. Use [review](review.md) for setup, the URL and
 monitor, and [feedback](feedback.md) for incoming items.
 
 ### A document built from several sources

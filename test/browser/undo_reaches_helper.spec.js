@@ -328,10 +328,8 @@ test.describe("an undo reaches the helper, and reaches the source file", () => {
     expect(projected, "a handled item is kept, not deleted").toBeTruthy();
     expect(projected.state).toBe("handled");
 
-    // And the contract, which is the only thing an agent is guaranteed to read,
-    // says what a reverts field means.
-    const contract = projection().contract.join("\n");
-    expect(contract).toContain("An item with a reverts field is a take-back");
+    // The review file carries only the data needed to act on the take-back.
+    expect(projection().contract).toBeUndefined();
   });
 
   test("the page check does not ask for the change back after the reviewer took it back", async ({ page }) => {

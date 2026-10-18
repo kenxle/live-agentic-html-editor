@@ -418,6 +418,6 @@ test("a closed card never counts as an unread reply", () => {
   assert.deepEqual(tabDone.unseenReplyIds([closed], {}), [], "read once closed");
 });
 
-test("the contract tells an agent a closed item takes no reply", () => {
-  assert.ok(reviewFormat.CONTRACT.some((line) => /closed_by_reviewer: true/.test(line) && /refused/.test(line)));
+test("the skill tells an agent a closed item takes no reply", () => {
+  assert.match(require("../support/skill.js").readSkillText(), /closed_by_reviewer: true/);
 });

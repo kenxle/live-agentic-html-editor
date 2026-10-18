@@ -1,4 +1,4 @@
-# Start and run a review
+# Start and watch a review
 
 ## Get ready and serve the page
 
@@ -54,11 +54,10 @@ A page shows every comment made on it. Comments on it that are filed in
 another review show on the rail read-only, with the agent that holds them; to
 work on those, ask your human to have that agent pick them up from the Library.
 
-**Read the `contract` field at the top of `review.json`** in the review folder
-once, when you start on a review. It is the rules for reading an item, changing
-the source, and replying, and it wins over this skill wherever the two differ.
-You do not need to read it again on each wake: the drain lists the new items.
-If you lose it, it is in `review.json` in the review folder.
+**Use this skill and its runbooks for instructions.** `review.json` in the review
+folder contains the review's data: page context, the reviewer's current `note`,
+`change` or `choice`, and reply history. It does not carry agent instructions.
+On each wake, the drain lists the new work; read the relevant items there.
 
 **Name your session if your host tells you its name.** The human may run many
 agents at once, and when nothing comes back on their comments, the rail tells
@@ -179,7 +178,7 @@ Read only your host's monitor guide: [Claude Code](host-claude.md),
 Read [feedback](feedback.md) before handling drain items. A held comment is
 invisible until the reviewer releases Hold; the drain is the current work list.
 
-Stay responsive during long tasks. Where available, hand long work to a
+**Stay responsive during long tasks.** Where available, hand long work to a
 background subagent; otherwise cut it into short pieces and drain between
 them. If new feedback changes or cancels that work, stop or redirect it.
 

@@ -97,7 +97,7 @@ rerun its build; follow [webapps and builds](webapps.md). For a deck whose
 edit the deck's stylesheet for layout or theme changes. Check the visible
 slide after each change before replying `handled`.
 
-Follow [review](review.md) for the URL, contract and monitor, and
+Follow [review](review.md) for the URL and monitor, and
 [feedback](feedback.md) for incoming items. A framed page gets no rail unless
 the script tag has `data-lahe-frames="allow"`. Keep framing refused for a
 Reveal.js speaker-notes window: it embeds the same deck and can compete with

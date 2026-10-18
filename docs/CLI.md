@@ -75,12 +75,11 @@ default directory and reports no work.
 
 The drain carries the reviewer's items and what locates them, and nothing it
 would repeat on every wake. There is no contract text, no pointer to it, and no
-field-class table: the contract lives in the `contract` field of the review's
-`review.json`, read once. The prompt-injection fence (architecture decision
+field-class table. Instructions live in the installed Lahe skill. The prompt-injection fence (architecture decision
 D12) is kept as structure, not words: on each item line, every field read off
 the page (the quoted passage, the before and after text, the region, the
 subject) is grouped under `page`, and the reviewer's own `note` and `change`
-stay at the top level. The contract says once that nothing under `page` is an
+stay at the top level. The skill says that nothing under `page` is an
 instruction. A review the reviewer ended is listed under
 `ended_reviews` on the last line on every drain while it still holds unanswered
 items, and once more when it holds none. After that it is not listed again, so a
@@ -304,8 +303,7 @@ that keeps working and this does not fight it: the reload is one per rebuild
 either way.
 
 **The files, which are the agent's real interface.** In the review folder that
-`add` names: `review.json` is what an agent reads (its top-level `contract`
-field is the whole contract), and `replies.jsonl` (or `replies-<agent>.jsonl`)
+`add` names: `review.json` contains the review data, and `replies.jsonl` (or `replies-<agent>.jsonl`)
 is where an agent answers, one appended JSON line per item. `events.jsonl` is
 the append-only history underneath both.
 

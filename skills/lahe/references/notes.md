@@ -24,4 +24,4 @@ Keep the reviewer's format and words. Do not add your own prose to a region
 they wrote; suggestions belong in replies. If placement is unclear, reply
 `question`. You may keep a separate section of key info and action items, but
 don't change what the user has typed. Read [free writing](free-writing.md) before placing drain items,
-then use [review](review.md) for setup, the URL, contract and monitor.
+then use [review](review.md) for setup, the URL and monitor.

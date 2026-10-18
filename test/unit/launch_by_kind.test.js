@@ -167,12 +167,9 @@ test("drain: a launch queued on the legacy row carries no hand-off; the worktree
 });
 
 test("every copy of the agent instructions says the helper launches on a Mac and a legacy row is refused", () => {
-  const rf = require("../../src/shared/review_format.js");
   const root = path.join(__dirname, "..", "..");
   const copies = {
-    contract: rf.CONTRACT.join("\n"),
-    skill: ["SKILL.md", path.join("references", "library.md")].map((f) => fs.readFileSync(path.join(root, "skills", "lahe", f), "utf8")).join("\n"),
-    contracts_md: fs.readFileSync(path.join(root, "docs", "CONTRACTS.md"), "utf8")
+    skill: ["SKILL.md", path.join("references", "library.md")].map((f) => fs.readFileSync(path.join(root, "skills", "lahe", f), "utf8")).join("\n")
   };
   for (const [name, text] of Object.entries(copies)) {
     assert.match(text, /On a Mac the helper opens the Terminal window itself/, name);

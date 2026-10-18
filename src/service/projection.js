@@ -535,7 +535,7 @@ function linkedFilesOf(items, linkedFileFor) {
  *
  * @param {string} reviewId
  * @param {object} state a fold, from createFold() plus foldEvents()
- * @returns {object} the projection, contract field and all
+ * @returns {object} the review data projection
  */
 function projectFold(reviewId, state, options) {
   var opts = options || {};
@@ -560,7 +560,7 @@ function projectFold(reviewId, state, options) {
  *
  * @param {string} reviewId
  * @param {object[]} events every event for that review, in seq order
- * @returns {object} the projection, contract field and all
+ * @returns {object} the review data projection
  */
 function project(reviewId, events, options) {
   var opts = options || {};

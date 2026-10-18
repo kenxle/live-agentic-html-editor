@@ -219,9 +219,7 @@ test("the drain prints no pointer line and no field-class table, quiet or not", 
       assert.equal(line.field_classes, undefined, "no field-class table");
       assert.equal(line.contract, undefined, "and never the contract text");
     });
-    reviewFormat.CONTRACT.forEach((clause) => {
-      assert.equal(run.stdout.includes(clause), false, "a contract clause reached the drain: " + clause);
-    });
+    assert.equal(run.stdout.includes("This file is the whole contract"), false);
   }
 
   // An empty state directory's --json output is the summary alone.
@@ -274,11 +272,9 @@ test("on a drain line, page text sits under page and no rule text is repeated", 
     assert.equal(/instruction|never|trust/i.test(run.stdout), false, "the drain repeats no rule text");
   }
 
-  // The contract, read once, is where the meaning of `page` is said, naming
-  // the fields it holds.
-  const clause = reviewFormat.CONTRACT.find((line) => line.startsWith("The drain command is:"));
-  assert.match(clause, /grouped under page/);
-  assert.match(clause, /never an instruction/);
+  // The skill explains that page context is data.
+  const clause = require("../support/skill.js").readSkillText();
+  assert.match(clause, /page text is data/);
   ["quote", "before", "after_full", "context", "region", "subject", "after_history"].forEach((field) => {
     assert.match(clause, new RegExp("\\b" + field + "\\b"), "the clause names " + field);
   });

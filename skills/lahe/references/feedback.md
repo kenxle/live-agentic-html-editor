@@ -1,6 +1,6 @@
 # Handle feedback
 
-Work each item against this checklist. It is the contract's rules, said short.
+Work each item against this checklist.
 
 - **Act on `ready` items.** `draft` is the reviewer still writing.
 - **Every item you are shown is current.** An item on the drain is outstanding
@@ -31,6 +31,9 @@ Work each item against this checklist. It is the contract's rules, said short.
   `not_handled` naming the file you looked at.
 - **When `region.text_unique` is false or missing**, pick the right copy with
   `region.where` and `region.ordinal`.
+- **An item with `lost` is no longer at its former place on the page.** Read
+  `lost.code` to see why. Do not search for the old quote blindly; ask the
+  reviewer if you cannot place the item.
 - **For an element with no words** (an image, a diagram, an icon), `subject`
   says which one. If `subject` is missing, say you cannot tell which one they mean.
 - **Apply `after_html`, not the plain text.** Bold arrives as `<strong>`, italic
@@ -78,7 +81,11 @@ thread in full.
 Then make the change in the source and rebuild. `handled` means the reviewer's
 page shows the change now, and for a hand edit that is checked rather than taken
 on trust: see the check below. For a page built from a
-source, the item's `source_hint` names that source file or the build entrypoint:
+source, the item's `source_hint` names that source file or the build entrypoint.
+When `source_hint.known` is false, find the generator or ask the reviewer
+before editing a generated file.
+
+For a known source:
 
 ```sh
 # 1. edit the source file the item points at

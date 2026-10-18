@@ -194,13 +194,10 @@ test("serve refuses a static or dev-server row: those are taken over or refused,
 });
 
 // Every copy of the agent instructions: no page-derived path in a shell string.
-test("the contract, the skill and CONTRACTS.md carry no '<path>' or '<candidate>' template, and send pickups to lahe library serve", () => {
-  const rf = require("../../src/shared/review_format.js");
+test("the skill carries no '<path>' or '<candidate>' shell template, and sends pickups to lahe library serve", () => {
   const root = path.join(__dirname, "..", "..");
   const copies = {
-    contract: rf.CONTRACT.join("\n"),
-    skill: ["SKILL.md", path.join("references", "library.md")].map((f) => fs.readFileSync(path.join(root, "skills", "lahe", f), "utf8")).join("\n"),
-    contracts_md: fs.readFileSync(path.join(root, "docs", "CONTRACTS.md"), "utf8")
+    skill: ["SKILL.md", path.join("references", "library.md")].map((f) => fs.readFileSync(path.join(root, "skills", "lahe", f), "utf8")).join("\n")
   };
   for (const [name, text] of Object.entries(copies)) {
     assert.equal(text.includes("'<path>'"), false, name + " has a '<path>' template");
