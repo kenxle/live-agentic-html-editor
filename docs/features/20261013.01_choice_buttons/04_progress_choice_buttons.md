@@ -1,12 +1,12 @@
-# Choice buttons: merged and live, one cleanup batch left
+# Choice buttons: merged, live, and cleaned up
 
-**Where it stands.** Merged to main as [PR #76](https://github.com/kenxle/live-agentic-html-editor/pull/76) on 2026-10-18, after CI went green. Your skill is reinstalled and your real helper restarted onto the new code, so every page it serves now carries live choice groups (checked through the port-free address: the rail script and `data-lahe-document` are on the served pages). The gate on main after the merge is green apart from one load flake. What is left is the cleanup batch at the bottom, at your go.
+**Where it stands.** Merged to main as [PR #76](https://github.com/kenxle/live-agentic-html-editor/pull/76) on 2026-10-18, after CI went green. Your skill is reinstalled and your real helper restarted onto the new code, so every page it serves now carries live choice groups (checked through the port-free address: the rail script and `data-lahe-document` are on the served pages). The gate on main after the merge is green apart from one load flake. The cleanup batch ran on 2026-10-18 at your word; nothing from this feature is left on the machine but the merged code and this folder.
 
-**Try it now.** [The lesson queue with real buttons](http://personal.docs.features.20261012-01-forge-international-style.lahe.localhost:1484/02_lesson_queue.md) is still up on the preview helper. From here on, any agent that writes a page with a choice group (the lahe skill now teaches it) gets your click back as a `choice` item on its drain.
+**Try it now.** The preview helper is down with the cleanup, so the preview copy of the lesson queue is gone. From here on, any agent that writes a page with a choice group (the lahe skill now teaches it) gets your click back as a `choice` item on its drain. To put real buttons on your lesson queue, run [the rebuild script](preview/add_choice_groups.py) on the file in your personal repo, or ask an agent to.
 
 **What you will notice first.** The lesson queue rebuilt with real buttons, served with the rail live, before any PR gate.
 
-Updated 2026-10-18 12:14.
+Updated 2026-10-18 18:41.
 
 ## The documents
 
@@ -50,13 +50,16 @@ Each was made by a builder or by me during integration, and each is written into
 - 2026-10-17: architect review: fourteen findings, all accepted. The one blocker: the group attribute was under the `data-lahe` prefix the tool strips from captured markup; it is now `data-choice`. The wake story was wrong and is corrected: the monitor's poll is what bounds wakes, and the count is measured rather than promised. A possible monitor quiet spell is on the board for you (LAHE-monitor-quiet-spell).
 - 2026-10-17: plan written; Step 0 (shared names, manifest, contract rows, fixtures) committed on `feat/choice-buttons`. One unit test failed on it (the list of kinds); fixed in the next Step 0 commit.
 - 2026-10-17: plan review: sixteen findings, four blockers, all folded in; builders dispatched. Ken caught a hand-written timestamp on this page that was ten minutes ahead; the timestamp now comes from the shell clock.
+- 2026-10-17 to 2026-10-18: core and style-skill builders done; integration, code review (five important findings) and the requirements check; one fix round; gates green on Chromium; a fresh agent with only the skill wrote a valid page first try.
+- 2026-10-18: PR #76 opened, failed once on CI (main had moved the stylesheet under the empty-notes fixture), fixed, merged. Skill reinstalled, real helper restarted, gate on main green apart from one load flake.
+- 2026-10-18 18:41: cleanup batch run on your card. Preview helper stopped, four worktrees and branches removed, preview folder and PR body file removed.
 
-## To delete at cleanup
+## Cleanup
 
-One batch, at your go, by the orchestrator. Nothing here is removed before that.
+Done 2026-10-18 18:41, on your card "run cleanup". Each line below was removed in one batch. Nothing else was touched: the other worktrees under `lahe-worktrees/` belong to other work.
 
 - The worktree `~/Documents/workspace/lahe-worktrees/cb-layer` and its branch `feat/cb-layer`: cut for a separate layer builder before the plan review folded the kernel and layer into one core builder. Never used.
-- The builder worktrees `~/Documents/workspace/lahe-worktrees/cb-kernel` (branch `feat/cb-core`) and `cb-style` (branch `feat/cb-style`), and the feature worktree `choice-buttons` (branch `feat/choice-buttons`), once the PR is merged.
-- Three `.claude-commit2026101714*-core` files in the cb-kernel worktree root, and `test-results/` folders in the builder worktrees.
-- `~/Documents/lahe-choice-preview/`: the copied state folder (346 MB), the preview helper's log, the eval home, the walk's work folders, and the preview copy of the lesson queue, once you have looked at the preview. The preview helper (port 7819) is stopped first.
+- The builder worktrees `~/Documents/workspace/lahe-worktrees/cb-kernel` (branch `feat/cb-core`) and `cb-style` (branch `feat/cb-style`), and the feature worktree `choice-buttons` (branch `feat/choice-buttons`). All four branches were merged into main; the remote `feat/choice-buttons` is deleted too.
+- Three `.claude-commit2026101714*-core` files in the cb-kernel worktree root, and `test-results/` folders in the builder worktrees (gone with the worktrees).
+- `~/Documents/lahe-choice-preview/`: the copied state folder (346 MB), the preview helper's log, the eval home, the walk's work folders, and the preview copy of the lesson queue. The preview helper (port 7819, pid 65686) was stopped first.
 - `.claude-pr-body-choice-buttons.md` in the main checkout (ignored by git).
