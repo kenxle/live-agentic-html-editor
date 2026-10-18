@@ -293,6 +293,28 @@ never a coloured edge.
 </div>
 ```
 
+### Cards
+Two or three parallel points side by side, such as the three findings or the
+parts of a comparison. Each card is a name and a short body. Nothing here asks
+the reader to choose; for that, use option cards.
+
+```html
+<div class="cards">
+  <div class="card">
+    <h4>Name</h4>
+    <p>A line or two.</p>
+  </div>
+  <div class="card">
+    <h4>Name</h4>
+    <ul><li>A short point.</li></ul>
+  </div>
+</div>
+```
+
+A single `.card` outside `.cards` is one framed block in the column. In Markdown
+rendered by LAHE, `::: card` inside `:::: cardgrid` becomes this, and a card's
+first line in bold becomes its `h4`.
+
 ## Badges
 
 A small square tag for a status or category. One or two words.
@@ -456,7 +478,8 @@ A page with no problem shows neither colour.
 
 - Three short points: facts grid. Numbers that are the point: stat tiles.
 - A side note: panel. A labelled point with parts: insight panel. One loud line: callout.
-- A choice for the reader: option cards, with a "Recommended" badge.
+- A choice for the reader: option cards, with a "Recommended" badge. Parallel
+  points with no choice: cards.
 - Stages with names: step sequence. Sentences in order: `ol`.
 - A screenshot with its explanation: image beside text. A framed figure with a
   number: plate. Several thumbnails: gallery or image cards.
