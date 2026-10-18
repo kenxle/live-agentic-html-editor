@@ -28,6 +28,8 @@ this skill's folder. Load as needed.
 | Serve a page and watch for comments | [Start and watch](references/review.md) |
 | Apply comments or edits, then reply | [Handle feedback](references/feedback.md) |
 | Ask with buttons or act on a selected answer | [Choice groups](references/choices.md) |
+| Preview or apply a document style | [Document styles](references/feedback.md#document-styles) |
+| Save a reviewed page as a PDF | [PDF export](references/finish.md#save-as-pdf) |
 | Add a document, move a file, claim or take over sessions | [Sessions](references/sessions.md) |
 | Open the Library or handle `catalog_requests` | [Library](references/library.md) |
 | Reviewer ends a review, or export/publish is next | [Finish](references/finish.md) |

@@ -1,5 +1,15 @@
 # Finish a review
 
+## Save as PDF
+
+The rail's PDF button opens a tray. Choosing "Save as PDF" sends a ready note:
+"Make a PDF of this page." Treat it as a request for a PDF of the current
+document, not as a request to end the review. Use the document's source and its
+existing export process when it has one. Otherwise export a clean rendered page
+to PDF. Inspect the PDF pages for missing content, broken layout, and review
+controls. Put the PDF beside the document or in its normal output folder, then
+reply with a link to it. Keep the review open if the reviewer is still working.
+
 An `ended` wake is a request to finish, not permission to abandon work.
 The drain lists `ended_reviews` until its unanswered items are resolved,
 then once more. Complete this routine before closing the session.
@@ -38,8 +48,9 @@ step and say so once.
 
 ### Taking the tool back out
 
-Do this when the review is over, and whenever the page is about to become something
-else: a PDF, a deploy, an email, an attachment.
+Do this when the review is over, or when the reviewed source is about to become
+something else: a deploy, an email, or an attachment. A PDF export during an
+active review uses a clean render; it does not close the review.
 
 ```sh
 lahe add path/to/page.html --remove   # takes the script line back out
