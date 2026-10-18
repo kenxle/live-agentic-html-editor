@@ -9,7 +9,7 @@ hard to find or missing. I compared the [skill before the split](https://github.
 | --- | --- |
 | The style switcher lets a reviewer preview a style, then asks the agent to apply it in the source. | [Main routes](../../skills/lahe/SKILL.md) and [document styles](../../skills/lahe/references/feedback.md#document-styles) |
 | Save as PDF sends a ready comment. The agent exports and checks the PDF while the review can stay open. | [Main routes](../../skills/lahe/SKILL.md) and [PDF export](../../skills/lahe/references/finish.md#save-as-pdf) |
-| Repeating callouts, tinted panels, bands or pull quotes makes a document harder to scan. Markdown components need separate HTML blocks, with HTML inside them. | [Documents](../../skills/lahe/references/documents.md#choose-components-before-writing-sections) |
+| Markdown components need separate HTML blocks, with HTML inside them. | [Documents](../../skills/lahe/references/documents.md#choose-components-before-writing-sections) |
 | A framed app page needs an explicit opt-in for its own rail. Duplicate views such as speaker notes should stay unframed. | [Webapps and builds](../../skills/lahe/references/webapps.md#your-app-in-dev) |
 | Earlier committed versions of a hand edit can explain what the reviewer was reaching for, but the current wording is what the agent applies. | [Handle feedback](../../skills/lahe/references/feedback.md) |
 | Moving a reviewed document from a worktree to the main checkout keeps its review when the owning session serves the main copy. | [Sessions and handoffs](../../skills/lahe/references/sessions.md) |
@@ -29,6 +29,8 @@ runbooks. The embedded `review.json` contract was intentionally removed: that
 file now carries review data, while the skill carries agent instructions. The
 old Codex instruction to hold a pending monitor call was replaced by the
 [current Codex watcher](../../skills/lahe/references/host-codex.md).
+The old limit on repeating prominent components stays removed by the reviewer's
+choice; it is not a rendering requirement.
 
 This audit checks written instruction coverage. It does not prove how a fresh
 agent behaves in a live review. The live comments that surfaced the style,

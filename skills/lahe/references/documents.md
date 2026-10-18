@@ -43,8 +43,6 @@ installer provides it as `references/components.md` beside this skill.
 
 - Use only catalog classes for house components. Add CSS only for needs the
   catalog does not cover, such as a chart.
-- Use at most one of each prominent component on a page: callout, tinted
-  panel, band, and pull quote. Repeating them makes the page harder to scan.
 - In Markdown documents, follow Markdown conventions. Lahe styles ordinary
   headings, lists and tables. Give each catalog component its own HTML block,
   with blank lines before and after. Write the block's contents as HTML;
@@ -91,5 +89,5 @@ review, follow [feedback](feedback.md#document-styles).
 ## Before serving
 
 Check the title, lede and first section; match each section to its component;
-check the HTML skeleton and repeated prominent components. Then follow
+check the HTML skeleton. Then follow
 [the review runbook](review.md).
