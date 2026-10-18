@@ -118,7 +118,12 @@
     // not: while the library is hidden this is the ONLY listener of ours the
     // reviewer can reach, and a remount that dropped it would leave them with
     // no way to bring the review back.
-    PRESENT: "present"
+    PRESENT: "present",
+    // The choice-button press (choice buttons). Bound once for the life of the
+    // page and never cleared by a remount: the press is judged at click time
+    // against the groups on the page now, so the listener has nothing to
+    // re-register.
+    CHOICES: "choices"
   };
 
   var shared = createRegistry();

@@ -298,7 +298,7 @@ Agents learn these from the lahe skill: its "Writing a page for someone to read"
 - **Counts are part of the component.** The facts grid is exactly three points. Stat tiles are up to four across, number first. Step sequence in boxes is four steps or fewer.
 - **Use a table for data and a facts grid or panel for words.** Use `table.data` with `num` cells for figures, and wrap a wide table in `.scrollx`.
 - **Panels:** sage is the default aside, cobalt is a definition or constraint, purple is the one thing to pause on, danger is a problem only. Callouts are one short line, under about 20 words.
-- **A choice for the reader is option cards, and the recommended card gets a "Recommended" badge.** Never a colored edge.
+- **Alternatives the reader weighs are option cards; a question with set answers the agent will act on is a choice group.** Option cards explain each alternative. A choice group collects the answer with a click. A page may use both, the cards above the group. In either, the recommended one gets a "Recommended" badge, never a colored edge, and a choice group needs none when there is no recommendation.
 - **Badges** are one or two words for a status or category. Use a **status dot** for a verdict word (accepted, rejected, deferred) in a table cell or line.
 - **Modifiers use a double dash on the block's class:** `panel panel--cobalt`, never `panel cobalt`.
 - **Keep to the classes in COMPONENTS.md.** A class that is not listed is not in the stylesheet.
