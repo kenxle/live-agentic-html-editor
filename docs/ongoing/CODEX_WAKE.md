@@ -4,7 +4,9 @@ Lahe now watches for Codex feedback outside the model turn. Real feedback queues
 
 ## Current status
 
-The full unit suite passed, and the expanded Codex tests passed. Lint and the bundle check passed too. The independent review has no remaining blockers. The live watcher started and returned successfully, and the report renders correctly. A native queued feedback round trip is the remaining live check.
+The fix is merged and active locally. The full unit suite passed, and the expanded Codex and installer checks passed. Lint and the bundle check passed too. The independent review has no remaining blockers.
+
+A real browser test card reached Codex's native queue. The watcher recorded delivery and exited. The queued follow-up can run when the current turn ends. Confirming that follow-up on the card is the remaining live check.
 
 ## What changes
 

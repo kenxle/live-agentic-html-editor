@@ -5,7 +5,7 @@ status: `[ ]` open, `[>]` claimed, `[x]` done, `[!]` blocked.
 
 ## Board
 
-- [>] @codex 2026-10-18 LAHE-codex-restart-wait -- **Move idle Codex monitoring outside the model turn.** PR #78 uses a local watcher and native `codex queue` for real feedback only. Startup, retry, session handoff and idle behavior have regression tests. The independent review has no blockers. Integrated checks passed before the latest main changes; the combined version is being verified. See [Codex wake status](ongoing/CODEX_WAKE.md).
+- [>] @codex 2026-10-18 LAHE-codex-restart-wait -- **Move idle Codex monitoring outside the model turn.** [PR #78 (Codex feedback without an idle model turn)](https://github.com/kenxle/live-agentic-html-editor/pull/78) is merged and active locally. Unit, installer, lint and bundle checks passed. The independent review has no blockers. A real browser test card was accepted by the native Codex queue; the watcher recorded it and exited. The queued follow-up will confirm arrival after this turn ends. See [Codex wake status](ongoing/CODEX_WAKE.md).
 - [>] @codex 2026-10-18 LAHE-monitor-single-wake -- **Print each monitor wake once, on stdout.** Ken requested removing the duplicate message while reviewing recurring CLI output. Wake wording stays unchanged; stderr keeps real diagnostics. Implemented on `fix/monitor-single-wake`; focused tests pass (37), and `gate:unit` on Node 20.19.0 passes (3030 pass, 0 fail). The helper leak guard passes. Independent review and landing pending.
 
 - [x] @codex 2026-10-18 LAHE-skill-split-keeps-hook-steps -- **The split skill now carries the Stop hook's drain-first step.** The Claude Code host guide states the exception. The Stop hook test passes, and `npm run install-skills` updated both installed copies.
