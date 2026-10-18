@@ -67,13 +67,17 @@
     FIELD.NEW_BLOCKS,
     FIELD.ANCHOR_AFTER_HTML,
     FIELD.ANCHOR_TAG_AFTER,
-    FIELD.PLACEMENT
+    FIELD.PLACEMENT,
+    // Choice buttons: the press is the reviewer's act like a note is, so an
+    // unacknowledged re-press in the browser wins (an offline rev 2 over a
+    // handled rev 1 in the store).
+    FIELD.CHOICE
   ];
 
   // Optional content fields: absent on today's records. When the browser copy
   // does not carry one, the merged item does not either, rather than carrying
   // the key with an undefined value.
-  var OPTIONAL_CONTENT_FIELDS = [FIELD.NEW_BLOCKS, FIELD.ANCHOR_AFTER_HTML, FIELD.ANCHOR_TAG_AFTER, FIELD.PLACEMENT];
+  var OPTIONAL_CONTENT_FIELDS = [FIELD.NEW_BLOCKS, FIELD.ANCHOR_AFTER_HTML, FIELD.ANCHOR_TAG_AFTER, FIELD.PLACEMENT, FIELD.CHOICE];
 
   // The reasons a merge decided what it decided. Returned on the result so a
   // failing test says which half of the rule broke, and so the rail can say

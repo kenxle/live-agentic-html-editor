@@ -151,7 +151,8 @@
     regionsLostDeferred: 0, // a lost verdict held back while the page was still settling
     regionsLostCleared: 0, // a later pass found the anchor, so the lost state ended
     regionsProbable: 0, // a lost comment was pointed at its probable place instead
-    regionsProbableCleared: 0 // a later pass found it for certain, so the guess ended
+    regionsProbableCleared: 0, // a later pass found it for certain, so the guess ended
+    choicesPainted: 0 // a choice group's state or pressed button changed on the page
   };
 
   function resetCounters() {
@@ -547,6 +548,11 @@
         summary.steps.push({ step: step, ran: false, why: "no hook supplied" });
       }
     }
+
+    // After every record has had its turn: the choice groups show their
+    // current record's state. A rebuild clears these attributes, so every pass
+    // puts them back.
+    paintChoicesIn(ctx);
 
     lastSummary = summary;
     releaseRetired(ctx);
@@ -2212,6 +2218,12 @@
     var item = itemWithId(ctx, id);
     if (!item) return null;
     var region = item[record.FIELD.REGION] || null;
+    // A press points at its group, found by name now, never at a remembered node.
+    if (record.isChoice(item)) {
+      var ref0 = region ? region.ref : null;
+      var found = ref0 ? ctx.anchor.resolve(ref0, ctx.root) : null;
+      return found && found.element ? found.element : null;
+    }
     if (region && region.lost) return probableElement(id);
     // The node the last pass bound, when it is still in the document. This is
     // what carries an element pick whose text the matcher can never re-find.
@@ -2300,6 +2312,9 @@
   // matches and several matches are the same verdict (nothing is written) and
   // they are DIFFERENT situations, so they do not get the same sentence.
   function lostReason(verdict) {
+    // THE CHOICE RUNG'S OWN SENTENCES ("no group named X", "two groups named
+    // X"). A press is found by its group's name and nothing else.
+    if (verdict && verdict.via === "choice") return verdict.reason + ", so nothing was marked on the page";
     // THE STAMP'S OWN TWO SENTENCES (S1, S2). An id on two elements and an id
     // over different words are both refusals the text ladder has no words for,
     // and the engine already wrote each one for the reviewer to read. Passing
@@ -2577,6 +2592,12 @@
       return { wrote: false, branch: null, lost: false, reason: "not replayed", item: item, element: null };
     }
 
+    // A choice press writes nothing and is found by its group's name alone
+    // (choice buttons). Its own path, so none of the fallbacks below (the last
+    // bound node, the stamp, the probable place) can bind it to a group that
+    // has since been renamed.
+    if (record.isChoice(item)) return applyChoice(item, ctx);
+
     // A free-writing record (an anchor plus a run, a tag change, or a
     // take-back) has its own path. Every record without those fields takes
     // the one below, unchanged.
@@ -2795,6 +2816,117 @@
       item: item,
       element: element
     };
+  }
+
+  // ---------------------------------------------------------------------------
+  // Choice buttons: a press, and the state its group shows
+  // ---------------------------------------------------------------------------
+  //
+  // docs/features/20261013.01_choice_buttons. A choice is not in WRITING_KINDS,
+  // so replay writes nothing for it. A ready press is resolved through the
+  // anchor engine's choice rung, so lost-marking, clearing and "show me where"
+  // work as for any record. Then, once per pass, every group with a record on
+  // this page paints its state from its current record (latest created_at):
+  // data-lahe-pressed on the pressed button and data-lahe-choice-state on the
+  // group. DOM only, inside the write epoch, and only where something changed.
+
+  function applyChoice(item, ctx) {
+    var id = item[record.FIELD.ID];
+    var region = item[record.FIELD.REGION];
+    var ref = region ? region.ref : null;
+    if (!ref) return { wrote: false, branch: null, lost: false, reason: "no reference", item: item, element: null };
+    var verdict = ctx.anchor.resolve(ref, ctx.root);
+    if (!verdict.element) return markLost(item, verdict, ctx);
+    lastElement[id] = verdict.element;
+    clearLost(ctx, item);
+    return { wrote: false, branch: null, lost: false, reason: "nothing to write", item: item, element: verdict.element };
+  }
+
+  function choiceButtonsIn(group) {
+    if (!group) return [];
+    if (typeof group.querySelectorAll === "function") return Array.prototype.slice.call(group.querySelectorAll("button"));
+    var out = [];
+    (function walk(node) {
+      var kids = node && node.children ? node.children : [];
+      for (var i = 0; i < kids.length; i += 1) {
+        if (String(kids[i].tagName || "").toLowerCase() === "button") out.push(kids[i]);
+        else walk(kids[i]);
+      }
+    })(group);
+    return out;
+  }
+
+  /**
+   * Is this press's revision still waiting to be stored by the helper? Boot
+   * answers from the outbox (ctx.isKept, handed the record: its own ready
+   * event at this revision). With no such hook, an item the
+   * helper never acknowledged reads as kept.
+   */
+  function isKeptNow(ctx, item) {
+    if (typeof ctx.isKept === "function") return !!ctx.isKept(item);
+    return item.acknowledged !== true;
+  }
+
+  /** What every choice group on the page should show right now. */
+  function choicePaintPlan(ctx) {
+    var plan = [];
+    var latest = record.latestChoiceByGroup(itemsIn(ctx).filter(record.isChoice));
+    Object.keys(latest).forEach(function (name) {
+      var item = latest[name];
+      var verdict = ctx.anchor.resolve(record.choiceRef(name), ctx.root);
+      if (!verdict.element) return;
+      plan.push({
+        group: verdict.element,
+        answer: item[record.FIELD.CHOICE].answer,
+        state: record.choiceStateOf(item, isKeptNow(ctx, item))
+      });
+    });
+    return plan;
+  }
+
+  function paintChoicesIn(ctx) {
+    var M = record.CHOICE_MARKUP;
+    var plan = choicePaintPlan(ctx);
+    var writes = [];
+    var keep = [];
+    plan.forEach(function (entry) {
+      keep.push(entry.group);
+      if (entry.group.getAttribute(M.STATE_ATTR) !== entry.state) {
+        writes.push({ node: entry.group, attr: M.STATE_ATTR, value: entry.state });
+      }
+      choiceButtonsIn(entry.group).forEach(function (button) {
+        keep.push(button);
+        var pressed = button.getAttribute("value") === entry.answer;
+        var has = typeof button.hasAttribute === "function" ? button.hasAttribute(M.PRESSED_ATTR) : button.getAttribute(M.PRESSED_ATTR) !== null;
+        if (pressed && !has) writes.push({ node: button, attr: M.PRESSED_ATTR, value: "" });
+        if (!pressed && has) writes.push({ node: button, attr: M.PRESSED_ATTR, value: null });
+      });
+    });
+    // Paint left on a group whose record went away (deleted, or another
+    // page's): taken off, so the page never shows a press nobody holds.
+    var root = ctx.root;
+    if (root && typeof root.querySelectorAll === "function") {
+      var stale = root.querySelectorAll("[" + M.STATE_ATTR + "],[" + M.PRESSED_ATTR + "]");
+      for (var i = 0; i < stale.length; i += 1) {
+        if (keep.indexOf(stale[i]) !== -1) continue;
+        if (stale[i].getAttribute(M.STATE_ATTR) !== null) writes.push({ node: stale[i], attr: M.STATE_ATTR, value: null });
+        if (stale[i].getAttribute(M.PRESSED_ATTR) !== null) writes.push({ node: stale[i], attr: M.PRESSED_ATTR, value: null });
+      }
+    }
+    if (!writes.length) return 0;
+    epoch.write("replay", function () {
+      writes.forEach(function (w) {
+        if (w.value === null) w.node.removeAttribute(w.attr);
+        else w.node.setAttribute(w.attr, w.value);
+      });
+    });
+    counters.choicesPainted += 1;
+    return writes.length;
+  }
+
+  /** Paint the choice groups now, outside a pass: after a press, or once the helper stores one. */
+  function paintChoices(override) {
+    return paintChoicesIn(contextFor(override));
   }
 
   // ---------------------------------------------------------------------------
@@ -3969,6 +4101,7 @@
   return {
     configure: configure,
     context: context,
+    paintChoices: paintChoices,
     lastPass: lastPass,
     conflictFor: conflictFor,
     conflictIds: conflictIds,

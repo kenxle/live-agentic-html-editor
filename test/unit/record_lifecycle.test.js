@@ -168,7 +168,9 @@ test("the dead send model's fields are gone", () => {
 });
 
 test("the kinds are exactly D4's closed list", () => {
-  assert.deepEqual(record.KINDS.slice().sort(), ["comment", "delete", "edit", "format_only", "note"]);
+  // Six since choice buttons (docs/features/20261013.01_choice_buttons): a
+  // press on a choice group is its own kind, with `choice` as its intent.
+  assert.deepEqual(record.KINDS.slice().sort(), ["choice", "comment", "delete", "edit", "format_only", "note"]);
 });
 
 test("the region reference carries its lost-anchor state as a named field (R20)", () => {

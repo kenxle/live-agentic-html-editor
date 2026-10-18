@@ -983,6 +983,130 @@ figure.plate figcaption b{font-family:var(--font-display);font-weight:var(--w-di
 .option p:not(.eyebrow){color:var(--on-surface-soft)}
 .option :is(ul,ol) > li{margin-bottom:var(--s2)}
 
+/* ---------- choice group ----------
+   A question with a set of answers the reader clicks. It grew out of option
+   cards: the cards explain the alternatives, the group collects the answer.
+   The agent writes a question and real buttons; Lahe arms them on a page it
+   serves, and a click goes to the agent as the answer.
+
+   The buttons are square and outlined, like a badge, never a pill. The
+   recommended one carries the Recommended badge, drawn here from
+   data-recommended so the agent writes no badge markup. The answer is the
+   one ink fill in the group, and the other buttons go quiet. Two attributes
+   name the answer:
+     data-chosen         on a button, written into the source by the agent once
+                         it has acted. A page with no Lahe still shows it, and
+                         so does print.
+     data-lahe-pressed   on a button, painted by Lahe while a review runs: the
+                         button the reviewer pressed. A newer press than the one
+                         written into the source, so it wins and the chosen
+                         button goes quiet.
+   Lahe also paints data-lahe-choice-state on the group, and the state shows
+   as a word at the end of the row in the rail's own words. A group Lahe
+   refused (a bad name, one button) gets data-lahe-inert and draws as plain
+   content: a dashed box, quiet buttons, no hover.
+
+   The box border is a hairline on all four sides in every state. The state
+   is a word, never a colour alone. */
+.choice{
+  display:flex;
+  flex-wrap:wrap;
+  align-items:center;
+  gap:var(--s3);
+  margin:0 0 var(--block-gap);
+  padding:var(--s4) var(--s5);
+  border:var(--line);
+  border-radius:var(--r-lg);
+}
+.choice:last-child{margin-bottom:0}
+.choice > .choice-q{
+  flex:1 0 100%;
+  max-width:none;
+  margin:0 0 var(--s1);
+  font-family:var(--font-display);
+  font-weight:var(--w-display);
+  color:var(--on-surface);
+}
+.choice > button{
+  display:inline-flex;
+  align-items:center;
+  gap:var(--s2);
+  margin:0;
+  padding:var(--s2) var(--s4);
+  border:var(--line-ink);
+  border-radius:0;
+  background:var(--surface);
+  color:var(--on-surface);
+  font-family:var(--font-display);
+  font-weight:var(--w-medium);
+  font-size:var(--text-small);
+  line-height:1.4;
+  cursor:pointer;
+  -webkit-appearance:none;
+  appearance:none;
+}
+.choice > button:focus-visible{border-radius:0}   /* the house ring, square like the button */
+
+/* The Recommended badge: the badge--purple look, inside the button so it
+   travels with the answer it marks. Its block padding is zero so a button
+   that carries it is the same height as one that does not. */
+.choice > button[data-recommended]::after{
+  content:"Recommended";
+  padding:0 var(--s2);
+  background:var(--emphasis-tint);
+  color:var(--emphasis);
+  font-weight:var(--w-display);
+  font-size:var(--text-micro);
+  line-height:1.4;
+  white-space:nowrap;
+}
+
+/* The answer: ink, and the rest of the group quiet. */
+.choice > button:is([data-chosen],[data-lahe-pressed]){
+  background:var(--structure);
+  border-color:var(--structure);
+  color:var(--on-structure);
+}
+.choice:has(> button:is([data-chosen],[data-lahe-pressed])) > button:not([data-chosen],[data-lahe-pressed]),
+.choice:has(> button[data-lahe-pressed]) > button[data-chosen]:not([data-lahe-pressed]){
+  background:var(--surface);
+  border-color:var(--border);
+  color:var(--on-surface-soft);
+}
+
+/* The state word, at the end of the row. A data-chosen group with no state
+   painted is decided, and reads as Done, the same as the rail's done. */
+.choice[data-lahe-choice-state]::after,
+.choice:not([data-lahe-choice-state]):has(> button[data-chosen])::after{
+  margin-left:auto;
+  padding:var(--s1) var(--s2);
+  border:1px solid transparent;
+  font-family:var(--font-display);
+  font-weight:var(--w-display);
+  font-size:var(--text-micro);
+  line-height:1.4;
+  white-space:nowrap;
+}
+.choice[data-lahe-choice-state="kept"]::after{content:"Kept in this browser";border-color:var(--border);color:var(--on-surface-soft)}
+.choice[data-lahe-choice-state="open"]::after{content:"Open";background:var(--accent-tint);color:var(--accent)}
+.choice[data-lahe-choice-state="question"]::after{content:"Question";background:var(--structure);color:var(--on-structure)}
+.choice[data-lahe-choice-state="not_handled"]::after{content:"Open";border-color:var(--structure);color:var(--on-surface)}
+.choice[data-lahe-choice-state="done"]::after,
+.choice:not([data-lahe-choice-state]):has(> button[data-chosen])::after{content:"Done";background:var(--tint);color:var(--on-surface)}
+
+/* Hover, on a button that is not the answer, in a group that is not refused. */
+.choice:not([data-lahe-inert]) > button:not([data-chosen],[data-lahe-pressed]):hover{background:var(--surface-raised)}
+
+/* Refused: plain content, not live buttons. The rail says which group and
+   why. A decision already in the source still shows. */
+.choice[data-lahe-inert]{border-style:dashed}
+.choice[data-lahe-inert] > button{cursor:default}
+.choice[data-lahe-inert] > button:not([data-chosen],[data-lahe-pressed]){border-color:var(--border);color:var(--on-surface-soft)}
+/* A refused group shows no decision either: two buttons carrying data-chosen is one
+   of the reasons it was refused, so neither may draw as the answer. */
+.choice[data-lahe-inert] > button:is([data-chosen],[data-lahe-pressed]){background:var(--surface);border-color:var(--border);color:var(--on-surface-soft)}
+.choice[data-lahe-inert]::after{content:none}
+
 /* ---------- images ----------
    Five ways to place a picture beyond the plain one in the column. Every one
    draws the same frame (--image-frame, a hairline in the house) so a
@@ -1719,8 +1843,8 @@ body > footer a{color:var(--on-surface)}
   */
   .sheet-head{break-after:avoid}
   table,.panel,.insight,.callout{break-inside:avoid}
-  .badge,.stat,.stat--tint,.panel--danger{-webkit-print-color-adjust:exact;print-color-adjust:exact}
-  .stat,ol.sequence,figure.plate,.option,.image-card,.media,.peek-pair,blockquote.pullquote{break-inside:avoid}
+  .badge,.stat,.stat--tint,.panel--danger,.choice{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  .stat,ol.sequence,figure.plate,.option,.choice,.image-card,.media,.peek-pair,blockquote.pullquote{break-inside:avoid}
 }
 
 

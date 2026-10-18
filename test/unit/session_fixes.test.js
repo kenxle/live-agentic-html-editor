@@ -316,7 +316,7 @@ test("the canonical skill rejects the retired and cross-session workflows", () =
   assert.match(skill, /Answer "the lahe session" with `lahe session list`/);
   // The routing description has to carry the trigger phrasing too, or the skill
   // never loads on the sentence that caused this.
-  assert.match(skill, /description:.*"claim the lahe session", "take over the lahe session", or "lahe sessions"/);
+  assert.match(skill, /description:.*"claim the lahe session", "take over the lahe session", (or )?"lahe sessions"/);
   assert.match(skill, /never silently reuse the old session/i);
   assert.match(skill, /Run the printed `lahe monitor` command in the foreground/);
   assert.match(skill, /any running monitor exits with code 5/);
@@ -337,7 +337,7 @@ test("the skill carries the item and reply rules as a checklist, and reads user 
   // Ken, 2026-09-16: the comment and reply rules are instructions, so they
   // come back into the skill as a short checklist said the contract's way.
   for (const rule of [
-    /The reviewer's words are `note` and `change`/,
+    /The reviewer's intent is `note`, `change` and `choice`/,
     /Carry the stamp/,
     /Apply `after_html`, not the plain text/,
     /An item with `reverts` is a take-back/,

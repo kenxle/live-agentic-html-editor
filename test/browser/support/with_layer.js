@@ -85,6 +85,9 @@ function scriptTagFor(config) {
     // review opens an empty page ready to type. protocol.SCRIPT_ATTR.NOTES is
     // F3's; the literal is the fallback until that lands on this branch.
     (config.notes === true ? " " + (attrs.NOTES || "data-lahe-notes") + '="true"' : "") +
+    // A page the helper serves itself carries the document mark, and only
+    // there do choice groups arm (choice buttons). Opt-in, as on the helper.
+    (config.document === true ? " " + attrs.DOCUMENT + '="' + protocol.DOCUMENT_ON + '"' : "") +
     "></script>"
   );
 }

@@ -1,20 +1,16 @@
 # Progress: Free writing
 
-**Phase 9, Cleanup.** Free writing is merged and live ([PR #20](https://github.com/kenxle/live-agentic-html-editor/pull/20)). One page of cleanup decisions waits on you. Last updated 2026-09-30 17:17.
+**Done. Free writing is merged and live.** [PR #20](https://github.com/kenxle/live-agentic-html-editor/pull/20) merged as 6f3bc6b, and cleanup is finished. Nothing is waiting on you. Last updated 2026-09-30 17:28.
 
 **Docs:** [Crucible questions](00_crucible_questions.md) · [Crucible](http://127.0.0.1:65155/00_crucible.html) · [Brief](http://127.0.0.1:65155/01_brief_free_writing.html) · [Wireframes](http://127.0.0.1:49513/index.html) ([decision](wireframes/DECISION.md)) · [Architecture](http://127.0.0.1:65155/02_architecture_free_writing.html) · [Plan](http://127.0.0.1:65155/03_plan_free_writing.html) · Review logs: [progress](04_progress_free_writing_review_log.md), [crucible questions](04_progress_free_writing_review_log_crucible_questions.md), [crucible](04_progress_free_writing_review_log_crucible.md), [brief, architecture, plan](04_progress_free_writing_review_log_brief_architecture_plan.md), [wireframes](04_progress_free_writing_review_log_wireframes.md) · [Cleanup decisions](http://127.0.0.1:60007/05_cleanup_decisions-9485fee2d3c81c3d.html)
 
 ## Needs your attention
 
-- [ ] **[Cleanup decisions](http://127.0.0.1:60007/05_cleanup_decisions-9485fee2d3c81c3d.html)**, each with a default:
-  - three proposed CLAUDE.md rules
-  - the deletion batch: 23 worktrees, the remote branch, and the preview
-  - the lesson queue
-  - the draft name left in git history
+Nothing is waiting on you.
 
 ## Currently working on
 
-Nothing is running. Next: the deletion batch and the CLAUDE.md changes, once you answer the cleanup decisions page.
+Nothing is running.
 
 ## Phases
 
@@ -29,7 +25,7 @@ Nothing is running. Next: the deletion batch and the CLAUDE.md changes, once you
 | 6 Implement | done | 2026-09-29 |
 | 7 Review | done | 2026-09-30 |
 | 8 Ship and land | done | 2026-09-30 |
-| 9 Cleanup | in progress | 2026-09-30 |
+| 9 Cleanup | done | 2026-09-30 |
 
 ## The record
 
@@ -74,7 +70,11 @@ No passes yet.
 
 ### Cleanup queue
 
-Listed on the [cleanup decisions page](http://127.0.0.1:60007/05_cleanup_decisions-9485fee2d3c81c3d.html), waiting on your yes.
+Done 2026-09-30 17:28. Ken approved the batch on the cleanup decisions page:
+- 22 worktrees and their 21 local branches removed, all merged into main
+- the remote branch `feat/free-writing` deleted
+- the preview session closed and its helper stopped
+- the preview folder kept, since it holds Ken's notes page
 
 ### Test results
 
@@ -117,6 +117,22 @@ PR [#20](https://github.com/kenxle/live-agentic-html-editor/pull/20) opened 2026
 ## Log
 
 Newest first.
+
+**2026-09-30 17:28.** Closed out. What shipped:
+- writing new paragraphs, headings and lists anywhere on a Lahe page
+- `lahe write` for blank notes pages
+- proofreading with "Use the fixes" and "Keep mine"
+- the fixes for the doubled header line and the lost bold
+
+Cleanup, on Ken's answers:
+- CLAUDE.md now spells out the no-deletion rule for builders
+- `.claude/guardrails.md` is added, so `st-ship` can run here
+- the test-helper trap is a proposed lesson, not a CLAUDE.md rule
+- all 22 worktrees, their branches, and the remote branch are removed
+- the preview is stopped, and its folder kept
+- the five older lessons and the draft name in git history are left as they are
+
+Follow-ups are on the board.
 
 **2026-09-30 17:18.** The living docs now match what shipped:
 - `docs/ongoing/FREE_WRITING.md` is new
