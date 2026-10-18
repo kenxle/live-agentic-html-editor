@@ -1602,11 +1602,9 @@ so a host that wakes an agent on task completion pays no model tokens for a quie
   <monitor>`. The counts are the items, ended reviews and Library requests its own drain printed
   (`parseDrain`), or "work waiting" when a line could not be read. The drain prints the items, so
   printing them here was a second copy. The drain and relaunch commands are the exact ones to run.
-- **The line prints once when both streams go to one place.** `streamsShareDestination` compares
-  `fs.fstatSync(1)` and `fs.fstatSync(2)`: the same `dev` and `ino` is one terminal, one pipe, or one
-  output file, and the line goes to stdout only. Otherwise, or when either call fails, it goes to
-  stdout and stderr, because a host that captured one stream once got the instruction without the
-  work.
+- **The wake line prints once, on stdout only.** stderr carries diagnostics, never a second copy
+  of the wake. Hosts must capture stdout to receive wakes, whether they display the streams
+  separately or together.
 - It writes `<state>/agent-sessions/<id>/monitor.json` (`pid`, `handoff_rev`, `at`) through
   `stateDir.writeAtomic`: once immediately after the startup guard passes, then once per loop. On
   startup, a heartbeat younger than three intervals carrying the same `handoff_rev` and a different

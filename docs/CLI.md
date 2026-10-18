@@ -138,9 +138,9 @@ The monitor keeps its idle polling in one small local Node process, so no host
 pays model tokens for a quiet document. When work lands it prints one line and
 none of the work: `LAHE ACTION REQUIRED`, what is waiting (counts), the drain
 command and the relaunch command. The drain prints the items. The line goes to
-stdout, and to stderr as well only when the two streams go to different places,
-so a host that reads one stream still sees it and a host that merges them sees
-it once. That is an interrupt, not a stopping point: the agent continues the
+stdout only; stderr is reserved for diagnostics. Hosts must capture stdout to
+receive wakes, whether they display the streams separately or together.
+That is an interrupt, not a stopping point: the agent continues the
 same turn through draining, editing, rebuilding, verification, and replies.
 Merely reporting that an item arrived is a workflow failure.
 
