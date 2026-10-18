@@ -1,6 +1,6 @@
 ---
 name: lahe
-description: Use cases: - Serve documents and websites for human review. - Write formatted, interactive responses as Markdown or HTML pages. - A non-trivial answer someone will read, decide on, or reply to. - Acting on existing Lahe comments/docs, handing a review between agents. Examples: findings, feature docs, progress, how it works, brainstorms, question lists, draft articles, mockups, charts, prompts, skills, dev apps, taking notes. Load it before you write the page or run any `lahe` command. Triggers: "lahe", "live review", "review this page", "put it on a page", "write it up", "brainstorm it with me", "what did we learn", "take notes", "claim the lahe session", "take over the lahe session", "lahe sessions", "let's make a doc", "explain this", "how is this happening", "let's review this site", "what's the progress on X", "let's write an article", "let's walk through X", "I need to take notes for X", "can we make a nice document", "let's make this look good".
+description: Use cases: - Serve documents and websites for human review. - Write formatted, interactive responses as Markdown or HTML pages. - A non-trivial answer someone will read, decide on, or reply to. - Acting on existing Lahe comments/docs, handing a review between agents. Examples: findings, feature docs, progress, how it works, brainstorms, question lists, draft articles, mockups, charts, prompts, skills, dev apps, taking notes. Load it before you run any `lahe` command. Triggers: "lahe", "live review", "review this page", "put it on a page", "write it up", "brainstorm it with me", "what did we learn", "take notes", "claim the lahe session", "take over the lahe session", "lahe sessions", "let's make a doc", "explain this", "how is this happening", "let's review this site", "what's the progress on X", "let's write an article", "let's walk through X", "I need to take notes for X", "can we make a nice document", "let's make this look good".
 ---
 
 <!-- lahe canonical skill: managed by the live-agentic-html-editor repository -->
@@ -8,57 +8,48 @@ description: Use cases: - Serve documents and websites for human review. - Write
 # Lahe live review
 
 This skill is the playbook for creating and reviewing MD and HTML documents.
-"When you use it" and "Writing a page for someone to read" come first, because
-most reviews start with a page you write. "How to use it" is the whole normal
-review loop, and "Scenarios" tells you which variation you are in.
 
-## What LAHE is
+## What Lahe is
 
-Your human reviews a locally served HTML page in their browser. They select
-passages and comment, and they edit text directly on the page. Every finished
-comment and edit becomes a durable record in a review folder on disk. You read
-those records, change the source, and answer. Your answer appears on the page
-beside the passage while they keep reviewing.
+Lahe is a collaborative editor for humans and agents. Users can select passages
+and leave comments or edit directly. Comments and edits are written in a review
+folder on disk. Agents read those records, change the source, and answer. Your
+answer appears embedded in the page in a chat bar while the User continues to
+review.
+
+Lahe keeps the important information visible, not scrolling away in a chat log,
+and allows a user to stay focused by working in one document and being able to
+chat with you without switching back to a terminal or chat window.
 
 ## When you use it
 
-Use it whenever your answer is something a person will read, decide on, or
-reply to:
+Use it for non-trivial responses, responses that benefit from formatting,
+decisions, or asking for user replies:
 
+- presentation slides
+- documents
+- website/webapp reviews
 - what an investigation, a debugging session, or a review found
 - what you finished and what is left: merged PRs, a fix waiting for approval
 - how something works, when they asked for the logic or the flow
 - a plan, brief, spec, summary, write-up, or report
 - a brainstorm, a set of options to choose between, or questions to answer
-- a draft email, post, or message they will edit before it goes out
-- a mockup, a deck, a set of logo options, a chart, a one-pager
+- a draft article, post, or message they will edit before it goes out
+- a mockup, a set of logo options, a chart, a one-pager
 - a Markdown or HTML file that already exists, or your own app running in dev
 
-That includes the quick ones. People rarely say "page". "What's the deal with
-this alert, can we fix it", "brainstorm it with me", "what did we learn" and
-"review the PRs and merge the good ones" all end in something to read. The
-tell is your own draft: if it runs past a screen, has headings or more than a
-handful of bullets, ends in a question for them, or asks them to pick, write
-it as a page and serve it, whether or not they said LAHE. In chat, say one line
-and give the link.
+If your response is longer than a screen, has headings or more than a handful
+of bullets, ends in a question for them, or asks them to pick, write it as a
+page and serve it, whether or not they said Lahe. In chat, say one line and
+give the link.
 
 Opening something for them to look at is a review too. A page you built, a
 deck, or a file they asked to see goes up with `lahe review`, not `open
 file.html` or another server: those pages have no rail, and comments made on
 them reach nobody.
 
-Also use it when they say any of these:
-
 - "LAHE", "live review", "review this page", "put it on a page for me"
 - "claim the lahe session" or "take over the lahe session" (see "Sessions")
-- "open the lahe library" (see "The Library")
-
-The reason to serve rather than paste: the page holds still while chat scrolls
-away, the reader stays in one window, and their comments come back to you as
-records instead of getting lost in a chat log.
-
-Leave it out for a short answer that fits in a few lines of chat, and for code
-changes the person will read as a diff.
 
 ## Writing a page for someone to read
 
