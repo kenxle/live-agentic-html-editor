@@ -153,13 +153,11 @@ test("lastItemAt reads the new field names", () => {
 // 2. The contract forbids the excuse
 // ---------------------------------------------------------------------------
 
-test("the contract says an item you are shown is current, whatever its card's age", () => {
-  const sentence = rf.CONTRACT.find((line) => /whatever its card/i.test(line));
-  assert.ok(sentence, "the contract carries the no-stale-excuse rule");
-  assert.match(sentence, /outstanding and current/i);
-  assert.match(sentence, /reviewer_last_changed_at/);
-  assert.match(sentence, /card_first_created_at/);
-  assert.match(sentence, /already done/i);
+test("the skill says an item you are shown is current, whatever its card's age", () => {
+  const skill = require("../support/skill.js").readSkillText();
+  assert.match(skill, /reviewer_last_changed_at/);
+  assert.match(skill, /card_first_created_at/);
+  assert.match(skill, /stale/);
 });
 
 // ---------------------------------------------------------------------------

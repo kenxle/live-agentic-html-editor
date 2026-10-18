@@ -87,54 +87,15 @@ function allItems(projected) {
 
 // --- ranked test 27 ----------------------------------------------------------
 
-test("the contract field is in the real projection byte for byte, and names no acknowledge command", () => {
+test("the real review.json projection contains review data but no instructions", () => {
   const { dir, log } = setup();
   post(log, itemOf({ note: "tighten this heading" }));
-
   const written = reviewWriter.writeReviewJson(projectOf(log), { dir: dir, review: REVIEW });
   const onDisk = JSON.parse(fs.readFileSync(written, "utf8"));
-
-  // Byte for byte, through a real write and a real re-read, against an
-  // independently restated first and last sentence plus the whole array.
-  assert.deepEqual(onDisk.contract, reviewFormat.CONTRACT);
-  assert.equal(onDisk.contract[0], "This file is the whole contract. You need nothing else.");
-  assert.equal(onDisk.contract[onDisk.contract.length - 1], "The only way to say you handled an item is to append a reply line.");
-  assert.equal(
-    Buffer.compare(
-      Buffer.from(JSON.stringify(onDisk.contract), "utf8"),
-      Buffer.from(JSON.stringify(reviewFormat.CONTRACT), "utf8")
-    ),
-    0
-  );
-
-  // The file tells an agent to append a line, and never to run a command that
-  // no longer exists. Two keep-up mechanisms are named, the wake feed and the
-  // monitor, and neither carries a seen-file any more: work stays listed until a
-  // reply lands, so redelivery is the dedupe. `lahe wait` is retired and must
-  // not survive here either.
-  const wholeFile = fs.readFileSync(written, "utf8");
-  assert.ok(/<state-dir>\/agent-sessions\/<agent-session-id>\/wake.log/.test(wholeFile), "the file names the wake feed");
-  // Claude Code waits with the monitor in a background Bash call. The Monitor
-  // tool option the old line named was removed from Claude Code on 2026-09-14.
-  // One launch waits until there is work: an interactive session puts no time
-  // limit on a background command (Claude Code 2.1.288).
-  assert.ok(/Claude Code: run lahe monitor --session <agent-session-id> as one Bash call, run_in_background true and timeout 86400000/.test(wholeFile), "the Claude Code line names the background monitor");
-  assert.ok(/relaunched while those items are still unanswered, it waits/.test(wholeFile), "the Claude Code line says a relaunch waits on work already printed");
-  assert.equal(/persistent/.test(wholeFile), false, "the removed Monitor tool option is named nowhere");
-  assert.ok(/Read this contract once, when you start on a review/.test(wholeFile), "the contract is read once, not on every wake");
-  assert.ok(/lahe monitor --session <agent-session-id>/.test(wholeFile), "the file names the scoped keep-up command an agent may run");
-  assert.ok(/lahe status --session <agent-session-id> --json --quiet/.test(wholeFile), "the file names the drain command");
-  assert.equal(/--seen-file/.test(wholeFile), false, "the retired ledger flag is taught nowhere");
-  assert.equal(/lahe wait/.test(wholeFile), false, "the retired blocking command is named nowhere");
-  assert.equal(/lahe ack|lahe next|lahe send/.test(wholeFile), false, "review.json names no acknowledge command");
-  // The retired acknowledgement vocabulary is gone entirely.
-  const acknowledgeMentions = onDisk.contract.filter((line) => /acknowledg/i.test(line));
-  assert.deepEqual(acknowledgeMentions, []);
-  assert.equal(
-    onDisk.contract[onDisk.contract.length - 1],
-    "The only way to say you handled an item is to append a reply line."
-  );
   assert.equal(onDisk.schema, reviewFormat.SCHEMA);
+  assert.equal(onDisk.contract, undefined);
+  assert.equal(onDisk.pages[0].items[0].note, "tighten this heading");
+  assert.equal(onDisk.pages[0].source_hint.instruction, undefined);
 });
 
 test("review.json carries the immutable agent-session owner from the recovery event", () => {
@@ -480,7 +441,7 @@ test("the projection groups by page in first-visit order", () => {
   const projected = projectOf(log);
   assert.deepEqual(projected.pages.map((p) => p.path), ["/", "/clients"]);
   assert.equal(projected.pages[1].items.length, 2);
-  assert.ok(projected.pages[0].source_hint.instruction.length > 0, "every page says what it knows about its source");
+  assert.equal(projected.pages[0].source_hint.instruction, undefined, "review data has no imperative source hint");
 });
 
 // A `page.visited` event carries the source hint `add --source` (or `review`'s

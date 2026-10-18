@@ -98,11 +98,11 @@ The code and the older docs call the server "the helper". It lives in `src/servi
 | The Library page | The reviewer | `/catalog` on the server, at `library.lahe.localhost`. Every review on the machine, grouped by agent session | [LIBRARY.md](LIBRARY.md) |
 | The CLI | People and agents | `lahe review`, `write`, `status`, `reply`, `monitor`, `session`, `library`, `style`, `install` and the rest | [CLI.md](../CLI.md) |
 | The menu bar app | The reviewer, on a Mac | A count of documents waiting on the reviewer, and a menu of them. Optional | [MENU_BAR.md](MENU_BAR.md) |
-| `review.json` | The agent | One file per review that the server writes from the log. It carries the `contract` field, the agent's guaranteed instructions | [CONTRACTS.md](../CONTRACTS.md) |
+| `review.json` | The agent | One file per review that the server writes from the log. It contains review data | [CONTRACTS.md](../CONTRACTS.md) |
 | Reply files | The agent | `replies.jsonl`, or `replies-<agent>.jsonl`. The agent appends one line per answer | [CONTRACTS.md](../CONTRACTS.md) |
 | The wake feed | The agent's host | `wake.log` per agent session. Append only, pointers only. `lahe monitor` waits on it | [the agent workflow](../diagrams/agent_workflow.md) |
 
-The agent's instructions live in two places that travel together: [the lahe skill](../../skills/lahe/SKILL.md) and the `contract` field written by `src/shared/review_format.js`. How each host connects is in [AGENTS.md](../../AGENTS.md).
+The agent's instructions live in [the Lahe skill](../../skills/lahe/SKILL.md). How each host connects is in [AGENTS.md](../../AGENTS.md).
 
 ## Processes and ports
 

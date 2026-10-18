@@ -18,6 +18,7 @@ const REPO_ROOT = path.join(__dirname, "..", "..");
 
 const FILES = [
   "skills/lahe/SKILL.md",
+  ...require("../../scripts/install-skills.js").REFERENCES.map((ref) => path.relative(REPO_ROOT, ref.from)),
   "src/shared/review_format.js",
   "test/unit/review_format.test.js",
   "docs/CONTRACTS.md",
@@ -73,7 +74,7 @@ test("V38: no doc an agent reads still describes per-session page servers or ran
 });
 
 test("V38: the skill, the contract and the CLI doc name the stable address", () => {
-  const skill = fs.readFileSync(path.join(REPO_ROOT, "skills/lahe/SKILL.md"), "utf8");
+  const skill = require("../support/skill.js").readSkillText();
   const contract = require("../../src/shared/review_format.js").CONTRACT.join("\n");
   const cli = fs.readFileSync(path.join(REPO_ROOT, "docs/CLI.md"), "utf8");
   for (const [name, text] of [["skill", skill], ["contract", contract], ["CLI doc", cli]]) {
@@ -88,7 +89,7 @@ test("V38: the skill, the contract and the CLI doc name the stable address", () 
 test("V38: the docs agree on the name rule and on 1483 or no port", () => {
   const read = (rel) => fs.readFileSync(path.join(REPO_ROOT, rel), "utf8");
   const sources = [
-    ["skill", read("skills/lahe/SKILL.md")],
+    ["skill", require("../support/skill.js").readSkillText()],
     ["contract", require("../../src/shared/review_format.js").CONTRACT.join("\n")],
     ["contract copy in CONTRACTS.md", read("docs/CONTRACTS.md")],
     ["CLI doc", read("docs/CLI.md")]

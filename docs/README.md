@@ -29,8 +29,7 @@ left behind. It is history, not current documentation. It says what we set out
 to build and why we chose what we chose, and it is not rewritten as the tool
 changes. When it disagrees with the tool, the tool is right.
 
-The living truth for how the tool works today is three files: this repo's
-`README.md`, `skills/lahe/SKILL.md` (the playbook an agent follows), and the `contract`
-field embedded in every `review.json`, which is authored in
-`src/shared/review_format.js` and restated in
-[CONTRACTS.md](CONTRACTS.md).
+The living truth for how the tool works today is this repo's `README.md`,
+[the Lahe skill](../skills/lahe/SKILL.md) for agent instructions, and
+[CONTRACTS.md](CONTRACTS.md) for the review data format. Each `review.json` is
+authored by `src/shared/review_format.js` and contains review data only.

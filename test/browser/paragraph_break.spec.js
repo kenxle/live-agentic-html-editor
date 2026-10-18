@@ -279,8 +279,7 @@ test.describe("a paragraph break the reviewer types is kept", () => {
     const projected = reviewJson.pages[0].items.find((it) => it.id === item.id);
     expect(projected, "the item reached review.json").toBeTruthy();
     expect(projected.after_full).toBe(SPLIT);
-    // The contract tells the agent what a blank line means in a Markdown source.
-    expect(reviewJson.contract.join("\n")).toContain("A break the reviewer typed is part of the edit");
+    expect(reviewJson.contract).toBeUndefined();
   });
 
   test("Shift-Enter in the middle of a paragraph is recorded as a line break", async ({ page }) => {

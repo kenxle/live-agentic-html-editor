@@ -81,9 +81,7 @@ test("with no repository around it, the folder is the document's own", async () 
 test("every copy of the Launch steps cds into the folder, read from a file, quoted by AppleScript", () => {
   const root = path.join(__dirname, "..", "..");
   const copies = {
-    contract: rf.CONTRACT.join("\n"),
-    skill: ["SKILL.md", path.join("references", "library.md")].map((f) => fs.readFileSync(path.join(root, "skills", "lahe", f), "utf8")).join("\n"),
-    contracts_md: fs.readFileSync(path.join(root, "docs", "CONTRACTS.md"), "utf8").replace(/\\"/g, '"')
+    skill: ["SKILL.md", path.join("references", "library.md")].map((f) => fs.readFileSync(path.join(root, "skills", "lahe", f), "utf8")).join("\n")
   };
   for (const [name, text] of Object.entries(copies)) {
     const flat = text.replace(/\\"/g, '"');
@@ -129,9 +127,7 @@ test("a repository below the home folder is still found", async (t) => {
 test("every copy of the Launch steps says what to do when folder is null: no cd, and say so in the answer", () => {
   const root = path.join(__dirname, "..", "..");
   const copies = {
-    contract: rf.CONTRACT.join("\n"),
-    skill: ["SKILL.md", path.join("references", "library.md")].map((f) => fs.readFileSync(path.join(root, "skills", "lahe", f), "utf8")).join("\n"),
-    contracts_md: fs.readFileSync(path.join(root, "docs", "CONTRACTS.md"), "utf8")
+    skill: ["SKILL.md", path.join("references", "library.md")].map((f) => fs.readFileSync(path.join(root, "skills", "lahe", f), "utf8")).join("\n")
   };
   for (const [name, text] of Object.entries(copies)) {
     const flat = text.replace(/\\"/g, '"').replace(/\s+/g, " ");

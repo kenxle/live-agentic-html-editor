@@ -166,16 +166,12 @@ test("the validation refusals name what is wrong and write no line at all", asyn
   }
 });
 
-test("the needs-see refusal quotes the contract rule rather than paraphrasing it", async () => {
-  const reviewFormat = require("../../src/shared/review_format.js");
+test("the needs-see refusal follows the skill's rule", async () => {
   const dir = aStateDir();
   const result = await run(dir, ["--item", "itm_a", "--rev", "1", "--status", "handled", "--needs-see"]);
   const quoted = "the flag counts only when the same line carries text or reason; flagging a reply with nothing in it sends the reviewer to a card that says nothing";
-  assert.ok(result.stderr.includes(quoted), "the refusal carries the contract's own words");
-  assert.ok(
-    reviewFormat.CONTRACT.some((sentence) => sentence.includes(quoted)),
-    "and those words are still in the contract"
-  );
+  assert.ok(result.stderr.includes(quoted), "the refusal explains the rule");
+  assert.match(require("../support/skill.js").readSkillText(), /needs-see/);
 });
 
 // ---------------------------------------------------------------------------

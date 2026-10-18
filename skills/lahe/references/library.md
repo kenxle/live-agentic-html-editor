@@ -1,12 +1,7 @@
 # The Library
 
-Part of the `lahe` skill. Read `SKILL.md` first; this file is the detail for the
+Part of the `lahe` skill. Read [SKILL.md](../SKILL.md) first; this file is the detail for the
 Library page and the requests it sends you.
-
-The Library is one page that lists every review on this machine. Your human
-browses it, opens an old document with its rail, and stars documents. Two of
-its buttons hand work to you: Pick this up, and Launch a new agent. A click on
-either is the human asking; nothing else is.
 
 The Library is one page that lists every review on this machine. Your human
 browses it, opens an old document with its rail, and stars documents. Two of
@@ -132,3 +127,5 @@ lahe library answer <request> --session <your-session-id> --status done --text "
 
 Never pick up or launch without a request, never take a session no request
 named, and never close a session for one.
+
+Use [review](review.md) for the drain loop and read only your host's monitor guide linked there.

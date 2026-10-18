@@ -339,20 +339,19 @@ test("the block reason is exactly the text the docs show", () => {
   assert.equal(protocol.monitorCommand([OURS], null), "lahe monitor --session " + OURS);
 });
 
-// The block reason restates the wake steps the contract and the skill already
+// The block reason restates the wake steps the skill already
 // give. PR #69 changed those steps and the hook kept the old ones, so every claim
 // the reason makes is listed here with the words the other copies use for it. A
 // change to any one copy fails this test until the others say the same thing.
-test("every step the block reason states is stated the same way in the contract and the skill", () => {
+test("every step the block reason states is stated the same way in the skill", () => {
   const flat = (text) => text.replace(/\s+/g, " ");
   const reason = flat(hook.blockReason([{ id: OURS, stateDir: null }], hook.DEFAULT_MAX_TIMEOUT_MS));
-  const contract = flat(reviewFormat.CONTRACT.join("\n"));
   const skillDir = path.join(REPO, "skills", "lahe");
   const skill = flat([path.join(skillDir, "SKILL.md")]
     .concat(fs.readdirSync(path.join(skillDir, "references")).map((name) => path.join(skillDir, "references", name)))
     .map((file) => fs.readFileSync(file, "utf8")).join("\n"));
   const placeholder = "<agent-session-id>";
-  // null: that copy does not cover this step.
+  // null: the skill does not repeat this exact phrase.
   const steps = [
     { step: "the monitor command",
       reason: protocol.monitorCommand([OURS], null),
@@ -389,7 +388,6 @@ test("every step the block reason states is stated the same way in the contract 
   ];
   for (const s of steps) {
     assert.ok(reason.includes(s.reason), "the block reason no longer says: " + s.step);
-    if (s.contract) assert.ok(contract.includes(s.contract), "the contract no longer says: " + s.step);
     if (s.skill) assert.ok(skill.includes(s.skill), "the skill no longer says: " + s.step);
   }
   // The slip PR #69's review caught: the reason told agents not to drain.
