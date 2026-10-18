@@ -1,12 +1,12 @@
-# Choice buttons: working on a preview, the full gate is running
+# Choice buttons: merged and live, one cleanup batch left
 
-**Where it stands.** The feature is built, reviewed, fixed and merged on `feat/choice-buttons`. The whole loop passes by script, and the lesson queue takes a press through the branch's own helper. The full gate is running on the final commit now; after it and the three-browser run, the PR opens and merges, then your helper and skill are brought current.
+**Where it stands.** Merged to main as [PR #76](https://github.com/kenxle/live-agentic-html-editor/pull/76) on 2026-10-18, after CI went green. Your skill is reinstalled and your real helper restarted onto the new code, so every page it serves now carries live choice groups. The gate is being rerun on main. What is left is the cleanup batch at the bottom, at your go.
 
-**Try it now.** [The lesson queue with real buttons](http://personal.docs.features.20261012-01-forge-international-style.lahe.localhost:1484/02_lesson_queue.md) is served by the branch's helper on its own port, against a copy of your Lahe data. Click an answer on any lesson: it paints, the card appears, and the state goes Open once stored. No agent is listening to that copy, so nothing answers there; the real one will once this lands.
+**Try it now.** [The lesson queue with real buttons](http://personal.docs.features.20261012-01-forge-international-style.lahe.localhost:1484/02_lesson_queue.md) is still up on the preview helper. From here on, any agent that writes a page with a choice group (the lahe skill now teaches it) gets your click back as a `choice` item on its drain.
 
 **What you will notice first.** The lesson queue rebuilt with real buttons, served with the rail live, before any PR gate.
 
-Updated 2026-10-18 11:57.
+Updated 2026-10-18 11:58.
 
 ## The documents
 
