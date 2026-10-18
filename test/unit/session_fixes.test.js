@@ -203,7 +203,7 @@ test("skill installation puts the component catalog and the Library reference be
       "the Library reference, for " + target.agent
     );
   }
-  const skill = fs.readFileSync(installSkills.SOURCE, "utf8");
+  const skill = require("../support/skill.js").readSkillText();
   assert.match(skill, /references\/components\.md/, "the skill names the catalog it ships");
   assert.match(skill, /references\/library\.md/, "and the Library reference");
 });
@@ -257,9 +257,8 @@ test("skill installation refuses an unrelated file at a target path", () => {
 });
 
 test("the canonical skill rejects the retired and cross-session workflows", () => {
-  const skill = fs.readFileSync(installSkills.SOURCE, "utf8");
-  // The skill holds every instruction for running a review (Ken, 2026-09-16).
-  // The do-nots are compiled in its Gotchas section as rules with a reason.
+  const skill = require("../support/skill.js").readSkillText();
+  // Instructions can live in the router or the references it ships.
   assert.match(skill, /lahe review <target>/);
   assert.match(skill, /Direct `\.md` and `\.markdown` targets/);
   assert.match(skill, /`lahe wait` is removed/);
@@ -271,7 +270,7 @@ test("the canonical skill rejects the retired and cross-session workflows", () =
   // from Claude Code on 2026-09-14, so the wait is our own monitor in a
   // background Bash call, relaunched after each drain. The removed option must
   // not be taught anywhere.
-  assert.match(skill, /#### Claude Code\s+One Bash call, and nothing else/);
+  assert.match(skill, /## Claude Code\s+One Bash call, and nothing else/);
   assert.match(skill, /`run_in_background: true`/);
   // One launch waits until there is work: an interactive session has no time
   // limit on a background command (Claude Code 2.1.288). A monitor launched
@@ -294,13 +293,13 @@ test("the canonical skill rejects the retired and cross-session workflows", () =
   assert.match(skill, /with no Codex\s+Timer/);
   assert.match(skill, /native\s+`schedule` timer/);
   assert.match(skill, /LAHE ACTION REQUIRED/);
-  assert.match(skill, /Receiving or describing an\s+item is not handling it/);
+  assert.match(skill, /A wake means work now/);
   assert.match(skill, /detached terminal task does not guarantee a new Codex turn/);
-  assert.match(skill, /keep the turn\s+pending on the monitor's exec call/);
+  assert.match(skill, /keep the turn\s+pending on the monitor's exec call/i);
   // The exit codes a host acts on.
   assert.match(skill, /\| 5 \| The agent session is closed \| Stop \|/);
   assert.match(skill, /\| 6 \| Another agent took the session over \| Stop \|/);
-  assert.match(skill, /Relaunch a monitor only after exit code 0/);
+  assert.match(skill, /\| 0 \| Work is waiting;.*run the monitor again/);
   assert.match(skill, /lahe session takeover <id>/);
   assert.match(skill, /Take over only on an explicit request/);
   // Session disambiguation. "Session" is overloaded, and a fresh agent told to
@@ -313,7 +312,6 @@ test("the canonical skill rejects the retired and cross-session workflows", () =
   assert.match(skill, /claim the lahe session\(s\)/);
   assert.match(skill, /run `lahe session list`/);
   assert.match(skill, /ask the human which id or ids they mean/);
-  assert.match(skill, /Answer "the lahe session" with `lahe session list`/);
   // The routing description has to carry the trigger phrasing too, or the skill
   // never loads on the sentence that caused this.
   assert.match(skill, /description:.*"claim the lahe session", "take over the lahe session", (or )?"lahe sessions"/);
@@ -326,14 +324,14 @@ test("the canonical skill rejects the retired and cross-session workflows", () =
   // minutes debugging an animation while the reviewer committed an item that
   // made the animation unnecessary (2026-08-20). The skill has to say that the
   // loop comes first and that new intent preempts work in flight.
-  assert.match(skill, /Stay an orchestrator while a review is open/);
+  assert.match(skill, /Stay responsive during long tasks/);
   assert.match(skill, /background subagent/);
-  assert.match(skill, /stop or redirect that work/);
+  assert.match(skill, /stop or redirect it/);
   assert.match(skill, /cut it into short pieces and drain between\s+them/);
 });
 
 test("the skill carries the item and reply rules as a checklist, and reads user settings", () => {
-  const skill = fs.readFileSync(installSkills.SOURCE, "utf8");
+  const skill = require("../support/skill.js").readSkillText();
   // Ken, 2026-09-16: the comment and reply rules are instructions, so they
   // come back into the skill as a short checklist said the contract's way.
   for (const rule of [

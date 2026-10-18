@@ -978,11 +978,11 @@ test("the restated contract in docs/CONTRACTS.md matches the source line for lin
 test("the skill carries the free-writing rules the contract carries", () => {
   const fs = require("node:fs");
   const path = require("node:path");
-  const skill = fs.readFileSync(path.join(__dirname, "..", "..", "skills", "lahe", "SKILL.md"), "utf8");
+  const skill = require("../support/skill.js").readSkillText();
   for (const term of ["new_blocks", "anchor_after_html", "remove_blocks", "from_anchor", "anchor_tag_after", "start_of_container",
     "proofread: true", "--suggest", "Use the fixes you listed. Change nothing else.", "Keep mine as written. No changes.", "review.notes"]) {
     assert.ok(skill.indexOf(term) !== -1, "the skill names " + term);
   }
-  const checked = skill.slice(skill.indexOf("#### A handled reply is checked"), skill.indexOf("### Step 5. Reply"));
+  const checked = fs.readFileSync(path.join(__dirname, "../../skills/lahe/references/feedback.md"), "utf8");
   assert.match(checked, /`new_blocks` has no old passage/);
 });

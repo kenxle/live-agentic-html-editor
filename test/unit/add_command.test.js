@@ -913,7 +913,7 @@ test("add prints the review folder, because that is the only way an agent finds 
 // The review instructions moved from AGENTS.md into the skill (Ken, 2026-09-16):
 // hosts load the skill automatically, and AGENTS.md is about the tool.
 test("the skill says where the state directory is, so the folder can be found without add's output", () => {
-  const skill = fs.readFileSync(path.join(REPO_ROOT, "skills", "lahe", "SKILL.md"), "utf8");
+  const skill = require("../support/skill.js").readSkillText();
   assert.match(skill, /LAHE_STATE_DIR/, "the first place looked at");
   assert.match(skill, /XDG_STATE_HOME/, "the second");
   assert.match(skill, /~\/\.local\/state\/lahe/, "and the default");
@@ -970,7 +970,8 @@ const COMMAND_DOCS = [
   "AGENTS.md",
   path.join("docs", "INSTALL.md"),
   path.join("docs", "CLI.md"),
-  path.join("skills", "lahe", "SKILL.md")
+  path.join("skills", "lahe", "SKILL.md"),
+  ...require("../../scripts/install-skills.js").REFERENCES.map((ref) => path.relative(REPO_ROOT, ref.from))
 ];
 
 // `wait` was removed from the dispatcher on purpose. Both agent docs name it
@@ -1020,7 +1021,9 @@ test("every lahe command the docs tell a reader to run is a real command", () =>
   for (const doc of COMMAND_DOCS) {
     const text = fs.readFileSync(path.join(REPO_ROOT, doc), "utf8");
     const found = commandsIn(text);
-    assert.ok(found.length > 0, doc + " names at least one lahe command to run");
+    if (!doc.includes(path.join("lahe", "references")) && !doc.startsWith("vendor/")) {
+      assert.ok(found.length > 0, doc + " names at least one lahe command to run");
+    }
 
     for (const use of found) {
       if (NAMED_ONLY_TO_WARN_AGAINST.has(use.command)) continue;

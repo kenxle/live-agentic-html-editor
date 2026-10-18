@@ -34,10 +34,14 @@ var SOURCE = path.join(REPO_ROOT, "skills", "lahe", "SKILL.md");
 // Files the skill reads on demand, copied beside each installed SKILL.md. The
 // component catalog stays in vendor/ as the style's own document, so it is
 // copied from there rather than kept twice.
-var REFERENCES = [
-  { from: path.join(REPO_ROOT, "skills", "lahe", "references", "library.md"), to: path.join("references", "library.md") },
+var REFERENCE_DIR = path.join(REPO_ROOT, "skills", "lahe", "references");
+var REFERENCES = fs.readdirSync(REFERENCE_DIR).filter(function (name) {
+  return name.endsWith(".md");
+}).sort().map(function (name) {
+  return { from: path.join(REFERENCE_DIR, name), to: path.join("references", name) };
+}).concat([
   { from: path.join(REPO_ROOT, "vendor", "stclair-doc-style", "COMPONENTS.md"), to: path.join("references", "components.md") }
-];
+]);
 var MARKER = "<!-- lahe canonical skill: managed by the live-agentic-html-editor repository -->";
 
 function defaultTargets(home) {

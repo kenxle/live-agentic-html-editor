@@ -21,14 +21,15 @@ next comment without spending model turns.
 | Any other host | read `skills/lahe/SKILL.md` from the clone | `lahe monitor --session <id>`, run in the foreground |
 
 `npm run install-skills` copies the skill to both skill folders, with its
-`references/` beside it (the Library steps, and the component catalog from
-`vendor/stclair-doc-style/COMPONENTS.md`), and adds Claude Code's Stop hook, `lahe hook stop`, to `~/.claude/settings.json` (see
+`references/` beside it (the task runbooks, host monitor guides, and component
+catalog from `vendor/stclair-doc-style/COMPONENTS.md`), and adds Claude Code's
+Stop hook, `lahe hook stop`, to `~/.claude/settings.json` (see
 [docs/CLI.md](docs/CLI.md), "The Stop hook"). `lahe review`
 prints the exact monitor command for each session.
 
 ## Writing new text
 
-A reviewer can write new paragraphs, headings, and lists on a page, and can start a blank notes page with `lahe write notes/day.md`. That command prints what `lahe review` prints, so the wake and drain steps are the same. The items that come back carry `new_blocks`, and the rules for placing them are in the skill. How it works inside is `docs/ongoing/FREE_WRITING.md`.
+A reviewer can write new paragraphs, headings, and lists on a page, and can start a blank notes page with `lahe write notes/day.md`. That command prints what `lahe review` prints, so the wake and drain steps are the same. The items that come back carry `new_blocks`, and the rules for placing them are in the skill's `references/free-writing.md`. How it works inside is `docs/ongoing/FREE_WRITING.md`.
 
 ## Install
 
