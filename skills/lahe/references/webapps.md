@@ -18,6 +18,10 @@ Markdown file, manifest, build script, or template that reveals the input set.
 Use the item's page text to find the right fragment, edit it, run the canonical
 build, verify, then reply.
 
+#### When there's no build script
+
+Some documents will be generated on the fly, like a prompt that is composed of many underlying files that you want to read at once. You should probably create a throwaway (or reusable) script to build this. The point is to never report an update as "complete" when the user cannot see it (you updated the source but the users view didn't change).
+
 ### Your app in dev
 
 ```sh
