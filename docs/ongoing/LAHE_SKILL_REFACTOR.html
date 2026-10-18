@@ -10,17 +10,17 @@
 <body>
   <div class="hero">
     <h1>The Lahe skill now loads guidance by task</h1>
-    <p class="lede">The main skill is a small router, with focused runbooks behind it. Review whether the routes are clear and the style and review safeguards remain strong enough.</p>
+    <p class="lede">The main skill is a small router, with focused runbooks behind it. The review repaired missing guidance and checked that installation, links and review commands still work.</p>
   </div>
 
   <section class="sheet" id="review">
-    <div class="sheet-head"><h2>Start with the router and document runbook</h2><span class="n">Review</span></div>
+    <div class="sheet-head"><h2>Start with the router and document runbook</h2><span class="n">Read</span></div>
     <p data-lahe-id="eb3zupc4x">Read <a href="http://live-agentic-html-editor.skills.lahe.lahe.localhost/SKILL.md">the new main skill</a>, then <a href="http://live-agentic-html-editor.skills.lahe.lahe.localhost/references/documents.md">the document runbook</a>. Those are the most important places to judge whether this is lighter without making house styles optional. Every changed document is linked in the index below.</p>
     <p>The <a href="LAHE_SKILL_REFACTOR_AUDIT.md">instruction audit</a> compares the runbooks with the skill before the split and records the gaps repaired during this review.</p>
     <ul>
-      <li><b>Routing:</b> Does the entry point tell an agent what to read next without encouraging it to load everything?</li>
-      <li><b>Style consistency:</b> Does the document runbook make the right component easy to find and require the catalog before writing markup?</li>
-      <li><b>Review reliability:</b> Are the monitor, source-editing, verification, reply and handoff rules still clear?</li>
+      <li><b>Routing:</b> The entry point points agents to the runbook for their task.</li>
+      <li><b>Style consistency:</b> The document runbook requires the component catalog before writing markup.</li>
+      <li><b>Review reliability:</b> The runbooks cover monitoring, source edits, verification, replies and handoffs.</li>
     </ul>
     <div class="panel"><p><b>Still needs real usage.</b> The checks confirm installation, links, commands and retained instruction coverage. I have not compared fresh agents using the old and new skills, so consistent behavior under real tasks remains something to observe.</p></div>
   </section>
@@ -29,7 +29,7 @@
     <div class="sheet-head"><h2>The entry point carries less context</h2><span class="n">Scope</span></div>
     <div class="stats">
       <div class="stat"><p class="stat-label">Main skill before</p><p class="stat-value">1,187 lines</p><p class="stat-meta">10,540 words, measured before the refactor</p></div>
-      <div class="stat"><p class="stat-label">Main skill after review edits</p><p class="stat-value">67 lines</p><p class="stat-meta">681 words, with the original description restored</p></div>
+      <div class="stat"><p class="stat-label">Main skill after review edits</p><p class="stat-value">68 lines</p><p class="stat-meta">706 words, with the original description restored</p></div>
     </div>
     <p>Most specialized guidance moved into references. The smaller entry point is what an agent reads when the skill activates; the task then determines which references it needs. These are file-size measurements, not measured token use or a claim that an entire review needs only the entry point.</p>
     <p>The shared safeguards stay in the router: use the house styles, serve a live review, read the relevant runbook, arm the right monitor, drain feedback, edit the source, verify before replying, and take over sessions only when asked. Review data stays in <code>review.json</code>; agent instructions live in the skill.</p>
@@ -68,7 +68,7 @@
         <tr><td><a href="http://live-agentic-html-editor.skills.lahe.lahe.localhost/references/free-writing.md">New writing and proofreading</a></td><td>Block placement, revisions, take-backs and proposed corrections.</td></tr>
         <tr><td><a href="http://live-agentic-html-editor.skills.lahe.lahe.localhost/references/choices.md">Choice groups</a></td><td>Button answers, recording decisions and changed minds.</td></tr>
         <tr><td><a href="http://live-agentic-html-editor.skills.lahe.lahe.localhost/references/host-claude.md">Claude Code monitoring</a></td><td>Background execution, Stop hook and memory-kill recovery.</td></tr>
-        <tr><td><a href="http://live-agentic-html-editor.skills.lahe.lahe.localhost/references/host-codex.md">Codex monitoring</a></td><td>Foreground pending execution and monitor exits.</td></tr>
+        <tr><td><a href="http://live-agentic-html-editor.skills.lahe.lahe.localhost/references/host-codex.md">Codex monitoring</a></td><td>Local watcher, queued feedback and monitor exits.</td></tr>
         <tr><td><a href="http://live-agentic-html-editor.skills.lahe.lahe.localhost/references/host-other.md">Other host monitoring</a></td><td>Antigravity, Gemini CLI and generic hosts.</td></tr>
         <tr><td><a href="http://live-agentic-html-editor.skills.lahe.lahe.localhost/references/sessions.md">Sessions</a></td><td>Multiple documents, moves, identity and explicit handoffs.</td></tr>
         <tr><td><a href="http://live-agentic-html-editor.skills.lahe.lahe.localhost/references/library.md">Library</a></td><td>Existing Library workflow, with a duplicate introduction removed and links added.</td></tr>
@@ -90,7 +90,7 @@
       <li>Repository lint, skill validation and whitespace checks passed.</li>
     </ul>
     <p>During review, you asked to restore the original description because it covered more cases. Its complete use cases, examples and trigger phrases are restored. Your opening paragraph now explicitly includes presentations, brainstorms, charts and graphs; the routing guidance says to load references as needed. The installed skill copies were refreshed again.</p>
-    <p>Your morning edits were preserved in commit <code>d712080a</code>. The refactor is commit <code>5915f253</code>. The working tree was clean after that commit.</p>
+    <p>Your edits were preserved in commit <code>d712080a</code>. The refactor began in commit <code>5915f253</code>; later review fixes and the <a href="LAHE_SKILL_REFACTOR_AUDIT.md">instruction audit</a> are also on main.</p>
   </section>
 </body>
 </html>
