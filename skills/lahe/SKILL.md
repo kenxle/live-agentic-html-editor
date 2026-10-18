@@ -14,7 +14,7 @@ presentations, brainstorms, charts and graphs, etc. If the answer exceeds a scre
 needs headings or many bullets, or asks the reader to choose or reply, use lahe.
 Respect an explicit request for another format.
 
-## Load only the route you need
+## Load the routes you need
 
 Read the matching runbook before starting its work. References are relative to
 this skill's folder. Load as needed.
