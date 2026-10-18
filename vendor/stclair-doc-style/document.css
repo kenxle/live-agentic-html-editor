@@ -649,6 +649,7 @@ figure.plate figcaption b{font-family:var(--font-display);font-weight:var(--w-di
   margin:0 0 var(--block-gap);
 }
 .option{
+  position:relative;
   border:var(--line);
   border-radius:var(--r-lg);
   padding:var(--s5);
@@ -657,7 +658,10 @@ figure.plate figcaption b{font-family:var(--font-display);font-weight:var(--w-di
 .option > :first-child{margin-top:0}
 .option > :last-child{margin-bottom:0}
 .option h4{margin-bottom:var(--s2)}
-.option .badge{margin-bottom:var(--s3)}
+/* A badge sits on the card's top border at the right, out of the flow, so a
+   recommended card's text starts at the same height as its neighbours. */
+.option > .badge{position:absolute;top:0;right:var(--s5);transform:translateY(-50%);margin:0}
+.option > .badge:first-child + *{margin-top:0}   /* the badge left the flow; what follows is the first line */
 .option p:not(.eyebrow){color:var(--on-surface-soft)}
 .option :is(ul,ol) > li{margin-bottom:var(--s2)}
 

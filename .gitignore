@@ -18,3 +18,4 @@ playwright/.cache/
 
 # Seneschal run evidence stays local (docs/STANDARD.md sets evidence: local)
 docs/reports/seneschal/
+.claude-pr-body*
