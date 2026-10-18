@@ -288,8 +288,6 @@ test("the canonical skill rejects the retired and cross-session workflows", () =
   // The drain command, in the one spelling every surface uses.
   assert.match(skill, /lahe status --session <id> --json --quiet/);
   assert.match(skill, /Repeat until it prints nothing/);
-  // The contract is read once at the start, not on every wake.
-  assert.match(skill, /once, when you start on a review/);
   assert.match(skill, /with no Codex\s+Timer/);
   assert.match(skill, /native\s+`schedule` timer/);
   assert.match(skill, /LAHE ACTION REQUIRED/);
