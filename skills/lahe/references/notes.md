@@ -2,7 +2,7 @@
 
 ### Notes on a blank page
 
-When your human wants to write, not review, run `lahe write <file.md>`. It
+When the user wants to write from a blank page, run `lahe write <file.md>`. It
 creates the file when it does not exist, or opens it as it is, and prints what
 `lahe review` prints. Hand over the `open` URL the same way. The page opens ready
 to type.
