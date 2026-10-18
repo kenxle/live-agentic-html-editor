@@ -7,26 +7,23 @@ folder or beside what they discuss, never in a temporary folder.
 
 ## Give the reader a useful starting point
 
-- Use a short sentence for the title, with detail in the lede.
+- Use a descriptive and declarative title, with detail in the lede.
 - The lede says what the page is for and what you need from the reader.
-- Put the answer, decision or open questions first; background goes below.
-- Keep the top current on agent-authored plans, briefs and progress pages.
-  Move settled items into Decisions or Progress in the same change. When none
-  remain, say so in one line. Preserve a template's structure and anything the
-  reviewer wrote.
-- Get every time-of-day stamp from the clock immediately before writing it.
-  Use the host clock or `date "+%Y-%m-%d %H:%M"`; message timestamps and earlier
-  clock readings are not the current time.
-- Link other documents with their full relative paths so the reader can open
-  them with the rail. Code identifiers and implementation paths can stay code.
-- Draw Mermaid flows top to bottom (`flowchart TD`). A single row of at most
-  three boxes can go across; split larger flows to keep labels readable.
+- Based on the document, put the answer, decision or open questions first, with
+  background in subsequent sections. Link to subsequent information liberally.
+- Keep the top section constantly updated on agent-authored plans, briefs and
+  progress pages. This is the first area the user goes to see what they need to
+  do and what information they need to respond to. Move settled items into
+  Decisions or Progress in the same change. When none remain, say so in one
+  line. Preserve a template's structure and anything the reviewer wrote.
 
 ## Choose components before writing sections
 
-Use Lahe's styles and components for new documents. Read the relevant sections
-of [the component catalog](components.md) **before writing markup**. It is the
-source of truth for classes, variants and examples; do not invent equivalents.
+Use Lahe's styles and components, as they greatly enhance the user's experience
+of working with you. Read the relevant sections of [the component catalog](components.md)
+**before writing markup**. It is the source of truth for classes, variants and
+examples. It is what allows the style switcher to work. If you do not use our
+predefined components the style switcher cannot swap between styles.
 In the clone the catalog is `vendor/stclair-doc-style/COMPONENTS.md`; the
 installer provides it as `references/components.md` beside this skill.
 
@@ -46,10 +43,8 @@ installer provides it as `references/components.md` beside this skill.
 
 - Use only catalog classes for house components. Add CSS only for needs the
   catalog does not cover, such as a chart.
-- At most one of each loud component: tinted panel, callout, band, pull quote.
-- In Markdown, make each component its own HTML block with blank lines before
-  and after. Write its contents as HTML; Markdown is not parsed inside it.
-  Plain Markdown lists and tables are already styled.
+- In Markdown documents, follow Markdown conventions. Lahe styles ordinary
+  headings, lists and tables. Use HTML for catalog components that need it.
 
 ## HTML structure
 
@@ -76,6 +71,18 @@ For another installed style, use `lahe style list` and put
 after the base stylesheet, or `lahe-style: <id>` in Markdown frontmatter.
 `lahe style add <folder>` installs one. For style requests received during
 review, follow [feedback](feedback.md#document-styles).
+
+## Details that apply across documents
+
+- Get every time-of-day stamp from the clock immediately before writing it.
+  Use the system reading and do not assume time has passed. Use the host clock
+  or `date "+%Y-%m-%d %H:%M"`; message timestamps and earlier clock readings
+  are not the current time.
+- Link other documents with their full relative paths so the reader can open
+  them with the rail. Code identifiers and implementation paths can stay code.
+- Mermaid diagrams get unreadable when drawn horizontally. Draw Mermaid flows
+  top to bottom (`flowchart TD`). A single row of at most three boxes can go
+  across; split larger flows to keep labels readable.
 
 ## Before serving
 

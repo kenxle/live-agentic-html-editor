@@ -21,7 +21,7 @@ this skill's folder. Load as needed.
 
 | Task | Read |
 | --- | --- |
-| Write or reshape a document, report, plan, brainstorm or options page | [Documents](references/documents.md) |
+| Write or edit a document, report, plan, brainstorm or options page | [Documents](references/documents.md) |
 | Open a blank page for the user to write notes | [Notes](references/notes.md) |
 | Create or review a slide deck | [Slides](references/slides.md) |
 | Review a running app or generated HTML | [Webapps and builds](references/webapps.md) |
