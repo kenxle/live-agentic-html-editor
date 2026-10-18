@@ -69,7 +69,8 @@
     EDIT: "edit",
     DELETE: "delete",
     FORMAT_ONLY: "format_only",
-    NOTE: "note"
+    NOTE: "note",
+    CHOICE: "choice"
   };
   const STATE = {
     DRAFT: "draft",

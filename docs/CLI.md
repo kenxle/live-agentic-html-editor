@@ -75,12 +75,11 @@ default directory and reports no work.
 
 The drain carries the reviewer's items and what locates them, and nothing it
 would repeat on every wake. There is no contract text, no pointer to it, and no
-field-class table: the contract lives in the `contract` field of the review's
-`review.json`, read once. The prompt-injection fence (architecture decision
+field-class table. Instructions live in the installed Lahe skill. The prompt-injection fence (architecture decision
 D12) is kept as structure, not words: on each item line, every field read off
 the page (the quoted passage, the before and after text, the region, the
 subject) is grouped under `page`, and the reviewer's own `note` and `change`
-stay at the top level. The contract says once that nothing under `page` is an
+stay at the top level. The skill says that nothing under `page` is an
 instruction. A review the reviewer ended is listed under
 `ended_reviews` on the last line on every drain while it still holds unanswered
 items, and once more when it holds none. After that it is not listed again, so a
@@ -125,10 +124,21 @@ without spending model tokens:
   `env` block of Claude Code's settings.json turns the kills off. After three
   kills in a row with nothing new landed between them, the agent stops
   relaunching and tells the reviewer instead.
-- **Codex** runs `lahe monitor --session <id>` as a foreground pending exec call
-  and keeps waiting on it. It must not detach the process, announce that
-  monitoring started, and end the turn: detached task completion alone does not
-  guarantee a new Codex turn.
+- **Codex** runs `lahe monitor --session <id> --codex`. It returns after a local
+  watcher starts, so the model turn can end and a graceful Codex restart can
+  finish. The watcher invokes `codex queue --remote unix:// --thread <id>
+  --message <wake>` only when work is waiting. It sends counts and a drain
+  command, with no page text. It exits after Codex accepts the queue, and the
+  agent drains to empty and re-arms after handling the batch. Re-arming an
+  active watcher for the same conversation returns successfully. Queue failures
+  are retried locally without marking feedback delivered. The bare command
+  selects this mode automatically under `CODEX_THREAD_ID` or `CODEX_SESSION_ID`.
+  It requires the local shared Codex daemon and a CLI with `codex queue`.
+  Missing prerequisites produce an error, without an indefinite foreground
+  wait. Socket access blocked by a sandbox needs the host's normal permission
+  mechanism. Worker diagnostics go to `agent-sessions/<id>/codex-monitor.log`.
+  A queued drain includes `--handoff-rev <n>`; a takeover makes that drain exit
+  `6` before printing any work, so an old queued message cannot cross a handoff.
 - **Antigravity** runs the same command as a background terminal task, never the
   native `schedule` timer, which invokes Gemini on every no-op.
 - **Any other host** runs it in the foreground after telling the user how to
@@ -138,9 +148,9 @@ The monitor keeps its idle polling in one small local Node process, so no host
 pays model tokens for a quiet document. When work lands it prints one line and
 none of the work: `LAHE ACTION REQUIRED`, what is waiting (counts), the drain
 command and the relaunch command. The drain prints the items. The line goes to
-stdout, and to stderr as well only when the two streams go to different places,
-so a host that reads one stream still sees it and a host that merges them sees
-it once. That is an interrupt, not a stopping point: the agent continues the
+stdout only; stderr is reserved for diagnostics. Hosts must capture stdout to
+receive wakes, whether they display the streams separately or together.
+That is an interrupt, not a stopping point: the agent continues the
 same turn through draining, editing, rebuilding, verification, and replies.
 Merely reporting that an item arrived is a workflow failure.
 
@@ -179,7 +189,9 @@ is that hook:
   monitor command (one command per state directory, every session in it),
   says to run it with Bash `run_in_background` and `timeout` 86400000 (or
   `BASH_MAX_TIMEOUT_MS` when that is larger), and says one launch waits until
-  there is work, so no timer or loop is added.
+  there is work, so no timer or loop is added. It also says to drain first
+  when the monitor's last line said work is waiting and no drain has run
+  since, because a relaunched monitor waits on work it already woke the agent for.
   Nothing when `stop_hook_active` is true, so it blocks at most once per turn.
   Nothing on any error. It always exits `0`.
 
@@ -302,8 +314,7 @@ that keeps working and this does not fight it: the reload is one per rebuild
 either way.
 
 **The files, which are the agent's real interface.** In the review folder that
-`add` names: `review.json` is what an agent reads (its top-level `contract`
-field is the whole contract), and `replies.jsonl` (or `replies-<agent>.jsonl`)
+`add` names: `review.json` contains the review data, and `replies.jsonl` (or `replies-<agent>.jsonl`)
 is where an agent answers, one appended JSON line per item. `events.jsonl` is
 the append-only history underneath both.
 

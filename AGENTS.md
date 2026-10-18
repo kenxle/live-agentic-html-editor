@@ -15,20 +15,21 @@ next comment without spending model turns.
 | Host | Finds the skill at | Waits for work with |
 | --- | --- | --- |
 | Claude Code | `~/.claude/skills/lahe/SKILL.md` | `lahe monitor --session <id>`, run with Bash in the background and launched again after each batch |
-| Codex | `~/.agents/skills/lahe/SKILL.md` | `lahe monitor --session <id>`, run as a foreground pending exec call |
+| Codex | `~/.agents/skills/lahe/SKILL.md` | `lahe monitor --session <id> --codex`, returns after starting a watcher that queues real work to the same conversation |
 | Gemini CLI | `~/.agents/skills/lahe/SKILL.md` | `lahe monitor --session <id>`, run in the foreground |
 | Antigravity | read `skills/lahe/SKILL.md` from the clone | `lahe monitor --session <id>`, run as a background terminal task |
 | Any other host | read `skills/lahe/SKILL.md` from the clone | `lahe monitor --session <id>`, run in the foreground |
 
 `npm run install-skills` copies the skill to both skill folders, with its
-`references/` beside it (the Library steps, and the component catalog from
-`vendor/stclair-doc-style/COMPONENTS.md`), and adds Claude Code's Stop hook, `lahe hook stop`, to `~/.claude/settings.json` (see
+`references/` beside it (the task runbooks, host monitor guides, and component
+catalog from `vendor/stclair-doc-style/COMPONENTS.md`), and adds Claude Code's
+Stop hook, `lahe hook stop`, to `~/.claude/settings.json` (see
 [docs/CLI.md](docs/CLI.md), "The Stop hook"). `lahe review`
 prints the exact monitor command for each session.
 
 ## Writing new text
 
-A reviewer can write new paragraphs, headings, and lists on a page, and can start a blank notes page with `lahe write notes/day.md`. That command prints what `lahe review` prints, so the wake and drain steps are the same. The items that come back carry `new_blocks`, and the rules for placing them are in the skill. How it works inside is `docs/ongoing/FREE_WRITING.md`.
+A reviewer can write new paragraphs, headings, and lists on a page, and can start a blank notes page with `lahe write notes/day.md`. That command prints what `lahe review` prints, so the wake and drain steps are the same. The items that come back carry `new_blocks`, and the rules for placing them are in the skill's `references/free-writing.md`. How it works inside is `docs/ongoing/FREE_WRITING.md`.
 
 ## Install
 

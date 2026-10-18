@@ -90,6 +90,11 @@ async function main(argv) {
     return protocol.CLI_EXIT.OK;
   }
 
+  // Older reviews still print the bare monitor command. In Codex it must also
+  // release the turn, rather than blocking a graceful daemon restart forever.
+  if (command === "monitor" && (process.env.CODEX_THREAD_ID || process.env.CODEX_SESSION_ID) && rest.indexOf("--codex") === -1) {
+    rest.push("--codex");
+  }
   if (Object.prototype.hasOwnProperty.call(COMMANDS, command)) return COMMANDS[command]().run(rest);
 
   process.stderr.write("lahe: unknown command " + JSON.stringify(command) + "\n\n" + USAGE + "\n");

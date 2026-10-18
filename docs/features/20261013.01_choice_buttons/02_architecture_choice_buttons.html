@@ -1,0 +1,3431 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Architecture: Choice buttons on a document</title>
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>%F0%9F%94%A8</text></svg>">
+
+<!-- The International Style is inlined here at build time, read fresh from
+     LAHE's clone (vendor/stclair-doc-style/) by shared_assets.load_doc_style()
+     and placed in a style tag carrying the data-lahe-doc-style attribute,
+     which LAHE's style switcher looks for. Do not paste a copy of the style into this file. -->
+<style data-lahe-doc-style>
+/*
+  System tokens, Ken St. Clair
+  SOURCE OF TRUTH for documents: this file is what document.css and day-page.css
+  read, and a paid style is a replacement for this file rather than a rewrite of
+  the surface files.
+
+  Scope. This is the document system. The web surface keeps its own values (its
+  column is narrower and its spacing scale is its own) and shares only the
+  palette and the fonts with this file. The presentation surface vendors a copy.
+  Neither one is a consumer that constrains a change here.
+
+  Do not redefine a token below in a surface stylesheet. If a surface needs a
+  value this file does not have, add it here so the other surfaces can see it.
+
+  Token names are stable. Renaming one breaks every surface that imports it, and
+  at least one surface vendors a copy rather than importing across repos (the
+  Columbia deck system). If you rename or add a token, say so in the commit and
+  tell the deck maintainer.
+
+  What belongs here, and what does not:
+    Here      any colour, type or spacing role more than one surface uses.
+    Not here  values only one surface can use. Slide-only type scales, slide
+              margins, page-print margins and the like stay in that surface's
+              own file under surface-specific names. If such a value turns out
+              to be a shared role, move it here rather than copying it.
+
+  Agreed with the deck surface on 2026-09-11: the vendored copy is taken whole
+  including this header, nobody edits it locally, and any new shared role comes
+  back here as a request rather than being defined in the copy.
+
+  Two layers. The raw names (--ink, --s5, --cobalt) are the palette and the
+  scale. The semantic roles below them (--on-surface, --gutter, --text-body) are
+  what a surface file and an agent reach for, because a role survives a restyle
+  and a raw name does not.
+*/
+
+:root{
+  /* ---------- colour ---------- */
+
+  /* Structural neutrals. Every surface uses these. */
+  --white:#ffffff;
+  --paper:#f7f7f5;
+  --ink:#1f1e1a;
+  --ink-soft:#55534b;
+  --ink-faint:#6b6860;
+  --rule:#dcdad6;
+  --rule-ondark:#4a4842;
+
+  /* Accents. One jab of colour per element, never a gradient. */
+  --purple:#46188c;
+  --purple-hover:#35126b;
+  /* Derived to match the other two tints rather than picked by eye: hue held,
+     lightness 95%. Ink reads 14.30:1 on it, against 14.39 on cobalt-tint and
+     14.46 on sage-tint, so the three are interchangeable for contrast. */
+  --purple-tint:#f1ebfa;
+  --link:#6d28d9;
+  --cobalt:#0760c7;
+  --cobalt-hover:#054a99;
+  --cobalt-tint:#e6effc;
+  /*
+    Two sages, and they are one colour with two legibility variants rather than
+    two colours. #8fb5a0 is the brand sage: it is what STYLE_GUIDE.md lists and
+    what the logo's middle segment uses, on white and on ink. It is unreadable
+    as a mark on white, at 2.26:1, so marks on white use a darkened version.
+
+                      on ink      on white
+      --sage-fill     7.38:1      2.26:1
+      --sage          3.57:1      4.67:1
+
+    Each fails where the other passes, so pick by ground, not by taste.
+  */
+  --sage-fill:#8fb5a0;   /* brand sage: fills, illustrations, the logo segment, anything on ink */
+  --sage:#637a63;        /* darkened: bullet dots and marks on white */
+  --sage-tint:#e7f1ed;
+
+  /* Status. Problems only: a source that wasn't read, a run that stopped, a
+     change that didn't save. They sit outside the accent budget, so a page
+     can show them beside a sage or cobalt panel. They are never decoration:
+     a page with no problem shows neither. Measured by
+     lib/scripts/measure_status_contrast.py; each clears 4.5:1 as text on
+     white, on paper, and on its own tint.
+                      on white   on paper   on its tint
+      --red           7.19:1     6.70:1     6.26:1
+      --amber         6.45:1     6.01:1     5.81:1
+     Amber is darkened to a brown so it passes as text. A status dot or a
+     notice border uses the same colour, so red and amber also differ by
+     shape on the page (a filled dot against a ring), never by hue alone. */
+  --red:#a8231c;
+  --red-tint:#fbeceb;
+  --amber:#8a5100;
+  --amber-tint:#fcf2e0;
+
+  /* Deprecated alias, kept because the deck surface vendors this file and a
+     rename would break it. Was #84c1ae, now resolves to the brand sage, which
+     clears the floor on ink at 7.38:1 and matches the logo. Use --sage-fill. */
+  --sage-lift:var(--sage-fill);
+
+  /* ---------- text on an ink ground ---------- */
+  /* Body text on dark is full white, 16.68:1. This is a house decision, not a
+     contrast one: a softened grey for body copy on a dark band was rejected.
+     The two values below are for secondary and meta text only.
+     Large-format surfaces such as slides may use soft for secondary copy where
+     full white at size glares. */
+  --ink-soft-ondark:#d9d7d1;   /* 11.59:1, secondary copy at large sizes */
+  --ink-faint-ondark:#b3b0a8;  /* 7.70:1, meta, section numbers, captions */
+
+  /* ---------- palette families, for the specimen ----------
+     Read only by the specimen script in document-every-component.html, which
+     draws the palette as key colours first, then each family's shades. Groups
+     are split by |. The first name in a group is the key colour; the text after
+     the colon is its one-line job. The job sits in the same string rather than
+     a second property so a family and its job cannot drift out of step when a
+     group is added or reordered. A style that leaves this out gets the older
+     view, roles plus leftover colours.
+
+     Sage leads its family, not sage-fill, because sage is what the mark and
+     fill roles use on a white page. Link sits with purple as its brighter
+     sibling. The two light ondark greys sit with white, since they are what
+     stands in for white on an ink ground. Paper is a shade of white here: it
+     only ever raises a ground, it never carries a job of its own. The alias
+     sage-lift is left out on purpose and shows under "Also defined". */
+  --palette-families:"white paper ink-soft-ondark ink-faint-ondark: The page ground, and text on an ink band \
+    | ink ink-soft ink-faint rule rule-ondark: Body text, headings, dividers and the default band \
+    | cobalt cobalt-hover cobalt-tint: The structural accent: the insight label, the accent band, code \
+    | sage sage-fill sage-tint: Bullet dots and marks, the third fill, the default quiet panel \
+    | purple purple-hover purple-tint link: Emphasis, for the one thing worth pausing on, and links \
+    | red red-tint: Status: something failed or is missing, and needs Ken \
+    | amber amber-tint: Status: something may be off, and will likely fix itself";
+
+  /* ---------- type ---------- */
+
+  --font-display:"Schibsted Grotesk","Hanken Grotesk",system-ui,sans-serif;
+  --font-body:"Hanken Grotesk",system-ui,sans-serif;
+  /* Code, in documents and on slides. Ken chose JetBrains Mono 2026-09-11.
+     The fallbacks are the platform faces, so a surface that has not bundled or
+     loaded the webfont still gets a real monospace rather than Courier. */
+  --font-mono:"JetBrains Mono",ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,"Liberation Mono",monospace;
+
+  /* Weights. The wordmark stays at 600 wherever it appears. */
+  --w-body:400;
+  --w-medium:500;
+  --w-display:600;
+  --w-bold:700;
+
+  /* Headings apart from labels. --font-display is the label voice (section
+     numbers, table heads, the facts figure, the insight label, calendar
+     heads); headings read these, which point at it in the house, so a style
+     can set its headings in one face and its labels in another without a
+     rule. The tracking suits a proportional face; a mono sets it to 0. */
+  --font-heading:var(--font-display);
+  --w-heading:var(--w-display);
+  --lh-heading:1.12;
+  --tracking-heading:-.012em;
+  --font-number:var(--font-display);  /* the section number */
+  --font-thead:var(--font-display);   /* a table's column names */
+  --font-caption:var(--font-body);    /* a figure's caption */
+
+  /* ---------- spacing, 4px-rooted ---------- */
+
+  --s1:4px; --s2:8px; --s3:12px; --s4:18px;
+  --s5:28px; --s6:44px; --s7:72px; --s8:104px;
+
+  /* ---------- lines and radius ---------- */
+
+  --r:4px;
+  --r-lg:6px;
+  /* Two corners the base used to type as literals, so a square style could
+     not reach them. Inline code is a chip, and a chip rounded as far as a
+     panel reads as a pill; the today marker is a pill on purpose. */
+  --r-code:3px;
+  --r-pill:999px;
+  --line:1px solid var(--rule);
+  --line-ink:1px solid var(--ink);
+  --divider:2px solid var(--ink);
+
+  /* ---------- layout ---------- */
+
+  --maxw:1080px;
+  --read:68ch;
+
+  /* Layout widths a style reads when it moves off the house layout. The base
+     reads none of them except --layout-bleed's arithmetic, so the house page
+     is unchanged by any value here; they are declared once so every style
+     spells the same idea the same way.
+       --layout-margin      a margin column beside the text (Textbook's notes)
+       --layout-rail        a narrow rail with a hairline (Field Guide)
+       --layout-label       a label column beside an entry (Ledger)
+       --layout-hang        the column a display numeral hangs in (Folio)
+       --layout-numeral     the size of a display numeral at a section head
+       --layout-display-h2  a section heading above the h2 token, for a style
+                            whose sections open like covers
+       --layout-bleed       the inline padding that lets a block run edge to
+                            edge while its content stays on the column. It
+                            resolves 100% where it is used, so it is the
+                            element's own width, not the root's.
+       --layout-cols        how many columns a style's page grid has
+       --layout-ruler       the height of a ruler strip showing those columns */
+  --layout-margin:12rem;
+  --layout-rail:9rem;
+  --layout-label:14rem;
+  --layout-hang:9rem;
+  --layout-numeral:calc(var(--text-h1) * 1.6);
+  --layout-display-h2:var(--text-h2);
+  --layout-bleed:max(var(--gutter), calc((100% - var(--maxw)) / 2 + var(--gutter)));
+  --layout-cols:12;
+  --layout-ruler:var(--s2);
+
+  /* ---------- semantic roles ----------
+     What a surface file writes. Each one points at a raw token above, so a new
+     style repoints these rather than editing document.css. */
+
+  /* Colour by job, not by name. Every colour a component rule in
+     document.css or day-page.css paints is one of these. A second style
+     overrides the roles from its own raw palette, so it never has to pour its
+     colours into slots named after the house hues. */
+
+  /* Ground and text. */
+  --surface:var(--white);            /* the page ground */
+  --surface-raised:var(--paper);     /* a quiet ground inside the page: the boxed table's header */
+  --on-surface:var(--ink);           /* body text on it */
+  --on-surface-soft:var(--ink-soft); /* secondary copy */
+  --on-surface-faint:var(--ink-faint); /* meta, captions, section numbers */
+  --border:var(--rule);              /* hairline colour */
+
+  /* Accent: the structural colour. */
+  --accent:var(--cobalt);            /* the one accent a document uses */
+  --accent-hover:var(--cobalt-hover); /* its hover state; no document rule uses it today */
+  --accent-tint:var(--cobalt-tint);  /* the structural panel, the insight panel, code */
+  /* --link is declared with the raw colours above and is already a job name,
+     so it serves as both: a style overrides --link directly. */
+  --focus:var(--link);               /* the focus ring */
+
+  /* Marks and emphasis. */
+  --mark:var(--sage);                /* bullet dots, accent numerals, small marks on the page ground */
+  --fill:var(--sage);                /* the third fill: the sage callout and icon circle */
+  --on-fill:var(--white);            /* text and glyphs on that fill */
+  --tint:var(--sage-tint);           /* the default quiet panel */
+  --emphasis:var(--purple);          /* the one thing worth pausing on: its band, callout, caveat label */
+  --emphasis-hover:var(--purple-hover); /* its hover state; no document rule uses it today */
+  --emphasis-tint:var(--purple-tint); /* the emphasis panel and the caveat insight */
+
+  /* On a filled ground. */
+  --structure:var(--ink);            /* heavy structural marks: dividers, filled bands, callouts */
+  --on-structure:var(--white);       /* text on a filled band, callout or icon circle */
+  --on-structure-soft:var(--ink-soft-ondark);   /* secondary copy on a filled ground */
+  --on-structure-faint:var(--ink-faint-ondark); /* section numbers and meta on a filled ground */
+  /* Text on the accent and emphasis fills. The house carries white on all
+     three, so both point at --on-structure; a style whose accent or emphasis
+     is light enough to want ink repoints one of these, not a rule. */
+  --on-accent:var(--on-structure);   /* text on the accent callout, band and icon circle */
+  --on-emphasis:var(--on-structure); /* text on the emphasis callout, band and icon circle */
+
+  /* Status, by job. A page paints problems through these, so a style can
+     repoint them. --muted is for a line that is neither fine nor a problem:
+     "pending switchover", "no sources were recorded for this page". It reuses
+     the faint ink on paper, so it reads as quiet rather than as a third
+     status colour. */
+  --danger:var(--red);               /* failed, missing, not saved: the red notice, dot and label */
+  --danger-tint:var(--red-tint);     /* the red notice's ground */
+  --on-danger:var(--white);          /* text on a filled danger button */
+  --warning:var(--amber);            /* may be off: the amber line, ring and label */
+  --warning-tint:var(--amber-tint);  /* the amber line's ground */
+  --muted:var(--ink-faint);          /* neither fine nor a problem */
+  --muted-tint:var(--paper);         /* the muted line's ground */
+
+  /* The section number, the table head and the figure. Each was a fixed
+     choice inside a rule, and every style that wanted another look had to
+     restate the rule; these name the choice so a style sets a value. */
+  --number-color:var(--on-surface-faint); /* the "Section N" label on the page ground */
+  --thead-color:var(--on-surface-faint);  /* a table's column names */
+  --thead-rule:var(--divider);            /* the rule under a naked table's head */
+  --thead-rule-boxed:var(--line);         /* the rule under a boxed table's head */
+  --figure-border:0 solid transparent;    /* a figure's frame; the house has none */
+  --figure-ground:transparent;            /* the ground a figure is printed on */
+  --figure-pad:0;                         /* the room between the frame and the image */
+  --caption-color:var(--on-surface-faint);
+
+  /* Spacing by purpose. The numeric scale above still exists; these name the
+     three distances a document actually keeps repeating. */
+  --gutter:var(--s5);                /* the column's side inset */
+  --section-gap:var(--s7);           /* between sections */
+  --section-gap-narrow:var(--s6);    /* the same gap on a narrow screen */
+  --block-gap:var(--s4);             /* between stacked blocks inside a section */
+
+  /* Type scale. Taken from the M5 tearsheet's actual sizes, not invented.
+     There is no 16px: lists, tables and the facts explanations sit at body
+     size like everything else. */
+  --text-h1:clamp(34px,4.6vw,52px);
+  --text-h2:clamp(25px,3vw,34px);
+  --text-h3:clamp(19px,2vw,23px);
+  --text-h4:18px;
+  --text-figure:23px;                /* the number in a facts grid */
+  --text-lede:20px;
+  --text-body:17px;
+  --text-small:15px;                 /* .small, code, the section number */
+  --text-meta:14px;                  /* table heads, captions, meta lines */
+  --text-micro:12px;                 /* chips, labels, month-grid events */
+  /* Three sizes from the X3 components page, which is built on M5. A stat
+     tile is number-first, so its number sits a step above the facts figure;
+     the single large tile is the one number a section is about. A pull quote
+     sits between h3 and h2, so it reads as a quote and not as a heading. */
+  --text-stat:clamp(30px,3.4vw,38px);        /* the number in a stat tile */
+  --text-stat-large:clamp(44px,6vw,64px);    /* the number in the single large stat tile */
+  --text-quote:clamp(22px,2.4vw,28px);       /* a pull quote's line */
+
+  /* ---------- images ----------
+     The frame every image treatment draws (image beside text, image cards,
+     the gallery, the full-width image, the peek pair). A screenshot of a white
+     page on a white page needs an edge, so the house draws a hairline. A style
+     that prints its images as plates or cuts them square sets these. */
+  --image-frame:var(--line);
+  --image-radius:var(--r);
+}
+
+/*
+  Document style system, Ken St. Clair
+  Spec: docs/document-style-guide.md (read that first; this file is the "how", not the "why")
+  Skeleton that demonstrates every component: lib/templates/document-every-component.html
+
+  Standalone. No brand assets in the base system below, drop this file into any
+  HTML document and it works with no dependency on St. Clair AI branding.
+  An optional, clearly separate brand section for the masthead lives at the
+  bottom of this file. Only include that section's markup in a document that
+  is an actual St. Clair AI deliverable.
+
+  Two rules govern everything below.
+
+  1. The column is declared once, as a rule about the page (see the next
+     block). No component sets its own max-width or inline padding, so a new
+     component cannot be off the grid: it never knows where the grid is.
+  2. Every colour, font, weight, size and spacing value is a var() from
+     system-tokens.css. A pixel value appears only on a border, an outline, a
+     stroke width, inside a media query, or with a same-line marker naming the
+     geometry it comes from. That is what makes a second style a new token file
+     rather than a rewrite of this file.
+*/
+
+/*
+  Tokens live in system-tokens.css, shared with the presentation surface. Add
+  surface-specific rules below, never redefine a shared token.
+*/
+
+/* ---------- the column ----------
+   Every direct child of the body sits in the column. A full-bleed band opts
+   out (it runs edge to edge) and its inner element opts back in through the
+   same rule. Three element types render nothing and are skipped, and
+   [data-lahe] is the review layer's own chrome: it lives in the body too, and
+   the page must not lay it out.
+
+   A full-width image (.bleed) opts out the same way a band does. Its caption
+   opts back in through the second selector, and only the picture itself runs
+   edge to edge. */
+
+:is(body, .band) > :not(.band, .bleed, script, style, template, [data-lahe]),
+.bleed > :not(img, picture, svg, video){
+  max-width:var(--maxw);
+  margin-inline:auto;
+  padding-inline:var(--gutter);
+}
+
+/* ---------- base ---------- */
+
+*{box-sizing:border-box}
+
+body{
+  margin:0;
+  background:var(--surface);
+  color:var(--on-surface);
+  font-family:var(--font-body);
+  font-size:var(--text-body);
+  line-height:1.65;
+  -webkit-font-smoothing:antialiased;
+}
+
+/* ---------- headings ----------
+   A heading carries its own room, sized to its level, so it is correct
+   wherever it lands: inside a section, inside rendered Markdown with no
+   wrapper at all, or written by an agent who does not know the hero markup.
+   The six head wrappers already provide that room, so they zero it, and the
+   first child of any padded container drops its top margin so the container's
+   padding is the only gap. */
+
+h1,h2,h3,h4,h5,h6{
+  font-family:var(--font-heading);
+  font-weight:var(--w-heading);
+  line-height:var(--lh-heading);
+  letter-spacing:var(--tracking-heading);
+  /* Sentence case only. Never set a heading in all caps. */
+}
+h1{font-size:var(--text-h1);margin:var(--section-gap) 0 var(--block-gap)}
+h2{font-size:var(--text-h2);margin:var(--section-gap) 0 var(--block-gap)}
+h3{font-size:var(--text-h3);margin:var(--section-gap-narrow) 0 var(--s3)}
+h4{font-size:var(--text-h4);margin:var(--s5) 0 var(--s2)}
+h5{font-size:var(--text-body);margin:var(--s5) 0 var(--s2)}
+h6{font-size:var(--text-small);margin:var(--s5) 0 var(--s2);color:var(--on-surface-soft)}
+
+:is(.hero,.sheet-head,.fold-head,.checkin-head,.cols,.icon-row,.sequence,.option,.image-card-body,.media-body) :is(h1,h2,h3,h4,h5,h6){margin:0}
+:is(.fold-body,.panel,.insight,.callout,.band,td) > :first-child{margin-top:0}
+
+/* ---------- text ---------- */
+
+p{margin:0 0 var(--block-gap)}
+p:last-child{margin-bottom:0}
+
+/* A long unbroken run (a raw URL) wraps rather than widening the page. */
+p,li,dd{overflow-wrap:anywhere}
+td{overflow-wrap:break-word}   /* break-word keeps whole words when columns size; a long URL still breaks */
+
+a{color:var(--link);text-decoration:underline}
+a{
+  text-decoration-thickness:1px;   /* px: a hairline underline, not a second rule on the page */
+  text-underline-offset:3px;       /* px: clears the descenders at body size */
+}
+:focus-visible{outline:2px solid var(--focus);outline-offset:3px;border-radius:var(--r)}
+
+/* ---------- plain elements ----------
+   Rendered Markdown carries no classes, so every element Markdown can produce
+   has a house look with no class needed. The classes further down are
+   optional upgrades, not the only way to get the style. */
+
+img{max-width:100%;height:auto}
+/* The frame, ground and padding are all nothing in the house; they are tokens
+   so a style that prints its figures as plates or drawings sets values. */
+figure{margin:var(--block-gap) 0;border:var(--figure-border);background:var(--figure-ground);padding:var(--figure-pad)}
+figcaption{margin-top:var(--s2);font-family:var(--font-caption);font-size:var(--text-meta);line-height:1.5;color:var(--caption-color)}
+blockquote{
+  margin:var(--block-gap) 0;
+  padding-left:var(--s4);
+  border-left:3px solid var(--border);
+  color:var(--on-surface-soft);
+}
+hr{border:0;border-top:var(--line);margin:var(--section-gap-narrow) 0}
+
+/* Stacked blocks carry their own room, so the markup needs no inline margins. */
+:is(.panel,.callout,.insight,.icon-line){margin-bottom:var(--block-gap)}
+:is(.panel,.callout,.insight,.icon-line):last-child{margin-bottom:0}
+
+/* ---------- the reading measure ----------
+   Prose gets the measure by default and the full-width blocks opt out. The
+   container half of the selector is :where(), so its specificity is zero and
+   any class below can override it without a fight. */
+
+:where(section.sheet,.fold-body,.checkin,.hero) :where(p,ul,ol,blockquote){max-width:var(--read)}
+/* A paragraph that is only an image is a figure, not prose: a chart or a
+   screenshot wants the column, not the reading measure. Markdown always wraps
+   an image in a paragraph, which is why this is decided here. */
+p:has(> img:only-child){max-width:none}
+:is(table,.facts,.cols,pre) :is(p,ul,ol,blockquote){max-width:none}
+
+/* ---------- layout helpers ---------- */
+
+.read{max-width:var(--read)}
+/* .small and .soft are for captions, footnotes, the footer, and a meta line: never
+   for running prose. Body text is one size and one colour, or the page reads as
+   two systems. */
+.soft{color:var(--on-surface-soft)}
+.lede{font-size:var(--text-lede);line-height:1.55;color:var(--on-surface-soft);max-width:none}
+.small{font-size:var(--text-small);line-height:1.5}
+
+/* ---------- masthead (unbranded) ----------
+   Even an unbranded document can carry a plain meta line: doc type + date,
+   no mark, no wordmark. See the brand section at the bottom for the branded
+   version. */
+.masthead{padding-block:var(--section-gap-narrow) 0}
+.masthead .meta{margin-top:var(--s2);font-size:var(--text-meta);color:var(--on-surface-faint)}
+
+/* ---------- hero ----------
+   The hero's bottom padding is deliberately small. It used to carry the full
+   section-gap on the assumption that the section below would zero its own
+   top padding and let the hero supply the room; that broke the moment the
+   hero sat on its own coloured ground (a band), because the band's edge, the
+   section's top, and the hanging rule all landed on the same pixel. A block
+   is correct wherever it lands and carries its own space, so the hero keeps
+   a narrow close of its own and the section below always adds its full gap
+   on top of it. */
+
+.hero{padding-block:var(--section-gap-narrow) var(--gutter)}
+.hero h1{max-width:17ch;margin-bottom:var(--block-gap)}
+.hero .lede{max-width:58ch}
+
+/* ---------- the chrome: numbered sections under a hanging rule ----------
+   A section carries its vertical rhythm and nothing else. The column comes
+   from the page rule at the top of this file, so a section is correct
+   wherever it lands in the body and cannot be double-padded by a wrapper.
+   That includes the first section: it always pays its own top padding, never
+   zero, so it never depends on whatever sits above it (a hero, a band, a
+   masthead) to supply the room. */
+
+section.sheet{padding-block:var(--section-gap)}
+
+.sheet-head{
+  display:flex;
+  gap:var(--block-gap);
+  align-items:baseline;         /* section number aligns to the heading's baseline, never the row's bottom */
+  justify-content:space-between;
+  flex-wrap:wrap;
+  border-top:var(--divider);    /* the hanging rule, always full column width, never a short stub */
+  padding-top:var(--s3);
+  margin-bottom:var(--section-gap-narrow);
+}
+.sheet-head .n{
+  font-family:var(--font-number);
+  font-weight:var(--w-display);
+  font-size:var(--text-small);
+  color:var(--number-color);
+}
+
+/* Two smaller levels under the section head. Each drops one thing: the
+   medium head's rule is 1px ink instead of the 2px divider and it carries an
+   h3 with a label on the right; the small head's rule is a hairline and it
+   carries an h4 alone, with no label. Both still run the full column width,
+   never a stub. They sit inside a section, after other content, so each pays
+   its own top room, and drops it when it is the first thing in its box. */
+.sheet-head--medium{
+  border-top:var(--line-ink);
+  margin-top:var(--section-gap-narrow);
+  margin-bottom:var(--gutter);
+}
+.sheet-head--medium .n{font-size:var(--text-meta)}
+.sheet-head--small{
+  border-top:var(--line);
+  padding-top:var(--s2);
+  margin-top:var(--gutter);
+  margin-bottom:var(--s3);
+}
+:is(.sheet-head--medium,.sheet-head--small):first-child{margin-top:0}
+
+/* ---------- facts (a definition-list grid for key figures) ---------- */
+
+.facts{display:grid;grid-template-columns:repeat(3,1fr);gap:var(--section-gap-narrow)}
+.facts dt{font-family:var(--font-display);font-weight:var(--w-display);font-size:var(--text-figure);letter-spacing:-.012em;margin-bottom:var(--s2)}
+.facts dd{margin:0;font-size:var(--text-body);line-height:1.5;color:var(--on-surface-soft)}
+
+/*
+  Facts grid with icons. Use when the three items are genuinely three points
+  rather than three columns of text, which is what a facts grid is for. The
+  icon sits above the term so the eye lands on it, then the number, then the
+  explanation.
+
+  One icon per fact or none at all. Two of three looks like an oversight.
+  Use one fill across the row rather than a different colour per fact; three
+  colours in one row is decoration, not signal.
+*/
+/*
+  Default icon treatment: a line icon on the term's line. Sized in em so it
+  tracks the term's type rather than a fixed pixel value. This is the preferred
+  version because the icon sits near the type's cap height and reads as part of
+  the line. A circled icon is always larger than the type beside it, which is
+  the thing that makes the row look heavier.
+*/
+.facts--line dt{display:flex; align-items:center; gap:var(--s3)}
+.facts--line dt .icon,.facts--line dt svg{width:.88em; height:.88em; color:var(--accent); flex:none}
+
+/*
+  Second option: a filled circle on the term's line. Louder, and it puts colour
+  on the page without needing a panel or a band. Use it when the document has no
+  other accent; prefer the line version otherwise.
+*/
+.facts--icons dt{display:flex; align-items:center; gap:var(--s3)}
+.facts--icons .icon-circle{width:32px; height:32px}   /* px: the contrast floor for white on sage is a 32px circle */
+.facts--icons .icon-circle .icon,.facts--icons .icon-circle svg{width:16px; height:16px}   /* px: the glyph inside a 32px circle */
+
+/* ---------- code ---------- */
+/*
+  Inline code and code blocks. The tint is cobalt, which the guide already
+  assigns to code blocks and table headers; ink on it reads 14.39:1.
+
+  The face is whatever --font-mono names, and that token ends in a platform
+  fallback stack, so a document that has not loaded the webfont still gets a
+  real monospace. Load the face in the head alongside the other two, or omit it
+  and accept the fallback; nothing breaks either way.
+
+  Code sits at --text-small against --text-body. A monospace at the same
+  nominal size reads larger than the surrounding prose because its characters
+  are wider.
+*/
+code{
+  font-family:var(--font-mono);
+  font-size:var(--text-small);
+  background:var(--accent-tint);
+  padding:.1em .35em;
+  border-radius:var(--r-code);   /* a corner this small reads as a chip; var(--r) rounds an inline run too far */
+}
+pre{
+  font-family:var(--font-mono);
+  font-size:var(--text-small);
+  line-height:1.55;
+  background:var(--accent-tint);
+  padding:var(--s4) var(--s5);
+  border-radius:var(--r);
+  white-space:pre-wrap;     /* a long line wraps inside the box; line breaks and indents stay */
+  overflow-wrap:anywhere;   /* a long URL or token breaks instead of running out of the box */
+  margin:0 0 var(--block-gap);
+}
+pre code{background:none; padding:0; font-size:inherit}
+
+/* ---------- tables ----------
+   Two styles. See docs/document-style-guide.md for when to use each.
+   A table carries space under it, so the paragraph after one is not cramped
+   against the last row. */
+
+table{width:100%;border-collapse:collapse;font-size:var(--text-body);margin:0 0 var(--s5)}  /* s5 not block-gap: the prose after a table crowded it at the smaller step */
+
+/* 1. Naked ruled table, the default. No outer border, no header tint. */
+thead th{
+  font-family:var(--font-thead);
+  font-weight:var(--w-display);
+  font-size:var(--text-meta);
+  color:var(--thead-color);
+  text-align:left;
+  padding:0 var(--s4) var(--s3) 0;
+  border-bottom:var(--thead-rule);
+}
+td{padding:var(--s4) var(--s4) var(--s4) 0;border-bottom:var(--line);vertical-align:top}
+td:last-child,th:last-child{padding-right:0}
+
+/* 2. Bordered box table, tinted header, for dense reference tables
+      (a scope-and-duration table, a pricing table). Add class "boxed". */
+table.boxed{border:var(--line)}
+table.boxed thead th{
+  background:var(--surface-raised);
+  border-bottom:var(--thead-rule-boxed);
+  padding:var(--s3) var(--s4);
+}
+table.boxed td{padding:var(--s3) var(--s4);border-bottom:var(--line)}
+table.boxed tr:last-child td{border-bottom:0}
+table.boxed td:last-child,table.boxed th:last-child{padding-right:var(--s4)}
+
+.scrollx{overflow-x:auto;-webkit-overflow-scrolling:touch}
+
+/* 3. Data table, for columns of numbers. Add class "data" to either table
+      above: every figure is set in tabular numerals, so digits are the same
+      width and a column of them stacks. A cell or head holding a number takes
+      class "num" and aligns right, so the decimals and dollar signs line up.
+      A total goes in a tfoot row. .num works on its own in any table. */
+table.data,.num{font-variant-numeric:tabular-nums}
+:is(th,td).num{text-align:right}
+
+/* The total row. Any table's tfoot gets it, class or not, because a total
+   row reads the same wherever it is: display weight and a rule above that is
+   heavier than the row rules, so it reads as the sum and not as one more
+   row. The naked table takes the 2px divider, which wins over the hairline
+   under the last body row where the two meet. */
+tfoot td{font-weight:var(--w-display);border-top:var(--divider)}
+tfoot tr:last-child td{border-bottom:0}
+/* The boxed table's total takes the raised ground and a 1px ink rule; the
+   boxed table already drops the hairline under its last body row. */
+table.boxed tfoot td{background:var(--surface-raised);border-top:var(--line-ink)}
+
+/* ---------- two-column prose ---------- */
+
+.cols{display:grid;grid-template-columns:1fr 1fr;gap:var(--section-gap-narrow)}
+.cols h4{margin-bottom:var(--s3)}
+
+/* ---------- lists ----------
+   A list with no class gets the house look, because rendered Markdown has no
+   classes. A list that carries any class has opted out, which is how .tasks,
+   .cal-events and .email-list keep their own shape. Every list, including
+   one inside the insight panel, draws its marker at left:0 and starts its
+   text at the same inset, so stacked lists line up to the pixel. */
+
+/* Dot-bullet list. Pick one accent colour per list, don't mix cobalt and sage dots. */
+ul:where(:not([class]), .dot){list-style:none;padding:0;margin:0 0 var(--block-gap)}
+ul:where(:not([class]), .dot) > li{position:relative;padding-left:2.1em;   /* same inset as a numbered list, so text starts on one line when the two stack */margin-bottom:var(--s3);font-size:var(--text-body);line-height:1.5}
+ul:where(:not([class]), .dot) > li::before{
+  content:"";
+  position:absolute;
+  left:0;
+  top:.6em;
+  width:7px;      /* px: the dot's drawn size, fixed so it does not swell with the line */
+  height:7px;     /* px: the dot's drawn size */
+  border-radius:50%;
+  background:var(--mark);
+}
+ul.dot--cobalt li::before{background:var(--accent)}
+
+/* Numbered steps, optionally two columns for short lines. The numeral is
+   drawn by a counter at a fixed inset rather than left to the browser's own
+   marker, so every numbered list has the same gap between numeral and text
+   as the accent version below. Ken asked for the two to match. */
+ol:where(:not([class]), .steps){list-style:none;counter-reset:step;margin:0 0 var(--block-gap);padding-left:0}
+ol:where(:not([class]), .steps) > li{counter-increment:step;position:relative;padding-left:2.1em;margin-bottom:var(--s3);font-size:var(--text-body);line-height:1.5;break-inside:avoid}
+ol:where(:not([class]), .steps) > li::before{
+  content:counter(step) ".";
+  position:absolute; left:0; top:0;
+  color:var(--on-surface);
+}
+ol.steps b{font-family:var(--font-display);font-weight:var(--w-display)}
+/* A list that starts at a number other than one keeps the browser's own
+   numerals, since a CSS counter cannot read the start attribute everywhere
+   yet. The text inset stays the same, so it still lines up with its
+   neighbours; only the numeral is drawn by the browser. */
+ol:where(:not([class]), .steps)[start]{list-style:decimal;padding-left:2.1em}
+ol:where(:not([class]), .steps)[start] > li{padding-left:0}
+ol:where(:not([class]), .steps)[start] > li::before{content:none}
+/* Where the browser can read the start attribute into the counter (Chromium
+   can), the list keeps its drawn numeral on the shared line instead. */
+@supports (counter-reset: step calc(attr(start type(<integer>), 1) - 1)){
+  ol:where(:not([class]), .steps)[start]{list-style:none;padding-left:0;counter-reset:step calc(attr(start type(<integer>), 1) - 1)}
+  ol:where(:not([class]), .steps)[start] > li{padding-left:2.1em}
+  ol:where(:not([class]), .steps)[start] > li::before{content:counter(step) "."}
+}
+
+ol.steps--two-col{columns:2;column-gap:var(--section-gap-narrow)}
+
+/* Checklist, for what is included rather than what to do in order. The
+   check is drawn in the mark colour at the list's usual inset, so a
+   checklist lines up with a dot list or a numbered list stacked beside it.
+   Like the insight icon, it is a mask painted with a token, so a restyle can
+   reach its colour. The stroke is 2, since the glyph is drawn smaller than
+   an icon beside body text and a thinner line breaks up at that size. */
+ul.checklist{list-style:none;padding:0;margin:0 0 var(--block-gap)}
+ul.checklist > li{position:relative;padding-left:2.1em;margin-bottom:var(--s3);line-height:1.5}
+ul.checklist > li::before{
+  content:"";
+  position:absolute;
+  left:0;
+  top:.2em;
+  width:1.1em;
+  height:1.1em;
+  background-color:var(--mark);
+  -webkit-mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='2.25' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M20 6 9 17l-5-5'/%3E%3C/svg%3E") center / contain no-repeat;
+  mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='2.25' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M20 6 9 17l-5-5'/%3E%3C/svg%3E") center / contain no-repeat;
+}
+
+/* ---------- step sequence, boxed ----------
+   An ol for a process whose steps each carry a name and a line of detail.
+   Two layouts:
+     .sequence          one ink border round the whole set, the steps side
+                        by side with hairlines between them. Four steps or
+                        fewer; it stacks under the facts grid's width.
+     .sequence--rows    ruled rows, the number hanging at the list inset.
+                        For more than four steps, or a step that needs more
+                        than two lines.
+   The number is drawn by a counter in the accent, the structural colour, so
+   the markup is only the step's name and its line. The plain numbered list
+   (ol.steps) stays: it is for a sequence of sentences, this is for a
+   sequence of named stages. */
+ol.sequence{
+  list-style:none;
+  counter-reset:seq;
+  margin:0 0 var(--block-gap);
+  padding:0;
+  max-width:none;   /* a grid, not prose: it opts out of the reading measure like the facts grid */
+  display:grid;
+  grid-auto-flow:column;
+  grid-auto-columns:minmax(0,1fr);
+  border:var(--line-ink);
+  border-radius:var(--r-lg);
+  overflow:hidden;
+}
+ol.sequence > li{counter-increment:seq;padding:var(--s4) var(--s5) var(--s5);line-height:1.5}
+ol.sequence > li + li{border-left:var(--line)}
+ol.sequence > li::before{
+  content:counter(seq);
+  display:block;
+  margin-bottom:var(--s3);
+  font-family:var(--font-number);
+  font-weight:var(--w-display);
+  font-size:var(--text-small);
+  font-variant-numeric:tabular-nums;
+  color:var(--accent);
+}
+ol.sequence h4{margin-bottom:var(--s1)}
+ol.sequence p{margin:0;font-size:var(--text-small);color:var(--on-surface-soft)}
+
+ol.sequence--rows{display:block;border:0;border-radius:0;overflow:visible}
+ol.sequence--rows > li{
+  display:grid;
+  grid-template-columns:2.1em minmax(0,1fr);   /* the numeral column is the list inset every list shares */
+  padding:var(--s4) 0;
+  border-top:var(--line);
+}
+ol.sequence--rows > li + li{border-left:0}
+ol.sequence--rows > li:last-child{border-bottom:var(--line)}
+ol.sequence--rows > li::before{margin:0;font-size:var(--text-body);line-height:var(--lh-heading)}
+
+/* ---------- eyebrow label ----------
+   A short faint label above a heading: "Quarterly review", "Option B",
+   "Section 2". It carries the heading's top room and the heading after it
+   drops its own, so the pair sits where the heading alone would have. No
+   rule and no box under it: a stub rule under a label is the device that
+   keeps failing. */
+.eyebrow{
+  margin:var(--section-gap-narrow) 0 var(--s2);
+  font-family:var(--font-display);
+  font-weight:var(--w-display);
+  font-size:var(--text-meta);
+  line-height:1.3;
+  color:var(--on-surface-faint);
+}
+.eyebrow:first-child{margin-top:0}
+.eyebrow + :is(h1,h2,h3,h4,h5,h6){margin-top:0}
+
+/* ---------- badges ----------
+   A small square tag for a status or a category: Open, Done, Draft. Square
+   corners in every case; a rounded tag reads as a pill button. Five fills,
+   one per badge:
+     .badge              ink, the loudest
+     .badge--outline     an ink outline on the page ground
+     .badge--cobalt      accent on its tint, 5.17:1
+     .badge--purple      emphasis on its tint, 10.17:1
+     .badge--sage        ink on the sage tint. The sage itself measures
+                         4.05:1 on its tint, under the floor at this size,
+                         so the word is ink and the dot carries the sage.
+   A badge may lead with a status dot (.badge-dot) or a Lucide icon. The
+   border is always drawn, transparent where there is none, so every badge
+   is the same height. */
+.badge{
+  display:inline-flex;
+  align-items:center;
+  gap:var(--s2);
+  padding:var(--s1) var(--s2);
+  border:1px solid var(--structure);
+  border-radius:0;
+  background:var(--structure);
+  color:var(--on-structure);
+  font-family:var(--font-display);
+  font-weight:var(--w-display);
+  font-size:var(--text-micro);
+  line-height:1.4;
+  vertical-align:middle;
+  white-space:nowrap;
+}
+.badge--outline{background:var(--surface);color:var(--on-surface)}
+.badge--cobalt{background:var(--accent-tint);border-color:transparent;color:var(--accent)}
+.badge--purple{background:var(--emphasis-tint);border-color:transparent;color:var(--emphasis)}
+.badge--sage{background:var(--tint);border-color:transparent;color:var(--on-surface)}
+.badge .icon,.badge svg{width:1.15em;height:1.15em;vertical-align:0}
+.badge-dot{
+  width:7px;      /* px: the dot's drawn size, the same as a list's dot */
+  height:7px;     /* px: the dot's drawn size */
+  border-radius:50%;
+  flex:none;
+  background:var(--mark);
+}
+.badge:not([class*="badge--"]) .badge-dot{background:currentColor}   /* the ink badge: a sage dot on ink is under the mark floor */
+/* A row of badges. */
+.badges{display:flex;flex-wrap:wrap;align-items:center;gap:var(--s3);margin:0 0 var(--block-gap)}
+
+/* ---------- stat tiles ----------
+   The number-first sibling of the facts grid, which is words-first. Each tile
+   is a faint label, a large number in tabular numerals, and one meta line.
+   Three looks:
+     .stat            a hairline border
+     .stat--tint      the default quiet tint instead of the border. A tint
+                      is the alternative to a border, never added to it.
+     .stat--large     the one number a section is about. It runs the width
+                      of its row, with the number on the left and the label
+                      and meta beside it.
+   No coloured top edge on any of them: that device is what makes a tile read
+   as a template. The row fits as many tiles as it holds, up to four across
+   in the column, and two across on a phone. */
+.stats{
+  display:grid;
+  grid-template-columns:repeat(auto-fit,minmax(9rem,1fr));
+  gap:var(--block-gap);
+  margin:0 0 var(--block-gap);
+}
+.stat{
+  border:var(--line);
+  border-radius:var(--r-lg);
+  padding:var(--s4) var(--s4) var(--s5);
+  min-width:0;
+}
+.stat--tint{background:var(--tint);border-color:transparent}
+.stat p{margin:0;max-width:none}
+.stat-label{font-size:var(--text-meta);line-height:1.3;color:var(--on-surface-faint)}
+.stat .stat-label{margin-bottom:var(--s3)}
+.stat-value{
+  font-family:var(--font-display);
+  font-weight:var(--w-display);
+  font-size:var(--text-stat);
+  line-height:1;
+  letter-spacing:-.02em;
+  font-variant-numeric:tabular-nums;
+}
+.stat .stat-value{margin-bottom:var(--s2)}
+.stat-meta{font-size:var(--text-meta);line-height:1.35;color:var(--on-surface-soft)}
+
+.stat--large{
+  display:grid;
+  grid-template-columns:auto minmax(0,1fr);
+  grid-template-areas:"value label" "value meta";
+  column-gap:var(--gutter);
+  align-items:end;
+  padding:var(--gutter) var(--s6);
+  margin:0 0 var(--block-gap);
+}
+.stat--large .stat-label{grid-area:label;align-self:end;margin-bottom:var(--s1);font-size:var(--text-small)}
+.stat--large .stat-value{grid-area:value;font-size:var(--text-stat-large);margin:0}
+.stat--large .stat-meta{grid-area:meta;align-self:start;font-size:var(--text-small)}
+
+/* ---------- pull quote ----------
+   One line of the display face, lifted out of the body. Two looks: plain, or
+   ruled above and below with a full-width ink line. Never quotation marks,
+   never a coloured side bar; the base blockquote keeps its hairline side
+   rule, and this is not that. The line is capped at half the reading
+   measure, so it breaks into short lines rather than one long one. */
+blockquote.pullquote{
+  margin:var(--section-gap-narrow) 0;
+  padding:0;
+  border:0;
+  max-width:none;
+  color:var(--on-surface);
+}
+blockquote.pullquote p{
+  max-width:calc(var(--read) / 2);
+  margin:0 0 var(--s4);
+  font-family:var(--font-display);
+  font-weight:var(--w-display);
+  font-size:var(--text-quote);
+  line-height:1.24;
+  letter-spacing:-.012em;
+  overflow-wrap:normal;
+}
+blockquote.pullquote footer{font-size:var(--text-small);line-height:1.5;color:var(--on-surface-soft)}
+blockquote.pullquote.pullquote--ruled{border-block:var(--line-ink);padding-block:var(--s5)}
+
+/* ---------- figure with a caption plate ----------
+   An image or chart printed on a plate: a hairline frame, the picture with
+   room round it, and the caption on its own strip under a hairline, led by a
+   bold figure number. Two plates:
+     figure.plate          white, the default
+     figure.plate--tint    the raised ground behind the picture; the caption
+                           strip stays on the page ground
+   The plain figure (no class) stays as it is: no frame at all. */
+figure.plate{
+  padding:0;
+  border:var(--line);
+  border-radius:var(--r-lg);
+  background:var(--surface);
+  overflow:hidden;
+}
+figure.plate > :is(img,svg,picture){
+  display:block;
+  width:100%;
+  height:auto;
+  padding:var(--s5) var(--s5) var(--s4);
+}
+figure.plate--tint > :is(img,svg,picture){background:var(--surface-raised)}
+figure.plate figcaption{
+  margin:0;
+  padding:var(--s3) var(--s5);
+  border-top:var(--line);
+  font-size:var(--text-small);
+  color:var(--on-surface-soft);
+}
+figure.plate figcaption b{font-family:var(--font-display);font-weight:var(--w-display);color:var(--on-surface)}
+
+/* ---------- option cards ----------
+   A grid of cards for a page that asks the reader to pick. Each card holds a
+   short label (an eyebrow or a badge), a name, a line or two, and, if it
+   helps, a short list. The grid fits as many cards as the column holds and
+   stacks on a phone. A recommended option says so with a badge, not with a
+   coloured edge. */
+.options{
+  display:grid;
+  grid-template-columns:repeat(auto-fit,minmax(15rem,1fr));
+  gap:var(--block-gap);
+  margin:0 0 var(--block-gap);
+}
+.option{
+  border:var(--line);
+  border-radius:var(--r-lg);
+  padding:var(--s5);
+  min-width:0;
+}
+.option > :first-child{margin-top:0}
+.option > :last-child{margin-bottom:0}
+.option h4{margin-bottom:var(--s2)}
+.option .badge{margin-bottom:var(--s3)}
+.option p:not(.eyebrow){color:var(--on-surface-soft)}
+.option :is(ul,ol) > li{margin-bottom:var(--s2)}
+
+/* ---------- images ----------
+   Five ways to place a picture beyond the plain one in the column. Every one
+   draws the same frame (--image-frame, a hairline in the house) so a
+   screenshot of a white page does not melt into the white page. */
+
+/* Image beside text: a picture and a short block of text side by side, the
+   picture taking two fifths. .media--right puts the picture on the right.
+   Under the facts grid's width it stacks, picture first either way. */
+.media{
+  display:grid;
+  grid-template-columns:minmax(0,2fr) minmax(0,3fr);
+  gap:var(--gutter);
+  align-items:start;
+  margin:0 0 var(--gutter);
+}
+.media > img,.media > .peek-pair{border:var(--image-frame);border-radius:var(--image-radius)}
+.media > img{display:block;width:100%;height:auto}
+.media--right{grid-template-columns:minmax(0,3fr) minmax(0,2fr)}
+.media--right > :is(img,.peek-pair){order:2}
+.media-body h4{margin-bottom:var(--s2)}
+
+/* Image cards: a picture on top, then a name and a line. Two across by
+   default, .image-cards--3 for three. The picture is cropped to one shape so
+   a row lines up, anchored at the top, where a screenshot's title is. */
+.image-cards{
+  display:grid;
+  grid-template-columns:repeat(2,minmax(0,1fr));
+  gap:var(--block-gap);
+  margin:0 0 var(--block-gap);
+}
+.image-cards--3{grid-template-columns:repeat(3,minmax(0,1fr))}
+.image-card{border:var(--image-frame);border-radius:var(--r-lg);overflow:hidden;min-width:0}
+.image-card > img{
+  display:block;
+  width:100%;
+  aspect-ratio:16 / 10;
+  object-fit:cover;
+  object-position:top;
+  border-bottom:var(--image-frame);
+}
+.image-card-body{padding:var(--s4) var(--s5) var(--s5)}
+.image-card-body h4{margin-bottom:var(--s1)}
+.image-card-body p{margin:0;font-size:var(--text-small);color:var(--on-surface-soft)}
+
+/* Gallery: a grid of figures, each with one caption line. Two-up by default,
+   .gallery--3 for three-up. It holds figures, not cards, so there is no box
+   round each one, only the picture's frame. Three-up drops to two under the
+   facts grid's width; two-up stays two, since a gallery is thumbnails. */
+.gallery{
+  display:grid;
+  grid-template-columns:repeat(2,minmax(0,1fr));
+  gap:var(--block-gap);
+  margin:0 0 var(--block-gap);
+}
+.gallery--3{grid-template-columns:repeat(3,minmax(0,1fr))}
+.gallery figure{margin:0;min-width:0}
+.gallery img{
+  display:block;
+  width:100%;
+  aspect-ratio:4 / 3;
+  object-fit:cover;
+  object-position:top;
+  border:var(--image-frame);
+  border-radius:var(--image-radius);
+}
+
+/* Full-width image: a picture that runs to the page edge, for a hero shot or
+   a wide chart. It works the way a band does: a figure.bleed is a direct
+   child of the body, the column rule at the top of this file lets it run
+   edge to edge, and its caption comes back into the column. A picture taller
+   than most of the screen is cropped from the top. */
+figure.bleed{margin:0;padding:0;border:0;background:none}
+.bleed > :is(img,picture,svg,video){
+  display:block;
+  width:100%;
+  height:auto;
+  max-height:70vh;
+  object-fit:cover;
+  object-position:top;
+  border-block:var(--image-frame);
+}
+.bleed > figcaption{margin-top:var(--s2)}
+
+/* Peek pair: a main picture filling a frame, with a second one inset at an
+   angle, peeking in from the lower right. For showing two views of one thing
+   (a page and its table). The pair fills the width it is given and keeps one
+   shape, so put it in a grid cell, a .media block or an image card rather
+   than across the whole column. The inset carries an ink frame so it reads as
+   a second sheet laid on the first. */
+.peek-pair{
+  position:relative;
+  display:block;
+  aspect-ratio:16 / 11;
+  overflow:hidden;
+  background:var(--surface-raised);
+  border:var(--image-frame);
+  border-radius:var(--image-radius);
+}
+.peek-pair > img{position:absolute;display:block;height:auto}
+.peek-pair > img:first-child{inset:0;width:100%;height:100%;object-fit:cover;object-position:top}
+.peek-pair > img + img{
+  width:60%;
+  right:-7%;
+  bottom:-16%;
+  transform:rotate(4deg);
+  border:var(--line-ink);
+}
+
+/* ---------- panel: a tint holding a short aside (one to three sentences) ---------- */
+
+/*
+  Tinted panel. Three colourways, all carrying ink at about 14.3:1 and ink-soft
+  at about 6.6:1, so the choice is tone rather than contrast:
+    sage    the default, quiet, for a caveat or an aside
+    cobalt  for something structural, a definition or a scope note
+    purple  for the one thing on the page worth pausing on
+  One tint per page. Two tinted panels in different colours read as decoration.
+*/
+.panel{background:var(--tint);padding:var(--gutter);border-radius:var(--r)}
+/* The modifier names still say the house hues. They paint through roles, so a
+   style never needs to touch them; a follow-up can rename them to the roles. */
+.panel--cobalt{background:var(--accent-tint)}
+.panel--purple{background:var(--emphasis-tint)}
+/*
+  The error panel. The one panel that carries the danger red, and only for a
+  problem: something failed, is missing, or did not save. Same shape as the
+  other three (tint, padding, corner), plus the full 1px border every status
+  notice carries, so red never relies on hue alone. The bold lead is the
+  label and takes the red; the explanation after it stays ink.
+    danger label on its tint   6.26:1
+    ink on the danger tint    14.54:1
+  It sits outside the one-tint-per-page budget, like every status colour.
+*/
+.panel--danger{background:var(--danger-tint);border:1px solid var(--danger)}
+.panel--danger b{color:var(--danger)}
+.panel p:last-child{margin-bottom:0}
+
+/* ---------- insight panel: a tinted panel with a generated label row ---------- */
+
+/*
+  A tint carrying a label row (icon plus label) and then the content: a bold
+  lead line, and under it either a short numbered list or another sentence or
+  two. The label and the icon are generated by CSS, so the markup holds only
+  the content.
+
+  Two variants, and two is the limit:
+    .insight            cobalt tint, label "Key insight", for the point a
+                        reader should carry out of the section
+    .insight--caveat    purple tint, label "Caveat", for the limit or the
+                        objection attached to what was just said
+
+  Contrast, measured. The label is --text-meta at display weight, under the
+  WCAG large-text threshold, so it has to clear 4.5:1 on its own tint:
+    cobalt label on cobalt-tint    5.17:1
+    purple label on purple-tint   10.17:1
+    sage label on sage-tint        4.05:1   fails, so there is no sage variant
+  Body text inside is ink: 14.39:1 on cobalt tint, 14.30:1 on purple tint.
+
+  Never give this panel a single-side coloured border. The tint is the device.
+*/
+.insight{
+  position:relative;          /* the icon below is placed against this box */
+  margin:var(--gutter) 0;
+  padding:var(--gutter);
+  border-radius:var(--r);
+  max-width:var(--read);
+  background:var(--accent-tint);
+  font-size:var(--text-body);
+  line-height:1.6;
+}
+.insight--caveat{background:var(--emphasis-tint)}
+
+.insight::before{
+  display:block;
+  font-family:var(--font-display);
+  font-weight:var(--w-display);
+  font-size:var(--text-meta);
+  margin-bottom:var(--s2);
+  padding-left:22px;    /* px: the 16px icon plus its gap, so the label clears it */
+  min-height:18px;      /* px: the icon's box, so a one-line label never clips it */
+  content:"Key insight";
+  color:var(--accent);
+}
+.insight--caveat::before{
+  content:"Caveat";
+  color:var(--emphasis);
+}
+
+/*
+  The icon is a mask, not a background image. A data-URI background has the
+  stroke colour written into it as a hex, which puts a colour outside the token
+  file and means a restyle cannot reach it. A mask paints the pseudo-element's
+  own background-color through the glyph, so the colour is the token and the
+  SVG carries only the shape. It sits on ::after rather than ::before because a
+  mask clips everything the element paints, and ::before is the label text.
+*/
+.insight::after{
+  content:"";
+  position:absolute;
+  left:var(--gutter);
+  top:calc(var(--gutter) + 3.2px);   /* px: half the label's 22.4px line box less half the 16px icon, which is where background-position:center put it */
+  width:16px;                        /* px: the icon's drawn size */
+  height:16px;                       /* px: the icon's drawn size */
+  background-color:var(--accent);
+  -webkit-mask-repeat:no-repeat;
+  mask-repeat:no-repeat;
+  -webkit-mask-size:contain;
+  mask-size:contain;
+  -webkit-mask-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='1.75' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M9 18h6'/%3E%3Cpath d='M10 22h4'/%3E%3Cpath d='M15.09 14c.18-.98.65-1.74 1.41-2.5A4.65 4.65 0 0 0 18 8 6 6 0 0 0 6 8c0 1 .23 2.23 1.5 3.5A4.61 4.61 0 0 1 8.91 14'/%3E%3C/svg%3E");
+  mask-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='1.75' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M9 18h6'/%3E%3Cpath d='M10 22h4'/%3E%3Cpath d='M15.09 14c.18-.98.65-1.74 1.41-2.5A4.65 4.65 0 0 0 18 8 6 6 0 0 0 6 8c0 1 .23 2.23 1.5 3.5A4.61 4.61 0 0 1 8.91 14'/%3E%3C/svg%3E");
+}
+.insight--caveat::after{
+  background-color:var(--emphasis);
+  -webkit-mask-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='1.75' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z'/%3E%3Cpath d='M12 9v4'/%3E%3Cpath d='M12 17h.01'/%3E%3C/svg%3E");
+  mask-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='1.75' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z'/%3E%3Cpath d='M12 9v4'/%3E%3Cpath d='M12 17h.01'/%3E%3C/svg%3E");
+}
+/*
+  Override the label text with data-label when "Key insight" or "Caveat" is
+  wrong for the content. The icon and the colour stay with the variant.
+  Keep the replacement to two or three words; it is a label, not a heading.
+*/
+.insight[data-label]::before{content:attr(data-label)}
+
+/* Lists inside the panel use the same inset and drawn markers as every other
+   list, so text lines up across the page; only the marker takes the panel's
+   colour. */
+.insight li{margin:0 0 var(--s2)}
+.insight ol > li::before{color:var(--accent)}
+.insight--caveat ol > li::before{color:var(--emphasis)}
+.insight ul > li::before{background:var(--accent)}
+.insight--caveat ul > li::before{background:var(--emphasis)}
+.insight > :first-child{margin-top:0}
+.insight > :last-child{margin-bottom:0}
+
+/* ---------- callout: a filled, saturated block holding one short line ---------- */
+
+/*
+  Four fills. White text on each, with measured contrast:
+    ink 16.68:1, purple 11.87:1, cobalt 5.99:1, sage 4.67:1.
+  Sage is the tightest and passes only because callout text is short. Do not
+  put a long paragraph on sage, and never drop callout text below body size.
+  One callout per page. It is the loudest small element available.
+*/
+.callout{background:var(--structure);color:var(--on-structure);padding:var(--s4) var(--gutter);border-radius:var(--r)}
+/* Hue-named modifiers painting through roles; a follow-up can rename them.
+   The third fill names its own text colour, because a style's third fill may
+   be light enough that it carries ink rather than white. */
+.callout--cobalt{background:var(--accent);color:var(--on-accent)}
+.callout--purple{background:var(--emphasis);color:var(--on-emphasis)}
+.callout--sage{background:var(--fill);color:var(--on-fill)}
+.callout p{color:inherit;margin:0}
+
+/* ---------- icons ---------- */
+/*
+  Any icon set works: Lucide, Font Awesome, Hero Icons. The rules are about
+  size, stroke and colour, not about which library. Lucide is the default
+  because the web surface already uses it.
+
+  Stroke weight tracks the type it sits beside. 1.75 next to body text,
+  2 next to display weights. An icon that is purely decorative gets
+  aria-hidden="true". An icon carrying meaning gets a label.
+*/
+.icon,[data-lucide],svg.lucide{
+  width:1.15em; height:1.15em;
+  stroke-width:1.75;
+  flex:none;
+  vertical-align:-.16em;
+}
+
+/* Inline icon leading a line of text. */
+.icon-line{display:flex; gap:var(--s3); align-items:flex-start}
+.icon-line .icon,.icon-line svg{margin-top:.15em; color:var(--on-surface)}
+
+/*
+  Icon in a filled circle. The second way to get colour onto a page, and the
+  quieter one, since a circle is small.
+  Contrast of white on each fill, all above the 4.5 floor:
+    ink 16.68:1, purple 11.87:1, cobalt 5.99:1, sage 4.67:1.
+  Sage is the tightest. Do not put white on a sage circle smaller than 32px.
+*/
+.icon-circle{
+  width:44px;      /* px: the circle's drawn size, also the tap-target floor */
+  height:44px;     /* px: the circle's drawn size */
+  border-radius:50%;
+  display:grid; place-items:center; flex:none;
+  background:var(--structure); color:var(--on-structure);
+}
+.icon-circle .icon,.icon-circle svg{width:20px; height:20px; vertical-align:0}   /* px: the glyph inside a 44px circle */
+/* Hue-named modifiers painting through roles, as with .callout above. */
+.icon-circle--cobalt{background:var(--accent);color:var(--on-accent)}
+.icon-circle--purple{background:var(--emphasis);color:var(--on-emphasis)}
+.icon-circle--sage{background:var(--fill);color:var(--on-fill)}
+
+/*
+  The icon reference. Twelve Lucide icons cover what documents need: check,
+  arrow-right, file-text, calendar, users, mail, search, terminal,
+  git-branch, book-open, clock, triangle-alert. A new one is added to this
+  list, and to the skeleton's reference section, before it is used.
+
+  Stroke follows type weight. 1.75 is the default above, for an icon beside
+  body text. Beside display type (a heading, a badge, an eyebrow) the letters
+  are heavier, so the stroke steps up to 2 to match.
+
+  Four colours, and an icon takes one of them: ink (the default, inherited
+  from the text), the accent for structure, the emphasis for the one thing to
+  act on, and the mark for status. */
+:is(h1,h2,h3,h4,h5,h6,.badge,.eyebrow) :is(.icon,[data-lucide],svg.lucide){stroke-width:2}
+/* :is() lifts these above the .icon-line colour, so a colour class wins
+   wherever the icon sits. */
+:is(.icon,svg,i).icon--cobalt{color:var(--accent)}
+:is(.icon,svg,i).icon--purple{color:var(--emphasis)}
+:is(.icon,svg,i).icon--sage{color:var(--mark)}
+/* The reference grid in the skeleton: each icon at its drawn size over its
+   name. */
+.icon-set{
+  display:grid;
+  grid-template-columns:repeat(6,minmax(0,1fr));
+  gap:var(--block-gap);
+  list-style:none;
+  margin:0 0 var(--block-gap);
+  padding:0;
+  max-width:none;   /* a grid, not prose */
+}
+.icon-set li{display:flex;overflow-wrap:anywhere;flex-direction:column;align-items:center;gap:var(--s2);text-align:center;font-size:var(--text-meta);line-height:1.3;color:var(--on-surface-faint)}
+.icon-set li > :is(.icon,[data-lucide],svg):not([class*="icon--"]){color:var(--on-surface)}
+.icon-set code{font-size:var(--text-micro)}
+.icon-set :is(.icon,[data-lucide],svg){width:24px;height:24px}   /* px: Lucide's drawn size, one-to-one with its 24-unit grid */
+
+/* A row of icon-circle plus text, for a short list of capabilities or steps. */
+.icon-row{display:flex; gap:var(--s4); align-items:flex-start; margin-bottom:var(--gutter)}
+.icon-row h4{margin-bottom:var(--s2)}
+.icon-row p{margin:0; color:var(--on-surface-soft)}
+
+/* ---------- numbered list, optional coloured numerals ---------- */
+/*
+  Plain steps leave the numerals in ink. Add .steps--accent to colour them,
+  which matches the sage dots on a dot list. Use one or the other in a
+  document, not both, or the page starts to look decorated.
+*/
+ol.steps--accent > li::before{
+  font-family:var(--font-display); font-weight:var(--w-display);
+  color:var(--mark);
+}
+
+/* ---------- folded section ----------
+   A native <details>, closed by default. The summary row is the section's
+   head, styled the same as a numbered section's: the hanging rule, an h2 at
+   full heading size, the section number on the right. A chevron sits on the
+   left of the heading, where a disclosure control conventionally lives, and
+   turns to point down when the section is open. No text label: "Show" and
+   "Hide" beside the heading made the row messy.
+
+   It owns only its top spacing, not the bottom, so a closed section takes no
+   more room than its head. The bottom gap lives on .fold-body, which a closed
+   <details> does not render at all. */
+
+details.fold{padding-block-start:var(--section-gap)}
+
+details.fold summary.fold-head{
+  display:flex;
+  align-items:baseline;
+  justify-content:space-between;
+  gap:var(--s4);
+  flex-wrap:wrap;
+  min-height:44px;              /* px: the tap-target floor, since the whole row is the control */
+  border-top:var(--divider);
+  padding-top:var(--s3);
+  cursor:pointer;
+  list-style:none;
+}
+details.fold summary.fold-head::-webkit-details-marker{display:none}
+details.fold summary.fold-head::marker{content:""}
+details.fold summary.fold-head h2{flex:1 1 auto}
+details.fold summary.fold-head .n{
+  font-family:var(--font-number);
+  font-weight:var(--w-display);
+  font-size:var(--text-small);
+  color:var(--number-color);
+  flex:none;
+}
+details.fold summary.fold-head .fold-arrow{
+  flex:none;
+  align-self:center;
+  width:10px;     /* px: the chevron is drawn from two borders, so its size is geometry */
+  height:10px;    /* px: the chevron's drawn size */
+  margin-right:var(--s1);
+  border-right:2px solid var(--on-surface-faint);
+  border-bottom:2px solid var(--on-surface-faint);
+  transform:rotate(-45deg);      /* closed: points right */
+  transition:transform .15s ease;
+}
+details.fold[open] summary.fold-head .fold-arrow{transform:rotate(45deg)}   /* open: points down */
+details.fold .fold-body{padding-top:var(--section-gap-narrow);padding-bottom:var(--section-gap)}
+
+/* ---------- check-in block ----------
+   A timestamped, unnumbered section. On the day page the newest one renders
+   open and older ones fold below it using the folded section above. */
+
+.checkin{padding-block:var(--section-gap-narrow)}
+.checkin .checkin-head{
+  border-top:var(--divider);
+  padding-top:var(--s3);
+  margin-bottom:var(--gutter);
+}
+.checkin .checkin-head .time{
+  display:block;
+  font-size:var(--text-meta);
+  line-height:1.5;
+  color:var(--on-surface-faint);
+  margin-top:var(--s2);
+}
+
+/* ---------- calendar grids ----------
+   Week view: seven columns, today first. Month view: weeks as rows, held
+   inside .scrollx so a narrow screen scrolls the grid rather than the page.
+   No drop shadow anywhere in this block; today is marked with a heavier rule
+   and a filled day-number label. */
+
+.cal-week{
+  display:grid;
+  grid-template-columns:repeat(7,1fr);
+  gap:var(--s4);
+}
+.cal-day{
+  border-top:var(--line);
+  padding-top:var(--s3);
+}
+.cal-day--today{border-top:var(--divider)}
+
+.cal-day-head{
+  display:flex;
+  align-items:baseline;
+  justify-content:space-between;
+  gap:var(--s2);
+  margin-bottom:var(--s3);
+}
+.cal-wd{
+  font-family:var(--font-display);
+  font-weight:var(--w-display);
+  font-size:var(--text-meta);
+  color:var(--on-surface-faint);
+}
+.cal-dn{
+  font-family:var(--font-display);
+  font-weight:var(--w-display);
+  font-size:var(--text-body);
+  color:var(--on-surface);
+}
+.cal-day--today .cal-dn{
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  min-width:22px;    /* px: the pill around a two-digit day number */
+  height:22px;       /* px: the pill's drawn height */
+  padding-inline:var(--s1);
+  border-radius:var(--r-pill);
+  background:var(--structure);
+  color:var(--surface);
+}
+
+.cal-events{list-style:none;margin:0;padding:0}
+.cal-event{
+  display:flex;
+  flex-direction:column;
+  gap:1px;            /* px: the time and the title are one unit, a hair apart, not two lines */
+  margin-bottom:var(--s3);
+  font-size:var(--text-meta);
+  line-height:1.4;
+}
+.cal-event:last-child{margin-bottom:0}
+.cal-time{
+  font-family:var(--font-display);
+  font-weight:var(--w-display);
+  font-size:var(--text-micro);
+  color:var(--on-surface-faint);
+}
+.cal-event--allday .cal-time{color:var(--mark)}
+.cal-title{color:var(--on-surface)}
+.cal-account{font-size:var(--text-micro);color:var(--on-surface-faint)}
+
+.cal-open{
+  margin:0;
+  font-size:var(--text-meta);
+  color:var(--on-surface-faint);
+}
+
+.cal-month{min-width:560px}   /* px: seven readable columns; under this the grid scrolls instead of crushing */
+.cal-month-weekdays{
+  display:grid;
+  grid-template-columns:repeat(7,1fr);
+  gap:var(--s2);
+  margin-bottom:var(--s2);
+}
+.cal-month-weekdays span{
+  font-family:var(--font-display);
+  font-weight:var(--w-display);
+  font-size:var(--text-meta);
+  color:var(--on-surface-faint);
+}
+.cal-month-grid{
+  display:grid;
+  grid-template-columns:repeat(7,1fr);
+  gap:var(--s2);
+}
+.cal-month-cell{
+  min-height:84px;    /* px: a cell holds three event lines before it grows */
+  border-top:var(--line);
+  padding-top:var(--s2);
+}
+.cal-month-cell--today{border-top:var(--divider)}
+.cal-month-cell--outside{opacity:.4}
+.cal-month-cell .cal-dn{
+  display:block;
+  font-size:var(--text-meta);
+  margin-bottom:var(--s1);
+}
+.cal-month-cell--today .cal-dn{
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  min-width:20px;    /* px: the pill around a day number in the tighter month cell */
+  height:20px;       /* px: the pill's drawn height */
+  padding-inline:var(--s1);
+  border-radius:var(--r-pill);
+  background:var(--structure);
+  color:var(--surface);
+}
+.cal-month-events{list-style:none;margin:0;padding:0}
+.cal-month-events li{
+  font-size:var(--text-micro);
+  line-height:1.4;
+  color:var(--on-surface-soft);
+  margin-bottom:2px;    /* px: event lines in a month cell sit almost touching, by design */
+  overflow-wrap:anywhere;
+}
+
+/* ---------- links row: the documents of one feature ----------
+   A small label, then the sibling documents separated by a centred dot, between
+   two hairlines. The current page is a span with aria-current, in plain ink
+   and not underlined; a page that does not exist yet is a span.disabled in
+   faint text. Items after the first item get the dot from ::before. */
+
+.toplinks{
+  display:flex;
+  flex-wrap:wrap;
+  align-items:baseline;
+  gap:var(--s1) 0;
+  margin-block:var(--s4) var(--s2);
+  padding-block:var(--s3);
+  border-top:var(--line);
+  border-bottom:var(--line);
+  font-size:var(--text-small);
+}
+.toplinks .toplinks-label{
+  font-family:var(--font-display);
+  font-weight:var(--w-display);
+  font-size:var(--text-meta);
+  color:var(--on-surface-faint);
+  margin-right:var(--s3);
+}
+.toplinks > :is(a,span):not(.toplinks-label) ~ :is(a,span)::before{
+  content:"\00B7";
+  display:inline-block;      /* so the dot is not underlined with the link it sits in */
+  color:var(--on-surface-faint);
+  margin-inline:var(--s2);
+  text-decoration:none;
+}
+.toplinks a:hover{text-decoration-thickness:2px}
+.toplinks [aria-current="page"]{
+  color:var(--on-surface);
+  font-weight:var(--w-display);
+  text-decoration:none;
+}
+.toplinks .disabled{color:var(--on-surface-faint)}
+
+/* ---------- contents list: the list inside a folded section ----------
+   Styles only the list. The fold around it is the folded section above. No
+   bullets, nested levels indented, links in body ink and not underlined until
+   hover. */
+
+.contents-list{font-size:var(--text-small);line-height:1.5}
+.contents-list ul{list-style:none;padding-left:0;margin:0}
+.contents-list ul ul{padding-left:var(--s4);margin-top:var(--s1)}
+.contents-list li{margin-bottom:var(--s1);padding-left:0;font-size:inherit;line-height:inherit}   /* undo the house list item, which a class-free ul gets */
+.contents-list li::before{content:none}   /* and its sage dot */
+.contents-list a{color:var(--on-surface);text-decoration:none}
+.contents-list a:hover{color:var(--link);text-decoration:underline}
+
+/* ---------- cross-reference line ----------
+   One line pointing at the place a point is argued in full: a light accent
+   tint, "See" with an arrow in the display face, then the link in bold ink.
+   As a body child the column rule sets its side inset, so only its block
+   padding is set here. */
+
+.xref{
+  font-size:var(--text-small);
+  line-height:1.5;
+  background:var(--accent-tint);
+  border-radius:var(--r);
+  padding:var(--s3) var(--s4);
+  margin-block:0 var(--block-gap);
+  color:var(--on-surface-soft);
+}
+.xref::before{
+  content:"\21B3  See";
+  font-family:var(--font-display);
+  font-weight:var(--w-display);
+  font-size:var(--text-meta);
+  color:var(--accent);
+  margin-right:var(--s2);
+}
+.xref > *{display:inline;margin:0}
+.xref a{font-weight:var(--w-display);color:var(--on-surface)}
+
+/* ---------- status dots ----------
+   A small round dot and one short word, for a verdict in a table cell or a
+   line: Accepted, Rejected, Deferred. The dot takes the text colour, so a
+   variant sets only the colour. Measured as text on white:
+     (none)               ink                 16.68:1
+     .status-dot--sage    --mark, the darkened sage  4.67:1
+     .status-dot--purple  --emphasis  11.87:1
+     .status-dot--faint   --on-surface-faint  5.56:1 */
+
+.status-dot{
+  font-family:var(--font-display);
+  font-weight:var(--w-display);
+  white-space:nowrap;
+}
+.status-dot::before{
+  content:"";
+  display:inline-block;
+  width:7px;       /* px: the dot is drawn geometry, a circle of 7px */
+  height:7px;      /* px: the dot's drawn size */
+  border-radius:var(--r-pill);
+  background:currentColor;
+  margin-right:var(--s2);
+  vertical-align:0.12em;
+}
+.status-dot--sage{color:var(--mark)}
+.status-dot--purple{color:var(--emphasis)}
+.status-dot--faint{color:var(--on-surface-faint)}
+
+/* ---------- bands: full-bleed, one per document at most ---------- */
+
+.band{background:var(--structure);color:var(--on-structure);margin-top:var(--section-gap)}
+.band > *{padding-block:var(--section-gap)}    /* the band's inner element carries the vertical room; the column comes from the page rule */
+.band h2{color:var(--on-structure)}   /* no margin of its own: a band head is a .sheet-head like any other, and a bare h2 takes the base margins */
+.band p,.band li{color:var(--on-structure)}          /* full white on a dark band, never a soft grey, contrast holds this way */
+.band .sheet-head{border-top-color:var(--on-structure)}
+.band .sheet-head .n{color:var(--on-structure-faint)}
+
+/*
+  Band colour variants. Ink is the default and the most permissive.
+  Measured contrast decides what text each one may carry:
+
+    on ink     white 16.68, soft-ondark 11.59, faint-ondark 7.70, sage-fill 7.38
+    on purple  white 11.87, soft-ondark  8.24, faint-ondark 5.48, sage-fill 5.25
+    on cobalt  white  5.99, soft-ondark  4.16, faint-ondark 2.76, sage-fill 2.65
+
+  So cobalt is the most constrained despite looking like the safe choice:
+  white text only. No grey meta, no sage marks. Purple carries everything ink
+  does. Pick the band colour for the document, then obey its row above.
+*/
+/* Hue-named modifiers painting through roles; a follow-up can rename them. */
+.band--cobalt{background:var(--accent)}
+.band--cobalt,.band--cobalt :is(h2,p,li){color:var(--on-accent)}
+.band--cobalt .sheet-head .n{color:var(--on-structure); opacity:.72}   /* grey fails here, dim white instead */
+.band--purple{background:var(--emphasis)}
+.band--purple,.band--purple :is(h2,p,li){color:var(--on-emphasis)}
+.band--purple .sheet-head .n{color:var(--on-structure-faint)}
+.band--cobalt .icon-circle,.band--purple .icon-circle,.band .icon-circle{background:var(--on-structure);color:var(--on-surface)}
+
+/* ---------- footer ----------
+   The page footer only. A <footer> inside a card or a component is that
+   component's business and keeps its own look. */
+
+body > footer{
+  border-top:var(--line);
+  margin-top:var(--section-gap);
+  padding-block:var(--gutter) var(--section-gap);
+  font-size:var(--text-meta);
+  color:var(--on-surface-faint);
+}
+body > footer a{color:var(--on-surface)}
+
+/* ---------- responsive ---------- */
+
+@media (max-width:820px){
+  .facts,.cols{grid-template-columns:1fr;gap:var(--gutter)}
+  ol.steps--two-col{columns:1}
+  section.sheet{padding-block:var(--section-gap-narrow)}
+
+  .cal-week{display:block}
+  .cal-day{padding-top:var(--s3);padding-bottom:var(--s3)}
+  .cal-day-head{margin-bottom:var(--s2)}
+
+  /* The boxed sequence stacks, hairlines between the steps instead of beside. */
+  ol.sequence{grid-auto-flow:row}
+  ol.sequence > li + li{border-left:0;border-top:var(--line)}
+  ol.sequence--rows > li + li{border-top:var(--line)}
+
+  /* Image beside text stacks, picture first whichever side it sat on. */
+  .media,.media--right{grid-template-columns:minmax(0,1fr)}
+  .media--right > :is(img,.peek-pair){order:0}
+  .image-cards,.image-cards--3{grid-template-columns:minmax(0,1fr)}
+  .gallery--3{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .icon-set{grid-template-columns:repeat(3,minmax(0,1fr))}
+
+  /* The links row: each item is a 44px-tall tap target. */
+  .toplinks > :is(a,span):not(.toplinks-label){
+    display:inline-block;
+    line-height:44px;   /* px: the tap-target floor; a line box, so the dot before an item is not underlined with its link */
+  }
+
+  /* The large stat stacks: label, number, meta, the way a small tile reads. */
+  .stat--large{grid-template-columns:minmax(0,1fr);grid-template-areas:"label" "value" "meta";padding:var(--gutter)}
+  .stat--large .stat-value{margin-bottom:var(--s2)}
+}
+
+@media (prefers-reduced-motion:reduce){
+  *{transition:none!important;animation:none!important;scroll-behavior:auto!important}
+  details.fold summary.fold-head .fold-arrow{transition:none}
+}
+
+@media print{
+  .band{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  .callout{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  .insight{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  /*
+    Keep-together belongs on a section's head and on the small blocks, not on
+    the section. A section longer than a page with break-inside:avoid starts on
+    a fresh page and leaves the previous one mostly empty, which made most
+    exports worse to help a few.
+  */
+  .sheet-head{break-after:avoid}
+  table,.panel,.insight,.callout{break-inside:avoid}
+  .badge,.stat,.stat--tint,.panel--danger{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  .stat,ol.sequence,figure.plate,.option,.image-card,.media,.peek-pair,blockquote.pullquote{break-inside:avoid}
+}
+
+
+/* =========================================================================
+   OPTIONAL BRAND SECTION, St. Clair AI documents only.
+
+   Include this markup and the classes below ONLY when the document itself
+   is a St. Clair AI deliverable (a client-facing work product, or a page
+   that will live on the St. Clair AI site or its sales materials). Every
+   other document, briefs, research reports, personal planning docs,
+   proposals for other names, omits this section entirely. See
+   docs/document-style-guide.md, "The brand layer."
+
+   Mark source: projects/agent_storefront/brand/logo/ (mark.svg or lockup.svg).
+   ========================================================================= */
+
+/*
+  The logo is a FILE, never rebuilt. Inline lockup.svg on white or
+  lockup_on_ink.svg on a dark ground, both from
+  projects/agent_storefront/brand/logo/. PNGs at every size and colorway are in
+  png/ beside them, browsable via DELIVERY.html.
+
+  Never set the mark beside live wordmark text, and never redraw either. The
+  lockup file already carries the correct proportions: mark height equal to the
+  wordmark cap height, baseline aligned, correct gap. Hand-assembling it gets
+  those wrong, which is why the file exists.
+
+  Full rules, including the Do Not list, are in
+  projects/agent_storefront/brand/BRAND_KIT.md.
+*/
+.mark{display:flex; align-items:center}
+/*
+  Lockup height is not chosen by eye. BRAND_KIT.md: the lockup's height is
+  0.9288 em of the wordmark font size it replaces, which puts the letters at the
+  same cap height they had as live text. The masthead wordmark was 19px, so
+  0.9288 x 19 = 17.6px. If a surface uses a different wordmark size, recompute
+  rather than guessing; too tall and the logo fights the document title.
+*/
+.mark svg{height:17.6px; width:auto; display:block}   /* px: 0.9288 em of the 19px wordmark it replaces, see above */
+
+/*
+  lahe-markdown.css
+  LAHE's own layer over the St. Clair AI document system. Written for this repo,
+  not copied from the personal repo: system-tokens.css and document.css beside
+  it are the copies, and they are never edited here.
+
+  Why this file is short. document.css now styles BARE elements: a class-free
+  ul gets the sage dot, a class-free ol gets the drawn numeral, and the
+  headings, tables, blockquotes and images all have a house look with no class
+  needed. marked emits exactly those bare elements, so a rendered .md already
+  looks like a St. Clair AI document. Restating any of it here is the drift the
+  style rebuild ended, so this file only carries what the base cannot know
+  about:
+
+  - the three @font-face rules, pointing at the vendored woff2 files
+  - color-scheme: light, so the browser's own controls stay on a light ground
+  - ligatures off in code, because an arrow drawn as one glyph is wrong in a
+    document about code
+  - the Mermaid block: a diagram is emitted as pre.mermaid, so it has to be
+    told not to look like a code block
+  - LAHE's own furniture: .frontmatter, .lahe-readonly-note, .lahe-local-link
+  - the GFM task-list opt-out: a checkbox item already carries its own marker,
+    so it drops the base's dot and its inset
+  - the tighter paragraph gap inside a list item, which the base has no
+    list-scoped rule for
+  - the top margin on a list nested inside a list item
+
+  The page column is not here, and must not be. main is a body child, so the
+  base's one column rule gives it the 1080px column and the gutter, and the
+  hero and the sections sit inside that. No width, no font size, no heading
+  margin in this file.
+
+  Two look changes are decisions, not fallout. A table is now the base's naked
+  ruled table, its default, rather than the boxed cobalt-header table this
+  layer used to draw. A blockquote is now the base's quiet hairline quote
+  rather than a sage tint. Both are the guide's own defaults, which is the
+  point of taking the base whole.
+
+  House rules this file obeys: no em dashes, no pills, no gradients, no
+  shadows, no all caps, no single-side coloured borders.
+*/
+
+/* ---------- the vendored faces ----------
+   Google serves one variable woff2 per family covering the weight range we
+   asked for, so there are three files rather than eight. Each @font-face
+   declares the range rather than a single weight. The served basenames match
+   what the helper falls back to: .lahe-fonts/<file>.woff2 resolves from any
+   directory, and the Markdown renderer also copies the files beside a written
+   artifact so a page saved to disk keeps its type. */
+
+@font-face {
+  font-family: "Schibsted Grotesk";
+  font-style: normal;
+  font-weight: 500 700;
+  font-display: swap;
+  src: url("./.lahe-fonts/schibsted-grotesk-variable.woff2") format("woff2");
+}
+
+@font-face {
+  font-family: "Hanken Grotesk";
+  font-style: normal;
+  font-weight: 400 600;
+  font-display: swap;
+  src: url("./.lahe-fonts/hanken-grotesk-variable.woff2") format("woff2");
+}
+
+@font-face {
+  font-family: "JetBrains Mono";
+  font-style: normal;
+  font-weight: 400 500;
+  font-display: swap;
+  src: url("./.lahe-fonts/jetbrains-mono-variable.woff2") format("woff2");
+}
+
+/* Light only, by decision. The guide is a light system, so nothing in this
+   bundle asks the browser which scheme it prefers. */
+:root { color-scheme: light }
+
+/* ---------- lists ----------
+   The base draws the dot and the numeral. These three rules are the gaps it
+   leaves, because it has no rule scoped inside a list item.
+
+   A GFM task list already carries its own marker, so it drops the dot and the
+   inset the dot hangs in. The selector has to name the class-free list the way
+   the base does, or the base's ::before wins on specificity.
+
+   Two shapes, because marked renders a task list two ways. A tight list puts
+   the checkbox straight in the item; a loose one (blank lines between items)
+   puts it inside a paragraph. Measured on 2026-09-16: only naming the tight
+   shape left a loose task item wearing a dot and a checkbox at once, which is
+   the exact thing this opt-out exists to prevent. */
+
+main ul:not([class]) li:has(> input[type="checkbox"]),
+main ul:not([class]) li:has(> p > input[type="checkbox"]) { padding-left: 0 }
+main ul:not([class]) li:has(> input[type="checkbox"])::before,
+main ul:not([class]) li:has(> p > input[type="checkbox"])::before { content: none }
+main li > input[type="checkbox"],
+main li > p > input[type="checkbox"] {
+  accent-color: var(--sage);
+  margin-right: var(--s2);
+}
+
+/* A list item holding more than one paragraph: the base's paragraph gap is the
+   gap between blocks of prose, which is too much inside a bullet. */
+main li > p { margin-bottom: var(--s2) }
+main li > p:last-child { margin-bottom: 0 }
+main li ul, main li ol { margin: var(--s3) 0 0 }
+
+/* ---------- code ----------
+   document.css already puts JetBrains Mono on a tint. The one thing added here
+   is turning the face's ligatures off. */
+
+main code, main pre { font-variant-ligatures: none }
+
+/* ---------- Mermaid ----------
+   A diagram is emitted as pre.mermaid, so it would otherwise inherit the code
+   block's tint and padding. It gets neither. */
+
+main .mermaid {
+  background: none;
+  padding: var(--s5) 0;
+  overflow: visible;
+  text-align: center;
+  font-family: var(--font-body);
+}
+main .mermaid svg {
+  max-width: 100%;
+  height: auto;
+}
+
+/* ---------- LAHE's own furniture ----------
+   These three class names are load-bearing: the renderer writes them, the
+   layer and the tests look for them. Styled on tokens, not renamed.
+
+   The read-only note and the frontmatter sit above the hero, outside any
+   section. They take their column from main, like everything else on the page,
+   so all they need here is the room above them. */
+
+main > .lahe-readonly-note,
+main > .frontmatter { margin-block: var(--s6) 0 }
+
+main .frontmatter { color: var(--on-surface-faint) }
+main .frontmatter summary {
+  cursor: pointer;
+  font-family: var(--font-display);
+  font-weight: var(--w-display);
+}
+main .frontmatter pre { margin: var(--s3) 0 0 }
+
+main .lahe-readonly-note {
+  /* The box's own inner padding, not a page column: without it the sentence
+     would sit flush against the border. */
+  padding: var(--s3) var(--s4);
+  border: var(--line);
+  border-radius: var(--r);
+  color: var(--on-surface-faint);
+}
+main .lahe-readonly-note code {
+  background: none;
+  padding: 0;
+}
+
+main .lahe-local-link {
+  color: var(--on-surface-faint);
+  text-decoration: underline dotted;
+  text-underline-offset: 3px;
+  cursor: help;
+}
+
+</style>
+
+<style>
+  /* What the style system does not have, and nothing else: the header of the
+     merged reviews section, and the jump target for a finding link. Every
+     value is a style token, so a restyle reaches these too. */
+
+  hr.reviews-divider{
+    border:0;
+    border-top:var(--divider);
+    margin:var(--section-gap) 0 var(--s1);
+  }
+  .reviews-banner{
+    border-top:var(--line-ink);
+    padding-top:var(--s4);
+    margin-bottom:var(--s5);
+    font-size:var(--text-small);
+    line-height:1.55;
+    color:var(--on-surface-soft);
+  }
+  .reviews-banner::before{
+    display:block;
+    content:"Reviews, full prose";
+    font-family:var(--font-heading);
+    font-weight:var(--w-heading);
+    font-size:var(--text-h2);
+    line-height:var(--lh-heading);
+    letter-spacing:var(--tracking-heading);
+    color:var(--on-surface);
+    margin-bottom:var(--s2);
+  }
+
+  .finding-anchor{display:inline-block;scroll-margin-top:var(--gutter)}
+</style>
+
+<script type="module">
+  import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.esm.min.mjs";
+
+  /* Mermaid in the house palette. Its theme is read by JavaScript before any
+     stylesheet applies, so the values are read from the inlined style tokens
+     at load time; this block holds no colour or font of its own. The mapping
+     is the one LAHE's Markdown renderer uses (MERMAID_THEME). */
+  const root = getComputedStyle(document.documentElement);
+  const t = (name) => root.getPropertyValue(name).trim();
+
+  mermaid.initialize({
+    startOnLoad: false,
+    securityLevel: "loose",
+    theme: "base",
+    themeVariables: {
+      fontFamily: t("--font-body"),
+      primaryColor: t("--accent-tint"), primaryBorderColor: t("--accent"), primaryTextColor: t("--on-surface"),
+      secondaryColor: t("--tint"), secondaryBorderColor: t("--mark"), secondaryTextColor: t("--on-surface"),
+      tertiaryColor: t("--emphasis-tint"), tertiaryBorderColor: t("--emphasis"), tertiaryTextColor: t("--on-surface"),
+      lineColor: t("--on-surface-soft"), textColor: t("--on-surface"),
+      noteBkgColor: t("--tint"), noteBorderColor: t("--mark"), noteTextColor: t("--on-surface"),
+      clusterBkg: t("--surface-raised"), clusterBorder: t("--border"),
+      edgeLabelBackground: t("--surface"),
+      actorBkg: t("--accent-tint"), actorBorder: t("--accent"), actorTextColor: t("--on-surface"),
+      signalColor: t("--on-surface-soft"), signalTextColor: t("--on-surface"),
+      labelBoxBkgColor: t("--accent-tint"), labelBoxBorderColor: t("--accent"),
+      loopTextColor: t("--on-surface"), activationBkgColor: t("--emphasis-tint"), activationBorderColor: t("--emphasis")
+    }
+  });
+
+  /* Pandoc emits ```mermaid blocks as <pre class="mermaid"><code>...</code></pre>
+     with the source entity-encoded. Mermaid 10 reads innerHTML and throws on the
+     <code> tag and the entities, so each block is flattened to one decoded text
+     node first. */
+  function renderMermaid() {
+    document.querySelectorAll("pre.mermaid").forEach(function (el) {
+      if (!el.dataset.mflattened) {
+        el.textContent = el.textContent;
+        el.dataset.mflattened = "1";
+      }
+    });
+    mermaid.run({ querySelector: "pre.mermaid" });
+  }
+  if (document.readyState === "loading") {
+    window.addEventListener("DOMContentLoaded", renderMermaid);
+  } else {
+    renderMermaid();
+  }
+</script>
+
+<!-- The shared document fixes go here, from
+     ~/.claude/skills/shared-assets/doc_fixes.css via
+     shared_assets.resolve_header(). The forge build currently passes
+     fixes=False: their table rule breaks header words mid-letter under the
+     International Style. Do not paste a copy into this file. -->
+
+</head>
+<body>
+<main data-container="Feature document">
+<div class="hero">
+<h1>Architecture: Choice buttons on a
+document</h1>
+
+</div>
+<nav class="toplinks" aria-label="Documents"><span class="toplinks-label">Docs</span><a href="00_crucible_choice_buttons.html">Crucible</a><a href="01_brief_choice_buttons.html">Brief</a><span aria-current="page">Architecture</span><a href="03_plan_choice_buttons.html">Plan</a><a href="04_progress_choice_buttons.md">Progress</a></nav>
+<details class="fold contents" open><summary class="fold-head"><span class="fold-arrow" aria-hidden="true"></span><h2>Contents</h2></summary><div class="fold-body"><nav id="TOC" class="contents-list">
+<ul>
+<li><a href="#summary" id="toc-summary">Summary</a></li>
+<li><a href="#analysis-of-existing-structure"
+id="toc-analysis-of-existing-structure">Analysis of Existing
+Structure</a></li>
+<li><a href="#components--modules-touched"
+id="toc-components--modules-touched">Components / Modules
+Touched</a></li>
+<li><a href="#data--state-changes" id="toc-data--state-changes">Data /
+State Changes</a>
+<ul>
+<li><a href="#the-component-as-the-agent-writes-it"
+id="toc-the-component-as-the-agent-writes-it">The component, as the
+agent writes it</a></li>
+<li><a href="#the-record" id="toc-the-record">The record</a></li>
+<li><a href="#the-anchor-engines-choice-rung"
+id="toc-the-anchor-engines-choice-rung">The anchor engine's choice
+rung</a></li>
+<li><a href="#state-on-the-page" id="toc-state-on-the-page">State on the
+page</a></li>
+<li><a href="#lifecycle" id="toc-lifecycle">Lifecycle</a></li>
+<li><a href="#presses-travel-together-and-what-bounds-the-wakes"
+id="toc-presses-travel-together-and-what-bounds-the-wakes">Presses
+travel together, and what bounds the wakes</a></li>
+<li><a href="#the-drain-line" id="toc-the-drain-line">The drain
+line</a></li>
+<li><a href="#the-script-tag" id="toc-the-script-tag">The script
+tag</a></li>
+<li><a href="#the-gesture" id="toc-the-gesture">The gesture</a></li>
+</ul></li>
+<li><a href="#key-flows" id="toc-key-flows">Key Flows</a>
+<ul>
+<li><a href="#a-press" id="toc-a-press">A press</a></li>
+<li><a href="#refusing-a-group" id="toc-refusing-a-group">Refusing a
+group</a></li>
+</ul></li>
+<li><a href="#alternatives-considered"
+id="toc-alternatives-considered">Alternatives Considered</a></li>
+<li><a href="#failure-modes--edge-cases"
+id="toc-failure-modes--edge-cases">Failure Modes / Edge Cases</a></li>
+<li><a href="#security--privacy-notes"
+id="toc-security--privacy-notes">Security &amp; Privacy Notes</a></li>
+<li><a href="#showing-it-before-the-pr"
+id="toc-showing-it-before-the-pr">Showing it before the PR</a></li>
+<li><a href="#test-strategy" id="toc-test-strategy">Test
+Strategy</a></li>
+<li><a href="#open-questions" id="toc-open-questions">Open
+Questions</a></li>
+<li><a href="#architect-review" id="toc-architect-review">Architect
+Review</a></li>
+<li><a href="#security-review" id="toc-security-review">Security
+Review</a></li>
+<li><a href="#architect-review-round-1"
+id="toc-architect-review-round-1">Architect Review (Round 1)</a>
+<ul>
+<li><a href="#summary-1" id="toc-summary-1">Summary</a></li>
+<li><a href="#1-the-group-id-is-in-the-tools-own-attribute-namespace"
+id="toc-1-the-group-id-is-in-the-tools-own-attribute-namespace">1. The
+group id is in the tool's own attribute namespace</a></li>
+<li><a
+href="#2-the-press-batch-does-not-do-what-the-doc-says-and-the-wake-count-depends-on-something-else"
+id="toc-2-the-press-batch-does-not-do-what-the-doc-says-and-the-wake-count-depends-on-something-else">2.
+The press batch does not do what the doc says, and the wake count
+depends on something else</a></li>
+<li><a href="#3-some-helper-served-pages-never-get-data-lahe-document"
+id="toc-3-some-helper-served-pages-never-get-data-lahe-document">3. Some
+helper-served pages never get <code>data-lahe-document</code></a></li>
+<li><a
+href="#4-a-presss-drain-line-will-carry-the-region-and-the-stamp-and-the-contract-will-ask-for-a-data-lahe-id"
+id="toc-4-a-presss-drain-line-will-carry-the-region-and-the-stamp-and-the-contract-will-ask-for-a-data-lahe-id">4.
+A press's drain line will carry the region and the stamp, and the
+contract will ask for a <code>data-lahe-id</code></a></li>
+<li><a
+href="#5-the-choice-field-its-class-where-the-grammar-is-enforced-and-whether-it-can-carry-prose"
+id="toc-5-the-choice-field-its-class-where-the-grammar-is-enforced-and-whether-it-can-carry-prose">5.
+The <code>choice</code> field: its class, where the grammar is enforced,
+and whether it can carry prose</a></li>
+<li><a
+href="#6-lost-marking-needs-more-than-an-early-return-use-one-rung-in-the-anchor-engine-instead"
+id="toc-6-lost-marking-needs-more-than-an-early-return-use-one-rung-in-the-anchor-engine-instead">6.
+Lost-marking needs more than an early return. Use one rung in the anchor
+engine instead</a></li>
+<li><a
+href="#7-requirement-r4-the-rail-names-a-broken-group-and-why-is-only-half-covered"
+id="toc-7-requirement-r4-the-rail-names-a-broken-group-and-why-is-only-half-covered">7.
+Requirement R4 (the rail names a broken group and why) is only half
+covered</a></li>
+<li><a
+href="#8-requirement-r14-answer-a-press-like-a-comment-including-a-question-needs-a-reply-box-on-the-card"
+id="toc-8-requirement-r14-answer-a-press-like-a-comment-including-a-question-needs-a-reply-box-on-the-card">8.
+Requirement R14 (answer a press like a comment, including a question)
+needs a reply box on the card</a></li>
+<li><a
+href="#9-the-click-path-skips-the-gesture-table-and-read-only-windows-are-not-covered"
+id="toc-9-the-click-path-skips-the-gesture-table-and-read-only-windows-are-not-covered">9.
+The click path skips the gesture table, and read-only windows are not
+covered</a></li>
+<li><a href="#10-which-record-a-groups-state-comes-from"
+id="toc-10-which-record-a-groups-state-comes-from">10. Which record a
+group's state comes from</a></li>
+<li><a href="#11-minting-the-merge-rule-and-the-projection-question-3"
+id="toc-11-minting-the-merge-rule-and-the-projection-question-3">11.
+Minting, the merge rule and the projection (question 3)</a></li>
+<li><a href="#12-load-order-for-choicesjs-question-7"
+id="toc-12-load-order-for-choicesjs-question-7">12. Load order for
+<code>choices.js</code> (question 7)</a></li>
+<li><a href="#13-style-details-the-doc-leaves-open-question-8-style"
+id="toc-13-style-details-the-doc-leaves-open-question-8-style">13. Style
+details the doc leaves open (question 8, style)</a></li>
+<li><a href="#14-files-and-docs-the-component-table-leaves-out"
+id="toc-14-files-and-docs-the-component-table-leaves-out">14. Files and
+docs the component table leaves out</a></li>
+<li><a href="#requirement-sweep" id="toc-requirement-sweep">Requirement
+sweep</a></li>
+<li><a href="#the-eight-questions-answered"
+id="toc-the-eight-questions-answered">The eight questions,
+answered</a></li>
+<li><a href="#to-delete-at-cleanup" id="toc-to-delete-at-cleanup">To
+delete at cleanup</a></li>
+</ul></li>
+</ul>
+</nav></div></details>
+<section class="sheet">
+<div class="sheet-head"><h2 id="summary">Summary</h2><span class="n">Section 1</span></div>
+<p>A choice group is a house component an agent writes into a page as an
+HTML block: a question, two or more real buttons, and a group name the
+agent chooses in <code>data-choice</code>. On a page the helper serves
+itself as a document, the review layer arms those buttons and nothing
+else. A click mints a record of a new kind, <code>choice</code>,
+carrying the group name and the answer, draft and ready in the same
+tick. The anchor engine gains one rung that finds a choice group by its
+name, so replay, lost-marking and "show me where" work on a choice
+unchanged. The helper projects it like any item, the drain prints the
+choice at the top level with only the question and heading under
+<code>page</code>, and the agent answers with the reply command it
+already uses. The layer paints the group's state from the record; the
+agent writes the decision into the source as <code>data-chosen</code>
+when it handles the item, so the document keeps the decision with no
+Lahe running. No new routes, tokens, lifecycle states or processes.</p>
+</section>
+<section class="sheet">
+<div class="sheet-head"><h2 id="analysis-of-existing-structure">Analysis of Existing
+Structure</h2><span class="n">Section 2</span></div>
+<ul>
+<li><strong>Records.</strong> <code>src/shared/record.js</code> holds
+the closed list of kinds and <code>newItem</code>, plus
+<code>validateItem</code>, the checker the helper's door runs. Free
+writing added <code>note</code> and optional fields; this adds
+<code>choice</code> the same way. The lifecycle table is untouched.</li>
+<li><strong>Minting and sending.</strong>
+<code>src/layer/comments.js</code> mints a draft and marks it ready;
+<code>src/layer/sync.js</code> queues <code>item.created</code> and
+<code>item.ready</code> and flushes the outbox, holding drafts back in
+<code>splitForFloor</code>. A press uses the same two events and a new
+hold in that same function.</li>
+<li><strong>Finding the region.</strong>
+<code>src/layer/anchor.js</code> <code>resolve</code> has one rung keyed
+on the record (the empty-container rung, keyed on
+<code>placement</code>). The choice rung is keyed on <code>kind</code>
+and sits beside it.</li>
+<li><strong>Waking the agent.</strong> The helper writes one wake line
+per accepted <code>item.ready</code>. Every supported host waits with
+<code>lahe monitor</code>, which polls <code>lahe status</code> every 15
+seconds and exits once on the first poll that finds undelivered work. So
+a post carrying several presses is one wake, and the wake count during a
+clicking session is one per agent work cycle, whatever the layer
+does.</li>
+<li><strong>The drain.</strong> <code>src/cli/commands/status.js</code>
+moves <code>review_format.DATA_FIELDS</code> under <code>page</code> and
+leaves intent at the top. A choice adds one top-level field.</li>
+<li><strong>The rail.</strong> <code>src/layer/tab_active.js</code>
+draws comment and note rows and refuses other kinds. A choice row joins
+it with a fixed answer and the ordinary reply box.</li>
+<li><strong>Clicks.</strong> <code>src/shared/gestures.js</code> decides
+every click on the page; today it names two click rules (the overlay's,
+and element pick). A press is a third.</li>
+<li><strong>Serving.</strong> <code>src/service/page_routes.js</code>
+builds the script tag for every page the helper serves itself, and sends
+a file that already carries this review's tag as it is.
+<code>lahe add</code> and <code>heal.js</code> use the same tag builder
+but write into files.</li>
+<li><strong>The house style and the catalog.</strong>
+<code>vendor/stclair-doc-style/document.css</code> and
+<code>COMPONENTS.md</code> are the official copies;
+<code>scripts/install-skills.js</code> ships the catalog beside the
+skill.</li>
+</ul>
+<p>What stays the same: every route, token and check; the lifecycle
+table; the events.jsonl envelope; the Markdown renderer; the Edits tab;
+the Library; the menu bar.</p>
+</section>
+<section class="sheet">
+<div class="sheet-head"><h2 id="components--modules-touched">Components / Modules Touched</h2><span class="n">Section 3</span></div>
+<div class="scrollx"><table>
+<thead>
+<tr>
+<th>Area</th>
+<th>Files</th>
+<th>Change</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Standing docs</td>
+<td><code>docs/ongoing/ARCHITECTURE.md</code> (done),
+<code>docs/ongoing/BRAND.md</code>,
+<code>docs/ongoing/STYLE_GUIDE.md</code> (its "a choice for the reader
+is option cards" line), <code>docs/CONTRACTS.md</code>,
+<code>docs/diagrams/module_map.md</code>,
+<code>finding_the_region.md</code>, <code>item_lifecycle.md</code></td>
+<td>The sixth kind, D3's exception, the word for the component, the
+record row and the drain line, the new rung, the one new load-order
+entry</td>
+</tr>
+<tr>
+<td>Test harness</td>
+<td><code>test/browser/support/with_layer.js</code>,
+<code>test/helpers/</code></td>
+<td>The tag builder takes the document opt-in so a spec can mount the
+layer as on a served page</td>
+</tr>
+<tr>
+<td>Shared kernel</td>
+<td><code>record.js</code> (kind, field, <code>validateItem</code>,
+<code>isReplayable</code> unchanged), <code>review_format.js</code>
+(field class, <code>projectItem</code>, the copy-and-export text for the
+kind, the contract paragraph), <code>merge.js</code>
+(<code>choice</code> in the browser-owned fields),
+<code>gestures.js</code> (the press outcome, no hint row),
+<code>protocol.js</code> (<code>SCRIPT_ATTR.DOCUMENT</code> and the tag
+builder's opt-in)</td>
+<td></td>
+</tr>
+<tr>
+<td>Layer</td>
+<td>new <code>choices.js</code>, <code>anchor.js</code> (the rung),
+<code>sync.js</code> (the press hold in <code>splitForFloor</code>),
+<code>replay.js</code> (paint state for the kind),
+<code>tab_active.js</code> (the row), <code>tab_done.js</code> (the Done
+row's text for the kind), <code>overlay.js</code> (the kind label and
+the card summary, which shows the answer), <code>index.js</code> (boot
+and the chip)</td>
+<td></td>
+</tr>
+<tr>
+<td>Service</td>
+<td><code>page_routes.js</code> (the attribute, at response time),
+<code>log.js</code> (the door runs the checker for the new field)</td>
+<td></td>
+</tr>
+<tr>
+<td>CLI</td>
+<td><code>status.js</code> (the drain line)</td>
+<td></td>
+</tr>
+<tr>
+<td>House style and catalog</td>
+<td><code>document.css</code>, <code>COMPONENTS.md</code></td>
+<td>The <code>.choice</code> component and its states</td>
+</tr>
+<tr>
+<td>Agent instructions</td>
+<td><code>skills/lahe/SKILL.md</code> (with the skill-creator skill),
+the contract array and its copies in
+<code>test/unit/review_format.test.js</code> and
+<code>docs/CONTRACTS.md</code>, <code>dist/</code></td>
+<td></td>
+</tr>
+<tr>
+<td>Manifest</td>
+<td><code>src/shared/manifest.js</code></td>
+<td><code>choices.js</code> in load order</td>
+</tr>
+</tbody>
+</table></div>
+</section>
+<section class="sheet">
+<div class="sheet-head"><h2 id="data--state-changes">Data / State Changes</h2><span class="n">Section 4</span></div>
+<h3 id="the-component-as-the-agent-writes-it">The component, as the
+agent writes it</h3>
+<pre class="html"><code>&lt;div class=&quot;choice&quot; data-choice=&quot;lesson-css-counter&quot;&gt;
+  &lt;p class=&quot;choice-q&quot;&gt;Promote this lesson?&lt;/p&gt;
+  &lt;button type=&quot;button&quot; value=&quot;promote&quot; data-recommended&gt;Promote&lt;/button&gt;
+  &lt;button type=&quot;button&quot; value=&quot;discard&quot;&gt;Discard&lt;/button&gt;
+  &lt;button type=&quot;button&quot; value=&quot;merge&quot;&gt;Merge&lt;/button&gt;
+&lt;/div&gt;</code></pre>
+<ul>
+<li><code>data-choice</code> is the group name: lowercase letters,
+digits and hyphens, 1 to 32 characters, starting with a letter or digit.
+Unique on the page. It is not under the <code>data-lahe-</code> prefix
+on purpose: the tool strips that prefix from captured markup and from
+the element descriptions agents get, and the group name must survive
+both.</li>
+<li>Each <code>button</code> has a <code>value</code> with the same
+grammar. The button's text is the label the reviewer reads.
+<code>type="button"</code> keeps it out of any form.
+<code>data-recommended</code> marks at most one.</li>
+<li>Once the agent has handled a press, it writes
+<code>data-chosen</code> (no value) onto the chosen <code>button</code>
+in the source. At most one button in a group carries it. The stylesheet
+draws that button as the decision with no Lahe present. It sits on the
+button, not the group, because CSS cannot match a button whose
+<code>value</code> equals an attribute on its parent.</li>
+<li>Look: square-cornered outlined buttons in the document's type, the
+pressed one filled with ink, the Recommended badge
+(<code>badge--purple</code>) drawn by the stylesheet from
+<code>data-recommended</code>. No pills, no colored edges, no
+shadows.</li>
+</ul>
+<p>In Markdown the block is written as HTML with a blank line before and
+after, like every other component.</p>
+<h3 id="the-record">The record</h3>
+<p>One new kind, <code>choice</code>, and one new optional field:</p>
+<pre class="json"><code>{
+  &quot;kind&quot;: &quot;choice&quot;,
+  &quot;state&quot;: &quot;ready&quot;,
+  &quot;note&quot;: null,
+  &quot;change&quot;: null,
+  &quot;choice&quot;: { &quot;group&quot;: &quot;lesson-css-counter&quot;, &quot;answer&quot;: &quot;promote&quot; },
+  &quot;context&quot;: { &quot;quote&quot;: &quot;Promote this lesson?&quot;, &quot;heading&quot;: &quot;A CSS counter ignores an ol start attribute&quot; },
+  &quot;region&quot;: { &quot;ref&quot;: { &quot;kind&quot;: &quot;choice&quot;, &quot;group&quot;: &quot;lesson-css-counter&quot; }, &quot;label&quot;: &quot;choice&quot;, &quot;lost&quot;: null }
+}</code></pre>
+<ul>
+<li><code>choice.group</code> and <code>choice.answer</code> are the
+reviewer's act and the only intent the record carries. Both are bounded
+by the grammar above, so neither can hold prose.
+<code>validateItem</code> refuses a record whose kind is
+<code>choice</code> without both, with a value off the grammar, or with
+any other key inside <code>choice</code>; the helper's door
+(<code>log.js</code>) runs that checker on every posted record, and the
+projection runs it again when it builds review.json.</li>
+<li>The pressed label is not stored. The agent knows its own labels, and
+the rail draws the answer from the group on the page.</li>
+<li><code>context.quote</code> carries the question and
+<code>context.heading</code> the nearest heading, both data.
+<code>context.prefix</code>, <code>suffix</code>, <code>element</code>
+and <code>subject</code> are left null.</li>
+<li>The region's ref is the choice rung's reference: kind and group
+name, nothing else. No stamp is minted for a choice, so no stamp round
+ever asks the agent for a <code>data-lahe-id</code>, and the drain line
+carries no region facts.</li>
+<li>Everything else is the ordinary record: id, rev, page fields,
+thread, reply.</li>
+</ul>
+<h3 id="the-anchor-engines-choice-rung">The anchor engine's choice
+rung</h3>
+<p><code>anchor.resolve</code> gains one rung, keyed on the ref's kind,
+beside the empty-container rung. For a choice ref it looks for elements
+matching <code>.choice[data-choice="&lt;group&gt;"]</code>. Exactly one
+binds. Zero or two is a refusal with its own reason ("no group named X",
+"two groups named X") and the rung stops there: no text search, no
+tie-breakers. Everything downstream (<code>applyRecord</code>,
+<code>markLost</code>, <code>clearLost</code>, "show me where", the
+settle recheck) works unchanged, and a moved group is found wherever it
+is.</p>
+<h3 id="state-on-the-page">State on the page</h3>
+<p><code>replay.js</code> writes nothing for a choice (the kind is not
+in its writing kinds). After it resolves the group it paints two
+attributes, inside a write epoch, from the group's current record:</p>
+<div class="scrollx"><table>
+<thead>
+<tr>
+<th>Attribute</th>
+<th>On</th>
+<th>Values</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>data-lahe-pressed</code></td>
+<td>the pressed <code>button</code></td>
+<td>present</td>
+<td>Which button the reviewer pressed</td>
+</tr>
+<tr>
+<td><code>data-lahe-choice-state</code></td>
+<td>the group</td>
+<td><code>kept</code>, <code>open</code>, <code>question</code>,
+<code>not_handled</code>, <code>done</code></td>
+<td>The rail's own states (brief R9). The stylesheet draws
+<code>not_handled</code> with the word Open, the brand's word for a
+thread the agent has answered no to, since the card says the same; the
+attribute keeps the finer value for tests and for a later look</td>
+</tr>
+</tbody>
+</table></div>
+<p>The current record for a group is the one with the latest
+<code>created_at</code> among this page's choice records naming it. A
+newer press wins over <code>data-chosen</code> in the source: when a
+group holds both a <code>data-chosen</code> button and a
+<code>data-lahe-pressed</code> one, the stylesheet draws the pressed one
+as the answer and the chosen one quiet. <code>data-chosen</code> alone
+draws the same as <code>done</code>. These are DOM only and a rebuild
+clears them; replay's next pass paints them again. A refused group gets
+<code>data-lahe-inert</code> from <code>choices.js</code> at arming
+time.</p>
+<h3 id="lifecycle">Lifecycle</h3>
+<p>No new states. A press mints the item in <code>draft</code> and marks
+it <code>ready</code> in the same tick, queueing
+<code>item.created</code> and <code>item.ready</code> together; the
+helper's door does no state check on these events and the merge on load
+handles a record that was never a typed draft. Pressing another answer
+while the item is <code>ready</code> with no reply is a reword: one
+<code>ready</code> write at the next revision, the way a committed
+comment's rewording lands (the browser never shows a draft in between,
+since there is nothing to type). After a <code>not_handled</code> reply,
+a new press on the same group reopens the same record
+(<code>not_handled</code> to <code>ready</code>, a reviewer move the
+table already allows) at a new revision. After <code>handled</code>, a
+new press mints a new item. Mark as done, reopen and delete work as for
+a comment. <code>merge.js</code> lists <code>choice</code> among the
+browser-owned content fields.</p>
+<h3 id="presses-travel-together-and-what-bounds-the-wakes">Presses
+travel together, and what bounds the wakes</h3>
+<p><code>choices.js</code> records a press with no immediate flush.
+<code>splitForFloor</code> holds every queued event of a choice item
+until 3 seconds have passed since the page's last press, with a cap of
+10 seconds from the first held press so steady clicking cannot hold work
+back for minutes. Hiding the tab or leaving the page flushes at once, as
+the draft floor does. Hold's gate stays in force.</p>
+<p>The helper still writes one wake line per accepted
+<code>item.ready</code>. That does not matter on any supported host:
+<code>lahe monitor</code> polls every 15 seconds and exits once on the
+first poll that finds undelivered work, so one post of several presses
+is one wake, and a clicking session costs about one wake per agent work
+cycle. R13's bound is this monitor behaviour plus the 3 second hold; the
+R15 measurement runs at a realistic reading pace and reports the wake
+count. Making the monitor itself wait for a quiet spell would cover
+comments too and is a change to a shared loop, so it goes on the board
+for Ken rather than into this feature.</p>
+<p>While a press is held it is <code>kept</code> on the page. The rail's
+own not-stored warning is driven by the helper being unreachable, not by
+the hold, so a held press does not read as a program-down warning; the
+plan checks that.</p>
+<h3 id="the-drain-line">The drain line</h3>
+<pre class="json"><code>{&quot;review&quot;:&quot;r…&quot;,&quot;id&quot;:&quot;itm_…&quot;,&quot;rev&quot;:1,&quot;kind&quot;:&quot;choice&quot;,&quot;state&quot;:&quot;ready&quot;,
+ &quot;choice&quot;:{&quot;group&quot;:&quot;lesson-css-counter&quot;,&quot;answer&quot;:&quot;promote&quot;},
+ &quot;page&quot;:{&quot;path&quot;:&quot;/02_lesson_queue.md&quot;,&quot;quote&quot;:&quot;Promote this lesson?&quot;,
+         &quot;context&quot;:{&quot;heading&quot;:&quot;A CSS counter ignores an ol start attribute&quot;}}}</code></pre>
+<p><code>choice</code> is classed as intent by key:
+<code>choice.group</code> and <code>choice.answer</code> each get
+<code>CLASS_INSTRUCTION</code> in <code>PROJECTED_FIELD_CLASS</code>. No
+<code>before</code>, <code>after_full</code>, <code>region</code>,
+<code>region_label</code>, <code>subject</code> or html fields appear;
+<code>projectItem</code> leaves them null for the kind and the drain's
+lean pass drops them.</p>
+<h3 id="the-script-tag">The script tag</h3>
+<p>One new attribute, <code>data-lahe-document</code>, is added by
+<code>page_routes.js</code> when it builds the response for a page it
+serves itself: rendered Markdown, an HTML page under a site root, a
+<code>lahe write</code> page, and a file that already carries this
+review's tag (the attribute is added to the served copy, never written
+to disk). It is an opt-in on the tag builder that <code>add.js</code>
+and <code>heal.js</code> never pass. The layer arms choice groups only
+when its tag carries it.</p>
+<h3 id="the-gesture">The gesture</h3>
+<p><code>gestures.js</code> gains <code>PRESS_CHOICE</code> in the
+gesture vocabulary and in the deciding function: a click on a
+<code>button</code> inside an armed <code>.choice</code>, on a document
+page, in browse mode, outside element-pick mode, with no block open for
+editing, in a window that may write, and not in present mode. It calls
+<code>preventDefault</code> so no form is submitted. It gets no row in
+the hint table: every table row becomes a hint line on every page's
+rail, and a page with no groups must stay unchanged (brief R3). The
+hint-count tests change on purpose to say so. In every other case the
+click is the page's, and on a document page a plain button does nothing
+anyway.</p>
+</section>
+<section class="sheet">
+<div class="sheet-head"><h2 id="key-flows">Key Flows</h2><span class="n">Section 5</span></div>
+<h3 id="a-press">A press</h3>
+<pre class="mermaid"><code>flowchart TD
+  A[Layer boots on a page whose tag carries data-lahe-document] --&gt; B[choices.js arms every .choice with a valid unique name and valid values; the rest get data-lahe-inert and a chip]
+  B --&gt; C[Reviewer clicks an answer; gestures says PRESS_CHOICE]
+  C --&gt; D[Mint a choice record in draft and mark it ready in the same tick]
+  D --&gt; E[Replay resolves the group by the choice rung and paints pressed and kept]
+  E --&gt; F[splitForFloor holds it 3 s after the last press, 10 s at most; one flush posts the batch]
+  F --&gt; G[Helper accepts, projects, writes wake lines; the monitor wakes once]
+  G --&gt; H[Drain prints each item with choice at the top]
+  H --&gt; I[Agent acts, writes data-chosen into the source, replies handled]
+  I --&gt; J[Page reloads on the rebuild; the group carries data-chosen and replay paints done from the handled record]</code></pre>
+<h3 id="refusing-a-group">Refusing a group</h3>
+<pre class="mermaid"><code>flowchart TD
+  S([a .choice element]) --&gt; T{tag carries data-lahe-document?}
+  T -- no --&gt; I[untouched: nothing written, no chip; not a document page]
+  T -- yes --&gt; U{name present and well formed?}
+  U -- no --&gt; C1[inert; chip: group has no valid name]
+  U -- yes --&gt; V{exactly one group with this name?}
+  V -- no --&gt; C2[both inert; chip names the duplicate]
+  V -- yes --&gt; X{two or more buttons, every value well formed?}
+  X -- no --&gt; C3[inert; chip names the group and the bad value]
+  X -- yes --&gt; Z{two buttons share a value,&lt;br/&gt;or two carry data-chosen?}
+  Z -- yes --&gt; C4[inert; chip names the group and the reason]
+  Z -- no --&gt; Y[armed]</code></pre>
+</section>
+<section class="sheet">
+<div class="sheet-head"><h2 id="alternatives-considered">Alternatives Considered</h2><span class="n">Section 6</span></div>
+<p>Each entry names what was chosen, what was rejected, and why. Read
+this before deviating.</p>
+<ul>
+<li><strong>A <code>choice</code> field, not words in
+<code>note</code>.</strong> A press could have been a comment whose note
+reads "promote". Rejected: <code>note</code> is free text, the agent
+would parse it, and the identity would ride on the anchor. The
+<code>choice</code> field is two bounded tokens the agent reads as data,
+and the group name is the agent's own.</li>
+<li><strong><code>data-choice</code>, not
+<code>data-lahe-choice</code>.</strong> The tool strips every
+<code>data-lahe-</code> attribute from captured markup and from the
+element descriptions agents get, so a group name under that prefix would
+vanish from an edit made near it. The layer's own state attributes stay
+under <code>data-lahe-</code> for exactly that reason: they are the
+tool's, not the document's.</li>
+<li><strong>An explicit <code>data-lahe-document</code> attribute, not
+inference from the script src.</strong> The layer could tell a
+helper-served page by whether the tag's src is the library path on the
+page's own origin. Rejected: an inference from a URL shape is a rule
+nobody can read, and a serving change would silently flip it. One
+attribute the helper adds to its own responses is testable and
+visible.</li>
+<li><strong>A rung in the anchor engine, not a separate re-mark
+pass.</strong> A pass of its own would have to re-implement lost-marking
+(the persisted <code>region.lost</code>, the card badge, and clearing
+both), which is where the 2026-08-17 stuck-badge bug came from. One rung
+keyed on the record's kind keeps D9 in one engine, and replay,
+lost-marking and "show me where" work unchanged.</li>
+<li><strong>The agent writes the decision into the source; the layer
+only paints the DOM.</strong> The layer could write
+<code>data-chosen</code> into the page itself, but a rebuild drops it.
+Having the agent carry it into the source is the same move the stamp
+round makes with <code>data-lahe-id</code>, keeps the record as the
+truth, and lets a page show its decisions with no Lahe present (the one
+thing worth taking from the checkbox approach).</li>
+<li><strong>The hold in <code>splitForFloor</code>, not a timer in
+<code>choices.js</code>.</strong> The outbox is flushed by the poll loop
+about once a second and <code>scheduleFlush</code> never pushes an armed
+timer back, so a sliding window built from timers would not hold. The
+one place that already holds events back is <code>splitForFloor</code>,
+and a cap keeps steady clicking from holding work for minutes, as the
+draft floor's spec required.</li>
+<li><strong>Accept the wake count and measure it, rather than change the
+monitor.</strong> The monitor polls every 15 seconds and exits on the
+first poll with new work, so a batch is one wake and a clicking session
+is one wake per agent cycle. A quiet spell in the monitor would bound it
+further and would cover comments too, but it changes a loop every host
+shares; that is Ken's call and it is on the board.</li>
+<li><strong>No new lifecycle state.</strong> A "pressed" state was
+considered. Rejected: a press is a draft that is ready in the same tick,
+which the table already allows, and the reword and reopen paths already
+model changing one's mind.</li>
+<li><strong>A raw HTML block, not a Markdown shorthand.</strong> A
+fenced <code>::: choice</code> block the renderer turns into the
+component would be shorter to write. Rejected for now: marked passes
+HTML through already, the same block works on an agent's HTML page, and
+the renderer stays untouched. A shorthand can be added later without
+changing the record.</li>
+<li><strong>Real <code>button</code> elements, not styled divs.</strong>
+Keyboard, focus ring and screen readers come free.
+<code>type="button"</code> keeps them out of any form.</li>
+<li><strong>Approach A (a button that posts a comment) and approach C
+(task-list checkboxes)</strong> were rejected in <a
+href="../../00_crucible_choice_buttons.md">the crucible</a>: A fails on
+repeated buttons, C is Markdown-only and not exclusive.</li>
+</ul>
+<p>The leaf is <a
+href="parts/architecture/alternatives.md">parts/architecture/alternatives.md</a>.</p>
+</section>
+<section class="sheet">
+<div class="sheet-head"><h2 id="failure-modes--edge-cases">Failure Modes / Edge Cases</h2><span class="n">Section 7</span></div>
+<ul>
+<li><strong>Helper down at the press.</strong> The record is in browser
+storage and the outbox like any item. The group shows <code>kept</code>;
+the card shows the rail's not-stored mark because the helper is
+unreachable, which is true. It sends when the helper is back.</li>
+<li><strong>A group moved by a rebuild.</strong> The rung finds it by
+name wherever it is, so its state follows it.</li>
+<li><strong>The group is gone while the item is ready.</strong> The rung
+refuses, <code>markLost</code> runs as for any record, and the card says
+the group is gone. The item stays on the drain.</li>
+<li><strong>The group is gone after the item is handled.</strong> A
+handled item is never stamped lost; nothing is painted.</li>
+<li><strong>The agent handles the item but forgets
+<code>data-chosen</code>.</strong> The page shows <code>done</code>
+while the record exists. A reader with no Lahe sees an undecided group.
+The skill names the write-back as part of handling, and the contract
+says a handled reply without it is incomplete, as it does for a missing
+<code>data-lahe-id</code>.</li>
+<li><strong>A press on a decided group.</strong> A new item at rev 1;
+the newer press paints over <code>data-chosen</code> until the agent
+answers.</li>
+<li><strong>Two quick presses on one group.</strong> A reword at rev 2
+inside the same hold; one flush, the drain shows only the latest.
+Pressing the same answer again while the press waits, or while the agent
+has asked a question, does nothing.</li>
+<li><strong>A reviewer's words on a choice thread.</strong> The card
+keeps the ordinary reply box. Words typed there go in <code>note</code>
+on the same record as a follow-up turn; the choice itself does not
+change.</li>
+<li><strong>A group inside a <code>lahe add</code> page, or any page
+without the attribute.</strong> Untouched: no attribute is written on it
+and no chip is raised; the page's own scripts see the click. D3 holds in
+full.</li>
+<li><strong>Element-pick mode, an open edit, a read-only window, present
+mode.</strong> The click is not a press; the gesture table says so.</li>
+<li><strong>Keyboard.</strong> Real buttons: Enter and Space press them;
+the house focus ring applies.</li>
+<li><strong>Print.</strong> A decided group prints its decision because
+the stylesheet draws <code>data-chosen</code>.</li>
+<li><strong>Old skill, new helper.</strong> An agent on a stale skill
+sees <code>kind: choice</code> with a <code>choice</code> field it was
+not told about. The contract paragraph ships in the same change, and
+review.json's contract is what it reads first.</li>
+</ul>
+</section>
+<section class="sheet">
+<div class="sheet-head"><h2 id="security--privacy-notes">Security &amp; Privacy Notes</h2><span class="n">Section 8</span></div>
+<ul>
+<li><strong>What the layer claims.</strong> Only a
+<code>PRESS_CHOICE</code> gesture: a click on a <code>button</code>
+inside an armed <code>.choice</code> on a page whose tag carries
+<code>data-lahe-document</code>, in browse mode. The helper alone writes
+that attribute, onto responses for pages it serves itself. A dev-server
+page never gets it.</li>
+<li><strong>What reaches the agent as intent.</strong>
+<code>choice.group</code> and <code>choice.answer</code>: bounded
+tokens, checked at the helper's door and again at projection, so a page
+cannot smuggle prose through the intent field. The question and heading
+are page text under <code>page</code> (D12).</li>
+<li><strong>The source write-back.</strong> The agent edits its own
+source, as it does for <code>data-lahe-id</code>. No new path, token or
+route.</li>
+<li><strong>No new trust boundary.</strong> No route, no token, no
+header, no process. events.jsonl gains a kind, not a shape.</li>
+</ul>
+</section>
+<section class="sheet">
+<div class="sheet-head"><h2 id="showing-it-before-the-pr">Showing it before the PR</h2><span class="n">Section 9</span></div>
+<p>The lesson-queue preview (brief R19) cannot work by copying the
+bundle into main's <code>dist/</code>, because this feature changes the
+helper too (the tag attribute, the door check, the drain line). The
+preview runs the branch's own helper from the feature worktree on
+another port, with its own state folder copied from Ken's with the
+recorded pids neutralized, serving the rebuilt lesson queue; a press on
+it must appear in that helper's drain as a choice item. That is the pass
+bar, with a screenshot beside it.</p>
+</section>
+<section class="sheet">
+<div class="sheet-head"><h2 id="test-strategy">Test Strategy</h2><span class="n">Section 10</span></div>
+<p>The plan owns the verification table. The failure modes above, the
+refusal flow and the architect review's requirement sweep are its
+inputs. The R15 measurement is a script in the feature folder after
+<code>docs/features/20261014.02_lean_agent_output/measure_one_comment.js</code>,
+run at a reading pace, reporting drain size and wake count.</p>
+</section>
+<section class="sheet">
+<div class="sheet-head"><h2 id="open-questions">Open Questions</h2><span class="n">Section 11</span></div>
+<p>None. The brief's questions leaf is <a
+href="parts/brief/questions.md">parts/brief/questions.md</a>. The one
+call this review handed to Ken (a quiet spell in the monitor) goes on
+the board as a follow-up, not into this feature.</p>
+</section>
+<section class="sheet">
+<div class="sheet-head"><h2 id="architect-review">Architect Review</h2><span class="n">Section 12</span></div>
+<p>Full prose: <a
+href="02_architecture_choice_buttons_reviews.md">02_architecture_choice_buttons_reviews.md</a>.</p>
+<div class="scrollx"><table>
+<thead>
+<tr>
+<th>#</th>
+<th>Finding</th>
+<th>Disposition</th>
+<th>Rationale</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>RF1</td>
+<td>The group attribute sat in the <code>data-lahe</code> namespace the
+tool strips from captured markup</td>
+<td><span class="status-dot status-dot--sage">Accepted</span></td>
+<td>Renamed <code>data-choice</code>; only the layer's state attributes
+stay under <code>data-lahe-</code></td>
+</tr>
+<tr>
+<td>RF2</td>
+<td>The helper writes one wake line per press; the monitor's 15 s poll
+is what bounds wakes; the poll loop would defeat a timer window</td>
+<td><span class="status-dot status-dot--sage">Accepted</span></td>
+<td>Mechanism restated; the hold lives in <code>splitForFloor</code>
+with a 10 s cap; wakes measured in R15; a monitor quiet spell goes to
+the board for Ken</td>
+</tr>
+<tr>
+<td>RF3</td>
+<td>A served file already carrying the tag never got the attribute</td>
+<td><span class="status-dot status-dot--sage">Accepted</span></td>
+<td>Added at response time as an opt-in <code>add.js</code> and
+<code>heal.js</code> never pass</td>
+</tr>
+<tr>
+<td>RF4</td>
+<td>A choice would be stamped and its drain line would carry region
+facts</td>
+<td><span class="status-dot status-dot--sage">Accepted</span></td>
+<td>No stamp; region ref is the rung's own; drain carries only the
+question and heading</td>
+</tr>
+<tr>
+<td>RF5</td>
+<td><code>choice.label</code> was page text classed as intent; grammar
+checked only in the browser</td>
+<td><span class="status-dot status-dot--sage">Accepted</span></td>
+<td>Label dropped; <code>group</code> and <code>answer</code> classed by
+key; checked at the door and at projection; limit 32</td>
+</tr>
+<tr>
+<td>RF6</td>
+<td>A separate re-mark pass would rebuild lost-marking by hand</td>
+<td><span class="status-dot status-dot--sage">Accepted</span></td>
+<td>One rung in <code>anchor.resolve</code>; replay paints state and
+writes nothing</td>
+</tr>
+<tr>
+<td>RF7</td>
+<td>Only duplicates raised the chip</td>
+<td><span class="status-dot status-dot--sage">Accepted</span></td>
+<td>Every refusal on a document page raises the chip with its
+reason</td>
+</tr>
+<tr>
+<td>RF8</td>
+<td>A read-only card blocked answering an agent's question</td>
+<td><span class="status-dot status-dot--sage">Accepted</span></td>
+<td>Only the answer is fixed; the reply box stays and its words go in
+<code>note</code></td>
+</tr>
+<tr>
+<td>RF9</td>
+<td>The click bypassed the gesture table</td>
+<td><span class="status-dot status-dot--sage">Accepted</span></td>
+<td><code>PRESS_CHOICE</code> in <code>gestures.js</code>, off in pick,
+edit, read-only and present</td>
+</tr>
+<tr>
+<td>RF10</td>
+<td>"Newest revision first" picked the wrong record; a press after
+<code>not_handled</code> left the old card open</td>
+<td><span class="status-dot status-dot--sage">Accepted</span></td>
+<td>Latest <code>created_at</code>; a press after
+<code>not_handled</code> reopens the same record</td>
+</tr>
+<tr>
+<td>RF11</td>
+<td><code>choice</code> missing from the merge rule's browser-owned
+fields</td>
+<td><span class="status-dot status-dot--sage">Accepted</span></td>
+<td>Added</td>
+</tr>
+<tr>
+<td>RF12</td>
+<td>The load-order note named the wrong dependency</td>
+<td><span class="status-dot status-dot--sage">Accepted</span></td>
+<td>After the shared files, listeners, store, anchor, overlay and sync;
+before <code>index.js</code></td>
+</tr>
+<tr>
+<td>RF13</td>
+<td>Look and the newer-press-wins rule were unstated</td>
+<td><span class="status-dot status-dot--sage">Accepted</span></td>
+<td>Stated under the component and the state table</td>
+</tr>
+<tr>
+<td>RF14</td>
+<td>The files table missed ten files and listed
+<code>markdown.js</code></td>
+<td><span class="status-dot status-dot--sage">Accepted</span></td>
+<td>Table corrected</td>
+</tr>
+<tr>
+<td>PR3</td>
+<td>From the plan review: CSS cannot match a button from a value on its
+group</td>
+<td><span class="status-dot status-dot--sage">Accepted</span></td>
+<td><code>data-chosen</code> and <code>data-lahe-pressed</code> live on
+the button; the state stays on the group</td>
+</tr>
+<tr>
+<td>PR4</td>
+<td>From the plan review: a bundle-only preview cannot show a feature
+that changes the helper</td>
+<td><span class="status-dot status-dot--sage">Accepted</span></td>
+<td>"Showing it before the PR": the branch's helper on another port
+against a copied state folder</td>
+</tr>
+<tr>
+<td>PR10</td>
+<td>From the plan review: <code>tab_done.js</code>,
+<code>overlay.js</code> labels, the export text, the style guide line
+and the harness were unowned</td>
+<td><span class="status-dot status-dot--sage">Accepted</span></td>
+<td>Added to the files table</td>
+</tr>
+<tr>
+<td>PR11</td>
+<td>From the plan review: a hint-table row would put a new hint on every
+page</td>
+<td><span class="status-dot status-dot--sage">Accepted</span></td>
+<td><code>PRESS_CHOICE</code> is in the vocabulary and the deciding
+function, with no table row</td>
+</tr>
+</tbody>
+</table></div>
+</section>
+<section class="sheet">
+<div class="sheet-head"><h2 id="security-review">Security Review</h2><span class="n">Section 13</span></div>
+<p>Not run separately. The diff touches no route, token, path or serving
+rule; the one serving change is an attribute on a tag the helper already
+writes. The code review covers the click gate and the field grammar at
+both checkpoints.</p>
+<hr class="reviews-divider">
+
+<div class="reviews-banner">
+<p>The sections below are the full verbatim persona + human reviews for
+this document. They live in a separate <code>_reviews.md</code> file (so
+agents read the lean spec), merged here for review.</p>
+</div>
+</section>
+<section class="sheet">
+<div class="sheet-head"><h2 id="architect-review-round-1">Architect Review (Round 1)</h2><span class="n">Section 14</span></div>
+<p>Reviewer: review-architect. Read against the brief (R1 to R19),
+<code>docs/ongoing/ARCHITECTURE.md</code>,
+<code>docs/CONTRACTS.md</code>, the diagrams named in the task,
+<code>docs/ongoing/OUTBOX_COALESCING.md</code>, and the code at the
+lines cited below. Nothing in the architecture or the brief was
+edited.</p>
+<h3 id="summary-1">Summary</h3>
+<p>The shape is right: a new kind, no new state, no new route, the agent
+writes the decision into its own source. Fourteen findings follow. The
+first one should be fixed before anything is built. It changes the
+attribute agents write into their pages, so fixing it later breaks every
+page already written.</p>
+<ul>
+<li>The group id attribute, <code>data-lahe-choice</code>, sits in the
+prefix the code strips as the tool's own markup. Edits and comments near
+a group lose the id.</li>
+<li>The press batch does not work the way the doc says. The helper
+writes one wake line per press, not one per flush. What actually wakes
+an agent is <code>lahe monitor</code>, which polls every 15 seconds. And
+the 3 second window, as described, would be bypassed by the poll loop's
+flush.</li>
+<li>A helper-served page whose file already carries this review's script
+tag is served with that tag as it is. That page never gets
+<code>data-lahe-document</code>, so its groups stay inert.</li>
+<li>A press's drain line would carry the region facts and the stamp. The
+contract then tells the agent to write a <code>data-lahe-id</code> into
+an HTML source.</li>
+<li>The <code>choice</code> field's class and its "cannot carry prose"
+claim need enforcing in more places than the doc lists.</li>
+<li>Replay, lost-marking and "show me where" are simpler with one new
+rung in the anchor engine than with an early return plus a separate
+pass.</li>
+</ul>
+<p>Answers to the eight questions asked are folded into the findings and
+collected at the end.</p>
+<hr />
+<h3 id="1-the-group-id-is-in-the-tools-own-attribute-namespace">1. The
+group id is in the tool's own attribute namespace</h3>
+<pre><code>severity   blocker
+kind       defect
+where      src/shared/markers.js:29 (TOOL_ATTR_PREFIX = &quot;data-lahe&quot;), :88 isToolAttrName;
+           src/shared/normalize.js:435 cleanAttrs; src/layer/anchor.js:1473 openingTagOf;
+           architecture &quot;The component, as the agent writes it&quot;
+what       Every attribute starting with data-lahe is stripped on capture and left out of a
+           subject&#39;s opening tag, and data-lahe-choice starts with it.
+why        A hand edit inside or around a group captures before_html and after_html without
+           the id, so an agent that writes the markup back drops the group&#39;s identity from the
+           source. The group then goes inert and its press goes lost. A comment on a group
+           shows the agent &lt;div class=&quot;choice&quot;&gt; with no id, so nineteen look identical.
+fix        Name the authored attribute outside the data-lahe prefix (for example data-choice,
+           beside data-chosen and data-recommended, which are already outside it). Keep the
+           layer&#39;s own state attributes (pressed, state, inert) inside the prefix, because
+           those should be stripped.</code></pre>
+<p>The code treats the prefix as "never content".
+<code>markers.js</code> says so at line 27: "Every attribute starting
+with this prefix is stripped on capture." <code>data-lahe-id</code>
+lives there on purpose, and the contract says "the attribute is not
+content." An id the agent writes is content. This is a blocker only
+because the name goes into the skill, the catalog and the contract, and
+agents start writing it into documents the day it ships.</p>
+<h3
+id="2-the-press-batch-does-not-do-what-the-doc-says-and-the-wake-count-depends-on-something-else">2.
+The press batch does not do what the doc says, and the wake count
+depends on something else</h3>
+<pre><code>severity   important
+kind       defect
+where      architecture &quot;Presses travel together&quot;; src/service/routes.js:543-583
+           (appendWakeLines); src/service/wake_feed.js:129 appendWork;
+           src/cli/commands/monitor.js:473-590; src/shared/protocol.js:1811 (INTERVAL_SECONDS: 15);
+           src/layer/sync.js:1943 splitForFloor, :2328 scheduleFlush, :2630 poll flush,
+           :1838-1849 recordItem immediate
+what       The helper writes one wake line per item.ready, not one per flush, and the window
+           as described would be skipped by the poll loop&#39;s flush.
+why        Three separate problems. (a) The design&#39;s stated mechanism is false. (b) Every
+           supported host wakes through lahe monitor, which ignores the wake feed and polls
+           lahe status every 15 seconds, so the window is not what decides the wake count.
+           (c) A ready item is never held by today&#39;s flush, so the window would not hold.
+fix        Restate the mechanism, move the window into splitForFloor, and say what really
+           bounds the wake count for R13 (presses close together wake the agent once).</code></pre>
+<p>What the helper does: <code>routes.js</code>
+<code>appendWakeLines</code> loops over the posted events and calls
+<code>wake.appendWork</code> once for every accepted
+<code>item.ready</code> (lines 559-581). The feed dedupes on (review,
+item, rev). Nineteen presses in one post become nineteen lines. The
+contract text in <code>review_format.js:97</code> says the same: one
+line "when a ready item lands".</p>
+<p>Why that mostly does not matter: Claude Code, Codex and Antigravity
+all run <code>lahe monitor</code>. The monitor runs
+<code>lahe status</code> every
+<code>protocol.MONITOR.INTERVAL_SECONDS</code> (15). It exits once,
+printing one line, at the first poll that finds any item it has not
+delivered (<code>monitor.js:534-590</code>). So nineteen lines in one
+post are one wake on every supported host. Only a raw
+<code>tail -f</code> of <code>wake.log</code> would see nineteen, and
+the skill steers no host to that. Nothing in the helper needs to change.
+The doc's sentence does.</p>
+<p>What actually bounds the wake count: once the agent wakes, it drains,
+works, and relaunches the monitor. The relaunched monitor's first poll
+exits at once on any press that landed meanwhile. So the count is
+roughly one wake per agent work cycle during the time Ken is clicking.
+The 3 second window only merges presses made under 3 seconds apart. If
+Ken reads each lesson before pressing, most presses are more than 3
+seconds apart, and the queue costs one wake per agent cycle whatever the
+window does. R13's "never nineteen" is then not guaranteed by anything
+in this design. The design should say this plainly, and pick one of
+these:</p>
+<ul>
+<li>accept it and measure it in the R15 (presses cheaper than comments)
+script at a realistic reading pace</li>
+<li>point at Hold, which already exists for exactly this (the reviewer
+holds, clicks, releases, and the release flush is one post)</li>
+<li>or settle in the monitor (when it sees fresh work, wait for a short
+quiet spell before exiting, with a cap). That covers comments too. It is
+a change to a shared loop, so it would be a decision for Ken.</li>
+</ul>
+<p>Why the window as written would not hold: <code>splitForFloor</code>
+holds an item back only when every queued event for it is a draft (lines
+1932-1962). A press queues <code>item.created</code> plus
+<code>item.ready</code>, so it goes whole on the next flush. The poll
+loop calls <code>flush()</code> whenever anything is pending (line
+2630), about once a second. And <code>recordItem</code> with
+<code>immediate: "ready"</code> schedules a flush at 0 (line 1849),
+which is the path <code>comments.markReady</code> takes through
+<code>emit(next, "ready")</code>. Also, <code>scheduleFlush</code> keeps
+the earliest deadline and never pushes an armed timer back (lines
+2320-2335), so a sliding quiet window cannot be built from timers. The
+fix:</p>
+<ul>
+<li>keep a page-wide "last press at" in sync</li>
+<li>hold choice items in <code>splitForFloor</code> until 3 seconds
+after it, so the poll loop cannot get round it</li>
+<li>add a cap so steady clicking cannot hold presses back for minutes.
+The draft floor's spec rejected a deadline that typing can keep pushing
+back, for the same reason.</li>
+<li>name the call <code>choices.js</code> makes: <code>recordItem</code>
+with no <code>immediate</code></li>
+<li>keep Hold's gate in force (no <code>force</code> on this path)</li>
+</ul>
+<p>Last, the window delays R5 (the click sends the press at once) by at
+least 3 seconds. During that time every press shows <code>kept</code>,
+the rail's "not stored yet" state. That is true, but it is the state the
+rail uses to warn that the program is down, so the plan should check the
+rail does not read as a warning on every press.</p>
+<h3 id="3-some-helper-served-pages-never-get-data-lahe-document">3. Some
+helper-served pages never get <code>data-lahe-document</code></h3>
+<pre><code>severity   important
+kind       defect
+where      src/service/page_routes.js:115-141 injectForMatch, :1885 serveHtmlPage,
+           :1904 serveMarkdown; src/cli/commands/add.js:1433, :1491-1494; src/service/heal.js:201;
+           architecture &quot;The script tag&quot;
+what       injectForMatch returns null and serves the file untouched when the HTML already
+           carries this review&#39;s tag, so that page never gets the new attribute.
+why        A page that was once lahe add-ed (its tag still on disk, which add.js prints a
+           line about) and is now served by the helper has inert groups on a document page,
+           which breaks R11 (helper-served pages carry live groups).
+fix        Decide the attribute where the response is built, not where a tag is built: when
+           injectForMatch finds this review&#39;s tag already in the file, add the attribute to
+           that tag in the response (never on disk). Make the scriptTag option opt-in
+           (document: true), passed only by injectForMatch, with a unit test that add.js and
+           heal.js tags never carry it.</code></pre>
+<p>On question 6: <code>protocol.scriptTag</code> has three callers. One
+is <code>page_routes.injectForMatch</code> (line 127), which covers
+rendered Markdown, HTML in a site root, linked
+<code>/.lahe-source/</code> pages and <code>lahe write</code> pages. The
+other two are <code>add.js</code> (line 1433) and <code>heal.js</code>
+(line 201), and both write the tag into a file. <code>lahe add</code>
+goes through the same builder, so the option must default off. The
+read-only paths (<code>serveElsewhere</code>, line 2048, and
+<code>serveGone</code>, line 2107) strip the tag and serve no layer, so
+their groups are plain buttons. That is correct.
+<code>static_servers.js</code> no longer injects anything.
+<code>markdown.js</code> writes no tag at all: it renders, and
+<code>serveMarkdown</code> injects. So the component table's
+"markdown.js (the tag only)" row should go.</p>
+<h3
+id="4-a-presss-drain-line-will-carry-the-region-and-the-stamp-and-the-contract-will-ask-for-a-data-lahe-id">4.
+A press's drain line will carry the region and the stamp, and the
+contract will ask for a <code>data-lahe-id</code></h3>
+<pre><code>severity   important
+kind       defect
+where      src/layer/anchor.js:1172 (mint stamps the element via stampFor, :869);
+           src/layer/comments.js:1300-1307 (openBox copies prefix, suffix and subject);
+           src/shared/review_format.js:73 (contract: write the stamp into the source),
+           :763 regionFacts; architecture &quot;The drain line&quot;
+what       Minting an element anchor writes a data-lahe-id onto the group, and projectItem
+           always emits region facts. The drain example claims &quot;no region&quot;.
+why        On an HTML page, region.stamp_carriable is true, and the contract tells the
+           agent to write that data-lahe-id into the source. That is work and tokens for an
+           element that already has an id the agent wrote. If choices.js reuses openBox&#39;s
+           context code, prefix and suffix (up to 400 characters each) and the subject&#39;s
+           opening tag ride on every press too. Both work against R15 (presses cheaper than
+           comments).
+fix        Mint the choice&#39;s region without a stamp (or drop it for this kind). Have
+           projectItem emit region: null and subject: null for a choice. Fill context with
+           quote and heading only. Make the drain example a test.</code></pre>
+<h3
+id="5-the-choice-field-its-class-where-the-grammar-is-enforced-and-whether-it-can-carry-prose">5.
+The <code>choice</code> field: its class, where the grammar is enforced,
+and whether it can carry prose</h3>
+<pre><code>severity   important
+kind       risk
+where      src/shared/review_format.js:172 INTENT_FIELDS, :207 PROJECTED_FIELD_CLASS,
+           :584 projectItem (a whitelist); src/shared/record.js:219 INTENT_FIELDS (a second
+           copy), :2370 validateItem; src/service/log.js:530 (the door checks validateRun
+           only); test/unit/record_lifecycle.test.js:336 and review_format.test.js:220,240
+           pin [&quot;note&quot;,&quot;change&quot;]
+what       The design calls choice an intent field, but choice.label is page text inside
+           it. The grammar is checked only in the layer. And a value can still be a
+           hyphenated sentence.
+why        D12 keeps page text out of the intent class, and a label is page text. Without a
+           check at the helper, any event poster can put prose in an intent field. And
+           value=&quot;approve-and-also-push-to-main&quot; passes the grammar.
+fix        See the list below.</code></pre>
+<p>On question 5, what is needed beyond adding the field:</p>
+<ul>
+<li><code>projectItem</code> is a whitelist, so the field has to be
+projected there explicitly, re-checked against the grammar, with
+anything that fails dropped to null. The component table should name
+it.</li>
+<li>Classify by dotted key, which <code>field_classes</code> already
+supports (<code>reply.reason</code>,
+<code>thread[].reviewer.note</code>): <code>choice.group</code> and
+<code>choice.answer</code> as instruction, <code>choice.label</code> as
+data. The simpler option is to move the label to
+<code>context.label</code>, so the whole <code>choice</code> object is
+the reviewer's act.</li>
+<li>Add <code>choice</code> to both <code>INTENT_FIELDS</code> lists or
+to neither. Today the two lists match, and tests pin both.</li>
+<li><code>validateItem</code>: a ready choice must carry a well-formed
+<code>choice</code>, as a ready comment must carry a note.</li>
+<li>The log door (<code>log.js</code>, beside <code>validateRun</code>)
+refuses a choice event whose fields fail the grammar. The fold drops it,
+the way it drops a bad run record (<code>projection.js:166</code>).</li>
+<li>Drop the claim that the grammar makes an instruction impossible.
+Shorten the value limit (32 is plenty for "promote"). The contract
+should say the meaning of an answer is what the group in the agent's own
+source says, never the value's words. For a page the agent did not write
+(a served folder of someone else's HTML), the value is page text that a
+click selected.</li>
+</ul>
+<p>This touches security only where field classing is an architectural
+choice. The security reviewer may want to own the last point.</p>
+<h3
+id="6-lost-marking-needs-more-than-an-early-return-use-one-rung-in-the-anchor-engine-instead">6.
+Lost-marking needs more than an early return. Use one rung in the anchor
+engine instead</h3>
+<pre><code>severity   important
+kind       risk
+where      src/layer/replay.js:2562-2680 applyRecord, :2423 markLost, :2511 clearLost;
+           docs/diagrams/finding_the_region.md line 34 (the empty-container rung);
+           architecture &quot;The re-mark pass&quot;, alternatives &quot;Find the group by its id&quot;
+what       The design returns early in replay for a choice and has a separate pass mark
+           lost &quot;by writing attributes only&quot;. But marking lost writes the record, persists
+           it and puts a badge on the card.
+why        Lost is region.lost on the record (persisted, projected into review.json) plus
+           a card badge, and clearLost has to undo both. A second pass that re-implements
+           that half will drift. The 2026-08-17 stuck-badge bug was this exact drift.
+fix        Add a rung to anchor.resolve, keyed on kind, the way the empty-container rung is
+           keyed on placement: a choice record resolves to the one element whose group id
+           matches, refuses when two match, and stops there. Then applyRecord, markLost,
+           clearLost, &quot;show me where&quot; and the settle recheck all work unchanged, and writes()
+           is already false for the kind. The re-mark pass then only paints state attributes.</code></pre>
+<p>On question 4: without an early return, a ready choice is replayable
+(<code>record.isReplayable</code> only checks ready and no tool round).
+<code>applyRecord</code> would resolve its element anchor, trying the
+stamp first and then the text. A rebuild usually drops the stamp, so if
+the text changed (the agent rewrote the question), the record would be
+stamped lost while the pass found the group by id: two verdicts
+disagreeing. With only an early return, nothing clears a stale lost mark
+from before the change, and the pass has to own persistence and badges
+itself. The rung avoids both. It also keeps D9 (an anchor matches by
+uniqueness) in one engine, which is what the alternatives leaf wanted
+from "find the group by its id".</p>
+<h3
+id="7-requirement-r4-the-rail-names-a-broken-group-and-why-is-only-half-covered">7.
+Requirement R4 (the rail names a broken group and why) is only half
+covered</h3>
+<pre><code>severity   important
+kind       defect
+where      architecture &quot;Refusing a group&quot; flowchart vs &quot;Failure Modes&quot;, value bullet
+what       The flowchart sends a missing or malformed id and &quot;fewer than two good buttons&quot;
+           to plain inert with no rail message. Only duplicates get the chip.
+why        R4 (a group an agent got wrong draws as plain content and the rail says which
+           group and why) covers no id, malformed id or answer, and duplicate ids. The
+           failure-mode list says the chip names a bad value, which the flowchart does not
+           show. A builder will follow the flowchart.
+fix        Every refusal on a document page raises the chip with its reason. Name a group
+           with no id by its question text. A group on a page without the attribute stays
+           silent (R11).</code></pre>
+<h3
+id="8-requirement-r14-answer-a-press-like-a-comment-including-a-question-needs-a-reply-box-on-the-card">8.
+Requirement R14 (answer a press like a comment, including a question)
+needs a reply box on the card</h3>
+<pre><code>severity   important
+kind       defect
+where      architecture &quot;Analysis&quot;, the rail bullet (&quot;a read-only comment-shaped row&quot;);
+           src/layer/tab_active.js:569-570 (rows only for comment and note), :281
+           (the follow-up composer)
+what       The card is called read-only, but when the agent replies with a question, the
+           reviewer answers it on the card.
+why        Without the follow-up composer, a press that gets a question has no way to be
+           answered except a fresh comment on the group, and the question card sits in
+           ready forever.
+fix        Make only the answer read-only. Keep the follow-up composer. Say that a
+           follow-up writes note on the choice record at a new rev (intent, on the drain
+           beside choice), and that the card summary shows the question and the answer
+           (overlay.js:2021 picks note, then quote, then change, and a choice has no note).</code></pre>
+<h3
+id="9-the-click-path-skips-the-gesture-table-and-read-only-windows-are-not-covered">9.
+The click path skips the gesture table, and read-only windows are not
+covered</h3>
+<pre><code>severity   important
+kind       risk
+where      src/shared/gestures.js:1-20, :342-356; src/layer/comments.js:3217 and
+           src/layer/editing.js:5564 (both capture clicks on the document);
+           src/layer/sync.js:1834 (recordItem returns null when read-only);
+           src/layer/index.js:667-699 (read-only and present mode)
+what       choices.js adds its own click listener. The doc does not say what a click on a
+           choice button does while pick mode is open, while an edit is open, in a read-only
+           window, or in present mode.
+why        Pick mode should win (R6&#39;s neighbour in the brief: a comment on a group is an
+           ordinary comment). In a read-only window recordItem writes nothing, so the page
+           would show a press that was never stored.
+fix        Add a PRESS_CHOICE outcome to gestures.js, below pick mode and after commit-edit,
+           so the order lives in the one table. Register the listener in a listener group
+           so read-only and present mode unbind it, and draw groups inert there. Call
+           preventDefault so a button inside an agent&#39;s form does not submit it.</code></pre>
+<h3 id="10-which-record-a-groups-state-comes-from">10. Which record a
+group's state comes from</h3>
+<pre><code>severity   minor
+kind       defect
+where      architecture &quot;The re-mark pass&quot; (&quot;newest revision first&quot;), &quot;Lifecycle&quot;
+what       Rev counts within one item, but a group can have several items. And after
+           not_handled the design mints a new item, though the table has not_handled to
+           ready for exactly this.
+why        A new item starts at rev 1, so &quot;newest revision first&quot; picks the wrong record
+           after a second press on a handled group. A new item after not_handled leaves the
+           old one outstanding in Active, which is two cards for one group.
+fix        Order by created_at, then rev. After not_handled, use the existing not_handled to
+           ready transition at a new rev on the same item. R7 (a press after handled starts
+           a new thread) asks for a new item only after handled.</code></pre>
+<h3 id="11-minting-the-merge-rule-and-the-projection-question-3">11.
+Minting, the merge rule and the projection (question 3)</h3>
+<pre><code>severity   minor
+kind       risk
+where      src/service/projection.js:152-247; src/service/log.js:485-551;
+           src/shared/merge.js:46-70 CONTENT_FIELDS, :121 mergeItem
+what       It works today, but the merge whitelist does not list choice, and the
+           draft-then-ready step adds nothing.
+why        Same-rev unacknowledged merges copy only CONTENT_FIELDS. That is safe today only
+           because every answer change bumps rev. The first time a path changes the answer
+           at the same rev, the browser&#39;s answer is silently replaced by the store&#39;s.
+fix        Add choice to CONTENT_FIELDS and OPTIONAL_CONTENT_FIELDS. Re-press with the
+           table&#39;s reviewer ready to ready (bumpRev) rather than ready, draft, ready.</code></pre>
+<p>On question 3: yes. The helper has no lifecycle check on item events.
+<code>projection.js:152</code> folds created, content and ready the same
+way, the newest record wins, and the log door checks only
+<code>validateRun</code>. A created and a ready in one post fold to one
+ready record. <code>eventTypeFor</code> (<code>sync.js:1666</code>)
+gives <code>item.ready</code> for any ready record, so even a record
+minted straight into ready posts correctly. The merge on load works for
+a record that was never a typed draft: rev decides, and when the revs
+are equal, the store's lifecycle stands. <code>wasCommitted</code>
+(<code>projection.js:75</code>) reads <code>after_history</code>, which
+is empty for a choice, as it is for a comment. So a same-rev draft from
+the ready, draft, ready path is folded as content and the state stays
+ready. That is harmless, and one more reason to drop the draft step.</p>
+<h3 id="12-load-order-for-choicesjs-question-7">12. Load order for
+<code>choices.js</code> (question 7)</h3>
+<pre><code>severity   minor
+kind       defect
+where      src/shared/manifest.js:36-222; architecture component table (&quot;load after comments.js&quot;)
+what       &quot;After comments.js&quot; does not name what the file actually needs.
+why        The manifest rule is that a file may use only namespaces registered above it.
+fix        choices.js comes after the shared kernel (record, protocol, epoch, markers),
+           listeners.js, store.js, anchor.js, overlay.js (the chip) and sync.js, and before
+           index.js. With the rung from finding 6, it does not need replay.js. If it calls
+           replay&#39;s lost functions, it must sit after replay.js and before inject.js. It does
+           not need comments.js.</code></pre>
+<h3 id="13-style-details-the-doc-leaves-open-question-8-style">13. Style
+details the doc leaves open (question 8, style)</h3>
+<pre><code>severity   minor
+kind       taste
+where      vendor/stclair-doc-style/COMPONENTS.md:275-290, document.css:485-516, :645-662;
+           architecture &quot;State on the page&quot;
+what       The doc does not say how data-recommended draws the badge, how the buttons are
+           shaped, or which rule wins when data-chosen and a newer press disagree.
+why        R2 (grown out of option cards, a Recommended badge, no colored edge) is the
+           requirement most likely to drift in build. The catalog uses a real
+           &lt;span class=&quot;badge badge--purple&quot;&gt;, and badges have square corners because &quot;a
+           rounded tag reads as a pill button&quot;.
+fix        Say it: the button is option-card shaped with square corners, the recommended
+           one carries the purple badge drawn by the stylesheet, and data-lahe-choice-state
+           outranks data-chosen. The &quot;two attributes&quot; table lists three. Tell the catalog to
+           keep the HTML block free of blank lines, or marked will wrap its parts in p tags.</code></pre>
+<h3 id="14-files-and-docs-the-component-table-leaves-out">14. Files and
+docs the component table leaves out</h3>
+<pre><code>severity   minor
+kind       defect
+where      architecture &quot;Components / Modules Touched&quot;
+what       Several files the design needs are missing, and one listed file needs no change.
+why        A builder works from this table.
+fix        Add: record.js validateItem; review_format.js projectItem; log.js (the door);
+           merge.js; sync.js (the press floor); gestures.js; anchor.js (the rung);
+           docs/ongoing/BRAND.md (the word list the brief&#39;s UX notes promise);
+           docs/diagrams/module_map.md, finding_the_region.md and item_lifecycle.md.
+           Remove markdown.js.</code></pre>
+<hr />
+<h3 id="requirement-sweep">Requirement sweep</h3>
+<div class="scrollx"><table>
+<thead>
+<tr>
+<th>Requirement</th>
+<th>Where the design covers it</th>
+<th>Gap</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>R1 (an agent can author a group from the skill and catalog, checked
+by an eval)</td>
+<td>Agent instructions row</td>
+<td>None, once the attribute is renamed (finding 1)</td>
+</tr>
+<tr>
+<td>R2 (option-card look, Recommended badge, no colored edge)</td>
+<td>House style row</td>
+<td>Visual not specified (finding 13)</td>
+</tr>
+<tr>
+<td>R3 (pages without groups unchanged)</td>
+<td>Implicit</td>
+<td>None</td>
+</tr>
+<tr>
+<td>R4 (broken group drawn inert and named in the rail)</td>
+<td>Refusal flow</td>
+<td>Only duplicates get the chip (finding 7)</td>
+</tr>
+<tr>
+<td>R5 (a click sends the press at once)</td>
+<td>Press flow</td>
+<td>The window delays it, and the delay shows as "kept" (finding 2)</td>
+</tr>
+<tr>
+<td>R6 (one answer per group, latest wins)</td>
+<td>Lifecycle</td>
+<td>None</td>
+</tr>
+<tr>
+<td>R7 (a press after handled starts a new thread)</td>
+<td>Lifecycle</td>
+<td>Also applied to not_handled (finding 10)</td>
+</tr>
+<tr>
+<td>R8 (a press is a durable record)</td>
+<td>Failure modes</td>
+<td>None</td>
+</tr>
+<tr>
+<td>R9 (states on the page in the rail's words)</td>
+<td>State table</td>
+<td>Ordering across items (finding 10)</td>
+</tr>
+<tr>
+<td>R10 (state follows a moved group, lost when it is removed)</td>
+<td>Re-mark pass</td>
+<td>Lost machinery (finding 6), stripped id (finding 1)</td>
+</tr>
+<tr>
+<td>R11 (only helper-served pages are live)</td>
+<td>Script tag</td>
+<td>Pages with a tag already on disk (finding 3)</td>
+</tr>
+<tr>
+<td>R12 (the drain gives group, answer, question and heading as
+data)</td>
+<td>Drain line</td>
+<td>Region, stamp and context leak (finding 4)</td>
+</tr>
+<tr>
+<td>R13 (presses close together wake the agent once)</td>
+<td>Press batch</td>
+<td>Mechanism misstated, wake count unbounded (finding 2)</td>
+</tr>
+<tr>
+<td>R14 (answer like a comment, including question and Mark as
+done)</td>
+<td>Lifecycle</td>
+<td>No reply box on the card (finding 8)</td>
+</tr>
+<tr>
+<td>R15 (presses cost fewer tokens than comments)</td>
+<td>Test strategy</td>
+<td>Finding 4 adds cost, and the measurement should model reading pace
+(finding 2)</td>
+</tr>
+<tr>
+<td>R16 (the page check never holds a press)</td>
+<td>handled_check.js:529 only checks edit and format_only</td>
+<td>None</td>
+</tr>
+<tr>
+<td>R17 (the decision is written into the source)</td>
+<td>data-chosen</td>
+<td>CSS precedence (finding 13)</td>
+</tr>
+<tr>
+<td>R18 (skill, catalog and contract updated together)</td>
+<td>Agent instructions row</td>
+<td>None</td>
+</tr>
+<tr>
+<td>R19 (first page shown is the real lesson queue)</td>
+<td>Not architecture</td>
+<td>Plan's to own</td>
+</tr>
+</tbody>
+</table></div>
+<h3 id="the-eight-questions-answered">The eight questions, answered</h3>
+<ol type="1">
+<li><strong>Coverage.</strong> See the sweep. R4, R11, R13 and R14 have
+real gaps. R12 and R15 are hurt by the drain leak.</li>
+<li><strong>Wake per flush or per item.</strong> One line per
+<code>item.ready</code> (<code>routes.js:559-581</code>). The supported
+hosts wake through <code>lahe monitor</code>, one exit per 15 second
+poll, so a flush is one wake there. The design must say so, and must say
+what bounds the count across agent cycles (finding 2).</li>
+<li><strong>Same-tick mint.</strong> It works. The helper does not check
+lifecycle on item events, and the merge on load is fine. Add
+<code>choice</code> to the merge whitelist anyway (finding 11).</li>
+<li><strong>Replay.</strong> An early return stops writes and stops a
+conflicting lost verdict. But the separate pass then has to re-implement
+persisted lost and card badges. A kind-keyed rung in
+<code>anchor.resolve</code> is cleaner (finding 6).</li>
+<li><strong>The <code>choice</code> field.</strong> Project it
+explicitly in <code>projectItem</code>. Class it by dotted key, or move
+the label out. Enforce the grammar at the log door, in the fold and in
+<code>validateItem</code>. The grammar does not stop hyphenated prose
+(finding 5).</li>
+<li><strong>Script tag writers.</strong>
+<code>page_routes.injectForMatch</code> is the only helper path that
+adds a tag to a response. <code>add.js</code> and <code>heal.js</code>
+use the same builder and write files. The gap is a file that already
+carries this review's tag (finding 3).</li>
+<li><strong>Load order.</strong> After the kernel, listeners, store,
+anchor, overlay and sync. Before index.js. On the right side of
+replay.js, depending on finding 6 (finding 12).</li>
+<li><strong>Contradictions.</strong> The id attribute breaks the
+tool-attribute rule in <code>markers.js</code> (finding 1). The label
+inside an intent field breaks D12 (finding 5). The click path skips the
+gesture table D3 relies on (finding 9). The stamp request on a press
+works against the product brief's "don't waste tokens" (finding 4). The
+style guide is not contradicted, only left open (finding 13).</li>
+</ol>
+<h3 id="to-delete-at-cleanup">To delete at cleanup</h3>
+<p>Nothing. This review created one file, this one.</p>
+</section>
+
+</main>
+
+
+
+</body>
+</html>

@@ -221,6 +221,14 @@
     "background:color-mix(in srgb,var(--bad) 6%,var(--paper))}",
     ".cardx[hidden]{display:none}",
     ".lahe-rail-note[data-empty='true']{color:var(--ink-faint)}",
+    // A CHOICE's answer is the reviewer's turn, fixed: they changed it by
+    // pressing another button on the page, never by typing here. So it carries
+    // none of the note's editing affordances. Words they add in the box below
+    // follow it in the same bubble, in the ordinary weight.
+    ".lahe-rail-answer{margin:0;white-space:pre-wrap;overflow-wrap:anywhere;cursor:default}",
+    ".lahe-rail-answer__value{font-weight:600}",
+    ".lahe-rail-answer__note{display:block;margin-top:4px;font-weight:400}",
+    ".lahe-rail-answer__note[hidden]{display:none}",
     // THE NOTE IS THE INPUT. Ken: "do we really need a button for 'reword'?
     // before we could just edit a comment and the color would go from green to
     // yellow and that was how we knew." So the words carry the affordance the
@@ -567,7 +575,9 @@
         // row into an edit's card was the cross-task defect 3D flagged at the
         // stitch.
         var kind = item[record.FIELD.KIND];
-        if (kind !== record.KIND.COMMENT && kind !== record.KIND.NOTE) return false;
+        // A choice press draws here too (choice buttons): the question, the
+        // fixed answer, and the same box for more words.
+        if (kind !== record.KIND.COMMENT && kind !== record.KIND.NOTE && kind !== record.KIND.CHOICE) return false;
         return !noteHandle || item[record.FIELD.ID] !== noteHandle.id || !record.isDraft(item);
       });
       var seen = Object.create(null);
@@ -606,6 +616,7 @@
     }
 
     function buildRow(item) {
+      if (record.isChoice(item)) return buildChoiceRow(item);
       var id = item[record.FIELD.ID];
       var row = el("article", ROW_CLASS);
       row.setAttribute("data-lahe-item", id);
@@ -781,7 +792,107 @@
       return box;
     }
 
+    /**
+     * A choice press's row (choice buttons). The card above it carries the
+     * group's question as its quote and the state chip with Mark as done; this
+     * row is the reviewer's answer as their own turn, the delete x, and the
+     * ordinary box for more words, which go into `note` on the same record.
+     * The answer itself is not editable here: pressing another button on the
+     * page is how it changes.
+     */
+    function buildChoiceRow(item) {
+      var id = item[record.FIELD.ID];
+      var row = el("article", ROW_CLASS);
+      row.setAttribute("data-lahe-item", id);
+      row.setAttribute("data-kind", record.KIND.CHOICE);
+      if (hosted) row.setAttribute("data-lahe-active-row", "");
+      if (!hosted) row.appendChild(el("p", "lahe-rail-quote", ""));
+      var answer = el("p", "lahe-rail-answer", "");
+      answer.setAttribute("data-lahe-choice-answer", "");
+      answer.appendChild(el("span", "lahe-rail-answer__value", ""));
+      var said = el("span", "lahe-rail-answer__note", "");
+      said.hidden = true;
+      answer.appendChild(said);
+      if (hosted) {
+        var turn = el("div", "lahe-rail-turn");
+        overlayModule.fillTurn(turn, el, {
+          side: "you",
+          who: "You",
+          at: item[record.FIELD.UPDATED_AT] || item[record.FIELD.CREATED_AT] || null,
+          bubble: answer
+        });
+        row.appendChild(turn);
+      } else {
+        row.appendChild(answer);
+      }
+      var foot = el("div", hosted ? "cardacts" : "lahe-rail-rowfoot");
+      if (!hosted) foot.appendChild(el("span", "lahe-rail-state", ""));
+      var del = el("button", hosted ? "cardx" : "lahe-rail-btn", hosted ? "\u00d7" : "Delete");
+      del.setAttribute("data-lahe-act", "delete");
+      del.setAttribute("type", "button");
+      if (hosted) {
+        del.setAttribute("aria-label", "Delete this answer");
+        del.title = "Delete this answer";
+      }
+      del.addEventListener("click", function () {
+        comments.remove(id);
+      });
+      if (hosted) row.appendChild(del);
+      else foot.appendChild(del);
+      row.appendChild(foot);
+      var box = buildAddBox(id);
+      var field = box.querySelector("textarea");
+      if (field) {
+        field.setAttribute("placeholder", "Add a message");
+        field.setAttribute("aria-label", "Add a message to this answer");
+      }
+      row.appendChild(box);
+      return row;
+    }
+
+    function updateChoiceRow(row, item) {
+      var quote = row.querySelector(".lahe-rail-quote");
+      if (quote) {
+        var quoteText = item[record.FIELD.CONTEXT] ? item[record.FIELD.CONTEXT].quote : null;
+        quote.textContent = quoteText || "";
+        quote.hidden = !quoteText;
+      }
+      var value = row.querySelector(".lahe-rail-answer__value");
+      if (value) value.textContent = overlayModule.choiceAnswerText(item, doc);
+      var said = row.querySelector(".lahe-rail-answer__note");
+      if (said) {
+        var words = record.reviewerNote(item) || "";
+        said.textContent = words;
+        said.hidden = !words;
+      }
+      var answered = !!item[record.FIELD.REPLY];
+      var add = row.querySelector(".lahe-rail-add");
+      if (add) {
+        add.hidden = answered || item[record.FIELD.STATE] !== record.STATE.READY;
+        var field = add.querySelector("textarea");
+        if (field) field.disabled = answered;
+        var send = add.querySelector(".lahe-rail-send");
+        if (send) send.disabled = answered;
+      }
+      var del = row.querySelector('[data-lahe-act="delete"]');
+      if (del && hosted) del.hidden = answered;
+      var cap = row.querySelector(".lahe-rail-turn .turn__cap");
+      if (cap) {
+        var at = item[record.FIELD.UPDATED_AT] || item[record.FIELD.CREATED_AT] || null;
+        var time = cap.querySelector(".turn__time");
+        if (at && !time) {
+          time = el("time", "turn__time", "");
+          cap.appendChild(time);
+        }
+        overlayModule.setTurnTime(time, at);
+      }
+      var state = row.querySelector(".lahe-rail-state");
+      if (state) state.textContent = stateLabel(item);
+      row.setAttribute("data-state", item[record.FIELD.STATE]);
+    }
+
     function updateRow(row, item) {
+      if (record.isChoice(item)) return updateChoiceRow(row, item);
       var quote = row.querySelector(".lahe-rail-quote");
       if (quote) {
         var quoteText = item[record.FIELD.CONTEXT] ? item[record.FIELD.CONTEXT].quote : null;

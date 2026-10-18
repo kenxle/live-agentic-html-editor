@@ -139,7 +139,7 @@ Each host wakes an agent differently, so each gets its own instruction. The agen
 | Agent | How it keeps up |
 | --- | --- |
 | Claude Code | Runs `lahe monitor` with Bash in the background, and runs it again after each batch of work. A Stop hook that `npm run install-skills` adds stops the agent from ending a turn while its watcher is down. |
-| Codex | Runs `lahe monitor` as a foreground pending exec call and waits on it. |
+| Codex | Runs `lahe monitor --codex`, which returns after starting a local watcher. Real feedback queues a follow-up to the same conversation with `codex queue`; idle reviews make no model calls. Requires the local shared Codex daemon. |
 | Antigravity | Runs `lahe monitor` as a background terminal task. Task completion wakes it. |
 | Anything else | Runs `lahe monitor` in the foreground after warning you it owns the chat. |
 

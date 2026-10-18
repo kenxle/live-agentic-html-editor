@@ -63,8 +63,8 @@ The drain still carries `reviewer_last_changed_at`. The no-stale-excuse spec (`d
 
 | Path | Reason | Status |
 |---|---|---|
-| `.claude/worktrees/agent-a1f0391c928ddd99b` | Builder worktree, branch merged | waiting for Ken |
-| local branch `feat/lean-agent-output` | Merged; held by the worktree above | waiting for Ken |
+| `.claude/worktrees/agent-a1f0391c928ddd99b` | Builder worktree, branch merged | removed 2026-10-18 |
+| local branch `feat/lean-agent-output` | Merged; held by the worktree above | removed 2026-10-18 |
 
 ### Test results
 
@@ -78,6 +78,7 @@ Merged 2026-10-15 as 56197967. CI gate passed. `npm run install-skills` ran afte
 
 ## Log
 
+- **2026-10-18 13:08.** Close-out answers applied. Both lessons promoted, a third (gh pr merge with --delete-branch) written straight to `docs/lessons/process/` at Ken's say-so instead of a CLAUDE.md rule. Both builder worktrees and branches removed. [PR #77](https://github.com/kenxle/live-agentic-html-editor/pull/77) merged: a test pins the Stop hook's steps to the contract and the skill, in place of a CLAUDE.md reminder. It found the hook and the skill disagreeing on draining, from this feature's review fix, and that is fixed.
 - **2026-10-17 12:35.** Closed out. Board row LAHE-lean-agent-output is done. Ongoing docs and diagrams checked.
 - **2026-10-15.** Merged PR #69 at Ken's request, reran the gate on main, ran `npm run install-skills`. The trimmed drain and the short reply output were tried live on the audit page and worked.
 - **2026-10-14.** Measured the cost of one comment on Ken's real document sessions (`~/Documents/token-audit/`), got his yes on each cut on the audit page, built and opened PR #69.

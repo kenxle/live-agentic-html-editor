@@ -151,12 +151,12 @@ async function runMonitor(printed, options) {
   const code = await monitor.run(["--session", "s_owner"].concat(opts.extraArgs || []), {
     stdout: (text) => stdout.push(String(text)),
     stderr: (text) => stderr.push(String(text)),
-    sameStream: opts.sameStream,
     readSession: (id) => ({ id: id, handoff_rev: 0, closed_at: null }),
     statusRun: async (args, io) => {
       const text = typeof printed === "function" ? printed(args) : printed;
       if (text) io.stdout(text);
-      return protocol.CLI_EXIT.OK;
+      if (opts.error) io.stderr(opts.error);
+      return opts.code === undefined ? protocol.CLI_EXIT.OK : opts.code;
     },
     wait: async () => {}
   });
@@ -164,7 +164,7 @@ async function runMonitor(printed, options) {
 }
 
 test("the monitor prints one line naming the work, the drain and the relaunch, and none of the item", async () => {
-  const result = await runMonitor('{"review":"r_one","id":"c_one","rev":1,"note":"fix the footer"}\n', { sameStream: true });
+  const result = await runMonitor('{"review":"r_one","id":"c_one","rev":1,"note":"fix the footer"}\n');
   assert.equal(result.code, protocol.CLI_EXIT.OK);
   const lines = result.stdout.split("\n").filter((line) => line);
   assert.equal(lines.length, 1, "one line: " + result.stdout);
@@ -177,26 +177,21 @@ test("the monitor prints one line naming the work, the drain and the relaunch, a
   assert.equal(result.stdout.includes("{"), false, "no JSON at all");
 });
 
-test("the line prints once when both streams go to one place, and on both when they are split", async () => {
+test("the wake prints once on stdout even when the host captures streams separately", async () => {
   const item = '{"review":"r_one","id":"c_one","rev":1}\n';
-  const same = await runMonitor(item, { sameStream: true });
-  assert.equal(same.stderr.includes("LAHE ACTION REQUIRED"), false, "one destination, one copy");
-  assert.equal((same.stdout.match(/LAHE ACTION REQUIRED/g) || []).length, 1);
-
-  const split = await runMonitor(item, { sameStream: false });
+  const split = await runMonitor(item);
   assert.equal((split.stdout.match(/LAHE ACTION REQUIRED/g) || []).length, 1);
-  assert.equal(split.stderr, split.stdout, "a host that reads only stderr still gets the whole line");
+  assert.equal(split.stderr, "", "a successful wake is not an error");
 });
 
-test("the monitor's same-place check compares the two streams' files", () => {
-  assert.equal(monitor.streamsShareDestination(() => ({ dev: 1, ino: 9 })), true);
-  let call = 0;
-  assert.equal(monitor.streamsShareDestination(() => ({ dev: 1, ino: (call += 1) })), false);
-  assert.equal(
-    monitor.streamsShareDestination(() => { throw new Error("EBADF"); }),
-    false,
-    "a stream that cannot be read is treated as split, which prints both"
-  );
+test("a drain failure still prints its diagnostic on stderr alongside a wake", async () => {
+  const result = await runMonitor('{"review":"r_one","id":"c_one","rev":1}\n', {
+    error: "cannot read another review\n",
+    code: protocol.CLI_EXIT.BAD_USAGE
+  });
+  assert.equal(result.code, protocol.CLI_EXIT.BAD_USAGE);
+  assert.match(result.stdout, /^LAHE ACTION REQUIRED:/);
+  assert.equal(result.stderr, "cannot read another review\n");
 });
 
 test("the line counts items, ended reviews and Library requests", async () => {
@@ -204,12 +199,12 @@ test("the line counts items, ended reviews and Library requests", async () => {
     '{"review":"r_one","id":"c_one","rev":1}\n' +
     '{"review":"r_one","id":"c_two","rev":3}\n' +
     '{"reviews":1,"ended_reviews":[{"review":"r_one"}],"catalog_requests":[{"request":"cq_1"}]}\n';
-  const result = await runMonitor(printed, { sameStream: true });
+  const result = await runMonitor(printed);
   assert.match(result.stdout, /2 items, 1 ended review, 1 Library request waiting/);
 });
 
 test("a drain line the monitor cannot read still wakes, as work waiting", async () => {
-  const result = await runMonitor("something new\n", { sameStream: true });
+  const result = await runMonitor("something new\n");
   assert.equal(result.code, protocol.CLI_EXIT.OK);
   assert.match(result.stdout, /LAHE ACTION REQUIRED: work waiting\./);
 });
@@ -217,7 +212,7 @@ test("a drain line the monitor cannot read still wakes, as work waiting", async 
 test("with two sessions, the line names a drain for each session with work and one relaunch for all", async () => {
   const result = await runMonitor(
     (args) => (args[1] === "s_other" ? '{"review":"r_two","id":"c_two","rev":1}\n' : '{"review":"r_one","id":"c_one","rev":1}\n'),
-    { sameStream: true, extraArgs: ["--session", "s_other"] }
+    { extraArgs: ["--session", "s_other"] }
   );
   const lines = result.stdout.split("\n").filter((line) => line);
   assert.equal(lines.length, 1);

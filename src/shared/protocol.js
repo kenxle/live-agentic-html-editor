@@ -1197,6 +1197,14 @@
     // A free-writing run record's drafts carry the whole run, so they wait
     // longer (docs/features/20260928.01_free_writing). A commit is never held.
     RUN_DRAFT_FLOOR_MS: 30000,
+    // Choice buttons (docs/features/20261013.01_choice_buttons): every event of
+    // a choice item waits until this long after the page's last press, so
+    // presses made close together reach the helper in one post and wake the
+    // agent once. Capped at PRESS_CAP_MS from the first held press, so steady
+    // clicking cannot hold work back for minutes. Hiding the tab and leaving
+    // the page flush at once, as for drafts; Hold's gate still applies.
+    PRESS_QUIET_MS: 3000,
+    PRESS_CAP_MS: 10000,
     // Plus an immediate flush on each of these, with no debounce and no draft
     // floor. `hide` is the tab being hidden, which is often the last thing a
     // page hears before the browser discards it.
@@ -1498,6 +1506,11 @@
     // reads it at boot, before the helper has answered anything, so an empty
     // notes page can open for typing and no other empty page does.
     NOTES: "data-lahe-notes",
+    // Choice buttons (docs/features/20261013.01_choice_buttons): present on the
+    // tag of a page the helper serves itself as a document, added at response
+    // time and never written to disk. `lahe add` and heal never pass it. The
+    // layer arms choice groups only when it is there.
+    DOCUMENT: "data-lahe-document",
     // Stable addresses: the old page-server origins of this page's site, as a
     // JSON array. The layer reads a record made on one of them as made on this
     // page, so a review's old comments show at its new address. Written only by
@@ -1588,6 +1601,10 @@
   var FRAMES_ALLOW = "allow";
   var START_HIDDEN = "hidden";
   var NOTES_ON = "true";
+  // The one value SCRIPT_ATTR.DOCUMENT carries (choice buttons). Written only
+  // by the helper, at response time, onto a page it serves itself; the layer
+  // arms choice groups only when the tag carries exactly this.
+  var DOCUMENT_ON = "true";
 
   // The inline onerror, kept to one statement-per-clause line so the attribute
   // stays readable in a page's source. Single quotes only: the attribute is
@@ -1623,6 +1640,7 @@
       '        ' + SCRIPT_ATTR.HELPER + '="' + (o.helper || DEFAULT_HELPER_ORIGIN) + '"\n' +
       fallback +
       (o.notes === true ? '        ' + SCRIPT_ATTR.NOTES + '="' + NOTES_ON + '"\n' : "") +
+      (o.document === true ? '        ' + SCRIPT_ATTR.DOCUMENT + '="' + DOCUMENT_ON + '"\n' : "") +
       (o.aliases !== undefined ? '        ' + SCRIPT_ATTR.ALIASES + '="' + aliasesAttribute(o.aliases) + '"\n' : "") +
       (o.pathAliases !== undefined ? '        ' + SCRIPT_ATTR.PATH_ALIASES + '="' + pathAliasesAttribute(o.pathAliases) + '"\n' : "") +
       (o.spellings !== undefined ? '        ' + SCRIPT_ATTR.SPELLINGS + '="' + spellingsAttribute(o.spellings) + '"\n' : "") +
@@ -1753,9 +1771,11 @@
    * `sessionId` may be a list: a monitor watching several sessions is relaunched
    * with one --session per session, the primary first.
    */
-  function monitorCommand(sessionId, stateDirPath) {
+  function monitorCommand(sessionId, stateDirPath, handoffRevisions) {
     var ids = Array.isArray(sessionId) ? sessionId : [sessionId];
-    return "lahe monitor" + ids.map(function (id) { return " --session " + String(id); }).join("") +
+    return "lahe monitor" + ids.map(function (id) {
+      return " --session " + String(id) + (handoffRevisions && Number.isInteger(handoffRevisions[id]) ? " --handoff-rev " + handoffRevisions[id] : "");
+    }).join("") +
       stateDirFlag(stateDirPath);
   }
 
@@ -2212,6 +2232,7 @@
     FRAMES_ALLOW: FRAMES_ALLOW,
     START_HIDDEN: START_HIDDEN,
     NOTES_ON: NOTES_ON,
+    DOCUMENT_ON: DOCUMENT_ON,
     SCRIPT_SELECTOR: SCRIPT_SELECTOR,
     SCRIPT_FALLBACK_ONERROR: SCRIPT_FALLBACK_ONERROR,
     scriptTag: scriptTag,

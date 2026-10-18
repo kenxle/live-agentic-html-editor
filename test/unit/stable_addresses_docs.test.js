@@ -18,6 +18,7 @@ const REPO_ROOT = path.join(__dirname, "..", "..");
 
 const FILES = [
   "skills/lahe/SKILL.md",
+  ...require("../../scripts/install-skills.js").REFERENCES.map((ref) => path.relative(REPO_ROOT, ref.from)),
   "src/shared/review_format.js",
   "test/unit/review_format.test.js",
   "docs/CONTRACTS.md",
@@ -72,11 +73,10 @@ test("V38: no doc an agent reads still describes per-session page servers or ran
   assert.deepEqual(found, []);
 });
 
-test("V38: the skill, the contract and the CLI doc name the stable address", () => {
-  const skill = fs.readFileSync(path.join(REPO_ROOT, "skills/lahe/SKILL.md"), "utf8");
-  const contract = require("../../src/shared/review_format.js").CONTRACT.join("\n");
+test("V38: the skill and the CLI doc name the stable address", () => {
+  const skill = require("../support/skill.js").readSkillText();
   const cli = fs.readFileSync(path.join(REPO_ROOT, "docs/CLI.md"), "utf8");
-  for (const [name, text] of [["skill", skill], ["contract", contract], ["CLI doc", cli]]) {
+  for (const [name, text] of [["skill", skill], ["CLI doc", cli]]) {
     assert.match(text, /<name>\.lahe\.localhost:1483/, name);
     assert.match(text, /after\s+(the|this)\s+session\s+closes/, name);
   }
@@ -88,9 +88,7 @@ test("V38: the skill, the contract and the CLI doc name the stable address", () 
 test("V38: the docs agree on the name rule and on 1483 or no port", () => {
   const read = (rel) => fs.readFileSync(path.join(REPO_ROOT, rel), "utf8");
   const sources = [
-    ["skill", read("skills/lahe/SKILL.md")],
-    ["contract", require("../../src/shared/review_format.js").CONTRACT.join("\n")],
-    ["contract copy in CONTRACTS.md", read("docs/CONTRACTS.md")],
+    ["skill", require("../support/skill.js").readSkillText()],
     ["CLI doc", read("docs/CLI.md")]
   ];
   for (const [name, text] of sources) {

@@ -36,12 +36,15 @@ exact no-op token burn the wake channel exists to prevent.
 flowchart TD
     Host{"which host is this?"}
     Host -->|"Claude Code"| CC["lahe monitor --session id,<br/>run with Bash in the background;<br/>one launch waits until there is work<br/>(timeout 86400000 matters only unattended)"]
-    Host -->|"Codex"| Cx["lahe monitor --session id,<br/>run as a foreground pending exec,<br/>keep waiting on it"]
+    Host -->|"Codex"| Cx["lahe monitor --session id --codex<br/>starts a local watcher and returns;<br/>end the model turn"]
     Host -->|"Antigravity"| AG["lahe monitor --session id,<br/>run as a background terminal task"]
     Host -->|"any other host"| Oth["lahe monitor --session id,<br/>run in the foreground"]
 
-    CC --> LocalPoll
-    Cx --> LocalPoll["the monitor polls locally in one<br/>small Node process, no model tokens spent"]
+    Cx --> CxPoll["watch locally outside the model turn<br/>no model calls while idle"]
+    CxPoll -->|"real work"| Queue["codex queue sends a wake<br/>to the same conversation"]
+    Queue --> CxDrain["drain with the printed handoff revision,<br/>handle every item, re-arm with --codex,<br/>then end the turn"]
+    CxDrain --> CxPoll
+    CC --> LocalPoll["the monitor polls locally in one<br/>small Node process, no model tokens spent"]
     AG --> LocalPoll
     Oth --> LocalPoll
     LocalPoll -->|"work is found"| Exit0["exits with code 0, prints one line:<br/>what is waiting, the drain and the relaunch"]
@@ -102,8 +105,12 @@ the loop above, and the wake channel below carrying all four required pieces.
   (`lahe status --json` without `--quiet`) keeps them. `lahe reply` prints back
   only the item and the status, with several items answered in one
   `lahe reply --batch` run, and after a batch the agent says one line in chat.
-- Every host now waits with the same `lahe monitor` process; only how it is
-  run differs. On Claude Code it runs with Bash in the background, where one
+- Codex uses a local watcher that queues real work to the same conversation.
+  The model turn ends while it waits, so idle monitoring cannot hold a graceful
+  Codex restart open. Queue failures retry locally. After acceptance the worker
+  exits; the agent drains to empty and re-arms it. One watcher covers the
+  conversation's sessions, and guarded drains reject wakes from before a takeover.
+  Other hosts keep their exit-on-work monitor. On Claude Code it runs with Bash in the background, where one
   launch waits until there is work (the 86400000 timeout matters only in an
   unattended run), and is launched again after each drain; the Stop hook
   blocks the end of a turn once when that relaunch was missed. A watch with a

@@ -290,20 +290,19 @@ Rules:
 
 Every class, its markup and its variants are in [COMPONENTS.md](../../vendor/stclair-doc-style/COMPONENTS.md). Do not copy that catalog. These are the rules for choosing.
 
-Agents learn these from the lahe skill: its "Writing a page for someone to read" section has a table matching content to components and the markup for the common ones, and `npm run install-skills` copies COMPONENTS.md beside the installed skill as `references/components.md`. A component added to the catalog reaches agents on their next install; one that changes how pages should be shaped also belongs in that skill section.
+Agents learn these from the lahe skill's document runbook, which matches content to components. `npm run install-skills` copies COMPONENTS.md beside the installed skill as `references/components.md`. A component added to the catalog reaches agents on their next install; one that changes how pages should be shaped also belongs in the runbook.
 
 - **Start bare.** A class-free `ul`, `ol`, `table`, `blockquote`, `img`, `code` and `pre` are already styled. Reach for a class only when the bare element cannot say it.
-- **Less is more: one tinted panel per page, one callout, one band, one pull quote.** Two loud things cancel each other.
 - **Every document has one `.hero`. Every major section is a `section.sheet` with a `.sheet-head`.**
 - **Counts are part of the component.** The facts grid is exactly three points. Stat tiles are up to four across, number first. Step sequence in boxes is four steps or fewer.
 - **Use a table for data and a facts grid or panel for words.** Use `table.data` with `num` cells for figures, and wrap a wide table in `.scrollx`.
 - **Panels:** sage is the default aside, cobalt is a definition or constraint, purple is the one thing to pause on, danger is a problem only. Callouts are one short line, under about 20 words.
-- **A choice for the reader is option cards, and the recommended card gets a "Recommended" badge.** Never a colored edge.
+- **Alternatives the reader weighs are option cards; a question with set answers the agent will act on is a choice group.** Option cards explain each alternative. A choice group collects the answer with a click. A page may use both, the cards above the group. In either, the recommended one gets a "Recommended" badge, never a colored edge, and a choice group needs none when there is no recommendation.
 - **Badges** are one or two words for a status or category. Use a **status dot** for a verdict word (accepted, rejected, deferred) in a table cell or line.
 - **Modifiers use a double dash on the block's class:** `panel panel--cobalt`, never `panel cobalt`.
 - **Keep to the classes in COMPONENTS.md.** A class that is not listed is not in the stylesheet.
 - **Images:** give every `img` an `alt`, `width` and `height`, and put the file beside the page. A screenshot of a white page needs the hairline frame; the image treatments draw it from `--image-frame`.
-- **Icons are optional.** The page does not load Lucide. Inline an SVG or leave the icon out.
+- **Use library icons.** The page does not load Lucide's script. Inline an SVG from a free icon library such as Lucide when an icon helps the reader.
 - **Mermaid keeps the house palette under every style.** Its colors are hex values in `src/service/markdown.js`, each named for the token it copies, because the library reads them before any stylesheet exists.
 
 ### The Library page

@@ -1322,6 +1322,13 @@
   function resolve(ref, root, options) {
     var reference = ref || {};
     var scope = scopeOf(root, null);
+    // THE CHOICE RUNG (choice buttons, docs/features/20261013.01_choice_buttons).
+    // A press is anchored on its group's name and nothing else, so it is found
+    // wherever a rebuild moved it. Exactly one group with the name binds; none
+    // or two is a refusal with its own reason, and the rung stops there: no
+    // text search, no tie-breakers, so a press never lands on another group.
+    var chosen = choiceRung(reference, scope);
+    if (chosen) return chosen;
     // THE EMPTY-CONTAINER RUNG (free writing, plan Task 2.3). A record written
     // at the start of an empty page is anchored on the page's one main (or
     // body), found by its tag alone: once the notes are placed, main's text is
@@ -1339,6 +1346,54 @@
     var verdict = uniqueness.selectUnique(candidatesFor(reference, scope), reference);
     verdict.element = verdict.bound ? mintedElementFor(verdict.key, reference, scope, options && options.tagAfter) : null;
     return verdict;
+  }
+
+  // The refusal codes the card shows for a choice whose group cannot be found
+  // (src/shared/failures.js). The reasons are the record's own sentence.
+  var CHOICE_FAILURE = { GONE: "CHOICE_GROUP_GONE", TWICE: "CHOICE_GROUP_TWICE" };
+
+  /** Is this element a choice group (`.choice`)? Read off the class attribute. */
+  function isChoiceGroup(node) {
+    if (!isElement(node)) return false;
+    var classes = attrOf(node, "class");
+    if (!classes) return false;
+    return (" " + classes.replace(/\s+/g, " ") + " ").indexOf(" " + record.CHOICE_MARKUP.GROUP_CLASS + " ") !== -1;
+  }
+
+  /** Every `.choice` group under `scope` named `group`, the scope itself included. */
+  function choiceGroupsNamed(scope, group) {
+    var found = [];
+    var check = function (node) {
+      if (isChoiceGroup(node) && attrOf(node, record.CHOICE_MARKUP.NAME_ATTR) === group) found.push(node);
+    };
+    check(scope);
+    eachElement(scope, check);
+    return found;
+  }
+
+  function choiceRung(ref, scope) {
+    // The anchor engine also runs without the record module (the anchor
+    // engine spec mounts normalize, uniqueness and this file alone). No record
+    // module means no choice record can exist, so the rung has nothing to say.
+    if (!record || !ref || ref.kind !== record.KIND.CHOICE) return null;
+    var group = typeof ref.group === "string" ? ref.group : "";
+    var found = record.isChoiceToken(group) ? choiceGroupsNamed(scope, group) : [];
+    var bound = found.length === 1;
+    return {
+      bound: bound,
+      key: bound ? found[0] : null,
+      element: bound ? found[0] : null,
+      via: "choice",
+      reason: bound
+        ? "the group named " + group
+        : found.length
+          ? "two groups on this page are named " + group
+          : "no group named " + group + " is on this page",
+      failureCode: bound ? null : found.length ? CHOICE_FAILURE.TWICE : CHOICE_FAILURE.GONE,
+      considered: found.length,
+      survivors: bound ? 1 : 0,
+      corroboration: { structure: false, heading: false }
+    };
   }
 
   function containerRung(ref, scope, options) {
@@ -1660,6 +1715,9 @@
     emptyRef: emptyRef,
     mint: mint,
     resolve: resolve,
+    CHOICE_FAILURE: CHOICE_FAILURE,
+    isChoiceGroup: isChoiceGroup,
+    choiceGroupsNamed: choiceGroupsNamed,
     // Exposed for the browser spec and for anyone debugging a bind: the same
     // descriptors the predicate saw.
     candidatesFor: candidatesFor,

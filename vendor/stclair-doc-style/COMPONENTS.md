@@ -13,12 +13,11 @@ Sample text below is placeholder. Replace it.
   page column. Do not wrap the page in your own container.
 - Modifiers use a double dash on the block's class: `panel panel--cobalt`, never
   `panel cobalt`.
-- Less is more. One tinted panel per page, one callout, one band at most, one
-  pull quote. Two loud things cancel each other.
 - Use a class-free `ul`, `ol`, `table`, `blockquote`, `img`, `code` and `pre` for
   the plain case. They are already styled.
 - Icons in the source style use `<i data-lucide="...">`, which needs the Lucide
-  script. A LAHE page does not load it. Leave icons out, or inline an SVG.
+  script. A LAHE page does not load it. For content icons, inline SVG from a
+  free icon library such as Lucide.
 - Keep the markup to the classes listed here. A class not in this file is not in
   the stylesheet.
 
@@ -296,7 +295,7 @@ never a coloured edge.
 ### Cards
 Two or three parallel points side by side, such as the three findings or the
 parts of a comparison. Each card is a name and a short body. Nothing here asks
-the reader to choose; for that, use option cards.
+the reader to choose; for that, use option cards or a choice group.
 
 ```html
 <div class="cards">
@@ -314,6 +313,44 @@ the reader to choose; for that, use option cards.
 A single `.card` outside `.cards` is one framed block in the column. In Markdown
 rendered by LAHE, `::: card` inside `:::: cardgrid` becomes this, and a card's
 first line in bold becomes its `h4`.
+
+### Choice group
+A question with a set of answers the reader clicks, when you can name every
+answer and will act on the one they pick. Lahe sends the click to you as the
+answer. Option cards explain the alternatives; a choice group collects the
+answer. A page may use both, the cards above the group.
+
+```html
+<div class="choice" data-choice="lesson-css-counter">
+  <p class="choice-q">Promote this lesson?</p>
+  <button type="button" value="promote" data-recommended>Promote</button>
+  <button type="button" value="discard">Discard</button>
+</div>
+```
+
+- `data-choice` names the group: lowercase letters, digits and hyphens, 1 to 32
+  characters, starting with a letter or digit. Unique on the page.
+- Two or more `button`s, each `type="button"` with a `value` in the same form.
+  The button's text is what the reader sees.
+- `data-recommended` on at most one button draws the Recommended badge. Leave it
+  off when you have no recommendation.
+- Once you have acted on the answer, write `data-chosen` (no value) onto the
+  chosen button in the source. The page then shows the decision with no Lahe
+  running, and in print. One button carries it; when the answer changes, move it.
+- The buttons sit directly inside the group. In Markdown, the group is its own
+  HTML block, with a blank line before and after and none inside: a blank line
+  inside ends the block and wraps each button in its own paragraph, and Lahe
+  refuses the group.
+
+What the reader sees. Lahe paints the attributes marked "Lahe"; never write them yourself.
+
+| On the page | Look |
+| --- | --- |
+| At rest | Square outlined buttons; the recommended one carries the badge |
+| `data-chosen` on a button | That button filled with ink, the others quiet, the word Done |
+| Lahe: `data-lahe-pressed` on a button | The button the reader pressed, filled with ink. A newer press than `data-chosen`, so it wins and the chosen one goes quiet |
+| Lahe: `data-lahe-choice-state` on the group | A word at the end of the row: Kept in this browser, Open, Question, Done. A press the agent said no to reads Open too, with the reason on its thread |
+| Lahe: `data-lahe-inert` on the group | A dashed box with quiet buttons: Lahe refused the group, and the rail says why |
 
 ## Badges
 
@@ -478,8 +515,9 @@ A page with no problem shows neither colour.
 
 - Three short points: facts grid. Numbers that are the point: stat tiles.
 - A side note: panel. A labelled point with parts: insight panel. One loud line: callout.
-- A choice for the reader: option cards, with a "Recommended" badge. Parallel
-  points with no choice: cards.
+- Alternatives to explain: option cards, with a "Recommended" badge. A question
+  with set answers you will act on: a choice group. Both, when the answer needs
+  the alternatives explained first. Parallel points with no choice: cards.
 - Stages with names: step sequence. Sentences in order: `ol`.
 - A screenshot with its explanation: image beside text. A framed figure with a
   number: plate. Several thumbnails: gallery or image cards.

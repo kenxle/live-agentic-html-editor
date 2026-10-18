@@ -194,6 +194,11 @@ var LAYER_FILES = [
     why: "post per record, re-post unacknowledged, and the reply poll loop"
   },
   {
+    path: "src/layer/choices.js",
+    owner: "choice-buttons layer",
+    why: "arm choice groups on a document page, mint a press, raise the refusal chip. Needs gestures, record, store, anchor, overlay, sync"
+  },
+  {
     path: "src/layer/comments.js",
     owner: "1D",
     why: "comment boxes, element-pick mode, the untethered note. 0A-kernel seeds a minimal real box"
@@ -327,6 +332,7 @@ var NON_BUNDLE_FILES = [
   },
   { path: "src/cli/commands/reply.js", owner: "3A", why: "reply: the one agent-facing write path, so no shell hand-encodes JSON" },
   { path: "src/cli/commands/monitor.js", owner: "3A", why: "exit-on-work local monitor over session-scoped status" },
+  { path: "src/cli/codex_monitor.js", owner: "3A", why: "detached local watcher that queues real work to an existing Codex thread" },
   {
     path: "src/cli/commands/library.js",
     owner: "Library 1.4",

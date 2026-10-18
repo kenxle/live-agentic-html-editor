@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>A dev-server page with a choice group</title>
+</head>
+<body>
+<h1>A dev-server page with a choice group</h1>
+<p>This page stands for a site Lahe was added to with <code>lahe add</code>. Its script tag carries no
+<code>data-lahe-document</code>, so the layer must claim no click here. The page counts its own clicks.</p>
+<div class="choice" data-choice="site-group">
+  <p class="choice-q">Looks like a choice group, but this is a live site.</p>
+  <button type="button" value="yes">Yes</button>
+  <button type="button" value="no">No</button>
+</div>
+<p id="clicks">0</p>
+<script>
+  // The site's own handler. A test reads #clicks to prove the click reached it.
+  document.addEventListener("click", function (event) {
+    if (event.target && event.target.tagName === "BUTTON") {
+      var el = document.getElementById("clicks");
+      el.textContent = String(Number(el.textContent) + 1);
+    }
+  });
+</script>
+</body>
+</html>

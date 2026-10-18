@@ -12,11 +12,11 @@ when behavior changes, change both.
 | --- | --- | --- |
 | `system_overview.md` | What exists and what talks to what: the browser running the library, the helper serving each page at its stable address, the store on disk, the Library page with its request queue, and the agent | `README.md`, `skills/lahe/SKILL.md` |
 | `module_map.md` | The four folders under `src/`, which way dependencies point, and why `layer/` is an ordered list rather than a cloud, and the Library page's own `CATALOG_PAGE` list | `CLAUDE.md`, Directory layout; `docs/ongoing/FREE_WRITING.md` (where its files live) |
-| `item_lifecycle.md` | The four states an item can be in, with the actor on every transition | `docs/CONTRACTS.md` |
+| `item_lifecycle.md` | The four states an item can be in, with the actor on every transition, including a press that is draft and ready at once | `docs/CONTRACTS.md`; `docs/ongoing/CHOICE_BUTTONS.md` |
 | `review_round_trip.md` | One comment end to end: a shared spine, then a labeled fan for the agent's half | `skills/lahe/SKILL.md`, How to use it |
 | `session_ownership.md` | What an agent session owns, the immutable-owner rule, what takeover does, the hand-over from the Library through its request queue, and when the helper stops (plus the reopened-session sweep) | `skills/lahe/SKILL.md`, Sessions; `docs/ongoing/SESSION_OWNERSHIP.md` |
 | `agent_workflow.md` | The agent's loop with commands on the arrows, plus the wake channel and its exit codes | `skills/lahe/SKILL.md`, `docs/CLI.md` |
-| `finding_the_region.md` | How a saved comment finds its spot on the page again, as a ladder ending in an honest refusal, including the empty-container rung for a blank notes page | architecture D9; `docs/ongoing/FREE_WRITING.md` |
+| `finding_the_region.md` | How a saved comment finds its spot on the page again, as a ladder ending in an honest refusal, including the choice rung that finds a group by its name and the empty-container rung for a blank notes page | architecture D9; `docs/ongoing/FREE_WRITING.md`; `docs/ongoing/CHOICE_BUTTONS.md` |
 | `replay_branches.md` | The four-way compare after a repaint, what each outcome does, and how a free-writing run is placed block by block | architecture D7; `docs/ongoing/FREE_WRITING.md` |
 | `protected_region.md` | The three protection layers during an edit (an anchor plus its whole run in a free-writing sitting), and what happens at commit | architecture D7; `docs/ongoing/FREE_WRITING.md` |
 | `merge_on_load.md` | Browser wins on content, store wins on lifecycle per revision | architecture D5 |

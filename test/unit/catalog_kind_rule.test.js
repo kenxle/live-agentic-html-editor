@@ -92,12 +92,9 @@ test("the drain carries a dev-server row's origin, so the refusal can name it", 
 });
 
 test("every copy of the pickup steps names the origin in a dev-server refusal", () => {
-  const rf = require("../../src/shared/review_format.js");
   const root = path.join(__dirname, "..", "..");
   const copies = {
-    contract: rf.CONTRACT.join("\n"),
-    skill: ["SKILL.md", path.join("references", "library.md")].map((f) => fs.readFileSync(path.join(root, "skills", "lahe", f), "utf8")).join("\n"),
-    contracts_md: fs.readFileSync(path.join(root, "docs", "CONTRACTS.md"), "utf8")
+    skill: ["SKILL.md", path.join("references", "library.md")].map((f) => fs.readFileSync(path.join(root, "skills", "lahe", f), "utf8")).join("\n")
   };
   for (const [name, text] of Object.entries(copies)) {
     assert.match(text, /Start the dev server at <origin>, then ask me again/, name);
