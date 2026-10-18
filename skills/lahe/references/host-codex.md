@@ -17,7 +17,9 @@ and drain until empty. Then re-arm with the same `--codex` command and end the
 turn after it returns. Re-arming while the watcher is active is harmless.
 
 Queued drain commands carry `--handoff-rev`. Copy it too. Exit 6 means this wake
-predates a takeover: stop without handling it or re-arming that session.
+predates a takeover: skip that session without handling or re-arming it. Keep
+working the other sessions in the wake. A guarded re-arm drops stale or closed
+sessions and continues with the ones you still own.
 If new work arrives while you handle a batch, the drain sees it. Re-arming
 checks again, so feedback in the gap still wakes you without repeated prompts
 while the current batch is being handled.

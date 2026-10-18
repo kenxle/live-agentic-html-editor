@@ -49,6 +49,7 @@ var USAGE = [
   "                       on; its exit code is used only when no session is left.",
   "  --interval <seconds> local polling interval; default " + DEFAULT_INTERVAL_SECONDS,
   "  --codex             watch outside the turn; queue real work to CODEX_THREAD_ID",
+  "  --handoff-rev <n>    guard the preceding --session against a stale queued re-arm",
   "  --state-dir <path>   same state root used by review and status",
   "",
   "Exit codes:",
@@ -78,6 +79,7 @@ function parseArgs(argv) {
     error: null
   };
   var list = argv || [];
+  var lastSession = null;
   for (var i = 0; i < list.length; i += 1) {
     var arg = list[i];
     if (arg === "--help" || arg === "-h") {
@@ -91,16 +93,17 @@ function parseArgs(argv) {
       }
       var value = list[(i += 1)];
       if (arg === "--handoff-rev") {
-        if (!out.sessions.length || !/^\d+$/.test(value) || !Number.isSafeInteger(Number(value))) {
+        if (!lastSession || !/^\d+$/.test(value) || !Number.isSafeInteger(Number(value))) {
           out.error = "--handoff-rev needs a non-negative integer after its --session";
           break;
         }
-        out.handoffRevisions[out.sessions[out.sessions.length - 1]] = Number(value);
+        out.handoffRevisions[lastSession] = Number(value);
       }
       // More than once is how one monitor watches several sessions (after a
       // Library pick-up the agent owns its own and the document's). A repeated
       // id is watched once.
       if (arg === "--session" && out.sessions.indexOf(value) === -1) out.sessions.push(value);
+      if (arg === "--session") lastSession = value;
       if (arg === "--seen-file") out.seenFile = value;
       if (arg === "--state-dir") out.stateDir = value;
       if (arg === "--interval") {
@@ -284,6 +287,7 @@ async function run(argv, options) {
   // own: a takeover of one drops that one and leaves the rest watched.
   var store;
   var watched = [];
+  var staleAtStart = false;
   try {
     store = storeFor(args.stateDir);
     for (var s = 0; s < args.sessions.length; s += 1) {
@@ -294,8 +298,9 @@ async function run(argv, options) {
       }
       var expectedRev = opts.expectedRevisions ? opts.expectedRevisions[args.sessions[s]] : args.handoffRevisions[args.sessions[s]];
       if (expectedRev !== undefined && expectedRev !== agentSessions.handoffRev(startingSession)) {
-        err("lahe monitor: session changed hands before its watcher started; do not re-arm this stale request\n");
-        return protocol.CLI_EXIT.SESSION_TAKEN_OVER;
+        err("lahe monitor: session " + args.sessions[s] + " changed hands before its watcher started; skipping this stale request\n");
+        staleAtStart = true;
+        continue;
       }
       watched.push({
         id: args.sessions[s],
@@ -313,6 +318,7 @@ async function run(argv, options) {
   // loop that could never end. With several sessions a closed one is dropped
   // and the rest are watched; with none left, this is the closed exit.
   var lastExit = null;
+  if (!watched.length && staleAtStart) return protocol.CLI_EXIT.SESSION_TAKEN_OVER;
   watched = watched.filter(function (entry) {
     if (!entry.closedAtStart) return true;
     lastExit = { entry: entry, state: "closed" };

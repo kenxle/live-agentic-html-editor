@@ -285,7 +285,7 @@ function withinMs(iso, nowMs, windowMs) {
  * agent ends up tailing a path that does not exist.
  *
  * The wake line names the feed the monitor watches. Every host waits with the
- * monitor line: Claude Code in a background Bash call, Codex as a pending exec,
+ * monitor line: Claude Code in a background Bash call, Codex with --codex,
  * Antigravity as a background terminal task.
  *
  * THE COMMANDS CARRY --state-dir WHEN THIS SESSION IS NOT IN THE DEFAULT
@@ -306,7 +306,8 @@ function commandBlock(input) {
     "  monitor   " + protocol.monitorCommand(spec.session, flagDir) + "\n" +
     "            Claude Code: one Bash call in the background, timeout 86400000. It waits until there is\n" +
     "            new work, so launch it again after each drain.\n" +
-    "            Codex: run as a foreground pending exec and keep waiting on it. Antigravity: a\n" +
+    "            Codex: add --codex. It starts a local watcher and returns; end the turn.\n" +
+    "            Real feedback arrives through codex queue in this conversation. Antigravity: a\n" +
     "            background terminal task, never the native schedule timer. It prints work and exits.\n" +
     "  drain     " + protocol.drainCommand(spec.session, flagDir) + "\n" +
     "            handle every item it prints, append replies, repeat until it prints nothing\n" +

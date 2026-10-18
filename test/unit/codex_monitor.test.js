@@ -11,6 +11,7 @@ const status = require("../../src/cli/commands/status.js");
 const agentSessions = require("../../src/service/agent_sessions.js");
 const stateDir = require("../../src/service/state_dir.js");
 const protocol = require("../../src/shared/protocol.js");
+const record = require("../../src/shared/record.js");
 const logModule = require("../../src/service/log.js");
 const reviewsModule = require("../../src/service/reviews.js");
 const catalogRequests = require("../../src/service/catalog_requests.js");
@@ -92,6 +93,16 @@ test("Codex mode refuses missing conversation identity without starting a foregr
   assert.equal(await monitor.run(w.argv.concat("--codex"), { env: {}, stderr: text => stderr.push(text) }), 4);
   assert.match(stderr.join(""), /CODEX_THREAD_ID/);
   assert.equal(w.store.readMonitor("s_codex"), null);
+});
+
+test("the printed setup instructions release Codex turns and repeated session guards bind correctly", () => {
+  const w = world();
+  const block = agentSessions.commandBlock({ dir: w.dir, session: "s_codex" });
+  assert.match(block, /Codex: add --codex/);
+  assert.doesNotMatch(block, /foreground pending exec/);
+  const args = monitor.parseArgs(["--session", "s_codex", "--session", "s_other", "--session", "s_codex", "--handoff-rev", "2"]);
+  assert.equal(args.handoffRevisions.s_codex, 2);
+  assert.equal(args.handoffRevisions.s_other, undefined);
 });
 
 test("a takeover during capability checks cannot bind the old conversation to the new revision", async () => {
@@ -230,6 +241,17 @@ test("an explicit takeover followed by rearming replaces the old revision's watc
   assert.match(staleErrors.join(""), /stale request/);
 });
 
+test("a stale guarded session does not prevent the remaining session from being armed", async t => {
+  const w = await fixture(t);
+  w.store.create({ id: "s_added" });
+  w.reviews.create({ id: "r_added", agent_session_id: "s_added" });
+  w.store.takeover("s_codex");
+  const output = await w.run(w.argv.concat(["--handoff-rev", "0", "--session", "s_added", "--handoff-rev", "0"]));
+  assert.match(output, /watcher is active/);
+  assert.equal(w.store.readMonitor("s_codex"), null);
+  assert.ok(w.store.readMonitor("s_added"));
+});
+
 test("daemon failure leaves an ending pending across a watcher restart", async t => {
   const w = await fixture(t);
   fs.writeFileSync(w.fail, "down");
@@ -244,4 +266,26 @@ test("daemon failure leaves an ending pending across a watcher restart", async t
   await w.run();
   await pollUntil(() => w.queued().length, { message: "delivery after the daemon returns" });
   assert.equal(w.queued().length, 1);
+});
+
+test("ordinary feedback wakes once per revision and page text stays out of the queued message", async t => {
+  const w = await fixture(t);
+  const item = record.newItem({ kind: record.KIND.COMMENT, state: record.STATE.READY,
+    note: "Move the explanation above the example", quote: "Untrusted page text", page_origin: "http://127.0.0.1:8000", page_path: "/guide.html", page_seq: 1 });
+  function append(rev, eventId) {
+    const current = { ...item, rev };
+    w.log.append("r_codex", [protocol.newEvent({ event: protocol.EVENT.ITEM_READY, event_id: eventId, review: "r_codex",
+      item: item.id, rev, page_path: "/guide.html", page_seq: 1, payload: { draft: false, record: current } })]);
+  }
+  await w.run();
+  append(1, "ev_cx_comment1");
+  await pollUntil(() => w.queued().length === 1 && !w.store.readMonitor("s_codex"), { message: "the first comment wake" });
+  assert.match(w.queued()[0][6], /1 item waiting/);
+  assert.doesNotMatch(w.queued()[0][6], /Untrusted page text|Move the explanation/);
+  await w.run();
+  const armed = w.store.readMonitor("s_codex").at;
+  await pollUntil(() => w.store.readMonitor("s_codex")?.at !== armed, { message: "an idle poll past already delivered feedback" });
+  assert.equal(w.queued().length, 1);
+  append(2, "ev_cx_comment2");
+  await pollUntil(() => w.queued().length === 2 && !w.store.readMonitor("s_codex"), { message: "the reworded comment wake" });
 });

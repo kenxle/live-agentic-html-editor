@@ -107,17 +107,24 @@ async function start(argv, args, options) {
     release = await acquire(file + ".lock");
     var existing = readRegistry(file);
     var registrations = [];
+    var droppedCode = null;
     // Save the revisions BEFORE any asynchronous capability or socket check.
     args.sessions.forEach(function (id) {
       var session = store.read(id);
-      if (!session || session.closed_at) throw new Error("session " + id + " is unknown or closed");
+      if (!session) throw new Error("session " + id + " is unknown");
+      if (session.closed_at) {
+        droppedCode = protocol.CLI_EXIT.SESSION_CLOSED;
+        err("lahe monitor --codex: session " + id + " is closed; skipping it\n");
+        return;
+      }
       if (args.handoffRevisions[id] !== undefined && args.handoffRevisions[id] !== agentSessions.handoffRev(session)) {
-        var stale = new Error("session " + id + " changed hands; do not re-arm this stale request");
-        stale.laheExit = protocol.CLI_EXIT.SESSION_TAKEN_OVER;
-        throw stale;
+        droppedCode = protocol.CLI_EXIT.SESSION_TAKEN_OVER;
+        err("lahe monitor --codex: session " + id + " changed hands; skipping this stale request\n");
+        return;
       }
       registrations.push({ id: id, rev: agentSessions.handoffRev(session) });
     });
+    if (!registrations.length) return droppedCode;
     var active = existing && agentSessions.pidAlive(existing.pid) &&
       existing.sessions.some(function (entry) {
         var session = store.read(entry.id);
@@ -147,10 +154,11 @@ async function start(argv, args, options) {
     var help = await (opts.execFile || execFile)("codex", ["queue", "--help"], { env: env, timeout: COMMAND_TIMEOUT_MS, maxBuffer: 65536 });
     if (!/--thread/.test(help) || !/--message/.test(help)) throw new Error("this Codex CLI does not support codex queue");
     await (opts.probeThread || probeThread)(thread, env);
-    if (registrations.some(function (entry) {
+    registrations = registrations.filter(function (entry) {
       var session = store.read(entry.id);
-      return !session || session.closed_at || agentSessions.handoffRev(session) !== entry.rev;
-    })) {
+      return session && !session.closed_at && agentSessions.handoffRev(session) === entry.rev;
+    });
+    if (!registrations.length) {
       err("lahe monitor --codex: a session closed or changed hands during startup; do not re-arm this stale request.\n");
       return protocol.CLI_EXIT.SESSION_TAKEN_OVER;
     }

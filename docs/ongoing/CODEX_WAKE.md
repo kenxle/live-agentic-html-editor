@@ -4,7 +4,7 @@ Lahe now watches for Codex feedback outside the model turn. Real feedback queues
 
 ## Current status
 
-The change passes its targeted tests. The independent review found startup and handoff races, which now have fixes and regression coverage. The full integrated checks and live use are next.
+The full unit suite passed, and the expanded Codex tests passed. Lint and the bundle check passed too. The independent review has no remaining blockers. The live watcher started and returned successfully, and the report renders correctly. A native queued feedback round trip is the remaining live check.
 
 ## What changes
 
