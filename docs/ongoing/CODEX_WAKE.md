@@ -6,7 +6,7 @@ Lahe now watches for Codex feedback outside the model turn. Real feedback queues
 
 The fix is merged and active locally. The full unit suite passed, and the expanded Codex and installer checks passed. Lint and the bundle check passed too. The independent review has no remaining blockers.
 
-A real browser test card reached Codex's native queue. The watcher recorded delivery and exited. The queued follow-up can run when the current turn ends. Confirming that follow-up on the card is the remaining live check.
+A real browser test card reached Codex's native queue. The watcher recorded delivery and exited. After the previous turn ended, the queued follow-up reached this same conversation and the agent drained the test card. The live round trip passed.
 
 ## What changes
 
@@ -36,6 +36,7 @@ A timeout that repeatedly wakes the model would spend tokens on empty checks. A 
 | A failed delivery leaves ended reviews and Library requests pending | Retry tests, including a worker restart |
 | An old conversation cannot drain work after a takeover | Guarded drain and startup revision tests |
 | Missing CLI support or socket access produces an error | Capability tests, plus a read-only connection to the running Codex socket |
+| Real browser feedback starts a follow-up after the active turn ends | The native queue delivered the test card to this same conversation, where the agent drained it |
 
 The executable tests are in [codex_monitor.test.js](../../test/unit/codex_monitor.test.js). The host instructions are in [the Codex guide](../../skills/lahe/references/host-codex.md).
 
@@ -45,7 +46,7 @@ This integration uses the existing local shared Codex daemon. A remote-only host
 
 If Codex is restarting when feedback arrives, the watcher retries locally. It records delivery only after the queue command succeeds. A process dying after Codex accepts a message but before Lahe records that acceptance can cause a repeat wake. The drain remains the source of truth about what still needs work.
 
-The automated tests use a fake Codex queue process. They exercise Lahe's real worker and lifecycle. A restart of the user's shared Codex daemon has not been forced during this work.
+The automated tests use a fake Codex queue process. They exercise Lahe's real worker and lifecycle. The live browser test also passed through the actual Codex queue and started the follow-up turn. A restart of the user's shared Codex daemon has not been forced during this work.
 
 ## Implementation and references
 
