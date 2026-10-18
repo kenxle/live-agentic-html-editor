@@ -1,6 +1,7 @@
 ---
 name: lahe
-description: Create and review documents, notes, slides and webapps in Lahe. Use for substantial write-ups, plans, findings, options or questions the user will read or respond to; live review, comments, edits, Library requests and session handoffs. Includes "claim the lahe session", "take over the lahe session", "lahe sessions". Load before any lahe command.
+description: >-
+  Use cases: - Serve documents and websites for human review. - Write formatted, interactive responses as Markdown or HTML pages. - A non-trivial answer someone will read, decide on, or reply to. - Acting on existing Lahe comments/docs, handing a review between agents. Examples: findings, feature docs, progress, how it works, brainstorms, question lists, draft articles, mockups, charts, prompts, skills, dev apps, taking notes. Load it before you run any `lahe` command. Triggers: "lahe", "live review", "review this page", "put it on a page", "write it up", "brainstorm it with me", "what did we learn", "take notes", "claim the lahe session", "take over the lahe session", "lahe sessions", "let's make a doc", "explain this", "how is this happening", "let's review this site", "what's the progress on X", "let's write an article", "let's walk through X", "I need to take notes for X", "can we make a nice document", "let's make this look good".
 ---
 
 <!-- lahe canonical skill: managed by the live-agentic-html-editor repository -->
@@ -8,7 +9,7 @@ description: Create and review documents, notes, slides and webapps in Lahe. Use
 # Lahe live review
 
 Lahe lets humans comment and edit while you update the source and reply in the
-page's rail. Use it for substantial responses, decisions and collaborative
+page's rail. Use it for non-trivial responses, decisions and collaborative
 writing. If the answer exceeds a screen, needs headings or many bullets, or
 asks the reader to choose or reply, write a page and serve it. Chat gets a short
 line and the link. Respect an explicit request for another format.

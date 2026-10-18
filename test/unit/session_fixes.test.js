@@ -314,7 +314,8 @@ test("the canonical skill rejects the retired and cross-session workflows", () =
   assert.match(skill, /ask the human which id or ids they mean/);
   // The routing description has to carry the trigger phrasing too, or the skill
   // never loads on the sentence that caused this.
-  assert.match(skill, /description:.*"claim the lahe session", "take over the lahe session", (or )?"lahe sessions"/);
+  const metadata = fs.readFileSync(installSkills.SOURCE, "utf8").split("---")[1];
+  assert.match(metadata, /"claim the lahe session", "take over the lahe session", (or )?"lahe sessions"/);
   assert.match(skill, /never silently reuse the old session/i);
   assert.match(skill, /Run the printed `lahe monitor` command in the foreground/);
   assert.match(skill, /any running monitor exits with code 5/);
