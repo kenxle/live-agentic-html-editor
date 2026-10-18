@@ -36,7 +36,8 @@ var SOURCE = path.join(REPO_ROOT, "skills", "lahe", "SKILL.md");
 // copied from there rather than kept twice.
 var REFERENCE_DIR = path.join(REPO_ROOT, "skills", "lahe", "references");
 var REFERENCES = fs.readdirSync(REFERENCE_DIR).filter(function (name) {
-  return name.endsWith(".md") && !name.includes(".hand-edits-");
+  // History snapshots and the clone-only catalog pointer are not runbooks.
+  return name.endsWith(".md") && !name.includes(".hand-edits-") && name !== "components-source.md" && name !== "components.md";
 }).sort().map(function (name) {
   return { from: path.join(REFERENCE_DIR, name), to: path.join("references", name) };
 }).concat([
