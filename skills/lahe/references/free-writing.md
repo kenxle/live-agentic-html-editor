@@ -38,10 +38,11 @@ Use [feedback](feedback.md) for the common item and reply rules.
     in the thread's last agent turn.
   - **Keep mine** posts "Keep mine as written. No changes." Change nothing and
     reply `handled`.
-- **On a notes review** (`review.notes` is true), place the text and stop.
-  Organize it only when the reviewer asks. Never write prose of your own into a
-  region the reviewer wrote; suggestions go in your reply. When you cannot tell
-  where new text belongs, reply `question` and ask.
+- **On a notes review** (`review.notes` is true), place the text as written.
+  You may keep a separate section of key info and action items. Never change
+  the reviewer's text or write your own prose into a region they wrote;
+  suggestions go in your reply. When you cannot tell where new text belongs,
+  reply `question` and ask.
 
 For new writing, do not use the anchor's after text as the whole run:
 `new_blocks` carries it. On every handled reply the page check tests each

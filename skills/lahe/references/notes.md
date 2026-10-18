@@ -18,10 +18,10 @@ to type.
   Both print the same notes address, because the review is a notes review.
 - The review carries `notes: true` in `review.json`. Each sitting arrives as one
   item with its words in `new_blocks`: place them in the file as written, at the
-  top of the file for `start_of_container`. Organize the notes only when your
-  human asks.
+  top of the file for `start_of_container`. Keep the user's notes as written.
 
 Keep the reviewer's format and words. Do not add your own prose to a region
 they wrote; suggestions belong in replies. If placement is unclear, reply
-`question`. Read [free writing](free-writing.md) before placing drain items,
+`question`. You may keep a separate section of key info and action items, but
+don't change what the user has typed. Read [free writing](free-writing.md) before placing drain items,
 then use [review](review.md) for setup, the URL, contract and monitor.
