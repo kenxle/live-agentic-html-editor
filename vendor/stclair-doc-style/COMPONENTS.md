@@ -511,6 +511,31 @@ Red and amber mean a problem and nothing else. The red panel is
 `<div class="panel panel--danger"><p><b>Not saved.</b> What went wrong.</p></div>`.
 A page with no problem shows neither colour.
 
+## Components in Markdown
+
+A Markdown page LAHE renders with pandoc installed turns these pandoc fenced
+divs into the components above. The same kinds render in the feature-forge and
+research-report builds. Without pandoc they show as plain text.
+
+| Fenced div | Becomes |
+| --- | --- |
+| `::: callout-req` | an eyebrow "Requirement" over the content; a run of them shares one label |
+| `::: callout-nongoal` | an eyebrow "Non-goals" over the content |
+| `::: callout-metric`, `callout-suggest` | insight panel, "Metrics" or "Suggestion" |
+| `::: callout-question`, `callout-flag` | caveat insight panel, "Open question" or "Red flag" |
+| `::: callout`, `callout-note` | insight panel ("Note" for the second) |
+| `::: callout-warn` | caveat insight panel |
+| `::: insight`, `::: {.insight .insight--caveat}`, `::: xref` | the component of that name |
+| `::: stat` inside `:::: stat-row` | stat tiles: the first paragraph is the value, the rest the meta line |
+| `::: pullquote` | pull quote: the first paragraph is the quote, the rest its footer |
+| `::: keytakeaway` | callout |
+| `::: eyebrow` | eyebrow |
+| `::: rimage` | figure plate: the image, then the caption |
+| `::: card` inside `:::: cardgrid` | cards |
+| any other name | a plain `div` with that class |
+
+`::: {.kind data-label="Your label"}` replaces a panel's label.
+
 ## Picking a component
 
 - Three short points: facts grid. Numbers that are the point: stat tiles.

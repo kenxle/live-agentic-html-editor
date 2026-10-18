@@ -33,7 +33,10 @@ A reviewer can write new paragraphs, headings, and lists on a page, and can star
 
 ## Install
 
-See `docs/INSTALL.md`.
+See `docs/INSTALL.md`. pandoc 3 is optional: with it, Markdown fenced divs
+(`::: callout-req`) render as styled panels. When the rail says "Ask your agent
+to install pandoc to get the correct styles", install it (`brew install pandoc`
+on macOS) and the page redraws within a minute.
 
 ## Documentation
 

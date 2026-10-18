@@ -11,6 +11,16 @@ release to keep in sync either. (The Playwright browser suite in `test/browser/`
 needs Node 20 and a `npm install` for its devDependencies; running the tool does
 not.)
 
+**Optional: pandoc 3 or later.** When pandoc is on the machine, LAHE renders
+Markdown with it, so pandoc fenced divs (`::: callout-req`, `::: stat`,
+`:::: cardgrid`) draw as the house components the feature-forge and
+research-report builds draw. Without it, Markdown renders with the vendored
+Marked and those blocks show as plain text, and the rail says so. Install it
+with `brew install pandoc` on macOS, your package manager on Linux, or from
+[pandoc.org](https://pandoc.org/installing.html). LAHE finds it on `PATH` or in
+`/opt/homebrew/bin` and `/usr/local/bin`; `LAHE_PANDOC=/path/to/pandoc` names
+it outright. A running helper looks again within a minute of the install.
+
 **A current Chrome, Edge, Safari, or Firefox.** The floor is the
 [Custom Highlight API](https://developer.mozilla.org/en-US/docs/Web/API/CSS_Custom_Highlight_API),
 and it is a floor for a reason worth stating: it is how the library draws a
@@ -117,7 +127,9 @@ lahe review path/to/SKILL.md
 
 LAHE renders the Markdown itself, gives generated documents a simple readable
 style, preserves proper block and list structure, resolves relative assets, and
-turns fenced `mermaid` flowcharts into diagrams using a local browser asset. It
+turns fenced `mermaid` flowcharts into diagrams using a local browser asset.
+With pandoc installed it renders through pandoc, so fenced divs draw as house
+components (the kinds are listed in `vendor/stclair-doc-style/COMPONENTS.md`). It
 does not modify the `.md` file. Agents should never improvise a Markdown-to-HTML
 conversion or start their own review server. After editing the Markdown source,
 rerun the same command to rebuild the review page before reporting the change
@@ -159,11 +171,12 @@ template. Individual comments may belong in other fragments. The agent locates
 the right fragment from the captured page text, edits source, runs the canonical
 build, verifies the HTML, and then replies.
 
-Pandoc remains a good choice when it is already the document build or the
-deliverable intentionally needs a reproducible multi-file compiler. Keep that
+A project's own pandoc build remains the right choice when the deliverable is
+assembled from several files or needs its own template. Keep that
 configuration in the project, including its styles, filters, and Mermaid
-runtime. Do not add Pandoc just to review one `.md` file, and do not maintain a
-hand-generated HTML twin of that file.
+runtime. For one `.md` file, `lahe review` already renders it (through pandoc
+when it is installed), so do not build or maintain a hand-generated HTML twin
+of that file.
 
 That server belongs to the agent session. `session close` stops it, and
 `session reopen` restores it. Passing `--origin` means you supplied an external
