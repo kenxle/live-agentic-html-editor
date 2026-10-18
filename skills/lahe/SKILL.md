@@ -39,8 +39,9 @@ authoring it. In the clone, that catalog lives at
 
 ## Rules across every route
 
-- **Use Lahe's styles and components for pages you author.** The documents
-  runbook selects the components; the catalog supplies their markup. Keep an
+- **Use Lahe's styles and components for pages you author.** Lahe components
+  are what make the style switcher work. The documents runbook selects the
+  components; the catalog supplies their markup. Keep an
   existing page's own design and anything the reviewer wrote.
 - **Serve with `lahe review <target>`** (`lahe write <file.md>` for notes).
   Give the `open` URL exactly as printed, plus the session and review it used.
