@@ -1,6 +1,6 @@
 /*
  * live-agentic-html-editor review layer
- * version 0.3.0+16ebe5a67320
+ * version 0.4.0+16ebe5a67320
  *
  * GENERATED FILE. Do not edit. Edit the sources under src/ and run
  *   npm run build:layer
@@ -12,7 +12,7 @@
   "use strict";
   var g = typeof globalThis !== "undefined" ? globalThis : window;
   g.LAHE = g.LAHE || {};
-  g.LAHE.version = "0.3.0+16ebe5a67320";
+  g.LAHE.version = "0.4.0+16ebe5a67320";
 })();
 /* ---- src/shared/markers.js  (owner: 0A-kernel) ---- */
 // Markers: the attribute and class names that identify DOM the tool added.
@@ -53364,7 +53364,7 @@
   "use strict";
 
   // Replaced by scripts/build-layer.js at concatenation time.
-  var VERSION = "0.3.0+16ebe5a67320";
+  var VERSION = "0.4.0+16ebe5a67320";
 
   var protocol = ns.protocol;
   var record = ns.record;
