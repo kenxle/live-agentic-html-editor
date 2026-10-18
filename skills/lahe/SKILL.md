@@ -27,16 +27,14 @@ this skill's folder. Load as needed.
 | Review a running app or generated HTML | [Webapps and builds](references/webapps.md) |
 | Serve a page and watch for comments | [Start and watch](references/review.md) |
 | Apply comments or edits, then reply | [Handle feedback](references/feedback.md) |
+| Ask with buttons or act on a selected answer | [Choice groups](references/choices.md) |
 | Add a document, move a file, claim or take over sessions | [Sessions](references/sessions.md) |
 | Open the Library or handle `catalog_requests` | [Library](references/library.md) |
 | Reviewer ends a review, or export/publish is next | [Finish](references/finish.md) |
 | Connection, helper or serving trouble | [Troubleshooting](references/troubleshooting.md) |
 
-Conditional detail: [new writing and proofreading](references/free-writing.md)
-when an item has `new_blocks`, `remove_blocks` or `proofread`;
-[choice groups](references/choices.md) when asking with buttons or receiving
-`kind: choice`. Read [components](references/components.md) for the markup you
-need before authoring it. In the clone, that catalog lives at
+Read [components](references/components.md) for the markup you need before
+authoring it. In the clone, that catalog lives at
 `vendor/stclair-doc-style/COMPONENTS.md`; installation places it beside this skill.
 
 ## Rules across every route
