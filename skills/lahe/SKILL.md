@@ -9,15 +9,15 @@ description: >-
 # Lahe live review
 
 Lahe lets humans comment and edit while you update the source and reply in the
-page's rail. Use it for non-trivial responses, decisions and collaborative
-writing. If the answer exceeds a screen, needs headings or many bullets, or
-asks the reader to choose or reply, write a page and serve it. Chat gets a short
-line and the link. Respect an explicit request for another format.
+page's rail. Use it for substantial responses, decisions, collaborative writing,
+presentations, brainstorms, charts and graphs, etc. If the answer exceeds a screen,
+needs headings or many bullets, or asks the reader to choose or reply, use lahe.
+Respect an explicit request for another format.
 
 ## Load only the route you need
 
 Read the matching runbook before starting its work. References are relative to
-this skill's folder. Do not load all of them.
+this skill's folder. Load as needed.
 
 | Task | Read |
 | --- | --- |

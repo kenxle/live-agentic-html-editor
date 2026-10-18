@@ -28,7 +28,7 @@
     <div class="sheet-head"><h2>The entry point carries less context</h2><span class="n">Scope</span></div>
     <div class="stats">
       <div class="stat"><p class="stat-label">Main skill before</p><p class="stat-value">1,187 lines</p><p class="stat-meta">10,540 words, measured before the refactor</p></div>
-      <div class="stat"><p class="stat-label">Main skill after review edits</p><p class="stat-value">67 lines</p><p class="stat-meta">692 words, with the original description restored</p></div>
+      <div class="stat"><p class="stat-label">Main skill after review edits</p><p class="stat-value">67 lines</p><p class="stat-meta">682 words, with the original description restored</p></div>
     </div>
     <p>Most specialized guidance moved into references. The smaller entry point is what an agent reads when the skill activates; the task then determines which references it needs. These are file-size measurements, not measured token use or a claim that an entire review needs only the entry point.</p>
     <p>The shared safeguards stayed in the router: use the house styles, serve a live review, read the contract, arm the right monitor, drain feedback, edit the source, verify before replying, and take over sessions only when asked.</p>
@@ -87,7 +87,7 @@
       <li>Affected CLI and Library checks passed using the repository's test wrapper.</li>
       <li>Repository lint, skill validation and whitespace checks passed.</li>
     </ul>
-    <p>During review, you asked to restore the original description because it covered more cases. Its complete use cases, examples and trigger phrases are restored, and the body uses non-trivial in place of substantial. The installed skill copies were refreshed again.</p>
+    <p>During review, you asked to restore the original description because it covered more cases. Its complete use cases, examples and trigger phrases are restored. Your opening paragraph now explicitly includes presentations, brainstorms, charts and graphs; the routing guidance says to load references as needed. The installed skill copies were refreshed again.</p>
     <p>Your morning edits were preserved in commit <code>d712080a</code>. The refactor is commit <code>5915f253</code>. The working tree was clean after that commit.</p>
   </section>
 </body>
